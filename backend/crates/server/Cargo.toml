@@ -1,0 +1,46 @@
+[package]
+name = "life-manager-server"
+description = "Life Manager server: REST API, CRDT document store, auth, attachments."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "life-manager"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.104"
+argon2 = "0.6.0"
+async-trait = "0.1.92"
+axum = { version = "0.8.9", features = ["multipart", "macros"] }
+axum-extra = { version = "0.12.6", features = ["cookie", "typed-header"] }
+base64 = "0.23.1"
+bson = "2.15.0"
+bytes = "1.12.1"
+clap = { version = "4.6.7", features = ["derive", "env"] }
+dotenvy = "0.15.7"
+futures = "0.3.34"
+hex = "0.4.3"
+hmac = "0.13.0"
+infer = "0.22.0"
+life-manager-core = { path = "../core", features = ["mongo"] }
+metrics = "0.24.6"
+metrics-exporter-prometheus = "0.18.3"
+mongodb = "3.9.1"
+rand = "0.10.3"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+sha2 = "0.11.0"
+thiserror = "2.0.21"
+time = { version = "0.3.55", features = ["serde", "formatting", "parsing", "macros"] }
+tokio = { version = "1.53.1", features = ["full"] }
+tokio-util = { version = "0.7.19", features = ["io"] }
+tower = { version = "0.5.3", features = ["util", "timeout", "limit"] }
+tower-http = { version = "0.7.1", features = ["trace", "cors", "limit", "timeout", "request-id", "catch-panic"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
+ulid = "3.0.0"
+yrs = "0.28.0"
+zip = "8.6.0"

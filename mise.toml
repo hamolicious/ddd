@@ -1,0 +1,69 @@
+[tools]
+rust = "latest"
+
+# `.env` is read for every task, so `mise run dev` sees the same SESSION_SECRET /
+# MONGO_URI the compose stack does. Copy `.env.example` to `.env` before your
+# first run — the server refuses to start without SESSION_SECRET (SPEC §5.2).
+[env]
+_.file = { path = ".env", redact = true }
+
+[tasks.dev]
+description = "Run the server against the compose Mongo (mongo in docker, server on the host)"
+dir = "backend"
+run = [
+  "docker compose -f ../docker-compose.yaml up -d --wait mongo",
+  "cargo run --bin life-manager -- serve",
+]
+
+[tasks.check]
+description = "Type-check the whole workspace (including tests) plus clippy"
+dir = "backend"
+run = [
+  "cargo fmt --all --check",
+  "cargo check --workspace --all-targets",
+  "cargo clippy --workspace --all-targets -- -D warnings",
+]
+
+[tasks.fmt]
+description = "Format the workspace in place"
+dir = "backend"
+run = "cargo fmt --all"
+
+[tasks.test]
+description = "Run the workspace test suite"
+dir = "backend"
+run = "cargo test --workspace --all-targets"
+
+[tasks.build]
+description = "Build the release binary (the same profile the Docker image uses)"
+dir = "backend"
+run = "cargo build --release --locked --bin life-manager"
+
+[tasks.wasm-check]
+description = "Check the shared core builds for the client kernel (no server deps, no bson)"
+dir = "backend"
+run = "cargo check -p life-manager-core --no-default-features"
+
+[tasks.up]
+description = "Build and start the full stack (mongo + server) in Docker"
+run = "docker compose up --build -d"
+
+[tasks.down]
+description = "Stop the stack, keeping the Mongo volume"
+run = "docker compose down"
+
+[tasks.logs]
+description = "Tail the server logs"
+run = "docker compose logs -f server"
+
+[tasks.backup]
+description = "Dump the database (documents + GridFS attachments) to ./backups — see docs/OPERATIONS.md"
+run = '''
+set -euo pipefail
+stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+out="backups/${stamp}"
+mkdir -p "$out"
+docker compose exec -T mongo mongodump \
+  --db "${MONGO_DATABASE:-life_manager}" --archive --gzip > "$out/dump.archive.gz"
+echo "wrote $out/dump.archive.gz"
+'''

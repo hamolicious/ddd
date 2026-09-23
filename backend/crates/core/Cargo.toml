@@ -1,0 +1,22 @@
+[package]
+name = "life-manager-core"
+description = "Shared Life Manager core: document parsing, title resolution, filter DSL. Compiles natively (server) and to wasm32 (client kernel)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[features]
+# `mongo` pulls in bson so the filter DSL can be compiled to Mongo queries.
+# Wasm builds use `--no-default-features` (no bson, no Mongo compiler).
+default = ["mongo"]
+mongo = ["dep:bson"]
+
+[dependencies]
+bson = { version = "2.15.0", optional = true }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+thiserror = "2.0.20"
+# No date/time crate on purpose: `date.rs` hand-rolls ISO-8601 parsing and civil-day
+# arithmetic so the native and `wasm32` builds are bit-identical (SPEC §3.4 — parity
+# by construction, not by test suite).

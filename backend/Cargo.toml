@@ -1,6 +1,14 @@
-[package]
-name = "backend"
+[workspace]
+resolver = "3"
+members = ["crates/core", "crates/server"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.90"
 
-[dependencies]
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"

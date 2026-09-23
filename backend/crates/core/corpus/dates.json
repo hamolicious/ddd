@@ -1,0 +1,193 @@
+{
+  "_comment": "Conformance corpus for core::date. `valid` cases assert canonical form, precision and epoch millis; `invalid` inputs must not parse at all; `order` must sort identically by epoch and by canonical text (the property the Mongo string comparison relies on); `canonical_shape` fixes the participation test for date comparisons against fm/plugins strings.",
+  "valid": [
+    {
+      "input": "2026-09-23",
+      "canonical": "2026-09-23",
+      "precision": "date",
+      "epoch_millis": 1790121600000
+    },
+    {
+      "input": "1970-01-01",
+      "canonical": "1970-01-01",
+      "precision": "date",
+      "epoch_millis": 0
+    },
+    {
+      "input": "0001-01-01",
+      "canonical": "0001-01-01",
+      "precision": "date",
+      "epoch_millis": -62135596800000
+    },
+    {
+      "input": "9999-12-31",
+      "canonical": "9999-12-31",
+      "precision": "date",
+      "epoch_millis": 253402214400000
+    },
+    {
+      "input": "2024-02-29",
+      "canonical": "2024-02-29",
+      "precision": "date",
+      "epoch_millis": 1709164800000
+    },
+    {
+      "input": "2000-02-29",
+      "canonical": "2000-02-29",
+      "precision": "date",
+      "epoch_millis": 951782400000
+    },
+    {
+      "input": "  2026-09-23  ",
+      "canonical": "2026-09-23",
+      "precision": "date",
+      "epoch_millis": 1790121600000
+    },
+    {
+      "input": "2026-09-23T10:00:00Z",
+      "canonical": "2026-09-23T10:00:00.000Z",
+      "precision": "date_time",
+      "epoch_millis": 1790157600000
+    },
+    {
+      "input": "2026-09-23t10:00:00z",
+      "canonical": "2026-09-23T10:00:00.000Z",
+      "precision": "date_time",
+      "epoch_millis": 1790157600000
+    },
+    {
+      "input": "2026-09-23 10:00:00",
+      "canonical": "2026-09-23T10:00:00.000Z",
+      "precision": "date_time",
+      "epoch_millis": 1790157600000
+    },
+    {
+      "input": "2026-09-23T10:00",
+      "canonical": "2026-09-23T10:00:00.000Z",
+      "precision": "date_time",
+      "epoch_millis": 1790157600000
+    },
+    {
+      "input": "2026-09-23T12:00:00+02:00",
+      "canonical": "2026-09-23T10:00:00.000Z",
+      "precision": "date_time",
+      "epoch_millis": 1790157600000
+    },
+    {
+      "input": "2026-09-23T08:00:00-0200",
+      "canonical": "2026-09-23T10:00:00.000Z",
+      "precision": "date_time",
+      "epoch_millis": 1790157600000
+    },
+    {
+      "input": "2026-09-23T09:00:00-01",
+      "canonical": "2026-09-23T10:00:00.000Z",
+      "precision": "date_time",
+      "epoch_millis": 1790157600000
+    },
+    {
+      "input": "2026-09-23T10:00:00.5Z",
+      "canonical": "2026-09-23T10:00:00.500Z",
+      "precision": "date_time",
+      "epoch_millis": 1790157600500
+    },
+    {
+      "input": "2026-09-23T10:00:00.123456789Z",
+      "canonical": "2026-09-23T10:00:00.123Z",
+      "precision": "date_time",
+      "epoch_millis": 1790157600123
+    },
+    {
+      "input": "2026-09-23T10:00:00,250Z",
+      "canonical": "2026-09-23T10:00:00.250Z",
+      "precision": "date_time",
+      "epoch_millis": 1790157600250
+    },
+    {
+      "input": "2026-01-01T00:30:00+01:00",
+      "canonical": "2025-12-31T23:30:00.000Z",
+      "precision": "date_time",
+      "epoch_millis": 1767223800000
+    }
+  ],
+  "invalid": [
+    "",
+    "   ",
+    "2026",
+    "2026-09",
+    "2026-9-3",
+    "26-09-23",
+    "2026/09/23",
+    "2026-00-01",
+    "2026-13-01",
+    "2026-01-00",
+    "2026-01-32",
+    "2026-02-30",
+    "2026-04-31",
+    "2100-02-29",
+    "1900-02-29",
+    "2026-09-23X10:00:00Z",
+    "2026-09-23T24:00:00Z",
+    "2026-09-23T10:60:00Z",
+    "2026-09-23T10:00:60Z",
+    "2026-09-23T10Z",
+    "2026-09-23T10:00:00.Z",
+    "2026-09-23T10:00:00.1234567890Z",
+    "2026-09-23T10:00:00+25:00",
+    "2026-09-23T10:00:00+2:00",
+    "2026-09-23T10:00:00Zextra",
+    "2026-09-23 groceries",
+    "not a date",
+    "today"
+  ],
+  "order": [
+    "0001-01-01",
+    "1970-01-01",
+    "2026-09-22T23:00:00Z",
+    "2026-09-23",
+    "2026-09-23T00:00:00Z",
+    "2026-09-23T00:00:00.001Z",
+    "2026-09-23T10:00:00Z",
+    "2026-09-24",
+    "9999-12-31"
+  ],
+  "canonical_shape": {
+    "yes": [
+      "2026-09-23",
+      "0001-01-01",
+      "2026-09-23T10:00:00.000Z",
+      "2026-09-23T23:59:59.999Z"
+    ],
+    "no": [
+      "",
+      "2026-09-2",
+      "2026-09-233",
+      "2026-09-23T10:00:00Z",
+      "2026-09-23T10:00:00.00Z",
+      "2026-09-23T10:00:00.0000Z",
+      "2026-09-23 10:00:00.000Z",
+      "2026-09-23t10:00:00.000z",
+      "x2026-09-23",
+      "2026-09-23 ",
+      "someday"
+    ]
+  },
+  "normalize": [
+    {
+      "input": "2026-09-23T12:00:00+02:00",
+      "output": "2026-09-23T10:00:00.000Z"
+    },
+    {
+      "input": "2026-13-45",
+      "output": "2026-13-45"
+    },
+    {
+      "input": "not a date",
+      "output": "not a date"
+    },
+    {
+      "input": "",
+      "output": ""
+    }
+  ]
+}

@@ -1,0 +1,744 @@
+{
+  "_comment": "Conformance corpus for core::document::parse_document. Every case is data only; the harness lives in tests/conformance.rs. `fm` and `plugins` are compared against Value::to_json output, `frontmatter`/`body`/`sections_text` against the sliced spans (null = no such region), and `diagnostics` is an exact ordered list of {kind, line} when present.",
+  "cases": [
+    {
+      "name": "spec-example",
+      "input": "---\ntitle: Groceries\npath: home/lists\ndate: 2026-09-23\n---\n\n# Groceries\n\n- [ ] milk\n- [x] bread\n\n%%% calendar\nsource-uid: abc123@google.com\n%%%\n",
+      "expect": {
+        "title": "Groceries",
+        "fm": {
+          "date": "2026-09-23",
+          "path": "home/lists",
+          "title": "Groceries"
+        },
+        "fm_parse_error": false,
+        "plugins": {
+          "calendar": {
+            "source-uid": "abc123@google.com"
+          }
+        },
+        "frontmatter": "---\ntitle: Groceries\npath: home/lists\ndate: 2026-09-23\n---\n",
+        "body": "\n# Groceries\n\n- [ ] milk\n- [x] bread\n\n",
+        "sections_text": "%%% calendar\nsource-uid: abc123@google.com\n%%%\n",
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "no-frontmatter-no-sections",
+      "input": "# Just a note\n\nSome text.\n",
+      "expect": {
+        "title": "Just a note",
+        "fm": {},
+        "fm_parse_error": false,
+        "plugins": {},
+        "frontmatter": null,
+        "body": "# Just a note\n\nSome text.\n",
+        "sections_text": null,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "empty-document",
+      "input": "",
+      "expect": {
+        "title": "Untitled",
+        "fm": {},
+        "fm_parse_error": false,
+        "plugins": {},
+        "frontmatter": null,
+        "body": "",
+        "sections_text": null,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "whitespace-only-document",
+      "input": "   \n\n\t\n",
+      "expect": {
+        "title": "Untitled",
+        "fm": {},
+        "fm_parse_error": false,
+        "plugins": {},
+        "frontmatter": null,
+        "body": "   \n\n\t\n",
+        "sections_text": null,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "fence-not-first-line",
+      "input": "\n---\ntitle: nope\n---\n",
+      "expect": {
+        "title": "---",
+        "fm": {},
+        "fm_parse_error": false,
+        "plugins": {},
+        "frontmatter": null,
+        "body": "\n---\ntitle: nope\n---\n",
+        "sections_text": null,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "fence-with-trailing-space-is-not-a-fence",
+      "input": "--- \ntitle: nope\n---\n",
+      "expect": {
+        "title": "---",
+        "fm": {},
+        "fm_parse_error": false,
+        "plugins": {},
+        "frontmatter": null,
+        "body": "--- \ntitle: nope\n---\n",
+        "sections_text": null,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "unterminated-frontmatter-fence",
+      "input": "---\ntitle: Orphan\n\nbody\n",
+      "expect": {
+        "title": "---",
+        "fm": {},
+        "fm_parse_error": true,
+        "plugins": {},
+        "frontmatter": null,
+        "body": "---\ntitle: Orphan\n\nbody\n",
+        "sections_text": null,
+        "diagnostics": [
+          {
+            "kind": "unterminated_fence",
+            "line": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "empty-frontmatter-block",
+      "input": "---\n---\nbody\n",
+      "expect": {
+        "title": "body",
+        "fm": {},
+        "fm_parse_error": false,
+        "plugins": {},
+        "frontmatter": "---\n---\n",
+        "body": "body\n",
+        "sections_text": null,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "frontmatter-closes-at-first-closing-fence",
+      "input": "---\na: 1\n---\nbody\n---\nnot: frontmatter\n---\n",
+      "expect": {
+        "title": "body",
+        "fm": {
+          "a": 1
+        },
+        "fm_parse_error": false,
+        "plugins": {},
+        "frontmatter": "---\na: 1\n---\n",
+        "body": "body\n---\nnot: frontmatter\n---\n",
+        "sections_text": null,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "no-trailing-newline-anywhere",
+      "input": "---\ntitle: Tight\n---",
+      "expect": {
+        "title": "Tight",
+        "fm": {
+          "title": "Tight"
+        },
+        "fm_parse_error": false,
+        "plugins": {},
+        "frontmatter": "---\ntitle: Tight\n---",
+        "body": "",
+        "sections_text": null,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "crlf-is-normalized",
+      "input": "---\r\ntitle: Windows\r\n---\r\n\r\n# Windows\r\n\r\n%%% p\r\nk: 1\r\n%%%\r\n",
+      "expect": {
+        "title": "Windows",
+        "fm": {
+          "title": "Windows"
+        },
+        "fm_parse_error": false,
+        "plugins": {
+          "p": {
+            "k": 1
+          }
+        },
+        "frontmatter": "---\ntitle: Windows\n---\n",
+        "body": "\n# Windows\n\n",
+        "sections_text": "%%% p\nk: 1\n%%%\n",
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "lone-cr-is-a-newline",
+      "input": "---\rtitle: Classic\r---\rbody\r",
+      "expect": {
+        "title": "Classic",
+        "fm": {
+          "title": "Classic"
+        },
+        "fm_parse_error": false,
+        "plugins": {},
+        "frontmatter": "---\ntitle: Classic\n---\n",
+        "body": "body\n",
+        "sections_text": null,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "bom-is-stripped",
+      "input": "﻿---\ntitle: Byte order\n---\n",
+      "expect": {
+        "title": "Byte order",
+        "fm": {
+          "title": "Byte order"
+        },
+        "fm_parse_error": false,
+        "plugins": {},
+        "frontmatter": "---\ntitle: Byte order\n---\n",
+        "body": "",
+        "sections_text": null,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "typed-scalars",
+      "input": "---\nstr: hello\nquoted: \"12\"\nsingle: 'it''s'\nint: -42\nbig: 9223372036854775808\nfloat: 1.25\nexp: 1e3\nyes: true\nno: FALSE\nnothing: null\ntilde: ~\nblank:\nversion: v1.2.3\nurl: \"https://example.com/x\"\n---\n",
+      "expect": {
+        "title": "Untitled",
+        "fm": {
+          "big": 9.223372036854776e+18,
+          "blank": null,
+          "exp": 1000.0,
+          "float": 1.25,
+          "int": -42,
+          "no": false,
+          "nothing": null,
+          "quoted": "12",
+          "single": "it's",
+          "str": "hello",
+          "tilde": null,
+          "url": "https://example.com/x",
+          "version": "v1.2.3",
+          "yes": true
+        },
+        "fm_parse_error": false,
+        "plugins": {},
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "flow-collections",
+      "input": "---\ntags: [work, home]\nempty: []\nnums: [1, 2.5, true, null]\nnested: {a: 1, b: [x, y]}\ntrailing: [a, b, ]\n---\n",
+      "expect": {
+        "title": "Untitled",
+        "fm": {
+          "empty": [],
+          "nested": {
+            "a": 1,
+            "b": [
+              "x",
+              "y"
+            ]
+          },
+          "nums": [
+            1,
+            2.5,
+            true,
+            null
+          ],
+          "tags": [
+            "work",
+            "home"
+          ],
+          "trailing": [
+            "a",
+            "b"
+          ]
+        },
+        "fm_parse_error": false,
+        "plugins": {},
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "duplicate-keys-last-wins",
+      "input": "---\na: 1\nb: first\na: 2\nb: second\n---\n",
+      "expect": {
+        "title": "Untitled",
+        "fm": {
+          "a": 2,
+          "b": "second"
+        },
+        "fm_parse_error": false,
+        "plugins": {},
+        "diagnostics": [
+          {
+            "kind": "duplicate_key",
+            "line": 4
+          },
+          {
+            "kind": "duplicate_key",
+            "line": 5
+          }
+        ]
+      }
+    },
+    {
+      "name": "broken-quote-mid-edit",
+      "input": "---\ntitle: \"Half open\nkeep: yes\n---\n\nbody\n",
+      "expect": {
+        "title": "body",
+        "fm": {
+          "keep": "yes"
+        },
+        "fm_parse_error": true,
+        "plugins": {},
+        "diagnostics": [
+          {
+            "kind": "invalid_value",
+            "line": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "broken-bracket-mid-edit",
+      "input": "---\ntags: [work, home\nkeep: 1\n---\n",
+      "expect": {
+        "title": "Untitled",
+        "fm": {
+          "keep": 1
+        },
+        "fm_parse_error": true,
+        "plugins": {},
+        "diagnostics": [
+          {
+            "kind": "invalid_value",
+            "line": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "invalid-keys-are-dropped-text-untouched",
+      "input": "---\nbad key: 1\nüni: 2\ntoo-long-key-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa: 3\nok-key_1: 4\n---\n",
+      "expect": {
+        "title": "Untitled",
+        "fm": {
+          "ok-key_1": 4
+        },
+        "fm_parse_error": true,
+        "plugins": {},
+        "diagnostics": [
+          {
+            "kind": "invalid_key",
+            "line": 2
+          },
+          {
+            "kind": "invalid_key",
+            "line": 3
+          },
+          {
+            "kind": "invalid_key",
+            "line": 4
+          }
+        ]
+      }
+    },
+    {
+      "name": "unsupported-yaml-features",
+      "input": "---\nanchor: &a value\nalias: *a\ntagged: !!str x\nblock: |\nfolded: >\nmerged:\n<<: other\nlist:\n- item\n  indented: 1\nok: 1\n---\n",
+      "expect": {
+        "title": "Untitled",
+        "fm": {
+          "list": null,
+          "merged": null,
+          "ok": 1
+        },
+        "fm_parse_error": true,
+        "plugins": {},
+        "diagnostics": [
+          {
+            "kind": "unsupported_feature",
+            "line": 2
+          },
+          {
+            "kind": "unsupported_feature",
+            "line": 3
+          },
+          {
+            "kind": "unsupported_feature",
+            "line": 4
+          },
+          {
+            "kind": "unsupported_feature",
+            "line": 5
+          },
+          {
+            "kind": "unsupported_feature",
+            "line": 6
+          },
+          {
+            "kind": "unsupported_feature",
+            "line": 8
+          },
+          {
+            "kind": "unsupported_feature",
+            "line": 10
+          },
+          {
+            "kind": "malformed_line",
+            "line": 11
+          }
+        ]
+      }
+    },
+    {
+      "name": "comments-and-blanks",
+      "input": "---\n# a comment\n\ntitle: Commented # trailing comment\nhash: \"keeps # inside quotes\"\nonly: # nothing but a comment\n---\n",
+      "expect": {
+        "title": "Commented",
+        "fm": {
+          "hash": "keeps # inside quotes",
+          "only": null,
+          "title": "Commented"
+        },
+        "fm_parse_error": false,
+        "plugins": {},
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "dates-normalize-to-canonical",
+      "input": "---\nplain: 2026-09-23\noffset: 2026-09-23T12:00:00+02:00\nspace: 2026-09-23 10:00\nnoseconds: 2026-09-23T10:00Z\nmicros: 2026-09-23T10:00:00.123456Z\nnotadate: 2026-13-45\nalmost: 2026-09-23 groceries\nlist: [2026-01-02, nope]\n---\n",
+      "expect": {
+        "title": "Untitled",
+        "fm": {
+          "almost": "2026-09-23 groceries",
+          "list": [
+            "2026-01-02",
+            "nope"
+          ],
+          "micros": "2026-09-23T10:00:00.123Z",
+          "noseconds": "2026-09-23T10:00:00.000Z",
+          "notadate": "2026-13-45",
+          "offset": "2026-09-23T10:00:00.000Z",
+          "plain": "2026-09-23",
+          "space": "2026-09-23T10:00:00.000Z"
+        },
+        "fm_parse_error": false,
+        "plugins": {},
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "title-falls-back-to-heading",
+      "input": "---\npath: home\n---\n\n## Second level ##\n\ntext\n",
+      "expect": {
+        "title": "Second level",
+        "fm": {
+          "path": "home"
+        },
+        "fm_parse_error": false,
+        "plugins": {},
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "title-falls-back-to-first-line",
+      "input": "This is the first line and it is quite long indeed, long enough that the resolver has to cut it at one hundred and twenty characters exactly.\n",
+      "expect": {
+        "title": "This is the first line and it is quite long indeed, long enough that the resolver has to cut it at one hundred and twent",
+        "fm": {},
+        "fm_parse_error": false,
+        "plugins": {},
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "title-ignores-section-text",
+      "input": "%%% p\nk: 1\n%%%\n",
+      "expect": {
+        "title": "Untitled",
+        "fm": {},
+        "fm_parse_error": false,
+        "plugins": {
+          "p": {
+            "k": 1
+          }
+        },
+        "frontmatter": null,
+        "body": "",
+        "sections_text": "%%% p\nk: 1\n%%%\n",
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "only-the-last-contiguous-run-counts",
+      "input": "%%% early\na: 1\n%%%\n\nreal body\n\n%%% late\nb: 2\n%%%\n",
+      "expect": {
+        "title": "%%% early",
+        "fm": {},
+        "fm_parse_error": false,
+        "plugins": {
+          "late": {
+            "b": 2
+          }
+        },
+        "frontmatter": null,
+        "body": "%%% early\na: 1\n%%%\n\nreal body\n\n",
+        "sections_text": "%%% late\nb: 2\n%%%\n",
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "several-sections-in-one-run",
+      "input": "body\n\n%%% a\nx: 1\n%%%\n%%% b\ny: 2\n%%%\n\n%%% c\nz: 3\n%%%\n\n",
+      "expect": {
+        "title": "body",
+        "fm": {},
+        "fm_parse_error": false,
+        "plugins": {
+          "a": {
+            "x": 1
+          },
+          "b": {
+            "y": 2
+          },
+          "c": {
+            "z": 3
+          }
+        },
+        "body": "body\n\n",
+        "sections_text": "%%% a\nx: 1\n%%%\n%%% b\ny: 2\n%%%\n\n%%% c\nz: 3\n%%%\n",
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "duplicate-sections-merge-later-wins",
+      "input": "%%% a\nx: 1\ny: 1\n%%%\n%%% a\ny: 2\n%%%\n",
+      "expect": {
+        "title": "Untitled",
+        "fm": {},
+        "fm_parse_error": false,
+        "plugins": {
+          "a": {
+            "x": 1,
+            "y": 2
+          }
+        },
+        "diagnostics": [
+          {
+            "kind": "duplicate_key",
+            "line": 5
+          }
+        ]
+      }
+    },
+    {
+      "name": "section-key-lines-last-occurrence-wins",
+      "input": "%%% a\nk: 1\nk: 2\nk: 3\n%%%\n",
+      "expect": {
+        "title": "Untitled",
+        "fm": {},
+        "fm_parse_error": false,
+        "plugins": {
+          "a": {
+            "k": 3
+          }
+        },
+        "diagnostics": [
+          {
+            "kind": "duplicate_key",
+            "line": 3
+          },
+          {
+            "kind": "duplicate_key",
+            "line": 4
+          }
+        ]
+      }
+    },
+    {
+      "name": "unterminated-section-fence",
+      "input": "body\n\n%%% calendar\nk: 1\n",
+      "expect": {
+        "title": "body",
+        "fm": {},
+        "fm_parse_error": false,
+        "plugins": {},
+        "frontmatter": null,
+        "body": "body\n\n%%% calendar\nk: 1\n",
+        "sections_text": null,
+        "diagnostics": [
+          {
+            "kind": "unterminated_fence",
+            "line": 3
+          }
+        ]
+      }
+    },
+    {
+      "name": "closing-fence-without-opening",
+      "input": "body\n%%%\n",
+      "expect": {
+        "title": "body",
+        "fm": {},
+        "fm_parse_error": false,
+        "plugins": {},
+        "sections_text": null,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "section-fence-must-be-byte-exact",
+      "input": "%%%calendar\nk: 1\n%%%\n",
+      "expect": {
+        "title": "%%%calendar",
+        "fm": {},
+        "fm_parse_error": false,
+        "plugins": {},
+        "sections_text": null,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "section-plugin-id-must-be-a-valid-key",
+      "input": "%%% not a plugin\nk: 1\n%%%\n",
+      "expect": {
+        "title": "%%% not a plugin",
+        "fm": {},
+        "fm_parse_error": false,
+        "plugins": {},
+        "sections_text": null,
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "empty-section-body",
+      "input": "body\n\n%%% a\n%%%\n",
+      "expect": {
+        "title": "body",
+        "fm": {},
+        "fm_parse_error": false,
+        "plugins": {
+          "a": {}
+        },
+        "sections_text": "%%% a\n%%%\n",
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "section-lines-are-tolerant-too",
+      "input": "%%% a\nok: 1\nnot a pair\n!!: 2\n%%%\n",
+      "expect": {
+        "title": "Untitled",
+        "fm": {},
+        "fm_parse_error": false,
+        "plugins": {
+          "a": {
+            "ok": 1
+          }
+        },
+        "diagnostics": [
+          {
+            "kind": "malformed_line",
+            "line": 3
+          },
+          {
+            "kind": "invalid_key",
+            "line": 4
+          }
+        ]
+      }
+    },
+    {
+      "name": "frontmatter-and-sections-with-no-body",
+      "input": "---\ntitle: Machine owned\n---\n%%% importer\nuid: 7\n%%%\n",
+      "expect": {
+        "title": "Machine owned",
+        "fm": {
+          "title": "Machine owned"
+        },
+        "fm_parse_error": false,
+        "plugins": {
+          "importer": {
+            "uid": 7
+          }
+        },
+        "frontmatter": "---\ntitle: Machine owned\n---\n",
+        "body": "",
+        "sections_text": "%%% importer\nuid: 7\n%%%\n",
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "value-with-colons-stays-a-string",
+      "input": "---\nnote: see: this thing\ntime: 10:30\n---\n",
+      "expect": {
+        "title": "Untitled",
+        "fm": {
+          "note": "see: this thing",
+          "time": "10:30"
+        },
+        "fm_parse_error": false,
+        "plugins": {},
+        "diagnostics": []
+      }
+    },
+    {
+      "name": "key-without-space-after-colon-is-malformed",
+      "input": "---\ntitle:NoSpace\nok: 1\n---\n",
+      "expect": {
+        "title": "Untitled",
+        "fm": {
+          "ok": 1
+        },
+        "fm_parse_error": true,
+        "plugins": {},
+        "diagnostics": [
+          {
+            "kind": "malformed_line",
+            "line": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "nesting-depth-cap",
+      "input": "---\nat-limit: [[[[1]]]]\nover-limit: [[[[[1]]]]]\n---\n",
+      "expect": {
+        "title": "Untitled",
+        "fm": {
+          "at-limit": [
+            [
+              [
+                [
+                  1
+                ]
+              ]
+            ]
+          ]
+        },
+        "fm_parse_error": true,
+        "plugins": {},
+        "diagnostics": [
+          {
+            "kind": "limit_exceeded",
+            "line": 3
+          }
+        ]
+      }
+    }
+  ]
+}

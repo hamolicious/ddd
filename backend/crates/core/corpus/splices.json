@@ -1,0 +1,462 @@
+{
+  "_comment": "Conformance corpus for core::splice. Each case applies one operation to `text` and asserts the resulting document (`expect`) plus, optionally, the number of edits and the exact slices the edits replace (`replaced`). Every result is re-parsed so a splice can never produce a document the parser disagrees with.",
+  "cases": [
+    {
+      "name": "set-existing-frontmatter-value",
+      "text": "---\ntitle: Old\npath: home\n---\n\nbody\n",
+      "op": {
+        "kind": "set_fm",
+        "key": "title",
+        "value": "New"
+      },
+      "expect": "---\ntitle: New\npath: home\n---\n\nbody\n",
+      "edits": 1,
+      "replaced": [
+        "Old"
+      ]
+    },
+    {
+      "name": "set-inserts-a-missing-key",
+      "text": "---\ntitle: A\n---\nbody\n",
+      "op": {
+        "kind": "set_fm",
+        "key": "path",
+        "value": "home/lists"
+      },
+      "expect": "---\ntitle: A\npath: home/lists\n---\nbody\n",
+      "edits": 1,
+      "replaced": [
+        ""
+      ]
+    },
+    {
+      "name": "set-fills-an-empty-value",
+      "text": "---\npath:\n---\n",
+      "op": {
+        "kind": "set_fm",
+        "key": "path",
+        "value": "home"
+      },
+      "expect": "---\npath: home\n---\n",
+      "edits": 1
+    },
+    {
+      "name": "set-creates-the-block",
+      "text": "# Note\n\ntext\n",
+      "op": {
+        "kind": "set_fm",
+        "key": "title",
+        "value": "Note"
+      },
+      "expect": "---\ntitle: Note\n---\n\n# Note\n\ntext\n",
+      "edits": 1
+    },
+    {
+      "name": "set-creates-the-block-in-an-empty-document",
+      "text": "",
+      "op": {
+        "kind": "set_fm",
+        "key": "title",
+        "value": "Fresh"
+      },
+      "expect": "---\ntitle: Fresh\n---\n",
+      "edits": 1
+    },
+    {
+      "name": "set-quotes-a-value-that-would-change-type",
+      "text": "---\na: 1\n---\n",
+      "op": {
+        "kind": "set_fm",
+        "key": "a",
+        "value": "true"
+      },
+      "expect": "---\na: \"true\"\n---\n",
+      "edits": 1
+    },
+    {
+      "name": "set-writes-a-flow-sequence",
+      "text": "---\ntags: [old]\n---\n",
+      "op": {
+        "kind": "set_fm",
+        "key": "tags",
+        "value": [
+          "work",
+          "home"
+        ]
+      },
+      "expect": "---\ntags: [work, home]\n---\n",
+      "edits": 1
+    },
+    {
+      "name": "set-targets-the-last-duplicate",
+      "text": "---\na: 1\na: 2\n---\n",
+      "op": {
+        "kind": "set_fm",
+        "key": "a",
+        "value": 3
+      },
+      "expect": "---\na: 1\na: 3\n---\n",
+      "edits": 1
+    },
+    {
+      "name": "set-replaces-the-whole-value-span-including-a-trailing-comment",
+      "text": "---\na: 1 # keep me\n---\n",
+      "op": {
+        "kind": "set_fm",
+        "key": "a",
+        "value": 2
+      },
+      "expect": "---\na: 2\n---\n",
+      "edits": 1,
+      "replaced": [
+        "1 # keep me"
+      ]
+    },
+    {
+      "name": "remove-every-occurrence",
+      "text": "---\na: 1\nb: 2\na: 3\n---\n",
+      "op": {
+        "kind": "remove_fm",
+        "key": "a"
+      },
+      "expect": "---\nb: 2\n---\n",
+      "edits": 2
+    },
+    {
+      "name": "remove-a-missing-key-is-a-no-op",
+      "text": "---\na: 1\n---\n",
+      "op": {
+        "kind": "remove_fm",
+        "key": "zz"
+      },
+      "expect": "---\na: 1\n---\n",
+      "edits": 0
+    },
+    {
+      "name": "remove-from-a-document-without-frontmatter",
+      "text": "body\n",
+      "op": {
+        "kind": "remove_fm",
+        "key": "a"
+      },
+      "expect": "body\n",
+      "edits": 0
+    },
+    {
+      "name": "section-write-touches-only-changed-lines",
+      "text": "body\n\n%%% calendar\na: 1\nb: 2\n%%%\n",
+      "op": {
+        "kind": "splice_section",
+        "plugin": "calendar",
+        "edits": [
+          {
+            "key": "b",
+            "value": 9
+          }
+        ]
+      },
+      "expect": "body\n\n%%% calendar\na: 1\nb: 9\n%%%\n",
+      "edits": 1,
+      "replaced": [
+        "b: 2\n"
+      ]
+    },
+    {
+      "name": "section-write-appends-new-keys-before-the-fence",
+      "text": "%%% calendar\na: 1\n%%%\n",
+      "op": {
+        "kind": "splice_section",
+        "plugin": "calendar",
+        "edits": [
+          {
+            "key": "c",
+            "value": "new"
+          }
+        ]
+      },
+      "expect": "%%% calendar\na: 1\nc: new\n%%%\n",
+      "edits": 1
+    },
+    {
+      "name": "section-write-removes-a-key",
+      "text": "%%% calendar\na: 1\nb: 2\n%%%\n",
+      "op": {
+        "kind": "splice_section",
+        "plugin": "calendar",
+        "edits": [
+          {
+            "key": "a",
+            "value": null,
+            "remove": true
+          }
+        ]
+      },
+      "expect": "%%% calendar\nb: 2\n%%%\n",
+      "edits": 1
+    },
+    {
+      "name": "section-write-sets-an-explicit-null",
+      "text": "%%% calendar\na: 1\n%%%\n",
+      "op": {
+        "kind": "splice_section",
+        "plugin": "calendar",
+        "edits": [
+          {
+            "key": "a",
+            "value": null
+          }
+        ]
+      },
+      "expect": "%%% calendar\na: null\n%%%\n",
+      "edits": 1
+    },
+    {
+      "name": "section-write-mixes-update-insert-and-remove",
+      "text": "body\n\n%%% calendar\na: 1\nb: 2\n%%%\n",
+      "op": {
+        "kind": "splice_section",
+        "plugin": "calendar",
+        "edits": [
+          {
+            "key": "b",
+            "value": 9
+          },
+          {
+            "key": "c",
+            "value": "new"
+          },
+          {
+            "key": "a",
+            "value": null,
+            "remove": true
+          }
+        ]
+      },
+      "expect": "body\n\n%%% calendar\nb: 9\nc: new\n%%%\n",
+      "edits": 3
+    },
+    {
+      "name": "section-write-cleans-up-duplicate-lines",
+      "text": "%%% a\nk: 1\nother: x\nk: 2\n%%%\n",
+      "op": {
+        "kind": "splice_section",
+        "plugin": "a",
+        "edits": [
+          {
+            "key": "k",
+            "value": 3
+          }
+        ]
+      },
+      "expect": "%%% a\nother: x\nk: 3\n%%%\n",
+      "edits": 2
+    },
+    {
+      "name": "section-write-creates-the-run",
+      "text": "# Note\n",
+      "op": {
+        "kind": "splice_section",
+        "plugin": "calendar",
+        "edits": [
+          {
+            "key": "uid",
+            "value": "abc"
+          }
+        ]
+      },
+      "expect": "# Note\n\n%%% calendar\nuid: abc\n%%%\n",
+      "edits": 1
+    },
+    {
+      "name": "section-write-creates-the-run-without-a-trailing-newline",
+      "text": "# Note",
+      "op": {
+        "kind": "splice_section",
+        "plugin": "calendar",
+        "edits": [
+          {
+            "key": "uid",
+            "value": "abc"
+          }
+        ]
+      },
+      "expect": "# Note\n\n%%% calendar\nuid: abc\n%%%\n",
+      "edits": 1
+    },
+    {
+      "name": "section-write-creates-the-run-in-an-empty-document",
+      "text": "",
+      "op": {
+        "kind": "splice_section",
+        "plugin": "calendar",
+        "edits": [
+          {
+            "key": "uid",
+            "value": "abc"
+          }
+        ]
+      },
+      "expect": "%%% calendar\nuid: abc\n%%%\n",
+      "edits": 1
+    },
+    {
+      "name": "section-write-appends-to-an-existing-run",
+      "text": "body\n\n%%% a\nx: 1\n%%%\n",
+      "op": {
+        "kind": "splice_section",
+        "plugin": "b",
+        "edits": [
+          {
+            "key": "y",
+            "value": 2
+          }
+        ]
+      },
+      "expect": "body\n\n%%% a\nx: 1\n%%%\n%%% b\ny: 2\n%%%\n",
+      "edits": 1
+    },
+    {
+      "name": "section-write-never-touches-another-plugin",
+      "text": "%%% a\nx: 1\n%%%\n%%% b\nx: 1\n%%%\n",
+      "op": {
+        "kind": "splice_section",
+        "plugin": "b",
+        "edits": [
+          {
+            "key": "x",
+            "value": 2
+          }
+        ]
+      },
+      "expect": "%%% a\nx: 1\n%%%\n%%% b\nx: 2\n%%%\n",
+      "edits": 1
+    },
+    {
+      "name": "section-write-targets-the-last-duplicate-section",
+      "text": "%%% a\nx: 1\n%%%\n%%% a\nx: 2\n%%%\n",
+      "op": {
+        "kind": "splice_section",
+        "plugin": "a",
+        "edits": [
+          {
+            "key": "x",
+            "value": 3
+          }
+        ]
+      },
+      "expect": "%%% a\nx: 1\n%%%\n%%% a\nx: 3\n%%%\n",
+      "edits": 1
+    },
+    {
+      "name": "section-write-into-an-empty-section",
+      "text": "%%% a\n%%%\n",
+      "op": {
+        "kind": "splice_section",
+        "plugin": "a",
+        "edits": [
+          {
+            "key": "k",
+            "value": 1
+          }
+        ]
+      },
+      "expect": "%%% a\nk: 1\n%%%\n",
+      "edits": 1
+    },
+    {
+      "name": "section-write-with-no-edits-creates-an-empty-section",
+      "text": "body\n",
+      "op": {
+        "kind": "splice_section",
+        "plugin": "a",
+        "edits": []
+      },
+      "expect": "body\n\n%%% a\n%%%\n",
+      "edits": 1
+    },
+    {
+      "name": "remove-section-removes-every-copy",
+      "text": "body\n\n%%% a\nx: 1\n%%%\n%%% b\ny: 2\n%%%\n%%% a\nz: 3\n%%%\n",
+      "op": {
+        "kind": "remove_section",
+        "plugin": "a"
+      },
+      "expect": "body\n\n%%% b\ny: 2\n%%%\n",
+      "edits": 2
+    },
+    {
+      "name": "remove-section-of-an-absent-plugin-is-a-no-op",
+      "text": "%%% a\nx: 1\n%%%\n",
+      "op": {
+        "kind": "remove_section",
+        "plugin": "zz"
+      },
+      "expect": "%%% a\nx: 1\n%%%\n",
+      "edits": 0
+    },
+    {
+      "name": "splices-work-on-crlf-text",
+      "text": "---\r\ntitle: Old\r\n---\r\n\r\nbody\r\n",
+      "op": {
+        "kind": "set_fm",
+        "key": "title",
+        "value": "New"
+      },
+      "expect": "---\r\ntitle: New\r\n---\r\n\r\nbody\r\n",
+      "edits": 1,
+      "replaced": [
+        "Old"
+      ]
+    },
+    {
+      "name": "set-a-date-value",
+      "text": "---\ntitle: A\n---\n",
+      "op": {
+        "kind": "set_fm",
+        "key": "date",
+        "value": "2026-09-23"
+      },
+      "expect": "---\ntitle: A\ndate: 2026-09-23\n---\n",
+      "edits": 1
+    }
+  ],
+  "rejected": [
+    {
+      "name": "invalid-frontmatter-key",
+      "op": {
+        "kind": "set_fm",
+        "key": "bad key",
+        "value": 1
+      }
+    },
+    {
+      "name": "empty-frontmatter-key",
+      "op": {
+        "kind": "set_fm",
+        "key": "",
+        "value": 1
+      }
+    },
+    {
+      "name": "invalid-plugin-id",
+      "op": {
+        "kind": "splice_section",
+        "plugin": "bad id",
+        "edits": []
+      }
+    },
+    {
+      "name": "invalid-section-key",
+      "op": {
+        "kind": "splice_section",
+        "plugin": "a",
+        "edits": [
+          {
+            "key": "bad key",
+            "value": 1
+          }
+        ]
+      }
+    }
+  ]
+}

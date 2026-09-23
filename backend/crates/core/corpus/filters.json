@@ -1,0 +1,1119 @@
+{
+  "_comment": "Conformance corpus for the filter DSL (SPEC §4.2). Every `cases` entry is evaluated twice: by core::filter::evaluator over the rows, and by compiling it with core::filter::mongo and running the compiled query through the test harness' Mongo interpreter. Both must return exactly `matches`. `error` cases must be refused by both sides.",
+  "rows": [
+    {
+      "id": "r1",
+      "title": "Alpha",
+      "content": "the first note",
+      "fm": {
+        "status": "open",
+        "n": 1,
+        "tags": [
+          "work",
+          "home"
+        ],
+        "due": "2026-09-23",
+        "flag": true,
+        "nothing": null
+      },
+      "plugins": {
+        "calendar": {
+          "uid": "a1"
+        }
+      },
+      "created_at": "2026-01-01T00:00:00.000Z",
+      "updated_at": "2026-02-01T00:00:00.000Z",
+      "deleted": false
+    },
+    {
+      "id": "r2",
+      "title": "Beta",
+      "content": "second note",
+      "fm": {
+        "status": "done",
+        "n": 2.5,
+        "tags": [
+          "home"
+        ],
+        "due": "2026-01-01T10:00:00.000Z"
+      },
+      "plugins": {},
+      "created_at": "2026-01-02T00:00:00.000Z",
+      "updated_at": "2026-01-15T00:00:00.000Z",
+      "deleted": false
+    },
+    {
+      "id": "r3",
+      "title": "Gamma",
+      "content": "third note",
+      "fm": {
+        "status": "open",
+        "n": 10,
+        "tags": [],
+        "due": "someday"
+      },
+      "plugins": {},
+      "created_at": "2026-01-03T00:00:00.000Z",
+      "updated_at": "2026-03-01T00:00:00.000Z",
+      "deleted": true
+    },
+    {
+      "id": "r4",
+      "title": "Delta",
+      "content": "fourth note",
+      "fm": {
+        "status": 5,
+        "n": "seven"
+      },
+      "plugins": {},
+      "created_at": "2026-01-04T00:00:00.000Z",
+      "updated_at": "2026-01-16T00:00:00.000Z",
+      "deleted": false
+    },
+    {
+      "id": "r5",
+      "title": "Epsilon",
+      "content": "fifth note",
+      "fm": {},
+      "plugins": {},
+      "created_at": "2026-01-05T00:00:00.000Z",
+      "updated_at": "2026-01-17T00:00:00.000Z",
+      "deleted": false
+    },
+    {
+      "id": "r6",
+      "title": "Zeta",
+      "content": "sixth note",
+      "fm": {
+        "tags": "work",
+        "nothing": null,
+        "nested": {
+          "deep": {
+            "k": "v"
+          }
+        }
+      },
+      "plugins": {
+        "calendar": {
+          "uid": "a1"
+        }
+      },
+      "created_at": "2026-01-06T00:00:00.000Z",
+      "updated_at": "2026-01-18T00:00:00.000Z",
+      "deleted": false
+    },
+    {
+      "id": "r7",
+      "title": "Eta",
+      "content": "seventh note",
+      "fm": {
+        "n": 1,
+        "due": "2026-02-30",
+        "tags": [
+          "2026-05-05",
+          "nope"
+        ],
+        "nothing": [
+          null
+        ]
+      },
+      "plugins": {},
+      "created_at": "2026-01-07T00:00:00.000Z",
+      "updated_at": "2026-01-19T00:00:00.000Z",
+      "deleted": false
+    }
+  ],
+  "cases": [
+    {
+      "name": "all",
+      "filter": "all",
+      "matches": [
+        "r1",
+        "r2",
+        "r3",
+        "r4",
+        "r5",
+        "r6",
+        "r7"
+      ]
+    },
+    {
+      "name": "none",
+      "filter": "none",
+      "matches": []
+    },
+    {
+      "name": "and-of-nothing-is-all",
+      "filter": {
+        "and": []
+      },
+      "matches": [
+        "r1",
+        "r2",
+        "r3",
+        "r4",
+        "r5",
+        "r6",
+        "r7"
+      ]
+    },
+    {
+      "name": "or-of-nothing-is-none",
+      "filter": {
+        "or": []
+      },
+      "matches": []
+    },
+    {
+      "name": "string-column-eq",
+      "filter": {
+        "cmp": {
+          "field": "title",
+          "op": "eq",
+          "value": {
+            "str": "Alpha"
+          }
+        }
+      },
+      "matches": [
+        "r1"
+      ]
+    },
+    {
+      "name": "string-column-ordering-is-byte-wise",
+      "filter": {
+        "cmp": {
+          "field": "title",
+          "op": "lt",
+          "value": {
+            "str": "C"
+          }
+        }
+      },
+      "matches": [
+        "r1",
+        "r2"
+      ]
+    },
+    {
+      "name": "id-column",
+      "filter": {
+        "cmp": {
+          "field": "id",
+          "op": "gte",
+          "value": {
+            "str": "r6"
+          }
+        }
+      },
+      "matches": [
+        "r6",
+        "r7"
+      ]
+    },
+    {
+      "name": "dynamic-eq",
+      "filter": {
+        "cmp": {
+          "field": "fm.status",
+          "op": "eq",
+          "value": {
+            "str": "open"
+          }
+        }
+      },
+      "matches": [
+        "r1",
+        "r3"
+      ]
+    },
+    {
+      "name": "dynamic-ne-is-present-and-not-eq",
+      "filter": {
+        "cmp": {
+          "field": "fm.status",
+          "op": "ne",
+          "value": {
+            "str": "open"
+          }
+        }
+      },
+      "matches": [
+        "r2",
+        "r4"
+      ]
+    },
+    {
+      "name": "missing-is-not-null",
+      "filter": {
+        "missing": {
+          "field": "fm.status"
+        }
+      },
+      "matches": [
+        "r5",
+        "r6",
+        "r7"
+      ]
+    },
+    {
+      "name": "is-null-is-not-missing",
+      "filter": {
+        "is_null": {
+          "field": "fm.nothing"
+        }
+      },
+      "matches": [
+        "r1",
+        "r6"
+      ]
+    },
+    {
+      "name": "exists-covers-null",
+      "filter": {
+        "exists": {
+          "field": "fm.nothing"
+        }
+      },
+      "matches": [
+        "r1",
+        "r6",
+        "r7"
+      ]
+    },
+    {
+      "name": "eq-null-means-present-and-null",
+      "filter": {
+        "cmp": {
+          "field": "fm.nothing",
+          "op": "eq",
+          "value": "null"
+        }
+      },
+      "matches": [
+        "r1",
+        "r6"
+      ]
+    },
+    {
+      "_comment": "r7 has fm.nothing = [null]. Mongo's `$type` traverses arrays element-wise, so the compiled null predicates need the same `$not: {$type: array}` guard every other dynamic-field branch carries — without it the server matches r7 and the evaluator does not.",
+      "name": "ne-null-matches-an-array-of-null",
+      "filter": {
+        "cmp": {
+          "field": "fm.nothing",
+          "op": "ne",
+          "value": "null"
+        }
+      },
+      "matches": [
+        "r7"
+      ]
+    },
+    {
+      "name": "numeric-family-spans-int-and-float",
+      "filter": {
+        "cmp": {
+          "field": "fm.n",
+          "op": "gt",
+          "value": {
+            "int": 1
+          }
+        }
+      },
+      "matches": [
+        "r2",
+        "r3"
+      ]
+    },
+    {
+      "name": "numeric-gte-includes-equal",
+      "filter": {
+        "cmp": {
+          "field": "fm.n",
+          "op": "gte",
+          "value": {
+            "int": 1
+          }
+        }
+      },
+      "matches": [
+        "r1",
+        "r2",
+        "r3",
+        "r7"
+      ]
+    },
+    {
+      "name": "string-literal-against-numeric-value-never-matches",
+      "filter": {
+        "cmp": {
+          "field": "fm.n",
+          "op": "eq",
+          "value": {
+            "str": "1"
+          }
+        }
+      },
+      "matches": []
+    },
+    {
+      "name": "bool-values",
+      "filter": {
+        "cmp": {
+          "field": "fm.flag",
+          "op": "eq",
+          "value": {
+            "bool": true
+          }
+        }
+      },
+      "matches": [
+        "r1"
+      ]
+    },
+    {
+      "name": "in-is-a-disjunction-of-eq",
+      "filter": {
+        "in": {
+          "field": "fm.status",
+          "values": [
+            {
+              "str": "open"
+            },
+            {
+              "str": "done"
+            }
+          ]
+        }
+      },
+      "matches": [
+        "r1",
+        "r2",
+        "r3"
+      ]
+    },
+    {
+      "name": "in-with-no-values-matches-nothing",
+      "filter": {
+        "in": {
+          "field": "fm.status",
+          "values": []
+        }
+      },
+      "matches": []
+    },
+    {
+      "name": "no-implicit-array-matching-on-cmp",
+      "filter": {
+        "cmp": {
+          "field": "fm.tags",
+          "op": "eq",
+          "value": {
+            "str": "work"
+          }
+        }
+      },
+      "matches": [
+        "r6"
+      ]
+    },
+    {
+      "name": "contains-needs-a-list",
+      "filter": {
+        "contains": {
+          "field": "fm.tags",
+          "value": {
+            "str": "work"
+          }
+        }
+      },
+      "matches": [
+        "r1"
+      ]
+    },
+    {
+      "name": "any-over-a-list",
+      "filter": {
+        "any": {
+          "field": "fm.tags",
+          "op": "gt",
+          "value": {
+            "str": "h"
+          }
+        }
+      },
+      "matches": [
+        "r1",
+        "r2",
+        "r7"
+      ]
+    },
+    {
+      "name": "every-is-vacuously-true-on-an-empty-list",
+      "filter": {
+        "every": {
+          "field": "fm.tags",
+          "op": "eq",
+          "value": {
+            "str": "home"
+          }
+        }
+      },
+      "matches": [
+        "r2",
+        "r3"
+      ]
+    },
+    {
+      "name": "every-with-ne",
+      "filter": {
+        "every": {
+          "field": "fm.tags",
+          "op": "ne",
+          "value": {
+            "str": "work"
+          }
+        }
+      },
+      "matches": [
+        "r2",
+        "r3",
+        "r7"
+      ]
+    },
+    {
+      "name": "any-with-a-date-literal",
+      "filter": {
+        "any": {
+          "field": "fm.tags",
+          "op": "gte",
+          "value": {
+            "date": "2026-01-01"
+          }
+        }
+      },
+      "matches": [
+        "r7"
+      ]
+    },
+    {
+      "name": "date-literal-compares-canonical-text",
+      "filter": {
+        "cmp": {
+          "field": "fm.due",
+          "op": "gte",
+          "value": {
+            "date": "2026-06-01"
+          }
+        }
+      },
+      "matches": [
+        "r1"
+      ]
+    },
+    {
+      "name": "date-literal-lower-bound",
+      "filter": {
+        "cmp": {
+          "field": "fm.due",
+          "op": "lt",
+          "value": {
+            "date": "2026-06-01"
+          }
+        }
+      },
+      "matches": [
+        "r2",
+        "r7"
+      ]
+    },
+    {
+      "name": "date-eq-is-precision-sensitive",
+      "filter": {
+        "cmp": {
+          "field": "fm.due",
+          "op": "eq",
+          "value": {
+            "date": "2026-09-23"
+          }
+        }
+      },
+      "matches": [
+        "r1"
+      ]
+    },
+    {
+      "name": "date-eq-with-a-datetime-literal",
+      "filter": {
+        "cmp": {
+          "field": "fm.due",
+          "op": "eq",
+          "value": {
+            "date": "2026-09-23T00:00:00Z"
+          }
+        }
+      },
+      "matches": []
+    },
+    {
+      "name": "date-column-compares-instants",
+      "filter": {
+        "cmp": {
+          "field": "updated_at",
+          "op": "gte",
+          "value": {
+            "date": "2026-02-01"
+          }
+        }
+      },
+      "matches": [
+        "r1",
+        "r3"
+      ]
+    },
+    {
+      "name": "date-column-lower-bound",
+      "filter": {
+        "cmp": {
+          "field": "created_at",
+          "op": "lt",
+          "value": {
+            "date": "2026-01-04"
+          }
+        }
+      },
+      "matches": [
+        "r1",
+        "r2",
+        "r3"
+      ]
+    },
+    {
+      "name": "deleted-is-derived-from-the-tombstone",
+      "filter": {
+        "cmp": {
+          "field": "deleted",
+          "op": "eq",
+          "value": {
+            "bool": true
+          }
+        }
+      },
+      "matches": [
+        "r3"
+      ]
+    },
+    {
+      "name": "live-documents",
+      "filter": {
+        "cmp": {
+          "field": "deleted",
+          "op": "eq",
+          "value": {
+            "bool": false
+          }
+        }
+      },
+      "matches": [
+        "r1",
+        "r2",
+        "r4",
+        "r5",
+        "r6",
+        "r7"
+      ]
+    },
+    {
+      "name": "plugin-section-values",
+      "filter": {
+        "cmp": {
+          "field": "plugins.calendar.uid",
+          "op": "eq",
+          "value": {
+            "str": "a1"
+          }
+        }
+      },
+      "matches": [
+        "r1",
+        "r6"
+      ]
+    },
+    {
+      "name": "nested-fm-maps",
+      "filter": {
+        "cmp": {
+          "field": "fm.nested.deep.k",
+          "op": "eq",
+          "value": {
+            "str": "v"
+          }
+        }
+      },
+      "matches": [
+        "r6"
+      ]
+    },
+    {
+      "name": "path-through-a-scalar-is-missing",
+      "filter": {
+        "missing": {
+          "field": "fm.status.deep"
+        }
+      },
+      "matches": [
+        "r1",
+        "r2",
+        "r3",
+        "r4",
+        "r5",
+        "r6",
+        "r7"
+      ]
+    },
+    {
+      "name": "text-contains-is-case-insensitive",
+      "filter": {
+        "text": {
+          "field": "title",
+          "mode": "contains",
+          "value": "ALPH"
+        }
+      },
+      "matches": [
+        "r1"
+      ]
+    },
+    {
+      "name": "text-starts-with",
+      "filter": {
+        "text": {
+          "field": "title",
+          "mode": "starts_with",
+          "value": "e"
+        }
+      },
+      "matches": [
+        "r5",
+        "r7"
+      ]
+    },
+    {
+      "name": "text-ends-with",
+      "filter": {
+        "text": {
+          "field": "content",
+          "mode": "ends_with",
+          "value": "NOTE"
+        }
+      },
+      "matches": [
+        "r1",
+        "r2",
+        "r3",
+        "r4",
+        "r5",
+        "r6",
+        "r7"
+      ]
+    },
+    {
+      "name": "text-on-a-dynamic-field",
+      "filter": {
+        "text": {
+          "field": "fm.status",
+          "mode": "contains",
+          "value": "PE"
+        }
+      },
+      "matches": [
+        "r1",
+        "r3"
+      ]
+    },
+    {
+      "name": "text-needle-is-escaped",
+      "filter": {
+        "text": {
+          "field": "content",
+          "mode": "contains",
+          "value": ".*"
+        }
+      },
+      "matches": []
+    },
+    {
+      "name": "not-is-a-complement",
+      "filter": {
+        "not": {
+          "cmp": {
+            "field": "fm.status",
+            "op": "eq",
+            "value": {
+              "str": "open"
+            }
+          }
+        }
+      },
+      "matches": [
+        "r2",
+        "r4",
+        "r5",
+        "r6",
+        "r7"
+      ]
+    },
+    {
+      "name": "and-combines",
+      "filter": {
+        "and": [
+          {
+            "cmp": {
+              "field": "fm.status",
+              "op": "eq",
+              "value": {
+                "str": "open"
+              }
+            }
+          },
+          {
+            "cmp": {
+              "field": "deleted",
+              "op": "eq",
+              "value": {
+                "bool": false
+              }
+            }
+          }
+        ]
+      },
+      "matches": [
+        "r1"
+      ]
+    },
+    {
+      "name": "or-combines",
+      "filter": {
+        "or": [
+          {
+            "contains": {
+              "field": "fm.tags",
+              "value": {
+                "str": "work"
+              }
+            }
+          },
+          {
+            "cmp": {
+              "field": "fm.n",
+              "op": "gt",
+              "value": {
+                "int": 5
+              }
+            }
+          }
+        ]
+      },
+      "matches": [
+        "r1",
+        "r3"
+      ]
+    },
+    {
+      "name": "nested-boolean-tree",
+      "filter": {
+        "and": [
+          {
+            "or": [
+              {
+                "cmp": {
+                  "field": "fm.n",
+                  "op": "eq",
+                  "value": {
+                    "int": 1
+                  }
+                }
+              },
+              {
+                "cmp": {
+                  "field": "fm.n",
+                  "op": "eq",
+                  "value": {
+                    "float": 2.5
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "not": {
+              "missing": {
+                "field": "fm.due"
+              }
+            }
+          }
+        ]
+      },
+      "matches": [
+        "r1",
+        "r2",
+        "r7"
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "name": "string-column-vs-int-literal",
+      "filter": {
+        "cmp": {
+          "field": "title",
+          "op": "eq",
+          "value": {
+            "int": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "date-column-vs-string-literal",
+      "filter": {
+        "cmp": {
+          "field": "updated_at",
+          "op": "eq",
+          "value": {
+            "str": "x"
+          }
+        }
+      }
+    },
+    {
+      "name": "bool-column-vs-string-literal",
+      "filter": {
+        "cmp": {
+          "field": "deleted",
+          "op": "eq",
+          "value": {
+            "str": "yes"
+          }
+        }
+      }
+    },
+    {
+      "name": "ordering-against-null",
+      "filter": {
+        "cmp": {
+          "field": "fm.n",
+          "op": "lt",
+          "value": "null"
+        }
+      }
+    },
+    {
+      "name": "ordering-against-bool",
+      "filter": {
+        "cmp": {
+          "field": "fm.flag",
+          "op": "gt",
+          "value": {
+            "bool": false
+          }
+        }
+      }
+    },
+    {
+      "name": "list-operator-on-a-column",
+      "filter": {
+        "contains": {
+          "field": "title",
+          "value": {
+            "str": "x"
+          }
+        }
+      }
+    },
+    {
+      "name": "list-operator-on-a-date-column",
+      "filter": {
+        "any": {
+          "field": "updated_at",
+          "op": "eq",
+          "value": {
+            "date": "2026-01-01"
+          }
+        }
+      }
+    },
+    {
+      "name": "text-on-a-date-column",
+      "filter": {
+        "text": {
+          "field": "created_at",
+          "mode": "contains",
+          "value": "2026"
+        }
+      }
+    },
+    {
+      "name": "text-on-the-deleted-column",
+      "filter": {
+        "text": {
+          "field": "deleted",
+          "mode": "contains",
+          "value": "true"
+        }
+      }
+    }
+  ],
+  "rejected_wire_forms": [
+    {
+      "name": "unknown-root",
+      "json": "{\"cmp\":{\"field\":\"nope\",\"op\":\"eq\",\"value\":{\"int\":1}}}"
+    },
+    {
+      "name": "bare-dynamic-root",
+      "json": "{\"exists\":{\"field\":\"fm\"}}"
+    },
+    {
+      "name": "nested-fixed-root",
+      "json": "{\"exists\":{\"field\":\"title.x\"}}"
+    },
+    {
+      "name": "invalid-key-segment",
+      "json": "{\"exists\":{\"field\":\"fm.bad key\"}}"
+    },
+    {
+      "name": "empty-segment",
+      "json": "{\"exists\":{\"field\":\"fm..x\"}}"
+    },
+    {
+      "name": "bad-date-literal",
+      "json": "{\"cmp\":{\"field\":\"fm.due\",\"op\":\"eq\",\"value\":{\"date\":\"2026-13-01\"}}}"
+    },
+    {
+      "name": "mixed-in-types",
+      "json": "{\"in\":{\"field\":\"fm.n\",\"values\":[{\"int\":1},{\"str\":\"a\"}]}}"
+    },
+    {
+      "name": "unknown-operator",
+      "json": "{\"between\":{\"field\":\"fm.n\",\"low\":1,\"high\":2}}"
+    },
+    {
+      "name": "not-an-object",
+      "json": "\"everything\""
+    },
+    {
+      "name": "untagged-literal",
+      "json": "{\"cmp\":{\"field\":\"fm.n\",\"op\":\"eq\",\"value\":1}}"
+    }
+  ],
+  "sorts": [
+    {
+      "name": "title-ascending",
+      "keys": [
+        "title"
+      ],
+      "order": [
+        "r1",
+        "r2",
+        "r4",
+        "r5",
+        "r7",
+        "r3",
+        "r6"
+      ]
+    },
+    {
+      "name": "title-descending",
+      "keys": [
+        "-title"
+      ],
+      "order": [
+        "r6",
+        "r3",
+        "r7",
+        "r5",
+        "r4",
+        "r2",
+        "r1"
+      ]
+    },
+    {
+      "name": "missing-sorts-last-ascending",
+      "keys": [
+        "fm.n"
+      ],
+      "order": [
+        "r1",
+        "r7",
+        "r2",
+        "r3",
+        "r4",
+        "r5",
+        "r6"
+      ]
+    },
+    {
+      "name": "missing-sorts-last-descending",
+      "keys": [
+        "-fm.n"
+      ],
+      "order": [
+        "r4",
+        "r3",
+        "r2",
+        "r1",
+        "r7",
+        "r5",
+        "r6"
+      ]
+    },
+    {
+      "name": "missing-on-the-first-key-still-uses-the-second",
+      "keys": [
+        "fm.status",
+        "-updated_at"
+      ],
+      "order": [
+        "r4",
+        "r2",
+        "r3",
+        "r1",
+        "r7",
+        "r6",
+        "r5"
+      ]
+    }
+  ],
+  "compiled_sorts": [
+    {
+      "keys": [
+        "-updated_at",
+        "fm.due"
+      ],
+      "expect": {
+        "updated_at": -1,
+        "fm.due": 1
+      }
+    },
+    {
+      "keys": [
+        "title"
+      ],
+      "expect": {
+        "title": 1
+      }
+    },
+    {
+      "keys": [
+        "id"
+      ],
+      "expect": {
+        "_id": 1
+      }
+    }
+  ],
+  "unsortable": [
+    "content",
+    "deleted"
+  ]
+}
