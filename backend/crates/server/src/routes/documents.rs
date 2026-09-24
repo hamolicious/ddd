@@ -36,7 +36,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::auth::AuthUser;
 use crate::docstore::{DocStoreError, ListQuery, TrashFilter};
-use crate::domain::{AuditEntry, DocumentView, Id, is_valid_id};
+use crate::domain::{AuditEntry, DocumentView, Id, Timestamp, is_valid_id};
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 
@@ -414,21 +414,15 @@ pub async fn list(
     _user: AuthUser,
     Query(params): Query<ListParams>,
 ) -> AppResult<Json<ListResponse>> {
-    let metadata_only = params.metadata_only;
     let query = params.into_query()?;
     let page = state.docs.list(&query).await.map_err(map_docstore)?;
 
-    let documents = page
-        .documents
-        .into_iter()
-        .map(|document| {
-            let mut view = DocumentView::from(document);
-            if metadata_only {
-                view.content = String::new();
-            }
-            view
-        })
-        .collect();
+    // `metadata_only` is honoured by the Mongo projection inside
+    // `DocStore::list` (`ListQuery::metadata_only`), so there is nothing to blank
+    // here: a row arrives with `content` already absent. Blanking it in this loop
+    // instead would mean reading every megabyte off the wire and throwing it away
+    // — the list path is exactly where that is not affordable (SPEC §3.5).
+    let documents = page.documents.into_iter().map(DocumentView::from).collect();
 
     Ok(Json(ListResponse {
         documents,
@@ -508,11 +502,15 @@ pub async fn replace(
     check_id(&id)?;
     check_text_size(&body.content, state.config().max_document_bytes)?;
 
-    state
+    let outcome = state
         .docs
         .replace_text(&id, &body.content, &user.actor())
         .await
         .map_err(map_docstore)?;
+    // A REST write is a CRDT write: every socket with this document open has to
+    // receive the diff, or its `Y.Doc` diverges from the server's for the life of
+    // the subscription (PROTOCOL.md §3.4).
+    crate::routes::sync::publish_update(&state, &id, &outcome.update);
 
     Ok(Json(load_view(&state, &id, false).await?))
 }
@@ -529,11 +527,12 @@ pub async fn patch(
 
     // Content-only replace: the text *is* the document (SPEC §3.1), so `PATCH`
     // and `PUT` differ only in what the client is allowed to send.
-    state
+    let outcome = state
         .docs
         .replace_text(&id, &body.content, &user.actor())
         .await
         .map_err(map_docstore)?;
+    crate::routes::sync::publish_update(&state, &id, &outcome.update);
 
     Ok(Json(load_view(&state, &id, false).await?))
 }
@@ -604,13 +603,17 @@ pub async fn restore(
     Ok(Json(view))
 }
 
-#[derive(Debug, Serialize)]
+/// A snapshot row on the wire. `created_at` is a [`Timestamp`] (RFC 3339), not a
+/// `bson::DateTime`: the stored type serializes through `serde_json` as MongoDB
+/// extended JSON (`{"$date": …}`), and no client should ever parse that
+/// (PROTOCOL.md §2.1).
+#[derive(Debug, Serialize, Deserialize)]
 pub struct SnapshotView {
     pub id: Id,
     pub document_id: Id,
     pub title: String,
     pub reason: String,
-    pub created_at: bson::DateTime,
+    pub created_at: Timestamp,
     pub created_by: Option<String>,
     pub size: usize,
 }
@@ -631,7 +634,7 @@ pub async fn list_snapshots(
                 document_id: snapshot.document_id,
                 title: snapshot.title,
                 reason: snapshot.reason,
-                created_at: snapshot.created_at,
+                created_at: snapshot.created_at.into(),
                 created_by: snapshot.created_by,
                 size: snapshot.content.len(),
             })
@@ -679,11 +682,26 @@ pub async fn restore_snapshot(
         )));
     }
 
-    state
+    // Who is watching, read *before* the write: a restore rewrites the whole text
+    // under any open editor (SPEC §3.5 asks for the warning).
+    let subscribers = crate::routes::sync::document_subscribers(&state, &id);
+
+    let outcome = state
         .docs
         .restore_snapshot(&id, &snapshot_id, &user.actor())
         .await
         .map_err(map_docstore)?;
+    // Without this, a restore is invisible to every open editor: the projection row
+    // updates (so the doc list shows the restored text) while the editor keeps the
+    // pre-restore text and merges the user's next keystroke into it.
+    crate::routes::sync::publish_update(&state, &id, &outcome.update);
+    if subscribers > 0 {
+        tracing::warn!(
+            document = %id,
+            subscribers,
+            "snapshot restored while the document had live subscribers"
+        );
+    }
 
     let view = load_view(&state, &id, false).await?;
 
@@ -700,9 +718,6 @@ pub async fn restore_snapshot(
         )
         .await;
 
-    // INTEGRATION (M2): warn when other users are subscribed to this document
-    // (SPEC §3.5) — there is no subscriber registry until the WebSocket layer
-    // exists, so nothing to consult here yet.
     Ok(Json(view))
 }
 

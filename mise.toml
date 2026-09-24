@@ -44,6 +44,64 @@ description = "Check the shared core builds for the client kernel (no server dep
 dir = "backend"
 run = "cargo check -p life-manager-core --no-default-features"
 
+[tasks.web]
+description = "Run the web dev server (proxies /api and the sync socket to the Rust server)"
+dir = "web"
+run = ["npm install --no-audit --no-fund", "npm run dev"]
+
+[tasks.web-check]
+description = "Typecheck and unit-test the web kernel"
+dir = "web"
+run = ["npm install --no-audit --no-fund", "npm run typecheck", "npm run test"]
+
+[tasks.harness]
+description = "Convergence harness against a running server (SPEC §9 M2)"
+dir = "web"
+run = "npm run harness:convergence --"
+
+[tasks.wasm]
+description = "Build the shared core to Wasm for the client kernel (writes web/kernel/src/wasm/pkg)"
+run = '''
+set -euo pipefail
+
+target="wasm32-unknown-unknown"
+out="web/kernel/src/wasm/pkg"
+artifact="backend/target/$target/release/life_manager_core.wasm"
+
+# The target has to be installed once: `rustup target add wasm32-unknown-unknown`.
+if ! rustc --print target-list | grep -qx "$target"; then
+  echo "rustc does not know $target" >&2; exit 1
+fi
+if ! ls "$(rustc --print sysroot)/lib/rustlib/$target" >/dev/null 2>&1; then
+  echo "missing std for $target — run: rustup target add $target" >&2; exit 1
+fi
+
+# `wasm-bindgen` must match the wasm-bindgen crate version in
+# backend/crates/core/Cargo.toml exactly (it refuses to run otherwise):
+#   cargo install wasm-bindgen-cli --version <that version>
+# or drop the prebuilt binary from the wasm-bindgen releases on your PATH.
+if command -v wasm-bindgen >/dev/null 2>&1; then
+  generate() { wasm-bindgen --target web --out-dir "$out" --out-name life_manager_core "$artifact"; }
+elif command -v wasm-pack >/dev/null 2>&1; then
+  # wasm-pack drives the same code generator; it also writes a package.json we
+  # do not use (the kernel imports the artifact directly through a Vite alias).
+  generate() {
+    wasm-pack build backend/crates/core --target web --release --out-dir "../../../$out" \
+      --out-name life_manager_core -- --no-default-features --features wasm
+  }
+else
+  echo "neither wasm-bindgen nor wasm-pack is on PATH — see the comment in this task" >&2
+  exit 1
+fi
+
+cd backend
+cargo build -p life-manager-core --target "$target" --release --no-default-features --features wasm
+cd ..
+mkdir -p "$out"
+generate
+node web/scripts/wasm-smoke.mjs
+'''
+
 [tasks.up]
 description = "Build and start the full stack (mongo + server) in Docker"
 run = "docker compose up --build -d"

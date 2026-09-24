@@ -6,14 +6,26 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[lib]
+# `cdylib` is what wasm-bindgen links (see the `wasm` feature and `mise run wasm`);
+# `rlib` is what the server depends on. Native builds produce both — the extra
+# shared object costs a moment of link time and keeps the Wasm pipeline a plain
+# `cargo build --target wasm32-unknown-unknown` with no per-crate special casing.
+crate-type = ["cdylib", "rlib"]
+
 [features]
 # `mongo` pulls in bson so the filter DSL can be compiled to Mongo queries.
-# Wasm builds use `--no-default-features` (no bson, no Mongo compiler).
+# Wasm builds use `--no-default-features --features wasm` (no bson, no Mongo
+# compiler — compilation is server-side by design, SPEC §4.2).
 default = ["mongo"]
 mongo = ["dep:bson"]
+# `wasm` adds the wasm-bindgen ABI the client kernel imports (src/wasm.rs).
+# Never enable it for a native build: it is meaningless off wasm32.
+wasm = ["dep:wasm-bindgen"]
 
 [dependencies]
 bson = { version = "2.15.0", optional = true }
+wasm-bindgen = { version = "0.2.128", optional = true }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 thiserror = "2.0.20"

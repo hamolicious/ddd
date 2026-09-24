@@ -98,6 +98,20 @@ pub fn all() -> Vec<IndexSpec> {
             doc! { "fm.$**": 1 },
             None,
         ),
+        // The workspace change feed (PROTOCOL.md §2.2). "Everything since X" is
+        // `{feed_seq: {$gt: X}}` sorted by `feed_seq` on this collection merged
+        // with the same scan on `deleted_ids`; without these two indexes every
+        // reconnect is a collection scan, and there is one per client per deploy.
+        //
+        // Sparse here, because a document row written before the feed existed (or
+        // by a migration that has not reached it yet) has no `feed_seq` at all and
+        // is deliberately invisible to catch-up rather than wrongly seq-0.
+        index(
+            super::DOCUMENTS,
+            "documents_feed_seq",
+            doc! { "feed_seq": 1 },
+            Some(IndexOptions::builder().sparse(true).build()),
+        ),
         // The server-side search provider (SPEC §6.5: a fallback for scripts and
         // integrations; the PWA searches its local index).
         index(
@@ -124,9 +138,16 @@ pub fn all() -> Vec<IndexSpec> {
             doc! { "document_id": 1, "created_at": -1 },
             None,
         ),
-        // `deleted_ids` is keyed by `_id` alone — the graveyard is a permanent
-        // set membership test and Mongo indexes `_id` for us.
-
+        // `deleted_ids` is otherwise keyed by `_id` alone — the graveyard is a
+        // permanent set membership test and Mongo indexes `_id` for us. `feed_seq`
+        // is the second half of the change feed's merged range scan: purge rows
+        // are how a client learns to drop a local replica (PROTOCOL.md §2.1).
+        index(
+            super::DELETED_IDS,
+            "deleted_ids_feed_seq",
+            doc! { "feed_seq": 1 },
+            Some(IndexOptions::builder().sparse(true).build()),
+        ),
         // ---- users & sessions ------------------------------------------
         index(
             super::USERS,

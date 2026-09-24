@@ -1,0 +1,37 @@
+{
+  "name": "@life-manager/web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Life Manager web: the kernel (projection store, sync, query, wasm core) plus the M2 demo page and harnesses. React and the plugin loader arrive in M3.",
+  "license": "MIT OR Apache-2.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "playwright test",
+    "harness:convergence": "vite-node harness/src/convergence.ts",
+    "harness:perf": "vite-node harness/src/perf.ts",
+    "wasm": "mise run wasm"
+  },
+  "dependencies": {
+    "idb": "^8.0.3",
+    "minisearch": "^7.2.0",
+    "yjs": "^13.6.29"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^24.10.0",
+    "fake-indexeddb": "^6.2.5",
+    "typescript": "~5.9.3",
+    "vite": "^8.3.0",
+    "vite-node": "^6.0.0",
+    "vitest": "^5.0.1"
+  }
+}

@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Life Manager — M2 sync demo</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --border: color-mix(in srgb, currentColor 18%, transparent);
+        font-family: ui-sans-serif, system-ui, sans-serif;
+      }
+      body {
+        margin: 0;
+        display: grid;
+        /* header · notice · panes · log */
+        grid-template-rows: auto auto 1fr auto;
+        height: 100vh;
+      }
+      #notice {
+        padding: 0.5rem 0.75rem;
+        border-bottom: 1px solid var(--border);
+        background: color-mix(in srgb, currentColor 8%, transparent);
+        font-size: 0.9rem;
+      }
+      #notice[hidden] {
+        display: none;
+      }
+      #search {
+        min-width: 12rem;
+      }
+      #status[data-status="synced"] {
+        border-color: color-mix(in srgb, currentColor 45%, transparent);
+        font-weight: 600;
+      }
+      header {
+        display: flex;
+        gap: 0.75rem;
+        align-items: center;
+        padding: 0.5rem 0.75rem;
+        border-bottom: 1px solid var(--border);
+        flex-wrap: wrap;
+      }
+      main {
+        display: grid;
+        grid-template-columns: minmax(14rem, 22rem) 1fr;
+        min-height: 0;
+      }
+      #docs {
+        overflow: auto;
+        border-right: 1px solid var(--border);
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      #docs li {
+        padding: 0.5rem 0.75rem;
+        border-bottom: 1px solid var(--border);
+        cursor: pointer;
+      }
+      #docs li[aria-selected="true"] {
+        font-weight: 600;
+      }
+      #docs li.deleted {
+        opacity: 0.55;
+        text-decoration: line-through;
+      }
+      #docs small {
+        display: block;
+        opacity: 0.6;
+      }
+      #editor {
+        display: grid;
+        grid-template-rows: auto 1fr;
+        min-height: 0;
+      }
+      textarea {
+        width: 100%;
+        height: 100%;
+        box-sizing: border-box;
+        border: 0;
+        padding: 0.75rem;
+        font: 13px/1.5 ui-monospace, monospace;
+        resize: none;
+      }
+      #status {
+        margin-left: auto;
+        font-variant-numeric: tabular-nums;
+      }
+      .pill {
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 0.1rem 0.6rem;
+        font-size: 0.8rem;
+      }
+      form {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      #log {
+        font: 12px/1.4 ui-monospace, monospace;
+        max-height: 8rem;
+        overflow: auto;
+        padding: 0.5rem 0.75rem;
+        border-top: 1px solid var(--border);
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <strong>Life Manager M2</strong>
+      <form id="login">
+        <input id="email" type="email" placeholder="email" autocomplete="username" required />
+        <input
+          id="password"
+          type="password"
+          placeholder="password"
+          autocomplete="current-password"
+          required
+        />
+        <button type="submit" id="sign-in">Sign in</button>
+        <button type="button" id="register">Create account</button>
+        <button type="button" id="logout">Sign out</button>
+      </form>
+      <input
+        id="search"
+        type="search"
+        placeholder="Search documents"
+        aria-label="Search documents"
+        autocomplete="off"
+      />
+      <button type="button" id="new">New document</button>
+      <span class="pill" id="status" data-status="offline">offline</span>
+      <span class="pill" id="seq">seq 0</span>
+      <span class="pill" id="count">0 docs</span>
+    </header>
+    <div id="notice" role="status" hidden></div>
+    <main>
+      <ul id="docs" role="listbox" aria-label="Documents"></ul>
+      <section id="editor">
+        <div style="padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border)">
+          <span id="open-title">no document open</span>
+        </div>
+        <!--
+          `readonly` until a document is actually bound. Without it the textarea
+          accepts typing from first paint, with no `oninput` handler behind it and
+          nothing to write to: the keystrokes land nowhere, and the moment a
+          document does open, `bindTextarea` overwrites them with its text. A user
+          loses an edit they watched themselves make; an automated test that fills
+          this field before the open resolves believes it made an edit that never
+          existed. `openDocument` clears it once the Y.Text is bound.
+        -->
+        <textarea id="text" spellcheck="false" readonly placeholder="Open a document to edit"></textarea>
+      </section>
+    </main>
+    <pre id="log"></pre>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

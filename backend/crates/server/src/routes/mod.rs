@@ -9,6 +9,7 @@
 //! /api/documents*                  -> documents.rs              (authenticated)
 //! /api/attachments*                -> attachments.rs            (authenticated)
 //! /api/admin/*                     -> admin.rs                  (admin only)
+//! /api/sync, /api/sync/bootstrap   -> sync.rs                   (authenticated)
 //! ```
 
 pub mod admin;
@@ -16,6 +17,7 @@ pub mod attachments;
 pub mod auth;
 pub mod documents;
 pub mod health;
+pub mod sync;
 
 use std::time::Duration;
 
@@ -45,7 +47,12 @@ pub fn router(state: AppState, metrics: PrometheusHandle) -> Router {
         .nest("/documents", documents::router())
         .nest("/attachments", attachments::router())
         .nest("/admin", admin::router())
-        .layer(DefaultBodyLimit::max(JSON_BODY_LIMIT));
+        .layer(DefaultBodyLimit::max(JSON_BODY_LIMIT))
+        // Merged *outside* the body limit: `/api/sync` is a WebSocket upgrade (no
+        // request body at all) and `/api/sync/bootstrap` streams a response, so a
+        // request-body cap is meaningless on both. Frame and page sizes are bounded
+        // by the protocol instead (PROTOCOL.md §6).
+        .merge(sync::router());
 
     let metrics_router = Router::new()
         .route("/metrics", get(telemetry::metrics_handler))

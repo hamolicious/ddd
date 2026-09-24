@@ -24,6 +24,11 @@ pub mod splice;
 pub mod title;
 pub mod value;
 
+/// The wasm-bindgen ABI the client kernel imports (feature `wasm`; SPEC §2).
+/// Built by `mise run wasm` into `web/kernel/src/wasm/pkg/`.
+#[cfg(feature = "wasm")]
+pub mod wasm;
+
 /// The strict-subset YAML line machinery shared by `frontmatter` and `sections`.
 /// Private: the public surface is the two parsers, never the line primitives.
 mod yaml;

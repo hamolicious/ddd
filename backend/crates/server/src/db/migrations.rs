@@ -14,7 +14,7 @@ use thiserror::Error;
 use crate::domain::{MigrationLock, SchemaMeta};
 
 /// Schema version this binary understands. Bump when adding a migration.
-pub const SCHEMA_VERSION: i32 = 1;
+pub const SCHEMA_VERSION: i32 = 2;
 
 /// How long a migration may hold the advisory lock before another process may
 /// steal it (a crashed migrator must not wedge the deployment forever).
@@ -61,11 +61,18 @@ pub struct MigrationReport {
 /// The ordered migration list. **Append only** — never edit or reorder an
 /// existing entry.
 pub fn migrations() -> Vec<Migration> {
-    vec![Migration {
-        version: 1,
-        name: "initial_collections",
-        run: |db| Box::pin(m001_initial_collections(db)),
-    }]
+    vec![
+        Migration {
+            version: 1,
+            name: "initial_collections",
+            run: |db| Box::pin(m001_initial_collections(db)),
+        },
+        Migration {
+            version: 2,
+            name: "backfill_feed_seq",
+            run: |db| Box::pin(m002_backfill_feed_seq(db)),
+        },
+    ]
 }
 
 /// Read the stored schema version (0 when the DB is empty).
@@ -326,6 +333,87 @@ async fn m001_initial_collections(db: &Database) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+/// Give every pre-feed row a `feed_seq` (SPEC §4.1, PROTOCOL.md §2.2).
+///
+/// M1 stored documents with no sequence number at all, and `FeedRow::from_row`
+/// returns `None` for such a row — so an un-backfilled M1 workspace is not
+/// *wrong* on the feed, it is **invisible**: a client would bootstrap fine and
+/// then never see a single change. The numbers are handed out in the order the
+/// rows were last touched (`updated_at`, then `deleted_at` for graveyard rows),
+/// so the backfilled feed reads like the history it stands in for.
+///
+/// Idempotent by construction: only rows *missing* `feed_seq` are considered, and
+/// the counter starts above whatever the highest existing number is, so a
+/// half-finished run resumes without ever reusing a number.
+async fn m002_backfill_feed_seq(db: &Database) -> anyhow::Result<()> {
+    use futures::TryStreamExt;
+
+    // Start above the high-water mark of both collections: a crashed earlier run
+    // may already have numbered part of the workspace.
+    let mut next = highest_feed_seq(db, super::DOCUMENTS)
+        .await?
+        .max(highest_feed_seq(db, super::DELETED_IDS).await?)
+        + 1;
+
+    for (collection, order_by) in [
+        (super::DOCUMENTS, "updated_at"),
+        (super::DELETED_IDS, "deleted_at"),
+    ] {
+        let handle = db.collection::<bson::Document>(collection);
+        let mut cursor = handle
+            .find(doc! { "feed_seq": { "$exists": false } })
+            .projection(doc! { "_id": 1 })
+            .sort(doc! { order_by: 1, "_id": 1 })
+            .await
+            .with_context(|| format!("scanning `{collection}` for rows without a feed_seq"))?;
+
+        let mut ids = Vec::new();
+        while let Some(row) = cursor
+            .try_next()
+            .await
+            .with_context(|| format!("reading `{collection}`"))?
+        {
+            if let Ok(id) = row.get_str("_id") {
+                ids.push(id.to_string());
+            }
+        }
+
+        let count = ids.len();
+        for id in ids {
+            // `$exists: false` in the filter as well as the scan: concurrent
+            // writers cannot appear under the advisory lock, but a resumed run
+            // must not renumber what a previous attempt already numbered.
+            handle
+                .update_one(
+                    doc! { "_id": &id, "feed_seq": { "$exists": false } },
+                    doc! { "$set": { "feed_seq": next } },
+                )
+                .await
+                .with_context(|| format!("backfilling feed_seq on `{collection}` row {id}"))?;
+            next += 1;
+        }
+        if count > 0 {
+            tracing::info!(collection, rows = count, "backfilled feed_seq");
+        }
+    }
+
+    Ok(())
+}
+
+/// The largest `feed_seq` in one collection, or 0 when there is none.
+async fn highest_feed_seq(db: &Database, collection: &str) -> anyhow::Result<i64> {
+    let row = db
+        .collection::<bson::Document>(collection)
+        .find_one(doc! { "feed_seq": { "$exists": true } })
+        .sort(doc! { "feed_seq": -1 })
+        .projection(doc! { "feed_seq": 1 })
+        .await
+        .with_context(|| format!("reading the highest feed_seq in `{collection}`"))?;
+    Ok(row
+        .and_then(|row| row.get_i64("feed_seq").ok())
+        .unwrap_or(0))
 }
 
 /// Mongo error code 48 — `NamespaceExists`.

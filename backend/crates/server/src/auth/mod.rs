@@ -199,7 +199,8 @@ impl FromRequestParts<AppState> for ClientMeta {
 }
 
 /// Pull the raw credential out of a request: `Authorization: Bearer …` first,
-/// then the session cookie.
+/// then the `life-manager.bearer.<token>` WebSocket subprotocol, then the session
+/// cookie.
 ///
 /// The header wins deliberately (RFC 7235: credentials the client sent
 /// explicitly). A bearer client running where a cookie jar also exists — a
@@ -219,6 +220,16 @@ pub fn credential_from_parts(parts: &Parts, cookie_name: &str) -> Option<(String
         }
     }
 
+    // A WebSocket handshake cannot carry `Authorization` from a browser API, and a
+    // shell serving its bundle from a local-file origin has no cookie jar at all
+    // (SPEC §5.2, §7). The subprotocol list is the only field a client controls,
+    // so the token rides there: `life-manager.bearer.<raw token>`
+    // (backend/PROTOCOL.md §1.1). It is never echoed in the selected-protocol
+    // response header.
+    if let Some(token) = bearer_from_subprotocols(&parts.headers) {
+        return Some((token, AuthVia::Bearer));
+    }
+
     let jar = CookieJar::from_headers(&parts.headers);
     let cookie = jar.get(cookie_name)?;
     let value = cookie.value().trim();
@@ -227,6 +238,27 @@ pub fn credential_from_parts(parts: &Parts, cookie_name: &str) -> Option<(String
     } else {
         Some((value.to_string(), AuthVia::Cookie))
     }
+}
+
+/// Extract a bearer token offered as a WebSocket subprotocol
+/// (`life-manager.bearer.<token>`, PROTOCOL.md §1.1).
+///
+/// Lives next to [`credential_from_parts`] rather than in the sync route, because
+/// it is a *credential carrier*: the auth layer owns the question "what did this
+/// request authenticate with", on every route, including the one that upgrades.
+pub fn bearer_from_subprotocols(headers: &axum::http::HeaderMap) -> Option<String> {
+    headers
+        .get_all(axum::http::header::SEC_WEBSOCKET_PROTOCOL)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .flat_map(|value| value.split(','))
+        .filter_map(|value| {
+            value
+                .trim()
+                .strip_prefix(crate::routes::sync::BEARER_SUBPROTOCOL_PREFIX)
+        })
+        .find(|token| !token.is_empty())
+        .map(str::to_owned)
 }
 
 /// Client IP for rate limiting (SPEC §5.2) and audit entries (SPEC §5.4).
@@ -435,12 +467,21 @@ pub async fn load_session(state: &AppState, token: &str) -> Result<Option<Sessio
 }
 
 /// Revoke one session (logout).
+///
+/// Also closes that session's live sync sockets with `4401`. A WebSocket
+/// authenticates once, at upgrade (PROTOCOL.md §1.3), so without this hook a
+/// revoked session keeps full read/write access until the socket's 5-minute
+/// revalidation poll happens to fire — up to six minutes of a revoked credential
+/// reading every document in the workspace and writing CRDT updates under the
+/// revoked user's name. The poll stays as the backstop for revocations nothing
+/// tells us about (an expiry, a row deleted straight in Mongo).
 pub async fn revoke_session(state: &AppState, session_id: &str) -> Result<(), AppError> {
     state
         .collections
         .sessions()
         .delete_one(doc! { "_id": session_id })
         .await?;
+    crate::routes::sync::close_session_sockets(state, session_id);
     Ok(())
 }
 
@@ -451,6 +492,7 @@ pub async fn revoke_user_sessions(state: &AppState, user_id: &str) -> Result<u64
         .sessions()
         .delete_many(doc! { "user_id": user_id })
         .await?;
+    crate::routes::sync::close_user_sockets(state, user_id);
     Ok(result.deleted_count)
 }
 
@@ -466,6 +508,7 @@ pub async fn revoke_user_sessions_except(
         .sessions()
         .delete_many(doc! { "user_id": user_id, "_id": { "$ne": keep_session_id } })
         .await?;
+    crate::routes::sync::close_user_sockets_except(state, user_id, keep_session_id);
     Ok(result.deleted_count)
 }
 

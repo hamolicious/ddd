@@ -4,15 +4,18 @@ The Rust half of Life Manager: a single binary (`life-manager`) serving the REST
 API over MongoDB, plus `life-manager-core`, the shared parsing/filter crate that
 also compiles to Wasm for the client kernel.
 
-**This is M1** ([SPEC](../SPEC.md) §9): storage, auth, documents, attachments, health/metrics.
-No WebSocket sync, no Extism plugin host, no frontend — those are M2–M4. The CRDT
-is real from the first commit: every document is one `yrs` doc holding one
-`Y.Text`, and `content`/`title`/`fm`/`plugins` are *derived*.
+**This is M2** ([SPEC](../SPEC.md) §9): M1's storage, auth, documents and
+attachments, plus the sync layer — the workspace change feed, per-document CRDT
+sync over WebSocket, and the bootstrap stream. No Extism plugin host (M4), no
+Flutter shell (M5). The CRDT is real from the first commit: every document is one
+`yrs` doc holding one `Y.Text`, and `content`/`title`/`fm`/`plugins` are *derived*.
 
 ```
 crates/core        the shared core — parsers, title resolver, filter DSL
-                   (native here, wasm32 for the PWA in M2; see crates/core/README.md)
-crates/server      axum app: routes, docstore, auth, db, telemetry
+                   (native here, and wasm32 for the PWA via the `wasm` feature)
+crates/server      axum app: routes, docstore, feed, auth, db, telemetry
+PROTOCOL.md        the /api/sync wire protocol — authoritative for both sides
+CONTRACTS.md       file ownership and frozen signatures per builder area
 ```
 
 ---
@@ -48,7 +51,8 @@ no `.env`.
 | `mise run logs` | Tail the server logs | `docker compose logs -f server` |
 | `mise run check` | fmt + `cargo check` + clippy `-D warnings`, whole workspace | see below |
 | `mise run test` | Whole workspace test suite | `cargo test --workspace --all-targets` |
-| `mise run wasm-check` | The core builds with no server deps (the future Wasm shape) | `cargo check -p life-manager-core --no-default-features` |
+| `mise run wasm-check` | The core builds with no server deps (the Wasm shape) | `cargo check -p life-manager-core --no-default-features` |
+| `mise run wasm` | Build the core to Wasm for the kernel + node smoke test | see [`../web/README.md`](../web/README.md) |
 | `mise run build` | Release binary, same profile as the Docker image | `cargo build --release --locked --bin life-manager` |
 | `mise run backup` | `mongodump` (documents + GridFS) into `./backups` | see [`../docs/OPERATIONS.md`](../docs/OPERATIONS.md) |
 
@@ -57,8 +61,22 @@ database. Run them against a live Mongo:
 
 ```bash
 docker compose up -d --wait mongo
-MONGO_URI=mongodb://127.0.0.1:27017 cargo test --workspace -- --ignored
+MONGO_URI=mongodb://127.0.0.1:27017 \
+  SESSION_SECRET="$(openssl rand -base64 48)" \
+  cargo test --workspace --all-targets -- --ignored
 ```
+
+`SESSION_SECRET` is needed as well as `MONGO_URI`: some of those tests build a
+`Config` from the environment, and `Config::from_env` refuses without it — exactly
+as the server does. `--all-targets` matters too, or the integration test binaries
+under `crates/server/tests/` never run.
+
+Each suite uses its own throwaway database and drops it afterwards, so they are
+safe to point at a Mongo that holds real data — but the socket suite (`sync_ws`)
+deliberately shares **one** database and serializes itself: an `AppState` is a
+replica, and SPEC §8 pins `replicas: 1` because the change-feed counter is
+in-process, so two live states over one database would hand out the same sequence
+numbers.
 
 ### Break-glass password reset
 
@@ -95,7 +113,7 @@ annotated copy-me file; [`../docs/OPERATIONS.md`](../docs/OPERATIONS.md) has the
 |---|---|---|
 | `MONGO_DATABASE` | `life_manager` | GridFS attachment buckets live in the same database. |
 | `BIND_ADDR` | `0.0.0.0:8080` | The server is TLS-unaware; terminate TLS at the ingress. |
-| `APP_ORIGIN` | *(empty)* | Comma-separated CORS allowlist, exact `scheme://host[:port]` — no paths, no wildcards. Empty = same-origin only. Becomes the mandatory WebSocket origin check in M2. |
+| `APP_ORIGIN` | *(empty)* | Comma-separated allowlist, exact `scheme://host[:port]` — no paths, no wildcards. Empty = same-origin only. Used for CORS **and** as the mandatory WebSocket origin check (SPEC §4.3): a cookie-authenticated `/api/sync` upgrade with no `Origin` is refused outright. |
 | `COOKIE_SECURE` | `true` | Set `false` only for plain-http local dev. |
 | `LOG_FORMAT` | `json` | `json` (deployed) or `pretty` (local). |
 | `RUST_LOG` | `info` | Standard `tracing` filter. |
@@ -211,13 +229,46 @@ MIME type is sniffed from the bytes, then the extension; the client's
 | `GET` | `/export` | Streamed zip of every document as plain markdown — the no-Mongo disaster-recovery path. |
 | `GET` | `/stats` | Workspace counters. |
 
+### Sync — `/api/sync`
+
+The app's channel (SPEC §4.1, §4.3). The complete wire protocol — message schemas,
+framing, close codes, backpressure, reconnect policy — is
+[`PROTOCOL.md`](PROTOCOL.md), and it is authoritative for the server and the client
+alike.
+
+| Method | Path | Behavior |
+|---|---|---|
+| `GET` | `/api/sync` | WebSocket upgrade. Carries the **workspace change feed** (sequence-numbered projection rows + live tail), **per-document CRDT sync** (y-protocols over binary frames) for open documents, and an **opaque awareness relay**. Auth at upgrade (cookie, `Authorization: Bearer`, or the `life-manager.bearer.<token>` subprotocol) with a mandatory `Origin` check. |
+| `GET` | `/api/sync/bootstrap` | Cold start: the whole projection as paged NDJSON (`header`, `row`…, `footer`), ordered by `_id`, with the feed `safe_seq` pinned for the whole pass. Rows are **streamed from the Mongo cursor**, one at a time — a 1 000-row page of megabyte documents is not a `Vec`. The `cursor` is **opaque** — copy `next_cursor` verbatim; it carries the position, the watermark pin and the row total, so resuming a cancelled pass cannot skip rows and the progress denominator costs one count per pass instead of one per page. Concurrency-limited to 2 streams per user (**429** beyond that). `?probe=1` returns the header line and nothing else. |
+
+Two properties worth stating outright, because they are what the design turns on:
+
+- **Resume is always exact.** The feed's sequence numbers live on the rows
+  themselves (`documents.feed_seq`) and on graveyard rows (`deleted_ids.feed_seq`),
+  and neither is ever trimmed — so "everything since seq X" works for any X, however
+  long a client was offline. There is no append-only feed collection to grow.
+- **A client's resume point is the server's `safe_seq`, not the highest sequence
+  number it saw.** Numbers are allocated before their Mongo write and can commit out
+  of order; `safe_seq` is the watermark below which everything has settled. See
+  `crates/server/src/feed.rs` for the whole argument.
+- **Every write is fanned out, whoever made it.** A `PUT`/`PATCH` or a snapshot
+  restore publishes its CRDT diff to the sockets that have the document open, exactly
+  as a socket write does — so an open editor never silently diverges from the server.
+- **Revocation is immediate.** Logout, a password change, deactivating or deleting a
+  user closes that account's live sockets with `4401` on the spot; the 5-minute
+  revalidation poll is the backstop for revocations the server does not perform
+  itself (an expiry, a row deleted in the database).
+
+Every timestamp in every response — REST, feed, bootstrap — is an **RFC 3339
+string**. MongoDB extended JSON (`{"$date": …}`) never reaches a client.
+
 ### Operations (unauthenticated)
 
 | Path | Behavior |
 |---|---|
 | `GET /healthz` | Liveness. 200 without touching Mongo. |
 | `GET /readyz` | Readiness with detail: Mongo ping (2 s bound), migration state, schema version, uptime, version. 200 / 503 on the same shape. |
-| `GET /metrics` | Prometheus text 0.0.4 — `lm_http_requests_total`, `lm_http_request_duration_seconds`, `lm_materialize_duration_seconds`, `lm_crdt_updates_applied_total`, room/document gauges, build info. |
+| `GET /metrics` | Prometheus text 0.0.4 — `lm_http_requests_total`, `lm_http_request_duration_seconds`, `lm_materialize_duration_seconds`, `lm_crdt_updates_applied_total`, room/document gauges, the change-feed gauges (`lm_feed_head_seq`, `lm_feed_safe_seq`, `lm_feed_subscribers`), socket gauges (`lm_ws_connections`, `lm_ws_subscribed_documents`), `lm_ws_backpressure_drops_total` by queue, and build info. Gauges are **sampled every 15 s**, so a scrape within 15 s of boot reports the workspace the server started with — including zeros. |
 
 ### Errors
 
@@ -246,6 +297,32 @@ Two statuses are worth singling out, because the obvious reading is wrong:
 
 ---
 
+## The M2 gates
+
+SPEC §9 M2 names two, and both are commands rather than claims:
+
+```bash
+# convergence: N simulated clients, randomized ops/partitions/reconnects, asserting
+# CRDT convergence *and* materialization equality against the Wasm core
+cd ../web && npm run harness:convergence
+
+# performance: 5 000 documents — bootstrap, cold boot, catch-up, round trip, heap
+cd ../web && npm run harness:perf
+```
+
+Measured results, with pass/fail against the SPEC targets, are in
+[`PERF.md`](PERF.md). Both harnesses need `mise run wasm` first: materialization
+equality is compared against the real shared core, and a missing artifact is a hard
+failure rather than a skipped assertion. They also need the server's `APP_ORIGIN`
+to list the origin the browser half loads from, and they share a dev account with
+the Playwright smoke — see [`../web/README.md`](../web/README.md).
+
+The other executable half of the protocol is `crates/server/tests/sync_ws.rs` —
+the real router over a real socket against a live Mongo, covering the handshake,
+origin-before-auth ordering, close codes, watermarks, fan-out and backpressure.
+
+---
+
 ## Notes on the shape of things
 
 - **The CRDT is the source of truth.** `content`, `title`, `fm`, `plugins` and
@@ -264,7 +341,10 @@ Two statuses are worth singling out, because the obvious reading is wrong:
   SPEC §8 and is v2.
 - **Migrations run at boot** under an advisory lock, ordered and idempotent, and
   the server **refuses to start against a database newer than the binary**. All
-  indexes are declared in one list (`db/indexes.rs`) and created idempotently.
+  indexes are declared in one list (`db/indexes.rs`) and created idempotently. They
+  run through `AppState::init_schema`, which then **re-seeds the change feed's
+  sequence counter** — `m002_backfill_feed_seq` is what numbers an M1 workspace's
+  rows, so a counter seeded before it would hand those numbers out a second time.
 - **Telemetry: none, ever.** Nothing leaves the deployment.
 
 [`../docs/OPERATIONS.md`](../docs/OPERATIONS.md) covers deployment, backup/restore (including the GridFS and

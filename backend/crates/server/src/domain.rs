@@ -6,15 +6,99 @@
 //!
 //! Conventions:
 //! - `_id` is a ULID string (client-mintable offline, SPEC §3.5).
-//! - Timestamps are `bson::DateTime` (millisecond precision, UTC).
+//! - Stored timestamps are `bson::DateTime` (millisecond precision, UTC); every
+//!   *view* uses [`Timestamp`], which serializes as an RFC 3339 string. Extended
+//!   JSON never reaches a client (PROTOCOL.md §2.1).
 //! - `*_by` holds a user id (or a plugin id prefixed `plugin:`) and means "last
 //!   applier the server saw", not authorship.
 
 use bson::{Binary, DateTime as BsonDateTime, Document as BsonDocument};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as _};
 
 /// A ULID, stored as its 26-character canonical string.
 pub type Id = String;
+
+// ---------------------------------------------------------------------------
+// Wire-format primitives
+// ---------------------------------------------------------------------------
+
+/// A timestamp **on the wire**: serialized as an RFC 3339 / ISO-8601 UTC string
+/// with millisecond precision, deserialized from the same.
+///
+/// Stored rows use `bson::DateTime`; every *view* uses this. The distinction is
+/// not cosmetic: `bson::DateTime` serializes through `serde_json` as MongoDB
+/// extended JSON (`{"$date": …}`), which no client should ever have to parse and
+/// which the sync protocol forbids outright (PROTOCOL.md §2.1). Converting at the
+/// view boundary makes that impossible to get wrong by accident.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Timestamp(BsonDateTime);
+
+impl Timestamp {
+    pub fn now() -> Self {
+        Self(BsonDateTime::now())
+    }
+
+    pub fn from_millis(millis: i64) -> Self {
+        Self(BsonDateTime::from_millis(millis))
+    }
+
+    pub fn timestamp_millis(self) -> i64 {
+        self.0.timestamp_millis()
+    }
+
+    pub fn to_bson(self) -> BsonDateTime {
+        self.0
+    }
+
+    /// The wire form. Falls back to the epoch for a value outside RFC 3339's
+    /// range (a corrupt row must not fail a whole response).
+    pub fn to_rfc3339(self) -> String {
+        self.0
+            .try_to_rfc3339_string()
+            .unwrap_or_else(|_| "1970-01-01T00:00:00Z".to_string())
+    }
+}
+
+impl From<BsonDateTime> for Timestamp {
+    fn from(value: BsonDateTime) -> Self {
+        Self(value)
+    }
+}
+
+impl From<Timestamp> for BsonDateTime {
+    fn from(value: Timestamp) -> Self {
+        value.0
+    }
+}
+
+impl Serialize for Timestamp {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.to_rfc3339())
+    }
+}
+
+impl<'de> Deserialize<'de> for Timestamp {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let raw = String::deserialize(deserializer)?;
+        BsonDateTime::parse_rfc3339_str(&raw)
+            .map(Self)
+            .map_err(|error| D::Error::custom(format!("invalid RFC 3339 timestamp: {error}")))
+    }
+}
+
+/// Convert a materialized `fm`/`plugins` sub-document to plain JSON.
+///
+/// These only ever hold the shared-core value model (SPEC §3.4) — the write path
+/// builds them with `core::value::map_to_bson` — but routing them through the
+/// core's own bridge means a stray `DateTime` or `Binary` that somehow reached a
+/// row degrades to a string instead of leaking extended JSON to clients.
+pub fn materialized_to_json(document: &BsonDocument) -> serde_json::Value {
+    let mut object = serde_json::Map::with_capacity(document.len());
+    for (key, value) in life_manager_core::value::map_from_bson(document) {
+        object.insert(key, value.to_json());
+    }
+    serde_json::Value::Object(object)
+}
 
 /// Mint a new ULID string.
 pub fn new_id() -> Id {
@@ -89,20 +173,38 @@ pub struct Document {
     pub deleted_at: Option<BsonDateTime>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub deleted_by: Option<String>,
+    /// Workspace-global change-feed sequence number (SPEC §4.1, PROTOCOL.md §2.2).
+    /// Rewritten on every materialization, tombstone and restore. `None` only on
+    /// rows written before the feed existed (migration backfills them).
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub feed_seq: Option<i64>,
 }
 
-/// The materialized projection of a document — what `GET /api/documents` and
-/// `GET /api/documents/:id` return, and what replicates to clients in M2
-/// (SPEC §4.1). Never contains CRDT bytes.
+/// A document row **without the CRDT blobs** — the shape every list, feed and
+/// bootstrap query reads out of Mongo.
+///
+/// It exists because `Document` is a promise the list path cannot keep: `crdt`
+/// and `state_vector` are 2–10× the plaintext and compacted only above 4 MiB
+/// (SPEC §3.5), so no query that returns many rows may read them. Those queries
+/// project them away, which used to mean handing back `Document` values with
+/// empty placeholder blobs — a type that lied. This one does not: if you hold a
+/// `DocumentRow`, there are no CRDT bytes to be had, and `DocStore::get`/
+/// `crdt_state` is where you go for them.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DocumentView {
+pub struct DocumentRow {
+    #[serde(rename = "_id")]
     pub id: Id,
-    pub title: String,
+    /// Materialized full text. Empty when the query asked for metadata only.
+    #[serde(default)]
     pub content: String,
+    pub title: String,
+    #[serde(default)]
     pub fm: BsonDocument,
+    #[serde(default)]
     pub plugins: BsonDocument,
-    pub fm_parse_error: bool,
     pub materialized_version: String,
+    #[serde(default)]
+    pub fm_parse_error: bool,
     pub created_at: BsonDateTime,
     pub created_by: Option<String>,
     pub updated_at: BsonDateTime,
@@ -111,25 +213,104 @@ pub struct DocumentView {
     pub deleted_at: Option<BsonDateTime>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub deleted_by: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub feed_seq: Option<i64>,
 }
 
-impl From<Document> for DocumentView {
+impl DocumentRow {
+    /// The Mongo projection that yields exactly these fields. One definition, so
+    /// a new field cannot be added to the struct and forgotten in three queries.
+    pub fn projection(include_content: bool) -> BsonDocument {
+        let mut projection = bson::doc! {
+            "title": 1, "fm": 1, "plugins": 1, "materialized_version": 1,
+            "fm_parse_error": 1, "created_at": 1, "created_by": 1,
+            "updated_at": 1, "updated_by": 1, "deleted_at": 1, "deleted_by": 1,
+            "feed_seq": 1,
+        };
+        if include_content {
+            projection.insert("content", 1);
+        }
+        projection
+    }
+
+    pub fn deleted(&self) -> bool {
+        self.deleted_at.is_some()
+    }
+}
+
+impl From<Document> for DocumentRow {
     fn from(doc: Document) -> Self {
         Self {
             id: doc.id,
-            title: doc.title,
             content: doc.content,
+            title: doc.title,
             fm: doc.fm,
             plugins: doc.plugins,
-            fm_parse_error: doc.fm_parse_error,
             materialized_version: doc.materialized_version,
+            fm_parse_error: doc.fm_parse_error,
             created_at: doc.created_at,
             created_by: doc.created_by,
             updated_at: doc.updated_at,
             updated_by: doc.updated_by,
             deleted_at: doc.deleted_at,
             deleted_by: doc.deleted_by,
+            feed_seq: doc.feed_seq,
         }
+    }
+}
+
+/// The materialized projection of a document **as it goes out on the wire** —
+/// what `GET /api/documents` and `GET /api/documents/:id` return, and the same
+/// field set the change feed replicates (SPEC §4.1, PROTOCOL.md §2.1).
+///
+/// Timestamps are RFC 3339 strings and `fm`/`plugins` are plain JSON: no
+/// extended JSON reaches a client, ever.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentView {
+    pub id: Id,
+    pub title: String,
+    pub content: String,
+    pub fm: serde_json::Value,
+    pub plugins: serde_json::Value,
+    pub fm_parse_error: bool,
+    pub materialized_version: String,
+    pub created_at: Timestamp,
+    pub created_by: Option<String>,
+    pub updated_at: Timestamp,
+    pub updated_by: Option<String>,
+    /// `true` ⇒ in Trash (SPEC §3.5). Explicit so clients need no null-checking
+    /// convention to answer the question they actually ask.
+    pub deleted: bool,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub deleted_at: Option<Timestamp>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub deleted_by: Option<String>,
+}
+
+impl From<DocumentRow> for DocumentView {
+    fn from(row: DocumentRow) -> Self {
+        Self {
+            id: row.id,
+            title: row.title,
+            content: row.content,
+            fm: materialized_to_json(&row.fm),
+            plugins: materialized_to_json(&row.plugins),
+            fm_parse_error: row.fm_parse_error,
+            materialized_version: row.materialized_version,
+            created_at: row.created_at.into(),
+            created_by: row.created_by,
+            updated_at: row.updated_at.into(),
+            updated_by: row.updated_by,
+            deleted: row.deleted_at.is_some(),
+            deleted_at: row.deleted_at.map(Timestamp::from),
+            deleted_by: row.deleted_by,
+        }
+    }
+}
+
+impl From<Document> for DocumentView {
+    fn from(doc: Document) -> Self {
+        DocumentRow::from(doc).into()
     }
 }
 
@@ -174,6 +355,12 @@ pub struct GraveyardEntry {
     pub id: Id,
     pub deleted_at: BsonDateTime,
     pub deleted_by: Option<String>,
+    /// Change-feed sequence number of the purge. Written once, never rewritten —
+    /// which is what lets the feed serve "everything since X" for *any* X without
+    /// an append-only feed collection (PROTOCOL.md §2.2). `None` on graveyard rows
+    /// written before the feed existed.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub feed_seq: Option<i64>,
 }
 
 // ---------------------------------------------------------------------------
@@ -213,9 +400,9 @@ pub struct UserView {
     pub name: String,
     pub is_admin: bool,
     pub is_active: bool,
-    pub created_at: BsonDateTime,
+    pub created_at: Timestamp,
     #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub last_login_at: Option<BsonDateTime>,
+    pub last_login_at: Option<Timestamp>,
 }
 
 impl From<User> for UserView {
@@ -226,8 +413,8 @@ impl From<User> for UserView {
             name: user.name,
             is_admin: user.is_admin,
             is_active: user.is_active,
-            created_at: user.created_at,
-            last_login_at: user.last_login_at,
+            created_at: user.created_at.into(),
+            last_login_at: user.last_login_at.map(Timestamp::from),
         }
     }
 }
@@ -345,9 +532,9 @@ pub struct AttachmentView {
     pub size: u64,
     pub sha256: String,
     pub revision: u32,
-    pub created_at: BsonDateTime,
+    pub created_at: Timestamp,
     pub created_by: Option<String>,
-    pub updated_at: BsonDateTime,
+    pub updated_at: Timestamp,
     pub updated_by: Option<String>,
 }
 
@@ -360,9 +547,9 @@ impl From<Attachment> for AttachmentView {
             size: a.size,
             sha256: a.sha256,
             revision: a.revision,
-            created_at: a.created_at,
+            created_at: a.created_at.into(),
             created_by: a.created_by,
-            updated_at: a.updated_at,
+            updated_at: a.updated_at.into(),
             updated_by: a.updated_by,
         }
     }

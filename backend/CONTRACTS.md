@@ -1,4 +1,11 @@
-# M1 build contracts
+# Build contracts
+
+**[M1 contracts](#m1-build-contracts) — [M2 contracts](#m2-build-contracts-sync)**
+
+M1 is built and green. M2 adds the sync layer; its section is at the end of this
+file and *amends* the rules below rather than replacing them.
+
+## M1 build contracts
 
 Five builder areas fill in this scaffold in parallel. The tree already compiles:
 every function exists, every signature is final, every body is `todo!()`.
@@ -366,6 +373,9 @@ pub trait DocStore: Send + Sync + 'static {
     fn stats(&self) -> DocStoreStats;
 }
 
+// SUPERSEDED IN M2 — `new` now takes `DocStoreTuning` and the `ChangeFeed`, and
+// `Page` carries `DocumentRow`s. See "Area: docstore (M2 additions)" below; the
+// M1 shape is kept here only so the history of the contract is readable.
 pub struct MongoDocStore { /* private */ }
 impl MongoDocStore {
     pub fn new(db: mongodb::Database, max_document_bytes: usize) -> Self;
@@ -752,3 +762,366 @@ mise run up / down / logs
 `mise run check` must pass before you report done. If your area cannot compile
 without another area's file changing, stop and report it — that is a contract
 problem, not a code problem.
+
+---
+
+# M2 build contracts (sync)
+
+**Scope: SPEC §9 M2 only** — change feed + projection replication, per-document
+CRDT sync over WebSocket, lazy hydration, the offline PWA skeleton (IndexedDB +
+local query engine + Wasm core), the bootstrap endpoint, and the convergence
+harness. **No microkernel or plugin loader (M3), no Extism (M4), no Flutter (M5),
+no React anywhere.**
+
+[`PROTOCOL.md`](PROTOCOL.md) is authoritative for everything on the wire. Server
+and client implement it independently; where an implementation and that document
+disagree, the document is the bug report, and where the document and
+[`../SPEC.md`](../SPEC.md) disagree, the SPEC wins.
+
+The three M1 rules still hold (don't edit another area's files; don't change a
+frozen signature; report instead of improvising). One amendment: **dependencies
+were added by the scaffold** — `axum` gained the `ws` feature and
+`life-manager-core` gained an optional `wasm-bindgen` behind the new `wasm`
+feature. Nothing else may be added.
+
+## New and changed layout
+
+```
+backend/
+├── PROTOCOL.md                     # the wire protocol                 FROZEN
+└── crates/
+    ├── core/src/wasm.rs            # wasm-bindgen ABI (feature `wasm`) [wasm]
+    └── server/src/
+        ├── feed.rs                 # change feed: seq + notices + queries [sync]
+        └── routes/sync.rs          # /api/sync + /api/sync/bootstrap     [sync]
+
+web/                                # see web/CONTRACTS.md for its areas
+```
+
+Root: `mise.toml` gained `wasm`, `web`, `web-check`, `harness` — **[ops]**.
+
+## Area: sync (server)
+
+**Owns:** `crates/server/src/feed.rs`, `crates/server/src/routes/sync.rs`.
+
+**Must not touch:** `docstore.rs` (ask docstore), `db/**` (ask ops), `auth/**`,
+`domain.rs`, `state.rs`, `error.rs`, other `routes/*`.
+
+Hard requirements (SPEC §4.1, §4.3; PROTOCOL.md §§1–7):
+
+- **Auth at upgrade only.** Cookie, `Authorization: Bearer`, or the
+  `life-manager.bearer.<token>` subprotocol — the last of which
+  `auth::credential_from_parts` already resolves. Origin is checked **before**
+  authentication, and a cookie connection with no `Origin` is refused.
+- Session revalidated every 5 min ± jitter → close **4401**. `4401` never implies
+  "clear local data" (SPEC §5.3) — do not invent a response that says otherwise.
+- **`safe_seq` comes from in-flight allocations**, never from `max(committed seq)`
+  (`FeedSequencer::safe_seq`, and the reasoning is in the `feed.rs` module docs).
+  Every feed message carries it; clients persist it.
+- Bounded send queues; on overflow **drop and instruct a resync**
+  (`feed.resync` / `doc.resync`). Never grow a buffer, never block the writer.
+- Max frame 4 MiB both ways; inbound rate caps; ≤ 32 doc subscriptions and ≤ 8
+  sockets per session.
+- Awareness frames are **relayed opaquely** — never parsed, never persisted,
+  never replayed to late joiners (SPEC §3.2).
+- Fan-out reaches every subscriber **except** the originator. All writes go
+  through `DocStore` so the per-document actor still serializes them.
+- Bootstrap is **streamed** NDJSON, paged by `_id`, with `safe_seq` pinned on the
+  first page and echoed on every page. Never buffer a page set in memory.
+
+**Frozen signatures** (implement behind them):
+
+```rust
+// feed.rs
+pub const FEED_SEQ_START: i64 = 1;
+pub const NOTICE_CHANNEL_CAPACITY: usize = 1024;
+pub const FEED_BATCH_MAX_ROWS: u32 = 1000;      pub const FEED_BATCH_DEFAULT_ROWS: u32 = 200;
+pub const FEED_CATCHUP_MAX_ROWS: u64 = 500;
+pub const BOOTSTRAP_DEFAULT_LIMIT: u32 = 200;   pub const BOOTSTRAP_MAX_LIMIT: u32 = 1000;
+
+pub enum FeedChangeKind { Upsert, Tombstoned, Restored, Purged }
+pub struct FeedNotice { pub seq: i64, pub id: Id, pub kind: FeedChangeKind }
+pub struct FeedRow { /* PROTOCOL.md §2.1, RFC 3339 timestamps, `purged` flag */ }
+impl FeedRow {
+    pub fn from_row(row: DocumentRow, include_content: bool) -> Option<Self>; // None ⇒ no feed_seq
+    pub fn purged(seq: i64, id: Id, deleted_at: Timestamp, deleted_by: Option<String>) -> Self;
+}
+pub struct FeedPage { pub rows: Vec<FeedRow>, pub safe_seq: i64, pub head_seq: i64, pub complete: bool }
+pub struct BootstrapPage { pub rows: Vec<FeedRow>, pub next_cursor: Option<String>, pub complete: bool }
+pub enum FeedError { Db(mongodb::error::Error), Bson(String), SeqAhead { since: i64, head: i64 } }
+
+pub struct FeedAllocation;              // RAII: commit() publishes, Drop burns the number
+impl FeedAllocation { pub fn seq(&self) -> i64; pub fn id(&self) -> &str;
+                      pub fn commit(self, kind: FeedChangeKind); }
+
+pub struct FeedSequencer;               // no database half; unit-tested
+impl FeedSequencer {
+    pub fn new() -> Arc<Self>;          pub fn set_head(&self, seq: i64);
+    pub fn head_seq(&self) -> i64;      pub fn safe_seq(&self) -> i64;
+    pub fn allocate(self: &Arc<Self>, id: Id) -> FeedAllocation;
+    pub fn subscribe(&self) -> broadcast::Receiver<FeedNotice>;
+    pub fn subscriber_count(&self) -> usize;
+}
+
+pub struct ChangeFeed;
+impl ChangeFeed {
+    pub fn new(collections: Collections) -> Arc<Self>;
+    pub async fn initialize(&self) -> Result<i64, FeedError>;            // todo!()
+    pub fn allocate(&self, id: Id) -> FeedAllocation;
+    pub fn head_seq(&self) -> i64;   pub fn safe_seq(&self) -> i64;
+    pub fn subscribe(&self) -> broadcast::Receiver<FeedNotice>;
+    pub fn subscriber_count(&self) -> usize;
+    pub fn sequencer(&self) -> &Arc<FeedSequencer>;
+    pub async fn count_since(&self, since_seq: i64) -> Result<u64, FeedError>;       // todo!()
+    pub async fn rows_since(&self, since_seq: i64, limit: u32,
+                            include_content: bool) -> Result<FeedPage, FeedError>;  // todo!()
+    pub async fn bootstrap_page(&self, cursor: Option<&str>, limit: u32, trash: TrashFilter,
+                                include_content: bool) -> Result<BootstrapPage, FeedError>; // todo!()
+    pub async fn bootstrap_total(&self, trash: TrashFilter) -> Result<u64, FeedError>;       // todo!()
+    pub fn trash_filter(trash: TrashFilter) -> bson::Document;
+    pub fn collections(&self) -> &Collections;
+}
+pub async fn collect_rows(cursor: mongodb::Cursor<DocumentRow>,
+                          include_content: bool) -> Result<Vec<FeedRow>, FeedError>;
+
+// routes/sync.rs
+pub const PROTOCOL_VERSION: u32 = 1;
+pub const SUBPROTOCOL: &str = "life-manager.v1";
+pub const BEARER_SUBPROTOCOL_PREFIX: &str = "life-manager.bearer.";
+pub const MAX_FRAME_BYTES: usize = 4 * 1024 * 1024;
+pub const MAX_SUBSCRIPTIONS: usize = 32;      pub const MAX_SOCKETS_PER_SESSION: usize = 8;
+pub const FEED_QUEUE_MESSAGES: usize = 64;    pub const DOC_QUEUE_FRAMES: usize = 256;
+pub const INBOUND_FRAMES_PER_SEC: u32 = 200;  pub const INBOUND_BYTES_PER_SEC: u64 = 2 << 20;
+pub const HEARTBEAT_SECS: u32 = 25;
+pub const SESSION_REVALIDATE_SECS: u64 = 300; pub const SESSION_REVALIDATE_JITTER_SECS: u64 = 60;
+pub const TAIL_COALESCE_MS: u64 = 50;
+pub mod close { /* 4400 4401 4403 4408 4409 4413 4429 4503 */ }
+pub mod frame { /* 0x01 STEP1, 0x02 STEP2, 0x03 UPDATE, 0x04 AWARENESS, 0x05 AWARENESS_QUERY,
+                   0x10 RESERVED_FLOOR */ }
+pub fn router() -> Router<AppState>;                        // /sync, /sync/bootstrap
+pub async fn upgrade(State<AppState>, HeaderMap, AuthUser, WebSocketUpgrade) -> AppResult<Response>;
+pub fn origin_allowed(&AppState, &HeaderMap, AuthVia) -> bool;
+pub fn offers_subprotocol(&HeaderMap) -> bool;
+pub struct BootstrapParams { cursor, limit, trash, include_content, probe }
+pub struct BootstrapHeader { .. }   pub struct BootstrapFooter { .. }
+pub async fn bootstrap(State<AppState>, AuthUser, Query<BootstrapParams>) -> AppResult<Response>; // todo!()
+pub fn ndjson_headers() -> [(HeaderName, &'static str); 3];
+pub fn map_feed_error(FeedError) -> AppError;
+```
+
+### Added by M2 integration (hardening pass)
+
+Additive only — nothing above changed shape. The four hooks are what let other areas
+reach the socket registry without `AppState` growing a field:
+
+```rust
+// routes/sync.rs — new ceilings (PROTOCOL.md §1.3, §6)
+pub const MAX_SOCKETS_PER_USER: usize = 16;   pub const MAX_SOCKETS_TOTAL: usize = 512;
+
+// routes/sync.rs — hooks other areas call
+pub fn publish_update(&AppState, id: &str, update: &[u8]);      // REST/restore fan-out
+pub fn document_subscribers(&AppState, id: &str) -> usize;      // the restore warning
+pub fn close_session_sockets(&AppState, session_id: &str) -> usize;
+pub fn close_user_sockets(&AppState, user_id: &str) -> usize;
+pub fn close_user_sockets_except(&AppState, user_id: &str, keep_session_id: &str) -> usize;
+
+// feed.rs — the streaming read the bootstrap route uses, and the catch-up byte bound
+pub async fn bootstrap_cursor(&self, cursor: Option<&str>, limit: u32, trash: TrashFilter,
+                              include_content: bool) -> Result<Cursor<DocumentRow>, FeedError>;
+pub const FEED_PAGE_MAX_BYTES: usize = 2 << 20;   // `rows_since` stops reading here
+
+// state.rs — migrations + index creation + re-seeding the feed counter, in one step
+impl AppState { pub async fn init_schema(&self) -> anyhow::Result<()> }
+```
+
+`bootstrap_page` is unchanged and still frozen, but the **route no longer calls it**:
+it buffered `limit + 1` rows (up to a gigabyte of client-chosen page) behind a
+doc comment promising a stream. It stays for tests and scripts that want a page as a
+value.
+
+Cross-area edits this pass made, each one for a defect that could not be fixed
+inside a single area:
+
+| File | Area | Change |
+|---|---|---|
+| `state.rs`, `main.rs` | ops | `AppState::init_schema` re-seeds `ChangeFeed` **after** the migrations. `AppState::new` seeds it before them (the docstore needs the feed at construction), and `m002_backfill_feed_seq` is what writes the numbers — so an M1→M2 upgrade used to leave the allocator at `head = 0` over rows numbered `1..N`, handing out duplicate sequence numbers and reporting a watermark far below the rows. Every caller (`main`, `tests/common`, the `/readyz` test) now uses it; `crates/server/tests/feed_boot.rs` is the upgrade, pinned. |
+| `routes/documents.rs` | http-routes | `PUT`, `PATCH` and snapshot restore publish their applied diff through `sync::publish_update`, and restore logs a warning when the document has live subscribers (SPEC §3.5 — the note that said there was no registry to consult is gone). |
+| `auth/mod.rs` | auth | `revoke_session` / `revoke_user_sessions` / `revoke_user_sessions_except` close the affected sockets with `4401`. Revalidation polling stays as the backstop for revocations the server does not perform itself. |
+
+## Area: docstore (M2 additions)
+
+Still owns `docstore.rs`. New obligations:
+
+1. **Publish to the feed on every projection change.** **Done.** `create`,
+   `materialize_room` (`Upsert`), `tombstone` (`Tombstoned`), `untombstone`
+   (`Restored`) and `purge_document` (`Purged`, writing `feed_seq` onto the
+   `deleted_ids` row) all allocate **before** the Mongo write and `commit` **after**
+   it succeeds, letting the guard burn the number on every failure path. A
+   projection change that does not write `feed_seq` is invisible to every client —
+   that is the single most important invariant in this milestone, and it was open
+   long enough for two builders and the convergence harness to report it
+   independently. Pinned by `crates/server/tests/sync_ws.rs::a_tombstone_and_a_purge_reach_the_feed_as_rows`, which walks edit → tombstone →
+   restore → purge over a live socket, and by the harness's `assertFeedFreshness`.
+
+   `untombstone` also records its `actor` as `updated_by` now (it used to
+   `let _ = actor`), because a restore *is* an applied change and SPEC §3.5 defines
+   `*_by` as the last applier the server saw.
+2. **Stop flushing synchronously** on the write path: let the debounce worker
+   (now `tuning.materialize_debounce`) own materialization, keeping the forced
+   flush on `get`/`text`, subscriber-drop and shutdown (SPEC §3.5).
+   **Still open, deliberately deferred** — see `PERF.md`. Measured cost is ~1.2 ms
+   per materialization against a p50 update round trip of 21 ms, so it is an
+   optimization, not a gate risk; and `WriteOutcome` hands the REST routes the
+   materialized `content`/`title`/`materialized_version` they return to the caller,
+   so deferring it is a read-your-writes change rather than a local one.
+3. Room subscriber accounting for the sync layer: rooms evict 10 min after the
+   **last subscriber** drops, post-flush (SPEC §4.3), not merely after idle time.
+4. `DocStoreTuning` is now the constructor parameter; the `pub const`s are only
+   defaults. No new reads of those constants.
+
+**The M1 ctor is deliberately unfrozen** to make this possible: `MongoDocStore::new`
+took `max_document_bytes` alone, so `MATERIALIZE_DEBOUNCE_MS`, `ROOM_IDLE_TIMEOUT_SECS`,
+`UPDATE_LOG_KEEP_BYTES`/`_COUNT`, `CRDT_*_THRESHOLD_BYTES` and `TRASH_RETENTION_DAYS`
+were validated in `Config` at boot and then ignored by the engine that was supposed
+to obey them. `state.rs` (ops) passes `DocStoreTuning::from_config(&config)`;
+`crates/server/tests/docstore_tuning.rs` pins the mapping field by field and proves
+the store consults it.
+
+Changed frozen signatures (already applied by the scaffold, callers compile):
+
+```rust
+pub struct DocStoreTuning { max_document_bytes, materialize_debounce, room_idle_timeout,
+    update_log_keep_bytes, update_log_keep_count, crdt_compact_threshold_bytes,
+    crdt_alert_threshold_bytes, trash_retention_days }
+impl DocStoreTuning { pub fn from_config(&Config) -> Self }      // + Default = the constants
+impl MongoDocStore { pub fn new(db: Database, tuning: DocStoreTuning,
+                                feed: Arc<ChangeFeed>) -> Self;
+                     pub fn tuning(&self) -> DocStoreTuning }
+pub struct Page { pub documents: Vec<DocumentRow>, pub next_cursor: Option<String> }
+```
+
+## Area: ops (M2 additions)
+
+1. **Indexes** (`db/indexes.rs`, the one list): **done** — `documents_feed_seq` and
+   `deleted_ids_feed_seq`, both ascending and sparse (a row written before the feed
+   existed has no `feed_seq` and is deliberately invisible to catch-up rather than
+   wrongly seq-0). Bootstrap paging rides the default `_id` index.
+2. **Migration** (append-only `migrations()`): **done** — `SCHEMA_VERSION = 2`,
+   `m002_backfill_feed_seq`. Numbers are handed out in last-touched order
+   (`updated_at`, then `deleted_at` for graveyard rows) so a backfilled feed reads
+   like the history it stands in for, and the counter starts above the existing
+   high-water mark so a half-finished run resumes without reusing a number.
+   `FeedRow::from_row` returns `None` for a row with no `feed_seq`, so an
+   un-backfilled M1 workspace was not *wrong* on the feed — it was invisible.
+3. `/readyz` and `/metrics`: **done** — `FEED_HEAD_SEQ`, `FEED_SAFE_SEQ`,
+   `FEED_SUBSCRIBERS` and `WS_BACKPRESSURE_DROPS` (labelled `queue="feed"|"doc"`)
+   are in `telemetry::names`, sampled in `sample_gauges`, described for `/metrics`,
+   and incremented at the sync area's two drop sites. Also fixed:
+   `init_metrics` installed the recorder *before* setting its `OnceLock`, so two
+   concurrent callers raced and the loser failed a valid `AppState::new` — fatal for
+   parallel integration tests. It is one critical section now.
+4. `.env.example` / `docs/OPERATIONS.md`: **done in `.env.example`** — `APP_ORIGIN`
+   now says it is both the CORS allowlist and the mandatory WebSocket origin check,
+   and ships with the Vite dev origin, because the failure mode (403 before
+   authentication, page loads, socket never connects) is otherwise opaque. The stale
+   note claiming the tuning knobs are ignored is gone.
+5. Graceful shutdown closes sockets with **4503** before flushing (SPEC §8):
+   **done** — `main.rs` calls `routes::sync::close_all_sockets(&state)` between
+   axum's drain and `flush_all`, and it returns the socket count for the log. The
+   hub's own `SIGTERM` watcher stays as the backstop.
+6. `docker-compose.yaml`: the `mongo` service runs with `ulimits.nofile = 64000`.
+   WiredTiger opens a file per collection and index and **aborts the process** at
+   Docker's default 1024, which under test load looks exactly like a sync bug.
+
+## Area: http-routes (M2 additions)
+
+1. **Router-level integration tests for sort/filter** (`crates/server/tests/**`):
+   the DSL over the router, asserting that `filter`/`sort`/`cursor` results match
+   `core::filter::evaluator` on the same corpus — the M1 gap. Cover: every
+   `CompareOp`, `contains`/`any`/`every`, `missing` vs `null`, date comparisons,
+   multi-key sort with `-`/`:desc`, `fm.*` and `plugins.*` paths, an invalid filter
+   → 400, and a refused `sort=content` → 400.
+
+   Done, as four binaries sharing `tests/common/mod.rs` (the harness: one
+   throwaway database per test, a bearer session, request helpers, and the
+   shared-core side of the comparison):
+
+   | Binary | Covers |
+   |---|---|
+   | `documents_query.rs` | the filter corpus (answered by Mongo **and** by the evaluator), sort specs against `compare_rows`, cursor paging as a partition, `metadata_only`, refused queries, `$text` search |
+   | `documents_rest.rs` | create/409/410, the configured document cap, `PATCH` content-only, `PUT`, the Trash partitions + restore + audit rows, `?format=crdt`, 401 on every route |
+   | `wire_views.rs` | every view's wire shape with no database — RFC 3339 timestamps, plain-JSON `fm`/`plugins`, no extended JSON anywhere |
+   | `docstore_tuning.rs` | the tuning knobs reach the engine (see area docstore, M2 item 4) |
+
+   Mongo-backed cases are `#[ignore]`d and skip when `MONGO_URI` is unset, so a
+   clean checkout stays green; `wire_views.rs` always runs.
+
+   **One divergence those tests pinned rather than fixed.**
+   `core::filter::evaluator::compare_rows` sorts a row whose sort key is *missing*
+   last in **both** directions; Mongo sorts an absent field lowest, i.e. first
+   ascending. So `?sort=fm.priority` can return the same rows in a different order
+   than the client's local query engine over the same data.
+   `documents_query.rs::missing_sort_keys_are_ordered_differently_by_the_two_engines`
+   asserts the current behaviour of *both* sides, so closing it stays a decision
+   instead of becoming a surprise, and the cases that must agree are restricted to
+   keys present on every row they order. Closing it means either changing the core
+   (treat `Missing` as below `Null`, which makes both directions match Mongo and is
+   the smaller change) or teaching the compiler to emit an `$ifNull` sort
+   projection — a `core` or `docstore` change, not an `http-routes` one, and it
+   needs `web/kernel/src/query/filter.ts` (which mirrors `compare_rows` line by
+   line, with its own pinning test) changed in the same commit.
+
+   Related, and also open: `SORTABLE_FIELDS` cannot offer `deleted_at` or
+   `materialized_version`, because `resolve_field` returns `Missing` for both roots —
+   so a client provably cannot reproduce that ordering, and `?trash=trashed&sort=deleted_at` is a 400. Sorting Trash needs a core field-space change, not a
+   whitelist entry. It lands with whoever builds the `doc-list` Trash view in M3.
+2. **Finish the RFC 3339 conversion. Done — no response type carries a
+   `bson::DateTime` any more.** `DocumentView`, `UserView`, `AttachmentView` and
+   `SnapshotView` were already converted; M2 integration finished the rest:
+   - `routes/auth.rs` — `SessionResponse::expires_at` → `domain::Timestamp`. This
+     one was on **every** register and login response as
+     `{"$date": {"$numberLong": …}}`.
+   - `routes/admin.rs` — `InviteView` (`created_at`, `expires_at`, `used_at`,
+     `revoked_at`) and `PasswordResetResponse::expires_at`.
+   - `routes/attachments.rs` — `OrphanView::flagged_at`.
+   - `routes/admin.rs` audit listing — new `AuditView`: `Timestamp` plus `detail`
+     through `domain::materialized_to_json`. It used to return the *stored*
+     `AuditEntry`, so `detail` leaked `$oid`/`$binary` for whatever a caller had put
+     in it, not just `$date`.
+
+   `crates/server/tests/documents_rest.rs::responses_never_carry_extended_json`
+   scans whole response bodies for `$date`/`$binary`/`$oid`/`$numberLong`, and now
+   covers login, the invite listing, the issued reset, the audit listing and the
+   orphan view alongside the document routes — so none of them can regress.
+3. `GET /api/documents` now pages `DocumentRow`s; keep `metadata_only` blanking
+   `content` at the projection, never after the read. **Done** — the route passes
+   `ListQuery::metadata_only` down and no longer blanks `view.content` after the
+   read (which had been reading every megabyte only to discard it).
+
+## Area: wasm (shared ABI)
+
+**Owns:** `backend/crates/core/src/wasm.rs` **and**
+`web/kernel/src/wasm/**` — the two halves of one ABI, so they have one owner.
+
+- Exports, frozen: `parse_document(text) -> JSON string`,
+  `evaluate_filter(filter_json, doc_json) -> bool`,
+  `core_semantics_version() -> u32`, `normalize_date(input) -> String`,
+  `resolve_title(text) -> String`.
+- **Compilation to Mongo stays server-side** (SPEC §4.2) — `bson` is not in the
+  Wasm build and must not become so.
+- Every export is **total**: malformed input yields a defined result, never a
+  panic. A trap poisons the instance, and a poisoned kernel is a blank app.
+- `mise run wasm` builds and smoke-tests the package; the smoke script
+  (`web/scripts/wasm-smoke.mjs`) is part of this area.
+- The generated `web/kernel/src/wasm/pkg/` is a build artifact and gitignored.
+
+## Commands
+
+```
+mise run check        # fmt + check + clippy -D warnings (backend)
+mise run test         # cargo test --workspace --all-targets
+mise run wasm         # build the Wasm core + node smoke test
+mise run web-check    # npm typecheck + vitest (web)
+mise run web          # vite dev server, /api proxied to the Rust server
+mise run harness      # convergence harness against a running server
+```

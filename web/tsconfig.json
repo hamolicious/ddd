@@ -1,0 +1,43 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "types": ["node", "vite/client"],
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    /* Off on purpose: this tree is a scaffold. Stub bodies legitimately ignore
+       their parameters until a builder fills them in, and `_`-prefixing every
+       one of them would churn the frozen signatures in CONTRACTS.md. */
+    "noUnusedParameters": false,
+
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+
+    /* `@life-manager/core-wasm` is the generated Wasm package. It is declared
+       ambiently in kernel/src/wasm/core-wasm.d.ts and aliased to the real
+       artifact by vite.config.ts, so `npm run typecheck` passes in a clean
+       checkout that has never run `mise run wasm`. */
+    "baseUrl": ".",
+    "paths": {
+      "@kernel/*": ["kernel/src/*"]
+    }
+  },
+  "include": [
+    "kernel/src/**/*.ts",
+    "demo/src/**/*.ts",
+    "harness/src/**/*.ts",
+    "vite.config.ts",
+    "playwright.config.ts"
+  ],
+  "exclude": ["node_modules", "dist", "kernel/src/wasm/pkg"]
+}

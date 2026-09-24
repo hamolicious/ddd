@@ -14,7 +14,7 @@ path = "src/main.rs"
 anyhow = "1.0.104"
 argon2 = "0.6.0"
 async-trait = "0.1.92"
-axum = { version = "0.8.9", features = ["multipart", "macros"] }
+axum = { version = "0.8.9", features = ["multipart", "macros", "ws"] }
 axum-extra = { version = "0.12.6", features = ["cookie", "typed-header"] }
 base64 = "0.23.1"
 bson = "2.15.0"
@@ -44,3 +44,11 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
 ulid = "3.0.0"
 yrs = "0.28.0"
 zip = "8.6.0"
+
+# CONTRACTS.md freezes the dependency list; this is the one addition, and it is
+# test-only. The M2 sync layer cannot be integration-tested without a WebSocket
+# *client*, and `tokio-tungstenite` is already in `Cargo.lock` — axum's `ws`
+# feature depends on it — so this adds no package, no version churn, and nothing
+# to the shipped binary. Announced in the sync area's report for sign-off.
+[dev-dependencies]
+tokio-tungstenite = "0.29.0"

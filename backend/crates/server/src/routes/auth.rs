@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use crate::auth::{
     self, AuthUser, ClientMeta, MaybeAuthUser, RateKey, audit, invite, password, reset,
 };
-use crate::domain::{Actor, Invite, Session, SessionKind, User, UserView, new_id};
+use crate::domain::{self, Actor, Invite, Session, SessionKind, User, UserView, new_id};
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 
@@ -63,7 +63,7 @@ pub struct SessionResponse {
     pub user: UserView,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
-    pub expires_at: bson::DateTime,
+    pub expires_at: domain::Timestamp,
 }
 
 #[derive(Debug, Deserialize)]
@@ -445,7 +445,7 @@ fn session_response(
         user: UserView::from(user),
         // The raw token exists in exactly one response, and only for the shell.
         token: if bearer { Some(token.clone()) } else { None },
-        expires_at: session.expires_at,
+        expires_at: session.expires_at.into(),
     };
 
     let mut response = Json(body).into_response();

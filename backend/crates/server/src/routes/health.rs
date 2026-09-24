@@ -190,7 +190,7 @@ mod tests {
             .expect("response");
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
-        crate::db::init_schema(&state.db).await.expect("schema");
+        state.init_schema().await.expect("schema");
         state
             .readiness
             .migrations_complete

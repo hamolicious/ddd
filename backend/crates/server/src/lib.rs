@@ -9,6 +9,7 @@
 //! | `error`, `state`, `domain` | **frozen** — scaffold-owned |
 //! | `db/*` | ops |
 //! | `docstore` | docstore (trait itself frozen) |
+//! | `feed` | sync (change-feed sequencing + queries; types frozen) |
 //! | `auth` | auth |
 //! | `routes/*` | http-routes |
 //! | `seed` | http-routes |
@@ -21,6 +22,7 @@ pub mod db;
 pub mod docstore;
 pub mod domain;
 pub mod error;
+pub mod feed;
 pub mod routes;
 pub mod seed;
 pub mod state;

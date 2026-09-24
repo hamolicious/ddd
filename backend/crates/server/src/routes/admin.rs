@@ -24,7 +24,7 @@ use tokio::sync::mpsc;
 
 use crate::auth::{AdminUser, ClientMeta, audit, invite, reset};
 use crate::db;
-use crate::domain::{AuditEntry, Id, User, UserView};
+use crate::domain::{AuditEntry, Id, Timestamp, User, UserView};
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 
@@ -72,12 +72,12 @@ pub struct CreateInviteResponse {
 pub struct InviteView {
     pub id: String,
     pub email: Option<String>,
-    pub created_at: bson::DateTime,
+    pub created_at: Timestamp,
     pub created_by: Id,
-    pub expires_at: bson::DateTime,
-    pub used_at: Option<bson::DateTime>,
+    pub expires_at: Timestamp,
+    pub used_at: Option<Timestamp>,
     pub used_by: Option<Id>,
-    pub revoked_at: Option<bson::DateTime>,
+    pub revoked_at: Option<Timestamp>,
     /// Derived: `pending` | `used` | `revoked` | `expired`.
     pub status: String,
 }
@@ -88,12 +88,12 @@ impl InviteView {
         Self {
             id: value.id,
             email: value.email,
-            created_at: value.created_at,
+            created_at: value.created_at.into(),
             created_by: value.created_by,
-            expires_at: value.expires_at,
-            used_at: value.used_at,
+            expires_at: value.expires_at.into(),
+            used_at: value.used_at.map(Timestamp::from),
             used_by: value.used_by,
-            revoked_at: value.revoked_at,
+            revoked_at: value.revoked_at.map(Timestamp::from),
             status,
         }
     }
@@ -200,7 +200,7 @@ pub struct UpdateUserRequest {
 pub struct PasswordResetResponse {
     pub user_id: Id,
     pub token: String,
-    pub expires_at: bson::DateTime,
+    pub expires_at: Timestamp,
 }
 
 pub async fn list_users(
@@ -423,7 +423,7 @@ pub async fn create_password_reset(
     Ok(Json(PasswordResetResponse {
         user_id: target.id,
         token,
-        expires_at: issued.expires_at,
+        expires_at: issued.expires_at.into(),
     }))
 }
 
@@ -524,9 +524,43 @@ pub struct AuditParams {
     pub limit: Option<u32>,
 }
 
+/// One audit row on the wire.
+///
+/// `AuditEntry` is a *stored* shape: its `created_at` is a `bson::DateTime` and
+/// its `detail` is a raw BSON document, so serializing it directly put
+/// `{"$date": …}` (and `$oid`/`$binary` for anything a caller had put in
+/// `detail`) into an API response. Nothing in this protocol carries extended JSON
+/// (PROTOCOL.md §2.1), so the listing goes through this view instead.
+#[derive(Debug, Serialize)]
+pub struct AuditView {
+    pub id: String,
+    pub action: String,
+    pub actor: Option<String>,
+    pub target_kind: String,
+    pub target_id: Option<String>,
+    pub detail: serde_json::Value,
+    pub ip: Option<String>,
+    pub created_at: Timestamp,
+}
+
+impl From<AuditEntry> for AuditView {
+    fn from(value: AuditEntry) -> Self {
+        Self {
+            id: value.id,
+            action: value.action,
+            actor: value.actor,
+            target_kind: value.target_kind,
+            target_id: value.target_id,
+            detail: crate::domain::materialized_to_json(&value.detail),
+            ip: value.ip,
+            created_at: value.created_at.into(),
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub struct AuditResponse {
-    pub entries: Vec<AuditEntry>,
+    pub entries: Vec<AuditView>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_cursor: Option<String>,
 }
@@ -597,7 +631,7 @@ pub async fn list_audit(
     };
 
     Ok(Json(AuditResponse {
-        entries,
+        entries: entries.into_iter().map(AuditView::from).collect(),
         next_cursor,
     }))
 }

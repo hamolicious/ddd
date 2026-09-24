@@ -76,7 +76,9 @@ async fn serve(config: Config) -> anyhow::Result<()> {
     let bind_addr = state.config.bind_addr;
     let grace = state.config.shutdown_grace;
 
-    db::init_schema(&state.db).await?;
+    // Migrations, indexes, and the feed counter re-seeded on top of what the
+    // migrations wrote (see `AppState::init_schema`).
+    state.init_schema().await?;
     let schema_version = db::migrations::current_version(&state.db).await?;
     state
         .readiness
@@ -126,6 +128,17 @@ async fn serve(config: Config) -> anyhow::Result<()> {
 
     maintenance.abort();
 
+    // Close every sync socket with 4503 *before* the flush (SPEC §8). Sockets are
+    // long-lived, so axum's graceful drain above has already returned with all of
+    // them still open; telling clients "shutting down, come back" first means they
+    // start their short-window reconnect while the flush runs, instead of waiting
+    // for a TCP reset at process exit. The hub watches SIGTERM itself as a
+    // backstop, but the explicit call is what makes the ordering deterministic.
+    let closed = routes::sync::close_all_sockets(&state);
+    if closed > 0 {
+        info!(sockets = closed, "sync sockets closed with 4503");
+    }
+
     info!("shutting down: flushing documents");
     match tokio::time::timeout(grace, state.docs.flush_all()).await {
         Ok(Ok(())) => info!("flush complete"),
@@ -153,6 +166,12 @@ async fn shutdown(grace: Duration) {
 async fn maintenance_loop(state: AppState, metrics: metrics_exporter_prometheus::PrometheusHandle) {
     let mut ticker = tokio::time::interval(MAINTENANCE_INTERVAL);
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    // `interval`'s first tick fires immediately, so the gauges are sampled at boot
+    // and then every `MAINTENANCE_INTERVAL`. Consequence worth knowing when reading
+    // `/metrics`: a gauge is up to one period stale, and a scrape inside the first
+    // period reports the *empty* workspace the server booted into. That is normal
+    // for a sampled gauge against a 15–60 s Prometheus scrape, but it is why a
+    // script that seeds data and scrapes two seconds later sees zeros.
 
     loop {
         ticker.tick().await;

@@ -36,6 +36,18 @@ pub mod names {
     /// M2: WebSocket connections and subscribed docs.
     pub const WS_CONNECTIONS: &str = "lm_ws_connections";
     pub const WS_SUBSCRIBED_DOCS: &str = "lm_ws_subscribed_documents";
+    /// M2: the workspace change feed (PROTOCOL.md §2.2). `HEAD` is the highest
+    /// number handed out, `SAFE` the watermark clients persist; a widening gap
+    /// between them means writes are sitting in flight, which is the signal that
+    /// the feed is stalling. `SUBSCRIBERS` counts the in-process notification
+    /// receivers, i.e. sockets tailing the feed.
+    pub const FEED_HEAD_SEQ: &str = "lm_feed_head_seq";
+    pub const FEED_SAFE_SEQ: &str = "lm_feed_safe_seq";
+    pub const FEED_SUBSCRIBERS: &str = "lm_feed_subscribers";
+    /// M2: send-queue overflows, labelled `queue="feed"|"doc"`. Every increment is
+    /// a client that was told to re-derive (PROTOCOL.md §6) — cheap, but a
+    /// sustained rate means the bounds are wrong for the workload.
+    pub const WS_BACKPRESSURE_DROPS: &str = "lm_ws_backpressure_drops_total";
 
     /// Effective limits, published so a dashboard can draw the ceiling next to
     /// the usage it is comparing against.
@@ -115,7 +127,21 @@ pub fn init_tracing(format: LogFormat) -> anyhow::Result<()> {
 ///
 /// Histograms are rendered as true Prometheus histograms (explicit buckets)
 /// rather than summaries, so latency is aggregatable across scrapes.
+/// Idempotent, and idempotent *under concurrency*: the recorder is
+/// process-global, so installing it and publishing the handle must happen as one
+/// critical section. Checking the `OnceLock` and then installing would let two
+/// threads both see "not installed" and race, and the loser of
+/// `install_recorder()` would fail a perfectly valid `AppState::new`. Integration
+/// tests build several states in parallel, so this is a real path, not a
+/// theoretical one.
 pub fn init_metrics(config: &Config) -> anyhow::Result<PrometheusHandle> {
+    static INSTALL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    if let Some(handle) = METRICS.get() {
+        return Ok(handle.clone());
+    }
+    let _guard = INSTALL.lock().unwrap_or_else(|err| err.into_inner());
+    // Re-check under the lock: another thread may have finished while we waited.
     if let Some(handle) = METRICS.get() {
         return Ok(handle.clone());
     }
@@ -183,6 +209,22 @@ fn describe() {
     describe_gauge!(
         names::WS_SUBSCRIBED_DOCS,
         "Documents with at least one subscriber (M2)"
+    );
+    describe_gauge!(
+        names::FEED_HEAD_SEQ,
+        "Highest change-feed sequence number allocated"
+    );
+    describe_gauge!(
+        names::FEED_SAFE_SEQ,
+        "Change-feed watermark clients persist as their resume point"
+    );
+    describe_gauge!(
+        names::FEED_SUBSCRIBERS,
+        "Sockets tailing the workspace change feed"
+    );
+    describe_counter!(
+        names::WS_BACKPRESSURE_DROPS,
+        "Send-queue overflows that cost a client a re-derivation, by queue"
     );
     describe_gauge!(
         names::CONFIG_MAX_DOCUMENT_BYTES,
@@ -347,6 +389,13 @@ pub async fn sample_gauges(state: &crate::state::AppState) {
     gauge!(names::ROOMS).set(stats.rooms as f64);
     gauge!(names::DIRTY_ROOMS).set(stats.dirty_rooms as f64);
     gauge!(names::OVERSIZED_DOCS).set(stats.oversized_docs as f64);
+
+    // The change feed's two sequence numbers and its tail count. `head - safe` is
+    // the in-flight depth, so a dashboard can alert on a watermark that stops
+    // moving while head climbs (PROTOCOL.md §2.2).
+    gauge!(names::FEED_HEAD_SEQ).set(state.feed.head_seq() as f64);
+    gauge!(names::FEED_SAFE_SEQ).set(state.feed.safe_seq() as f64);
+    gauge!(names::FEED_SUBSCRIBERS).set(state.feed.subscriber_count() as f64);
 
     // Estimated: it reads collection metadata instead of counting, which is what
     // a gauge sampled every few seconds should cost.

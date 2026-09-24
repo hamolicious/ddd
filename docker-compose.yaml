@@ -19,6 +19,13 @@ services:
     image: mongo:8
     restart: unless-stopped
     command: ["--bind_ip_all"]
+    # WiredTiger opens a file per collection/index and aborts the process when it
+    # runs out of descriptors. Docker's default soft limit (1024) is reached by the
+    # M2 test suites, which create a throwaway database per test.
+    ulimits:
+      nofile:
+        soft: 64000
+        hard: 64000
     environment:
       MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-life_manager}
     volumes:

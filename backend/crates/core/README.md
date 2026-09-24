@@ -1,18 +1,38 @@
 # `life-manager-core` — the shared core
 
 Everything in this crate runs **identically on the server and in the client
-kernel** (compiled to `wasm32` in M2). Parity between offline and online
-behaviour is by construction: one implementation, two build targets
-(SPEC §2, §3.4, §4.2). `corpus/` is the regression net that keeps it honest.
+kernel** (compiled to `wasm32`). Parity between offline and online behaviour is by
+construction: one implementation, two build targets (SPEC §2, §3.4, §4.2).
+`corpus/` is the regression net that keeps it honest.
 
-Two build shapes:
+Three build shapes:
 
 ```
 cargo test  -p life-manager-core                        # native, `mongo` feature on
-cargo check -p life-manager-core --no-default-features  # what becomes Wasm (no bson)
+cargo check -p life-manager-core --no-default-features  # the Wasm shape (no bson)
+mise run wasm                                           # wasm32 + wasm-bindgen + smoke test
 ```
 
 `bson` is only reachable from `filter::mongo`, behind the `mongo` feature.
+
+## The client ABI (`src/wasm.rs`, feature `wasm`)
+
+`mise run wasm` builds this crate for `wasm32-unknown-unknown` and runs
+wasm-bindgen over it, writing `web/kernel/src/wasm/pkg/`. Five exports, JSON in and
+out:
+
+| Export | Returns |
+|---|---|
+| `parse_document(text)` | `{ title, fm, plugins, fm_parse_error }` as a JSON string |
+| `evaluate_filter(filter_json, doc_json)` | `bool` — `false` for bad input *and* for an evaluation error, matching what the server's compiled query does with such a row |
+| `core_semantics_version()` | `CORE_SEMANTICS_VERSION`, compared against the sync handshake |
+| `normalize_date(input)` | the canonical date form, so client-side sorting matches |
+| `resolve_title(text)` | the resolved title without a full parse round trip |
+
+**Filter compilation is deliberately absent**: compiling to Mongo needs `bson` and
+belongs to the server (SPEC §4.2). The TypeScript half of the contract is
+`web/kernel/src/wasm/core-wasm.d.ts`; the two change together. JSON strings rather
+than `JsValue` trees keep the boundary loggable and drop a dependency.
 
 Three properties every function here holds to:
 
@@ -351,8 +371,8 @@ apply(text, &edits)                         // reference implementation
 
 ## 6. The conformance corpus
 
-`corpus/*.json` is **data, not code** — deliberately, because in M2 the same
-files are fed to this crate compiled to `wasm32` and the answers must match.
+`corpus/*.json` is **data, not code** — deliberately, because the same files are
+fed to this crate compiled to `wasm32` and the answers must match.
 The only Rust is the harness in `tests/conformance.rs` and
 `tests/common/mod.rs`.
 

@@ -52,7 +52,8 @@ use yrs::{Doc, GetString, OffsetKind, Options, ReadTxn, StateVector, Text, Trans
 
 use crate::db;
 use crate::domain::{
-    Actor, AuditEntry, Document, DocumentSnapshot, DocumentUpdate, Id, is_valid_id, new_id,
+    Actor, AuditEntry, Document, DocumentRow, DocumentSnapshot, DocumentUpdate, Id, is_valid_id,
+    new_id,
 };
 use crate::telemetry::names;
 
@@ -64,14 +65,14 @@ pub const OFFSET_KIND: OffsetKind = OffsetKind::Utf16;
 pub const SKIP_GC: bool = false;
 
 // ---------------------------------------------------------------------------
-// Pinned engine constants (SPEC §3.5, §4.3)
+// Default engine tuning (SPEC §3.5, §4.3)
 //
-// INTEGRATION: `Config` carries operator-tunable equivalents of these
-// (`materialize_debounce`, `room_idle_timeout`, `update_log_keep_*`,
-// `crdt_*_threshold_bytes`, `trash_retention_days`), but the frozen constructor
-// `MongoDocStore::new(db, max_document_bytes)` has no `Config` parameter, so the
-// engine cannot read them. These constants are the documented defaults; if the
-// knobs must be live, `new` needs a third parameter (a cross-area change).
+// These are the *defaults*. The live values come from `Config` through
+// [`DocStoreTuning`], which `MongoDocStore::new` takes — so `MATERIALIZE_DEBOUNCE_MS`,
+// `ROOM_IDLE_TIMEOUT_SECS`, `UPDATE_LOG_KEEP_*`, `CRDT_*_THRESHOLD_BYTES` and
+// `TRASH_RETENTION_DAYS` actually do something. The constants stay as the
+// documented defaults (and as what `DocStoreTuning::default()` yields, which is
+// what the unit tests use).
 // ---------------------------------------------------------------------------
 
 /// Materialization debounce window (SPEC §3.5).
@@ -121,6 +122,61 @@ pub fn new_doc() -> Doc {
 // ---------------------------------------------------------------------------
 // Types crossing the trait boundary
 // ---------------------------------------------------------------------------
+
+/// Operator-tunable engine knobs (SPEC §3.5, §4.3), read from [`crate::config::Config`].
+///
+/// A struct rather than eight constructor parameters: adding a knob then touches
+/// one type and one `from_config`, not every call site and every test.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DocStoreTuning {
+    /// Hard cap on document text (`MAX_DOCUMENT_BYTES`); the shared core's 1 MiB
+    /// cap is the ceiling, this may only lower it.
+    pub max_document_bytes: usize,
+    /// Materialization debounce window (`MATERIALIZE_DEBOUNCE_MS`).
+    pub materialize_debounce: Duration,
+    /// Idle-room eviction delay (`ROOM_IDLE_TIMEOUT_SECS`).
+    pub room_idle_timeout: Duration,
+    /// Per-document update-log retention (`UPDATE_LOG_KEEP_BYTES` / `_COUNT`).
+    pub update_log_keep_bytes: u64,
+    pub update_log_keep_count: u32,
+    /// `crdt` blob thresholds (`CRDT_COMPACT_THRESHOLD_BYTES` / `_ALERT_`).
+    pub crdt_compact_threshold_bytes: u64,
+    pub crdt_alert_threshold_bytes: u64,
+    /// Days a tombstone sits in Trash before purge (`TRASH_RETENTION_DAYS`).
+    pub trash_retention_days: i64,
+}
+
+impl Default for DocStoreTuning {
+    fn default() -> Self {
+        Self {
+            max_document_bytes: limits::MAX_DOCUMENT_BYTES,
+            materialize_debounce: MATERIALIZE_DEBOUNCE,
+            room_idle_timeout: ROOM_IDLE_TIMEOUT,
+            update_log_keep_bytes: UPDATE_LOG_KEEP_BYTES,
+            update_log_keep_count: UPDATE_LOG_KEEP_COUNT,
+            crdt_compact_threshold_bytes: CRDT_COMPACT_THRESHOLD_BYTES,
+            crdt_alert_threshold_bytes: CRDT_ALERT_THRESHOLD_BYTES,
+            trash_retention_days: TRASH_RETENTION_DAYS,
+        }
+    }
+}
+
+impl DocStoreTuning {
+    /// Take the validated values from `Config` (ops validates ranges and
+    /// cross-field rules at boot; nothing is re-checked here).
+    pub fn from_config(config: &crate::config::Config) -> Self {
+        Self {
+            max_document_bytes: config.max_document_bytes,
+            materialize_debounce: config.materialize_debounce,
+            room_idle_timeout: config.room_idle_timeout,
+            update_log_keep_bytes: config.update_log_keep_bytes,
+            update_log_keep_count: config.update_log_keep_count,
+            crdt_compact_threshold_bytes: config.crdt_compact_threshold_bytes,
+            crdt_alert_threshold_bytes: config.crdt_alert_threshold_bytes,
+            trash_retention_days: i64::from(config.trash_retention_days),
+        }
+    }
+}
 
 /// Everything materialized from a document's text in one pass (SPEC §3.5).
 /// Rewritten together, never inconsistent with each other.
@@ -249,17 +305,17 @@ pub enum TrashFilter {
     All,
 }
 
-/// One page of documents.
+/// One page of documents, as [`DocumentRow`]s — the projection, never the CRDT.
 ///
-/// The rows come from a **projection**: `crdt` and `state_vector` are never read
-/// by the list path (and `content` is left out under
-/// [`ListQuery::metadata_only`]), so those fields arrive as the empty placeholders
-/// [`document_from_projection`] fills in. Read a listed row for its materialized
-/// fields only; anything that needs CRDT bytes goes through
-/// [`DocStore::get`]/[`DocStore::crdt_state`] for that one id.
+/// The type is the contract: `crdt` and `state_vector` are 2–10× the plaintext
+/// and compacted only above 4 MiB (SPEC §3.5), so no query returning many rows
+/// may read them, and a page therefore *cannot* carry them. `content` is
+/// additionally empty under [`ListQuery::metadata_only`]. Anything that needs CRDT
+/// bytes asks for one id at a time through
+/// [`DocStore::get`]/[`DocStore::crdt_state`].
 #[derive(Debug, Clone)]
 pub struct Page {
-    pub documents: Vec<Document>,
+    pub documents: Vec<DocumentRow>,
     /// Cursor for the next page; `None` when exhausted.
     pub next_cursor: Option<String>,
 }
@@ -413,7 +469,12 @@ pub struct MongoDocStore {
 /// this file may reach into it.
 struct MongoDocStoreInner {
     collections: db::Collections,
-    max_document_bytes: usize,
+    tuning: DocStoreTuning,
+    /// The workspace change feed (SPEC §4.1). Every write that changes the
+    /// projection allocates a sequence number here and commits it after the Mongo
+    /// write, which is what makes the feed's `safe_seq` meaningful
+    /// (PROTOCOL.md §2.2).
+    feed: Arc<crate::feed::ChangeFeed>,
     /// Hot-document registry. A `std::sync::Mutex` on purpose: it is only ever
     /// held for map operations (never across an `.await`), which lets the
     /// synchronous [`DocStore::stats`] read it.
@@ -463,15 +524,25 @@ impl Room {
 }
 
 impl MongoDocStore {
-    pub fn new(db: mongodb::Database, max_document_bytes: usize) -> Self {
+    pub fn new(
+        db: mongodb::Database,
+        tuning: DocStoreTuning,
+        feed: Arc<crate::feed::ChangeFeed>,
+    ) -> Self {
         Self {
             inner: std::sync::Arc::new(MongoDocStoreInner {
                 collections: db::Collections::new(db),
-                max_document_bytes,
+                tuning,
+                feed,
                 rooms: std::sync::Mutex::new(HashMap::new()),
                 oversized_docs: std::sync::Mutex::new(HashSet::new()),
             }),
         }
+    }
+
+    /// The tuning this store was built with.
+    pub fn tuning(&self) -> DocStoreTuning {
+        self.inner.tuning
     }
 
     /// Start the background workers (debounced materialization flush, idle room
@@ -484,7 +555,7 @@ impl MongoDocStore {
         // becomes the only flush path).
         let store = self.clone();
         handles.push(tokio::spawn(async move {
-            let mut ticker = tokio::time::interval(MATERIALIZE_DEBOUNCE);
+            let mut ticker = tokio::time::interval(store.inner.tuning.materialize_debounce);
             ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             loop {
                 ticker.tick().await;
@@ -564,7 +635,7 @@ fn effective_limit(max_document_bytes: usize) -> usize {
 
 impl MongoDocStoreInner {
     fn check_size(&self, text: &str) -> Result<(), DocStoreError> {
-        let limit = effective_limit(self.max_document_bytes);
+        let limit = effective_limit(self.tuning.max_document_bytes);
         if text.len() > limit {
             return Err(DocStoreError::TooLarge {
                 len: text.len(),
@@ -849,7 +920,7 @@ impl MongoDocStoreInner {
         };
 
         let crdt_len = crdt.len() as u64;
-        if crdt_len > CRDT_ALERT_THRESHOLD_BYTES {
+        if crdt_len > self.tuning.crdt_alert_threshold_bytes {
             tracing::warn!(document = %room.id, bytes = crdt_len, "crdt blob above alert threshold");
         }
         {
@@ -857,7 +928,7 @@ impl MongoDocStoreInner {
             // compacted form, so every flush already writes the compacted blob;
             // what is left to do is report the ones that stay large.
             let mut oversized = self.oversized_docs.lock().expect("oversized set poisoned");
-            if crdt_len > CRDT_COMPACT_THRESHOLD_BYTES {
+            if crdt_len > self.tuning.crdt_compact_threshold_bytes {
                 oversized.insert(room.id.clone());
             } else {
                 oversized.remove(&room.id);
@@ -866,8 +937,15 @@ impl MongoDocStoreInner {
 
         let materialized = materialize(&state.text, version_hash(&state_vector));
 
+        // The projection is changing, so the row needs a new feed sequence number
+        // (CONTRACTS.md docstore M2 item 1). Allocated *before* the write and
+        // committed only once it lands; the guard burns the number on any failure
+        // path below, which is what keeps `safe_seq` honest (PROTOCOL.md §2.2).
+        let feed_allocation = self.feed.allocate(room.id.clone());
+
         let updated_at = state.pending_updated_at.unwrap_or_else(BsonDateTime::now);
         let mut set = doc! {
+            "feed_seq": feed_allocation.seq(),
             "crdt": Bson::Binary(binary(crdt)),
             "state_vector": Bson::Binary(binary(state_vector)),
             "content": &materialized.content,
@@ -914,6 +992,9 @@ impl MongoDocStoreInner {
         state.pending_actor = None;
         state.pending_updated_at = None;
         room.dirty.store(false, Ordering::Relaxed);
+
+        // The row carries its new `feed_seq`: tell every connected client.
+        feed_allocation.commit(crate::feed::FeedChangeKind::Upsert);
 
         metrics::histogram!(names::MATERIALIZE_LATENCY).record(started.elapsed().as_secs_f64());
         Ok(materialized)
@@ -971,7 +1052,10 @@ impl MongoDocStoreInner {
             // `kept > 1` keeps the newest entry unconditionally: the per-document
             // sequence numbers are derived from it at load, and a single update
             // larger than the byte budget must not wipe the log.
-            if kept > 1 && (kept > UPDATE_LOG_KEEP_COUNT || bytes > UPDATE_LOG_KEEP_BYTES) {
+            if kept > 1
+                && (kept > self.tuning.update_log_keep_count
+                    || bytes > self.tuning.update_log_keep_bytes)
+            {
                 cutoff = Some(seq);
                 break;
             }
@@ -1050,7 +1134,8 @@ impl MongoDocStoreInner {
 
     /// Purge every document whose Trash retention has run out (SPEC §3.5).
     async fn purge_expired_trash(&self) -> Result<usize, DocStoreError> {
-        let cutoff = BsonDateTime::from_millis(now_ms() - TRASH_RETENTION_DAYS * DAY_MS);
+        let cutoff =
+            BsonDateTime::from_millis(now_ms() - self.tuning.trash_retention_days * DAY_MS);
         let mut cursor = self
             .collections
             .raw(db::DOCUMENTS)
@@ -1102,14 +1187,25 @@ impl MongoDocStoreInner {
             return Err(DocStoreError::NotFound(id.to_string()));
         };
 
+        // A purge is the one feed row that is written on `deleted_ids` rather than
+        // on `documents` — the `documents` row is about to stop existing. Purged
+        // rows are how a long-offline client learns to drop its local replica
+        // (PROTOCOL.md §2.1), so this number is not optional. `$set` rather than
+        // `$setOnInsert`: the guard above already returned `NotFound` unless the
+        // `documents` row exists, so this path runs at most once per id, and a
+        // graveyard row backfilled without a `feed_seq` still gets one.
+        let feed_allocation = self.feed.allocate(id.to_string());
         self.collections
             .deleted_ids()
             .update_one(
                 doc! { "_id": id },
-                doc! { "$setOnInsert": {
-                    "deleted_at": BsonDateTime::now(),
-                    "deleted_by": actor.as_stored(),
-                } },
+                doc! {
+                    "$setOnInsert": {
+                        "deleted_at": BsonDateTime::now(),
+                        "deleted_by": actor.as_stored(),
+                    },
+                    "$set": { "feed_seq": feed_allocation.seq() },
+                },
             )
             .upsert(true)
             .await?;
@@ -1118,6 +1214,8 @@ impl MongoDocStoreInner {
             .documents()
             .delete_one(doc! { "_id": id })
             .await?;
+        // The row really is gone now, so clients can be told.
+        feed_allocation.commit(crate::feed::FeedChangeKind::Purged);
         self.collections
             .document_updates()
             .delete_many(doc! { "document_id": id })
@@ -1193,31 +1291,14 @@ fn list_filter(query: &ListQuery) -> BsonDocument {
     }
 }
 
-/// Deserialize a projected `documents` row into the typed [`Document`] the
-/// [`DocStore`] contract returns.
+/// Deserialize a projected `documents` row into a [`DocumentRow`].
 ///
-/// [`Document`] is a frozen shape and every field is required, so the fields the
-/// list projection deliberately left out are filled with empty placeholders:
-/// `crdt`/`state_vector` always, `content` when the caller asked for metadata
-/// only. See [`Page`] for what a caller may do with such a row.
-fn document_from_projection(mut row: BsonDocument) -> Result<Document, DocStoreError> {
-    for blob in ["crdt", "state_vector"] {
-        if !row.contains_key(blob) {
-            row.insert(blob, empty_binary());
-        }
-    }
-    if !row.contains_key("content") {
-        row.insert("content", String::new());
-    }
+/// Every field `DocumentRow` can do without is `#[serde(default)]`, so a
+/// metadata-only projection (no `content`) deserializes as an empty string rather
+/// than failing — and there is nothing to fake, because the type promises no CRDT
+/// bytes in the first place.
+fn row_from_projection(row: BsonDocument) -> Result<DocumentRow, DocStoreError> {
     bson::from_document(row).map_err(|err| DocStoreError::Bson(err.to_string()))
-}
-
-/// A zero-length BinData placeholder for a blob the projection excluded.
-fn empty_binary() -> Binary {
-    Binary {
-        subtype: BinarySubtype::Generic,
-        bytes: Vec::new(),
-    }
 }
 
 #[async_trait]
@@ -1273,6 +1354,11 @@ impl DocStore for MongoDocStore {
 
         let materialized = materialize(&stored_text, version_hash(&state_vector));
         let now = BsonDateTime::now();
+        // The row enters the change feed with the same write that creates it, so a
+        // client that is already subscribed sees it without a materialization pass
+        // (SPEC §4.1). The guard is committed only after the insert succeeds;
+        // dropping it on an error burns the number, which is legal (PROTOCOL.md §2.2).
+        let feed_allocation = inner.feed.allocate(id.clone());
         let stored = Document {
             id: id.clone(),
             crdt: binary(update.clone()),
@@ -1289,6 +1375,7 @@ impl DocStore for MongoDocStore {
             updated_by: Some(actor.as_stored()),
             deleted_at: None,
             deleted_by: None,
+            feed_seq: Some(feed_allocation.seq()),
         };
 
         if let Err(err) = inner.collections.documents().insert_one(stored).await {
@@ -1297,6 +1384,8 @@ impl DocStore for MongoDocStore {
             }
             return Err(err.into());
         }
+
+        feed_allocation.commit(crate::feed::FeedChangeKind::Upsert);
 
         inner.append_update(&id, 1, &update, actor).await?;
         metrics::counter!(names::UPDATES_APPLIED).increment(1);
@@ -1423,14 +1512,15 @@ impl DocStore for MongoDocStore {
             sort.insert("_id", 1);
         }
 
-        // Projection, not a typed `find`: a page of `Document` rows carries the
-        // `crdt` and `state_vector` blobs (2-10x the plaintext, compacted only
-        // above 4 MiB — SPEC §3.5) plus up to 1 MiB of `content` each, and
-        // `limit + 1` of them are buffered before the response is built. A single
-        // `?limit=500` over large documents is otherwise gigabytes of resident
-        // memory on a single-replica server (SPEC §8) — i.e. an authenticated OOM.
-        // `metadata_only` drops `content` here too, rather than blanking it in the
-        // route after the bytes have already been read.
+        // Projection, not a typed `find` over `Document`: the `crdt` and
+        // `state_vector` blobs are 2-10x the plaintext and compacted only above
+        // 4 MiB (SPEC §3.5), and `limit + 1` rows are buffered before the response
+        // is built — a single `?limit=500` over large documents would be gigabytes
+        // of resident memory on a single-replica server (SPEC §8), i.e. an
+        // authenticated OOM. The page type is `DocumentRow`, which cannot carry
+        // them, so this exclusion cannot be forgotten. `metadata_only` drops
+        // `content` here too, rather than blanking it in the route after the bytes
+        // have already been read.
         let mut projection = doc! { "crdt": 0, "state_vector": 0 };
         if query.metadata_only {
             projection.insert("content", 0);
@@ -1448,7 +1538,7 @@ impl DocStore for MongoDocStore {
 
         let mut documents = Vec::new();
         while let Some(row) = cursor.try_next().await? {
-            documents.push(document_from_projection(row)?);
+            documents.push(row_from_projection(row)?);
         }
 
         let next_cursor = if documents.len() > limit as usize {
@@ -1483,6 +1573,11 @@ impl DocStore for MongoDocStore {
         if let Some(room) = self.inner.cached_room(id) {
             self.inner.flush_room(&room).await?;
         }
+        // A tombstone is a projection change: the row needs a fresh `feed_seq` or
+        // no client ever learns the document moved to Trash (CONTRACTS.md docstore
+        // M2 item 1). Allocate before the write, commit only if it matched — an
+        // idempotent re-delete matches nothing and burns the number.
+        let feed_allocation = self.inner.feed.allocate(id.to_string());
         let result = self
             .inner
             .collections
@@ -1492,6 +1587,7 @@ impl DocStore for MongoDocStore {
                 doc! { "$set": {
                     "deleted_at": BsonDateTime::now(),
                     "deleted_by": actor.as_stored(),
+                    "feed_seq": feed_allocation.seq(),
                 } },
             )
             .await?;
@@ -1507,7 +1603,9 @@ impl DocStore for MongoDocStore {
             if !exists {
                 return Err(DocStoreError::NotFound(id.to_string()));
             }
+            return Ok(());
         }
+        feed_allocation.commit(crate::feed::FeedChangeKind::Tombstoned);
         Ok(())
     }
 
@@ -1515,19 +1613,29 @@ impl DocStore for MongoDocStore {
         if !is_valid_id(id) {
             return Err(DocStoreError::InvalidId(id.to_string()));
         }
-        let _ = actor;
+        // A restore is a projection change too, and `updated_by` is "the last
+        // applier the server saw" (SPEC §3.5) — which on a restore is whoever
+        // clicked restore, so the actor is recorded rather than discarded.
+        let feed_allocation = self.inner.feed.allocate(id.to_string());
         let result = self
             .inner
             .collections
             .documents()
             .update_one(
                 doc! { "_id": id },
-                doc! { "$unset": { "deleted_at": "", "deleted_by": "" } },
+                doc! {
+                    "$unset": { "deleted_at": "", "deleted_by": "" },
+                    "$set": {
+                        "feed_seq": feed_allocation.seq(),
+                        "updated_by": actor.as_stored(),
+                    },
+                },
             )
             .await?;
         if result.matched_count == 0 {
             return Err(DocStoreError::NotFound(id.to_string()));
         }
+        feed_allocation.commit(crate::feed::FeedChangeKind::Restored);
         Ok(())
     }
 
@@ -1616,7 +1724,7 @@ impl DocStore for MongoDocStore {
     }
 
     async fn evict_idle(&self) -> Result<usize, DocStoreError> {
-        let cutoff = now_ms() - ROOM_IDLE_TIMEOUT.as_millis() as i64;
+        let cutoff = now_ms() - self.inner.tuning.room_idle_timeout.as_millis() as i64;
         let mut evicted = 0;
         for room in self.inner.all_rooms() {
             if room.last_touched_ms.load(Ordering::Relaxed) > cutoff {
@@ -2122,7 +2230,8 @@ mod mongo_tests {
         let name = format!("life_manager_docstore_test_{}", new_id());
         let db = client.database(&name);
         crate::db::indexes::ensure(&db).await.ok()?;
-        Some(MongoDocStore::new(db, limits::MAX_DOCUMENT_BYTES))
+        let feed = crate::feed::ChangeFeed::new(crate::db::Collections::new(db.clone()));
+        Some(MongoDocStore::new(db, DocStoreTuning::default(), feed))
     }
 
     async fn teardown(store: &MongoDocStore) {
@@ -2242,11 +2351,9 @@ mod mongo_tests {
             .iter()
             .find(|d| d.id == created.id)
             .expect("the created document is listed");
-        assert!(row.crdt.bytes.is_empty(), "the crdt blob was read");
-        assert!(
-            row.state_vector.bytes.is_empty(),
-            "the state vector was read"
-        );
+        // `DocumentRow` has no `crdt`/`state_vector` fields at all — the page type
+        // is what guarantees the blobs are not read, so there is nothing to assert
+        // beyond the materialized fields arriving.
         assert_eq!(row.title, "Listed", "materialized fields still arrive");
         assert!(row.content.contains("body"));
 

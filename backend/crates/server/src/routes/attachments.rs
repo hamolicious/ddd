@@ -37,7 +37,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest as _, Sha256};
 
 use crate::auth::{AdminUser, AuthUser};
-use crate::domain::{Attachment, AttachmentView, AuditEntry, Id, is_valid_id, new_id};
+use crate::domain::{Attachment, AttachmentView, AuditEntry, Id, Timestamp, is_valid_id, new_id};
 use crate::error::{AppError, AppResult};
 use crate::routes::documents::map_docstore;
 use crate::state::AppState;
@@ -182,7 +182,7 @@ pub struct UploadParams {
 #[derive(Debug, Serialize)]
 pub struct OrphanView {
     pub attachment: AttachmentView,
-    pub flagged_at: bson::DateTime,
+    pub flagged_at: Timestamp,
 }
 
 /// The bytes after a successful stream into GridFS.
@@ -1014,7 +1014,7 @@ async fn find_orphans(state: &AppState) -> AppResult<Vec<OrphanView>> {
         }
     }
 
-    let flagged_at = BsonDateTime::now();
+    let flagged_at = Timestamp::now();
     Ok(unreferenced
         .into_values()
         .map(|attachment| OrphanView {
@@ -1036,9 +1036,9 @@ mod tests {
             size: 12,
             sha256: "ab".repeat(32),
             revision: 1,
-            created_at: BsonDateTime::from_millis(0),
+            created_at: crate::domain::Timestamp::from_millis(0),
             created_by: None,
-            updated_at: BsonDateTime::from_millis(0),
+            updated_at: crate::domain::Timestamp::from_millis(0),
             updated_by: None,
         }
     }
