@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Life Manager</title>
+    <meta name="description" content="An offline-first, collaborative document manager." />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+
+    <!--
+      The server replaces the marker below with the import map for the blessed runtime
+      layer: inline, carrying the response's CSP nonce (SPEC §6.4, §8).
+
+      Inline is the only option — browsers never shipped an external import map — and it
+      must come before the app module, because a map is only consulted for resolutions
+      that happen after it is inserted.
+
+      In `vite dev` nothing replaces it: the dev server resolves the app's own imports
+      itself, and loader/importmap.ts installs a map over this bundle's modules before
+      the first plugin loads.
+    -->
+    <!--LM_IMPORT_MAP-->
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>Life Manager needs JavaScript. Everything it does happens in your browser.</noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

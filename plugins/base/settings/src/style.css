@@ -1,0 +1,235 @@
+/*
+ * `settings` styles. Linked on activation by the kernel loader (SPEC §6.4), never
+ * imported by the module — so it is a real file in devtools with this plugin's name on
+ * it, and it can be overridden by a later stylesheet without a build step.
+ *
+ * Convention: every class starts `settings-` (per-plugin class prefix, SPEC §6.4 —
+ * there is no shadow DOM in v1, so the prefix is the whole isolation story).
+ * Every value comes from a kernel token, so themes reach this file for free.
+ */
+
+.settings-root {
+  max-width: 62rem;
+  margin: 0 auto;
+  padding: calc(var(--lm-space) * 2);
+  color: var(--lm-text);
+  font-family: var(--lm-font-sans);
+}
+
+.settings-header h1 {
+  margin: 0 0 var(--lm-space);
+  font-size: 1.5rem;
+}
+
+.settings-shared-note {
+  margin: 0 0 calc(var(--lm-space) * 2);
+  padding: var(--lm-space);
+  border-left: 3px solid var(--lm-warning);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg-subtle);
+  color: var(--lm-text-muted);
+}
+
+.settings-panes {
+  display: grid;
+  grid-template-columns: minmax(10rem, 14rem) 1fr;
+  gap: calc(var(--lm-space) * 2);
+  align-items: start;
+}
+
+.settings-nav ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-nav-link {
+  display: flex;
+  align-items: center;
+  min-height: var(--lm-tap-target);
+  padding: 0 var(--lm-space);
+  border-radius: var(--lm-radius);
+  color: inherit;
+  text-decoration: none;
+}
+
+.settings-nav-link:hover {
+  background: var(--lm-bg-subtle);
+}
+
+.settings-nav-link[aria-current="page"] {
+  background: var(--lm-accent-subtle);
+  font-weight: 600;
+}
+
+.settings-pane {
+  min-width: 0;
+}
+
+.settings-section h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.settings-section-description {
+  margin: calc(var(--lm-space) * 0.5) 0 0;
+  color: var(--lm-text-muted);
+}
+
+.settings-section-owner {
+  margin: 0 0 calc(var(--lm-space) * 1.5);
+  color: var(--lm-text-muted);
+  font-size: 0.85rem;
+}
+
+.settings-empty,
+.settings-muted {
+  color: var(--lm-text-muted);
+}
+
+/* ---- account ----------------------------------------------------------- */
+
+.settings-account {
+  display: grid;
+  gap: calc(var(--lm-space) * 3);
+}
+
+.settings-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: calc(var(--lm-space) * 0.5) calc(var(--lm-space) * 2);
+  margin: 0;
+}
+
+.settings-facts dt {
+  color: var(--lm-text-muted);
+}
+
+.settings-facts dd {
+  margin: 0;
+}
+
+.settings-badge {
+  margin-left: calc(var(--lm-space) * 0.75);
+  padding: 0 calc(var(--lm-space) * 0.5);
+  border: 1px solid var(--lm-accent);
+  border-radius: var(--lm-radius);
+  background: var(--lm-accent-subtle);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+
+.settings-form {
+  display: grid;
+  gap: var(--lm-space);
+  max-width: 24rem;
+  margin: 0;
+}
+
+.settings-form h3,
+.settings-signout h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.settings-form label {
+  display: grid;
+  gap: calc(var(--lm-space) * 0.25);
+}
+
+.settings-form input {
+  min-height: var(--lm-tap-target);
+  padding: 0 calc(var(--lm-space) * 1.25);
+  border: 1px solid var(--lm-border);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg);
+  color: inherit;
+  font: inherit;
+}
+
+.settings-form button,
+.settings-actions button {
+  min-height: var(--lm-tap-target);
+  padding: 0 calc(var(--lm-space) * 1.5);
+  border: 1px solid var(--lm-border-strong);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg-raised);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.settings-form button[type="submit"] {
+  justify-self: start;
+  border-color: var(--lm-accent);
+  background: var(--lm-accent);
+  color: var(--lm-accent-text);
+}
+
+.settings-signout {
+  display: grid;
+  gap: var(--lm-space);
+  max-width: 34rem;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lm-space);
+}
+
+/* Specificity rather than `!important`: this has to beat `.settings-actions button`
+   above, and a base plugin that reached for `!important` would be the first thing in
+   the way of anyone restyling it. */
+.settings-actions button.settings-danger {
+  border-color: var(--lm-danger);
+  background: var(--lm-danger);
+  color: var(--lm-danger-text);
+}
+
+.settings-error {
+  margin: 0;
+  color: var(--lm-danger);
+}
+
+.settings-warning {
+  margin: 0;
+  padding: var(--lm-space);
+  border-left: 3px solid var(--lm-warning);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg-subtle);
+}
+
+.settings-ok {
+  margin: 0;
+  color: var(--lm-success);
+}
+
+/* ---- the mobile breakpoint --------------------------------------------- */
+
+@media (max-width: 640px) {
+  .settings-root {
+    padding: var(--lm-space);
+  }
+
+  /* Single pane (SPEC §6.5): the section list becomes a row above the content. */
+  .settings-panes {
+    grid-template-columns: 1fr;
+    gap: var(--lm-space);
+  }
+
+  .settings-nav ul {
+    display: flex;
+    gap: calc(var(--lm-space) * 0.5);
+    overflow-x: auto;
+    padding-bottom: calc(var(--lm-space) * 0.5);
+  }
+
+  .settings-nav-link {
+    white-space: nowrap;
+  }
+
+  .settings-form {
+    max-width: none;
+  }
+}

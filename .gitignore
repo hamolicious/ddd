@@ -12,6 +12,18 @@
 # Web build output and dependencies.
 node_modules/
 /web/dist/
+# M3 build output: the PWA bundle, the generated plugin contract, and the built base
+# plugin distribution (the *sources* are committed; `plugins/base/*/dist` is what
+# `mise run plugins` produces and what the server serves as PLUGINS_DIR).
+/web/app/dist/
+/web/kernel-api/dist/
+/plugins/base/dist/
+/plugins/base/*/dist/
+# The example plugins (`plugins/examples/*`) build the same way; the composed
+# registry directories the app E2E suite serves are derived from both dists.
+/plugins/examples/dist/
+/plugins/examples/*/dist/
+/web/app/e2e/.plugins/
 /web/test-results/
 /web/playwright-report/
 # Playwright MCP scratch output (snapshots, console logs) from driving the demo.

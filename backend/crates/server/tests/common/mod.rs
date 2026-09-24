@@ -93,6 +93,13 @@ pub fn test_config(mongo_uri: String, database: String) -> Config {
         login_attempt_window: Duration::from_secs(60),
         shutdown_grace: Duration::from_secs(5),
         seed_welcome_docs: false,
+        // M3: no frontend and no plugins in the integration harness. `web_dist_dir:
+        // None` is what makes the SPA fallback answer "API only" instead of hunting for
+        // a bundle, and an empty `plugins_dir` keeps `/api/plugins` deterministic.
+        web_dist_dir: None,
+        plugins_dir: std::path::PathBuf::from("target/test-plugins-empty"),
+        kernel_dts_path: None,
+        disable_plugins: false,
     }
 }
 

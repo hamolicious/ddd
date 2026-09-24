@@ -1,0 +1,269 @@
+/*
+ * The kernel's own stylesheet: the reset, the frame, the boot screens, the auth
+ * gate, and the safe-mode manager. Nothing else.
+ *
+ * Every value comes from a kernel token (`--lm-*`), which the runtime writes onto
+ * `:root` before React renders — so a theme override reaches this file for free, and
+ * a boot that never loaded a plugin is still legible in light and dark.
+ *
+ * Plugins bring their own `style.css`, linked on activation, and prefix their
+ * classes (SPEC §6.4). The `lm-` prefix here is the kernel's.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--lm-bg);
+  color: var(--lm-text);
+  font-family: var(--lm-font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+}
+
+:focus-visible {
+  outline: 2px solid var(--lm-focus-ring);
+  outline-offset: 2px;
+}
+
+a {
+  color: var(--lm-link);
+}
+
+code,
+pre {
+  font-family: var(--lm-font-mono);
+  font-size: 0.9em;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  min-height: var(--lm-tap-target);
+  padding: 0 calc(var(--lm-space) * 1.5);
+  border: 1px solid var(--lm-border-strong);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg-raised);
+  cursor: pointer;
+}
+
+button[type="submit"] {
+  border-color: var(--lm-accent);
+  background: var(--lm-accent);
+  color: var(--lm-accent-text);
+}
+
+input {
+  min-height: var(--lm-tap-target);
+  padding: 0 calc(var(--lm-space) * 1.25);
+  border: 1px solid var(--lm-border);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg);
+}
+
+/* ---- frame ------------------------------------------------------------- */
+
+.lm-frame {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.lm-outlet {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.lm-notices {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-bottom: 1px solid var(--lm-border);
+}
+
+.lm-notice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lm-space);
+  align-items: center;
+  padding: calc(var(--lm-space) * 0.75) var(--lm-space);
+  background: var(--lm-bg-subtle);
+}
+
+.lm-notice-warning {
+  border-left: 3px solid var(--lm-warning);
+}
+
+.lm-notice-error {
+  border-left: 3px solid var(--lm-danger);
+}
+
+.lm-notice-info {
+  border-left: 3px solid var(--lm-accent);
+}
+
+.lm-notice-message {
+  flex: 1 1 auto;
+}
+
+.lm-notice button {
+  min-height: calc(var(--lm-tap-target) - 12px);
+}
+
+.lm-notice-detail pre {
+  max-width: 100%;
+  margin: var(--lm-space) 0 0;
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+
+/* ---- boot, auth, empty states ------------------------------------------ */
+
+.lm-boot,
+.lm-auth,
+.lm-empty {
+  display: grid;
+  place-items: center;
+  min-height: 100%;
+  padding: calc(var(--lm-space) * 3);
+}
+
+.lm-boot-inner,
+.lm-auth-form,
+.lm-empty {
+  width: min(28rem, 100%);
+}
+
+.lm-empty {
+  text-align: left;
+}
+
+.lm-boot-inner progress {
+  width: 100%;
+}
+
+.lm-boot-error {
+  padding: var(--lm-space);
+  border: 1px solid var(--lm-danger);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg-subtle);
+  color: var(--lm-danger);
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+
+.lm-auth-form {
+  display: grid;
+  gap: calc(var(--lm-space) * 0.75);
+  padding: calc(var(--lm-space) * 3);
+  border: 1px solid var(--lm-border);
+  border-radius: var(--lm-radius-lg);
+  background: var(--lm-bg-raised);
+  box-shadow: var(--lm-shadow-1);
+}
+
+.lm-auth-form h1 {
+  margin: 0 0 var(--lm-space);
+  font-size: 1.4rem;
+}
+
+.lm-auth-hint {
+  margin: 0;
+  color: var(--lm-text-muted);
+}
+
+.lm-auth-error {
+  margin: 0;
+  color: var(--lm-danger);
+}
+
+.lm-auth-switch {
+  border: 0;
+  background: none;
+  color: var(--lm-link);
+  text-decoration: underline;
+}
+
+/* ---- re-authentication (the 4401 overlay, SPEC §5.3) -------------------- */
+
+/*
+ * An overlay, not a screen: the workspace stays mounted and readable underneath,
+ * because a 401 says nothing about the local copy and clearing it is what this
+ * flow exists to avoid. `color-mix` degrades to the fallback colour where it is
+ * unsupported.
+ */
+.lm-reauth {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: calc(var(--lm-space) * 3);
+  background: rgb(0 0 0 / 55%);
+  background: color-mix(in srgb, var(--lm-bg) 25%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.lm-reauth .lm-auth-form {
+  width: min(28rem, 100%);
+}
+
+.lm-reauth input[readonly] {
+  color: var(--lm-text-muted);
+  background: var(--lm-bg-subtle);
+}
+
+/* ---- safe mode --------------------------------------------------------- */
+
+.lm-bare {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: calc(var(--lm-space) * 3);
+}
+
+.lm-bare-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.lm-bare-table th,
+.lm-bare-table td {
+  padding: calc(var(--lm-space) * 0.75);
+  border-bottom: 1px solid var(--lm-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.lm-bare footer {
+  margin-top: calc(var(--lm-space) * 3);
+  color: var(--lm-text-muted);
+}
+
+/* ---- mobile ------------------------------------------------------------ */
+
+@media (max-width: 640px) {
+  .lm-auth-form {
+    padding: calc(var(--lm-space) * 2);
+  }
+
+  .lm-bare {
+    padding: var(--lm-space);
+  }
+}

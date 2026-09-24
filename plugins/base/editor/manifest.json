@@ -1,0 +1,30 @@
+{
+  "id": "editor",
+  "version": "1.0.0",
+  "name": "Editor",
+  "description": "Edit mode: CodeMirror 6 bound to the document's Y.Text.",
+  "author": "Life Manager base distribution",
+  "license": "MIT OR Apache-2.0",
+  "kernel": "^1.0",
+  "dependencies": {
+    "commands": "^1.0",
+    "document-surface": "^1.0"
+  },
+  "peerLibraries": {
+    "@codemirror/commands": "^6.0.0",
+    "@codemirror/language": "^6.0.0",
+    "@codemirror/state": "^6.0.0",
+    "@codemirror/view": "^6.0.0",
+    "@lezer/highlight": "^1.0.0",
+    "react": "^18.0.0",
+    "y-codemirror.next": "^0.3.0",
+    "yjs": "^13.6.0"
+  },
+  "frontend": {
+    "module": "frontend/index.mjs",
+    "style": "frontend/style.css"
+  },
+  "x-defines": [
+    "editor.extension"
+  ]
+}

@@ -1,0 +1,238 @@
+/*
+ * `viewer` styles. Linked on activation by the kernel loader (SPEC §6.4), never
+ * imported by the module — so it is a real file in devtools with this plugin's name on
+ * it, and it can be overridden by a later stylesheet without a build step.
+ *
+ * Convention: every class starts `viewer-` (per-plugin class prefix, SPEC §6.4 —
+ * there is no shadow DOM in v1, so the prefix is the whole isolation story).
+ * Every value comes from a kernel token, so themes reach this file for free.
+ *
+ * `.viewer-body` styles the *rendered markdown* by element, because the nodes come from
+ * the `markdown` plugin's pipeline and carry no classes of ours. A plugin that
+ * contributes a `markdown.component` override brings its own styles.
+ */
+
+.viewer-root {
+  color: var(--lm-text);
+  font-family: var(--lm-font-sans);
+}
+
+.viewer-body {
+  max-width: 72ch;
+  padding: calc(var(--lm-space) * 3) calc(var(--lm-space) * 2);
+  margin: 0 auto;
+  font-size: 1rem;
+  line-height: 1.65;
+  overflow-wrap: break-word;
+}
+
+.viewer-body > :first-child {
+  margin-top: 0;
+}
+
+.viewer-body h1,
+.viewer-body h2,
+.viewer-body h3,
+.viewer-body h4 {
+  margin: calc(var(--lm-space) * 3) 0 var(--lm-space);
+  line-height: 1.25;
+}
+
+.viewer-body h1 {
+  font-size: 1.6rem;
+}
+.viewer-body h2 {
+  font-size: 1.3rem;
+}
+.viewer-body h3 {
+  font-size: 1.1rem;
+}
+
+.viewer-body p,
+.viewer-body ul,
+.viewer-body ol,
+.viewer-body blockquote,
+.viewer-body pre,
+.viewer-body table {
+  margin: 0 0 calc(var(--lm-space) * 1.5);
+}
+
+.viewer-body a {
+  color: var(--lm-link);
+}
+
+.viewer-body code {
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+  background: var(--lm-bg-subtle);
+  font-family: var(--lm-font-mono);
+  font-size: 0.9em;
+}
+
+.viewer-body pre {
+  padding: var(--lm-space);
+  overflow-x: auto;
+  border: 1px solid var(--lm-border);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg-subtle);
+}
+
+.viewer-body pre code {
+  padding: 0;
+  background: none;
+}
+
+.viewer-body blockquote {
+  padding-left: calc(var(--lm-space) * 1.5);
+  border-left: 3px solid var(--lm-border-strong);
+  color: var(--lm-text-muted);
+}
+
+.viewer-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--lm-radius);
+}
+
+.viewer-body table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.viewer-body th,
+.viewer-body td {
+  padding: calc(var(--lm-space) / 2) var(--lm-space);
+  border: 1px solid var(--lm-border);
+  text-align: left;
+}
+
+.viewer-body hr {
+  border: 0;
+  border-top: 1px solid var(--lm-border);
+}
+
+/* --- wrapper-attachment documents (SPEC §3.6) --------------------------- */
+
+.viewer-attachment {
+  display: flex;
+  justify-content: center;
+  padding: calc(var(--lm-space) * 2);
+}
+
+.viewer-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lm-space);
+  margin: 0;
+  max-width: min(100%, 72ch);
+}
+
+.viewer-preview-frame {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--lm-space) / 2);
+  min-height: 12rem;
+  padding: calc(var(--lm-space) * 3);
+  border: 1px dashed var(--lm-border-strong);
+  border-radius: var(--lm-radius-lg);
+  background: var(--lm-bg-subtle);
+  text-align: center;
+}
+
+.viewer-preview-image {
+  display: block;
+  max-width: 100%;
+  max-height: 70vh;
+  height: auto;
+  margin: 0 auto;
+  border-radius: var(--lm-radius-lg);
+  background: var(--lm-bg-subtle);
+  box-shadow: var(--lm-shadow-1);
+}
+
+.viewer-preview-media {
+  width: 100%;
+  border-radius: var(--lm-radius);
+}
+
+.viewer-preview-text {
+  max-height: 70vh;
+  padding: var(--lm-space);
+  overflow: auto;
+  border: 1px solid var(--lm-border);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg-subtle);
+  font-family: var(--lm-font-mono);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.viewer-file {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.9rem;
+}
+
+.viewer-file-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.viewer-file-meta,
+.viewer-muted {
+  color: var(--lm-text-muted);
+  font-size: 0.85rem;
+}
+
+.viewer-file-actions {
+  margin-top: calc(var(--lm-space) / 2);
+}
+
+.viewer-file-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--lm-tap-target);
+  color: var(--lm-link);
+}
+
+.viewer-file-link:focus-visible {
+  outline: 2px solid var(--lm-focus-ring);
+  outline-offset: 2px;
+}
+
+.viewer-chip {
+  display: inline-block;
+  margin: 0;
+  padding: 2px calc(var(--lm-space) * 1.25);
+  border: 1px solid var(--lm-border-strong);
+  border-radius: 999px;
+  background: var(--lm-bg-raised);
+  color: var(--lm-text-muted);
+  font-size: 0.8rem;
+}
+
+.viewer-chip-offline {
+  border-color: var(--lm-warning);
+  color: var(--lm-text);
+}
+
+.viewer-empty {
+  padding: calc(var(--lm-space) * 3) calc(var(--lm-space) * 2);
+  color: var(--lm-text-muted);
+  max-width: 62ch;
+}
+
+@media (max-width: 640px) {
+  .viewer-body {
+    padding: calc(var(--lm-space) * 2) var(--lm-space);
+  }
+
+  .viewer-attachment {
+    padding: var(--lm-space);
+  }
+}

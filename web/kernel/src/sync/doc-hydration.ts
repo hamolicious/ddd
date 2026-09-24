@@ -307,9 +307,35 @@ export class DocHydrator {
     this.#evict();
 
     if (this.transport.state !== "open") {
-      // Offline: the local replica *is* the document. Sync happens on reconnect.
-      entry.phase = "live";
-      return entry;
+      if (entry.hasLocalState) {
+        // Offline with a replica on disk: it *is* the document (SPEC §4.1 —
+        // "editable offline = documents you've opened"). Sync happens on reconnect.
+        entry.phase = "live";
+        return entry;
+      }
+      // Offline and never opened before: there is **nothing here to edit**, and
+      // SPEC §4.1 says so in as many words — "an unopened document is read-only
+      // offline until reconnect".
+      //
+      // The empty `Y.Doc` above is not this document; it is a blank one that happens
+      // to share its id. Returning it as `live` hands an editor an empty `Y.Text`
+      // while the projection row next to it is full of text, so the reader sees a
+      // populated read view, switches to edit, and is invited to type into a replica
+      // that is not the document. (The CRDT merge on reconnect is not *lossy* — Yjs
+      // merges the insert in — but it lands in a document the user never saw, which
+      // is worse than being told no.)
+      //
+      // Failing here is what surfaces the read-only path callers already implement:
+      // `document-surface` keeps reading from `row.content` and says "editing is
+      // unavailable", and `editor` shows that text read-only instead of an empty box.
+      this.#reportError(
+        id,
+        "internal",
+        "offline and never hydrated: readable from the projection, not editable until reconnect",
+      );
+      entry.phase = "error";
+      this.#discard(entry);
+      throw new Error(`document ${id} cannot be hydrated while offline (never opened)`);
     }
     try {
       await this.#awaitSync(entry);

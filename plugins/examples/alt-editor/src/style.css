@@ -1,0 +1,47 @@
+/*
+ * Kernel tokens only (SPEC §6.4): a plugin that hard-codes colours is unreadable in
+ * half the themes, and `themes` overrides these same variables.
+ */
+
+.altedit {
+  display: flex;
+  flex-direction: column;
+  /* `min-height: 0` on every flex child, so the textarea is the only scroller —
+     the same rule the CodeMirror editor needs for the Android soft keyboard. */
+  min-height: 0;
+  flex: 1;
+  gap: var(--lm-space-2, 0.5rem);
+  padding: var(--lm-space-3, 0.75rem);
+}
+
+.altedit-note {
+  margin: 0;
+  color: var(--lm-fg-subtle);
+  font-size: 0.85rem;
+}
+
+.altedit-area {
+  flex: 1;
+  min-height: 12rem;
+  resize: vertical;
+  padding: var(--lm-space-2, 0.5rem);
+  border: 1px solid var(--lm-border);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg);
+  color: var(--lm-fg);
+  font-family: var(--lm-font-mono, ui-monospace, monospace);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  tab-size: 2;
+  white-space: pre-wrap;
+}
+
+.altedit-area:focus-visible {
+  outline: 2px solid var(--lm-focus);
+  outline-offset: 1px;
+}
+
+.altedit-area[readonly] {
+  background: var(--lm-bg-subtle);
+  color: var(--lm-fg-subtle);
+}

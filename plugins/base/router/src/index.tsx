@@ -1,0 +1,154 @@
+/**
+ * `router` — URL ↔ view (SPEC §6.5).
+ *
+ * **Hash paths driven through the History API.** The address is `#/doc/01J…`
+ * because the Flutter shell serves the bundle from a local origin with no server to
+ * rewrite paths (SPEC §7) and the service worker's `index.html` fallback is the
+ * PWA's equivalent — a hash path is the one form that works in both with no special
+ * case, and it is the spelling the rest of the distribution already writes
+ * (`location.hash = "/settings"`, `#/admin/plugins`). Navigation itself goes through
+ * `history.pushState`/`replaceState` so "replace, don't push" is expressible and
+ * back/forward arrive as `popstate`; on an origin where `pushState` is refused
+ * (`file://` in a webview) it degrades to assigning `location.hash`, which is the
+ * same navigation minus the ability to replace.
+ *
+ * The router does not render views: it resolves a URL to a `main.view` id plus params
+ * and tells `shell-ui`. That separation is what lets a command open a view without
+ * touching the URL, and a URL open a view without a command.
+ */
+
+import type { ReactNode } from "react";
+
+import { type Kernel, type Unsubscribe } from "@kernel";
+
+import { POINTS, routeShape, type MainView, type Route } from "../../_shared/points.js";
+
+import { createLink, type LinkProps } from "./Link.js";
+import { buildPath, fullPath, matchRoutes, pathQuery, type RouteMatch } from "./match.js";
+
+/** The view the router selects when nothing matches. Contributed below. */
+export const NOT_FOUND_VIEW = "router.notFound";
+
+/**
+ * The canonical document route, exported so `document-surface` registers exactly the
+ * path `markdown`'s `doc://` links and every doc list build. One constant beats four
+ * plugins hand-concatenating the same string slightly differently.
+ */
+export const DOCUMENT_ROUTE = "/doc/:id";
+
+export interface RouterApi {
+  /** Navigate, pushing history. `path` is the pattern's concrete form: `/doc/01J…`. */
+  navigate(path: string, options?: { readonly replace?: boolean }): void;
+  /** The current path and query string, without the leading `#`. */
+  current(): string;
+  /** The current path's query string, parsed (`#/search?q=cake`). */
+  query(): URLSearchParams;
+  /** Resolve a path against the registered routes. */
+  match(path: string): { readonly view: string; readonly params: Readonly<Record<string, string>> } | undefined;
+  onChange(listener: (path: string) => void): Unsubscribe;
+  /** Build a path from a pattern and params — never hand-concatenate one. */
+  href(pattern: string, params?: Readonly<Record<string, string>>): string;
+  /** The `<a href>` form of a concrete path (`/doc/x` → `#/doc/x`). */
+  url(path: string): string;
+  /** The canonical path for one document. */
+  documentPath(id: string): string;
+  /** An anchor that navigates in-app and marks itself `aria-current="page"`. */
+  readonly Link: (props: LinkProps) => ReactNode;
+}
+
+export default function activate(kernel: Kernel): RouterApi {
+  const routes = kernel.extensions.definePoint<Route>({
+    name: POINTS.route,
+    shape: routeShape,
+    key: (route) => route.path,
+    description: "A URL pattern (`/doc/:id`) mapped to a `main.view` id.",
+  });
+
+  const shell = kernel.services.require<{
+    setMainView(id: string, params?: Readonly<Record<string, string>>): void;
+  }>("shell-ui");
+
+  const listeners = new Set<(path: string) => void>();
+  let applied: string | undefined;
+
+  const current = (): string => fullPath(location.hash);
+  const url = (path: string): string => `#${fullPath(path)}`;
+
+  /**
+   * Resolve the current URL, tell the shell, and notify subscribers once.
+   *
+   * The dedupe key is the path **and** query: a view addressed by a query
+   * (`#/folder?path=home/lists`) matches the same route for every folder, so comparing
+   * paths alone would navigate the shell and tell nobody.
+   */
+  const resolve = (): void => {
+    const path = current();
+    const found = matchRoutes(routes.get(), path);
+    if (found) shell.setMainView(found.view, found.params);
+    else shell.setMainView(NOT_FOUND_VIEW, { path });
+
+    if (path === applied) return;
+    applied = path;
+    for (const listener of [...listeners]) listener(path);
+  };
+
+  const navigate = (path: string, options?: { readonly replace?: boolean }): void => {
+    const hash = url(path);
+    try {
+      const href = `${location.pathname}${location.search}${hash}`;
+      if (options?.replace) history.replaceState(history.state, "", href);
+      else history.pushState(null, "", href);
+    } catch {
+      // `pushState` is refused on an opaque origin (`file://` in the shell webview).
+      // Assigning the hash is the same navigation; `replace` becomes a push.
+      location.hash = hash.slice(1);
+    }
+    resolve();
+  };
+
+  const api: RouterApi = {
+    navigate,
+    current,
+    query: () => new URLSearchParams(pathQuery(location.hash)),
+    match: (path) => {
+      const found: RouteMatch | undefined = matchRoutes(routes.get(), path);
+      return found ? { view: found.view, params: found.params } : undefined;
+    },
+    onChange: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    href: (pattern, params) => buildPath(pattern, params),
+    url,
+    documentPath: (id) => buildPath(DOCUMENT_ROUTE, { id }),
+    Link: createLink({ current, onChange: (l) => api.onChange(l), navigate, url }),
+  };
+
+  // Where the router puts a URL nobody claimed. It is a contributed `main.view` like
+  // any other, so a workspace that wants a prettier 404 replaces it by id.
+  kernel.extensions.contribute<MainView>(POINTS.mainView, {
+    id: NOT_FOUND_VIEW,
+    title: "Not found",
+    component: ({ params }) => (
+      <div className="route-notfound">
+        <h1>Nothing here</h1>
+        <p>
+          No route matches <code>{params?.["path"] ?? current()}</code>.
+        </p>
+        <p>
+          <a href="#/">Go to the start page</a>
+        </p>
+      </div>
+    ),
+  });
+
+  // Two listeners, one resolution path: `popstate` is back/forward and our own
+  // `pushState` navigations' history entries, `hashchange` is everything that writes
+  // `location.hash` directly (other plugins, the address bar, an external link).
+  addEventListener("popstate", resolve);
+  addEventListener("hashchange", resolve);
+  // A route contributed after the first render must be able to claim the current URL.
+  routes.subscribe(() => resolve());
+
+  return api;
+}

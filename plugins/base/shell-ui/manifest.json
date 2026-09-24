@@ -1,0 +1,21 @@
+{
+  "id": "shell-ui",
+  "version": "1.0.0",
+  "name": "Shell UI",
+  "description": "Layout skeleton, mobile breakpoint and the sync-status indicator.",
+  "author": "Life Manager base distribution",
+  "license": "MIT OR Apache-2.0",
+  "kernel": "^1.0",
+  "peerLibraries": {
+    "react": "^18.0.0"
+  },
+  "frontend": {
+    "module": "frontend/index.mjs",
+    "style": "frontend/style.css"
+  },
+  "x-defines": [
+    "main.view",
+    "navbar.item",
+    "sidebar.panel"
+  ]
+}

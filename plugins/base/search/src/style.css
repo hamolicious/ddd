@@ -1,0 +1,232 @@
+/*
+ * `search` styles. Linked on activation by the kernel loader (SPEC §6.4), never
+ * imported by the module — so it is a real file in devtools with this plugin's name on
+ * it, and it can be overridden by a later stylesheet without a build step.
+ *
+ * Convention: every class starts `search-` (per-plugin class prefix, SPEC §6.4 —
+ * there is no shadow DOM in v1, so the prefix is the whole isolation story).
+ * Every value comes from a kernel token, so themes reach this file for free.
+ */
+
+.search-root {
+  color: var(--lm-text);
+  font-family: var(--lm-font-sans);
+}
+
+/* --- the navbar box ------------------------------------------------------- */
+
+.search-box {
+  position: relative;
+  flex: 1 1 18rem;
+  max-width: 28rem;
+  font-family: var(--lm-font-sans);
+}
+
+.search-input {
+  width: 100%;
+  min-height: var(--lm-tap-target);
+  padding: 0 var(--lm-space);
+  border: 1px solid var(--lm-border);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg);
+  color: var(--lm-text);
+  font: inherit;
+}
+
+.search-input:focus-visible,
+.search-dropdown :focus-visible,
+.search-results :focus-visible {
+  outline: 2px solid var(--lm-focus-ring);
+  outline-offset: 1px;
+}
+
+.search-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 900;
+  max-height: min(60vh, 28rem);
+  overflow-y: auto;
+  border: 1px solid var(--lm-border);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg-raised);
+  box-shadow: var(--lm-shadow-2);
+  color: var(--lm-text);
+}
+
+.search-hits {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.search-hit {
+  display: block;
+  padding: calc(var(--lm-space) * 0.75) var(--lm-space);
+  cursor: pointer;
+}
+
+.search-hit-active {
+  background: var(--lm-accent-subtle);
+}
+
+.search-hit-title {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-hit-snippet,
+.search-result-snippet {
+  display: block;
+  color: var(--lm-text-muted);
+  font-size: 0.88em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-result-snippet {
+  white-space: normal;
+}
+
+.search-hit mark,
+.search-result-snippet mark {
+  background: var(--lm-selection);
+  color: inherit;
+}
+
+.search-all {
+  width: 100%;
+  min-height: var(--lm-tap-target);
+  border: 0;
+  border-top: 1px solid var(--lm-border);
+  background: var(--lm-bg-subtle);
+  color: var(--lm-link);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* --- the results page ---------------------------------------------------- */
+
+.search-results {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--lm-space) * 1.5);
+  padding: calc(var(--lm-space) * 2);
+  color: var(--lm-text);
+  font-family: var(--lm-font-sans);
+}
+
+.search-results h2 {
+  margin: 0;
+}
+
+.search-form {
+  display: flex;
+  gap: var(--lm-space);
+  align-items: stretch;
+}
+
+.search-field {
+  flex: 1 1 auto;
+}
+
+.search-field input {
+  width: 100%;
+  min-height: var(--lm-tap-target);
+  padding: 0 var(--lm-space);
+  border: 1px solid var(--lm-border);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg);
+  color: inherit;
+  font: inherit;
+}
+
+.search-form button {
+  min-height: var(--lm-tap-target);
+  padding: 0 calc(var(--lm-space) * 2);
+  border: 1px solid var(--lm-accent);
+  border-radius: var(--lm-radius);
+  background: var(--lm-accent);
+  color: var(--lm-accent-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.search-providers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--lm-space) * 1.5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--lm-text-muted);
+  font-size: 0.9em;
+}
+
+.search-provider-failed .search-provider-error {
+  color: var(--lm-warning);
+}
+
+.search-note,
+.search-empty,
+.search-status {
+  margin: 0;
+  color: var(--lm-text-muted);
+}
+
+.search-list {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--lm-space) * 1.5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.search-result-open {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--lm-link);
+  font: inherit;
+  font-size: 1.05em;
+  text-align: left;
+  cursor: pointer;
+}
+
+.search-result-meta {
+  display: flex;
+  gap: var(--lm-space);
+  margin: 2px 0;
+  color: var(--lm-text-muted);
+  font-size: 0.85em;
+}
+
+.search-result-path {
+  font-family: var(--lm-font-mono);
+}
+
+.search-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .search-box {
+    max-width: none;
+  }
+
+  .search-results {
+    padding: var(--lm-space);
+  }
+}

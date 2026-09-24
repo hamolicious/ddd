@@ -10,6 +10,7 @@
 //! | `db/*` | ops |
 //! | `docstore` | docstore (trait itself frozen) |
 //! | `feed` | sync (change-feed sequencing + queries; types frozen) |
+//! | `plugins` | server-static (M3: installed-plugin registry + import map) |
 //! | `auth` | auth |
 //! | `routes/*` | http-routes |
 //! | `seed` | http-routes |
@@ -23,6 +24,7 @@ pub mod docstore;
 pub mod domain;
 pub mod error;
 pub mod feed;
+pub mod plugins;
 pub mod routes;
 pub mod seed;
 pub mod state;

@@ -1,0 +1,41 @@
+/*
+ * `router` styles. Linked on activation by the kernel loader (SPEC §6.4), never
+ * imported by the module — so it is a real file in devtools with this plugin's name on
+ * it, and it can be overridden by a later stylesheet without a build step.
+ *
+ * Convention: every class starts `route-` (per-plugin class prefix, SPEC §6.4 —
+ * there is no shadow DOM in v1, so the prefix is the whole isolation story).
+ * Every value comes from a kernel token, so themes reach this file for free.
+ *
+ * There is almost nothing here on purpose: the router renders exactly one thing, the
+ * view for a URL nobody claimed.
+ */
+
+.route-notfound {
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: calc(var(--lm-space) * 4) calc(var(--lm-space) * 2);
+  color: var(--lm-text-muted);
+  font-family: var(--lm-font-sans);
+}
+
+.route-notfound h1 {
+  margin: 0 0 var(--lm-space);
+  color: var(--lm-text);
+  font-size: 1.3rem;
+}
+
+.route-notfound code {
+  padding: 0 calc(var(--lm-space) * 0.5);
+  border: 1px solid var(--lm-border);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg-subtle);
+  word-break: break-all;
+}
+
+/* A `router.Link` that points at the page it is on — nav lists, folder trees, doc
+   lists. Every `Link` carries this class, so the rule stays inside the plugin's
+   prefix instead of restyling the whole document's `aria-current` usage. */
+.route-link[aria-current="page"] {
+  font-weight: 600;
+}

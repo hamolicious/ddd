@@ -1,0 +1,20 @@
+{
+  "id": "viewer",
+  "version": "1.0.0",
+  "name": "Viewer",
+  "description": "Read mode: renders the body, hides frontmatter and machine sections.",
+  "author": "Life Manager base distribution",
+  "license": "MIT OR Apache-2.0",
+  "kernel": "^1.0",
+  "dependencies": {
+    "document-surface": "^1.0",
+    "markdown": "^1.0"
+  },
+  "peerLibraries": {
+    "react": "^18.0.0"
+  },
+  "frontend": {
+    "module": "frontend/index.mjs",
+    "style": "frontend/style.css"
+  }
+}

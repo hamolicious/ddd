@@ -267,7 +267,7 @@ string**. MongoDB extended JSON (`{"$date": …}`) never reaches a client.
 | Path | Behavior |
 |---|---|
 | `GET /healthz` | Liveness. 200 without touching Mongo. |
-| `GET /readyz` | Readiness with detail: Mongo ping (2 s bound), migration state, schema version, uptime, version. 200 / 503 on the same shape. |
+| `GET /readyz` | Readiness with detail: Mongo ping (2 s bound), migration state, plugin **counts**, schema version, uptime, version. 200 / 503 on the same shape. Unauthenticated, so the body carries no filesystem paths and no manifest errors — those go to the log and the admin view. |
 | `GET /metrics` | Prometheus text 0.0.4 — `lm_http_requests_total`, `lm_http_request_duration_seconds`, `lm_materialize_duration_seconds`, `lm_crdt_updates_applied_total`, room/document gauges, the change-feed gauges (`lm_feed_head_seq`, `lm_feed_safe_seq`, `lm_feed_subscribers`), socket gauges (`lm_ws_connections`, `lm_ws_subscribed_documents`), `lm_ws_backpressure_drops_total` by queue, and build info. Gauges are **sampled every 15 s**, so a scrape within 15 s of boot reports the workspace the server started with — including zeros. |
 
 ### Errors

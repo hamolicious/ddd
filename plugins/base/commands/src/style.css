@@ -1,0 +1,318 @@
+/*
+ * `commands` styles. Linked on activation by the kernel loader (SPEC §6.4), never
+ * imported by the module — so it is a real file in devtools with this plugin's name on
+ * it, and it can be overridden by a later stylesheet without a build step.
+ *
+ * Convention: every class starts `cmd-` (per-plugin class prefix, SPEC §6.4 —
+ * there is no shadow DOM in v1, so the prefix is the whole isolation story).
+ * Every value comes from a kernel token, so themes reach this file for free.
+ */
+
+.cmd-root {
+  color: var(--lm-text);
+  font-family: var(--lm-font-sans);
+}
+
+/* --- the trigger in the navbar ------------------------------------------- */
+
+.cmd-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--lm-space) * 0.75);
+  min-height: var(--lm-tap-target);
+  padding: 0 calc(var(--lm-space) * 1.5);
+  border: 1px solid var(--lm-border);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg-subtle);
+  color: var(--lm-text-muted);
+  font: inherit;
+  font-family: var(--lm-font-sans);
+  cursor: pointer;
+}
+
+.cmd-trigger:hover {
+  color: var(--lm-text);
+  border-color: var(--lm-border-strong);
+}
+
+/* --- the palette --------------------------------------------------------- */
+
+.cmd-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: calc(var(--lm-space) * 6) var(--lm-space) var(--lm-space);
+  background: var(--lm-bg-overlay);
+}
+
+.cmd-palette {
+  display: flex;
+  flex-direction: column;
+  width: min(42rem, 100%);
+  max-height: min(70vh, 36rem);
+  overflow: hidden;
+  border: 1px solid var(--lm-border);
+  border-radius: var(--lm-radius-lg);
+  background: var(--lm-bg-raised);
+  box-shadow: var(--lm-shadow-2);
+  color: var(--lm-text);
+  font-family: var(--lm-font-sans);
+}
+
+.cmd-input {
+  flex: none;
+  padding: calc(var(--lm-space) * 1.75) calc(var(--lm-space) * 2);
+  border: 0;
+  border-bottom: 1px solid var(--lm-border);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 1.05rem;
+}
+
+.cmd-input:focus-visible,
+.cmd-palette :focus-visible {
+  outline: 2px solid var(--lm-focus-ring);
+  outline-offset: -2px;
+}
+
+.cmd-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  margin: 0;
+  padding: calc(var(--lm-space) * 0.5) 0;
+  list-style: none;
+}
+
+.cmd-option {
+  display: flex;
+  align-items: center;
+  gap: var(--lm-space);
+  min-height: var(--lm-tap-target);
+  padding: 0 calc(var(--lm-space) * 2);
+  cursor: pointer;
+}
+
+.cmd-option-active {
+  background: var(--lm-accent-subtle);
+}
+
+.cmd-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmd-category {
+  margin-right: calc(var(--lm-space) * 0.75);
+  color: var(--lm-text-muted);
+}
+
+.cmd-category::after {
+  content: " ›";
+}
+
+.cmd-icon {
+  flex: none;
+  color: var(--lm-text-muted);
+}
+
+.cmd-keys {
+  flex: none;
+  padding: 0 calc(var(--lm-space) * 0.75);
+  border: 1px solid var(--lm-border);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg-subtle);
+  color: var(--lm-text-muted);
+  font-family: var(--lm-font-mono);
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.cmd-empty,
+.cmd-status,
+.cmd-note,
+.cmd-conflict-banner {
+  margin: 0;
+  padding: var(--lm-space) calc(var(--lm-space) * 2);
+  color: var(--lm-text-muted);
+  font-size: 0.9em;
+}
+
+.cmd-status {
+  border-top: 1px solid var(--lm-border);
+}
+
+.cmd-conflict-banner {
+  border-bottom: 1px solid var(--lm-border);
+  color: var(--lm-warning);
+}
+
+.cmd-link {
+  border: 0;
+  background: none;
+  color: var(--lm-link);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* --- the settings section ----------------------------------------------- */
+
+.cmd-settings {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--lm-space) * 1.5);
+  color: var(--lm-text);
+  font-family: var(--lm-font-sans);
+}
+
+.cmd-settings .cmd-note {
+  padding: 0;
+}
+
+.cmd-warning {
+  margin: 0;
+  padding: var(--lm-space);
+  border: 1px solid var(--lm-warning);
+  border-radius: var(--lm-radius);
+  color: var(--lm-text);
+}
+
+.cmd-conflicts h4 {
+  margin: 0 0 calc(var(--lm-space) * 0.5);
+}
+
+.cmd-conflicts ul {
+  margin: 0;
+  padding-left: calc(var(--lm-space) * 2.5);
+}
+
+.cmd-field {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--lm-space) * 0.5);
+  max-width: 24rem;
+}
+
+.cmd-field input {
+  min-height: var(--lm-tap-target);
+  padding: 0 var(--lm-space);
+  border: 1px solid var(--lm-border);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg);
+  color: inherit;
+  font: inherit;
+}
+
+.cmd-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.cmd-table th,
+.cmd-table td {
+  padding: calc(var(--lm-space) * 0.75);
+  border-bottom: 1px solid var(--lm-border);
+  vertical-align: top;
+  font-weight: normal;
+}
+
+.cmd-table thead th {
+  color: var(--lm-text-muted);
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cmd-id {
+  display: block;
+  color: var(--lm-text-muted);
+  font-family: var(--lm-font-mono);
+  font-size: 0.8em;
+}
+
+.cmd-unbound {
+  color: var(--lm-text-muted);
+}
+
+.cmd-badge {
+  margin-left: calc(var(--lm-space) * 0.75);
+  padding: 0 calc(var(--lm-space) * 0.5);
+  border-radius: var(--lm-radius);
+  background: var(--lm-accent-subtle);
+  color: var(--lm-text);
+  font-size: 0.75em;
+}
+
+.cmd-capturing {
+  color: var(--lm-accent);
+}
+
+.cmd-actions {
+  display: flex;
+  gap: calc(var(--lm-space) * 0.5);
+  white-space: nowrap;
+}
+
+.cmd-actions button,
+.cmd-danger {
+  min-height: var(--lm-tap-target);
+  padding: 0 var(--lm-space);
+  border: 1px solid var(--lm-border);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg-subtle);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.cmd-actions button:disabled,
+.cmd-danger:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.cmd-danger {
+  align-self: flex-start;
+  border-color: var(--lm-danger);
+  color: var(--lm-danger);
+}
+
+.cmd-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The mobile breakpoint is `shell-ui`'s (SPEC §6.5), but the palette is a full-screen
+   overlay of its own, so it honours the same threshold rather than asking the shell. */
+@media (max-width: 640px) {
+  .cmd-overlay {
+    padding: 0;
+  }
+
+  .cmd-palette {
+    width: 100%;
+    max-width: none;
+    max-height: 100%;
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .cmd-trigger span {
+    display: none;
+  }
+}

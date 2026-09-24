@@ -1,9 +1,9 @@
 # Local / self-host deployment (SPEC §8).
 #
 # Production is Kubernetes, explicitly single-replica; this file is the
-# local + self-host path. Caddy (automatic HTTPS) is intentionally NOT part of
-# M1 — the server is TLS-unaware and there is no PWA to serve yet. The commented
-# block at the bottom is the M3 shape.
+# local + self-host path. Since M3 the image contains the PWA bundle and the base
+# plugin distribution as well as the binary, so `docker compose up --build` gives a
+# complete app on http://localhost:8080 — no Vite, no separate frontend deploy.
 #
 # First run:
 #   cp .env.example .env    # then put a real SESSION_SECRET in it
@@ -11,6 +11,19 @@
 #
 # `mise run dev` uses only the `mongo` service and runs the server on the host,
 # which is why mongo's port is published on loopback.
+#
+# The `caddy` profile adds automatic HTTPS in front of the server, which a real
+# self-host deployment needs — Secure cookies, the PWA and the Flutter bridge all
+# require a secure origin (SPEC §8):
+#
+#   DOMAIN=notes.example.com ACME_EMAIL=you@example.com \
+#     APP_ORIGIN=https://notes.example.com COOKIE_SECURE=true \
+#     TRUST_PROXY_HEADERS=true SERVER_PORT=127.0.0.1:8080 \
+#     docker compose --profile caddy up -d --build
+#
+# `SERVER_PORT=127.0.0.1:8080` there is not decoration: `TRUST_PROXY_HEADERS=true` lets a
+# request pick its own client IP, so it is only safe while the proxy is the *only* route
+# in. See `deploy/Caddyfile`.
 
 name: life-manager
 
@@ -44,8 +57,12 @@ services:
 
   server:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      # The repository root, not `backend/`: since M3 the image also builds the PWA
+      # bundle, the base plugins and the plugin contract out of `web/` and `plugins/`
+      # (see the header of `backend/Dockerfile`). `.dockerignore` is what keeps that
+      # context small.
+      context: .
+      dockerfile: backend/Dockerfile
     restart: unless-stopped
     depends_on:
       mongo:
@@ -57,8 +74,21 @@ services:
       # Required, >= 32 bytes, no default (SPEC §5.2). Rotating it logs everyone out.
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required and must be at least 32 bytes}
       MAX_ATTACHMENT_BYTES: ${MAX_ATTACHMENT_BYTES:-26214400}
-      # Origin allowlist for CORS now, the WebSocket upgrade in M2.
+      # Origin allowlist: CORS *and* the mandatory WebSocket origin check. Since M3 the
+      # server serves the PWA itself, so its own origin must be in here or the page loads
+      # and the socket is refused with 403 before it authenticates (PROTOCOL.md §1.2).
+      # Behind the caddy profile this becomes https://${DOMAIN}.
       APP_ORIGIN: ${APP_ORIGIN:-http://localhost:8080}
+
+      # ---- M3: the static surface (SPEC §6.4, §8) ----
+      # The image bakes all three (see `backend/Dockerfile`); these only need overriding
+      # to point at a mounted directory, which is what M4's plugin installer will want.
+      WEB_DIST_DIR: ${WEB_DIST_DIR:-/srv/web}
+      PLUGINS_DIR: ${PLUGINS_DIR:-/srv/plugins}
+      KERNEL_DTS_PATH: ${KERNEL_DTS_PATH:-/srv/kernel.d.ts}
+      # Server-side safe mode (SPEC §6.1): every client is told the plugin list is empty,
+      # which is the way back in when an installed plugin breaks the app for everyone.
+      DISABLE_PLUGINS: ${DISABLE_PLUGINS:-false}
       # Compose runs over plain http on localhost; production keeps this true.
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       # No reverse proxy in M1 (see the header of this file): the client IP is
@@ -90,20 +120,36 @@ services:
     # the process, not docker's SIGKILL.
     stop_grace_period: 40s
 
+  # Automatic HTTPS in front of the server (SPEC §8). Opt-in, because a plain
+  # `docker compose up` on a laptop wants http://localhost:8080 and has no domain to
+  # get a certificate for. The server stays TLS-unaware; Caddy terminates.
+  caddy:
+    image: caddy:2
+    profiles: ["caddy"]
+    restart: unless-stopped
+    depends_on:
+      server:
+        condition: service_healthy
+    environment:
+      # The name the certificate is issued for; it must resolve to this host. The
+      # default is deliberately `localhost`, for which Caddy issues a certificate from
+      # its own local CA instead of calling ACME — so a mistyped invocation fails on a
+      # browser warning rather than by burning Let's Encrypt rate limit on a bad name.
+      # It cannot be `${DOMAIN:?…}`: Compose interpolates every service before it filters
+      # by profile, so a required variable here would break plain `docker compose up`.
+      DOMAIN: ${DOMAIN:-localhost}
+      # Optional: an address for ACME expiry notices.
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
 volumes:
   mongo-data:
   mongo-config:
-
-# M3 adds the reverse proxy, once there is a PWA bundle to serve. A secure origin
-# is required by cookies / PWA / the Flutter bridge, so self-hosters get Caddy's
-# automatic HTTPS:
-#
-#  caddy:
-#    image: caddy:2
-#    restart: unless-stopped
-#    depends_on: [server]
-#    ports: ["80:80", "443:443"]
-#    volumes:
-#      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-#      - caddy-data:/data
-#      - caddy-config:/config
+  caddy-data:
+  caddy-config:

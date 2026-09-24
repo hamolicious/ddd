@@ -38,7 +38,8 @@ pub struct ReadyReport {
     pub ready: bool,
     pub mongo: CheckResult,
     pub migrations: CheckResult,
-    /// M4; reported as skipped in M1.
+    /// The frontend plugin registry: count, root, and anything it refused to load.
+    /// Informational — see [`check_plugins`] for why it never fails the probe.
     pub plugins: CheckResult,
     pub schema_version: i32,
     pub uptime_secs: u64,
@@ -97,9 +98,7 @@ impl CheckResult {
 pub async fn readyz(State(state): State<AppState>) -> (StatusCode, Json<ReadyReport>) {
     let mongo = check_mongo(&state).await;
     let migrations = check_migrations(&state);
-    // The plugin host arrives in M4 (SPEC §9); reporting it as a passing,
-    // explicitly-skipped check keeps the body's shape stable for dashboards.
-    let plugins = CheckResult::skipped("plugin host not present in M1");
+    let plugins = check_plugins(&state);
 
     let ready = mongo.ok && migrations.ok && plugins.ok;
 
@@ -148,6 +147,48 @@ fn check_migrations(state: &AppState) -> CheckResult {
     } else {
         CheckResult::failed("migrations have not finished", None)
     }
+}
+
+/// The frontend plugin registry (SPEC §8: "plugin load, with **details**").
+///
+/// M3 has no plugin *host* — that is M4 — but it does have a registry, and "the
+/// plugins did not load" is the most likely M3 misconfiguration: a `PLUGINS_DIR`
+/// that resolved somewhere empty ships a server whose clients boot into a shell
+/// with nothing in it. This check is how an operator sees that without reading the
+/// client's console.
+///
+/// **It never fails the probe, and that is deliberate.** `/readyz` answers "should
+/// traffic come here", and a server with an unbuilt plugin directory or one
+/// unparsable manifest serves every request it is asked to — including the API, the
+/// sync socket, and the other thirteen plugins. Failing readiness would take a
+/// working deployment out of rotation over a missing subdirectory, and
+/// `plugins::scan` says so in as many words where it records that case ("not an
+/// error: a deployment with no plugins installed is a valid state"). `DISABLE_PLUGINS=1`
+/// is likewise a supported recovery mode (SPEC §6.1), not a fault.
+///
+/// So the counts go in `detail`, and readiness stays a question about traffic.
+///
+/// **Counts, and nothing identifying.** `/readyz` is unauthenticated by design (above) and
+/// the documented Compose deployment proxies it straight through Caddy, so its body is
+/// world-readable. It used to carry the absolute `PLUGINS_DIR` and up to three manifest
+/// rejection strings — the server's filesystem layout and which plugin directories are
+/// malformed, handed to anyone who asks. That is reconnaissance, and this file is careful
+/// to keep exactly that kind of thing out of `/healthz`. The paths and messages are still
+/// available where they belong: a `WARN` at boot (`main.rs`) and the admin plugin view,
+/// both of which have an operator behind them.
+fn check_plugins(state: &AppState) -> CheckResult {
+    if state.config.disable_plugins {
+        return CheckResult::skipped("DISABLE_PLUGINS=1: no plugins are served");
+    }
+    let registry = crate::plugins::registry(&state.config);
+    let count = registry.plugins().len();
+    let problems = registry.problems().len();
+    if problems == 0 {
+        return CheckResult::ok().with_detail(format!("{count} plugins loaded"));
+    }
+    CheckResult::ok().with_detail(format!(
+        "{count} plugins loaded; {problems} not loaded (see the server log or admin)"
+    ))
 }
 
 #[cfg(test)]
@@ -218,6 +259,25 @@ mod tests {
         assert_eq!(report["ready"], true);
         assert_eq!(report["mongo"]["ok"], true);
         assert_eq!(report["migrations"]["ok"], true);
+        // The plugin check reports, it never gates: this test's `PLUGINS_DIR` is
+        // whatever the environment says and is usually not built, which is a valid
+        // deployment state and must not take the server out of rotation (SPEC §8;
+        // `plugins::scan` records an unreadable directory as a problem, not an error).
+        assert_eq!(report["plugins"]["ok"], true);
+        let plugin_detail = report["plugins"]["detail"]
+            .as_str()
+            .expect("the plugin check says what it found")
+            .to_string();
+        assert!(
+            plugin_detail.contains("plugins loaded") || plugin_detail.contains("DISABLE_PLUGINS"),
+            "the plugin check must say what it found: {plugin_detail}"
+        );
+        // Unauthenticated body: counts only. No filesystem paths, no manifest messages —
+        // see `check_plugins` for why.
+        assert!(
+            !plugin_detail.contains('/'),
+            "/readyz must not disclose the plugin directory: {plugin_detail}"
+        );
         assert_eq!(
             report["schema_version"],
             crate::db::migrations::SCHEMA_VERSION

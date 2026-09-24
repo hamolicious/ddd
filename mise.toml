@@ -8,11 +8,28 @@ rust = "latest"
 _.file = { path = ".env", redact = true }
 
 [tasks.dev]
-description = "Run the server against the compose Mongo (mongo in docker, server on the host)"
+description = "Run the server against the compose Mongo (mongo in docker, server on the host), serving the built PWA + plugins"
 dir = "backend"
+# The three M3 paths are passed explicitly and spelled relative to **this task's**
+# directory. The defaults in `config.rs` (`plugins/base/dist`,
+# `web/kernel-api/dist/kernel.d.ts`) are relative to the process's working directory, and
+# this task runs in `backend/` — so unset they would resolve to `backend/plugins/…` and
+# silently find nothing, which looks exactly like "the plugins failed to load".
+#
+# `WEB_DIST_DIR` makes http://localhost:8080 serve the last `mise run web-build` output,
+# import map and all. `mise run app` is still the live-reloading way to work on the app
+# (Vite on :5174, proxying /api, /plugins, /importmap.json and the socket here) — what
+# this adds is the *production* path on the same machine: one origin, the real CSP, the
+# real nonced import map, the real service worker. A missing bundle is not an error: the
+# route says what to build.
 run = [
   "docker compose -f ../docker-compose.yaml up -d --wait mongo",
-  "cargo run --bin life-manager -- serve",
+  """
+  WEB_DIST_DIR="${WEB_DIST_DIR:-../web/app/dist}" \
+  PLUGINS_DIR="${PLUGINS_DIR:-../plugins/base/dist}" \
+  KERNEL_DTS_PATH="${KERNEL_DTS_PATH:-../web/kernel-api/dist/kernel.d.ts}" \
+  cargo run --bin life-manager -- serve
+  """,
 ]
 
 [tasks.check]
@@ -49,8 +66,39 @@ description = "Run the web dev server (proxies /api and the sync socket to the R
 dir = "web"
 run = ["npm install --no-audit --no-fund", "npm run dev"]
 
+[tasks.app]
+description = "Run the M3 PWA dev server (the real app; proxies /api, /plugins and the socket to the Rust server)"
+dir = "web"
+run = ["npm install --no-audit --no-fund", "npm run dev:app"]
+
+[tasks.kernel-dts]
+description = "Generate the plugin contract (web/kernel-api/dist/kernel.d.ts), served at /kernel.d.ts"
+dir = "web"
+run = ["npm install --no-audit --no-fund", "npm run kernel:dts"]
+
+[tasks.plugins]
+description = "Build the base plugin distribution into plugins/base/dist (what the server serves as PLUGINS_DIR)"
+dir = "web"
+run = ["npm install --no-audit --no-fund", "npm run build:plugins"]
+
+[tasks.web-build]
+description = "Build everything the server serves: the Wasm core, the contract, the PWA bundle (runtime layer + app + service worker), and the base plugins"
+dir = "web"
+# `wasm` first, and as a dependency rather than a documented prerequisite: the app bundle
+# imports the shared core through a Vite alias into `kernel/src/wasm/pkg`, which is a
+# gitignored build artifact — so in a fresh checkout `build:app` fails to resolve it, and
+# in a stale one it silently bundles a core older than `backend/crates/core`. This is the
+# same order `backend/Dockerfile` builds in.
+depends = ["wasm"]
+run = [
+  "npm install --no-audit --no-fund",
+  "npm run kernel:dts",
+  "npm run build:app",
+  "npm run build:plugins",
+]
+
 [tasks.web-check]
-description = "Typecheck and unit-test the web kernel"
+description = "Typecheck and unit-test the web tree: kernel contract, kernel runtime, PWA loader, base plugins"
 dir = "web"
 run = ["npm install --no-audit --no-fund", "npm run typecheck", "npm run test"]
 

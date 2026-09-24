@@ -313,3 +313,344 @@ reported skip without it. Measured numbers live in
 `mise run wasm`: the Wasm package is declared ambiently in `core-wasm.d.ts` and
 resolved at runtime through a Vite alias. Keep it that way — a typecheck that
 needs a Rust toolchain is a typecheck nobody runs.
+
+---
+
+# M3 build contracts (microkernel frontend)
+
+**Scope: SPEC §9 M3 only** — the loader, import maps + peer-library resolution, the
+registries, error boundaries, safe mode, and the base distribution of SPEC §6.5, plus
+the server-side static/import-map serving that makes it loadable. **Not in scope:** the
+Extism/Wasm backend plugin host, the zip install flow, the plugin approval UI's backend
+(M4), and Flutter (M5).
+
+The M2 rules still hold — don't edit another area's files, don't change a frozen
+signature, report instead of improvising — with these amendments, all of them made by
+the scaffold and announced here:
+
+1. **React 18 is in.** `web/app/**`, `web/kernel/src/runtime/**` and every base plugin
+   are React; `web/kernel/src/{store,sync,query,wasm}/**` still must not import it.
+2. **`package.json`, `tsconfig.json` and `vite.config.ts` were extended** (React,
+   CodeMirror, unified/remark, Workbox; the `@kernel` path and alias; `app/src/**/*.test.ts`
+   in the Vitest include). They are frozen again from here.
+3. **The M2 demo stays exactly as it is**, as a harness fixture and the SPEC §8 smoke's
+   surface. The product is `web/app/`. Nothing in `app/` may import from `demo/`.
+
+## The two `@kernel`s, and why
+
+| Specifier | Resolves to | Who may import it |
+|---|---|---|
+| `@kernel` (exact) | `web/kernel-api/src/index.ts` | **plugins** and everything in `web/` |
+| `@kernel/…` | `web/kernel/src/…` | `web/` code only — never a plugin |
+
+`kernel-api/` is the **frozen public contract**: declarations, a few shipped constants
+(the default theme tokens), the shape validators, and no IndexedDB, sockets or Wasm. It
+is what `/kernel.d.ts` is generated from and what a third-party plugin author compiles
+against. `kernel/src/runtime/**` implements it over the M2 substrate.
+
+`kernel/src/runtime/contract-parity.ts` is a compile-time proof that the two halves have
+not drifted (`DocumentRow` ≡ `ProjectionRow`, `SyncStatus` ≡ the feed's, and so on).
+Change one side without the other and `npm run typecheck` fails there, naming the type.
+
+## Layout and ownership
+
+```
+web/
+├── kernel-api/src/                  the @kernel contract                FROZEN [scaffold]
+│   ├── index.ts        the barrel + KERNEL_API_VERSION
+│   ├── types.ts        Unsubscribe, Disposable, CoreValue/CoreMap, KernelLogger
+│   ├── errors.ts       KernelError + notImplemented()
+│   ├── shape.ts        minimal runtime shape validation (`s.object({…})`)
+│   ├── documents.ts    queries, open→Y.Doc, create/delete, the SPLICE HELPERS
+│   ├── extensions.ts   definePoint / contribute / get / subscribe
+│   ├── services.ts     what activate() returned, for declared dependents
+│   ├── events.ts       the ephemeral bus + KernelEvents
+│   ├── settings.ts     per-user settings documents
+│   ├── session.ts      user, authenticated fetch, logout
+│   ├── sync.ts         the observable status of SPEC §6.4
+│   ├── ui.ts           single mount, error boundary, notices, DEFAULT_*_TOKENS
+│   ├── capabilities.ts feature detection + the shell bridge
+│   ├── manifest.ts     SPEC §6.2 shapes, validateManifest, satisfies
+│   └── kernel.ts       the Kernel object, activate()/deactivate()
+├── kernel-api/tsconfig.build.json + scripts/build-kernel-dts.mjs        [scaffold]
+├── kernel/src/runtime/              the implementation              [kernel-runtime]
+│   ├── host.ts         KernelHost + forPlugin(manifest)            (done)
+│   ├── registry.ts     the extension registry + registry.test.ts   (done)
+│   ├── services.ts     declared-dependency enforcement             (done)
+│   ├── events.ts       the bus                                     (done)
+│   ├── notices.ts      the notice centre                           (done)
+│   ├── theme.ts        token layers + colour-scheme resolution      (done)
+│   ├── mount.tsx       MountPoint + KernelOutlet                   (done)
+│   ├── boundary.tsx    PluginErrorBoundary + wrapWithBoundary      (done)
+│   ├── documents.ts    reads/writes done; SPLICE HELPERS open      [kernel-runtime]
+│   ├── settings.ts     per-user settings documents                  (done)
+│   ├── session.ts      fetch/logout wiring                         (done)
+│   ├── sync.ts         status projection                           (done)
+│   ├── core.ts         2 of 4 methods need new Wasm bindings       [wasm]
+│   ├── capabilities.ts browser fallbacks done; bridge stubbed      [kernel-runtime]
+│   └── contract-parity.ts                                          [scaffold]
+├── app/                             the PWA                        [kernel-runtime]
+│   ├── index.html      carries the <!--LM_IMPORT_MAP--> marker
+│   ├── runtime/        one re-export module per blessed specifier + specifiers.ts
+│   ├── src/main.tsx    the boot sequence
+│   ├── src/boot/       api, cache (offline boot), AuthGate, kernel-init, safe-mode, update
+│   ├── src/loader/     order.ts (+test), loader.ts, importmap.ts
+│   ├── src/ui/         AppFrame, BootScreen
+│   ├── src/safe-mode/  BareManager  (?safe=bare)
+│   ├── src/sw.ts       the Workbox service worker
+│   └── src/styles.css  the kernel's own stylesheet
+├── vite.app.config.ts / vite.runtime.config.ts / vite.sw.config.ts      [scaffold]
+└── scripts/build-app.mjs, scripts/build-plugins.mjs                     [scaffold]
+
+plugins/base/
+├── _shared/points.ts                the frozen point shapes              [scaffold]
+├── _shared/vite.plugin-config.mjs   the reference build config           [scaffold]
+├── shell-ui, router, commands, themes                                  [base-shell]
+├── doc-list, folders, document-surface, viewer, editor, properties      [base-docs]
+├── markdown                                                        [base-markdown]
+└── search, settings, admin                                            [base-tools]
+
+backend/  — see backend/CONTRACTS.md, area server-static
+```
+
+## The frozen extension points
+
+Names, payload types and shape validators live in **one** file,
+`plugins/base/_shared/points.ts`. They are *not* part of `@kernel`: the kernel knows
+point names only as opaque strings (SPEC §2), and the moment it knew what a navbar was,
+replacing `shell-ui` would be a kernel change. Adding an **optional** field is allowed
+and announced; renaming a point or making a field required is not.
+
+| Point | Owner | Payload (required fields) |
+|---|---|---|
+| `navbar.item` | `shell-ui` | `{ id, label, icon?, order?, side?, onSelect?, component? }` |
+| `sidebar.panel` | `shell-ui` | `{ id, title, component, icon?, order?, defaultOpen? }` |
+| `main.view` | `shell-ui` | `{ id, component, title? }` — component gets `{ params? }` |
+| `router.route` | `router` | `{ path, view, order? }` — `path` has `:name` segments |
+| `commands.command` | `commands` | `{ id, title, run, category?, icon?, when? }` |
+| `keybindings.default` | `commands` | `{ command, keys, when? }` — `keys` uses `Mod+…` |
+| `themes.theme` | `themes` | `{ id, name, scheme, tokens }` — token overrides only |
+| `search.provider` | `search` | `{ id, label, order?, search(query, options) }` |
+| `document.mode` | `document-surface` | `{ id, label, component, icon?, order?, when? }` |
+| `editor.extension` | `editor` | `{ id, extension, order? }` — a CodeMirror `Extension` |
+| `properties.editor` | `properties` | `{ id, match(key, value), component, order? }` — the component gets `{ documentId, propertyKey, value, onChange }` |
+| `settings.section` | `settings` | `{ id, title, component, order?, description? }` |
+| `markdown.directive` | `markdown` | `{ name, kind: container/leaf/text, component }` |
+| `markdown.fence` | `markdown` | `{ language, component }` |
+| `markdown.remark` | `markdown` | `{ id, plugin, options?, order? }` — the escalated path |
+| `markdown.component` | `markdown` | `{ node, component, order? }` |
+| `markdown.taskState` | `markdown` | `{ marker, label, icon, order?, done? }` |
+
+One field spelling is load-bearing and worth the note: `properties.editor`'s component prop
+is **`propertyKey`**, not `key`. `key` is reserved in JSX — `createElement` strips it from
+the props to use as the element key — so a point whose identifying field was called `key`
+could never deliver it, and the base panel had to pass the name twice to work at all. Any
+contribution field naming what a component must read gets the same treatment.
+
+Registry semantics, pinned by `kernel/src/runtime/registry.test.ts`: contributions to an
+undefined point **buffer**; a duplicate `definePoint` **throws**; `get`/`subscribe` are
+**live** (`subscribe` fires immediately); a malformed contribution **throws at the
+contributor**; ordering is `order` ascending then contribution sequence; a duplicate
+`key` means **first registration wins** and the loser is reported; a **throwing subscriber
+is isolated** — the other subscribers are still notified and the throw is reported against
+the subscriber, never raised into the contributor's `activate()`; and `removePlugin`
+(the loader's `retract`) releases the **points** a plugin defined as well as its
+contributions, so contributions to them re-buffer and a replacement plugin can define the
+same names.
+
+## Area: kernel-runtime
+
+**Owns:** `kernel/src/runtime/**` and `web/app/**`.
+
+**Must not touch:** `kernel-api/**` (frozen — report instead), `kernel/src/{store,sync,query,wasm}/**`,
+`demo/**`, `plugins/base/**`.
+
+Hard requirements:
+
+- **Attribution is the kernel's, never the caller's.** Everything a plugin can reach
+  comes from `host.forPlugin(manifest)`; no API takes a plugin id from its caller.
+- **The loader's failure rules are not negotiable** (SPEC §6.4): an `activate()` throw
+  marks the plugin failed, withdraws what it registered (`host.retract`), and skips
+  **all transitive dependents**; the outcome is **one** aggregated notice.
+- **Every contributed component renders inside `kernel.ui.boundary`**, and the **mount
+  itself renders inside a boundary the app owns** (`AppFrame`). The per-contribution
+  wrappers cannot cover the shell's own render or the contributed `icon` fields (a
+  `ReactNode` is not a component), and one throw in any of those unmounts the React root —
+  a white page with no notice strip and no way out but typing `?safe=bare` by hand. Every
+  render path ends in a boundary; none ends in a blank document.
+- **A plugin problem is user-visible.** Registry rejections and error-boundary catches both
+  arrive on `onPluginProblem`; they belong in `host.notices` (aggregated, one notice, linking
+  to admin), not only in `console.warn`.
+- **Safe mode works without any plugin**: `?safe=1` base-only, `?safe=bare` the built-in
+  manager, and both must survive a broken `shell-ui`.
+- **The boot sequence works with no network.** `/auth/me` and `/plugins` are the only REST
+  calls before the kernel, both are `NetworkOnly` in the service worker on purpose, and both
+  fall back to what the last successful boot remembered (`app/src/boot/cache.ts`). An
+  offline reload opens the local workspace; it does not show a boot failure. A genuine 401
+  (a server that answered) is the only thing that forgets the remembered session.
+- **A bearer token is a shell-only credential** (SPEC §5.2). A browser session is the
+  HTTP-only cookie and nothing else: the app must not read or persist a bearer token outside
+  the Flutter shell, because web storage on an origin that runs full-trust plugin code is
+  readable by every plugin and by any DOM-XSS on the page.
+- **A 401 never clears local data** (SPEC §5.3); only explicit logout does, and it blocks
+  on unsynced edits unless the user discards them.
+- Finish `documents.splice`, `settings`, and the shell bridge half of `capabilities`.
+
+## Area: base-shell
+
+**Owns:** `plugins/base/{shell-ui,router,commands,themes}/**`.
+
+- `shell-ui` is the only plugin that may call `kernel.ui.mount`.
+- The **mobile breakpoint** is this area's: drawer sidebar, single pane, 44 px targets
+  (`--lm-tap-target`), and the sync-status indicator (SPEC §6.5).
+- Landmarks, a skip link, a keyboard-operable palette and visible focus rings are
+  requirements, not polish (SPEC §8).
+- Keybindings: user config wins, first registration wins between plugins, conflicts are
+  listed. `Mod` means Cmd on Apple platforms and Ctrl elsewhere.
+- `themes` **overrides** kernel tokens through `kernel.ui.tokens.apply`, one disposable
+  layer at a time; it never writes CSS variables itself.
+
+## Area: base-docs
+
+**Owns:** `plugins/base/{doc-list,folders,document-surface,viewer,editor,properties}/**`.
+
+- **Every metadata write is a splice** (SPEC §3.3): `folders` moves and the `properties`
+  panel go through `kernel.documents.splice`, never a frontmatter rewrite.
+- `document-surface` owns hydration: it opens the document once, passes the handle to the
+  active mode, and **releases** it on navigation. `viewer` and `editor` are symmetric
+  contributions with no built-in favourite — that symmetry is what makes M3's acceptance
+  test ("the built-in editor replaced by a separately-authored editor plugin") possible.
+- `editor` binds CodeMirror to the `Y.Text` with `y-codemirror.next`, collapses the
+  frontmatter and `%%%` regions, and uses `Y.UndoManager` rather than CodeMirror history.
+  It must be usable with the Android soft keyboard (M5 acceptance, so design for it now).
+- `doc-list` owns the Trash view. **Sorting Trash by `deleted_at` is a 400 today** — the
+  shared DSL's field space does not reach that root, so the client could not reproduce the
+  order anyway; `backend/CONTRACTS.md` records it as the core change that lands with this
+  view. Until then sort by `updated_at` and say so in the UI.
+- Empty states are required for doc-list, folders and Trash (SPEC §6.5).
+
+## Area: base-markdown
+
+**Owns:** `plugins/base/markdown/**`.
+
+- **No raw HTML passthrough in v1**, and link/image schemes are an allowlist: `http`,
+  `https`, `mailto`, `attachment`, `doc` (SPEC §8). This plugin is the security boundary.
+- `doc://<ulid>` renders the target's **title from the projection** (so it works offline)
+  and navigates in-app; a missing target is a chip, not a dead link.
+- `attachment://<ulid>`: images inline, everything else a chip, "not available offline"
+  when the blob is not cached (SPEC §3.6).
+- Directives and fences are the blessed syntaxes because they degrade to literal text
+  without their plugin; `markdown.remark` is the escalated path and should stay rare.
+- Build the unified processor **once per point revision**, not per render.
+- `[ ]` and `[x]` are default `taskState` contributions; the shipped interaction
+  (left-click toggles, right-click / long-press opens the menu) is replaceable.
+
+## Area: base-tools
+
+**Owns:** `plugins/base/{search,settings,admin}/**`.
+
+- `search`'s **default provider is the local index** (offline correctness, SPEC §4.1);
+  the server provider is a fallback and must be labelled as needing a network.
+- `settings` renders contributed sections and must state that settings are per-user
+  **documents in the shared workspace** — visible to other users (SPEC §6.4). Secrets
+  belong in admin plugin config.
+- `admin` is a thin client over `/api/admin/*`; the server authorizes, the UI only hides.
+  **The plugin list is read-only in M3** — approval, config and enable/disable are M4
+  endpoints. Show the capability list and SPEC §6.1's trust sentence.
+
+## Area: server-static
+
+See `backend/CONTRACTS.md` (M3 section). The client-side contract it has to keep:
+`GET /api/plugins` returns `{plugins: InstalledPlugin[], problems, disabled}` with
+**camelCase** `baseUrl`; `index.html` is served with the import map inlined at
+`<!--LM_IMPORT_MAP-->` and a matching CSP nonce; `/plugins/:id/:version/*` is immutable;
+`/importmap.json` and `/kernel.d.ts` are public.
+
+## Commands
+
+```
+npm run typecheck        # tsc --noEmit over kernel-api, kernel, app and plugins/base
+npm run test             # vitest (adds the registry and loader-order suites)
+npm run dev:app          # the PWA on :5174, /api + /plugins proxied to the server
+npm run kernel:dts       # generate kernel-api/dist/kernel.d.ts
+npm run build:app        # runtime layer -> app bundle -> service worker, in that order
+npm run build:plugins    # plugins/base/* -> plugins/base/dist/<id>/<version>/
+mise run web-build       # all three of the above
+npm run e2e:app          # the M3 journeys + safe mode + the M3 acceptance test
+```
+
+`mise run app` needs the server for `/api` **and** `/plugins`, so run `mise run plugins`
+once first. In dev there is no server-injected import map: `app/src/loader/importmap.ts`
+builds one over this bundle's own modules before the first plugin is imported, so dev and
+production share one React, one Yjs and one `@kernel`.
+
+## Dependencies added by M3
+
+Runtime: `react`, `react-dom` (the UI runtime); `@codemirror/{state,view,commands,language,lang-markdown}`,
+`@lezer/{common,highlight,markdown}`, `y-codemirror.next` (the `editor.extension` point);
+`unified`, `remark-parse`, `remark-gfm`, `remark-directive`, `unist-util-visit` (the
+`markdown.*` points); `workbox-{core,precaching,routing,strategies,window}` (the service
+worker). Dev: `@types/react`, `@types/react-dom`.
+
+The **blessed runtime layer** of SPEC §6.4 — one copy, served through the import map — is
+exactly the 17 specifiers in `app/runtime/specifiers.ts`, and
+`plugins/base/_shared/vite.plugin-config.mjs`'s `RUNTIME_EXTERNALS` must list the same 17.
+Those two lists must agree; a mismatch shows up as a duplicated library, not as an error.
+
+**Three of the packages above are *not* in the runtime layer**, and the difference matters
+to a plugin author: `@codemirror/lang-markdown`, `@lezer/markdown` and `unist-util-visit`
+are `web/`'s own dependencies, used by the kernel and the app. A plugin can neither import
+them as externals (no import-map entry) nor resolve them to bundle (`plugins/base` has no
+`node_modules`) — the build fails outright with "failed to resolve import". That is why
+`base/editor` ships markdown highlighting as a `StreamLanguage` over `@codemirror/language`
+rather than a lezer parser, documented at the top of its `markdown-language.ts`. Adding a
+row to the runtime layer is a deliberate act with kernel-semver consequences (SPEC §6.4,
+risk 6: the pinned set is what makes the singleton model work), so it belongs in a
+milestone that wants it, not in a build fix.
+
+## Integration pass (M3 close-out)
+
+The M3 areas were built in parallel and integrated in one pass. Everything below is a
+change the integrator made **outside** a single area's ownership, recorded here because
+"don't edit another area's files" is the rule the rest of this document is built on and
+these are the exceptions.
+
+**Scaffold files, unfrozen for exactly two lines each.** Both were reported independently
+by four of the five areas as blocking:
+
+- `vite.config.ts` → `test.include` gained `"../plugins/base/**/*.test.{ts,tsx}"`. Until
+  then `npm run test` collected **zero** plugin tests: eleven committed suites, none of
+  them running. The count went 18 files / 284 tests → 38 / 653.
+- `tsconfig.json` → `paths` gained `"vitest": ["node_modules/vitest"]`. `plugins/base` is
+  outside `web/`, so node resolution walks *up* and never reaches `web/node_modules`;
+  thirteen `TS2307`s disappeared. Dev-only, type-level, nothing ships.
+
+**Two cross-area defects, fixed at the root rather than worked around.** Both are the same
+shape — *read once at activation, never again* — and both are invisible to a unit test
+because they need a second event after the first render:
+
+- `plugins/base/document-surface/src/index.tsx`: `Surface`'s snapshot is read through
+  `useSyncExternalStore`, which re-renders only when `getSnapshot()` returns a different
+  object. `#emit()` notified listeners without changing the snapshot, so a `document.mode`
+  contributed after the last render never appeared as a tab — the exact case the class's
+  own comment promised to handle ("an uninstalled editor must fall back to reading"). A
+  `revision` counter now gives every notification a new identity.
+- `plugins/base/themes/src/{controller,Picker}.tsx`: the stored appearance was adopted once
+  at activation. A settings document that replicates *after* `themes` activates (a cold
+  client — `settings.start()` waits for the first local query, not for the bootstrap) then
+  restored the theme and silently dropped the light/dark choice. `reload()` re-adopts it,
+  and the picker's radio follows the preference instead of only its own clicks.
+  `controller.test.ts` is the regression net.
+
+**One robustness fix in the app**: `app/src/boot/update.ts` left `workbox.register()`'s
+rejection unhandled, so a browser that refuses service workers (private window, policy,
+automation) threw an uncaught error during boot. The offline shell is a progressive
+enhancement; losing it is a warning, not a crash.
+
+**Server, ops area** (`backend/crates/server/src/`): `routes/health.rs` now reports the real
+plugin registry in `/readyz` instead of an M1 placeholder, and `main.rs` scans the registry
+at boot so a misdirected `PLUGINS_DIR` is a startup log line rather than something the
+operator learns after a user opens an empty shell.
+
+**New, owned by nobody before**: `playwright.app.config.ts`, `app/e2e/**`,
+`scripts/build-examples.mjs`, `scripts/compose-plugins.mjs`, `plugins/examples/**`.

@@ -2,6 +2,7 @@
 //! `&Config` or `Arc<Config>` — no `std::env` reads outside this file.
 
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -17,6 +18,10 @@ pub const MIN_SESSION_SECRET_BYTES: usize = 32;
 pub const DEFAULT_BIND_ADDR: &str = "0.0.0.0:8080";
 /// Default graceful-shutdown budget in seconds (SPEC §8: exit ≤ 30 s).
 pub const DEFAULT_SHUTDOWN_GRACE_SECS: u64 = 30;
+/// Default `PLUGINS_DIR` — where `mise run plugins` writes the base distribution.
+pub const DEFAULT_PLUGINS_DIR: &str = "plugins/base/dist";
+/// Default `KERNEL_DTS_PATH` — where `npm run kernel:dts` writes the contract.
+pub const DEFAULT_KERNEL_DTS_PATH: &str = "web/kernel-api/dist/kernel.d.ts";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LogFormat {
@@ -98,6 +103,23 @@ pub struct Config {
     pub shutdown_grace: Duration,
     /// `SEED_WELCOME_DOCS`, default true (SPEC §6.5 first run).
     pub seed_welcome_docs: bool,
+
+    // ---- M3: serving the PWA and the plugin distribution (SPEC §6.4, §8) ----
+    /// `WEB_DIST_DIR` — the built PWA (`web/app/dist`). Unset ⇒ the server serves
+    /// no frontend at all, which is the right shape for a dev setup where Vite
+    /// serves it and proxies `/api` here.
+    pub web_dist_dir: Option<PathBuf>,
+    /// `PLUGINS_DIR`, default `plugins/base/dist` — one directory per installed
+    /// plugin per version (`<id>/<version>/manifest.json`), served at
+    /// `/plugins/<id>/<version>/…`. In M4 this is where the zip installer
+    /// extracts; in M3 the base distribution's build writes it.
+    pub plugins_dir: PathBuf,
+    /// `KERNEL_DTS_PATH`, default `web/kernel-api/dist/kernel.d.ts` — the
+    /// generated plugin contract, served at `/kernel.d.ts` (SPEC §6.4).
+    pub kernel_dts_path: Option<PathBuf>,
+    /// `DISABLE_PLUGINS`, default false. The server-side half of safe mode
+    /// (SPEC §6.1): every client is told the installed plugin list is empty.
+    pub disable_plugins: bool,
 }
 
 /// `SESSION_SECRET` bytes. Never logged, never serialized.
@@ -206,6 +228,19 @@ impl Config {
             login_attempt_window: parse_secs("LOGIN_ATTEMPT_WINDOW_SECS", 900)?,
             shutdown_grace: parse_secs("SHUTDOWN_GRACE_SECS", DEFAULT_SHUTDOWN_GRACE_SECS)?,
             seed_welcome_docs: parse_bool("SEED_WELCOME_DOCS", true)?,
+
+            web_dist_dir: var("WEB_DIST_DIR").map(PathBuf::from),
+            plugins_dir: var("PLUGINS_DIR")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from(DEFAULT_PLUGINS_DIR)),
+            // Unlike `WEB_DIST_DIR` this has a default, because it is generated
+            // from this repository and the route reports its absence clearly.
+            kernel_dts_path: Some(
+                var("KERNEL_DTS_PATH")
+                    .map(PathBuf::from)
+                    .unwrap_or_else(|| PathBuf::from(DEFAULT_KERNEL_DTS_PATH)),
+            ),
+            disable_plugins: parse_bool("DISABLE_PLUGINS", false)?,
         };
 
         if config.session_absolute_days < config.session_idle_days {
@@ -399,6 +434,10 @@ mod tests {
             login_attempt_window: Duration::from_secs(900),
             shutdown_grace: Duration::from_secs(DEFAULT_SHUTDOWN_GRACE_SECS),
             seed_welcome_docs: true,
+            web_dist_dir: None,
+            plugins_dir: PathBuf::from(DEFAULT_PLUGINS_DIR),
+            kernel_dts_path: None,
+            disable_plugins: false,
         }
     }
 

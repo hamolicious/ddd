@@ -14,7 +14,9 @@ use std::time::Duration;
 
 use clap::{Parser, Subcommand};
 use life_manager_server::domain::Actor;
-use life_manager_server::{auth, config::Config, db, routes, seed, state::AppState, telemetry};
+use life_manager_server::{
+    auth, config::Config, db, plugins, routes, seed, state::AppState, telemetry,
+};
 use tracing::{error, info, warn};
 
 /// How often sampled gauges are refreshed and housekeeping runs.
@@ -96,6 +98,35 @@ async fn serve(config: Config) -> anyhow::Result<()> {
             Ok(count) => info!(documents = count, "seeded welcome documents"),
             // A failed seed is cosmetic: the workspace works empty.
             Err(err) => warn!(error = %err, "seeding welcome documents failed"),
+        }
+    }
+
+    // Scan the plugin directory at boot rather than lazily on the first request.
+    // The registry is cached either way, so this is not about speed — it is about
+    // *when the operator learns*. Scanned lazily, "0 plugins from …" and every
+    // "plugin directory unreadable" line appears after someone has already loaded
+    // the app into an empty shell; scanned here it is a startup log line next to
+    // "schema ready", which is where a misdirected `PLUGINS_DIR` is cheap to spot.
+    if state.config.disable_plugins {
+        warn!("DISABLE_PLUGINS=1: no frontend plugins will be served (SPEC §6.1 recovery mode)");
+    } else {
+        let registry = plugins::reload(&state.config);
+        let root = registry
+            .root()
+            .map(|root| root.display().to_string())
+            .unwrap_or_else(|| "<none>".to_string());
+        if registry.plugins().is_empty() {
+            // Not fatal — an empty workspace is legal — but it is the M3
+            // misconfiguration, so it is a warning rather than an info line.
+            warn!(
+                dir = %root,
+                "no frontend plugins found: clients will boot into an empty shell"
+            );
+        } else {
+            info!(dir = %root, plugins = registry.plugins().len(), "plugin registry loaded");
+        }
+        for problem in registry.problems() {
+            warn!(path = %problem.path, message = %problem.message, "plugin not loaded");
         }
     }
 

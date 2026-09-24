@@ -1,0 +1,18 @@
+{
+  "id": "extra-task-states",
+  "version": "1.0.0",
+  "kernel": "^1.0",
+  "dependencies": {
+    "markdown": "^1.0"
+  },
+  "peerLibraries": {
+    "react": "^18.0.0"
+  },
+  "frontend": {
+    "module": "frontend/index.mjs"
+  },
+  "name": "Extra task states",
+  "description": "Adds `[/]` in progress, `[-]` dropped and `[?]` question to the markdown task-state registry (SPEC §6.6).",
+  "author": "Life Manager examples",
+  "license": "MIT OR Apache-2.0"
+}

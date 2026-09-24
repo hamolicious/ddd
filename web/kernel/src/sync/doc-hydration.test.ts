@@ -199,6 +199,40 @@ describe("open", () => {
     expect(MockSocket.instances).toHaveLength(0);
   });
 
+  it("refuses to open a never-hydrated document with no socket", async () => {
+    // SPEC §4.1, the sentence the test above is the other half of: "editable offline =
+    // documents you've opened"; an unopened document is **read-only offline until
+    // reconnect". There is no replica on disk here, so the `Y.Doc` this would hand back
+    // is not the document — it is an empty one sharing its id.
+    //
+    // Returning it as `live` is worse than it sounds: the projection row is still full
+    // of text, so the reader sees a populated read view, switches to edit, finds an
+    // empty box, and is invited to type into a replica that is not the document. The
+    // merge on reconnect is not lossy — Yjs keeps the insert — but it lands in a
+    // document the user never saw. Refusing is what lets `document-surface` say
+    // "editing is unavailable, reading works from the replicated copy".
+    MockSocket.reset();
+    const persistence = new MemoryDocPersistence();
+    const { transport } = makeTransport(); // never connected
+    const hydrator = new DocHydrator(transport, { persistence, syncTimeoutMs: 50 });
+
+    const errors: DocError[] = [];
+    const reporting = new DocHydrator(transport, {
+      persistence,
+      syncTimeoutMs: 50,
+      onError: (_id, error) => errors.push(error),
+    });
+
+    await expect(hydrator.open(DOC)).rejects.toThrow(/cannot be hydrated while offline/);
+    await expect(reporting.open(OTHER)).rejects.toThrow(/never opened/);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.message).toMatch(/not editable until reconnect/);
+
+    // Nothing is left half-open: a later attempt (online) starts clean.
+    await expect(hydrator.open(DOC)).rejects.toThrow(/cannot be hydrated while offline/);
+    expect(MockSocket.instances).toHaveLength(0);
+  });
+
   it("rejects, and forgets the replica, when the document is in the graveyard", async () => {
     const { socket, hydrator } = await fixture();
     const opening = hydrator.open(DOC);

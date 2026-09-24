@@ -1125,3 +1125,256 @@ mise run web-check    # npm typecheck + vitest (web)
 mise run web          # vite dev server, /api proxied to the Rust server
 mise run harness      # convergence harness against a running server
 ```
+
+---
+
+# M3 build contracts (static serving + plugin distribution)
+
+**Scope on this side: SPEC §9 M3 only** — serving the PWA bundle, the import map, the
+installed-plugin list and the plugin modules. **Not in scope:** the Extism host, the zip
+installer, the pending-install approval flow, plugin config/secrets, hooks and cron —
+all M4, and all of them write the same directory this area reads.
+
+The M1/M2 rules still hold. Amendments, made by the scaffold and announced here:
+
+- **Two new modules**, both owned by the new `server-static` area: `crates/server/src/plugins.rs`
+  and `crates/server/src/routes/statics.rs`.
+- **`config.rs` gained four fields** (ops-owned file, scaffold edit): `web_dist_dir`,
+  `plugins_dir`, `kernel_dts_path`, `disable_plugins`.
+- **`routes/mod.rs` gained three lines** (http-routes-owned file, scaffold edit): the
+  `/api/plugins` nest, the `statics::router()` merge, and `.fallback(statics::fallback)`.
+- **No new dependencies.** Static serving is `tokio::fs` plus a canonicalization check
+  rather than `tower-http`'s `fs` feature, so `Cargo.toml` and `Cargo.lock` are untouched.
+
+## Area: server-static
+
+**Owns:** `crates/server/src/plugins.rs`, `crates/server/src/routes/statics.rs`.
+
+**Must not touch:** `docstore.rs`, `feed.rs`, `auth/**`, `domain.rs`, `state.rs`,
+`error.rs`, the other `routes/*`. `config.rs` changes go through ops.
+
+### Routes
+
+| Route | Auth | Cache | Notes |
+|---|---|---|---|
+| `GET /` and any unmatched GET | none | `no-store` | `index.html` with the import map inlined + a fresh CSP nonce |
+| `GET /assets/*`, `/runtime/*` | none | `immutable`, 1 y | content-hashed by the build |
+| `GET /sw.js`, `/icon*.svg`, `/manifest.webmanifest` | none | `no-cache` | |
+| `GET /importmap.json` | none | `no-cache` | the blessed runtime layer only |
+| `GET /kernel.d.ts` | none | `no-cache` | the generated plugin contract (SPEC §6.4) |
+| `GET /plugins/{id}/{version}/frontend/{*path}` | none | `immutable`, 1 y | must be in the registry; **only `frontend/**`** |
+| `GET /api/plugins` | session | — | `{plugins, problems, disabled}` |
+
+### Hard requirements
+
+- **`index.html` is never served as a file.** Every spelling of it goes through the
+  injection path; serving the raw file ships a page whose `<!--LM_IMPORT_MAP-->` marker is
+  still a comment, and then *every* bare specifier fails to resolve. Pinned by the reason
+  it is written down: that is exactly how the first version of this route broke.
+- **The import map is inline and nonced** (SPEC §8: "external or nonced"). Browsers never
+  shipped an external import map, so inline-with-nonce is the only form that works; the
+  nonce is per response, which is why `index.html` is `no-store` and why the service worker
+  must not precache it.
+- **The CSP adds `'wasm-unsafe-eval'`** to the policy written in SPEC §8. Without it
+  `WebAssembly.instantiateStreaming` is refused and the client silently loses the shared
+  core — filters, titles and dates then come from nowhere. It is the narrow directive, not
+  `'unsafe-eval'`, and it is supported across the SPEC §8 browser floor. **This is a
+  documented deviation from the SPEC's literal CSP string.**
+- **Path safety twice over**: lexical (no `..`, no absolute segments, no NUL) *and*
+  canonicalized-and-re-checked against the root, so a symlink cannot leave the tree.
+- **`nosniff` on every response**, and `Content-Disposition: attachment` for anything
+  outside the inline allowlist. Neither `image/svg+xml` nor **`text/html`** is inline: a
+  plugin package is third-party content served from the app's own origin, `serve_file`
+  attaches no CSP, and an inline `.html` from a package would therefore be a scriptable
+  same-origin document *outside* the policy every real document gets — no `default-src`, no
+  `frame-ancestors`, no `base-uri` (the SPEC §3.6 rule, applied here). The app's own
+  `index.html` never passes through `serve_file`.
+- **Only `frontend/**` of a package is reachable.** That is the package layout SPEC §6.2
+  fixes, and it keeps two non-browser files off a public URL: `manifest.json`, whose
+  capability and `config` key lists are exactly what `/api/plugins` requires a session to
+  see, and `backend.wasm`, which is server-side code. `plugins.rs` rejects a manifest whose
+  `frontend.module`/`style` is outside that directory, so the rule is reported at scan time
+  rather than 404-ing in a client. The route itself stays unauthenticated and that is
+  *forced*: a plugin module is fetched by `import()`, which cannot carry a header, and the
+  M5 shell authenticates with a bearer token from an origin where the cookie is not sent.
+  Scoped asset URLs are the M4 conversation, when a privately installed plugin first has
+  something to lose.
+- **Only registered plugins are served.** A directory that is not in the registry 404s, so
+  M4's *pending* installs cannot be fetched before an admin approves them.
+- **One version per plugin**, the highest. Two versions in one page would give two copies
+  of a plugin's API to different dependents.
+- **A bad plugin directory is never fatal**: it becomes a `PluginProblem`, is logged at
+  boot, and is returned by `/api/plugins` so the admin screen can show it.
+- **`DISABLE_PLUGINS=1`** returns an empty list and 404s every plugin asset — the
+  server-side half of safe mode (SPEC §6.1).
+- **`/api/plugins` is camelCase on the wire** (`baseUrl`), unlike every other response.
+  It is not a REST resource of its own: it is `InstalledPlugin` from
+  `web/kernel-api/src/manifest.ts`, consumed directly by the loader, and the manifest it
+  wraps is already camelCase because plugin authors write it by hand.
+
+### The installed layout
+
+```
+<PLUGINS_DIR>/<id>/<version>/manifest.json
+<PLUGINS_DIR>/<id>/<version>/frontend/index.mjs
+<PLUGINS_DIR>/<id>/<version>/frontend/style.css
+```
+
+`mise run plugins` writes it for the base distribution; M4's installer extracts into the
+same shape. `/plugins/<id>/<version>/…` maps onto it one-to-one, which is what makes plugin
+URLs immutable (SPEC §8).
+
+### Public API
+
+```rust
+// plugins.rs
+pub const BASE_PLUGIN_IDS: &[&str];                  // the 14 plugins of SPEC §6.5
+pub fn is_valid_plugin_id(id: &str) -> bool;         // ^[a-z0-9][a-z0-9-]{0,63}$
+pub fn is_valid_version(version: &str) -> bool;      // x.y.z with an optional tail
+pub fn safe_relative_path(path: &str) -> bool;
+pub struct PluginFrontend { module, style }
+pub struct PluginManifest { id, version, kernel, dependencies, peer_libraries,
+                            frontend, name, description, author, license, extra }
+pub struct InstalledPlugin { manifest, base_url, state, base }   // camelCase on the wire
+pub struct PluginProblem { path, message }
+pub struct Registry;                                 // plugins(), problems(), root(),
+                                                     // get(), peer_ranges(), unsatisfied_peers()
+pub fn scan(dir: &Path) -> Registry;
+pub fn registry(config: &Config) -> Arc<Registry>;   // cached; empty when DISABLE_PLUGINS
+pub fn reload(config: &Config) -> Arc<Registry>;     // boot, and M4's installer
+
+// routes/statics.rs
+pub const IMPORT_MAP_MARKER: &str = "<!--LM_IMPORT_MAP-->";
+pub const RUNTIME_MANIFEST_FILE: &str = "runtime-manifest.json";
+pub fn router() -> Router<AppState>;                 // importmap.json, kernel.d.ts, /plugins/*
+pub fn api_router() -> Router<AppState>;             // /api/plugins
+pub async fn fallback(State<AppState>, Uri) -> Response;   // static file, else index.html
+pub fn runtime_imports(&AppState) -> BTreeMap<String, String>;
+pub struct ImportMap { imports }
+pub struct InstalledResponse { plugins, problems, disabled }
+```
+
+### Config (ops)
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `WEB_DIST_DIR` | unset | the built PWA; unset ⇒ API-only (Vite serves the app in dev) |
+| `PLUGINS_DIR` | `plugins/base/dist` | the installed set |
+| `KERNEL_DTS_PATH` | `web/kernel-api/dist/kernel.d.ts` | the generated contract |
+| `DISABLE_PLUGINS` | `false` | server-side safe mode |
+
+`APP_ORIGIN` must include the server's **own** origin once it serves the PWA, or the
+WebSocket upgrade is refused with 403 before authentication (PROTOCOL.md §1.2) — the page
+loads and never syncs.
+
+### Tests
+
+| Binary | Covers |
+|---|---|
+| unit tests in `routes/statics.rs` | path resolution (`..`, absolute, symlink-free cases, a directory is not a file), the content-type table, the inline allowlist excluding SVG, nonce uniqueness, marker replacement, and the **whole `script-src` directive** asserted as one string |
+| unit tests in `plugins.rs` | id/version validation, manifest path safety, numeric version ordering, a missing directory as a problem rather than a panic |
+| `crates/server/tests/statics.rs` | the assembled router: import-map content, `index.html` injection + the policy + `no-store` + COOP, a fresh nonce per response, `index.html` never served as a file *from any spelling*, the SPA fallback, `/api/**` 404s staying JSON, cache policy per URL class, traversal out of both roots (lexical, percent-encoded, and via symlink), only-the-registered-version, SVG disposition, `/api/plugins` auth + camelCase + reported refusals, `DISABLE_PLUGINS`, `/kernel.d.ts` |
+
+`tests/statics.rs` builds its own fixture tree under `CARGO_TARGET_TMPDIR` and is
+`#[ignore]`d like every other Mongo-backed suite (the router needs an `AppState`, and
+`AppState::new` pings Mongo):
+
+```text
+MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p life-manager-server --test statics -- --ignored
+```
+
+### Deliberate deviations from the M3 brief
+
+1. **No `rust-embed`.** The bundle is read from `WEB_DIST_DIR` in every profile, not
+   embedded in the binary in release. Two reasons, and the first is the binding one:
+   embedding needs a `rust-embed` dependency, and `Cargo.toml`/`Cargo.lock` are frozen by
+   this file (rule 3) — this area added **no** dependencies at all. The second is that
+   embedding couples `cargo build` to a Vite build having already run, which would break
+   `mise run check` and the Rust-only CI in a checkout that has never run `npm`. The
+   deployment property `rust-embed` was wanted for — one self-contained artifact — is met
+   instead by the image: `backend/Dockerfile` builds the bundle in a Node stage and bakes
+   it in at `/srv/web`, so the container has no external file dependency either way.
+2. **The registry is the directory, not a `plugins` Mongo collection.** M3 has nothing
+   mutable to record: the installed set *is* the directory, one version per plugin, read at
+   first use and re-readable through `reload`. The `plugins` collection becomes the
+   **approval record** in M4 (pending vs enabled, approved capabilities, the install queue)
+   while the directory stays the artifact store — and M4 extends the same registry either
+   way, because `reload` is the seam. Writing a mirror now would need a boot call in
+   `main.rs` (an ops file) for a table nothing reads.
+
+### Open on this side
+
+1. **`/readyz`'s `plugins` check reports the registry** — done, and deliberately **counts
+   only**: `N plugins loaded; M not loaded`. `/readyz` is unauthenticated and proxied
+   straight through in the Compose deployment, so the absolute `PLUGINS_DIR` and the
+   manifest-rejection strings it used to carry were world-readable reconnaissance. The paths
+   and messages live where an operator is: the boot `WARN` and the admin plugin view.
+2. **No `ETag`/`304` on static files.** Hashed assets are `immutable` so it does not
+   matter for them; `sw.js` and the icons re-download on every revalidation. Cheap to add
+   (`mtime` + length), deliberately not invented here.
+3. **Peer-library *resolution* is not implemented, only checked.** One version of each
+   blessed library ships in the runtime bundle, so there is nothing to resolve in M3;
+   `Registry::unsatisfied_peers` reports what an installed plugin declared and the bundle
+   does not provide, and `/importmap.json` logs it. Real resolution (SPEC §6.4: "the server
+   resolves all installed plugins' ranges to single versions at install") lands with M4's
+   installer, where installs are serialized and can fail.
+4. **`plugins::reload` is never called at boot.** The registry is scanned lazily on the
+   first request that needs it, so the log line naming the plugin count and the problems
+   appears *after* the first request instead of during startup, and a bad plugin directory
+   is not visible until someone loads the app. One line in `main.rs` next to
+   `state.init_schema()` closes it — an ops file, hence a request rather than an edit.
+
+### What the M3 hardening pass changed
+
+Two defects and one structural fix, all inside this area's own files:
+
+1. **`index.html` was still reachable as a raw file.** The guard compared the *raw* request
+   path against the single spelling `index.html`, so `/./index.html` and `/index.html/`
+   walked past it into the file branch and shipped a page whose `<!--LM_IMPORT_MAP-->` was
+   still a comment — the exact failure the guard exists to prevent. The fallback now
+   normalizes away empty and `.` segments *before* deciding which branch runs, and
+   `tests/statics.rs::index_html_is_never_served_as_a_file_from_any_spelling` pins all
+   three spellings.
+2. **The registry cache was global, not per directory.** A single cached `Arc<Registry>`
+   made the first `PLUGINS_DIR` any caller asked about the answer for every later one.
+   Invisible in a server process (one config) and fatal in a test binary, where each case
+   points at its own fixture. Keyed by `config.plugins_dir` now.
+3. **`Cross-Origin-Opener-Policy: same-origin`** on the app document, and the CSP/marker
+   rendering split into a pure `render_index` so the policy string is unit-testable without
+   a filesystem or a database. COOP is deliberately *not* paired with COEP
+   (`require-corp`), which would force CORP headers onto every plugin asset for a
+   cross-origin isolation this app does not use.
+
+**Verified end to end against the real bundle**, not only in tests: the server was run with
+`WEB_DIST_DIR=web/app/dist PLUGINS_DIR=plugins/base/dist` and the app driven in Chromium
+through registration. All 14 base plugins fetched their module *and* their stylesheet under
+`script-src 'self' 'nonce-…' 'wasm-unsafe-eval'`, all 17 runtime-layer specifiers resolved
+through the injected map, and `life_manager_core_bg.wasm` compiled with **no CSP violation**
+— which is the one thing worth re-checking by hand after any policy edit, because a server
+built before `'wasm-unsafe-eval'` existed shows exactly this and nothing else:
+
+```text
+[wasm] core unavailable WebAssembly.instantiateStreaming(): Compiling or instantiating
+WebAssembly module violates the following Content Security policy directive …
+```
+
+### Build and deployment integration (this area, with ops' files)
+
+- **`backend/Dockerfile` is now four stages and the build context is the repository root**
+  (`wasm-tools` → `rust-builder` → `web-builder` → `runtime`). The image contains the
+  binary plus `/srv/web`, `/srv/plugins` and `/srv/kernel.d.ts`, and sets the three
+  matching env vars, so `docker compose up --build` is a complete app with no separate
+  frontend deploy. The Rust stage also compiles the shared core to Wasm, because the app
+  bundle imports it — which is why the Node stage cannot come first.
+- **`/.dockerignore` is new** and is what makes a root context affordable: no `.git`, no
+  `node_modules`, no `target`, no `dist`, no `.env`, and not the Flutter tree.
+- **`docker-compose.yaml`**: root build context, the four M3 env vars, and a `caddy`
+  **profile** (opt-in, `deploy/Caddyfile` is new) for the automatic-HTTPS self-host path
+  SPEC §8 describes. `DOMAIN` defaults to `localhost` rather than being required, because
+  Compose interpolates every service before it filters by profile.
+- **`mise.toml`**: `web-build` now `depends = ["wasm"]` (the app bundle aliases a
+  gitignored Wasm artifact, so a fresh checkout could not build and a stale one silently
+  bundled an old core), and `dev` passes `WEB_DIST_DIR`/`PLUGINS_DIR`/`KERNEL_DTS_PATH`
+  explicitly. That last one is not cosmetic: the task runs in `backend/`, and the relative
+  defaults in `config.rs` would otherwise resolve to `backend/plugins/…` and find nothing,
+  which reads as "the plugins failed to load".

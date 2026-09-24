@@ -1,0 +1,281 @@
+/*
+ * `folders` styles. Linked on activation by the kernel loader (SPEC §6.4), never
+ * imported by the module — so it is a real file in devtools with this plugin's name on
+ * it, and it can be overridden by a later stylesheet without a build step.
+ *
+ * Convention: every class starts `folders-` (per-plugin class prefix, SPEC §6.4 —
+ * there is no shadow DOM in v1, so the prefix is the whole isolation story).
+ * Every value comes from a kernel token, so themes reach this file for free.
+ */
+
+.folders-root {
+  color: var(--lm-text);
+  font-family: var(--lm-font-sans);
+}
+
+.folders {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--lm-space) * 0.5);
+  color: var(--lm-text);
+  font-family: var(--lm-font-sans);
+}
+
+/* --- the tree ------------------------------------------------------------ */
+
+.folders-tree {
+  display: flex;
+  flex-direction: column;
+}
+
+.folders-tree:focus-visible,
+.folders :focus-visible {
+  outline: 2px solid var(--lm-focus-ring);
+  outline-offset: -2px;
+}
+
+.folders-node {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: var(--lm-tap-target);
+  padding-right: calc(var(--lm-space) * 0.5);
+  border-radius: var(--lm-radius);
+}
+
+.folders-node:hover {
+  background: var(--lm-bg-subtle);
+}
+
+.folders-node-active {
+  background: var(--lm-accent-subtle);
+}
+
+/* The drop target has to be unmistakable: a mis-drop moves someone's document. */
+.folders-node-drop {
+  outline: 2px dashed var(--lm-accent);
+  outline-offset: -2px;
+}
+
+.folders-twisty {
+  flex: none;
+  width: 1.5rem;
+  min-height: 1.5rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--lm-text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.folders-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-family: var(--lm-font-sans);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.folders-count {
+  flex: none;
+  color: var(--lm-text-muted);
+  font-size: 0.8em;
+  font-variant-numeric: tabular-nums;
+}
+
+.folders-actions {
+  display: none;
+  flex: none;
+  gap: 2px;
+}
+
+.folders-node:hover .folders-actions,
+.folders-node-active .folders-actions {
+  display: flex;
+}
+
+.folders-actions button {
+  min-width: 1.75rem;
+  min-height: 1.75rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--lm-radius);
+  background: none;
+  color: var(--lm-text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.folders-actions button:hover {
+  border-color: var(--lm-border);
+  color: var(--lm-text);
+}
+
+.folders-unfiled {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lm-space);
+  min-height: var(--lm-tap-target);
+  margin-top: calc(var(--lm-space) * 0.5);
+  padding: 0 var(--lm-space);
+  border: 1px dashed var(--lm-border);
+  border-radius: var(--lm-radius);
+  background: none;
+  color: var(--lm-text-muted);
+  font: inherit;
+  font-family: var(--lm-font-sans);
+  cursor: pointer;
+}
+
+.folders-hint,
+.folders-empty {
+  margin: 0;
+  color: var(--lm-text-muted);
+  font-size: 0.85em;
+}
+
+.folders-empty {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--lm-space) * 0.75);
+}
+
+.folders-empty code,
+.folders-hint code {
+  font-family: var(--lm-font-mono);
+}
+
+.folders-error {
+  margin: 0;
+  padding: calc(var(--lm-space) * 0.75);
+  border: 1px solid var(--lm-danger);
+  border-radius: var(--lm-radius);
+  color: var(--lm-text);
+  font-size: 0.9em;
+}
+
+/* A rename is one splice per document; this is how far it has got. */
+.folders-progress {
+  margin: 0;
+  padding: calc(var(--lm-space) * 0.75);
+  border: 1px solid var(--lm-border);
+  border-radius: var(--lm-radius);
+  color: var(--lm-text-muted);
+  font-size: 0.9em;
+}
+
+/* --- the folder contents view ------------------------------------------- */
+
+.folders-contents {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--lm-space) * 1.5);
+  padding: calc(var(--lm-space) * 2);
+  color: var(--lm-text);
+  font-family: var(--lm-font-sans);
+}
+
+.folders-contents-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lm-space);
+}
+
+.folders-contents-header h2 {
+  margin: 0;
+  font-family: var(--lm-font-mono);
+  font-size: 1.2rem;
+}
+
+.folders-contents button {
+  min-height: var(--lm-tap-target);
+  padding: 0 var(--lm-space);
+  border: 1px solid var(--lm-border);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg-subtle);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.folders-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: var(--lm-tap-target);
+  color: var(--lm-text-muted);
+  font-size: 0.9em;
+}
+
+.folders-doc-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.folders-doc-list li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--lm-space);
+  padding: calc(var(--lm-space) * 0.5) 0;
+  border-bottom: 1px solid var(--lm-border);
+}
+
+.folders-doc {
+  min-height: auto !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: none !important;
+  color: var(--lm-link) !important;
+  text-align: left;
+  cursor: grab;
+}
+
+.folders-doc-path {
+  color: var(--lm-text-muted);
+  font-family: var(--lm-font-mono);
+  font-size: 0.8em;
+}
+
+.folders-json {
+  color: var(--lm-text-muted);
+  font-size: 0.85em;
+}
+
+.folders-json pre {
+  overflow-x: auto;
+  margin: calc(var(--lm-space) * 0.5) 0 0;
+  padding: var(--lm-space);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg-subtle);
+  font-family: var(--lm-font-mono);
+}
+
+@media (max-width: 640px) {
+  /* Row actions cannot depend on hover on a touch device. */
+  .folders-actions {
+    display: flex;
+  }
+
+  .folders-actions button {
+    min-width: var(--lm-tap-target);
+    min-height: var(--lm-tap-target);
+  }
+
+  .folders-contents {
+    padding: var(--lm-space);
+  }
+}

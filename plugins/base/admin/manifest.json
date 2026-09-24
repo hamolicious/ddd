@@ -1,0 +1,22 @@
+{
+  "id": "admin",
+  "version": "1.0.0",
+  "name": "Admin",
+  "description": "Users, invites, audit log, orphans, snapshots, and the plugin list.",
+  "author": "Life Manager base distribution",
+  "license": "MIT OR Apache-2.0",
+  "kernel": "^1.0",
+  "dependencies": {
+    "commands": "^1.0",
+    "router": "^1.0",
+    "settings": "^1.0",
+    "shell-ui": "^1.0"
+  },
+  "peerLibraries": {
+    "react": "^18.0.0"
+  },
+  "frontend": {
+    "module": "frontend/index.mjs",
+    "style": "frontend/style.css"
+  }
+}

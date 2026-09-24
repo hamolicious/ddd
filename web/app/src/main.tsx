@@ -1,0 +1,480 @@
+/**
+ * The PWA entry point: the boot sequence of SPEC §9 M3, in order, with every step
+ * visible.
+ *
+ * ```
+ * browser floor  →  service worker  →  auth gate  →  kernel init  →  import map
+ *                →  plugin list  →  topological activation  →  shell mounts
+ * ```
+ *
+ * Four properties of this sequence are load-bearing:
+ *
+ * 1. **The auth gate comes before the kernel.** The kernel opens IndexedDB and a
+ *    socket as the signed-in user; there is no "anonymous kernel" to hand a login
+ *    form to, and plugins are served to authenticated clients only.
+ * 2. **The kernel comes before the plugins, and boots fully offline.** By the time
+ *    the first `activate()` runs, the projection is readable, the query engine is
+ *    warm and sync is running or retrying. A plugin never has to ask "is the kernel
+ *    ready".
+ * 3. **The whole sequence survives having no network.** The two REST calls in it —
+ *    `/auth/me` and `/plugins` — are `NetworkOnly` in the service worker by design, so
+ *    each one falls back to what the last successful boot remembered (`boot/cache.ts`)
+ *    instead of failing the boot. An offline reload opens the local workspace; it does
+ *    not show "Life Manager could not start" (SPEC §4.1, §8).
+ * 4. **A plugin failure is contained and reported once.** The frame renders either
+ *    way; the aggregated notice says what broke (SPEC §6.4), and registry rejections and
+ *    render failures land in the same notice centre rather than in the console alone.
+ */
+
+import { StrictMode, type ReactNode } from "react";
+import { createRoot, type Root } from "react-dom/client";
+
+import {
+  KERNEL_API_VERSION,
+  type InstalledPlugin,
+  type LogoutOptions,
+  type SessionUser,
+} from "@kernel";
+import {
+  PluginErrorBoundary,
+  paintKernelDefaultTokens,
+  type KernelHost,
+} from "@kernel/runtime/index.js";
+
+import { AuthGate } from "./boot/AuthGate.js";
+import { OfflineError, installedPlugins, logoutRequest, me } from "./boot/api.js";
+import {
+  cachedPlugins,
+  cachedSession,
+  forgetBootCache,
+  forgetSession,
+  rememberPlugins,
+  rememberSession,
+} from "./boot/cache.js";
+import { initKernel, type KernelRuntime } from "./boot/kernel-init.js";
+import { bootModeFor, safeModeFrom } from "./boot/safe-mode.js";
+import { registerServiceWorker } from "./boot/update.js";
+import { installDevImportMap, missingSpecifiers, pageImportMap } from "./loader/importmap.js";
+import { failureNotice, loadPlugins } from "./loader/loader.js";
+import { BareManager } from "./safe-mode/BareManager.js";
+import { AppFrame } from "./ui/AppFrame.js";
+import { BootFailure, BootScreen, UnsupportedBrowser, supportsImportMaps } from "./ui/BootScreen.js";
+
+import "./styles.css";
+
+/** Where a shell's bearer token lives. Browsers never take this path (SPEC §5.2). */
+const SHELL_TOKEN_KEY = "life-manager.bearer";
+
+const found = document.getElementById("root");
+if (!found) throw new Error("index.html is missing #root");
+/** Narrowing does not survive into the closures below; this does. */
+const container: HTMLElement = found;
+const root: Root = createRoot(container);
+
+/**
+ * Every render goes through one root boundary.
+ *
+ * React 18 unmounts the whole tree on an uncaught render error, and an unmounted root
+ * is a white page: no notice strip, no in-place "plugin X failed" chip, and no link to
+ * safe mode — so the user's only way out is knowing to type `?safe=bare` by hand.
+ * `AppFrame` contains failures inside the plugin mount; this contains the frame itself,
+ * so there is no render path left that can end in a blank document (SPEC §6.4).
+ */
+const render = (node: ReactNode): void =>
+  root.render(
+    <StrictMode>
+      <PluginErrorBoundary
+        pluginId="kernel"
+        point="app.root"
+        fallback={({ error }) => <BootFailure error={error} />}
+      >
+        {node}
+      </PluginErrorBoundary>
+    </StrictMode>,
+  );
+
+void boot();
+
+async function boot(): Promise<void> {
+  if (!supportsImportMaps()) {
+    render(<UnsupportedBrowser />);
+    return;
+  }
+
+  // Before the first render: the boot screen, the auth gate and a boot failure are
+  // all written in kernel tokens, and none of them has a kernel yet (SPEC §6.4 —
+  // the kernel ships the default light/dark token values).
+  paintKernelDefaultTokens(document.documentElement);
+
+  const safeMode = safeModeFrom(location.search);
+
+  // Registered early so an update found mid-session still surfaces, but it never
+  // takes over on its own (see update.ts).
+  let applyUpdate: (() => void) | undefined;
+  registerServiceWorker((apply) => {
+    applyUpdate = apply;
+    runtime?.host.notices.notify({
+      id: "kernel:update-available",
+      level: "info",
+      message: "An update is available.",
+      actions: [{ label: "Reload", run: () => apply() }],
+    });
+  });
+
+  render(<BootScreen message="Starting…" />);
+
+  const token = shellToken();
+  let user: SessionUser | undefined;
+  /** True when the session came from the cache: the server was unreachable. */
+  let offlineBoot = false;
+  try {
+    user = await me(token);
+    if (user) rememberSession(user);
+    // The server answered "not signed in", which is the one authoritative way to learn
+    // the session is over. Anything remembered about it is now wrong.
+    else forgetSession();
+  } catch (error) {
+    if (!(error instanceof OfflineError)) {
+      render(<BootFailure error={asError(error)} />);
+      return;
+    }
+    // No server. Boot the local workspace as whoever was last signed in here; if the
+    // session has really expired, the socket answers `4401` and `ReauthOverlay` asks —
+    // over the top of a workspace that is still readable (SPEC §5.3).
+    user = cachedSession();
+    offlineBoot = user !== undefined;
+    if (!user) {
+      render(<BootFailure error={asError(error)} offline />);
+      return;
+    }
+  }
+
+  if (!user) {
+    render(
+      <AuthGate
+        bearer={token !== undefined}
+        onSignedIn={(signedIn, issued) => {
+          if (issued) rememberShellToken(issued);
+          rememberSession(signedIn);
+          void withSession(signedIn, issued ?? token);
+        }}
+      />,
+    );
+    return;
+  }
+
+  await withSession(user, token);
+
+  async function withSession(signedIn: SessionUser, bearer: string | undefined): Promise<void> {
+    try {
+      render(<BootScreen message="Opening your workspace…" />);
+      runtime = await initKernel({
+        user: signedIn,
+        ...(bearer ? { bearerToken: bearer } : {}),
+        root: container,
+        bootMode: bootModeFor(safeMode),
+        logout: (options) => signOut(runtime, bearer, options),
+        onPluginProblem: (problem) => reportPluginProblem(problem),
+        onCoreUnavailable: (error) => console.warn("[wasm] core unavailable", error.message),
+      });
+      const host = runtime.host;
+
+      // A problem reported while the kernel was still being built has no notice yet.
+      notifyPluginProblems(host);
+
+      // An update that arrived before the kernel existed has no notice yet.
+      if (applyUpdate) {
+        const apply = applyUpdate;
+        host.notices.notify({
+          id: "kernel:update-available",
+          level: "info",
+          message: "An update is available.",
+          actions: [{ label: "Reload", run: () => apply() }],
+        });
+      }
+
+      render(
+        <AppFrame
+          host={host}
+          {...(bearer !== undefined ? { bearer: true } : {})}
+          onSignedIn={(_user, issued) => resumeSession(issued)}
+        />,
+      );
+
+      if (safeMode === "bare") {
+        // No plugins at all: the kernel's own manager takes the mount (SPEC §6.1).
+        host.mount.mount("kernel", <BareManager {...(bearer ? { token: bearer } : {})} />);
+        return;
+      }
+
+      await activatePlugins(host, bearer, safeMode === "base", offlineBoot);
+    } catch (error) {
+      render(<BootFailure error={asError(error)} />);
+    }
+  }
+}
+
+let runtime: KernelRuntime | undefined;
+
+/**
+ * Every plugin problem the kernel detects — a contribution rejected by shape or key
+ * validation, and every error boundary that caught a render — aggregated into **one**
+ * notice, with the count in the message and the individual lines in the detail.
+ *
+ * It is one notice rather than one per problem for the reason SPEC §6.4 gives for
+ * activation failures: a workspace with three broken plugins must not show three
+ * modals. And it is a notice rather than a `console.warn` because the console is not a
+ * user interface — a `sidebar.panel` that throws at render shows its in-place chip, and
+ * without this the user has no way to learn *which* plugin it was or that admin is
+ * where to go next (SPEC §6.4: validation "rejects loudly").
+ */
+const pluginProblems: string[] = [];
+
+function reportPluginProblem(problem: {
+  readonly pluginId: string;
+  readonly point: string;
+  readonly message: string;
+}): void {
+  console.warn(`[plugin:${problem.pluginId}] ${problem.point}: ${problem.message}`);
+  const line = `${problem.pluginId} — ${problem.point}: ${problem.message}`;
+  // The same component can throw on every re-render; the notice lists distinct problems.
+  if (pluginProblems.includes(line)) return;
+  pluginProblems.push(line);
+  const host = runtime?.host;
+  // Before the kernel exists there is nowhere to put it; the list is replayed by
+  // `notifyPluginProblems` as soon as there is.
+  if (host) notifyPluginProblems(host);
+}
+
+function notifyPluginProblems(host: KernelHost): void {
+  if (pluginProblems.length === 0) return;
+  const count = pluginProblems.length;
+  host.notices.notify({
+    id: "kernel:plugin-problems",
+    level: "warning",
+    message: `${count} plugin problem${count === 1 ? "" : "s"} in this session.`,
+    detail: pluginProblems.join("\n"),
+    actions: [
+      {
+        label: "Open admin",
+        run: () => {
+          location.hash = "#/admin/plugins";
+        },
+      },
+    ],
+  });
+}
+
+/**
+ * After a mid-session re-login (the 4401 path of SPEC §5.3): resume, without ever
+ * touching local data.
+ *
+ * A cookie session just reconnects — the new cookie is already on the connection the
+ * socket will make. A **shell** session comes back with a *new* bearer token, and the
+ * kernel's `fetch` and the socket were both built with the old one, so the honest
+ * move is to store it and reload: rebuilding the session carrier underneath a running
+ * plugin set is how you get half the app authenticating and half not. The reload
+ * re-reads IndexedDB; nothing is cleared either way.
+ */
+function resumeSession(issued: string | undefined): void {
+  if (issued !== undefined) {
+    rememberShellToken(issued);
+    location.reload();
+    return;
+  }
+  runtime?.sync.reconnectNow();
+}
+
+async function activatePlugins(
+  host: KernelHost,
+  bearer: string | undefined,
+  baseOnly: boolean,
+  offlineBoot: boolean,
+): Promise<void> {
+  // In development there is no server-injected map; build one over this bundle's
+  // own modules so a plugin's `import "react"` resolves to the same React.
+  await installDevImportMap();
+
+  const missing = missingSpecifiers(pageImportMap());
+  if (missing.length > 0) {
+    host.notices.notify({
+      id: "kernel:import-map-incomplete",
+      level: "error",
+      message: "The runtime layer is incomplete; plugins may fail to load.",
+      detail: `The import map does not resolve: ${missing.join(", ")}. Rebuild the app bundle (\`mise run web-build\`) so the server can serve a complete map.`,
+    });
+  }
+
+  const plugins = await installedSet(host, bearer, offlineBoot);
+  const report = await loadPlugins({
+    host,
+    plugins,
+    kernelVersion: KERNEL_API_VERSION,
+    baseOnly,
+  });
+
+  console.info(
+    `[loader] ${report.activated.length} activated, ${report.failed.length} failed, ${report.skipped.length} skipped in ${report.elapsedMs} ms`,
+  );
+
+  const notice = failureNotice(report, () => {
+    location.hash = "#/admin/plugins";
+  });
+  if (notice) host.notices.notify(notice);
+}
+
+/**
+ * The installed set, from the server when it is reachable and from the last boot when
+ * it is not.
+ *
+ * `GET /api/plugins` is `NetworkOnly` in the service worker (a cached API response is a
+ * second copy of the workspace, `sw.ts`), so offline this is the only thing standing
+ * between a synced workspace and an app with no user interface in it at all. The
+ * remembered list points at `/plugins/<id>/<version>/…` URLs, which the service worker
+ * *does* cache immutably (SPEC §8) — so the modules behind it are genuinely present.
+ */
+async function installedSet(
+  host: KernelHost,
+  bearer: string | undefined,
+  offlineBoot: boolean,
+): Promise<readonly InstalledPlugin[]> {
+  try {
+    const { plugins } = await installedPlugins(bearer);
+    rememberPlugins(plugins);
+    return plugins;
+  } catch (error) {
+    if (!(error instanceof OfflineError)) throw error;
+    const remembered = cachedPlugins();
+    if (remembered) {
+      console.info(`[loader] offline: activating the ${remembered.length} plugins last seen here`);
+      return remembered;
+    }
+    host.notices.notify({
+      id: "kernel:plugins-unavailable",
+      level: "error",
+      message: offlineBoot
+        ? "Offline, and this device has never fetched the plugin list."
+        : "The plugin list could not be fetched.",
+      detail:
+        "Your documents are here and readable, but no plugin could be activated — including the one that draws the interface. Reconnect and reload once; after that the list is remembered for offline boots.",
+      actions: [{ label: "Reload", run: () => location.reload() }],
+    });
+    return [];
+  }
+}
+
+/**
+ * Sign-out — the one destructive local path (SPEC §5.3). It blocks while edits are
+ * unsynced unless the user has explicitly chosen to discard them, because clearing
+ * the stores is what deletes the only copy.
+ */
+async function signOut(
+  current: KernelRuntime | undefined,
+  bearer: string | undefined,
+  options: LogoutOptions,
+): Promise<void> {
+  const pending = current?.sync.pending ?? 0;
+  if (pending > 0 && !options.discardUnsynced) {
+    throw new Error(
+      `${pending} local edit${pending === 1 ? "" : "s"} have not reached the server yet. Wait for sync, or sign out discarding them.`,
+    );
+  }
+  try {
+    await logoutRequest(bearer);
+  } catch (error) {
+    // Offline sign-out still clears this device (shared-device safety, SPEC §5.3); the
+    // server-side session expires on its own schedule.
+    if (!(error instanceof OfflineError)) throw error;
+  } finally {
+    current?.host.settings.stop();
+    current?.sync.stop();
+    await current?.engine.close();
+    await current?.store.clear();
+    rememberShellToken(undefined);
+    forgetBootCache();
+    location.assign("/");
+  }
+}
+
+/**
+ * The bearer token, **for shells only** (SPEC §5.2).
+ *
+ * A browser must never take this path: its session is an HTTP-only cookie the page
+ * cannot read, and that is the security property. So the store is consulted only when
+ * the page is actually running inside the Flutter shell, for two reasons:
+ *
+ * 1. reading it unconditionally made the app *prefer* a stored bearer token over the
+ *    cookie in any browser where the key happened to exist;
+ * 2. a long-lived credential (30-day idle / 180-day absolute) sitting in `localStorage`
+ *    on an origin that runs full-trust plugin code (SPEC §6.1) is readable by any
+ *    plugin and by any DOM-XSS anywhere on the origin — which is exactly what the
+ *    cookie path is designed to make impossible.
+ *
+ * Inside the shell there is no cookie to fall back on (the webview's origin is a local
+ * file), so the token does have to persist. The **native keystore** is where SPEC
+ * §5.2/§7 puts it, and the boot sequence needs it synchronously — before the kernel
+ * exists — which the bridge's "everything may be a promise" ABI cannot serve. So the
+ * shape is: the shell reads its keystore before loading the page and injects the value
+ * as `window.shell.bearerToken`, and `setBearerToken` hands a newly issued one back for
+ * storage. Neither ever touches web storage.
+ *
+ * INTEGRATION (flutter-shell, M5): implement `bearerToken` / `setBearerToken(token)` on
+ * the bridge against `flutter_secure_storage`. Until then a shell build falls back to
+ * `localStorage`, which in the webview is a native data directory rather than evictable
+ * web storage (SPEC §7) — and a browser stays on the cookie, with no token stored at all.
+ */
+interface ShellTokenBridge {
+  /** Injected by the shell from the native keystore, before the page loads. */
+  readonly bearerToken?: string | null;
+  /** Store (or, with `null`, forget) a token the server just issued. */
+  readonly setBearerToken?: (token: string | null) => unknown;
+}
+
+// Function declarations, not `const` arrows: `boot()` runs at the top of this module and
+// reads the token through `shellToken()`, so anything it calls has to be hoisted. (An
+// arrow here is `undefined` at that point and the boot dies before the first render — with
+// the failure surfacing as a minified "is not a function", which is how it was found.)
+function shellBridge(): ShellTokenBridge | undefined {
+  return (globalThis as { shell?: ShellTokenBridge }).shell;
+}
+
+/** `true` only inside the Flutter shell webview — never in a browser. */
+function inShell(): boolean {
+  return shellBridge() !== undefined;
+}
+
+function shellToken(): string | undefined {
+  const bridge = shellBridge();
+  if (!bridge) return undefined;
+  if (typeof bridge.bearerToken === "string" && bridge.bearerToken.length > 0) {
+    return bridge.bearerToken;
+  }
+  try {
+    return localStorage.getItem(SHELL_TOKEN_KEY) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function rememberShellToken(token: string | undefined): void {
+  const store = shellBridge()?.setBearerToken;
+  if (store) {
+    try {
+      store(token ?? null);
+    } catch {
+      // The keystore is the only store worth trying in a shell that has one.
+    }
+    return;
+  }
+  try {
+    // Removed unconditionally: a browser carrying this key from an older build of the
+    // app should lose it at the first sign-out rather than keep it indefinitely.
+    if (token !== undefined && inShell()) localStorage.setItem(SHELL_TOKEN_KEY, token);
+    else localStorage.removeItem(SHELL_TOKEN_KEY);
+  } catch {
+    // Private mode: the session lasts as long as the page does.
+  }
+}
+
+const asError = (cause: unknown): Error =>
+  cause instanceof Error ? cause : new Error(String(cause));

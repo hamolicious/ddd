@@ -1,0 +1,48 @@
+{
+  /*
+   * The example plugins compile against **`kernel.d.ts` and nothing else**.
+   *
+   * `web/tsconfig.json` maps `@kernel` to `kernel-api/src/index.ts` — the contract's
+   * *source*, which is right for the base distribution (it lives in the monorepo and
+   * moves with the kernel). A third-party author has no such thing: they have the one
+   * generated file served at `/kernel.d.ts` (SPEC §6.4). Pointing `@kernel` at
+   * `kernel-api/dist/kernel.d.ts` here is what makes "built against kernel.d.ts only"
+   * a checked claim instead of a comment — if the generator drops a type the examples
+   * use, this config fails and `web/tsconfig.json` does not.
+   *
+   * Consequence: run `npm run kernel:dts` before `npx tsc -p plugins/examples`. That
+   * ordering is real for third parties too, so it is not worth hiding.
+   */
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "jsx": "react-jsx",
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+
+    "baseUrl": ".",
+    "paths": {
+      "@kernel": ["../../web/kernel-api/dist/kernel.d.ts"],
+      /* The runtime layer, type-only: at runtime each one is an import-map singleton
+         the server resolves, exactly as it is for a base plugin. */
+      "react": ["../../web/node_modules/@types/react"],
+      "react/jsx-runtime": ["../../web/node_modules/@types/react/jsx-runtime"],
+      "yjs": ["../../web/node_modules/yjs"]
+    }
+  },
+  "include": ["*/src/**/*.ts", "*/src/**/*.tsx"],
+  "exclude": ["dist", "*/dist"]
+}

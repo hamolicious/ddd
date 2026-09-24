@@ -1,0 +1,20 @@
+{
+  "id": "alt-editor",
+  "version": "1.0.0",
+  "kernel": "^1.0",
+  "dependencies": {
+    "document-surface": "^1.0"
+  },
+  "peerLibraries": {
+    "react": "^18.0.0",
+    "yjs": "^13.0.0"
+  },
+  "frontend": {
+    "module": "frontend/index.mjs",
+    "style": "frontend/style.css"
+  },
+  "name": "Plain-text editor",
+  "description": "A replacement `edit` mode: a textarea bound to the document's Y.Text. Exists to prove SPEC §9 M3's acceptance criterion — the built-in editor replaced by a separately-authored editor plugin.",
+  "author": "Life Manager examples",
+  "license": "MIT OR Apache-2.0"
+}

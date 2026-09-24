@@ -1,0 +1,432 @@
+/*
+ * `admin` styles. Linked on activation by the kernel loader (SPEC §6.4), never
+ * imported by the module — so it is a real file in devtools with this plugin's name on
+ * it, and it can be overridden by a later stylesheet without a build step.
+ *
+ * Convention: every class starts `admin-` (per-plugin class prefix, SPEC §6.4 —
+ * there is no shadow DOM in v1, so the prefix is the whole isolation story).
+ * Every value comes from a kernel token, so themes reach this file for free.
+ */
+
+.admin-root {
+  color: var(--lm-text);
+  font-family: var(--lm-font-sans);
+}
+
+.admin,
+.admin-section {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--lm-space) * 1.5);
+  color: var(--lm-text);
+  font-family: var(--lm-font-sans);
+}
+
+.admin {
+  padding: calc(var(--lm-space) * 2);
+}
+
+.admin h2,
+.admin-section h3,
+.admin-section h4 {
+  margin: 0;
+}
+
+.admin :focus-visible,
+.admin-section :focus-visible {
+  outline: 2px solid var(--lm-focus-ring);
+  outline-offset: 1px;
+}
+
+.admin-section button,
+.admin button {
+  min-height: var(--lm-tap-target);
+  padding: 0 var(--lm-space);
+  border: 1px solid var(--lm-border);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg-subtle);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.admin-section button:disabled,
+.admin button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.admin-danger {
+  border-color: var(--lm-danger) !important;
+  color: var(--lm-danger) !important;
+}
+
+.admin-link {
+  min-height: auto !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: none !important;
+  color: var(--lm-link) !important;
+  text-align: left;
+}
+
+.admin-link-active {
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+/* --- tabs ---------------------------------------------------------------- */
+
+.admin-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--lm-space) * 0.5);
+  border-bottom: 1px solid var(--lm-border);
+}
+
+.admin-tab {
+  border-color: transparent !important;
+  background: none !important;
+  border-bottom-left-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+}
+
+.admin-tab-active {
+  border-color: var(--lm-border) !important;
+  border-bottom-color: var(--lm-bg) !important;
+  background: var(--lm-bg) !important;
+  font-weight: 600;
+}
+
+/* --- tables -------------------------------------------------------------- */
+
+.admin-table-scroll {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: calc(var(--lm-space) * 0.75);
+  border-bottom: 1px solid var(--lm-border);
+  vertical-align: top;
+  font-weight: normal;
+  white-space: nowrap;
+}
+
+.admin-table thead th {
+  color: var(--lm-text-muted);
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.admin-row-inactive {
+  opacity: 0.6;
+}
+
+.admin-actions {
+  display: flex;
+  gap: calc(var(--lm-space) * 0.5);
+}
+
+.admin-checkbox,
+.admin-field {
+  display: flex;
+  gap: 4px;
+}
+
+.admin-checkbox {
+  align-items: center;
+  min-height: var(--lm-tap-target);
+}
+
+.admin-field {
+  flex-direction: column;
+  min-width: 12rem;
+  color: var(--lm-text-muted);
+  font-size: 0.85em;
+}
+
+.admin-field input {
+  min-height: var(--lm-tap-target);
+  padding: 0 var(--lm-space);
+  border: 1px solid var(--lm-border);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg);
+  color: var(--lm-text);
+  font: inherit;
+  font-size: 1rem;
+}
+
+.admin-inline-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--lm-space);
+}
+
+/* --- notes, warnings, secrets ------------------------------------------- */
+
+.admin-note,
+.admin-empty,
+.admin-hint {
+  margin: 0;
+  color: var(--lm-text-muted);
+  font-size: 0.9em;
+}
+
+.admin-hint {
+  display: block;
+  font-size: 0.8em;
+}
+
+.admin-error,
+.admin-warning,
+.admin-callout,
+.admin-secret {
+  margin: 0;
+  padding: var(--lm-space);
+  border: 1px solid var(--lm-border);
+  border-radius: var(--lm-radius);
+}
+
+.admin-error {
+  border-color: var(--lm-danger);
+}
+
+.admin-warning {
+  border-color: var(--lm-warning);
+}
+
+.admin-callout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lm-space);
+  border-color: var(--lm-warning);
+  background: var(--lm-bg-subtle);
+}
+
+.admin-callout p {
+  margin: 0;
+}
+
+/* A token shown once: it must be selectable, wrap, and be visually unmistakable. */
+.admin-secret {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lm-space);
+  border-color: var(--lm-accent);
+  background: var(--lm-accent-subtle);
+}
+
+.admin-secret p {
+  flex: 1 1 100%;
+  margin: 0;
+}
+
+.admin-secret code {
+  flex: 1 1 20rem;
+  overflow-wrap: anywhere;
+  padding: calc(var(--lm-space) * 0.5);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg);
+  font-family: var(--lm-font-mono);
+  user-select: all;
+}
+
+.admin-badge,
+.admin-status {
+  display: inline-block;
+  margin-left: calc(var(--lm-space) * 0.5);
+  padding: 0 calc(var(--lm-space) * 0.5);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg-subtle);
+  color: var(--lm-text-muted);
+  font-size: 0.75em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.admin-status-pending,
+.admin-status-enabled {
+  background: var(--lm-accent-subtle);
+  color: var(--lm-text);
+}
+
+.admin-status-revoked,
+.admin-status-failed {
+  background: var(--lm-danger);
+  color: var(--lm-danger-text);
+}
+
+.admin-status-expired,
+.admin-status-disabled {
+  background: var(--lm-bg-subtle);
+}
+
+/* --- audit --------------------------------------------------------------- */
+
+.admin-audit,
+.admin-picker,
+.admin-plugins,
+.admin-problems {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lm-space);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-audit li {
+  padding: calc(var(--lm-space) * 0.75) 0;
+  border-bottom: 1px solid var(--lm-border);
+}
+
+.admin-audit-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lm-space);
+  align-items: baseline;
+  margin: 0;
+  color: var(--lm-text-muted);
+  font-size: 0.85em;
+}
+
+.admin-audit-action {
+  color: var(--lm-text);
+  font-family: var(--lm-font-mono);
+  font-size: 1rem;
+}
+
+.admin-audit-target {
+  margin: 2px 0 0;
+  font-size: 0.9em;
+}
+
+.admin-audit pre,
+.admin-plugin pre {
+  overflow-x: auto;
+  margin: calc(var(--lm-space) * 0.5) 0 0;
+  padding: var(--lm-space);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg-subtle);
+  font-family: var(--lm-font-mono);
+  font-size: 0.85em;
+}
+
+.admin-picker {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: var(--lm-space);
+}
+
+/* --- stats and plugins --------------------------------------------------- */
+
+.admin-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: var(--lm-space);
+  margin: 0;
+}
+
+.admin-stats dt {
+  color: var(--lm-text-muted);
+  font-size: 0.8em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.admin-stats dd {
+  margin: 0;
+  font-size: 1.2em;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-plugin {
+  padding: var(--lm-space);
+  border: 1px solid var(--lm-border);
+  border-radius: var(--lm-radius);
+}
+
+.admin-plugin-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--lm-space);
+  margin: 0;
+}
+
+.admin-plugin-head code,
+.admin-plugin-meta code {
+  font-family: var(--lm-font-mono);
+  font-size: 0.85em;
+}
+
+.admin-plugin-description {
+  margin: calc(var(--lm-space) * 0.5) 0 0;
+  color: var(--lm-text-muted);
+}
+
+.admin-plugin-meta {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
+  gap: calc(var(--lm-space) * 0.75);
+  margin: var(--lm-space) 0 0;
+}
+
+.admin-plugin-meta dt {
+  color: var(--lm-text-muted);
+  font-size: 0.8em;
+}
+
+.admin-plugin-meta dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-plugin-capabilities {
+  margin: var(--lm-space) 0 0;
+}
+
+.admin-plugin-capabilities ul {
+  margin: calc(var(--lm-space) * 0.5) 0 0;
+  padding-left: calc(var(--lm-space) * 2.5);
+}
+
+.admin-problems li {
+  overflow-wrap: anywhere;
+}
+
+.admin-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .admin {
+    padding: var(--lm-space);
+  }
+
+  .admin-table th,
+  .admin-table td {
+    white-space: normal;
+  }
+
+  .admin-actions {
+    flex-direction: column;
+  }
+}

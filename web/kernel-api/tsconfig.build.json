@@ -1,0 +1,16 @@
+/* Declaration emit for the public contract only (SPEC §6.4: the kernel publishes
+   its types, also served at `/kernel.d.ts`). `npm run kernel:dts` runs this and
+   then flattens the output into one ambient `declare module "@kernel"` file. */
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "removeComments": false,
+    "rootDir": "src",
+    "outDir": "dist/types",
+    "declarationDir": "dist/types"
+  },
+  "include": ["src/**/*.ts"]
+}

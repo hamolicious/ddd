@@ -10,6 +10,10 @@
 //! /api/attachments*                -> attachments.rs            (authenticated)
 //! /api/admin/*                     -> admin.rs                  (admin only)
 //! /api/sync, /api/sync/bootstrap   -> sync.rs                   (authenticated)
+//! /api/plugins                     -> statics.rs                (authenticated)
+//! /importmap.json, /kernel.d.ts    -> statics.rs                (public)
+//! /plugins/:id/:version/*          -> statics.rs                (public, immutable)
+//! everything else (GET)            -> statics.rs                (the PWA + SPA fallback)
 //! ```
 
 pub mod admin;
@@ -17,6 +21,7 @@ pub mod attachments;
 pub mod auth;
 pub mod documents;
 pub mod health;
+pub mod statics;
 pub mod sync;
 
 use std::time::Duration;
@@ -47,6 +52,7 @@ pub fn router(state: AppState, metrics: PrometheusHandle) -> Router {
         .nest("/documents", documents::router())
         .nest("/attachments", attachments::router())
         .nest("/admin", admin::router())
+        .nest("/plugins", statics::api_router())
         .layer(DefaultBodyLimit::max(JSON_BODY_LIMIT))
         // Merged *outside* the body limit: `/api/sync` is a WebSocket upgrade (no
         // request body at all) and `/api/sync/bootstrap` streams a response, so a
@@ -61,6 +67,13 @@ pub fn router(state: AppState, metrics: PrometheusHandle) -> Router {
     Router::new()
         .merge(health::router())
         .nest("/api", api)
+        // The PWA, the import map, the plugin modules and `kernel.d.ts` (SPEC §6.4, §8).
+        // Merged at the root: `/plugins/...` is a *client-facing* URL, deliberately not
+        // under `/api`, because it is immutable cacheable content rather than an API.
+        .merge(statics::router())
+        // Any unmatched GET is a client-side route — `index.html`. `/api/**` is
+        // excluded inside the handler so an API 404 stays JSON.
+        .fallback(statics::fallback)
         .with_state(state.clone())
         .merge(metrics_router)
         .layer(cors_layer(&state))

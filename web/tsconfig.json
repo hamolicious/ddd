@@ -7,6 +7,11 @@
     "moduleDetection": "force",
     "types": ["node", "vite/client"],
 
+    /* M3: the app and every plugin are React 18 + TSX. The kernel (M2) still
+       imports no React; `kernel/src/runtime/**` is the one exception, because the
+       error boundary and the single mount point are React by definition. */
+    "jsx": "react-jsx",
+
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
@@ -29,15 +34,63 @@
        checkout that has never run `mise run wasm`. */
     "baseUrl": ".",
     "paths": {
-      "@kernel/*": ["kernel/src/*"]
+      /* The plugin-facing contract. Exactly `@kernel`, nothing under it — this is
+         the specifier the server's import map resolves for plugin bundles too. */
+      "@kernel": ["kernel-api/src/index.ts"],
+      /* Kernel internals: the M2 substrate plus the M3 runtime. Not a plugin
+         specifier; `web/` code only. */
+      "@kernel/*": ["kernel/src/*"],
+      /* `plugins/base/**` is outside `web/`, so ordinary node resolution walks *up*
+         from there and never reaches `web/node_modules`. These entries point the
+         blessed runtime layer (SPEC §6.4) at this project's copies — at `@types/*`
+         where the package ships no types of its own — so one tsconfig can check the
+         kernel, the app and every base plugin against one set of declarations.
+         Type-level only: at runtime every one of them is an import-map singleton. */
+      "react": ["node_modules/@types/react"],
+      "react/jsx-runtime": ["node_modules/@types/react/jsx-runtime"],
+      "react-dom": ["node_modules/@types/react-dom"],
+      "react-dom/client": ["node_modules/@types/react-dom/client"],
+      "yjs": ["node_modules/yjs"],
+      "@codemirror/*": ["node_modules/@codemirror/*"],
+      "@lezer/*": ["node_modules/@lezer/*"],
+      "y-codemirror.next": ["node_modules/y-codemirror.next"],
+      "unified": ["node_modules/unified"],
+      "remark-parse": ["node_modules/remark-parse"],
+      "remark-gfm": ["node_modules/remark-gfm"],
+      "remark-directive": ["node_modules/remark-directive"],
+      /* Not part of the runtime layer — a dev-only type resolution. Base plugin
+         test files `import { describe, it } from "vitest"`, and the same upward
+         node resolution that misses `react` above misses `vitest` too, so every
+         plugin suite reported TS2307 while running fine under the runner. */
+      "vitest": ["node_modules/vitest"]
     }
   },
   "include": [
     "kernel/src/**/*.ts",
+    "kernel/src/**/*.tsx",
+    "kernel-api/src/**/*.ts",
+    "app/src/**/*.ts",
+    "app/src/**/*.tsx",
+    "app/runtime/**/*.ts",
     "demo/src/**/*.ts",
     "harness/src/**/*.ts",
     "vite.config.ts",
-    "playwright.config.ts"
+    "vite.app.config.ts",
+    "vite.runtime.config.ts",
+    "vite.sw.config.ts",
+    "playwright.config.ts",
+    /* The base distribution lives outside `web/` (SPEC §8 layout) but compiles
+       against this one tsconfig: one `@kernel`, one React, one set of rules. */
+    "../plugins/base/**/*.ts",
+    "../plugins/base/**/*.tsx"
   ],
-  "exclude": ["node_modules", "dist", "kernel/src/wasm/pkg"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "kernel/src/wasm/pkg",
+    "kernel-api/dist",
+    "app/dist",
+    "../plugins/base/dist",
+    "../plugins/base/*/dist"
+  ]
 }

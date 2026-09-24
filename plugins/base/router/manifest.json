@@ -1,0 +1,22 @@
+{
+  "id": "router",
+  "version": "1.0.0",
+  "name": "Router",
+  "description": "URL to view, over the hash so the Flutter shell works from a local origin.",
+  "author": "Life Manager base distribution",
+  "license": "MIT OR Apache-2.0",
+  "kernel": "^1.0",
+  "dependencies": {
+    "shell-ui": "^1.0"
+  },
+  "peerLibraries": {
+    "react": "^18.0.0"
+  },
+  "frontend": {
+    "module": "frontend/index.mjs",
+    "style": "frontend/style.css"
+  },
+  "x-defines": [
+    "router.route"
+  ]
+}
