@@ -300,3 +300,49 @@ docker compose exec -T mongo mongodump \
   --db "${MONGO_DATABASE:-life_manager}" --archive --gzip > "$out/dump.archive.gz"
 echo "wrote $out/dump.archive.gz"
 '''
+
+[tasks.adb-pair]
+description = "Pair with a phone over Wi-Fi debugging: mise run adb-pair <ip:pairing-port> <6-digit-code> (then auto-connects via mDNS)"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+ADB="${ANDROID_HOME:-$HOME/Android/Sdk}/platform-tools/adb"
+PAIR="{{arg(name='pair_hostport')}}"
+CODE="{{arg(name='code')}}"
+"$ADB" pair "$PAIR" "$CODE"
+echo "Paired. Discovering connect endpoint via mDNS..."
+sleep 1
+SVC=$("$ADB" mdns services 2>/dev/null | awk '/_adb-tls-connect/{print $NF; exit}')
+if [ -n "${SVC:-}" ]; then
+  "$ADB" connect "$SVC"
+else
+  echo "mDNS discovery came up empty — connect manually with the IP:port from the MAIN Wireless-debugging screen:"
+  echo "  $ADB connect <ip:port>"
+fi
+"$ADB" devices -l
+"""
+
+[tasks.shell-install]
+description = "Install the shell APK on the connected phone (adb reverse + install -r); pass --logs to stream flutter logcat afterwards"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+ADB="${ANDROID_HOME:-$HOME/Android/Sdk}/platform-tools/adb"
+APK="app/build/app/outputs/flutter-apk/app-debug.apk"
+[ -f "$APK" ] || { echo "no APK at $APK — build it first: mise run shell-apk"; exit 1; }
+COUNT=$("$ADB" devices | awk 'NR>1 && $2=="device"' | wc -l)
+[ "$COUNT" -ge 1 ] || { echo "no device attached — connect USB or: mise run adb-pair <ip:port> <code>"; exit 1; }
+if [ "$COUNT" -gt 1 ] && [ -z "${ANDROID_SERIAL:-}" ]; then
+  echo "multiple devices attached (often the same phone connected twice over Wi-Fi):"
+  "$ADB" devices | awk 'NR>1 && $2=="device"{print "  " $1}'
+  echo "either: adb disconnect <the duplicate>   or: ANDROID_SERIAL=<serial> mise run shell-install"
+  exit 1
+fi
+"$ADB" reverse tcp:8080 tcp:8080
+"$ADB" install -r "$APK"
+echo "installed. server URL on the phone: http://127.0.0.1:8080"
+if [ "${1:-}" = "--logs" ]; then
+  "$ADB" logcat -c
+  exec "$ADB" logcat -s flutter:V
+fi
+"""
