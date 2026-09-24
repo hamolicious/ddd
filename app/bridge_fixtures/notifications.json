@@ -1,0 +1,175 @@
+{
+  "capability": "notifications",
+  "cases": [
+    {
+      "name": "permission, baked in",
+      "note": "Registered so the page's synchronous permission() has a value; the shim reads the value injected at document start and refreshes it after request().",
+      "method": "permission",
+      "request": {
+        "v": 1,
+        "id": "1",
+        "capability": "notifications",
+        "method": "permission",
+        "params": {}
+      },
+      "response": { "v": 1, "id": "1", "ok": true, "result": "granted" }
+    },
+    {
+      "name": "request, refused",
+      "method": "request",
+      "request": {
+        "v": 1,
+        "id": "2",
+        "capability": "notifications",
+        "method": "request",
+        "params": {}
+      },
+      "response": { "v": 1, "id": "2", "ok": true, "result": "denied" }
+    },
+    {
+      "name": "notify now",
+      "method": "notify",
+      "request": {
+        "v": 1,
+        "id": "3",
+        "capability": "notifications",
+        "method": "notify",
+        "params": { "title": "Standup", "body": "in 5 minutes", "tag": "standup", "route": "/doc/01J8" }
+      },
+      "response": { "v": 1, "id": "3", "ok": true, "result": null }
+    },
+    {
+      "name": "schedule a reminder",
+      "note": "atIso is the canonical instant, normalized to UTC. The kernel API takes epoch ms and the injected shim converts — 1774000000000 ms is exactly this instant.",
+      "method": "schedule",
+      "request": {
+        "v": 1,
+        "id": "4",
+        "capability": "notifications",
+        "method": "schedule",
+        "params": {
+          "id": "review",
+          "title": "Weekly review",
+          "body": null,
+          "tag": "review",
+          "route": "/doc/01J9",
+          "atIso": "2026-03-20T09:46:40.000Z"
+        }
+      },
+      "atMs": 1774000000000,
+      "response": { "v": 1, "id": "4", "ok": true, "result": "review" }
+    },
+    {
+      "name": "schedule with no id falls back to the tag",
+      "note": "id defaults to tag, so re-scheduling the same reminder replaces rather than stacks — the same semantics as a browser Notification with one tag (BRIDGE.md §4.3).",
+      "method": "schedule",
+      "request": {
+        "v": 1,
+        "id": "5",
+        "capability": "notifications",
+        "method": "schedule",
+        "params": {
+          "id": null,
+          "title": "Weekly review",
+          "body": null,
+          "tag": "review",
+          "route": null,
+          "atIso": "2026-03-20T09:46:40.000Z"
+        }
+      },
+      "atMs": 1774000000000,
+      "response": { "v": 1, "id": "5", "ok": true, "result": "review" }
+    },
+    {
+      "name": "schedule with an unparseable instant",
+      "method": "schedule",
+      "request": {
+        "v": 1,
+        "id": "6",
+        "capability": "notifications",
+        "method": "schedule",
+        "params": { "id": null, "title": "Weekly review", "body": null, "tag": null, "route": null, "atIso": "next tuesday" }
+      },
+      "response": {
+        "v": 1,
+        "id": "6",
+        "ok": false,
+        "error": { "code": "invalid", "message": "atIso is not an ISO-8601 instant: next tuesday" }
+      }
+    },
+    {
+      "name": "schedule without permission",
+      "method": "schedule",
+      "request": {
+        "v": 1,
+        "id": "7",
+        "capability": "notifications",
+        "method": "schedule",
+        "params": { "id": null, "title": "Weekly review", "body": null, "tag": null, "route": null, "atIso": "2026-03-20T09:46:40.000Z" }
+      },
+      "response": {
+        "v": 1,
+        "id": "7",
+        "ok": false,
+        "error": { "code": "denied", "message": "notifications are not permitted on this device" }
+      }
+    },
+    {
+      "name": "cancel",
+      "method": "cancel",
+      "request": {
+        "v": 1,
+        "id": "8",
+        "capability": "notifications",
+        "method": "cancel",
+        "params": { "id": "review" }
+      },
+      "response": { "v": 1, "id": "8", "ok": true, "result": null }
+    },
+    {
+      "name": "list what is pending",
+      "note": "Entries carry BOTH atIso and at (epoch ms) so neither side has to convert. The registry file is the source of truth, because Android's pendingNotificationRequests() returns ints with no schedule attached.",
+      "method": "list",
+      "request": {
+        "v": 1,
+        "id": "9",
+        "capability": "notifications",
+        "method": "list",
+        "params": {}
+      },
+      "response": {
+        "v": 1,
+        "id": "9",
+        "ok": true,
+        "result": [
+          {
+            "id": "review",
+            "title": "Weekly review",
+            "tag": "review",
+            "route": "/doc/01J9",
+            "atIso": "2026-03-20T09:46:40.000Z",
+            "at": 1774000000000
+          },
+          {
+            "id": "lm-1774086400000",
+            "title": "Water the plants",
+            "atIso": "2026-03-21T09:46:40.000Z",
+            "at": 1774086400000
+          }
+        ]
+      }
+    },
+    {
+      "name": "list, nothing pending",
+      "method": "list",
+      "request": {
+        "v": 1,
+        "id": "10",
+        "capability": "notifications",
+        "method": "list",
+        "params": {}
+      },
+      "response": { "v": 1, "id": "10", "ok": true, "result": [] }
+    }
+  ]
+}

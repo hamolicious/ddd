@@ -59,6 +59,25 @@ export interface FilesystemCapability {
   export(file: FileExport): Promise<void>;
   /** Ask the user for files. Fallback: a hidden `<input type="file">`. */
   pick(options?: PickOptions): Promise<readonly PickedFile[]>;
+  /**
+   * The whole workspace as a zip — `GET /api/admin/export`, the no-Mongo recovery
+   * path of SPEC §5.1. **Admin-only server-side**, so gate the affordance on
+   * `session.isAdmin()` however the UI is drawn: a non-admin gets a 403.
+   *
+   * **Optional on purpose, and the reason is the M5 rule "an absent capability is
+   * reported absent"** (`app/BRIDGE.md` §3): it exists only where it can actually
+   * work — the shell's native streamed download, or a cookie session that can
+   * authenticate a plain download link. A bearer session with no native handler
+   * leaves it `undefined` rather than offering a button that 401s, because the
+   * token lives in the shell's keystore and no navigation can carry it.
+   *
+   * It is not `export(bytes)`: the archive is the whole workspace and must never
+   * be held in the webview's heap (`app/BRIDGE.md` §4.2).
+   *
+   * Added in M5 as an **optional** member of this otherwise frozen interface
+   * (`app/CONTRACTS.md`, area web-shim).
+   */
+  exportWorkspace?(): Promise<void>;
 }
 
 export type NotificationPermissionState = "granted" | "denied" | "default";

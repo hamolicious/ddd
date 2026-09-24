@@ -1,0 +1,38 @@
+{
+  "bridgeVersion": 1,
+  "handler": "lm_shell_v1",
+  "errorCodes": ["unsupported", "denied", "cancelled", "invalid", "timeout", "failed"],
+  "methods": [
+    "auth.clearToken",
+    "auth.getToken",
+    "auth.setToken",
+    "boot.failed",
+    "boot.ok",
+    "filesystem.export",
+    "filesystem.exportWorkspace",
+    "filesystem.importFile",
+    "filesystem.pick",
+    "notifications.cancel",
+    "notifications.list",
+    "notifications.notify",
+    "notifications.permission",
+    "notifications.request",
+    "notifications.schedule"
+  ],
+  "jsAliases": {
+    "notifications.scheduled": "notifications.list",
+    "bootOk": "boot.ok",
+    "bootFailed": "boot.failed",
+    "setBearerToken": "auth.setToken"
+  },
+  "jsAliasNote": "key = the member `bootstrapScript` defines on `window.shell`; value = the registered `capability.method` behind it (BRIDGE.md §3, §4). Three of them are flat because the boot sequence reads them before any capability object is meaningful, and `notifications.scheduled` is the frozen kernel spelling of `notifications.list`. `boot.*` has no nested spelling at all: the only JS members are `bootOk` / `bootFailed`.",
+  "capabilities": ["auth", "boot", "filesystem", "notifications"],
+  "pluginFacing": ["filesystem", "notifications"],
+  "envelopeKeys": {
+    "request": ["v", "id", "capability", "method", "params"],
+    "response": ["v", "id", "ok", "result", "error"],
+    "error": ["code", "message"]
+  },
+  "cases": ["auth.json", "boot.json", "filesystem.json", "notifications.json", "envelope.json"],
+  "other": ["window_shell.json", "manifest.json"]
+}

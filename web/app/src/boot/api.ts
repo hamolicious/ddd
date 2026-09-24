@@ -9,9 +9,16 @@
  * HTTP-only cookie the page cannot read, which is the point. The Flutter shell (M5)
  * logs in with `bearer: true` and stores the token in native secure storage; that is
  * why `login()` takes the flag rather than hard-coding either.
+ *
+ * **The base is resolved, not hard-coded** (M5, `app/BRIDGE.md` §6). `"/api"` is right in
+ * a browser and wrong in the shell, where the page origin is the loopback server holding
+ * the downloaded bundle and the API lives on `window.shell.serverBaseUrl`. Every call
+ * here went to a 404 in the shell until this was a function.
  */
 
 import type { InstalledPlugin, SessionUser } from "@kernel";
+
+import { apiBase } from "./shell.js";
 
 export interface AuthBootstrap {
   readonly needs_first_user: boolean;
@@ -65,21 +72,52 @@ export class OfflineError extends Error {
   }
 }
 
+/**
+ * How long one pre-kernel call gets before it counts as "there is no server".
+ *
+ * **Shorter than the shell's 25 s boot watchdog on purpose** (`app/lib/config.dart`).
+ * These two calls are the only network in the boot sequence, and without a deadline they
+ * inherit the platform default — minutes, on a captive portal, a half-open TCP connection,
+ * a VPN handshake, or a server that accepts and then stalls. The shell's watchdog would
+ * fire first and declare a bundle broken that was merely waiting, which is the one
+ * distinction the whole auto-revert guarantee rests on; two such launches revert and
+ * quarantine a working bundle.
+ *
+ * A timeout is an [OfflineError] like any other transport failure, and that is the right
+ * answer rather than a lenient one: it boots the local workspace from the cached session
+ * and lets the socket re-auth when there is a network again (SPEC §4.1, §5.3).
+ */
+const BOOT_REQUEST_TIMEOUT_MS = 10_000;
+
+/** `AbortSignal.timeout` where it exists; `undefined` in an older runtime (rule: degrade). */
+const deadline = (): AbortSignal | undefined =>
+  typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
+    ? AbortSignal.timeout(BOOT_REQUEST_TIMEOUT_MS)
+    : undefined;
+
 async function call<T>(path: string, init: RequestInit = {}, token?: string): Promise<T> {
   const headers = new Headers(init.headers);
   if (token) headers.set("authorization", `Bearer ${token}`);
   if (init.body !== undefined && !headers.has("content-type")) {
     headers.set("content-type", "application/json");
   }
+  const signal = init.signal ?? deadline();
   let response: Response;
   try {
-    response = await fetch(`/api${path}`, {
+    // `same-origin` is deliberate on both paths: a browser sends its cookie, and the
+    // shell's cross-origin calls send none — the bearer header above is the whole
+    // credential there, and asking for cookies would need the server to allow
+    // credentialed CORS for nothing (SPEC §5.2).
+    response = await fetch(`${apiBase()}${path}`, {
       credentials: "same-origin",
       ...init,
+      ...(signal ? { signal } : {}),
       headers,
     });
   } catch (cause) {
-    // `fetch` rejects only for transport failures; every HTTP status resolves.
+    // `fetch` rejects only for transport failures; every HTTP status resolves. An abort
+    // from the deadline above lands here too, which is what makes a stalled server an
+    // offline boot instead of a failed one.
     throw new OfflineError(cause);
   }
   if (!response.ok) throw await errorFrom(response);

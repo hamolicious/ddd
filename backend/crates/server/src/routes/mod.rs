@@ -13,6 +13,7 @@
 //! /api/plugins                     -> statics.rs                (authenticated)
 //! /api/plugins/:id/*               -> plugin_api.rs             (session, or public per manifest)
 //! /api/admin/plugins/*             -> plugin_api.rs             (admin only)
+//! /api/shell/*                     -> shell.rs                  (authenticated; M5 bundle manifest)
 //! /importmap.json, /kernel.d.ts    -> statics.rs                (public)
 //! /plugins/:id/:version/*          -> statics.rs                (public, immutable)
 //! everything else (GET)            -> statics.rs                (the PWA + SPA fallback)
@@ -24,6 +25,7 @@ pub mod auth;
 pub mod documents;
 pub mod health;
 pub mod plugin_api;
+pub mod shell;
 pub mod statics;
 pub mod sync;
 
@@ -67,6 +69,10 @@ pub fn router(state: AppState, metrics: PrometheusHandle) -> Router {
             "/plugins",
             statics::api_router().merge(plugin_api::router()),
         )
+        // M5: the Flutter shell's bundle manifest and the two files it cannot fetch from
+        // a static route byte-stably (`shell.rs`, `app/BRIDGE.md` §5). Inside the JSON
+        // body limit like the rest of `/api` — both routes are GETs with no body.
+        .nest("/shell", shell::router())
         .layer(DefaultBodyLimit::max(JSON_BODY_LIMIT))
         // Merged *outside* the body limit: `/api/sync` is a WebSocket upgrade (no
         // request body at all) and `/api/sync/bootstrap` streams a response, so a

@@ -24,6 +24,14 @@
  * 4. **A plugin failure is contained and reported once.** The frame renders either
  *    way; the aggregated notice says what broke (SPEC §6.4), and registry rejections and
  *    render failures land in the same notice centre rather than in the console alone.
+ *
+ * M5 adds a fifth, and it is the one with teeth: **inside the Flutter shell this sequence
+ * reports its own outcome.** The shell has already written `failedBoots` to disk before
+ * the webview loaded, and `shell.bootOk()` — sent here, after the plugin set has
+ * activated — is the only thing that clears it (`app/BRIDGE.md` §7). Two consequences
+ * worth stating: every early `return` on a failure path is a *silent* failed boot unless
+ * it says so (hence `reportBootFailed`), and `bootOk` must not move earlier, because a
+ * bundle that renders and then throws has not booted.
  */
 
 import { StrictMode, type ReactNode } from "react";
@@ -53,6 +61,17 @@ import {
 } from "./boot/cache.js";
 import { initKernel, type KernelRuntime } from "./boot/kernel-init.js";
 import { bootModeFor, safeModeFrom } from "./boot/safe-mode.js";
+import { contributeShellSection } from "./boot/ShellSection.js";
+import {
+  inShell,
+  onShellUpdateReady,
+  rememberShellToken,
+  reportBootFailed,
+  reportBootOk,
+  serverBaseUrl,
+  shellToken,
+  type ShellUpdateReady,
+} from "./boot/shell.js";
 import { registerServiceWorker } from "./boot/update.js";
 import { installDevImportMap, missingSpecifiers, pageImportMap } from "./loader/importmap.js";
 import { failureNotice, loadPlugins } from "./loader/loader.js";
@@ -61,9 +80,6 @@ import { AppFrame } from "./ui/AppFrame.js";
 import { BootFailure, BootScreen, UnsupportedBrowser, supportsImportMaps } from "./ui/BootScreen.js";
 
 import "./styles.css";
-
-/** Where a shell's bearer token lives. Browsers never take this path (SPEC §5.2). */
-const SHELL_TOKEN_KEY = "life-manager.bearer";
 
 const found = document.getElementById("root");
 if (!found) throw new Error("index.html is missing #root");
@@ -98,6 +114,9 @@ void boot();
 async function boot(): Promise<void> {
   if (!supportsImportMaps()) {
     render(<UnsupportedBrowser />);
+    // A webview too old for import maps is a shell problem, not a bundle problem: say so
+    // rather than letting the watchdog revert to a bundle that cannot run either.
+    reportBootFailed("this webview does not support import maps");
     return;
   }
 
@@ -110,15 +129,34 @@ async function boot(): Promise<void> {
 
   // Registered early so an update found mid-session still surfaces, but it never
   // takes over on its own (see update.ts).
+  //
+  // **Not in the shell.** `sw.js` is deliberately excluded from the bundle
+  // (`app/BRIDGE.md` §5): the loopback origin already *is* the offline cache, and a worker
+  // installed there would fight the bundle updater for control of what the webview sees —
+  // two caches, two update stories, one of them invisible to the revert path. Registration
+  // would also just 404, since the local server serves only manifest-listed paths.
   let applyUpdate: (() => void) | undefined;
-  registerServiceWorker((apply) => {
-    applyUpdate = apply;
-    runtime?.host.notices.notify({
-      id: "kernel:update-available",
-      level: "info",
-      message: "An update is available.",
-      actions: [{ label: "Reload", run: () => apply() }],
+  if (!inShell()) {
+    registerServiceWorker((apply) => {
+      applyUpdate = apply;
+      runtime?.host.notices.notify({
+        id: "kernel:update-available",
+        level: "info",
+        message: "An update is available.",
+        actions: [{ label: "Reload", run: () => apply() }],
+      });
     });
+  }
+
+  // The shell's half of the same story. A staged bundle is never applied to a running
+  // webview (`app/BRIDGE.md` §7 — the page holds IndexedDB handles, a socket and an
+  // activated plugin graph), so there is no "Reload" action to offer: promotion happens
+  // at the next launch, and the only honest instruction is to reopen the app.
+  let shellUpdate: ShellUpdateReady | undefined;
+  onShellUpdateReady((info) => {
+    shellUpdate = info;
+    const host = runtime?.host;
+    if (host) notifyShellUpdate(host, info);
   });
 
   render(<BootScreen message="Starting…" />);
@@ -136,6 +174,7 @@ async function boot(): Promise<void> {
   } catch (error) {
     if (!(error instanceof OfflineError)) {
       render(<BootFailure error={asError(error)} />);
+      reportBootFailed(`the session check failed: ${asError(error).message}`);
       return;
     }
     // No server. Boot the local workspace as whoever was last signed in here; if the
@@ -145,14 +184,35 @@ async function boot(): Promise<void> {
     offlineBoot = user !== undefined;
     if (!user) {
       render(<BootFailure error={asError(error)} offline />);
+      // Nothing is wrong with the bundle: there is no server and nobody has ever signed
+      // in on this device. Reverting would not help, and the shell's own recovery screen
+      // is the wrong answer too — so this says why and leaves the counter to the watchdog
+      // only if the user never gets further.
+      reportBootFailed("offline, and no session has been established on this device yet");
       return;
     }
   }
 
   if (!user) {
+    // **A booted bundle.** The kernel is not up — there is no session to build one with —
+    // but the sequence ran to completion and put a working login form on screen, which is
+    // the only correct thing to show for "the server says you are not signed in".
+    //
+    // Saying nothing here was the bug: the shell had already incremented `failedBoots`
+    // before the webview loaded, and only `bootOk()` clears it (`app/BRIDGE.md` §7). So a
+    // session that simply idled past its 30-day expiry (SPEC §5.2) produced a 25 s
+    // watchdog expiry mid-typing, a native "Life Manager could not start" over the login
+    // form, and — two launches later — a revert that quarantined a perfectly good bundle,
+    // permanently, for a failure that had nothing to do with it.
+    reportBootOk();
     render(
       <AuthGate
-        bearer={token !== undefined}
+        // **In the shell, always ask for a bearer token** (SPEC §5.2): a cookie cannot
+        // survive the loopback origin, so a shell that logs in without this flag gets a
+        // `Set-Cookie` it will never send back and looks signed out on the next call.
+        // `token !== undefined` was the wrong test — on first run there is no token yet,
+        // which is exactly when the login form is shown.
+        bearer={inShell()}
         onSignedIn={(signedIn, issued) => {
           if (issued) rememberShellToken(issued);
           rememberSession(signedIn);
@@ -168,9 +228,13 @@ async function boot(): Promise<void> {
   async function withSession(signedIn: SessionUser, bearer: string | undefined): Promise<void> {
     try {
       render(<BootScreen message="Opening your workspace…" />);
+      const server = serverBaseUrl();
       runtime = await initKernel({
         user: signedIn,
         ...(bearer ? { bearerToken: bearer } : {}),
+        // The shell's server; absent in a browser, where every default is the page
+        // origin already (`app/BRIDGE.md` §6).
+        ...(server ? { serverBaseUrl: server } : {}),
         root: container,
         bootMode: bootModeFor(safeMode),
         logout: (options) => signOut(runtime, bearer, options),
@@ -192,11 +256,20 @@ async function boot(): Promise<void> {
           actions: [{ label: "Reload", run: () => apply() }],
         });
       }
+      if (shellUpdate) notifyShellUpdate(host, shellUpdate);
+
+      // Shell-only, and nothing is contributed in a browser: which bridge this device
+      // speaks, what it can do natively, and which bundle is running (SPEC §9 M5's OTA
+      // and revert criteria are not testable without a visible version).
+      contributeShellSection(host);
 
       render(
         <AppFrame
           host={host}
-          {...(bearer !== undefined ? { bearer: true } : {})}
+          // `inShell()` and not just "we have a token": the re-auth overlay of SPEC §5.3
+          // must ask for a *bearer* token in the shell even on a launch that arrived here
+          // without one, because a cookie cannot survive the loopback origin.
+          bearer={inShell() || bearer !== undefined}
           onSignedIn={(_user, issued) => resumeSession(issued)}
         />,
       );
@@ -204,14 +277,42 @@ async function boot(): Promise<void> {
       if (safeMode === "bare") {
         // No plugins at all: the kernel's own manager takes the mount (SPEC §6.1).
         host.mount.mount("kernel", <BareManager {...(bearer ? { token: bearer } : {})} />);
+        // `?safe=bare` *is* a successful boot: the workspace is open and the built-in
+        // manager is on screen. Reverting a bundle that got this far would throw away the
+        // one screen from which a broken plugin can be disabled (`app/BRIDGE.md` §7).
+        reportBootOk();
         return;
       }
 
       await activatePlugins(host, bearer, safeMode === "base", offlineBoot);
+
+      // **Interactive.** The kernel is up, the projection is readable, and the plugin set
+      // has activated (or failed, contained and reported — a workspace with a broken
+      // plugin is still a booted bundle, and its second-attempt safe mode is what
+      // diagnoses that). This is the moment `app/BRIDGE.md` §7 clears `failedBoots` on,
+      // and the last line of the boot sequence on purpose.
+      reportBootOk();
     } catch (error) {
-      render(<BootFailure error={asError(error)} />);
+      const failure = asError(error);
+      render(<BootFailure error={failure} />);
+      reportBootFailed(failure.message);
     }
   }
+}
+
+/**
+ * The shell staged a verified bundle. There is no "Reload" here and that is the whole
+ * point: reloading re-runs the *current* bundle, because promotion happens at launch with
+ * nothing running (`app/BRIDGE.md` §7). Offering a button that appears to update and does
+ * not is worse than telling the truth.
+ */
+function notifyShellUpdate(host: KernelHost, info: ShellUpdateReady): void {
+  host.notices.notify({
+    id: "kernel:shell-update-ready",
+    level: "info",
+    message: "An app update is ready. Close and reopen Life Manager to finish it.",
+    ...(info.bundleVersion ? { detail: `Bundle ${info.bundleVersion} is verified and staged.` } : {}),
+  });
 }
 
 let runtime: KernelRuntime | undefined;
@@ -397,84 +498,18 @@ async function signOut(
 }
 
 /**
- * The bearer token, **for shells only** (SPEC §5.2).
+ * The bearer token, **for shells only**, and everything else about running inside one,
+ * now lives in `boot/shell.ts` (SPEC §5.2, `app/BRIDGE.md` §6). It moved out of this file
+ * in M5 because three other things needed the same knowledge — the API base, the socket
+ * URL and `bootOk` — and a private helper at the bottom of the entry point could not be
+ * shared or tested.
  *
- * A browser must never take this path: its session is an HTTP-only cookie the page
- * cannot read, and that is the security property. So the store is consulted only when
- * the page is actually running inside the Flutter shell, for two reasons:
- *
- * 1. reading it unconditionally made the app *prefer* a stored bearer token over the
- *    cookie in any browser where the key happened to exist;
- * 2. a long-lived credential (30-day idle / 180-day absolute) sitting in `localStorage`
- *    on an origin that runs full-trust plugin code (SPEC §6.1) is readable by any
- *    plugin and by any DOM-XSS anywhere on the origin — which is exactly what the
- *    cookie path is designed to make impossible.
- *
- * Inside the shell there is no cookie to fall back on (the webview's origin is a local
- * file), so the token does have to persist. The **native keystore** is where SPEC
- * §5.2/§7 puts it, and the boot sequence needs it synchronously — before the kernel
- * exists — which the bridge's "everything may be a promise" ABI cannot serve. So the
- * shape is: the shell reads its keystore before loading the page and injects the value
- * as `window.shell.bearerToken`, and `setBearerToken` hands a newly issued one back for
- * storage. Neither ever touches web storage.
- *
- * INTEGRATION (flutter-shell, M5): implement `bearerToken` / `setBearerToken(token)` on
- * the bridge against `flutter_secure_storage`. Until then a shell build falls back to
- * `localStorage`, which in the webview is a native data directory rather than evictable
- * web storage (SPEC §7) — and a browser stays on the cookie, with no token stored at all.
+ * The rule it enforces is unchanged and worth repeating here, where the session is built:
+ * a browser never reads or writes a token. Its session is an HTTP-only cookie the page
+ * cannot see, and a long-lived credential in web storage on an origin that runs
+ * full-trust plugin code (SPEC §6.1) is readable by every plugin and by any DOM-XSS on
+ * the page — which is exactly what the cookie path makes impossible.
  */
-interface ShellTokenBridge {
-  /** Injected by the shell from the native keystore, before the page loads. */
-  readonly bearerToken?: string | null;
-  /** Store (or, with `null`, forget) a token the server just issued. */
-  readonly setBearerToken?: (token: string | null) => unknown;
-}
-
-// Function declarations, not `const` arrows: `boot()` runs at the top of this module and
-// reads the token through `shellToken()`, so anything it calls has to be hoisted. (An
-// arrow here is `undefined` at that point and the boot dies before the first render — with
-// the failure surfacing as a minified "is not a function", which is how it was found.)
-function shellBridge(): ShellTokenBridge | undefined {
-  return (globalThis as { shell?: ShellTokenBridge }).shell;
-}
-
-/** `true` only inside the Flutter shell webview — never in a browser. */
-function inShell(): boolean {
-  return shellBridge() !== undefined;
-}
-
-function shellToken(): string | undefined {
-  const bridge = shellBridge();
-  if (!bridge) return undefined;
-  if (typeof bridge.bearerToken === "string" && bridge.bearerToken.length > 0) {
-    return bridge.bearerToken;
-  }
-  try {
-    return localStorage.getItem(SHELL_TOKEN_KEY) ?? undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function rememberShellToken(token: string | undefined): void {
-  const store = shellBridge()?.setBearerToken;
-  if (store) {
-    try {
-      store(token ?? null);
-    } catch {
-      // The keystore is the only store worth trying in a shell that has one.
-    }
-    return;
-  }
-  try {
-    // Removed unconditionally: a browser carrying this key from an older build of the
-    // app should lose it at the first sign-out rather than keep it indefinitely.
-    if (token !== undefined && inShell()) localStorage.setItem(SHELL_TOKEN_KEY, token);
-    else localStorage.removeItem(SHELL_TOKEN_KEY);
-  } catch {
-    // Private mode: the session lasts as long as the page does.
-  }
-}
 
 const asError = (cause: unknown): Error =>
   cause instanceof Error ? cause : new Error(String(cause));

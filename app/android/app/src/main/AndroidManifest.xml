@@ -1,8 +1,31 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The shell talks to the Life Manager server and to its own loopback bundle server
+         (BRIDGE.md §6). Flutter's template declares INTERNET only in the debug and profile
+         manifests, which produces a release build that cannot reach anything. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Scheduled local notifications (SPEC §7: "these fire with the app closed").
+         POST_NOTIFICATIONS is requested at runtime on API 33+; RECEIVE_BOOT_COMPLETED lets
+         flutter_local_notifications re-register pending schedules after a reboot, without
+         which every reminder silently disappears when the phone restarts.
+
+         Deliberately absent: SCHEDULE_EXACT_ALARM / USE_EXACT_ALARM. Reminders are
+         scheduled with AndroidScheduleMode.inexactAllowWhileIdle — exact alarms need a
+         user-revocable grant on API 31+, and USE_EXACT_ALARM is restricted by Play policy
+         to alarm and calendar apps (bridge/notifications.dart). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+
     <application
-        android:label="app"
+        android:label="Life Manager"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="false"
+        android:networkSecurityConfig="@xml/network_security_config">
+        <!-- windowSoftInputMode is adjustResize, not adjustPan: the editor is CodeMirror in
+             a webview and the M5 acceptance criterion is that it is usable with the Android
+             soft keyboard (SPEC §9 M5). adjustPan scrolls the whole window and hides the
+             caret behind the keyboard. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -25,6 +48,37 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- The two receivers `flutter_local_notifications` needs to actually deliver a
+             scheduled notification (SPEC §7: "these fire with the app closed" — the one
+             M5 capability with no browser equivalent).
+
+             The plugin's own manifest declares permissions only; these components live in
+             the plugin's code but must be declared by the *app* (its README, "To schedule
+             notifications"). Without them the AlarmManager PendingIntent that
+             `zonedSchedule` sets targets a component the merged manifest does not contain:
+             the alarm fires into nothing, the reminder never appears, and
+             `notifications.list()` keeps reporting it as pending until its instant passes.
+             Nothing on the host catches this — every bridge test replaces the plugin with
+             a fake — so it is a device-only failure and belongs in `TESTPLAN.md`.
+
+             The boot receiver is the other half of RECEIVE_BOOT_COMPLETED above: the
+             permission alone listens for nothing, and every pending reminder is lost on
+             restart. MY_PACKAGE_REPLACED covers an app update, which is the same problem
+             on a shorter timescale. -->
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

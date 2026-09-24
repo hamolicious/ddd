@@ -1,0 +1,37 @@
+{
+  "capability": "boot",
+  "note": "boot.ok is what makes auto-revert work (BRIDGE.md §7). The web side sends it ONCE, after the kernel is up and the plugin set has activated — never on DOMContentLoaded, which a broken bundle also reaches. boot.failed is politeness; the shell's 25 s watchdog covers silence.",
+  "cases": [
+    {
+      "name": "the bundle booted",
+      "method": "ok",
+      "request": { "v": 1, "id": "1", "capability": "boot", "method": "ok", "params": {} },
+      "response": { "v": 1, "id": "1", "ok": true, "result": null }
+    },
+    {
+      "name": "the bundle knows it failed",
+      "method": "failed",
+      "request": {
+        "v": 1,
+        "id": "2",
+        "capability": "boot",
+        "method": "failed",
+        "params": { "reason": "the shared Wasm core is unavailable" }
+      },
+      "response": { "v": 1, "id": "2", "ok": true, "result": null }
+    },
+    {
+      "name": "failed with no reason given",
+      "note": "The page sends a string it has; an absent reason is not worth failing the call over.",
+      "method": "failed",
+      "request": {
+        "v": 1,
+        "id": "3",
+        "capability": "boot",
+        "method": "failed",
+        "params": { "reason": "" }
+      },
+      "response": { "v": 1, "id": "3", "ok": true, "result": null }
+    }
+  ]
+}

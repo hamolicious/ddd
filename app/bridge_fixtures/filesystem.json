@@ -1,0 +1,174 @@
+{
+  "capability": "filesystem",
+  "cases": [
+    {
+      "name": "export text",
+      "method": "export",
+      "request": {
+        "v": 1,
+        "id": "1",
+        "capability": "filesystem",
+        "method": "export",
+        "params": { "name": "notes.md", "mime": "text/markdown", "text": "# hi\n" }
+      },
+      "response": { "v": 1, "id": "1", "ok": true, "result": null }
+    },
+    {
+      "name": "export bytes as base64",
+      "note": "`data` is base64 and never a Uint8Array: only JSON crosses the boundary (BRIDGE.md §2).",
+      "method": "export",
+      "request": {
+        "v": 1,
+        "id": "2",
+        "capability": "filesystem",
+        "method": "export",
+        "params": { "name": "hi.bin", "mime": "application/octet-stream", "data": "aGk=" }
+      },
+      "response": { "v": 1, "id": "2", "ok": true, "result": null },
+      "bytes": { "base64": "aGk=", "utf8": "hi" }
+    },
+    {
+      "name": "export with neither text nor data is a web-side bug",
+      "method": "export",
+      "request": {
+        "v": 1,
+        "id": "3",
+        "capability": "filesystem",
+        "method": "export",
+        "params": { "name": "empty.md", "mime": "text/markdown" }
+      },
+      "response": {
+        "v": 1,
+        "id": "3",
+        "ok": false,
+        "error": { "code": "invalid", "message": "one of text or data is required" }
+      }
+    },
+    {
+      "name": "export cancelled at the share sheet",
+      "note": "`cancelled` is a real bridge error and must NOT make the web side retry in the browser: that would open a second save dialog (BRIDGE.md §3, rule 3).",
+      "method": "export",
+      "request": {
+        "v": 1,
+        "id": "4",
+        "capability": "filesystem",
+        "method": "export",
+        "params": { "name": "notes.md", "mime": "text/markdown", "text": "# hi\n" }
+      },
+      "response": {
+        "v": 1,
+        "id": "4",
+        "ok": false,
+        "error": { "code": "cancelled", "message": "the user cancelled" }
+      }
+    },
+    {
+      "name": "pick one file",
+      "note": "A picked file arrives whole, because a native picker's file has no File object in the page's realm to re-read.",
+      "method": "pick",
+      "request": {
+        "v": 1,
+        "id": "5",
+        "capability": "filesystem",
+        "method": "pick",
+        "params": { "accept": [".md", "text/markdown"], "multiple": false }
+      },
+      "response": {
+        "v": 1,
+        "id": "5",
+        "ok": true,
+        "result": [{ "name": "a.md", "mime": "text/markdown", "size": 2, "data": "aGk=" }]
+      }
+    },
+    {
+      "name": "pick, dismissed",
+      "note": "Empty, not `cancelled`: a caller must not have to tell \"no files\" from \"changed my mind\" (BRIDGE.md §4.2).",
+      "method": "pick",
+      "request": {
+        "v": 1,
+        "id": "6",
+        "capability": "filesystem",
+        "method": "pick",
+        "params": { "multiple": true }
+      },
+      "response": { "v": 1, "id": "6", "ok": true, "result": [] }
+    },
+    {
+      "name": "pick a file that is too large",
+      "method": "pick",
+      "request": {
+        "v": 1,
+        "id": "7",
+        "capability": "filesystem",
+        "method": "pick",
+        "params": { "multiple": false }
+      },
+      "response": {
+        "v": 1,
+        "id": "7",
+        "ok": false,
+        "error": { "code": "failed", "message": "big.zip is 41943040 bytes; the limit is 26214400" }
+      }
+    },
+    {
+      "name": "export the workspace",
+      "note": "GET /api/admin/export, fetched natively with the bearer token and handed to the share sheet — never pulled through the page's heap (BRIDGE.md §4.2).",
+      "method": "exportWorkspace",
+      "request": {
+        "v": 1,
+        "id": "8",
+        "capability": "filesystem",
+        "method": "exportWorkspace",
+        "params": {}
+      },
+      "response": { "v": 1, "id": "8", "ok": true, "result": null }
+    },
+    {
+      "name": "export the workspace as a non-admin",
+      "note": "Admin-only server-side (SPEC §5.1), however the UI is drawn: the affordance must be gated on the user's admin flag.",
+      "method": "exportWorkspace",
+      "request": {
+        "v": 1,
+        "id": "9",
+        "capability": "filesystem",
+        "method": "exportWorkspace",
+        "params": {}
+      },
+      "response": {
+        "v": 1,
+        "id": "9",
+        "ok": false,
+        "error": { "code": "denied", "message": "the server refused the export (403)" }
+      }
+    },
+    {
+      "name": "import a file",
+      "method": "importFile",
+      "request": {
+        "v": 1,
+        "id": "10",
+        "capability": "filesystem",
+        "method": "importFile",
+        "params": { "accept": [".md"] }
+      },
+      "response": {
+        "v": 1,
+        "id": "10",
+        "ok": true,
+        "result": { "name": "a.md", "mime": "text/markdown", "size": 2, "data": "aGk=" }
+      }
+    },
+    {
+      "name": "import, dismissed",
+      "method": "importFile",
+      "request": {
+        "v": 1,
+        "id": "11",
+        "capability": "filesystem",
+        "method": "importFile",
+        "params": {}
+      },
+      "response": { "v": 1, "id": "11", "ok": true, "result": null }
+    }
+  ]
+}

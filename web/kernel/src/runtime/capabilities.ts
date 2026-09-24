@@ -16,6 +16,7 @@
  * a joke, and a shape mismatch must degrade rather than throw.
  */
 
+import { bridgeVersionOf, readShellBridge, shellUrl } from "./shell-bridge.js";
 import {
   CapabilityUnavailableError,
   SUPPORTED_BRIDGE_VERSION,
@@ -32,12 +33,29 @@ import {
   type StorageReport,
 } from "@kernel";
 
-/** The shape the kernel expects of `window.shell`. Everything is optional. */
+/**
+ * The shape the kernel expects of `window.shell`. Everything is optional.
+ *
+ * The full v1 surface — `auth`, `serverBaseUrl`, `bootOk`, the method list — is declared in
+ * `shell-bridge.ts`; this is the subset `CapabilitiesHost` itself touches.
+ */
 export interface ShellBridge {
   readonly version?: number;
+  /** The spelling `app/BRIDGE.md` uses; [`detectBridge`] accepts either. */
+  readonly bridgeVersion?: number;
   readonly filesystem?: unknown;
   readonly notifications?: unknown;
+  /**
+   * The server origin (`app/BRIDGE.md` §6). Read here for one reason: the browser
+   * fallback for {@link FilesystemCapability.exportWorkspace} is a link to
+   * `/api/admin/export`, and inside the shell the page origin is the loopback bundle
+   * server, where that path does not exist.
+   */
+  readonly serverBaseUrl?: string;
 }
+
+/** The admin export zip — SPEC §5.1's no-Mongo recovery path. */
+const WORKSPACE_EXPORT_PATH = "/api/admin/export";
 
 /**
  * ## The bridge ABI, v1 (SPEC §7)
@@ -83,6 +101,8 @@ export interface ShellBridge {
 interface ShellFilesystemBridge {
   export?: (file: { name: string; mime: string; text?: string; data?: string }) => unknown;
   pick?: (options: { accept?: readonly string[]; multiple: boolean }) => unknown;
+  /** M5 (`app/BRIDGE.md` §4.2): fetched with the bearer token and shared natively. */
+  exportWorkspace?: () => unknown;
 }
 
 interface ShellNotificationsBridge {
@@ -92,21 +112,72 @@ interface ShellNotificationsBridge {
   schedule?: (notification: NotificationRequest, at: number) => unknown;
   cancel?: (id: string) => unknown;
   scheduled?: () => unknown;
+  /**
+   * The name `app/BRIDGE.md` §4.3 gives the same handler. The shell registers both
+   * spellings; either alone is enough here, because detection is per method and the
+   * two are documented as the same call.
+   */
+  list?: () => unknown;
 }
 
 export function detectBridge(): ShellBridge | undefined {
-  const candidate = (globalThis as { shell?: unknown }).shell;
-  if (typeof candidate !== "object" || candidate === null) return undefined;
-  const bridge = candidate as ShellBridge;
-  if (typeof bridge.version !== "number") return undefined;
+  const bridge = readShellBridge() as ShellBridge | undefined;
+  if (bridge === undefined) return undefined;
+  // Either spelling counts: `version` is this file's original field name, `bridgeVersion` is
+  // what `app/BRIDGE.md` calls it, and the shell injects both (M5). A bridge claiming
+  // neither is not a bridge.
+  const version = bridgeVersionOf(bridge);
+  if (version === undefined) return undefined;
   // A shell newer in major than this bundle speaks an ABI we do not know; fall
   // back rather than guess (SPEC §7: the bundle declares a minimum bridge version).
-  if (Math.trunc(bridge.version) > SUPPORTED_BRIDGE_VERSION) return undefined;
-  return bridge;
+  if (version > SUPPORTED_BRIDGE_VERSION) return undefined;
+  // Normalized so everything downstream can read `.version`, whichever spelling arrived.
+  return typeof bridge.version === "number" ? bridge : { ...bridge, version };
 }
 
 class BrowserFilesystem implements FilesystemCapability {
   readonly support: CapabilitySupport = typeof document === "undefined" ? "unavailable" : "fallback";
+
+  /**
+   * A plain download link to `/api/admin/export` — **defined only when the link can
+   * authenticate itself**, which means a cookie session in a real browser tab.
+   *
+   * Left `undefined` inside a shell (`window.shell` present at all, even a bridge this
+   * bundle refuses to speak to): that session is a bearer token in the platform
+   * keystore, a navigation cannot carry an `Authorization` header, and an affordance
+   * that reliably 401s is worse than an absent one. The shell's own
+   * `filesystem.exportWorkspace` handler is what serves it there.
+   */
+  readonly exportWorkspace?: () => Promise<void>;
+
+  constructor() {
+    // "Is there a shell" and not "is there an object on `window.shell`": rule 2 of
+    // `app/BRIDGE.md` §3 — an object claiming no version is not a bridge, and a plugin
+    // that parks one on `window` must not silently remove the export link from a browser
+    // tab whose cookie can authenticate it perfectly well. A shell of *any* major does
+    // suppress it, including one this bundle refuses to call: its session is a bearer
+    // token in the keystore, and no navigation can carry an `Authorization` header.
+    if (this.support !== "unavailable" && bridgeVersionOf(readShellBridge()) === undefined) {
+      this.exportWorkspace = (): Promise<void> => this.#downloadWorkspace();
+    }
+  }
+
+  /**
+   * Not `fetch` + `blob:`: the archive is every document in the workspace, and pulling
+   * it through the page's heap to hand it straight back to the browser is exactly the
+   * mistake `app/BRIDGE.md` §4.2 names. A link lets the browser stream it to disk, and
+   * the server's `Content-Disposition: attachment` keeps the app on screen.
+   */
+  #downloadWorkspace(): Promise<void> {
+    const anchor = document.createElement("a");
+    anchor.href = shellUrl(WORKSPACE_EXPORT_PATH);
+    // A 403 for a non-admin (SPEC §5.1) then lands in its own tab instead of
+    // replacing a running workspace with an error envelope.
+    anchor.target = "_blank";
+    anchor.rel = "noopener";
+    anchor.click();
+    return Promise.resolve();
+  }
 
   async export(file: FileExport): Promise<void> {
     if (this.support === "unavailable") {
@@ -223,6 +294,13 @@ class BrowserNotifications implements NotificationsCapability {
  */
 class ShellFilesystem implements FilesystemCapability {
   readonly support: CapabilitySupport;
+  /**
+   * Native when the shell registered the handler; otherwise whatever the browser
+   * implementation could offer, which inside a shell is nothing (see
+   * {@link BrowserFilesystem.exportWorkspace}). Absent means absent: a plugin that
+   * feature-detects this member gets the truth for this device.
+   */
+  readonly exportWorkspace?: () => Promise<void>;
 
   constructor(
     private readonly bridge: ShellFilesystemBridge,
@@ -232,6 +310,14 @@ class ShellFilesystem implements FilesystemCapability {
       typeof bridge.export === "function" || typeof bridge.pick === "function"
         ? "native"
         : fallback.support;
+    const native = bridge.exportWorkspace;
+    if (typeof native === "function") {
+      this.exportWorkspace = async (): Promise<void> => {
+        await native.call(bridge);
+      };
+    } else if (fallback.exportWorkspace) {
+      this.exportWorkspace = () => fallback.exportWorkspace?.() ?? Promise.resolve();
+    }
   }
 
   async export(file: FileExport): Promise<void> {
@@ -336,20 +422,39 @@ class ShellNotifications implements NotificationsCapability {
     await call.call(this.bridge, id);
   }
 
+  /**
+   * What is pending, and when. Accepts either handler spelling (`scheduled`, `list`)
+   * and either instant spelling: `app/BRIDGE.md` §4.3 has the shell send **both**
+   * `atIso` (the canonical instant) and `at` (epoch ms, what this frozen API returns),
+   * so a shell that sends only the ISO form is still understood rather than dropped as
+   * malformed — which would read to a user as "my reminders vanished".
+   */
   async scheduled(): Promise<readonly { readonly id: string; readonly at: number }[]> {
-    const call = this.bridge.scheduled;
+    const call = this.bridge.scheduled ?? this.bridge.list;
     if (typeof call !== "function") return this.fallback.scheduled();
     const list = await call.call(this.bridge);
     if (!Array.isArray(list)) return [];
-    return list
-      .map((entry) => entry as { id?: unknown; at?: unknown })
-      .filter((entry) => typeof entry.id === "string" && typeof entry.at === "number")
-      .map((entry) => ({ id: entry.id as string, at: entry.at as number }));
+    const entries: { readonly id: string; readonly at: number }[] = [];
+    for (const raw of list as { id?: unknown; at?: unknown; atIso?: unknown }[]) {
+      if (typeof raw?.id !== "string") continue;
+      const at = instantOf(raw);
+      if (at === undefined) continue;
+      entries.push({ id: raw.id, at });
+    }
+    return entries;
   }
 }
 
 const isPermission = (value: unknown): value is NotificationPermissionState =>
   value === "granted" || value === "denied" || value === "default";
+
+/** Epoch ms from `at`, or from `atIso` when that is all the shell sent. */
+function instantOf(entry: { at?: unknown; atIso?: unknown }): number | undefined {
+  if (typeof entry.at === "number" && Number.isFinite(entry.at)) return entry.at;
+  if (typeof entry.atIso !== "string") return undefined;
+  const parsed = Date.parse(entry.atIso);
+  return Number.isNaN(parsed) ? undefined : parsed;
+}
 
 /** Base64 without `Buffer`: the bridge is JSON-only, so bytes travel as text. */
 function toBase64(bytes: Uint8Array): string {

@@ -12,6 +12,17 @@
  *    so a cold index is built off the main thread;
  * 4. the **sync client**, last — the app is usable offline, so the socket is an
  *    enhancement, not a prerequisite.
+ *
+ * **Where the server is, is an input** (M5, `app/BRIDGE.md` §6). In a browser the API is
+ * same-origin and every default here is already right. Inside the Flutter shell the page
+ * is served by a loopback bundle server, so the REST base, the bootstrap URL, the sync
+ * socket and the `too_large` hydration fallback all have to be pointed at
+ * `window.shell.serverBaseUrl` — four call sites, one option, and the reason the shell
+ * could sign in and then never sync.
+ *
+ * Note what is *not* re-based: plugin modules and the import map. Those are part of the
+ * downloaded bundle and are served by the loopback origin itself (`app/BRIDGE.md` §5), so
+ * they stay page-relative and keep working with no network at all.
  */
 
 import { IdbDocPersistence, IdbProjectionStore } from "@kernel/store/index.js";
@@ -25,6 +36,11 @@ export interface KernelInitOptions {
   readonly user: SessionUser;
   /** Present only in a shell (SPEC §5.2); browsers authenticate with the cookie. */
   readonly bearerToken?: string;
+  /**
+   * Absolute server origin, e.g. `https://life.example.com` — the shell only
+   * (`boot/shell.ts`). Absent means "this page's origin", which is what a browser wants.
+   */
+  readonly serverBaseUrl?: string;
   readonly root: HTMLElement;
   readonly bootMode: BootMode;
   /** Sign-out: warn on unsynced edits, clear local data, reload (SPEC §5.3). */
@@ -60,9 +76,26 @@ export async function initKernel(options: KernelInitOptions): Promise<KernelRunt
   const engine = new QueryEngine(store, core, createSearchIndex());
   engine.warmUp().catch((error: unknown) => console.warn("[search] warm-up failed", error));
 
+  // The socket and the two REST paths inside the sync layer take absolute URLs, so the
+  // shell is served by passing options — no kernel file has to know the shell exists.
+  const server = options.serverBaseUrl;
   const sync = new SyncClient(store, {
-    ...(options.bearerToken ? { transport: { bearerToken: options.bearerToken } } : {}),
-    hydrator: { persistence: new IdbDocPersistence(store) },
+    transport: {
+      ...(options.bearerToken ? { bearerToken: options.bearerToken } : {}),
+      ...(server ? { url: `${server}/api/sync` } : {}),
+    },
+    ...(server || options.bearerToken
+      ? {
+          bootstrap: {
+            ...(server ? { url: `${server}/api/sync/bootstrap` } : {}),
+            ...(options.bearerToken ? { bearerToken: options.bearerToken } : {}),
+          },
+        }
+      : {}),
+    hydrator: {
+      persistence: new IdbDocPersistence(store),
+      ...(server ? { restBaseUrl: server } : {}),
+    },
     onState: (state) => {
       host.sync.update(state);
       // 4401 is "re-authenticate", and nothing else — local data is untouched
@@ -81,6 +114,9 @@ export async function initKernel(options: KernelInitOptions): Promise<KernelRunt
       user: options.user,
       via: options.bearerToken ? "bearer" : "cookie",
       ...(options.bearerToken ? { token: options.bearerToken } : {}),
+      // `kernel.session.fetch` is what every plugin and `DocumentsHost` call the server
+      // through; its default is `/api` on the page origin (SPEC §5.1).
+      ...(server ? { apiBase: `${server}/api` } : {}),
       logout: options.logout,
     },
     ...(options.onPluginProblem ? { onPluginProblem: options.onPluginProblem } : {}),

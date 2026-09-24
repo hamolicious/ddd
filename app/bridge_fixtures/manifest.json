@@ -1,0 +1,107 @@
+{
+  "note": "GET /api/shell/manifest (BRIDGE.md §5). Three parties parse this shape — the Rust serializer, the Dart updater and the web settings panel — so the field names live here as data rather than in three test files. `bundle_version` is derived from the sorted (path, sha256) listing and nothing else: same bytes, same version, on any replica. It is a 64-character lowercase hex sha256 and parsers must enforce that: it is used verbatim as an on-disk directory name by the shell, so anything else — `..`, a separator, a reserved name — reaches a recursive delete and a rename with the server's word for it.",
+  "valid": {
+    "bundle_version": "b1f3c0de00000000000000000000000000000000000000000000000000000000",
+    "min_bridge_version": 1,
+    "index_csp": "default-src 'self'; script-src 'self' 'nonce-Ax9k' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https: wss:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+    "files": [
+      {
+        "path": "index.html",
+        "sha256": "f51954f0a78ea4995bfd7d5371c02560be0538b80f1728b50b4b6fe9baf48cdb",
+        "size": 44
+      },
+      {
+        "path": "importmap.json",
+        "sha256": "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4",
+        "size": 2
+      },
+      {
+        "path": "assets/index-PoVlm7Xk.js",
+        "sha256": "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4",
+        "size": 2
+      },
+      {
+        "path": "plugins/shell-ui/1.0.0/frontend/index.mjs",
+        "sha256": "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4",
+        "size": 2
+      }
+    ]
+  },
+  "synthesized": ["index.html", "importmap.json"],
+  "excluded": ["sw.js"],
+  "verify": [
+    {
+      "name": "the hash of known bytes, so both sides agree on the algorithm",
+      "note": "sha256 is lowercase hex over the exact bytes written, and size is checked first because it catches the common truncation with a message that says so.",
+      "utf8": "hi",
+      "base64": "aGk=",
+      "sha256": "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4",
+      "size": 2
+    },
+    {
+      "name": "index.html sample bytes",
+      "utf8": "<!doctype html>\n<title>Life Manager</title>\n",
+      "sha256": "f51954f0a78ea4995bfd7d5371c02560be0538b80f1728b50b4b6fe9baf48cdb",
+      "size": 44
+    }
+  ],
+  "invalid": [
+    {
+      "name": "no bundle_version",
+      "manifest": { "min_bridge_version": 1, "files": [{ "path": "index.html", "sha256": "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4", "size": 2 }] }
+    },
+    {
+      "name": "no min_bridge_version",
+      "manifest": { "bundle_version": "b1f3c0de00000000000000000000000000000000000000000000000000000000", "files": [{ "path": "index.html", "sha256": "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4", "size": 2 }] }
+    },
+    {
+      "name": "an empty file list is nothing to serve",
+      "manifest": { "bundle_version": "b1f3c0de00000000000000000000000000000000000000000000000000000000", "min_bridge_version": 1, "files": [] }
+    },
+    {
+      "name": "no index.html — a bundle that cannot boot",
+      "manifest": {
+        "bundle_version": "b1f3c0de00000000000000000000000000000000000000000000000000000000",
+        "min_bridge_version": 1,
+        "files": [{ "path": "assets/app.js", "sha256": "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4", "size": 2 }]
+      }
+    },
+    {
+      "name": "a path that escapes the bundle directory",
+      "manifest": {
+        "bundle_version": "b1f3c0de00000000000000000000000000000000000000000000000000000000",
+        "min_bridge_version": 1,
+        "files": [
+          { "path": "index.html", "sha256": "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4", "size": 2 },
+          { "path": "../escape.js", "sha256": "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4", "size": 2 }
+        ]
+      }
+    },
+    {
+      "name": "a bundle_version that escapes the bundle directory",
+      "note": "The id becomes a directory name under the bundle root, and that directory is handed to a recursive delete and a rename when an update installs. A server answering with `../../shared_prefs` — and serving file bytes that match its own hashes, so every other check passes — would have the shell delete the keystore holding the bearer token.",
+      "manifest": {
+        "bundle_version": "../../shared_prefs",
+        "min_bridge_version": 1,
+        "files": [{ "path": "index.html", "sha256": "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4", "size": 2 }]
+      }
+    },
+    {
+      "name": "a bundle_version that is not a 64-character hex digest",
+      "manifest": {
+        "bundle_version": "b1f3",
+        "min_bridge_version": 1,
+        "files": [{ "path": "index.html", "sha256": "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4", "size": 2 }]
+      }
+    },
+    {
+      "name": "a truncated sha256",
+      "manifest": {
+        "bundle_version": "b1f3c0de00000000000000000000000000000000000000000000000000000000",
+        "min_bridge_version": 1,
+        "files": [{ "path": "index.html", "sha256": "8f4343", "size": 2 }]
+      }
+    }
+  ],
+  "unsafePaths": ["/etc/passwd", "../escape.js", "a/../../b", "a//b", "a/./b", "a\\b", "", "."]
+}

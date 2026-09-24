@@ -51,3 +51,20 @@ export { SessionHost, type SessionHostOptions } from "./session.js";
 export { SyncHost } from "./sync.js";
 export { CoreHost } from "./core.js";
 export { CapabilitiesHost, detectBridge, type ShellBridge } from "./capabilities.js";
+// The full `window.shell` v1 declaration (SPEC §7; `app/BRIDGE.md` is authoritative).
+export {
+  BRIDGE_VERSION,
+  bridgeVersionOf,
+  readShellBridge,
+  shellServerBaseUrl,
+  shellUrl,
+  type ShellAuth,
+  type ShellBridgeV1,
+  type ShellExportFile,
+  type ShellFilesystem,
+  type ShellNotification,
+  type ShellNotifications,
+  type ShellPermission,
+  type ShellPickOptions,
+  type ShellPickedFile,
+} from "./shell-bridge.js";

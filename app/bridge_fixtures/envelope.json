@@ -1,0 +1,107 @@
+{
+  "note": "The envelope itself (BRIDGE.md §2). A malformed message gets a response too: a bad message must not leave a promise pending forever in the page, which is why every case here has one — including the ones where `id` could not be read and comes back as the empty string.",
+  "cases": [
+    {
+      "name": "an unknown method",
+      "note": "Unreachable in a matched pair — the injected shim defines only the methods the shell registered — so this is what a plugin calling the handler directly gets (SPEC §6.1: plugins are full-trust and can).",
+      "malformed": false,
+      "request": {
+        "v": 1,
+        "id": "1",
+        "capability": "filesystem",
+        "method": "teleport",
+        "params": {}
+      },
+      "response": {
+        "v": 1,
+        "id": "1",
+        "ok": false,
+        "error": { "code": "unsupported", "message": "no bridge method filesystem.teleport" }
+      }
+    },
+    {
+      "name": "a page speaking a newer bridge major",
+      "note": "The reverse mismatch — bundle newer than shell — is refused here; bundle older than shell degrades in the page instead (BRIDGE.md §8).",
+      "malformed": false,
+      "request": { "v": 2, "id": "2", "capability": "boot", "method": "ok", "params": {} },
+      "response": {
+        "v": 1,
+        "id": "2",
+        "ok": false,
+        "error": {
+          "code": "unsupported",
+          "message": "this shell speaks bridge v1; the page asked for v2"
+        }
+      }
+    },
+    {
+      "name": "a handler that ran out of time",
+      "note": "120 s, because a picker waits on a human. The native side may still finish; the page has stopped waiting.",
+      "malformed": false,
+      "request": {
+        "v": 1,
+        "id": "3",
+        "capability": "filesystem",
+        "method": "pick",
+        "params": { "multiple": false }
+      },
+      "response": {
+        "v": 1,
+        "id": "3",
+        "ok": false,
+        "error": { "code": "timeout", "message": "the shell did not answer within 120s" }
+      }
+    },
+    {
+      "name": "a handler bug",
+      "malformed": false,
+      "request": { "v": 1, "id": "4", "capability": "notifications", "method": "list", "params": {} },
+      "response": {
+        "v": 1,
+        "id": "4",
+        "ok": false,
+        "error": { "code": "failed", "message": "FileSystemException: registry.json is not readable" }
+      }
+    },
+    {
+      "name": "the envelope is not an object",
+      "malformed": true,
+      "request": "boot.ok",
+      "response": {
+        "v": 1,
+        "id": "",
+        "ok": false,
+        "error": { "code": "invalid", "message": "the envelope must be an object" }
+      }
+    },
+    {
+      "name": "the envelope is missing its keys",
+      "malformed": true,
+      "request": { "capability": "boot", "method": "ok" },
+      "response": {
+        "v": 1,
+        "id": "",
+        "ok": false,
+        "error": { "code": "invalid", "message": "v, id, capability and method are required" }
+      }
+    },
+    {
+      "name": "params is not an object",
+      "malformed": true,
+      "request": { "v": 1, "id": "7", "capability": "boot", "method": "ok", "params": 3 },
+      "response": {
+        "v": 1,
+        "id": "",
+        "ok": false,
+        "error": { "code": "invalid", "message": "params must be an object when present" }
+      }
+    },
+    {
+      "name": "params absent is params empty",
+      "note": "`params` is always an object on the wire, and an absent one decodes as {} rather than failing: the page's `call()` sends `params || {}`.",
+      "malformed": false,
+      "request": { "v": 1, "id": "8", "capability": "boot", "method": "ok" },
+      "response": { "v": 1, "id": "8", "ok": true, "result": null }
+    }
+  ]
+}

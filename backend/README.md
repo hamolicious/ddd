@@ -9,7 +9,10 @@ attachments; M2's sync layer — the workspace change feed, per-document CRDT sy
 over WebSocket, the bootstrap stream; M3's plugin distribution and PWA serving;
 and now the **Extism plugin host** — capability enforcement, resource limits and
 the circuit breaker, the pending-install approval flow, encrypted plugin config,
-hooks, cron and the event bridge. No Flutter shell (M5). The CRDT is real from
+hooks, cron and the event bridge; and M5's **shell bundle manifest** — the
+authenticated `/api/shell/*` pair that publishes the PWA as a content-hashed,
+per-file-verified bundle for the Android shell to download and revert between
+(`src/routes/shell.rs`, SPEC §7). The CRDT is real from
 the first commit: every document is one `yrs` doc holding one `Y.Text`, and
 `content`/`title`/`fm`/`plugins` are *derived*.
 

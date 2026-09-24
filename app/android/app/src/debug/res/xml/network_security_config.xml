@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The debug-build override of `src/main/res/xml/network_security_config.xml`.
+
+  Same two loopback entries (the shell's own bundle server, BRIDGE.md §6) plus `10.0.2.2`,
+  the Android emulator's route to the host machine — how a debug build reaches
+  `mise run dev` on a laptop.
+
+  It lives here rather than in `main` so the exemption cannot ship. Resource merging gives
+  the debug source set precedence for a resource of the same name, so a debug APK gets this
+  file and a release APK gets `main`'s, with no build-type plumbing and nothing an operator
+  has to remember to remove.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>

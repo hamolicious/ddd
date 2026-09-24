@@ -1,0 +1,132 @@
+{
+  "note": "What `ShellBridge.bootstrapScript` puts on `window.shell` (BRIDGE.md §3), and the detection rule the web side applies to it. `injected` lists *values*, not the functions; `methods` is what decides which functions exist, and `capabilities` is informational — presence of the method is the only gate.",
+  "injected": {
+    "version": 1,
+    "bridgeVersion": 1,
+    "platform": "android",
+    "serverBaseUrl": "https://life.example.com",
+    "bearerToken": "lm.session.Ax9…",
+    "capabilities": [
+      "auth",
+      "boot",
+      "filesystem",
+      "notifications"
+    ],
+    "methods": [
+      "auth.clearToken",
+      "auth.getToken",
+      "auth.setToken",
+      "boot.failed",
+      "boot.ok",
+      "filesystem.export",
+      "filesystem.exportWorkspace",
+      "filesystem.importFile",
+      "filesystem.pick",
+      "notifications.cancel",
+      "notifications.list",
+      "notifications.notify",
+      "notifications.permission",
+      "notifications.request",
+      "notifications.schedule"
+    ],
+    "functions": [
+      "setBearerToken",
+      "bootOk",
+      "bootFailed",
+      "auth.getToken",
+      "auth.setToken",
+      "auth.clearToken",
+      "filesystem.export",
+      "filesystem.pick",
+      "filesystem.exportWorkspace",
+      "filesystem.importFile",
+      "notifications.permission",
+      "notifications.request",
+      "notifications.notify",
+      "notifications.schedule",
+      "notifications.cancel",
+      "notifications.scheduled",
+      "notifications.list"
+    ]
+  },
+  "updateReady": {
+    "note": "How the shell tells a running page that a new bundle is verified and staged (BRIDGE.md §5, §7). Not a bridge method: the page does not ask, it is told, so the shell only has to `evaluateJavascript` a dispatch. Both spellings land on the same notice; the event is the one a plugin can also subscribe to. Purely informational — promotion happens at the next launch either way. It lives here because the listeners shipped on the web side before anything in the shell fired them, and a shared string is what keeps the two halves from drifting apart silently.",
+    "event": "lm-shell-update-ready",
+    "functionSpelling": "lmShellUpdateReady",
+    "detailKey": "bundleVersion",
+    "script": "window.dispatchEvent(new CustomEvent(\"lm-shell-update-ready\", { detail: { bundleVersion: \"b1f3c0de00000000000000000000000000000000000000000000000000000000\" } }));",
+    "scriptVersion": "b1f3c0de00000000000000000000000000000000000000000000000000000000"
+  },
+  "detection": [
+    {
+      "name": "no shell at all",
+      "shell": null,
+      "absent": true,
+      "detected": false
+    },
+    {
+      "name": "a string is not a bridge",
+      "shell": "yes",
+      "detected": false
+    },
+    {
+      "name": "an object claiming no version is not a bridge",
+      "shell": {},
+      "detected": false
+    },
+    {
+      "name": "a version that is not a number is not a bridge",
+      "shell": {
+        "version": "1"
+      },
+      "detected": false
+    },
+    {
+      "name": "the canonical spelling",
+      "shell": {
+        "version": 1
+      },
+      "detected": true,
+      "bridgeVersion": 1
+    },
+    {
+      "name": "the BRIDGE.md spelling alone is accepted",
+      "note": "`version` is what the committed kernel reads and `bridgeVersion` is the name this document uses; the shell injects both and the kernel accepts either.",
+      "shell": {
+        "bridgeVersion": 1
+      },
+      "detected": true,
+      "bridgeVersion": 1
+    },
+    {
+      "name": "a shell newer in major degrades rather than guesses",
+      "note": "An old bundle on a new shell ignores the bridge entirely and uses browser fallbacks (BRIDGE.md §8). It still works; it just gets no native behaviour.",
+      "shell": {
+        "version": 2,
+        "bridgeVersion": 2
+      },
+      "detected": false
+    },
+    {
+      "name": "a serverBaseUrl that is not an absolute http(s) URL is ignored",
+      "note": "window.shell is reachable by full-trust plugin code, so the value is validated rather than trusted; falling back to the page origin is a working answer in a browser and a safe one everywhere.",
+      "shell": {
+        "version": 1,
+        "serverBaseUrl": "javascript:alert(1)"
+      },
+      "detected": true,
+      "bridgeVersion": 1,
+      "serverBaseUrl": null
+    },
+    {
+      "name": "a trailing slash is stripped so callers can concatenate a rooted path",
+      "shell": {
+        "version": 1,
+        "serverBaseUrl": "https://life.example.com/"
+      },
+      "detected": true,
+      "bridgeVersion": 1,
+      "serverBaseUrl": "https://life.example.com"
+    }
+  ]
+}

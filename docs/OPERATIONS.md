@@ -100,7 +100,7 @@ boot failure, not a warning.** A value that is set but empty counts as unset.
 |---|---|---|
 | `BIND_ADDR` | `0.0.0.0:8080` | Listen address. |
 | `MONGO_DATABASE` | `life_manager` | Database name inside the URI's server. |
-| `APP_ORIGIN` | *(empty)* | Comma-separated origin allowlist for CORS (M1) and the WebSocket upgrade (M2). Exact matches only: `scheme://host[:port]`, no path, no trailing slash, no wildcards. Empty allows nothing. |
+| `APP_ORIGIN` | *(empty)* | Comma-separated origin allowlist for CORS (M1) and the WebSocket upgrade (M2). Exact matches only: `scheme://host[:port]`, no path, no trailing slash, no wildcards. Empty allows nothing. **Add `http://127.0.0.1:41847` if anyone uses the Android shell** — see "The Android shell" below. |
 | `COOKIE_SECURE` | `true` | Set `false` only for plain-http local development. |
 | `TRUST_PROXY_HEADERS` | `false` | Where the client IP comes from — the input to the per-IP login backoff (SPEC §5.2) and to `ip` on every session row and audit entry (SPEC §5.4). `false`: the connection's peer address; `X-Forwarded-For` / `X-Real-IP` are ignored. `true`: the **rightmost** `X-Forwarded-For` hop, which is the one a single trusted proxy appended. **Set `true` only when a reverse proxy is the only route to the server** — otherwise a client picks its own rate-limit bucket and stamps its own origin on the audit log. Compose publishes the port directly, so it stays `false` there; behind the Kubernetes ingress of SPEC §8, set it to `true`. |
 | `LOG_FORMAT` | `json` | `json` or `pretty`. |
@@ -171,6 +171,55 @@ likely to touch are `CONFIG_KEY` (before a plugin stores its first secret) and
 A plugin is always granted *less* than or equal to what its manifest asks for. The one
 exception is `http.hosts`, which an admin may **add** to at approval time: a plugin
 whose destination you configure cannot know the host when it was packaged.
+
+### The Android shell (M5)
+
+The shell is optional and per-device: everything works in a plain browser. There is
+**nothing to deploy** for it — no extra service, no extra storage, no extra
+configuration file. The server publishes the already-built PWA as a verified bundle
+through two authenticated routes (`GET /api/shell/manifest`, `GET
+/api/shell/bundle/{path}`), both derived from `WEB_DIST_DIR` and `PLUGINS_DIR`.
+Nothing is stored: the bundle version is a hash over what is on disk, so it moves when
+you deploy a new build and is identical across restarts.
+
+**One thing must be configured, and getting it wrong looks like a different bug
+entirely:**
+
+```
+APP_ORIGIN=https://lm.example.com,http://127.0.0.1:41847
+```
+
+The shell serves its downloaded bundle from a loopback HTTP server so the page gets a
+real, stable, secure-context origin — IndexedDB, Web Workers and `crypto.subtle` all
+work unchanged. The cost is that every API call is then cross-origin. Login is not
+origin-checked, so **without that entry a user signs in successfully and then never
+syncs**: the WebSocket upgrade is refused with 403 before it authenticates. The app
+warns before sending a password, but it cannot fix the server. The port is fixed
+(`41847`) and must stay fixed — it is part of the origin every client-side store is
+keyed by.
+
+Two further consequences worth knowing:
+
+- **The server must be HTTPS in production.** The shell holds a bearer token rather
+  than a cookie (SPEC §5.2), and a plain-HTTP server would put it on the wire. This is
+  the same requirement the PWA already has, for the same reason. A release APK now
+  enforces it: cleartext is permitted only to the shell's own loopback bundle server,
+  so an `http://` server URL simply does not connect.
+- **Do not redirect `/api`.** The shell refuses to follow a redirect on any request
+  carrying the bearer token, because `dart:io` would re-send the `Authorization`
+  header to whatever host the `Location` names. If you move a deployment, change the
+  server URL on the device rather than leaving a `301` behind: a shell pointed at the
+  old host reports "unavailable" and keeps running its installed bundle. The same
+  applies to an identity proxy in front of the API that bounces unrecognised requests
+  to an SSO host.
+- **A deploy is an app update.** Devices pick up a new bundle on their next launch —
+  and on any foreground at least 15 minutes after their last check, so a long-lived
+  app process does not sit on an old bundle for days. They verify every file's SHA-256
+  before swapping, keep the previous bundle, and revert automatically after two failed
+  boots. You do not have to do anything, and a bad deploy does not brick installed
+  apps — but a *partially* published `WEB_DIST_DIR` does produce a manifest whose
+  hashes do not match, which devices refuse wholesale and log as corrupt. Publish the
+  directory atomically.
 
 ### Compose-only
 

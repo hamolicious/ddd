@@ -1,6 +1,33 @@
 [tools]
 rust = "latest"
 
+# The JDK the Android build runs on (`mise run shell-apk`). Pinned to an LTS, and pinned
+# *down* from whatever the machine has, because the Android toolchain is the constraint:
+#
+#   * AGP's `JdkImageTransform` rebuilds a `java.base` module from the platform's
+#     `core-for-system-modules.jar` and feeds it to `jlink`. JDK 26's jlink refuses it —
+#     "cannot find the build signature in the java.base specified on module path" — and the
+#     build dies in a *dependency's* `compileDebugJavaWithJavac` with no mention of the JDK.
+#   * Flutter states a supported JDK range, and 26 is years past it. `flutter build` warns
+#     ("Newer than known valid Java version") and carries on into exactly that failure.
+#
+# 21 is the newest LTS that AGP 9 and Gradle 9.3 both support. Nothing else in this repo is
+# Java, so pinning it here costs nothing elsewhere. Raise it when Flutter's supported range
+# does, not when a newer JDK merely exists.
+java = "temurin-21"
+
+# M5: the Flutter shell (SPEC §7, `app/`). **Pinned**, unlike `rust`, for two reasons: the
+# Dart SDK version is what `app/pubspec.yaml`'s resolved dependency set was solved against,
+# and a minor Flutter bump can change generated Gradle config under an Android build (see
+# `app/README.md` § "Building the APK").
+#
+# The definition is spelled out rather than left to `flutter = "3.47.5"` because mise's
+# registry entry for Flutter is an `http` backend with no built-in URL/checksum templates:
+# this is what actually resolves a version to a tarball and verifies it. It lives here, at
+# the repo root, so `mise run shell-test` works from anywhere in the tree (`app/mise.toml`
+# used to hold it, which meant the tool existed only when your shell was inside `app/`).
+flutter = { version = "3.47.5", checksum_expr = '"sha256:" + filter(fromJSON(body).releases, { #.archive endsWith filename })[0].sha256', platforms = { linux-x64 = { checksum_url = "https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json", url = "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_{{ version | trim_end(pat='-stable') }}-stable.tar.xz" }, macos-arm64 = { checksum_url = "https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json", url = "https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/flutter_macos_arm64_{{ version | trim_end(pat='-stable') }}-stable.zip" }, macos-x64 = { checksum_url = "https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json", url = "https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/flutter_macos_{{ version | trim_end(pat='-stable') }}-stable.zip" }, windows-x64 = { checksum_url = "https://storage.googleapis.com/flutter_infra_release/releases/releases_windows.json", url = "https://storage.googleapis.com/flutter_infra_release/releases/stable/windows/flutter_windows_{{ version | trim_end(pat='-stable') }}-stable.zip" } }, version_expr = 'fromJSON(body).releases | filter({ #.channel == "stable" }) | map({ replace(#.version, "-stable", "") }) | sortVersions()', version_list_url = "https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json" }
+
 # `.env` is read for every task, so `mise run dev` sees the same SESSION_SECRET /
 # MONGO_URI the compose stack does. Copy `.env.example` to `.env` before your
 # first run — the server refuses to start without SESSION_SECRET (SPEC §5.2).
@@ -157,6 +184,50 @@ run = [
 description = "Typecheck and unit-test the web tree: kernel contract, kernel runtime, PWA loader, base plugins"
 dir = "web"
 run = ["npm install --no-audit --no-fund", "npm run typecheck", "npm run test"]
+
+[tasks.shell-test]
+description = "M5: the Flutter shell gate — format, analyze and unit-test app/"
+dir = "app"
+# The gate for `app/`, and the exact analogue of `mise run check` + `mise run test` for
+# `backend/`. Three things in one task because all three have to hold before a shell change
+# is worth reviewing, and none of them needs an Android SDK, an emulator or a device:
+# `flutter analyze` and `flutter test` run on the host Dart VM.
+#
+# `dart format --set-exit-if-changed` is first for the same reason `cargo fmt --check` is
+# first in `check`: it is the cheapest failure and the one most likely to produce a diff that
+# hides the real change.
+#
+# `flutter pub get` is included rather than assumed: `pubspec.lock` is committed, and a fresh
+# checkout has no `.dart_tool`, so without it the first run of this task fails with a
+# missing-package error that looks like a broken pubspec.
+run = [
+  "flutter pub get",
+  "dart format --output=none --set-exit-if-changed lib test",
+  "flutter analyze",
+  "flutter test",
+]
+
+[tasks.shell-apk]
+description = "M5: build the Android debug APK (the milestone's build gate) — needs an Android SDK"
+dir = "app"
+# The gate `shell-test` deliberately is not: it compiles Dart *and* every plugin's Android
+# half, which is where a toolchain mismatch actually shows up. Run it before shipping a
+# change to `app/android/**`, `pubspec.yaml`, or the Flutter pin.
+#
+# `ANDROID_HOME` is defaulted rather than required because `android/local.properties`
+# (gitignored, written once — see `app/README.md`) already carries `sdk.dir`; the export is
+# for the plugins that read the environment instead. The JDK comes from `[tools]` above, and
+# that pin is load-bearing: see the comment there.
+run = '''
+set -euo pipefail
+export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
+export ANDROID_SDK_ROOT="$ANDROID_HOME"
+if [ ! -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
+  echo "no Android SDK at $ANDROID_HOME — see app/README.md § Building the APK" >&2
+  exit 1
+fi
+flutter build apk "${@:---debug}"
+'''
 
 [tasks.harness]
 description = "Convergence harness against a running server (SPEC §9 M2)"
