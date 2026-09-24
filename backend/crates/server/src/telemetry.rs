@@ -44,10 +44,38 @@ pub mod names {
     pub const FEED_HEAD_SEQ: &str = "lm_feed_head_seq";
     pub const FEED_SAFE_SEQ: &str = "lm_feed_safe_seq";
     pub const FEED_SUBSCRIBERS: &str = "lm_feed_subscribers";
-    /// M2: send-queue overflows, labelled `queue="feed"|"doc"`. Every increment is
-    /// a client that was told to re-derive (PROTOCOL.md §6) — cheap, but a
-    /// sustained rate means the bounds are wrong for the workload.
+    /// M2: send-queue overflows, labelled `queue="feed"|"doc"|"plugin"`. Every
+    /// increment on `feed` or `doc` is a client that was told to re-derive
+    /// (PROTOCOL.md §6) — cheap, but a sustained rate means the bounds are wrong for
+    /// the workload. `plugin` (M4) is a dropped `plugin.event` frame, which is
+    /// ephemeral by design (SPEC §6.3: no offline replay) — a chatty plugin loses
+    /// events rather than closing everybody's socket.
     pub const WS_BACKPRESSURE_DROPS: &str = "lm_ws_backpressure_drops_total";
+
+    /// M4: the plugin host (SPEC §8 names "hook latency/failures, wasm timeouts").
+    ///
+    /// All of them are labelled `plugin="<id>"`, and the call metrics additionally by
+    /// `kind="hook"|"cron"|"route"|"call"|"event"|"init"` — which is what makes "the
+    /// calendar's cron is slow" and "something is hammering a plugin route" different
+    /// lines on a dashboard rather than one average.
+    pub const PLUGIN_CALLS: &str = "lm_plugin_calls_total";
+    pub const PLUGIN_CALL_LATENCY: &str = "lm_plugin_call_duration_seconds";
+    /// Labelled `outcome="refused"|"timeout"|"trap"|"bad_response"|"unavailable"`. A
+    /// refusal is the plugin working; the other four are the breaker's input.
+    pub const PLUGIN_CALL_FAILURES: &str = "lm_plugin_call_failures_total";
+    pub const PLUGIN_ACTIVE: &str = "lm_plugins_active";
+    pub const PLUGIN_DISABLED: &str = "lm_plugins_disabled";
+    pub const PLUGIN_INSTANCES: &str = "lm_plugin_instances";
+    /// Hook deliveries and the debounce backlog (SPEC §6.3).
+    pub const PLUGIN_HOOKS_DELIVERED: &str = "lm_plugin_hooks_delivered_total";
+    pub const PLUGIN_HOOKS_PENDING: &str = "lm_plugin_hooks_pending";
+    /// Outbound requests, labelled `outcome="ok"|"blocked"|"timeout"|"too_large"`. The
+    /// `blocked` series is the one to alert on: a plugin repeatedly aiming at a refused
+    /// address is either misconfigured or probing.
+    pub const PLUGIN_HTTP_REQUESTS: &str = "lm_plugin_http_requests_total";
+    /// Document writes made by plugins, and the ones the per-document cap refused.
+    pub const PLUGIN_DOCUMENT_WRITES: &str = "lm_plugin_document_writes_total";
+    pub const PLUGIN_WRITES_REFUSED: &str = "lm_plugin_write_cap_refusals_total";
 
     /// Effective limits, published so a dashboard can draw the ceiling next to
     /// the usage it is comparing against.

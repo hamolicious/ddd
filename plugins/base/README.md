@@ -36,6 +36,21 @@ dist/<id>/<version>/              build output = the installed layout the server
 | `settings` | the settings shell | `settings.section` |
 | `admin` | users, invites, audit, orphans, snapshots, plugins | — |
 
+Two more ship here from M4, and they are deliberately **not** in `BASE_PLUGIN_IDS`
+(`crates/server/src/plugins.rs`), which is what `?safe=1` boots: safe mode is a recovery
+path, and recovery should not include the newest code. They are the M4 proof (SPEC §9 M4),
+not part of the fourteen-plugin core.
+
+| Plugin | Halves | Responsibility |
+|---|---|---|
+| `calendar` | backend + frontend | crons an ICS feed into machine-owned documents (`fm.date`); renders a month grid from them |
+| `agenda` | frontend only | what is coming up, from `fm.date` across the whole workspace — **no backend half, no capabilities** |
+
+`agenda` exists to make the rule concrete: *a plugin needs a backend half only when it needs
+cron, outbound HTTP or a webhook* (SPEC §6.3). It needs none, so it has none, and it reads
+`fm.date` rather than "calendar events" — a note with a date and an imported meeting are the
+same thing to it, which is why it does not depend on `calendar`.
+
 ## Building
 
 ```bash

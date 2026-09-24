@@ -100,6 +100,24 @@ pub fn test_config(mongo_uri: String, database: String) -> Config {
         plugins_dir: std::path::PathBuf::from("target/test-plugins-empty"),
         kernel_dts_path: None,
         disable_plugins: false,
+        // M4: the plugin host is inert in this harness — no staging directory is written,
+        // no inbox is watched, and **cron is off**, which matters more than it looks: a
+        // suite that boots a dozen `AppState`s against throwaway databases must not have a
+        // scheduler firing jobs in any of them. The timeouts are deliberately short so a
+        // test that does exercise the host fails fast instead of holding the suite for a
+        // minute.
+        plugin_staging_dir: std::path::PathBuf::from("target/test-plugins-staging"),
+        plugin_inbox_dir: None,
+        plugin_config_key: None,
+        plugin_call_timeout: Duration::from_millis(2_000),
+        plugin_cron_timeout: Duration::from_millis(5_000),
+        plugin_memory_bytes: 32 * 1024 * 1024,
+        plugin_max_instances: 2,
+        plugin_breaker_threshold: 3,
+        plugin_http_timeout: Duration::from_millis(1_000),
+        plugin_http_max_response_bytes: 1024 * 1024,
+        plugin_http_allow_cidrs: Vec::new(),
+        plugin_enable_cron: false,
     }
 }
 

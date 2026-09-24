@@ -59,3 +59,23 @@ export const RUNTIME_SPECIFIER_NAMES: readonly string[] = Object.keys(RUNTIME_SP
 
 /** Where the build records specifier → hashed chunk URL, for the server. */
 export const RUNTIME_MANIFEST_FILE = "runtime-manifest.json";
+
+/**
+ * The npm package a specifier's version comes from, or `undefined` when there is not one.
+ *
+ * The build records specifier → **version** alongside specifier → URL, because the server
+ * cannot otherwise enforce the half of HOST-ABI.md §7.1 step 4 that matters: that a declared
+ * `peerLibraries` range *intersects what the bundle provides*. Without a version it could only
+ * check that the specifier exists, so a plugin declaring `"@codemirror/view": "^7"` installed
+ * and activated cleanly on a server shipping 6.x and failed in the browser, against an API
+ * that had changed under it.
+ *
+ * A subpath specifier resolves to its package (`react/jsx-runtime` → `react`); `@kernel` has
+ * none — it is this repo's own contract, versioned by `KERNEL_API_VERSION` and already checked
+ * through a manifest's `kernel` range.
+ */
+export function packageOf(specifier: string): string | undefined {
+  if (specifier === "@kernel") return undefined;
+  const segments = specifier.split("/");
+  return specifier.startsWith("@") ? segments.slice(0, 2).join("/") : segments[0];
+}

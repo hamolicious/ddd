@@ -1,0 +1,5 @@
+# This crate only exists on wasm32: it links the Extism host imports. Building it
+# for the host target fails at link time, so the target is pinned here — `cargo
+# check` and rust-analyzer then do the right thing with no flags.
+[build]
+target = "wasm32-unknown-unknown"

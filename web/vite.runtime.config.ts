@@ -11,13 +11,82 @@
  * falls back to a built-in default and says so.
  */
 
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { createRequire } from "node:module";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { defineConfig, type Plugin } from "vite";
 
-import { RUNTIME_MANIFEST_FILE, RUNTIME_SPECIFIERS } from "./app/runtime/specifiers.js";
+import {
+  RUNTIME_MANIFEST_FILE,
+  RUNTIME_SPECIFIERS,
+  packageOf,
+} from "./app/runtime/specifiers.js";
+
+const require = createRequire(import.meta.url);
+
+/**
+ * Specifier → the version of the package this build actually resolved.
+ *
+ * Recorded so the server can check a plugin's `peerLibraries` *range* against it rather than
+ * only checking that the specifier exists (HOST-ABI.md §7.1 step 4). Read from the resolved
+ * package's own `package.json`, not from this repo's dependency ranges: a `^18.0.0` in
+ * `package.json` is what was asked for, and what is in the chunk is what the browser gets.
+ *
+ * A package whose version cannot be read is left out rather than guessed at — the server
+ * degrades to the presence check for that one library and says so.
+ */
+function resolveVersions(): Record<string, string> {
+  const versions: Record<string, string> = {};
+  for (const specifier of Object.keys(RUNTIME_SPECIFIERS)) {
+    const pkg = packageOf(specifier);
+    if (!pkg) continue;
+    const version = versionOf(pkg);
+    if (version) versions[specifier] = version;
+  }
+  return versions;
+}
+
+/** The `version` in a package's own `package.json`, or `undefined`. */
+function versionOf(pkg: string): string | undefined {
+  // The direct route, when the package exports its manifest.
+  try {
+    return readVersion(require.resolve(`${pkg}/package.json`));
+  } catch {
+    // Most of the runtime layer (`@codemirror/*`, `@lezer/*`, `unified`, the `remark` set)
+    // ships an `exports` map with no `./package.json` entry, which makes the direct resolve
+    // throw. Resolving the package's *entry point* and walking up to the nearest
+    // `package.json` whose `name` matches is what works for those.
+  }
+  let dir: string;
+  try {
+    dir = dirname(require.resolve(pkg));
+  } catch {
+    return undefined;
+  }
+  while (true) {
+    const candidate = join(dir, "package.json");
+    if (existsSync(candidate)) {
+      const raw = JSON.parse(readFileSync(candidate, "utf8")) as {
+        name?: string;
+        version?: string;
+      };
+      // Stop only at the package's *own* manifest: a nested one (a bundled dependency, a
+      // `dist/package.json` with `{"type":"module"}` and nothing else) would report the wrong
+      // version, which is worse than reporting none.
+      if (raw.name === pkg) return typeof raw.version === "string" ? raw.version : undefined;
+    }
+    const parent = dirname(dir);
+    if (parent === dir || !dir.includes(`node_modules${sep}`)) return undefined;
+    dir = parent;
+  }
+}
+
+function readVersion(manifest: string): string | undefined {
+  const { version } = JSON.parse(readFileSync(manifest, "utf8")) as { version?: string };
+  return typeof version === "string" && version.length > 0 ? version : undefined;
+}
 
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 const outDir = here("./app/dist");
@@ -45,7 +114,11 @@ const manifestPlugin: Plugin = {
     if (missing.length > 0) {
       this.error(`runtime layer: no chunk emitted for ${missing.join(", ")}`);
     }
-    writeFileSync(join(outDir, RUNTIME_MANIFEST_FILE), `${JSON.stringify({ imports }, null, 2)}\n`);
+    const versions = resolveVersions();
+    writeFileSync(
+      join(outDir, RUNTIME_MANIFEST_FILE),
+      `${JSON.stringify({ imports, versions }, null, 2)}\n`,
+    );
   },
 };
 

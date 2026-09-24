@@ -27,7 +27,12 @@
 /web/test-results
 /web/playwright-report
 /plugins/base/dist
+/plugins/base/dist.staging
 /plugins/base/*/dist
+# The plugin workspace's cargo output. The `plugin-builder` stage rebuilds it; the host's
+# copy is both large and, in a fresh clone, absent — and a stale `backend.wasm` that looks
+# like a successful build is the nastiest failure mode this pipeline has.
+/plugins/target
 
 # The Flutter shell (SPEC §7, M5) is a separate artifact — it is not in this image, and
 # its platform directories are large.

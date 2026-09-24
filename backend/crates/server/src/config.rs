@@ -22,6 +22,9 @@ pub const DEFAULT_SHUTDOWN_GRACE_SECS: u64 = 30;
 pub const DEFAULT_PLUGINS_DIR: &str = "plugins/base/dist";
 /// Default `KERNEL_DTS_PATH` — where `npm run kernel:dts` writes the contract.
 pub const DEFAULT_KERNEL_DTS_PATH: &str = "web/kernel-api/dist/kernel.d.ts";
+/// `CONFIG_KEY` length in raw bytes — XChaCha20-Poly1305's key size
+/// ([`crate::plugininstall::config::ConfigCipher`] uses a 32-byte value verbatim).
+pub const CONFIG_KEY_BYTES: usize = 32;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LogFormat {
@@ -119,7 +122,51 @@ pub struct Config {
     pub kernel_dts_path: Option<PathBuf>,
     /// `DISABLE_PLUGINS`, default false. The server-side half of safe mode
     /// (SPEC §6.1): every client is told the installed plugin list is empty.
+    ///
+    /// M4 widens its meaning: it also stops the **backend** host — nothing is compiled, no
+    /// cron fires, no hook is delivered, every `/api/plugins/:id/*` route 404s. Safe mode
+    /// has to mean "no plugin code runs anywhere", or a broken backend half would still be
+    /// running while the operator is looking at a bare client.
     pub disable_plugins: bool,
+
+    // ---- M4: the backend plugin host and the install flow (SPEC §6.2, §6.3) ----
+    /// `PLUGIN_STAGING_DIR`, default `<PLUGINS_DIR>.staging`. Extraction and the
+    /// *pending* set live here — a sibling of the served root, same filesystem, so the
+    /// install and the approval are both atomic renames.
+    pub plugin_staging_dir: PathBuf,
+    /// `PLUGIN_INBOX_DIR`, unset by default. A directory to watch for dropped `.zip`
+    /// packages (SPEC §6.2's second install path). Unset ⇒ no watcher, deliberately: a
+    /// guessed relative default is how M3 learned that `backend/plugins/…` silently exists.
+    pub plugin_inbox_dir: Option<PathBuf>,
+    /// `CONFIG_KEY` — 32 bytes, hex or base64, for encrypting `secret: true` config values.
+    /// Unset ⇒ derived from `SESSION_SECRET` (SPEC §6.2), with the consequence documented
+    /// in `plugininstall::config`: rotating the session secret then makes stored secrets
+    /// unreadable and they must be re-entered.
+    pub plugin_config_key: Option<SessionSecret>,
+    /// `PLUGIN_CALL_TIMEOUT_MS`, default 5 000 (SPEC §6.3). Clamped down only.
+    pub plugin_call_timeout: Duration,
+    /// `PLUGIN_CRON_TIMEOUT_MS`, default 60 000.
+    pub plugin_cron_timeout: Duration,
+    /// `PLUGIN_MEMORY_BYTES`, default 128 MiB.
+    pub plugin_memory_bytes: u64,
+    /// `PLUGIN_MAX_INSTANCES`, default 4 — per plugin, and therefore its concurrency.
+    pub plugin_max_instances: usize,
+    /// `PLUGIN_BREAKER_THRESHOLD`, default 5 consecutive failures.
+    pub plugin_breaker_threshold: u32,
+    /// `PLUGIN_HTTP_TIMEOUT_MS`, default 10 000.
+    pub plugin_http_timeout: Duration,
+    /// `PLUGIN_HTTP_MAX_RESPONSE_BYTES`, default 10 MiB.
+    pub plugin_http_max_response_bytes: u64,
+    /// `PLUGIN_HTTP_ALLOW_CIDRS` — comma-separated CIDRs an operator deliberately allows
+    /// outbound, on top of the default-deny for private, loopback, link-local and metadata
+    /// addresses (SPEC §6.2: "admin-configurable allowlist"). This is how a self-hosted LAN
+    /// service becomes reachable, and it is the one knob that *widens* the sandbox — so it
+    /// is spelled as CIDRs an operator has to type, never as a boolean.
+    pub plugin_http_allow_cidrs: Vec<ipnet::IpNet>,
+    /// `PLUGIN_ENABLE_CRON`, default true. Off is the "why is this job running twice"
+    /// switch for a second server pointed at one database (HA is v2, SPEC §8) and for
+    /// local debugging.
+    pub plugin_enable_cron: bool,
 }
 
 /// `SESSION_SECRET` bytes. Never logged, never serialized.
@@ -193,6 +240,12 @@ impl Config {
 
         let app_origins = parse_origins("APP_ORIGIN")?;
 
+        // Hoisted out of the struct literal because `PLUGIN_STAGING_DIR`'s default is
+        // derived from it (`<PLUGINS_DIR>.staging`, a sibling of the served root).
+        let plugins_dir = var("PLUGINS_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(DEFAULT_PLUGINS_DIR));
+
         let config = Config {
             mongo_uri: required("MONGO_URI")?,
             bind_addr,
@@ -230,9 +283,7 @@ impl Config {
             seed_welcome_docs: parse_bool("SEED_WELCOME_DOCS", true)?,
 
             web_dist_dir: var("WEB_DIST_DIR").map(PathBuf::from),
-            plugins_dir: var("PLUGINS_DIR")
-                .map(PathBuf::from)
-                .unwrap_or_else(|| PathBuf::from(DEFAULT_PLUGINS_DIR)),
+            plugins_dir: plugins_dir.clone(),
             // Unlike `WEB_DIST_DIR` this has a default, because it is generated
             // from this repository and the route reports its absence clearly.
             kernel_dts_path: Some(
@@ -241,6 +292,42 @@ impl Config {
                     .unwrap_or_else(|| PathBuf::from(DEFAULT_KERNEL_DTS_PATH)),
             ),
             disable_plugins: parse_bool("DISABLE_PLUGINS", false)?,
+
+            plugin_staging_dir: var("PLUGIN_STAGING_DIR")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| default_staging_dir(&plugins_dir)),
+            plugin_inbox_dir: var("PLUGIN_INBOX_DIR").map(PathBuf::from),
+            plugin_config_key: parse_config_key("CONFIG_KEY")?,
+            plugin_call_timeout: parse_millis(
+                "PLUGIN_CALL_TIMEOUT_MS",
+                life_manager_plugin_abi::limits::CALL_TIMEOUT_MS,
+            )?,
+            plugin_cron_timeout: parse_millis(
+                "PLUGIN_CRON_TIMEOUT_MS",
+                life_manager_plugin_abi::limits::CRON_CALL_TIMEOUT_MS,
+            )?,
+            plugin_memory_bytes: parse_var(
+                "PLUGIN_MEMORY_BYTES",
+                life_manager_plugin_abi::limits::MEMORY_BYTES,
+            )?,
+            plugin_max_instances: parse_var(
+                "PLUGIN_MAX_INSTANCES",
+                life_manager_plugin_abi::limits::MAX_INSTANCES_PER_PLUGIN,
+            )?,
+            plugin_breaker_threshold: parse_var(
+                "PLUGIN_BREAKER_THRESHOLD",
+                life_manager_plugin_abi::limits::BREAKER_FAILURE_THRESHOLD,
+            )?,
+            plugin_http_timeout: parse_millis(
+                "PLUGIN_HTTP_TIMEOUT_MS",
+                life_manager_plugin_abi::limits::HTTP_TIMEOUT_MS,
+            )?,
+            plugin_http_max_response_bytes: parse_var(
+                "PLUGIN_HTTP_MAX_RESPONSE_BYTES",
+                life_manager_plugin_abi::limits::MAX_HTTP_RESPONSE_BYTES,
+            )?,
+            plugin_http_allow_cidrs: parse_cidrs("PLUGIN_HTTP_ALLOW_CIDRS")?,
+            plugin_enable_cron: parse_bool("PLUGIN_ENABLE_CRON", true)?,
         };
 
         if config.session_absolute_days < config.session_idle_days {
@@ -359,6 +446,111 @@ fn parse_log_format(key: &'static str) -> Result<LogFormat, ConfigError> {
     }
 }
 
+/// `<PLUGINS_DIR>.staging` — a sibling directory, so the pending set is outside the tree
+/// the registry scans while staying on the same filesystem as the final rename.
+fn default_staging_dir(plugins_dir: &std::path::Path) -> PathBuf {
+    let mut name = plugins_dir.as_os_str().to_os_string();
+    name.push(".staging");
+    PathBuf::from(name)
+}
+
+/// `CONFIG_KEY` as 32 raw bytes: 64 hex characters, or base64.
+///
+/// Reuses [`SessionSecret`] as the container for one reason worth stating — it is the type
+/// in this file that refuses to print itself, and a key that can reach a log line is not a
+/// key.
+fn parse_config_key(key: &'static str) -> Result<Option<SessionSecret>, ConfigError> {
+    let Some(raw) = var(key) else {
+        return Ok(None);
+    };
+    let raw = raw.trim();
+    if raw.is_empty() {
+        // An empty value is the same as unset, not a boot failure: it is what a
+        // Compose file with `CONFIG_KEY: ${CONFIG_KEY}` and nothing exported does.
+        return Ok(None);
+    }
+
+    // Hex first, because a 64-character hex string is also valid base64 — decoding
+    // it as base64 would silently yield 48 bytes of the wrong key, and a key that is
+    // wrong-but-accepted makes every stored secret unreadable with no error to read.
+    let bytes = if raw.len() == CONFIG_KEY_BYTES * 2 && raw.bytes().all(|b| b.is_ascii_hexdigit()) {
+        hex::decode(raw).map_err(|err| ConfigError::Invalid {
+            var: key,
+            reason: format!("not valid hex: {err}"),
+        })?
+    } else {
+        decode_base64_any(raw).ok_or_else(|| ConfigError::Invalid {
+            var: key,
+            reason: format!(
+                "expected {} bytes as {} hex characters or base64",
+                CONFIG_KEY_BYTES,
+                CONFIG_KEY_BYTES * 2
+            ),
+        })?
+    };
+
+    if bytes.len() != CONFIG_KEY_BYTES {
+        return Err(ConfigError::Invalid {
+            var: key,
+            reason: format!(
+                "decoded to {} bytes, expected {CONFIG_KEY_BYTES}",
+                bytes.len()
+            ),
+        });
+    }
+
+    // `SessionSecret` is the wrapper because it is the type in this file that refuses
+    // to print itself; its 32-byte floor is exactly `CONFIG_KEY_BYTES`, so the check
+    // above has already passed it.
+    SessionSecret::new(bytes).map(Some)
+}
+
+/// Decode base64 in any of the four spellings an operator might paste: standard or
+/// URL-safe alphabet, padded or not.
+fn decode_base64_any(raw: &str) -> Option<Vec<u8>> {
+    use base64::Engine as _;
+    use base64::engine::general_purpose::{STANDARD, STANDARD_NO_PAD, URL_SAFE, URL_SAFE_NO_PAD};
+
+    STANDARD
+        .decode(raw)
+        .or_else(|_| STANDARD_NO_PAD.decode(raw))
+        .or_else(|_| URL_SAFE.decode(raw))
+        .or_else(|_| URL_SAFE_NO_PAD.decode(raw))
+        .ok()
+}
+
+/// `PLUGIN_HTTP_ALLOW_CIDRS` — comma-separated CIDRs (`10.1.2.0/24`, `fd00::/8`).
+fn parse_cidrs(key: &'static str) -> Result<Vec<ipnet::IpNet>, ConfigError> {
+    let Some(raw) = var(key) else {
+        return Ok(Vec::new());
+    };
+
+    let mut nets = Vec::new();
+    for entry in raw.split(',') {
+        let entry = entry.trim();
+        if entry.is_empty() {
+            continue;
+        }
+        // A bare address is accepted and read as a single-host CIDR — `10.1.2.3` is
+        // what an operator writes when they mean one internal service, and refusing it
+        // over a missing `/32` is pedantry that gets worked around with a wider mask.
+        let net = match entry.parse::<ipnet::IpNet>() {
+            Ok(net) => net,
+            Err(_) => match entry.parse::<std::net::IpAddr>() {
+                Ok(addr) => ipnet::IpNet::from(addr),
+                Err(_) => {
+                    return Err(ConfigError::Invalid {
+                        var: key,
+                        reason: format!("`{entry}` is not a CIDR block or IP address"),
+                    });
+                }
+            },
+        };
+        nets.push(net);
+    }
+    Ok(nets)
+}
+
 /// Parse `APP_ORIGIN` — comma separated, each entry `scheme://host[:port]` with
 /// no path and no trailing slash (that is what a browser sends in `Origin`).
 fn parse_origins(key: &'static str) -> Result<Vec<String>, ConfigError> {
@@ -438,6 +630,25 @@ mod tests {
             plugins_dir: PathBuf::from(DEFAULT_PLUGINS_DIR),
             kernel_dts_path: None,
             disable_plugins: false,
+            plugin_staging_dir: default_staging_dir(&PathBuf::from(DEFAULT_PLUGINS_DIR)),
+            plugin_inbox_dir: None,
+            plugin_config_key: None,
+            plugin_call_timeout: Duration::from_millis(
+                life_manager_plugin_abi::limits::CALL_TIMEOUT_MS,
+            ),
+            plugin_cron_timeout: Duration::from_millis(
+                life_manager_plugin_abi::limits::CRON_CALL_TIMEOUT_MS,
+            ),
+            plugin_memory_bytes: life_manager_plugin_abi::limits::MEMORY_BYTES,
+            plugin_max_instances: life_manager_plugin_abi::limits::MAX_INSTANCES_PER_PLUGIN,
+            plugin_breaker_threshold: life_manager_plugin_abi::limits::BREAKER_FAILURE_THRESHOLD,
+            plugin_http_timeout: Duration::from_millis(
+                life_manager_plugin_abi::limits::HTTP_TIMEOUT_MS,
+            ),
+            plugin_http_max_response_bytes:
+                life_manager_plugin_abi::limits::MAX_HTTP_RESPONSE_BYTES,
+            plugin_http_allow_cidrs: Vec::new(),
+            plugin_enable_cron: true,
         }
     }
 

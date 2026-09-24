@@ -4,6 +4,13 @@ The client half of Life Manager: the offline-first substrate of **M2** (projecti
 sync client, local query engine, the shared Rust core as Wasm) and the microkernel
 frontend of **M3** (the `@kernel` contract, the plugin loader, the PWA).
 
+**M4 changed nothing here in contract terms** — no `@kernel` surface was added and no
+signature moved. What it added is two plugins in `../plugins/base/` (`calendar`, whose
+backend half crons an ICS feed into machine-owned documents, and `agenda`, which is pure
+frontend with no backend and no capabilities) and the management half of `admin`. The
+`build:plugins` script builds frontend halves; `build-wasm-plugins.mjs` builds backend
+halves into the same installed layout; `package-plugin.mjs` writes the installable `.zip`.
+
 **The app is `app/`.** `demo/` is the M2 page, kept exactly as it was: it is the surface
 the SPEC §8 Playwright smoke drives and a fixture for the harnesses, not the product.
 

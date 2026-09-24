@@ -338,6 +338,10 @@ pub enum DocStoreError {
     Contended(Id),
     #[error("snapshot {0} not found")]
     SnapshotNotFound(Id),
+    /// A [`DocStore::splice`] closure declined to produce edits for the text it was shown.
+    /// The caller's own message, because only the caller knows what it was trying to write.
+    #[error("the splice is not representable: {0}")]
+    SpliceRefused(String),
     #[error("database error: {0}")]
     Db(#[from] mongodb::error::Error),
     #[error("bson error: {0}")]
@@ -349,6 +353,14 @@ pub enum DocStoreError {
 // ---------------------------------------------------------------------------
 // The trait
 // ---------------------------------------------------------------------------
+
+/// Computes splice edits from a document's current text.
+///
+/// Called exactly once, with the room lock held — see [`DocStore::splice`] for why the
+/// contract is a closure rather than a precomputed edit list. `Err` carries a message for
+/// [`DocStoreError::SpliceRefused`].
+pub type SpliceFn<'a> =
+    &'a (dyn Fn(&str) -> Result<Vec<life_manager_core::splice::TextEdit>, String> + Send + Sync);
 
 /// CRDT-backed document storage.
 ///
@@ -378,12 +390,34 @@ pub trait DocStore: Send + Sync + 'static {
         actor: &Actor,
     ) -> Result<WriteOutcome, DocStoreError>;
 
-    /// Apply text edits computed by the shared core's splice helpers
-    /// (frontmatter values, `%%%` section lines) in one transaction.
-    async fn apply_edits(
+    /// Compute the shared core's splice edits (frontmatter values, `%%%` section lines)
+    /// **from the text as it is under the room lock**, then apply them in one transaction.
+    ///
+    /// # Why a closure and not an edit list
+    ///
+    /// A [`life_manager_core::splice::TextEdit`] is a byte-offset span, and a byte offset is
+    /// only meaningful against the exact string it was computed from. The obvious API —
+    /// `text()` to read, compute the spans, `apply_edits()` to write — is two separate
+    /// acquisitions of the room lock with a window in between, and a concurrent CRDT write in
+    /// that window silently shifts every offset. Nothing downstream can catch it:
+    /// `edit_deltas` validates bounds, character boundaries and non-overlap, never that the
+    /// span still holds the text it was derived from. The observed failure was a plugin's
+    /// one-line `%%%` write landing over the tail of a human's prose, which is worse than
+    /// anything SPEC §11.2 accepts (that risk is losing *one machine value*, not user text).
+    ///
+    /// So the caller hands over the computation instead of its result. `compute` is called
+    /// **exactly once, with the lock held**, and its spans are applied to the very string it
+    /// was given. It must be pure: the shared core's splice helpers are, and everything a
+    /// plugin needs to decide (which keys change, where the fence is) is a function of that
+    /// text.
+    ///
+    /// Returning `Ok(vec![])` is "nothing to write" and is a clean no-op — no CRDT history,
+    /// no log entry, no timestamp churn. Returning `Err` is
+    /// [`DocStoreError::SpliceRefused`] with the caller's own message.
+    async fn splice(
         &self,
         id: &str,
-        edits: &[life_manager_core::splice::TextEdit],
+        compute: SpliceFn<'_>,
         actor: &Actor,
     ) -> Result<WriteOutcome, DocStoreError>;
 
@@ -621,8 +655,11 @@ impl DocStoreWorkers {
 enum Mutation<'a> {
     /// Replace the whole text (`create`, `PUT`, restore).
     SetText(&'a str),
-    /// Apply shared-core splice edits.
-    Edits(&'a [life_manager_core::splice::TextEdit]),
+    /// Compute shared-core splice edits against the locked text, then apply them. There is
+    /// deliberately **no** variant that takes precomputed edits: a byte-offset span computed
+    /// outside this lock can no longer be trusted by the time it gets here (see
+    /// [`DocStore::splice`]).
+    Splice(SpliceFn<'a>),
     /// Apply an encoded Yjs update (encoding v1).
     Update(&'a [u8]),
 }
@@ -780,9 +817,16 @@ impl MongoDocStoreInner {
 
         // 1. Work out the resulting text first, so the size cap is enforced
         //    before any CRDT state is touched (SPEC §3.5 limits).
+        //
+        //    This is also where a splice's edits are computed — inside the lock, from the
+        //    text step 3 will apply them to, so the offsets cannot be stale.
+        let mut spliced: Vec<life_manager_core::splice::TextEdit> = Vec::new();
         let candidate: String = match mutation {
             Mutation::SetText(text) => normalize_input(text).into_owned(),
-            Mutation::Edits(edits) => life_manager_core::splice::apply(&state.text, edits),
+            Mutation::Splice(compute) => {
+                spliced = compute(&state.text).map_err(DocStoreError::SpliceRefused)?;
+                life_manager_core::splice::apply(&state.text, &spliced)
+            }
             Mutation::Update(update) => {
                 // Apply to a scratch replica to learn the resulting text without
                 // risking a partial write on the hot doc.
@@ -808,6 +852,30 @@ impl MongoDocStoreInner {
             }
         };
         self.check_size(&candidate)?;
+
+        // 1a. A **genuine no-op**: no snapshot, no transaction, no log entry, no
+        //     materialization, no timestamp churn. Idempotent client retries and idempotent
+        //     plugin syncs land here (HOST-ABI.md §3.4: a daily sync that changes nothing must
+        //     produce no CRDT history at all).
+        //
+        //     Decided from the candidate text, *before* the transaction, because it cannot be
+        //     decided after one: `encode_diff_v1` over an empty transaction returns `[0, 0]`,
+        //     not an empty slice, so the `update.is_empty()` test further down never fired and
+        //     every no-op rewrite appended an update-log entry anyway.
+        //
+        //     `Update` is excluded and must be: a remote update whose text happens to match can
+        //     still carry structure other replicas need, and dropping it would stall their
+        //     convergence. Only the two text-rewriting mutations are decidable this way.
+        if !matches!(mutation, Mutation::Update(_)) && candidate == state.text {
+            return Ok(WriteOutcome {
+                id: room.id.clone(),
+                content: state.text.clone(),
+                title: state.stored_title.clone(),
+                materialized_version: state.stored_version.clone(),
+                update: Vec::new(),
+                seq: state.seq,
+            });
+        }
 
         // 2. Snapshot policy (SPEC §3.5) — decoupled from compaction, and taken
         //    *before* the edit lands, so "restore" means "the version I had
@@ -835,8 +903,10 @@ impl MongoDocStoreInner {
                         delta.apply(&mut txn, &text_ref);
                     }
                 }
-                Mutation::Edits(edits) => {
-                    for delta in edit_deltas(&state.text, edits)? {
+                Mutation::Splice(_) => {
+                    // `spliced` was computed from `state.text` a few lines up, under this
+                    // same lock — the offsets are the ones that string actually has.
+                    for delta in edit_deltas(&state.text, &spliced)? {
                         delta.apply(&mut txn, &text_ref);
                     }
                 }
@@ -1427,13 +1497,15 @@ impl DocStore for MongoDocStore {
         self.inner.mutate(id, Mutation::SetText(text), actor).await
     }
 
-    async fn apply_edits(
+    async fn splice(
         &self,
         id: &str,
-        edits: &[life_manager_core::splice::TextEdit],
+        compute: SpliceFn<'_>,
         actor: &Actor,
     ) -> Result<WriteOutcome, DocStoreError> {
-        self.inner.mutate(id, Mutation::Edits(edits), actor).await
+        self.inner
+            .mutate(id, Mutation::Splice(compute), actor)
+            .await
     }
 
     async fn apply_update(

@@ -555,8 +555,15 @@ Hard requirements:
   **documents in the shared workspace** — visible to other users (SPEC §6.4). Secrets
   belong in admin plugin config.
 - `admin` is a thin client over `/api/admin/*`; the server authorizes, the UI only hides.
-  **The plugin list is read-only in M3** — approval, config and enable/disable are M4
-  endpoints. Show the capability list and SPEC §6.1's trust sentence.
+  The plugin list was read-only in M3; **M4 made it the management surface** — upload,
+  the pending-approval screen with the editable `http.hosts` field, the generated config
+  form, enable/disable, breaker reset, "run cron now", uninstall with its purge checkbox.
+  SPEC §6.1's trust sentence sits **above the approve button**, not at the bottom of the
+  page: it is a consent gate, not a footnote. Two rules the UI must not lose:
+  a `secret: true` field renders empty with "stored — leave blank to keep it" and an
+  untouched one is *dropped* from the submission (submitting the mask would overwrite the
+  credential with `••••••••`), and adding a host at approval shows an explicit warning
+  naming what is being added.
 
 ## Area: server-static
 

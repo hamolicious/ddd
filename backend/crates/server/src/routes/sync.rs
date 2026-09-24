@@ -769,6 +769,115 @@ pub fn publish_update(state: &AppState, id: &str, update: &[u8]) {
     );
 }
 
+/// Relay a backend plugin's `emit_client` event to connected browsers (SPEC §6.3).
+///
+/// **Added by the M4 scaffold; implemented by the `hooks-cron` builder.** It belongs here
+/// rather than in the plugin host because `ConnEntry` — the only place a user id meets an
+/// outbox — is private to this module, and growing `AppState` to expose it would break a
+/// frozen contract for one function.
+///
+/// The frame is a JSON message the client kernel already tolerates:
+///
+/// ```json
+/// { "t": "plugin.event", "plugin": "calendar", "event": "synced",
+///   "payload": { … }, "at": "2026-09-24T06:00:01Z" }
+/// ```
+///
+/// PROTOCOL.md §9 says a client **ignores unknown `t` values** (that clause exists for
+/// exactly this), so this is additive: an M2/M3 client drops it, an M4 client turns it into
+/// `kernel.events` type `plugin:<id>:<event>` with origin
+/// `{ kind: "server", plugin: "<id>" }`.
+///
+/// `user_id` targets one user's sessions; `None` reaches every connected session. Returns
+/// how many sockets it was **queued** on — not a delivery guarantee: an overflowing outbox
+/// drops it, because a plugin event is ephemeral with no replay (SPEC §6.3) and buffering
+/// it would trade a lost nudge for a lost document update.
+pub fn publish_plugin_event(
+    state: &AppState,
+    plugin_id: &str,
+    event: &str,
+    payload: &serde_json::Value,
+    user_id: Option<&str>,
+) -> usize {
+    /// Headroom a plugin event needs in the control queue before it is enqueued.
+    ///
+    /// Plugin events go on the control queue — they are small JSON messages with no
+    /// document or feed semantics — but they must **not** inherit its "never dropped,
+    /// close the socket on overflow" policy: a chatty plugin would then be able to
+    /// disconnect every browser in the workspace. So the enqueue is conditional on the
+    /// queue being well short of [`CTL_QUEUE_MESSAGES`], and past that the event is
+    /// dropped. That is exactly what SPEC §6.3 asks for — ephemeral, no replay — and the
+    /// reserve keeps the space a `feed.resync` or a close frame needs.
+    const PLUGIN_EVENT_HEADROOM: usize = CTL_QUEUE_MESSAGES / 2;
+
+    // Serialized once, not once per socket: a workspace-wide event on 200 sockets costs one
+    // `to_string` and 200 string clones, rather than 200 serializations of the same value.
+    let frame = serde_json::json!({
+        "t": "plugin.event",
+        "plugin": plugin_id,
+        "event": event,
+        "payload": payload,
+        "at": Timestamp::now().to_rfc3339(),
+    });
+    let json = match serde_json::to_string(&frame) {
+        Ok(json) => json,
+        Err(err) => {
+            // A payload the host could not re-serialize is a host bug, not a socket
+            // problem: no connection is penalised for it.
+            tracing::error!(
+                plugin = %plugin_id, %event, error = %err,
+                "sync: cannot serialize a plugin event"
+            );
+            return 0;
+        }
+    };
+
+    let hub = SyncHub::get(state);
+    let targets: Vec<Arc<Outbox>> = {
+        let conns = hub.conns.lock().expect("sync connection registry poisoned");
+        conns
+            .values()
+            // No `user_id` reaches every connected session: this is a shared workspace
+            // (SPEC §2), so "everyone" is a normal audience rather than a broadcast leak.
+            .filter(|entry| user_id.is_none_or(|target| entry.user_id == target))
+            .map(|entry| Arc::clone(&entry.outbox))
+            .collect()
+    };
+
+    let mut queued = 0usize;
+    let mut dropped = 0usize;
+    for outbox in &targets {
+        let accepted = {
+            let mut outbox_state = outbox.lock();
+            if outbox_state.closing.is_some() || outbox_state.ctl.len() >= PLUGIN_EVENT_HEADROOM {
+                false
+            } else {
+                outbox_state.ctl.push_back(Message::text(json.clone()));
+                true
+            }
+        };
+        if accepted {
+            outbox.wake.notify_one();
+            queued += 1;
+        } else {
+            dropped += 1;
+        }
+    }
+
+    if dropped > 0 {
+        metrics::counter!(names::WS_BACKPRESSURE_DROPS, "queue" => "plugin").increment(1);
+        tracing::debug!(
+            plugin = %plugin_id, %event, dropped,
+            "sync: plugin event dropped on sockets that are not keeping up"
+        );
+    }
+    tracing::debug!(
+        plugin = %plugin_id, %event, sockets = queued, target = ?user_id,
+        "sync: plugin event queued"
+    );
+    queued
+}
+
 /// How many sockets currently subscribe to `id`.
 ///
 /// Used by the snapshot-restore route to warn that other users are editing the

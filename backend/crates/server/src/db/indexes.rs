@@ -250,6 +250,24 @@ pub fn all() -> Vec<IndexSpec> {
             doc! { "target_id": 1 },
             None,
         ),
+        // ---- plugins (M4) -----------------------------------------------
+        // The approval record is read by id (the default `_id` index) and listed by
+        // state for the admin screen and for the boot-time activation pass.
+        index(super::PLUGINS, "plugins_state", doc! { "state": 1 }, None),
+        // `plugin_kv`'s `_id` is `<plugin_id>:<key>`, so a point read needs no index.
+        // This one serves the two range operations that exist: counting a plugin's keys
+        // against the per-plugin budget, and deleting the namespace on
+        // `uninstall --purge`.
+        index(
+            super::PLUGIN_KV,
+            "plugin_kv_plugin_key",
+            doc! { "plugin_id": 1, "key": 1 },
+            None,
+        ),
+        // `plugin_config`'s `_id` **is** the plugin id (one document per plugin — an
+        // admin saves a form, not a field), so it needs no index of its own. Listed
+        // here as a comment rather than omitted silently, because "no index" and
+        // "forgot the index" look identical in this file.
     ]
 }
 

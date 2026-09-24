@@ -140,9 +140,31 @@ pub async fn installed(
 // /importmap.json
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Serialize, Deserialize)]
+/// The import map as the browser gets it — **only** `imports`.
+///
+/// A separate type from [`RuntimeManifest`] because what the build records and what the spec
+/// allows in an import map are different documents: an extra top-level key here would be a
+/// `<script type="importmap">` the browser may refuse.
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct ImportMap {
     pub imports: BTreeMap<String, String>,
+}
+
+/// `runtime-manifest.json` as the build writes it.
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct RuntimeManifest {
+    pub imports: BTreeMap<String, String>,
+    /// Specifier → the version of the package the bundle actually shipped.
+    ///
+    /// The other half of a peer-library check. Without it the install flow could only ask
+    /// whether a specifier *exists*, so `"@codemirror/view": "^7"` installed cleanly against a
+    /// 6.x bundle and failed in the browser — the check HOST-ABI.md §7.1 step 4 describes
+    /// ("ranges intersect with what the runtime bundle provides") was not being made.
+    ///
+    /// `#[serde(default)]`: a manifest written by an older build has no `versions`, and the
+    /// check degrades to presence-only rather than refusing every plugin.
+    #[serde(default)]
+    pub versions: BTreeMap<String, String>,
 }
 
 /// Read `runtime-manifest.json` from the built bundle.
@@ -153,22 +175,35 @@ pub struct ImportMap {
 /// produce an app that loads and then fails on the first plugin, which is much harder to
 /// diagnose than an empty map plus this log line.
 pub fn runtime_imports(state: &AppState) -> BTreeMap<String, String> {
+    runtime_manifest(state).imports
+}
+
+/// Specifier → the version the built bundle provides, for the peer-range check.
+///
+/// Empty when there is no bundle, and possibly missing an entry when the build could not read
+/// a package's version. Both cases mean "cannot be checked", never "does not satisfy".
+pub fn runtime_versions(state: &AppState) -> BTreeMap<String, String> {
+    runtime_manifest(state).versions
+}
+
+/// Read `runtime-manifest.json` whole. See [`runtime_imports`] for why there is no fallback.
+fn runtime_manifest(state: &AppState) -> RuntimeManifest {
     let Some(dist) = state.config.web_dist_dir.as_ref() else {
-        return BTreeMap::new();
+        return RuntimeManifest::default();
     };
     let path = dist.join(RUNTIME_MANIFEST_FILE);
     let raw = match std::fs::read_to_string(&path) {
         Ok(raw) => raw,
         Err(err) => {
             warn!(path = %path.display(), error = %err, "no runtime manifest; the import map will be empty");
-            return BTreeMap::new();
+            return RuntimeManifest::default();
         }
     };
-    match serde_json::from_str::<ImportMap>(&raw) {
-        Ok(map) => map.imports,
+    match serde_json::from_str::<RuntimeManifest>(&raw) {
+        Ok(map) => map,
         Err(err) => {
             warn!(path = %path.display(), error = %err, "runtime manifest is invalid");
-            BTreeMap::new()
+            RuntimeManifest::default()
         }
     }
 }
@@ -182,16 +217,30 @@ pub fn runtime_imports(state: &AppState) -> BTreeMap<String, String> {
 pub async fn import_map(State(state): State<AppState>) -> Response {
     let imports = runtime_imports(&state);
     let registry = plugins::registry(&state.config);
-    let unsatisfied = registry.unsatisfied_peers(&imports);
-    if !unsatisfied.is_empty() {
+
+    // `resolve_import_map` rather than `unsatisfied_peers`: the served map is
+    // byte-identical either way (it is the bundle's, unchanged — plugin modules load by
+    // URL, not by bare specifier), but this also runs the M4 peer *resolution* over the
+    // set that will actually load. That is what catches two third-party plugins asking
+    // for CodeMirror ranges that cannot both be satisfied — a conflict an import map
+    // cannot express, because it cannot change after load (SPEC §6.4).
+    let resolution = plugins::resolve_import_map(&registry, &imports, &runtime_versions(&state));
+    if !resolution.missing.is_empty() {
         // Not an error response: the app boots and reports it in the notice strip. This
         // log line is for whoever installed the plugin (SPEC §6.4 peer resolution).
         warn!(
-            libraries = unsatisfied.join("; "),
+            libraries = resolution.missing.join("; "),
             "installed plugins declare peer libraries the runtime layer does not provide"
         );
     }
-    let body = serde_json::to_vec_pretty(&ImportMap { imports }).unwrap_or_else(|_| b"{}".to_vec());
+    for warning in &resolution.warnings {
+        warn!(warning = %warning, "peer library resolution");
+    }
+
+    let body = serde_json::to_vec_pretty(&ImportMap {
+        imports: resolution.imports,
+    })
+    .unwrap_or_else(|_| b"{}".to_vec());
     (
         StatusCode::OK,
         [
@@ -269,6 +318,14 @@ const PLUGIN_ASSET_ROOT: &str = "frontend";
 /// The plugin must be in the registry — serving a directory that is not installed would
 /// make the registry decorative, and in M4 it would serve a *pending* plugin nobody
 /// approved.
+///
+/// **The state is checked, not only the presence.** "A pending package is never in
+/// `PLUGINS_DIR`" is the structural half of that guarantee
+/// ([`plugins::InstalledPlugin::state`]), and a structural guarantee is worth one explicit
+/// check anyway: an interrupted approval (renamed into the served root, record not yet
+/// written) used to leave a `pending` directory here that this route happily served,
+/// unauthenticated, to anyone who knew the id and version — and `reject` deleted the record
+/// while leaving those files behind.
 pub async fn plugin_asset(
     State(state): State<AppState>,
     AxumPath((id, version, path)): AxumPath<(String, String, String)>,
@@ -280,8 +337,17 @@ pub async fn plugin_asset(
         return not_found();
     }
     let registry = plugins::registry(&state.config);
-    if registry.get(&id, &version).is_none() {
-        return not_found();
+    match registry.get(&id, &version) {
+        None => return not_found(),
+        Some(plugin) if !plugin.state.is_served() => {
+            tracing::warn!(
+                plugin = %id, %version, state = plugin.state.as_str(),
+                "refusing to serve an asset of a plugin that is not approved; \
+                 its directory should not be in PLUGINS_DIR"
+            );
+            return not_found();
+        }
+        Some(_) => {}
     }
     let Some(root) = registry.root() else {
         return not_found();

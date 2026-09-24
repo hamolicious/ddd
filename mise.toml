@@ -81,6 +81,62 @@ description = "Build the base plugin distribution into plugins/base/dist (what t
 dir = "web"
 run = ["npm install --no-audit --no-fund", "npm run build:plugins"]
 
+[tasks.wasm-plugins]
+description = "M4: build every plugin's backend half (wasm32) into the installed layout next to its frontend half"
+# Ordered after `plugins` on purpose: the Vite build owns `emptyOutDir` for
+# `plugins/base/dist/<id>/<version>`, so a `backend.wasm` written before it is deleted by
+# it. `depends` makes that order explicit instead of a note in a README.
+depends = ["plugins"]
+run = "node web/scripts/build-wasm-plugins.mjs"
+
+[tasks.plugin-package]
+description = "M4: package a built plugin as the installable .zip of SPEC §6.2 (`mise run plugin-package calendar`)"
+# Packages the *built* directory (`plugins/base/dist/<id>/<version>`), which is already the
+# installed layout, and writes exactly the allowlist the installer accepts — manifest,
+# declared wasm module, `frontend/**`. A `zip -r` of the same directory is not equivalent:
+# the installer rejects any entry outside that set by design (SPEC §6.2), so a stray file
+# from a build tool fails the install naming a file the author did not know was there.
+#
+# `wasm-plugins`, not `plugins`: it depends on `plugins` itself and adds the backend
+# halves *after* the Vite build, which owns `emptyOutDir` for those directories. Depending
+# on `plugins` alone deleted the `backend.wasm` this task then could not find.
+depends = ["wasm-plugins"]
+run = "node web/scripts/package-plugin.mjs"
+
+[tasks.plugin-check]
+description = "M4: check the plugin SDK and every plugin backend half for wasm32 (they are excluded from the backend workspace)"
+# `mise run check` covers `backend/`, and deliberately cannot cover these: the SDK links
+# Extism's host imports, so a host-target build fails at link time.
+#
+# `--target wasm32-unknown-unknown` is spelled out rather than left to the
+# `.cargo/config.toml` in each directory. Cargo discovers config files from the *current
+# working directory* upward — not from the manifest's directory — so a `--manifest-path`
+# invocation from the repo root never reads `plugins/.cargo/config.toml` and silently
+# checks the host target instead, which is the opposite of what this task is for.
+#
+# `cargo fmt` is likewise not scoped by `--manifest-path` alone: its `--all` form walks the
+# whole workspace it resolves, and from the repo root that reached into
+# `backend/crates/server/src/pluginhost/**`. Both fmt lines run with an explicit `dir`.
+run = [
+  "cargo fmt --manifest-path backend/crates/plugin-sdk/Cargo.toml --check",
+  "cargo clippy --manifest-path backend/crates/plugin-sdk/Cargo.toml --all-targets --target wasm32-unknown-unknown -- -D warnings",
+  "cargo fmt --manifest-path plugins/Cargo.toml --all --check",
+  "cargo clippy --manifest-path plugins/Cargo.toml --workspace --all-targets --target wasm32-unknown-unknown -- -D warnings",
+]
+
+[tasks.plugin-test]
+description = "M4: host-target unit tests for the pure plugin crates (the ICS parser)"
+# A wasm plugin crate cannot be unit-tested on the host — it links the host imports — so
+# the logic worth testing lives in plain crates and is tested here. The explicit `--target`
+# overrides the wasm32 default in `plugins/.cargo/config.toml`.
+run = "cargo test --manifest-path plugins/Cargo.toml -p calendar-ics --target x86_64-unknown-linux-gnu"
+
+[tasks.plugin-smoke]
+description = "M4: build the hello-world plugin and load it in a minimal Extism host (the ABI's end-to-end check)"
+depends = ["wasm-plugins"]
+dir = "backend"
+run = "cargo test -p life-manager-server --test pluginhost_smoke"
+
 [tasks.web-build]
 description = "Build everything the server serves: the Wasm core, the contract, the PWA bundle (runtime layer + app + service worker), and the base plugins"
 dir = "web"

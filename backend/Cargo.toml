@@ -1,6 +1,12 @@
 [workspace]
 resolver = "3"
-members = ["crates/core", "crates/server"]
+members = ["crates/core", "crates/plugin-abi", "crates/server"]
+# `crates/plugin-sdk` is **not** a member and is excluded on purpose: it is a
+# wasm32-only crate (it links Extism PDK host imports), so a host-target
+# `cargo test --workspace --all-targets` would fail to link it. It has its own
+# `[workspace]` table and its own lock; `mise run plugin-check` builds it for
+# `wasm32-unknown-unknown`, which is the only target it is meaningful on.
+exclude = ["crates/plugin-sdk"]
 
 [workspace.package]
 version = "0.1.0"

@@ -140,8 +140,14 @@ export class QueryEngine {
 
   readonly #live = new Set<LiveQuery>();
   #unsubscribe: (() => void) | undefined;
-  /** Store changes are handled one at a time, in arrival order. */
+  /** Live-query re-runs, one at a time, in arrival order. */
   #queue: Promise<void> = Promise.resolve();
+  /**
+   * Search-index writes, one at a time, in arrival order — a **separate** chain from
+   * `#queue` on purpose (see [`#attach`]): indexing is allowed to be slow, live queries
+   * are not allowed to wait for it.
+   */
+  #indexQueue: Promise<void> = Promise.resolve();
   #indexOpened: Promise<void> | undefined;
   #persistTimer: ReturnType<typeof setTimeout> | undefined;
   #persistSeq = 0;
@@ -301,11 +307,44 @@ export class QueryEngine {
   // Following the store
   // -------------------------------------------------------------------------
 
+  /**
+   * Follow the store on **two** independent chains: one that re-runs live queries and
+   * one that feeds the search index.
+   *
+   * They used to be one, and that was a bug with a nasty shape. Indexing awaits
+   * {@link #ensureIndex}, which on a cold start opens a Web Worker and walks the whole
+   * store; every change that arrived during that window sat behind it in the same
+   * serialized queue, so **no live query updated until the index finished building**. A
+   * client that booted and then received its first feed batch a second later showed a
+   * list that simply never refreshed — and it recovered on its own once indexing
+   * completed, which is exactly the shape of a bug nobody can reproduce.
+   *
+   * Each chain stays serialized in arrival order on its own account: live queries must
+   * observe changes in feed order, and the index must not interleave upserts.
+   */
   #attach(): void {
     this.#unsubscribe ??= this.store.subscribe((change) => {
-      this.#queue = this.#queue.then(() => this.#onChange(change)).catch((error: unknown) => {
-        this.#report(error);
-      });
+      // One read, shared by both chains. It starts immediately rather than inside a
+      // queue: the rows are already committed when `emit` fires (that is the store's
+      // contract), so there is nothing to wait for, and doing it once means a batch is
+      // not read twice.
+      const applied = this.store.getMany(change.applied);
+      // Both chains await the same promise, so a rejection would reach two `.catch`
+      // handlers. Attaching a no-op one here keeps it from ever being unhandled in the
+      // window before the second chain gets to it.
+      applied.catch(() => undefined);
+
+      this.#queue = this.#queue
+        .then(async () => this.#deliver(change, await applied))
+        .catch((error: unknown) => {
+          this.#report(error);
+        });
+
+      this.#indexQueue = this.#indexQueue
+        .then(async () => this.#index(change, await applied))
+        .catch((error: unknown) => {
+          this.#report(error);
+        });
     });
   }
 
@@ -314,23 +353,29 @@ export class QueryEngine {
     this.#unsubscribe = undefined;
   }
 
-  async #onChange(change: StoreChange): Promise<void> {
-    const applied = await this.store.getMany(change.applied);
-    // Only index once someone has asked for search: until `#ensureIndex` has run,
-    // the index is not open, and the rows in this batch are below the watermark it
-    // will catch up from anyway.
-    if (this.search && this.#indexOpened) {
-      try {
-        await this.#ensureIndex();
-        await this.search.upsert(applied);
-        if (change.purged.length > 0) await this.search.remove(change.purged);
-        this.#schedulePersist(change.safeSeq);
-      } catch (error) {
-        this.#report(error);
-      }
-    }
+  /** Re-run every live query the change can affect. Never waits on the index. */
+  async #deliver(change: StoreChange, applied: readonly StoredRow[]): Promise<void> {
     for (const live of [...this.#live]) {
       await live.apply(change, applied).catch((error: unknown) => this.#report(error));
+    }
+  }
+
+  /**
+   * Keep the search index level with the store.
+   *
+   * Only once someone has asked for search: until `#ensureIndex` has run, the index is
+   * not open, and the rows in this batch are below the watermark it will catch up from
+   * anyway.
+   */
+  async #index(change: StoreChange, applied: readonly StoredRow[]): Promise<void> {
+    if (!this.search || !this.#indexOpened) return;
+    try {
+      await this.#ensureIndex();
+      await this.search.upsert(applied);
+      if (change.purged.length > 0) await this.search.remove(change.purged);
+      this.#schedulePersist(change.safeSeq);
+    } catch (error) {
+      this.#report(error);
     }
   }
 

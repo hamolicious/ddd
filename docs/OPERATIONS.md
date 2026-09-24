@@ -145,6 +145,33 @@ today. The same applies to `CRDT_COMPACT_THRESHOLD_BYTES` and
 | `UPDATE_LOG_KEEP_BYTES` | `1048576` | Per-document update-log retention. |
 | `UPDATE_LOG_KEEP_COUNT` | `200` | Per-document update-log retention. Correctness never depends on either: a client outside the window falls back to a full state-vector sync. |
 
+### Plugins (M4)
+
+Nothing here needs setting for the base distribution to work. The two you are most
+likely to touch are `CONFIG_KEY` (before a plugin stores its first secret) and
+`PLUGIN_HTTP_ALLOW_CIDRS` (to reach a service on your own network).
+
+| Variable | Default | Notes |
+|---|---|---|
+| `DISABLE_PLUGINS` | `false` | The server-side half of safe mode (SPEC §6.1). `true` ⇒ **no plugin code runs anywhere**: nothing is compiled, no cron fires, no hook is delivered, `/api/plugins/:id/*` 404s, and every client is told the installed list is empty. The recovery switch when a plugin is taking the workspace down. |
+| `PLUGINS_DIR` | `plugins/base/dist` | One directory per installed plugin per version (`<id>/<version>/`), served at `/plugins/<id>/<version>/…`. On Kubernetes this is the RWO PVC of SPEC §8. |
+| `PLUGIN_STAGING_DIR` | `<PLUGINS_DIR>.staging` | Where uploads are extracted and pending packages wait. **Must be on the same filesystem as `PLUGINS_DIR`** — approval is an atomic rename, not a copy. |
+| `PLUGIN_INBOX_DIR` | *(unset)* | A directory to watch for dropped `.zip` packages — SPEC §6.2's second install path, for a Compose volume or an `initContainer`. Polled every 5 s, after the file stops growing. A dropped package lands **pending**, exactly like an upload: dropping a file is not evidence a human read its capability list. Archives are moved to `installed/` or `rejected/` (with a `.error.txt`), never deleted. Unset ⇒ no watcher. |
+| `CONFIG_KEY` | *(derived)* | 32 bytes as 64 hex characters or base64, encrypting every `secret: true` config value at rest. Unset ⇒ derived from `SESSION_SECRET` — see the rotation caveat below. `openssl rand -hex 32`. |
+| `PLUGIN_CALL_TIMEOUT_MS` | `5000` | Per-call wall clock (SPEC §6.3). **Clamped down only**: a value above the default is ignored, so config can tighten the limits and never loosen them. |
+| `PLUGIN_CRON_TIMEOUT_MS` | `60000` | Budget for one cron run. |
+| `PLUGIN_MEMORY_BYTES` | `134217728` (128 MiB) | Per-instance Wasm memory. |
+| `PLUGIN_MAX_INSTANCES` | `4` | Pooled instances per plugin (Extism calls are non-reentrant). |
+| `PLUGIN_BREAKER_THRESHOLD` | `5` | Consecutive failures or timeouts before the circuit breaker disables the plugin. Re-enabling is a manual admin click, by design — a breaker that closed itself would hide the fault. |
+| `PLUGIN_HTTP_TIMEOUT_MS` | `10000` | Outbound request timeout. The effective value is the smallest of this, what the plugin asked for, and what is left of the call's deadline. |
+| `PLUGIN_HTTP_MAX_RESPONSE_BYTES` | `10485760` (10 MiB) | Response cap. Over it is a refusal, **never a truncated body** — half an ICS feed makes confidently wrong documents. |
+| `PLUGIN_HTTP_ALLOW_CIDRS` | *(empty)* | Comma-separated CIDRs (`10.1.2.0/24`, `fd00::/8`; a bare address means that one host). Loopback, link-local, RFC1918 and unique-local destinations are refused by default *after* DNS resolution, on every redirect hop; this is the operator escape hatch for a service on your own network. **Cloud metadata addresses (`169.254.169.254`, `fd00:ec2::254`) stay refused even inside an allowed range.** An unparseable entry fails the boot. |
+| `PLUGIN_ENABLE_CRON` | `true` | `false` stops the scheduler without disabling anything else — the switch for a maintenance window, or for a second environment pointed at a production database. |
+
+A plugin is always granted *less* than or equal to what its manifest asks for. The one
+exception is `http.hosts`, which an admin may **add** to at approval time: a plugin
+whose destination you configure cannot know the host when it was packaged.
+
 ### Compose-only
 
 `SERVER_PORT` (host port for the server, default 8080) and `MONGO_PORT` (host
@@ -153,8 +180,7 @@ the server.
 
 ### Read indirectly
 
-`HOSTNAME` is used to label the migration lock holder in logs. `DISABLE_PLUGINS`
-appears in SPEC §6.1 but is not read in M1 — there is no plugin host yet.
+`HOSTNAME` is used to label the migration lock holder in logs.
 
 ## Health and readiness
 
@@ -168,17 +194,23 @@ turn into a restart loop.
 {
   "ready": true,
   "mongo": { "ok": true, "detail": "ping ok", "latency_ms": 1 },
-  "migrations": { "ok": true, "detail": "schema version 1" },
-  "plugins": { "ok": true, "detail": "plugin host not present in M1" },
-  "schema_version": 1,
+  "migrations": { "ok": true, "detail": "schema version 2" },
+  "plugins": { "ok": true, "detail": "16 plugins loaded" },
+  "schema_version": 2,
   "uptime_secs": 412,
   "version": "0.1.0"
 }
 ```
 
 200 when every check passes, 503 with the same body otherwise. The Mongo ping is
-bounded at 2 s so the probe cannot hang. `plugins` is reported as a passing,
-explicitly-skipped check until M4, which keeps the body's shape stable.
+bounded at 2 s so the probe cannot hang.
+
+**`plugins` reports the registry, not the health of each plugin.** A plugin whose
+backend half failed to activate, or one the breaker disabled, does not make the server
+unready — that is deliberate (SPEC §6.4's rule for the frontend, applied to the backend):
+a workspace missing one feature is a better outcome than a server that will not start
+because somebody dropped a bad zip in. Look at `GET /api/admin/plugins` for per-plugin
+state, and at `lm_plugin_disabled` for an alert.
 
 ## Metrics
 
@@ -199,11 +231,27 @@ public route. Names are stable (they come from one table in `telemetry.rs`):
 | `lm_login_failures_total` | counter | Failed logins — pair with the `login_attempts` collection. |
 | `lm_config_max_document_bytes`, `lm_config_max_attachment_bytes` | gauge | The effective limits, so a dashboard can draw the ceiling. |
 | `lm_build_info` | gauge | Always 1, carries a `version` label. |
-| `lm_ws_connections`, `lm_ws_subscribed_documents` | gauge | M2 (WebSocket sync); registered now, zero until then. |
+| `lm_ws_connections`, `lm_ws_subscribed_documents` | gauge | Open sync sockets / documents subscribed across them. |
+| `lm_ws_backpressure_drops_total` | counter | Send-queue overflows by `queue="feed"｜"doc"｜"plugin"`. `feed`/`doc` mean a client was told to re-derive; `plugin` is a dropped `plugin.event`, which is ephemeral by design. |
+
+### Plugins (M4)
+
+| Metric | Type | Meaning |
+|---|---|---|
+| `lm_plugin_calls_total` | counter | Calls into a backend half, by `plugin` and `kind` (`cron`｜`hook`｜`route`｜`call`｜`init`). |
+| `lm_plugin_call_duration_seconds` | histogram | Call latency by `plugin`, `kind`. |
+| `lm_plugin_call_failures_total` | counter | Host-side failures by `plugin`, `kind`, `reason`. **A plugin's own refusal is not a failure** and does not appear here — it is a successful call that returned an error, and counting it would trip the breaker on a misconfiguration. |
+| `lm_plugins_active` / `lm_plugins_disabled` | gauge | Backend halves loaded / disabled. **`lm_plugins_disabled` above zero is the alert that matters**: it means the breaker opened or an admin switched something off, and nothing closes a breaker but a person. |
+| `lm_plugin_instances` | gauge | Pooled Wasm instances across all plugins. |
+| `lm_plugin_hooks_delivered_total` | counter | Hook deliveries by `plugin`, `outcome` (`ok`｜`failed`｜`rate_capped`). A sustained `rate_capped` is a plugin in a write loop; the 10/min per-document cap is the backstop that stopped it. |
+| `lm_plugin_hooks_pending` | gauge | Documents waiting out the 2 s hook debounce. |
+| `lm_plugin_http_requests_total` | counter | Outbound requests by `plugin`, `outcome`. |
+| `lm_plugin_document_writes_total` | counter | Document writes by `plugin`. |
+| `lm_plugin_write_cap_refusals_total` | counter | Writes refused by the per-plugin-per-document cap. Same signal as `rate_capped`, from the write side. |
 
 Suggested first alerts: `lm_rooms_dirty` above zero for more than a few minutes,
 any `lm_materialize_failures_total` increase, `lm_documents_oversized` above
-zero, and `/readyz` failing.
+zero, `lm_plugins_disabled` above zero, and `/readyz` failing.
 
 ## Logs
 
@@ -361,6 +409,25 @@ openssl rand -base64 48            # new value into .env / the secret store
 docker compose up -d server        # or roll the deployment
 ```
 
+**If `CONFIG_KEY` is unset, rotating `SESSION_SECRET` also makes every stored plugin
+secret unreadable.** With no `CONFIG_KEY` the encryption key is derived from
+`SESSION_SECRET` (SPEC §6.2), so a new session secret cannot open the old ciphertext.
+Nothing breaks loudly: an undecryptable value is reported to the admin screen as
+*not set*, with a log line, and the plugin behaves as if it had never been configured
+— so a calendar quietly stops syncing rather than erroring. Re-enter each affected
+plugin's secrets in Admin → Plugins afterwards.
+
+Set `CONFIG_KEY` *before* a plugin stores its first secret and the two rotate
+independently:
+
+```bash
+openssl rand -hex 32               # 64 hex characters, or base64 — 32 bytes either way
+```
+
+Rotating `CONFIG_KEY` itself has the same consequence for plugin secrets alone, and no
+effect on sessions. There is no re-encryption pass: the recovery for both is re-entering
+the values.
+
 ## Break-glass password reset
 
 When nobody can log in as an admin (SPEC §5.1), run the CLI subcommand next to
@@ -406,3 +473,47 @@ escape hatch if one keeps growing.
 **Shutdown logs `exceeded its grace period`.** Something in flight did not
 finish inside `SHUTDOWN_GRACE_SECS`. Flushed state is durable; check what was
 running, and confirm the platform's kill timeout is still above the grace period.
+
+### Plugins
+
+**`lm_plugins_disabled` is above zero.** Either an admin switched a plugin off, or the
+circuit breaker opened after `PLUGIN_BREAKER_THRESHOLD` consecutive failures. Admin →
+Plugins shows which, and why: an admin switch reads as "disabled by …", a breaker trip
+names the last failure. Nothing closes a breaker but a person — clicking *enable* clears
+it and re-activates the backend half without a restart. If it trips again immediately,
+the plugin is broken, not flaky.
+
+**A plugin's cron never runs.** Check, in order: `PLUGIN_ENABLE_CRON` is `true`;
+the plugin is `enabled` (not pending, disabled or failed); and its configuration is
+complete — Admin → Plugins lists the keys with nothing stored. The "run now" button next
+to each declared schedule runs the job immediately with the cron budget, and reports
+what it did; it deliberately does **not** move `last_run`, so testing a job cannot make
+the real firing skip.
+
+**A plugin's outbound request is refused.** The two codes mean different things and the
+log line carries both. `capability_denied` — the manifest declares no `http` capability
+at all; the package has to change. `blocked` — the host or the resolved address is not
+allowed: either the name is not in the approved list (widen it by re-approving; see
+below), or it resolved into a refused range (`PLUGIN_HTTP_ALLOW_CIDRS`). The check runs
+after DNS and again on every redirect hop, so an approved name that resolves into
+RFC1918 is still refused.
+
+**Changing what an already-approved plugin may reach.** Capabilities are granted once,
+at approval, and a plugin in the `enabled` state has no re-approval path. To widen
+`http.hosts` on a running plugin: uninstall it *without* the purge checkbox — which
+keeps its KV and its `%%%` document data — then upload the same package again and
+approve it with the host added. A reinstall is lossless by design precisely so this is
+safe.
+
+**A dropped package never appears.** `PLUGIN_INBOX_DIR` is polled every 5 s, and only
+after the file has stopped growing. A rejected one is moved to `<inbox>/rejected/` with
+a sibling `.error.txt` naming the reason — most often an entry outside `frontend/**`
+plus the declared wasm module, which the installer refuses on purpose (SPEC §6.2): a
+`README.md` or a `__MACOSX/` sidecar from a desktop zip tool fails the install by name.
+Package with `mise run plugin-package <id>`, which writes exactly the accepted set.
+
+**A plugin is taking the workspace down.** `DISABLE_PLUGINS=1` and restart: no plugin
+code runs on the server, and every client is told the installed list is empty. In the
+browser, `?safe=1` boots the base distribution only and `?safe=bare` boots a minimal
+built-in plugin manager — neither needs a server change, which matters when the plugin
+breaking things is a frontend half.

@@ -21,7 +21,7 @@
  * `node_modules` of their own.
  */
 
-import { readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -38,6 +38,11 @@ const requested = process.argv.slice(2);
 const plugins = readdirSync(baseDir)
   .filter((name) => !name.startsWith("_") && name !== "dist")
   .filter((name) => statSync(join(baseDir, name)).isDirectory())
+  // A plugin source directory is one with a manifest. Anything else here is not a plugin
+  // and is skipped rather than crashing the build on a missing `manifest.json` — the case
+  // that found this was `PLUGIN_STAGING_DIR`, which defaults to `<PLUGINS_DIR>.staging`
+  // and therefore lands as a sibling of the sources when `PLUGINS_DIR` is the default.
+  .filter((name) => existsSync(join(baseDir, name, "manifest.json")))
   .filter((name) => requested.length === 0 || requested.includes(name))
   .sort();
 

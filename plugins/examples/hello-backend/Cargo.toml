@@ -1,0 +1,15 @@
+[package]
+name = "hello-backend"
+description = "The smallest legal backend plugin: the required ABI export, one cron handler, one invoked call. The host's smoke test builds and calls it."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+life-manager-plugin-sdk = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

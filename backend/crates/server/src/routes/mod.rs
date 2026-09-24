@@ -11,6 +11,8 @@
 //! /api/admin/*                     -> admin.rs                  (admin only)
 //! /api/sync, /api/sync/bootstrap   -> sync.rs                   (authenticated)
 //! /api/plugins                     -> statics.rs                (authenticated)
+//! /api/plugins/:id/*               -> plugin_api.rs             (session, or public per manifest)
+//! /api/admin/plugins/*             -> plugin_api.rs             (admin only)
 //! /importmap.json, /kernel.d.ts    -> statics.rs                (public)
 //! /plugins/:id/:version/*          -> statics.rs                (public, immutable)
 //! everything else (GET)            -> statics.rs                (the PWA + SPA fallback)
@@ -21,6 +23,7 @@ pub mod attachments;
 pub mod auth;
 pub mod documents;
 pub mod health;
+pub mod plugin_api;
 pub mod statics;
 pub mod sync;
 
@@ -52,7 +55,18 @@ pub fn router(state: AppState, metrics: PrometheusHandle) -> Router {
         .nest("/documents", documents::router())
         .nest("/attachments", attachments::router())
         .nest("/admin", admin::router())
-        .nest("/plugins", statics::api_router())
+        // M4: plugin management lives beside the rest of admin but in its own file —
+        // `plugin_api.rs` owns both halves of the plugin HTTP surface (the admin screens
+        // and the inbound dispatch), because the route table is the same resource.
+        .nest("/admin/plugins", plugin_api::admin_router())
+        // The installed-plugin list (M3) and the per-plugin route dispatch (M4) share the
+        // `/api/plugins` prefix: `GET /` is the list, `/{id}/{*path}` reaches a backend
+        // half. Merged rather than nested twice — axum resolves `/` and `/{id}/{*path}`
+        // without ambiguity, and one nest keeps the body limit and the layer stack single.
+        .nest(
+            "/plugins",
+            statics::api_router().merge(plugin_api::router()),
+        )
         .layer(DefaultBodyLimit::max(JSON_BODY_LIMIT))
         // Merged *outside* the body limit: `/api/sync` is a WebSocket upgrade (no
         // request body at all) and `/api/sync/bootstrap` streams a response, so a

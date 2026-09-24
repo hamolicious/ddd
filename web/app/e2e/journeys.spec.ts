@@ -28,8 +28,15 @@ import {
   waitSynced,
 } from "./helpers.js";
 
-/** The base distribution (SPEC §6.5) plus the one example plugin the suite installs. */
-const EXPECTED_PLUGINS = 15;
+/**
+ * What `plugins/base/dist` holds, plus the one example plugin the suite installs.
+ *
+ * The 14 of SPEC §6.5's table, plus M4's two — `calendar` (the backend-plugin proof) and
+ * `agenda` (the pure-frontend one) — plus `alt-editor`. The two M4 plugins ship in the
+ * same directory but are deliberately **not** in `BASE_PLUGIN_IDS`, so `?safe=1` still
+ * boots only §6.5's set; `safe-mode.spec.ts` is what pins that.
+ */
+const EXPECTED_PLUGINS = 17;
 
 /**
  * `--lm-bg` as the `midnight` theme paints it (`plugins/base/themes/src/index.tsx`).
@@ -73,13 +80,19 @@ test("registering the first user boots the whole plugin distribution", async ({
 
   // First run seeds deletable welcome documents demonstrating frontmatter, `fm.path`,
   // task lists and a directive (SPEC §6.5).
+  //
+  // Scoped to the main region, not the whole page: M4's `agenda` contributes sidebar
+  // panels that link to the same documents by title, so an unscoped lookup matches two
+  // buttons and fails on strict mode. The assertion always meant "`doc-list` is showing
+  // them", and the sidebar's copy is another plugin's business.
+  const main = page.locator("#shell-main");
   for (const title of [
     "Welcome to Life Manager",
     "Tasks and lists",
     "Folders come from frontmatter",
     "Directives and machine sections",
   ]) {
-    await expect(page.getByRole("button", { name: title })).toBeVisible();
+    await expect(main.getByRole("button", { name: title })).toBeVisible();
   }
   await expect(docRows(page).first()).toBeVisible();
 

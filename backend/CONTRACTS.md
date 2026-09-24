@@ -345,13 +345,23 @@ pub struct ListQuery { pub filter: Option<bson::Document>, pub sort: Option<bson
 pub enum TrashFilter { Live, Trashed, All }
 pub struct Page { pub documents: Vec<Document>, pub next_cursor: Option<String> }
 pub enum DocStoreError { NotFound, AlreadyExists, Graveyarded, TooLarge{len,limit}, InvalidId,
-    MalformedUpdate, Contended, SnapshotNotFound, Db, Bson, Other }
+    MalformedUpdate, Contended, SnapshotNotFound, SpliceRefused(String), Db, Bson, Other }
+
+/// Computes splice edits from a document's text. Called **once, with the room lock held**.
+pub type SpliceFn<'a> =
+    &'a (dyn Fn(&str) -> Result<Vec<core::splice::TextEdit>, String> + Send + Sync);
 
 #[async_trait]
 pub trait DocStore: Send + Sync + 'static {
     async fn create(&self, id: Option<Id>, text: &str, actor: &Actor) -> Result<WriteOutcome, DocStoreError>;
     async fn replace_text(&self, id: &str, text: &str, actor: &Actor) -> Result<WriteOutcome, DocStoreError>;
-    async fn apply_edits(&self, id: &str, edits: &[core::splice::TextEdit], actor: &Actor) -> Result<WriteOutcome, DocStoreError>;
+    // M4 replaces `apply_edits(id, edits, actor)`. A `TextEdit` is a byte-offset span, and a
+    // byte offset only means something against the string it was computed from; the old
+    // signature made the caller read the text in one critical section and hand back offsets
+    // applied in another, so a concurrent CRDT write in between silently shifted them onto
+    // somebody else's text. The closure is called inside the lock, against the text the write
+    // lands on. There is deliberately no variant that accepts a precomputed edit list.
+    async fn splice(&self, id: &str, compute: SpliceFn<'_>, actor: &Actor) -> Result<WriteOutcome, DocStoreError>;
     async fn apply_update(&self, id: &str, update: &[u8], actor: &Actor) -> Result<WriteOutcome, DocStoreError>;
     async fn text(&self, id: &str) -> Result<String, DocStoreError>;
     async fn get(&self, id: &str) -> Result<Document, DocStoreError>;
@@ -1378,3 +1388,302 @@ WebAssembly module violates the following Content Security policy directive …
   explicitly. That last one is not cosmetic: the task runs in `backend/`, and the relative
   defaults in `config.rs` would otherwise resolve to `backend/plugins/…` and find nothing,
   which reads as "the plugins failed to load".
+
+---
+
+# M4 build contracts (backend plugins)
+
+**Scope: SPEC §9 M4 only** — the Extism host with its limits and circuit breaker, the
+manifest/dependency/capability enforcement, the pending-install approval flow, plugin
+config and secrets, hooks, cron and the event bridge; **proof:** the `calendar` plugin
+(backend half crons an ICS feed into machine-owned documents, frontend half renders a month
+view from `fm.date`) with `agenda` alongside it as a pure frontend plugin.
+**Not in scope:** the Flutter shell (M5). Nothing here needs Dart, and nothing here needs a
+new frontend kernel API.
+
+[`HOST-ABI.md`](HOST-ABI.md) is authoritative for everything crossing the Wasm boundary.
+Server and plugins implement it independently; where an implementation and that document
+disagree, the document is the bug report, and where the document and
+[`../SPEC.md`](../SPEC.md) disagree, the SPEC wins.
+
+The M1–M3 rules still hold: **don't edit another area's files, don't change a frozen
+signature, report instead of improvising.** Amendments the M4 scaffold made, all announced
+here:
+
+1. **Two new crates.** `crates/plugin-abi` (a workspace member — the ABI as serde types) and
+   `crates/plugin-sdk` (**excluded** from the workspace: it links Extism's host imports, so a
+   host-target `cargo test --workspace --all-targets` would fail to link it).
+2. **A new Cargo workspace outside `backend/`:** `plugins/` holds the backend halves
+   (`base/calendar/backend`, `base/calendar/ics`, `examples/hello-backend`). Both it and
+   `crates/plugin-sdk` pin `wasm32-unknown-unknown` in their own `.cargo/config.toml`, so no
+   command needs `--target`.
+3. **Dependencies were added** to `crates/server`: `extism`, `reqwest` (rustls only),
+   `hickory-resolver`, `ipnet`, `chacha20poly1305`, `hkdf`, and `life-manager-plugin-abi`.
+   Nothing else may be added. (`zip`, `hmac`, `sha2` were already there.)
+4. **`config.rs` gained twelve fields** (ops-owned file, scaffold edit) — the `PLUGIN_*`
+   block and `CONFIG_KEY`; `.env.example` documents every one.
+5. **`routes/mod.rs` gained two nests** (http-routes-owned file, scaffold edit):
+   `/api/admin/plugins` and the merge of `plugin_api::router()` into the existing
+   `/api/plugins` nest.
+6. **`routes/sync.rs` gained one function** (sync-owned file, scaffold edit):
+   `publish_plugin_event`, because `ConnEntry` — the only place a user id meets an outbox —
+   is private to that module.
+7. **`db/indexes.rs` gained two indexes** and **`telemetry.rs` gained twelve metric names**
+   (ops-owned files, scaffold edits). **No migration and no `SCHEMA_VERSION` bump:** the
+   three plugin collections are created lazily by Mongo and need no backfill.
+8. **`main.rs` gained the boot and shutdown wiring** (ops-owned file, scaffold edit).
+
+## New and changed layout
+
+```
+backend/
+├── HOST-ABI.md                          the Wasm boundary                    FROZEN
+└── crates/
+    ├── plugin-abi/                      the ABI as types      [wasm-host]     FROZEN
+    │   └── src/{lib,error,documents,kv,config,events,call,http,hooks,cron,log,limits,names}.rs
+    ├── plugin-sdk/                      the plugin author's crate  [wasm-host]
+    │   └── src/{lib,host,runtime,documents,kv,config,events,plugins,http,log}.rs
+    └── server/src/
+        ├── pluginhost/
+        │   ├── mod.rs        host, activation, invocation      [wasm-host]
+        │   ├── host_fns.rs   the 13 host functions             [wasm-host]
+        │   ├── limits.rs     deadlines, write ledger           [wasm-host]
+        │   ├── breaker.rs    the circuit breaker               [wasm-host]
+        │   ├── pool.rs       compiled modules + instances      [wasm-host]
+        │   ├── hooks.rs      feed → debounce → invoke          [hooks-cron]
+        │   └── cron.rs       the parser + the scheduler        [hooks-cron]
+        ├── plugininstall/
+        │   ├── mod.rs        the pipeline, approve, uninstall  [install-flow]
+        │   ├── zipcheck.rs   hostile-zip handling              [install-flow]
+        │   ├── queue.rs      the Mongo install lock            [install-flow]
+        │   ├── watcher.rs    the directory-drop path           [install-flow]
+        │   └── config.rs     plugin_config + secrets           [install-flow]
+        ├── plugins.rs        + manifest types, states, record, resolution [install-flow, with server-static]
+        └── routes/plugin_api.rs  dispatch [wasm-host] + admin surface [agenda-admin]
+
+plugins/
+├── Cargo.toml                           the wasm plugin workspace
+├── base/calendar/{manifest.json,README.md,backend/,ics/,src/}   [calendar]
+├── base/agenda/{manifest.json,src/}                             [agenda-admin]
+└── examples/hello-backend/                                      [wasm-host]
+
+web/scripts/build-wasm-plugins.mjs       backend halves → the installed layout  [wasm-host]
+```
+
+Root: `mise.toml` gained `wasm-plugins`, `plugin-check`, `plugin-test`, `plugin-smoke`;
+`.env.example` and `.gitignore` gained their M4 blocks — **[ops]**.
+
+## The five builder areas
+
+| Area | Owns | Must not touch |
+|---|---|---|
+| **wasm-host** | `crates/plugin-abi/**`, `crates/plugin-sdk/**`, `pluginhost/{mod,host_fns,limits,breaker,pool}.rs`, the dispatch half of `routes/plugin_api.rs`, `plugins/examples/**`, `web/scripts/build-wasm-plugins.mjs`, `crates/server/tests/pluginhost_*.rs` | `plugininstall/**`, `plugins.rs`, `pluginhost/{hooks,cron}.rs`, `feed.rs`, `docstore.rs`, `domain.rs`, `state.rs`, `error.rs` |
+| **install-flow** | `plugininstall/**`, `plugins.rs` (the M4 half), `crates/server/tests/plugininstall_*.rs` | `pluginhost/**` internals, `routes/**` (ask), `docstore.rs`, `domain.rs` |
+| **hooks-cron** | `pluginhost/hooks.rs`, `pluginhost/cron.rs`, `routes::sync::publish_plugin_event`, the `emit`/`emit_client` bodies in `host_fns.rs` | everything else in `pluginhost/**`, `plugininstall/**`, the rest of `sync.rs` |
+| **calendar** | `plugins/base/calendar/**` | anything under `backend/` (report ABI gaps instead), `plugins/base/agenda/**` |
+| **agenda-admin** | `plugins/base/agenda/**`, `plugins/base/admin/src/Plugins.tsx` and its siblings, the admin half of `routes/plugin_api.rs` | `pluginhost/**`, `plugininstall/**` (call them) |
+
+Three areas share one file each, and the split is marked inside the file:
+`routes/plugin_api.rs` (wasm-host dispatch / agenda-admin admin), `host_fns.rs`
+(hooks-cron owns two function bodies), `plugins.rs` (server-static's M3 registry /
+install-flow's M4 types).
+
+## Frozen contracts
+
+### `crates/plugin-abi` — FROZEN
+
+Every type in it is the wire format. Adding an **optional** field is allowed and announced;
+renaming one, retyping one, or changing an `ErrorCode` spelling is an ABI-major change and
+bumps `ABI_VERSION`. `HOST-ABI.md` is the prose half and changes in the same commit.
+
+```rust
+pub const ABI_VERSION: u32 = 1;
+pub type JsonMap = BTreeMap<String, serde_json::Value>;
+pub struct Envelope<T> { pub ok: bool, pub value: Option<T>, pub error: Option<HostError> }
+pub enum Origin { User{id}, Plugin{id}, System }
+pub struct Capabilities { documents, http_hosts, public_routes, notifications }
+pub struct InitPayload { plugin_id, version, abi_version, capabilities, config_keys }
+pub enum ErrorCode { CapabilityDenied, Forbidden, NotFound, Gone, AlreadyExists,
+    InvalidArgument, TooLarge, LimitExceeded, Reentrancy, Timeout, Blocked, Unavailable,
+    Internal }                      // append-only; `is_plugin_fault` splits breaker input
+pub struct HostError { code, message, detail }
+// documents: DocumentValue, TrashScope, GetDocument{Input,Output},
+//   QueryDocuments{Input,Output}, CreateDocumentInput, WriteDocumentOutput,
+//   SectionEdit, SpliceSection{Input,Output}, RewriteDocumentInput
+// kv / config / events / call / http / hooks / cron / log: one module each
+// limits::*  — every cap, readable from both sides
+// names::*   — every host-function and export name; HOST_FUNCTIONS, EXPORTS
+```
+
+### `pluginhost` — the invocation contract
+
+```rust
+pub const HOST_NAMESPACE: &str = "extism:host/user";
+pub struct ActivePlugin { id, version, capabilities, dependencies, hooks, cron, routes,
+    events, config_keys, wasm_path, module_sha256, abi_version, exports }
+pub enum CallKind { Init, Hook(HookKind), Cron{index}, Route, Invoked{caller,function},
+                    Event{emitter} }        // export_name(), timeout(), label()
+pub struct Invocation { plugin_id, kind, payload, deadline, depth, stack, user_id }
+    // top_level(), with_user(), nested() — depth ≤ 3, no reentrancy, shared deadline
+pub struct CallOutcome { value, duration, writes, logs }
+pub enum PluginHostError { NotActive, NoExport, Disabled, Timeout, Trap, BadResponse,
+    AbiMismatch, PoolExhausted, Instantiate, ShuttingDown, Internal }  // counts_as_failure()
+pub enum CallFailure { Refused(HostError), Host(PluginHostError) }
+pub struct PluginHost;                      // get(), activate(), deactivate(), reload(),
+                                            // active(), get_active(), call(), call_typed(),
+                                            // reset_breaker(), stats(), shutdown()
+pub fn spawn_workers(&AppState) -> PluginHostWorkers;
+pub struct PluginLimits { … }               // from_config: configuration may only LOWER
+pub struct Deadline;                        // inherited(), capped(), remaining_ms()
+pub struct WriteLedger;  pub struct CallCounters;
+pub enum BreakerState { Closed{failures}, Open{since,failures,reason} }
+pub enum BreakerTransition { Counted, Opened, AlreadyOpen }
+pub struct CircuitBreaker;  pub struct PluginPool;  pub struct InstanceGuard;
+pub struct CronSchedule;  pub enum CronParseError { … }  pub struct CronState;
+pub const HOOK_DEBOUNCE: Duration = 2s;  pub const HOOK_MAX_DELAY: Duration = 30s;
+```
+
+### `plugininstall` — the install contract
+
+```rust
+pub enum InstallSource { Upload{filename}, Directory{path}, Base }
+pub struct InstallRequest { source, archive, actor, auto_approve }
+pub struct InstallOutcome { id, version, state, capabilities, replaced, warnings }
+pub enum InstallError { Package, Manifest, KernelIncompatible, AbiIncompatible, Dependency,
+    PeerLibrary, AlreadyInstalled, Locked, RolledBack, Io, Db, Internal }
+pub async fn install / approve / reject / disable / enable / uninstall / purge_sections
+pub async fn records / record / adopt_installed_directory
+pub fn staging_dir / pending_dir / installed_dir / validate_manifest
+// zipcheck: ExtractedPackage, ZipError, read_manifest, extract, entry_allowed,
+//           inside_root, wait_for_stable, sha256_file
+// queue:    InstallLock, acquire, with_lock, holder   (a `meta` document + TTL)
+// watcher:  spawn, scan_once                          (5 s poll + stable-size check)
+// config:   SealedValue, StoredValue, ConfigCipher{seal,open}, cipher,
+//           for_plugin, for_admin, set, clear, purge, validate_value
+```
+
+### `plugins.rs` — the M4 additions
+
+```rust
+// PluginManifest gained typed `capabilities`, `config`, `backend`
+pub struct PluginCapabilities { documents, http, notifications, public_routes }
+    // to_abi(), http_hosts(), approval_is_legal()
+pub struct HttpCapability { hosts }
+pub struct ConfigField { kind, secret, label, description, default, required, options }
+pub struct PluginBackend { module, hooks, cron, routes, events }
+pub struct RouteSpec { method, path, public }              // parse("POST /webhook")
+pub enum PluginState { Pending, Enabled, Disabled, Failed } // wire: snake_case
+pub struct PluginRecord { … }  pub struct PluginKvEntry { … }  pub struct PluginConfigEntry { … }
+pub struct Resolution { order, peer_versions, warnings }
+pub enum ResolveError { Missing, Unsatisfied, Cycle, PeerConflict }
+pub fn resolve(&[PluginManifest]) -> Result<Resolution, ResolveError>;
+pub fn satisfies(version, range) -> Result<bool, ResolveError>;
+impl Registry { pub fn apply_states(&mut self, &[PluginRecord]) }
+// InstalledPlugin::state changed from &'static str to PluginState — same wire strings
+```
+
+## Decisions this scaffold made, and why
+
+1. **`created_by` is the machine-ownership record.** SPEC §3.3 wants a "creator-plugin
+   check" for `rewrite_document`. `Actor::Plugin` already exists and `created_by` is already
+   stored, so ownership is `created_by == "plugin:<caller>"` — no new column, no second
+   source of truth, no `domain.rs` change. A human-created document is therefore nobody's to
+   rewrite, which is the intended outcome.
+2. **`splice_section` takes no `plugin_id`.** SPEC §6.3 spells the signature with one; the
+   host supplies it. A plugin that could name the section could write another plugin's
+   machine data.
+3. **A pending package never sits in `PLUGINS_DIR`.** Extraction goes to
+   `PLUGIN_STAGING_DIR/pending/<id>/<version>` and **approval is the rename** into the
+   served root. That makes "pending installs cannot be fetched" structural rather than a
+   check that could be forgotten — the static route serves the registry, and the registry is
+   a scan of the served root.
+4. **An approval may widen `http.hosts`, and nothing else.** A plugin whose destination is
+   admin-configured cannot know its host at packaging time (the calendar is exactly that),
+   and the alternative is operators repackaging zips — which they would do by turning the
+   check off. Every other field may only be narrowed.
+5. **`emit_client` is a JSON `plugin.event` message, not a binary frame.** PROTOCOL.md §3.1
+   reserves binary types `0x10`–`0x1F` for plugin channels, but §9 already says clients
+   **ignore unknown `t` values** — so a JSON message is additive with no protocol version
+   bump, and it is readable in a log. The reserved binary range stays reserved for a future
+   high-rate channel.
+6. **The cron parser is hand-rolled.** Every cron crate pulls `chrono`, and this workspace
+   uses `time` deliberately (the shared core hand-rolls date arithmetic for parity by
+   construction, SPEC §3.4). ~150 lines and fully testable beats a second date library
+   forever. Non-standard syntax (`@daily`, seconds, `L`, `#`) is a parse error, so a manifest
+   cannot mean two things on two servers.
+7. **A `log` host function was added** (not in SPEC §6.3's list). A plugin with no way to
+   log is a plugin you debug by making it fail, and anything it printed would miss the
+   structured log's plugin id, request id and level.
+8. **`PluginRecord` lives in `plugins.rs`, not `domain.rs`.** Every other Mongo shape is in
+   `domain.rs`, and this one is the exception: that file is frozen and shared by every area,
+   while this record is coupled to the manifest types in `plugins.rs`. Putting it there would
+   mean a frozen file importing the plugin subsystem and a merge conflict for every builder.
+9. **No `delete_document`, no `kv_list`.** `HOST-ABI.md` §8 argues both, and names what a v2
+   would need.
+10. **Host functions reach tokio through a stored `Handle`.** Extism calls are synchronous
+    and run on `spawn_blocking` threads, so `handle.block_on(...)` inside a host function
+    cannot starve the reactor. The rule that keeps it safe — never wait on a task that needs
+    *this* thread — is written in `host_fns.rs` because it is the one place a deadlock is
+    imaginable.
+11. **The instance pool caches compiled modules and instances separately.** Compilation is
+    expensive, instantiation is not; a trapped instance is **dropped, not reset**, because
+    carrying one plugin bug into the next unrelated call is a failure nobody reproduces.
+12. **The M3 carry-over is satisfied structurally, with no change to `statics.rs`.**
+    `web/CONTRACTS.md` requires that `/plugins/:id/:version/*` — unauthenticated by necessity
+    — keep `manifest.json` and `backend.wasm` unreachable. The M4 installer writes
+    `backend.wasm` into the same version directory, and that route already refuses any path
+    outside `frontend/` *before* resolving it (`statics::PLUGIN_ASSET_ROOT`). So the new file
+    is unreachable by construction rather than by a check someone had to remember; the
+    plugin-asset tests in `tests/statics.rs` should gain a case asserting exactly that
+    (`/plugins/calendar/1.0.0/backend.wasm` → 404) when install-flow starts writing it.
+13. **`calendar` and `agenda` are not in `BASE_PLUGIN_IDS`.** `?safe=1` boots the fourteen of
+    SPEC §6.5; a recovery mode should not include the newest code. They still ship in
+    `plugins/base/` and load normally.
+
+## What is deliberately still open
+
+Items 1, 2, 4 and 5 of the M4 list are **closed** — `Registry::apply_states` is wired,
+`plugins::resolve_import_map` is what `routes::statics::import_map` calls, the Dockerfile
+has a `plugin-builder` stage, and the admin approval screen exists. What is left:
+
+1. **No `/readyz` plugin-host detail.** The frontend registry counts are there (M3); the
+   backend host's `active`/`disabled` counts are in `PluginHostStats` and still not
+   reported. Keep it counts-only when it lands: `/readyz` is unauthenticated and proxied
+   straight through in the Compose deployment. `lm_plugins_disabled` on `/metrics` is the
+   alert in the meantime, and `docs/OPERATIONS.md` says so.
+2. **The convergence harness does not exercise plugin writes.** A plugin writing while three
+   clients edit the same documents is the interesting M4 convergence case and the harness is
+   the right place for it (SPEC §9 M2's gate, extended). The integration run did it by hand
+   — two browsers open on a calendar while cron reconciled a changed feed — and that is a
+   manual check, not a gate.
+3. **A plugin's capability grant is immutable once approved.** `approve` refuses anything
+   not in `Pending`, so widening `http.hosts` on a running plugin means uninstall (without
+   purge, which is lossless) and reinstall. That is a real workflow an operator will hit
+   the first time a feed moves host; `docs/OPERATIONS.md` documents the workaround. A
+   re-approval path on an enabled record is the fix.
+4. **The upgrade pending window.** One record per plugin means installing 1.1.0 over an
+   approved 1.0.0 sets the record to `pending` at 1.1.0 while 1.0.0 keeps serving.
+   `capabilities_approved`, `approved_at/by` and `cron_state` are preserved across the
+   window and a failed install rolls the record back verbatim, but a **restart inside that
+   window does not re-activate the old backend half**. The fix is a separate "candidate"
+   shape on `PluginRecord`, which the admin API is not written against.
+5. **`InstallError::AbiIncompatible` is unconstructed.** The install-time check is the
+   static export scan; the ABI *version value* is checked by `PluginHost::activate`, which
+   reports it as an activation failure rather than an install one. Either wire it or drop
+   the variant.
+
+## Commands
+
+```
+mise run check          # backend: fmt + check + clippy -D warnings (unchanged)
+mise run test           # backend: cargo test --workspace --all-targets
+mise run plugin-check   # the SDK + the plugin workspace, for wasm32
+mise run plugin-test    # host-target tests for the pure plugin crates (calendar-ics)
+mise run wasm-plugins   # build backend halves into plugins/base/dist/<id>/<version>/
+mise run plugin-smoke   # build hello-backend, load it in a minimal Extism host
+mise run plugin-package # package a built plugin as the installable .zip of SPEC §6.2
+mise run plugins        # frontend halves (unchanged)
+```
+
+`mise run check` deliberately does **not** cover `crates/plugin-sdk` or `plugins/**` — both
+are wasm32-only. `plugin-check` is their gate, and both must pass before reporting done.

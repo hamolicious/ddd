@@ -15,7 +15,8 @@ use std::time::Duration;
 use clap::{Parser, Subcommand};
 use life_manager_server::domain::Actor;
 use life_manager_server::{
-    auth, config::Config, db, plugins, routes, seed, state::AppState, telemetry,
+    auth, config::Config, db, pluginhost, plugininstall, plugins, routes, seed, state::AppState,
+    telemetry,
 };
 use tracing::{error, info, warn};
 
@@ -130,6 +131,49 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         }
     }
 
+    // M4: the backend plugin host. Boot order matters and is the same order the
+    // frontend's is: reconcile what is on disk with the approval records, activate the
+    // approved backend halves, *then* start cron and the hook dispatcher — a cron job
+    // firing against a half-activated set would be the one bug nobody reproduces.
+    //
+    // None of it is fatal. A plugin that fails to compile or refuses its ABI check is
+    // recorded and skipped (SPEC §6.4's rule for the frontend, applied here), because a
+    // server that will not boot over a third-party plugin is a worse outcome than a
+    // workspace missing one feature.
+    let plugin_workers = if state.config.disable_plugins {
+        None
+    } else {
+        match plugininstall::adopt_installed_directory(&state).await {
+            Ok(0) => {}
+            Ok(count) => info!(plugins = count, "adopted installed plugins into records"),
+            Err(err) => {
+                warn!(error = %err, "could not reconcile the plugin records with the directory")
+            }
+        }
+        let host = pluginhost::PluginHost::get(&state);
+        for (id, err) in host.reload(&state).await {
+            warn!(plugin = %id, error = %err, "plugin backend not activated");
+        }
+        let stats = host.stats();
+        info!(
+            active = stats.active,
+            disabled = stats.disabled,
+            cron_jobs = stats.cron_jobs,
+            "plugin host ready"
+        );
+        Some(pluginhost::spawn_workers(&state))
+    };
+
+    // The second install path of SPEC §6.2 — a `.zip` dropped into `PLUGIN_INBOX_DIR`.
+    // `spawn` returns `None` when the variable is unset (the default) or plugins are
+    // disabled, so this is a no-op on a server that has not asked for it. It lands the
+    // package *pending*, exactly like an upload: dropping a file into a watched directory
+    // is not evidence that a human read its capability list.
+    let plugin_inbox = plugininstall::watcher::spawn(state.clone());
+    if plugin_inbox.is_some() {
+        info!(dir = ?state.config.plugin_inbox_dir, "watching the plugin inbox");
+    }
+
     let maintenance = tokio::spawn(maintenance_loop(state.clone(), metrics.clone()));
 
     // Observability (request-id span + HTTP metrics) is part of `routes::router`'s
@@ -168,6 +212,22 @@ async fn serve(config: Config) -> anyhow::Result<()> {
     let closed = routes::sync::close_all_sockets(&state);
     if closed > 0 {
         info!(sockets = closed, "sync sockets closed with 4503");
+    }
+
+    // Plugins stop before the flush, and in this order for a reason: a cron job or a hook
+    // still running would keep writing documents into the set we are about to flush, so
+    // shutting the host down first means the flush is over a settled state. In-flight
+    // calls are waited for rather than cancelled (SPEC §6.3's refcounted unload) — a
+    // half-written machine-owned document has nobody to finish it.
+    if let Some(inbox) = plugin_inbox {
+        // Aborted rather than joined: the watcher's unit of work is one archive, and an
+        // install in flight holds the Mongo queue lock whose TTL is the recovery path.
+        inbox.abort();
+    }
+    if let Some(workers) = plugin_workers {
+        workers.shutdown().await;
+        pluginhost::PluginHost::get(&state).shutdown(grace).await;
+        info!("plugin host stopped");
     }
 
     info!("shutting down: flushing documents");

@@ -17,7 +17,12 @@ import { MemoryProjectionStore } from "../store/testing.js";
 import type { CoreBindings, FilterJson } from "../wasm/index.js";
 import { coreArtifactExists, loadCoreForNode } from "../wasm/node-core.js";
 import { QueryEngine } from "./index.js";
-import { MemorySearchPersistence, MiniSearchIndex, SEARCH_INDEX_VERSION } from "./search.js";
+import {
+  MemorySearchPersistence,
+  MiniSearchIndex,
+  SEARCH_INDEX_VERSION,
+  type SearchIndex,
+} from "./search.js";
 
 let seq = 0;
 
@@ -171,6 +176,63 @@ describe.skipIf(!available)("QueryEngine", () => {
     await apply(store, [feedRow("b", { fm: { status: "open" } })]);
     await flush();
     expect(emissions).toBe(0);
+  });
+
+  /**
+   * The regression this pins showed up only in a running app, and recovered on its own,
+   * which is the worst combination to debug: live-query delivery used to share one
+   * serialized queue with the search index, so every change that arrived while the index
+   * was opening (a Web Worker plus a walk of the whole store, on a cold start) waited for
+   * it. A client that booted and then received its first feed batch a second later showed
+   * a list that never refreshed — until indexing finished, at which point everything
+   * worked and the evidence was gone.
+   */
+  it("re-emits live queries while the search index is still opening", async () => {
+    const store = new MemoryProjectionStore();
+    await apply(store, [feedRow("a", { fm: { status: "open" } })]);
+
+    // An index whose `open()` never resolves until this test lets it.
+    let release = (): void => {};
+    const opened = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let upserts = 0;
+    const stalled: SearchIndex = {
+      open: () => opened,
+      upsert: async () => {
+        upserts += 1;
+      },
+      remove: async () => {},
+      search: async () => [],
+      persist: async () => {},
+      stats: async () => ({ documents: 0, safeSeq: 0, bytes: 0, builtAt: 0 }),
+      rebuild: async () => {},
+      close: async () => {},
+    };
+
+    const engine = new QueryEngine(store, core, stalled);
+    // `warmUp` kicks off `open()`, which is now hanging; nothing may depend on it.
+    const warm = engine.warmUp();
+
+    const live = await engine.subscribe({ filter: openFilter });
+    const seen: string[][] = [];
+    live.onChange((result) => seen.push(result.rows.map((row) => row.id)));
+
+    await apply(store, [feedRow("b", { fm: { status: "open" } })]);
+    await flush();
+
+    expect(seen).toEqual([["a", "b"]]);
+    expect(upserts).toBe(0);
+
+    // And the index still gets the batch once it finishes opening.
+    release();
+    await warm;
+    await flush();
+    await flush();
+    expect(upserts).toBeGreaterThan(0);
+
+    live.close();
+    await engine.close();
   });
 
   it("searches through the index, ranked, and intersects with a filter", async () => {

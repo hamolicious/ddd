@@ -155,6 +155,51 @@ describe("applyRows", () => {
     // The row is readable by the time the listener runs.
     expect(await store.get(seenInStore[0] as string)).toBeDefined();
   });
+
+  /**
+   * Two tabs, one IndexedDB, two feed sockets (SPEC §4.3 allows eight).
+   *
+   * The second tab to apply a batch correctly declines to write rows the first already
+   * stored — and used to report nothing applied, so its live queries never re-ran. The
+   * data sat in the shared database, visible to a fresh `query()`, while every open
+   * list in that tab was frozen. A row committed by any tab is news to the readers in
+   * all of them.
+   */
+  it("tells the other tabs about a batch, including one they declined to rewrite", async () => {
+    const other = new IdbProjectionStore(store.name);
+    await other.open();
+    const heard: StoreChange[] = [];
+    other.subscribe((change) => heard.push(change));
+
+    await store.applyRows([feedRow({ id: id(1), seq: 7 })], checkpoint(7));
+    // BroadcastChannel delivery is a task, not a microtask.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(heard).toHaveLength(1);
+    expect(heard[0]).toMatchObject({ applied: [id(1)], safeSeq: 7 });
+    // And the row really is readable from the other connection.
+    expect((await other.get(id(1)))?.seq).toBe(7);
+
+    // The second tab's own apply of the same batch is the no-op it should be: nothing
+    // written, nothing announced a second time.
+    const applied = await other.applyRows([feedRow({ id: id(1), seq: 7 })], checkpoint(7));
+    expect(applied.applied).toEqual([]);
+    expect(applied.ignored).toEqual([id(1)]);
+    await other.close();
+  });
+
+  it("does not echo a broadcast back to the tab that sent it", async () => {
+    const other = new IdbProjectionStore(store.name);
+    await other.open();
+    const mine: StoreChange[] = [];
+    store.subscribe((change) => mine.push(change));
+
+    await store.applyRows([feedRow({ id: id(2), seq: 3 })], checkpoint(3));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(mine).toHaveLength(1);
+    await other.close();
+  });
 });
 
 describe("iteration", () => {

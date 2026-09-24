@@ -57,6 +57,28 @@ pub const BASE_PLUGIN_IDS: &[&str] = &[
     "viewer",
 ];
 
+/// The `@kernel` contract version this server implements — what a manifest's `kernel`
+/// range is checked against at install (SPEC §6.4: "one `kernel` semver covers both the
+/// `@kernel` surface and the Wasm host ABI. … Server enforces at install").
+///
+/// **This must equal `KERNEL_API_VERSION` in `web/kernel-api/src/index.ts`.** There is no
+/// build step that can check it: the number lives in a TypeScript file the Rust build never
+/// reads, and the loader independently re-checks each plugin against its *own* bundle
+/// version (SPEC §6.4), so a drift here does not corrupt anything — it makes the server and
+/// the client disagree about which plugins are installable. Changing one without the other
+/// is the bug.
+pub const KERNEL_VERSION: &str = "1.0.0";
+
+/// Hook names a manifest's `backend.hooks` may contain (SPEC §6.3).
+pub const HOOK_NAMES: &[&str] = &["document.created", "document.changed", "document.deleted"];
+
+/// Methods a `backend.routes` declaration may use.
+pub const ROUTE_METHODS: &[&str] = &["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"];
+
+/// The `documents` capability's legal values (SPEC §6.2). A typo'd `"writes"` is refused
+/// at install rather than silently reading as "no write access requested".
+pub const DOCUMENT_RIGHTS: &[&str] = &["read", "write"];
+
 /// `^[a-z0-9][a-z0-9-]{0,63}$`, checked without a regex dependency.
 pub fn is_valid_plugin_id(id: &str) -> bool {
     let mut chars = id.chars();
@@ -68,13 +90,58 @@ pub fn is_valid_plugin_id(id: &str) -> bool {
 }
 
 /// `1.2.3` with an optional `-prerelease` / `+build` tail.
+///
+/// **Every character is checked, not just the numeric core.** A version string is used
+/// verbatim as a filesystem path component — `<PLUGINS_DIR>/<id>/<version>/…`, the staging
+/// work directory, `pending_dir`, and the `/plugins/:id/:version/*` URL — so anything this
+/// function accepts must be a single, harmless path segment. Validating only the part before
+/// the first `-`/`+` (as an earlier version of this did) accepted
+/// `1.0.0-../../../../srv/web/evil`, and `fs::create_dir_all` + `canonicalize` in
+/// [`crate::plugininstall::zipcheck::extract`] then happily resolved it *out* of the staging
+/// tree: every allowlisted entry of the package (including arbitrary `frontend/**` files)
+/// landed in a directory of the attacker's choosing, as the server process, reachable
+/// without an admin click through the inbox watcher. The zip checks cannot catch that —
+/// they validate entry names *inside* the archive, not the root they are handed.
 pub fn is_valid_version(version: &str) -> bool {
-    let core = version.split(['-', '+']).next().unwrap_or_default();
+    // Bound the whole string: it becomes a directory name.
+    if version.is_empty() || version.len() > 128 {
+        return false;
+    }
+
+    // Split the semver tails off in order: build metadata after the *first* `+`,
+    // pre-release after the first `-` of what remains.
+    let (without_build, build) = match version.split_once('+') {
+        Some((head, build)) => (head, Some(build)),
+        None => (version, None),
+    };
+    let (core, pre) = match without_build.split_once('-') {
+        Some((head, pre)) => (head, Some(pre)),
+        None => (without_build, None),
+    };
+
     let parts: Vec<&str> = core.split('.').collect();
-    parts.len() == 3
+    let core_ok = parts.len() == 3
         && parts
             .iter()
-            .all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_digit()))
+            .all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_digit()));
+    if !core_ok {
+        return false;
+    }
+
+    // Dot-separated identifiers of ASCII alphanumerics and hyphens, each non-empty
+    // (semver 2.0.0 §9/§10). This is what keeps `/`, `\`, `.` runs, NUL and every other
+    // path-significant byte out of the tail.
+    let identifiers_ok = |tail: &str| {
+        !tail.is_empty()
+            && tail.split('.').all(|identifier| {
+                !identifier.is_empty()
+                    && identifier
+                        .chars()
+                        .all(|c| c.is_ascii_alphanumeric() || c == '-')
+            })
+    };
+
+    pre.is_none_or(identifiers_ok) && build.is_none_or(identifiers_ok)
 }
 
 /// Order two versions by their numeric triple; anything unparseable sorts lowest.
@@ -115,6 +182,20 @@ pub struct PluginManifest {
     pub peer_libraries: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub frontend: Option<PluginFrontend>,
+    /// M4. Typed rather than left in [`PluginManifest::extra`]: the install flow validates
+    /// it, the admin screen renders it, and the host gates on it — three readers is two too
+    /// many for a `serde_json::Value`. Skipped when empty, so an M3 manifest's
+    /// `/api/plugins` representation is byte-identical to what it was.
+    #[serde(default, skip_serializing_if = "PluginCapabilities::is_empty")]
+    pub capabilities: PluginCapabilities,
+    /// M4. The admin-config schema (SPEC §6.2). Values live in `plugin_config`; this is
+    /// only their declaration, and it is safe to serve to any session — a key name is not a
+    /// secret, and the admin UI needs it to draw the form.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub config: BTreeMap<String, ConfigField>,
+    /// M4. The backend half: module, hooks, cron, routes, event subscriptions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backend: Option<PluginBackend>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -123,10 +204,789 @@ pub struct PluginManifest {
     pub author: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub license: Option<String>,
-    /// Everything else in the file, passed through untouched (`capabilities`,
-    /// `config`, `backend`, `x-*`). The admin UI shows it; M4 enforces it.
+    /// Everything else in the file, passed through untouched (`x-*` keys, and anything a
+    /// newer server understands that this one does not).
     #[serde(flatten)]
     pub extra: BTreeMap<String, serde_json::Value>,
+}
+
+impl PluginManifest {
+    /// `true` when the package declares a backend half the host should load.
+    pub fn has_backend(&self) -> bool {
+        self.backend.is_some()
+    }
+
+    /// The declared cron expressions, or an empty slice.
+    pub fn cron(&self) -> &[String] {
+        self.backend
+            .as_ref()
+            .map(|backend| backend.cron.as_slice())
+            .unwrap_or_default()
+    }
+
+    /// Config keys declared `secret: true`.
+    pub fn secret_keys(&self) -> Vec<&str> {
+        self.config
+            .iter()
+            .filter(|(_, field)| field.secret)
+            .map(|(key, _)| key.as_str())
+            .collect()
+    }
+}
+
+/// The capability set a manifest **requests** (SPEC §6.2), and the shape the approval
+/// record stores as what an admin **granted**.
+///
+/// One type for both, because the approval screen's job is to show the difference and the
+/// diff is only meaningful between like shapes.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PluginCapabilities {
+    /// `["read"]`, `["read", "write"]`, or empty. Unknown strings are refused at install
+    /// rather than ignored — a typo'd `"writes"` must not read as "no write access
+    /// requested".
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub documents: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub http: Option<HttpCapability>,
+    /// Native-bridge notifications (frontend-side, SPEC §7).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub notifications: bool,
+    /// Route paths served without a session. Each must also appear in
+    /// `backend.routes`; a public route that does not exist is a manifest error.
+    #[serde(
+        default,
+        rename = "public-routes",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub public_routes: Vec<String>,
+}
+
+impl PluginCapabilities {
+    pub fn is_empty(&self) -> bool {
+        self.documents.is_empty()
+            && self.http.is_none()
+            && !self.notifications
+            && self.public_routes.is_empty()
+    }
+
+    pub fn can_read_documents(&self) -> bool {
+        self.documents.iter().any(|c| c == "read")
+    }
+
+    pub fn can_write_documents(&self) -> bool {
+        self.documents.iter().any(|c| c == "write")
+    }
+
+    /// Approved hosts, lowercased. Empty ⇒ `http_request` is an erroring stub.
+    pub fn http_hosts(&self) -> Vec<String> {
+        self.http
+            .as_ref()
+            .map(|http| {
+                http.hosts
+                    .iter()
+                    .map(|host| host.trim().to_ascii_lowercase())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// The form the host hands a plugin ([`life_manager_plugin_abi::Capabilities`]).
+    pub fn to_abi(&self) -> life_manager_plugin_abi::Capabilities {
+        life_manager_plugin_abi::Capabilities {
+            documents: self.documents.clone(),
+            http_hosts: self.http_hosts(),
+            public_routes: self.public_routes.clone(),
+            notifications: self.notifications,
+        }
+    }
+
+    /// Is `granted` a legal approval of `self` (the request)?
+    ///
+    /// The rule, and the one exception: an approval may **narrow** anything, and may
+    /// **extend `http.hosts`**. A plugin whose destination is admin-configured cannot know
+    /// its host when it is packaged — the calendar plugin ships `hosts: []` and the
+    /// operator who enters a feed URL is the one who knows the host — and the alternative
+    /// is asking that operator to repackage a zip. Widening anything else (a `documents`
+    /// right, a public route the package never declared) is refused: those are the
+    /// package's own claims about itself.
+    pub fn approval_is_legal(&self, granted: &PluginCapabilities) -> Result<(), String> {
+        for right in &granted.documents {
+            if !self.documents.iter().any(|requested| requested == right) {
+                return Err(format!(
+                    "the package did not request `documents: [\"{right}\"]`; an approval may not add it"
+                ));
+            }
+        }
+        if granted.notifications && !self.notifications {
+            return Err(
+                "the package did not request `notifications`; an approval may not add it"
+                    .to_string(),
+            );
+        }
+        for route in &granted.public_routes {
+            if !self
+                .public_routes
+                .iter()
+                .any(|requested| requested == route)
+            {
+                return Err(format!(
+                    "the package did not declare `{route}` as a public route; an approval may not add it"
+                ));
+            }
+        }
+        // The one widening. `hosts` may grow, but only for a package that asked for the
+        // `http` capability at all — granting HTTP to a plugin whose manifest never
+        // mentioned it is adding a capability, not widening one.
+        if let Some(http) = granted.http.as_ref() {
+            if self.http.is_none() {
+                return Err(
+                    "the package did not request the `http` capability; an approval may not add it"
+                        .to_string(),
+                );
+            }
+            for host in &http.hosts {
+                validate_host(host)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Every capability well-formedness rule of `HOST-ABI.md` §7.1 step 5, checked against
+    /// the manifest's own `backend.routes`.
+    pub fn validate(&self, declared_routes: &[RouteSpec]) -> Result<(), String> {
+        for right in &self.documents {
+            if !DOCUMENT_RIGHTS.contains(&right.as_str()) {
+                return Err(format!(
+                    "`capabilities.documents` may only contain {DOCUMENT_RIGHTS:?}, not `{right}`"
+                ));
+            }
+        }
+        if let Some(http) = self.http.as_ref() {
+            for host in &http.hosts {
+                validate_host(host)?;
+            }
+        }
+        for route in &self.public_routes {
+            if !declared_routes.iter().any(|spec| spec.path == *route) {
+                return Err(format!(
+                    "`public-routes` lists `{route}`, which is not in `backend.routes`"
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// A `http.hosts` entry must be a bare host name: no scheme, no path, no port, no wildcard
+/// (HOST-ABI.md §3.11 matches hosts exactly, so a wildcard would silently match nothing and
+/// a `https://` prefix would never match at all).
+fn validate_host(host: &str) -> Result<(), String> {
+    let host = host.trim();
+    if host.is_empty() {
+        return Err("`http.hosts` contains an empty entry".to_string());
+    }
+    if host.contains("://") || host.contains('/') {
+        return Err(format!(
+            "`http.hosts` entry `{host}` must be a bare host name, with no scheme and no path"
+        ));
+    }
+    if host.contains('*') {
+        return Err(format!(
+            "`http.hosts` entry `{host}` uses a wildcard; hosts are matched exactly"
+        ));
+    }
+    if host.contains(':') {
+        return Err(format!(
+            "`http.hosts` entry `{host}` must not carry a port; the host alone is the grant"
+        ));
+    }
+    if host
+        .chars()
+        .any(|c| !(c.is_ascii_alphanumeric() || c == '.' || c == '-'))
+    {
+        return Err(format!("`http.hosts` entry `{host}` is not a host name"));
+    }
+    Ok(())
+}
+
+/// `http: { hosts: [...] }` — the parameterized capability of SPEC §6.2.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HttpCapability {
+    #[serde(default)]
+    pub hosts: Vec<String>,
+}
+
+/// One field of the admin-config schema.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConfigField {
+    /// `string` | `number` | `boolean` | `select`.
+    #[serde(rename = "type")]
+    pub kind: String,
+    /// `true` ⇒ write-only in the UI, encrypted at rest (SPEC §6.2).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub secret: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Shown as the field's placeholder and used when nothing is set. **Never** applied to
+    /// a secret.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub required: bool,
+    /// For `select`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub options: Vec<String>,
+}
+
+/// The `backend` half of a manifest (SPEC §6.2).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PluginBackend {
+    /// Path inside the package, conventionally `backend.wasm`. Must be a safe relative
+    /// path and is the **only** file outside `frontend/**` the installer extracts.
+    pub module: String,
+    /// `document.created` / `document.changed` / `document.deleted`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hooks: Vec<String>,
+    /// Five-field UTC cron expressions (SPEC §6.3).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cron: Vec<String>,
+    /// `"POST /webhook"` — method and path, space separated.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub routes: Vec<String>,
+    /// Server-bus events this plugin wants delivered to `lm_event`, namespaced
+    /// (`other-plugin:something`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub events: Vec<String>,
+}
+
+/// One declared inbound route, parsed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RouteSpec {
+    /// Upper-case method.
+    pub method: String,
+    /// Leading slash, no trailing slash, no `..`, no wildcards: a plugin's route table is
+    /// exact, so two plugins' routes can never overlap and a path cannot be smuggled.
+    pub path: String,
+    /// Reachable without a session (`capabilities.public-routes`).
+    pub public: bool,
+}
+
+impl RouteSpec {
+    /// Parse `"POST /webhook"`.
+    pub fn parse(declaration: &str, public_routes: &[String]) -> Result<RouteSpec, String> {
+        let mut parts = declaration.split_whitespace();
+        let (Some(method), Some(path)) = (parts.next(), parts.next()) else {
+            return Err(format!(
+                "`{declaration}` is not a route declaration; the form is `METHOD /path`"
+            ));
+        };
+        if parts.next().is_some() {
+            return Err(format!("`{declaration}` has more than a method and a path"));
+        }
+        let method = method.to_ascii_uppercase();
+        if !ROUTE_METHODS.contains(&method.as_str()) {
+            return Err(format!(
+                "`{method}` is not a method a plugin route may declare ({ROUTE_METHODS:?})"
+            ));
+        }
+        // Exact paths only: no wildcards, no parameters. Two plugins' route tables can then
+        // never overlap, and a path cannot be smuggled past the dispatcher's prefix strip.
+        if !path.starts_with('/') {
+            return Err(format!("route path `{path}` must start with `/`"));
+        }
+        if path.len() > 1 && path.ends_with('/') {
+            return Err(format!("route path `{path}` must not end with `/`"));
+        }
+        if path.contains("//") {
+            return Err(format!("route path `{path}` has an empty segment"));
+        }
+        if path
+            .split('/')
+            .any(|segment| segment == ".." || segment == ".")
+        {
+            return Err(format!("route path `{path}` contains a relative segment"));
+        }
+        if path.chars().any(|c| {
+            matches!(c, '*' | '{' | '}' | '?' | '#' | ':' | '\\') || c.is_whitespace() || c == '\0'
+        }) {
+            return Err(format!(
+                "route path `{path}` may only contain literal path characters"
+            ));
+        }
+        if !path.is_ascii() {
+            return Err(format!("route path `{path}` must be ASCII"));
+        }
+        Ok(RouteSpec {
+            public: public_routes.iter().any(|public| public == path),
+            method,
+            path: path.to_string(),
+        })
+    }
+}
+
+/// Parse every `backend.routes` declaration of a manifest, marking the public ones **as the
+/// package requested them**.
+///
+/// This is the *request*, which is what the install-time validation
+/// ([`PluginCapabilities::validate`]) and the pending approval screen need. Anything that
+/// decides whether a live route may be served without a session must use
+/// [`route_specs_granted`] instead: the admin is allowed to decline a public route, and
+/// declining it has to mean something.
+pub fn route_specs(manifest: &PluginManifest) -> Result<Vec<RouteSpec>, String> {
+    route_specs_with_public(manifest, &manifest.capabilities.public_routes)
+}
+
+/// [`route_specs`], with `public` taken from what an admin **granted** rather than from what
+/// the package asked for.
+///
+/// The approval screen presents each requested public route as its own checkbox with the
+/// warning that "anyone who can reach this server can call them, with no session", and
+/// [`PluginCapabilities::approval_is_legal`] accepts a narrowed set. Deriving the live
+/// `public` flag from the manifest instead of the grant silently discarded that decision:
+/// an admin who unchecked `/webhook` and approved still got an unauthenticated webhook —
+/// the free outbound-request amplifier the dispatcher's own docs warn about.
+pub fn route_specs_granted(
+    manifest: &PluginManifest,
+    granted: &PluginCapabilities,
+) -> Result<Vec<RouteSpec>, String> {
+    route_specs_with_public(manifest, &granted.public_routes)
+}
+
+fn route_specs_with_public(
+    manifest: &PluginManifest,
+    public_routes: &[String],
+) -> Result<Vec<RouteSpec>, String> {
+    let Some(backend) = manifest.backend.as_ref() else {
+        return Ok(Vec::new());
+    };
+    let mut specs = Vec::with_capacity(backend.routes.len());
+    for declaration in &backend.routes {
+        let spec = RouteSpec::parse(declaration, public_routes)?;
+        if specs
+            .iter()
+            .any(|other: &RouteSpec| other.method == spec.method && other.path == spec.path)
+        {
+            return Err(format!(
+                "`backend.routes` declares `{} {}` twice",
+                spec.method, spec.path
+            ));
+        }
+        specs.push(spec);
+    }
+    Ok(specs)
+}
+
+// ---------------------------------------------------------------------------
+// The approval record (Mongo `plugins`)
+// ---------------------------------------------------------------------------
+
+/// Where a plugin is in its life cycle (SPEC §6.2).
+///
+/// `pending` is the state that matters: **both** install paths land there, and only an
+/// explicit admin click moves a plugin out of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PluginState {
+    /// Installed on disk, not served, not loaded. Awaiting approval.
+    Pending,
+    /// Approved by an admin: its frontend half is served and its backend half is active.
+    ///
+    /// The wire spelling is **`enabled`**, not `approved`, because that is the word
+    /// `web/kernel-api/src/manifest.ts` froze in M3 and the loader compares against
+    /// (`plugin.state !== "enabled"` ⇒ skip). Approval is the *transition*; enabled is the
+    /// state.
+    Enabled,
+    /// Approved but switched off — by an admin, or by the circuit breaker.
+    Disabled,
+    /// Approved but its backend half could not be activated. The frontend half is still
+    /// served: half a plugin is usually better than none, and the admin screen says which
+    /// half is missing.
+    Failed,
+}
+
+impl PluginState {
+    /// `true` when the frontend half should be served to clients.
+    ///
+    /// **A pending plugin is not served** — that is what keeps an unapproved package's
+    /// code out of every user's session (SPEC §6.1's trust model: the frontend half runs
+    /// unsandboxed).
+    pub fn is_served(self) -> bool {
+        matches!(
+            self,
+            PluginState::Enabled | PluginState::Disabled | PluginState::Failed
+        )
+    }
+
+    /// `true` when the backend half should be running.
+    pub fn is_active(self) -> bool {
+        matches!(self, PluginState::Enabled)
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PluginState::Pending => "pending",
+            PluginState::Enabled => "enabled",
+            PluginState::Disabled => "disabled",
+            PluginState::Failed => "failed",
+        }
+    }
+}
+
+/// The `plugins` collection: the **approval record**, while the directory stays the
+/// artifact store (the M3 note in `backend/CONTRACTS.md` promised exactly this split).
+///
+/// Deliberately **not** in `domain.rs`, unlike every other Mongo shape. `domain.rs` is a
+/// frozen file every area compiles against, and this record is coupled to the manifest
+/// types in *this* module — putting it there would mean a frozen file that imports the
+/// plugin subsystem, and a merge conflict for every builder. Announced as a deviation in
+/// `backend/CONTRACTS.md`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PluginRecord {
+    /// `_id` is `<id>` — one record per plugin, not per version: two versions of one
+    /// plugin are never served at once (see the registry's "one version per plugin"),
+    /// so the record tracks the installed one.
+    #[serde(rename = "_id")]
+    pub id: String,
+    pub version: String,
+    pub state: PluginState,
+    /// The manifest as installed, so the admin screen and the host do not re-read disk.
+    pub manifest: PluginManifest,
+    /// What the admin approved. Empty until approval.
+    #[serde(default)]
+    pub capabilities_approved: PluginCapabilities,
+    pub source: crate::plugininstall::InstallSource,
+    pub installed_at: crate::domain::Timestamp,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub installed_by: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approved_at: Option<crate::domain::Timestamp>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approved_by: Option<String>,
+    /// Why it is off: `"admin"`, or the breaker's reason. Persisted so a restart does not
+    /// silently re-enable a plugin nobody has looked at.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub disabled_reason: Option<String>,
+    /// The last activation or call failure, for the admin screen.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+    /// Hex SHA-256 of `backend.wasm` as installed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub module_sha256: Option<String>,
+    /// One entry per `backend.cron` expression (SPEC §6.3: `last_run` persisted).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cron_state: Vec<crate::pluginhost::cron::CronState>,
+}
+
+/// One `plugin_kv` row. `_id` is `<plugin_id>:<key>`, which makes the namespace
+/// structural: there is no query a plugin could ask that reaches another's keys.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PluginKvEntry {
+    #[serde(rename = "_id")]
+    pub id: String,
+    pub plugin_id: String,
+    pub key: String,
+    pub value: bson::Bson,
+    pub updated_at: crate::domain::Timestamp,
+}
+
+/// One `plugin_config` row (one per plugin, all keys together — an admin saves a form, not
+/// a field).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PluginConfigEntry {
+    #[serde(rename = "_id")]
+    pub plugin_id: String,
+    /// Key → plain value, or the sealed form for secrets
+    /// ([`crate::plugininstall::config::StoredValue`]).
+    pub values: bson::Document,
+    pub updated_at: crate::domain::Timestamp,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub updated_by: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
+// Resolution (SPEC §6.1, §6.4) — shared by the installer and the import map
+// ---------------------------------------------------------------------------
+
+/// A resolved load order plus what it implies for the import map.
+#[derive(Debug, Clone, Default)]
+pub struct Resolution {
+    /// Plugin ids in topological order — the order both halves load in (SPEC §6.1).
+    pub order: Vec<String>,
+    /// Library → the single version every plugin will get.
+    pub peer_versions: BTreeMap<String, String>,
+    /// Non-fatal notes for the admin screen.
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum ResolveError {
+    #[error("`{plugin}` needs `{dependency}` {range}, which is not installed")]
+    Missing {
+        plugin: String,
+        dependency: String,
+        range: String,
+    },
+    #[error("`{plugin}` needs `{dependency}` {range}, but {found} is installed")]
+    Unsatisfied {
+        plugin: String,
+        dependency: String,
+        range: String,
+        found: String,
+    },
+    #[error("dependency cycle: {0}")]
+    Cycle(String),
+    #[error(
+        "`{library}` is required as {ranges} by different plugins, with no version satisfying all of them"
+    )]
+    PeerConflict { library: String, ranges: String },
+}
+
+/// Resolve dependencies and peer libraries over a set of manifests.
+///
+/// **One resolution, two consumers** (the promise M3 left open): the installer runs it to
+/// decide whether a package may be installed at all, and `/importmap.json` runs it to pick
+/// the one version of each blessed library every plugin gets. Import maps cannot change
+/// after load (SPEC §6.4), which is why the choice has to be made here, once, over the
+/// whole installed set, rather than per plugin at load time.
+pub fn resolve(manifests: &[PluginManifest]) -> Result<Resolution, ResolveError> {
+    let installed: BTreeMap<&str, &PluginManifest> = manifests
+        .iter()
+        .map(|manifest| (manifest.id.as_str(), manifest))
+        .collect();
+
+    // --- dependencies ------------------------------------------------------
+    // Every edge is checked before any ordering happens, so the error a plugin author
+    // sees names the range and the installed version rather than "cycle".
+    for manifest in manifests {
+        for (dependency, range) in &manifest.dependencies {
+            let Some(found) = installed.get(dependency.as_str()) else {
+                return Err(ResolveError::Missing {
+                    plugin: manifest.id.clone(),
+                    dependency: dependency.clone(),
+                    range: range.clone(),
+                });
+            };
+            if !satisfies(&found.version, range)? {
+                return Err(ResolveError::Unsatisfied {
+                    plugin: manifest.id.clone(),
+                    dependency: dependency.clone(),
+                    range: range.clone(),
+                    found: found.version.clone(),
+                });
+            }
+        }
+    }
+
+    // --- topological order (Kahn, alphabetical tie-break) ------------------
+    // Deterministic on purpose: the load order is part of what a plugin observes (a
+    // dependency's `activate()` return value is its API, SPEC §6.4), so two boots of the
+    // same installed set must order identically.
+    let mut remaining: BTreeMap<&str, usize> = manifests
+        .iter()
+        .map(|manifest| {
+            let unmet = manifest
+                .dependencies
+                .keys()
+                .filter(|dependency| installed.contains_key(dependency.as_str()))
+                .count();
+            (manifest.id.as_str(), unmet)
+        })
+        .collect();
+    let mut order: Vec<String> = Vec::with_capacity(manifests.len());
+    while !remaining.is_empty() {
+        let ready: Vec<&str> = remaining
+            .iter()
+            .filter(|(_, unmet)| **unmet == 0)
+            .map(|(id, _)| *id)
+            .collect();
+        if ready.is_empty() {
+            let mut stuck: Vec<&str> = remaining.keys().copied().collect();
+            stuck.sort_unstable();
+            return Err(ResolveError::Cycle(stuck.join(" → ")));
+        }
+        for id in ready {
+            remaining.remove(id);
+            order.push(id.to_string());
+            // Decrement the dependents of `id`.
+            for manifest in manifests {
+                if manifest.dependencies.contains_key(id)
+                    && let Some(unmet) = remaining.get_mut(manifest.id.as_str())
+                {
+                    *unmet = unmet.saturating_sub(1);
+                }
+            }
+        }
+    }
+
+    // --- peer libraries ---------------------------------------------------
+    // One version of each library for every plugin, chosen here, because an import map
+    // cannot change after load (SPEC §6.4). The choice is the highest floor any declared
+    // range implies; if that version does not satisfy every range, no single version does
+    // within this range subset, and the install is refused rather than resolved to
+    // something half the plugins were not written against.
+    let mut peer_ranges: BTreeMap<&str, Vec<(&str, &str)>> = BTreeMap::new();
+    for manifest in manifests {
+        for (library, range) in &manifest.peer_libraries {
+            peer_ranges
+                .entry(library.as_str())
+                .or_default()
+                .push((manifest.id.as_str(), range.as_str()));
+        }
+    }
+
+    let mut peer_versions = BTreeMap::new();
+    let mut warnings = Vec::new();
+    for (library, declarations) in peer_ranges {
+        let mut floor = [0u64; 3];
+        for (_, range) in &declarations {
+            let candidate = range_floor(range)?;
+            if candidate > floor {
+                floor = candidate;
+            }
+        }
+        let chosen = format!("{}.{}.{}", floor[0], floor[1], floor[2]);
+        let unsatisfied: Vec<String> = declarations
+            .iter()
+            .filter_map(|(plugin, range)| match satisfies(&chosen, range) {
+                Ok(true) => None,
+                Ok(false) | Err(_) => Some(format!("{plugin} wants {range}")),
+            })
+            .collect();
+        if !unsatisfied.is_empty() {
+            return Err(ResolveError::PeerConflict {
+                library: library.to_string(),
+                ranges: unsatisfied.join(", "),
+            });
+        }
+        if declarations.len() > 1 {
+            let distinct: std::collections::BTreeSet<&str> =
+                declarations.iter().map(|(_, range)| *range).collect();
+            if distinct.len() > 1 {
+                warnings.push(format!(
+                    "`{library}` is declared as {} by different plugins; all of them get {chosen}",
+                    distinct.into_iter().collect::<Vec<_>>().join(" / ")
+                ));
+            }
+        }
+        peer_versions.insert(library.to_string(), chosen);
+    }
+
+    Ok(Resolution {
+        order,
+        peer_versions,
+        warnings,
+    })
+}
+
+/// The lowest version a range admits, as a numeric triple. `*` is `0.0.0`.
+fn range_floor(range: &str) -> Result<[u64; 3], ResolveError> {
+    let range = range.trim();
+    if range == "*" {
+        return Ok([0, 0, 0]);
+    }
+    let bare = range
+        .strip_prefix('^')
+        .or_else(|| range.strip_prefix('~'))
+        .or_else(|| range.strip_prefix('='))
+        .unwrap_or(range);
+    parse_partial(bare).ok_or_else(|| ResolveError::PeerConflict {
+        library: range.to_string(),
+        ranges: format!("`{range}` is not a supported version range"),
+    })
+}
+
+/// `1`, `1.2` or `1.2.3` → `[1, 0, 0]` / `[1, 2, 0]` / `[1, 2, 3]`. Any prerelease or build
+/// tail is dropped: ordering prereleases is not in the supported subset, and pretending to
+/// would be worse than saying so.
+fn parse_partial(input: &str) -> Option<[u64; 3]> {
+    let core = input.split(['-', '+']).next().unwrap_or_default();
+    if core.is_empty() {
+        return None;
+    }
+    let mut out = [0u64; 3];
+    for (seen, part) in core.split('.').enumerate() {
+        if seen == 3 || part.is_empty() || !part.chars().all(|c| c.is_ascii_digit()) {
+            return None;
+        }
+        out[seen] = part.parse().ok()?;
+    }
+    Some(out)
+}
+
+/// Does `version` satisfy `range`?
+///
+/// The supported subset is `^x.y`, `^x.y.z`, `~x.y.z`, `x.y.z` and `*` — what every
+/// manifest in this repository uses. Anything else is a manifest error rather than a
+/// silently permissive match: "this range is not supported" is a fixable message, and a
+/// wrong `true` here loads a plugin against an API that has moved.
+pub fn satisfies(version: &str, range: &str) -> Result<bool, ResolveError> {
+    let unsupported = || ResolveError::PeerConflict {
+        library: range.to_string(),
+        ranges: format!(
+            "`{range}` is not a supported version range (use `*`, `x.y.z`, `^x.y[.z]` or `~x.y[.z]`)"
+        ),
+    };
+
+    let Some(actual) = parse_partial(version) else {
+        return Err(ResolveError::PeerConflict {
+            library: version.to_string(),
+            ranges: format!("`{version}` is not a version"),
+        });
+    };
+
+    let range = range.trim();
+    if range == "*" {
+        return Ok(true);
+    }
+
+    let (operator, bare) = match range.as_bytes().first() {
+        Some(b'^') => ('^', &range[1..]),
+        Some(b'~') => ('~', &range[1..]),
+        Some(b'=') => ('=', &range[1..]),
+        _ => ('=', range),
+    };
+    let floor = parse_partial(bare).ok_or_else(unsupported)?;
+    // How many components the author wrote — `~1.2` and `~1.2.0` are not the same range.
+    let written = bare
+        .split(['-', '+'])
+        .next()
+        .unwrap_or_default()
+        .split('.')
+        .count();
+
+    if actual < floor {
+        return Ok(false);
+    }
+    Ok(match operator {
+        // Caret: the left-most non-zero component is pinned (so `^0.2.1` does not admit
+        // 0.3.0). This is npm/cargo semantics, and it is the one place where being
+        // approximately right would load a plugin against an API that has moved.
+        '^' => {
+            if floor[0] > 0 {
+                actual[0] == floor[0]
+            } else if floor[1] > 0 || written >= 2 {
+                actual[0] == 0 && actual[1] == floor[1]
+            } else {
+                actual[0] == 0
+            }
+        }
+        // Tilde: patch-level changes when a minor is written, minor-level when it is not.
+        '~' => {
+            if written >= 2 {
+                actual[0] == floor[0] && actual[1] == floor[1]
+            } else {
+                actual[0] == floor[0]
+            }
+        }
+        // Exact, to the precision written: `1.0` means "any 1.0.x".
+        _ => match written {
+            1 => actual[0] == floor[0],
+            2 => actual[0] == floor[0] && actual[1] == floor[1],
+            _ => actual == floor,
+        },
+    })
 }
 
 /// One entry of `GET /api/plugins`.
@@ -145,8 +1005,16 @@ pub struct InstalledPlugin {
     pub manifest: PluginManifest,
     /// Version-scoped, trailing slash: the loader resolves module paths against it.
     pub base_url: String,
-    /// M3 serves only `enabled`; `pending` arrives with the M4 approval flow.
-    pub state: &'static str,
+    /// M4: `enabled` unless a record says otherwise.
+    ///
+    /// **A pending package is never in `PLUGINS_DIR`** — that is the structural half of
+    /// "pending installs cannot be fetched before an admin approves them". The installer
+    /// extracts into `PLUGIN_STAGING_DIR/pending/<id>/<version>/`, which no route can
+    /// reach, and *approval* is the rename into the served root. So the directory alone is
+    /// enough to answer "may this be served", and Mongo is only consulted to demote an
+    /// entry to `disabled`/`failed` ([`Registry::apply_states`]) — a server that cannot
+    /// reach Mongo therefore serves the last approved set rather than nothing.
+    pub state: PluginState,
     pub base: bool,
 }
 
@@ -202,6 +1070,72 @@ impl Registry {
             }
         }
         out
+    }
+
+    /// Demote entries the approval records say are `disabled` or `failed`, so
+    /// `/api/plugins` tells the loader the truth and the admin screen can explain a plugin
+    /// that is installed but not running.
+    ///
+    /// Additive by construction: a record that is missing leaves the scanned entry alone.
+    /// A plugin in the served directory with no record is an *adopted* M3 install
+    /// ([`crate::plugininstall::adopt_installed_directory`]), not an error.
+    pub fn apply_states(&mut self, records: &[PluginRecord]) {
+        for plugin in &mut self.plugins {
+            let Some(record) = records
+                .iter()
+                .find(|record| record.id == plugin.manifest.id)
+            else {
+                // An adopted M3 install: served, and nobody has said otherwise.
+                continue;
+            };
+            if record.version != plugin.manifest.version {
+                // The record describes a different version than the one on disk — a
+                // half-finished upgrade, or a directory an operator edited by hand. Leaving
+                // the scanned entry alone is the conservative answer: the served artifact is
+                // real, and demoting it on the strength of a record about another version
+                // would take a working app offline.
+                warn!(
+                    plugin = %plugin.manifest.id,
+                    on_disk = %plugin.manifest.version,
+                    recorded = %record.version,
+                    "the plugin record names a different version than the served directory"
+                );
+                continue;
+            }
+            plugin.state = record.state;
+        }
+    }
+
+    /// Every manifest in the registry, for [`resolve`].
+    pub fn manifests(&self) -> Vec<PluginManifest> {
+        self.plugins
+            .iter()
+            .map(|plugin| plugin.manifest.clone())
+            .collect()
+    }
+
+    /// Resolve the installed set: load order, one version per peer library, warnings.
+    ///
+    /// The second consumer of [`resolve`] the M3 notes promised (the installer is the
+    /// first): `/importmap.json` needs the peer-library choice, and the loader needs the
+    /// topological order.
+    pub fn resolution(&self) -> Result<Resolution, ResolveError> {
+        resolve(&self.manifests())
+    }
+
+    /// The manifests of the plugins that will actually be *loaded* — `enabled` only.
+    ///
+    /// The distinction matters for the import map: a `disabled` or `failed` plugin's
+    /// frontend half is still served (half a plugin beats none, and the admin screen needs
+    /// to explain it), but the loader skips it (`plugin.state !== "enabled"`), so its
+    /// `peerLibraries` ranges must not get a vote in a version every *loaded* plugin has to
+    /// live with.
+    pub fn loaded_manifests(&self) -> Vec<PluginManifest> {
+        self.plugins
+            .iter()
+            .filter(|plugin| plugin.state.is_active())
+            .map(|plugin| plugin.manifest.clone())
+            .collect()
     }
 
     /// Libraries some plugin declares that the served import map does not provide.
@@ -301,7 +1235,7 @@ pub fn scan(dir: &Path) -> Registry {
         registry.plugins.push(InstalledPlugin {
             base_url: format!("/plugins/{id}/{version}/"),
             base: BASE_PLUGIN_IDS.contains(&id.as_str()),
-            state: "enabled",
+            state: PluginState::Enabled,
             manifest,
         });
     }
@@ -391,6 +1325,93 @@ pub fn safe_relative_path(path: &str) -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// The import map (M4: peer-library resolution over the whole installed set)
+// ---------------------------------------------------------------------------
+
+/// What `/importmap.json` should serve, and what is wrong with it.
+///
+/// M3 served the runtime bundle's map and *checked* that every declared `peerLibraries`
+/// entry was present. This is the resolution SPEC §6.4 asks for — "the server resolves all
+/// installed plugins' ranges to single versions at install" — made visible at serve time
+/// as well, now that third-party plugins can be installed and each of them brings its own
+/// ranges:
+///
+/// - `imports` is what goes on the wire. It is the runtime bundle's map **unchanged**:
+///   plugin modules are loaded by URL, never by bare specifier, so no installed plugin ever
+///   adds an entry. Saying so explicitly is the point — "the import map includes the
+///   installed plugins" is a tempting and wrong reading of §6.4.
+/// - `chosen` is the one version of each library the installed set resolves to. The install
+///   flow refuses a package whose ranges cannot meet the others' (`resolve`), so this is
+///   informational — but it is what an operator needs when a plugin author asks "which
+///   CodeMirror am I getting".
+/// - `missing` is a library some loaded plugin declares that the bundle does not provide.
+///   An import map cannot change after load, so such a plugin will fail on its first bare
+///   import; the install flow refuses one when the bundle is known, and this is the
+///   backstop for a plugin adopted from disk or a bundle that changed underneath.
+#[derive(Debug, Clone, Default)]
+pub struct PeerResolution {
+    pub imports: BTreeMap<String, String>,
+    pub chosen: BTreeMap<String, String>,
+    pub missing: Vec<String>,
+    pub warnings: Vec<String>,
+}
+
+/// Resolve the peer libraries of everything that will load, against what the runtime bundle
+/// provides.
+///
+/// Never fails: a conflict is a warning here, because the enforcement point is *install*
+/// (where an operator can still act) and a boot that refused to serve an import map would
+/// take the whole app down over one plugin.
+pub fn resolve_import_map(
+    registry: &Registry,
+    provided: &BTreeMap<String, String>,
+    provided_versions: &BTreeMap<String, String>,
+) -> PeerResolution {
+    let manifests = registry.loaded_manifests();
+    let (chosen, mut warnings) = match resolve(&manifests) {
+        Ok(resolution) => (resolution.peer_versions, resolution.warnings),
+        Err(err) => (BTreeMap::new(), vec![err.to_string()]),
+    };
+
+    let mut missing = Vec::new();
+    for (library, users) in registry.peer_ranges() {
+        if !provided.contains_key(library) {
+            let who: Vec<&str> = users.iter().map(|(id, _)| *id).collect();
+            missing.push(format!("{library} (declared by {})", who.join(", ")));
+            continue;
+        }
+        // The range check the install flow makes, repeated here for the plugins that never went
+        // through it — adopted from disk, or installed against a bundle that has since been
+        // rebuilt with a new major. A warning rather than a refusal: the enforcement point is
+        // install, where an operator can still act, and refusing to serve an import map would
+        // take the whole app down over one plugin.
+        let Some(version) = provided_versions.get(library) else {
+            continue;
+        };
+        for (plugin, range) in users {
+            if matches!(satisfies(version, range), Ok(false)) {
+                warnings.push(format!(
+                    "`{plugin}` declares `{library}` {range}, but the runtime layer provides \
+                     {version}; it will fail on its first bare import"
+                ));
+            }
+        }
+    }
+    if !missing.is_empty() && provided.is_empty() {
+        warnings.push(
+            "this server serves no runtime bundle, so no peer library can be satisfied".to_string(),
+        );
+    }
+
+    PeerResolution {
+        imports: provided.clone(),
+        chosen,
+        missing,
+        warnings,
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Process-wide cache
 // ---------------------------------------------------------------------------
 
@@ -431,7 +1452,34 @@ pub fn registry(config: &Config) -> Arc<Registry> {
 /// Re-scan the plugins directory and replace the cache. Called at boot (so the log
 /// line appears before the first request) and by M4's installer.
 pub fn reload(config: &Config) -> Arc<Registry> {
-    let scanned = Arc::new(scan(&config.plugins_dir));
+    reload_with_records(config, &[])
+}
+
+/// [`reload`], with the approval records applied to the scan (M4).
+///
+/// The wiring the M4 scaffold left open: `reload` alone reports `enabled` for a directory
+/// whose record says `disabled`, because a directory scan cannot know. Every
+/// `plugininstall` action that changes what is served calls this
+/// ([`crate::plugininstall::refresh_registry`]), so `/api/plugins` and the static asset
+/// route agree with the `plugins` collection.
+///
+/// **An empty `records` slice is not "everything is disabled"** — it is "no records were
+/// read", which is also what a Mongo outage looks like. [`Registry::apply_states`] is
+/// additive for exactly that reason: an entry with no record keeps the state the scan gave
+/// it, so a server that cannot reach Mongo serves the last approved set rather than
+/// nothing.
+pub fn reload_with_records(config: &Config, records: &[PluginRecord]) -> Arc<Registry> {
+    if config.disable_plugins {
+        // Safe mode: nothing is scanned, so nothing can be served or demoted.
+        let empty = Arc::new(Registry::default());
+        let mut guard = cell().write().expect("plugin registry lock poisoned");
+        guard.insert(config.plugins_dir.clone(), Arc::clone(&empty));
+        return empty;
+    }
+
+    let mut scanned = scan(&config.plugins_dir);
+    scanned.apply_states(records);
+    let scanned = Arc::new(scanned);
     for problem in scanned.problems() {
         warn!(path = %problem.path, message = %problem.message, "plugin not loaded");
     }
@@ -462,9 +1510,35 @@ mod tests {
 
         assert!(is_valid_version("1.0.0"));
         assert!(is_valid_version("10.2.30-beta.1"));
+        assert!(is_valid_version("1.0.0+build.5"));
+        assert!(is_valid_version("1.0.0-rc-1+exp.sha.5114f85"));
         assert!(!is_valid_version("1.0"));
         assert!(!is_valid_version("v1.0.0"));
         assert!(!is_valid_version(".."));
+    }
+
+    /// The version is a filesystem path component (`<PLUGINS_DIR>/<id>/<version>/…`, the
+    /// staging work dir, `pending_dir`), so a tail that validates must still be one
+    /// harmless segment. Checking only the numeric core let a manifest walk out of the
+    /// staging tree and write the package's files anywhere the server process could.
+    #[test]
+    fn version_tails_cannot_escape_a_path_component() {
+        assert!(!is_valid_version("1.0.0-../../../../srv/web/evil"));
+        assert!(!is_valid_version("1.0.0+../evil"));
+        assert!(!is_valid_version("1.0.0-.."));
+        assert!(!is_valid_version("1.0.0-a/b"));
+        assert!(!is_valid_version("1.0.0-a\\b"));
+        assert!(!is_valid_version("1.0.0-"));
+        assert!(!is_valid_version("1.0.0+"));
+        assert!(!is_valid_version("1.0.0-beta."));
+        assert!(!is_valid_version("1.0.0-be..ta"));
+        assert!(!is_valid_version("1.0.0-beta\0"));
+        assert!(!is_valid_version(&format!("1.0.0-{}", "a".repeat(200))));
+
+        // And nothing that escapes survives being joined onto a root.
+        for bad in ["1.0.0-../../etc", "1.0.0+../..", "../1.0.0"] {
+            assert!(!is_valid_version(bad), "{bad} must be refused");
+        }
     }
 
     #[test]
@@ -483,6 +1557,152 @@ mod tests {
         assert_eq!(compare_versions("1.10.0", "1.9.0"), Ordering::Greater);
         assert_eq!(compare_versions("2.0.0", "10.0.0"), Ordering::Less);
         assert_eq!(compare_versions("1.0.0", "1.0.0"), Ordering::Equal);
+    }
+
+    /// One entry as the scan would have produced it.
+    fn installed(id: &str, peers: &[(&str, &str)], state: PluginState) -> InstalledPlugin {
+        let peer_libraries: serde_json::Map<String, serde_json::Value> = peers
+            .iter()
+            .map(|(library, range)| ((*library).to_string(), serde_json::json!(range)))
+            .collect();
+        let manifest: PluginManifest = serde_json::from_value(serde_json::json!({
+            "id": id,
+            "version": "1.0.0",
+            "kernel": "^1.0",
+            "peerLibraries": peer_libraries,
+            "frontend": { "module": "frontend/index.mjs" },
+        }))
+        .expect("a valid manifest");
+        InstalledPlugin {
+            base_url: format!("/plugins/{id}/1.0.0/"),
+            base: false,
+            state,
+            manifest,
+        }
+    }
+
+    /// The M4 import-map contract (SPEC §6.4): one version per library over everything that
+    /// will *load*, the map itself untouched by the installed set, and a library the bundle
+    /// does not provide reported rather than silently resolved.
+    #[test]
+    fn the_import_map_resolves_one_version_per_library_over_the_loaded_set() {
+        let mut registry = Registry::default();
+        registry.plugins.push(installed(
+            "editor",
+            &[("@codemirror/view", "^6.2")],
+            PluginState::Enabled,
+        ));
+        registry.plugins.push(installed(
+            "outline",
+            &[("@codemirror/view", "^6.4")],
+            PluginState::Enabled,
+        ));
+        registry.plugins.push(installed(
+            "legacy",
+            &[("@lezer/highlight", "^1.0")],
+            PluginState::Disabled,
+        ));
+
+        let provided = BTreeMap::from([(
+            "@codemirror/view".to_string(),
+            "/assets/codemirror-view-abc123.js".to_string(),
+        )]);
+        let versions = BTreeMap::from([("@codemirror/view".to_string(), "6.26.3".to_string())]);
+        let resolution = resolve_import_map(&registry, &provided, &versions);
+
+        assert_eq!(
+            resolution.imports, provided,
+            "no installed plugin ever adds an import-map entry — plugin modules load by URL"
+        );
+        assert_eq!(
+            resolution
+                .chosen
+                .get("@codemirror/view")
+                .map(String::as_str),
+            Some("6.4.0"),
+            "the highest floor any loaded plugin requires is the one version they all get"
+        );
+        // The disabled plugin is still *served* (half a plugin beats none), so its
+        // unsatisfiable library is reported…
+        assert!(
+            resolution
+                .missing
+                .iter()
+                .any(|entry| entry.starts_with("@lezer/highlight")),
+            "{:?}",
+            resolution.missing
+        );
+        // …but it gets no vote in a version the plugins that actually load have to live
+        // with, because the loader skips anything that is not `enabled`.
+        assert!(!resolution.chosen.contains_key("@lezer/highlight"));
+
+        // And a genuine conflict is a warning here, never a refusal: the enforcement point
+        // is install, where an operator can still act.
+        let mut conflicting = Registry::default();
+        conflicting.plugins.push(installed(
+            "a",
+            &[("@codemirror/view", "^6.0")],
+            PluginState::Enabled,
+        ));
+        conflicting.plugins.push(installed(
+            "b",
+            &[("@codemirror/view", "^7.0")],
+            PluginState::Enabled,
+        ));
+        let resolution = resolve_import_map(&conflicting, &provided, &versions);
+        assert!(resolution.chosen.is_empty());
+        // The conflict, plus the per-plugin note that `b`'s `^7.0` cannot be met by the 6.26.3
+        // the bundle ships — the check HOST-ABI.md §7.1 step 4 asks for, made against a version
+        // rather than against the mere presence of the specifier.
+        assert_eq!(resolution.warnings.len(), 2, "{:?}", resolution.warnings);
+        assert!(
+            resolution.warnings.iter().any(|warning| warning
+                .contains("`b` declares `@codemirror/view` ^7.0")
+                && warning.contains("6.26.3")),
+            "{:?}",
+            resolution.warnings
+        );
+    }
+
+    /// A range the bundle satisfies produces no note; one it does not, does. The install flow
+    /// refuses the second outright — this is the boot-time backstop for a plugin adopted from
+    /// disk or a bundle rebuilt underneath an installed set.
+    #[test]
+    fn peer_ranges_are_checked_against_the_version_the_bundle_provides() {
+        let provided = BTreeMap::from([(
+            "@codemirror/view".to_string(),
+            "/assets/codemirror-view-abc123.js".to_string(),
+        )]);
+        let versions = BTreeMap::from([("@codemirror/view".to_string(), "6.26.3".to_string())]);
+
+        let mut ok = Registry::default();
+        ok.plugins.push(installed(
+            "editor",
+            &[("@codemirror/view", "^6.2")],
+            PluginState::Enabled,
+        ));
+        assert!(
+            resolve_import_map(&ok, &provided, &versions)
+                .warnings
+                .is_empty()
+        );
+
+        let mut stale = Registry::default();
+        stale.plugins.push(installed(
+            "editor",
+            &[("@codemirror/view", "^7")],
+            PluginState::Enabled,
+        ));
+        let warnings = resolve_import_map(&stale, &provided, &versions).warnings;
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+
+        // No recorded version ⇒ no claim either way. A bundle built before the manifest
+        // carried versions must not start refusing plugins.
+        assert!(
+            resolve_import_map(&stale, &provided, &BTreeMap::new())
+                .warnings
+                .is_empty()
+        );
     }
 
     #[test]

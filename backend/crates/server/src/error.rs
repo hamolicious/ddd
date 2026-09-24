@@ -152,6 +152,9 @@ impl AppError {
                 DocStoreError::InvalidId(_) | DocStoreError::MalformedUpdate(_) => {
                     StatusCode::BAD_REQUEST
                 }
+                // Well-formed request, but the document does not contain what the splice was
+                // aimed at — the same answer `CoreError::SpliceTargetMissing` gets.
+                DocStoreError::SpliceRefused(_) => StatusCode::UNPROCESSABLE_ENTITY,
                 // A lost optimistic-concurrency race: the client may retry.
                 DocStoreError::Contended(_) => StatusCode::CONFLICT,
                 DocStoreError::Db(_) | DocStoreError::Bson(_) | DocStoreError::Other(_) => {

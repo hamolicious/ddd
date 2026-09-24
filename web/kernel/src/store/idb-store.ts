@@ -86,10 +86,48 @@ export interface LifeManagerDb extends DBSchema {
 export class IdbProjectionStore implements ProjectionStore {
   #db: IDBPDatabase<LifeManagerDb> | undefined;
   readonly #listeners = new Set<StoreListener>();
+  #channel: BroadcastChannel | undefined;
 
   constructor(readonly name: string = DB_NAME) {}
 
+  /**
+   * Cross-tab change notification (SPEC §4.3: up to 8 sockets per session — several
+   * tabs of one workspace are a supported v1 configuration, and the SharedWorker that
+   * would collapse them into one socket is v2).
+   *
+   * **The bug this exists to prevent.** IndexedDB is shared between tabs; the feed
+   * socket is not. Every tab runs its own {@link applyRows}, and the second one to
+   * arrive finds `row.seq <= knownSeq` — the row another tab already stored — and
+   * correctly declines to write it. But it then also reported *nothing applied*, so its
+   * live queries never re-ran: the data was in the shared store and visible to a fresh
+   * `query()`, while every open list in that tab stayed frozen. Whichever tab won the
+   * race updated; the others quietly stopped being live.
+   *
+   * A row committed by any tab is news to the readers in all of them, so the writer
+   * announces it and every other tab fans it out to its own listeners. Listeners then
+   * read the rows back out of the (shared, already-committed) database, so the payload
+   * is only ids and a watermark.
+   */
+  #openChannel(): void {
+    if (this.#channel || typeof BroadcastChannel === "undefined") return;
+    try {
+      const channel = new BroadcastChannel(`${this.name}:projection`);
+      channel.onmessage = (event: MessageEvent<StoreChange>) => {
+        const change = event.data;
+        if (!change || !Array.isArray(change.applied) || !Array.isArray(change.purged)) return;
+        // Local fan-out only — never re-post, or two tabs would echo forever.
+        this.#fanOut(change);
+      };
+      this.#channel = channel;
+    } catch {
+      // No BroadcastChannel (an old browser, a locked-down context): every tab still
+      // works on its own writes, which is exactly the pre-fix behaviour rather than a
+      // new failure. Nothing here is worth a thrown error at boot.
+    }
+  }
+
   async open(): Promise<void> {
+    this.#openChannel();
     this.#db ??= await openDB<LifeManagerDb>(this.name, DB_VERSION, {
       upgrade(db) {
         if (!db.objectStoreNames.contains(STORE_PROJECTION)) {
@@ -118,6 +156,8 @@ export class IdbProjectionStore implements ProjectionStore {
   async close(): Promise<void> {
     this.#db?.close();
     this.#db = undefined;
+    this.#channel?.close();
+    this.#channel = undefined;
   }
 
   get db(): IDBPDatabase<LifeManagerDb> {
@@ -316,8 +356,22 @@ export class IdbProjectionStore implements ProjectionStore {
     ]);
   }
 
-  /** Fan a change out to subscribers. Implementations call this after a write. */
+  /**
+   * Fan a change out to this tab's subscribers **and** announce it to the others
+   * (see {@link #openChannel}). Implementations call this after a write.
+   */
   protected emit(change: StoreChange): void {
+    this.#fanOut(change);
+    try {
+      this.#channel?.postMessage(change);
+    } catch {
+      // A change that cannot be structured-cloned, or a channel closed underneath us.
+      // The local fan-out above already happened, so this tab is correct either way.
+    }
+  }
+
+  /** Deliver to this tab's listeners only. */
+  #fanOut(change: StoreChange): void {
     for (const listener of this.#listeners) listener(change);
   }
 }

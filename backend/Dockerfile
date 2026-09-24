@@ -8,10 +8,11 @@
 #
 # Stages:
 #
-#   wasm-tools   — `wasm-bindgen` CLI, installed once and cached (the slow layer).
-#   rust-builder — the release binary **and** the shared core compiled to Wasm.
-#   web-builder  — kernel.d.ts, the PWA bundle, the base plugins (needs that Wasm).
-#   runtime      — no toolchain, non-root, one binary plus three read-only directories.
+#   wasm-tools     — `wasm-bindgen` CLI, installed once and cached (the slow layer).
+#   rust-builder   — the release binary **and** the shared core compiled to Wasm.
+#   plugin-builder — the **backend halves** of plugins, wasm32 (M4).
+#   web-builder    — kernel.d.ts, the PWA bundle, the base plugins (needs both of those).
+#   runtime        — no toolchain, non-root, one binary plus three read-only directories.
 #
 # Build order is the dependency order, and it is the same order `mise run web-build`
 # uses on a workstation: the client kernel imports the shared Rust core as Wasm (SPEC §2),
@@ -46,14 +47,19 @@ RUN rustup target add wasm32-unknown-unknown
 
 # 1. Dependency layer: manifests only, with dummy sources.
 COPY backend/Cargo.toml backend/Cargo.lock ./
+# Every workspace member's manifest, or cargo refuses to read the workspace at all.
+# `crates/plugin-sdk` is deliberately excluded from the workspace (it is wasm32-only) and
+# is built by the `plugin-builder` stage instead.
 COPY backend/crates/core/Cargo.toml crates/core/Cargo.toml
+COPY backend/crates/plugin-abi/Cargo.toml crates/plugin-abi/Cargo.toml
 COPY backend/crates/server/Cargo.toml crates/server/Cargo.toml
-RUN mkdir -p crates/core/src crates/server/src \
+RUN mkdir -p crates/core/src crates/plugin-abi/src crates/server/src \
     && echo "" > crates/core/src/lib.rs \
+    && echo "" > crates/plugin-abi/src/lib.rs \
     && echo "" > crates/server/src/lib.rs \
     && echo "fn main() {}" > crates/server/src/main.rs \
     && cargo build --release --locked \
-    && rm -rf crates/core/src crates/server/src
+    && rm -rf crates/core/src crates/plugin-abi/src crates/server/src
 
 # 2. Real sources.
 COPY backend/crates ./crates
@@ -69,6 +75,34 @@ RUN cargo build -p life-manager-core --target wasm32-unknown-unknown --release -
         --no-default-features --features wasm \
     && wasm-bindgen --target web --out-dir /wasm-pkg --out-name life_manager_core \
         target/wasm32-unknown-unknown/release/life_manager_core.wasm
+
+# ---------------------------------------------------------------------------
+# plugin-builder: the backend halves of plugins (M4).
+#
+# A separate Cargo workspace from `backend/` and a separate stage from `rust-builder`,
+# for the reason `plugins/Cargo.toml` states: every crate here is a `cdylib` linking the
+# Extism PDK's host imports, so it only builds for `wasm32-unknown-unknown` and would
+# fail at link time on the host target. It needs `backend/crates` too — the SDK and the
+# ABI crate are path dependencies — and the directory layout has to match the repo's,
+# because those paths are relative.
+#
+# Without this stage the image shipped `calendar` with its frontend half only, and the
+# host reported a missing module on every boot: a container that silently lost the half
+# of M4 that M4 exists to prove.
+# ---------------------------------------------------------------------------
+FROM rust-builder AS plugin-builder
+WORKDIR /repo
+
+# The workspace root comes along because `crates/plugin-abi` inherits `edition` and
+# friends from it; without it cargo cannot even parse that manifest.
+COPY backend/Cargo.toml backend/Cargo.lock ./backend/
+COPY backend/crates ./backend/crates
+COPY plugins ./plugins
+# `--target` explicitly rather than relying on `plugins/.cargo/config.toml`: cargo
+# discovers config from the *working directory* upward, so a `--manifest-path` build from
+# elsewhere silently picks the host target — the same trap `mise run plugin-check` hit.
+WORKDIR /repo/plugins
+RUN cargo build --workspace --target wasm32-unknown-unknown --release --locked
 
 # ---------------------------------------------------------------------------
 # web-builder: everything the server serves as static content.
@@ -88,16 +122,24 @@ COPY web ./web
 COPY plugins ./plugins
 # The generated Wasm package the app bundle imports (aliased in `vite.app.config.ts`).
 COPY --from=rust-builder /wasm-pkg ./web/kernel/src/wasm/pkg
+# The compiled backend halves. Copied as cargo's output tree so the install step below can
+# find each artifact by the crate name its manifest declares, rather than this file
+# hard-coding a plugin id and version.
+COPY --from=plugin-builder /repo/plugins/target/wasm32-unknown-unknown/release \
+     ./plugins/target/wasm32-unknown-unknown/release
 
 WORKDIR /repo/web
-# Three artifacts, in the order `scripts/build-app.mjs` documents:
+# Four artifacts, in dependency order:
 #   kernel.d.ts   — the plugin contract, served at /kernel.d.ts
 #   app/dist      — runtime layer + app bundle + service worker, and the
 #                   `runtime-manifest.json` the server's import map is built from
 #   plugins/base/dist — the installed layout `/plugins/<id>/<version>/…` maps onto
+#   …/backend.wasm    — each plugin's backend half, *after* `build:plugins`, which owns
+#                       `emptyOutDir` for those directories and would delete it otherwise
 RUN npm run kernel:dts \
     && npm run build:app \
-    && npm run build:plugins
+    && npm run build:plugins \
+    && node scripts/build-wasm-plugins.mjs --prebuilt
 
 # ---------------------------------------------------------------------------
 # Runtime: no toolchain, non-root, TLS terminated upstream (SPEC §8).
@@ -115,13 +157,19 @@ RUN apt-get update \
 
 COPY --from=rust-builder /build/target/release/life-manager /usr/local/bin/life-manager
 
-# Static content, owned by root and readable by everyone: the server only ever reads it.
-# In M4 the plugin *installer* needs a writable directory — that is when `/srv/plugins`
-# becomes the RWO volume mount SPEC §8 already reserves for it, and these baked-in base
-# plugins become its seed rather than its whole contents.
+# The bundle and the contract are read-only: the server only ever reads them.
 COPY --from=web-builder /repo/web/app/dist /srv/web
-COPY --from=web-builder /repo/plugins/base/dist /srv/plugins
 COPY --from=web-builder /repo/web/kernel-api/dist/kernel.d.ts /srv/kernel.d.ts
+
+# `/srv/plugins` is **writable by the runtime user**, because from M4 the plugin installer
+# writes here: approval is an atomic rename out of the staging directory into this one
+# (SPEC §6.2), which is also why the staging directory is its sibling — same filesystem,
+# or a rename becomes a copy. The baked-in base distribution is this directory's *seed*,
+# not its whole contents; in the Kubernetes deployment of SPEC §8 it is the RWO PVC mount
+# point, and an operator who mounts a volume over it takes responsibility for seeding it
+# (`plugininstall::adopt_installed_directory` reconciles whatever is there at boot).
+COPY --from=web-builder --chown=10001:10001 /repo/plugins/base/dist /srv/plugins
+RUN install -d -o 10001 -g 10001 /srv/plugins.staging
 
 USER 10001:10001
 WORKDIR /home/lifemanager

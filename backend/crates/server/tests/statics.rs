@@ -611,6 +611,53 @@ async fn traversal_out_of_the_plugin_root_is_refused() {
     app.cleanup().await;
 }
 
+/// `/plugins/:id/:version/*` is **unauthenticated by necessity** — a browser fetching an ES
+/// module sends no credentials — so it must serve only `frontend/**` (web/CONTRACTS.md, the
+/// M3 carry-over; `backend/CONTRACTS.md` decision 12).
+///
+/// The two files that must stay unreachable through it are the ones M4 started putting in
+/// the same directory: the **manifest**, which lists capabilities, config keys, declared
+/// hosts and routes, and the **backend module**, which is the plugin's server-side code. A
+/// reader of either learns what this server's plugins are trusted with without ever signing
+/// in. `/api/plugins` is the authenticated way to ask.
+///
+/// It holds by construction — `is_frontend_path` requires `frontend` as the first segment,
+/// before any path resolution — and this is the test that says so out loud, now that the
+/// installer really does write `backend.wasm` next to the frontend half.
+#[tokio::test]
+#[ignore = "needs MONGO_URI"]
+async fn the_manifest_and_the_backend_half_are_not_served_to_the_browser() {
+    let fixture = Fixture::new("package-private");
+    let Some(app) = StaticsApp::start(with_fixture(&fixture)).await else {
+        return;
+    };
+
+    for uri in [
+        "/plugins/shell-ui/1.0.0/manifest.json",
+        "/plugins/shell-ui/1.0.0/backend.wasm",
+        // Not reachable by walking out of `frontend/` either.
+        "/plugins/shell-ui/1.0.0/frontend/../manifest.json",
+        "/plugins/shell-ui/1.0.0/frontend/../backend.wasm",
+        // Nor by dressing the first segment up.
+        "/plugins/shell-ui/1.0.0/%66rontend/../backend.wasm",
+    ] {
+        let response = app.get(uri).await;
+        assert_eq!(
+            response.status,
+            StatusCode::NOT_FOUND,
+            "{uri} must not be served without a session"
+        );
+    }
+
+    // The control: the frontend half of the same package is served, which is what makes
+    // the assertions above about the *allowlist* rather than about a missing directory.
+    app.get("/plugins/shell-ui/1.0.0/frontend/index.mjs")
+        .await
+        .expect_status(StatusCode::OK);
+
+    app.cleanup().await;
+}
+
 #[cfg(unix)]
 #[tokio::test]
 #[ignore = "needs MONGO_URI"]

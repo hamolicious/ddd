@@ -4,19 +4,31 @@ The Rust half of Life Manager: a single binary (`life-manager`) serving the REST
 API over MongoDB, plus `life-manager-core`, the shared parsing/filter crate that
 also compiles to Wasm for the client kernel.
 
-**This is M2** ([SPEC](../SPEC.md) §9): M1's storage, auth, documents and
-attachments, plus the sync layer — the workspace change feed, per-document CRDT
-sync over WebSocket, and the bootstrap stream. No Extism plugin host (M4), no
-Flutter shell (M5). The CRDT is real from the first commit: every document is one
-`yrs` doc holding one `Y.Text`, and `content`/`title`/`fm`/`plugins` are *derived*.
+**This is M4** ([SPEC](../SPEC.md) §9): M1's storage, auth, documents and
+attachments; M2's sync layer — the workspace change feed, per-document CRDT sync
+over WebSocket, the bootstrap stream; M3's plugin distribution and PWA serving;
+and now the **Extism plugin host** — capability enforcement, resource limits and
+the circuit breaker, the pending-install approval flow, encrypted plugin config,
+hooks, cron and the event bridge. No Flutter shell (M5). The CRDT is real from
+the first commit: every document is one `yrs` doc holding one `Y.Text`, and
+`content`/`title`/`fm`/`plugins` are *derived*.
 
 ```
 crates/core        the shared core — parsers, title resolver, filter DSL
                    (native here, and wasm32 for the PWA via the `wasm` feature)
-crates/server      axum app: routes, docstore, feed, auth, db, telemetry
+crates/plugin-abi  the wire types of the host ABI — shared by the host and the SDK
+crates/plugin-sdk  what a plugin's backend half compiles against (wasm32 only,
+                   excluded from this workspace: it links Extism's host imports)
+crates/server      axum app: routes, docstore, feed, auth, db, telemetry,
+                   pluginhost/ (the Wasm runtime), plugininstall/ (the install flow)
 PROTOCOL.md        the /api/sync wire protocol — authoritative for both sides
+HOST-ABI.md        the Wasm host ABI — authoritative for backend plugin authors
 CONTRACTS.md       file ownership and frozen signatures per builder area
 ```
+
+**One semver covers both plugin contracts.** A manifest's `kernel` range is checked
+against the `@kernel` surface *and* the host ABI; `docs/KERNEL-API.md` is the changelog
+for the frontend half and `HOST-ABI.md` the specification for the backend half.
 
 ---
 
@@ -228,6 +240,23 @@ MIME type is sniffed from the bytes, then the extension; the client's
 | `GET` | `/audit` | Audit log, `_id`-cursor paginated (default 50, max 200). |
 | `GET` | `/export` | Streamed zip of every document as plain markdown — the no-Mongo disaster-recovery path. |
 | `GET` | `/stats` | Workspace counters. |
+| `GET`/`POST` | `/plugins` | Every record — state, requested vs approved capabilities, cron, breaker, last error — or a multipart `.zip` upload, which lands **pending**. |
+| `POST` | `/plugins/{id}/{version}/approve` | Body: the approved capability set. Narrowing always; `http.hosts` is the one field an admin may widen. Activates the backend half without a restart. |
+| `POST` | `/plugins/{id}/{version}/reject` | Delete the pending package. |
+| `POST` | `/plugins/{id}/enable`, `/disable` | The admin off switch; `enable` also clears the circuit breaker. |
+| `DELETE` | `/plugins/{id}` | Uninstall. Retains KV and in-document `%%%` data by default; `?purge=true` clears them and queues the section-strip job. |
+| `GET`/`PUT` | `/plugins/{id}/config` | Schema and values. `secret: true` values are write-only: reads return a mask, and submitting the mask back means "unchanged". |
+| `POST` | `/plugins/{id}/cron/{index}/run` | Run one declared schedule now, with the cron budget. Deliberately does not move `last_run`. |
+| `GET` | `/plugins/{id}/logs` | The last N host-side events for this plugin (in-process ring; the audit log is the durable record). |
+
+### Plugin routes — `/api/plugins/{id}/*`
+
+A backend half's own inbound routes, exactly as its manifest declares them
+(HOST-ABI.md §4.4). Session-authenticated by default; a manifest may declare specific
+`public-routes`, which is surfaced at install as the capability it is. Rate-limited per
+plugin per client. `cookie` and `authorization` are stripped on the way in — a plugin
+never sees the caller's credentials — and `set-cookie` and the hop-by-hop headers on the
+way out. A plugin's own refusal keeps its status code; a host failure is 502/503/504.
 
 ### Sync — `/api/sync`
 
@@ -320,6 +349,34 @@ the Playwright smoke — see [`../web/README.md`](../web/README.md).
 The other executable half of the protocol is `crates/server/tests/sync_ws.rs` —
 the real router over a real socket against a live Mongo, covering the handshake,
 origin-before-auth ordering, close codes, watermarks, fan-out and backpressure.
+
+## The M4 proof
+
+SPEC §9 M4 names one: **the calendar plugin** — a backend half cronning an ICS feed
+into machine-owned documents, a frontend half rendering a month view from `fm.date`,
+and `agenda` alongside it as a pure frontend plugin with no backend and no
+capabilities at all.
+
+Both ship in `plugins/base/`. To exercise the whole install path rather than the
+shipped copy:
+
+```bash
+mise run web-build && mise run wasm-plugins   # build both halves
+mise run plugin-package calendar              # → dist-packages/calendar-1.0.0.zip
+# then: Admin → Plugins → upload → approve (adding your feed's host) → configure
+```
+
+The suites behind it, all needing `MONGO_URI` and `mise run wasm-plugins`:
+
+```bash
+cargo test -p life-manager-server \
+  --test pluginhost_runtime  `# the host: limits, ownership, breaker, pooling, safe mode` \
+  --test pluginhost_http     `# SSRF: allowlist, IP policy, resolve-then-pin, per-hop` \
+  --test pluginhost_routes   `# inbound routes: auth default, credential stripping` \
+  --test plugininstall_zip   `# hostile archives, no database needed` \
+  --test plugininstall_flow  `# the queue, approval, upgrade, uninstall, secrets` \
+  -- --include-ignored
+```
 
 ---
 

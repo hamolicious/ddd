@@ -18,7 +18,12 @@
  * whole response bodies for `$date`/`$oid`, so anything arriving here is a plain string.
  */
 
-import type { InstalledPlugin, ManifestProblem } from "@kernel";
+import type {
+  InstalledPlugin,
+  ManifestProblem,
+  PluginCapabilities,
+  PluginManifest,
+} from "@kernel";
 
 export type ApiFetch = (path: string, init?: RequestInit) => Promise<Response>;
 
@@ -118,6 +123,196 @@ export interface InstalledPluginsResponse {
   readonly disabled: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// M4: plugin management (`/api/admin/plugins/*`)
+// ---------------------------------------------------------------------------
+
+/**
+ * These shapes mirror `crates/server/src/routes/plugin_api.rs` — **snake_case**, like the
+ * rest of `/api/admin`, with one deliberate exception inherited from the manifest:
+ * `capabilities["public-routes"]` keeps its hyphen, because that is what a plugin author
+ * writes in `manifest.json` and what SPEC §6.2 froze. The manifest itself is served exactly
+ * as it was written, so anything nested under `manifest` is manifest spelling
+ * (`peerLibraries`), not wire spelling.
+ */
+export type PluginLifecycleState = "pending" | "enabled" | "disabled" | "failed";
+
+export interface PluginCronState {
+  readonly index: number;
+  readonly expression: string;
+  readonly last_run?: string;
+  /** `"ok"`, or the error code of the last failure. */
+  readonly last_status?: string;
+  readonly runs: number;
+  readonly failures: number;
+}
+
+/**
+ * The circuit breaker, as the server can see it (SPEC §6.3).
+ *
+ * `open` means the host turned the plugin off after repeated failures and it stays off until
+ * an admin re-enables it; `by_admin` means a person did. The distinction decides what the
+ * button says, so the two are separate flags rather than one enum with a nullable reason.
+ */
+export interface PluginBreakerState {
+  readonly open: boolean;
+  readonly reason: string | null;
+  readonly by_admin: boolean;
+}
+
+export interface PluginMetrics {
+  readonly cron_jobs: number;
+  readonly cron_runs: number;
+  readonly cron_failures: number;
+  readonly last_cron_run: string | null;
+  readonly last_cron_status: string | null;
+  readonly recent_events: number;
+}
+
+export interface PluginRouteSpec {
+  readonly method: string;
+  readonly path: string;
+  /** Reachable without a session — the capability that deserves the loudest label. */
+  readonly public: boolean;
+}
+
+/** One field of a manifest's `config` schema (SPEC §6.2). */
+export interface PluginConfigSchemaField {
+  readonly type: string;
+  /** Write-only in this UI, encrypted at rest. */
+  readonly secret?: boolean;
+  readonly label?: string;
+  readonly description?: string;
+  readonly default?: unknown;
+  readonly required?: boolean;
+  /** For `select`. */
+  readonly options?: readonly string[];
+}
+
+export type PluginConfigSchema = Readonly<Record<string, PluginConfigSchemaField>>;
+
+export type PluginInstallSource =
+  | { readonly kind: "upload"; readonly filename: string }
+  | { readonly kind: "directory"; readonly path: string }
+  | { readonly kind: "base" };
+
+export interface PluginAdminView {
+  readonly id: string;
+  readonly version: string;
+  readonly state: PluginLifecycleState;
+  readonly base: boolean;
+  readonly served: boolean;
+  readonly active: boolean;
+  readonly manifest: PluginManifest;
+  /** What the package asked for — the list an approval screen must show. */
+  readonly capabilities_requested: PluginCapabilities;
+  /** What an admin granted. Empty until approval. */
+  readonly capabilities_approved: PluginCapabilities;
+  readonly capabilities_differ: boolean;
+  readonly source: PluginInstallSource;
+  readonly installed_at: string;
+  readonly installed_by: string | null;
+  readonly approved_at: string | null;
+  readonly approved_by: string | null;
+  readonly last_error: string | null;
+  readonly module_sha256: string | null;
+  readonly has_backend: boolean;
+  readonly hooks: readonly string[];
+  readonly cron: readonly PluginCronState[];
+  readonly routes: readonly PluginRouteSpec[];
+  readonly events: readonly string[];
+  readonly config_schema: PluginConfigSchema;
+  readonly breaker: PluginBreakerState;
+  readonly metrics: PluginMetrics;
+}
+
+export interface PluginHostStats {
+  readonly active: number;
+  readonly disabled: number;
+  readonly instances: number;
+  readonly calls_in_flight: number;
+  readonly cron_jobs: number;
+  readonly hooks_pending: number;
+}
+
+export interface PluginLimitsView {
+  readonly call_timeout_ms: number;
+  readonly cron_timeout_ms: number;
+  readonly memory_bytes: number;
+  readonly max_instances: number;
+  readonly breaker_threshold: number;
+  readonly http_timeout_ms: number;
+  readonly max_http_response_bytes: number;
+  readonly cron_enabled: boolean;
+  readonly max_package_bytes: number;
+}
+
+export interface PluginAdminList {
+  readonly plugins: readonly PluginAdminView[];
+  readonly problems: readonly { readonly path: string; readonly message: string }[];
+  readonly host: PluginHostStats;
+  readonly limits: PluginLimitsView;
+  readonly plugins_disabled: boolean;
+  readonly install_lock: string | null;
+  readonly abi_version: number;
+  readonly pending_count: number;
+  readonly secret_placeholder: string;
+}
+
+export interface PluginInstallOutcome {
+  readonly id: string;
+  readonly version: string;
+  readonly state: PluginLifecycleState;
+  readonly capabilities: PluginCapabilities;
+  readonly replaced: string | null;
+  readonly warnings: readonly string[];
+}
+
+export interface PluginConfigView {
+  readonly plugin_id: string;
+  readonly schema: PluginConfigSchema;
+  /**
+   * Key → stored value, every `secret: true` one replaced by {@link secret_placeholder}.
+   * A key with no stored value is **absent**, which is what {@link normalizeConfigValues}
+   * reads as "not set" — so this is deliberately not `Record<string, unknown>` with holes
+   * filled in. Read it through that function rather than indexing it directly.
+   */
+  readonly values: unknown;
+  /** Key → `true` when a value is stored. A masked secret looks the same either way. */
+  readonly set?: Readonly<Record<string, boolean>>;
+  /** Declared keys with nothing stored and no usable default. */
+  readonly missing?: readonly string[];
+  readonly updated_at?: string | null;
+  readonly updated_by?: string | null;
+  readonly secret_keys: readonly string[];
+  readonly secret_placeholder: string;
+}
+
+export interface PluginEvent {
+  readonly at: string;
+  readonly plugin_id: string;
+  readonly level: string;
+  readonly message: string;
+}
+
+export interface PluginLogView {
+  readonly plugin_id: string;
+  readonly events: readonly PluginEvent[];
+  /** The ring is per-process; the audit log is the durable record. */
+  readonly ephemeral: boolean;
+  readonly capacity: number;
+}
+
+export interface CronRunResult {
+  readonly plugin_id: string;
+  readonly index: number;
+  readonly expression: string;
+  readonly duration_ms: number;
+  readonly writes: number;
+  readonly logs: number;
+  readonly value: unknown;
+}
+
 export interface AuditQuery {
   readonly action?: string;
   readonly actor?: string;
@@ -151,6 +346,28 @@ export interface AdminClient {
   plugins(): Promise<InstalledPluginsResponse>;
   /** The zip of every document as plain markdown — the no-Mongo recovery path. */
   exportWorkspace(): Promise<Blob>;
+
+  // ---- M4: plugin management ----
+  /** Every plugin record: state, capabilities requested vs granted, cron, breaker. */
+  adminPlugins(): Promise<PluginAdminList>;
+  /** Upload a package. It lands **pending** — approval is a separate, explicit act. */
+  uploadPlugin(file: File): Promise<PluginInstallOutcome>;
+  /** Approve a pending install with a capability set (omit ⇒ exactly what was requested). */
+  approvePlugin(
+    id: string,
+    version: string,
+    capabilities?: PluginCapabilities,
+  ): Promise<PluginAdminView>;
+  rejectPlugin(id: string, version: string): Promise<void>;
+  enablePlugin(id: string): Promise<void>;
+  disablePlugin(id: string, note?: string): Promise<void>;
+  /** `purge` is SPEC §6.2's explicit checkbox: KV **and** the plugin's `%%%` sections. */
+  uninstallPlugin(id: string, purge: boolean): Promise<void>;
+  pluginConfig(id: string): Promise<PluginConfigView>;
+  savePluginConfig(id: string, values: Readonly<Record<string, unknown>>): Promise<PluginConfigView>;
+  /** Run one declared cron expression now, without moving the schedule. */
+  runPluginCron(id: string, index: number): Promise<CronRunResult>;
+  pluginLogs(id: string, limit?: number): Promise<PluginLogView>;
 }
 
 export function createAdminClient(fetchApi: ApiFetch): AdminClient {
@@ -200,7 +417,202 @@ export function createAdminClient(fetchApi: ApiFetch): AdminClient {
 
     plugins: () => json<InstalledPluginsResponse>("/plugins"),
     exportWorkspace: async () => (await fetchApi("/admin/export")).blob(),
+
+    adminPlugins: () => json<PluginAdminList>("/admin/plugins"),
+    uploadPlugin: (file) => {
+      // `FormData`, not a JSON body: a package is up to 25 MB and the server streams it to a
+      // staging file. Content-Type is deliberately *not* set — the browser has to add the
+      // multipart boundary, and setting it by hand is the classic way to make every upload
+      // fail with "malformed multipart body".
+      const body = new FormData();
+      body.append("package", file, file.name);
+      return json<PluginInstallOutcome>("/admin/plugins", { method: "POST", body });
+    },
+    approvePlugin: (pluginId, version, capabilities) =>
+      json<PluginAdminView>(
+        `/admin/plugins/${id(pluginId)}/${id(version)}/approve`,
+        postJson(capabilities === undefined ? {} : { capabilities }),
+      ),
+    rejectPlugin: (pluginId, version) =>
+      send(`/admin/plugins/${id(pluginId)}/${id(version)}/reject`, { method: "POST" }),
+    enablePlugin: (pluginId) => send(`/admin/plugins/${id(pluginId)}/enable`, { method: "POST" }),
+    disablePlugin: (pluginId, note) =>
+      send(`/admin/plugins/${id(pluginId)}/disable`, postJson(note ? { note } : {})),
+    uninstallPlugin: (pluginId, purge) =>
+      send(`/admin/plugins/${id(pluginId)}${purge ? "?purge=true" : ""}`, { method: "DELETE" }),
+    pluginConfig: (pluginId) => json<PluginConfigView>(`/admin/plugins/${id(pluginId)}/config`),
+    savePluginConfig: (pluginId, values) =>
+      json<PluginConfigView>(`/admin/plugins/${id(pluginId)}/config`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ values }),
+      }),
+    runPluginCron: (pluginId, index) =>
+      json<CronRunResult>(
+        `/admin/plugins/${id(pluginId)}/cron/${encodeURIComponent(String(index))}/run`,
+        { method: "POST" },
+      ),
+    pluginLogs: (pluginId, limit) =>
+      json<PluginLogView>(
+        `/admin/plugins/${id(pluginId)}/logs${limit === undefined ? "" : `?limit=${limit}`}`,
+      ),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Plugin config values
+// ---------------------------------------------------------------------------
+
+/** One config key as the form holds it. */
+export interface ConfigValueState {
+  /** The value to show. A secret is always the placeholder, never the real thing. */
+  readonly value: unknown;
+  /** `true` when the server has a value stored for this key. */
+  readonly set: boolean;
+}
+
+/**
+ * Read `PluginConfigView.values` into one predictable shape.
+ *
+ * The server hands back whatever `plugininstall::config::for_admin` produced, and the two
+ * plausible spellings are `{ key: value }` and `{ key: { value, set } }`. Accepting both is
+ * cheap here and the alternative is a form that silently renders `[object Object]` in every
+ * field the day the other spelling ships.
+ *
+ * INTEGRATION (install-flow): pinning `for_admin`'s return shape in `HOST-ABI.md` — the
+ * `{ value, set }` form, since "is it set" is exactly what a masked secret field has to know —
+ * would let this function lose half its body. Until then it is deliberately tolerant, and
+ * `api.test.ts` pins both readings.
+ */
+export function normalizeConfigValues(
+  values: unknown,
+  schema: PluginConfigSchema,
+  placeholder: string,
+): Readonly<Record<string, ConfigValueState>> {
+  const source: Record<string, unknown> =
+    typeof values === "object" && values !== null && !Array.isArray(values)
+      ? (values as Record<string, unknown>)
+      : {};
+  const result: Record<string, ConfigValueState> = {};
+
+  for (const key of Object.keys(schema)) {
+    const field = schema[key];
+    const raw = source[key];
+    let value: unknown = raw;
+    let set = raw !== undefined && raw !== null;
+
+    if (typeof raw === "object" && raw !== null && !Array.isArray(raw) && "value" in raw) {
+      const wrapped = raw as { value?: unknown; set?: unknown };
+      value = wrapped.value;
+      set = wrapped.set === true || (wrapped.set === undefined && wrapped.value !== undefined);
+    }
+
+    if (field?.secret === true) {
+      // A secret is never readable, so the only honest thing to render is the mask. `set`
+      // is what the UI actually needs: "leave blank to keep the stored value" only makes
+      // sense when there is one.
+      result[key] = { value: set ? placeholder : "", set };
+      continue;
+    }
+    result[key] = { value: set ? value : (field?.default ?? ""), set };
+  }
+  return result;
+}
+
+/**
+ * The values to submit: only what the admin changed, with an untouched secret dropped.
+ *
+ * A secret field that still holds the placeholder means "unchanged" — submitting it would
+ * overwrite the real credential with `••••••••`, which is the single most likely way for this
+ * screen to destroy something irrecoverable. It is therefore handled here, in a pure
+ * function, and not in a component's event handler.
+ */
+export function configSubmission(
+  draft: Readonly<Record<string, unknown>>,
+  schema: PluginConfigSchema,
+  placeholder: string,
+): Record<string, unknown> {
+  const submission: Record<string, unknown> = {};
+  for (const [key, raw] of Object.entries(draft)) {
+    const field = schema[key];
+    if (!field) continue;
+    if (field.secret === true && (raw === placeholder || raw === "")) continue;
+    if (field.type === "number") {
+      if (raw === "" || raw === null || raw === undefined) {
+        submission[key] = null;
+        continue;
+      }
+      const numeric = typeof raw === "number" ? raw : Number(raw);
+      submission[key] = Number.isFinite(numeric) ? numeric : raw;
+      continue;
+    }
+    if (field.type === "boolean") {
+      submission[key] = raw === true || raw === "true";
+      continue;
+    }
+    if (raw === "" && field.required !== true) {
+      // An emptied optional field clears the key rather than storing an empty string.
+      submission[key] = null;
+      continue;
+    }
+    submission[key] = raw;
+  }
+  return submission;
+}
+
+/**
+ * What an approval is allowed to change (`HOST-ABI.md` §7.2, and the server re-checks it):
+ * it may **narrow** anything and may **extend only `http.hosts`**.
+ *
+ * Returned as messages rather than a boolean so the screen can say which field is the
+ * problem before the request is sent — the server's refusal is the control, this is the
+ * courtesy.
+ */
+export function approvalProblems(
+  requested: PluginCapabilities | undefined,
+  granted: PluginCapabilities,
+): readonly string[] {
+  const problems: string[] = [];
+  const asked = requested ?? {};
+  for (const right of granted.documents ?? []) {
+    if (!(asked.documents ?? []).includes(right)) {
+      problems.push(`the package did not request \`documents: ["${right}"]\``);
+    }
+  }
+  if (granted.notifications === true && asked.notifications !== true) {
+    problems.push("the package did not request `notifications`");
+  }
+  for (const route of granted["public-routes"] ?? []) {
+    if (!(asked["public-routes"] ?? []).includes(route)) {
+      problems.push(`the package did not declare \`${route}\` as a public route`);
+    }
+  }
+  if (granted.http !== undefined && asked.http === undefined) {
+    problems.push("the package did not request the `http` capability");
+  }
+  for (const host of granted.http?.hosts ?? []) {
+    if (!isBareHost(host)) {
+      problems.push(`\`${host}\` is not a bare host name (no scheme, no path, no port)`);
+    }
+  }
+  return problems;
+}
+
+/** A `http.hosts` entry: a bare host name, matched exactly (`HOST-ABI.md` §3.11). */
+export function isBareHost(host: string): boolean {
+  const value = host.trim();
+  if (value === "") return false;
+  if (value.includes("://") || value.includes("/") || value.includes(":")) return false;
+  if (value.includes("*")) return false;
+  return /^[A-Za-z0-9.-]+$/.test(value);
+}
+
+/** `"a.test, b.test"` → `["a.test", "b.test"]`, blanks dropped. */
+export function parseHostList(raw: string): readonly string[] {
+  return raw
+    .split(/[,\s]+/)
+    .map((value) => value.trim())
+    .filter((value) => value !== "");
 }
 
 /** Only the parameters that are set; an empty `action=` would filter on the empty string. */
