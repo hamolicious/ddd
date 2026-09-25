@@ -68,6 +68,29 @@ export function isWithin(candidate: string, ancestor: string): boolean {
   return candidate === ancestor || candidate.startsWith(`${ancestor}/`);
 }
 
+/**
+ * Where `folder` lands when it is dropped into `parent` — the drag-and-drop half of a
+ * rename. `home/lists` dropped on `archive` becomes `archive/lists`: the *name* travels,
+ * the old parent does not.
+ *
+ * Dropping onto root (`parent === ""`) lifts the folder to the top level. If `parent`
+ * already holds a folder of that name the two become one folder, which is not a
+ * collision to resolve but what `fm.path` means — folders are path prefixes, and two
+ * documents with the same prefix are in the same folder (SPEC §6.5).
+ */
+export function reparentTarget(folder: string, parent: string): string {
+  const source = normalizePath(folder);
+  if (source === "") return "";
+  return joinPath(normalizePath(parent), nameOf(source));
+}
+
+/** Rename in place: same parent, new last segment. */
+export function renameTarget(folder: string, name: string): string {
+  const source = normalizePath(folder);
+  if (source === "") return "";
+  return joinPath(parentOf(source), name);
+}
+
 export interface FolderNode {
   /** The full normalized path. */
   readonly path: string;
@@ -91,9 +114,16 @@ export interface FolderTree {
   readonly totalDocuments: number;
 }
 
-/** Just enough of a projection row to build the tree from. */
+/**
+ * Just enough of a projection row to build the tree from.
+ *
+ * `title` is optional because the folder-only half of this file never needed it and its
+ * tests construct rows without one; the file tree (`tree.ts`) draws documents as rows and
+ * does, falling back to the kernel's own last resort, `"Untitled"` (SPEC §3.4).
+ */
 export interface PathRow {
   readonly id: string;
+  readonly title?: string;
   readonly fm: { readonly [key: string]: unknown };
 }
 

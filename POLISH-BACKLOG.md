@@ -1,11 +1,18 @@
 # Polish backlog
 
-> **Owner-queued (scripted as the `core-improvements` workflow, runs after the mobile/prose
-> wave):** task-list left alignment; frontmatter unfolded in edit mode + pretty properties
-> header in read mode; folders as a real drag-and-drop file tree (pathless notes at root,
-> empty-folder bookkeeping via settings, inline rename, delete with move-or-trash choice);
-> a settings entry for where new notes go (root by default); a settings entry for the
-> default document mode when opening (Read / Edit, read by default).
+> **Owner-queued (scripted as the `core-improvements` workflow, ran after the mobile/prose
+> wave) — done, 2026-09-25.** Task-list left alignment; frontmatter unfolded in edit mode +
+> pretty properties header in read mode; folders as a real drag-and-drop file tree (pathless
+> notes at root, empty-folder bookkeeping via settings, inline rename, delete with
+> move-or-trash choice); a settings entry for where new notes go (root by default); a
+> settings entry for the default document mode when opening (Read / Edit, read by default).
+> That wave closed items 1–4 below; see [Closed](#closed) for each one's outcome, and
+> `web/CONTRACTS.md`'s "Core-improvements pass" for what it cost.
+
+**Item numbers are stable.** Several source comments cite an item by number
+(`folders/src/FolderTree.tsx` §3 and §4, `editor/src/index.tsx` item 2), so a closed item
+keeps its number in the Closed table and the ones above it are *not* renumbered. A gap in
+the list is an item that was fixed, not a mistake.
 
 What UX sweeps of the core flows found and **did not** fix, with enough to reproduce each
 one. Everything here was seen in a running build — the real server, the real bundle, the
@@ -24,99 +31,6 @@ here for anyone who wonders whether it was looked at. Every open item below was
 re-verified against the tree at this revision, not carried over on trust.
 
 ---
-
-## 1. Creating a document drops you into read mode on an empty page
-
-**Repro.** Click "New document" (navbar, `Mod+N`, the palette, or a folder's `+`). The
-route changes to `/doc/<id>`, the title reads "Untitled", and the selected mode tab is
-**Read** — so the first thing after the app's most common action is an empty page and a
-tab you have to find before you can type.
-
-**Why it was not fixed in a sweep.** The obvious fix — have `doc-list` set the mode to
-`edit` after it navigates — is the one thing `document-surface` is built to prevent. SPEC
-§6.5 makes `viewer` and `editor` symmetric contributions with no built-in favourite, and
-that symmetry is what M3's acceptance test rests on; a `doc-list` that spells `"edit"`
-makes the built-in editor special again, in a plugin that has no business knowing modes
-exist. Its manifest does not even depend on `document-surface`.
-
-**There is no user-level workaround today, and there nearly is one.**
-`document-surface` already declares a per-user setting for exactly this —
-`defaultMode`, labelled "Default document mode", default `read`
-(`plugins/base/document-surface/src/index.tsx:141`). It works; it is simply not reachable,
-because nothing renders it (item 2). Closing item 2 gives this item an opt-out that costs
-no contract change at all, and is the cheapest thing to do first.
-
-**The shape of a real fix.** A `?mode=<id>` query on the document route, resolved by
-`document-surface` the way it already resolves `?line=N`, plus a `create`-time default
-that `doc-list` passes as *data* rather than as a mode id it chose (e.g. the surface
-treating "created this session and still empty" as a reason to prefer the first writable
-mode). Either is a design call about the route contract.
-
-## 2. Two base plugins declare user settings that no screen renders
-
-**New in the integration pass.** `kernel.settings.defineSchema` has four callers. Two of
-them — `themes` and `commands` — also contribute a `settings.section` and render their own
-values. The other two contribute no section, so the settings they declare, with labels and
-descriptions written for a human, are reachable from no UI in the product:
-
-| Plugin | Key | Label | Default |
-|---|---|---|---|
-| `document-surface` | `defaultMode` | Default document mode | `read` |
-| `editor` | fold-frontmatter | Fold frontmatter when a document opens | `true` |
-
-**Not dead code.** `defineSchema` is load-bearing: the runtime lays the declared defaults
-under the stored values (`web/kernel/src/runtime/settings.ts`, `#effective`), which is why
-both settings behave correctly at their default. It is only the `label`/`description`/
-`type` half — the half that exists for a settings screen — that nothing consumes.
-
-**Why `settings` cannot fix this centrally.** `SettingsApi.schema()` is plugin-scoped: it
-returns *the calling plugin's* schema, and the frozen contract offers no way to enumerate
-another plugin's (`web/kernel-api/src/settings.ts:51`, comment "for the settings UI"). So
-a generic "render every plugin's schema" section in `settings` would need a new `@kernel`
-surface. The in-bar fix is the other direction and is small: **`document-surface` and
-`editor` each contribute their own `settings.section`** rendering their own `schema()` —
-the same thing `themes` and `commands` already do, and no contract moves.
-
-Worth doing first, because it is small, it is the pattern two base plugins already follow,
-and it hands item 1 an escape hatch.
-
-## 3. A document can only be moved between folders by dragging
-
-**Repro.** On a phone (390 px), open the sidebar drawer and try to move a document into
-`welcome/examples`. There is no way: the only move affordance is an HTML5 drag from a
-`doc-list` row onto a `folders` tree node, and HTML5 drag-and-drop does not exist on touch.
-A `doc-list` row's only document action is still "Move to Trash".
-
-**Mitigated, not fixed.** The folder tree's hint names the real touch path — editing
-`path` in the properties panel — so the gap is signposted rather than silent. The fix is a
-"Move to folder…" action (a row action, a command, and a properties-panel folder picker),
-which is new UI in two plugins rather than a correction to existing UI.
-
-*(The `FolderTree.tsx` header comment that described a "Move to…" row prompt as though it
-existed was corrected in the integration pass — it now states that drag and the properties
-panel are the only two paths, and points here.)*
-
-## 4. Folder rename is a `window.prompt`
-
-**Repro.** Click a folder's ✎ (or press F2 on it). A native browser prompt appears;
-`folders/src/index.tsx` calls `globalThis.prompt` in two places.
-
-Three problems, in order of how much they matter:
-
-1. **In the Flutter shell its behaviour is unpinned and untested.**
-   `app/lib/shell/webview_host.dart` registers **no `onJsPrompt` handler**, so what a
-   `prompt()` does inside the shell is whatever `flutter_inappwebview`'s default happens to
-   be on that Android version. Nothing in this repo pins it, no host test can reach it, and
-   `app/TESTPLAN.md` does not cover it — which puts it in the same category as the
-   notification receivers of SPEC §11.5: a control that a green suite says nothing about.
-   If the default is to suppress, the rename button does nothing at all on a phone.
-2. It is not theme-aware — a white box in a dark workspace.
-3. It blocks the whole page while a rename that may touch hundreds of documents is being
-   *typed*, which is the one moment the progress reporting underneath it cannot be seen.
-
-Needs a small in-tree dialog (`folders` already has the busy/progress/problem states to
-render into), which is new UI, not a tweak. Doing so also removes the untested webview
-dependency in (1) rather than documenting it.
 
 ## 5. A document has no delete, and no way back to where you came from
 
@@ -182,6 +96,44 @@ larger claim this was cut down from. The gate offers no way to *choose* a displa
 everyone is stuck with their email's local part until someone adds a field.
 `POST /api/auth/register` already accepts `name`.
 
+## 11. Two people setting the same frontmatter key at once get a value neither typed
+
+**Repro** (two browsers, one document filed at `home/lists`). A drags it to `archive`;
+B drags it to `inbox` before A's update arrives. Both replicas converge on
+`path: archiveinbox` — a valid path neither user chose — and both progress rows say the
+move succeeded. Drag a *folder* and it happens once per document inside it
+(`folders/src/index.tsx`, `planFolderMove` → `pool`).
+
+**Why.** `setFrontmatterValue` replaces the key's **value span**, which is what SPEC §3.3
+mandates for human-owned frontmatter: it is the only write that keeps a trailing comment,
+the key's position and the rest of the block byte-identical. Under concurrency the two
+replicas delete the same span and insert at the same origin, so both inserts survive
+*inside one line* and concatenate. A `%%%` section write does not have this problem
+because it replaces the key's whole **line**: two lines survive, and the parser's
+last-occurrence-wins rule (SPEC §3.3, §3.4) picks one of the two values a user actually
+asked for. Both behaviours are now pinned by
+`web/kernel/src/runtime/splice.test.ts` → "concurrent writes to one key", which is where
+this was verified rather than argued about.
+
+**Why it is not fixed in `folders`.** Every plugin-level workaround is worse than the
+bug. Writing `path` as a line (remove-then-set through the two public helpers) merges
+correctly — the test above asserts that too — but re-inserts the key at the block's
+insert point, so a `path` that sat above `title` moves below it: exactly the reformatting
+§3.3 forbids, and exactly what `app/e2e/journeys.spec.ts` compares byte for byte. There
+is no pure removal planner in the frozen `@kernel` contract, so the two cannot be fused
+into one transaction either, and a plugin computing its own line spans would be
+reimplementing `core::splice` outside the kernel helper.
+
+**Where the fix is.** `core::splice::set_frontmatter_value` replacing the key's line
+**in place** (delete the line span, insert the new line at its start) rather than its
+value span: same resulting text for a lone writer, key position preserved, duplicate
+lines under concurrency. That is Rust and the TypeScript port changed together,
+`backend/crates/core/corpus/splices.json` regenerated (`replaced` and `edits` change for
+every `set_fm` case), and SPEC §3.3's "replace only the affected key's value span"
+reworded — plus a decision about the trailing comment on that line, which the value-span
+write already clobbers but which a line write clobbers more visibly. Cross-area, and a
+SPEC edit: it is not a sweep.
+
 ---
 
 ## Minor, for whenever someone is already in the file
@@ -204,6 +156,10 @@ reader as the open items.
 
 | Was | Outcome |
 |---|---|
+| **Item 1** — Creating a document drops you into read mode on an empty page | **Closed with a user-level opt-out**, which is as far as it can go without a route-contract decision. `document-surface` now renders its own `settings.section` ("Documents" → "Open documents in"), so a workspace that wants to land in Edit says so once. The options come from the `document.mode` registry rather than being spelled, so SPEC §6.5's symmetry — and M3's acceptance test — still hold. `?mode=<id>` on the route is still the real fix and is still a design call. |
+| **Item 2** — Two base plugins declare user settings that no screen renders | **Fixed, one by rendering and one by removal.** `document-surface` contributes the section above (without declaring a `settings` dependency — contributions to undefined points buffer). `editor`'s `foldFrontmatter` was **deleted along with the behaviour**: frontmatter is now absent from the fold service's answer entirely, so there is no gutter arrow, no `foldEffect` target and nothing `foldAll` can collapse — a preference whose only honest value was `false` is not worth a screen. |
+| **Item 3** — A document can only be moved between folders by dragging | **Fixed.** Long-press (500 ms), right-click, the row's `⋯`, or `M` opens a portalled sheet with Move to…, New document/folder here, Rename and Delete; the picker always offers Root first. Portalled because `shell-ui`'s sidebar declares `container-type: inline-size`, which traps a `position: fixed` panel. Covered at 390 px by `web/app/e2e/zz-folder-tree.spec.ts`. |
+| **Item 4** — Folder rename is a `window.prompt` | **Fixed.** Rename is an inline field in the row (Enter/✓ commit, Escape/✕ cancel; blur does neither, because a rename can splice hundreds of documents and a stray click is not consent). `globalThis.prompt` is gone from the plugin, which also removes the untested `onJsPrompt` dependency inside the Flutter shell rather than documenting it. The e2e spec fails the run if *any* native dialog opens, so this cannot quietly come back. |
 | Trash's ordering caveat will go stale the moment `deleted_at` lands | **Done.** `deleted_at` is a fixed root of the shared DSL, `TrashView` sorts through the query, the client-side re-sort and the "sorted on this device" paragraph are gone, corpus parity passes. |
 | Wide tables scroll the view, not themselves, on a phone | **Not reproducible.** Re-measured at 390 px across all thirteen routes: `scrollWidth === clientWidth` on both the page and `.shell-main`. The keybindings table fits at 380 px. The `min-width: 0` fix on the settings pane is what let it wrap. |
 | `.cmd-category` contributes no space to the accessibility tree | **Fixed** (second pass). It affected the palette *and* the settings keybindings table — same markup — which is what moved it over the bar. |
@@ -241,6 +197,36 @@ For the record, and so nothing here is looked for twice. Each has a test unless 
 | The folder tree's row actions were unreachable by keyboard: `tabindex="-1"` like everything in a roving-tabindex tree, and `display: none` until the row was active. Rename had F2 as a fallback; **"new document in this folder" had no keyboard path at all** | `folders` (the active row's two actions become a tab stop; `:focus-within` keeps the group visible while they hold focus) | `app/e2e/polish.spec.ts` |
 | `.cmd-category`'s separator gap was `margin-right`, which the accessibility tree cannot see — every palette row *and* every keybindings row announced as one word, "Admin ›Browse snapshots" | `commands` (`content: " › "`, margin reduced so the visual gap is unchanged) | `app/e2e/polish.spec.ts` (asserts the **accessible name**, since `innerText` omits generated content) |
 | Two more end-user strings citing the spec at the reader — the folder contents filter disclosure still said "SPEC §4.2", and admin's users note said "(SPEC §5.4)" | `folders`, `admin` | — (copy) |
+
+### Core-improvements wave (2026-09-25)
+
+Larger than a sweep — three owners' worth of work against the owner's own three asks — so
+the detail lives in `web/CONTRACTS.md`. What was *found* on the way is here, because each
+one was a surface that passed every existing assertion while rendering something else.
+
+| What was wrong | Where | Covered by |
+|---|---|---|
+| Task lists were indented **twice**: a list's marker gutter was `calc(--lm-space * 3)` in two rules and `--lm-tap-target` in a third, so a task's text sat 50 px from the body margin against a bullet's 24, and nesting stepped 50 against 24. The `li` edge was already flush, which is why nothing caught it | `markdown` (one `--md-gutter` token; the 44 px target **overhangs** its column instead of widening it) | `app/e2e/list-alignment.spec.ts` (measured edges, at 1280 px and 390 px) |
+| The "Filters" badge counted a whitespace-only title box as an applied filter, **Clear** silently unticked "Show machine documents", and an unusable condition was marked "Incomplete" over rows that were entirely filled in and refused for a *type* reason | `doc-list` (`appliedCount()`; `clauseProblem()` returns the reason and `invalidClauses` is derived from it, so the mark and the query are one decision) | `doc-list/src/filter.test.ts` (incl. a ~3 000-row matrix pinning `clauseProblem(c) === undefined ⟺ buildClause(c) !== undefined`), `app/e2e/list-alignment.spec.ts` |
+| A date-only frontmatter value rendered a day early west of Greenwich (`new Date("2026-09-23")` is UTC midnight), and an impossible date like `2026-02-30` was printed as "2 Mar 2026" — a day the document does not contain | `_shared/fm-display.ts` (components read into a *local* `Date`; validity checked before formatting) | `_shared/fm-display.test.ts`, run under four time zones |
+| `mobile-shell.spec.ts`'s audit test measured the "Detail" disclosures *after* filtering the log to one target id — whether that target has a detail block is an accident of which admin action sorts first, so it failed about one run in four with nothing wrong | `app/e2e/mobile-shell.spec.ts` (the two independent claims made in that order) | itself |
+
+### Review follow-ups to the core-improvements wave (2026-09-25)
+
+The wave's own review, applied. Two of the six were latent rather than reproducible and
+are marked as such; the seventh finding is open item 11, because its fix is not in a
+plugin.
+
+| What was wrong | Where | Covered by |
+|---|---|---|
+| `folders` spliced `fm.path` on **any** id it was handed. Excluding machine-owned documents from the tree's `rows` protects what the tree draws and nothing else, and two entry points never consult `rows`: the `folders.moveDocument` command (an id out of the URL) and a drop (`text/plain` off a `DataTransfer` any plugin fills in). Aimed at the kernel's per-user settings document it moved it out of `.settings`, where `settingsFilter()` is looking for it — every stored setting for that user then read as its schema default, recoverable only by hand-editing `path` back | `folders` (`refuseMachineWrite` on the write path, against the document's *stored* `fm.path` rather than tree membership, so a document past `TREE_ROW_LIMIT` is still movable; the command refuses with a notice before opening a sheet; a dotted *destination* is refused too, since `.hidden` typed into an inline rename is the same hole from the other side) | `folders/src/…` + the guard's own refusals; `browsing.spec.ts` still pins the three-plugin agreement about hiding |
+| The empty-folder list is one settings key, so two devices creating a folder at once wrote `emptyFolders:` concurrently and the host kept one line — the folder made on the losing device vanished from both trees with no error. The plugin's documentation called a *stale* entry the only failure mode; a dropped one is the opposite | `folders` (`mergeTracked`, plus an "unconfirmed" set that an entry leaves the first time a stored value contains it — so a lost race is merged back and a folder deleted later on another device stays deleted) | `folders/src/empty-folders.test.ts` |
+| "New notes go to" handed its settings write to nobody: a failure was an unhandled rejection in the console, the picker kept showing the folder the user chose, and `doc-list` went on filing notes in the old one | `folders` (`DefaultLocation` optimistic-and-reverted with a `role="alert"`, the shape `DefaultModeSection` already used) | — (visual; the rejection path is not reachable from a passing e2e run) |
+| "Open documents in" and its "N documents open the way you last left them" count were read once at mount. A second tab, a second device, or switching modes on a few documents left the select stale and the count wrong — and that count is what "Forget remembered modes" is about to clear | `document-surface` (`kernel.settings.subscribe`, skipped while a write of its own is in flight so the optimistic value still wins) | `frontmatter.spec.ts`'s "Open documents in" test still passes, which is what pins the optimistic path |
+| `formatDateValue` built a local `Date` from the raw components, and `new Date(26, 0, 1)` is **1926**: `date: 0026-01-01` printed as "1 Jan 1926" — the same "a date the document does not contain" the function's own comment exists to prevent | `_shared/fm-display.ts` (`setFullYear` after construction) | `_shared/fm-display.test.ts` |
+| Removing the surface-level `fm_parse_error` notice left **edit mode** with no warning at all: the read-mode header does not render there and the properties panel is a drawer that starts closed at 390 px — and edit mode is where the read-mode warning tells the reader to go | `editor` (its own `role="status"` notice, in both the hydrated and the read-only branch) | `frontmatter.spec.ts` (its `fm_parse_error` assertions run in both modes) |
+| `pressHandled` had a path that set it and no path that cleared it: a long press on the blank part of a folder row opens the sheet, and the click that follows has no handler to consume it. **Latent, not reproducible** — every touch `pressStart` also resets the flag, so the next tap clears it before its own click — but the flag's lifetime depended on that rather than stating it | `folders` (the folder row consumes its own press, the way the document row already did) | — (reasoned; the tree's 390 px journeys in `zz-folder-tree.spec.ts` exercise the sheet) |
+
 
 **Verified good, for the next person who wonders:** empty states for the document list,
 folders and Trash (all three written, all three reachable with `SEED_WELCOME_DOCS=false`);

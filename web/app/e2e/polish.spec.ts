@@ -107,9 +107,13 @@ test.describe("phone width (390px)", () => {
 
 test.describe("copy and labels that were wrong", () => {
   test("a fold placeholder names the region it hides", async ({ page, request, baseURL }) => {
-    // Frontmatter is human-owned (SPEC §3.3) and was labelled "machine data"; a `%%%`
-    // section's owner is on the fence line the fold hides, so the chip is the one place
-    // left to say it.
+    // A `%%%` section's owner is on the fence line the fold hides, so the chip is the
+    // one place left to say it. This test used to assert a *second* placeholder reading
+    // "⋯ frontmatter": the block was folded on open behind a per-user preference, and
+    // the label was the fix for it having said "machine data". The owner removed the
+    // behaviour instead (2026-09-25) — frontmatter is human-owned (SPEC §3.3) and edit
+    // mode is where it gets edited — so what is left to pin here is that exactly one
+    // region folds and it names its plugin. `frontmatter.spec.ts` owns the rest.
     const id = await createDocument(
       request,
       baseURL as string,
@@ -121,14 +125,13 @@ test.describe("copy and labels that were wrong", () => {
     await page.getByRole("tab", { name: "Edit" }).click();
 
     const placeholders = page.locator(".cm-foldPlaceholder");
-    await expect(placeholders).toHaveCount(2);
-    await expect(placeholders.nth(0)).toHaveText("⋯ frontmatter");
-    await expect(placeholders.nth(1)).toHaveText("⋯ sweep-demo data");
+    await expect(placeholders).toHaveCount(1);
+    await expect(placeholders.nth(0)).toHaveText("⋯ sweep-demo data");
 
     // Still a fold, not just a label: clicking it puts the text back.
     await placeholders.nth(0).click();
-    await expect(placeholders).toHaveCount(1);
-    await expect(page.locator(".cm-content")).toContainText("title: Fold labels");
+    await expect(placeholders).toHaveCount(0);
+    await expect(page.locator(".cm-content")).toContainText("key: value");
   });
 
   test("Trash attributes a deletion in words, not a raw user id", async ({ page, request, baseURL }) => {

@@ -20,6 +20,25 @@
  * a frontmatter block wholesale is correct (SPEC §3.3): there is no concurrent writer to
  * merge with yet, and no existing block to destroy. Every *later* metadata write in this
  * plugin's neighbourhood goes through `kernel.documents.splice`.
+ *
+ * INTEGRATION (folders): **where an unfiled new document lands arrives as an event.**
+ * `folders` owns the "new notes go here" setting and emits `folders:default-location`
+ * with `{ path }` at its own activation and on every change; `createDocument` uses the
+ * last value it heard whenever the caller named no `path` of its own. That direction is
+ * forced: `folders` *depends on* `doc-list`, so `kernel.services.get("folders")` from
+ * here is a `ContractViolationError` by design (SPEC §6.4) and declaring the dependency
+ * back would be a cycle the loader cannot order. The event bus needs no dependency in
+ * either direction.
+ *
+ * Two properties this rests on, both stated because `kernel.events` gives neither for
+ * free (it is fire-and-forget with no replay, SPEC §6.3):
+ *
+ * - **The listener is registered in `activate`**, before any plugin that depends on this
+ *   one can have activated. `folders`' announcement therefore cannot precede it.
+ * - **Root is the floor.** No `folders`, a `folders` that failed to activate, an empty
+ *   setting, or a payload that is not a string: the document is created at the root and
+ *   is still created. No plugin's opinion about folders may stop the app's most common
+ *   action.
  */
 
 import { useEffect, useState } from "react";
@@ -65,6 +84,25 @@ interface RouterService {
 
 export default function activate(kernel: Kernel): DocListApi {
   const router = kernel.services.require<RouterService>("router");
+
+  /**
+   * Where an unfiled new document goes — the folder `folders` keeps as a per-user
+   * setting, or the workspace root, which is the value until something says otherwise.
+   *
+   * See this file's header for why it arrives as an event rather than as a service
+   * call. The listener is registered **here, in `activate`**, and that is the whole of
+   * the ordering contract: `folders` depends on this plugin, so its `activate` — and
+   * the announcement at the end of it — cannot run until this line has.
+   *
+   * Treated as untrusted input, because an event payload is: anything that is not a
+   * non-empty string leaves the value at the root rather than putting `undefined` or a
+   * number into a `path:` line.
+   */
+  let defaultLocation = "";
+  kernel.events.on<{ readonly path?: unknown }>("folders:default-location", (event) => {
+    const path = event.payload?.path;
+    defaultLocation = typeof path === "string" ? path.trim() : "";
+  });
 
   /** Ids the list last rendered, for `visible()`. */
   let visible: readonly string[] = [];
@@ -196,8 +234,12 @@ export default function activate(kernel: Kernel): DocListApi {
       // spliced afterwards: at creation there is no concurrent writer to merge with, and
       // this is the one moment when authoring the whole text is correct (SPEC §3.3).
       const title = options?.title ?? "Untitled";
+      // An explicit path always wins: a folder's "+" button knows where it is, and no
+      // default may overrule a caller that said so. Only an *unfiled* document asks
+      // where unfiled documents go, and the answer is the root until told otherwise.
+      const path = options?.path ?? defaultLocation;
       const front = ["---", `title: ${yamlScalar(title)}`];
-      if (options?.path) front.push(`path: ${yamlScalar(options.path)}`);
+      if (path) front.push(`path: ${yamlScalar(path)}`);
       front.push("---", "", `# ${title}`, "");
       const id = await kernel.documents.create({ text: front.join("\n") });
       router.navigate(`/doc/${id}`);

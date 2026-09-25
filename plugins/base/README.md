@@ -12,8 +12,8 @@ reference for writing a plugin — there is deliberately no scaffolding CLI (SPE
 ```
 _shared/points.ts                 the extension points: names, types, shape validators
 _shared/machine-docs.ts           the one rule three plugins share about hiding documents
-_shared/compact.ts                "this is a phone": the breakpoint, and the visual viewport
-_shared/compact.ts                the compact media query and the hooks that read it
+_shared/fm-display.ts             what kind of thing an fm value is, and how to show one
+_shared/compact.ts                "this is a phone": the breakpoint, and the hooks that read it
 _shared/vite.plugin-config.mjs    the reference build config (SPEC §6.4)
 _shared/vite.config.example.mjs   how a standalone plugin uses it
 <id>/manifest.json                SPEC §6.2
@@ -30,7 +30,7 @@ dist/<id>/<version>/              build output = the installed layout the server
 | `themes` | theme registry + picker; overrides kernel tokens | `themes.theme` |
 | `search` | search UI; local index is the default provider | `search.provider` |
 | `doc-list` | browse/sort/filter, new document, Trash | — |
-| `folders` | tree over `fm.path`; moves are splices | — |
+| `folders` | drag-and-drop file tree over `fm.path`; every move is a splice | — |
 | `markdown` | the unified/remark → React pipeline | `markdown.directive/fence/remark/component/taskState` |
 | `document-surface` | the document route + mode registry | `document.mode` |
 | `viewer` | read mode | contributes `read` |
@@ -90,6 +90,15 @@ flowchart TD
     themes --> commands
 ```
 
+The graph is **unchanged by the core-improvements pass**: nothing declared a new
+dependency. `folders` gained `react-dom` in `peerLibraries` (its move sheet is a
+`createPortal`), which is a blessed runtime-layer specifier resolved through the server's
+import map, not an edge in this graph. The one new cross-plugin relationship in that
+pass — `folders` telling `doc-list` where unfiled documents go — is a `kernel.events`
+message precisely *because* the arrow it would need points the wrong way: `folders`
+already depends on `doc-list`, and the reverse edge would be a cycle the loader cannot
+order.
+
 Reading it bottom-up: `shell-ui` owns the frame everyone renders into; `router` and
 `commands` are the two services almost everything consumes (URLs and actions); the
 document experience stacks `viewer`/`editor`/`properties` as peer *modes* on
@@ -117,6 +126,63 @@ for anyone to keep up to date.
 `folders` has no toggle, deliberately: a hidden folder in a tree is a row that looks
 like every other folder and behaves differently, and a rename there would splice
 `fm.path` on documents the kernel authors.
+
+**Hiding is a read rule; the write needs its own.** Filtering a query protects what a
+view *draws* and nothing else, and `folders` reaches its write path from places that
+never ran the query: the `folders.moveDocument` command takes an id out of the URL, and
+a drop reads `text/plain` off a `DataTransfer` any plugin may have filled in. Aimed at
+the kernel's per-user settings document that wrote `fm.path` on it and moved it out of
+`.settings`, where the settings host's own query is looking — leaving every stored
+setting reading as its schema default. So `folders` checks the document's *stored*
+`fm.path` at the splice (`refuseMachineWrite`), and refuses a dotted **destination** too,
+because `.hidden` typed into an inline folder rename is the same hole from the other
+side. Anyone adding a write here inherits that obligation; `EXCLUDE_MACHINE_DOCUMENTS` on
+a subscription is not it.
+
+## Two shared files, and why each is not a dependency
+
+`_shared/` holds what several base plugins must agree about *exactly*, where a manifest
+dependency would be the wrong shape of agreement.
+
+- **`machine-docs.ts`** — above. Three plugins, one rule about what to hide.
+- **`fm-display.ts`** — what kind of thing an `fm` value is (`inferKind`, `isDateKey`,
+  `PREFERRED_KEY_ORDER`) and how to print one for a reader (`fmDisplayRows`,
+  `formatDateValue`). `properties` draws the editable panel; `viewer` draws read mode's
+  properties header. Two copies of "is `due` a date?" would show one document two
+  different ways on the same screen.
+
+The dependency `viewer → properties` would have been the obvious alternative and is the
+wrong one: a declared dependency means **read mode disappears when `properties` fails or
+is replaced** (a failed plugin skips its transitive dependents, SPEC §6.4) — a broken
+sidebar panel taking down document reading. A third-party plugin must not import
+`_shared` (it is not part of `@kernel`); it asks `properties` for the same function
+through `PropertiesApi.display(fm)`.
+
+## The folder tree
+
+`folders` renders folders *and* documents as one `role="tree"`: a document with no
+`fm.path` is a row at the root, beside the top-level folders, because that is where it
+is. Dragging a document onto a folder is one `setFrontmatterValue`; onto **Root** it is
+one `removeFrontmatterKey`; dragging a *folder* is one splice per document inside it,
+planned first (`src/moves.ts`) so the move has a total to show progress against and can
+be re-planned against the live projection after a partial failure. A folder is only a
+prefix, so dropping `a/notes` into `b` when `b/notes` exists **merges** them — there is
+no record to collide.
+
+Two things `fm.path` alone cannot express, both held in this plugin's own per-user
+settings: a folder that holds no document yet (`emptyFolders`, dropped the moment one
+lands in it) and which folders the user has **collapsed** (stored as the negative, so an
+untouched tree is open). `emptyFolders` is a whole list under one settings key, so two
+devices creating a folder at the same moment write it concurrently and the host keeps one
+line (SPEC §3.3, last occurrence wins) — which silently lost the folder made on the
+losing device. A write is therefore **merged, not adopted**: entries this device wrote and
+has not yet read back are folded into the stored list (`mergeTracked`), and an entry stops
+being defended the first time a stored value contains it, so a folder deleted later on
+another device stays deleted. A stale entry costs nothing (the tree draws it from
+`fm.path` anyway); a dropped one is a folder the user made and cannot see. Everything reachable by drag is reachable without one — a
+long-press, a right-click, the row's `⋯`, or `M` opens a portalled sheet with Move to…,
+New document/folder here, Rename and Delete — because HTML5 drag and drop does not fire
+from touch.
 
 ## Building
 

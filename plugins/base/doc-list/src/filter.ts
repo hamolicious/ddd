@@ -296,9 +296,72 @@ export function buildEffectiveFilter(draft: FilterDraft): FilterJson | undefined
   return draft.includeMachine === true ? filter : withoutMachineDocuments(filter);
 }
 
+/**
+ * Why a row produces no clause, or `undefined` when it produces one.
+ *
+ * **This is the definition, and {@link invalidClauses} is derived from it.** They used
+ * to be two computations of the same question — `buildClause(...) === undefined` in one
+ * place, a fixed "Incomplete" string in the other — which is exactly the shape of bug
+ * the audit suspected here (a row marked "not being applied" while the query said
+ * otherwise). `filter.test.ts` asserts the equivalence over a matrix rather than
+ * trusting that the two stay in step.
+ *
+ * The sentence matters as much as the boolean. Two of these rows are not *incomplete*
+ * at all — they are filled in and refused, and "Incomplete" told the user to type
+ * something into a box that was already full.
+ */
+export function clauseProblem(clause: FilterClause): string | undefined {
+  const field = clause.field.trim();
+  if (field === "") return "Name a property, such as fm.status.";
+  if (!isFieldPathShaped(field)) {
+    return "That is not a property path. Try title, updated_at or fm.something.";
+  }
+
+  if (VALUELESS_OPS.includes(clause.op)) return undefined;
+
+  if (TEXT_OPS.includes(clause.op)) {
+    if (clause.kind !== "str") return "Text matching needs the text value type.";
+    return clause.value.trim() === "" ? "Type the text to match." : undefined;
+  }
+
+  if (ORDERING_OPS.includes(clause.op) && (clause.kind === "bool" || clause.kind === "null")) {
+    return "Before and after do not apply to true/false or null.";
+  }
+
+  if (buildLiteral(clause.kind, clause.value) === undefined) {
+    if (clause.value.trim() === "") return "Type a value to compare against.";
+    switch (clause.kind) {
+      case "date":
+        return "That is not a date. Try 2026-09-23.";
+      case "int":
+        return "That is not a whole number.";
+      case "float":
+        return "That is not a number.";
+      case "bool":
+        return "Type true or false.";
+      default:
+        return "That value cannot be used here.";
+    }
+  }
+  return undefined;
+}
+
 /** Clauses the builder dropped, so the UI can mark the rows instead of losing them silently. */
 export function invalidClauses(draft: FilterDraft): readonly string[] {
-  return draft.clauses.filter((clause) => buildClause(clause) === undefined).map((clause) => clause.id);
+  return draft.clauses.filter((clause) => clauseProblem(clause) !== undefined).map((clause) => clause.id);
+}
+
+/**
+ * How many conditions the query actually carries — the number the folded filter bar
+ * shows, so a collapsed bar is never a silent one.
+ *
+ * Counted from {@link buildFilter}'s own rules rather than from the row count: a title
+ * box holding only spaces produces no clause, and a badge that counted it said "1
+ * condition applied" over a query with none.
+ */
+export function appliedCount(draft: FilterDraft): number {
+  const usable = draft.clauses.filter((clause) => clauseProblem(clause) === undefined).length;
+  return usable + ((draft.titleContains ?? "").trim() !== "" ? 1 : 0);
 }
 
 /** The filter that selects trashed documents (used with `includeDeleted: true`). */

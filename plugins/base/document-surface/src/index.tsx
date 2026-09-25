@@ -44,8 +44,10 @@ import {
   type Command,
   type DocumentMode,
   type DocumentModeProps,
+  type SettingsSection,
 } from "../../_shared/points.js";
 import { lineFromPath } from "./line.js";
+import { DefaultModeSection } from "./SettingsSection.js";
 import {
   DEFAULT_MODE_ID,
   nextModeId,
@@ -53,6 +55,7 @@ import {
   rememberMode,
   resolveModeId,
   serializeModeMemory,
+  sortModes,
   visibleModes,
 } from "./modes.js";
 
@@ -141,8 +144,10 @@ export default function activate(kernel: Kernel): DocumentSurfaceApi {
   kernel.settings.defineSchema({
     [SETTING_DEFAULT_MODE]: {
       type: "string",
-      label: "Default document mode",
-      description: "Used when a document has no remembered mode.",
+      label: "Open documents in",
+      description:
+        "Which mode a document opens in when you have not switched modes on it. " +
+        "The options are whatever modes are installed.",
       default: DEFAULT_MODE_ID,
     },
     [SETTING_MODE_MEMORY]: {
@@ -162,6 +167,39 @@ export default function activate(kernel: Kernel): DocumentSurfaceApi {
     title: "Document",
     component: (props: { readonly params?: Readonly<Record<string, string>> }) => (
       <SurfaceView surface={surface} router={router} params={props.params} />
+    ),
+  });
+
+  /**
+   * "Open documents in" — the screen for the setting declared above.
+   *
+   * Contributed without depending on `settings`: a contribution to a point nobody has
+   * defined yet buffers until somebody does (SPEC §6.4), and the point name is an
+   * opaque string to the kernel. A `dependencies` entry would buy nothing and would
+   * make read/edit mode disappear the day a workspace replaces the settings shell.
+   */
+  kernel.extensions.contribute<SettingsSection>(POINTS.settingsSection, {
+    id: "documents",
+    title: "Documents",
+    order: 20,
+    description: "How a document opens.",
+    component: () => (
+      <DefaultModeSection
+        kernel={kernel}
+        // Sorted: `ExtensionPoint.get()` answers in contribution order, which is the
+        // loader's topological order and therefore alphabetical-ish by plugin id —
+        // "Edit, Read" rather than the "Read, Edit" every mode switcher in the app
+        // shows. `order` is the contract for how modes are presented (SPEC §6.5).
+        modes={() => sortModes(modes.get())}
+        onModesChange={(listener) => modes.subscribe(() => listener())}
+        // Not the raw stored value: `resolveModeId` is the same precedence the surface
+        // opens a document with, so the select shows the mode that would actually be
+        // used — including when the stored preference names a mode nobody installed.
+        defaultMode={() => resolveModeId(undefined, surface.preferredMode(), modes.get())}
+        setDefaultMode={(modeId) => surface.setPreferredMode(modeId)}
+        rememberedCount={() => surface.rememberedCount()}
+        forgetRemembered={() => surface.forgetRemembered()}
+      />
     ),
   });
 
@@ -430,6 +468,39 @@ class Surface {
     return resolveModeId(remembered, this.#preferredMode(), visible);
   }
 
+  /**
+   * The user's "open documents in" preference, or `undefined` when none is stored.
+   * Public for the settings section; the resolver uses the private one.
+   */
+  preferredMode(): string | undefined {
+    return this.#preferredMode();
+  }
+
+  /** Store the preference. Takes effect on the next document opened, not on this one. */
+  async setPreferredMode(modeId: string): Promise<void> {
+    await this.kernel.settings.set(SETTING_DEFAULT_MODE, modeId);
+  }
+
+  /** How many documents have a remembered mode that outranks the preference. */
+  rememberedCount(): number {
+    return this.#memoryMap().size;
+  }
+
+  /**
+   * Drop every remembered per-document mode, so the preference applies everywhere.
+   *
+   * The pending coalesced write is cancelled first: it holds the *old* map and would
+   * put the whole memory back a fraction of a second after it was cleared.
+   */
+  async forgetRemembered(): Promise<void> {
+    if (this.#memoryTimer !== undefined) {
+      clearTimeout(this.#memoryTimer);
+      this.#memoryTimer = undefined;
+    }
+    this.#memory = new Map();
+    await this.kernel.settings.set(SETTING_MODE_MEMORY, []);
+  }
+
   #preferredMode(): string | undefined {
     try {
       const value = this.kernel.settings.get<string>(SETTING_DEFAULT_MODE);
@@ -611,12 +682,22 @@ function SurfaceView({
       </header>
 
       {row.deleted ? <TrashedBanner surface={surface} row={row} /> : null}
-      {row.fm_parse_error ? (
-        <p className="docsurface-notice docsurface-notice-warning" role="status">
-          One frontmatter line could not be read. The text is untouched — see the properties
-          panel.
-        </p>
-      ) : null}
+      {/*
+        `fm_parse_error` used to get a full-width notice here, and that was one
+        rendering too many and one layer too high. Too many: `properties` already warns
+        in its panel, and `viewer`'s read-mode header now warns beside the rows the
+        dropped line is missing from — three statements of one fact, two of them
+        stacked on the same screen. Too high: this plugin owns the route and the mode
+        registry and knows nothing else about a document (SPEC §6.5), and a
+        frontmatter-shaped notice above every mode is knowledge about the text.
+
+        The correction that followed: **each mode says it for itself.** Removing the
+        notice from here left *edit* mode with no warning at all — the read-mode header
+        does not render there and the properties panel is a drawer that starts closed on
+        a phone — so `editor` now carries its own, which is also where the read-mode
+        warning tells the reader to go. Three renderers, one per surface that shows
+        `fm` or the text it comes from, and none of them this one.
+      */}
       {snapshot.hydrationError && !snapshot.handle ? (
         <p className="docsurface-notice" role="status">
           Cannot edit: the editable copy did not load

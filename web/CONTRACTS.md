@@ -785,3 +785,159 @@ server returns, what the local index holds or what `kernel.documents` answers ch
   constant, for the reason its own doc comment gives.
 - **`app/pubspec.yaml`**: the unused `archive` dependency dropped (`pubspec.lock`
   regenerated; `flutter test` green). Nothing in `app/lib/` imported it.
+
+---
+
+# Core-improvements pass (2026-09-25) — area `base-docs` / `base-markdown`
+
+## A cross-plugin seam with no contract change: `folders:default-location`
+
+`doc-list.createDocument` needs to ask "where do unfiled documents go?", and the plugin
+that knows is `folders` — which **depends on** `doc-list`. `kernel.services.get("folders")`
+from `doc-list` is a `ContractViolationError` by design (the registry refuses an
+undeclared dependency, SPEC §6.4), and declaring the dependency back would be a cycle the
+loader cannot topologically order.
+
+The seam is `kernel.events`, which needs no dependency in either direction: `folders`
+emits `folders:default-location` with `{ path }` at its own activation and on every
+change; `doc-list` registers the listener inside its own `activate` and uses the last
+value it heard when the caller named no `path`. **No extension point, no new field, no
+frozen file touched.**
+
+A registry point (`doc-list` defines, `folders` contributes) was built first and then
+withdrawn: it is the more typed of the two, but `folders` had already chosen the event,
+and one mechanism that both plugins use beats a second, better one that only half the
+distribution does.
+
+Two properties the seam rests on, recorded because `kernel.events` guarantees neither —
+it is fire-and-forget with no replay (SPEC §6.3):
+
+- **Order is structural, not lucky.** `doc-list` subscribes in `activate`; `folders`
+  activates strictly later, because it depends on `doc-list`. The announcement cannot
+  precede the listener.
+- **Root is the floor.** No `folders`, a `folders` that failed to activate, an empty
+  setting, or a payload whose `path` is not a string: the document is created at the
+  root, and it *is* created. No plugin's opinion about folders may break the app's most
+  common action.
+
+## New shared file: `plugins/base/_shared/fm-display.ts`
+
+The second file in `_shared/`, and for the same reason as the first. `properties` draws
+the editable frontmatter panel and `viewer` now draws a read-mode properties header; two
+copies of "is `due` a date?" would show one document two different ways **on the same
+screen**. The typing half (`inferKind`, `isDateKey`, `isIsoDateLike`, `rowsFromFm`,
+`PREFERRED_KEY_ORDER`, `formatScalar`) moved out of `properties/src/rows.ts`, which
+re-exports every moved name so its own callers and tests are unchanged; the display half
+(`fmDisplayRows`, `formatDateValue`) is new.
+
+Deliberately **not** a `viewer → properties` manifest dependency: a declared dependency
+means read mode disappears when `properties` fails or is replaced (SPEC §6.4 skips the
+transitive dependents of a failed plugin), which is a broken sidebar panel taking down
+document *reading*. Third parties, which must not import `_shared`, get the same
+function through `PropertiesApi.display(fm)`.
+
+One rule inside it that is easy to lose: a **date-only** value never goes through
+`new Date(string)` — that parses as UTC midnight and prints the day before west of
+Greenwich — and validity is checked before formatting, so `2026-02-30` stays text rather
+than being rendered as "2 Mar 2026".
+
+## Files added in this pass
+
+| File | Owner area | What it is |
+|---|---|---|
+| `plugins/base/_shared/fm-display.ts` | shared | above |
+| `plugins/base/viewer/src/FmHeader.tsx` | base-docs | read mode's properties header; display-only, no focusable control |
+| `plugins/base/document-surface/src/SettingsSection.tsx` | base-docs | the `settings.section` that renders "Open documents in", with its options read from the `document.mode` registry rather than spelled |
+| `plugins/base/folders/src/{tree,moves,empty-folders}.ts` | base-docs | the render model, the move plan, and the empty-folder bookkeeping — pure, tested apart from the panel |
+| `plugins/base/folders/src/{Sheet,DefaultLocation}.tsx` | base-docs | the touch/keyboard move sheet (portalled), and the "new notes go to" section |
+
+Two consequences worth stating:
+
+- **`folders/manifest.json` gained `react-dom` in `peerLibraries`** — the sheet is a
+  `createPortal` out of the sidebar, which `shell-ui` declares `container-type:
+  inline-size` on and which would otherwise trap a `position: fixed` panel. `react-dom`
+  is already in the blessed runtime layer (SPEC §6.4), so this resolves through the
+  server's import map like every other external. **No `dependencies` field moved in this
+  pass**, so the dependency graph in `plugins/base/README.md` is unchanged.
+- **`document-surface` no longer renders an `fm_parse_error` notice.** The statement now
+  lives with the plugins that render `fm` or the text it comes from — `viewer`'s header,
+  `properties`' panel and (**added in the review follow-up**) `editor`'s own notice —
+  rather than in the plugin that owns the route and the mode registry and otherwise knows
+  nothing about frontmatter. `editor` is not optional in that list: removing the
+  surface-level notice left *edit* mode with none at all, since the read-mode header does
+  not render there and the panel is a `sidebar.panel` that starts closed at 390 px — and
+  the read-mode warning's own advice is "fix the line in edit mode".
+  `app/e2e/frontmatter.spec.ts` now asserts the notice **once per mode, in both modes**,
+  which pins the rule in both of its failure directions. `.docsurface-notice-warning`
+  stays in the stylesheet as the neutral variant between plain and `-danger`.
+
+## `--md-gutter`: one token for every list indent
+
+`markdown`'s list indentation had been spelled three times — `calc(var(--lm-space) * 3)`
+in a list's `padding-inline-start` and in a task row's negative margin, and
+`var(--lm-tap-target)` in the checkbox column — so a task's *text* sat 50 px from the
+body margin while a bullet's sat at 24 px, and each nesting level stepped 50 against 24.
+It is now one custom property on `.md-root` that all three read, and the 44 px tap target
+**overhangs** its column (negative inline margins) instead of widening it. Anything
+styling lists should read `--md-gutter` rather than re-deriving it; a theme that changes
+`--lm-space` rescales tasks, bullets and numbers together.
+
+## Review follow-ups (2026-09-25)
+
+The core-improvements pass reviewed, and the findings applied. Nothing here moved a
+contract: no `@kernel` surface, no manifest `dependencies`, no extension point.
+
+- **Machine-owned documents needed a write rule, not only a read one.** `folders`
+  excluded them from its subscription and spliced `fm.path` on any id reaching its write
+  path — the `folders.moveDocument` command (an id out of the URL) and a drop
+  (`text/plain` off a `DataTransfer`) never went through that query. Pointed at the
+  kernel's per-user settings document it moved it out of `.settings`, where
+  `SettingsHost`'s own query looks for it, and every stored setting then read as its
+  schema default. `refuseMachineWrite` checks the document's **stored** `fm.path` at the
+  splice (not tree membership, so a document past `TREE_ROW_LIMIT` is still movable) and
+  refuses a dotted **destination** too. Covered by `app/e2e/zz-folder-tree.spec.ts`.
+- **`folders`' `emptyFolders` now merges rather than overwrites.** One settings key holds
+  the whole list, so two devices creating a folder at once resolve to one line and one
+  creation is lost. `mergeTracked` plus an "unconfirmed" set — an entry leaves it the
+  first time a stored value contains it — folds a lost race back in without resurrecting
+  a folder deleted later elsewhere.
+- **Two settings screens stopped lying.** "New notes go to" now shows a failed write
+  (optimistic, reverted, `role="alert"`) instead of dropping the promise, and
+  "Open documents in" follows `kernel.settings.subscribe` instead of reading once at
+  mount — the remembered-mode count in particular, since that is the number its own
+  button is about to clear.
+- **`formatDateValue` keeps a year below 100 in its own century** (`setFullYear`;
+  `new Date(26, 0, 1)` is 1926).
+- **Not fixed, and why:** concurrent `setFrontmatterValue` on one key concatenates the
+  two values (`archive` + `inbox` → `archiveinbox`). That is the value-span replacement
+  SPEC §3.3 mandates, it is pinned by
+  `kernel/src/runtime/splice.test.ts` → "concurrent writes to one key" alongside the
+  `%%%` line write that merges correctly, and the fix is in `core::splice` + the port +
+  `corpus/splices.json` + §3.3's wording, not in a plugin. `POLISH-BACKLOG.md` item 11
+  carries the plan.
+
+## Verification (integration close-out)
+
+Gates, on an isolated stack (port 8241, database `life_manager_verify`, its own composed
+registry; the live `:8080` stack untouched):
+
+- `npm run typecheck` clean, `npx vitest run` **898 passed / 1 skipped**.
+- `playwright.app.config.ts` **71 passed / 0 failed**, twice over.
+- **Re-run after the review follow-ups above**, on an isolated stack (port 8121,
+  database `life_manager_e2e`; the demo smoke on port 8131 / `life_manager_demo_e2e`;
+  the live `:8080` stack untouched): `npm run typecheck` clean, `npx vitest run`
+  **907 passed / 1 skipped**, `playwright.app.config.ts` **74 passed / 0 failed**, and
+  the SPEC §8 demo smoke **2 passed**. The three new app tests are the machine-owned
+  refusal in `zz-folder-tree.spec.ts` and the two `fm_parse_error` modes in
+  `frontmatter.spec.ts`.
+- `app/e2e/zz-folder-tree.spec.ts` is new: the four writes the existing suite did not
+  cover — a folder move (every document inside re-prefixed, each one splice, a bystander
+  in the destination byte-identical), a drop on Root (`removeFrontmatterKey`, the line
+  gone and nothing else moved), a folder delete down both branches (to the parent by
+  splice; to Trash, restored with its `path` intact), and the pointer-free path at
+  390 px. It is named `zz-` because it adds documents to the shared workspace and
+  several earlier specs assert on workspace-wide counts.
+- `app/e2e/mobile-shell.spec.ts`'s audit-log test was **de-flaked** rather than left: it
+  measured the "Detail" disclosures *after* filtering the log to one target id, and
+  whether that target's entries carry a detail block is an accident of which admin action
+  sorts first. The two claims are independent and are now made in that order.

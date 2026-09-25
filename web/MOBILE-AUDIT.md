@@ -782,6 +782,28 @@ taken with four documents in the workspace). Either `buildEffectiveFilter`
 it as dropped, or something else empties the list. This is a correctness bug, not a
 layout or copy one, and is outside all three ownerships — someone should own it.
 
+> **Answered 2026-09-25 (core-improvements pass). The note was telling the truth; the
+> observation was the fold.** Measured on a running build at 390 px with six documents:
+> pressing "Add condition" leaves the list at six rows and the emitted filter byte-identical
+> to the machine-document exclusion alone. `buildFilter` drops a clause the moment
+> `buildClause` returns `undefined`, and `invalidClauses` asks the same function, so the two
+> could not disagree. What `05b` shows is item **C-9** one screen further down: the expanded
+> bar was 1 700 px tall and the rows were below the fold of a viewport-sized screenshot. The
+> old empty state — "No document matches **these conditions**" — is what made any empty list
+> read as a claim that the conditions had run.
+>
+> Pinned rather than closed on a paragraph: `filter.test.ts` now asserts that an unusable row
+> changes nothing about the effective filter (alone, beside a good one, in `and` and in `or`),
+> and that `clauseProblem` and `buildClause` agree over a 3 000-row matrix of every field,
+> operator, value type and value the controls can produce. `app/e2e/list-alignment.spec.ts`
+> asserts the same thing where the audit looked: the rendered row count does not move.
+>
+> Three real defects were found while proving it, all fixed: the "Filters" badge counted a
+> whitespace-only title box as an applied condition; **Clear** silently unticked "Show machine
+> documents"; and the note said "Incomplete" over rows that were entirely filled in and
+> refused for a type reason (a text operator against a date, an ordering operator against
+> true/false). The note now gives the reason.
+
 **Q6 — Two search boxes.** (owner C, with an owner A seam)
 Removing the navbar search item on compact widths buys back a third of the mobile navbar,
 but the navbar item is a `navbar.item` contribution owned by `search` while the navbar's

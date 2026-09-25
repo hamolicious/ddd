@@ -98,7 +98,13 @@
   white-space: nowrap;
 }
 
-/* Notices: frontmatter parse errors, hydration failures, the Trash banner. */
+/*
+ * Notices: hydration failures and the Trash banner.
+ *
+ * The frontmatter-parse-error notice moved out of this plugin (see the comment where it
+ * used to render); `-warning` is kept as the neutral middle variant between the plain
+ * notice and `-danger`.
+ */
 .docsurface-notice {
   margin: 0;
   padding: var(--lm-space) calc(var(--lm-space) * 2);
@@ -156,6 +162,77 @@
 
 .docsurface-empty .docsurface-title {
   margin-bottom: var(--lm-space);
+}
+
+/* --- the settings section ("Open documents in") -------------------------- */
+
+/*
+ * Rendered inside `settings`' pane, which owns the section heading and the description
+ * above it; everything below is this plugin's own control. Styled here rather than
+ * reusing `.settings-*`, because those belong to another plugin's stylesheet and the
+ * class prefix is the whole isolation story (SPEC §6.4).
+ */
+.docsurface-settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lm-space);
+  max-width: 48ch;
+}
+
+.docsurface-setting {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--lm-space) / 2);
+  min-width: 0;
+}
+
+.docsurface-setting-label {
+  color: var(--lm-text);
+  font-weight: 600;
+}
+
+.docsurface-setting-select {
+  /* 44 px touch target at every width (SPEC §6.5), not only below the breakpoint. */
+  min-height: var(--lm-tap-target);
+  min-width: 0;
+  max-width: 100%;
+  padding: 0 var(--lm-space);
+  border: 1px solid var(--lm-border-strong);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg-raised);
+  color: var(--lm-text);
+  font: inherit;
+}
+
+.docsurface-setting-select:focus-visible,
+.docsurface-setting-button:focus-visible {
+  outline: 2px solid var(--lm-focus-ring);
+  outline-offset: 2px;
+}
+
+.docsurface-setting-hint {
+  margin: 0;
+  color: var(--lm-text-muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.docsurface-setting-button {
+  min-height: calc(var(--lm-tap-target) - 12px);
+  padding: 0 var(--lm-space);
+  border: 1px solid var(--lm-border-strong);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg-raised);
+  color: var(--lm-text);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.docsurface-setting-error {
+  margin: 0;
+  color: var(--lm-danger);
+  font-size: 0.9rem;
 }
 
 /*

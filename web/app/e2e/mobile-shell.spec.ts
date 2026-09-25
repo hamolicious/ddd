@@ -234,6 +234,20 @@ test.describe("phone (390 × 844)", () => {
     await mainDoesNotScrollSideways(page);
     await nothingOffScreen(page);
 
+    // Every audit row's "Detail" disclosure — the global `summary` rule's whole reason
+    // for existing. These measured 374 × 22.5.
+    //
+    // Measured on the **unfiltered** log, and before the filter interaction below,
+    // deliberately. This used to run after clicking a target id, which filters the log
+    // to that one target — and whether *that* target's entries carry a detail block is
+    // an accident of which admin action happens to sort first, so the assertion failed
+    // roughly one run in four with nothing wrong. The two things this test is about are
+    // independent: that a disclosure is a 44 px target, and that filtering by a ULID
+    // does not drag the page sideways.
+    const details = page.locator(".admin-audit summary");
+    expect(await details.count(), "audit entries with a detail block").toBeGreaterThan(0);
+    await tapTargets(page, ".admin-audit summary");
+
     // The interaction: a target id filters the log to that target.
     const target = page.locator(".admin-audit-target button.admin-link").first();
     const id = (await target.innerText()).trim();
@@ -241,12 +255,7 @@ test.describe("phone (390 × 844)", () => {
     await target.click();
     await expect(page.getByLabel("Target id")).toHaveValue(id);
     await noSidewaysScroll(page);
-
-    // Every audit row's "Detail" disclosure — the global `summary` rule's whole reason
-    // for existing. These measured 374 × 22.5.
-    const details = page.locator(".admin-audit summary");
-    expect(await details.count(), "audit entries with a detail block").toBeGreaterThan(0);
-    await tapTargets(page, ".admin-audit summary");
+    await nothingOffScreen(page);
   });
 
   test("a notice panel is not cut off the left edge", async ({ page }) => {

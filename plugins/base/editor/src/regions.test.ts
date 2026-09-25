@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   documentRegions,
   foldableRegions,
+  foldableRegionsOf,
   regionAt,
   regionsOf,
   stringLines,
@@ -136,25 +137,31 @@ describe("documentRegions — machine sections", () => {
 });
 
 describe("foldableRegions", () => {
-  it("folds the frontmatter and every section by default", () => {
+  it("folds every `%%%` section", () => {
     const folds = foldableRegions(DOC);
     expect(folds.map((region) => slice(DOC, region)?.split("\n")[0])).toEqual([
-      "---",
       "%%% calendar",
       "%%% reminders",
     ]);
   });
 
-  it("leaves the frontmatter alone when the preference says so", () => {
-    const folds = foldableRegions(DOC, { frontmatter: false });
-    expect(folds.map((region) => slice(DOC, region)?.split("\n")[0])).toEqual([
-      "%%% calendar",
-      "%%% reminders",
-    ]);
+  it("never offers the frontmatter block a fold range", () => {
+    // Owner ask, 2026-09-25: frontmatter is human-owned (SPEC §3.3) and edit mode is
+    // where it is edited, so it opens as plain text and stays that way. This is
+    // stronger than "not folded on open": absent from the answer means the fold
+    // service offers no range, so no gutter arrow, no `foldAll` and no contributed
+    // extension can collapse it either.
+    const folds = foldableRegionsOf(documentRegions(DOC));
+    expect(folds.some((region) => region.start === 0)).toBe(false);
+    expect(documentRegions(DOC).frontmatter).toBeDefined();
+
+    // A document that is *only* frontmatter therefore folds nothing at all.
+    expect(foldableRegions("---\ntitle: T\npath: p\n---\n")).toEqual([]);
   });
 
   it("skips a region that does not span a line break", () => {
     // CodeMirror cannot fold within a line, and a fold with no handle just hides text.
+    expect(foldableRegions("# b\n\n%%% a\n%%%\n").map((region) => region.start)).toEqual([5]);
     expect(foldableRegions("---\n")).toEqual([]);
   });
 

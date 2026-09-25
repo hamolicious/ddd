@@ -11,9 +11,12 @@
  *   produced. The filter language is documented and small (SPEC §4.2), so showing it is
  *   cheaper than inventing a second vocabulary for describing it, and it is how a user
  *   learns to write one by hand.
- * - **An incomplete clause is marked, not dropped in silence.** A half-typed date or an
- *   empty value produces no clause, and the row says so — otherwise the list quietly
- *   ignores what the user just typed.
+ * - **A clause that produces nothing is marked, with the reason.** A half-typed date, an
+ *   empty value, a text operator pointed at a date — each produces no clause, and the
+ *   row says which it is. The mark and the query come from one function
+ *   (`clauseProblem`), so the row cannot claim to be ignored while the query carries it,
+ *   or the reverse. That claim was doubted once (`web/MOBILE-AUDIT.md`, Q5) and is now
+ *   pinned by `filter.test.ts` rather than argued.
  *
  * **Sort is always on screen; the rest folds away.** Expanded, this bar cost the whole
  * first screen of a phone, so the browse view opened on no documents at all. The
@@ -30,9 +33,10 @@ import {
   FIELD_OPTIONS,
   SORT_OPTIONS,
   VALUELESS_OPS,
+  appliedCount,
   buildEffectiveFilter,
+  clauseProblem,
   describeClause,
-  invalidClauses,
   type ClauseOp,
   type FilterClause,
   type FilterDraft,
@@ -83,7 +87,13 @@ export function FilterBar({
   sortDirection,
   onSortChange,
 }: FilterBarProps): ReactElement {
-  const invalid = new Set(invalidClauses(draft));
+  // Row id → why it produces no clause. One computation, used both to mark the row and
+  // to say what is wrong with it, so the mark and the query cannot disagree.
+  const problems = new Map(
+    draft.clauses
+      .map((clause) => [clause.id, clauseProblem(clause)] as const)
+      .filter((entry): entry is readonly [string, string] => entry[1] !== undefined),
+  );
   // The *effective* filter — what the list actually runs, machine-document exclusion
   // included. Showing the user's clauses alone would make the disclosure a half-truth
   // about the query, which is the one thing this control is for.
@@ -92,8 +102,7 @@ export function FilterBar({
   const compact = useCompact();
   const panelId = useId();
   const [expanded, setExpanded] = useState(!compact);
-  const applied =
-    draft.clauses.length - invalid.size + ((draft.titleContains ?? "") !== "" ? 1 : 0);
+  const applied = appliedCount(draft);
 
   const patch = (id: string, change: Partial<FilterClause>): void => {
     onDraftChange({
@@ -190,7 +199,7 @@ export function FilterBar({
               return (
                 <li
                   key={clause.id}
-                  className={`doclist-clause${invalid.has(clause.id) ? " doclist-clause-invalid" : ""}`}
+                  className={`doclist-clause${problems.has(clause.id) ? " doclist-clause-invalid" : ""}`}
                 >
                   <label className="doclist-field">
                     <span className="doclist-visually-hidden">Field</span>
@@ -267,8 +276,13 @@ export function FilterBar({
                     ✕
                   </button>
 
-                  {invalid.has(clause.id) && (
-                    <p className="doclist-clause-note">Incomplete. This condition is ignored.</p>
+                  {problems.has(clause.id) && (
+                    // The reason, not a label. "Incomplete" was shown over a row whose
+                    // boxes were all full — a text operator against a date value, say —
+                    // and told the reader to finish typing something already typed.
+                    <p className="doclist-clause-note">
+                      Not applied. {problems.get(clause.id)}
+                    </p>
                   )}
                 </li>
               );
@@ -304,7 +318,13 @@ export function FilterBar({
         {(draft.clauses.length > 0 || (draft.titleContains ?? "") !== "") && (
           <button
             type="button"
-            onClick={() => onDraftChange({ combine: "and", clauses: [], titleContains: "" })}
+            // Conditions only. "Show machine documents" is a view preference, not a
+            // condition — it has its own checkbox and no business being reset by a
+            // button that does not name it, which is what spreading a fresh literal
+            // over the draft used to do.
+            onClick={() =>
+              onDraftChange({ ...draft, combine: "and", clauses: [], titleContains: "" })
+            }
           >
             Clear
           </button>

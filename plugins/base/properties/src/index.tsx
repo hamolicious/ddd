@@ -28,6 +28,7 @@ import {
   type RefObject,
 } from "react";
 
+import { fmDisplayRows, type FmDisplayRow } from "../../_shared/fm-display.js";
 import {
   POINTS,
   propertiesEditorShape,
@@ -59,6 +60,20 @@ export interface PropertiesApi {
    * inspector, a settings screen). Additive to the M3 scaffold's API.
    */
   readonly Panel: ComponentType<Record<string, never>>;
+  /**
+   * **Display-only** typed rows for a document's frontmatter: the panel's ordering and
+   * the panel's idea of what each key *is*, with dates, booleans and lists prettified
+   * for a reader rather than for a control.
+   *
+   * For a plugin that renders frontmatter it does not edit — `viewer`'s read-mode
+   * header is the one in the base distribution. Published here because the base
+   * plugins share the implementation through `_shared/fm-display.ts`, which is the
+   * base distribution's internal file and not part of `@kernel`; going through this
+   * API is how a third-party plugin gets the same answers without importing it.
+   *
+   * Nothing here writes. Editing stays in the panel and in edit mode.
+   */
+  display(fm: Readonly<Record<string, CoreValue>> | undefined): readonly FmDisplayRow[];
 }
 
 /** The `document-surface` API, structurally — plugins never import each other. */
@@ -105,6 +120,7 @@ export default function activate(kernel: Kernel): PropertiesApi {
       kernel.documents.splice.setFrontmatterValue(target(documentId), key, value),
     remove: (documentId, key) =>
       kernel.documents.splice.removeFrontmatterKey(target(documentId), key),
+    display: (fm) => fmDisplayRows(fm),
     Panel: () => (
       <PropertiesPanel
         kernel={kernel}

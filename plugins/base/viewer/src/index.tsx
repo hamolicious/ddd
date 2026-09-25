@@ -1,13 +1,20 @@
 /**
  * `viewer` — read mode (SPEC §6.5).
  *
- * One contribution to `document.mode`, and two responsibilities inside it:
+ * One contribution to `document.mode`, and three responsibilities inside it:
  *
  * - **Hide the machine regions.** The frontmatter block and the `%%%` sections are part
  *   of the text (SPEC §3.1) and must not be rendered as prose. Reading mode shows the
- *   body; `properties` shows the frontmatter as fields. The split itself is
- *   `markdown.bodyOf` — the byte-exact fence rules of SPEC §3.4 live in the shared Rust
- *   core, and a second implementation here is exactly the divergence SPEC §2 forbids.
+ *   body. The split itself is `markdown.bodyOf` — the byte-exact fence rules of SPEC
+ *   §3.4 live in the shared Rust core, and a second implementation here is exactly the
+ *   divergence SPEC §2 forbids.
+ * - **Show the frontmatter's *contents* as a pretty header** above the body
+ *   (`FmHeader.tsx`). Hiding the block is right about the text and was wrong about the
+ *   information: the date, the tags and the folder are things a reader wants, and the
+ *   only place they appeared was a sidebar panel that is a drawer on a phone. The
+ *   header is display-only; `properties` and edit mode remain the two ways to change a
+ *   value, and both plugins type values through `_shared/fm-display.ts` so they cannot
+ *   disagree about what a key is.
  * - **Render an attachment wrapper document as a file preview** (SPEC §3.6). A wrapper
  *   is an ordinary document whose body embeds one `attachment://`, so this is a
  *   presentation decision, not a special object type. See `wrapper.ts`.
@@ -26,6 +33,7 @@ import type { Kernel } from "@kernel";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { POINTS, type DocumentMode, type DocumentModeProps } from "../../_shared/points.js";
+import { FmHeader } from "./FmHeader.js";
 import {
   formatBytes,
   previewKindFor,
@@ -76,9 +84,13 @@ export default function activate(kernel: Kernel): void {
     }
 
     return (
-      <article className="viewer-root viewer-body">
-        {markdown.render(body ?? "", { documentId: id })}
-      </article>
+      // The column, not the article: the properties header and the body share one
+      // measure and one set of gutters, and `.viewer-body` keeps its own `max-width`
+      // and auto margins so nothing about the reading column moves.
+      <div className="viewer-root viewer-read">
+        <FmHeader fm={row.fm} fmParseError={row.fm_parse_error} />
+        <article className="viewer-body">{markdown.render(body ?? "", { documentId: id })}</article>
+      </div>
     );
   };
 

@@ -176,35 +176,45 @@ export function regionsOf(source: LineReader): DocumentRegions {
 }
 
 /**
- * The ranges the editor folds on open.
+ * **What the editor folds: the `%%%` sections, and nothing else.**
  *
- * `%%%` sections are **always** folded — they are machine-owned data and the prose is
- * what the user came for (SPEC §6.5). The frontmatter fold is a preference, because
- * frontmatter is human-owned (SPEC §3.3) and plenty of people write it by hand.
+ * The one statement of the rule, so that the fold service, the open-time fold and the
+ * two commands cannot drift from each other or from the tests.
  *
- * A region shorter than two lines is skipped: CodeMirror cannot fold a range that does
+ * `%%%` sections are always folded — they are machine-owned data (SPEC §3.3) and the
+ * prose is what the user came for (SPEC §6.5). **Frontmatter is not foldable at all**
+ * (owner ask, 2026-09-25). It used to be, behind a per-user preference that defaulted
+ * to folding it, which meant a human-owned block collapsed itself every time a document
+ * opened. Returning it here — even as "foldable but not folded" — would put the fold
+ * arrow back in the gutter and let `foldAll` or any contributed extension collapse it,
+ * so the region is absent from the answer rather than merely left unfolded.
+ */
+export function foldableRegionsOf(regions: DocumentRegions): readonly Region[] {
+  return regions.sections;
+}
+
+/**
+ * {@link foldableRegionsOf} over text, skipping anything that cannot actually fold.
+ *
+ * A region shorter than two lines is dropped: CodeMirror cannot fold a range that does
  * not span a line boundary, and a one-line "fold" would just hide text with no handle.
  */
-export function foldableRegions(
-  text: string,
-  options: { readonly frontmatter: boolean } = { frontmatter: true },
-): readonly Region[] {
-  const regions = documentRegions(text);
-  const folds: Region[] = [];
-  if (options.frontmatter && regions.frontmatter && spansALineBreak(text, regions.frontmatter)) {
-    folds.push(regions.frontmatter);
-  }
-  for (const section of regions.sections) {
-    if (spansALineBreak(text, section)) folds.push(section);
-  }
-  return folds;
+export function foldableRegions(text: string): readonly Region[] {
+  return foldableRegionsOf(documentRegions(text)).filter((region) =>
+    spansALineBreak(text, region),
+  );
 }
 
 function spansALineBreak(text: string, region: Region): boolean {
   return text.slice(region.start, region.end).includes("\n");
 }
 
-/** The machine region containing `offset`, if any — what the fold service answers with. */
+/**
+ * The machine region containing `offset`, if any.
+ *
+ * Both regions, frontmatter included — this answers "where am I", not "what folds".
+ * The fold service uses {@link foldableRegionsOf}.
+ */
 export function regionAt(text: string, offset: number): Region | undefined {
   const regions = documentRegions(text);
   if (regions.frontmatter && offset >= regions.frontmatter.start && offset <= regions.frontmatter.end) {

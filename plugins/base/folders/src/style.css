@@ -21,11 +21,55 @@
   font-family: var(--lm-font-sans);
 }
 
+/* --- the toolbar: new folder, and Root as a drop target ------------------- */
+
+/*
+ * Root is a *control*, not a row, and it is always on screen.
+ *
+ * It has one job the tree cannot do: a document already at the root has no row to be
+ * dropped "out of", and the tree's own background is only a drop target when there is
+ * some. A strip that appears halfway through a drag would also be a strip that a test —
+ * and a user — cannot aim at, so it is simply always there.
+ */
+.folders-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--lm-space) * 0.5);
+}
+
+.folders-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--lm-space) * 0.5);
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: var(--lm-tap-target);
+  padding: 0 var(--lm-space);
+  border: 1px solid var(--lm-border);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg-raised);
+  color: inherit;
+  font: inherit;
+  font-family: var(--lm-font-sans);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.folders-toolbar button:hover {
+  border-color: var(--lm-border-strong);
+}
+
+.folders-root {
+  justify-content: center;
+}
+
 /* --- the tree ------------------------------------------------------------ */
 
 .folders-tree {
   display: flex;
   flex-direction: column;
+  /* Room to drop on the background — the "put it at the root" gesture needs a target. */
+  min-height: calc(var(--lm-tap-target) * 1.5);
 }
 
 .folders-tree:focus-visible,
@@ -92,7 +136,9 @@
   cursor: pointer;
 }
 
-.folders-name {
+.folders-name,
+.folders-leaf-name,
+.folders-more {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
@@ -106,6 +152,53 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   cursor: pointer;
+}
+
+/*
+ * A document row is the row itself, not a button inside it.
+ *
+ * Two reasons, and the second is the load-bearing one. A tree's activatable thing is the
+ * `treeitem` (WAI-ARIA), so a nested button is a second control announcing the same
+ * name; and a button whose accessible name is exactly a document's title would collide
+ * with the *list's* row of the same name — one title, two buttons, and every query for
+ * "the row called X" becomes ambiguous.
+ */
+.folders-node-leaf {
+  cursor: pointer;
+}
+
+.folders-leaf-name {
+  color: var(--lm-link);
+}
+
+.folders-more {
+  color: var(--lm-text-muted);
+  font-size: 0.9em;
+}
+
+/* A folder that exists only in settings, because nothing has been filed in it yet. */
+.folders-node-empty .folders-name {
+  color: var(--lm-text-muted);
+  font-style: italic;
+}
+
+/* The inline rename field — never a `window.prompt` (POLISH-BACKLOG §4). */
+.folders-rename {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: calc(var(--lm-tap-target) - 8px);
+  padding: 0 calc(var(--lm-space) * 0.5);
+  border: 1px solid var(--lm-accent);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg-raised);
+  color: var(--lm-text);
+  font: inherit;
+  font-family: var(--lm-font-sans);
+}
+
+.folders-node-editing .folders-actions,
+.folders-actions-edit {
+  display: flex;
 }
 
 .folders-count {
@@ -152,23 +245,6 @@
   color: var(--lm-text);
 }
 
-.folders-unfiled {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--lm-space);
-  min-height: var(--lm-tap-target);
-  margin-top: calc(var(--lm-space) * 0.5);
-  padding: 0 var(--lm-space);
-  border: 1px dashed var(--lm-border);
-  border-radius: var(--lm-radius);
-  background: none;
-  color: var(--lm-text-muted);
-  font: inherit;
-  font-family: var(--lm-font-sans);
-  cursor: pointer;
-}
-
 .folders-hint,
 .folders-empty {
   margin: 0;
@@ -196,7 +272,7 @@
   font-size: 0.9em;
 }
 
-/* A rename is one splice per document; this is how far it has got. */
+/* A move is one splice per document; this is how far it has got. */
 .folders-progress {
   margin: 0;
   padding: calc(var(--lm-space) * 0.75);
@@ -204,6 +280,248 @@
   border-radius: var(--lm-radius);
   color: var(--lm-text-muted);
   font-size: 0.9em;
+}
+
+/*
+ * "Try again" after a partial move.
+ *
+ * It is a real control inside the error, not a line of advice, because the recovery is
+ * exact: re-planning reads the live projection, so the retry writes only the documents
+ * still sitting in the old folder.
+ */
+.folders-retry {
+  min-height: calc(var(--lm-tap-target) - 12px);
+  padding: 0 calc(var(--lm-space) * 0.75);
+  border: 1px solid var(--lm-border-strong);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg-raised);
+  color: inherit;
+  font: inherit;
+  font-family: var(--lm-font-sans);
+  cursor: pointer;
+}
+
+/* --- the sheet: move / rename / delete, and the folder picker ------------- */
+
+/*
+ * Portalled to `document.body` (see `Sheet.tsx`): `shell-ui`'s sidebar declares
+ * `container-type: inline-size`, which makes it the containing block for `position:
+ * fixed` children — a sheet rendered in place would be trapped in a 288 px column.
+ */
+.folders-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: calc(var(--lm-space) * 2);
+  background: var(--lm-bg-overlay);
+}
+
+.folders-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lm-space);
+  box-sizing: border-box;
+  width: min(30rem, 100%);
+  max-height: min(80vh, 40rem);
+  overflow-y: auto;
+  padding: calc(var(--lm-space) * 1.5);
+  border: 1px solid var(--lm-border);
+  border-radius: var(--lm-radius-lg);
+  background: var(--lm-bg-raised);
+  box-shadow: var(--lm-shadow-2);
+  color: var(--lm-text);
+  font-family: var(--lm-font-sans);
+}
+
+.folders-sheet-header {
+  display: flex;
+  align-items: center;
+  gap: var(--lm-space);
+}
+
+.folders-sheet-header h2 {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 1.05rem;
+}
+
+.folders-sheet-close {
+  flex: none;
+  min-width: var(--lm-tap-target);
+  min-height: var(--lm-tap-target);
+  border: 1px solid transparent;
+  border-radius: var(--lm-radius);
+  background: none;
+  color: var(--lm-text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.folders-sheet-close:hover {
+  border-color: var(--lm-border);
+  color: var(--lm-text);
+}
+
+.folders-sheet-note {
+  margin: 0;
+  color: var(--lm-text-muted);
+  font-size: 0.9em;
+}
+
+.folders-sheet-note code {
+  font-family: var(--lm-font-mono);
+}
+
+.folders-sheet-actions,
+.folders-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.folders-sheet-actions button,
+.folders-picker-list button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  min-height: var(--lm-tap-target);
+  padding: calc(var(--lm-space) * 0.5) var(--lm-space);
+  border: 1px solid transparent;
+  border-radius: var(--lm-radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-family: var(--lm-font-sans);
+  text-align: left;
+  cursor: pointer;
+}
+
+.folders-sheet-actions button:hover,
+.folders-picker-list button:hover {
+  border-color: var(--lm-border);
+  background: var(--lm-bg-subtle);
+}
+
+.folders-sheet-actions small,
+.folders-picker-path {
+  color: var(--lm-text-muted);
+  font-size: 0.8em;
+}
+
+.folders-sheet-danger {
+  color: var(--lm-danger);
+}
+
+.folders-picker-list button[aria-current="true"] {
+  background: var(--lm-accent-subtle);
+}
+
+.folders-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lm-space);
+  min-height: 0;
+}
+
+.folders-picker-filter input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--lm-tap-target);
+  padding: 0 var(--lm-space);
+  border: 1px solid var(--lm-border);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg);
+  color: var(--lm-text);
+  font: inherit;
+  font-family: var(--lm-font-sans);
+}
+
+.folders-picker-list {
+  overflow-y: auto;
+  max-height: 22rem;
+}
+
+.folders-picker-name {
+  overflow-wrap: anywhere;
+}
+
+.folders-picker-path {
+  font-family: var(--lm-font-mono);
+  overflow-wrap: anywhere;
+}
+
+.folders-picker-empty {
+  padding: var(--lm-space);
+  color: var(--lm-text-muted);
+  font-size: 0.9em;
+}
+
+/* --- the settings section ------------------------------------------------ */
+
+.folders-settings {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--lm-space) * 0.75);
+}
+
+.folders-settings-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--lm-space);
+}
+
+.folders-settings-row select {
+  flex: 1 1 12rem;
+  min-width: 0;
+  min-height: var(--lm-tap-target);
+  padding: 0 calc(var(--lm-space) * 0.5);
+  border: 1px solid var(--lm-border);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg);
+  color: var(--lm-text);
+  font: inherit;
+  font-family: var(--lm-font-sans);
+}
+
+.folders-settings-note {
+  margin: 0;
+  color: var(--lm-text-muted);
+  font-size: 0.9em;
+}
+
+.folders-settings-note code {
+  font-family: var(--lm-font-mono);
+}
+
+/* A settings write that did not land. Same weight as the note it sits under. */
+.folders-settings-error {
+  margin: 0;
+  color: var(--lm-danger);
+  font-size: 0.9em;
+}
+
+/* Announced, not drawn — the picker's filter label. */
+.folders-visually-hidden {
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* --- the folder contents view ------------------------------------------- */
@@ -371,5 +689,31 @@
 
   .folders-contents {
     padding: var(--lm-space);
+  }
+
+  /*
+   * A bottom sheet, the way the palette is one (`commands`): a centred dialog on a
+   * 390 px screen is a dialog with its controls under the thumb's reach and its edges
+   * against the bezel. `env(safe-area-inset-bottom)` keeps the last action clear of the
+   * gesture bar — the app sets `viewport-fit=cover`.
+   */
+  .folders-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .folders-sheet {
+    width: 100%;
+    max-width: none;
+    max-height: 85dvh;
+    padding-bottom: calc(var(--lm-space) * 1.5 + env(safe-area-inset-bottom, 0px));
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: var(--lm-radius-lg) var(--lm-radius-lg) 0 0;
+  }
+
+  .folders-picker-list {
+    max-height: 50dvh;
   }
 }

@@ -8,9 +8,13 @@
  *
  * Three requirements that are easy to miss and expensive to retrofit:
  *
- * - **Machine sections are collapsed, not hidden.** The frontmatter block and the
- *   `%%%` fences are part of the text and stay editable; they start folded so a
- *   document opens on its prose (SPEC §3.1, §6.5).
+ * - **Machine sections are collapsed, not hidden; frontmatter is neither.** A `%%%`
+ *   fence is machine-owned data (SPEC §3.3) and starts folded, so a document opens on
+ *   its prose. **Frontmatter does not fold at all** (owner ask, 2026-09-25): it is
+ *   human-owned, it is what edit mode is *for* when the thing being edited is a date
+ *   or a tag list, and a block that collapses itself the moment a document opens is a
+ *   control you have to defeat before you can type. Both regions stay part of the text
+ *   and stay editable either way (SPEC §3.1, §6.5).
  * - **Every write is a splice.** `yCollab` already produces minimal insert/delete pairs
  *   from CodeMirror transactions; nothing in this plugin may ever replace the whole
  *   text, because that destroys concurrent edits (SPEC §3.2).
@@ -48,6 +52,7 @@ import {
 } from "../../_shared/points.js";
 import { markdownSyntax } from "./markdown-language.js";
 import {
+  foldableRegionsOf,
   regionsOf as regionsIn,
   type DocumentRegions,
   type LineReader,
@@ -57,11 +62,12 @@ import {
 export interface EditorApi {
   /** Focus the editor for the document on screen. */
   focus(): void;
-  /** Fold or unfold the frontmatter and `%%%` regions. */
+  /**
+   * Fold or unfold the `%%%` regions. **Frontmatter is not among them** — it has no
+   * fold range at all, so there is nothing here to unfold it from.
+   */
   setMachineSectionsFolded(folded: boolean): void;
 }
-
-const SETTING_FOLD_FRONTMATTER = "foldFrontmatter";
 
 /**
  * Region lookups are keyed on the `Text` object — the fold service is asked about
@@ -98,28 +104,20 @@ function regionsOf(doc: Text): DocumentRegions {
   return regions;
 }
 
-/** Every machine region of a document, frontmatter first. */
-function machineRegions(regions: DocumentRegions): readonly Region[] {
-  return regions.frontmatter ? [regions.frontmatter, ...regions.sections] : [...regions.sections];
-}
-
 /**
  * What a folded region is, for the placeholder chip.
  *
- * One label for every fold read "machine data", which is wrong about the frontmatter
- * and says so twice: frontmatter is **human**-owned (SPEC §3.3), and this plugin's own
- * setting already tells the user "`%%%` sections always start folded; frontmatter is
- * yours". A fold is also the one place a `%%%` section's owner is worth naming — the
- * opening fence carries the plugin id and folding hides it.
+ * One label for every fold read "machine data", which was wrong about the frontmatter —
+ * and now cannot arise, because frontmatter does not fold. A fold is the one place a
+ * `%%%` section's owner is worth naming: the opening fence carries the plugin id and
+ * folding hides it.
  *
  * `from` is the end of the region's first line (see {@link foldRangeFor}), so a region
  * is matched by the line it starts on rather than by an exact offset.
  */
 function foldLabel(doc: Text, from: number): string {
   const line = doc.lineAt(from).from;
-  const regions = regionsOf(doc);
-  if (regions.frontmatter && regions.frontmatter.start === line) return "frontmatter";
-  const section = regions.sections.find((candidate) => candidate.start === line);
+  const section = regionsOf(doc).sections.find((candidate) => candidate.start === line);
   return section ? `${section.id} data` : "machine data";
 }
 
@@ -141,26 +139,15 @@ export default function activate(kernel: Kernel): EditorApi {
     description: "A CodeMirror 6 extension, from the shared @codemirror/state instance.",
   });
 
-  kernel.settings.defineSchema({
-    [SETTING_FOLD_FRONTMATTER]: {
-      type: "boolean",
-      label: "Fold frontmatter when a document opens",
-      description: "Machine sections always start folded.",
-      default: true,
-    },
-  });
+  // There is deliberately no `defineSchema` here any more. This plugin used to declare
+  // a `foldFrontmatter` per-user setting, defaulting to "fold it" — a setting no screen
+  // rendered (POLISH-BACKLOG item 2), for a behaviour the owner asked to remove rather
+  // than to make configurable. A preference whose only honest value is `false` is not a
+  // preference, and leaving the key declared would keep a label and a description
+  // written for a settings screen describing something the editor no longer does.
 
   /** The view currently on screen. One document surface ⇒ at most one editor. */
   let live: EditorView | undefined;
-
-  const foldFrontmatterPreference = (): boolean => {
-    try {
-      return kernel.settings.get<boolean>(SETTING_FOLD_FRONTMATTER) !== false;
-    } catch {
-      // `settings` is not implemented in the kernel runtime yet; the default stands.
-      return true;
-    }
-  };
 
   /** Contributed extensions, in `order`. A throwing contribution costs only itself. */
   const contributedExtensions = (): readonly Extension[] => {
@@ -175,10 +162,8 @@ export default function activate(kernel: Kernel): EditorApi {
     return collected;
   };
 
-  const setFolded = (view: EditorView, folded: boolean, includeFrontmatter: boolean): void => {
-    const regions = regionsOf(view.state.doc);
-    const targets = includeFrontmatter ? machineRegions(regions) : regions.sections;
-    const effects = targets
+  const setFolded = (view: EditorView, folded: boolean): void => {
+    const effects = foldableRegionsOf(regionsOf(view.state.doc))
       .map((region) => foldRangeFor(view.state.doc, region))
       .filter((range): range is { from: number; to: number } => range !== null)
       .map((range) => (folded ? foldEffect.of(range) : unfoldEffect.of(range)));
@@ -201,10 +186,11 @@ export default function activate(kernel: Kernel): EditorApi {
     const doc = view.state.doc;
     const target = doc.line(Math.min(Math.max(line, 1), doc.lines));
 
-    // A `%%%` section starts folded (and frontmatter may), so a line inside one would
-    // be "revealed" behind a `⋯ machine data` placeholder. Unfold the region that
-    // contains it — and only that one; the rest stay out of the way.
-    const containing = machineRegions(regionsOf(doc)).find(
+    // A `%%%` section starts folded, so a line inside one would be "revealed" behind a
+    // `⋯ machine data` placeholder. Unfold the region that contains it — and only that
+    // one; the rest stay out of the way. A line in the frontmatter needs nothing: that
+    // block is never folded.
+    const containing = foldableRegionsOf(regionsOf(doc)).find(
       (region) => target.from >= region.start && target.from < region.end,
     );
     const unfold = containing ? foldRangeFor(doc, containing) : null;
@@ -268,8 +254,12 @@ export default function activate(kernel: Kernel): EditorApi {
                   return chip;
                 },
               }),
+              // The fold service is what makes a region foldable *at all* — gutter,
+              // keybinding and `foldEffect` alike. Frontmatter is absent from it on
+              // purpose: not "folded: false", but no fold range, so nothing in
+              // CodeMirror or in any contributed extension can collapse it.
               foldService.of((state, lineStart) => {
-                const region = machineRegions(regionsOf(state.doc)).find(
+                const region = foldableRegionsOf(regionsOf(state.doc)).find(
                   (candidate) => candidate.start === lineStart,
                 );
                 return region ? foldRangeFor(state.doc, region) : null;
@@ -316,8 +306,9 @@ export default function activate(kernel: Kernel): EditorApi {
           view?.dispatch({ effects: extensionsCompartment.reconfigure(contributedExtensions()) });
         });
 
-        // `%%%` sections always start folded; the frontmatter fold is the user's call.
-        setFolded(view, true, foldFrontmatterPreference());
+        // `%%%` sections always start folded. Frontmatter never was folded here and
+        // never is — it opens as plain, highlighted text like the rest of the document.
+        setFolded(view, true);
         // `?line=N`, applied after the folds so the reveal wins over them.
         if (line !== undefined) revealLine(view, line);
         live = view;
@@ -355,6 +346,28 @@ export default function activate(kernel: Kernel): EditorApi {
       revealLine(live, line);
     }, [line, open, failure]);
 
+    /*
+     * **The frontmatter line the parser dropped (SPEC §3.4), said in the mode that can
+     * fix it.**
+     *
+     * `document-surface` used to carry this notice above every mode and stopped, because
+     * in read mode it was the third statement of one fact — `viewer`'s properties header
+     * and `properties`' panel already say it. In *edit* mode it was the only one: the
+     * header is read-mode-only and the panel is a `sidebar.panel`, which at 390 px is a
+     * drawer that starts closed. So the key silently missing from `fm` everywhere in the
+     * app had no explanation on the one screen whose whole job is repairing the text —
+     * and the read-mode warning's own advice is "fix the line in edit mode".
+     *
+     * It is a `status`, not an `alert`: the document opened fine, the text is intact,
+     * and nothing is waiting on the reader.
+     */
+    const parseNotice = row.fm_parse_error ? (
+      <p className="editor-notice" role="status">
+        One frontmatter line could not be read, so its key is missing everywhere else in
+        the app. The text below is exactly what the document holds.
+      </p>
+    ) : null;
+
     if (!open) {
       return (
         <div className="editor-root editor-unhydrated">
@@ -362,6 +375,7 @@ export default function activate(kernel: Kernel): EditorApi {
             Opening for editing… You can read it now. A document you have never opened
             stays read-only until this device reconnects.
           </p>
+          {parseNotice}
           <pre className="editor-readonly">{row.content ?? ""}</pre>
         </div>
       );
@@ -369,6 +383,7 @@ export default function activate(kernel: Kernel): EditorApi {
 
     return (
       <div className="editor-root" data-document={id}>
+        {parseNotice}
         {failure ? (
           <p className="editor-notice editor-notice-error" role="alert">
             The editor failed to start: {failure}
@@ -401,14 +416,14 @@ export default function activate(kernel: Kernel): EditorApi {
   });
   kernel.extensions.contribute<Command>(POINTS.command, {
     id: "editor.unfoldMachineSections",
-    title: "Show machine sections and frontmatter",
+    title: "Show machine sections",
     category: "Document",
     when: () => live !== undefined,
     run: () => api.setMachineSectionsFolded(false),
   });
   kernel.extensions.contribute<Command>(POINTS.command, {
     id: "editor.foldMachineSections",
-    title: "Collapse machine sections and frontmatter",
+    title: "Collapse machine sections",
     category: "Document",
     when: () => live !== undefined,
     run: () => api.setMachineSectionsFolded(true),
@@ -417,7 +432,7 @@ export default function activate(kernel: Kernel): EditorApi {
   const api: EditorApi = {
     focus: () => live?.focus(),
     setMachineSectionsFolded: (folded) => {
-      if (live) setFolded(live, folded, true);
+      if (live) setFolded(live, folded);
     },
   };
 

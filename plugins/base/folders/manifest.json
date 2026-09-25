@@ -2,7 +2,7 @@
   "id": "folders",
   "version": "1.0.0",
   "name": "Folders",
-  "description": "A tree over fm.path; moves are frontmatter splices.",
+  "description": "A drag-and-drop file tree over fm.path; every move is a frontmatter splice.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
   "kernel": "^1.0",
@@ -13,7 +13,8 @@
     "shell-ui": "^1.0"
   },
   "peerLibraries": {
-    "react": "^18.0.0"
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
   },
   "frontend": {
     "module": "frontend/index.mjs",

@@ -25,7 +25,7 @@ import { normalizePath } from "./path.js";
 export function folderFilter(folder: string, includeSubfolders: boolean): FilterJson {
   const path = normalizePath(folder);
   if (path === "") {
-    // Unfiled: no `fm.path` at all, or one that normalizes away. `missing` and `is_null`
+    // Root: no `fm.path` at all, or one that normalizes away. `missing` and `is_null`
     // are different questions in this DSL (SPEC §4.2), so both are asked.
     return { or: [{ missing: { field: "fm.path" } }, { is_null: { field: "fm.path" } }] };
   }
@@ -106,7 +106,7 @@ export function FolderContents({
   return (
     <section className="folders-contents" aria-labelledby="folder-contents-heading">
       <header className="folders-contents-header">
-        <h2 id="folder-contents-heading">{path === "" ? "Unfiled documents" : path}</h2>
+        <h2 id="folder-contents-heading">{path === "" ? "Root" : path}</h2>
         <button type="button" onClick={() => onNewDocumentHere(path)}>
           New document here
         </button>
@@ -137,11 +137,19 @@ export function FolderContents({
         <div className="folders-empty">
           <p>
             {path === ""
-              ? "Nothing here yet."
+              ? "Nothing at the root yet."
               : `Nothing in ${path}${includeSubfolders ? " or its subfolders" : ""} yet.`}
           </p>
           <p>
-            Set <code>path: {path || "…"}</code> in a document’s properties to file it here.
+            {path === "" ? (
+              <>
+                A document with no <code>path:</code> line in its frontmatter sits here.
+              </>
+            ) : (
+              <>
+                Set <code>path: {path}</code> in a document’s properties to file it here.
+              </>
+            )}
           </p>
         </div>
       ) : (

@@ -1,14 +1,23 @@
 /**
- * Typing frontmatter for the properties panel: which kind of value a key holds, how to
- * show it in a control, and how to read a typed value back out of what the user typed.
+ * Reading a typed value back out of what the user typed, plus the date picker's halves
+ * and the key rules the "add property" row enforces.
  *
- * Pure, total, unit-tested, and deliberately aligned with the shared core's **strict
- * YAML subset** (`crates/core/README.md` §2) rather than with JavaScript's idea of
- * types. That alignment is the whole point: the panel writes *value text* into the
- * document with a splice, the server re-parses that text with the Rust core, and the
- * projection comes back with whatever type the core decided. If `parseScalarInput`
- * disagreed with the core — if it wrote `12` meaning a string — the row would come back
- * a number and the panel would appear to have changed the type behind the user's back.
+ * **Which kind of value a key holds, and how to order the rows, moved to
+ * `_shared/fm-display.ts`** and is re-exported below. Two plugins render `fm` — this
+ * panel and `viewer`'s read-mode header — and a key that is a date in one and a string
+ * in the other is the bug that file exists to prevent. Nothing about the answers
+ * changed; only where they are decided. A third-party plugin that cannot import the
+ * base distribution's internal file gets the same answers through this plugin's API
+ * (`PropertiesApi.display`).
+ *
+ * What is left here is the *write* half, and it is pure, total, unit-tested, and
+ * deliberately aligned with the shared core's **strict YAML subset**
+ * (`crates/core/README.md` §2) rather than with JavaScript's idea of types. That
+ * alignment is the whole point: the panel writes *value text* into the document with a
+ * splice, the server re-parses that text with the Rust core, and the projection comes
+ * back with whatever type the core decided. If `parseScalarInput` disagreed with the
+ * core — if it wrote `12` meaning a string — the row would come back a number and the
+ * panel would appear to have changed the type behind the user's back.
  *
  * So the rules here are the core's rules:
  *
@@ -18,98 +27,23 @@
  * - Quoting is how a user forces a string: `"12"` is the string `12`.
  * - A date is an ISO-8601 string. It stays a *string* in YAML terms — the core
  *   canonicalizes it at materialization (SPEC §3.4) — which is why `date` is a
- *   presentation kind here and not a separate wire type.
+ *   presentation kind there and not a separate wire type.
  */
 
 import type { CoreValue } from "@kernel";
 
-/** What control a row should get. `date` is a presentation refinement of `string`. */
-export type PropertyKind = "string" | "number" | "boolean" | "date" | "array" | "map" | "null";
+import { ISO_DATE_ONLY, isIsoDateLike } from "../../_shared/fm-display.js";
 
-export interface PropertyRow {
-  readonly key: string;
-  readonly value: CoreValue | undefined;
-  readonly kind: PropertyKind;
-}
-
-/**
- * Keys the panel puts first, in this order. Everything else sorts alphabetically after
- * them — `title` and `path` are the two the whole app reads (title resolution, the
- * folder tree), so burying them under `aliases` would be perverse.
- */
-export const PREFERRED_KEY_ORDER: readonly string[] = [
-  "title",
-  "path",
-  "date",
-  "due",
-  "status",
-  "tags",
-  "aliases",
-];
-
-/** Keys whose value is a date even when it is currently empty or malformed. */
-const DATE_KEY = /(^|_)date$|^due$|^created$|^updated$|_at$/;
-
-const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
-const DATE_TIME =
-  /^(\d{4})-(\d{2})-(\d{2})[Tt ](\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,9})?)?(?:[Zz]|[+-]\d{2}:?(?:\d{2})?)?$/;
-
-export function isDateKey(key: string): boolean {
-  return DATE_KEY.test(key);
-}
-
-/**
- * Is this string an ISO-8601 date the core would recognise?
- *
- * Calendar validity is checked, because the core checks it: `2026-02-30` does not parse
- * there, so treating it as a date here would put a date picker on a string and lose the
- * user's text the first time they touched the control.
- */
-export function isIsoDateLike(value: unknown): boolean {
-  if (typeof value !== "string") return false;
-  const match = DATE_ONLY.exec(value) ?? DATE_TIME.exec(value);
-  if (!match) return false;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  if (month < 1 || month > 12 || day < 1) return false;
-  if (day > daysInMonth(year, month)) return false;
-  const hour = match[4] === undefined ? 0 : Number(match[4]);
-  const minute = match[5] === undefined ? 0 : Number(match[5]);
-  const second = match[6] === undefined ? 0 : Number(match[6]);
-  return hour <= 23 && minute <= 59 && second <= 60;
-}
-
-function daysInMonth(year: number, month: number): number {
-  if (month === 2) return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 29 : 28;
-  return [4, 6, 9, 11].includes(month) ? 30 : 31;
-}
-
-/** Which control a key/value pair wants. */
-export function inferKind(key: string, value: CoreValue | undefined): PropertyKind {
-  if (value === undefined || value === null) return isDateKey(key) ? "date" : "null";
-  if (typeof value === "boolean") return "boolean";
-  if (typeof value === "number") return "number";
-  if (Array.isArray(value)) return "array";
-  if (typeof value === "string") return isIsoDateLike(value) || isDateKey(key) ? "date" : "string";
-  return "map";
-}
-
-/** One row per frontmatter key, preferred keys first, then alphabetical. */
-export function rowsFromFm(fm: Readonly<Record<string, CoreValue>> | undefined): readonly PropertyRow[] {
-  const entries = Object.entries(fm ?? {});
-  const rank = (key: string): number => {
-    const index = PREFERRED_KEY_ORDER.indexOf(key);
-    return index === -1 ? PREFERRED_KEY_ORDER.length : index;
-  };
-  return entries
-    .map(([key, value]) => ({ key, value, kind: inferKind(key, value) }))
-    .sort((a, b) => {
-      const byRank = rank(a.key) - rank(b.key);
-      if (byRank !== 0) return byRank;
-      return a.key.localeCompare(b.key, "en", { sensitivity: "base" }) || a.key.localeCompare(b.key);
-    });
-}
+export {
+  PREFERRED_KEY_ORDER,
+  formatScalar,
+  inferKind,
+  isDateKey,
+  isIsoDateLike,
+  rowsFromFm,
+  type PropertyKind,
+  type PropertyRow,
+} from "../../_shared/fm-display.js";
 
 // ---------------------------------------------------------------------------
 // text ⇄ value
@@ -151,14 +85,14 @@ export function parseScalarInput(raw: string): CoreValue {
   return raw.trim();
 }
 
-/** What a text control shows for a value. The inverse of {@link parseScalarInput}. */
-export function formatScalar(value: CoreValue | undefined): string {
-  if (value === undefined || value === null) return "";
-  if (typeof value === "string") return value;
-  if (typeof value === "boolean" || typeof value === "number") return String(value);
-  if (Array.isArray(value)) return value.map((item) => formatScalar(item)).join(", ");
-  return JSON.stringify(value);
-}
+/*
+ * `formatScalar` — what a text control shows for a value, and the inverse of
+ * {@link parseScalarInput} — is re-exported from `_shared/fm-display.ts` at the top of
+ * this file. It is the *unprettified* form on purpose: the panel's controls have to
+ * round-trip through `parseScalarInput`, so a date must come back as the text the
+ * document holds, not as "Sep 23, 2026". The read-mode header's prettified form is
+ * `fmDisplayRows` in the same module.
+ */
 
 /**
  * Split a comma-separated list the way a YAML flow sequence reads, respecting quotes
@@ -207,7 +141,7 @@ export interface DateParts {
 /** Split an ISO value into what `<input type="date">` and `<input type="time">` want. */
 export function splitDateValue(value: CoreValue | undefined): DateParts {
   if (typeof value !== "string" || !isIsoDateLike(value)) return { date: "" };
-  const dateOnly = DATE_ONLY.exec(value);
+  const dateOnly = ISO_DATE_ONLY.exec(value);
   if (dateOnly) return { date: value };
   // `Date` is the browser's parser, not a second implementation of ours: the value is
   // already known to be ISO-8601, and the halves below are UI state, never stored.
@@ -225,7 +159,7 @@ export function splitDateValue(value: CoreValue | undefined): DateParts {
  * lexicographic sorting chronological (SPEC §3.4).
  */
 export function joinDateValue(date: string, time?: string): string {
-  if (!DATE_ONLY.test(date)) return date;
+  if (!ISO_DATE_ONLY.test(date)) return date;
   if (!time || !/^\d{2}:\d{2}(:\d{2})?$/.test(time)) return date;
   const local = new Date(`${date}T${time.length === 5 ? `${time}:00` : time}`);
   if (Number.isNaN(local.getTime())) return date;

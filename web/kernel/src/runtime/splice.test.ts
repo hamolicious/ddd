@@ -14,6 +14,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { beforeAll, describe, expect, it } from "vitest";
+import * as Y from "yjs";
 
 import { coreArtifactExists, loadCoreForNode } from "../wasm/node-core.js";
 import type { CoreBindings } from "../wasm/index.js";
@@ -318,5 +319,131 @@ describe.skipIf(!coreArtifactExists())("spliced text as the Rust parser reads it
       const out = applyEdits("", setFrontmatterValue("", key, 1));
       expect(core.parseDocument(out).fm[key]).toBe(1);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// What the two write shapes do when two clients write at once
+// ---------------------------------------------------------------------------
+
+/**
+ * **These tests pin behaviour, not a wish.** They exist because the two write shapes
+ * SPEC §3.3 describes merge differently, one of them badly, and until this block the
+ * difference was undocumented and untested — which is how "a document lands in a folder
+ * neither user chose" stayed invisible.
+ *
+ * - A **`%%%` section** write replaces a key's whole *line*. Two clients delete the same
+ *   line and insert their own at the same origin, so both inserts survive as duplicate
+ *   lines and the parser's last-occurrence-wins rule (SPEC §3.3, §3.4) picks one. Both
+ *   replicas agree, the value is one of the two a user asked for, and the next write to
+ *   that key deletes the loser. This is the per-key LWW the SPEC claims.
+ *
+ * - A **frontmatter value** write replaces the key's *value span* — which is what SPEC
+ *   §3.3 mandates for human-owned frontmatter, precisely so a comment, the key's
+ *   position and the rest of the line survive. Under concurrency the two inserts land at
+ *   the same origin inside one line and **concatenate**: `archive` and `inbox` converge
+ *   to `archiveinbox`, a syntactically valid path neither user chose, which nothing
+ *   later cleans up.
+ *
+ * The second is a real defect and it is **not fixable where the callers are**: writing
+ * `path` as a line (remove-then-set, asserted below) merges correctly but relocates the
+ * key to the end of the block, which is exactly the reformatting §3.3 forbids and which
+ * `app/e2e/journeys.spec.ts` asserts against byte for byte. Closing it means changing
+ * `core::splice::set_frontmatter_value` to a line replacement *in place*, in Rust and in
+ * this port together, with `corpus/splices.json` regenerated and §3.3's wording changed
+ * with them. `POLISH-BACKLOG.md` carries it as an open item with that plan; this block
+ * is the regression net that will tell whoever does it that they succeeded.
+ */
+describe("concurrent writes to one key", () => {
+  const seed = (text: string): Y.Doc => {
+    const doc = new Y.Doc();
+    doc.getText("text").insert(0, text);
+    return doc;
+  };
+
+  /** `SpliceHost.apply`'s ordering and transaction shape, over a bare `Y.Doc`. */
+  const applyTo = (doc: Y.Doc, edits: readonly TextEdit[]): void => {
+    const target = doc.getText("text");
+    const ordered = [...edits].sort((a, b) => b.range.start - a.range.start);
+    doc.transact(() => {
+      for (const edit of ordered) {
+        const length = edit.range.end - edit.range.start;
+        if (length > 0) target.delete(edit.range.start, length);
+        if (edit.text.length > 0) target.insert(edit.range.start, edit.text);
+      }
+    });
+  };
+
+  /** Two replicas of one text, each written independently, then reconciled. */
+  const converge = (
+    base: string,
+    left: (text: string) => readonly TextEdit[][],
+    right: (text: string) => readonly TextEdit[][],
+  ): string => {
+    const a = seed(base);
+    const b = new Y.Doc();
+    Y.applyUpdate(b, Y.encodeStateAsUpdate(a));
+    for (const edits of left(a.getText("text").toString())) applyTo(a, edits);
+    for (const edits of right(b.getText("text").toString())) applyTo(b, edits);
+    const fromA = Y.encodeStateAsUpdate(a);
+    const fromB = Y.encodeStateAsUpdate(b);
+    Y.applyUpdate(a, fromB);
+    Y.applyUpdate(b, fromA);
+    const text = a.getText("text").toString();
+    expect(b.getText("text").toString(), "the two replicas converge either way").toBe(text);
+    return text;
+  };
+
+  const FM = "---\ntitle: Note\npath: home/lists\n---\n\nbody\n";
+
+  it("merges a section key to one of the two values written", () => {
+    const base = "body\n\n%%% probe\nstate: idle\n%%%\n";
+    const text = converge(
+      base,
+      (before) => [spliceSection(before, "probe", [{ key: "state", value: "running" }])],
+      (before) => [spliceSection(before, "probe", [{ key: "state", value: "done" }])],
+    );
+    // Two lines survive; the parser reads the last one. Deterministic, and one of the
+    // two values a caller actually asked for.
+    expect(text.match(/^state: /gm)).toHaveLength(2);
+    const winner = [...text.matchAll(/^state: (.*)$/gm)].at(-1)?.[1];
+    expect(["running", "done"]).toContain(winner);
+  });
+
+  it("concatenates a frontmatter value into one neither caller wrote", () => {
+    const text = converge(
+      FM,
+      (before) => [setFrontmatterValue(before, "path", "archive")],
+      (before) => [setFrontmatterValue(before, "path", "inbox")],
+    );
+    const value = /^path: (.*)$/m.exec(text)?.[1];
+    // The defect, asserted exactly so a fix shows up as this test failing.
+    expect(value).toMatch(/^(archiveinbox|inboxarchive)$/);
+    expect(["archive", "inbox"]).not.toContain(value);
+    // What is *not* damaged: one `path` line, the block's shape, everything else.
+    expect(text.match(/^path: /gm)).toHaveLength(1);
+    expect(text).toContain("title: Note");
+  });
+
+  it("would merge cleanly as a line write — at the cost of the key's position", () => {
+    const write = (value: string) => (before: string): readonly TextEdit[][] => {
+      const removed = applyEdits(before, removeFrontmatterKey(before, "path"));
+      return [removeFrontmatterKey(before, "path"), setFrontmatterValue(removed, "path", value)];
+    };
+    const text = converge(FM, write("archive"), write("inbox"));
+    const values = [...text.matchAll(/^path: (.*)$/gm)].map((match) => match[1]);
+    expect(values).toHaveLength(2);
+    for (const value of values) expect(["archive", "inbox"]).toContain(value);
+
+    // And the reason this is not simply adopted: with `path` written as a line it is
+    // re-inserted at the block's insert point, so a key that sat above `title` now sits
+    // below it. `journeys.spec.ts` compares the moved document to the original byte for
+    // byte; SPEC §3.3 says a fm write "never reformats, reorders or re-serializes".
+    const ordered = "---\npath: home\ntitle: Note\n---\n";
+    const relocated = applyEdits(
+      applyEdits(ordered, removeFrontmatterKey(ordered, "path")),
+      setFrontmatterValue(applyEdits(ordered, removeFrontmatterKey(ordered, "path")), "path", "archive"),
+    );
+    expect(relocated).toBe("---\ntitle: Note\npath: archive\n---\n");
   });
 });

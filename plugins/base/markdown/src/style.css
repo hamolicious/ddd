@@ -22,6 +22,21 @@
   line-height: 1.6;
   min-width: 0;
   overflow-wrap: anywhere;
+
+  /*
+   * **One marker gutter for every list**, and the reason it is a custom property is
+   * that three rules have to agree on it exactly or the alignment drifts: a list's
+   * `padding-inline-start`, a task row's negative `margin-inline-start` that cancels
+   * it, and the width of the task's checkbox column. They used to be spelled
+   * `calc(var(--lm-space) * 3)` in two places and `var(--lm-tap-target)` in the third,
+   * which is how a task's *text* ended up 50 px from the body margin while a bullet's
+   * text sat at 24 px — the same list, two indents.
+   *
+   * With one token: a top-level item's marker sits at the body text margin, its text
+   * one gutter in, and every nesting level adds exactly one gutter — for tasks,
+   * bullets and numbers alike.
+   */
+  --md-gutter: calc(var(--lm-space) * 3);
 }
 
 .md-root > * + * {
@@ -202,7 +217,7 @@
 /* --- tasks ----------------------------------------------------------------- */
 
 .md-list {
-  padding-inline-start: calc(var(--lm-space) * 3);
+  padding-inline-start: var(--md-gutter);
 }
 
 /*
@@ -218,19 +233,50 @@
   margin-block-start: var(--lm-space);
 }
 
+/*
+ * A task row is the list's own marker gutter plus its text, and nothing else: the
+ * negative start margin cancels the `ul`'s padding so the checkbox column *is* that
+ * gutter rather than sitting beside it. The row's left edge therefore lands on the
+ * body text margin at top level, exactly where a paragraph starts.
+ *
+ * No `gap`: the gutter is the spacing, and a gap here would push a task's text one
+ * more notch right than the bullet directly above it.
+ */
 .md-task {
   align-items: baseline;
   display: flex;
-  gap: calc(var(--lm-space) * 0.75);
+  gap: 0;
   list-style: none;
-  margin-inline-start: calc(var(--lm-space) * -3);
+  margin-inline-start: calc(var(--md-gutter) * -1);
 }
 
 .md-task-done .md-task-body {
   color: var(--lm-text-muted);
 }
 
+/*
+ * The checkbox column. The state menu is positioned against this, so it has to be a
+ * containing block.
+ *
+ * It is **as wide as the tap target and occupies as much room as the gutter**: the
+ * negative inline margins take the difference back out of the line. The overhang is
+ * carried here rather than on the button inside, so the box is never smaller than its
+ * own content — an element whose `scrollWidth` exceeds its `clientWidth` without an
+ * `overflow-x` of its own is, correctly, what `app/e2e/mobile-document.spec.ts` reports
+ * as content clipped off a phone screen.
+ */
 .md-task-control {
+  display: inline-flex;
+  /*
+   * `auto`, not a fixed basis: a `markdown.taskState` is free to contribute an icon
+   * wider than the tap target, and a column that refused to grow for it would clip it
+   * rather than widen. Never *narrower* than the target, which is the half that has a
+   * spec behind it.
+   */
+  flex: 0 0 auto;
+  justify-content: center;
+  margin-inline: calc((var(--md-gutter) - var(--lm-tap-target)) / 2);
+  min-width: var(--lm-tap-target);
   position: relative;
 }
 
@@ -242,7 +288,17 @@
   cursor: pointer;
   font-size: 1.1em;
   line-height: 1;
-  /* Comfortably tappable without pushing the list text off the baseline grid. */
+  /*
+   * The hit area stays a full 44 px square (SPEC §6.5) — its *column* is what shrank
+   * to the gutter (see `.md-task-control`). The button used to contribute all 44 px
+   * of inline flow, which is what put every task's text 50 px from the body margin
+   * and made each nesting level a 50 px step while bullets stepped 24 px.
+   *
+   * The overhang is inline only: the block axis still contributes its 44 px, so two
+   * stacked checkboxes never overlap each other's target. Sideways it takes 10 px of
+   * the page gutter on one side and 10 px of the task's own text on the other, which
+   * is a larger target for the thing the row is about.
+   */
   min-height: var(--lm-tap-target);
   min-width: var(--lm-tap-target);
   padding: 0;

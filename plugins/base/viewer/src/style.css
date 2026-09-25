@@ -20,6 +20,20 @@
 }
 
 /*
+ * The read column: the properties header and the body, stacked.
+ *
+ * A plain block, deliberately. `.docsurface-pane` is a column flex container, and the
+ * comment on `.viewer-body` below records what an auto cross-axis margin does to a flex
+ * item — it cancels `align-items: stretch` and the child sizes to fit-content. As a
+ * block, both children centre with ordinary auto margins and neither can do that again.
+ * `width: 100%` keeps *this* box stretched inside the pane.
+ */
+.viewer-read {
+  width: 100%;
+  min-width: 0;
+}
+
+/*
  * `anywhere`, not `break-word`: only `anywhere` reduces the element's min-content width,
  * and it is that width an ancestor sizes to. With `break-word` one long URL made the
  * whole reading column 659 px wide inside a 390 px pane — headings, paragraphs and all.
@@ -47,6 +61,98 @@
 
 .viewer-body > :first-child {
   margin-top: 0;
+}
+
+/* --- the read-mode properties header ------------------------------------ */
+
+/*
+ * Frontmatter, pretty-printed above the body (`FmHeader.tsx`). It shares the body's
+ * measure and gutters — `width: 100%` plus the same `max-width` and auto margins — so
+ * the two read as one column rather than as a widget bolted above one.
+ *
+ * `min-width: 0` for the same reason it is on `.viewer-body`: a 26-character `fm.path`
+ * with no break opportunity would otherwise set the pane's min-content width and take
+ * the whole reading column sideways with it (the 659 px bug, `mobile-routes.spec.ts`).
+ */
+.viewer-properties {
+  width: 100%;
+  max-width: 72ch;
+  min-width: 0;
+  margin: 0 auto;
+  padding: calc(var(--lm-space) * 2) calc(var(--lm-space) * 2) 0;
+}
+
+.viewer-properties-list {
+  display: grid;
+  /*
+   * The key column sizes to the longest key and stops: `minmax(auto, 12ch)` would let a
+   * 64-character key (SPEC §3.4's cap) take the whole row. Values get what is left, and
+   * `min-width: 0` on the value cell is what lets them wrap inside it.
+   */
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+  gap: calc(var(--lm-space) / 2) calc(var(--lm-space) * 1.5);
+  margin: 0;
+  padding: 0 0 calc(var(--lm-space) * 1.5);
+  border-bottom: 1px solid var(--lm-border);
+  font-size: 0.9rem;
+}
+
+/* The `<div>` wrapper each row needs to be one grid row: `display: contents`. */
+.viewer-property {
+  display: contents;
+}
+
+.viewer-property-key {
+  min-width: 0;
+  margin: 0;
+  color: var(--lm-text-muted);
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.viewer-property-value {
+  min-width: 0;
+  margin: 0;
+  color: var(--lm-text);
+  overflow-wrap: anywhere;
+}
+
+.viewer-property-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--lm-space) / 2);
+}
+
+.viewer-property-chip {
+  display: inline-block;
+  max-width: 100%;
+  padding: 1px calc(var(--lm-space) * 0.75);
+  border: 1px solid var(--lm-border);
+  border-radius: 999px;
+  background: var(--lm-bg-subtle);
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
+
+.viewer-property-flag {
+  font-variant-numeric: tabular-nums;
+}
+
+.viewer-property-empty {
+  color: var(--lm-text-muted);
+}
+
+.viewer-properties-warning {
+  margin: var(--lm-space) 0 0;
+  padding-left: var(--lm-space);
+  border-left: 3px solid var(--lm-warning);
+  color: var(--lm-text-muted);
+  font-size: 0.85rem;
+}
+
+/* With a header above it the body no longer needs its own top gutter. */
+.viewer-properties + .viewer-body {
+  padding-top: calc(var(--lm-space) * 2);
 }
 
 .viewer-body h1,
@@ -281,5 +387,30 @@
 
   .viewer-attachment {
     padding: var(--lm-space);
+  }
+
+  /*
+   * The header keeps the body's gutters at every width, and at this one the two-column
+   * grid is what would break first: a `title` a reader actually wrote leaves a value
+   * column of about fifteen characters once a long key has taken its share. Below the
+   * breakpoint the key sits above its value instead, which is the only layout that
+   * cannot squeeze either of them.
+   */
+  .viewer-properties {
+    padding: calc(var(--lm-space) * 2) calc(var(--lm-space) * 2) 0;
+  }
+
+  .viewer-properties-list {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .viewer-property {
+    display: block;
+    padding-bottom: calc(var(--lm-space) / 2);
+  }
+
+  .viewer-property-key {
+    font-size: 0.8rem;
   }
 }

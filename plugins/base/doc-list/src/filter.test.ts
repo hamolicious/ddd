@@ -10,15 +10,20 @@ import { describe, expect, it } from "vitest";
 
 import {
   TRASHED_ONLY,
+  VALUELESS_OPS,
+  appliedCount,
   buildClause,
   buildEffectiveFilter,
   buildFilter,
   buildLiteral,
   buildSort,
+  clauseProblem,
   invalidClauses,
   isFieldPathShaped,
   TRASH_SORT_IS_CLIENT_SIDE,
+  type ClauseOp,
   type FilterClause,
+  type ValueKind,
 } from "./filter.js";
 import { EXCLUDE_MACHINE_DOCUMENTS } from "../../_shared/machine-docs.js";
 
@@ -261,5 +266,126 @@ describe("buildEffectiveFilter", () => {
     expect(buildEffectiveFilter({ combine: "and", clauses: [], includeMachine: true })).toBeUndefined();
     const draft = { combine: "and", clauses: [clause()], includeMachine: true } as const;
     expect(buildEffectiveFilter(draft)).toEqual(buildFilter(draft));
+  });
+});
+
+/**
+ * `web/MOBILE-AUDIT.md`'s open question 5, settled.
+ *
+ * The claim: a row marked "this condition is not being applied" was applied anyway, and
+ * the document list dropped to zero rows because of it. It was not true — the builder
+ * has always dropped such a row — and the observation was the filter bar filling a
+ * phone's first screen (audit item C-9) with the list below the fold, over an empty
+ * state that said "No document matches **these conditions**" and so read as a claim the
+ * conditions had run.
+ *
+ * Rather than record "we looked and it was fine", the property is pinned here: an
+ * unusable row is worth exactly nothing to the query, alone or beside a good one, in
+ * `and` and in `or`, with and without the machine-document exclusion.
+ */
+describe("an unusable clause contributes nothing to the query (MOBILE-AUDIT Q5)", () => {
+  /** What the "Add condition" button produces: a field, an operator, an empty value. */
+  const fresh = clause({ id: "fresh", value: "" });
+
+  it("leaves the effective filter byte-identical to the draft without it", () => {
+    const without = { combine: "and", clauses: [] } as const;
+    const with_ = { combine: "and", clauses: [fresh] } as const;
+    expect(buildEffectiveFilter(with_)).toEqual(buildEffectiveFilter(without));
+    expect(buildEffectiveFilter(with_)).toEqual(EXCLUDE_MACHINE_DOCUMENTS);
+    // Not an `and` of one, not an `all` node: the exclusion and nothing else.
+    expect(JSON.stringify(buildEffectiveFilter(with_))).toBe(
+      JSON.stringify(EXCLUDE_MACHINE_DOCUMENTS),
+    );
+  });
+
+  it("does not narrow a filter that has a usable clause beside it", () => {
+    for (const combine of ["and", "or"] as const) {
+      const good = { combine, clauses: [clause()] } as const;
+      const mixed = { combine, clauses: [clause(), fresh] } as const;
+      expect(buildFilter(mixed)).toEqual(buildFilter(good));
+      expect(buildEffectiveFilter(mixed)).toEqual(buildEffectiveFilter(good));
+    }
+  });
+
+  it("keeps the empty state truthful: no usable clause means the user filtered nothing", () => {
+    // `hasFilter` in `DocListView` is `buildFilter(...) !== undefined`, so this is what
+    // decides between "No documents yet" and "No document matches".
+    expect(buildFilter({ combine: "and", clauses: [fresh] })).toBeUndefined();
+  });
+
+  it("is reported to the row, with a reason rather than a guess", () => {
+    expect(invalidClauses({ combine: "and", clauses: [fresh] })).toEqual(["fresh"]);
+    expect(clauseProblem(fresh)).toBe("Type a value to compare against.");
+    // Filled in and still refused — the two cases the old copy called "Incomplete".
+    expect(clauseProblem(clause({ op: "text_contains", kind: "date", value: "2026-09-23" }))).toBe(
+      "Text matching needs the text value type.",
+    );
+    expect(clauseProblem(clause({ op: "lt", kind: "bool", value: "true" }))).toBe(
+      "Before and after do not apply to true/false or null.",
+    );
+  });
+});
+
+/**
+ * The mark and the query are one decision, not two that have to be kept in step.
+ *
+ * This is the guard that would have caught the bug Q5 suspected, whichever direction it
+ * had drifted: a row silently dropped, or a row marked dead while the query carried it.
+ */
+describe("clauseProblem is exactly the builder's own verdict", () => {
+  const ops: readonly ClauseOp[] = [
+    "eq", "ne", "lt", "lte", "gt", "gte",
+    "contains", "any", "every",
+    "text_contains", "text_starts_with", "text_ends_with",
+    "missing", "exists", "is_null",
+  ];
+  const kinds: readonly ValueKind[] = ["str", "int", "float", "bool", "date", "null"];
+  const values = ["", "   ", "open", "3", "1.5", "true", "2026-09-23", "2026-02-30", "2026"];
+  const fields = ["fm.status", "title", "", " ", "fm", "not a path", "plugins.x.y"];
+
+  it("agrees on every combination the controls can produce", () => {
+    let disagreements = 0;
+    let dropped = 0;
+    for (const field of fields) {
+      for (const op of ops) {
+        for (const kind of kinds) {
+          for (const value of values) {
+            for (const negate of [false, true]) {
+              const row = clause({ field, op, kind, value, negate });
+              const built = buildClause(row) !== undefined;
+              const problem = clauseProblem(row) === undefined;
+              if (built !== problem) disagreements += 1;
+              if (!built) dropped += 1;
+            }
+          }
+        }
+      }
+    }
+    expect(disagreements).toBe(0);
+    // A matrix that never drops anything would pass the line above vacuously.
+    expect(dropped).toBeGreaterThan(0);
+  });
+
+  it("says nothing about a row the valueless operators make complete on their own", () => {
+    for (const op of VALUELESS_OPS) {
+      expect(clauseProblem(clause({ op, value: "" }))).toBeUndefined();
+    }
+  });
+});
+
+describe("appliedCount", () => {
+  /**
+   * The number on the folded "Filters" toggle. It used to count a title box holding
+   * only spaces, because it tested `!== ""` where `buildFilter` tests `trim() !== ""` —
+   * a badge reading "1" over a query with no conditions in it.
+   */
+  it("counts what the query carries, not what the boxes hold", () => {
+    expect(appliedCount({ combine: "and", clauses: [] })).toBe(0);
+    expect(appliedCount({ combine: "and", clauses: [], titleContains: "   " })).toBe(0);
+    expect(appliedCount({ combine: "and", clauses: [], titleContains: " x " })).toBe(1);
+    expect(appliedCount({ combine: "and", clauses: [clause(), clause({ id: "b", value: "" })] })).toBe(1);
+    expect(
+      appliedCount({ combine: "and", clauses: [clause()], titleContains: "notes" }),
+    ).toBe(2);
   });
 });

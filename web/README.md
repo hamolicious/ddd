@@ -14,6 +14,18 @@ plugin takes: `build:plugins` builds frontend halves, `build-wasm-plugins.mjs` b
 backend halves into the same installed layout, `package-plugin.mjs` writes the installable
 `.zip`.
 
+**The core-improvements wave (2026-09-25) changed nothing here in contract terms either** —
+no `@kernel` surface moved and no plugin declared a new dependency. What a user sees is
+different in four places, all inside `../plugins/base/`: task lists are indented once
+rather than twice (one `--md-gutter` token; the 44 px checkbox overhangs its column
+instead of widening it); frontmatter is **unfoldable** in edit mode and rendered as a
+typed properties header in read mode; `folders` is a real drag-and-drop file tree, with
+pathless documents as rows at its root and a touch/keyboard sheet for every move a drag
+can make; and two settings that existed but were reachable from no screen — "Open
+documents in" and "New notes go to" — now have one. Every metadata write in all of it is
+still a line splice (SPEC §3.3), which is what `app/e2e/zz-folder-tree.spec.ts` checks by
+byte-comparing the stored text.
+
 **The app is `app/`.** `demo/` is the M2 page, kept exactly as it was: it is the surface
 the SPEC §8 Playwright smoke drives and a fixture for the harnesses, not the product.
 
@@ -312,6 +324,10 @@ break.
 | `safe-mode.spec.ts` | Sabotages an installed plugin's module *on disk*, then: a normal boot degrades with one aggregated notice, `?safe=1` boots past it, `?safe=bare` reaches the kernel's own manager, and restoring the file recovers. Each step in a fresh context, because plugin URLs are immutable. |
 | `browsing.spec.ts` | The two browsing behaviours that only exist assembled: a machine-owned document (`fm.path: .settings`) staying out of the list, the sidebar count *and* the folder tree until the toggle asks for it — three plugins that have to agree — and `#/doc/<id>?line=N` scrolling the editor, including on a query-only navigation into the document already open. |
 | `acceptance.spec.ts` | **SPEC §9 M3's acceptance criterion.** Composes a registry of base-minus-`editor` plus `plugins/examples/alt-editor`, starts a second server over it, and shows the app working with `document.mode`'s `edit` provided by the separately-authored plugin — same tab, same command, same keybinding, and no CodeMirror in the page. |
+| `polish.spec.ts`, `mobile-*.spec.ts` | What the two polish waves fixed, and the 390 px zero-overflow net across every route, every settings section and every admin section. A UI that scrolls the page sideways on a phone fails here. |
+| `frontmatter.spec.ts` | Read mode's properties header (typed, ordered, display-only, nothing at all without frontmatter), edit mode showing the raw block **unfolded** with the `%%%` section still collapsed, and the "Open documents in" setting. `fm_parse_error` is asserted **in both modes, exactly once per mode** — the rule fails in two directions, and both have been seen: twice on one screen, and nowhere at all. Its last test mutates shared per-user state and restores it by polling the *server's* copy — an optimistic select that loses its write leaves every later spec opening documents in the wrong mode. |
+| `list-alignment.spec.ts` | Where list text actually lands, measured: a task's row starts at the body text margin, its text lines up with a bullet's, and the step is one gutter at every depth. Plus the document list not moving under a condition that was refused. |
+| `zz-folder-tree.spec.ts` | The folder tree as a file manager, checked against the **stored text**: a folder move re-prefixes every document inside it by one splice each and leaves a bystander byte-identical; a drop on Root removes the `path` line and nothing else; a folder is created empty, renamed inline and filled; delete goes to the parent by splice or to Trash and restores intact; the same move happens at 390 px through the sheet, because HTML5 drag and drop does not fire from touch; and a machine-owned document is refused a folder, because the tree's query excluding one never protected the write. It fails if anything opens a native dialog. **`zz-` so it runs last:** it adds documents to the shared workspace, and earlier specs assert on workspace-wide counts. |
 
 Notes for running it: `LM_APP` points the suite at a server you started yourself (and
 `webServer` then reuses it — which also means the database is *not* dropped, so a
