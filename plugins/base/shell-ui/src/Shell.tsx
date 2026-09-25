@@ -180,13 +180,17 @@ function NavItem({
   if (item.component) {
     const Rendered = bounded(kernel, item.component, POINTS.navbarItem, entry.pluginId);
     return (
-      <li className="shell-nav-item" data-plugin={entry.pluginId}>
+      // `data-kind` is what lets the stylesheet tell a plugin's own widget (a search
+      // box, which wants to grow) from a label the shell renders itself (a command
+      // button, which wants its whole label or nothing). Without it the mobile navbar
+      // shrank both in proportion and "New document" read "New docu…".
+      <li className="shell-nav-item" data-kind="component" data-plugin={entry.pluginId}>
         <Rendered />
       </li>
     );
   }
   return (
-    <li className="shell-nav-item" data-plugin={entry.pluginId}>
+    <li className="shell-nav-item" data-kind="button" data-plugin={entry.pluginId}>
       {item.onSelect ? (
         <button type="button" className="shell-nav-button" onClick={() => item.onSelect?.()}>
           <BoundedIcon

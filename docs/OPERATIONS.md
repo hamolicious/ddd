@@ -101,6 +101,7 @@ boot failure, not a warning.** A value that is set but empty counts as unset.
 | `BIND_ADDR` | `0.0.0.0:8080` | Listen address. |
 | `MONGO_DATABASE` | `life_manager` | Database name inside the URI's server. |
 | `APP_ORIGIN` | *(empty)* | Comma-separated origin allowlist for CORS (M1) and the WebSocket upgrade (M2). Exact matches only: `scheme://host[:port]`, no path, no trailing slash, no wildcards. Empty allows nothing. **Add `http://127.0.0.1:41847` if anyone uses the Android shell** — see "The Android shell" below. |
+| `PUBLIC_URL` | *(empty)* | The single origin clients reach this server at, e.g. `https://lm.example.com`. Same syntax as one `APP_ORIGIN` entry — `scheme://host[:port]`, no path, no trailing slash — but a different question: `APP_ORIGIN` is *who may talk to me*, this is *what URL am I reached at*, which a TLS-unaware server behind an ingress cannot work out for itself. Optional, and unset changes nothing. Setting it narrows the Content-Security-Policy published in the Android shell's bundle manifest (`index_csp`) from scheme-wide `connect-src 'self' https: http: wss: ws:` to `connect-src 'self' <PUBLIC_URL> <the same host as wss://>` — see "The Android shell" below. |
 | `COOKIE_SECURE` | `true` | Set `false` only for plain-http local development. |
 | `TRUST_PROXY_HEADERS` | `false` | Where the client IP comes from — the input to the per-IP login backoff (SPEC §5.2) and to `ip` on every session row and audit entry (SPEC §5.4). `false`: the connection's peer address; `X-Forwarded-For` / `X-Real-IP` are ignored. `true`: the **rightmost** `X-Forwarded-For` hop, which is the one a single trusted proxy appended. **Set `true` only when a reverse proxy is the only route to the server** — otherwise a client picks its own rate-limit bucket and stamps its own origin on the audit log. Compose publishes the port directly, so it stays `false` there; behind the Kubernetes ingress of SPEC §8, set it to `true`. |
 | `LOG_FORMAT` | `json` | `json` or `pretty`. |
@@ -197,6 +198,31 @@ syncs**: the WebSocket upgrade is refused with 403 before it authenticates. The 
 warns before sending a password, but it cannot fix the server. The port is fixed
 (`41847`) and must stay fixed — it is part of the origin every client-side store is
 keyed by.
+
+**One thing is worth configuring, and nothing breaks if you do not:**
+
+```
+PUBLIC_URL=https://lm.example.com
+```
+
+The bundle manifest publishes `index_csp`, the Content-Security-Policy the shell's
+loopback server sends with `index.html`. Because that page's own origin is
+`http://127.0.0.1:41847`, every API call and the sync socket are cross-origin to it,
+so `connect-src 'self'` would leave the app unable to reach the server at all — and the
+server does not know what host, port or scheme a device reaches it by. With `PUBLIC_URL`
+unset the policy falls back to scheme sources, `connect-src 'self' https: http: wss: ws:`,
+which works everywhere and restricts nothing about *where* the page may connect. Setting
+it narrows that to the two spellings of your own origin:
+
+```
+connect-src 'self' https://lm.example.com wss://lm.example.com
+```
+
+Everything else in the policy is unchanged and was never the loose part — `script-src` is
+`'self'` plus one nonce, `object-src 'none'`, `base-uri 'none'`. Devices pick the narrowed
+policy up with their next bundle (the manifest changes, so `bundle_version` moves). Point
+it at the URL devices actually use: naming the internal cluster address instead would
+publish a policy that blocks every request the app makes.
 
 Two further consequences worth knowing:
 
@@ -463,7 +489,7 @@ secret unreadable.** With no `CONFIG_KEY` the encryption key is derived from
 `SESSION_SECRET` (SPEC §6.2), so a new session secret cannot open the old ciphertext.
 Nothing breaks loudly: an undecryptable value is reported to the admin screen as
 *not set*, with a log line, and the plugin behaves as if it had never been configured
-— so a calendar quietly stops syncing rather than erroring. Re-enter each affected
+— so a feed importer quietly stops syncing rather than erroring. Re-enter each affected
 plugin's secrets in Admin → Plugins afterwards.
 
 Set `CONFIG_KEY` *before* a plugin stores its first secret and the two rotate

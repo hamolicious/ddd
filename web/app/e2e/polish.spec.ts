@@ -1,0 +1,348 @@
+/**
+ * The UX sweep's regression net.
+ *
+ * Every test here pins something that was **wrong in a shipped build** and is cheap to
+ * break again, because each one is a property nothing else in the suite asserts:
+ *
+ * - The journeys drive a desktop viewport, so nothing noticed that the navbar ran past
+ *   a phone's screen and took the page's horizontal scroll with it.
+ * - Nothing read a fold placeholder, a Trash attribution line, or the palette's
+ *   *ordering*, so all three could say something wrong while every assertion passed.
+ *
+ * The mobile block uses 390 px — the narrowest mainstream phone, and the width SPEC
+ * §6.5's breakpoint exists for. `documentElement.scrollWidth === clientWidth` is the
+ * whole assertion for "nothing overflows": a page that scrolls sideways on a phone is
+ * the symptom every one of those layout bugs produced.
+ */
+
+import { expect, test } from "@playwright/test";
+
+import {
+  ADMIN,
+  createDocument,
+  docRows,
+  openDocument,
+  runCommand,
+  showSidebar,
+  signIn,
+} from "./helpers.js";
+
+/** Nothing on the page may push the document wider than the viewport. */
+async function noHorizontalScroll(page: import("@playwright/test").Page): Promise<void> {
+  const overflow = await page.evaluate(() => {
+    const root = document.documentElement;
+    const widest = [...document.querySelectorAll<HTMLElement>("body *")]
+      .map((element) => ({ element, box: element.getBoundingClientRect() }))
+      .filter((entry) => entry.box.width > 0 && entry.box.right > root.clientWidth + 1)
+      .map((entry) => `${entry.element.tagName.toLowerCase()}.${entry.element.className}`)
+      .slice(0, 5);
+    return { scrollWidth: root.scrollWidth, clientWidth: root.clientWidth, widest };
+  });
+  expect(
+    overflow.scrollWidth,
+    `the page scrolls sideways; widest offenders: ${overflow.widest.join(", ")}`,
+  ).toBeLessThanOrEqual(overflow.clientWidth);
+}
+
+test.describe("phone width (390px)", () => {
+  test.use({ viewport: { width: 390, height: 780 } });
+
+  test("the navbar fits, and both of its primary actions are reachable", async ({ page }) => {
+    await signIn(page, ADMIN);
+
+    // The two things a person opens the app to do. They used to be squeezed to zero
+    // width by an end group that refused to shrink, which is invisible to a test that
+    // only checks the elements exist — so assert on the rendered width.
+    const create = page.getByRole("button", { name: "New document" }).first();
+    const search = page.getByRole("combobox", { name: /search documents/i });
+    await expect(create).toBeVisible();
+    await expect(search).toBeVisible();
+    for (const control of [create, search]) {
+      const box = await control.boundingBox();
+      expect(box?.width ?? 0).toBeGreaterThan(60);
+    }
+
+    // And the label is the whole label — "New docu…" is a truncation, not a button.
+    await expect(create).toHaveText("New document");
+
+    await noHorizontalScroll(page);
+  });
+
+  test("the document list, a document and settings all fit", async ({ page, request, baseURL }) => {
+    const id = await createDocument(
+      request,
+      baseURL as string,
+      "---\ntitle: Phone width fixture\npath: sweep\n---\n\nbody\n",
+    );
+
+    await signIn(page, ADMIN);
+    await noHorizontalScroll(page);
+
+    await openDocument(page, id);
+    await noHorizontalScroll(page);
+
+    // The settings section list is a row of long names ("Administration — Snapshots").
+    // As a grid item with the default `min-width: auto` it grew to their combined
+    // max-content width — 1 700 px — and its own `overflow-x` never fired.
+    await page.goto("/#/settings");
+    await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
+    await noHorizontalScroll(page);
+    const nav = page.getByRole("navigation", { name: /settings sections/i });
+    expect((await nav.boundingBox())?.width ?? 0).toBeLessThanOrEqual(390);
+  });
+
+  test("the sidebar drawer opens over the content and Escape closes it", async ({ page }) => {
+    await signIn(page, ADMIN);
+    await showSidebar(page);
+    const sidebar = page.getByRole("complementary", { name: /sidebar/i });
+    await expect(sidebar).toBeVisible();
+    await noHorizontalScroll(page);
+
+    await page.keyboard.press("Escape");
+    await expect(sidebar).toBeHidden();
+    // Focus goes back to the control that opened it, not to the top of the document.
+    await expect(page.locator(".shell-sidebar-toggle")).toBeFocused();
+  });
+});
+
+test.describe("copy and labels that were wrong", () => {
+  test("a fold placeholder names the region it hides", async ({ page, request, baseURL }) => {
+    // Frontmatter is human-owned (SPEC §3.3) and was labelled "machine data"; a `%%%`
+    // section's owner is on the fence line the fold hides, so the chip is the one place
+    // left to say it.
+    const id = await createDocument(
+      request,
+      baseURL as string,
+      "---\ntitle: Fold labels\npath: sweep\n---\n\nbody\n\n%%% sweep-demo\nkey: value\nother: 2\n%%%\n",
+    );
+
+    await signIn(page, ADMIN);
+    await openDocument(page, id);
+    await page.getByRole("tab", { name: "Edit" }).click();
+
+    const placeholders = page.locator(".cm-foldPlaceholder");
+    await expect(placeholders).toHaveCount(2);
+    await expect(placeholders.nth(0)).toHaveText("⋯ frontmatter");
+    await expect(placeholders.nth(1)).toHaveText("⋯ sweep-demo data");
+
+    // Still a fold, not just a label: clicking it puts the text back.
+    await placeholders.nth(0).click();
+    await expect(placeholders).toHaveCount(1);
+    await expect(page.locator(".cm-content")).toContainText("title: Fold labels");
+  });
+
+  test("Trash attributes a deletion in words, not a raw user id", async ({ page, request, baseURL }) => {
+    await createDocument(
+      request,
+      baseURL as string,
+      "---\ntitle: Trash attribution fixture\npath: sweep\n---\n\nbody\n",
+    );
+
+    await signIn(page, ADMIN);
+    const row = docRows(page).filter({ hasText: "Trash attribution fixture" });
+    await expect(row).toHaveCount(1);
+    await row.getByRole("button", { name: /move to trash/i }).click();
+
+    await page.goto("/#/trash");
+    const trashed = page.locator(".doclist-item").filter({ hasText: "Trash attribution fixture" });
+    await expect(trashed).toHaveCount(1);
+    await expect(trashed).toContainText("by you");
+    // The id is still recoverable on hover; it is not what the line reads as.
+    await expect(trashed).not.toContainText(/by 0[0-9A-HJKMNP-TV-Z]{25}/);
+  });
+});
+
+test.describe("the folder tree", () => {
+  /**
+   * The tree is a roving-tabindex widget: the container is the only tab stop and arrows
+   * move the active row. Correct for navigating it, and it left the row's two action
+   * buttons unreachable by any key — `tabindex="-1"` like everything else in a row, and
+   * `display: none` until the row is active. Rename at least had F2. "New document in
+   * this folder" had no keyboard path at all, on a button the tree draws for you.
+   *
+   * So the assertion is a real `Tab` from the tree rather than a CSS check: a rule that
+   * merely *showed* the buttons without putting them in the tab order would still leave
+   * them unreachable, and would still pass a visibility test.
+   */
+  test("puts the active row's actions in the tab order", async ({ page, request, baseURL }) => {
+    await createDocument(
+      request,
+      baseURL as string,
+      "---\ntitle: Folder keyboard fixture\npath: sweep-folder\n---\n\nbody\n",
+    );
+
+    await signIn(page, ADMIN);
+    await showSidebar(page);
+
+    // Focusing the tree activates its first row (that is the widget's own onFocus), so
+    // the actions Tab reaches are the ones the user can see highlighted.
+    const tree = page.getByRole("tree", { name: /folders/i });
+    await tree.focus();
+    const active = tree.locator(".folders-node-active");
+    await expect(active).toHaveCount(1);
+    const folder = await active.locator(".folders-name").innerText();
+
+    await page.keyboard.press("Tab");
+    await expect(
+      page.getByRole("button", { name: new RegExp(`new document in .*${folder}`, "i") }).first(),
+    ).toBeFocused();
+
+    await page.keyboard.press("Tab");
+    await expect(
+      page.getByRole("button", { name: new RegExp(`rename or move .*${folder}`, "i") }).first(),
+    ).toBeFocused();
+
+    // And a row that is not active stays out of the way — one tab stop per tree, plus
+    // the row the user is standing on, is the whole contract.
+    const inactiveActions = tree.locator(".folders-node:not(.folders-node-active) .folders-actions button");
+    for (const button of await inactiveActions.all()) {
+      await expect(button).toHaveAttribute("tabindex", "-1");
+    }
+  });
+});
+
+test.describe("the task state menu", () => {
+  /**
+   * A menu that takes focus has to give it back. Both of these were "the menu closed,
+   * and focus was on `<body>`" — the keyboard user ends up at the top of the document,
+   * several dozen tab stops from the task they were working on, with nothing on screen
+   * to say what happened.
+   *
+   * The right-click path is the one that matters: a context menu opened by pointer does
+   * not focus the control it targets, so the element to return to cannot be read from
+   * `document.activeElement` and has to come from the menu's own position in the DOM.
+   */
+  test("hands focus back to the checkbox on Escape and on choosing a state", async ({
+    page,
+    request,
+    baseURL,
+  }) => {
+    const id = await createDocument(
+      request,
+      baseURL as string,
+      "---\ntitle: Task focus fixture\npath: sweep\n---\n\n- [ ] first\n- [ ] second\n",
+    );
+
+    await signIn(page, ADMIN);
+    await openDocument(page, id);
+
+    const box = page.locator(".md-task-box").first();
+    const menu = page.getByRole("menu", { name: "Task state" });
+
+    await box.click({ button: "right" });
+    await expect(menu).toBeVisible();
+    // Focus really is inside the menu first — otherwise the assertion below would pass
+    // for a menu that never took focus at all.
+    await expect(menu.getByRole("menuitem").first()).toBeFocused();
+
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+    await expect(box).toBeFocused();
+
+    // Choosing an item rewrites the marker, so the trigger re-renders underneath the
+    // focus call; it is still the control the user should be on.
+    await box.click({ button: "right" });
+    await expect(menu).toBeVisible();
+    await menu.getByRole("menuitem", { name: "Done" }).click();
+    await expect(box).toHaveAttribute("aria-checked", "true");
+    await expect(box).toBeFocused();
+  });
+
+  test("closing by clicking elsewhere leaves focus where the user put it", async ({
+    page,
+    request,
+    baseURL,
+  }) => {
+    // The other half of the same rule: the menu must not *pull* focus back when it was
+    // dismissed by the user going somewhere else. A menu that does is worse than one
+    // that drops focus, because it fights the pointer.
+    const id = await createDocument(
+      request,
+      baseURL as string,
+      "---\ntitle: Task blur fixture\npath: sweep\n---\n\n- [ ] only\n",
+    );
+
+    await signIn(page, ADMIN);
+    await openDocument(page, id);
+
+    const box = page.locator(".md-task-box").first();
+    await box.click({ button: "right" });
+    await expect(page.getByRole("menu", { name: "Task state" })).toBeVisible();
+
+    // The already-selected mode tab: focusable, and it leaves the read view mounted, so
+    // the checkbox is still there to assert *isn't* focused. (Clicking "Edit" would
+    // unmount the whole article and prove nothing.)
+    const elsewhere = page.getByRole("tab", { name: "Read" });
+    await elsewhere.click();
+    await expect(page.getByRole("menu", { name: "Task state" })).toHaveCount(0);
+    await expect(box).toBeVisible();
+    await expect(box).not.toBeFocused();
+    await expect(elsewhere).toBeFocused();
+  });
+});
+
+test.describe("the command palette", () => {
+  test("offers no mode command when no document is open", async ({ page, request, baseURL }) => {
+    const id = await createDocument(
+      request,
+      baseURL as string,
+      "---\ntitle: Palette guard fixture\npath: sweep\n---\n\nbody\n",
+    );
+
+    await signIn(page, ADMIN);
+    await page.goto("/#/trash");
+    await expect(page.getByRole("heading", { name: "Trash" })).toBeVisible();
+
+    await page.keyboard.press("ControlOrMeta+k");
+    const palette = page.getByRole("combobox", { name: /command/i });
+    await expect(palette).toBeVisible();
+    // These ran `setMode` on nothing and looked like a broken app.
+    await expect(page.getByRole("option", { name: /show document as/i })).toHaveCount(0);
+    await page.keyboard.press("Escape");
+
+    // On a document they are exactly what the palette is for.
+    await openDocument(page, id);
+    await runCommand(page, /show document as: edit/i);
+    await expect(page.getByRole("tab", { name: "Edit" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  test("separates a row's category from its title in the accessible name", async ({ page }) => {
+    // The gap was `margin-right` on the category, which is invisible to the
+    // accessibility tree: every row announced as one run-together word
+    // ("Admin ›Browse snapshots"). The same markup builds the keybindings table, so
+    // both views were saying it.
+    await signIn(page, ADMIN);
+    await page.keyboard.press("ControlOrMeta+k");
+    await expect(page.getByRole("combobox", { name: /command/i })).toBeVisible();
+
+    const categorised = page.locator(".cmd-list [role=option]", { has: page.locator(".cmd-category") });
+    expect(await categorised.count()).toBeGreaterThan(0);
+    for (const row of await categorised.all()) {
+      // The *accessible name*, not `innerText`: the separator is generated content, which
+      // `innerText` does not return at all and the name computation does. That difference
+      // is the entire bug — the gap was styling the sighted reader could see and the name
+      // computation could not.
+      await expect(row).toHaveAccessibleName(/\S\s›\s\S/);
+    }
+  });
+
+  test("groups an unfiltered list by category", async ({ page }) => {
+    await signIn(page, ADMIN);
+    await page.keyboard.press("ControlOrMeta+k");
+    await expect(page.getByRole("combobox", { name: /command/i })).toBeVisible();
+
+    // Every score is 0 for an empty query, so the tie-break *is* the ordering. Sorting
+    // on title alone interleaved the categories the rows are labelled with.
+    const categories = await page.locator(".cmd-list [role=option] .cmd-category").allInnerTexts();
+    expect(categories.length).toBeGreaterThan(5);
+    const firstSeen = new Map<string, number>();
+    categories.forEach((category, index) => {
+      if (!firstSeen.has(category)) firstSeen.set(category, index);
+    });
+    for (const [category, start] of firstSeen) {
+      const last = categories.lastIndexOf(category);
+      const run = categories.slice(start, last + 1);
+      expect(run.every((entry) => entry === category), `"${category}" is not contiguous`).toBe(true);
+    }
+  });
+});

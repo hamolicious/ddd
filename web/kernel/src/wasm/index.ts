@@ -31,15 +31,44 @@ export interface FilterRow {
   readonly plugins: CoreMap;
   readonly created_at?: string;
   readonly updated_at?: string;
+  /**
+   * The tombstone instant, **omitted** on a live document rather than sent as
+   * null: `deleted_at` is an addressable field of the DSL (M5 polish), so
+   * `missing`/`exists` can tell the two apart, and Mongo stores it unset. Sending
+   * `null` here would make the client answer `exists` where the server answers
+   * `missing` for every live row in the workspace.
+   */
+  readonly deleted_at?: string;
   readonly deleted: boolean;
 }
 
-/** **FROZEN INTERFACE.** The client-side surface of the shared core. */
+/**
+ * **FROZEN INTERFACE.** The client-side surface of the shared core.
+ *
+ * It is the **whole** ABI now. `resolveTitle` and `normalizeDate` were the two exports
+ * `wasm.rs` had and this file did not, and `web/CONTRACTS.md` listed the gap as open
+ * under this area: `kernel.core.resolveTitle`/`normalizeDate` threw
+ * `notImplemented`, and `harness/src/core.ts` reached past this interface into the
+ * generated module to get at `normalize_date`. Both are closed here, and the closing
+ * is the one kind of change this interface takes — additive, with the Rust side already
+ * exporting what it adds.
+ */
 export interface CoreBindings {
   parseDocument(text: string): ParsedDocument;
   evaluateFilter(filter: FilterJson, row: FilterRow): boolean;
   /** Mirrors `CORE_SEMANTICS_VERSION`; compared against `welcome`. */
   semanticsVersion(): number;
+  /**
+   * `fm.title` → first ATX heading → first non-empty line → `"Untitled"`, without a
+   * `parseDocument` round trip through JSON.
+   */
+  resolveTitle(text: string): string;
+  /**
+   * `Date::normalize_str` — the canonical ISO-8601 form materialization writes
+   * (SPEC §3.4), so a value derived on this client sorts and compares the way the
+   * server's would. Returns the input unchanged when it is not a date.
+   */
+  normalizeDate(input: string): string;
 }
 
 /** Project a stored projection row into the evaluator's row shape. */
@@ -52,6 +81,7 @@ export function filterRow(row: ProjectionRow): FilterRow {
     plugins: row.plugins,
     created_at: row.created_at,
     updated_at: row.updated_at,
+    ...(row.deleted_at === null ? {} : { deleted_at: row.deleted_at }),
     deleted: row.deleted,
   };
 }
@@ -74,6 +104,8 @@ export function loadCore(initInput?: BufferSource | WebAssembly.Module | URL | s
       evaluateFilter: (filter: FilterJson, row: FilterRow) =>
         mod.evaluate_filter(JSON.stringify(filter), JSON.stringify(row)),
       semanticsVersion: () => mod.core_semantics_version(),
+      resolveTitle: (text: string) => mod.resolve_title(text),
+      normalizeDate: (input: string) => mod.normalize_date(input),
     } satisfies CoreBindings;
   })();
   return cached;

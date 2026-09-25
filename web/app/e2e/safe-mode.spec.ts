@@ -114,11 +114,27 @@ test("a broken plugin fails alone, and safe mode boots past it", async ({ browse
       await expect(notice).toBeVisible();
       await expect(page.getByRole("button", { name: /open admin/i }).first()).toBeVisible();
 
+      // **Once**, not twice. The kernel's frame and `shell-ui`'s bell both render
+      // `host.notices`, and for a while both did it at the same time: the same sentence
+      // in a strip across the top and again behind the bell, dismissable in two places
+      // and reappearing from the other. The kernel's strip now stands down whenever a
+      // shell holds the mount, and this count is what says so.
+      await expect(page.getByText(/1 plugin failed to load/i)).toHaveCount(1);
+
       // The plugin's name and the thrown message are behind the notice's disclosure —
       // the summary counts, the detail diagnoses.
+      //
+      // The `li` is reached by walking **up** from the message rather than by filtering
+      // `li`s that contain it, and that is not a style preference: `shell-ui` renders
+      // its navbar as a list, so `li:has(text)` matches the navbar item *and* the notice
+      // row, document order puts the outer one first, and `.first()` then reached past
+      // the notice into whichever disclosure the panel happened to render first. The
+      // nearest ancestor is the notice, in the kernel's own strip and in the shell's
+      // panel alike.
       const details = page
-        .locator("li", { has: page.getByText(/1 plugin failed to load/i) })
+        .getByText(/1 plugin failed to load/i)
         .first()
+        .locator("xpath=ancestor::li[1]")
         .locator("details");
       await details.first().evaluate((element: HTMLDetailsElement) => {
         element.open = true;
@@ -150,6 +166,15 @@ test("a broken plugin fails alone, and safe mode boots past it", async ({ browse
   {
     const { context, page } = await freshPage(browser, base);
     try {
+      // Deny storage persistence, so the boot sequence raises a notice *before* the bare
+      // manager takes the mount (SPEC §6.4). It is the cheapest deterministic stand-in for
+      // the three that reach this screen that way — the storage warning, the plugin-list
+      // failure, and the update notice whose only `Reload` button lives in its actions.
+      await page.addInitScript(() => {
+        const storage = navigator.storage as unknown as Record<string, unknown>;
+        storage["persist"] = () => Promise.resolve(false);
+        storage["persisted"] = () => Promise.resolve(false);
+      });
       await page.goto("/?safe=bare");
       // Still needs a session, but no plugins at all — so `signIn`'s waits do not
       // apply: there is no shell and no loader line. The gate is the same one.
@@ -170,6 +195,14 @@ test("a broken plugin fails alone, and safe mode boots past it", async ({ browse
       // manager has a `<header>` of its own, so the `banner` landmark is not the tell.)
       await expect(page.locator(".shell-root")).toHaveCount(0);
       await expect(page.locator(".doclist")).toHaveCount(0);
+
+      // **And the kernel's notice strip is still on screen.** The strip stands down while
+      // a *shell* holds the mount, because the shell's bell draws the same list — but here
+      // the kernel itself holds it, `BareManager` has no notice UI, and no plugin loaded
+      // that could give it one. Keying that dedupe on "something holds the mount" blanked
+      // every notice on the one screen SPEC §6.1 calls the recovery path.
+      await expect(page.locator(".lm-notices")).toBeVisible();
+      await expect(page.getByText(/may evict offline data/i)).toBeVisible();
     } finally {
       await context.close();
     }

@@ -103,6 +103,22 @@ function ShellSection({ host }: { readonly host: KernelHost }): ReactNode {
               : (manifest?.bundleVersion ?? "not published")
         }
       />
+      {/*
+        The one question a person actually has, and it needs **both** numbers: the
+        server's manifest names the newest bundle, `window.shell.bundleVersion` names
+        the one this device booted. With either missing the honest answer is silence
+        rather than a guess, which is why this row appears only when both are there.
+      */}
+      {info.bundleVersion !== undefined && manifest?.bundleVersion !== undefined ? (
+        <Fact
+          label="Up to date"
+          value={
+            manifest.bundleVersion === info.bundleVersion
+              ? "yes — this device is running the published bundle"
+              : "no — a newer bundle is published; it installs at the next launch"
+          }
+        />
+      ) : null}
       {needsNewerShell ? (
         <Fact
           label="Update blocked"

@@ -27,6 +27,8 @@
 
 import type { FilterJson, SortKey } from "@kernel";
 
+import { withoutMachineDocuments } from "../../_shared/machine-docs.js";
+
 /** The value families the DSL compares. `"null"` is the bare-string literal. */
 export type ValueKind = "str" | "int" | "float" | "bool" | "date" | "null";
 
@@ -66,6 +68,16 @@ export interface FilterDraft {
   readonly clauses: readonly FilterClause[];
   /** Free text, matched case-insensitively against `title`. */
   readonly titleContains?: string;
+  /**
+   * Show machine-owned documents — the ones whose `fm.path` starts with `.`, such as
+   * the kernel's per-user settings documents (`_shared/machine-docs.ts`).
+   *
+   * Off by default, because a workspace of eleven notes reading "12 documents" is
+   * wrong about the only question the number answers. It is a **view** default and
+   * nothing more: the documents are ordinary documents, and every link to one keeps
+   * working whether this is on or off.
+   */
+  readonly includeMachine?: boolean;
 }
 
 /** Operators that take no value. */
@@ -114,15 +126,15 @@ export const SORT_OPTIONS: readonly FieldOption[] = [
 ];
 
 /**
- * `deleted_at` is **not** here on purpose.
+ * `deleted_at` is not in {@link SORT_OPTIONS} because the main list never shows a
+ * tombstone — but it **is** a sort key now, and the Trash view uses it.
  *
- * `core::filter::evaluator::resolve_field` returns `Missing` for that root, so the
- * client provably cannot reproduce the server's ordering, and `?sort=deleted_at` is a
- * 400 (`backend/CONTRACTS.md`, area http-routes). The Trash view therefore sorts by
- * `deleted_at` **in the client, after the query**, and says so in the UI. Closing this
- * needs a change to the shared core's field space, not a whitelist entry here.
+ * It used to be neither: `resolve_field` returned `Missing` for that root and
+ * `?sort=deleted_at` was a 400, so Trash ordered its rows in the component after the
+ * query, over whatever page came back. The shared core's field space reaches it now
+ * (`core::filter::ast::FIXED_ROOTS`), so the ordering is the engine's on both sides.
  */
-export const TRASH_SORT_IS_CLIENT_SIDE = true;
+export const TRASH_SORT_IS_CLIENT_SIDE = false;
 
 /** Canonical date shapes the core's `Date::parse` accepts, loosely — enough to refuse junk. */
 const DATE_PATTERN =
@@ -181,7 +193,10 @@ export function isFieldPathShaped(field: string): boolean {
   if (!segments.every((segment) => /^[A-Za-z0-9_-]{1,64}$/.test(segment))) return false;
   const root = segments[0] as string;
   if (root === "fm" || root === "plugins") return segments.length >= 2;
-  return segments.length === 1 && ["id", "title", "content", "created_at", "updated_at", "deleted"].includes(root);
+  return (
+    segments.length === 1 &&
+    ["id", "title", "content", "created_at", "updated_at", "deleted_at", "deleted"].includes(root)
+  );
 }
 
 /**
@@ -264,6 +279,21 @@ export function buildFilter(draft: FilterDraft): FilterJson | undefined {
   if (nodes.length === 0) return undefined;
   if (nodes.length === 1) return nodes[0];
   return draft.combine === "or" ? { or: nodes } : { and: nodes };
+}
+
+/**
+ * The filter the list actually runs: {@link buildFilter} plus the machine-document
+ * exclusion, unless the draft asks for them.
+ *
+ * Kept separate from `buildFilter` because the two answer different questions.
+ * `buildFilter` is "what did the user ask for", which is what decides whether an empty
+ * result says "no documents yet" or "nothing matches your filter"; this is "what goes
+ * on the wire". Folding the exclusion into `buildFilter` would make every list look
+ * filtered and turn the first-run empty state into the wrong sentence.
+ */
+export function buildEffectiveFilter(draft: FilterDraft): FilterJson | undefined {
+  const filter = buildFilter(draft);
+  return draft.includeMachine === true ? filter : withoutMachineDocuments(filter);
 }
 
 /** Clauses the builder dropped, so the UI can mark the rows instead of losing them silently. */

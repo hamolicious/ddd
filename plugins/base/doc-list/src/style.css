@@ -109,6 +109,8 @@
   gap: 4px;
   min-height: var(--lm-tap-target);
   font-size: 0.9em;
+  white-space: nowrap;
+  cursor: pointer;
 }
 
 .doclist-clauses {

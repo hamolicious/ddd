@@ -67,7 +67,7 @@ pub const BASE_PLUGIN_IDS: &[&str] = &[
 /// version (SPEC §6.4), so a drift here does not corrupt anything — it makes the server and
 /// the client disagree about which plugins are installable. Changing one without the other
 /// is the bug.
-pub const KERNEL_VERSION: &str = "1.0.0";
+pub const KERNEL_VERSION: &str = "1.1.0";
 
 /// Hook names a manifest's `backend.hooks` may contain (SPEC §6.3).
 pub const HOOK_NAMES: &[&str] = &["document.created", "document.changed", "document.deleted"];
@@ -304,7 +304,7 @@ impl PluginCapabilities {
     ///
     /// The rule, and the one exception: an approval may **narrow** anything, and may
     /// **extend `http.hosts`**. A plugin whose destination is admin-configured cannot know
-    /// its host when it is packaged — the calendar plugin ships `hosts: []` and the
+    /// its host when it is packaged — a feed importer ships `hosts: []` and the
     /// operator who enters a feed URL is the one who knows the host — and the alternative
     /// is asking that operator to repackage a zip. Widening anything else (a `documents`
     /// right, a public route the package never declared) is refused: those are the

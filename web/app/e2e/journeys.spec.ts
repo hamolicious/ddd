@@ -31,12 +31,12 @@ import {
 /**
  * What `plugins/base/dist` holds, plus the one example plugin the suite installs.
  *
- * The 14 of SPEC §6.5's table, plus M4's two — `calendar` (the backend-plugin proof) and
- * `agenda` (the pure-frontend one) — plus `alt-editor`. The two M4 plugins ship in the
- * same directory but are deliberately **not** in `BASE_PLUGIN_IDS`, so `?safe=1` still
- * boots only §6.5's set; `safe-mode.spec.ts` is what pins that.
+ * The 14 of SPEC §6.5's table plus `extra-task-states`. It was 17 while M4's two proof
+ * plugins (`calendar`, `agenda`) shipped alongside them; both were removed on 2026-09-24,
+ * so the base distribution and `BASE_PLUGIN_IDS` — what `?safe=1` boots — are once again
+ * the same fourteen. `safe-mode.spec.ts` is what pins that.
  */
-const EXPECTED_PLUGINS = 17;
+const EXPECTED_PLUGINS = 15;
 
 /**
  * `--lm-bg` as the `midnight` theme paints it (`plugins/base/themes/src/index.tsx`).
@@ -81,10 +81,10 @@ test("registering the first user boots the whole plugin distribution", async ({
   // First run seeds deletable welcome documents demonstrating frontmatter, `fm.path`,
   // task lists and a directive (SPEC §6.5).
   //
-  // Scoped to the main region, not the whole page: M4's `agenda` contributes sidebar
-  // panels that link to the same documents by title, so an unscoped lookup matches two
-  // buttons and fails on strict mode. The assertion always meant "`doc-list` is showing
-  // them", and the sidebar's copy is another plugin's business.
+  // Scoped to the main region, not the whole page. The assertion means "`doc-list` is
+  // showing them", and any sidebar plugin that links the same documents by title is
+  // another plugin's business — an unscoped lookup matches two buttons and fails on
+  // strict mode, which is how `agenda` (since removed) broke this once already.
   const main = page.locator("#shell-main");
   for (const title of [
     "Welcome to Life Manager",
@@ -228,7 +228,7 @@ test("dragging a document between folders splices fm.path and leaves the rest of
     "",
     "body stays put",
     "",
-    "%%% calendar",
+    "%%% reminders",
     "source-uid: keep-me@example.com",
     "%%%",
     "",
@@ -267,7 +267,7 @@ test("dragging a document between folders splices fm.path and leaves the rest of
   // The splice replaced exactly one value span. Everything else is byte-identical.
   expect(moved).toBe(original.replace("path: journeys/from", "path: journeys/to"));
   expect(moved).toContain("# where this note lives — keep this comment");
-  expect(moved).toContain("%%% calendar");
+  expect(moved).toContain("%%% reminders");
   expect(otherId).toBeTruthy();
 });
 

@@ -170,14 +170,37 @@ describe("compareRows", () => {
     expect(compareRows(newer, older, keys)).toBeLessThan(0);
   });
 
-  it("treats roots the shared core does not know as missing", () => {
-    // `resolve_field` knows id/title/content/deleted/created_at/updated_at/fm/plugins
-    // and nothing else, so neither side can order by these — and the client must
-    // not invent an order the server cannot reproduce.
+  it("orders by `deleted_at`, the root the Trash view sorts on", () => {
+    // `FIXED_ROOTS` gained `deleted_at` in the M5 polish precisely so Trash could be
+    // sorted newest-first by the server's own field space (SPEC §6.5). Until this
+    // mirror followed, `-deleted_at` was insertion order here and tombstone order
+    // there: the same query, two orders, no error anywhere.
+    const keys = [parseSortKey("-deleted_at")];
+    const a = row("a", { deleted: true, deleted_at: "2026-01-01T00:00:00.000Z" });
+    const b = row("b", { deleted: true, deleted_at: "2026-05-05T00:00:00.000Z" });
+    expect(compareRows(b, a, keys)).toBeLessThan(0);
+    expect(compareRows(a, b, keys)).toBeGreaterThan(0);
+  });
+
+  it("sorts a live document last on `deleted_at`, and never as null", () => {
+    // `deleted_at` is absent on a live row, and `FieldRef::Missing` sorts after every
+    // present value — which is what puts the live documents behind the tombstoned ones
+    // rather than in front of them.
     const keys = [parseSortKey("deleted_at")];
-    const a = row("a", { deleted: true, deleted_at: "2026-05-05T00:00:00.000Z" });
-    const b = row("b", { deleted: true, deleted_at: "2026-01-01T00:00:00.000Z" });
-    // By date, "a" would sort last; by the id tiebreaker it sorts first.
+    const live = row("a", { deleted_at: null });
+    const trashed = row("b", { deleted: true, deleted_at: "2026-01-01T00:00:00.000Z" });
+    expect(compareRows(trashed, live, keys)).toBeLessThan(0);
+    expect(compareRows(live, trashed, keys)).toBeGreaterThan(0);
+  });
+
+  it("treats roots the shared core does not know as missing", () => {
+    // `resolve_field` knows id/title/content/deleted/created_at/updated_at/deleted_at
+    // and fm/plugins — and nothing else, so neither side can order by these, and the
+    // client must not invent an order the server cannot reproduce.
+    const keys = [parseSortKey("materialized_version")];
+    const a = row("a", { materialized_version: "zzz" });
+    const b = row("b", { materialized_version: "aaa" });
+    // By value, "a" would sort last; by the id tiebreaker it sorts first.
     expect(compareRows(a, b, keys)).toBeLessThan(0);
     expect(compareRows(b, a, keys)).toBeGreaterThan(0);
   });

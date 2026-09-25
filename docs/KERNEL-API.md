@@ -61,13 +61,15 @@ Three rules worth knowing before the first line:
    without it.
 2. **Put the logic in a plain crate.** A `cdylib` that links the host imports cannot be
    unit-tested on the host target, so the testable half belongs in an ordinary library
-   crate beside it — `plugins/base/calendar/ics/` is the reference, with 58 host-target
-   tests behind `mise run plugin-test`.
+   crate beside it. `plugins/base/calendar/ics/` was the reference — a 58-test ICS parser
+   behind a `mise run plugin-test` task — until the calendar plugin was removed
+   (2026-09-24); the crate, its suite and that task went with it. The rule did not: the
+   first plugin that needs real logic brings both back.
 3. **Reconcile, never accumulate.** Hooks are at-most-once with no retry and cron skips
    missed runs (SPEC §6.3), so every run must be able to start from whatever state it
-   finds. The calendar plugin's sync is a full reconciliation for exactly this reason, and
-   it is also why an unchanged feed costs **zero** writes: `splice_section` drops edits
-   whose value already matches, so an idempotent daily sync writes no CRDT history at all.
+   finds. A feed sync should be a full reconciliation for exactly this reason, and that is
+   also why an unchanged feed costs **zero** writes: `splice_section` drops edits whose
+   value already matches, so an idempotent daily sync writes no CRDT history at all.
 
 Build and install both halves with `mise run wasm-plugins`; package one for a real install
 with `mise run plugin-package <id>`.
@@ -139,12 +141,11 @@ The contract is frozen and, apart from one surface, implemented.
   `document-surface`'s mode memory has the same shape and is harmless only because its
   fallback is the right answer anyway). If you find yourself writing "read it once, it will
   be there", it will not be.
-- `core.resolveTitle` / `core.normalizeDate` — **still throw.** The Wasm ABI exports
-  `resolve_title` and `normalize_date`, but `CoreBindings` does not surface them yet; that
-  is a `wasm`-area change (it owns both halves of the ABI).
+- `core.resolveTitle` / `core.normalizeDate` — **threw until 1.1.0.** The Wasm ABI
+  exported `resolve_title` and `normalize_date` all along; `CoreBindings` surfaced three of
+  its five exports, so the two methods raised `notImplemented`. Closed in 1.1.0 below.
 
-A plugin may compile against all of it today; the two `core` methods throw with a message
-naming what is missing.
+A plugin may compile against all of it today.
 
 ## 1.0.0 — M4 additions
 
@@ -165,7 +166,7 @@ Two `@kernel` surfaces that existed in M3 now have a server behind them:
 Two behaviours that are contract, not implementation detail, and that a frontend half
 should be written against:
 
-- **A machine-owned document is an ordinary document.** The calendar's event notes are
+- **A machine-owned document is an ordinary document.** An importer's event notes are
   markdown with frontmatter, in the workspace, searchable and editable like everything
   else; `created_by` is `plugin:<id>` and that is the only difference. A plugin reading
   them uses `documents.query`, not a plugin-specific channel.
@@ -173,3 +174,53 @@ should be written against:
   is expected to reconcile around a human's tombstone rather than re-create it, and never
   to rewrite a document it did not create — the host refuses that outright
   (`rewrite_document` checks `created_by`).
+
+## 1.1.0 — polish pass (2026-09-25)
+
+A **minor**, by this file's own rule: one optional field added, nothing removed and no
+signature moved. `"kernel": "^1.0"` still resolves. `KERNEL_VERSION` in
+`backend/crates/server/src/plugins.rs` moved with it — the two are one number and nothing
+checks that automatically.
+
+- **`SectionLineEdit` gained `remove?: boolean`**, and with it the meaning of `value`
+  changed: **`value` is now written literally, `null` included**, and `remove: true` is how
+  a key's line is deleted.
+
+  The old shape could not express the difference. `FmValue` already contains `null`, so one
+  field could not mean both "write this" and "write nothing", and the documented reading —
+  `value: null` deletes — spent the only spelling JSON has for an explicit null on
+  deletion. The strict YAML subset of SPEC §3.4 *has* a `null` scalar, `core::splice`'s own
+  `SectionLineEdit` is an `Option<Value>` that distinguishes the two, and the conformance
+  corpus exercises both cases; only the `@kernel` shape could not say which was meant.
+
+  **If you wrote `{ key, value: null }` to remove a key, it now writes `key: null`.** Add
+  `remove: true`. Nothing in the base distribution did — the only caller was the kernel's
+  own `settings`, where `settings.remove(key)` and `settings.set(key, null)` had been the
+  same call and are now the two different things they read as.
+
+  **This is a behaviour break inside a minor, and the gate at the top of this file cannot
+  catch it.** The rule there is about the *shape* of the surface — nothing was removed and
+  no signature moved, so `"kernel": "^1.0"` resolves, `KERNEL_API_MAJOR` is still `1`, and
+  a plugin built against 1.0.0 installs and passes the loader's boot re-check. The two
+  spellings are byte-identical on the way in, so no check could tell them apart even if one
+  wanted to. It shipped as a minor anyway because the alternative was a `2.0.0` that
+  re-declared a contract published days earlier for one field's semantics, and because
+  every consumer in existence is in this repository and was migrated in the same commit.
+
+  What stands in for the gate: `kernel.documents.splice.spliceSection` **warns, once per
+  plugin and key**, when a `null` arrives with no `remove` field at all — the write follows
+  the new contract, and the author is told at the call site that made it. Pass
+  `remove: false` alongside the null to say you meant it. If a plugin outside this
+  repository ever ships against 1.0.0, that warning is the migration note; the next
+  semantic change to an existing field is a major, because there will then be somebody to
+  break.
+
+- **`core.resolveTitle` and `core.normalizeDate` work.** Same signatures, no longer
+  throwing: `CoreBindings` carries all five Wasm exports now, so a plugin can resolve a
+  title without a `parseDocument` round trip and spell a date the way the server's
+  materialization will (SPEC §3.4) — which is what makes a locally-derived `fm.date` sort
+  the same on this client as on the server.
+
+Not `@kernel`, but in the same pass and visible to a plugin author replacing a base
+plugin: `DocumentModeProps` (in `plugins/base/_shared/points.ts`, the base distribution's
+own file) gained an optional `line?: number`, the 1-based line of `#/doc/<id>?line=42`.

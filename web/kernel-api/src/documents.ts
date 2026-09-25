@@ -132,10 +132,33 @@ export interface TextEdit {
   readonly text: string;
 }
 
-/** One line of a `%%%` section. `value: null` removes the key's line. */
+/**
+ * One line of a `%%%` section.
+ *
+ * `value` is written literally — **`null` writes the YAML `null`**, which the strict
+ * subset of SPEC §3.4 has and this shape previously had no way to spell. To delete a
+ * key's line instead, set {@link SectionLineEdit.remove}; `value` is then ignored and
+ * may be anything.
+ *
+ * `remove` is an additive optional field (`web/CONTRACTS.md`: the one exception to the
+ * frozen surface). It exists because a single `value` field cannot mean both "write
+ * this" and "write nothing": `FmValue` already contains `null`, so the older reading —
+ * `value: null` deletes — spent the only spelling JSON has for an explicit null on
+ * deletion, and the algorithm underneath (`core::splice::SectionLineEdit`, an
+ * `Option<Value>`) could express a distinction the contract could not.
+ */
 export interface SectionLineEdit {
   readonly key: string;
   readonly value: FmValue | null;
+  /**
+   * Delete the key's line. A key that is not there is not an error.
+   *
+   * **Spell it `false` when you are writing a `null` on purpose.** Under kernel 1.0.0 a
+   * bare `{ key, value: null }` *deleted* the line, and the two spellings are identical on
+   * the way in, so the kernel writes the null (this contract) and warns once, naming the
+   * change. `remove: false` is how a caller says which of the two they meant.
+   */
+  readonly remove?: boolean;
 }
 
 /** Anything a splice can be aimed at: an id, or an already-open document. */

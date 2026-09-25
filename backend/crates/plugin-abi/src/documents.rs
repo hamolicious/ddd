@@ -191,6 +191,16 @@ pub(crate) fn default_true() -> bool {
 /// `remove` and `value` are separate on purpose: `{"key":"k","value":null}` writes the
 /// YAML line `k: null`, while `{"key":"k","remove":true}` deletes the line. Collapsing
 /// them onto one nullable field is how a plugin ends up unable to store a null.
+///
+/// **`value` therefore needs [`deserialize_present`], not plain `Option`.** serde maps a
+/// JSON `null` onto `Option<T>` as `None`, which is the same thing an *absent* field
+/// produces — so the wire form this doc comment specifies for "write a literal null"
+/// deserialized to "no value at all" and the host refused it as
+/// [`crate::ErrorCode::InvalidArgument`]. A backend plugin could not write a null into its
+/// own section at all, while serialization (and the test beside it) looked right, because
+/// only one direction was ever exercised. The three states on the wire are *absent*
+/// (`None`), *present and null* (`Some(Value::Null)`) and *present with a value*
+/// (`Some(_)`), and the host's `section_edits` distinguishes all three.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SectionEdit {
     /// `^[A-Za-z0-9_-]{1,64}$` (`core::limits::is_valid_key`).
@@ -198,11 +208,31 @@ pub struct SectionEdit {
     /// A scalar or a flow sequence — the strict YAML subset of SPEC §3.4, serialized by
     /// the shared core's `to_yaml_inline`. Nested maps are not representable in a
     /// one-key-per-line section and are [`crate::ErrorCode::InvalidArgument`].
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ///
+    /// `null` here is a *value* (the YAML `null` scalar), not an omission; see the type's
+    /// doc comment.
+    #[serde(
+        default,
+        deserialize_with = "deserialize_present",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub value: Option<Value>,
     /// Delete the key's line.
     #[serde(default)]
     pub remove: bool,
+}
+
+/// `Some(value)` for any field that is **present**, `null` included.
+///
+/// The counterpart to `#[serde(default)]`: absence is answered by the default (`None`) and
+/// never reaches this function, so everything that does get here was written by the caller
+/// and is `Some`. Without it `Option<Value>` folds "not sent" and "sent as null" together,
+/// and a distinction the wire format has is one the type cannot read back.
+fn deserialize_present<'de, D>(deserializer: D) -> Result<Option<Value>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Value::deserialize(deserializer).map(Some)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -290,6 +320,42 @@ mod tests {
             serde_json::to_string(&removed).unwrap(),
             r#"{"key":"source_uid","remove":true}"#
         );
+    }
+
+    /// The direction the test above did not cover, and the one the host actually runs.
+    ///
+    /// Serialization was asserted and deserialization was assumed, so `{"value":null}`
+    /// came back as `None` — indistinguishable from an absent `value` — and
+    /// `pluginhost::host_fns::section_edits` refused it with "has no `value` and is not a
+    /// `remove`". Every byte on the wire was right; only the type reading it back was
+    /// lossy, which is exactly the shape a one-directional test cannot see.
+    #[test]
+    fn a_section_edit_reads_back_the_null_it_wrote() {
+        let wire = r#"{"key":"source_uid","value":null,"remove":false}"#;
+        let parsed: SectionEdit = serde_json::from_str(wire).unwrap();
+        assert_eq!(
+            parsed.value,
+            Some(Value::Null),
+            "a present `null` is the YAML null scalar, not an omission"
+        );
+        assert!(!parsed.remove);
+        assert_eq!(serde_json::to_string(&parsed).unwrap(), wire);
+
+        // Absent stays absent: `#[serde(default)]` answers it before the deserializer runs.
+        let removal: SectionEdit = serde_json::from_str(r#"{"key":"k","remove":true}"#).unwrap();
+        assert_eq!(removal.value, None);
+        assert!(removal.remove);
+
+        // And neither: still `None`, so the host can go on refusing an edit that says
+        // nothing rather than guessing which of the two it meant.
+        let neither: SectionEdit = serde_json::from_str(r#"{"key":"k"}"#).unwrap();
+        assert_eq!(neither.value, None);
+        assert!(!neither.remove);
+
+        // A real value round-trips unchanged, which is what stops the fix above from
+        // being "everything is now Some".
+        let scalar: SectionEdit = serde_json::from_str(r#"{"key":"k","value":"v"}"#).unwrap();
+        assert_eq!(scalar.value, Some(Value::String("v".into())));
     }
 
     #[test]

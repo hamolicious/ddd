@@ -49,12 +49,21 @@ pub const MAX_LIMIT: u32 = 500;
 ///
 /// This list must stay a subset of the shared core's addressable roots
 /// ([`life_manager_core::filter::ast::FieldPath`]), because every token also goes
-/// through `SortKey::parse`: `deleted_at` and `materialized_version` used to be
-/// advertised here and always 400'd, since neither is a field of the projection
-/// the DSL addresses (SPEC §4.1). Sorting Trash by deletion time needs
-/// `deleted_at` added to the projection and to the core's field space — a
-/// cross-crate change, not a whitelist entry.
-pub const SORTABLE_FIELDS: &[&str] = &["id", "title", "created_at", "updated_at"];
+/// through `SortKey::parse`: `deleted_at` and `materialized_version` were once
+/// advertised here and always 400'd, since neither was a field of the projection
+/// the DSL addresses (SPEC §4.1).
+///
+/// `deleted_at` is now genuinely one of them — the cross-crate change that note
+/// asked for, made in `core::filter` (an addressable root, a `Row` field, a
+/// `Column::Date` in the Mongo compiler). It is what Trash sorts by: the view is
+/// "what did I delete, most recent first" (SPEC §6.5), and without a server-side
+/// sort key that order could only be imposed on a page *after* it came back, so
+/// the newest deletion was not reliably on the first page. `documents_deleted_at`
+/// already indexed the column for the Trash *filter*, so the sort is free.
+///
+/// `materialized_version` is still absent and stays absent: it is a state-vector
+/// hash, and ordering by it is ordering by noise.
+pub const SORTABLE_FIELDS: &[&str] = &["id", "title", "created_at", "updated_at", "deleted_at"];
 
 /// Roots whose sub-paths may be sorted on: materialized frontmatter and machine
 /// sections (`fm.due`, `plugins.calendar.start`).
@@ -731,11 +740,39 @@ mod tests {
         assert!(sort_field_allowed("updated_at"));
         assert!(sort_field_allowed("created_at"));
         assert!(sort_field_allowed("id"));
+        // Trash orders by deletion time (SPEC §6.5).
+        assert!(sort_field_allowed("deleted_at"));
         // Not sortable: huge text, unknown roots, empty.
         assert!(!sort_field_allowed("content"));
         assert!(!sort_field_allowed("crdt"));
         assert!(!sort_field_allowed("password_hash"));
+        assert!(!sort_field_allowed("materialized_version"));
         assert!(!sort_field_allowed(""));
+    }
+
+    /// The whitelist and the core's field space have to agree, or a field that
+    /// passes [`sort_field_allowed`] 400s one line later in `SortKey::parse` —
+    /// which is exactly how `deleted_at` used to be advertised-and-refused.
+    #[test]
+    fn every_advertised_sort_field_survives_the_core() {
+        for field in SORTABLE_FIELDS {
+            let key = SortKey::parse(field).unwrap_or_else(|err| {
+                panic!("`{field}` is advertised but the core refuses it: {err}")
+            });
+            filter_mongo::compile_sort(std::slice::from_ref(&key)).unwrap_or_else(|err| {
+                panic!("`{field}` is advertised but does not compile to a Mongo sort: {err}")
+            });
+        }
+        // And the other direction, for the two the core accepts but sorting must not:
+        // `content` is megabytes of text and `deleted` is a derived boolean whose stored
+        // column is a timestamp.
+        for field in ["content", "deleted"] {
+            let key = SortKey::parse(field).expect("the core addresses it");
+            assert!(
+                filter_mongo::compile_sort(std::slice::from_ref(&key)).is_err(),
+                "`{field}` must not be a sort key"
+            );
+        }
     }
 
     #[test]

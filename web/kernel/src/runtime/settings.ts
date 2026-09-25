@@ -91,6 +91,7 @@ import {
   type DocumentRow,
   type FilterJson,
   type QuerySubscription,
+  type SectionLineEdit,
   type SettingsApi,
   type SettingsSchema,
   type SettingsValue,
@@ -113,6 +114,18 @@ export interface SettingsHostOptions {
 }
 
 type Values = Record<string, SettingsValue>;
+
+/**
+ * One pending write, in `@kernel`'s own `SectionLineEdit` spelling.
+ *
+ * `remove` is what distinguishes `settings.remove(key)` from `settings.set(key, null)`,
+ * and the two really are different: the strict YAML subset has a `null` scalar
+ * (SPEC §3.4), so storing one is a legitimate thing for a plugin to ask for, and
+ * removing the key is what makes a *declared default* apply again. Before
+ * `SectionLineEdit` could say which was meant, both spelled `value: null` and `set`
+ * silently did what `remove` does.
+ */
+type SettingsEdit = SectionLineEdit & { readonly value: SettingsValue | null };
 
 /** The local query that finds this user's settings document(s). */
 export function settingsFilter(userId: string): FilterJson {
@@ -188,8 +201,13 @@ export class SettingsHost {
       get: <T extends SettingsValue>(key: string): T | undefined =>
         host.#effective(pluginId)[key] as T | undefined,
       all: () => host.#effective(pluginId),
-      set: (key: string, value: SettingsValue) => host.#write(pluginId, [{ key, value }]),
-      remove: (key: string) => host.#write(pluginId, [{ key, value: null }]),
+      // `remove: false` is spelled out rather than left off, and it is not noise: a bare
+      // `value: null` is the one spelling kernel 1.0.0 and 1.1.0 disagree about, so the
+      // splice helper warns about it on a plugin's behalf. `set(key, null)` means the
+      // null, and saying so keeps the kernel from warning about its own call.
+      set: (key: string, value: SettingsValue) =>
+        host.#write(pluginId, [{ key, value, remove: false }]),
+      remove: (key: string) => host.#write(pluginId, [{ key, value: null, remove: true }]),
       subscribe: (listener): Unsubscribe => {
         const listeners = host.#listeners.get(pluginId) ?? new Set();
         host.#listeners.set(pluginId, listeners);
@@ -311,7 +329,7 @@ export class SettingsHost {
    */
   async #write(
     pluginId: string,
-    edits: readonly { readonly key: string; readonly value: SettingsValue | null }[],
+    edits: readonly SettingsEdit[],
   ): Promise<void> {
     for (const edit of edits) {
       if (!isValidKey(edit.key)) {
@@ -320,7 +338,7 @@ export class SettingsHost {
           { pluginId, key: edit.key },
         );
       }
-      if (edit.value !== null && asSettingsValue(edit.value) === undefined) {
+      if (edit.remove !== true && asSettingsValue(edit.value) === undefined) {
         throw new ContractViolationError(
           `settings value for "${edit.key}" must be a string, number, boolean, null or a flat list`,
           { pluginId, key: edit.key },
@@ -341,8 +359,8 @@ export class SettingsHost {
     // should not have to wait a round trip to read its own value back.
     const optimistic: Values = { ...this.#stored.get(pluginId) };
     for (const edit of edits) {
-      if (edit.value === null) delete optimistic[edit.key];
-      else optimistic[edit.key] = edit.value;
+      if (edit.remove === true) delete optimistic[edit.key];
+      else optimistic[edit.key] = edit.value as SettingsValue;
     }
     this.#stored.set(pluginId, optimistic);
     this.#emit(pluginId);
@@ -374,7 +392,7 @@ export class SettingsHost {
       try {
         await splice.spliceSection(
           id,
-          stale.map((key) => ({ key, value: null })),
+          stale.map((key) => ({ key, value: null, remove: true })),
         );
       } catch (error) {
         this.#warn(
@@ -391,7 +409,7 @@ export class SettingsHost {
    */
   async #create(
     pluginId: string,
-    edits: readonly { readonly key: string; readonly value: SettingsValue | null }[],
+    edits: readonly SettingsEdit[],
   ): Promise<void> {
     if (this.#creating) {
       const id = await this.#creating;
@@ -404,7 +422,9 @@ export class SettingsHost {
       spliceSection(
         base,
         pluginId,
-        edits.filter((edit) => edit.value !== null).map((edit) => ({ key: edit.key, value: edit.value })),
+        edits
+          .filter((edit) => edit.remove !== true)
+          .map((edit) => ({ key: edit.key, value: edit.value })),
       ),
     );
     this.#creating = this.options.documents.create({ text });

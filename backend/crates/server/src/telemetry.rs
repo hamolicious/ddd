@@ -56,7 +56,7 @@ pub mod names {
     ///
     /// All of them are labelled `plugin="<id>"`, and the call metrics additionally by
     /// `kind="hook"|"cron"|"route"|"call"|"event"|"init"` — which is what makes "the
-    /// calendar's cron is slow" and "something is hammering a plugin route" different
+    /// cron of plugin X is slow" and "something is hammering a plugin route" different
     /// lines on a dashboard rather than one average.
     pub const PLUGIN_CALLS: &str = "lm_plugin_calls_total";
     pub const PLUGIN_CALL_LATENCY: &str = "lm_plugin_call_duration_seconds";

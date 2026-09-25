@@ -41,6 +41,10 @@ pub struct ReadyReport {
     /// The frontend plugin registry: count, root, and anything it refused to load.
     /// Informational — see [`check_plugins`] for why it never fails the probe.
     pub plugins: CheckResult,
+    /// The **backend** plugin host: how many modules are active, how many the circuit
+    /// breaker has open, how many cron schedules are armed. Informational for the same
+    /// reason `plugins` is — see [`check_plugin_host`].
+    pub plugin_host: CheckResult,
     pub schema_version: i32,
     pub uptime_secs: u64,
     pub version: &'static str,
@@ -99,14 +103,16 @@ pub async fn readyz(State(state): State<AppState>) -> (StatusCode, Json<ReadyRep
     let mongo = check_mongo(&state).await;
     let migrations = check_migrations(&state);
     let plugins = check_plugins(&state);
+    let plugin_host = check_plugin_host(&state);
 
-    let ready = mongo.ok && migrations.ok && plugins.ok;
+    let ready = mongo.ok && migrations.ok && plugins.ok && plugin_host.ok;
 
     let report = ReadyReport {
         ready,
         mongo,
         migrations,
         plugins,
+        plugin_host,
         schema_version: state.readiness.schema_version.load(Ordering::Relaxed),
         uptime_secs: state.readiness.started_at.elapsed().as_secs(),
         version: crate::VERSION,
@@ -188,6 +194,43 @@ fn check_plugins(state: &AppState) -> CheckResult {
     }
     CheckResult::ok().with_detail(format!(
         "{count} plugins loaded; {problems} not loaded (see the server log or admin)"
+    ))
+}
+
+/// The backend plugin host (SPEC §6.3): active modules, breaker state, armed cron.
+///
+/// The gap `backend/CONTRACTS.md` left open after M4 — the frontend registry's counts were
+/// on `/readyz` and the host's were only on `/metrics`. An operator looking at one
+/// unauthenticated endpoint to answer "did this deploy come up whole" could see the
+/// fourteen frontend halves and nothing about whether the backend halves compiled, and a
+/// plugin the circuit breaker had opened (SPEC §6.3: five consecutive failures) was
+/// invisible without a Prometheus query.
+///
+/// **Counts, and nothing identifying** — the same rule [`check_plugins`] documents at
+/// length. Which plugin the breaker opened, and why, are admin-authenticated facts
+/// (`GET /api/admin/plugins`, `.../logs`); this body is world-readable in the documented
+/// Compose deployment, so it carries numbers only.
+///
+/// **It never fails the probe**, also for the same reason. A breaker that opened on a
+/// misbehaving feed importer says nothing about whether this replica should receive
+/// traffic — it serves the API, the socket and every other plugin exactly as before, and
+/// taking it out of rotation would turn one broken plugin into an outage.
+/// `lm_plugins_disabled` is the alert; this is the human-readable echo of it.
+///
+/// [`PluginHost::existing`] rather than `get`: a probe must not create the thing it
+/// reports on. A `None` means the host has not been built yet — pre-boot, or
+/// `DISABLE_PLUGINS=1`, which is a supported recovery mode and not a fault.
+fn check_plugin_host(state: &AppState) -> CheckResult {
+    if state.config.disable_plugins {
+        return CheckResult::skipped("DISABLE_PLUGINS=1: no backend plugins run");
+    }
+    let Some(host) = crate::pluginhost::PluginHost::existing(state) else {
+        return CheckResult::skipped("the plugin host has not started yet");
+    };
+    let stats = host.stats();
+    CheckResult::ok().with_detail(format!(
+        "{} active, {} breaker-open, {} cron schedules, {} instances, {} calls in flight",
+        stats.active, stats.disabled, stats.cron_jobs, stats.instances, stats.calls_in_flight
     ))
 }
 
@@ -277,6 +320,23 @@ mod tests {
         assert!(
             !plugin_detail.contains('/'),
             "/readyz must not disclose the plugin directory: {plugin_detail}"
+        );
+        // The backend host reports alongside the frontend registry, on the same terms:
+        // counts only, and never a reason to take the replica out of rotation.
+        assert_eq!(report["plugin_host"]["ok"], true);
+        let host_detail = report["plugin_host"]["detail"]
+            .as_str()
+            .expect("the plugin host check says what it found")
+            .to_string();
+        assert!(
+            host_detail.contains("breaker-open")
+                || host_detail.contains("DISABLE_PLUGINS")
+                || host_detail.contains("has not started"),
+            "the plugin host check must say what it found: {host_detail}"
+        );
+        assert!(
+            !host_detail.contains('/'),
+            "/readyz must not disclose plugin paths or ids: {host_detail}"
         );
         assert_eq!(
             report["schema_version"],

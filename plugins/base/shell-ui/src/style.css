@@ -312,6 +312,15 @@
   background: var(--lm-bg-subtle);
   overflow-y: auto;
   overscroll-behavior: contain;
+  /*
+   * A query container, so a panel can lay itself out against the width it actually
+   * has rather than against the viewport's. Panels are contributed by other plugins
+   * and the shell is the only thing that knows how wide it made them — `properties`
+   * already ships `@container (max-width: 20rem)` rules that could not fire because
+   * nobody had declared a container, so on a 288 px sidebar its rows kept a
+   * two-column grid meant for a page.
+   */
+  container-type: inline-size;
 }
 
 /* `hidden` is how the shell collapses the sidebar; the default `display: block`
@@ -425,6 +434,36 @@
     gap: 0;
   }
 
+  /*
+   * Two rows on a phone. The end group does not shrink — the toggle, the notices and
+   * the sync state earn their width first — so on one row it pushed the navbar past
+   * the viewport (the whole page then scrolled sideways) and squeezed the start group
+   * to zero, which is where "New document" and the search box live. Giving the start
+   * group a full-width second row costs one tap target of height and makes both of
+   * them reachable again.
+   */
+  .shell-navbar {
+    /* The nav is two rows tall now; the toggle belongs beside the first, not
+       floating between them. */
+    align-items: flex-start;
+  }
+
+  .shell-nav {
+    flex-wrap: wrap;
+  }
+
+  .shell-nav-list[data-side="start"] {
+    order: 2;
+    flex: 1 1 100%;
+    gap: calc(var(--lm-space) * 0.5);
+  }
+
+  /* A label the shell renders keeps all of itself; a plugin's own widget takes what
+     is left (the list scrolls if even that is not enough). */
+  .shell-nav-list[data-side="start"] > .shell-nav-item[data-kind="button"] {
+    flex: 0 0 auto;
+  }
+
   /* Icons carry the navbar on a phone; the label stays for screen readers. */
   .shell-nav-button .shell-nav-icon + .shell-nav-label {
     position: absolute;
@@ -438,6 +477,16 @@
 
   .shell-sync-label {
     font-size: 0.85em;
+  }
+
+  /*
+   * "Synced" is the one state whose word adds nothing: the dot says it, and the
+   * status keeps its accessible name from `title` either way. The states that
+   * actually change what a user should do — "Offline", "Error", and the separate
+   * "n unsynced" chip — keep their words (see indicators.tsx).
+   */
+  .shell-sync[data-tone="ok"] .shell-sync-label {
+    display: none;
   }
 
   .shell-sync-pending {

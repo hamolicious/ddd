@@ -88,7 +88,13 @@ function unavailableCore(reason: string): CoreBindings {
   const fail = (): never => {
     throw new Error(`the shared Wasm core is unavailable (${reason}); run \`mise run wasm\``);
   };
-  return { parseDocument: fail, evaluateFilter: fail, semanticsVersion: () => -1 };
+  return {
+    parseDocument: fail,
+    evaluateFilter: fail,
+    resolveTitle: fail,
+    normalizeDate: fail,
+    semanticsVersion: () => -1,
+  };
 }
 
 async function boot(): Promise<void> {

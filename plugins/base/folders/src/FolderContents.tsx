@@ -170,7 +170,9 @@ export function FolderContents({
       )}
 
       <details className="folders-json">
-        <summary>Filter (the shared DSL, SPEC §4.2)</summary>
+        {/* Same wording as the document list's own disclosure: a spec section number is
+            a note to whoever builds this, not to whoever uses it. */}
+        <summary>Show this filter as the query language sees it</summary>
         <pre>{JSON.stringify(query.filter, null, 2)}</pre>
       </details>
     </section>

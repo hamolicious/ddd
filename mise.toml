@@ -117,7 +117,7 @@ depends = ["plugins"]
 run = "node web/scripts/build-wasm-plugins.mjs"
 
 [tasks.plugin-package]
-description = "M4: package a built plugin as the installable .zip of SPEC §6.2 (`mise run plugin-package calendar`)"
+description = "M4: package a built plugin as the installable .zip of SPEC §6.2 (`mise run plugin-package doc-list`)"
 # Packages the *built* directory (`plugins/base/dist/<id>/<version>`), which is already the
 # installed layout, and writes exactly the allowlist the installer accepts — manifest,
 # declared wasm module, `frontend/**`. A `zip -r` of the same directory is not equivalent:
@@ -151,12 +151,16 @@ run = [
   "cargo clippy --manifest-path plugins/Cargo.toml --workspace --all-targets --target wasm32-unknown-unknown -- -D warnings",
 ]
 
-[tasks.plugin-test]
-description = "M4: host-target unit tests for the pure plugin crates (the ICS parser)"
-# A wasm plugin crate cannot be unit-tested on the host — it links the host imports — so
-# the logic worth testing lives in plain crates and is tested here. The explicit `--target`
-# overrides the wasm32 default in `plugins/.cargo/config.toml`.
-run = "cargo test --manifest-path plugins/Cargo.toml -p calendar-ics --target x86_64-unknown-linux-gnu"
+# REMOVED (2026-09-24): `plugin-test` ran the host-target unit suite of `calendar-ics`, the
+# pure parser crate beside the calendar plugin's wasm glue. The calendar plugin is gone and
+# so is that crate, and `plugins/` now holds exactly one member — `examples/hello-backend`,
+# a `cdylib` linking Extism's host imports, which *cannot* be tested on the host target.
+# There is nothing left for this task to run, and a task that resolves to zero tests is
+# worse than no task: it reports green.
+#
+# The pattern it enforced is still the right one and is documented in `backend/HOST-ABI.md`:
+# put a plugin's real logic in a plain crate beside the wasm glue and unit-test it on the
+# host. Bring this task back with the first plugin that has such a crate.
 
 [tasks.plugin-smoke]
 description = "M4: build the hello-world plugin and load it in a minimal Extism host (the ABI's end-to-end check)"

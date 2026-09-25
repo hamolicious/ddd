@@ -305,8 +305,8 @@ async fn a_missing_module_fails_activation_without_publishing_anything() {
 }
 
 /// A plugin with no `backend` in its manifest is not an error worth a breaker entry: most
-/// plugins have no backend half, and `agenda` shipping without one is the point of SPEC §9
-/// M4.
+/// plugins have no backend half — a plugin needs one only for cron, outbound HTTP or a
+/// webhook (SPEC §6.3), and today none of the base distribution does.
 #[tokio::test]
 async fn a_plugin_without_a_backend_half_is_simply_not_active() {
     if skip() {
@@ -676,6 +676,27 @@ async fn a_splice_writes_only_its_own_section_and_only_when_something_changed() 
     let updated = harness.state.docs.text(&human.id).await.expect("the text");
     assert!(updated.contains("source_uid: def@example.com"));
     assert!(!updated.contains("abc@example.com"));
+
+    // **A literal null is a value, and this is the only test that proves it crosses the
+    // boundary.** `SectionEdit.value` is an `Option<Value>`, and serde folds a JSON `null`
+    // onto `None` — the same thing an absent field produces — so the wire form
+    // `HOST-ABI.md` and the ABI's own doc comment specify for "write `k: null`" arrived as
+    // "no value at all" and the host refused it with `invalid_argument`. The ABI test beside
+    // the type only ever serialized, which is exactly how a lossy read-back survives.
+    let nulled = harness
+        .invoke(
+            "splice",
+            json!({ "id": human.id, "key": "source_uid", "value": null }),
+        )
+        .await
+        .expect("splice_section")
+        .expect("a value");
+    assert_eq!(nulled["edits_applied"], json!(1));
+    let nulled_text = harness.state.docs.text(&human.id).await.expect("the text");
+    assert!(
+        nulled_text.contains("source_uid: null"),
+        "a null must be written as the YAML null scalar, not refused: {nulled_text}"
+    );
 
     harness.cleanup().await;
 }

@@ -607,6 +607,108 @@ export function isBareHost(host: string): boolean {
   return /^[A-Za-z0-9.-]+$/.test(value);
 }
 
+/**
+ * What the server's outbound IP policy will make of one `http.hosts` entry —
+ * `undefined` when it is an ordinary public name and there is nothing to say.
+ *
+ * The approval screen used to print one blanket sentence, "Loopback, link-local,
+ * private and metadata addresses stay blocked regardless", next to *any* added host.
+ * It was wrong twice over: wrong for `example.com`, where there was nothing to warn
+ * about and the sentence read as a threat; and wrong for `10.0.0.5`, because the
+ * operator's `PLUGIN_HTTP_ALLOW_CIDRS` is exactly the knob that unblocks private
+ * ranges (SPEC §6.2: "admin-configurable allowlist"), so "regardless" was a promise
+ * the server does not keep. The one range it *does* keep is the cloud metadata
+ * addresses, which `address_allowed` refuses before it consults the allowlist at all.
+ *
+ * This is a **hint about a literal**, deliberately, and never a verdict. The server
+ * resolves the name and pins the address it got (`resolve_pinned`); a name this
+ * function calls ordinary can still resolve into a refused range, and that refusal is
+ * the enforcement. Nothing here gates the approve button.
+ */
+export type HostPolicyNote =
+  | { readonly kind: "metadata"; readonly message: string }
+  | { readonly kind: "loopback"; readonly message: string }
+  | { readonly kind: "private"; readonly message: string }
+  | { readonly kind: "internal-name"; readonly message: string };
+
+/** The cloud metadata addresses `address_allowed` refuses ahead of the allowlist. */
+const METADATA_LITERALS = new Set(["169.254.169.254", "169.254.170.2", "100.100.100.200"]);
+/** Names that resolve to a metadata endpoint on the providers that publish one. */
+const METADATA_NAMES = new Set(["metadata.google.internal", "metadata", "instance-data"]);
+
+export function hostPolicyNote(host: string): HostPolicyNote | undefined {
+  const value = host.trim().toLowerCase();
+  if (value === "") return undefined;
+
+  if (METADATA_LITERALS.has(value) || METADATA_NAMES.has(value)) {
+    return {
+      kind: "metadata",
+      message:
+        "a cloud metadata endpoint — the server refuses these before it consults any " +
+        "allowlist, so this host can never be reached.",
+    };
+  }
+
+  if (value === "localhost" || value.endsWith(".localhost") || isLoopbackLiteral(value)) {
+    return {
+      kind: "loopback",
+      message:
+        "loopback — blocked unless the operator has listed it in `PLUGIN_HTTP_ALLOW_CIDRS`. " +
+        "Note that loopback here is the *server's* own machine, not the user's.",
+    };
+  }
+
+  if (isPrivateLiteral(value)) {
+    return {
+      kind: "private",
+      message:
+        "a private, link-local or carrier-grade-NAT address — blocked unless the operator " +
+        "has listed it in `PLUGIN_HTTP_ALLOW_CIDRS`.",
+    };
+  }
+
+  if (value.endsWith(".internal") || value.endsWith(".local")) {
+    return {
+      kind: "internal-name",
+      message:
+        "an internal name. Whether it works depends on what it resolves to: a private " +
+        "address is blocked unless the operator has listed it in `PLUGIN_HTTP_ALLOW_CIDRS`.",
+    };
+  }
+
+  return undefined;
+}
+
+function isLoopbackLiteral(value: string): boolean {
+  if (value === "::1" || value === "0.0.0.0" || value === "::") return true;
+  const octets = ipv4Octets(value);
+  return octets !== undefined && (octets[0] === 127 || octets[0] === 0);
+}
+
+function isPrivateLiteral(value: string): boolean {
+  // IPv6 unique-local (fc00::/7) and link-local (fe80::/10), enough of them to
+  // recognise what somebody would actually type.
+  if (/^f[cd][0-9a-f]{0,2}:/.test(value) || /^fe[89ab][0-9a-f]?:/.test(value)) return true;
+  const octets = ipv4Octets(value);
+  if (octets === undefined) return false;
+  const [a = 0, b = 0] = octets;
+  return (
+    a === 10 ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 169 && b === 254) ||
+    (a === 100 && b >= 64 && b <= 127)
+  );
+}
+
+/** The four octets of a dotted-quad literal, or `undefined` for anything else. */
+function ipv4Octets(value: string): readonly number[] | undefined {
+  const parts = value.split(".");
+  if (parts.length !== 4) return undefined;
+  const octets = parts.map((part) => (/^\d{1,3}$/.test(part) ? Number(part) : -1));
+  return octets.every((octet) => octet >= 0 && octet <= 255) ? octets : undefined;
+}
+
 /** `"a.test, b.test"` → `["a.test", "b.test"]`, blanks dropped. */
 export function parseHostList(raw: string): readonly string[] {
   return raw

@@ -43,21 +43,48 @@ import {
 } from "./splice.js";
 
 /**
- * The public `SectionLineEdit` (`{ key, value: FmValue | null }`) onto the
- * algorithm's `Option<Value>`.
+ * The public `SectionLineEdit` onto the algorithm's `Option<Value>`.
  *
- * `@kernel` is frozen and documents `value: null` as **"removes the key's line"**,
- * which is the one thing the public shape can say — `FmValue` already contains
- * `null`, so a single field cannot also mean "write the literal null". That is the
- * mapping applied here, and the consequence, stated: a plugin cannot write an
- * explicit `null` into its own section through `@kernel`. Nothing in the base
- * distribution needs to (absence and null mean the same thing to every consumer of
- * a `%%%` key), and the fix is a contract change — an optional `remove?: boolean`
- * on `SectionLineEdit`, which is the one kind of addition `web/CONTRACTS.md`
- * permits without a kernel-major.
+ * `remove: true` is `None` — the key's line goes. Everything else is `Some(value)`
+ * and is written literally, `null` included, which is the whole reason `remove`
+ * exists: `FmValue` already contains `null`, so one field cannot mean both "write
+ * this" and "write nothing", and the strict YAML subset of SPEC §3.4 has a `null`
+ * scalar that a plugin is entitled to store in its own section.
  */
-const sectionEdits = (edits: readonly SectionLineEdit[]): SectionKeyEdit[] =>
-  edits.map((edit) => (edit.value === null ? { key: edit.key } : { key: edit.key, value: edit.value }));
+const sectionEdits = (pluginId: string, edits: readonly SectionLineEdit[]): SectionKeyEdit[] =>
+  edits.map((edit) => {
+    if (edit.remove === true) return { key: edit.key };
+    if (edit.value === null && edit.remove === undefined) warnAboutBareNull(pluginId, edit.key);
+    return { key: edit.key, value: edit.value };
+  });
+
+/**
+ * The one spelling whose meaning changed between kernel 1.0.0 and 1.1.0.
+ *
+ * Under 1.0.0 `{ key, value: null }` **removed** the key's line; under 1.1.0 it writes the
+ * YAML `null` and removal is `remove: true`. The two are byte-identical on the way in, so
+ * nothing can refuse the old one — and `KERNEL_API_MAJOR` is still `1`, so a plugin built
+ * against 1.0.0 installs, passes the loader's boot re-check, and then quietly accretes
+ * `key: null` lines where it meant to clear them. A warning is what is left: it names the
+ * change at the call site that made it, which is the only place an author can act on it.
+ * `docs/KERNEL-API.md`'s 1.1.0 entry records why this shipped as a minor and what would
+ * make it a major.
+ *
+ * Once per plugin and key. A splice inside a render loop must not turn a migration note
+ * into a flood.
+ */
+const warnedBareNulls = new Set<string>();
+
+function warnAboutBareNull(pluginId: string, key: string): void {
+  const seen = `${pluginId}:${key}`;
+  if (warnedBareNulls.has(seen)) return;
+  warnedBareNulls.add(seen);
+  console.warn(
+    `[plugin:${pluginId}] spliceSection({ key: "${key}", value: null }) writes the literal ` +
+      `\`${key}: null\` since kernel 1.1.0. If you meant to delete the line, pass ` +
+      `\`remove: true\`; to silence this, pass \`remove: false\` alongside the null.`,
+  );
+}
 
 /** `fetch` against `/api`, carrying whatever this session authenticates with. */
 export type ApiFetch = (path: string, init?: RequestInit) => Promise<Response>;
@@ -106,7 +133,7 @@ export class SpliceHost implements DocumentSpliceApi {
   }
 
   spliceSection(target: SpliceTarget, edits: readonly SectionLineEdit[]): Promise<void> {
-    return this.#write(target, (text) => spliceSection(text, this.pluginId, sectionEdits(edits)));
+    return this.#write(target, (text) => spliceSection(text, this.pluginId, sectionEdits(this.pluginId, edits)));
   }
 
   removeSection(target: SpliceTarget): Promise<void> {
@@ -123,9 +150,9 @@ export class SpliceHost implements DocumentSpliceApi {
     return setFrontmatterValue(text, key, value);
   }
 
-  /** Pure. `value: null` in an edit removes the key's line (SPEC §3.3 wording). */
+  /** Pure. `remove: true` deletes the key's line; every other edit writes its value. */
   planSection(text: string, edits: readonly SectionLineEdit[]): readonly TextEdit[] {
-    return spliceSection(text, this.pluginId, sectionEdits(edits));
+    return spliceSection(text, this.pluginId, sectionEdits(this.pluginId, edits));
   }
 
   /**

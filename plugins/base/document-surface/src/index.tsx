@@ -32,6 +32,7 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
   useSyncExternalStore,
   type ComponentType,
   type ReactNode,
@@ -44,6 +45,7 @@ import {
   type DocumentMode,
   type DocumentModeProps,
 } from "../../_shared/points.js";
+import { lineFromPath } from "./line.js";
 import {
   DEFAULT_MODE_ID,
   nextModeId,
@@ -53,6 +55,17 @@ import {
   serializeModeMemory,
   visibleModes,
 } from "./modes.js";
+
+export { LINE_PARAM, lineFromPath } from "./line.js";
+
+/**
+ * The router, as much of it as this plugin uses. `document-surface` declares the
+ * dependency in its manifest, so `services.require` resolves.
+ */
+interface RouterService {
+  onChange(listener: (path: string) => void): Unsubscribe;
+  current(): string;
+}
 
 export interface DocumentSurfaceApi {
   /** The document currently on screen, if any. */
@@ -141,13 +154,14 @@ export default function activate(kernel: Kernel): DocumentSurfaceApi {
   });
 
   const surface = new Surface(kernel, modes);
+  const router = kernel.services.require<RouterService>("router");
 
   kernel.extensions.contribute(POINTS.route, { path: "/doc/:id", view: "document.surface" });
   kernel.extensions.contribute(POINTS.mainView, {
     id: "document.surface",
     title: "Document",
     component: (props: { readonly params?: Readonly<Record<string, string>> }) => (
-      <SurfaceView surface={surface} params={props.params} />
+      <SurfaceView surface={surface} router={router} params={props.params} />
     ),
   });
 
@@ -179,7 +193,13 @@ export default function activate(kernel: Kernel): DocumentSurfaceApi {
           id: `document.mode.${mode.id}`,
           title: `Show document as: ${mode.label}`,
           category: "Document",
-          when: () => surface.visible().some((candidate) => candidate.id === mode.id),
+          // Both halves are needed. The mode has to be registered *and* there has to be
+          // a document to show it on: with only the first test these sat in the palette
+          // from every other view — Trash, search, settings — and running one did
+          // nothing at all, which is a dead button with a promising name.
+          when: () =>
+            surface.snapshot.documentId !== undefined &&
+            surface.visible().some((candidate) => candidate.id === mode.id),
           run: () => api.setMode(mode.id),
         }),
       );
@@ -521,9 +541,11 @@ function ModeIcon({
 
 function SurfaceView({
   surface,
+  router,
   params,
 }: {
   readonly surface: Surface;
+  readonly router: RouterService;
   readonly params?: Readonly<Record<string, string>>;
 }): ReactNode {
   const raw = params?.id;
@@ -535,6 +557,12 @@ function SurfaceView({
     useCallback((listener: () => void) => surface.subscribe(listener), [surface]),
     () => surface.snapshot,
   );
+
+  // `?line=N`, followed live. The router notifies on a **query-only** change too
+  // (`fullPath` keeps the query, deliberately), which is what makes a second search
+  // result in the same document move the cursor instead of doing nothing.
+  const [line, setLine] = useState<number | undefined>(() => lineFromPath(router.current()));
+  useEffect(() => router.onChange((path) => setLine(lineFromPath(path))), [router]);
 
   // Navigation, not mounting, drives what is open — `show` is idempotent for the same
   // id, and `close` on unmount is the release that the handle's ref count needs.
@@ -613,6 +641,7 @@ function SurfaceView({
             id={row.id}
             row={row}
             open={snapshot.handle}
+            line={line}
           />
         ) : (
           <p className="docsurface-empty">
@@ -633,6 +662,7 @@ function ActiveMode({
   id,
   row,
   open,
+  line,
 }: {
   readonly kernel: Kernel;
   readonly mode: DocumentMode;
@@ -640,9 +670,12 @@ function ActiveMode({
   readonly id: DocumentId;
   readonly row: DocumentRow;
   readonly open?: OpenDocument;
+  readonly line?: number;
 }): ReactNode {
   const Component = boundaryFor(kernel, mode, owner);
-  return <Component id={id} row={row} open={open} />;
+  // Spread rather than `line={line}`: `exactOptionalPropertyTypes` is on, so an
+  // absent line has to be an absent *prop*, not a prop whose value is `undefined`.
+  return <Component id={id} row={row} open={open} {...(line !== undefined ? { line } : {})} />;
 }
 
 /**

@@ -23,7 +23,7 @@ import type { ReactElement } from "react";
 
 import type { Kernel, SearchHit } from "@kernel";
 
-import { queryParam, searchPath } from "./hash.js";
+import { documentPath, queryParam, searchPath } from "./hash.js";
 import { mergeHits, type ProviderResult } from "./merge.js";
 import { ResultsView } from "./ResultsView.js";
 import { SearchBox } from "./SearchBox.js";
@@ -128,7 +128,13 @@ export default function activate(kernel: Kernel): SearchApi {
     row: (id) => kernel.documents.get(id),
   };
 
-  const openDocument = (id: string): void => router.navigate(`/doc/${id}`);
+  /**
+   * Open a result, at the line the snippet came from when there is one
+   * (`#/doc/<id>?line=42`). A deep link, not state: `document-surface` clamps a line
+   * past the end and a mode that has no lines ignores it.
+   */
+  const openDocument = (id: string, line?: number): void =>
+    router.navigate(documentPath(id, line));
 
   // ---------------------------------------------------------------------------
   // Contributions

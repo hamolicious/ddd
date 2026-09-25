@@ -458,24 +458,46 @@ struct IndexPage {
     csp: String,
 }
 
-/// Replace [`IMPORT_MAP_MARKER`] with a nonced inline import map and build the matching
-/// CSP. Pure: `nonce` and `imports` are the only inputs that vary per response.
-fn render_index(html: &str, imports: &BTreeMap<String, String>, nonce: &str) -> IndexPage {
+/// Replace [`IMPORT_MAP_MARKER`] with a nonced inline import map.
+///
+/// **The one implementation.** `shell.rs` renders the same document for the Flutter
+/// bundle and used to carry a copy of this function, with the copy's own comment saying
+/// exporting this one was the right fix and the statics owner's call. It is, and this is
+/// it: two renderings of `index.html` that differ by a character are two ways for the
+/// browser page and the shipped bundle to diverge, and the divergence would show up as a
+/// module-resolution failure on a device rather than a test failure here.
+///
+/// The *policy* is not shared, and deliberately: the shell's document is served by the
+/// device's own loopback origin and needs a different `connect-src` (see
+/// `shell::shell_csp`). Only the markup is common.
+///
+/// Pure: `imports` and `nonce` are the only inputs.
+pub(super) fn render_index_body(
+    html: &str,
+    imports: &BTreeMap<String, String>,
+    nonce: &str,
+) -> String {
     let map = serde_json::to_string(&ImportMap {
         imports: imports.clone(),
     })
     .unwrap_or_else(|_| "{}".to_string());
     let script = format!("<script type=\"importmap\" nonce=\"{nonce}\">{map}</script>");
-    let body = if html.contains(IMPORT_MAP_MARKER) {
+    if html.contains(IMPORT_MAP_MARKER) {
         html.replace(IMPORT_MAP_MARKER, &script)
     } else {
         // A bundle built from an index.html without the marker would load and then fail
         // to resolve `react` in the first plugin. Say so here rather than there.
         warn!(
-            "index.html has no {IMPORT_MAP_MARKER} marker; plugins will not resolve the runtime layer"
+            "index.html has no {IMPORT_MAP_MARKER} marker; bare specifiers will not resolve the runtime layer"
         );
         html.to_string()
-    };
+    }
+}
+
+/// The browser-facing `index.html`: [`render_index_body`] plus the policy that must
+/// accompany it. Pure: `nonce` and `imports` are the only inputs that vary per response.
+fn render_index(html: &str, imports: &BTreeMap<String, String>, nonce: &str) -> IndexPage {
+    let body = render_index_body(html, imports, nonce);
 
     // SPEC §8, with two deliberate additions and one narrowing.
     //
@@ -495,11 +517,22 @@ fn render_index(html: &str, imports: &BTreeMap<String, String>, nonce: &str) -> 
     // `connect-src` adds `ws:` alongside the spec's `wss:` so a plain-http compose or
     // dev origin can open `/api/sync` at all; over TLS the browser refuses `ws:` anyway.
     //
+    // `media-src 'self' blob:` is the third addition, and it is the attachment story
+    // (SPEC §3.6). Audio and video are attachments like any other — `attachment://<ulid>`
+    // in the text, resolved by the `markdown` plugin to `/api/attachments/<id>` — and with
+    // no `media-src` they fell through to `default-src 'self'`, which covers the direct URL
+    // but not the other half of the same feature: the client caches attachment bytes and
+    // renders them from an object URL, and `<audio src="blob:…">` was refused outright.
+    // `img-src` has carried `blob:` for exactly this reason since M3; media had simply never
+    // been played. It is the same narrow shape — a blob URL is same-origin by construction
+    // and cannot be minted by a remote page.
+    //
     // The nonce is what authorises the one inline script on the page (the import map).
     // Everything else, including every plugin module, is `'self'`.
     let csp = format!(
         "default-src 'self'; script-src 'self' 'nonce-{nonce}' 'wasm-unsafe-eval'; \
-         style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; \
+         style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; \
+         media-src 'self' blob:; font-src 'self'; \
          connect-src 'self' ws: wss:; worker-src 'self' blob:; object-src 'none'; \
          base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
     );
@@ -820,6 +853,13 @@ mod tests {
         // The deviations, each pinned so removing one is a deliberate act:
         assert!(csp.contains("worker-src 'self' blob:"), "the search worker");
         assert!(csp.contains("connect-src 'self' ws: wss:"), "/api/sync");
+        // Audio and video attachments are played from an object URL, so `blob:` here is
+        // the whole feature and not a convenience: without `media-src` the directive fell
+        // back to `default-src 'self'` and `<audio src="blob:…">` was refused.
+        assert!(
+            csp.contains("media-src 'self' blob:"),
+            "audio/video attachments"
+        );
 
         // `script-src` is asserted whole. It is the one directive where an extra source
         // is a hole rather than a loosening: no `'unsafe-eval'` (only the narrow Wasm

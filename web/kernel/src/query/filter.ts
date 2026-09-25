@@ -107,11 +107,16 @@ const MISSING: ResolvedField = { kind: "missing" };
 /**
  * Mirror of `core::filter::evaluator::resolve_field`.
  *
- * Deliberately *narrower* than {@link resolvePath}: `deleted_at` and
- * `materialized_version` are unknown roots to the shared core and therefore sort
- * as missing here too. Widening this on the client alone would make client and
- * server disagree about an ordering, which is the one thing this file exists to
- * prevent.
+ * Deliberately *narrower* than {@link resolvePath}: `materialized_version` is an
+ * unknown root to the shared core and therefore sorts as missing here too.
+ * Widening this on the client alone would make client and server disagree about
+ * an ordering, which is the one thing this file exists to prevent.
+ *
+ * `deleted_at` used to be on that narrower list and no longer is: the M5 polish
+ * added it to `core::filter::evaluator::Row` and to the corpus (it is what
+ * `doc-list`'s Trash view sorts by), so leaving it missing here was the exact
+ * disagreement described above — `-deleted_at` returned insertion order on the
+ * client and tombstone order from the server.
  */
 function resolveField(row: ProjectionRow, path: string): ResolvedField {
   const segments = path.split(".");
@@ -128,7 +133,8 @@ function resolveField(row: ProjectionRow, path: string): ResolvedField {
     case "deleted":
       return { kind: "bool", value: row.deleted };
     case "created_at":
-    case "updated_at": {
+    case "updated_at":
+    case "deleted_at": {
       // PROTOCOL.md §2.1: every wire timestamp is canonical RFC 3339 with
       // millisecond precision, and `core::date` guarantees byte-wise order over
       // canonical forms *is* chronological order — so no parsing is needed (and
@@ -265,6 +271,20 @@ function orderFields(a: ResolvedField, b: ResolvedField): number {
  * `core::filter::evaluator::compare_rows`: missing sorts last, then by type
  * order (null < bool < number < string < list < map), then by value; `id` is the
  * implicit final tiebreaker so paging is deterministic.
+ *
+ * **Equal to the comparator, not to Mongo.** The two engines are the same on every row
+ * that *has* the sort key and deliberately differ on rows that do not: this puts a missing
+ * key last in both directions, while `GET /api/documents` sorts in Mongo, where an absent
+ * field is Null — the lowest BSON type — and therefore comes **first** ascending. Closing
+ * that means changing `compare_rows` and this mirror in one commit, or teaching
+ * `filter::mongo::compile_sort` to emit an `$ifNull` projection; it is parked, and
+ * `crates/server/tests/documents_query.rs` pins both sides so it stays a decision.
+ *
+ * It matters most on `deleted_at`, which is the only *fixed* root that can be absent and
+ * is an advertised sort key (`doc-list`'s Trash order). `?trash=all&sort=deleted_at` is
+ * where the split is visible: live documents have no `deleted_at`, so the server returns
+ * them first and this returns them last. `-deleted_at` — the direction the Trash view
+ * actually uses — agrees, because there the present values lead either way.
  */
 export function compareRows(
   a: ProjectionRow,

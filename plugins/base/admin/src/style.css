@@ -186,6 +186,16 @@
   font-size: 0.8em;
 }
 
+/* Per-host notes under the `http.hosts` field: a plain list, not a bullet stack. */
+.admin-host-notes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--lm-space) / 2);
+}
+
 .admin-error,
 .admin-warning,
 .admin-callout,

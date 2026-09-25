@@ -298,6 +298,7 @@ fn canonical_shape_agrees_between_evaluator_and_compiler() {
                 plugins: &empty,
                 created_at: None,
                 updated_at: None,
+                deleted_at: None,
                 deleted: false,
             };
             assert_eq!(
@@ -414,6 +415,9 @@ struct CorpusRow {
     plugins: Map,
     created_at: Date,
     updated_at: Date,
+    /// The tombstone time. `Some` exactly when `deleted` — and the *only* place
+    /// the two may disagree would be a fixture bug, so it is derived, not read.
+    deleted_at: Option<Date>,
     deleted: bool,
 }
 
@@ -427,6 +431,7 @@ impl CorpusRow {
             plugins: &self.plugins,
             created_at: Some(&self.created_at),
             updated_at: Some(&self.updated_at),
+            deleted_at: self.deleted_at.as_ref(),
             deleted: self.deleted,
         }
     }
@@ -447,14 +452,16 @@ impl CorpusRow {
             "updated_at",
             bson::DateTime::from_millis(self.updated_at.epoch_millis()),
         );
-        doc.insert(
-            "deleted_at",
-            if self.deleted {
-                bson::Bson::DateTime(bson::DateTime::from_millis(self.updated_at.epoch_millis()))
-            } else {
-                bson::Bson::Null
-            },
-        );
+        // Unset on a live document, never written as null — that is what `tombstone`
+        // and `untombstone` (`$unset`) actually leave in the collection, and now that
+        // `deleted_at` is an addressable field the difference is observable:
+        // `missing`/`exists` would disagree with the evaluator against a null.
+        if let Some(deleted_at) = self.deleted_at.as_ref() {
+            doc.insert(
+                "deleted_at",
+                bson::DateTime::from_millis(deleted_at.epoch_millis()),
+            );
+        }
         doc
     }
 }
@@ -475,6 +482,10 @@ fn corpus_rows(corpus: &serde_json::Value) -> Vec<CorpusRow> {
             updated_at: Date::parse(row["updated_at"].as_str().expect("updated_at"))
                 .expect("updated_at parses"),
             deleted: row["deleted"].as_bool().expect("deleted"),
+            deleted_at: row["deleted"].as_bool().expect("deleted").then(|| {
+                Date::parse(row["updated_at"].as_str().expect("updated_at"))
+                    .expect("updated_at parses")
+            }),
         })
         .collect()
 }

@@ -8,6 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 
+import { documentPath } from "./hash.js";
 import { mergeHits, snippetFor, splitHighlights, type ProviderResult } from "./merge.js";
 
 const provider = (
@@ -86,6 +87,20 @@ describe("snippetFor", () => {
     expect(snippetFor(content, ["absent"])?.text).toBe("---");
   });
 
+  /**
+   * The line number is what makes a result a deep link (`#/doc/<id>?line=7`) rather
+   * than a jump to the top of a long document. It counts lines of the **materialized
+   * text**, frontmatter and `%%%` sections included, because that is the string the
+   * editor holds — so the number means the same thing on both sides.
+   */
+  it("reports the 1-based line the snippet came from", () => {
+    expect(snippetFor(content, ["milk"])?.line).toBe(7);
+    expect(snippetFor(content, ["Groceries"])?.line).toBe(2);
+    // The fallback line is a line too, so an unmatched result still links somewhere sane.
+    expect(snippetFor(content, ["absent"])?.line).toBe(1);
+    expect(snippetFor("\n\n\nfirst real line\n", [])?.line).toBe(4);
+  });
+
   it("returns nothing without content, which is the offline metadata-only case", () => {
     expect(snippetFor(undefined, ["milk"])).toBeUndefined();
     expect(snippetFor("", ["milk"])).toBeUndefined();
@@ -106,12 +121,36 @@ describe("snippetFor", () => {
 
 describe("splitHighlights", () => {
   it("alternates plain and highlighted pieces covering the whole string", () => {
-    const pieces = splitHighlights({ text: "buy milk now", ranges: [{ start: 4, end: 8 }] });
+    const pieces = splitHighlights({
+      text: "buy milk now",
+      ranges: [{ start: 4, end: 8 }],
+      line: 1,
+    });
     expect(pieces).toEqual([
       { text: "buy ", hit: false },
       { text: "milk", hit: true },
       { text: " now", hit: false },
     ]);
     expect(pieces.map((piece) => piece.text).join("")).toBe("buy milk now");
+  });
+});
+
+describe("documentPath", () => {
+  it("deep-links a result to the line its snippet came from", () => {
+    expect(documentPath("01J8Z", 42)).toBe("/doc/01J8Z?line=42");
+    expect(documentPath("01J8Z", 1)).toBe("/doc/01J8Z?line=1");
+  });
+
+  it("omits the query when there is no line to point at", () => {
+    // A metadata-only result (the offline server-provider case) has no content and so
+    // no snippet; the link still has to work, it just opens at the top.
+    expect(documentPath("01J8Z")).toBe("/doc/01J8Z");
+    expect(documentPath("01J8Z", 0)).toBe("/doc/01J8Z");
+    expect(documentPath("01J8Z", -1)).toBe("/doc/01J8Z");
+    expect(documentPath("01J8Z", 1.5)).toBe("/doc/01J8Z");
+  });
+
+  it("encodes the id, because a path segment is not a place to trust a string", () => {
+    expect(documentPath("a/b")).toBe("/doc/a%2Fb");
   });
 });

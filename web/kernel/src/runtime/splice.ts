@@ -45,12 +45,10 @@ import { KernelError, type FmValue, type TextEdit } from "@kernel";
  * `Option<Value>` kept intact: **`undefined` removes the key's line, `null` writes
  * the literal `null`.**
  *
- * The frozen public shape (`SectionLineEdit` in `@kernel`) cannot express that
- * distinction: it is `{ key, value: FmValue | null }` and `FmValue` already
- * contains `null`, so its documented meaning — "`value: null` removes the key's
- * line" — spends the only spelling JSON has for an explicit null on deletion. The
- * conformance corpus exercises both cases, so the algorithm keeps both and
- * `SpliceHost` maps the public shape onto it (see the note there).
+ * The public shape (`SectionLineEdit` in `@kernel`) spells the same distinction with
+ * an optional `remove` flag, because `FmValue` already contains `null` and one field
+ * cannot mean both "write this" and "write nothing". `SpliceHost` maps between them
+ * (see the note there). The conformance corpus exercises both cases.
  */
 export interface SectionKeyEdit {
   readonly key: string;

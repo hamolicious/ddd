@@ -78,13 +78,24 @@ database. Run them against a live Mongo:
 docker compose up -d --wait mongo
 MONGO_URI=mongodb://127.0.0.1:27017 \
   SESSION_SECRET="$(openssl rand -base64 48)" \
-  cargo test --workspace --all-targets -- --ignored
+  cargo test --workspace --all-targets -- --include-ignored
 ```
 
 `SESSION_SECRET` is needed as well as `MONGO_URI`: some of those tests build a
 `Config` from the environment, and `Config::from_env` refuses without it — exactly
 as the server does. `--all-targets` matters too, or the integration test binaries
 under `crates/server/tests/` never run.
+
+**`--include-ignored`, not `--ignored`.** `--ignored` runs the ignored tests *and
+nothing else*, and whole suites here are not `#[ignore]`d — `plugininstall_zip`
+needs no database at all, and the four `pluginhost_*` binaries gate on the fixture
+rather than on the marker. Under `--ignored` those binaries match zero tests and
+print `test result: ok`, so the run is green with the entire Wasm plugin host
+unexercised: 23 runtime, 13 zip-hardening, 9 HTTP, 8 route and 5 smoke tests
+silently filtered out. That is the same failure the removal note in `mise.toml`
+records for the old `plugin-test` task — *a task that resolves to zero tests is
+worse than no task, because it reports green*. `--include-ignored` runs both halves
+and is what the M4 section below uses.
 
 Each suite uses its own throwaway database and drops it afterwards, so they are
 safe to point at a Mongo that holds real data — but the socket suite (`sync_ws`)
@@ -129,6 +140,7 @@ annotated copy-me file; [`../docs/OPERATIONS.md`](../docs/OPERATIONS.md) has the
 | `MONGO_DATABASE` | `life_manager` | GridFS attachment buckets live in the same database. |
 | `BIND_ADDR` | `0.0.0.0:8080` | The server is TLS-unaware; terminate TLS at the ingress. |
 | `APP_ORIGIN` | *(empty)* | Comma-separated allowlist, exact `scheme://host[:port]` — no paths, no wildcards. Empty = same-origin only. Used for CORS **and** as the mandatory WebSocket origin check (SPEC §4.3): a cookie-authenticated `/api/sync` upgrade with no `Origin` is refused outright. |
+| `PUBLIC_URL` | *(empty)* | The single origin clients reach this server at (`scheme://host[:port]`). Not an allowlist — `APP_ORIGIN` is *who may talk to me*, this is *what URL am I reached at*. Unset changes nothing; set, it narrows the CSP the Android shell's bundle carries (`index_csp`) from scheme-wide `connect-src` to this origin's `https`/`wss` pair. |
 | `COOKIE_SECURE` | `true` | Set `false` only for plain-http local dev. |
 | `LOG_FORMAT` | `json` | `json` (deployed) or `pretty` (local). |
 | `RUST_LOG` | `info` | Standard `tracing` filter. |
@@ -208,9 +220,20 @@ curl -G "$BASE/api/documents" -H "Authorization: Bearer $TOKEN" \
   --data-urlencode 'sort=fm.path,-updated_at'
 ```
 
-`sort` accepts `id`, `title`, `created_at`, `updated_at`, `deleted_at`,
-`materialized_version` and any `fm.*`/`plugins.*` path, `-` for descending, at
-most 3 keys. `content` and `crdt` are refused.
+`sort` accepts `id`, `title`, `created_at`, `updated_at`, `deleted_at` (the Trash
+order) and any `fm.*`/`plugins.*` path, `-` for descending, at most 3 keys.
+`content`, `deleted` and `materialized_version` are refused — megabytes of text, a
+derived boolean, and a hash respectively.
+
+**A row that lacks the sort key is ordered differently here than by the client.** Mongo
+sorts an absent field as Null — the lowest BSON type — so it comes first ascending, while
+the shared core's `compare_rows` (which the PWA's local query engine mirrors) puts it last
+in *both* directions. The same query therefore returns the same rows in a different order
+online and offline whenever some of them are missing the key. It is a parked decision, not
+a bug in either half, and both behaviours are pinned in
+`crates/server/tests/documents_query.rs`. It is worth knowing for exactly one shipped
+sort: `?trash=all&sort=deleted_at` puts the live documents first here and last on the
+client. `-deleted_at`, which is what the Trash view sends, agrees.
 
 ### Attachments — `/api/attachments`
 
@@ -299,7 +322,7 @@ string**. MongoDB extended JSON (`{"$date": …}`) never reaches a client.
 | Path | Behavior |
 |---|---|
 | `GET /healthz` | Liveness. 200 without touching Mongo. |
-| `GET /readyz` | Readiness with detail: Mongo ping (2 s bound), migration state, plugin **counts**, schema version, uptime, version. 200 / 503 on the same shape. Unauthenticated, so the body carries no filesystem paths and no manifest errors — those go to the log and the admin view. |
+| `GET /readyz` | Readiness with detail: Mongo ping (2 s bound), migration state, the frontend plugin registry's **counts**, the backend plugin host's counts (active, breaker-open, cron schedules, instances, calls in flight), schema version, uptime, version. 200 / 503 on the same shape. Neither plugin check can fail the probe — one broken plugin is not a reason to take a serving replica out of rotation; `lm_plugins_disabled` is the alert. Unauthenticated, so the body carries counts only: no filesystem paths, no plugin ids, no manifest errors — those go to the log and the admin view. |
 | `GET /metrics` | Prometheus text 0.0.4 — `lm_http_requests_total`, `lm_http_request_duration_seconds`, `lm_materialize_duration_seconds`, `lm_crdt_updates_applied_total`, room/document gauges, the change-feed gauges (`lm_feed_head_seq`, `lm_feed_safe_seq`, `lm_feed_subscribers`), socket gauges (`lm_ws_connections`, `lm_ws_subscribed_documents`), `lm_ws_backpressure_drops_total` by queue, and build info. Gauges are **sampled every 15 s**, so a scrape within 15 s of boot reports the workspace the server started with — including zeros. |
 
 ### Errors
@@ -355,18 +378,21 @@ origin-before-auth ordering, close codes, watermarks, fan-out and backpressure.
 
 ## The M4 proof
 
-SPEC §9 M4 names one: **the calendar plugin** — a backend half cronning an ICS feed
-into machine-owned documents, a frontend half rendering a month view from `fm.date`,
-and `agenda` alongside it as a pure frontend plugin with no backend and no
-capabilities at all.
+SPEC §9 M4 named one: **the calendar plugin**, with `agenda` alongside it as a pure
+frontend plugin. Both were built, both proved the milestone, and both were **removed**
+at the owner's direction on 2026-09-24 — the tree ships neither, and git history has
+them. Nothing in the host was written for them: the fixture every one of these suites
+drives is `plugins/examples/hello-backend`, which exports a cron handler, a document
+hook, inbound routes, outbound HTTP and a call dispatcher precisely so the host's
+behaviour is asserted against a plugin written for asserting on.
 
-Both ship in `plugins/base/`. To exercise the whole install path rather than the
-shipped copy:
+To exercise the whole install path — upload → pending → approve → hot activation —
+package any built plugin and drive it through the admin screen:
 
 ```bash
-mise run web-build && mise run wasm-plugins   # build both halves
-mise run plugin-package calendar              # → dist-packages/calendar-1.0.0.zip
-# then: Admin → Plugins → upload → approve (adding your feed's host) → configure
+mise run web-build && mise run wasm-plugins   # build both halves of everything
+mise run plugin-package doc-list              # → dist-packages/doc-list-1.0.0.zip
+# then: Admin → Plugins → upload → approve → (configure, if it declares config)
 ```
 
 The suites behind it, all needing `MONGO_URI` and `mise run wasm-plugins`:

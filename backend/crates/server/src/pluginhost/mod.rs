@@ -582,6 +582,19 @@ impl PluginHost {
         )
     }
 
+    /// The host for this state **if one already exists** — never creating one.
+    ///
+    /// [`PluginHost::get`] is the right accessor everywhere a call is about to be made:
+    /// creating the host is how the first one comes into being. `/readyz` is the case that
+    /// wants the other answer. A readiness probe runs every few seconds forever, it is
+    /// unauthenticated, and its job is to *report* state, not to bring any into existence —
+    /// a probe that instantiated the host would make "the plugin host is running" true by
+    /// asking the question.
+    pub fn existing(state: &AppState) -> Option<Arc<PluginHost>> {
+        let hosts = hosts().lock().expect("plugin host registry poisoned");
+        hosts.get(state.db.name()).map(Arc::clone)
+    }
+
     fn new(state: &AppState) -> PluginHost {
         let limits = PluginLimits::from_config(&state.config);
         PluginHost {
@@ -618,8 +631,9 @@ impl PluginHost {
         }
 
         let Some(backend) = record.manifest.backend.as_ref() else {
-            // Not an error worth a breaker entry: most plugins have no backend half, and
-            // `agenda` shipping without one is the point being made (SPEC §9 M4).
+            // Not an error worth a breaker entry: most plugins have no backend half — a
+            // plugin needs one only for cron, outbound HTTP or a webhook (SPEC §6.3), and
+            // today none of the base distribution does.
             return Err(PluginHostError::NotActive(record.id.clone()));
         };
 
@@ -1324,6 +1338,7 @@ pub(crate) mod test_support {
             max_attachment_bytes: 1024 * 1024,
             max_document_bytes: life_manager_core::limits::MAX_DOCUMENT_BYTES,
             app_origins: vec!["http://localhost:5173".to_string()],
+            public_url: None,
             log_format: LogFormat::Pretty,
             cookie_secure: false,
             trust_proxy_headers: false,

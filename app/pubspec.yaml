@@ -7,7 +7,6 @@ environment:
   sdk: ^3.13.4
 
 dependencies:
-  archive: ^4.3.0
   crypto: ^3.0.7
   file_picker: ^13.1.0
   flutter:

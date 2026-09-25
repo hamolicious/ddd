@@ -22,7 +22,7 @@ import {
   FIELD_OPTIONS,
   SORT_OPTIONS,
   VALUELESS_OPS,
-  buildFilter,
+  buildEffectiveFilter,
   describeClause,
   invalidClauses,
   type ClauseOp,
@@ -76,7 +76,10 @@ export function FilterBar({
   onSortChange,
 }: FilterBarProps): ReactElement {
   const invalid = new Set(invalidClauses(draft));
-  const filter = buildFilter(draft);
+  // The *effective* filter — what the list actually runs, machine-document exclusion
+  // included. Showing the user's clauses alone would make the disclosure a half-truth
+  // about the query, which is the one thing this control is for.
+  const filter = buildEffectiveFilter(draft);
 
   const patch = (id: string, change: Partial<FilterClause>): void => {
     onDraftChange({
@@ -96,6 +99,19 @@ export function FilterBar({
             placeholder="groceries"
             onChange={(event) => onDraftChange({ ...draft, titleContains: event.target.value })}
           />
+        </label>
+
+        <label className="doclist-checkbox">
+          <input
+            type="checkbox"
+            checked={draft.includeMachine === true}
+            onChange={(event) =>
+              onDraftChange({ ...draft, includeMachine: event.target.checked })
+            }
+          />
+          <span title="Documents whose fm.path starts with a dot — the kernel's per-user settings documents, and anything a plugin files the same way. They are ordinary documents; this only decides whether they are listed here.">
+            Show machine documents
+          </span>
         </label>
 
         <label className="doclist-field">
@@ -273,7 +289,9 @@ export function FilterBar({
 
       {filter !== undefined && (
         <details className="doclist-json">
-          <summary>Filter (the shared DSL, SPEC §4.2)</summary>
+          {/* A spec section number is a note to whoever builds this, not to whoever
+              uses it. What a reader wants to know is what the block below *is*. */}
+          <summary>Show this filter as the query language sees it</summary>
           <pre>{JSON.stringify(filter, null, 2)}</pre>
         </details>
       )}

@@ -50,7 +50,17 @@ export function scoreMatch(query: string, item: Matchable): MatchResult<Matchabl
   return undefined;
 }
 
-/** Rank and sort. Ties break on title then id, so the list never jitters. */
+/**
+ * Rank and sort. Ties break on **category**, then title, then id, so the list never
+ * jitters.
+ *
+ * Category first is what makes the *unfiltered* palette readable, and that is the state
+ * it opens in: every score is 0 for an empty query, so the tie-break is the whole
+ * ordering. Breaking on title alone interleaved the categories the rows are labelled
+ * with — "Admin › Browse snapshots", "Appearance › Change theme", "Admin › Create an
+ * invite" — and made a list of twenty-one commands read as unsorted. Uncategorised
+ * commands sort first, where a short list of bare titles is easiest to scan.
+ */
 export function rankMatches<T extends Matchable>(query: string, items: readonly T[]): readonly MatchResult<T>[] {
   const scored: MatchResult<T>[] = [];
   for (const item of items) {
@@ -59,6 +69,9 @@ export function rankMatches<T extends Matchable>(query: string, items: readonly 
   }
   scored.sort((a, b) => {
     if (a.score !== b.score) return b.score - a.score;
+    const left = a.item.category ?? "";
+    const right = b.item.category ?? "";
+    if (left !== right) return left < right ? -1 : 1;
     if (a.item.title !== b.item.title) return a.item.title < b.item.title ? -1 : 1;
     return a.item.id < b.item.id ? -1 : a.item.id > b.item.id ? 1 : 0;
   });

@@ -43,9 +43,6 @@ declare module "@life-manager/core-wasm" {
    * Normalize an ISO-8601 date the way materialization does (SPEC §3.4), so a
    * client that derives a value locally spells it the way the server would.
    * Returns the input unchanged when it is not a date.
-   *
-   * Not part of {@link CoreBindings} (that surface is frozen for M2); declared
-   * here because the Rust side exports it and this file is the ABI.
    */
   export function normalize_date(input: string): string;
 

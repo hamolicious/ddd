@@ -265,6 +265,7 @@ literal must parse, or the filter is rejected.
 | `id` | string | `_id` |
 | `title`, `content` | string | same name |
 | `created_at`, `updated_at` | date | same name, a BSON date |
+| `deleted_at` | date | same name, a BSON date — **absent** on a live document |
 | `deleted` | bool | derived from `deleted_at` |
 | `fm.<key>[.<key>…]` | dynamic | `fm.…` |
 | `plugins.<plugin-id>[.<key>…]` | dynamic | `plugins.…` |
@@ -300,7 +301,7 @@ scalar comparison to suppress Mongo's implicit traversal.
 whose type differs from the literal's simply does not match — heterogeneous
 workspaces are normal, and one odd row must not fail a whole query. But
 `title`/`id`/`content` are strings, `deleted` is a bool and
-`created_at`/`updated_at` are dates by schema, so a mismatch there is a query
+`created_at`/`updated_at`/`deleted_at` are dates by schema, so a mismatch there is a query
 bug: `EvalError::TypeMismatch` in the evaluator and `CompileError::Unsupported`
 in the compiler (→ 400). Both sides refuse the same filters, so the result sets
 still agree.
@@ -309,7 +310,7 @@ Also refused by both sides: an ordering operator (`lt`/`lte`/`gt`/`gte`) against
 a `null` or `bool` literal, and a list operator or `text` against a non-string
 column.
 
-**Dates.** A date literal against `created_at`/`updated_at` compares **instants**
+**Dates.** A date literal against `created_at`/`updated_at`/`deleted_at` compares **instants**
 (they are BSON dates). Against `fm`/`plugins` it compares **canonical text**,
 and only values already in canonical shape participate — the evaluator tests the
 shape directly, the compiler emits the equivalent regex guard, and

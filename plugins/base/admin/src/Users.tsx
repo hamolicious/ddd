@@ -152,9 +152,11 @@ export function UsersSection({ client, selfId }: UsersSectionProps): ReactElemen
         </div>
       )}
 
+      {/* The spec reference belonged to whoever built this screen, not to the
+          administrator reading it. The sentence says the same thing without it. */}
       <p className="admin-note">
         This is a shared workspace: every signed-in user can read, edit and delete every
-        document (SPEC §5.4). The audit log is the accountability, not permissions.
+        document. The audit log is the accountability here, not permissions.
       </p>
     </section>
   );

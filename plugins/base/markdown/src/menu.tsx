@@ -6,7 +6,8 @@
  * palette/editor, focus rings"), and a context menu is the easiest place in a renderer to
  * get it wrong — a `div` with click handlers is invisible to a screen reader and
  * unreachable without a pointer. So: real `<button>`s in a `role="menu"`, focus moved to
- * the first item on open, arrows to move, Escape and focus-loss to close.
+ * the first item on open, arrows to move, Escape and focus-loss to close, and focus
+ * handed **back to the trigger** on the two dismissals the user chose (see `restoreTo`).
  *
  * Positioned with plain CSS relative to the trigger rather than portalled to
  * `kernel.ui.root`: a portal would escape `overflow: hidden` but also escape the
@@ -14,7 +15,23 @@
  * document scrolls is worse than one that clips.
  */
 
-import { useEffect, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
+
+/** Focusable, still in the document, and not the body itself. */
+function isRestorable(element: Element | null | undefined): element is HTMLElement {
+  return (
+    element instanceof HTMLElement &&
+    element.isConnected &&
+    element !== document.body &&
+    !element.hasAttribute("disabled")
+  );
+}
 
 export interface MenuItem {
   readonly id: string;
@@ -34,10 +51,44 @@ export interface PopupMenuProps {
 
 export function PopupMenu({ label, items, onClose }: PopupMenuProps): ReactNode {
   const root = useRef<HTMLDivElement | null>(null);
+  /**
+   * Where focus goes when the menu is dismissed **deliberately** — Escape, or choosing an
+   * item. Without it, Escape left `document.activeElement` on `<body>`: a keyboard user
+   * who opened the state menu and changed their mind was dropped at the top of the
+   * document and had to tab back through the whole shell to reach the next task.
+   *
+   * It is captured at mount, because by the time the menu closes React has already
+   * detached it and the DOM no longer says what it was rendered next to.
+   *
+   * `document.activeElement` alone is the obvious answer and the wrong one: a right-click
+   * does not focus the control it targets, so on the very path this menu exists for, the
+   * active element at mount *is* `<body>`. The trigger is the control the menu is
+   * rendered beside — both call sites wrap `<trigger/>{menu}` in one element — and the
+   * remembered active element is the fallback for a menu opened from the keyboard.
+   */
+  const restoreTo = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
+    const opener = document.activeElement;
+    const sibling = root.current?.previousElementSibling;
+    restoreTo.current = isRestorable(sibling)
+      ? sibling
+      : isRestorable(opener)
+        ? opener
+        : null;
     root.current?.querySelector<HTMLButtonElement>("button")?.focus();
   }, []);
+
+  /**
+   * Close and hand focus back. Deliberately *not* used by the outside-click and
+   * focus-loss paths below: those close the menu because the user has already moved
+   * somewhere else, and pulling focus back out of it would be the worse bug.
+   */
+  const dismiss = useCallback((): void => {
+    const target = restoreTo.current;
+    onClose();
+    if (isRestorable(target)) target.focus();
+  }, [onClose]);
 
   useEffect(() => {
     // `mousedown`, not `click`: closing on mousedown means the click that opened another
@@ -70,7 +121,7 @@ export function PopupMenu({ label, items, onClose }: PopupMenuProps): ReactNode 
         if (event.key === "Escape") {
           event.preventDefault();
           event.stopPropagation();
-          onClose();
+          dismiss();
           return;
         }
         if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -90,7 +141,10 @@ export function PopupMenu({ label, items, onClose }: PopupMenuProps): ReactNode 
           className="md-menu-item"
           aria-current={item.selected ? "true" : undefined}
           onClick={() => {
-            onClose();
+            // Focus back on the trigger before the action runs: choosing a state
+            // re-renders the marker, and the control the user was on is the one they
+            // should still be on afterwards.
+            dismiss();
             item.run();
           }}
         >

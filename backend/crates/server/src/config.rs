@@ -61,6 +61,23 @@ pub struct Config {
     /// `APP_ORIGIN` — comma-separated allowlist. Required by the WS upgrade in
     /// M2; used for CORS in M1. Empty = same-origin only.
     pub app_origins: Vec<String>,
+    /// `PUBLIC_URL` — the **single** origin clients reach this server at, e.g.
+    /// `https://notes.example.com`. Optional; `None` is the default and changes
+    /// nothing.
+    ///
+    /// It is not an allowlist and it is not `APP_ORIGIN`. `APP_ORIGIN` answers
+    /// "which origins may talk to me" (a set, checked against a request's
+    /// `Origin` header); this answers "what URL am I reached at" — a single
+    /// value the server otherwise has no way to know, since it is TLS-unaware
+    /// and sits behind an ingress that rewrites the host (SPEC §8).
+    ///
+    /// Today exactly one thing consumes it: the CSP the Flutter shell's bundle
+    /// carries (`routes::shell::shell_csp`). That document is served by the
+    /// device's own loopback origin, so *every* API call and the sync socket are
+    /// cross-origin to it, and without a name for the server the only policy
+    /// that works is scheme-wide (`connect-src … https: http: wss: ws:`).
+    /// Setting this names the server and the policy narrows to it.
+    pub public_url: Option<String>,
     /// `LOG_FORMAT` = `json` | `pretty`.
     pub log_format: LogFormat,
     /// `COOKIE_SECURE`, default true; only settable to false for local http dev.
@@ -240,6 +257,26 @@ impl Config {
 
         let app_origins = parse_origins("APP_ORIGIN")?;
 
+        // Validated by exactly the same parser as `APP_ORIGIN`, then required to be one
+        // value: a `PUBLIC_URL` with a path, a trailing junk segment or two entries would
+        // otherwise be pasted straight into a CSP, where a malformed source silently
+        // *widens* nothing but does silently fail to match — the app would look broken for
+        // no visible reason. A bad variable is a boot failure here, like every other.
+        let public_url = match parse_origins("PUBLIC_URL")?.as_slice() {
+            [] => None,
+            [origin] => Some(origin.clone()),
+            many => {
+                return Err(ConfigError::Invalid {
+                    var: "PUBLIC_URL",
+                    reason: format!(
+                        "expected one origin, got {} — this is the URL this server is reached \
+                         at, not an allowlist (that is APP_ORIGIN)",
+                        many.len()
+                    ),
+                });
+            }
+        };
+
         // Hoisted out of the struct literal because `PLUGIN_STAGING_DIR`'s default is
         // derived from it (`<PLUGINS_DIR>.staging`, a sibling of the served root).
         let plugins_dir = var("PLUGINS_DIR")
@@ -255,6 +292,7 @@ impl Config {
             max_attachment_bytes: parse_var("MAX_ATTACHMENT_BYTES", DEFAULT_MAX_ATTACHMENT_BYTES)?,
             max_document_bytes,
             app_origins,
+            public_url,
             log_format: parse_log_format("LOG_FORMAT")?,
             cookie_secure: parse_bool("COOKIE_SECURE", true)?,
             // Off by default: trusting a forwarding header that no proxy
@@ -355,6 +393,11 @@ impl Config {
     /// Cookie name for browser sessions.
     pub fn session_cookie_name(&self) -> &'static str {
         "lm_session"
+    }
+
+    /// [`Config::public_url`] as a WebSocket origin. See [`ws_origin`].
+    pub fn public_ws_origin(&self) -> Option<String> {
+        ws_origin(self.public_url.as_deref()?)
     }
 
     /// `true` when `origin` is allowed to talk to this server.
@@ -551,6 +594,22 @@ fn parse_cidrs(key: &'static str) -> Result<Vec<ipnet::IpNet>, ConfigError> {
     Ok(nets)
 }
 
+/// An http(s) origin with its scheme swapped for the WebSocket one
+/// (`https` → `wss`, `http` → `ws`). `None` for anything else.
+///
+/// A CSP source is matched scheme-and-all, and `/api/sync` is opened as a
+/// `wss://` URL: listing only the `https://` origin in `connect-src` would admit
+/// every REST call and refuse the socket. Both spellings of the same host have
+/// to be named, which is why this exists rather than each caller doing string
+/// surgery on an origin.
+pub fn ws_origin(origin: &str) -> Option<String> {
+    match origin.split_once("://") {
+        Some(("https", rest)) if !rest.is_empty() => Some(format!("wss://{rest}")),
+        Some(("http", rest)) if !rest.is_empty() => Some(format!("ws://{rest}")),
+        _ => None,
+    }
+}
+
 /// Parse `APP_ORIGIN` — comma separated, each entry `scheme://host[:port]` with
 /// no path and no trailing slash (that is what a browser sends in `Origin`).
 fn parse_origins(key: &'static str) -> Result<Vec<String>, ConfigError> {
@@ -609,6 +668,7 @@ mod tests {
             max_attachment_bytes: DEFAULT_MAX_ATTACHMENT_BYTES,
             max_document_bytes: life_manager_core::limits::MAX_DOCUMENT_BYTES,
             app_origins: origins.iter().map(|o| o.to_string()).collect(),
+            public_url: None,
             log_format: LogFormat::Json,
             cookie_secure: true,
             trust_proxy_headers: false,
@@ -668,5 +728,30 @@ mod tests {
     fn empty_allowlist_allows_nothing() {
         let config = config_with_origins(&[]);
         assert!(!config.origin_allowed("https://notes.example.com"));
+    }
+
+    #[test]
+    fn a_public_url_yields_both_spellings_of_its_origin() {
+        // The pair a CSP `connect-src` needs: the REST origin and the socket origin.
+        assert_eq!(
+            ws_origin("https://notes.example.com").as_deref(),
+            Some("wss://notes.example.com")
+        );
+        assert_eq!(
+            ws_origin("http://192.168.1.10:8080").as_deref(),
+            Some("ws://192.168.1.10:8080")
+        );
+        // Anything `parse_origins` would already have refused has no WebSocket form.
+        assert_eq!(ws_origin("notes.example.com"), None);
+        assert_eq!(ws_origin("ftp://notes.example.com"), None);
+        assert_eq!(ws_origin("https://"), None);
+
+        let mut config = config_with_origins(&[]);
+        assert_eq!(config.public_ws_origin(), None);
+        config.public_url = Some("https://notes.example.com".to_string());
+        assert_eq!(
+            config.public_ws_origin().as_deref(),
+            Some("wss://notes.example.com")
+        );
     }
 }

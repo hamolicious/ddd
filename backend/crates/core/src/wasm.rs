@@ -53,7 +53,7 @@ pub fn parse_document(text: &str) -> String {
 /// Evaluate a filter-DSL expression against one projection row.
 ///
 /// `filter_json` is the DSL wire form (`crates/core/README.md`); `doc_json` is
-/// `{ id, title, content, fm, plugins, created_at?, updated_at?, deleted }` with
+/// `{ id, title, content, fm, plugins, created_at?, updated_at?, deleted_at?, deleted }` with
 /// RFC 3339 timestamps.
 ///
 /// Returns `false` for an unparseable filter, an unparseable row, **and** for an
@@ -77,6 +77,7 @@ pub fn evaluate_filter(filter_json: &str, doc_json: &str) -> bool {
     let plugins = map_field(&document, "plugins");
     let created_at = date_field(&document, "created_at");
     let updated_at = date_field(&document, "updated_at");
+    let deleted_at = date_field(&document, "deleted_at");
     let deleted = document
         .get("deleted")
         .and_then(serde_json::Value::as_bool)
@@ -90,6 +91,7 @@ pub fn evaluate_filter(filter_json: &str, doc_json: &str) -> bool {
         plugins: &plugins,
         created_at: created_at.as_ref(),
         updated_at: updated_at.as_ref(),
+        deleted_at: deleted_at.as_ref(),
         deleted,
     };
 

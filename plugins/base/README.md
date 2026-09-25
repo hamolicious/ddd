@@ -11,6 +11,7 @@ reference for writing a plugin — there is deliberately no scaffolding CLI (SPE
 
 ```
 _shared/points.ts                 the extension points: names, types, shape validators
+_shared/machine-docs.ts           the one rule three plugins share about hiding documents
 _shared/vite.plugin-config.mjs    the reference build config (SPEC §6.4)
 _shared/vite.config.example.mjs   how a standalone plugin uses it
 <id>/manifest.json                SPEC §6.2
@@ -36,20 +37,84 @@ dist/<id>/<version>/              build output = the installed layout the server
 | `settings` | the settings shell | `settings.section` |
 | `admin` | users, invites, audit, orphans, snapshots, plugins | — |
 
-Two more ship here from M4, and they are deliberately **not** in `BASE_PLUGIN_IDS`
-(`crates/server/src/plugins.rs`), which is what `?safe=1` boots: safe mode is a recovery
-path, and recovery should not include the newest code. They are the M4 proof (SPEC §9 M4),
-not part of the fourteen-plugin core.
+That is the whole table. `calendar` and `agenda` — M4's proof plugins, which shipped here
+and were never in `BASE_PLUGIN_IDS` — were **removed** on 2026-09-24 at the owner's
+direction. They are in git history; nothing here depends on them, and nothing in the
+server was written for them. The one thing that went with them is the only base plugin
+that had a backend half, so **every plugin in this directory is now frontend-only**; a
+`backend.wasm` still builds and installs exactly as before (`mise run wasm-plugins`,
+`plugins/examples/hello-backend`), there is simply nothing in the base set using it.
 
-| Plugin | Halves | Responsibility |
-|---|---|---|
-| `calendar` | backend + frontend | crons an ICS feed into machine-owned documents (`fm.date`); renders a month grid from them |
-| `agenda` | frontend only | what is coming up, from `fm.date` across the whole workspace — **no backend half, no capabilities** |
+## How the base plugins relate
 
-`agenda` exists to make the rule concrete: *a plugin needs a backend half only when it needs
-cron, outbound HTTP or a webhook* (SPEC §6.3). It needs none, so it has none, and it reads
-`fm.date` rather than "calendar events" — a note with a date and an imported meeting are the
-same thing to it, which is why it does not depend on `calendar`.
+Generated from the fourteen `manifest.json` `dependencies` fields — an arrow reads
+**"depends on"**, and the loader's activation order is precisely a topological order of
+this graph (a dependency always activates first; a failed dependency skips its whole
+subtree). Every plugin additionally depends on `@kernel`, which is not drawn.
+
+```mermaid
+flowchart TD
+    subgraph documents ["document experience"]
+        viewer --> markdown
+        viewer --> document-surface
+        editor --> document-surface
+        properties --> document-surface
+    end
+
+    subgraph browse ["browse & find"]
+        folders --> doc-list
+        search
+    end
+
+    subgraph config ["configuration"]
+        themes --> settings
+        admin --> settings
+    end
+
+    subgraph foundation ["foundation"]
+        router --> shell-ui
+        commands --> shell-ui
+    end
+
+    markdown --> commands & router
+    document-surface --> commands & router & shell-ui
+    editor --> commands
+    properties --> commands
+    doc-list --> commands & router & shell-ui
+    folders --> commands & router & shell-ui
+    search --> commands & router & shell-ui
+    settings --> commands & router & shell-ui
+    admin --> commands & router & shell-ui
+    themes --> commands
+```
+
+Reading it bottom-up: `shell-ui` owns the frame everyone renders into; `router` and
+`commands` are the two services almost everything consumes (URLs and actions); the
+document experience stacks `viewer`/`editor`/`properties` as peer *modes* on
+`document-surface`, with `markdown` as the rendering pipeline `viewer` consumes; and
+`folders` is the one browse plugin built on top of another (`doc-list`). Replacing any
+node means satisfying its incoming arrows — nothing else.
+
+## Machine-owned documents
+
+`doc-list`, `folders` and `search` leave out any document whose `fm.path` starts with
+`.` — the kernel's per-user settings documents (SPEC §6.4) are the ones that exist
+today. The rule, the predicate and the DSL clause live in one place,
+`_shared/machine-docs.ts`, precisely so the three cannot drift about what they are
+hiding: a sidebar counting twelve above a list of eleven is the bug this replaced.
+
+It is **a convention three plugins share, not a kernel concept.** The kernel knows one
+domain model — a document is text — and "machine-owned" is not part of it (SPEC §2).
+Nothing changes about what the server returns, what the local index holds or what
+`kernel.documents` answers, every one of these documents stays readable, editable and
+linkable, and `doc-list`'s filter bar and `search`'s results page each carry a toggle
+that brings them back. A plugin that wants machine-owned documents of its own gets the
+same treatment by filing them under a dotted path — there is no list of special paths
+for anyone to keep up to date.
+
+`folders` has no toggle, deliberately: a hidden folder in a tree is a row that looks
+like every other folder and behaves differently, and a rename there would splice
+`fm.path` on documents the kernel authors.
 
 ## Building
 

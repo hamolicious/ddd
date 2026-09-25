@@ -126,8 +126,21 @@
 
 .search-form {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--lm-space);
   align-items: stretch;
+}
+
+/* "Include machine documents" — a control beside the query, not a field of its own. */
+.search-toggle {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--lm-space) / 2);
+  min-height: var(--lm-tap-target);
+  font-size: 0.85em;
+  color: var(--lm-text-muted);
+  white-space: nowrap;
+  cursor: pointer;
 }
 
 .search-field {
@@ -224,6 +237,14 @@
 @media (max-width: 640px) {
   .search-box {
     max-width: none;
+    /*
+     * A smaller share of the row. `shell-ui` gives the navbar's start side a
+     * full-width second row on a phone, and 18rem of flex basis there took enough of
+     * it to squeeze the neighbouring "New document" down to "New docu…". 10rem still
+     * fills whatever is left over (`flex-grow: 1`) and stops shouldering a sibling
+     * out of its own label.
+     */
+    flex-basis: 10rem;
   }
 
   .search-results {

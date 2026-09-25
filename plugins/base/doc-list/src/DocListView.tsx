@@ -6,11 +6,13 @@
  * tombstoned document is an ordinary projection row with `deleted: true`, restorable for
  * 30 days, and purge is the server's job.
  *
- * **Trash sorts client-side.** `?sort=deleted_at` is a 400 and the local evaluator
- * resolves that root to `Missing`, so neither engine can order by it (`filter.ts` has the
- * full argument). The rows are therefore ordered here, after the query, and the UI says
- * so rather than showing a control that lies — which is also why Trash asks for a
- * generous `limit`: the ordering is only correct over the rows it actually holds.
+ * **Trash sorts on `deleted_at`, in the engine.** It used to sort in this component
+ * after the query, because the shared field space did not reach that root: the order
+ * was then only correct over the page the query happened to return, and a workspace
+ * with more tombstones than `TRASH_LIMIT` showed the wrong ones in a confident order.
+ * `deleted_at` is a fixed root of the DSL now (`core::filter::ast::FIXED_ROOTS`), the
+ * server compiles it, and `kernel/src/query/filter.ts` mirrors it — so the sort key is
+ * just a sort key, and the direction toggle is one query parameter.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -19,7 +21,13 @@ import type { ReactElement } from "react";
 import type { DocumentQuery, DocumentRow, DocumentsApi } from "@kernel";
 
 import { FilterBar } from "./FilterBar.js";
-import { TRASHED_ONLY, buildFilter, buildSort, type FilterDraft } from "./filter.js";
+import {
+  TRASHED_ONLY,
+  buildEffectiveFilter,
+  buildFilter,
+  buildSort,
+  type FilterDraft,
+} from "./filter.js";
 import { useLiveQuery } from "./useLiveQuery.js";
 
 /** Trash holds at most 30 days of tombstones; one page covers a realistic workspace. */
@@ -48,14 +56,18 @@ export function DocListView({
   const [busy, setBusy] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
 
+  // Two filters, and the difference matters. `filter` is what the *user* asked for and
+  // decides which empty state to show; `effective` is what the query runs, and hides
+  // machine-owned documents unless the draft asks for them (`_shared/machine-docs.ts`).
   const filter = buildFilter(draft);
+  const effective = buildEffectiveFilter(draft);
   const query = useMemo<DocumentQuery>(
     () => ({
-      ...(filter !== undefined ? { filter } : {}),
+      ...(effective !== undefined ? { filter: effective } : {}),
       sort: buildSort(sortField, sortDirection),
       limit: LIST_LIMIT,
     }),
-    [JSON.stringify(filter), sortDirection, sortField],
+    [JSON.stringify(effective), sortDirection, sortField],
   );
 
   const state = useLiveQuery(documents, query);
@@ -161,6 +173,16 @@ export interface TrashViewProps {
   readonly onRestore: (id: string) => Promise<void>;
   /** From the server config; 30 by default (SPEC §3.5). */
   readonly retentionDays?: number;
+  /**
+   * The signed-in user's id, so `deleted_by` can be rendered as a sentence.
+   *
+   * The projection carries attribution as an id and nothing else, and there is no
+   * `@kernel` way to turn one into a name (the user list is an admin endpoint). "you"
+   * versus "someone else" is the whole of what this view can honestly say, and it is
+   * also the distinction that matters in a shared workspace (SPEC §5.4) — a 26-character
+   * ULID on screen said neither.
+   */
+  readonly currentUserId?: string;
 }
 
 export function TrashView({
@@ -168,6 +190,7 @@ export function TrashView({
   onOpen,
   onRestore,
   retentionDays = 30,
+  currentUserId,
 }: TrashViewProps): ReactElement {
   const [busy, setBusy] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -177,24 +200,13 @@ export function TrashView({
     () => ({
       filter: TRASHED_ONLY,
       includeDeleted: true,
-      // Ordered again below; `updated_at` only keeps the query's own order stable.
-      sort: buildSort("updated_at", "desc"),
+      sort: buildSort("deleted_at", newestFirst ? "desc" : "asc"),
       limit: TRASH_LIMIT,
     }),
-    [],
+    [newestFirst],
   );
   const state = useLiveQuery(documents, query);
-
-  const rows = useMemo(() => {
-    const ordered = [...state.rows].sort((a, b) => {
-      const left = a.deleted_at ?? "";
-      const right = b.deleted_at ?? "";
-      if (left !== right) return left < right ? -1 : 1;
-      // Same instant: the id tiebreaker both engines use, so the order is total.
-      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-    });
-    return newestFirst ? ordered.reverse() : ordered;
-  }, [newestFirst, state.rows]);
+  const rows = state.rows;
 
   return (
     <section className="doclist" aria-labelledby="trash-heading">
@@ -208,12 +220,6 @@ export function TrashView({
       <p className="doclist-note">
         Documents stay here for {retentionDays} days, then the server purges them
         permanently. Restoring brings a document back exactly as it was.
-      </p>
-      <p className="doclist-note">
-        Sorted by deletion time <strong>on this device</strong>: the shared filter language
-        does not reach <code>deleted_at</code>, so neither the server nor the local query
-        engine can order by it — see <code>filter.ts</code>. The ordering therefore covers
-        the {TRASH_LIMIT} most recently updated tombstones.
       </p>
 
       {(state.error ?? error) && (
@@ -240,7 +246,11 @@ export function TrashView({
                 </button>
                 <p className="doclist-meta">
                   <span>deleted {formatWhen(row.deleted_at)}</span>
-                  {row.deleted_by && <span>by {row.deleted_by}</span>}
+                  {row.deleted_by && (
+                    <span title={`user ${row.deleted_by}`}>
+                      by {row.deleted_by === currentUserId ? "you" : "another user"}
+                    </span>
+                  )}
                 </p>
                 <div className="doclist-item-actions">
                   <button

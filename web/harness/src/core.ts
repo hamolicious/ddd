@@ -12,8 +12,7 @@
  *    `canonicalize_dates`, SPEC §3.4) so lexicographic sort is chronological.
  *    `parse_document` does **not**, so a raw client parse of `date: 2026-9-3`
  *    disagrees with the server's `2026-09-03`. The harness applies the core's own
- *    `normalize_date` recursively before comparing — see the INTEGRATION note in
- *    this file.
+ *    `normalizeDate` recursively before comparing.
  */
 
 import { readFile } from "node:fs/promises";
@@ -24,8 +23,6 @@ import { loadCore, type CoreBindings, type ParsedDocument } from "../../kernel/s
 const PKG = new URL("../../kernel/src/wasm/pkg/", import.meta.url);
 
 export interface HarnessCore extends CoreBindings {
-  /** `Date::normalize_str` — the server's canonical ISO-8601 form (SPEC §3.4). */
-  normalizeDate(input: string): string;
   /** A parse canonicalized exactly the way materialization canonicalizes it. */
   parseAsMaterialized(text: string): ParsedDocument;
 }
@@ -54,14 +51,13 @@ export function harnessCore(): Promise<HarnessCore> {
       );
     }
     const core = await loadCore(bytes);
-    // `normalize_date` is exported by the Wasm ABI but is not part of the frozen
-    // `CoreBindings` surface, so it is reached through the generated module here.
-    // INTEGRATION (wasm area): if `CoreBindings` grows `normalizeDate`, drop this.
-    const mod = await import("@life-manager/core-wasm");
-    const normalizeDate = (input: string): string => mod.normalize_date(input);
+    // `normalizeDate` is part of `CoreBindings` now, so the harness uses the same
+    // binding every other caller does. It used to reach past the interface into the
+    // generated module for `normalize_date`, which meant this file — and only this
+    // file — knew how to canonicalize a date the way the server does.
+    const normalizeDate = core.normalizeDate;
     return {
       ...core,
-      normalizeDate,
       parseAsMaterialized: (text: string) => {
         const parsed = core.parseDocument(text);
         return {

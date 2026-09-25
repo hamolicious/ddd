@@ -95,11 +95,17 @@
   flex: 0 1 6rem;
 }
 
+/*
+ * `flex-basis: 6rem`, not `100%`. At `100%` these editors claimed the whole row of
+ * `.properties-value`, which wrapped the row's "Remove <key>" button onto a line of
+ * its own — an orphaned `×` floating under the control it belongs to. They still
+ * take every pixel left over (`flex-grow: 1`) and still wrap their own contents.
+ */
 .properties-date,
 .properties-list-editor,
 .properties-unparseable {
   display: flex;
-  flex: 1 1 100%;
+  flex: 1 1 6rem;
   flex-wrap: wrap;
   align-items: center;
   gap: calc(var(--lm-space) / 2);

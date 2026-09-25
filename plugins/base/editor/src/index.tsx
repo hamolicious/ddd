@@ -104,6 +104,26 @@ function machineRegions(regions: DocumentRegions): readonly Region[] {
 }
 
 /**
+ * What a folded region is, for the placeholder chip.
+ *
+ * One label for every fold read "machine data", which is wrong about the frontmatter
+ * and says so twice: frontmatter is **human**-owned (SPEC §3.3), and this plugin's own
+ * setting already tells the user "`%%%` sections always start folded; frontmatter is
+ * yours". A fold is also the one place a `%%%` section's owner is worth naming — the
+ * opening fence carries the plugin id and folding hides it.
+ *
+ * `from` is the end of the region's first line (see {@link foldRangeFor}), so a region
+ * is matched by the line it starts on rather than by an exact offset.
+ */
+function foldLabel(doc: Text, from: number): string {
+  const line = doc.lineAt(from).from;
+  const regions = regionsOf(doc);
+  if (regions.frontmatter && regions.frontmatter.start === line) return "frontmatter";
+  const section = regions.sections.find((candidate) => candidate.start === line);
+  return section ? `${section.id} data` : "machine data";
+}
+
+/**
  * Fold from the end of a region's first line, so the fence line stays on screen with
  * the fold placeholder next to it. Folding from `region.start` would hide the `%%% id`
  * header and leave the user a nameless blob to click.
@@ -165,7 +185,40 @@ export default function activate(kernel: Kernel): EditorApi {
     if (effects.length > 0) view.dispatch({ effects });
   };
 
-  const Edit = ({ id, row, open }: DocumentModeProps): ReactNode => {
+  /**
+   * Put the cursor on a 1-based line and scroll it into view — `#/doc/<id>?line=42`.
+   *
+   * Clamped rather than validated: a deep link into a document that has since been
+   * edited (or synced from another device) can name a line that no longer exists, and
+   * landing at the end is a better answer than an exception or no movement at all.
+   *
+   * `scrollIntoView` with `y: "center"` rather than the default "nearest": a line the
+   * user was *sent* to should be somewhere they can read around, not flush against the
+   * bottom edge — and on the soft-keyboard layouts of SPEC §6.5's M5 criterion, the
+   * bottom edge is where the keyboard is.
+   */
+  const revealLine = (view: EditorView, line: number): void => {
+    const doc = view.state.doc;
+    const target = doc.line(Math.min(Math.max(line, 1), doc.lines));
+
+    // A `%%%` section starts folded (and frontmatter may), so a line inside one would
+    // be "revealed" behind a `⋯ machine data` placeholder. Unfold the region that
+    // contains it — and only that one; the rest stay out of the way.
+    const containing = machineRegions(regionsOf(doc)).find(
+      (region) => target.from >= region.start && target.from < region.end,
+    );
+    const unfold = containing ? foldRangeFor(doc, containing) : null;
+
+    view.dispatch({
+      selection: { anchor: target.from },
+      effects: [
+        ...(unfold ? [unfoldEffect.of(unfold)] : []),
+        EditorView.scrollIntoView(target.from, { y: "center" }),
+      ],
+    });
+  };
+
+  const Edit = ({ id, row, open, line }: DocumentModeProps): ReactNode => {
     const host = useRef<HTMLDivElement | null>(null);
     const [failure, setFailure] = useState<string | undefined>(undefined);
 
@@ -204,7 +257,16 @@ export default function activate(kernel: Kernel): EditorApi {
 
               // --- the machine regions ---------------------------------------
               codeFolding({
-                placeholderText: "⋯ machine data",
+                preparePlaceholder: (state, range) => foldLabel(state.doc, range.from),
+                placeholderDOM: (_view, onclick, prepared: unknown) => {
+                  const chip = document.createElement("span");
+                  chip.className = "cm-foldPlaceholder";
+                  chip.textContent = `⋯ ${typeof prepared === "string" ? prepared : "machine data"}`;
+                  chip.title = "Click to expand";
+                  chip.setAttribute("aria-label", `Expand ${chip.textContent.slice(2)}`);
+                  chip.onclick = onclick;
+                  return chip;
+                },
               }),
               foldService.of((state, lineStart) => {
                 const region = machineRegions(regionsOf(state.doc)).find(
@@ -256,6 +318,8 @@ export default function activate(kernel: Kernel): EditorApi {
 
         // `%%%` sections always start folded; the frontmatter fold is the user's call.
         setFolded(view, true, foldFrontmatterPreference());
+        // `?line=N`, applied after the folds so the reveal wins over them.
+        if (line !== undefined) revealLine(view, line);
         live = view;
         setFailure(undefined);
       } catch (error) {
@@ -271,7 +335,25 @@ export default function activate(kernel: Kernel): EditorApi {
         // history alive for a document that is no longer on screen.
         undoManager?.destroy();
       };
+      // `line` is deliberately **not** a dependency: rebuilding the whole editor — and
+      // with it the `Y.UndoManager` and every contributed extension — because a deep
+      // link moved is the wrong shape of fix. A second `?line=` on the document already
+      // open is handled by the effect below, which only dispatches a selection.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open, id]);
+
+    /**
+     * A `?line=` that changes while this editor stays mounted — following a second
+     * search result into the document already on screen.
+     *
+     * `live` is the view this component created (the surface mounts at most one editor),
+     * and a dispatch is all that is needed: the text is untouched, so this is a cursor
+     * move and a scroll, not an edit, and `Y.UndoManager` never sees it.
+     */
+    useEffect(() => {
+      if (line === undefined || !live || failure !== undefined) return;
+      revealLine(live, line);
+    }, [line, open, failure]);
 
     if (!open) {
       return (

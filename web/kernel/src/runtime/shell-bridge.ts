@@ -106,6 +106,20 @@ export interface ShellBridgeV1 {
   readonly methods?: readonly string[];
   readonly platform?: string;
   /**
+   * The `bundle_version` the shell is **currently serving** to this webview — the
+   * 64-character digest from the bundle manifest (`app/BRIDGE.md` §5).
+   *
+   * Optional, and absent today: `bootstrapScript` on the Dart side does not inject it
+   * yet, so `shellInfo()` reports `undefined` and the settings panel says "not reported
+   * by the shell". It is declared here rather than read through a cast because the
+   * *page* cannot answer "am I up to date?" without it: `GET /api/shell/manifest` names
+   * the newest bundle the server has, which is a different question from which one this
+   * device booted. Adding it on the Dart side is an optional member and needs no bridge
+   * version bump (`app/BRIDGE.md` §8) — and `app/bridge_fixtures/window_shell.json`
+   * deliberately does not list it, so neither half's tests assume it is there.
+   */
+  readonly bundleVersion?: string;
+  /**
    * Where the server is. **The page's own origin is the shell's loopback bundle server**, so
    * API and socket URLs must be resolved against this and not against `location.origin`
    * (`app/BRIDGE.md` §6).

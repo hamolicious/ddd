@@ -388,8 +388,8 @@ The checks, **in this order** (the order is the security property):
    clock is not a request cap: a cron run has 60 s of it, which is thousands of requests
    aimed at whatever host an admin approved for a nightly feed fetch, and on a plugin with a
    public route the same loop is reachable once per inbound request. The number is far above
-   the fetch-and-follow-redirects shape this capability exists for (the calendar makes one
-   request per run) and far below a loop; a plugin that genuinely has to page through an API
+   the fetch-and-follow-redirects shape this capability exists for (a daily feed importer
+   makes one request per run) and far below a loop; a plugin that genuinely has to page through an API
    spreads the pages across cron runs, the same answer the per-call write cap gives.
 
 **Credentials are not replayed across origins.** `authorization` is deliberately allowed on
@@ -498,8 +498,8 @@ silent degradation the payload exists to prevent.
 The rules, and what each costs (SPEC §6.3):
 
 - **At-most-once, fire-and-forget, no retry.** Failures are logged and counted on the
-  breaker. A plugin that must not miss a change reconciles on its cron run — which is why
-  the calendar plugin does a full reconciliation rather than trusting hooks.
+  breaker. A plugin that must not miss a change reconciles on its cron run rather than
+  trusting hooks — a full reconciliation is the shape that survives a missed delivery.
 - **Debounced 2 s per document**, with `coalesced` saying how many changes the delivery
   stands for, and a 30 s ceiling so a continuously-edited document still delivers.
 - **Never delivered to the plugin that caused the change.** Origin comes from the row's
@@ -535,8 +535,8 @@ The rules, and what each costs (SPEC §6.3):
 - **No overlapping executions** per expression; a slot arriving while the previous run is
   in flight counts as missed. That is a property of the *job*, not of the scheduler, so the
   admin screen's "run cron now" takes the same claim and answers `409` when a run is already
-  going — a manual run racing the scheduled one gave the calendar two reconciliations that
-  both read the pre-write state and both created a document per event.
+  going — a manual run racing the scheduled one gave M4's calendar plugin two
+  reconciliations that both read the pre-write state and both created a document per event.
 - `last_run` is persisted on the plugin's record, so a restart does not re-fire.
 - Dispatch on `index`, not on the clock: it is stable across restarts and reformatting.
 
@@ -737,8 +737,8 @@ The approved set may **narrow** anything. It may **extend** exactly one field:
 `http.hosts`.
 
 > A plugin whose destination is admin-configured cannot know its host when it is packaged.
-> The calendar plugin is exactly that case: it ships `"hosts": []` and the operator who
-> enters a feed URL is the one who knows the host. The alternative is asking every operator
+> A feed importer is exactly that case: it ships `"hosts": []` and the operator who enters
+> a feed URL is the one who knows the host. The alternative is asking every operator
 > to repackage a zip, which they would do by turning the check off. Widening anything else —
 > a `documents` right, a public route the package never declared — is refused: those are the
 > package's own claims about itself.
@@ -809,10 +809,14 @@ Build and check:
 ```text
 mise run wasm-plugins    # build every backend half into the installed layout
 mise run plugin-check    # fmt + clippy for the SDK and the plugin crates (wasm32)
-mise run plugin-test     # host-target tests for the pure crates (the ICS parser)
 mise run plugin-smoke    # build hello-backend and load it in a minimal Extism host
 ```
 
 **Keep the testable logic out of the wasm crate.** A plugin crate cannot be unit-tested on
 the host target — it links the Extism host imports — so pure logic belongs in a plain crate
-beside it (`plugins/base/calendar/ics` is the pattern) and the wasm crate stays glue.
+beside it and the wasm crate stays glue. `plugins/base/calendar/ics` was the worked
+example until that plugin was removed (2026-09-24); the pattern is unchanged, and so is
+the task that ran it — `mise run plugin-test` was **deleted with that crate** rather than
+left pointing at nothing, because a task that resolves to zero tests reports green.
+`mise.toml` keeps the removal note; bring the task back with the first plugin that has a
+pure crate to run.

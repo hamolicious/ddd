@@ -59,6 +59,12 @@
 //! database: a plugin removed to try a replacement and put back finds its state where it
 //! left it (SPEC §6.2).
 //!
+//! **A plugin can also leave without anyone calling `uninstall`** — an image that stops
+//! shipping it, a directory an operator emptied. [`adopt_installed_directory`] reconciles
+//! that at boot: the record is retired and the table above applies unchanged, so the data
+//! survives and a reinstall is still lossless. See [`prune_absent_records`] for the two
+//! cases that deliberately do *not* count as leaving.
+//!
 //! **Owner:** the `install-flow` builder (`backend/CONTRACTS.md`).
 
 pub mod config;
@@ -154,14 +160,15 @@ pub enum InstallError {
         required: String,
         current: String,
     },
-    #[error(
-        "plugin `{id}`'s backend was built against host ABI {found}, this server speaks {expected}"
-    )]
-    AbiIncompatible {
-        id: String,
-        expected: u32,
-        found: u32,
-    },
+    // There is deliberately no `AbiIncompatible` variant. The ABI *version value* cannot be
+    // known at install time: it is what the module's `lm_abi_version` export *returns*, and
+    // reading it needs a compiled instance. What install can answer statically is whether
+    // the export exists at all, and that is [`check_backend_module`] — reported as a
+    // `Manifest` error, because "this .wasm was not built with `lm::abi_version!()`" is a
+    // packaging fault. The value is checked by `PluginHost::activate` before any of the
+    // plugin's own code runs, and surfaces as `PluginHostError::AbiMismatch` on the record's
+    // `last_error`. An unconstructible variant here only advertised a check that lives
+    // somewhere else.
     #[error("unsatisfied dependency: {0}")]
     Dependency(String),
     #[error("unsatisfiable peer library: {0}")]
@@ -205,7 +212,6 @@ impl From<InstallError> for crate::error::AppError {
                 AppError::BadRequest(format!("the manifest is not valid: {message}"))
             }
             InstallError::KernelIncompatible { .. }
-            | InstallError::AbiIncompatible { .. }
             | InstallError::Dependency(_)
             | InstallError::PeerLibrary(_) => AppError::Unprocessable(error.to_string()),
             InstallError::AlreadyInstalled { .. } | InstallError::Conflict(_) => {
@@ -501,7 +507,7 @@ async fn stage_and_record(
 /// `capabilities` is what the **admin** approved, which may differ from what the manifest
 /// requested. The rule (`backend/HOST-ABI.md`, "Capabilities an admin may widen"): the
 /// approved set may narrow anything, and may *extend* only `http.hosts` — a plugin whose
-/// destination is user-configured (the calendar is exactly that) cannot know its host at
+/// destination is user-configured (a feed importer is exactly that) cannot know its host at
 /// packaging time, and the alternative is asking every operator to repackage a zip.
 pub async fn approve(
     state: &AppState,
@@ -566,6 +572,13 @@ async fn approve_locked(
                     installed.display()
                 ))
             })?;
+            // The rename empties `<staging>/pending/<id>` but leaves the directory. An
+            // empty directory there is not a pending package, and something does read it
+            // as one: `retire_absent_records`'s second guard. Fails when a sibling version
+            // is still pending, which is the case where it *should* stay.
+            if let Some(parent) = pending.parent() {
+                let _ = fs::remove_dir(parent);
+            }
         }
         // The rename already happened; only the record write is outstanding. Approving again
         // finishes the job, with whatever capabilities the admin is choosing *now*.
@@ -1068,12 +1081,26 @@ fn unwind_interrupted_approvals(
     moved
 }
 
-/// Seed records for the plugins already on disk.
+/// Reconcile the plugin records with the plugins on disk.
 ///
 /// The bridge from M3, where the directory *was* the registry. On first boot every
 /// directory becomes an approved record with its manifest's capabilities: an existing
 /// deployment must not wake up with its whole base distribution pending, and the base
 /// distribution has no backend halves to gate anyway.
+///
+/// It reconciles in **both** directions. A directory with no record is adopted (below); a
+/// record with no directory is retired ([`retire_absent_records`]), which is what keeps a
+/// plugin dropped from the image from lingering as an entry in admin and a 404ing module URL
+/// in every client. Retiring keeps the plugin's data, exactly as an uninstall does.
+///
+/// **A *known* plugin is never re-approved by this pass.** The capability set a record
+/// carries is the one an admin decided on — possibly narrower than the manifest's request,
+/// which is the only thing the approval screen is for (SPEC §6.2) — and the state is their
+/// on/off switch. Adoption therefore fills in what is missing and overwrites only what the
+/// *directory* is authoritative about (the version, the manifest, the module hash). Writing
+/// `manifest.capabilities` unconditionally is the bug this sentence exists to prevent: a
+/// plugin absent for one boot and back the next would return with everything it asked for
+/// and no approval screen in between.
 ///
 /// **The consequence, stated:** anything an operator copies into `PLUGINS_DIR` by hand is
 /// adopted as approved. That is inherent in the directory being the artifact store — the
@@ -1104,17 +1131,23 @@ pub async fn adopt_installed_directory(state: &AppState) -> Result<usize, Instal
     for installed in registry.plugins() {
         let manifest = &installed.manifest;
         if let Some(existing) = known.get(&manifest.id) {
-            if existing.version == manifest.version {
+            // Same version, same record, nothing to reconcile — *unless* the record is the
+            // one an earlier boot switched off because this very directory was missing.
+            // That one is back, and re-enabling it is the whole point of having kept it.
+            if existing.version == manifest.version && !marked_absent(existing) {
                 continue;
             }
-            // The directory and the record disagree about the version. The directory wins
-            // — it is what is being served — and the record is corrected rather than the
-            // plugin being demoted (`Registry::apply_states` refuses to demote on a
-            // version mismatch for the same reason).
-            warn!(
-                plugin = %manifest.id, on_disk = %manifest.version, recorded = %existing.version,
-                "correcting a plugin record to the version on disk"
-            );
+            if existing.version != manifest.version {
+                // The directory and the record disagree about the version. The directory
+                // wins — it is what is being served — and the record is corrected rather
+                // than the plugin being demoted (`Registry::apply_states` refuses to demote
+                // on a version mismatch for the same reason).
+                warn!(
+                    plugin = %manifest.id, on_disk = %manifest.version,
+                    recorded = %existing.version,
+                    "correcting a plugin record to the version on disk"
+                );
+            }
         }
 
         let module_sha256 = manifest.backend.as_ref().and_then(|backend| {
@@ -1123,17 +1156,45 @@ pub async fn adopt_installed_directory(state: &AppState) -> Result<usize, Instal
             zipcheck::sha256_file(&path).ok()
         });
         let previous = known.get(&manifest.id);
+        // A package that went away and came back. The previous pass turned the record off
+        // rather than deleting it precisely so this is recoverable without a click; the
+        // marker is what separates "we switched it off because the file vanished" from "an
+        // admin switched it off", and only the first is ours to undo.
+        let returning = previous.is_some_and(marked_absent);
+        if returning {
+            info!(
+                plugin = %manifest.id, version = %manifest.version,
+                "a plugin whose package had gone missing is back; re-enabling it with the \
+                 capabilities it was already approved for"
+            );
+        }
+        if previous.is_some_and(|record| {
+            record.state.is_served() && record.capabilities_approved != manifest.capabilities
+        }) {
+            warn!(
+                plugin = %manifest.id, version = %manifest.version,
+                "the manifest on disk does not ask for what this plugin is approved for; \
+                 the approved set stands and host calls outside it are refused \
+                 (uninstall without --purge and reinstall to be asked again)"
+            );
+        }
         let record = PluginRecord {
             id: manifest.id.clone(),
             version: manifest.version.clone(),
-            state: previous
-                .map(|record| record.state)
-                .unwrap_or(PluginState::Enabled),
+            state: match previous {
+                // First sight of a directory: approved with exactly what it asks for. There
+                // is no admin decision to reconstruct, and the alternative (empty) would
+                // silently strip a working plugin of its capabilities on upgrade to M4.
+                None => PluginState::Enabled,
+                Some(_) if returning => PluginState::Enabled,
+                Some(record) => record.state,
+            },
             manifest: manifest.clone(),
-            // An adopted install is approved with exactly what it asks for: there is no
-            // admin decision to reconstruct, and the alternative (empty) would silently
-            // strip a working plugin of its capabilities on upgrade to M4.
-            capabilities_approved: manifest.capabilities.clone(),
+            // **Never widened here.** The manifest's request is what an admin was asked
+            // about; the record's set is what they answered.
+            capabilities_approved: previous
+                .map(|record| record.capabilities_approved.clone())
+                .unwrap_or_else(|| manifest.capabilities.clone()),
             source: previous
                 .map(|record| record.source.clone())
                 .unwrap_or(InstallSource::Base),
@@ -1141,9 +1202,15 @@ pub async fn adopt_installed_directory(state: &AppState) -> Result<usize, Instal
                 .map(|record| record.installed_at)
                 .unwrap_or_else(Timestamp::now),
             installed_by: previous.and_then(|record| record.installed_by.clone()),
-            approved_at: Some(Timestamp::now()),
-            approved_by: None,
-            disabled_reason: previous.and_then(|record| record.disabled_reason.clone()),
+            approved_at: previous
+                .and_then(|record| record.approved_at)
+                .or_else(|| Some(Timestamp::now())),
+            approved_by: previous.and_then(|record| record.approved_by.clone()),
+            disabled_reason: if returning {
+                None
+            } else {
+                previous.and_then(|record| record.disabled_reason.clone())
+            },
             last_error: None,
             module_sha256,
             cron_state: previous
@@ -1154,11 +1221,168 @@ pub async fn adopt_installed_directory(state: &AppState) -> Result<usize, Instal
         adopted += 1;
     }
 
-    // Records for plugins that are no longer on disk are left alone: an operator who
-    // unmounted a volume has not uninstalled anything, and deleting the record would throw
-    // away the approval and the cron history they will want back.
+    retire_absent_records(state, &known, &registry).await;
+
     refresh_registry(state).await;
     Ok(adopted)
+}
+
+/// `disabled_reason` on a record this pass switched off because its package went missing.
+///
+/// A marker, not prose, because [`adopt_installed_directory`] has to tell this apart from a
+/// reason an *admin* wrote: one is ours to undo when the directory comes back, the other is
+/// a decision that outlives the file. It is shown as-is in the admin screen, so it reads as
+/// a sentence too.
+pub const ABSENT_DISABLED_REASON: &str = "the package is no longer in PLUGINS_DIR";
+
+/// Was this record switched off by [`retire_absent_records`], as opposed to by a person?
+fn marked_absent(record: &PluginRecord) -> bool {
+    record.state == PluginState::Disabled
+        && record.disabled_reason.as_deref() == Some(ABSENT_DISABLED_REASON)
+}
+
+/// Is there an actual package under `<staging>/pending/<id>`, or just a directory?
+///
+/// The distinction is load-bearing and was not made. `approve` renames
+/// `<staging>/pending/<id>/<version>` into the served root and leaves the **empty parent**
+/// behind, so every plugin that was ever approved from an upload has a `pending/<id>`
+/// directory for the rest of the deployment's life. Testing for the directory therefore
+/// read "approved once, from an upload" as "waiting for a click", and
+/// [`retire_absent_records`]'s second guard skipped exactly the plugins an operator is most
+/// likely to remove by hand. `approve` cleans the parent up now; this stays version-agnostic
+/// so the guard does not depend on it having succeeded.
+fn has_pending_package(staging_pending: &Path, id: &str) -> bool {
+    fs::read_dir(staging_pending.join(id)).is_ok_and(|mut entries| entries.next().is_some())
+}
+
+/// Switch off the plugins whose artifacts are gone.
+///
+/// A record left `enabled` without a package is a **ghost**: the admin screen lists it as
+/// running, the host tries to activate a `backend.wasm` that is not there, and a client that
+/// remembers the plugin list from its last boot keeps fetching a module URL that 404s. That
+/// is exactly what happens when a plugin is dropped from the image: the new image simply does
+/// not ship the directory any more, and nothing else tells the database.
+///
+/// **The record is disabled, not deleted, and that is the whole correction.** Deleting it
+/// threw away the two things only the database holds — *what an admin approved* and *what an
+/// admin decided*. An absence of one boot is not rare: an image that drops a plugin and a
+/// rollback that restores it, an operator moving `<PLUGINS_DIR>/X` aside, a half-finished
+/// volume sync. With a deleted record the directory's return was re-adoption from scratch —
+/// `Enabled`, with the **manifest's full request** as the approved set, `disabled_reason`
+/// cleared and `cron_state` reset — so a narrowing an admin chose on the approval screen and
+/// a disable they made after the plugin misbehaved both evaporated silently, and a nightly
+/// job re-fired. Disabling in place keeps every one of those and still kills the ghost:
+/// `PluginState::is_active` is `Enabled` alone, so the backend half stays down, and the
+/// registry is a scan of the directory, so the frontend half is already unreachable.
+///
+/// A returning directory is re-enabled by [`adopt_installed_directory`] **only** when the
+/// reason still reads [`ABSENT_DISABLED_REASON`] — an admin's own disable is never undone.
+///
+/// **Three guards, because the opposite mistake is worse than a ghost.**
+///
+/// 1. Nothing is touched unless the scan found *some* plugin. An unreadable `PLUGINS_DIR`, an
+///    unmounted volume or a `PLUGINS_DIR` pointing at the wrong path all look like "every
+///    plugin disappeared at once", and turning off every plugin over a mount that comes back
+///    a minute later is a self-inflicted outage.
+/// 2. A record whose package sits in the **staging** tree is left alone. A pending upload has
+///    no directory in the served root by design (that is what "pending" *is*), and touching
+///    it would disturb the package an admin is about to approve.
+/// 3. A record that is already `Disabled` is left exactly as it is — including its reason.
+///    This pass runs on every boot, so anything it does unconditionally it does forever.
+///
+/// The one record still **deleted** is a `Pending` one with no package in either root: there
+/// is no approval to keep (`capabilities_approved` is empty until approval) and no state a
+/// person chose, so what is left is a row describing an archive that does not exist.
+///
+/// **Retention is the uninstall's, unchanged (SPEC §6.2):** `plugin_kv`, `plugin_config` and
+/// every `%%% <id>` section in every document **stay**, whichever branch runs. Putting the
+/// plugin back is lossless, and an operator who wants the data gone still has
+/// `DELETE /api/admin/plugins/{id}?purge=true`.
+async fn retire_absent_records(
+    state: &AppState,
+    known: &BTreeMap<String, PluginRecord>,
+    registry: &Arc<plugins::Registry>,
+) -> usize {
+    if registry.plugins().is_empty() {
+        // Guard 1. Said out loud when there is anything to be silent about, because "my
+        // plugins vanished and so did their config" is the support question this prevents.
+        if !known.is_empty() {
+            warn!(
+                records = known.len(),
+                dir = %state.config.plugins_dir.display(),
+                "no plugins found on disk; keeping every plugin record untouched \
+                 (an unreadable or unmounted PLUGINS_DIR is not an uninstall)"
+            );
+        }
+        return 0;
+    }
+
+    let staging_pending = staging_dir(&state.config).join(PENDING_SUBDIR);
+    let mut retired = 0usize;
+    for record in known.values() {
+        if state.config.plugins_dir.join(&record.id).exists() {
+            continue;
+        }
+        if has_pending_package(&staging_pending, &record.id) {
+            continue; // Guard 2: an unapproved package, waiting for a click.
+        }
+        if record.state == PluginState::Disabled {
+            continue; // Guard 3: already off, by us on an earlier boot or by a person.
+        }
+
+        deactivate(state, record).await;
+        crate::pluginhost::PluginHost::get(state).forget(&record.id);
+
+        let pending = record.state == PluginState::Pending;
+        let outcome = if pending {
+            delete_record(state, &record.id).await
+        } else {
+            let mut retired = record.clone();
+            retired.state = PluginState::Disabled;
+            retired.disabled_reason = Some(ABSENT_DISABLED_REASON.to_string());
+            save_record(state, &retired).await
+        };
+        if let Err(err) = outcome {
+            warn!(plugin = %record.id, error = %err, "could not retire an absent plugin");
+            continue;
+        }
+
+        state
+            .audit(
+                AuditEntry::new(
+                    "plugin.absent",
+                    Some(&Actor::System),
+                    "plugin",
+                    Some(record.id.clone()),
+                )
+                .with_detail(bson::doc! {
+                    "version": record.version.clone(),
+                    "state": record.state.as_str(),
+                    "outcome": if pending { "record deleted" } else { "disabled" },
+                    // Says in the record what the doc comment says here: this is not a purge.
+                    "retained": "kv, config, %%% sections",
+                }),
+            )
+            .await;
+        crate::routes::plugin_api::note(
+            &record.id,
+            "warn",
+            if pending {
+                "the pending package is no longer on disk; the record was removed"
+            } else {
+                "the package is no longer on disk; the plugin was disabled, keeping its \
+                 approved capabilities, its KV, its config and its in-document sections"
+            },
+        );
+        warn!(
+            plugin = %record.id, version = %record.version, was = %record.state.as_str(),
+            "a plugin's package is gone from PLUGINS_DIR; \
+             {} (KV, config and `%%%` sections kept — uninstall with ?purge=true to drop them)",
+            if pending { "removing its pending record" } else { "disabling it" }
+        );
+        retired += 1;
+    }
+    retired
 }
 
 /// Re-scan `PLUGINS_DIR` and apply the approval records to it.

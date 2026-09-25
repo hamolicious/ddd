@@ -1,5 +1,5 @@
 {
-  "_comment": "Conformance corpus for the filter DSL (SPEC §4.2). Every `cases` entry is evaluated twice: by core::filter::evaluator over the rows, and by compiling it with core::filter::mongo and running the compiled query through the test harness' Mongo interpreter. Both must return exactly `matches`. `error` cases must be refused by both sides.",
+  "_comment": "Conformance corpus for the filter DSL (SPEC \u00a74.2). Every `cases` entry is evaluated twice: by core::filter::evaluator over the rows, and by compiling it with core::filter::mongo and running the compiled query through the test harness' Mongo interpreter. Both must return exactly `matches`. `error` cases must be refused by both sides.",
   "rows": [
     {
       "id": "r1",
@@ -296,7 +296,7 @@
       ]
     },
     {
-      "_comment": "r7 has fm.nothing = [null]. Mongo's `$type` traverses arrays element-wise, so the compiled null predicates need the same `$not: {$type: array}` guard every other dynamic-field branch carries — without it the server matches r7 and the evaluator does not.",
+      "_comment": "r7 has fm.nothing = [null]. Mongo's `$type` traverses arrays element-wise, so the compiled null predicates need the same `$not: {$type: array}` guard every other dynamic-field branch carries \u2014 without it the server matches r7 and the evaluator does not.",
       "name": "ne-null-matches-an-array-of-null",
       "filter": {
         "cmp": {
@@ -859,6 +859,61 @@
         "r2",
         "r7"
       ]
+    },
+    {
+      "name": "deleted-at-is-absent-on-a-live-document",
+      "filter": {
+        "missing": {
+          "field": "deleted_at"
+        }
+      },
+      "matches": [
+        "r1",
+        "r2",
+        "r4",
+        "r5",
+        "r6",
+        "r7"
+      ]
+    },
+    {
+      "name": "deleted-at-exists-exactly-in-trash",
+      "filter": {
+        "exists": {
+          "field": "deleted_at"
+        }
+      },
+      "matches": [
+        "r3"
+      ]
+    },
+    {
+      "name": "deleted-at-orders-as-an-instant",
+      "filter": {
+        "cmp": {
+          "field": "deleted_at",
+          "op": "gte",
+          "value": {
+            "date": "2026-02-15"
+          }
+        }
+      },
+      "matches": [
+        "r3"
+      ]
+    },
+    {
+      "name": "deleted-at-before-the-tombstone-matches-nothing",
+      "filter": {
+        "cmp": {
+          "field": "deleted_at",
+          "op": "lt",
+          "value": {
+            "date": "2026-02-15"
+          }
+        }
+      },
+      "matches": []
     }
   ],
   "errors": [
@@ -1082,6 +1137,37 @@
         "r6",
         "r5"
       ]
+    },
+    {
+      "name": "deleted-at-descending-is-the-trash-order",
+      "keys": [
+        "-deleted_at"
+      ],
+      "order": [
+        "r3",
+        "r1",
+        "r2",
+        "r4",
+        "r5",
+        "r6",
+        "r7"
+      ]
+    },
+    {
+      "_comment": "Ascending gives the SAME order as descending above, and that is the point. 'Missing last' does not flip with direction, so the one row that carries a `deleted_at` leads either way. Mongo does flip: an absent field is Null, the lowest BSON type, so `?trash=all&sort=deleted_at` returns the live documents FIRST from the server and LAST from this comparator - the two engines hand back the same rows in opposite halves. `deleted_at` is the only fixed root that can be absent and it is an advertised sort key (the Trash order), so this is the one place that parked divergence reaches a shipped query. Pinned on both sides by `crates/server/tests/documents_query.rs::deleted_at_ascending_diverges_where_a_document_is_still_live`, so closing it stays a decision.",
+      "name": "deleted-at-ascending-still-sorts-missing-last",
+      "keys": [
+        "deleted_at"
+      ],
+      "order": [
+        "r3",
+        "r1",
+        "r2",
+        "r4",
+        "r5",
+        "r6",
+        "r7"
+      ]
     }
   ],
   "compiled_sorts": [
@@ -1109,6 +1195,15 @@
       ],
       "expect": {
         "_id": 1
+      }
+    },
+    {
+      "name": "deleted-at-descending",
+      "keys": [
+        "-deleted_at"
+      ],
+      "expect": {
+        "deleted_at": -1
       }
     }
   ],

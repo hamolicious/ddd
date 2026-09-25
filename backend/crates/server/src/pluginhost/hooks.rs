@@ -14,8 +14,8 @@
 //!   latest state and a `coalesced` count. Cost: a hook is *late* by up to two seconds,
 //!   deliberately.
 //! - **At-most-once, no retry.** A failure is logged and counted on the breaker. Cost: a
-//!   plugin that must not miss a change has to reconcile on its cron run — which is why
-//!   the calendar plugin does a full reconciliation rather than trusting hooks.
+//!   plugin that must not miss a change has to reconcile on its cron run rather than
+//!   trusting hooks — a full reconciliation is the shape that survives a missed delivery.
 //! - **Never delivered to the plugin that caused the change.** The origin comes from the
 //!   row's `updated_by` (`plugin:<id>`), which is "the last applier the server saw"
 //!   (SPEC §3.5). **Known consequence, stated rather than discovered:** when a user and a

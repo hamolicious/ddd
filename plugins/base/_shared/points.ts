@@ -265,6 +265,20 @@ export interface DocumentModeProps {
   readonly row: DocumentRow;
   /** Present once hydrated; read modes can render from `row.content` alone. */
   readonly open?: OpenDocument;
+  /**
+   * A **1-based line** the mode should reveal: `#/doc/<id>?line=42`.
+   *
+   * Optional and additive. The surface parses the query and hands the number over
+   * rather than each mode re-reading the URL, because the surface is the thing that
+   * knows when the document actually arrived — a mode that read `location.hash` on
+   * mount would scroll before the text existed.
+   *
+   * Honouring it is *best effort and a mode's own business*: `editor` puts the cursor
+   * on the line and scrolls it into view, a rendered mode has no lines to scroll to and
+   * may ignore it entirely. A number past the end of the document is clamped, never an
+   * error. It is a deep link, not a state: a mode must render correctly without it.
+   */
+  readonly line?: number;
 }
 
 export const documentModeShape: Shape<DocumentMode> = s.object({

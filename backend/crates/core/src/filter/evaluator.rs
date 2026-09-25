@@ -8,7 +8,8 @@
 //!    differs from the literal's simply does not match, exactly as Mongo's
 //!    comparison bracketing behaves. Heterogeneous workspaces are normal.
 //! 2. **Fixed columns error.** `id`/`title`/`content` are strings, `deleted` is
-//!    a bool, `created_at`/`updated_at` are dates — their types are schema-fixed,
+//!    a bool, `created_at`/`updated_at`/`deleted_at` are dates — their types are
+//!    schema-fixed,
 //!    so a mismatch is a query bug: [`EvalError::TypeMismatch`] here, and
 //!    `CompileError::Unsupported` on the server (→ 400). Neither side silently
 //!    answers.
@@ -35,6 +36,10 @@ pub struct Row<'a> {
     pub plugins: &'a Map,
     pub created_at: Option<&'a Date>,
     pub updated_at: Option<&'a Date>,
+    /// When this document was tombstoned. `None` on a live document — the same
+    /// absence Mongo stores (the field is unset, never written as null), so
+    /// `missing` and `exists` agree on both sides.
+    pub deleted_at: Option<&'a Date>,
     pub deleted: bool,
 }
 
@@ -131,6 +136,7 @@ pub fn resolve_field<'a>(row: &Row<'a>, field: &FieldPath) -> FieldRef<'a> {
         "deleted" => FieldRef::Bool(row.deleted),
         "created_at" => row.created_at.map_or(FieldRef::Missing, FieldRef::Date),
         "updated_at" => row.updated_at.map_or(FieldRef::Missing, FieldRef::Date),
+        "deleted_at" => row.deleted_at.map_or(FieldRef::Missing, FieldRef::Date),
         "fm" => walk(row.fm, &segments[1..]),
         "plugins" => walk(row.plugins, &segments[1..]),
         _ => FieldRef::Missing,
@@ -331,7 +337,23 @@ fn text_match(
 /// (the server sorts in Mongo). Missing values sort last in both directions.
 ///
 /// `id` ascending is always the final tiebreaker — the same one the query layer
-/// appends to the Mongo sort — so client and server orderings are identical.
+/// appends to the Mongo sort — so client and server orderings are identical **over
+/// rows that all carry the sort key**.
+///
+/// **They are not identical over rows that do not, and that is a parked decision rather
+/// than an oversight.** Mongo sorts an absent field as Null, the lowest BSON type, so it
+/// comes *first* ascending; this comparator puts it last in both directions. Closing the
+/// gap means either making `Missing` rank below `Null` here (and in
+/// `web/kernel/src/query/filter.ts`, which mirrors this function line by line, in the same
+/// commit) or emitting an `$ifNull` sort projection from `filter::mongo::compile_sort`.
+/// `crates/server/tests/documents_query.rs` asserts the current behaviour of *both* sides
+/// so that it stays a decision.
+///
+/// The one place it reaches a user-facing sort is `deleted_at`: it is the only fixed root
+/// that can be absent and it is an advertised sort key (`SORTABLE_FIELDS`, the Trash
+/// order). Ascending over `?trash=all` splits live from tombstoned documents to opposite
+/// ends depending on who ordered them; descending — what the Trash view sends — agrees,
+/// because the present values lead either way.
 pub fn compare_rows(a: &Row<'_>, b: &Row<'_>, sort: &[SortKey]) -> Ordering {
     for key in sort {
         let left = resolve_field(a, &key.field);
@@ -434,6 +456,7 @@ mod tests {
             plugins,
             created_at: None,
             updated_at: None,
+            deleted_at: None,
             deleted: false,
         }
     }

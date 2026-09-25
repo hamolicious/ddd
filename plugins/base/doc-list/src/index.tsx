@@ -10,11 +10,11 @@
  * - **Trash is `includeDeleted` plus a filter, not another store.** A tombstoned
  *   document is an ordinary projection row with `deleted: true` and is restorable for
  *   30 days; purge is the server's job and is permanent (SPEC §3.5).
- * - **Sorting Trash by `deleted_at` is not available** — the shared filter DSL's field
- *   space does not reach that root, so the server refuses `sort=deleted_at` and the
- *   client cannot reproduce that order either. `backend/CONTRACTS.md` records it as a
- *   core change that lands with whoever builds this view; until then Trash is ordered in
- *   the client after the query, and `TrashView` says so on screen.
+ * - **Trash sorts by `deleted_at` in the engine.** That root was outside the shared
+ *   filter DSL's field space when this view was built, so the rows were ordered in the
+ *   component after the query — correct only over the page that came back. The core
+ *   change `backend/CONTRACTS.md` promised has landed, so the direction toggle is now a
+ *   sort key on the query and the order holds over the whole of Trash.
  *
  * **`createDocument` authors the whole text, once.** That is the one moment when writing
  * a frontmatter block wholesale is correct (SPEC §3.3): there is no concurrent writer to
@@ -118,6 +118,7 @@ export default function activate(kernel: Kernel): DocListApi {
       documents={kernel.documents}
       onOpen={open}
       onRestore={(id) => kernel.documents.restore(id)}
+      currentUserId={kernel.session.user.id}
     />
   );
 

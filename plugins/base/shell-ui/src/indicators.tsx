@@ -8,10 +8,17 @@
  * announces transitions without stealing focus.
  *
  * **The notice bell** is the in-shell way back to the kernel's notices (SPEC §6.4's
- * aggregated plugin-failure notice, SPEC §8's "update available — reload"). The
- * kernel's own frame renders a strip above the shell so that a *broken* shell cannot
- * hide it; the bell is what a working shell adds — a count that stays reachable while
- * the user is reading something else, and the same actions on the same notices.
+ * aggregated plugin-failure notice, SPEC §8's "update available — reload"). While this
+ * shell holds the mount the bell is the *only* rendering of them: the kernel's frame
+ * keeps its own strip in reserve for a workspace with no shell mounted, one whose holder
+ * threw while rendering, and `?safe=bare`, where the kernel's own manager holds the mount
+ * and draws no notices (`web/app/src/ui/AppFrame.tsx`). Both drew the list at once until
+ * this was written down, which put every notice on screen twice and made "dismiss" a
+ * thing you had to do in two places.
+ *
+ * The consequence for a *replacement* shell is worth stating: taking the mount means
+ * taking this job. A shell that renders no notices leaves them reachable only through
+ * `kernel.ui.notices()`.
  */
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
@@ -68,10 +75,58 @@ export function NoticeBell({ kernel }: { readonly kernel: Kernel }): ReactNode {
 
   // Nothing to say: no bell at all, rather than a permanently empty affordance.
   const count = notices.length;
+  /**
+   * The ids this bell has already shown the user.
+   *
+   * Seeded during the **first render** — the lazy-ref pattern, idempotent and observable
+   * nowhere else — rather than in the effect below, so that the boundary between "was
+   * already there" and "just arrived" is the moment the bell appeared, not the moment
+   * React got round to flushing passive effects. A notice raised during the commit that
+   * mounted this shell (an error boundary catching a contributed component, SPEC §6.4) is
+   * therefore new, which is what it is.
+   */
+  const announced = useRef<ReadonlySet<string> | undefined>(undefined);
+  if (announced.current === undefined) {
+    announced.current = new Set(notices.map((notice) => notice.id));
+  }
 
   useEffect(() => {
     if (count === 0) setOpen(false);
   }, [count]);
+
+  /**
+   * A notice that **arrives while the bell is up** opens the panel by itself, once.
+   *
+   * The kernel's strip stands down while a shell holds the mount — the two used to
+   * render the same list and every notice appeared twice — so this bell is the only
+   * place SPEC §6.4's aggregated plugin failure and SPEC §8's "update available —
+   * reload" are shown. Left to a badge alone, both would be a number beside an
+   * exclamation mark: the failure would go unread, and the update's `Reload` action
+   * would be two clicks behind an affordance nobody had reason to press.
+   *
+   * No filtering by level. The kernel's notice centre is already the "the user has to
+   * be told once" channel and nothing routine goes through it, so a rule about which
+   * levels deserve attention would be a second, quieter policy about the same
+   * question — and the wrong half of it is a notice nobody ever sees.
+   *
+   * **"Arrives" is doing the work, and the seed above is why.** Boot raises notices before
+   * this plugin exists — a waiting service worker's `kernel:update-available`, a browser
+   * that refused storage persistence — so an empty starting set made every one of them
+   * "fresh" on first paint and sprang the panel open over the navbar on *every* reload
+   * until the underlying condition changed. Seeding from what is already on the list makes
+   * the rule the one the paragraphs above describe: the badge carries what the boot
+   * sequence found, and the panel opens for what happens next.
+   *
+   * Once, too: a re-render, or a plugin that throws on every paint and pushes the same
+   * aggregate notice again, must not re-open a panel the user closed.
+   */
+  useEffect(() => {
+    const previous = announced.current ?? new Set<string>();
+    // Only the ids still on the list are remembered, so a notice that was dismissed and
+    // later raised again is a new one rather than one the user has already answered.
+    announced.current = new Set(notices.map((notice) => notice.id));
+    if (notices.some((notice) => !previous.has(notice.id))) setOpen(true);
+  }, [notices]);
 
   useEffect(() => {
     if (!open) return;

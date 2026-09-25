@@ -109,12 +109,22 @@
 }
 
 .cmd-category {
-  margin-right: calc(var(--lm-space) * 0.75);
+  /* The separator's own trailing space now carries part of the gap (see `::after`). */
+  margin-right: calc(var(--lm-space) * 0.25);
   color: var(--lm-text-muted);
 }
 
+/*
+ * The trailing space is load-bearing, not a typo.
+ *
+ * The gap after the separator used to be `margin-right` alone, which the accessibility
+ * tree does not see: a palette row and a keybindings row both announced as
+ * "Admin ›Browse snapshots", one word. Putting a real space in the generated content
+ * makes the rendered text say what the layout already showed, and the margin below is
+ * dropped to the same amount so the visual gap does not grow.
+ */
 .cmd-category::after {
-  content: " ›";
+  content: " › ";
 }
 
 .cmd-icon {
@@ -312,7 +322,20 @@
     border-radius: 0;
   }
 
-  .cmd-trigger span {
+  /*
+   * The keyboard hint, on a device with no keyboard — 60 px of a navbar that has
+   * none to spare (`shell-ui` wraps it onto two rows as it is). The label stays:
+   * the trigger has no icon, so hiding it would leave a blank button.
+   *
+   * This replaces a `.cmd-trigger span` rule that matched nothing: the trigger's
+   * label is a bare text node and the hint is a `<kbd>`, so the mobile navbar was
+   * paying for the hint the whole time.
+   */
+  .cmd-trigger {
+    padding: 0 var(--lm-space);
+  }
+
+  .cmd-trigger .cmd-keys {
     display: none;
   }
 }

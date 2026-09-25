@@ -86,9 +86,15 @@ RUN cargo build -p life-manager-core --target wasm32-unknown-unknown --release -
 # ABI crate are path dependencies — and the directory layout has to match the repo's,
 # because those paths are relative.
 #
-# Without this stage the image shipped `calendar` with its frontend half only, and the
-# host reported a missing module on every boot: a container that silently lost the half
-# of M4 that M4 exists to prove.
+# Without this stage a base plugin with a backend half ships with its frontend half only,
+# and the host reports a missing module on every boot — a container that silently lost half
+# a plugin. That is exactly what happened to `calendar` before the stage existed.
+#
+# Since `calendar` was removed (2026-09-24) **no base plugin has a backend half**, so today
+# this stage compiles only `examples/hello-backend`, which is not installed into the image.
+# It is kept, not deleted, because it is the difference between "add a backend half to a
+# plugin" being a one-line manifest change and being a silent half-install in production:
+# the failure it prevents is invisible until a plugin boots in a container.
 # ---------------------------------------------------------------------------
 FROM rust-builder AS plugin-builder
 WORKDIR /repo

@@ -15,6 +15,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { DocumentRow } from "@kernel";
 
+import { isMachineDocument } from "../../_shared/machine-docs.js";
+
 import { mergeHits, type MergedHit, type ProviderResult } from "./merge.js";
 
 export interface SearchEngine {
@@ -38,6 +40,24 @@ export interface UseSearchOptions {
   readonly debounceMs?: number;
   /** `false` keeps the hook idle (a closed search box does not query). */
   readonly enabled?: boolean;
+  /**
+   * Include machine-owned documents — `fm.path` starting with `.`, such as the
+   * kernel's per-user settings documents (`_shared/machine-docs.ts`). Off by default.
+   *
+   * The filtering happens **here rather than in the providers**, and that is the
+   * reason this option exists at all: a provider is an extension point anyone may
+   * contribute to (`search.provider`), and the local index and the server's `$text`
+   * index have no shared notion of `fm.path` to filter on. Rows are already fetched
+   * for every hit — for the title and the snippet — so the view that has them is the
+   * one place a consistent answer can be given across every provider.
+   *
+   * The consequence is stated rather than hidden: the **per-provider counts above the
+   * list are the providers' own**, so they can exceed the number of results shown when
+   * a query matches a settings document. That is the honest way round — a count that
+   * silently disagreed with what the provider returned would make a failing provider
+   * indistinguishable from a filtered one.
+   */
+  readonly includeMachine?: boolean;
 }
 
 export function useSearch(
@@ -45,7 +65,7 @@ export function useSearch(
   query: string,
   options: UseSearchOptions = {},
 ): SearchState {
-  const { limit = 50, debounceMs = 140, enabled = true } = options;
+  const { limit = 50, debounceMs = 140, enabled = true, includeMachine = false } = options;
   const [state, setState] = useState<SearchState>({
     settled: "",
     running: false,
@@ -71,15 +91,25 @@ export function useSearch(
         try {
           const results = await engine.run(trimmed, { limit });
           if (token.current !== mine) return;
-          const hits = mergeHits(results, limit);
+          const merged = mergeHits(results, limit);
           const rows = new Map<string, DocumentRow>();
           await Promise.all(
-            hits.map(async (hit) => {
+            merged.map(async (hit) => {
               const row = await engine.row(hit.id);
               if (row) rows.set(hit.id, row);
             }),
           );
           if (token.current !== mine) return;
+          // A hit whose row could not be fetched is **kept**: it is a real document the
+          // provider found, this client just has no projection row for it (a
+          // metadata-only server result on a cold client), and dropping it would make
+          // the offline/online answer differ for a reason the user cannot see.
+          const hits = includeMachine
+            ? merged
+            : merged.filter((hit) => {
+                const row = rows.get(hit.id);
+                return row === undefined || !isMachineDocument(row);
+              });
           setState({ settled: trimmed, running: false, results, hits, rows });
         } catch (cause) {
           if (token.current !== mine) return;
@@ -105,7 +135,7 @@ export function useSearch(
     }, debounceMs);
 
     return () => clearTimeout(timer);
-  }, [debounceMs, enabled, engine, limit, query]);
+  }, [debounceMs, enabled, engine, includeMachine, limit, query]);
 
   return state;
 }

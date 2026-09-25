@@ -21,7 +21,7 @@
  * the changelog.
  */
 
-export const KERNEL_API_VERSION = "1.0.0";
+export const KERNEL_API_VERSION = "1.1.0";
 
 /** Major of {@link KERNEL_API_VERSION} — what a manifest's `kernel` range is checked against. */
 export const KERNEL_API_MAJOR = 1;

@@ -16,7 +16,7 @@
  * Usage: `node web/scripts/build-examples.mjs [id …]`
  */
 
-import { readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -33,6 +33,12 @@ const requested = process.argv.slice(2);
 const plugins = readdirSync(examplesDir)
   .filter((name) => !name.startsWith("_") && !name.startsWith(".") && name !== "dist")
   .filter((name) => statSync(join(examplesDir, name)).isDirectory())
+  // A *frontend* plugin source directory is one with a manifest, exactly as in
+  // `build-plugins.mjs`. `examples/hello-backend` is a Rust-only host fixture — no manifest,
+  // no frontend half, built by `build-wasm-plugins.mjs` — and reading a manifest it has
+  // never had crashed this script *after* it had written every real example's output, so
+  // the documented e2e setup step exited non-zero while appearing to have worked.
+  .filter((name) => existsSync(join(examplesDir, name, "manifest.json")))
   .filter((name) => requested.length === 0 || requested.includes(name))
   .sort();
 

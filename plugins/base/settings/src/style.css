@@ -37,6 +37,17 @@
   align-items: start;
 }
 
+/*
+ * `min-width: 0`, the twin of the one on `.settings-pane`. A grid item's automatic
+ * minimum size is its content's, so without this the nav grew to the max-content
+ * width of every section name laid out in a row — 1 700 px on a phone — and the
+ * `overflow-x: auto` below never fired, because the `ul`'s containing block was
+ * already that wide. The page scrolled sideways instead of the section list.
+ */
+.settings-nav {
+  min-width: 0;
+}
+
 .settings-nav ul {
   margin: 0;
   padding: 0;

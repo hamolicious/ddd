@@ -174,8 +174,26 @@ describe("inside the shell", () => {
     expect(info?.serverBaseUrl).toBe(windowShell.injected.serverBaseUrl);
     expect(info?.methods).toEqual(index.methods);
     expect(info?.capabilities).toEqual(index.capabilities);
-    // `BRIDGE.md` §3 has no `bundleVersion` member, so the panel says "not reported".
+    // The fixture injects no `bundleVersion` — the Dart `bootstrapScript` does not set
+    // one — so the panel says "not reported by the shell".
     expect(info?.bundleVersion).toBeUndefined();
+  });
+
+  it("reports the running bundle when the shell does inject one", () => {
+    // `bundleVersion` is a declared optional member of the bridge (`BRIDGE.md` §8: a new
+    // optional member is not a version bump). This is the assertion that makes the web
+    // half ready for it without the fixture — and the Dart side — having to move first.
+    injectShell({ bundleVersion: manifestFixture.valid.bundle_version });
+    expect(shellInfo()?.bundleVersion).toBe(manifestFixture.valid.bundle_version);
+  });
+
+  it("ignores a bundle version that is not a non-empty string", () => {
+    // Full-trust plugin code can write anything onto `window.shell` (SPEC §6.1), and a
+    // diagnostics panel printing `[object Object]` is the least of the reasons to narrow.
+    injectShell({ bundleVersion: 42 as unknown as string });
+    expect(shellInfo()?.bundleVersion).toBeUndefined();
+    injectShell({ bundleVersion: "" });
+    expect(shellInfo()?.bundleVersion).toBeUndefined();
   });
 
   it("still boots on a shell whose major is newer than this bundle", () => {

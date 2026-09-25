@@ -123,7 +123,7 @@ pub fn compile(filter: &Filter) -> Result<BsonDocument, CompileError> {
 enum Column {
     /// `id`, `title`, `content` — always a string.
     Str,
-    /// `created_at`, `updated_at` — always a BSON date.
+    /// `created_at`, `updated_at`, `deleted_at` — always a BSON date.
     Date,
     /// `deleted` — derived from `deleted_at`.
     Deleted,
@@ -134,7 +134,7 @@ enum Column {
 fn column(field: &FieldPath) -> Column {
     match field.root() {
         "id" | "title" | "content" => Column::Str,
-        "created_at" | "updated_at" => Column::Date,
+        "created_at" | "updated_at" | "deleted_at" => Column::Date,
         "deleted" => Column::Deleted,
         _ => Column::Dynamic,
     }
@@ -367,7 +367,7 @@ pub fn stored_path(field: &crate::filter::ast::FieldPath) -> Result<String, Comp
     match segments[0].as_str() {
         "id" => Ok("_id".to_string()),
         "deleted" => Ok("deleted_at".to_string()),
-        "title" | "content" | "created_at" | "updated_at" => Ok(segments[0].clone()),
+        "title" | "content" | "created_at" | "updated_at" | "deleted_at" => Ok(segments[0].clone()),
         "fm" | "plugins" => Ok(segments.join(".")),
         other => Err(CompileError::UnknownField(other.to_string())),
     }

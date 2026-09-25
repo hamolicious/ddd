@@ -24,7 +24,12 @@ export interface ResultsViewProps {
   readonly engine: SearchEngine;
   /** The query from the URL, re-read on every hash change by the host. */
   readonly initialQuery: string;
-  readonly onOpenDocument: (id: string) => void;
+  /**
+   * Open a result. `line` is the 1-based line of the snippet, so the host can deep-link
+   * to the match (`#/doc/<id>?line=42`) instead of dropping the reader at the top of a
+   * long document and leaving them to find it again.
+   */
+  readonly onOpenDocument: (id: string, line?: number) => void;
   /** Push the query into the URL, so a result page is linkable. */
   readonly onQueryChange: (query: string) => void;
   /** Total live documents, for the "index still building" distinction. */
@@ -39,6 +44,10 @@ export function ResultsView({
   documentCount,
 }: ResultsViewProps): ReactElement {
   const [query, setQuery] = useState(initialQuery);
+  // Not in the URL: it is a preference about this list, not part of the address a
+  // person shares. A shared `#/search?q=…` link should show the other reader the
+  // default view, not whatever the sender happened to have toggled.
+  const [includeMachine, setIncludeMachine] = useState(false);
 
   // The URL is the source of truth: a back/forward navigation or a link from the box
   // must move the page, not be overwritten by stale local state.
@@ -46,7 +55,7 @@ export function ResultsView({
     setQuery(initialQuery);
   }, [initialQuery]);
 
-  const state = useSearch(engine, query, { limit: 100 });
+  const state = useSearch(engine, query, { limit: 100, includeMachine });
   const failures = useProviderErrors(state);
   const trimmed = query.trim();
 
@@ -73,6 +82,16 @@ export function ResultsView({
           />
         </label>
         <button type="submit">Search</button>
+        <label className="search-toggle">
+          <input
+            type="checkbox"
+            checked={includeMachine}
+            onChange={(event) => setIncludeMachine(event.target.checked)}
+          />
+          <span title="Documents whose fm.path starts with a dot — the per-user settings documents the kernel keeps, and anything a plugin files the same way.">
+            Include machine documents
+          </span>
+        </label>
       </form>
 
       <ul className="search-providers" aria-label="Providers">
@@ -126,7 +145,7 @@ export function ResultsView({
                 <button
                   type="button"
                   className="search-result-open"
-                  onClick={() => onOpenDocument(hit.id)}
+                  onClick={() => onOpenDocument(hit.id, snippet?.line)}
                 >
                   {row?.title ?? hit.id}
                 </button>

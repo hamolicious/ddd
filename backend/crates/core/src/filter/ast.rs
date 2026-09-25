@@ -21,12 +21,20 @@ use crate::value::ValueType;
 /// Roots addressable on a projection row that are *not* stored under
 /// `fm`/`plugins`. Their types are fixed by the schema, so a type mismatch
 /// against one of them is a query bug rather than row data.
-pub(crate) const FIXED_ROOTS: [&str; 6] = [
+pub(crate) const FIXED_ROOTS: [&str; 7] = [
     "id",
     "title",
     "content",
     "created_at",
     "updated_at",
+    // `deleted` is the boolean question ("is this in Trash"); `deleted_at` is the
+    // timestamp behind it, and it is a distinct field because it answers a distinct
+    // question — *when*. Trash is sorted newest-first (SPEC §6.5, the `doc-list`
+    // plugin's Trash view), and without this root that sort could only be done on the
+    // client after paging, because the server's sort keys are this field space.
+    // Absent on a live document, so `missing`/`exists` separate live from trashed just
+    // as `deleted` does.
+    "deleted_at",
     "deleted",
 ];
 /// Roots whose contents are dynamic (materialized from document text).

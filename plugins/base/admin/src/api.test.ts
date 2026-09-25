@@ -18,6 +18,7 @@ import {
   createAdminClient,
   describeActor,
   formatBytes,
+  hostPolicyNote,
   formatWhen,
   isBareHost,
   normalizeConfigValues,
@@ -337,5 +338,62 @@ describe("isBareHost / parseHostList", () => {
     expect(parseHostList("a.test, b.test")).toEqual(["a.test", "b.test"]);
     expect(parseHostList("  a.test \n b.test,,")).toEqual(["a.test", "b.test"]);
     expect(parseHostList("")).toEqual([]);
+  });
+});
+
+describe("hostPolicyNote", () => {
+  it("says nothing about an ordinary public host", () => {
+    expect(hostPolicyNote("calendar.google.com")).toBeUndefined();
+    expect(hostPolicyNote("feeds.example.net")).toBeUndefined();
+    expect(hostPolicyNote("203.0.113.7")).toBeUndefined();
+    expect(hostPolicyNote("")).toBeUndefined();
+  });
+
+  /**
+   * The one claim the old blanket sentence got right, and the reason the new text does
+   * not repeat "regardless" for anything else: `address_allowed` checks
+   * `METADATA_ADDRESSES` *before* it consults `PLUGIN_HTTP_ALLOW_CIDRS`, so these are
+   * the only destinations no operator configuration can open.
+   */
+  it("calls a cloud metadata endpoint unreachable whatever the configuration", () => {
+    for (const host of [
+      "169.254.169.254",
+      "169.254.170.2",
+      "100.100.100.200",
+      "metadata.google.internal",
+    ]) {
+      const note = hostPolicyNote(host);
+      expect(note?.kind).toBe("metadata");
+      expect(note?.message).toContain("before it consults any allowlist");
+    }
+  });
+
+  /**
+   * And the claim it got wrong: private and loopback ranges are default-deny, not
+   * always-deny — `PLUGIN_HTTP_ALLOW_CIDRS` is the documented way a self-hosted LAN
+   * service becomes reachable (SPEC §6.2), so the note has to name it.
+   */
+  it("calls loopback and private ranges blocked *unless* the operator allowlisted them", () => {
+    for (const host of ["localhost", "app.localhost", "127.0.0.1", "::1", "0.0.0.0"]) {
+      expect(hostPolicyNote(host)?.kind).toBe("loopback");
+    }
+    for (const host of ["10.0.0.5", "172.16.4.1", "172.31.255.254", "192.168.1.10", "100.72.0.1", "fd00::1", "fe80::1"]) {
+      expect(hostPolicyNote(host)?.kind).toBe("private");
+    }
+    expect(hostPolicyNote("10.0.0.5")?.message).toContain("PLUGIN_HTTP_ALLOW_CIDRS");
+    expect(hostPolicyNote("localhost")?.message).toContain("PLUGIN_HTTP_ALLOW_CIDRS");
+  });
+
+  it("leaves 172.15/172.32 alone — they are public, and the /12 boundary is easy to fumble", () => {
+    expect(hostPolicyNote("172.15.0.1")).toBeUndefined();
+    expect(hostPolicyNote("172.32.0.1")).toBeUndefined();
+    expect(hostPolicyNote("100.63.0.1")).toBeUndefined();
+    expect(hostPolicyNote("100.128.0.1")).toBeUndefined();
+  });
+
+  it("hedges on an internal name, because only resolution can settle it", () => {
+    const note = hostPolicyNote("nas.local");
+    expect(note?.kind).toBe("internal-name");
+    expect(note?.message).toContain("depends on what it resolves to");
   });
 });

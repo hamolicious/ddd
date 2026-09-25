@@ -5,11 +5,14 @@ sync client, local query engine, the shared Rust core as Wasm) and the microkern
 frontend of **M3** (the `@kernel` contract, the plugin loader, the PWA).
 
 **M4 changed nothing here in contract terms** — no `@kernel` surface was added and no
-signature moved. What it added is two plugins in `../plugins/base/` (`calendar`, whose
-backend half crons an ICS feed into machine-owned documents, and `agenda`, which is pure
-frontend with no backend and no capabilities) and the management half of `admin`. The
-`build:plugins` script builds frontend halves; `build-wasm-plugins.mjs` builds backend
-halves into the same installed layout; `package-plugin.mjs` writes the installable `.zip`.
+signature moved. What it added is the management half of `admin`, plus two proof plugins in
+`../plugins/base/` (`calendar`, whose backend half cronned an ICS feed into machine-owned
+documents, and `agenda`, pure frontend with no backend and no capabilities). **Both were
+removed on 2026-09-24** at the owner's direction; they are in git history and nothing here
+refers to them. The build scripts they exercised are unchanged and still the path any
+plugin takes: `build:plugins` builds frontend halves, `build-wasm-plugins.mjs` builds
+backend halves into the same installed layout, `package-plugin.mjs` writes the installable
+`.zip`.
 
 **The app is `app/`.** `demo/` is the M2 page, kept exactly as it was: it is the surface
 the SPEC §8 Playwright smoke drives and a fixture for the harnesses, not the product.
@@ -87,7 +90,7 @@ wasm target and no `rustup` to add one).
 | `npm run test` | Vitest unit tests: protocol framing, backoff, the IndexedDB store, feed and hydration clients, sort semantics, search, **and the shared-core parity suite** read straight out of `backend/crates/core/corpus/` (it self-skips, reporting why, until `mise run wasm` has run). |
 | `npm run dev` / `build` / `preview` | Vite. |
 | `npm run e2e` | Playwright against the **M2 demo**: the SPEC §8 smoke and two-browser live collaboration. Needs a server and `npx playwright install chromium`; skips with a message when `/api` is unreachable. |
-| `npm run e2e:app` | Playwright against the **real app** (`playwright.app.config.ts`): ten M3 journeys, safe mode, and the M3 acceptance test. Starts its own server — see below. |
+| `npm run e2e:app` | Playwright against the **real app** (`playwright.app.config.ts`): the M3 journeys, browsing, safe mode, and the M3 acceptance test. Starts its own server — see below. |
 | `npm run harness:convergence` | N simulated clients, randomized ops/partitions → convergence + materialization equality. `--seed=N` replays; `--clients=`/`--operations=`/`--journal=` are the other knobs. |
 | `npm run harness:perf` | 5 000 documents: bootstrap, catch-up, round-trip and client-heap numbers. Recorded in [`../backend/PERF.md`](../backend/PERF.md). |
 | `mise run wasm` | Builds `backend/crates/core` (feature `wasm`) into `kernel/src/wasm/pkg/`. |
@@ -143,7 +146,19 @@ Failure is contained at every step (SPEC §6.4): an `activate()` throw marks tha
 failed, withdraws what it registered (**including the extension points it defined**, so a
 replacement can claim them), **skips all transitive dependents**, and produces **one
 aggregated notice**; a render-time throw becomes an in-place "plugin X failed" chip from the
-kernel's error boundary, *and* a line in the notice strip. The mount as a whole sits inside
+kernel's error boundary, *and* a line in the notices.
+
+**One rendering of those notices, not two.** `host.notices` is the single list, and
+whoever holds the mount draws it: `shell-ui`'s bell while a shell is up (it opens itself
+for a notice that arrives *after* it mounted — what was already on the list at boot gets
+the badge, not a panel that springs open on every reload), the kernel's own strip when
+nothing is mounted, when the holder threw while rendering, **and in `?safe=bare`, where
+the kernel's own `BareManager` holds the mount and draws no notices at all**. Both drew it
+at once until the polish pass, which put every notice on screen twice and made "dismiss"
+something you had to do in two places — and the first cut of the fix keyed on "something
+holds the mount", which blanked the strip on the recovery screen. The consequence for a
+replacement shell is worth knowing: taking the mount means taking that job. The mount as a
+whole sits inside
 one more boundary that the app owns, because the per-contribution wrappers cannot cover the
 shell's own render or a contributed `icon` (a `ReactNode` is not a component) — and an
 uncaught render error unmounts the React root, which is a white page with no way out. The
@@ -295,6 +310,7 @@ break.
 |---|---|
 | `journeys.spec.ts` | Register → welcome documents → create from the palette → edit in CodeMirror and watch the list follow → toggle a task and set a plugin-contributed state → drag between folders and assert the raw text was **spliced** (comment, key order and `%%%` section byte-identical) → a date through the properties panel → offline search and offline read → two browsers live → a theme that survives a reload → Trash and restore → an invite a second user registers with. |
 | `safe-mode.spec.ts` | Sabotages an installed plugin's module *on disk*, then: a normal boot degrades with one aggregated notice, `?safe=1` boots past it, `?safe=bare` reaches the kernel's own manager, and restoring the file recovers. Each step in a fresh context, because plugin URLs are immutable. |
+| `browsing.spec.ts` | The two browsing behaviours that only exist assembled: a machine-owned document (`fm.path: .settings`) staying out of the list, the sidebar count *and* the folder tree until the toggle asks for it — three plugins that have to agree — and `#/doc/<id>?line=N` scrolling the editor, including on a query-only navigation into the document already open. |
 | `acceptance.spec.ts` | **SPEC §9 M3's acceptance criterion.** Composes a registry of base-minus-`editor` plus `plugins/examples/alt-editor`, starts a second server over it, and shows the app working with `document.mode`'s `edit` provided by the separately-authored plugin — same tab, same command, same keybinding, and no CodeMirror in the page. |
 
 Notes for running it: `LM_APP` points the suite at a server you started yourself (and

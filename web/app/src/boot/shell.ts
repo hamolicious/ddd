@@ -73,12 +73,17 @@ export interface ShellInfo {
   /**
    * The bundle this device is *running*, if the shell injected it.
    *
-   * INTEGRATION (shell-bridge): `window.shell` has no `bundleVersion` in `BRIDGE.md` §3,
-   * so this is `undefined` today and the settings section says "not reported". Adding it
-   * to `bootstrapScript` (an optional member; no version bump, §8) is the only way the
-   * page can name the bundle it is *actually* running — the server's manifest names the
-   * newest one, which is a different question and the reason "up to date?" cannot be
-   * answered from the server alone.
+   * `ShellBridgeV1.bundleVersion` is a declared optional member now, so reading it is
+   * no longer a cast past the bridge type — but the Dart `bootstrapScript` still does
+   * not set it, so this is `undefined` in practice and the settings section says "not
+   * reported by the shell". It is the only way the page can name the bundle it is
+   * *actually* running: the server's manifest names the newest one, which is a
+   * different question and the reason "up to date?" cannot be answered from the server
+   * alone.
+   *
+   * INTEGRATION (shell-bridge): adding it to `bootstrapScript` is an optional member
+   * and needs no bridge version bump (`app/BRIDGE.md` §8). Nothing here or in
+   * `app/bridge_fixtures/` requires it first.
    */
   readonly bundleVersion: string | undefined;
 }
@@ -259,7 +264,6 @@ function updateInfo(detail: unknown): ShellUpdateReady {
 export function shellInfo(): ShellInfo | undefined {
   const bridge = shellBridge();
   if (!bridge) return undefined;
-  const extra = bridge as { readonly bundleVersion?: unknown };
   return {
     // Not `detectBridge()`: this panel must be able to say "this shell speaks bridge 2
     // and this bundle speaks 1", which is exactly the case detection refuses.
@@ -268,7 +272,12 @@ export function shellInfo(): ShellInfo | undefined {
     serverBaseUrl: serverBaseUrl(),
     capabilities: strings(bridge.capabilities),
     methods: strings(bridge.methods),
-    bundleVersion: typeof extra.bundleVersion === "string" ? extra.bundleVersion : undefined,
+    // Declared but optional, and `window.shell` is reachable by full-trust plugin code
+    // (SPEC §6.1) — so it is narrowed like every other member rather than trusted.
+    bundleVersion:
+      typeof bridge.bundleVersion === "string" && bridge.bundleVersion.length > 0
+        ? bridge.bundleVersion
+        : undefined,
   };
 }
 

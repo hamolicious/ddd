@@ -29,6 +29,8 @@ import type { ReactElement } from "react";
 
 import type { DocumentRow, Kernel } from "@kernel";
 
+import { EXCLUDE_MACHINE_DOCUMENTS } from "../../_shared/machine-docs.js";
+
 import { FolderContents } from "./FolderContents.js";
 import { FolderTree } from "./FolderTree.js";
 import { buildTree, isRecursiveRename, normalizePath, renamedPath, type PathRow } from "./path.js";
@@ -117,7 +119,23 @@ export default function activate(kernel: Kernel): FoldersApi {
     try {
       // One live query for the whole tree. `subscribe` re-runs only when a change can
       // alter the result (SPEC §4.2), so this is one subscription, not one per folder.
-      const subscription = await kernel.documents.subscribe({ limit: TREE_ROW_LIMIT });
+      //
+      // **Machine-owned documents are excluded here rather than in the tree widget**
+      // (`_shared/machine-docs.ts`), so every consumer of `rows` inherits it: the
+      // counts, the "unfiled" total, *and* the rename walk — which is the one that
+      // would otherwise matter. A folder rename splices `fm.path` on every row it
+      // matches, and the kernel's settings documents are machine-owned (SPEC §3.3):
+      // a tree that listed `.settings` would offer F2 on it and rewrite frontmatter
+      // the kernel authors.
+      //
+      // No toggle here, deliberately. A hidden folder in a tree is a control that
+      // looks like every other folder and behaves differently; `doc-list`'s "show
+      // machine documents" is where the escape hatch belongs, because a list can hold
+      // a mixed set without implying that a dotted folder is yours to reorganise.
+      const subscription = await kernel.documents.subscribe({
+        filter: EXCLUDE_MACHINE_DOCUMENTS,
+        limit: TREE_ROW_LIMIT,
+      });
       const take = (result: { rows: readonly DocumentRow[] }): void => {
         rows = result.rows.map((row) => ({ id: row.id, fm: row.fm }));
         loading = false;

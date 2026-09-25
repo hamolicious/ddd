@@ -16,13 +16,18 @@ against the published contract" is checked rather than asserted.
 |---|---|
 | `alt-editor` | **SPEC §9 M3's acceptance criterion**: "the built-in editor replaced by a separately-authored editor plugin". A replacement `edit` mode — a plain `<textarea>` bound to the document's `Y.Text`, deliberately *not* CodeMirror, so what it proves is that `document.mode` has no built-in favourite rather than that two plugins can share a library. Driven by `web/app/e2e/acceptance.spec.ts`. |
 | `extra-task-states` | Adds `[/]`, `[-]` and `[?]` to the markdown task-state registry (SPEC §6.6). It is the only way to test the registry-driven half of the task contract: `[ ]` and `[x]` are `markdown`'s own default contributions *and* the only two markers remark-gfm recognises, so clicking those cannot distinguish "the registry decides marker semantics" from "GFM does". It also doubles as the non-base plugin the safe-mode suite breaks on purpose. |
+| `hello-backend` | **The backend half's fixture** (SPEC §6.3, `backend/HOST-ABI.md`). Rust only — a `Cargo.toml` and a `src/`, no manifest and no frontend half — and it is what every host suite actually drives: `pluginhost_smoke` (the ABI end to end), `pluginhost_runtime` (limits, ownership, the breaker, pooling, safe mode), `pluginhost_http` (the SSRF policy) and `pluginhost_routes` (inbound routes, credential stripping). It exports a cron handler, a `document.changed` hook, HTTP routes, a call dispatcher, and a set of paths that exist purely so a host test can reach them — a trap, a spin, a log flood, a capability probe. Since `calendar` was removed (2026-09-24) it is the **only** backend plugin in the repository, and it is the right place to add any behaviour a host test needs. |
 
 ## Building
 
 ```bash
 node web/scripts/build-examples.mjs            # -> plugins/examples/dist/<id>/<version>/
 npx --prefix web tsc --noEmit -p plugins/examples/tsconfig.json
+mise run wasm-plugins                          # the backend halves (hello-backend)
 ```
+
+`build-examples.mjs` builds the **frontend** halves: it skips any directory with no
+`manifest.json`, which is how `hello-backend` stays out of it.
 
 The typecheck needs `web/kernel-api/dist/kernel.d.ts`, so run `npm run kernel:dts` (or
 `mise run web-build`) first. That ordering is real for third parties too, so it is not

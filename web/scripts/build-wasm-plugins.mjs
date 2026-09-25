@@ -19,8 +19,10 @@
  * ```
  *
  * A plugin whose manifest has no `backend` is skipped, silently and correctly: most
- * plugins have no backend half, and `agenda` shipping without one is the point being made
- * (SPEC §9 M4).
+ * plugins have no backend half — since the calendar's removal (2026-09-24) **no plugin in
+ * `plugins/base/` has one**, and this script installs nothing there. It still builds the
+ * `examples/` fixtures, and it is still what installs the backend half of the next plugin
+ * that grows one.
  *
  * Usage: `node web/scripts/build-wasm-plugins.mjs [id …] [--debug] [--examples] [--prebuilt]`
  *
@@ -60,7 +62,7 @@ const crateName = (cargoToml) => {
   return match[1];
 };
 
-/** `calendar-backend` → `calendar_backend.wasm`. */
+/** `hello-backend` → `hello_backend.wasm`. */
 const artifactName = (crate) => `${crate.replaceAll("-", "_")}.wasm`;
 
 const targets = [];

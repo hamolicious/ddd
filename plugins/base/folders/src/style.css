@@ -98,7 +98,16 @@
   gap: 2px;
 }
 
+/*
+ * `:focus-within` is not decoration here — without it the row actions are
+ * `display: none` for a keyboard user, and `display: none` is not focusable, so Tab
+ * skips straight past them. F2 covers rename; "new document in this folder" had no
+ * keyboard path at all. Revealing the group when anything inside the row takes focus
+ * (the folder's own name button is inside it) puts both buttons back in the tab order
+ * at the point the user is already looking at.
+ */
 .folders-node:hover .folders-actions,
+.folders-node:focus-within .folders-actions,
 .folders-node-active .folders-actions {
   display: flex;
 }

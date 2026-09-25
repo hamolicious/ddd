@@ -5,12 +5,12 @@
 //!
 //! A plugin declares its routes in `backend.routes` (`"POST /webhook"`), and any of them
 //! listed in `capabilities.public-routes` is reachable **without a session**. Everything
-//! else needs one, which is the default and the reason the calendar's "sync now" button is
+//! else needs one, which is the default and the reason a plugin's own "sync now" button is
 //! safe: an unauthenticated refresh endpoint is a free outbound-request amplifier pointed
 //! at whatever host the plugin is allowed to reach.
 //!
 //! Requests reach the plugin's single `lm_http` export with the path *inside* its
-//! namespace (`/api/plugins/calendar/webhook` → `/webhook`).
+//! namespace (`/api/plugins/<id>/webhook` → `/webhook`).
 //!
 //! # What the host strips, in both directions
 //!
@@ -213,7 +213,7 @@ pub async fn dispatch(
         return Err(AppError::NotFound("plugin route"));
     };
 
-    // **Session-authenticated by default** (SPEC §5.1). The calendar's "sync now" is the
+    // **Session-authenticated by default** (SPEC §5.1). A plugin's own "sync now" is the
     // reason it matters: an unauthenticated refresh endpoint is a free outbound-request
     // amplifier pointed at whatever host the plugin is allowed to reach.
     if !route.public && user.is_none() {
@@ -867,6 +867,20 @@ pub struct LimitsView {
     pub breaker_threshold: u32,
     pub http_timeout_ms: u64,
     pub max_http_response_bytes: u64,
+    /// `PLUGIN_HTTP_ALLOW_CIDRS` — the operator's holes in the outbound IP policy
+    /// (SPEC §6.2: "loopback/link-local/RFC1918/metadata destinations blocked by default,
+    /// **admin-configurable allowlist**"). Usually empty.
+    ///
+    /// It is here because the capability-approval screen has to be able to tell the truth.
+    /// That screen warns, next to the `http` hosts field, that private and loopback
+    /// addresses "stay blocked regardless" — which is exactly right on a default server and
+    /// exactly wrong on one where this list is non-empty, and the screen had no way to know
+    /// which it was looking at. An approval UI that overstates the sandbox is worse than one
+    /// that says nothing: an admin widens `http.hosts` believing an internal name cannot
+    /// resolve anywhere sensitive, and on this server it can.
+    ///
+    /// Admin-only, like everything else on this response. Rendered as CIDR strings.
+    pub http_allow_cidrs: Vec<String>,
     pub cron_enabled: bool,
     pub max_package_bytes: u64,
 }
@@ -935,6 +949,11 @@ pub async fn list(
             breaker_threshold: config.plugin_breaker_threshold,
             http_timeout_ms: config.plugin_http_timeout.as_millis() as u64,
             max_http_response_bytes: config.plugin_http_max_response_bytes,
+            http_allow_cidrs: config
+                .plugin_http_allow_cidrs
+                .iter()
+                .map(|net| net.to_string())
+                .collect(),
             cron_enabled: config.plugin_enable_cron,
             max_package_bytes: MAX_UPLOAD_BYTES,
         },

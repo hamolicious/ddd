@@ -494,6 +494,81 @@ async fn missing_sort_keys_are_ordered_differently_by_the_two_engines() {
     app.cleanup().await;
 }
 
+/// The same divergence on the one root where it reaches a shipped sort.
+///
+/// `deleted_at` is not an `fm.*` path a caller chose: it is a fixed root, it is in
+/// `SORTABLE_FIELDS`, and it is what `doc-list`'s Trash view sorts by. It is also the only
+/// fixed root that can be **absent** — `Option` in `domain.rs` with
+/// `skip_serializing_if`, and `untombstone` `$unset`s it — so `?trash=all&sort=deleted_at`
+/// runs the disagreement above over live documents versus tombstoned ones and splits them
+/// to opposite ends of the first page.
+///
+/// Pinned rather than fixed, for the reason the test above gives: the fix is a `core` or
+/// `docstore` change that has to land with `web/kernel/src/query/filter.ts` in one commit.
+/// What this adds is that it can no longer be *discovered* — `-deleted_at`, the direction
+/// the Trash view actually sends, agrees between the two engines, so the corpus case that
+/// exists proved nothing about the ascending one.
+#[tokio::test]
+#[ignore = "requires MONGO_URI"]
+async fn deleted_at_ascending_diverges_where_a_document_is_still_live() {
+    let Some(app) = TestApp::start().await else {
+        return;
+    };
+    let (_rows, _titles) = corpus(&app).await;
+
+    // Two of the seven go to Trash, so the query has both kinds in it.
+    let live = app.list("limit=100").await;
+    let trashed: Vec<String> = live.ids().into_iter().take(2).collect();
+    for id in &trashed {
+        app.delete(&format!("/api/documents/{id}"))
+            .await
+            .expect_status(StatusCode::NO_CONTENT);
+    }
+
+    // Read the rows back the way the client sees them, tombstones included.
+    let all = app.list("trash=all&limit=100").await;
+    let rows: Vec<LocalRow> = all.documents.iter().map(LocalRow::from_view).collect();
+    assert_eq!(rows.len(), CORPUS.len());
+    assert_eq!(
+        rows.iter().filter(|row| row.deleted_at.is_some()).count(),
+        trashed.len(),
+        "only the tombstoned documents carry `deleted_at`"
+    );
+
+    for (spec, agree) in [("-deleted_at", true), ("deleted_at", false)] {
+        let from_server = app
+            .list(&format!("trash=all&sort={spec}&limit=100"))
+            .await
+            .ids();
+        let from_core = sorted_ids(&parse_sort(spec), &rows);
+        assert_eq!(
+            sorted(from_server.clone()),
+            sorted(from_core.clone()),
+            "sort `{spec}`: the same rows must come back either way"
+        );
+        assert_eq!(
+            from_server == from_core,
+            agree,
+            "sort `{spec}`: server {from_server:?} vs comparator {from_core:?}"
+        );
+    }
+
+    // And the shape of the disagreement, so a change to either engine fails here loudly
+    // rather than flipping a boolean above.
+    let ascending = app.list("trash=all&sort=deleted_at&limit=100").await.ids();
+    assert!(
+        !trashed.contains(&ascending[0]),
+        "Mongo sorts an absent `deleted_at` as Null, so the live documents lead: {ascending:?}"
+    );
+    let from_core = sorted_ids(&parse_sort("deleted_at"), &rows);
+    assert!(
+        trashed.contains(&from_core[0]),
+        "the comparator puts missing last, so the tombstones lead: {from_core:?}"
+    );
+
+    app.cleanup().await;
+}
+
 /// Paging must be a partition of the single-page result: same rows, same order,
 /// no gaps, no repeats, and a final page without a cursor.
 #[tokio::test]

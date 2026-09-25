@@ -8,7 +8,7 @@
  * released again afterwards.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 
 import type { OpenDocument } from "@kernel";
@@ -138,10 +138,62 @@ describe("a plugin's section is its own", () => {
     expect(open.text.toString()).toBe("body\n\n%%% b\ny: 2\n%%%\n");
   });
 
-  it("treats `value: null` in a section edit as removal, per the frozen contract", async () => {
+  it("removes a key's line when the edit says `remove`", async () => {
     const open = new FakeOpen("doc1", "%%% a\nx: 1\ny: 2\n%%%\n");
-    await host(open).forPlugin("a").splice.spliceSection(open, [{ key: "x", value: null }]);
+    await host(open)
+      .forPlugin("a")
+      .splice.spliceSection(open, [{ key: "x", value: null, remove: true }]);
     expect(open.text.toString()).toBe("%%% a\ny: 2\n%%%\n");
+  });
+
+  // The distinction `remove` was added for: the strict YAML subset of SPEC §3.4 has a
+  // `null` scalar, and before this a plugin had no way to write one — `value: null`
+  // was spelled for deletion and spent the only spelling JSON has for an explicit null.
+  it("writes a literal null when `remove` is not set", async () => {
+    const open = new FakeOpen("doc1", "%%% a\nx: 1\ny: 2\n%%%\n");
+    await host(open)
+      .forPlugin("a")
+      .splice.spliceSection(open, [{ key: "x", value: null, remove: false }]);
+    expect(open.text.toString()).toBe("%%% a\nx: null\ny: 2\n%%%\n");
+  });
+
+  it("writes a literal null into a section that does not exist yet", async () => {
+    const open = new FakeOpen("doc1", "body\n");
+    await host(open)
+      .forPlugin("a")
+      .splice.spliceSection(open, [{ key: "x", value: null, remove: false }]);
+    expect(open.text.toString()).toBe("body\n\n%%% a\nx: null\n%%%\n");
+  });
+
+  /**
+   * The one spelling whose meaning changed between kernel 1.0.0 and 1.1.0, and the only
+   * thing that can be done about it short of a major.
+   *
+   * `{ key, value: null }` used to delete the key's line and now writes `key: null`. The
+   * two are byte-identical on the way in, so the install gate cannot refuse the old one:
+   * `KERNEL_API_MAJOR` is still `1`, `"kernel": "^1.0"` still resolves, and a plugin
+   * written against 1.0.0 loads and then quietly accretes null lines where it meant to
+   * clear them. The write follows the *new* contract — that is what the contract says —
+   * and the author is told, at the call site, once.
+   */
+  it("warns once per key when a null arrives without an explicit `remove`", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const open = new FakeOpen("doc1", "%%% migrating\nx: 1\n%%%\n");
+      const splice = host(open).forPlugin("migrating").splice;
+      await splice.spliceSection(open, [{ key: "x", value: null }]);
+      await splice.spliceSection(open, [{ key: "x", value: null }]);
+
+      expect(open.text.toString()).toBe("%%% migrating\nx: null\n%%%\n");
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]?.[0]).toContain("remove: true");
+
+      // An explicit `remove: false` is the author saying they meant the null.
+      await splice.spliceSection(open, [{ key: "y", value: null, remove: false }]);
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 

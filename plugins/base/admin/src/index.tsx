@@ -147,6 +147,11 @@ export default function activate(kernel: Kernel): AdminApi {
     kernel.extensions.contribute<NavbarItem>(POINTS.navbarItem, {
       id: "admin.link",
       label: "Admin",
+      // The icon is what lets `shell-ui` collapse this to a tap target at its mobile
+      // breakpoint (it hides a label that *has* an icon beside it, keeping the label
+      // for screen readers). Without one this item spelled "Admin" in full on a phone
+      // and was part of why the navbar ran past the viewport.
+      icon: "🛡",
       side: "end",
       order: 90,
       onSelect: () => api.open(),

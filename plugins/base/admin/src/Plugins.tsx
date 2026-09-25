@@ -18,8 +18,8 @@
  *   clicks approve. The capability list is shown in full — hosts spelled out, public routes
  *   labelled as reachable without signing in — and may be **narrowed** here. The one field
  *   that may be *extended* is `http.hosts`, because a plugin whose destination is
- *   admin-configured cannot know its host when it is packaged (`HOST-ABI.md` §7.2); the
- *   calendar plugin is exactly that case.
+ *   admin-configured cannot know its host when it is packaged (`HOST-ABI.md` §7.2) — a
+ *   feed importer given its URL by an operator is exactly that case.
  * - **An upgrade is an upload.** A package whose id is already installed lands pending too,
  *   so a new version goes past the capability screen rather than around it.
  * - **Uninstall keeps data by default.** KV and the plugin's in-document `%%%` sections
@@ -42,6 +42,7 @@ import {
   approvalProblems,
   formatBytes,
   formatWhen,
+  hostPolicyNote,
   parseHostList,
   type AdminClient,
   type PluginAdminList,
@@ -356,10 +357,10 @@ function PendingCard({
             {addedHosts.length > 0 && (
               <p className="admin-warning">
                 Adding {addedHosts.map((host) => <code key={host}>{host}</code>)} — hosts the
-                package itself did not ask for. Loopback, link-local, private and
-                metadata addresses stay blocked regardless.
+                package itself did not ask for.
               </p>
             )}
+            <HostPolicyNotes hosts={granted.http?.hosts ?? []} />
           </div>
         )}
 
@@ -473,6 +474,44 @@ function PendingCard({
         </button>
       </div>
     </li>
+  );
+}
+
+/**
+ * What the server's outbound IP policy will make of the hosts in the box — per host,
+ * and only where there is something true to say.
+ *
+ * It replaces a single blanket sentence ("loopback, link-local, private and metadata
+ * addresses stay blocked regardless") that was printed next to every added host. That
+ * sentence was noise beside `example.com` and *wrong* beside `10.0.0.5`: an operator's
+ * `PLUGIN_HTTP_ALLOW_CIDRS` is exactly what unblocks private ranges (SPEC §6.2), so
+ * "regardless" promised something the server does not do. The metadata endpoints are
+ * the only addresses that really are refused whatever the configuration, and now they
+ * are the only ones the UI says so about.
+ *
+ * Notes are hints about the *literal that was typed*. The server resolves the name and
+ * pins the address it got, and that is the enforcement; nothing here blocks approval.
+ */
+function HostPolicyNotes({ hosts }: { readonly hosts: readonly string[] }): ReactElement | null {
+  const notes = hosts
+    .map((host) => ({ host, note: hostPolicyNote(host) }))
+    .filter((entry): entry is { host: string; note: NonNullable<typeof entry.note> } =>
+      entry.note !== undefined,
+    );
+  if (notes.length === 0) return null;
+
+  return (
+    <ul className="admin-host-notes">
+      {notes.map(({ host, note }) => (
+        <li
+          key={host}
+          className={note.kind === "metadata" ? "admin-warning" : "admin-note"}
+          data-kind={note.kind}
+        >
+          <code>{host}</code> is {note.message}
+        </li>
+      ))}
+    </ul>
   );
 }
 

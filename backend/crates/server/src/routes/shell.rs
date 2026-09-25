@@ -114,7 +114,7 @@ use crate::error::{AppError, AppResult};
 use crate::plugins;
 use crate::state::AppState;
 
-use super::statics::{IMPORT_MAP_MARKER, ImportMap, runtime_imports};
+use super::statics::{ImportMap, render_index_body, runtime_imports};
 
 /// The bridge version this server's bundle requires of a shell, when the bundle does not
 /// say (SPEC §7: "the bundle declares a minimum bridge version").
@@ -356,7 +356,7 @@ async fn build_bundle(state: &AppState) -> AppResult<Arc<Bundle>> {
     files.sort_by(|a, b| a.path.cmp(&b.path));
     files.dedup_by(|a, b| a.path == b.path);
 
-    let index_csp = shell_csp(&nonce_of(&synthesized));
+    let index_csp = shell_csp(&nonce_of(&synthesized), state.config.public_url.as_deref());
     let bundle = Arc::new(Bundle {
         manifest: ShellManifest {
             bundle_version: bundle_version(&files),
@@ -671,7 +671,7 @@ async fn synthesize(state: &AppState, dist: &Path) -> AppResult<BTreeMap<String,
     .unwrap_or_else(|_| b"{}".to_vec());
 
     let nonce = stable_nonce(&html, &importmap);
-    let index = render_index(&html, &imports, &nonce);
+    let index = render_index_body(&html, &imports, &nonce);
 
     Ok(BTreeMap::from([
         (
@@ -689,32 +689,6 @@ async fn synthesize(state: &AppState, dist: &Path) -> AppResult<BTreeMap<String,
             },
         ),
     ]))
-}
-
-/// Replace [`IMPORT_MAP_MARKER`] with the nonced inline import map.
-///
-/// A deliberate duplicate of `statics::render_index`, which is private: this area owns
-/// `shell.rs` only, and the two renderings are *not* the same document anyway — this one
-/// bakes a stable nonce and pairs with [`shell_csp`]. The integration suite fetches `/`
-/// and this file's `index.html` in one test and compares the policies directive by
-/// directive, so the two cannot drift silently. (`INTEGRATION:` exporting
-/// `statics::render_index` would let both share one implementation; that is the statics
-/// owner's call, not mine.)
-fn render_index(html: &str, imports: &BTreeMap<String, String>, nonce: &str) -> String {
-    let map = serde_json::to_string(&ImportMap {
-        imports: imports.clone(),
-    })
-    .unwrap_or_else(|_| "{}".to_string());
-    let script = format!("<script type=\"importmap\" nonce=\"{nonce}\">{map}</script>");
-    if html.contains(IMPORT_MAP_MARKER) {
-        html.replace(IMPORT_MAP_MARKER, &script)
-    } else {
-        warn!(
-            "index.html has no {IMPORT_MAP_MARKER} marker; the shell bundle will not resolve \
-             the runtime layer"
-        );
-        html.to_string()
-    }
 }
 
 /// The nonce baked into the bundle's `index.html`, derived from the bytes it authorises.
@@ -760,32 +734,49 @@ fn nonce_of(synthesized: &BTreeMap<String, SynthesizedFile>) -> String {
 
 /// The policy the shell's loopback server sends with `index.html`.
 ///
-/// SPEC §8's policy, as `statics.rs` renders it, with **one** difference:
-/// `connect-src` admits the `http(s)`/`ws(s)` schemes rather than `'self'` alone.
+/// SPEC §8's policy, as `statics.rs` renders it, with **one** difference, whose width
+/// now depends on whether the operator has told the server its own address.
 ///
-/// That difference is not a loosening anybody chose — it is the loopback origin
-/// (`app/BRIDGE.md` §6). In the shell the page is served from
-/// `http://127.0.0.1:41847` and *every* API call and the sync socket are cross-origin;
-/// with `connect-src 'self'` the app logs in natively and then cannot reach the server
-/// at all. The server cannot name the origin instead, because it does not know it: a
-/// device reaches this server by whatever host, port and scheme its operator configured
-/// (a tunnel, a LAN address, `10.0.2.2` on an emulator), and `APP_ORIGIN` lists the
-/// *clients* it accepts, not the URL it is reached at.
+/// The difference is the loopback origin (`app/BRIDGE.md` §6). In the shell the page is
+/// served from `http://127.0.0.1:41847` and *every* API call and the sync socket are
+/// cross-origin; with `connect-src 'self'` the app logs in natively and then cannot reach
+/// the server at all. So `connect-src` has to name the server — and for a long time it
+/// could not, because the server does not know its own URL: it is TLS-unaware, a device
+/// reaches it by whatever host, port and scheme its operator configured (a tunnel, a LAN
+/// address, `10.0.2.2` on an emulator), and `APP_ORIGIN` lists the *clients* it accepts,
+/// not the URL it is reached at. The fallback was scheme sources — `https: http: wss: ws:`,
+/// no host restriction at all.
 ///
-/// It is also a smaller step than it looks: the browser policy already carries
-/// `connect-src … ws: wss:`, which are scheme sources with no host restriction, so
-/// scheme-level connect sources are the established shape here rather than a new one.
-/// Everything that actually contains the blast radius is unchanged — `script-src` is
-/// still `'self'` plus one nonce, `object-src 'none'`, `base-uri 'none'`.
+/// [`Config::public_url`] is the missing fact, and when it is set this narrows to it:
+/// `connect-src 'self' https://notes.example.com wss://notes.example.com`. Both spellings
+/// of the host, because a CSP source matches scheme-and-all and `/api/sync` is a `wss://`
+/// URL ([`Config::public_ws_origin`]). Unset keeps the old behaviour exactly — this is a
+/// tightening an operator opts into by answering the question, never a new way for a
+/// working deployment to break after an upgrade.
 ///
-/// `INTEGRATION:` tightening this to the real origin needs the server to know its own
-/// public URL (a `PUBLIC_URL`-shaped config addition) or the shell to substitute its
-/// `serverBaseUrl` into the policy. Both are decisions above this area.
-fn shell_csp(nonce: &str) -> String {
+/// Everything that actually contains the blast radius was never the loose part and is
+/// unchanged either way: `script-src` is `'self'` plus one nonce, `object-src 'none'`,
+/// `base-uri 'none'`, `frame-ancestors 'none'`.
+///
+/// `media-src 'self' blob:` is the same addition `statics.rs` makes and needs no widening
+/// on either branch: an attachment is never played from its server URL. The client fetches
+/// the bytes (that is `connect-src`) and renders them from an object URL, exactly as
+/// `img-src`'s long-standing `blob:` exists for. See `statics::render_index`.
+///
+/// The markup itself is [`render_index_body`], shared with the browser page — only the
+/// policy differs, and only in `connect-src`.
+fn shell_csp(nonce: &str, public_url: Option<&str>) -> String {
+    let connect = match public_url.and_then(|origin| {
+        crate::config::ws_origin(origin).map(|ws| format!("'self' {origin} {ws}"))
+    }) {
+        Some(narrowed) => narrowed,
+        None => "'self' https: http: wss: ws:".to_string(),
+    };
     format!(
         "default-src 'self'; script-src 'self' 'nonce-{nonce}' 'wasm-unsafe-eval'; \
-         style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; \
-         connect-src 'self' https: http: wss: ws:; worker-src 'self' blob:; \
+         style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; \
+         media-src 'self' blob:; font-src 'self'; \
+         connect-src {connect}; worker-src 'self' blob:; \
          object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
     )
 }
@@ -906,6 +897,7 @@ fn fingerprint(entries: &[WalkEntry], roots: &[BundleRoot]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::routes::statics::IMPORT_MAP_MARKER;
 
     fn file(path: &str, sha: &str) -> ShellFile {
         ShellFile {
@@ -1075,7 +1067,7 @@ mod tests {
         .expect("the import map serializes");
         let html = format!("<head>{IMPORT_MAP_MARKER}</head>");
         let nonce = stable_nonce(&html, &map);
-        let body = render_index(&html, &imports, &nonce);
+        let body = render_index_body(&html, &imports, &nonce);
 
         assert!(!body.contains(IMPORT_MAP_MARKER), "the marker survived");
         assert!(body.contains(&format!("nonce=\"{nonce}\"")));
@@ -1091,18 +1083,18 @@ mod tests {
             },
         )]);
         assert_eq!(nonce_of(&synthesized), nonce);
-        assert!(shell_csp(&nonce_of(&synthesized)).contains(&format!("'nonce-{nonce}'")));
+        assert!(shell_csp(&nonce_of(&synthesized), None).contains(&format!("'nonce-{nonce}'")));
     }
 
     #[test]
     fn a_template_without_the_marker_publishes_no_nonce_rather_than_a_dangling_one() {
-        // Degraded, not fatal — the same choice `statics::render_index` makes. What must
+        // Degraded, not fatal — the one `render_index_body` makes for both pages. What must
         // not happen is a policy naming a nonce no script carries, which would block the
         // import map on a *working* template's next deploy and look like a server bug.
         let synthesized = BTreeMap::from([(
             "index.html".to_string(),
             SynthesizedFile {
-                bytes: render_index("<head></head>", &BTreeMap::new(), "N").into_bytes(),
+                bytes: render_index_body("<head></head>", &BTreeMap::new(), "N").into_bytes(),
                 content_type: "text/html; charset=utf-8",
             },
         )]);
@@ -1111,12 +1103,13 @@ mod tests {
 
     #[test]
     fn the_shell_policy_is_the_browser_policy_plus_the_cross_origin_api() {
-        let csp = shell_csp("N");
+        let csp = shell_csp("N", None);
         for directive in [
             "default-src 'self'",
             "script-src 'self' 'nonce-N' 'wasm-unsafe-eval'",
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data: blob:",
+            "media-src 'self' blob:",
             "worker-src 'self' blob:",
             "object-src 'none'",
             "base-uri 'none'",
@@ -1136,6 +1129,42 @@ mod tests {
             .find(|directive| directive.starts_with("script-src "))
             .expect("script-src is present");
         assert_eq!(script_src, "script-src 'self' 'nonce-N' 'wasm-unsafe-eval'");
+    }
+
+    /// `PUBLIC_URL` is what lets the deviation above stop being scheme-wide.
+    #[test]
+    fn a_configured_public_url_narrows_connect_src_to_that_origin() {
+        let csp = shell_csp("N", Some("https://notes.example.com"));
+        let connect = csp
+            .split("; ")
+            .find(|directive| directive.starts_with("connect-src "))
+            .expect("connect-src is present");
+
+        // Both spellings of the one host, and nothing else: the REST origin and the
+        // socket origin. A policy with only the `https://` form would let the app log in
+        // and then refuse `/api/sync`, which is the failure this pairing exists to avoid.
+        assert_eq!(
+            connect,
+            "connect-src 'self' https://notes.example.com wss://notes.example.com"
+        );
+        // The bare *scheme sources* are gone — that is the entire point of setting the
+        // variable. (Matched as whole tokens: `https:` the scheme source and
+        // `https://notes.example.com` the host source are different sources, and only the
+        // first is the wide one.)
+        for scheme in ["https:", "http:", "wss:", "ws:"] {
+            assert!(
+                !connect.split(' ').any(|source| source == scheme),
+                "the bare `{scheme}` scheme source survived the narrowing:\n{connect}"
+            );
+        }
+        // Plain http deployments narrow too, to their own scheme pair.
+        assert!(
+            shell_csp("N", Some("http://192.168.1.10:8080"))
+                .contains("connect-src 'self' http://192.168.1.10:8080 ws://192.168.1.10:8080;")
+        );
+        // Nothing else in the policy moves with it.
+        assert!(csp.contains("media-src 'self' blob:"));
+        assert!(csp.contains("script-src 'self' 'nonce-N' 'wasm-unsafe-eval'"));
     }
 
     #[test]

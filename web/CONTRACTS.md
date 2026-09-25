@@ -226,12 +226,14 @@ Frozen surface: `Query`, `QueryResult`, `SortKey`, `parseSortKey`, `resolvePath`
 Frozen surface: `CoreBindings`, `ParsedDocument`, `FilterJson`, `FilterRow`,
 `filterRow`, `loadCore`, `resetCoreForTests`.
 
-**Open:** `CoreBindings` exposes no date canonicalization, though the ABI exports
-`normalize_date`. `parse_document` does not canonicalize dates but server
-materialization does, so any kernel code re-deriving a projection row offline
-disagrees with the server on real datetimes. `harness/src/core.ts` reaches into the
-generated module as a stopgap; adding `normalizeDate()` to `CoreBindings` fixes it
-for web-store and web-query too.
+**Closed (polish pass, 2026-09-25):** `CoreBindings` carries **all five** ABI exports.
+It used to surface three, so `kernel.core.resolveTitle`/`normalizeDate` threw
+`notImplemented` and `harness/src/core.ts` reached past the interface into the generated
+module for `normalize_date` — which meant the harness, and only the harness, knew how to
+canonicalize a date the way server materialization does (SPEC §3.4). `parse_document`
+still does not canonicalize; `normalizeDate` is how a caller matches the server, and
+`kernel/src/wasm/core-parity.test.ts` checks both new bindings against
+`backend/crates/core/corpus/{documents,dates}.json`.
 
 ## Area: web-demo
 
@@ -523,10 +525,11 @@ Hard requirements:
 - `editor` binds CodeMirror to the `Y.Text` with `y-codemirror.next`, collapses the
   frontmatter and `%%%` regions, and uses `Y.UndoManager` rather than CodeMirror history.
   It must be usable with the Android soft keyboard (M5 acceptance, so design for it now).
-- `doc-list` owns the Trash view. **Sorting Trash by `deleted_at` is a 400 today** — the
-  shared DSL's field space does not reach that root, so the client could not reproduce the
-  order anyway; `backend/CONTRACTS.md` records it as the core change that lands with this
-  view. Until then sort by `updated_at` and say so in the UI.
+- `doc-list` owns the Trash view. **Sorting Trash by `deleted_at` was a 400** — the shared
+  DSL's field space did not reach that root, so the client could not reproduce the order
+  anyway, and the view sorted its own rows after the query. *Closed in the polish pass
+  below:* `deleted_at` is a fixed root on both engines, so the direction toggle is a sort
+  key on the query and the workaround (and the note disclaiming it) is gone.
 - Empty states are required for doc-list, folders and Trash (SPEC §6.5).
 
 ## Area: base-markdown
@@ -661,3 +664,124 @@ operator learns after a user opens an empty shell.
 
 **New, owned by nobody before**: `playwright.app.config.ts`, `app/e2e/**`,
 `scripts/build-examples.mjs`, `scripts/compose-plugins.mjs`, `plugins/examples/**`.
+
+---
+
+# Polish pass (2026-09-25)
+
+Calendar and agenda were removed at the owner's direction and the basics were tightened.
+Everything below is either a change to a frozen surface or a change outside one area's
+ownership, recorded here because those are the two things this document exists to control.
+
+## Frozen surfaces, extended additively
+
+Each one is the "adding an optional field is the one exception" rule, and each is
+announced rather than assumed. `docs/KERNEL-API.md` has the changelog entry; the contract
+moved **1.0.0 → 1.1.0**, and `KERNEL_VERSION` in
+`backend/crates/server/src/plugins.rs` moved with it because the two are one number with
+nothing checking that automatically.
+
+- **`@kernel`'s `SectionLineEdit` gained `remove?: boolean`** (`kernel-api/src/documents.ts`).
+  With it, `value` is written **literally, `null` included**, and `remove: true` deletes the
+  key's line. The old shape could not express the difference at all — `FmValue` contains
+  `null`, so one field could not mean both "write this" and "write nothing" — while
+  `core::splice::SectionLineEdit` underneath is an `Option<Value>` that always could. The
+  only in-tree caller was `runtime/settings.ts`, where `remove(key)` and `set(key, null)`
+  had silently been the same operation.
+
+  **The added field is additive; the meaning change underneath it is not**, and a minor
+  cannot express that. `{ key, value: null }` used to delete and now writes `key: null`;
+  the two spellings are byte-identical on the wire, `KERNEL_API_MAJOR` is still `1`, and
+  `"kernel": "^1.0"` therefore installs and boots. Accepted rather than fixed, because
+  every consumer is in this repository and a `2.0.0` days after `1.0.0` for one field's
+  semantics is a worse signal than the break it would describe. What replaces the gate is a
+  one-per-plugin-per-key warning from `runtime/documents.ts` when a null arrives with no
+  `remove` field, pinned by `runtime/documents.test.ts`, and `docs/KERNEL-API.md`'s 1.1.0
+  entry records the reasoning and the condition that makes the next such change a major.
+  `settings.set` spells `remove: false` for the same reason a caller should.
+- **`CoreBindings` gained `resolveTitle` and `normalizeDate`** (area `wasm`; see the
+  "Closed" note under that area). No Rust change: `wasm.rs` already exported both.
+- **`FilterRow` gained `deleted_at?: string`, and `filterRow` fills it** (area `wasm`).
+  `core::filter::ast::FIXED_ROOTS` gained `deleted_at` in the M5 polish and `wasm.rs`
+  already read it off the row JSON; this side did not send it, so `missing`/`exists`/
+  `cmp` on that root answered for every client as though no document had ever been
+  deleted. It is **omitted, never sent as null**, for a live document — that is what
+  Mongo stores and what `missing` is asked about, and a null would make the client
+  answer `exists` where the server answers `missing` for every live row.
+- **`plugins/base/_shared/points.ts`'s `DocumentModeProps` gained `line?: number`** — the
+  1-based line of `#/doc/<id>?line=42`. The surface parses the query and hands the number
+  down; honouring it is a mode's own business (`editor` moves the cursor and scrolls, a
+  rendered mode may ignore it).
+- **`web/kernel/src/runtime/shell-bridge.ts`'s `ShellBridgeV1` gained `bundleVersion?:
+  string`** — the bundle the shell is serving this webview. Declared but not yet injected
+  by the Dart `bootstrapScript`, and `app/bridge_fixtures/window_shell.json` deliberately
+  does not list it, so neither half's tests assume it is there (`app/BRIDGE.md` §8: a new
+  optional member is not a version bump).
+
+## New shared file: `plugins/base/_shared/machine-docs.ts`
+
+Owned by nobody before; used by `doc-list`, `folders` and `search`, which is exactly why
+it is in `_shared` rather than triplicated. It carries one rule — **a document whose
+`fm.path` starts with `.` is machine-owned** — as a predicate and as a DSL clause, so the
+three plugins cannot drift about what they are hiding.
+
+It is a *convention three plugins share*, not a kernel concept: the kernel knows one
+domain model and "machine-owned" is not part of it (SPEC §2). Nothing about what the
+server returns, what the local index holds or what `kernel.documents` answers changes.
+
+## Cross-area changes
+
+- **`web/app/src/ui/AppFrame.tsx` and `plugins/base/shell-ui/src/indicators.tsx`** were
+  changed together, because the bug was the relationship between them: both rendered the
+  kernel's notice list, so every notice appeared twice and had to be dismissed twice. The
+  kernel's strip now renders only when the mount is held by something that draws notices
+  of its own, and `shell-ui`'s bell opens itself once for a notice that *arrives* while it
+  is up, so "1 plugin failed to load" is still a sentence on screen rather than a badge
+  with a number on it.
+
+  Both halves of that sentence were wrong in the first cut, and both are worth recording
+  because both are the same mistake — a rule stated over the wrong quantity.
+
+  - The strip keyed on "something holds the mount". **`?safe=bare` mounts the kernel's own
+    `BareManager`**, which renders no notices and has no plugin behind it that could, so
+    the strip stood down on the one screen SPEC §6.1 calls the recovery path — with the
+    storage warning, the plugin-list failure and the update notice's only `Reload` button
+    all raised before that branch runs. The condition is now `mounted && !mountFailed &&
+    bootMode !== "bare"`, pinned by `app/e2e/safe-mode.spec.ts` (which denies storage
+    persistence so a notice deterministically exists to look for).
+  - The bell's "seen" set started empty on every mount, so every notice the boot sequence
+    had already raised counted as fresh and the panel sprang open over the navbar on
+    *every* reload — a waiting service worker or a browser that refused storage
+    persistence was enough. It is seeded from the list present at the bell's first render
+    now: the badge carries what boot found, the panel opens for what happens next.
+    Deliberately **not** filtered by level, and this document said otherwise until now —
+    the code's own comment gives the argument, and a second quieter policy about "which
+    levels deserve attention" is how a notice nobody sees gets shipped.
+- **`kernel/src/query/filter.ts` and `plugins/base/doc-list/**` were changed together**,
+  because the client half of the M5 core change had never landed. `compare_rows` resolves
+  `deleted_at` as a date; `resolveField` here still returned `MISSING` for it, with a
+  comment asserting the core did not know the root. So `-deleted_at` was insertion order
+  on the client and tombstone order on the server — the same query, two orders, no error
+  anywhere, which is precisely the disagreement that file exists to prevent. With the
+  mirror fixed, the base-docs workaround below closes: `TrashView` sorts in the engine
+  instead of re-sorting `state.rows` in a `useMemo`, so the order holds over the whole of
+  Trash rather than over the page `TRASH_LIMIT` happened to return, and the on-screen note
+  disclaiming it is gone. `TRASH_SORT_IS_CLIENT_SIDE` is `false` and `isFieldPathShaped`
+  accepts the root. Pinned by `filter.test.ts` on both sides — including the live/trashed
+  case, where an absent `deleted_at` must sort *after* every present one.
+
+  **That last rule is where `deleted_at` inherits the one divergence the two engines
+  already had**, and it is the first *fixed* root to do so. `compare_rows` and this mirror
+  put a missing key last in both directions; Mongo sorts an absent field as Null, the
+  lowest BSON type, so it leads ascending. `?trash=all&sort=deleted_at` therefore hands
+  back the same rows in opposite halves depending on who ordered them. `-deleted_at` — the
+  direction `TrashView` sends — agrees, which is why the corpus case that existed proved
+  nothing about it. Both behaviours are now pinned (a corpus `sorts` case for the
+  comparator, `documents_query.rs::deleted_at_ascending_diverges_where_a_document_is_still_live`
+  against real Mongo), and the comparator's doc comment no longer claims the two orderings
+  are identical. Closing it is still a `core` + `filter.ts` change in one commit, as the M2
+  note says.
+- **`backend/crates/server/src/plugins.rs`**: `KERNEL_VERSION` bumped, as above. One
+  constant, for the reason its own doc comment gives.
+- **`app/pubspec.yaml`**: the unused `archive` dependency dropped (`pubspec.lock`
+  regenerated; `flutter test` green). Nothing in `app/lib/` imported it.

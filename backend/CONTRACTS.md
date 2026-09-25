@@ -258,6 +258,7 @@ impl SortKey { pub fn parse(input: &str) -> Result<SortKey, FilterParseError> } 
 pub struct Row<'a> { pub id: &'a str, pub title: &'a str, pub content: &'a str,
                      pub fm: &'a Map, pub plugins: &'a Map,
                      pub created_at: Option<&'a Date>, pub updated_at: Option<&'a Date>,
+                     pub deleted_at: Option<&'a Date>,   // added in M5 polish: Trash sorts by it
                      pub deleted: bool }
 pub enum FieldRef<'a> { Missing, Present(&'a Value), Str(&'a str), Bool(bool), Date(&'a Date) }
 pub enum EvalError { TypeMismatch{field,found,expected}, NotApplicable{field}, UnknownField }
@@ -612,7 +613,8 @@ pub async fn shutdown_signal();
 pub fn router() -> Router<AppState>;
 pub async fn healthz() -> impl IntoResponse;
 pub struct ReadyReport { pub ready: bool, pub mongo: CheckResult, pub migrations: CheckResult,
-    pub plugins: CheckResult, pub schema_version: i32, pub uptime_secs: u64, pub version: &'static str }
+    pub plugins: CheckResult, pub plugin_host: CheckResult,  // `plugin_host` added in M5 polish
+    pub schema_version: i32, pub uptime_secs: u64, pub version: &'static str }
 pub struct CheckResult { pub ok: bool, pub detail: Option<String>, pub latency_ms: Option<u64> }
 pub async fn readyz(State(state): State<AppState>) -> (StatusCode, Json<ReadyReport>);
 ```
@@ -1081,10 +1083,23 @@ pub struct Page { pub documents: Vec<DocumentRow>, pub next_cursor: Option<Strin
    needs `web/kernel/src/query/filter.ts` (which mirrors `compare_rows` line by
    line, with its own pinning test) changed in the same commit.
 
-   Related, and also open: `SORTABLE_FIELDS` cannot offer `deleted_at` or
-   `materialized_version`, because `resolve_field` returns `Missing` for both roots —
-   so a client provably cannot reproduce that ordering, and `?trash=trashed&sort=deleted_at` is a 400. Sorting Trash needs a core field-space change, not a
-   whitelist entry. It lands with whoever builds the `doc-list` Trash view in M3.
+   Related, and once open: `SORTABLE_FIELDS` could not offer `deleted_at` or
+   `materialized_version`, because `resolve_field` returned `Missing` for both roots —
+   so a client provably could not reproduce that ordering, and
+   `?trash=trashed&sort=deleted_at` was a 400. **Half-closed (M5 polish).**
+   `deleted_at` is a fixed root on both engines now and is the Trash sort key;
+   `materialized_version` is still refused, and deliberately (a hash has no order worth
+   exposing).
+
+   And closing it inherited the divergence above, which is worth stating because
+   `deleted_at` is the **first fixed root that can be absent**: a live document has no
+   `deleted_at` (`Option` in `domain.rs` with `skip_serializing_if`; `untombstone`
+   `$unset`s it), so `?trash=all&sort=deleted_at` is the same disagreement over live
+   versus tombstoned documents — server first, client last — on a key the API advertises
+   rather than on an `fm.*` path a caller chose. Pinned on both sides by
+   `documents_query.rs::deleted_at_ascending_diverges_where_a_document_is_still_live` and
+   by a corpus `sorts` case; `compare_rows`'s doc comment no longer claims the two
+   orderings are identical. `-deleted_at`, which is what `doc-list` sends, agrees.
 2. **Finish the RFC 3339 conversion. Done — no response type carries a
    `bson::DateTime` any more.** `DocumentView`, `UserView`, `AttachmentView` and
    `SnapshotView` were already converted; M2 integration finished the rest:
@@ -1351,7 +1366,10 @@ Two defects and one structural fix, all inside this area's own files:
    points at its own fixture. Keyed by `config.plugins_dir` now.
 3. **`Cross-Origin-Opener-Policy: same-origin`** on the app document, and the CSP/marker
    rendering split into a pure `render_index` so the policy string is unit-testable without
-   a filesystem or a database. COOP is deliberately *not* paired with COEP
+   a filesystem or a database. (M5 polish split it once more: the marker replacement is
+   `pub(super) render_index_body`, which `shell.rs` now calls instead of carrying its own
+   copy. The *policies* stay separate — the shell's `connect-src` is not the browser's —
+   but there is one renderer of `index.html`.) COOP is deliberately *not* paired with COEP
    (`require-corp`), which would force CORP headers onto every plugin asset for a
    cross-origin isolation this app does not use.
 
@@ -1401,6 +1419,15 @@ view from `fm.date`) with `agenda` alongside it as a pure frontend plugin.
 **Not in scope:** the Flutter shell (M5). Nothing here needs Dart, and nothing here needs a
 new frontend kernel API.
 
+> **Post-M4 (2026-09-24): `calendar` and `agenda` were removed from the tree** at the
+> owner's direction ("rip out the calendar stuff — let's polish the basics"). This section
+> is kept verbatim as the record of what M4 was built against; the **`calendar` and
+> `agenda-admin` builder areas no longer have plugin sources to own** (agenda-admin's admin
+> surface — `plugins/base/admin/**` and the admin half of `routes/plugin_api.rs` — is
+> untouched and still shipping). Everything else here still describes the tree. The
+> capability, hook, cron, route and install-lifecycle suites never drove the calendar: their
+> fixture is and always was `plugins/examples/hello-backend`.
+
 [`HOST-ABI.md`](HOST-ABI.md) is authoritative for everything crossing the Wasm boundary.
 Server and plugins implement it independently; where an implementation and that document
 disagree, the document is the bug report, and where the document and
@@ -1414,7 +1441,8 @@ here:
    `crates/plugin-sdk` (**excluded** from the workspace: it links Extism's host imports, so a
    host-target `cargo test --workspace --all-targets` would fail to link it).
 2. **A new Cargo workspace outside `backend/`:** `plugins/` holds the backend halves
-   (`base/calendar/backend`, `base/calendar/ics`, `examples/hello-backend`). Both it and
+   (`base/calendar/backend`, `base/calendar/ics`, `examples/hello-backend` — since the
+   calendar's removal, `examples/hello-backend` alone). Both it and
    `crates/plugin-sdk` pin `wasm32-unknown-unknown` in their own `.cargo/config.toml`, so no
    command needs `--target`.
 3. **Dependencies were added** to `crates/server`: `extism`, `reqwest` (rustls only),
@@ -1463,15 +1491,17 @@ backend/
 
 plugins/
 ├── Cargo.toml                           the wasm plugin workspace
-├── base/calendar/{manifest.json,README.md,backend/,ics/,src/}   [calendar]
-├── base/agenda/{manifest.json,src/}                             [agenda-admin]
+├── base/calendar/{manifest.json,README.md,backend/,ics/,src/}   [calendar]     (removed)
+├── base/agenda/{manifest.json,src/}                             [agenda-admin] (removed)
 └── examples/hello-backend/                                      [wasm-host]
 
 web/scripts/build-wasm-plugins.mjs       backend halves → the installed layout  [wasm-host]
 ```
 
 Root: `mise.toml` gained `wasm-plugins`, `plugin-check`, `plugin-test`, `plugin-smoke`;
-`.env.example` and `.gitignore` gained their M4 blocks — **[ops]**.
+`.env.example` and `.gitignore` gained their M4 blocks — **[ops]**. (`plugin-test` was
+removed with the calendar: it ran `calendar-ics`'s host-target suite, and nothing left in
+`plugins/` can be built for the host target.)
 
 ## The five builder areas
 
@@ -1480,8 +1510,8 @@ Root: `mise.toml` gained `wasm-plugins`, `plugin-check`, `plugin-test`, `plugin-
 | **wasm-host** | `crates/plugin-abi/**`, `crates/plugin-sdk/**`, `pluginhost/{mod,host_fns,limits,breaker,pool}.rs`, the dispatch half of `routes/plugin_api.rs`, `plugins/examples/**`, `web/scripts/build-wasm-plugins.mjs`, `crates/server/tests/pluginhost_*.rs` | `plugininstall/**`, `plugins.rs`, `pluginhost/{hooks,cron}.rs`, `feed.rs`, `docstore.rs`, `domain.rs`, `state.rs`, `error.rs` |
 | **install-flow** | `plugininstall/**`, `plugins.rs` (the M4 half), `crates/server/tests/plugininstall_*.rs` | `pluginhost/**` internals, `routes/**` (ask), `docstore.rs`, `domain.rs` |
 | **hooks-cron** | `pluginhost/hooks.rs`, `pluginhost/cron.rs`, `routes::sync::publish_plugin_event`, the `emit`/`emit_client` bodies in `host_fns.rs` | everything else in `pluginhost/**`, `plugininstall/**`, the rest of `sync.rs` |
-| **calendar** | `plugins/base/calendar/**` | anything under `backend/` (report ABI gaps instead), `plugins/base/agenda/**` |
-| **agenda-admin** | `plugins/base/agenda/**`, `plugins/base/admin/src/Plugins.tsx` and its siblings, the admin half of `routes/plugin_api.rs` | `pluginhost/**`, `plugininstall/**` (call them) |
+| **calendar** *(area retired — its sources were removed 2026-09-24)* | `plugins/base/calendar/**` | anything under `backend/` (report ABI gaps instead), `plugins/base/agenda/**` |
+| **agenda-admin** *(the `agenda` half was removed 2026-09-24; the admin half is live)* | `plugins/base/agenda/**`, `plugins/base/admin/src/Plugins.tsx` and its siblings, the admin half of `routes/plugin_api.rs` | `pluginhost/**`, `plugininstall/**` (call them) |
 
 Three areas share one file each, and the split is marked inside the file:
 `routes/plugin_api.rs` (wasm-host dispatch / agenda-admin admin), `host_fns.rs`
@@ -1495,6 +1525,15 @@ install-flow's M4 types).
 Every type in it is the wire format. Adding an **optional** field is allowed and announced;
 renaming one, retyping one, or changing an `ErrorCode` spelling is an ABI-major change and
 bumps `ABI_VERSION`. `HOST-ABI.md` is the prose half and changes in the same commit.
+
+One correction, not a change (2026-09-25): `SectionEdit.value` carries
+`deserialize_with = "deserialize_present"`. No byte on the wire moved — serde simply folds
+a JSON `null` onto `Option<T>` as `None`, which is what an *absent* field also produces, so
+`{"key":"k","value":null}` — the form this type's own doc comment and `HOST-ABI.md` specify
+for "write the YAML `null`" — arrived at the host as "no value" and was refused as
+`invalid_argument`. A backend plugin could not write a null into its own section at all,
+while the test beside the type passed because it only ever serialized. Round trips are now
+asserted in both directions there and end to end in `pluginhost_runtime.rs`.
 
 ```rust
 pub const ABI_VERSION: u32 = 1;
@@ -1549,8 +1588,15 @@ pub const HOOK_DEBOUNCE: Duration = 2s;  pub const HOOK_MAX_DELAY: Duration = 30
 pub enum InstallSource { Upload{filename}, Directory{path}, Base }
 pub struct InstallRequest { source, archive, actor, auto_approve }
 pub struct InstallOutcome { id, version, state, capabilities, replaced, warnings }
-pub enum InstallError { Package, Manifest, KernelIncompatible, AbiIncompatible, Dependency,
-    PeerLibrary, AlreadyInstalled, Locked, RolledBack, Io, Db, Internal }
+// M5 polish: `AbiIncompatible` was removed — it was never constructible. The ABI
+// *version value* is only knowable from a running instance, so it is checked by
+// `PluginHost::activate` (`PluginHostError::AbiMismatch`); install checks statically
+// that the module exports `lm_abi_version` at all, and reports that as `Manifest`.
+pub enum InstallError { Package, Manifest, KernelIncompatible, Dependency,
+    PeerLibrary, AlreadyInstalled, Locked, RolledBack, NotInstalled, Conflict, Config,
+    Io, Db, Internal }
+pub const ABSENT_DISABLED_REASON: &str;   // the `disabled_reason` boot writes for a
+                                          // package that vanished; see decision 14
 pub async fn install / approve / reject / disable / enable / uninstall / purge_sections
 pub async fn records / record / adopt_installed_directory
 pub fn staging_dir / pending_dir / installed_dir / validate_manifest
@@ -1598,7 +1644,7 @@ impl Registry { pub fn apply_states(&mut self, &[PluginRecord]) }
    check that could be forgotten — the static route serves the registry, and the registry is
    a scan of the served root.
 4. **An approval may widen `http.hosts`, and nothing else.** A plugin whose destination is
-   admin-configured cannot know its host at packaging time (the calendar is exactly that),
+   admin-configured cannot know its host at packaging time (a feed importer is exactly that),
    and the alternative is operators repackaging zips — which they would do by turning the
    check off. Every other field may only be narrowed.
 5. **`emit_client` is a JSON `plugin.event` message, not a binary frame.** PROTOCOL.md §3.1
@@ -1635,10 +1681,43 @@ impl Registry { pub fn apply_states(&mut self, &[PluginRecord]) }
     outside `frontend/` *before* resolving it (`statics::PLUGIN_ASSET_ROOT`). So the new file
     is unreachable by construction rather than by a check someone had to remember; the
     plugin-asset tests in `tests/statics.rs` should gain a case asserting exactly that
-    (`/plugins/calendar/1.0.0/backend.wasm` → 404) when install-flow starts writing it.
+    (`/plugins/<id>/<version>/backend.wasm` → 404) when install-flow starts writing it.
 13. **`calendar` and `agenda` are not in `BASE_PLUGIN_IDS`.** `?safe=1` boots the fourteen of
-    SPEC §6.5; a recovery mode should not include the newest code. They still ship in
-    `plugins/base/` and load normally.
+    SPEC §6.5; a recovery mode should not include the newest code. *(Moot since their
+    removal: the base distribution and `BASE_PLUGIN_IDS` are the same fourteen again. The
+    rule stands for the next plugin that ships in `plugins/base/` without being core.)*
+14. **A record whose package is gone is retired at boot** (added 2026-09-24 with the
+    calendar's removal). `adopt_installed_directory` reconciles both ways now: a directory
+    with no record is adopted, and a record with no directory is switched off — otherwise
+    dropping a plugin from the image leaves a row admin lists as `enabled`, a backend half
+    the host tries to activate against a missing module, and a module URL every client 404s
+    on. Three guards: nothing is touched when the scan found **no** plugins at all (an
+    unmounted volume is not an uninstall), a record whose package sits in the staging tree
+    is left alone (that is what `pending` is), and a record that is already `Disabled` is
+    left exactly as it is, reason included — this pass runs on every boot, so anything it
+    does unconditionally it does forever. **Retention is the uninstall's** — KV,
+    `plugin_config` and `%%% <id>` sections survive, so putting the plugin back is lossless.
+
+    **Disabled, not deleted** *(corrected 2026-09-25)*. The first cut deleted the record,
+    and `adopt_installed_directory` then re-adopted a returning directory from scratch:
+    `Enabled`, with the **manifest's full request** as the approved set, `disabled_reason`
+    cleared and `cron_state` reset. So a boot-long absence — an image that drops a plugin
+    and a rollback that restores it, an operator moving `<PLUGINS_DIR>/X` aside, a
+    half-finished volume sync — silently undid an admin's capability narrowing *and* their
+    disable, with no approval screen in between, and neither guard fired because other
+    plugins were on disk and nothing was pending. The record is the only place those two
+    decisions live, so it stays: `PluginState::is_active` is `Enabled` alone, which keeps
+    the backend half down, and the registry is a scan of the directory, which keeps the
+    frontend half unreachable — the ghost dies either way. `disabled_reason` is set to
+    `plugininstall::ABSENT_DISABLED_REASON`, and **only** that marker is undone when the
+    directory returns; an admin's own reason is never overwritten and never cleared.
+    Adoption also stopped writing `capabilities_approved` for a record it already knows:
+    the manifest's request is what an admin was *asked*, the record's set is what they
+    *answered*, and a mismatch between the two is now a boot `WARN` instead of a silent
+    widening. The one record still deleted is a `Pending` one with no package in either
+    root — nothing was ever approved, so there is nothing to keep.
+    `plugininstall_flow.rs::an_absence_does_not_undo_a_narrowing_or_an_admin_disable` is
+    the regression net.
 
 ## What is deliberately still open
 
@@ -1646,16 +1725,21 @@ Items 1, 2, 4 and 5 of the M4 list are **closed** — `Registry::apply_states` i
 `plugins::resolve_import_map` is what `routes::statics::import_map` calls, the Dockerfile
 has a `plugin-builder` stage, and the admin approval screen exists. What is left:
 
-1. **No `/readyz` plugin-host detail.** The frontend registry counts are there (M3); the
-   backend host's `active`/`disabled` counts are in `PluginHostStats` and still not
-   reported. Keep it counts-only when it lands: `/readyz` is unauthenticated and proxied
-   straight through in the Compose deployment. `lm_plugins_disabled` on `/metrics` is the
-   alert in the meantime, and `docs/OPERATIONS.md` says so.
+1. ~~**No `/readyz` plugin-host detail.**~~ **Closed (M5 polish).** `ReadyReport` gained a
+   `plugin_host: CheckResult` alongside `plugins`, carrying the host's active /
+   breaker-open / cron / instance / in-flight counts. Counts only and never gating, for
+   the two reasons `routes::health::check_plugin_host` documents: the body is
+   world-readable, and one plugin the breaker opened is not a reason to take a serving
+   replica out of rotation. It reads through `PluginHost::existing`, which does not create
+   a host — a probe must not make what it reports on true by asking.
 2. **The convergence harness does not exercise plugin writes.** A plugin writing while three
    clients edit the same documents is the interesting M4 convergence case and the harness is
    the right place for it (SPEC §9 M2's gate, extended). The integration run did it by hand
-   — two browsers open on a calendar while cron reconciled a changed feed — and that is a
-   manual check, not a gate.
+   — two browsers open on a month view while the calendar's cron reconciled a changed feed —
+   and that was a manual check, not a gate. With that plugin removed there is no longer any
+   plugin in the tree that writes documents, so this gap is now **unreachable by the suite
+   at all** rather than merely untested; closing it needs a document-writing fixture (extend
+   `hello-backend`) as well as the harness work.
 3. **A plugin's capability grant is immutable once approved.** `approve` refuses anything
    not in `Pending`, so widening `http.hosts` on a running plugin means uninstall (without
    purge, which is lossless) and reinstall. That is a real workflow an operator will hit
@@ -1667,10 +1751,13 @@ has a `plugin-builder` stage, and the admin approval screen exists. What is left
    window and a failed install rolls the record back verbatim, but a **restart inside that
    window does not re-activate the old backend half**. The fix is a separate "candidate"
    shape on `PluginRecord`, which the admin API is not written against.
-5. **`InstallError::AbiIncompatible` is unconstructed.** The install-time check is the
-   static export scan; the ABI *version value* is checked by `PluginHost::activate`, which
-   reports it as an activation failure rather than an install one. Either wire it or drop
-   the variant.
+5. ~~**`InstallError::AbiIncompatible` is unconstructed.**~~ **Closed (M5 polish):
+   dropped.** Wiring it was not available — the ABI version is what the module's
+   `lm_abi_version` export *returns*, which needs a compiled instance, so install cannot
+   know it. The variant advertised a check that lives in `PluginHost::activate`
+   (`PluginHostError::AbiMismatch`, surfaced on the record's `last_error`). What install
+   can answer statically — "was this built with `lm::abi_version!()` at all" — it already
+   answers, as a `Manifest` error.
 
 ## Commands
 
@@ -1678,7 +1765,6 @@ has a `plugin-builder` stage, and the admin approval screen exists. What is left
 mise run check          # backend: fmt + check + clippy -D warnings (unchanged)
 mise run test           # backend: cargo test --workspace --all-targets
 mise run plugin-check   # the SDK + the plugin workspace, for wasm32
-mise run plugin-test    # host-target tests for the pure plugin crates (calendar-ics)
 mise run wasm-plugins   # build backend halves into plugins/base/dist/<id>/<version>/
 mise run plugin-smoke   # build hello-backend, load it in a minimal Extism host
 mise run plugin-package # package a built plugin as the installable .zip of SPEC §6.2

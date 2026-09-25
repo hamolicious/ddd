@@ -76,6 +76,7 @@ pub fn test_config(mongo_uri: String, database: String) -> Config {
         max_attachment_bytes: 1024 * 1024,
         max_document_bytes: 64 * 1024,
         app_origins: vec!["http://localhost:5173".to_string()],
+        public_url: None,
         log_format: LogFormat::Pretty,
         cookie_secure: false,
         trust_proxy_headers: false,
@@ -392,6 +393,7 @@ pub struct LocalRow {
     pub plugins: Map,
     pub created_at: Option<Date>,
     pub updated_at: Option<Date>,
+    pub deleted_at: Option<Date>,
     pub deleted: bool,
 }
 
@@ -405,6 +407,9 @@ impl LocalRow {
             plugins: json_to_map(&view.plugins),
             created_at: Date::from_epoch_millis(view.created_at.timestamp_millis()).ok(),
             updated_at: Date::from_epoch_millis(view.updated_at.timestamp_millis()).ok(),
+            deleted_at: view
+                .deleted_at
+                .and_then(|at| Date::from_epoch_millis(at.timestamp_millis()).ok()),
             deleted: view.deleted,
         }
     }
@@ -418,6 +423,7 @@ impl LocalRow {
             plugins: &self.plugins,
             created_at: self.created_at.as_ref(),
             updated_at: self.updated_at.as_ref(),
+            deleted_at: self.deleted_at.as_ref(),
             deleted: self.deleted,
         }
     }

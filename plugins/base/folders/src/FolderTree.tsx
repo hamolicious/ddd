@@ -8,10 +8,15 @@
  * §8's "keyboard-operable" applied to the one widget in the base distribution that is
  * genuinely two-dimensional.
  *
- * **Drag and drop is the mouse shorthand, never the only path.** Dropping a document on a
- * folder moves it; so does the "Move to…" prompt on the row, and so does the properties
- * panel editing `fm.path` directly. All three end in the same place: one
- * `kernel.documents.splice.setFrontmatterValue` call (SPEC §3.3).
+ * **Drag and drop is the mouse shorthand — and today it is the only shorthand.** Dropping
+ * a document on a folder moves it, and so does the properties panel editing `fm.path`
+ * directly; both end in the same place, one
+ * `kernel.documents.splice.setFrontmatterValue` call (SPEC §3.3). There is **no "Move
+ * to…" action on a `doc-list` row** — its only document action is "Move to Trash" — so on
+ * a touch screen, where HTML5 drag and drop does not exist, the properties panel is the
+ * whole story. The visible hint at the foot of this tree says exactly that rather than
+ * leaving a phone user to discover it. Adding the row action is `POLISH-BACKLOG.md` §2;
+ * when it lands, this paragraph and that hint both change.
  *
  * The drag payload is a plain text/plain document id, deliberately: `doc-list` rows and
  * anything else that wants to be draggable into a folder only has to set that, with no
@@ -243,17 +248,18 @@ export function FolderTree({
           {visible.map((node) => {
             const expandable = node.children.length > 0;
             const expanded = expandable ? !collapsed.has(node.path) : undefined;
+            const isActive = node.path === active;
             return (
               <div
                 key={node.path}
                 id={`folders-node-${node.path}`}
                 role="treeitem"
                 aria-level={node.depth + 1}
-                aria-selected={node.path === active}
+                aria-selected={isActive}
                 {...(expanded !== undefined ? { "aria-expanded": expanded } : {})}
                 className={[
                   "folders-node",
-                  node.path === active ? "folders-node-active" : "",
+                  isActive ? "folders-node-active" : "",
                   node.path === dropTarget ? "folders-node-drop" : "",
                 ]
                   .filter(Boolean)
@@ -296,10 +302,26 @@ export function FolderTree({
                   {node.documents}
                 </span>
 
+                {/*
+                 * The row actions are the one part of this tree that Tab may enter.
+                 *
+                 * The tree itself is a roving-tabindex widget — the container holds the
+                 * only tab stop and arrows move the active row — which is correct for
+                 * navigating it and leaves these two buttons unreachable: they are
+                 * `tabindex="-1"` like every other control in a row, and `display: none`
+                 * until their row is active, so Tab skipped them and no arrow key
+                 * reached them. Rename at least had F2; "new document here" had no
+                 * keyboard path at all.
+                 *
+                 * Making them a tab stop *on the active row only* keeps the roving model
+                 * intact (there is still exactly one tab stop per tree, plus the actions
+                 * of the row the user is standing on) and follows the visible affordance
+                 * — the row that shows its buttons is the row whose buttons Tab reaches.
+                 */}
                 <span className="folders-actions">
                   <button
                     type="button"
-                    tabIndex={-1}
+                    tabIndex={isActive ? 0 : -1}
                     aria-label={`New document in ${node.path}`}
                     title="New document here"
                     onClick={() => onNewDocumentHere(node.path)}
@@ -308,7 +330,7 @@ export function FolderTree({
                   </button>
                   <button
                     type="button"
-                    tabIndex={-1}
+                    tabIndex={isActive ? 0 : -1}
                     aria-label={`Rename or move ${node.path}`}
                     title="Rename or move (F2)"
                     onClick={() => rename(node)}
@@ -342,8 +364,10 @@ export function FolderTree({
       )}
 
       <p className="folders-hint">
-        Drag a document onto a folder to move it, or press F2 on a folder to rename it.
-        Renaming rewrites <code>fm.path</code> in every document inside it.
+        Drag a document onto a folder to move it, or use a folder’s rename button
+        (<span aria-hidden="true">✎</span>, or F2 on the keyboard). Renaming rewrites{" "}
+        <code>fm.path</code> in every document inside it. On a touch screen, move a
+        document by editing its <code>path</code> in the properties panel.
       </p>
     </div>
   );

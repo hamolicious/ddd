@@ -11,13 +11,16 @@ import { describe, expect, it } from "vitest";
 import {
   TRASHED_ONLY,
   buildClause,
+  buildEffectiveFilter,
   buildFilter,
   buildLiteral,
   buildSort,
   invalidClauses,
   isFieldPathShaped,
+  TRASH_SORT_IS_CLIENT_SIDE,
   type FilterClause,
 } from "./filter.js";
+import { EXCLUDE_MACHINE_DOCUMENTS } from "../../_shared/machine-docs.js";
 
 const clause = (over: Partial<FilterClause> = {}): FilterClause => ({
   id: "c1",
@@ -217,5 +220,46 @@ describe("the Trash partition", () => {
 describe("buildSort", () => {
   it("produces one key; `id` is appended by both engines as the tiebreaker", () => {
     expect(buildSort("updated_at", "desc")).toEqual([{ field: "updated_at", direction: "desc" }]);
+  });
+
+  /**
+   * The Trash view's sort key. It used to be impossible — `deleted_at` was outside the
+   * shared field space, so the rows were ordered in the component over whatever page
+   * came back — and the regression this pins is the silent one: if either engine loses
+   * the root again, the order is wrong rather than refused.
+   */
+  it("sorts Trash by `deleted_at`, the root both engines now resolve", () => {
+    expect(buildSort("deleted_at", "desc")).toEqual([{ field: "deleted_at", direction: "desc" }]);
+    expect(isFieldPathShaped("deleted_at")).toBe(true);
+    expect(TRASH_SORT_IS_CLIENT_SIDE).toBe(false);
+  });
+});
+
+describe("buildEffectiveFilter", () => {
+  /**
+   * The split between this and `buildFilter` is the point: `buildFilter` answers "what
+   * did the user ask for" (which decides between "no documents yet" and "nothing
+   * matches your filter"), and this answers "what goes on the wire".
+   */
+  it("hides machine-owned documents when nothing else is filtered", () => {
+    expect(buildEffectiveFilter({ combine: "and", clauses: [] })).toEqual(
+      EXCLUDE_MACHINE_DOCUMENTS,
+    );
+    // …while the user's own filter is still empty, so the empty state stays "no
+    // documents yet" rather than "nothing matches".
+    expect(buildFilter({ combine: "and", clauses: [] })).toBeUndefined();
+  });
+
+  it("ands the exclusion onto whatever the user built", () => {
+    const draft = { combine: "and", clauses: [clause()] } as const;
+    expect(buildEffectiveFilter(draft)).toEqual({
+      and: [buildFilter(draft), EXCLUDE_MACHINE_DOCUMENTS],
+    });
+  });
+
+  it("is exactly the user's filter once the toggle is on", () => {
+    expect(buildEffectiveFilter({ combine: "and", clauses: [], includeMachine: true })).toBeUndefined();
+    const draft = { combine: "and", clauses: [clause()], includeMachine: true } as const;
+    expect(buildEffectiveFilter(draft)).toEqual(buildFilter(draft));
   });
 });

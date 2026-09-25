@@ -953,6 +953,341 @@ async fn plugins_already_on_disk_are_adopted_as_approved() {
     harness.cleanup().await;
 }
 
+/// The other half of reconciliation: a package that is gone.
+///
+/// An image that stops shipping a plugin says nothing to the database, so without this the
+/// record outlives its artifacts — listed in admin as `enabled`, activated by the host against
+/// a `backend.wasm` that is not there, and fetched by every client that remembers the plugin
+/// list from its last boot (a 404 per module). Disabling the record is what makes the removal
+/// complete; keeping the record *and* the plugin's data is what keeps it reversible.
+#[tokio::test]
+#[ignore = "requires MONGO_URI"]
+async fn a_plugin_whose_package_is_gone_is_retired_and_keeps_its_data() {
+    let Some(harness) = Harness::start("prune").await else {
+        return;
+    };
+
+    for (id, version) in [("staying", "1.0.0"), ("going", "2.0.0")] {
+        let dir = harness.served(id, version);
+        fs::create_dir_all(dir.join("frontend")).expect("a plugin directory");
+        fs::write(dir.join("manifest.json"), manifest(id, version)).expect("manifest");
+        fs::write(
+            dir.join("frontend/index.mjs"),
+            b"export function activate(){}\n",
+        )
+        .expect("module");
+    }
+    assert_eq!(
+        plugininstall::adopt_installed_directory(&harness.state)
+            .await
+            .expect("adopts"),
+        2
+    );
+
+    // State the plugin owns, of both kinds retention covers.
+    harness
+        .state
+        .collections
+        .raw("plugin_kv")
+        .insert_one(bson::doc! {
+            "_id": "going:cursor", "plugin_id": "going", "key": "cursor",
+            "value": "2026-09-01", "updated_at": bson::DateTime::now(),
+        })
+        .await
+        .expect("writes kv");
+    harness
+        .state
+        .collections
+        .raw("plugin_config")
+        .insert_one(bson::doc! {
+            "_id": "going", "values": { "feed": "https://x.test/f" },
+            "updated_at": bson::DateTime::now(),
+        })
+        .await
+        .expect("writes config");
+
+    // The image stopped shipping it.
+    fs::remove_dir_all(
+        harness
+            .served("going", "2.0.0")
+            .parent()
+            .expect("the id dir"),
+    )
+    .expect("removes the package");
+
+    plugininstall::adopt_installed_directory(&harness.state)
+        .await
+        .expect("reconciles");
+
+    let gone = plugininstall::record(&harness.state, "going")
+        .await
+        .expect("reads")
+        .expect("the record survives; only the plugin is switched off");
+    assert_eq!(
+        gone.state,
+        PluginState::Disabled,
+        "a record left `enabled` with no package is a ghost: admin lists it as running and \
+         the host activates a module that is not there"
+    );
+    assert_eq!(
+        gone.disabled_reason.as_deref(),
+        Some(plugininstall::ABSENT_DISABLED_REASON),
+        "the reason is the marker, so a directory that comes back can be told from a plugin \
+         a person switched off"
+    );
+    assert_eq!(
+        plugininstall::record(&harness.state, "staying")
+            .await
+            .expect("reads")
+            .expect("a record")
+            .state,
+        PluginState::Enabled,
+        "the plugin that is still on disk must be untouched"
+    );
+    let registry = plugins::registry(&harness.state.config);
+    assert!(registry.get("going", "2.0.0").is_none());
+    assert!(registry.get("staying", "1.0.0").is_some());
+
+    // Idempotent: this pass runs on every boot, so a second one must change nothing and say
+    // nothing. (`adopted` counts directories written, and there is still exactly one.)
+    assert_eq!(
+        plugininstall::adopt_installed_directory(&harness.state)
+            .await
+            .expect("reconciles again"),
+        0,
+        "a record already disabled for absence must not be rewritten on every boot"
+    );
+
+    // Retiring is an uninstall, not a purge (SPEC §6.2): the data survives a reinstall.
+    for (collection, filter) in [
+        ("plugin_kv", bson::doc! { "plugin_id": "going" }),
+        ("plugin_config", bson::doc! { "_id": "going" }),
+    ] {
+        assert_eq!(
+            harness
+                .state
+                .collections
+                .raw(collection)
+                .count_documents(filter)
+                .await
+                .expect("counts"),
+            1,
+            "{collection} must survive a retirement, exactly as it survives an uninstall"
+        );
+    }
+
+    harness.cleanup().await;
+}
+
+/// An absence of one boot must not undo an admin's decisions.
+///
+/// This is the case retirement was written for and the one it originally broke. A plugin's
+/// *record* is the only place two facts live: the capability set an admin chose on the
+/// approval screen — possibly narrower than the manifest asked for, which is the whole point
+/// of that screen (SPEC §6.2) — and whether they switched the plugin off afterwards. Deleting
+/// the record threw both away, and the directory coming back was then re-adoption from
+/// scratch: `Enabled`, with the **manifest's full request** granted, and no approval screen
+/// in between. An absence of one boot is not exotic — an image that drops a plugin and a
+/// rollback that restores it, an operator moving the directory aside, a half-finished volume
+/// sync — and neither guard covers it, because other plugins are on disk and nothing is
+/// pending.
+///
+/// Two plugins, because the two decisions recover differently: the one we switched off comes
+/// back on, the one a person switched off stays off.
+#[tokio::test]
+#[ignore = "requires MONGO_URI"]
+async fn an_absence_does_not_undo_a_narrowing_or_an_admin_disable() {
+    let Some(harness) = Harness::start("absence-keeps-approval").await else {
+        return;
+    };
+
+    let requested = |id: &str| {
+        format!(
+            r#"{{"id":"{id}","version":"1.0.0","kernel":"^1.0",
+            "capabilities":{{"documents":["read","write"]}},
+            "frontend":{{"module":"frontend/index.mjs"}}}}"#
+        )
+    };
+    let narrowed = PluginCapabilities {
+        documents: vec!["read".into()],
+        ..PluginCapabilities::default()
+    };
+
+    for id in ["narrowed", "switched-off"] {
+        let archive = harness.package(id, &requested(id), false);
+        harness.install(archive).await.expect("installs");
+        plugininstall::approve(
+            &harness.state,
+            id,
+            "1.0.0",
+            narrowed.clone(),
+            &Actor::System,
+        )
+        .await
+        .expect("approves, narrowed");
+    }
+    // One of them the admin then turns off, for a reason of their own.
+    plugininstall::disable(
+        &harness.state,
+        "switched-off",
+        "misbehaving",
+        &Actor::System,
+    )
+    .await
+    .expect("disables");
+
+    // A third plugin stays on disk throughout, so guard 1 ("no plugins found at all") is
+    // not what is being tested here.
+    let anchor = harness.served("anchor", "1.0.0");
+    fs::create_dir_all(anchor.join("frontend")).expect("a plugin directory");
+    fs::write(anchor.join("manifest.json"), manifest("anchor", "1.0.0")).expect("manifest");
+    fs::write(
+        anchor.join("frontend/index.mjs"),
+        b"export function activate(){}\n",
+    )
+    .expect("module");
+
+    // --- The absence. Both directories move aside; neither is pending. -------------
+    let aside = harness.dir.join("aside");
+    fs::create_dir_all(&aside).expect("somewhere to put them");
+    for id in ["narrowed", "switched-off"] {
+        fs::rename(harness.state.config.plugins_dir.join(id), aside.join(id))
+            .expect("moves the package aside");
+    }
+
+    plugininstall::adopt_installed_directory(&harness.state)
+        .await
+        .expect("reconciles");
+
+    for id in ["narrowed", "switched-off"] {
+        let record = plugininstall::record(&harness.state, id)
+            .await
+            .expect("reads")
+            .unwrap_or_else(|| {
+                panic!("{id}'s record must survive; deleting it loses the approval")
+            });
+        assert_eq!(record.state, PluginState::Disabled, "{id}");
+        assert!(
+            record.capabilities_approved.can_read_documents()
+                && !record.capabilities_approved.can_write_documents(),
+            "{id} must keep the narrowed grant: {:?}",
+            record.capabilities_approved
+        );
+    }
+    assert_eq!(
+        plugininstall::record(&harness.state, "switched-off")
+            .await
+            .expect("reads")
+            .expect("a record")
+            .disabled_reason
+            .as_deref(),
+        Some("misbehaving"),
+        "an admin's own reason is not overwritten by ours; it is what stops the re-enable below"
+    );
+
+    // --- The return. The image rolls back and both directories are there again. ----
+    for id in ["narrowed", "switched-off"] {
+        fs::rename(aside.join(id), harness.state.config.plugins_dir.join(id))
+            .expect("puts the package back");
+    }
+    plugininstall::adopt_installed_directory(&harness.state)
+        .await
+        .expect("reconciles");
+
+    let back = plugininstall::record(&harness.state, "narrowed")
+        .await
+        .expect("reads")
+        .expect("a record");
+    assert_eq!(
+        back.state,
+        PluginState::Enabled,
+        "we switched it off because the file vanished, so we switch it back on"
+    );
+    assert_eq!(back.disabled_reason, None);
+    assert!(
+        back.capabilities_approved.can_read_documents()
+            && !back.capabilities_approved.can_write_documents(),
+        "and it comes back with what was approved, not with what the manifest asks for: {:?}",
+        back.capabilities_approved
+    );
+
+    let still_off = plugininstall::record(&harness.state, "switched-off")
+        .await
+        .expect("reads")
+        .expect("a record");
+    assert_eq!(
+        still_off.state,
+        PluginState::Disabled,
+        "an admin's disable is not ours to undo"
+    );
+    assert_eq!(still_off.disabled_reason.as_deref(), Some("misbehaving"));
+
+    harness.cleanup().await;
+}
+
+/// The two cases that must **not** prune, because both look like "everything disappeared".
+#[tokio::test]
+#[ignore = "requires MONGO_URI"]
+async fn an_empty_plugins_dir_and_a_pending_upload_are_never_pruned() {
+    let Some(harness) = Harness::start("prune-guards").await else {
+        return;
+    };
+
+    let dir = harness.served("ondisk", "1.0.0");
+    fs::create_dir_all(dir.join("frontend")).expect("a plugin directory");
+    fs::write(dir.join("manifest.json"), manifest("ondisk", "1.0.0")).expect("manifest");
+    fs::write(
+        dir.join("frontend/index.mjs"),
+        b"export function activate(){}\n",
+    )
+    .expect("module");
+    plugininstall::adopt_installed_directory(&harness.state)
+        .await
+        .expect("adopts");
+
+    // Guard 2: a pending package lives in staging and has *nothing* in the served root —
+    // that is what pending means. Pruning it would delete what an admin is about to approve.
+    let archive = harness.package("waiting", &manifest("waiting", "1.0.0"), false);
+    harness.install(archive).await.expect("installs");
+    assert!(!harness.served("waiting", "1.0.0").exists());
+
+    plugininstall::adopt_installed_directory(&harness.state)
+        .await
+        .expect("reconciles");
+    let pending = plugininstall::record(&harness.state, "waiting")
+        .await
+        .expect("reads")
+        .expect("a pending record");
+    assert_eq!(pending.state, PluginState::Pending);
+    assert!(
+        harness
+            .pending("waiting", "1.0.0")
+            .join("manifest.json")
+            .is_file()
+    );
+
+    // Guard 1: an unreadable or unmounted PLUGINS_DIR reads as "no plugins on disk". It is
+    // not an uninstall, and treating it as one would delete every approval over a mount that
+    // comes back a minute later.
+    fs::remove_dir_all(&harness.state.config.plugins_dir).expect("unmounts the volume");
+    fs::create_dir_all(&harness.state.config.plugins_dir).expect("an empty served root");
+
+    plugininstall::adopt_installed_directory(&harness.state)
+        .await
+        .expect("reconciles");
+    for id in ["ondisk", "waiting"] {
+        assert!(
+            plugininstall::record(&harness.state, id)
+                .await
+                .expect("reads")
+                .is_some(),
+            "{id}'s record must survive an empty PLUGINS_DIR"
+        );
+    }
+
+    harness.cleanup().await;
+}
+
 // ---------------------------------------------------------------------------
 // Config and secrets
 // ---------------------------------------------------------------------------

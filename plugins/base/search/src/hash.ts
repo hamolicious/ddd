@@ -20,3 +20,20 @@ export function searchPath(query: string): string {
   const trimmed = query.trim();
   return trimmed === "" ? "/search" : `/search?q=${encodeURIComponent(trimmed)}`;
 }
+
+/**
+ * The hash path for one result, deep-linked to the line the snippet came from.
+ *
+ * `?line=` is `document-surface`'s query (`LINE_PARAM` there), and it is spelled here
+ * as a literal rather than imported: `search` does not depend on `document-surface` in
+ * its manifest, and a plugin must never import another plugin's source (`web/README.md`
+ * — interaction goes through the registry, or through an address both sides agree on).
+ * A URL is exactly that kind of agreed address, and the surface ignores a `line` it
+ * cannot use, so the failure mode of a disagreement is a document that opens at the top.
+ */
+export function documentPath(id: string, line?: number): string {
+  const path = `/doc/${encodeURIComponent(id)}`;
+  return line !== undefined && Number.isSafeInteger(line) && line >= 1
+    ? `${path}?line=${String(line)}`
+    : path;
+}

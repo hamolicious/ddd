@@ -87,6 +87,16 @@ export interface Snippet {
   readonly text: string;
   /** Offsets into `text` to highlight. Non-overlapping, ascending. */
   readonly ranges: readonly SnippetRange[];
+  /**
+   * The **1-based line** of the materialized text this snippet came from, so a result
+   * can deep-link to it (`#/doc/<id>?line=42`) rather than only to the document.
+   *
+   * It is a line of `content` — the whole materialized string, frontmatter and `%%%`
+   * sections included — which is the same string the editor holds, so the number means
+   * the same thing on both sides. A result whose only match is *in* the frontmatter
+   * therefore links into the frontmatter, which is where the match is.
+   */
+  readonly line: number;
 }
 
 /**
@@ -111,19 +121,21 @@ export function snippetFor(
     .filter((term) => term.length > 0);
 
   const lines = content.split("\n");
-  let chosen: string | undefined;
+  // The *index* is what carries the line number; `find` alone would lose it.
+  let at = -1;
   if (needles.length > 0) {
-    chosen = lines.find((line) => {
+    at = lines.findIndex((line) => {
       const lower = line.toLowerCase();
       return line.trim() !== "" && needles.some((needle) => lower.includes(needle));
     });
   }
-  chosen ??= lines.find((line) => line.trim() !== "");
+  if (at < 0) at = lines.findIndex((line) => line.trim() !== "");
+  const chosen = at < 0 ? undefined : lines[at];
   if (chosen === undefined) return undefined;
 
   const trimmed = chosen.trim();
   const text = trimmed.length > maxLength ? `${trimmed.slice(0, maxLength - 1)}…` : trimmed;
-  return { text, ranges: locate(text, needles) };
+  return { text, ranges: locate(text, needles), line: at + 1 };
 }
 
 /** Every occurrence of every needle, merged into non-overlapping ascending ranges. */

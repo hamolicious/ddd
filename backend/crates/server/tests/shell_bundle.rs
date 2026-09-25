@@ -1012,9 +1012,11 @@ async fn the_bundle_route_serves_nothing_but_the_synthesized_pair() {
 /// `index_csp` is SPEC §8's policy with exactly one deviation, and the browser-facing
 /// document is the reference.
 ///
-/// The two renderings are separate code (`statics::render_index` is private, and this area
-/// owns only `shell.rs`), so this test is what keeps them from drifting: it compares the
-/// policies directive by directive and names the one difference the loopback origin forces.
+/// The two documents now share one renderer (`statics::render_index_body`), but their
+/// *policies* are still built separately and must be: the shell's `connect-src` is not the
+/// browser's. So this test compares them directive by directive and names the one
+/// difference the loopback origin forces — with `PUBLIC_URL` unset, which is what the test
+/// config carries and what keeps that difference scheme-wide.
 #[tokio::test]
 #[ignore = "needs MONGO_URI"]
 async fn the_shell_policy_tracks_the_browser_policy() {

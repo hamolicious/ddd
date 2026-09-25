@@ -6,6 +6,24 @@
  * shell is missing, failed, or skipped — otherwise the notice telling you *why* the
  * app is blank has nowhere to appear.
  *
+ * **The strip is a fallback, not a second renderer.** A mounted shell renders the same
+ * notices itself (`shell-ui`'s bell), and rendering both put every notice on screen
+ * twice — the same message in the strip and behind the bell, dismissable in two places.
+ * So the strip appears only when the mount is held by something that draws notices of its
+ * own. `host.notices` stays the single source either way; only the kernel's *rendering* of
+ * it is conditional.
+ *
+ * Three cases stand it back up, and the third is the one that is easy to miss:
+ *
+ * 1. Nothing holds the mount — no shell activated.
+ * 2. The holder threw while rendering, so its bell is unreachable.
+ * 3. **`?safe=bare`**, where the *kernel itself* holds the mount. `BareManager` is a
+ *    plugin table and two links; it has no notice UI, and no plugin has loaded that could
+ *    give it one. Keying the dedupe on "something holds the mount" silently blanked the
+ *    strip on the one screen SPEC §6.1 calls the recovery path — the storage-not-persisted
+ *    warning, the plugin-list failure and the update notice's only `Reload` button are all
+ *    raised before the bare branch mounts, and every one of them had nowhere to appear.
+ *
  * **The mount is inside an error boundary, and that is the whole point of the frame.**
  * `shell-ui` wraps each contributed *component* in `kernel.ui.boundary`, but that leaves
  * everything between them uncovered: the shell's own render, the mode tabs, and every
@@ -35,34 +53,51 @@ export interface AppFrameProps {
 export function AppFrame({ host, bearer, onSignedIn }: AppFrameProps): ReactNode {
   const [notices, setNotices] = useState<readonly Notice[]>(() => host.notices.list());
   const [mounted, setMounted] = useState<boolean>(() => host.mount.holder !== undefined);
+  const [mountFailed, setMountFailed] = useState(false);
   const [status, setStatus] = useState<SyncStatus>(() => host.sync.state.status);
 
   useEffect(() => host.notices.subscribe(setNotices), [host]);
   useEffect(
-    () => host.mount.subscribe(() => setMounted(host.mount.holder !== undefined)),
+    () =>
+      host.mount.subscribe(() => {
+        setMounted(host.mount.holder !== undefined);
+        // A new holder gets a fresh chance to render its own notice UI.
+        setMountFailed(false);
+      }),
     [host],
   );
   // The 4401 path (SPEC §5.3): the socket asks for re-authentication and the app
   // asks the user, over the top of a workspace that is still there.
   useEffect(() => host.sync.api().subscribe((state) => setStatus(state.status)), [host]);
 
+  // `?safe=bare` mounts the kernel's own `BareManager`, which renders no notices and has
+  // no plugin behind it that could — so the strip is the only place they can appear there.
+  const bare = host.info.bootMode === "bare";
+  /** Whoever holds the mount is drawing the notices itself, so the kernel stands down. */
+  const holderDrawsNotices = mounted && !mountFailed && !bare;
+
   return (
     <div className="lm-frame">
-      <NoticeStrip notices={notices} onDismiss={(id) => host.notices.dismiss(id)} />
+      {holderDrawsNotices ? null : (
+        <NoticeStrip notices={notices} onDismiss={(id) => host.notices.dismiss(id)} />
+      )}
       <div className="lm-outlet">
         {mounted ? (
           <PluginErrorBoundary
             pluginId={host.mount.holder ?? "unknown"}
             point="ui.mount"
             fallback={MountFailed}
-            onError={(error, where) =>
+            onError={(error, where) => {
+              // The shell that would have shown these notices is the thing that just
+              // threw, so the kernel takes the strip back over.
+              setMountFailed(true);
               host.notices.notify({
                 id: "kernel:mount-failed",
                 level: "error",
                 message: `The interface from "${where.pluginId}" failed to render.`,
                 detail: error.message,
-              })
-            }
+              });
+            }}
           >
             <KernelOutlet mount={host.mount} />
           </PluginErrorBoundary>
