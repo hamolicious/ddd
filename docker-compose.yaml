@@ -78,7 +78,7 @@ services:
       # server serves the PWA itself, so its own origin must be in here or the page loads
       # and the socket is refused with 403 before it authenticates (PROTOCOL.md §1.2).
       # Behind the caddy profile this becomes https://${DOMAIN}.
-      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:8080}
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:${SERVER_PORT:-8080}}
 
       # ---- M3: the static surface (SPEC §6.4, §8) ----
       # The image bakes all three (see `backend/Dockerfile`); these only need overriding
