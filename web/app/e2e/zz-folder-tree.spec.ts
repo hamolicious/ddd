@@ -98,7 +98,12 @@ function folderNode(page: Page, name: string): Locator {
  * to say about why. The intermediate moves are what make the gesture the one a hand
  * makes.
  */
-async function dragOnto(page: Page, source: Locator, target: Locator): Promise<void> {
+async function dragOnto(
+  page: Page,
+  source: Locator,
+  target: Locator,
+  position?: { x: number; y: number },
+): Promise<void> {
   await source.hover();
   await page.mouse.down();
   // Twice, and through `hover()` rather than `mouse.move`: the first pass is what starts
@@ -106,13 +111,15 @@ async function dragOnto(page: Page, source: Locator, target: Locator): Promise<v
   // the gesture as one), the second is the `dragover` on the destination that a drop is
   // only accepted after. `hover()` re-resolves the element each time, so a tree that
   // scrolls or re-renders mid-drag still gets the pointer put on the right row.
-  await target.hover();
-  await target.hover();
+  await target.hover(position ? { position } : {});
+  await target.hover(position ? { position } : {});
   // A destination that accepted the drag outlines itself (`.folders-node-drop`, set in
   // `dragover`). Waiting for that waits for the browser to have accepted the gesture,
   // and fails *here* — "nothing accepted the drag" — rather than three assertions later
   // as a document that did not move.
-  await expect(page.locator(".folders-node-drop").first()).toBeVisible({ timeout: 5_000 });
+  await expect(page.locator(".folders-node-drop, .folders-tree-root-drop").first()).toBeVisible({
+    timeout: 5_000,
+  });
   await page.mouse.up();
 }
 
@@ -232,7 +239,22 @@ test("dropping a document on Root removes the path line and leaves the rest byte
   // behaving like a file manager, and the row has to be the thing you can pick up.
   const leaf = page.locator(".folders-node-leaf", { hasText: "Going to root" }).first();
   await expect(leaf).toBeVisible();
-  await dragOnto(page, leaf, page.locator(".folders-root"));
+  // Root has no button any more. While a drag is in flight the tree renders a sticky
+  // "move to root" strip pinned to the bottom of its on-screen slice, so the target is
+  // reachable however tall the tree has grown. The strip only exists after `dragstart`,
+  // which Chromium fires on the first move *after* the button goes down — hence the
+  // small wiggle before the strip can be hovered.
+  const leafBox = await leaf.boundingBox();
+  if (!leafBox) throw new Error("the leaf has no box");
+  await leaf.hover();
+  await page.mouse.down();
+  await page.mouse.move(leafBox.x + leafBox.width / 2 + 6, leafBox.y + leafBox.height / 2 + 6);
+  const strip = page.locator(".folders-root-dropzone");
+  await expect(strip).toBeVisible({ timeout: 5_000 });
+  await strip.hover();
+  await strip.hover(); // the dragover a drop is only accepted after
+  await expect(page.locator(".folders-node-drop").first()).toBeVisible({ timeout: 5_000 });
+  await page.mouse.up();
   await waitSynced(page);
 
   await expect
@@ -295,7 +317,8 @@ test("a folder can be created empty, filled, renamed inline and survives a reloa
 
   // Created with no document in it at all — the thing `fm.path` alone cannot express,
   // and the reason this plugin keeps a list of empty folders in its own settings.
-  await page.getByRole("button", { name: /New folder/ }).click();
+  // The toolbar is gone; the palette command is the create path now.
+  await runCommand(page, "New folder");
   const field = page.getByRole("textbox", { name: "New folder name" });
   await expect(field).toBeVisible();
   await field.fill(name);

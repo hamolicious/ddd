@@ -16,15 +16,43 @@
  *    resolve through the server's import map at load time. Bundling any of them would
  *    give the plugin its own React or its own Yjs, and the failure would look like a
  *    kernel bug (SPEC §6.4).
- * 3. **`style.css` is copied, not imported.** The kernel links it on activation, so it
- *    must be a sibling file rather than something injected by the module.
+ * 3. **`style.css` is a sibling file, not a module import.** The kernel links it on
+ *    activation. It is copied normally, or compiled with the opt-in Tailwind preset.
  *
  * A plugin that needs a library *outside* the runtime layer bundles it normally. That
  * is allowed and sometimes right — the cost is bundle size, not correctness.
  */
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { basename, join, resolve } from "node:path";
+
+import { TAILWIND_PRESET } from "./tailwind-preset.mjs";
+
+/**
+ * Compile a plugin stylesheet using Tailwind from `resolveFrom`.
+ *
+ * The virtual `from` path is deliberately inside Tailwind's node_modules: Tailwind
+ * resolves its granular CSS imports from that path, while base plugins themselves
+ * intentionally have no node_modules directory. The preset omits preflight and does
+ * not put utilities in a layer: both would conflict with app-shell CSS.
+ */
+async function compileWithTailwind({ root, styleSource, out, resolveFrom }) {
+  const require = createRequire(join(resolveFrom, "noop.cjs"));
+  const { default: postcss } = await import(require.resolve("postcss"));
+  const { default: tailwind } = await import(require.resolve("@tailwindcss/postcss"));
+  const nodeModules = join(require.resolve("tailwindcss/package.json"), "..", "..");
+  const from = join(nodeModules, ".lm-plugin-entry.css");
+  const entry = [
+    TAILWIND_PRESET,
+    `@source ${JSON.stringify(join(root, "src"))};`,
+    existsSync(styleSource) ? `@import ${JSON.stringify(styleSource)};` : "",
+  ].join("\n");
+  const result = await postcss([tailwind()]).process(entry, { from, to: out, map: false });
+
+  mkdirSync(join(out, ".."), { recursive: true });
+  writeFileSync(out, result.css);
+}
 
 /**
  * Specifiers a plugin must never bundle. Kept in sync with
@@ -56,9 +84,11 @@ export const RUNTIME_EXTERNALS = [
  * @param {string} options.root       The plugin directory (contains manifest.json).
  * @param {string} [options.outDir]   Where to write; default `<root>/dist`.
  * @param {string} [options.entry]    Default `<root>/src/index.tsx`.
+ * @param {boolean} [options.tailwind] Compile `style.css` with the Tailwind preset.
+ * @param {string} [options.resolveFrom] Directory from which Tailwind resolves.
  * @returns {import("vite").InlineConfig}
  */
-export function pluginConfig({ root, outDir, entry }) {
+export function pluginConfig({ root, outDir, entry, tailwind = false, resolveFrom = root }) {
   const manifestPath = join(root, "manifest.json");
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   const out = outDir ?? join(root, "dist");
@@ -107,20 +137,22 @@ export function pluginConfig({ root, outDir, entry }) {
     plugins: [
       {
         name: "lm-plugin-package",
-        closeBundle() {
+        async closeBundle() {
           // The manifest travels with the build — the server serves this directory as
           // the installed plugin, so the copy here is what `/api/plugins` reads.
           mkdirSync(out, { recursive: true });
           writeFileSync(join(out, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
           if (!stylePath) return;
           const source = resolve(root, "src", basename(stylePath));
-          if (!existsSync(source)) {
-            this.warn(`manifest declares ${stylePath} but ${source} does not exist`);
-            return;
-          }
           const target = join(out, stylePath);
-          mkdirSync(join(target, ".."), { recursive: true });
-          copyFileSync(source, target);
+          if (tailwind) {
+            await compileWithTailwind({ root, styleSource: source, out: target, resolveFrom });
+          } else if (existsSync(source)) {
+            mkdirSync(join(target, ".."), { recursive: true });
+            copyFileSync(source, target);
+          } else {
+            this.warn(`manifest declares ${stylePath} but ${source} does not exist`);
+          }
         },
       },
     ],

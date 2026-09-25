@@ -16,6 +16,7 @@ _shared/fm-display.ts             what kind of thing an fm value is, and how to 
 _shared/compact.ts                "this is a phone": the breakpoint, and the hooks that read it
 _shared/vite.plugin-config.mjs    the reference build config (SPEC §6.4)
 _shared/vite.config.example.mjs   how a standalone plugin uses it
+_shared/vite.config.tailwind.example.mjs  Tailwind-enabled standalone build
 <id>/manifest.json                SPEC §6.2
 <id>/src/index.tsx                `export default function activate(kernel) { … }`
 <id>/src/style.css                linked on activation; classes prefixed per plugin

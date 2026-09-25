@@ -240,7 +240,8 @@
     "meta actions";
   gap: 0 var(--lm-space);
   align-items: center;
-  padding: calc(var(--lm-space) * 0.5) 0;
+  /* Dense rows on a pointer device; the compact block restores the touch spacing. */
+  padding: 2px 0;
   border-bottom: 1px solid var(--lm-border);
 }
 
@@ -258,7 +259,8 @@
   align-items: center;
   width: 100%;
   min-width: 0;
-  min-height: var(--lm-tap-target);
+  /* Half height on pointer devices; the compact block restores the 44px tap floor. */
+  min-height: calc(var(--lm-tap-target) / 2);
   padding: 0 !important;
   border: 0 !important;
   background: none !important;
@@ -391,6 +393,14 @@
 
 /* Same threshold as `_shared/compact.ts`'s `COMPACT_MEDIA_QUERY`; change both together. */
 @media (max-width: 640px), (max-height: 480px) and (pointer: coarse) {
+  .doclist-item {
+    padding: calc(var(--lm-space) * 0.5) 0;
+  }
+
+  .doclist-open {
+    min-height: var(--lm-tap-target);
+  }
+
   .doclist {
     padding: var(--lm-space);
   }

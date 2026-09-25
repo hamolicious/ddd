@@ -367,8 +367,13 @@ export function FolderTree({
     autoExpand.current = undefined;
   }, []);
 
+  // Whether a drag from this tree is in flight — it gates the sticky root drop strip,
+  // which has to be *rendered* state, not just the `dragSource` ref.
+  const [dragging, setDragging] = useState(false);
+
   const endDrag = useCallback(() => {
     dragSource.current = undefined;
+    setDragging(false);
     setDropTarget(undefined);
     cancelAutoExpand();
   }, [cancelAutoExpand]);
@@ -429,6 +434,7 @@ export function FolderTree({
 
   const startDrag = useCallback((event: ReactDragEvent, target: TreeTarget) => {
     dragSource.current = target;
+    setDragging(true);
     event.dataTransfer.effectAllowed = "move";
     if (target.kind === "folder") event.dataTransfer.setData(FOLDER_DRAG_TYPE, target.path);
     else event.dataTransfer.setData(DOCUMENT_DRAG_TYPE, target.id);
@@ -898,11 +904,6 @@ export function FolderTree({
   // The sheet
   // ---------------------------------------------------------------------------
 
-  const activeFolder = ((): string => {
-    const row = visible.find((candidate) => candidate.key === active);
-    if (row?.kind === "folder") return row.path;
-    return row?.path ?? "";
-  })();
 
   const renderSheet = (): ReactElement | null => {
     if (!sheet) return null;
@@ -1065,42 +1066,13 @@ export function FolderTree({
         </p>
       )}
 
-      <div className="folders-toolbar">
-        <button
-          type="button"
-          className="folders-new-folder"
-          onClick={() => {
-            const parent = activeFolder;
-            if (parent !== "") revealFolder(parent);
-            setEdit({ kind: "create", parent });
-          }}
-        >
-          <span aria-hidden="true">＋</span> New folder
-        </button>
-        <button
-          type="button"
-          className={`folders-root${dropTarget === "" ? " folders-node-drop" : ""}`}
-          aria-label="Root — drop here to take a document out of its folder"
-          onDragOver={(event) => dragOverFolder(event, "", false)}
-          onDragLeave={() => setDropTarget((current) => (current === "" ? undefined : current))}
-          onDrop={(event) => dropOnFolder(event, "")}
-          onClick={() => onSelectFolder("")}
-        >
-          <span aria-hidden="true">⌂</span> Root
-        </button>
-      </div>
-
       {visible.length === 0 && edit === undefined ? (
         <div className="folders-empty">
           <p>No documents yet.</p>
-          <p>
-            A folder is a <code>path:</code> line in a document’s frontmatter.{" "}
-            <code>path: home/lists</code> files it under <code>home/lists</code>.
-          </p>
         </div>
       ) : (
         <div
-          className="folders-tree"
+          className={`folders-tree${dropTarget === "" ? " folders-tree-root-drop" : ""}`}
           role="tree"
           aria-label="Folders"
           aria-busy={busy}
@@ -1124,6 +1096,22 @@ export function FolderTree({
             : {})}
         >
           {rowElements}
+          {dragging ? (
+            // Only while dragging, and pinned to the bottom of whatever part of the
+            // tree is on screen: the "move to root" target is reachable no matter how
+            // tall the tree has grown (a document leaves its folder; a folder becomes
+            // top-level).
+            <div
+              className={`folders-root-dropzone${dropTarget === "" ? " folders-node-drop" : ""}`}
+              onDragOver={(event) => dragOverFolder(event, "", false)}
+              onDragLeave={() =>
+                setDropTarget((current) => (current === "" ? undefined : current))
+              }
+              onDrop={(event) => dropOnFolder(event, "")}
+            >
+              Drop here to move to root
+            </div>
+          ) : null}
         </div>
       )}
 

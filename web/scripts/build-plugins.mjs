@@ -68,7 +68,7 @@ for (const id of plugins) {
     process.exit(1);
   }
   const outDir = join(distRoot, manifest.id, manifest.version);
-  await build(pluginConfig({ root, outDir }));
+  await build(pluginConfig({ root, outDir, tailwind: manifest["x-tailwind"] === true, resolveFrom: web }));
   built.push(`${manifest.id}@${manifest.version}`);
   console.log(`+ ${manifest.id}@${manifest.version} -> ${outDir}`);
 }
