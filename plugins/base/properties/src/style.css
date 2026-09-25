@@ -20,6 +20,9 @@
   color: var(--lm-text);
   font-family: var(--lm-font-sans);
   font-size: 0.9rem;
+  /* A key or a value the author never meant to be readable still has to fit. */
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .properties-list {
@@ -61,11 +64,15 @@
   min-width: 0;
 }
 
+/*
+ * A full 44 px, not `44px - 10px`. The subtraction was here with a comment claiming the
+ * SPEC §6.5 target it then missed by ten pixels, on every row of the panel. The token is
+ * the target; nothing in this file is allowed to shave it.
+ */
 .properties-input {
   flex: 1 1 6rem;
   min-width: 0;
-  /* 44 px touch target at the mobile breakpoint (SPEC §6.5). */
-  min-height: calc(var(--lm-tap-target) - 10px);
+  min-height: var(--lm-tap-target);
   padding: 4px 6px;
   border: 1px solid var(--lm-border);
   border-radius: var(--lm-radius);
@@ -116,7 +123,7 @@
   display: inline-flex;
   align-items: center;
   gap: calc(var(--lm-space) / 2);
-  min-height: calc(var(--lm-tap-target) - 10px);
+  min-height: var(--lm-tap-target);
   font-family: var(--lm-font-mono);
   font-size: 0.85rem;
 }
@@ -127,10 +134,11 @@
   accent-color: var(--lm-accent);
 }
 
+/* The destroy-a-property button, one per row, next to a text field. Full target. */
 .properties-remove {
   flex: 0 0 auto;
-  width: calc(var(--lm-tap-target) - 14px);
-  height: calc(var(--lm-tap-target) - 14px);
+  width: var(--lm-tap-target);
+  height: var(--lm-tap-target);
   border: 1px solid transparent;
   border-radius: var(--lm-radius);
   background: transparent;
@@ -207,7 +215,7 @@
 }
 
 .properties-button {
-  min-height: calc(var(--lm-tap-target) - 10px);
+  min-height: var(--lm-tap-target);
   padding: 0 calc(var(--lm-space) * 1.5);
   border: 1px solid var(--lm-border-strong);
   border-radius: var(--lm-radius);
@@ -270,13 +278,33 @@
  * `shell-ui`. The viewport breakpoint is the honest approximation until then; the
  * container query is left below it so it starts working the moment a container exists.
  */
-@media (max-width: 640px) {
+/* Same threshold as `_shared/compact.ts`'s `COMPACT_MEDIA_QUERY`; change both together. */
+@media (max-width: 640px), (max-height: 480px) and (pointer: coarse) {
   .properties-row {
     grid-template-columns: 1fr;
   }
 
   .properties-key {
     padding-top: 0;
+  }
+
+  /*
+   * The "remove this tag" × is 24 px wide, which is a miss on a finger and sits inside a
+   * chip a person is also trying to read. On a phone the chip grows to the tap target
+   * and the × takes a square of it; on a pointer device both stay compact, because that
+   * is a size question about the input device rather than about the column width — which
+   * is why this is here and not in the container query below.
+   */
+  .properties-chip {
+    min-height: var(--lm-tap-target);
+    padding-inline: calc(var(--lm-space) * 1.5) 0;
+    font-size: 0.85rem;
+  }
+
+  .properties-chip-remove {
+    width: var(--lm-tap-target);
+    height: var(--lm-tap-target);
+    font-size: 1.1rem;
   }
 }
 

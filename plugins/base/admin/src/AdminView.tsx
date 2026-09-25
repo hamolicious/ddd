@@ -13,7 +13,7 @@
  */
 
 import { useCallback } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent, ReactElement } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactElement, ReactNode } from "react";
 
 import type { DocumentsApi } from "@kernel";
 
@@ -39,6 +39,37 @@ const LABELS: Readonly<Record<AdminSectionId, string>> = {
 
 export function isAdminSection(value: string): value is AdminSectionId {
   return (ADMIN_SECTIONS as readonly string[]).includes(value);
+}
+
+/**
+ * The frame every admin section draws around itself — **with its heading on the
+ * `/admin` route and without it inside settings**.
+ *
+ * Both places render the same component (that is the point of contributing each area
+ * twice), but the settings shell already draws an `<h2>` with the section's title and
+ * its description above it. Drawing the `<h3>` as well printed "Invites" twice, one
+ * line apart, and nested two ARIA regions with the identical accessible name — which
+ * is not just noise on screen, it is a screen reader announcing the same landmark
+ * twice on the way into a form.
+ */
+export function AdminSectionFrame({
+  id,
+  title,
+  embedded,
+  children,
+}: {
+  readonly id: AdminSectionId;
+  readonly title: string;
+  readonly embedded?: boolean;
+  readonly children: ReactNode;
+}): ReactElement {
+  if (embedded) return <section className="admin-section">{children}</section>;
+  return (
+    <section className="admin-section" aria-labelledby={`admin-${id}-heading`}>
+      <h3 id={`admin-${id}-heading`}>{title}</h3>
+      {children}
+    </section>
+  );
 }
 
 export interface AdminViewProps {
@@ -79,9 +110,7 @@ export function AdminView({
       <section className="admin" aria-labelledby="admin-heading">
         <h2 id="admin-heading">Administration</h2>
         <p className="admin-empty">
-          You are not an administrator of this workspace. Every route behind this screen is
-          refused by the server, so there is nothing here to show you. Ask an administrator
-          — they can promote an account from this same screen.
+          You are not an administrator. Ask one to promote your account.
         </p>
       </section>
     );
@@ -126,26 +155,29 @@ export function AdminSectionBody({
   client,
   documents,
   selfId,
+  embedded,
 }: {
   readonly section: AdminSectionId;
   readonly client: AdminClient;
   readonly documents: DocumentsApi;
   readonly selfId: string;
+  /** True on the settings screen, which has already drawn this section's heading. */
+  readonly embedded?: boolean;
 }): ReactElement {
   switch (section) {
     case "users":
-      return <UsersSection client={client} selfId={selfId} />;
+      return <UsersSection client={client} selfId={selfId} embedded={embedded} />;
     case "invites":
-      return <InvitesSection client={client} />;
+      return <InvitesSection client={client} embedded={embedded} />;
     case "audit":
-      return <AuditSection client={client} />;
+      return <AuditSection client={client} embedded={embedded} />;
     case "orphans":
-      return <OrphansSection client={client} />;
+      return <OrphansSection client={client} embedded={embedded} />;
     case "snapshots":
-      return <SnapshotsSection client={client} documents={documents} />;
+      return <SnapshotsSection client={client} documents={documents} embedded={embedded} />;
     case "plugins":
-      return <PluginsSection client={client} />;
+      return <PluginsSection client={client} embedded={embedded} />;
     default:
-      return <ExportSection client={client} />;
+      return <ExportSection client={client} embedded={embedded} />;
   }
 }

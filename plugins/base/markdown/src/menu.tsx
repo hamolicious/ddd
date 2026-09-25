@@ -18,10 +18,65 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
+
+/** Breathing room between the menu and the edge of the screen. */
+const GUTTER = 8;
+/** Below this a scrolling menu is worse than one that overlaps its trigger. */
+const MIN_MENU_HEIGHT = 132;
+
+/**
+ * Keep the menu inside the screen.
+ *
+ * It is `position: absolute` against its trigger (see the file header for why it is not
+ * portalled), so no stylesheet can know whether the trigger sits at x = 8 or at x = 340:
+ * a task marker in an indented list at 360 px opens a 12 rem menu past the right edge and
+ * nothing flips or clamps it. That has to be a measurement, and it is this one.
+ *
+ * Measured against `visualViewport`, not `innerWidth`/`innerHeight`: on Android the soft
+ * keyboard shrinks the **visual** viewport only (SPEC §6.5, M5), so a menu sized against
+ * the layout viewport opens underneath the keyboard and looks like it never opened.
+ */
+function clampIntoViewport(menu: HTMLElement): void {
+  menu.style.removeProperty("--md-menu-shift");
+  menu.style.removeProperty("--md-menu-max-width");
+  menu.style.removeProperty("--md-menu-max-height");
+  menu.removeAttribute("data-place");
+
+  const view = window.visualViewport;
+  const left = view?.offsetLeft ?? 0;
+  const top = view?.offsetTop ?? 0;
+  const width = view?.width ?? document.documentElement.clientWidth;
+  const height = view?.height ?? document.documentElement.clientHeight;
+
+  menu.style.setProperty("--md-menu-max-width", `${Math.max(width - GUTTER * 2, 160)}px`);
+
+  // Re-read after the width cap: a narrowed menu is taller, and the flip below depends
+  // on the height it will actually have.
+  const box = menu.getBoundingClientRect();
+
+  let shift = 0;
+  if (box.right > left + width - GUTTER) shift = left + width - GUTTER - box.right;
+  if (box.left + shift < left + GUTTER) shift = left + GUTTER - box.left;
+  menu.style.setProperty("--md-menu-shift", `${Math.round(shift)}px`);
+
+  // `box.top` is the trigger's bottom edge (the menu hangs off it), so these are the two
+  // gaps the menu can occupy.
+  const below = top + height - GUTTER - box.top;
+  const above = box.top - top - GUTTER;
+  // Flip only when it genuinely helps: a menu that opens upward from the last line of a
+  // document is right, one that opens upward with less room there than below is not.
+  const flip = below < Math.min(box.height, MIN_MENU_HEIGHT) && above > below;
+  if (flip) menu.setAttribute("data-place", "above");
+  menu.style.setProperty(
+    "--md-menu-max-height",
+    `${Math.round(Math.max(flip ? above : below, MIN_MENU_HEIGHT))}px`,
+  );
+}
 
 /** Focusable, still in the document, and not the body itself. */
 function isRestorable(element: Element | null | undefined): element is HTMLElement {
@@ -78,6 +133,27 @@ export function PopupMenu({ label, items, onClose }: PopupMenuProps): ReactNode 
         : null;
     root.current?.querySelector<HTMLButtonElement>("button")?.focus();
   }, []);
+
+  /**
+   * Before paint, and again whenever the screen changes shape under it — the soft
+   * keyboard opening is a `visualViewport` resize and nothing else, so a menu measured
+   * once at mount would be the only thing on screen that did not notice it.
+   */
+  useLayoutEffect(() => {
+    const menu = root.current;
+    if (!menu) return;
+    const measure = (): void => clampIntoViewport(menu);
+    measure();
+    const view = window.visualViewport;
+    view?.addEventListener("resize", measure);
+    view?.addEventListener("scroll", measure);
+    window.addEventListener("resize", measure);
+    return () => {
+      view?.removeEventListener("resize", measure);
+      view?.removeEventListener("scroll", measure);
+      window.removeEventListener("resize", measure);
+    };
+  }, [items.length]);
 
   /**
    * Close and hand focus back. Deliberately *not* used by the outside-click and

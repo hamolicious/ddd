@@ -2,11 +2,11 @@
  * The full results page (`#/search?q=…`).
  *
  * Results are grouped by nothing by default — one merged, ranked list is what a person
- * wants — but every row says which provider(s) found it, and a per-provider strip above
- * the list reports counts and failures. That is the honest presentation of a provider
- * registry: "the server index is unreachable" is information, and an offline client
- * whose only working provider is the local index should be able to see that it still
- * has complete local coverage (SPEC §4.1).
+ * wants — but every row says which provider(s) found it, and the per-provider counts are
+ * a disclosure under the list rather than a strip above it. The strip was three numbers
+ * and two nouns immediately above "2 results", which is a whole phone screen spent on
+ * arithmetic; a provider that *failed* is still called out in words, because "the server
+ * index is unreachable" is information an offline client needs (SPEC §4.1).
  *
  * The three empty states SPEC §6.5 asks for by name are all here: no query, no matches,
  * and "the index is still building" — the last one inferred from a local provider that
@@ -88,37 +88,46 @@ export function ResultsView({
             checked={includeMachine}
             onChange={(event) => setIncludeMachine(event.target.checked)}
           />
-          <span title="Documents whose fm.path starts with a dot — the per-user settings documents the kernel keeps, and anything a plugin files the same way.">
-            Include machine documents
-          </span>
+          <span title="Documents plugins keep for themselves.">Include machine documents</span>
         </label>
       </form>
 
-      <ul className="search-providers" aria-label="Providers">
-        {state.results.map((result) => (
-          <li key={result.providerId} className={result.error ? "search-provider-failed" : undefined}>
-            {result.label}:{" "}
-            {result.error ? (
-              <span className="search-provider-error">unavailable — {result.error}</span>
-            ) : (
-              `${result.hits.length} hit${result.hits.length === 1 ? "" : "s"}`
-            )}
-          </li>
-        ))}
-      </ul>
+      {/*
+        One number on screen, the split behind a disclosure.
+        The strip used to read "This device: 3 hits  Server: 3 hits" directly above
+        "2 results for document" — three numbers and two nouns for one list, on a
+        screen that has room for about one. Which source found a row is still on the
+        row; how many each returned is a question, not a headline.
+      */}
+      {state.results.length > 0 && trimmed !== "" && (
+        <details className="search-sources">
+          <summary>Where these came from</summary>
+          <ul className="search-providers" aria-label="Sources">
+            {state.results.map((result) => (
+              <li
+                key={result.providerId}
+                className={result.error ? "search-provider-failed" : undefined}
+              >
+                {result.label}:{" "}
+                {result.error ? (
+                  <span className="search-provider-error">unavailable: {result.error}</span>
+                ) : (
+                  `${result.hits.length} result${result.hits.length === 1 ? "" : "s"}`
+                )}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
 
       {failures.length > 0 && (
         <p className="search-note" role="status">
-          Some providers need a network connection. Results below come from the ones that
-          answered — the local index covers every document on this device, online or off.
+          Some results need a connection. These come from this device.
         </p>
       )}
 
       {trimmed === "" ? (
-        <p className="search-empty">
-          Type to search titles, text and frontmatter. Search runs on this device, so it
-          works offline.
-        </p>
+        <p className="search-empty">Search titles, text and properties.</p>
       ) : state.running ? (
         <p className="search-empty" role="status">
           Searching…
@@ -126,13 +135,15 @@ export function ResultsView({
       ) : state.hits.length === 0 ? (
         <p className="search-empty">
           Nothing matches “{trimmed}”.
+          {/*
+            The one hedge left, and it is down to a clause. `@kernel` reports no index
+            status (see the INTEGRATION note in this plugin's README section), so
+            "documents exist and nothing matched" is still the closest this view can get
+            to "the index is cold" — but three sentences of it under every failed search
+            read as an excuse rather than a state.
+          */}
           {documentCount !== undefined && documentCount > 0 && (
-            <>
-              {" "}
-              If this workspace was just opened on this device, the local index may still
-              be building — it indexes in the background and this page updates when it
-              finishes.
-            </>
+            <> The local index may still be building; this page updates when it finishes.</>
           )}
         </p>
       ) : (

@@ -12,6 +12,8 @@ reference for writing a plugin — there is deliberately no scaffolding CLI (SPE
 ```
 _shared/points.ts                 the extension points: names, types, shape validators
 _shared/machine-docs.ts           the one rule three plugins share about hiding documents
+_shared/compact.ts                "this is a phone": the breakpoint, and the visual viewport
+_shared/compact.ts                the compact media query and the hooks that read it
 _shared/vite.plugin-config.mjs    the reference build config (SPEC §6.4)
 _shared/vite.config.example.mjs   how a standalone plugin uses it
 <id>/manifest.json                SPEC §6.2

@@ -73,6 +73,7 @@ import {
   type ShellUpdateReady,
 } from "./boot/shell.js";
 import { registerServiceWorker } from "./boot/update.js";
+import { trackViewportHeight } from "./boot/viewport.js";
 import { installDevImportMap, missingSpecifiers, pageImportMap } from "./loader/importmap.js";
 import { failureNotice, loadPlugins } from "./loader/loader.js";
 import { BareManager } from "./safe-mode/BareManager.js";
@@ -124,6 +125,9 @@ async function boot(): Promise<void> {
   // all written in kernel tokens, and none of them has a kernel yet (SPEC §6.4 —
   // the kernel ships the default light/dark token values).
   paintKernelDefaultTokens(document.documentElement);
+  // And `--lm-viewport-height`, for the same reason and at the same moment: the auth
+  // gate is a form a soft keyboard covers, and it renders before any plugin exists.
+  trackViewportHeight();
 
   const safeMode = safeModeFrom(location.search);
 
@@ -353,7 +357,8 @@ function notifyPluginProblems(host: KernelHost): void {
   host.notices.notify({
     id: "kernel:plugin-problems",
     level: "warning",
-    message: `${count} plugin problem${count === 1 ? "" : "s"} in this session.`,
+    // "in this session" is scoping trivia: a notice is always about this session.
+    message: `${count} plugin problem${count === 1 ? "" : "s"}.`,
     detail: pluginProblems.join("\n"),
     actions: [
       {
@@ -398,11 +403,16 @@ async function activatePlugins(
 
   const missing = missingSpecifiers(pageImportMap());
   if (missing.length > 0) {
+    console.error(
+      `[loader] the import map does not resolve: ${missing.join(", ")}. Rebuild the app bundle (\`mise run web-build\`) so the server can serve a complete map.`,
+    );
     host.notices.notify({
       id: "kernel:import-map-incomplete",
       level: "error",
-      message: "The runtime layer is incomplete; plugins may fail to load.",
-      detail: `The import map does not resolve: ${missing.join(", ")}. Rebuild the app bundle (\`mise run web-build\`) so the server can serve a complete map.`,
+      // A build command is an instruction to whoever ships the app, not to whoever
+      // opened it. The console keeps it; the notice says what the reader can do.
+      message: "Some plugins may not load. Reinstall or update the app.",
+      detail: `The import map does not resolve: ${missing.join(", ")}.`,
     });
   }
 
@@ -457,7 +467,7 @@ async function installedSet(
         ? "Offline, and this device has never fetched the plugin list."
         : "The plugin list could not be fetched.",
       detail:
-        "Your documents are here and readable, but no plugin could be activated — including the one that draws the interface. Reconnect and reload once; after that the list is remembered for offline boots.",
+        "Your documents are here, but the interface could not load. Reconnect and reload once.",
       actions: [{ label: "Reload", run: () => location.reload() }],
     });
     return [];

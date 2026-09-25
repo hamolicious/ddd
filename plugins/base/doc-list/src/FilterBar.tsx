@@ -14,10 +14,18 @@
  * - **An incomplete clause is marked, not dropped in silence.** A half-typed date or an
  *   empty value produces no clause, and the row says so — otherwise the list quietly
  *   ignores what the user just typed.
+ *
+ * **Sort is always on screen; the rest folds away.** Expanded, this bar cost the whole
+ * first screen of a phone, so the browse view opened on no documents at all. The
+ * disclosure is collapsed by default only on a compact viewport (`_shared/compact.ts`),
+ * and the toggle carries the count of conditions currently applied so a folded filter
+ * is never a silent one.
  */
 
+import { useId, useState } from "react";
 import type { ReactElement } from "react";
 
+import { useCompact } from "../../_shared/compact.js";
 import {
   FIELD_OPTIONS,
   SORT_OPTIONS,
@@ -81,6 +89,12 @@ export function FilterBar({
   // about the query, which is the one thing this control is for.
   const filter = buildEffectiveFilter(draft);
 
+  const compact = useCompact();
+  const panelId = useId();
+  const [expanded, setExpanded] = useState(!compact);
+  const applied =
+    draft.clauses.length - invalid.size + ((draft.titleContains ?? "") !== "" ? 1 : 0);
+
   const patch = (id: string, change: Partial<FilterClause>): void => {
     onDraftChange({
       ...draft,
@@ -91,30 +105,7 @@ export function FilterBar({
   return (
     <div className="doclist-controls">
       <div className="doclist-row">
-        <label className="doclist-field doclist-grow">
-          <span>Title contains</span>
-          <input
-            type="search"
-            value={draft.titleContains ?? ""}
-            placeholder="groceries"
-            onChange={(event) => onDraftChange({ ...draft, titleContains: event.target.value })}
-          />
-        </label>
-
-        <label className="doclist-checkbox">
-          <input
-            type="checkbox"
-            checked={draft.includeMachine === true}
-            onChange={(event) =>
-              onDraftChange({ ...draft, includeMachine: event.target.checked })
-            }
-          />
-          <span title="Documents whose fm.path starts with a dot — the kernel's per-user settings documents, and anything a plugin files the same way. They are ordinary documents; this only decides whether they are listed here.">
-            Show machine documents
-          </span>
-        </label>
-
-        <label className="doclist-field">
+        <label className="doclist-field doclist-sort">
           <span>Sort by</span>
           <select
             value={sortField}
@@ -127,7 +118,7 @@ export function FilterBar({
             ))}
           </select>
         </label>
-        <label className="doclist-field">
+        <label className="doclist-field doclist-sort">
           <span>Direction</span>
           <select
             value={sortDirection}
@@ -138,6 +129,41 @@ export function FilterBar({
             <option value="desc">Newest / Z→A</option>
             <option value="asc">Oldest / A→Z</option>
           </select>
+        </label>
+
+        <button
+          type="button"
+          className="doclist-filter-toggle"
+          aria-expanded={expanded}
+          aria-controls={panelId}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          Filters
+          {applied > 0 && <span className="doclist-filter-count">{applied}</span>}
+        </button>
+      </div>
+
+      <div className="doclist-filter-panel" id={panelId} hidden={!expanded}>
+      <div className="doclist-row">
+        <label className="doclist-field doclist-grow">
+          <span>Title contains</span>
+          <input
+            type="search"
+            value={draft.titleContains ?? ""}
+            placeholder="Search titles"
+            onChange={(event) => onDraftChange({ ...draft, titleContains: event.target.value })}
+          />
+        </label>
+
+        <label className="doclist-checkbox">
+          <input
+            type="checkbox"
+            checked={draft.includeMachine === true}
+            onChange={(event) =>
+              onDraftChange({ ...draft, includeMachine: event.target.checked })
+            }
+          />
+          <span title="Documents plugins keep for themselves.">Show machine documents</span>
         </label>
       </div>
 
@@ -171,7 +197,7 @@ export function FilterBar({
                     <input
                       list="doclist-fields"
                       value={clause.field}
-                      placeholder="fm.status"
+                      placeholder="Property name"
                       onChange={(event) => patch(clause.id, { field: event.target.value })}
                     />
                   </label>
@@ -211,7 +237,7 @@ export function FilterBar({
                         <span className="doclist-visually-hidden">Value</span>
                         <input
                           value={clause.value}
-                          placeholder={clause.kind === "date" ? "2026-09-23" : "open"}
+                          placeholder={clause.kind === "date" ? "2026-09-23" : "Value"}
                           onChange={(event) => patch(clause.id, { value: event.target.value })}
                         />
                       </label>
@@ -242,9 +268,7 @@ export function FilterBar({
                   </button>
 
                   {invalid.has(clause.id) && (
-                    <p className="doclist-clause-note">
-                      Incomplete — this condition is not being applied.
-                    </p>
+                    <p className="doclist-clause-note">Incomplete. This condition is ignored.</p>
                   )}
                 </li>
               );
@@ -291,10 +315,11 @@ export function FilterBar({
         <details className="doclist-json">
           {/* A spec section number is a note to whoever builds this, not to whoever
               uses it. What a reader wants to know is what the block below *is*. */}
-          <summary>Show this filter as the query language sees it</summary>
+          <summary>Show the filter as JSON</summary>
           <pre>{JSON.stringify(filter, null, 2)}</pre>
         </details>
       )}
+      </div>
     </div>
   );
 }

@@ -275,10 +275,7 @@ function PreviewBody({
       return (
         <div className="viewer-preview-frame">
           <p className="viewer-chip">PDF</p>
-          <p className="viewer-muted">
-            Inline PDF embedding is blocked by the app’s content-security policy
-            (<code>object-src &apos;none&apos;</code>). Use “Open the file”.
-          </p>
+          <p className="viewer-muted">PDFs cannot be shown inline. Open the file instead.</p>
         </div>
       );
     default:

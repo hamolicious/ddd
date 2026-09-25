@@ -17,6 +17,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   height: 100%;
   color: var(--lm-text);
   font-family: var(--lm-font-sans);
@@ -43,6 +44,8 @@
 .docsurface-id {
   font-family: var(--lm-font-mono);
   font-size: 0.85em;
+  /* A ULID is one 26-character unbreakable word in a 390 px column. */
+  overflow-wrap: anywhere;
 }
 
 /* The mode switcher: a segmented control. */
@@ -85,7 +88,14 @@
 
 .docsurface-mode-icon {
   display: inline-flex;
+  flex: 0 0 auto;
   line-height: 1;
+}
+
+.docsurface-mode-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Notices: frontmatter parse errors, hydration failures, the Trash banner. */
@@ -120,12 +130,21 @@
   cursor: pointer;
 }
 
-/* The mode's pane. `min-height: 0` is load-bearing: see the file header. */
+/*
+ * The mode's pane. `min-height: 0` is load-bearing: see the file header.
+ *
+ * `min-width: 0` is its twin and was missing. A flex item's automatic minimum size is
+ * its content's min-content width, so without this the pane refused to be narrower than
+ * the widest unbreakable word in the document and `overflow: auto` turned that into the
+ * whole reading column scrolling sideways. The same declaration is why `.shell-main` and
+ * `.settings-pane` do not have the bug.
+ */
 .docsurface-pane {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   overflow: auto;
 }
 
@@ -139,9 +158,22 @@
   margin-bottom: var(--lm-space);
 }
 
-@media (max-width: 640px) {
+/*
+ * Phone: the switcher is a full-width segmented control, and it has to survive 360 px
+ * with more than the two modes the base distribution ships. Each tab takes an equal
+ * share (`flex: 1 1 0`), is allowed to be narrower than its own label (`min-width: 0`),
+ * and ellipsises rather than pushing the row wide — a third mode used to make the
+ * header the widest thing on the screen.
+ */
+/* Same threshold as `_shared/compact.ts`'s `COMPACT_MEDIA_QUERY`; change both together. */
+@media (max-width: 640px), (max-height: 480px) and (pointer: coarse) {
   .docsurface-header {
     padding: var(--lm-space);
+  }
+
+  .docsurface-title {
+    flex: 1 1 100%;
+    font-size: 1.05rem;
   }
 
   .docsurface-modes {
@@ -151,5 +183,7 @@
   .docsurface-mode {
     flex: 1 1 0;
     justify-content: center;
+    min-width: 0;
+    padding: 0 calc(var(--lm-space) * 0.75);
   }
 }

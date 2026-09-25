@@ -87,10 +87,20 @@
   color: var(--lm-text-muted);
 }
 
-.settings-section-owner {
-  margin: 0 0 calc(var(--lm-space) * 1.5);
-  color: var(--lm-text-muted);
-  font-size: 0.85rem;
+/*
+ * The gap between a section's heading and its first control used to be the bottom
+ * margin of the "provided by <plugin>" line. That line is gone — which plugin owns a
+ * section is an admin question, not a caption under every heading — so the spacing is
+ * stated here rather than being a side effect of it.
+ */
+.settings-section > h2,
+.settings-section > .settings-section-description {
+  margin-bottom: calc(var(--lm-space) * 1.5);
+}
+
+/* Shown only in the compact drill-down; see the breakpoint at the bottom. */
+.settings-back {
+  display: none;
 }
 
 .settings-empty,
@@ -216,31 +226,102 @@
   color: var(--lm-success);
 }
 
-/* ---- the mobile breakpoint --------------------------------------------- */
+/* ---- the compact breakpoint -------------------------------------------- */
 
-@media (max-width: 640px) {
+/*
+ * `plugins/base/_shared/compact.ts` owns this query; `shell-ui`'s `state.ts` gives
+ * the same string to `matchMedia`.
+ *
+ * The shape below is a **drill-down**, and it is the answer to the section list being a
+ * 1 860 px horizontal strip inside a 374 px scroller: eleven names laid out in a row,
+ * two and a half of them visible, no scrollbar on a touch device and no edge fade to
+ * say the rest existed — and it was the only route into admin from this screen.
+ *
+ * So the list stacks into full-width rows, and the two halves take turns: `/settings`
+ * is the list, `/settings/<id>` is that section with the whole screen and "All
+ * settings" to go back. `data-view` on the root (SettingsView.tsx) is the switch.
+ * Nothing about the URLs, the sections or the contribution point changes; on a wide
+ * screen both halves still render side by side exactly as before.
+ */
+@media (max-width: 640px), (max-height: 480px) and (pointer: coarse) {
   .settings-root {
-    padding: var(--lm-space);
+    padding: var(--lm-space) calc(var(--lm-space) + var(--lm-safe-right))
+      calc(var(--lm-space) + var(--lm-safe-bottom))
+      calc(var(--lm-space) + var(--lm-safe-left));
   }
 
-  /* Single pane (SPEC §6.5): the section list becomes a row above the content. */
+  .settings-header h1 {
+    font-size: 1.3rem;
+  }
+
+  .settings-shared-note {
+    margin-bottom: var(--lm-space);
+    font-size: 0.9rem;
+  }
+
+  /* Single pane (SPEC §6.5). */
   .settings-panes {
     grid-template-columns: 1fr;
     gap: var(--lm-space);
   }
 
+  /* One card per section, full width, already a tap target from the rule above. */
   .settings-nav ul {
-    display: flex;
+    display: grid;
     gap: calc(var(--lm-space) * 0.5);
-    overflow-x: auto;
-    padding-bottom: calc(var(--lm-space) * 0.5);
   }
 
   .settings-nav-link {
-    white-space: nowrap;
+    justify-content: space-between;
+    border: 1px solid var(--lm-border);
+    background: var(--lm-bg-raised);
   }
 
-  .settings-form {
+  .settings-nav-link::after {
+    content: "›";
+    color: var(--lm-text-muted);
+  }
+
+  .settings-back {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--lm-tap-target);
+    margin-bottom: calc(var(--lm-space) * 0.5);
+    color: var(--lm-link);
+  }
+
+  .settings-back::before {
+    content: "‹";
+    margin-right: calc(var(--lm-space) * 0.5);
+  }
+
+  /* The two halves take turns. */
+  .settings-root[data-view="index"] .settings-pane,
+  .settings-root[data-view="section"] .settings-nav {
+    display: none;
+  }
+
+  /* The section that is open is the card. */
+  .settings-root[data-view="section"] .settings-section {
+    padding: var(--lm-space);
+    border: 1px solid var(--lm-border);
+    border-radius: var(--lm-radius-lg);
+    background: var(--lm-bg-raised);
+  }
+
+  /*
+   * The backstop for the design rule: wide content scrolls inside its own container,
+   * the page never does. A section may render something with an intrinsic minimum
+   * width — a table, an id, a key sequence — and without this it propagates out
+   * through the grid and lands on `main`, which *is* a scroll box, so the page
+   * scrolls sideways instead of the wide thing inside it.
+   */
+  .settings-pane {
+    overflow-x: auto;
+  }
+
+  .settings-form,
+  .settings-signout {
     max-width: none;
   }
 }

@@ -15,6 +15,14 @@
  * (SPEC §6.4), so another user can read them. That sentence belongs on the screen
  * where somebody is about to type something into a settings field, not only in the
  * contract.
+ *
+ * **On a phone it is a list, then a section.** The eleven section names laid out in a
+ * row were a 1 860 px horizontal strip inside a 374 px scroller with no scrollbar: two
+ * and a half sections visible and no affordance saying the rest existed. Below the
+ * compact breakpoint the list stacks and the two halves take turns — `data-view` on the
+ * root is what the stylesheet reads to decide which — so a section gets the whole
+ * screen and "All settings" goes back. The URL is unchanged either way, and on a wide
+ * screen both halves are still side by side.
  */
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -52,21 +60,22 @@ export function SettingsView({ kernel, router, params }: SettingsViewProps): Rea
   );
 
   const requested = params?.["section"];
+  const chosen = sections.find((entry) => entry.value.id === requested);
   const active =
-    sections.find((entry) => entry.value.id === requested) ??
+    chosen ??
     // An unknown section id falls back to the first rather than to an empty pane: the
     // id may belong to a plugin that has not activated, or has been uninstalled.
     sections[0];
 
   return (
-    <div className="settings-root">
+    // `section` only when the URL actually named one that exists — `/settings` on its
+    // own is the index, and on a wide screen both views render whichever this says.
+    <div className="settings-root" data-view={chosen ? "section" : "index"}>
       <header className="settings-header">
         <h1>Settings</h1>
         <p className="settings-shared-note">
-          Settings are stored as a <strong>per-user document in this shared workspace</strong>.
-          They sync and work offline like everything else — and other users of this
-          workspace can read them. Never put a secret here; plugin secrets belong in
-          admin configuration, which is encrypted at rest.
+          Other people in this workspace can read your settings. Put secrets in admin
+          plugin configuration, which is encrypted.
         </p>
       </header>
 
@@ -98,6 +107,20 @@ export function SettingsView({ kernel, router, params }: SettingsViewProps): Rea
           </nav>
 
           <div className="settings-pane">
+            {/* The way back out of a drilled-in section. A real link, because it is a
+                real navigation — and hidden by the stylesheet on a screen wide enough
+                to show the list beside the section anyway. */}
+            <a
+              className="settings-back"
+              href={router.url("/settings")}
+              onClick={(event) => {
+                if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+                event.preventDefault();
+                router.navigate("/settings");
+              }}
+            >
+              All settings
+            </a>
             {active ? <Section kernel={kernel} entry={active} /> : null}
           </div>
         </div>
@@ -132,9 +155,8 @@ function Section({
       {section.description ? (
         <p className="settings-section-description">{section.description}</p>
       ) : null}
-      <p className="settings-section-owner">
-        provided by <code>{entry.pluginId}</code>
-      </p>
+      {/* No "provided by <plugin>" line: which plugin owns a section is an admin
+          question, and it was a second grey sentence under every heading. */}
       <Rendered />
     </section>
   );

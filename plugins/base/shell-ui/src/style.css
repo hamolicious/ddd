@@ -10,9 +10,14 @@
  * Two rules here are contract rather than taste (SPEC §6.5, §8):
  *
  * - interactive controls are at least `--lm-tap-target` in the smallest dimension;
- * - the breakpoint at 640px turns the sidebar into a drawer over a single pane, and
- *   it is the same number `state.ts` gives `matchMedia`, because a layout that
- *   disagrees with `isCompact()` is worse than either behaviour alone.
+ * - the compact breakpoint turns the sidebar into a drawer over a single pane, and it
+ *   is the same query `state.ts` gives `matchMedia` — both read it from
+ *   `plugins/base/_shared/compact.ts`, because a layout that disagrees with
+ *   `isCompact()` is worse than either behaviour alone.
+ *
+ * The screen edges are paid for with the kernel's `--lm-safe-*` tokens: `viewport-fit=
+ * cover` lays this shell out *under* the Android status bar and gesture bar, so the
+ * navbar's first row and the drawer's last panel are under system chrome without them.
  */
 
 .shell-root {
@@ -29,8 +34,11 @@
 .shell-skip {
   position: absolute;
   z-index: 30;
-  top: calc(var(--lm-space) * 0.5);
-  left: calc(var(--lm-space) * 0.5);
+  top: calc(var(--lm-space) * 0.5 + var(--lm-safe-top));
+  left: calc(var(--lm-space) * 0.5 + var(--lm-safe-left));
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--lm-tap-target);
   padding: calc(var(--lm-space) * 0.75) var(--lm-space);
   border-radius: var(--lm-radius);
   background: var(--lm-bg-raised);
@@ -58,12 +66,16 @@
 /* ---- navbar ------------------------------------------------------------ */
 
 .shell-navbar {
+  /* The compact notice panel hangs off this, not off the bell — see the breakpoint. */
+  position: relative;
   display: flex;
   flex: 0 0 auto;
   gap: var(--lm-space);
   align-items: center;
   min-height: var(--lm-tap-target);
-  padding: calc(var(--lm-space) * 0.5) var(--lm-space);
+  padding: calc(var(--lm-space) * 0.5 + var(--lm-safe-top))
+    calc(var(--lm-space) + var(--lm-safe-right)) calc(var(--lm-space) * 0.5)
+    calc(var(--lm-space) + var(--lm-safe-left));
   border-bottom: 1px solid var(--lm-border);
   background: var(--lm-bg-subtle);
 }
@@ -238,7 +250,10 @@
   top: calc(100% + var(--lm-space) * 0.5);
   right: 0;
   width: min(26rem, calc(100vw - var(--lm-space) * 2));
+  /* `vh` is Android's *large* viewport: with the URL bar shown, 60vh is more than 60%
+     of what is on screen. `--lm-viewport-height` is what is actually visible. */
   max-height: 60vh;
+  max-height: calc(var(--lm-viewport-height) * 0.6);
   padding: var(--lm-space);
   border: 1px solid var(--lm-border);
   border-radius: var(--lm-radius-lg);
@@ -276,6 +291,11 @@
   margin: 0 0 calc(var(--lm-space) * 0.5);
 }
 
+.shell-notice-message {
+  /* A notice often names a module specifier or a URL: one unbreakable word. */
+  overflow-wrap: anywhere;
+}
+
 .shell-notice-plugin {
   color: var(--lm-text-muted);
   font-size: 0.9em;
@@ -307,7 +327,8 @@
 .shell-sidebar {
   flex: 0 0 auto;
   width: min(18rem, 32vw);
-  padding: calc(var(--lm-space) * 0.5);
+  padding: calc(var(--lm-space) * 0.5) calc(var(--lm-space) * 0.5)
+    calc(var(--lm-space) * 0.5 + var(--lm-safe-bottom));
   border-right: 1px solid var(--lm-border);
   background: var(--lm-bg-subtle);
   overflow-y: auto;
@@ -410,9 +431,14 @@
   background: var(--lm-bg-overlay);
 }
 
-/* ---- the mobile breakpoint (SPEC §6.5) --------------------------------- */
+/* ---- the compact breakpoint (SPEC §6.5) -------------------------------- */
 
-@media (max-width: 640px) {
+/*
+ * `plugins/base/_shared/compact.ts` owns this query and `state.ts` gives the same
+ * string to `matchMedia`. The height half is what gives a phone in landscape
+ * (844 × 390) these layouts instead of the desktop ones.
+ */
+@media (max-width: 640px), (max-height: 480px) and (pointer: coarse) {
   /* Single pane: the sidebar leaves the flow entirely and slides over the main
      region, which keeps its full width whether the drawer is open or not. */
   .shell-sidebar {
@@ -441,11 +467,38 @@
    * to zero, which is where "New document" and the search box live. Giving the start
    * group a full-width second row costs one tap target of height and makes both of
    * them reachable again.
+   *
+   * It costs height, and height is what a phone has least of, so the padding and the
+   * row gap are spent down to nothing here: the rows are already `--lm-tap-target`
+   * tall on their own, and every pixel of chrome is a pixel off the document.
    */
   .shell-navbar {
     /* The nav is two rows tall now; the toggle belongs beside the first, not
        floating between them. */
     align-items: flex-start;
+    gap: calc(var(--lm-space) * 0.5);
+    padding: var(--lm-safe-top) calc(var(--lm-space) * 0.5 + var(--lm-safe-right)) 0
+      calc(var(--lm-space) * 0.5 + var(--lm-safe-left));
+  }
+
+  /*
+   * The panel is anchored to the *navbar*, not to the bell.
+   *
+   * `.shell-notices` is the bell at the far right, so `right: 0` against it put a
+   * 374 px panel's left edge at x = −9 on a 390 px screen and cut the first characters
+   * off every notice. Making the navbar the containing block keeps the vertical
+   * anchoring (still `top: 100%` of the row it drops out of) and gives the panel the
+   * full width between the gutters.
+   */
+  .shell-notices {
+    position: static;
+  }
+
+  .shell-notice-panel {
+    inset-inline: var(--lm-space);
+    width: auto;
+    /* The last notice has to clear the gesture bar. */
+    padding-bottom: calc(var(--lm-space) + var(--lm-safe-bottom));
   }
 
   .shell-nav {

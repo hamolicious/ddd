@@ -25,6 +25,14 @@
   font-size: 1.3rem;
 }
 
+/* The one action on the page. An empty state gets one line and one thing to do, and
+   on a phone that thing has to be a tap target rather than 20 px of underlined text. */
+.route-notfound a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--lm-tap-target);
+}
+
 .route-notfound code {
   padding: 0 calc(var(--lm-space) * 0.5);
   border: 1px solid var(--lm-border);

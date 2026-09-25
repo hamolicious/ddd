@@ -198,7 +198,7 @@ export function createRuntime(kernel: Kernel): MarkdownRuntime & { dispose(): vo
         kernel.ui.notify({
           id: `markdown.attachment.${id}`,
           level: "warning",
-          message: "That file is not available offline.",
+          message: "That file is not on this device. Reconnect to download it.",
           detail: `attachment://${id}`,
         });
         return;
@@ -237,8 +237,9 @@ export function createRuntime(kernel: Kernel): MarkdownRuntime & { dispose(): vo
           kernel.ui.notify({
             id: `markdown.task.${documentId}`,
             level: "warning",
-            message: "That checkbox moved while you were reading — nothing was changed.",
-            detail: "Reopen the document and try again.",
+            message:
+              "The document changed while you were reading, so nothing was ticked.",
+            detail: "Reopen it and try again.",
           });
           return;
         }

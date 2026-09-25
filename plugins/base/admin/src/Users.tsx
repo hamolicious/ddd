@@ -20,6 +20,7 @@
 import { useState } from "react";
 import type { ReactElement } from "react";
 
+import { AdminSectionFrame } from "./AdminView.js";
 import { describeActor, formatWhen, type AdminClient, type CreatedInvite } from "./api.js";
 import { useAsync, useMutation } from "./hooks.js";
 
@@ -27,9 +28,11 @@ export interface UsersSectionProps {
   readonly client: AdminClient;
   /** The signed-in user's id, so "you" is marked and self-demotion is obvious. */
   readonly selfId: string;
+  /** Rendered inside settings, which has already drawn the heading. */
+  readonly embedded?: boolean;
 }
 
-export function UsersSection({ client, selfId }: UsersSectionProps): ReactElement {
+export function UsersSection({ client, selfId, embedded }: UsersSectionProps): ReactElement {
   const users = useAsync(() => client.users(), []);
   const mutation = useMutation(() => users.reload());
   const [issued, setIssued] = useState<{ readonly email: string; readonly token: string } | undefined>();
@@ -38,9 +41,7 @@ export function UsersSection({ client, selfId }: UsersSectionProps): ReactElemen
   const activeAdmins = rows.filter((user) => user.is_admin && user.is_active).length;
 
   return (
-    <section className="admin-section" aria-labelledby="admin-users-heading">
-      <h3 id="admin-users-heading">Users</h3>
-
+    <AdminSectionFrame id="users" title="Users" embedded={embedded}>
       {users.error && (
         <p className="admin-error" role="alert">
           {users.error}
@@ -55,8 +56,7 @@ export function UsersSection({ client, selfId }: UsersSectionProps): ReactElemen
       {issued && (
         <div className="admin-secret" role="status">
           <p>
-            One-time password reset link for <strong>{issued.email}</strong>. It is shown
-            once — copy it now.
+            Reset link for <strong>{issued.email}</strong>. Copy it now; it is shown once.
           </p>
           <code>{issued.token}</code>
           <CopyButton value={issued.token} />
@@ -94,8 +94,8 @@ export function UsersSection({ client, selfId }: UsersSectionProps): ReactElemen
                       {user.id === selfId && <span className="admin-badge">you</span>}
                       {!user.is_active && <span className="admin-badge">deleted</span>}
                     </th>
-                    <td>{user.name || "—"}</td>
-                    <td>
+                    <td data-label="Name">{user.name || "—"}</td>
+                    <td data-label="Admin">
                       <label className="admin-checkbox">
                         <input
                           type="checkbox"
@@ -111,8 +111,8 @@ export function UsersSection({ client, selfId }: UsersSectionProps): ReactElemen
                       </label>
                       {lastAdmin && <span className="admin-hint">last admin</span>}
                     </td>
-                    <td>{formatWhen(user.created_at)}</td>
-                    <td>{formatWhen(user.last_login_at)}</td>
+                    <td data-label="Created">{formatWhen(user.created_at)}</td>
+                    <td data-label="Last sign-in">{formatWhen(user.last_login_at)}</td>
                     <td className="admin-actions">
                       <button
                         type="button"
@@ -133,7 +133,7 @@ export function UsersSection({ client, selfId }: UsersSectionProps): ReactElemen
                         onClick={() => {
                           if (
                             !confirm(
-                              `Delete ${user.email}? Their sessions end immediately. Everything they wrote stays, attributed to a deleted user.`,
+                              `Delete ${user.email}? Their sessions end now; what they wrote stays, attributed to a deleted user.`,
                             )
                           ) {
                             return;
@@ -155,14 +155,20 @@ export function UsersSection({ client, selfId }: UsersSectionProps): ReactElemen
       {/* The spec reference belonged to whoever built this screen, not to the
           administrator reading it. The sentence says the same thing without it. */}
       <p className="admin-note">
-        This is a shared workspace: every signed-in user can read, edit and delete every
-        document. The audit log is the accountability here, not permissions.
+        Everyone signed in can read, edit and delete every document. The audit log
+        records who did what.
       </p>
-    </section>
+    </AdminSectionFrame>
   );
 }
 
-export function InvitesSection({ client }: { readonly client: AdminClient }): ReactElement {
+export function InvitesSection({
+  client,
+  embedded,
+}: {
+  readonly client: AdminClient;
+  readonly embedded?: boolean;
+}): ReactElement {
   const invites = useAsync(() => client.invites(), []);
   const mutation = useMutation(() => invites.reload());
   const [email, setEmail] = useState("");
@@ -172,9 +178,7 @@ export function InvitesSection({ client }: { readonly client: AdminClient }): Re
   const rows = invites.data ?? [];
 
   return (
-    <section className="admin-section" aria-labelledby="admin-invites-heading">
-      <h3 id="admin-invites-heading">Invites</h3>
-
+    <AdminSectionFrame id="invites" title="Invites" embedded={embedded}>
       {(invites.error ?? mutation.error) && (
         <p className="admin-error" role="alert">
           {invites.error ?? mutation.error}
@@ -193,7 +197,7 @@ export function InvitesSection({ client }: { readonly client: AdminClient }): Re
         }}
       >
         <label className="admin-field">
-          <span>Email (optional — pins the invite to one address)</span>
+          <span>Email (optional). Pins the invite to one address.</span>
           <input
             type="email"
             value={email}
@@ -209,7 +213,7 @@ export function InvitesSection({ client }: { readonly client: AdminClient }): Re
       {created && (
         <div className="admin-secret" role="status">
           <p>
-            Invite token — <strong>shown once</strong>. It is single-use and expires{" "}
+            Invite token, <strong>shown once</strong>. Single-use; expires{" "}
             {formatWhen(created.invite.expires_at)}.
           </p>
           <code>{created.token}</code>
@@ -223,10 +227,7 @@ export function InvitesSection({ client }: { readonly client: AdminClient }): Re
       {invites.loading ? (
         <p role="status">Loading invites…</p>
       ) : rows.length === 0 ? (
-        <p className="admin-empty">
-          No invites. After the first user, registration needs one — so this is also the
-          answer to “why can nobody sign up”.
-        </p>
+        <p className="admin-empty">No invites. People need one to register.</p>
       ) : (
         <div className="admin-table-scroll">
           <table className="admin-table">
@@ -246,15 +247,15 @@ export function InvitesSection({ client }: { readonly client: AdminClient }): Re
                   <th scope="row">
                     <span className={`admin-status admin-status-${invite.status}`}>{invite.status}</span>
                   </th>
-                  <td>{invite.email ?? "any"}</td>
-                  <td>
+                  <td data-label="Email">{invite.email ?? "any"}</td>
+                  <td data-label="Created">
                     {formatWhen(invite.created_at)}
                     <span className="admin-hint">
                       by {describeActor(invite.created_by, users.data ?? [])}
                     </span>
                   </td>
-                  <td>{formatWhen(invite.expires_at)}</td>
-                  <td>
+                  <td data-label="Expires">{formatWhen(invite.expires_at)}</td>
+                  <td data-label="Used">
                     {invite.used_at
                       ? `${formatWhen(invite.used_at)} — ${describeActor(invite.used_by, users.data ?? [])}`
                       : "—"}
@@ -276,10 +277,9 @@ export function InvitesSection({ client }: { readonly client: AdminClient }): Re
       )}
 
       <p className="admin-note">
-        The listing stores only a hash of each token, so a lost token cannot be recovered —
-        revoke it and create another.
+        A lost token cannot be recovered. Revoke it and create another.
       </p>
-    </section>
+    </AdminSectionFrame>
   );
 }
 

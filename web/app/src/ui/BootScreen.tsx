@@ -62,9 +62,9 @@ export function BootFailure({
         <h1>{offline ? "Life Manager is offline" : "Life Manager could not start"}</h1>
         {offline ? (
           <p>
-            The server cannot be reached, and this device has not signed in yet — so
-            there is no local copy of your workspace to open. Connect once, and after
-            that it opens offline.
+            The server is unreachable and this device has never signed in, so there is
+            nothing stored locally to open. Connect once and it will open offline after
+            that.
           </p>
         ) : null}
         <pre className="lm-boot-error">{error.message}</pre>
@@ -90,9 +90,8 @@ export function UnsupportedBrowser(): ReactNode {
       <div className="lm-boot-inner">
         <h1>This browser is too old</h1>
         <p>
-          Life Manager needs a browser with import-map support — Chrome or Edge 89+,
-          Safari 16.4+, Firefox 108+. Everything else about your data is fine; this
-          browser simply cannot load the app.
+          Life Manager needs Chrome 89+, Edge 89+, Safari 16.4+ or Firefox 108+. Your
+          data is unaffected.
         </p>
       </div>
     </div>

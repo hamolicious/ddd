@@ -15,12 +15,19 @@
 import { useState } from "react";
 import type { ReactElement } from "react";
 
+import { AdminSectionFrame } from "./AdminView.js";
 import { describeActor, formatWhen, type AdminClient, type AuditPage } from "./api.js";
 import { useAsync, useMutation } from "./hooks.js";
 
 const PAGE_SIZE = 50;
 
-export function AuditSection({ client }: { readonly client: AdminClient }): ReactElement {
+export function AuditSection({
+  client,
+  embedded,
+}: {
+  readonly client: AdminClient;
+  readonly embedded?: boolean;
+}): ReactElement {
   const [action, setAction] = useState("");
   const [actor, setActor] = useState("");
   const [targetId, setTargetId] = useState("");
@@ -48,9 +55,7 @@ export function AuditSection({ client }: { readonly client: AdminClient }): Reac
   };
 
   return (
-    <section className="admin-section" aria-labelledby="admin-audit-heading">
-      <h3 id="admin-audit-heading">Audit log</h3>
-
+    <AdminSectionFrame id="audit" title="Audit log" embedded={embedded}>
       <form
         className="admin-inline-form"
         onSubmit={(event) => {
@@ -90,10 +95,7 @@ export function AuditSection({ client }: { readonly client: AdminClient }): Reac
       {first.loading ? (
         <p role="status">Loading the audit log…</p>
       ) : entries.length === 0 ? (
-        <p className="admin-empty">
-          Nothing recorded for this filter. Destructive and administrative actions —
-          document deletes and restores, user, invite and plugin operations — land here.
-        </p>
+        <p className="admin-empty">Nothing matches this filter.</p>
       ) : (
         <ol className="admin-audit">
           {entries.map((entry) => (
@@ -150,7 +152,7 @@ export function AuditSection({ client }: { readonly client: AdminClient }): Reac
           Load {PAGE_SIZE} more
         </button>
       )}
-    </section>
+    </AdminSectionFrame>
   );
 }
 

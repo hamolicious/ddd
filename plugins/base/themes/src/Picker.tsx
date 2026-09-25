@@ -86,7 +86,7 @@ export function ThemePicker({ kernel, controller }: ThemePickerProps): ReactNode
           </label>
         ))}
         <p className="theme-note">
-          Currently showing the <strong>{scheme}</strong> appearance.
+          Showing <strong>{scheme}</strong>.
         </p>
       </fieldset>
 
@@ -109,8 +109,7 @@ export function ThemePicker({ kernel, controller }: ThemePickerProps): ReactNode
 
       {controller.durable ? null : (
         <p className="theme-note theme-note-warning">
-          Your choice is saved on this device and has not reached your settings yet — it
-          syncs to your other devices as soon as the server is reachable.
+          Saved on this device. It reaches your other devices when you are online.
         </p>
       )}
     </div>
@@ -143,9 +142,7 @@ function SchemeGroup({
         {active ? <span className="theme-badge">active now</span> : null}
       </legend>
       {!active ? (
-        <p className="theme-note">
-          Applied when the {scheme} appearance is showing.
-        </p>
+        <p className="theme-note">Used in {scheme}.</p>
       ) : null}
       {missing ? (
         <p className="theme-note theme-note-warning">

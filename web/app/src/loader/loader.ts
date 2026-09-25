@@ -204,10 +204,12 @@ export function failureNotice(
   return {
     id: "kernel:plugins-failed",
     level: "warning",
+    // The second clause is dropped when there is nothing in it: the common message read
+    // "1 plugin failed to load; 0 skipped." — a number whose only job was to be zero.
     message:
       count > 0
-        ? `${count} plugin${count === 1 ? "" : "s"} failed to load; ${skipped} skipped.`
-        : `${skipped} plugin${skipped === 1 ? "" : "s"} were skipped.`,
+        ? `${count} plugin${count === 1 ? "" : "s"} failed to load.${skipped > 0 ? ` ${skipped} skipped.` : ""}`
+        : `${skipped} plugin${skipped === 1 ? "" : "s"} skipped.`,
     detail: problems.join("\n"),
     ...(onOpenAdmin ? { actions: [{ label: "Open admin", run: onOpenAdmin }] } : {}),
   };

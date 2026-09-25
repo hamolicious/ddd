@@ -79,6 +79,49 @@
   gap: var(--lm-space);
 }
 
+/*
+ * Sort stays out; the condition builder folds away.
+ *
+ * Expanded, this bar is nine operators, six value types and a JSON disclosure — and it
+ * filled the whole first screen of a phone, so opening the app showed zero documents.
+ * Sort is the control a phone user actually reaches for, so it stays in the always-on
+ * row and everything else lives behind the toggle (collapsed by default only on a
+ * phone: on a wide screen the bar has the room it always had).
+ */
+.doclist-filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--lm-space) * 0.5);
+  margin-left: auto;
+}
+
+.doclist-filter-toggle[aria-expanded="true"] {
+  border-color: var(--lm-border-strong) !important;
+}
+
+.doclist-filter-count {
+  padding: 0 calc(var(--lm-space) * 0.5);
+  border-radius: var(--lm-radius);
+  background: var(--lm-accent-subtle);
+  font-size: 0.85em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* `display: flex` below outranks the UA's `[hidden] { display: none }`; restore it. */
+.doclist-filter-panel[hidden] {
+  display: none;
+}
+
+.doclist-filter-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lm-space);
+  margin: 0;
+  padding: var(--lm-space) 0 0;
+  border: 0;
+  border-top: 1px solid var(--lm-border);
+}
+
 .doclist-field {
   display: flex;
   flex-direction: column;
@@ -152,6 +195,18 @@
   color: var(--lm-text-muted);
 }
 
+/*
+ * A `<summary>` is a control, so it gets a control's tap target. Left as a bare inline
+ * run it measured 19 px tall — a third of a fingertip — on the two disclosures this
+ * plugin draws.
+ */
+.doclist-json > summary {
+  display: flex;
+  align-items: center;
+  min-height: var(--lm-tap-target);
+  cursor: pointer;
+}
+
 .doclist-json pre {
   overflow-x: auto;
   margin: calc(var(--lm-space) * 0.5) 0 0;
@@ -171,42 +226,79 @@
   list-style: none;
 }
 
+/*
+ * `minmax(0, 1fr)` and not `1fr`: a grid track's default `min-width: auto` is its
+ * content's max-content width, so one long title stretched the row past the viewport
+ * and took the page's horizontal scroll with it. The zero minimum is what lets the
+ * title and the meta line below truncate instead.
+ */
 .doclist-item {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
     "title actions"
     "meta actions";
   gap: 0 var(--lm-space);
   align-items: center;
-  padding: calc(var(--lm-space) * 0.75) 0;
+  padding: calc(var(--lm-space) * 0.5) 0;
   border-bottom: 1px solid var(--lm-border);
 }
 
+/*
+ * The most-used control in the product, and it measured 100 × 22.5 px: the four
+ * `!important` overrides below cancelled the app's 44 px button floor
+ * (`web/app/src/styles.css`) to make the title read as a link. Keeping the look and
+ * restoring the height is the whole fix — the button now spans its grid column and is
+ * a full tap target, so the fingertip that misses it no longer lands on "Move to
+ * Trash" 8 px away.
+ */
 .doclist-open {
   grid-area: title;
-  justify-self: start;
-  min-height: auto !important;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--lm-tap-target);
   padding: 0 !important;
   border: 0 !important;
   background: none !important;
   color: var(--lm-link);
   font-size: 1.05em;
   text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
+/*
+ * One line, always. As a wrapping flex row a path plus a localized timestamp became
+ * three lines on a phone and the row grew to 150 px; the path is the part that gives
+ * way, because "updated <when>" is the same length on every row and is what the list
+ * is sorted by.
+ */
 .doclist-meta {
   grid-area: meta;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: var(--lm-space);
-  margin: 2px 0 0;
+  min-width: 0;
+  margin: 0 0 calc(var(--lm-space) * 0.5);
+  overflow: hidden;
   color: var(--lm-text-muted);
   font-size: 0.85em;
+  white-space: nowrap;
+}
+
+.doclist-meta > * {
+  flex: none;
 }
 
 .doclist-path {
+  flex: 0 1 auto;
+  min-width: 3ch;
+  overflow: hidden;
   font-family: var(--lm-font-mono);
+  text-overflow: ellipsis;
 }
 
 .doclist-warning {
@@ -297,20 +389,32 @@
   white-space: nowrap;
 }
 
-@media (max-width: 640px) {
+/* Same threshold as `_shared/compact.ts`'s `COMPACT_MEDIA_QUERY`; change both together. */
+@media (max-width: 640px), (max-height: 480px) and (pointer: coarse) {
   .doclist {
     padding: var(--lm-space);
   }
 
-  .doclist-item {
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      "title"
-      "meta"
-      "actions";
+  /*
+   * The row stays two columns here. Stacking it put a full-width "Move to Trash" under
+   * every document — 150 px per row, four documents to a screen, and the destructive
+   * action given the same visual weight as the title on the browse screen. Side by
+   * side, the title truncates and the button keeps its label.
+   */
+  .doclist-item-actions button {
+    padding: 0 calc(var(--lm-space) * 0.75);
+    font-size: 0.9em;
   }
 
   .doclist-grow {
     flex-basis: 100%;
+  }
+
+  .doclist-sort {
+    flex: 1 1 8rem;
+  }
+
+  .doclist-sort select {
+    width: 100%;
   }
 }

@@ -71,7 +71,7 @@ export function describeSync(state: SyncState): SyncDescription {
       return {
         label: "Offline",
         tone: "warn",
-        detail: `Offline. Everything is still readable, and documents you have opened are still editable.${unsynced}`,
+        detail: `Offline. Everything is readable; documents you have opened are editable.${unsynced}`,
         action: "reconnect",
         pending,
       };

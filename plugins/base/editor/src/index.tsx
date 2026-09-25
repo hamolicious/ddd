@@ -145,7 +145,7 @@ export default function activate(kernel: Kernel): EditorApi {
     [SETTING_FOLD_FRONTMATTER]: {
       type: "boolean",
       label: "Fold frontmatter when a document opens",
-      description: "Machine `%%%` sections always start folded; frontmatter is yours.",
+      description: "Machine sections always start folded.",
       default: true,
     },
   });
@@ -262,7 +262,7 @@ export default function activate(kernel: Kernel): EditorApi {
                   const chip = document.createElement("span");
                   chip.className = "cm-foldPlaceholder";
                   chip.textContent = `⋯ ${typeof prepared === "string" ? prepared : "machine data"}`;
-                  chip.title = "Click to expand";
+                  chip.title = "Expand";
                   chip.setAttribute("aria-label", `Expand ${chip.textContent.slice(2)}`);
                   chip.onclick = onclick;
                   return chip;
@@ -359,8 +359,8 @@ export default function activate(kernel: Kernel): EditorApi {
       return (
         <div className="editor-root editor-unhydrated">
           <p className="editor-notice">
-            Fetching the editable copy… Reading works meanwhile; offline, a document you
-            have never opened stays read-only until this device reconnects (SPEC §4.1).
+            Opening for editing… You can read it now. A document you have never opened
+            stays read-only until this device reconnects.
           </p>
           <pre className="editor-readonly">{row.content ?? ""}</pre>
         </div>
@@ -376,8 +376,7 @@ export default function activate(kernel: Kernel): EditorApi {
         ) : null}
         {open.phase === "error" ? (
           <p className="editor-notice" role="status">
-            This copy is local only — the server connection for this document is down.
-            Edits are kept and will sync on reconnect.
+            Offline. Your edits are saved here and sync when the connection returns.
           </p>
         ) : null}
         <div className="editor-surface" ref={host} />
@@ -445,12 +444,12 @@ function SaveState({ kernel }: { readonly kernel: Kernel }): ReactNode {
     }
     switch (state.status) {
       case "offline":
-        return "Offline — everything typed so far is saved locally";
+        return "Offline. Everything typed is saved on this device.";
       case "connecting":
       case "syncing":
         return "Reconnecting…";
       case "auth-required":
-        return "Sign in again to sync (nothing is lost)";
+        return "Sign in again to sync. Nothing is lost.";
       case "error":
         return state.lastError ? `Sync error: ${state.lastError}` : "Sync error";
       default:

@@ -49,10 +49,17 @@ import {
   type PluginAdminView,
   type PluginCronState,
 } from "./api.js";
+import { AdminSectionFrame } from "./AdminView.js";
 import { useAsync, useMutation } from "./hooks.js";
 import { PluginConfigForm } from "./PluginConfig.js";
 
-export function PluginsSection({ client }: { readonly client: AdminClient }): ReactElement {
+export function PluginsSection({
+  client,
+  embedded,
+}: {
+  readonly client: AdminClient;
+  readonly embedded?: boolean;
+}): ReactElement {
   const list = useAsync<PluginAdminList>(() => client.adminPlugins(), []);
   // The M3 read-only view, used only as a fallback: if the management endpoint cannot answer
   // (a server without the plugin host, or one that failed to reach Mongo), an admin should
@@ -69,9 +76,10 @@ export function PluginsSection({ client }: { readonly client: AdminClient }): Re
   );
 
   return (
-    <section className="admin-section" aria-labelledby="admin-plugins-heading">
-      <h3 id="admin-plugins-heading">Plugins</h3>
-
+    <AdminSectionFrame id="plugins" title="Plugins" embedded={embedded}>
+      {/* Two paragraphs of essay before the first control cost ~440 px on a phone, so the
+          recovery routes — which matter once something is already broken, not while you
+          are reading about trust — moved behind a disclosure. */}
       <div className="admin-callout">
         <p>
           <strong>Installing a plugin is an act of trust.</strong> Its frontend half runs
@@ -80,11 +88,14 @@ export function PluginsSection({ client }: { readonly client: AdminClient }): Re
           only the <em>server</em> host functions and native bridge calls — they are not a
           sandbox for the browser half.
         </p>
-        <p>
-          Recovery if a plugin breaks the app: <code>?safe=1</code> boots the base
-          distribution only, <code>?safe=bare</code> boots a minimal built-in plugin
-          manager, and <code>DISABLE_PLUGINS=1</code> on the server disables every plugin.
-        </p>
+        <details className="admin-details">
+          <summary>If a plugin breaks the app</summary>
+          <p className="admin-note">
+            <code>?safe=1</code> boots the base distribution only. <code>?safe=bare</code>{" "}
+            boots a minimal built-in plugin manager. <code>DISABLE_PLUGINS=1</code> on the
+            server disables every plugin for every client.
+          </p>
+        </details>
       </div>
 
       {list.data?.plugins_disabled === true && (
@@ -125,11 +136,7 @@ export function PluginsSection({ client }: { readonly client: AdminClient }): Re
             Pending installs{pending.length > 0 ? ` (${pending.length})` : ""}
           </h4>
           {pending.length === 0 ? (
-            <p className="admin-empty">
-              Nothing is waiting for approval. An uploaded package, and any package dropped
-              into the server’s inbox directory, appears here until an administrator approves
-              it — nothing of it runs and nothing of it is served in the meantime.
-            </p>
+            <p className="admin-empty">Nothing is waiting for approval.</p>
           ) : (
             <ul className="admin-plugins">
               {pending.map((plugin) => (
@@ -145,9 +152,7 @@ export function PluginsSection({ client }: { readonly client: AdminClient }): Re
 
           <h4>Installed</h4>
           {live.length === 0 ? (
-            <p className="admin-empty">
-              No plugins installed. If the app is rendering, it is doing so in safe mode.
-            </p>
+            <p className="admin-empty">No plugins installed.</p>
           ) : (
             <ul className="admin-plugins">
               {live.map((plugin) => (
@@ -181,7 +186,7 @@ export function PluginsSection({ client }: { readonly client: AdminClient }): Re
           )}
         </>
       )}
-    </section>
+    </AdminSectionFrame>
   );
 }
 
@@ -230,10 +235,8 @@ function UploadPanel({
           onChange={(event) => setFile(event.target.files?.[0] ?? undefined)}
         />
         <p className="admin-note">
-          The package lands <strong>pending</strong>: its capabilities are shown for approval
-          and nothing of it runs or is served until an administrator approves it. Uploading a
-          version of an already-installed plugin is how an upgrade happens — it goes through
-          the same approval.
+          Uploads wait for approval. Nothing runs until you approve it. A new version of an
+          installed plugin upgrades it.
           {cap !== undefined && <> Maximum package size {formatBytes(cap)}.</>}
         </p>
       </div>
@@ -347,8 +350,8 @@ function PendingCard({
               onChange={(event) => setHosts(event.target.value)}
             />
             <p className="admin-note">
-              Hosts are matched exactly — no wildcards, no scheme, no port. This is the one
-              field an approval may <em>add</em> to: a plugin whose destination you configure
+              Hosts match exactly: no wildcards, no scheme, no port. This is the one field
+              an approval may <em>add</em> to: a plugin whose destination you configure
               cannot know the host when it is packaged.
               {requested.http.hosts.length === 0 && (
                 <> This package requested none, so you are naming them.</>
@@ -552,7 +555,7 @@ function InstalledCard({
       {plugin.state === "failed" && (
         <p className="admin-warning" role="status">
           The backend half could not be activated: {plugin.last_error ?? "no reason recorded"}.
-          The frontend half is still served — half a plugin is usually better than none.
+          The frontend half is still served.
         </p>
       )}
       {plugin.last_error != null && plugin.state !== "failed" && (
@@ -684,8 +687,8 @@ function InstalledCard({
           disabled={mutate.busy !== undefined}
           onClick={() => {
             const message = purge
-              ? `Uninstall ${plugin.id} AND permanently delete its stored data and its %%% sections from every document? This cannot be undone.`
-              : `Uninstall ${plugin.id}? Its key-value data and its %%% sections are kept, so a reinstall picks up where it left off.`;
+              ? `Uninstall ${plugin.id} and delete its stored data? This cannot be undone.`
+              : `Uninstall ${plugin.id}? Its stored data is kept for a reinstall.`;
             if (!confirm(message)) return;
             mutate.run("uninstall", () => client.uninstallPlugin(plugin.id, purge));
           }}
@@ -695,9 +698,8 @@ function InstalledCard({
       </div>
       {plugin.base && (
         <p className="admin-note">
-          This is part of the base distribution. Uninstalling it removes a part of the visible
-          app — that is by design (the base set is installed like any other plugin), but
-          <code>?safe=bare</code> is the way back if it was the wrong one.
+          Uninstalling this removes part of the app. <code>?safe=bare</code> is the way
+          back.
         </p>
       )}
     </li>
@@ -719,53 +721,58 @@ function CronTable({
   return (
     <div className="admin-plugin-cron">
       <strong>Scheduled jobs</strong> <span className="admin-note">(UTC; missed runs are skipped)</span>
-      <table className="admin-table">
-        <thead>
-          <tr>
-            <th scope="col">Expression</th>
-            <th scope="col">Last run</th>
-            <th scope="col">Status</th>
-            <th scope="col">Runs</th>
-            <th scope="col">Failures</th>
-            <th scope="col" />
-          </tr>
-        </thead>
-        <tbody>
-          {plugin.cron.map((job: PluginCronState) => (
-            <tr key={job.index}>
-              <td>
-                <code>{job.expression}</code>
-              </td>
-              <td>{formatWhen(job.last_run)}</td>
-              <td>{job.last_status ?? "—"}</td>
-              <td>{job.runs}</td>
-              <td>{job.failures}</td>
-              <td>
-                <button
-                  type="button"
-                  disabled={!plugin.active || mutate.busy !== undefined}
-                  title={
-                    plugin.active
-                      ? "Run this job now. The schedule is not moved."
-                      : "The backend half is not loaded, so there is nothing to run."
-                  }
-                  onClick={() => {
-                    setResult(undefined);
-                    mutate.run(`cron-${job.index}`, async () => {
-                      const run = await client.runPluginCron(plugin.id, job.index);
-                      setResult(
-                        `Ran in ${run.duration_ms} ms, ${run.writes} document write(s), ${run.logs} log line(s).`,
-                      );
-                    });
-                  }}
-                >
-                  {mutate.busy === `cron-${job.index}` ? "Running…" : "Run now"}
-                </button>
-              </td>
+      {/* The one table in this plugin with no `.admin-table-scroll` parent, and six
+          columns to overflow with. It is invisible in a workspace whose plugins are all
+          frontend-only, which is why nothing caught it. */}
+      <div className="admin-table-scroll">
+        <table className="admin-table">
+          <thead>
+            <tr>
+              <th scope="col">Expression</th>
+              <th scope="col">Last run</th>
+              <th scope="col">Status</th>
+              <th scope="col">Runs</th>
+              <th scope="col">Failures</th>
+              <th scope="col" />
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {plugin.cron.map((job: PluginCronState) => (
+              <tr key={job.index}>
+                <th scope="row">
+                  <code>{job.expression}</code>
+                </th>
+                <td data-label="Last run">{formatWhen(job.last_run)}</td>
+                <td data-label="Status">{job.last_status ?? "—"}</td>
+                <td data-label="Runs">{job.runs}</td>
+                <td data-label="Failures">{job.failures}</td>
+                <td className="admin-actions">
+                  <button
+                    type="button"
+                    disabled={!plugin.active || mutate.busy !== undefined}
+                    title={
+                      plugin.active
+                        ? "Run this job now. The schedule is not moved."
+                        : "The backend half is not loaded, so there is nothing to run."
+                    }
+                    onClick={() => {
+                      setResult(undefined);
+                      mutate.run(`cron-${job.index}`, async () => {
+                        const run = await client.runPluginCron(plugin.id, job.index);
+                        setResult(
+                          `Ran in ${run.duration_ms} ms, ${run.writes} document write(s), ${run.logs} log line(s).`,
+                        );
+                      });
+                    }}
+                  >
+                    {mutate.busy === `cron-${job.index}` ? "Running…" : "Run now"}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       {mutate.error !== undefined && (
         <p className="admin-error" role="alert">
           {mutate.error}
@@ -813,10 +820,7 @@ function PluginLogs({
   const events = logs.data?.events ?? [];
   if (events.length === 0) {
     return (
-      <p className="admin-empty">
-        Nothing recorded for this plugin since the server started. This list lives in memory;
-        the audit log is the durable record.
-      </p>
+      <p className="admin-empty">Nothing recorded since the server started.</p>
     );
   }
   return (

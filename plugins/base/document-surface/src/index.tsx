@@ -135,7 +135,7 @@ export default function activate(kernel: Kernel): DocumentSurfaceApi {
     name: POINTS.documentMode,
     shape: documentModeShape,
     key: (mode) => mode.id,
-    description: "A way of showing one document — `read`, `edit`, or anything else.",
+    description: "How a document is displayed.",
   });
 
   kernel.settings.defineSchema({
@@ -592,8 +592,8 @@ function SurfaceView({
       <div className="docsurface-root docsurface-empty">
         <h1 className="docsurface-title">Document not found</h1>
         <p>
-          Nothing in this workspace has the id <code className="docsurface-id">{id}</code>. It may
-          have been permanently deleted, or this client may not have finished its first sync.
+          No document with the id <code className="docsurface-id">{id}</code>. It may have been
+          deleted, or this device may still be syncing.
         </p>
       </div>
     );
@@ -613,17 +613,17 @@ function SurfaceView({
       {row.deleted ? <TrashedBanner surface={surface} row={row} /> : null}
       {row.fm_parse_error ? (
         <p className="docsurface-notice docsurface-notice-warning" role="status">
-          This document’s frontmatter has a line that could not be read. The text is untouched;
-          open the properties panel to see which keys are missing.
+          One frontmatter line could not be read. The text is untouched — see the properties
+          panel.
         </p>
       ) : null}
       {snapshot.hydrationError && !snapshot.handle ? (
         <p className="docsurface-notice" role="status">
-          Editing is unavailable: the editable copy could not be fetched
+          Cannot edit: the editable copy did not load
           {" ("}
           {snapshot.hydrationError}
           {"). "}
-          Reading works from the replicated copy.
+          You can still read it.
         </p>
       ) : null}
 
@@ -645,8 +645,7 @@ function SurfaceView({
           />
         ) : (
           <p className="docsurface-empty">
-            No way of showing a document is installed. A workspace needs at least one{" "}
-            <code>document.mode</code> contribution.
+            No plugin can display a document. Ask an administrator to install one.
           </p>
         )}
       </section>
@@ -727,12 +726,27 @@ function ModeTabs({
             }}
           >
             <ModeIcon surface={surface} mode={mode} />
-            {mode.label}
+            {/* A span, so a label too long for a 360 px segment ellipsises instead of
+                widening the header (see `.docsurface-mode-label`). */}
+            <span className="docsurface-mode-label">{mode.label}</span>
           </button>
         );
       })}
     </div>
   );
+}
+
+/**
+ * A timestamp as a person reads it, in their own locale.
+ *
+ * The banner used to print the stored ISO string, which is the only place in the app
+ * that shows a user a `Z`-suffixed timestamp. Deliberately local to this plugin: `admin`
+ * has the same three lines and the two must not import each other (SPEC §6.4 — a plugin
+ * depends on another plugin's *API*, never its source).
+ */
+function formatWhen(iso: string): string {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
 }
 
 function TrashedBanner({
@@ -745,8 +759,8 @@ function TrashedBanner({
   const kernel = surface.kernel;
   return (
     <p className="docsurface-notice docsurface-notice-danger" role="status">
-      This document is in the Trash{row.deleted_at ? ` (deleted ${row.deleted_at})` : ""}. It is
-      restorable for 30 days.{" "}
+      In the Trash{row.deleted_at ? ` since ${formatWhen(row.deleted_at)}` : ""}. Restorable for
+      30 days.{" "}
       <button
         type="button"
         className="docsurface-restore"

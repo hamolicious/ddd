@@ -45,7 +45,7 @@ export function ReauthOverlay({ user, bearer, onSignedIn }: ReauthOverlayProps):
       .catch((cause: unknown) => {
         setError(
           cause instanceof ApiError && cause.status === 429
-            ? `Too many attempts — ${cause.message}`
+            ? `Too many attempts. ${cause.message}`
             : cause instanceof Error
               ? cause.message
               : String(cause),

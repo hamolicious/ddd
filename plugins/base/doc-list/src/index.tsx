@@ -86,12 +86,8 @@ export default function activate(kernel: Kernel): DocListApi {
       kernel.ui.notify({
         id: "doc-list.create-failed",
         level: "error",
-        message: "The document could not be created.",
-        detail:
-          `${message}\n\n` +
-          "Creating a document needs the server: it mints the id and records the document " +
-          "before it can be edited. Existing documents stay readable offline, and recently " +
-          "opened ones stay editable.",
+        message: "Could not create the document — the server is unreachable.",
+        detail: `${message}\n\nExisting documents still work offline.`,
         actions: [{ label: "Try again", run: () => create(options) }],
       });
     });

@@ -14,8 +14,16 @@
 
 import type { Unsubscribe } from "@kernel";
 
-/** SPEC §6.5's mobile breakpoint. Below it: drawer sidebar, single pane. */
-export const COMPACT_QUERY = "(max-width: 640px)";
+import { COMPACT_MEDIA_QUERY } from "../../_shared/compact.js";
+
+/**
+ * SPEC §6.5's mobile breakpoint: drawer sidebar, single pane.
+ *
+ * The string is `_shared/compact.ts`'s, not this file's, because every `style.css` in
+ * the base distribution opens its compact block with the same query and a layout that
+ * disagrees with `isCompact()` is worse than either behaviour alone.
+ */
+export const COMPACT_QUERY = COMPACT_MEDIA_QUERY;
 
 /** Where the per-device panel collapse state is remembered. */
 const PANELS_KEY = "life-manager.shell-ui.panels";

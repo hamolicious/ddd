@@ -78,18 +78,32 @@
   white-space: nowrap;
 }
 
+.search-hit {
+  min-width: 0;
+}
+
+/*
+ * Two lines, clamped — not one line with `text-overflow: ellipsis`.
+ *
+ * `text-overflow` only ellipses the *element's own* text; a snippet is a run of
+ * `<span>` and `<mark>` children from the highlighter, so the box clipped at 141 px
+ * over 500 px of content with no ellipsis and no warning: three words of every result,
+ * cut mid-syllable. A line clamp works on wrapped inline children and is what the
+ * results page already did the equivalent of.
+ */
 .search-hit-snippet,
 .search-result-snippet {
-  display: block;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
   color: var(--lm-text-muted);
   font-size: 0.88em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .search-result-snippet {
-  white-space: normal;
+  -webkit-line-clamp: 3;
 }
 
 .search-hit mark,
@@ -169,6 +183,18 @@
   cursor: pointer;
 }
 
+.search-sources {
+  color: var(--lm-text-muted);
+  font-size: 0.9em;
+}
+
+.search-sources > summary {
+  display: flex;
+  align-items: center;
+  min-height: var(--lm-tap-target);
+  cursor: pointer;
+}
+
 .search-providers {
   display: flex;
   flex-wrap: wrap;
@@ -201,6 +227,8 @@
 }
 
 .search-result-open {
+  max-width: 100%;
+  min-height: var(--lm-tap-target);
   padding: 0;
   border: 0;
   background: none;
@@ -208,19 +236,25 @@
   font: inherit;
   font-size: 1.05em;
   text-align: left;
+  /* A title can be one unbreakable token (a pasted URL); it wraps rather than scrolls. */
+  overflow-wrap: anywhere;
   cursor: pointer;
 }
 
 .search-result-meta {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--lm-space);
+  min-width: 0;
   margin: 2px 0;
   color: var(--lm-text-muted);
   font-size: 0.85em;
 }
 
 .search-result-path {
+  min-width: 0;
   font-family: var(--lm-font-mono);
+  overflow-wrap: anywhere;
 }
 
 .search-visually-hidden {
@@ -234,7 +268,8 @@
   white-space: nowrap;
 }
 
-@media (max-width: 640px) {
+/* Same threshold as `_shared/compact.ts`'s `COMPACT_MEDIA_QUERY`; change both together. */
+@media (max-width: 640px), (max-height: 480px) and (pointer: coarse) {
   .search-box {
     max-width: none;
     /*
@@ -247,7 +282,30 @@
     flex-basis: 10rem;
   }
 
+  /*
+   * The dropdown escapes the box it hangs off.
+   *
+   * It inherited the trigger's width, and the rule above makes that width small on
+   * purpose: measured `clientWidth` 141 at 360 px and 94 in landscape, for a panel
+   * whose job is to show a title and two lines of matching text. `position: fixed`
+   * with `top: auto` keeps the browser's own placement (directly under the input, its
+   * static position) and takes the width from the viewport instead — and the height
+   * from `dvh`, so browser chrome sliding away does not leave it hanging off-screen.
+   */
+  .search-dropdown {
+    position: fixed;
+    top: auto;
+    left: var(--lm-space);
+    right: var(--lm-space);
+    margin-top: 4px;
+    max-height: min(50dvh, 22rem);
+  }
+
   .search-results {
     padding: var(--lm-space);
+  }
+
+  .search-form button {
+    padding: 0 var(--lm-space);
   }
 }

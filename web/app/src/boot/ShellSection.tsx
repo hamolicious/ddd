@@ -41,7 +41,7 @@ export function contributeShellSection(host: KernelHost): void {
       id: SHELL_SECTION_ID,
       title: "This device",
       description:
-        "The app shell around this workspace: bridge version, what it can do natively, and which bundle is running.",
+        "Bridge version, native capabilities and the bundle running on this device.",
       order: 90,
       component: () => <ShellSection host={host} />,
     },
@@ -114,8 +114,8 @@ function ShellSection({ host }: { readonly host: KernelHost }): ReactNode {
           label="Up to date"
           value={
             manifest.bundleVersion === info.bundleVersion
-              ? "yes — this device is running the published bundle"
-              : "no — a newer bundle is published; it installs at the next launch"
+              ? "Yes"
+              : "No. A newer bundle installs at the next launch."
           }
         />
       ) : null}
@@ -133,8 +133,8 @@ function ShellSection({ host }: { readonly host: KernelHost }): ReactNode {
         label="Reminders"
         value={
           host.capabilities.notifications.supportsScheduled
-            ? "scheduled — they fire with the app closed"
-            : "foreground only — this device cannot schedule reminders"
+            ? "Scheduled. They fire with the app closed."
+            : "Foreground only. This device cannot schedule reminders."
         }
       />
       <Fact

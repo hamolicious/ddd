@@ -116,7 +116,7 @@ export class ExtensionRegistry {
           this.#report({
             pluginId: entry.pluginId,
             point: definition.name,
-            message: `duplicate key "${key}" — the contribution from "${winner}" wins`,
+            message: `Two plugins claim “${key}”. ${winner} is being used.`,
           });
           continue;
         }
@@ -161,7 +161,7 @@ export class ExtensionRegistry {
         this.#report({
           pluginId,
           point,
-          message: `duplicate key "${duplicate}" — the contribution from "${this.#owningPluginOfKey(point, duplicate)}" wins`,
+          message: `Two plugins claim “${duplicate}”. ${this.#owningPluginOfKey(point, duplicate)} is being used.`,
         });
         return { dispose: () => undefined };
       }

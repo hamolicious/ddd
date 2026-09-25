@@ -280,7 +280,8 @@ function MissingView({
         <p>
           {registered === 0
             ? "No plugin has contributed a view yet."
-            : "Pick something from the sidebar or the navigation bar."}
+            : // "the sidebar" is behind ☰ on a phone; "the menu" is true on both.
+              "Pick a view from the menu."}
         </p>
       </div>
     );
@@ -289,8 +290,10 @@ function MissingView({
     <div className="shell-empty" role="status">
       <h1>That view is not available</h1>
       <p>
-        Nothing provides the view <code>{view.id}</code>. The plugin that does may have
-        failed to load — check the notices in the navigation bar.
+        Nothing provides this view. Check the notices for a plugin that failed to load.
+      </p>
+      <p>
+        <code>{view.id}</code>
       </p>
     </div>
   );

@@ -68,15 +68,16 @@ export default function activate(kernel: Kernel): SearchApi {
   // The default: local, offline, live.
   kernel.extensions.contribute<SearchProvider>(POINTS.searchProvider, {
     id: "local",
-    label: "This device",
+    label: "On this device",
     order: 0,
     search: (query, options) => kernel.documents.search(query, options),
   });
 
-  // The fallback: the server's materialized index. Needs a network, and says so.
+  // The fallback: the server's materialized index. Needs a network; the note under the
+  // results says so when it fails, which is where a caveat belongs rather than in a label.
   kernel.extensions.contribute<SearchProvider>(POINTS.searchProvider, {
     id: "server",
-    label: "Server (needs a network)",
+    label: "On the server",
     order: 10,
     search: async (query, options) => {
       const params = new URLSearchParams({ search: query, limit: String(options.limit ?? 50) });

@@ -8,11 +8,20 @@
  * Every value comes from a kernel token, so themes reach this file for free.
  */
 
+/*
+ * `anywhere`, not `break-word`, and the difference is the whole bug.
+ *
+ * Both break a long word visually, but only `anywhere` also reduces the element's
+ * **min-content width**. With `break-word`, a 200-character URL still reports a
+ * 650 px minimum, every flex and grid ancestor sizes to it, and the entire document
+ * column — headings and paragraphs included — ends up wider than a 390 px phone.
+ */
 .md-root {
   color: var(--lm-text);
   font-family: var(--lm-font-sans);
   line-height: 1.6;
-  overflow-wrap: break-word;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .md-root > * + * {
@@ -29,8 +38,15 @@
   margin-block: calc(var(--lm-space) * 3) var(--lm-space);
 }
 
+/*
+ * A bare URL is one unbreakable word. `word-break` is the belt to `overflow-wrap`'s
+ * braces: Chrome breaks a long `href` on `anywhere` alone, but an autolink whose text
+ * has no break opportunity at all still needs the explicit permission.
+ */
 .md-root a {
   color: var(--lm-link);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .md-root blockquote {
@@ -47,11 +63,13 @@
 
 /* --- code ------------------------------------------------------------------ */
 
+/* Inline code is prose, so it wraps. Fenced code is a block, so it scrolls — below. */
 .md-inline-code {
   background: var(--lm-bg-subtle);
   border-radius: var(--lm-radius);
   font-family: var(--lm-font-mono);
   font-size: 0.9em;
+  overflow-wrap: anywhere;
   padding: 0.1em 0.35em;
 }
 
@@ -230,8 +248,15 @@
   padding: 0;
   /* Suppress the double-tap-zoom delay so a tick feels immediate on Android. */
   touch-action: manipulation;
-  /* A long-press must not raise the platform's own text-selection bubble. */
+  /*
+   * A long-press opens our state menu (SPEC §6.6), so the platform must not also
+   * raise its own selection bubble or link callout over the top of it. `user-select`
+   * covers the selection handles; `-webkit-touch-callout` covers the WebKit/Blink
+   * callout, which `preventDefault` on `contextmenu` does not always suppress in an
+   * Android webview.
+   */
   user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .md-task-box:disabled {
@@ -245,6 +270,14 @@
 
 /* --- menu ------------------------------------------------------------------ */
 
+/*
+ * The menu is positioned against its trigger, and CSS does not know where that trigger
+ * is: a task marker in an indented list at 360 px puts a 12 rem menu past the right
+ * edge. `PopupMenu` measures and writes the three custom properties below — a shift
+ * back inside the visual viewport, a height budget, and (via `data-place`) a flip above
+ * the trigger when there is no room under it. The declarations here are what the menu
+ * looks like when it already fits, so an unmeasured first paint is still correct.
+ */
 .md-menu {
   background: var(--lm-bg-raised);
   border: 1px solid var(--lm-border);
@@ -254,10 +287,20 @@
   flex-direction: column;
   inset-inline-start: 0;
   min-width: 12rem;
+  max-width: var(--md-menu-max-width, 16rem);
+  max-height: var(--md-menu-max-height, none);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: calc(var(--lm-space) * 0.5);
   position: absolute;
   top: 100%;
+  transform: translateX(var(--md-menu-shift, 0px));
   z-index: 20;
+}
+
+.md-menu[data-place="above"] {
+  top: auto;
+  bottom: 100%;
 }
 
 .md-menu-item {
@@ -268,9 +311,13 @@
   color: var(--lm-text);
   cursor: pointer;
   display: flex;
+  /* Never compressed below the tap target by the menu's own height budget. */
+  flex: 0 0 auto;
   font: inherit;
   gap: var(--lm-space);
   min-height: var(--lm-tap-target);
+  overflow-wrap: anywhere;
+  padding-block: calc(var(--lm-space) * 0.5);
   padding-inline: var(--lm-space);
   text-align: start;
   width: 100%;

@@ -34,12 +34,30 @@
   outline-offset: -2px;
 }
 
+/*
+ * The indent, as a variable rather than an inline `calc` in the component.
+ *
+ * At 12 px a level the tree ran out of room inside a 360 px drawer well before it ran
+ * out of nesting: four levels down, the twisty, the name, the count and two 44 px
+ * action buttons had nothing left. `--folders-indent` halves on a phone and the depth
+ * it is multiplied by is capped, so a deep path stays readable instead of becoming a
+ * column of ellipses. `--folders-depth` is the row's own depth, set by `FolderTree`.
+ */
+.folders-tree {
+  --folders-indent: calc(var(--lm-space) * 1.5);
+  --folders-indent-cap: 6;
+}
+
 .folders-node {
   display: flex;
   align-items: center;
   gap: 2px;
   min-height: var(--lm-tap-target);
   padding-right: calc(var(--lm-space) * 0.5);
+  padding-left: calc(
+    var(--lm-space) * 0.5 +
+      var(--folders-indent) * min(var(--folders-depth, 0), var(--folders-indent-cap))
+  );
   border-radius: var(--lm-radius);
 }
 
@@ -57,6 +75,11 @@
   outline-offset: -2px;
 }
 
+/*
+ * The control that expands a folder, and it measured 24 × 24 px. The mobile block at
+ * the foot of this file upsized the row's *action* buttons and left this one out, so
+ * the one thing a tree is for was the smallest target in it.
+ */
 .folders-twisty {
   flex: none;
   width: 1.5rem;
@@ -237,31 +260,60 @@
 
 .folders-doc-list li {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--lm-space);
-  padding: calc(var(--lm-space) * 0.5) 0;
+  min-width: 0;
+  padding: 0;
   border-bottom: 1px solid var(--lm-border);
 }
 
+/* Same fix as `doc-list`'s `.doclist-open`: keep the link look, restore the tap target. */
 .folders-doc {
-  min-height: auto !important;
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: var(--lm-tap-target) !important;
   padding: 0 !important;
   border: 0 !important;
   background: none !important;
   color: var(--lm-link) !important;
   text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   cursor: grab;
 }
 
+/* Nothing on a touch screen can grab; the cursor was advertising an absent gesture. */
+@media (hover: none) {
+  .folders-doc {
+    cursor: pointer;
+  }
+}
+
 .folders-doc-path {
+  flex: 0 1 auto;
+  min-width: 3ch;
+  overflow: hidden;
   color: var(--lm-text-muted);
   font-family: var(--lm-font-mono);
   font-size: 0.8em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .folders-json {
   color: var(--lm-text-muted);
   font-size: 0.85em;
+}
+
+/* A disclosure is a control; 19 px of inline text is not a tap target (doc-list too). */
+.folders-json > summary {
+  display: flex;
+  align-items: center;
+  min-height: var(--lm-tap-target);
+  cursor: pointer;
 }
 
 .folders-json pre {
@@ -273,14 +325,47 @@
   font-family: var(--lm-font-mono);
 }
 
-@media (max-width: 640px) {
-  /* Row actions cannot depend on hover on a touch device. */
+/*
+ * Row actions cannot depend on hover on a device that has none — and the width-only
+ * rule this replaces missed the case it mattered in most: a phone in landscape is
+ * 844 px wide, above the breakpoint, and had no hover, so "new document here" and
+ * "rename" were invisible and unreachable there. `(hover: none)` is the honest test.
+ */
+@media (hover: none) {
   .folders-actions {
     display: flex;
   }
 
   .folders-actions button {
     min-width: var(--lm-tap-target);
+    min-height: var(--lm-tap-target);
+  }
+
+  .folders-twisty {
+    width: var(--lm-tap-target);
+    min-height: var(--lm-tap-target);
+  }
+}
+
+/* Same threshold as `_shared/compact.ts`'s `COMPACT_MEDIA_QUERY`; change both together. */
+@media (max-width: 640px), (max-height: 480px) and (pointer: coarse) {
+  .folders-actions {
+    display: flex;
+  }
+
+  .folders-actions button {
+    min-width: var(--lm-tap-target);
+    min-height: var(--lm-tap-target);
+  }
+
+  /* Half the indent, so 44 px targets and a four-deep path fit the same 360 px drawer. */
+  .folders-tree {
+    --folders-indent: calc(var(--lm-space) * 0.75);
+    --folders-indent-cap: 4;
+  }
+
+  .folders-twisty {
+    width: var(--lm-tap-target);
     min-height: var(--lm-tap-target);
   }
 

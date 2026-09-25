@@ -119,7 +119,7 @@ function describe(cause: unknown): string {
   if (cause instanceof ApiError) {
     // 429 carries the backoff of SPEC §5.2; saying so beats "request failed".
     return cause.status === 429
-      ? `Too many attempts — ${cause.message}`
+      ? `Too many attempts. ${cause.message}`
       : cause.message;
   }
   return cause instanceof Error ? cause.message : String(cause);

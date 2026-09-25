@@ -202,7 +202,7 @@ test("a broken plugin fails alone, and safe mode boots past it", async ({ browse
       // that could give it one. Keying that dedupe on "something holds the mount" blanked
       // every notice on the one screen SPEC §6.1 calls the recovery path.
       await expect(page.locator(".lm-notices")).toBeVisible();
-      await expect(page.getByText(/may evict offline data/i)).toBeVisible();
+      await expect(page.getByText(/may delete this workspace's offline copy/i)).toBeVisible();
     } finally {
       await context.close();
     }

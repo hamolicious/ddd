@@ -1,5 +1,12 @@
 # Polish backlog
 
+> **Owner-queued (scripted as the `core-improvements` workflow, runs after the mobile/prose
+> wave):** task-list left alignment; frontmatter unfolded in edit mode + pretty properties
+> header in read mode; folders as a real drag-and-drop file tree (pathless notes at root,
+> empty-folder bookkeeping via settings, inline rename, delete with move-or-trash choice);
+> a settings entry for where new notes go (root by default); a settings entry for the
+> default document mode when opening (Read / Edit, read by default).
+
 What UX sweeps of the core flows found and **did not** fix, with enough to reproduce each
 one. Everything here was seen in a running build — the real server, the real bundle, the
 real plugin registry — at 1280 px and at 390 px, after the calendar and agenda removal.

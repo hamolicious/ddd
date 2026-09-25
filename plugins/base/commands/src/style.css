@@ -307,19 +307,49 @@
 }
 
 /* The mobile breakpoint is `shell-ui`'s (SPEC §6.5), but the palette is a full-screen
-   overlay of its own, so it honours the same threshold rather than asking the shell. */
-@media (max-width: 640px) {
+   overlay of its own, so it honours the same threshold rather than asking the shell.
+   Same line as `_shared/compact.ts`'s `COMPACT_MEDIA_QUERY`; change both together. */
+@media (max-width: 640px), (max-height: 480px) and (pointer: coarse) {
   .cmd-overlay {
     padding: 0;
   }
 
+  /*
+   * A sheet over the *visible* viewport, not the layout one.
+   *
+   * `height: 100%` measured the layout viewport, which Android does not shrink for the
+   * soft keyboard: the option list ran on underneath the keyboard, and with it closed
+   * the last row sat under the gesture bar. `Palette.tsx` publishes the two custom
+   * properties from `visualViewport`; `dvh` and `0px` are the fallbacks for a browser
+   * that has no such API, and `safe-area-inset-bottom` keeps the status line clear of
+   * the gesture bar (`viewport-fit=cover` is set on the app).
+   */
   .cmd-palette {
-    width: 100%;
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: var(--cmd-sheet-top, 0px);
+    box-sizing: border-box;
+    width: auto;
     max-width: none;
-    max-height: 100%;
-    height: 100%;
+    height: var(--cmd-sheet-height, 100dvh);
+    max-height: none;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
     border: 0;
     border-radius: 0;
+  }
+
+  /* The one part that scrolls; the input above and the count below stay put. */
+  .cmd-list {
+    overscroll-behavior: contain;
+  }
+
+  .cmd-input {
+    padding: var(--lm-space) calc(var(--lm-space) * 1.5);
+  }
+
+  .cmd-option {
+    padding: 0 calc(var(--lm-space) * 1.5);
   }
 
   /*
@@ -338,4 +368,60 @@
   .cmd-trigger .cmd-keys {
     display: none;
   }
+
+  /*
+   * The keybindings table becomes one card per command.
+   *
+   * Four columns in 360 px put all twenty "Change" buttons 22–28 px past the right
+   * edge, and the page had no horizontal scroller of its own, so it pushed `main`
+   * instead. `admin` wraps its tables in a scroller; that is right for a table with
+   * ten columns of data and wrong for three fields, which simply stack.
+   */
+  .cmd-table,
+  .cmd-table tbody,
+  .cmd-table tr,
+  .cmd-table th,
+  .cmd-table td {
+    display: block;
+  }
+
+  /* The header labels three columns that no longer exist; the cells say it themselves. */
+  .cmd-table thead {
+    display: none;
+  }
+
+  .cmd-table tr {
+    margin-bottom: var(--lm-space);
+    padding: calc(var(--lm-space) * 0.75);
+    border: 1px solid var(--lm-border);
+    border-radius: var(--lm-radius);
+  }
+
+  .cmd-table th,
+  .cmd-table td {
+    padding: calc(var(--lm-space) * 0.25) 0;
+    border-bottom: 0;
+  }
+
+  .cmd-table th[scope="row"] {
+    font-weight: 600;
+  }
+
+  .cmd-actions {
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+
+  .cmd-actions button {
+    flex: 1 1 8rem;
+  }
+
+  .cmd-field {
+    max-width: none;
+  }
+}
+
+/* A command id is one long dotted token; it wraps rather than widening its card. */
+.cmd-id {
+  overflow-wrap: anywhere;
 }

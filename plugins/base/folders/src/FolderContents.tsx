@@ -137,12 +137,11 @@ export function FolderContents({
         <div className="folders-empty">
           <p>
             {path === ""
-              ? "Every document has a folder."
+              ? "Nothing here yet."
               : `Nothing in ${path}${includeSubfolders ? " or its subfolders" : ""} yet.`}
           </p>
           <p>
-            A document joins this folder by having <code>path: {path || "…"}</code> in its
-            frontmatter — drag one here, or create one.
+            Set <code>path: {path || "…"}</code> in a document’s properties to file it here.
           </p>
         </div>
       ) : (
@@ -172,7 +171,7 @@ export function FolderContents({
       <details className="folders-json">
         {/* Same wording as the document list's own disclosure: a spec section number is
             a note to whoever builds this, not to whoever uses it. */}
-        <summary>Show this filter as the query language sees it</summary>
+        <summary>Show the filter as JSON</summary>
         <pre>{JSON.stringify(query.filter, null, 2)}</pre>
       </details>
     </section>

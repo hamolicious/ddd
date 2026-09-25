@@ -14,9 +14,10 @@
  * `kernel.documents.splice.setFrontmatterValue` call (SPEC §3.3). There is **no "Move
  * to…" action on a `doc-list` row** — its only document action is "Move to Trash" — so on
  * a touch screen, where HTML5 drag and drop does not exist, the properties panel is the
- * whole story. The visible hint at the foot of this tree says exactly that rather than
- * leaving a phone user to discover it. Adding the row action is `POLISH-BACKLOG.md` §2;
- * when it lands, this paragraph and that hint both change.
+ * whole story. The hint at the foot of this tree is written twice for that reason and
+ * `(hover: none)` picks which one is shown, so a phone is never told about a gesture it
+ * does not have. Adding the row action is `POLISH-BACKLOG.md` §2; when it lands, this
+ * paragraph and both hints change.
  *
  * The drag payload is a plain text/plain document id, deliberately: `doc-list` rows and
  * anything else that wants to be draggable into a folder only has to set that, with no
@@ -24,8 +25,9 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent, ReactElement } from "react";
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactElement } from "react";
 
+import { useTouchOnly } from "../../_shared/compact.js";
 import { buildTree, parentOf, type FolderNode, type PathRow } from "./path.js";
 
 /** The drag type a draggable document row should set. */
@@ -61,6 +63,7 @@ export function FolderTree({
   prompt,
 }: FolderTreeProps): ReactElement {
   const tree = useMemo(() => buildTree(rows), [rows]);
+  const touchOnly = useTouchOnly();
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [active, setActive] = useState<string | undefined>(undefined);
   const [dropTarget, setDropTarget] = useState<string | undefined>(undefined);
@@ -226,9 +229,8 @@ export function FolderTree({
         <div className="folders-empty">
           <p>No folders yet.</p>
           <p>
-            A folder is just a <code>path:</code> line in a document’s frontmatter —
-            <code> path: home/lists</code> puts it in <code>home</code> → <code>lists</code>.
-            Nothing is created or deleted: the tree is whatever paths exist.
+            A folder is a <code>path:</code> line in a document’s frontmatter.{" "}
+            <code>path: home/lists</code> files it under <code>home/lists</code>.
           </p>
         </div>
       ) : (
@@ -264,7 +266,9 @@ export function FolderTree({
                 ]
                   .filter(Boolean)
                   .join(" ")}
-                style={{ paddingLeft: `calc(var(--lm-space) * ${node.depth * 1.5 + 0.5})` }}
+                // The depth, not the padding: `style.css` owns how wide a level is, so
+                // the phone breakpoint can halve it and cap it without this file knowing.
+                style={{ "--folders-depth": node.depth } as CSSProperties}
                 onMouseDown={() => setActive(node.path)}
                 onDragOver={(event) => {
                   event.preventDefault();
@@ -332,7 +336,7 @@ export function FolderTree({
                     type="button"
                     tabIndex={isActive ? 0 : -1}
                     aria-label={`Rename or move ${node.path}`}
-                    title="Rename or move (F2)"
+                    title="Rename or move"
                     onClick={() => rename(node)}
                   >
                     ✎
@@ -363,11 +367,25 @@ export function FolderTree({
         </button>
       )}
 
+      {/*
+        Two hints, and the device decides which one is true. Describing a drag to a
+        screen that cannot drag (HTML5 drag and drop does not fire from touch) was three
+        sentences, two of them about gestures the reader does not have.
+      */}
       <p className="folders-hint">
-        Drag a document onto a folder to move it, or use a folder’s rename button
-        (<span aria-hidden="true">✎</span>, or F2 on the keyboard). Renaming rewrites{" "}
-        <code>fm.path</code> in every document inside it. On a touch screen, move a
-        document by editing its <code>path</code> in the properties panel.
+        {touchOnly ? (
+          <>
+            Move a document by editing its <code>path</code> in its properties. Rename a
+            folder with <span aria-hidden="true">✎</span>; that rewrites <code>path</code>{" "}
+            in every document inside it.
+          </>
+        ) : (
+          <>
+            Drag a document onto a folder to move it. Rename a folder with{" "}
+            <span aria-hidden="true">✎</span> or F2; that rewrites <code>path</code> in
+            every document inside it.
+          </>
+        )}
       </p>
     </div>
   );

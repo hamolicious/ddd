@@ -185,7 +185,7 @@ export default function activate(kernel: Kernel): FoldersApi {
     const target = normalizePath(to);
     if (source === "") throw new Error("the unfiled root cannot be renamed");
     if (isRecursiveRename(source, target)) {
-      throw new Error(`“${target}” is inside “${source}” — that would move the folder into itself`);
+      throw new Error(`Cannot move “${source}” into itself.`);
     }
 
     // The documents that actually move, decided before any write, so there is a total

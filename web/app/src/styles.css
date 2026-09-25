@@ -10,6 +10,29 @@
  * classes (SPEC §6.4). The `lm-` prefix here is the kernel's.
  */
 
+/*
+ * Two device tokens the kernel publishes beside the theme tokens, because every
+ * surface that fills the screen needs them and none of them can derive them alone.
+ *
+ * `--lm-safe-*` — `index.html` sets `viewport-fit=cover`, which lays the page out under
+ * the Android status bar and under the gesture bar. Anything anchored to a screen edge
+ * (the navbar, the drawer, the palette, the bottom-most scroller) has to pay the inset
+ * back or its first or last row is under system chrome. `env()` is 0 everywhere that
+ * has no insets, including every desktop browser and Playwright, so these are free.
+ *
+ * `--lm-viewport-height` — the visible height, kept current from `visualViewport` by
+ * `boot/viewport.ts`. The default is what the app used before it existed, so a browser
+ * without `visualViewport` and a test that never starts the tracker both behave exactly
+ * as they did.
+ */
+:root {
+  --lm-safe-top: env(safe-area-inset-top, 0px);
+  --lm-safe-right: env(safe-area-inset-right, 0px);
+  --lm-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --lm-safe-left: env(safe-area-inset-left, 0px);
+  --lm-viewport-height: 100vh;
+}
+
 *,
 *::before,
 *::after {
@@ -78,12 +101,29 @@ input {
   background: var(--lm-bg);
 }
 
+/*
+ * `<summary>` is a tap target and the global `button` rule above does not reach it.
+ * Four of them ship in the base distribution — a notice's "Details", an audit row's
+ * "Detail", and the query-language disclosure in both the document list and folder
+ * contents — and every one measured 19–23 px tall.
+ *
+ * Sized with padding rather than `display: flex`, which would take the disclosure
+ * triangle with it (no `::marker` is generated on a flex container).
+ */
+summary {
+  min-height: var(--lm-tap-target);
+  padding-block: calc((var(--lm-tap-target) - 1.5em) / 2);
+  cursor: pointer;
+}
+
 /* ---- frame ------------------------------------------------------------- */
 
 .lm-frame {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  /* Not `100%`: on Android the layout viewport keeps its full height while the soft
+     keyboard covers the bottom of it (see `boot/viewport.ts`). */
+  height: var(--lm-viewport-height);
 }
 
 .lm-outlet {
@@ -123,8 +163,12 @@ input {
   flex: 1 1 auto;
 }
 
+/* The strip's dismiss and action controls. A full tap target, not the tap target
+   minus 12 px: the strip is what the kernel draws when nothing else is holding the
+   mount — the bare recovery screen included — so these are the only controls on it. */
 .lm-notice button {
-  min-height: calc(var(--lm-tap-target) - 12px);
+  min-width: var(--lm-tap-target);
+  min-height: var(--lm-tap-target);
 }
 
 .lm-notice-detail pre {
@@ -142,7 +186,10 @@ input {
   display: grid;
   place-items: center;
   min-height: 100%;
-  padding: calc(var(--lm-space) * 3);
+  padding: calc(var(--lm-space) * 3 + var(--lm-safe-top))
+    calc(var(--lm-space) * 3 + var(--lm-safe-right))
+    calc(var(--lm-space) * 3 + var(--lm-safe-bottom))
+    calc(var(--lm-space) * 3 + var(--lm-safe-left));
 }
 
 .lm-boot-inner,
@@ -209,13 +256,28 @@ input {
  * flow exists to avoid. `color-mix` degrades to the fallback colour where it is
  * unsupported.
  */
+/*
+ * Sized from the visible height and scrollable, not `inset: 0` + `place-items: center`.
+ * Centred in the *layout* viewport, the password field sat behind the Android soft
+ * keyboard, and `position: fixed` is anchored to that same layout viewport, so
+ * scrolling could not rescue it either. `margin: auto` on the flex item keeps the
+ * dialog centred when there is room and lets it scroll from its own top when there is
+ * not — which `place-items: center` cannot do, because a centred grid item that
+ * overflows overflows in *both* directions.
+ */
 .lm-reauth {
   position: fixed;
-  inset: 0;
+  top: 0;
+  inset-inline: 0;
   z-index: 100;
-  display: grid;
-  place-items: center;
-  padding: calc(var(--lm-space) * 3);
+  height: var(--lm-viewport-height);
+  display: flex;
+  justify-content: center;
+  overflow-y: auto;
+  padding: calc(var(--lm-space) * 3 + var(--lm-safe-top))
+    calc(var(--lm-space) * 3 + var(--lm-safe-right))
+    calc(var(--lm-space) * 3 + var(--lm-safe-bottom))
+    calc(var(--lm-space) * 3 + var(--lm-safe-left));
   background: rgb(0 0 0 / 55%);
   background: color-mix(in srgb, var(--lm-bg) 25%, transparent);
   backdrop-filter: blur(2px);
@@ -223,6 +285,7 @@ input {
 
 .lm-reauth .lm-auth-form {
   width: min(28rem, 100%);
+  margin: auto;
 }
 
 .lm-reauth input[readonly] {
@@ -235,7 +298,16 @@ input {
 .lm-bare {
   max-width: 60rem;
   margin: 0 auto;
-  padding: calc(var(--lm-space) * 3);
+  padding: calc(var(--lm-space) * 3 + var(--lm-safe-top))
+    calc(var(--lm-space) * 3 + var(--lm-safe-right))
+    calc(var(--lm-space) * 3 + var(--lm-safe-bottom))
+    calc(var(--lm-space) * 3 + var(--lm-safe-left));
+}
+
+/* Five columns on a recovery screen. Safe mode is reached *because* something is
+   already wrong; it must not also be the screen that does not fit. */
+.lm-bare-scroll {
+  overflow-x: auto;
 }
 
 .lm-bare-table {
@@ -249,6 +321,16 @@ input {
   border-bottom: 1px solid var(--lm-border);
   text-align: left;
   vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+/* The two ways out, and the only controls above the table. They were 20 px tall on a
+   phone — inline links in a paragraph — on the screen someone reaches precisely
+   because the normal way in stopped working. */
+.lm-bare header a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--lm-tap-target);
 }
 
 .lm-bare footer {
@@ -256,14 +338,115 @@ input {
   color: var(--lm-text-muted);
 }
 
-/* ---- mobile ------------------------------------------------------------ */
+/* ---- "This device" (shell-only settings section) ------------------------ */
 
-@media (max-width: 640px) {
+/*
+ * `ShellSection.tsx` renders this `<dl>` and nothing styled it, so it fell back to a
+ * browser-default definition list: indented `<dd>`s, no grid, and a server URL or a
+ * bundle hash as one unwrapped line that pushed the whole settings pane sideways.
+ * Same two-column shape as `settings`' own `.settings-facts`, so the one kernel-owned
+ * section on that screen stops being the one that looks different.
+ */
+.lm-shell-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: calc(var(--lm-space) * 0.5) calc(var(--lm-space) * 2);
+  margin: 0;
+}
+
+.lm-shell-facts dt {
+  color: var(--lm-text-muted);
+}
+
+.lm-shell-facts dd {
+  margin: 0;
+  /* A bundle hash and a server URL are both unbreakable words. */
+  overflow-wrap: anywhere;
+}
+
+/* ---- compact: phones in both orientations ------------------------------ */
+
+/*
+ * `plugins/base/_shared/compact.ts` owns this query and every stylesheet in the base
+ * distribution opens its compact block with the same one. The second arm is what gives a
+ * phone in landscape (844 × 390) the mobile layout instead of the desktop one; the
+ * `pointer: coarse` on it is what keeps a short *desktop* window on the wide layout.
+ */
+@media (max-width: 640px), (max-height: 480px) and (pointer: coarse) {
+  .lm-boot,
+  .lm-auth,
+  .lm-empty,
+  .lm-reauth {
+    padding: calc(var(--lm-space) + var(--lm-safe-top))
+      calc(var(--lm-space) + var(--lm-safe-right))
+      calc(var(--lm-space) + var(--lm-safe-bottom))
+      calc(var(--lm-space) + var(--lm-safe-left));
+  }
+
   .lm-auth-form {
     padding: calc(var(--lm-space) * 2);
   }
 
   .lm-bare {
-    padding: var(--lm-space);
+    padding: calc(var(--lm-space) + var(--lm-safe-top))
+      calc(var(--lm-space) + var(--lm-safe-right))
+      calc(var(--lm-space) + var(--lm-safe-bottom))
+      calc(var(--lm-space) + var(--lm-safe-left));
+  }
+
+  /* One card per plugin instead of a five-column table nobody can read: the header
+     row goes away and each cell carries its own label. */
+  .lm-bare-scroll {
+    overflow-x: visible;
+  }
+
+  .lm-bare-table,
+  .lm-bare-table tbody,
+  .lm-bare-table tr,
+  .lm-bare-table th,
+  .lm-bare-table td {
+    display: block;
+  }
+
+  .lm-bare-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    clip-path: inset(50%);
+    overflow: hidden;
+  }
+
+  .lm-bare-table tr {
+    margin-bottom: var(--lm-space);
+    padding: calc(var(--lm-space) * 0.75);
+    border: 1px solid var(--lm-border);
+    border-radius: var(--lm-radius);
+  }
+
+  .lm-bare-table th,
+  .lm-bare-table td {
+    padding: 2px 0;
+    border-bottom: 0;
+  }
+
+  .lm-bare-table th[scope="row"] {
+    font-weight: 600;
+    font-size: 1.05em;
+  }
+
+  .lm-bare-table td::before {
+    content: attr(data-label) ": ";
+    color: var(--lm-text-muted);
+  }
+
+  .lm-shell-facts {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .lm-shell-facts dt {
+    margin-top: calc(var(--lm-space) * 0.75);
+    font-size: 0.85em;
   }
 }

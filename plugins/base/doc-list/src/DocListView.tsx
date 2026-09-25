@@ -217,10 +217,7 @@ export function TrashView({
         </button>
       </header>
 
-      <p className="doclist-note">
-        Documents stay here for {retentionDays} days, then the server purges them
-        permanently. Restoring brings a document back exactly as it was.
-      </p>
+      <p className="doclist-note">Deleted documents are kept for {retentionDays} days.</p>
 
       {(state.error ?? error) && (
         <p className="doclist-error" role="alert">
@@ -233,9 +230,7 @@ export function TrashView({
           Loading…
         </p>
       ) : rows.length === 0 ? (
-        <p className="doclist-empty">
-          Trash is empty. Deleted documents appear here for {retentionDays} days.
-        </p>
+        <p className="doclist-empty">Trash is empty.</p>
       ) : (
         <>
           <ul className="doclist-items">
@@ -288,22 +283,15 @@ function EmptyState({
   readonly hasFilter: boolean;
   readonly onCreate: () => void;
 }): ReactElement {
+  // One line and one action. The markdown tutorial that used to sit here is what the
+  // seeded welcome documents are for, and the reassurance that filtering is local was a
+  // sentence answering a question nobody had asked.
   if (hasFilter) {
-    return (
-      <p className="doclist-empty">
-        No document matches these conditions. Clearing them shows everything — the filter
-        runs on this device, so it is not a connection problem.
-      </p>
-    );
+    return <p className="doclist-empty">No document matches. Clear the filter.</p>;
   }
   return (
     <div className="doclist-empty">
       <p>No documents yet.</p>
-      <p>
-        Everything here is one markdown file: <code>---</code> frontmatter at the top, text
-        in the middle. Put <code>path: home/lists</code> in the frontmatter and it appears
-        in the folder tree.
-      </p>
       <button type="button" className="doclist-primary" onClick={onCreate}>
         Create the first document
       </button>

@@ -89,7 +89,7 @@ export function TaskCheckbox({
         aria-haspopup="menu"
         aria-expanded={menuOpen}
         disabled={!writable}
-        title={writable ? `${state.label} — right-click for all states` : state.label}
+        title={writable ? `${state.label}. Long-press for other states.` : state.label}
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();

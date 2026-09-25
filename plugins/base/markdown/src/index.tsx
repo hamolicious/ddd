@@ -297,7 +297,7 @@ export default function activate(kernel: Kernel): MarkdownApi {
         kernel.ui.notify({
           id: "markdown.promote.no-target",
           level: "info",
-          message: "Select an embedded file first, then promote it to a document.",
+          message: "Select an embedded file first.",
         });
         return;
       }

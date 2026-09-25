@@ -39,9 +39,7 @@ export function BareManager({ token }: { readonly token?: string }): ReactNode {
     <div className="lm-bare">
       <header>
         <h1>Plugin manager (safe mode)</h1>
-        <p>
-          No plugins are loaded. Kernel contract <code>{KERNEL_API_VERSION}</code>.
-        </p>
+        <p>No plugins are loaded.</p>
         <p>
           <a href={safeModeUrl("off")}>Normal boot</a> ·{" "}
           <a href={safeModeUrl("base")}>Base plugins only</a>
@@ -52,42 +50,51 @@ export function BareManager({ token }: { readonly token?: string }): ReactNode {
       {!plugins && !error ? <p>Loading the installed plugin list…</p> : null}
 
       {plugins ? (
-        <table className="lm-bare-table">
-          <thead>
-            <tr>
-              <th scope="col">Plugin</th>
-              <th scope="col">Version</th>
-              <th scope="col">Kernel</th>
-              <th scope="col">Base</th>
-              <th scope="col">Would load</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[...plugins]
-              .sort((a, b) => a.manifest.id.localeCompare(b.manifest.id))
-              .map((plugin) => {
-                const skipped = skipReason.get(plugin.manifest.id);
-                return (
-                  <tr key={plugin.manifest.id}>
-                    <th scope="row">{plugin.manifest.id}</th>
-                    <td>{plugin.manifest.version}</td>
-                    <td>
-                      <code>{plugin.manifest.kernel}</code>
-                    </td>
-                    <td>{plugin.base ? "yes" : "no"}</td>
-                    <td>{skipped ? `no — ${skipped.detail}` : "yes"}</td>
-                  </tr>
-                );
-              })}
-          </tbody>
-        </table>
+        // `data-label` on every cell, because at the compact breakpoint the kernel
+        // stylesheet drops the header row and stacks each plugin into a card.
+        <div className="lm-bare-scroll">
+          <table className="lm-bare-table">
+            <thead>
+              <tr>
+                <th scope="col">Plugin</th>
+                <th scope="col">Version</th>
+                <th scope="col">Kernel</th>
+                <th scope="col">Base</th>
+                <th scope="col">Would load</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...plugins]
+                .sort((a, b) => a.manifest.id.localeCompare(b.manifest.id))
+                .map((plugin) => {
+                  const skipped = skipReason.get(plugin.manifest.id);
+                  return (
+                    <tr key={plugin.manifest.id}>
+                      <th scope="row">{plugin.manifest.id}</th>
+                      <td data-label="Version">{plugin.manifest.version}</td>
+                      <td data-label="Kernel">
+                        <code>{plugin.manifest.kernel}</code>
+                      </td>
+                      <td data-label="Base">{plugin.base ? "yes" : "no"}</td>
+                      <td data-label="Would load">
+                        {skipped ? `no — ${skipped.detail}` : "yes"}
+                      </td>
+                    </tr>
+                  );
+                })}
+            </tbody>
+          </table>
+        </div>
       ) : null}
 
       <footer>
         <p>
-          Enabling and disabling plugins is an administrator action on the server
-          (M4). To stop the server serving plugins to every client at once, set
-          <code> DISABLE_PLUGINS=1</code> and restart it.
+          An administrator enables and disables plugins on the server. To stop the server
+          serving plugins to every client at once, set <code>DISABLE_PLUGINS=1</code> and
+          restart it.
+        </p>
+        <p>
+          Kernel contract <code>{KERNEL_API_VERSION}</code>.
         </p>
       </footer>
     </div>

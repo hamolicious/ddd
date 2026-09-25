@@ -168,8 +168,8 @@ function MountFailed({
     <div className="lm-empty" role="alert">
       <h1>The interface failed to render</h1>
       <p>
-        <code>{pluginId}</code> holds the UI mount and threw while rendering, so the app
-        has no layout. Your documents are untouched — this is a display failure.
+        <code>{pluginId}</code> draws the interface and it failed. Your documents are
+        untouched.
       </p>
       <pre className="lm-boot-error">{error.message}</pre>
       <p>
@@ -189,9 +189,9 @@ function NoShell({ bootMode }: { readonly bootMode: string }): ReactNode {
   return (
     <div className="lm-empty" role="alert">
       <h1>No user interface is mounted</h1>
+      <p>Your workspace loaded, but no plugin drew the interface.</p>
       <p>
-        The kernel started and the workspace is synced, but no plugin claimed the UI
-        mount — normally <code>shell-ui</code>. Boot mode: <code>{bootMode}</code>.
+        Boot mode: <code>{bootMode}</code>.
       </p>
       <p>
         <a href={safeModeUrl("base")}>Boot with base plugins only</a> ·{" "}

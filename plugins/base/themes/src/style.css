@@ -62,9 +62,11 @@
   background: var(--lm-bg-subtle);
 }
 
+/* The row is the hit area, but the control is what a thumb aims at: 1.1rem was
+   17.6 px of dot in a 44 px row. */
 .theme-option input {
-  width: 1.1rem;
-  height: 1.1rem;
+  width: 1.5rem;
+  height: 1.5rem;
   min-height: 0;
   margin: 0;
   accent-color: var(--lm-accent);
@@ -111,9 +113,11 @@
   word-break: break-all;
 }
 
-@media (max-width: 640px) {
+/* `plugins/base/_shared/compact.ts` owns this query. */
+@media (max-width: 640px), (max-height: 480px) and (pointer: coarse) {
   .theme-picker {
     gap: var(--lm-space);
+    max-width: none;
   }
 
   .theme-swatch {

@@ -68,6 +68,10 @@
   background: none !important;
   color: var(--lm-link) !important;
   text-align: left;
+  /* The audit log renders 26-character document ids and 64-hex invite tokens through
+     this. One of those is a 485 px unbreakable word in a 344 px column, and it dragged
+     nine ancestors and `main` sideways with it. */
+  overflow-wrap: anywhere;
 }
 
 .admin-link-active {
@@ -144,6 +148,15 @@
 .admin-checkbox {
   align-items: center;
   min-height: var(--lm-tap-target);
+}
+
+/* The row is the label and the label is 44 px, but the box is what a thumb aims at. */
+.admin-checkbox input,
+.admin-confirm input,
+.admin-capabilities label input {
+  width: 1.5rem;
+  height: 1.5rem;
+  accent-color: var(--lm-accent);
 }
 
 .admin-field {
@@ -426,18 +439,140 @@
   white-space: nowrap;
 }
 
-@media (max-width: 640px) {
+/* ---- the compact breakpoint --------------------------------------------- */
+
+/*
+ * `plugins/base/_shared/compact.ts` owns this query; `shell-ui`'s `state.ts` gives
+ * the same string to `matchMedia`.
+ *
+ * **Every table becomes one card per row.** The previous rule here released `nowrap`
+ * inside the `overflow-x: auto` wrapper, which does not stack anything — it squeezes
+ * columns, and `Last sign-in` rendered as three stacked fragments reading LAS / SIG /
+ * IN. Meanwhile the columns that were still off the right edge were `Actions`: on a
+ * 360 px screen `Reset link`, `Delete` and `Revoke` sat 64–167 px past it, reachable
+ * only by a horizontal swipe inside a nested scroller that draws no scrollbar on
+ * Android. Those are the only actions on those screens.
+ *
+ * So: the header row is hidden, each `<tr>` is a bordered card, each `<td>` prints its
+ * own column name from `data-label`, and the row's actions are full-width buttons at
+ * the bottom of the card. Every `<td>` in this plugin carries a `data-label` — that is
+ * the contract between the markup and this block.
+ */
+@media (max-width: 640px), (max-height: 480px) and (pointer: coarse) {
   .admin {
+    padding: var(--lm-space) calc(var(--lm-space) + var(--lm-safe-right))
+      calc(var(--lm-space) + var(--lm-safe-bottom))
+      calc(var(--lm-space) + var(--lm-safe-left));
+  }
+
+  /* The wrapper has nothing left to scroll: the table is a column of cards. */
+  .admin-table-scroll {
+    overflow-x: visible;
+  }
+
+  .admin-table,
+  .admin-table tbody,
+  .admin-table tr,
+  .admin-table th,
+  .admin-table td {
+    display: block;
+  }
+
+  .admin-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .admin-table tr {
+    margin-bottom: var(--lm-space);
     padding: var(--lm-space);
+    border: 1px solid var(--lm-border);
+    border-radius: var(--lm-radius);
+    background: var(--lm-bg-raised);
   }
 
   .admin-table th,
   .admin-table td {
+    padding: calc(var(--lm-space) * 0.25) 0;
+    border-bottom: 0;
     white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  /* The row header is the card's title. */
+  .admin-table th[scope="row"] {
+    margin-bottom: calc(var(--lm-space) * 0.5);
+    font-size: 1.05em;
+    font-weight: 600;
+  }
+
+  .admin-table td::before {
+    content: attr(data-label);
+    display: block;
+    color: var(--lm-text-muted);
+    font-size: 0.75em;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  /* A cell whose whole content is a control says what the control is for once. */
+  .admin-table td.admin-actions::before {
+    content: none;
+  }
+
+  .admin-table td.admin-actions {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--lm-space) * 0.5);
+    margin-top: calc(var(--lm-space) * 0.75);
+    padding-top: calc(var(--lm-space) * 0.75);
+    border-top: 1px solid var(--lm-border);
   }
 
   .admin-actions {
     flex-direction: column;
+  }
+
+  .admin-actions > button {
+    width: 100%;
+  }
+
+  /* An inline form is a stack of full-width fields on a phone. */
+  .admin-inline-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .admin-field {
+    min-width: 0;
+  }
+
+  .admin-events {
+    max-height: none;
+  }
+
+  /*
+   * The snapshot picker is a wrapped row of document chips, and choosing one is the
+   * only way into the rest of that screen — a primary control, measured at 20–41 px
+   * tall. `.admin-link` deliberately strips the kernel's button styling with
+   * `!important` so an id inside a sentence reads as a link (the audit log's use,
+   * which should stay inline), so this has to answer in kind; the narrower selector
+   * alone cannot beat it.
+   *
+   * Scoped to `.admin-picker`, not to `.admin-link`, for exactly that reason: the
+   * rule is about a list row, not about every link in the plugin.
+   */
+  .admin-picker .admin-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--lm-tap-target) !important;
+    padding: 0 calc(var(--lm-space) * 0.75) !important;
   }
 }
 
@@ -512,11 +647,9 @@
   padding: 8px var(--lm-space);
 }
 
+/* Sizing comes from the kernel stylesheet's `summary` rule, which every disclosure in
+   the app now shares; this only adds the weight. */
 .admin-details > summary {
-  cursor: pointer;
-  min-height: var(--lm-tap-target);
-  display: flex;
-  align-items: center;
   font-weight: 600;
 }
 

@@ -149,15 +149,14 @@ function SignOut({ kernel }: { readonly kernel: Kernel }): ReactNode {
     <section className="settings-signout">
       <h3>Sign out</h3>
       <p className="settings-muted">
-        Signing out clears this device's local copy of the workspace — the offline
-        projection, the documents you have opened and the search index. Anything already
+        Signing out clears this device's local copy of the workspace. Anything already
         synced stays on the server.
       </p>
       {pending > 0 ? (
         <p className="settings-warning" role="status">
           {pending} local edit{pending === 1 ? "" : "s"} {pending === 1 ? "has" : "have"} not
           reached the server yet. Wait for the sync indicator to settle, or sign out
-          discarding them — that cannot be undone.
+          discarding them. Discarded edits cannot be recovered.
         </p>
       ) : null}
       {error ? (

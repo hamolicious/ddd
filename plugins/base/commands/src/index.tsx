@@ -345,7 +345,7 @@ export default function activate(kernel: Kernel): CommandsApi {
     id: "commands.keybindings",
     title: "Keybindings",
     order: 200,
-    description: "Rebind any command. Your bindings win over plugin defaults.",
+    description: "Change any command's shortcut.",
     component: createKeybindingsSection({
       commands: () => api.list(),
       bindings: () => resolved,

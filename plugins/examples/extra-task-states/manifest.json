@@ -12,7 +12,7 @@
     "module": "frontend/index.mjs"
   },
   "name": "Extra task states",
-  "description": "Adds `[/]` in progress, `[-]` dropped and `[?]` question to the markdown task-state registry (SPEC §6.6).",
+  "description": "Adds three task markers: [/] in progress, [-] dropped, [?] question.",
   "author": "Life Manager examples",
   "license": "MIT OR Apache-2.0"
 }

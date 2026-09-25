@@ -32,6 +32,8 @@ import { loadCore, type CoreBindings } from "@kernel/wasm/index.js";
 import { KernelHost, type PluginProblem } from "@kernel/runtime/index.js";
 import type { BootMode, LogoutOptions, SessionUser } from "@kernel";
 
+import { inShell } from "./shell.js";
+
 export interface KernelInitOptions {
   readonly user: SessionUser;
   /** Present only in a shell (SPEC §5.2); browsers authenticate with the cookie. */
@@ -131,7 +133,7 @@ export async function initKernel(options: KernelInitOptions): Promise<KernelRunt
     host.notices.notify({
       id: "kernel:settings-unavailable",
       level: "warning",
-      message: "Your settings could not be read; defaults are in use.",
+      message: "Your settings could not be read, so defaults are in use. Reload to try again.",
       detail: reason,
     });
   });
@@ -144,14 +146,21 @@ export async function initKernel(options: KernelInitOptions): Promise<KernelRunt
   await sync.start();
 
   // SPEC §6.4: ask for persistent storage at first login, warn if denied.
+  //
+  // **Not inside the shell.** `navigator.storage.persist()` answers for a *browser*
+  // profile's eviction policy; in the Flutter webview the workspace lives in the app's
+  // own private storage, which Android clears only when the app is uninstalled or the
+  // user clears its data. The permission is routinely refused there, so the warning
+  // fired on every launch and said something untrue about the device it was on.
   void host.capabilities.requestPersistence().then((report) => {
-    if (report.persisted) return;
+    if (report.persisted || inShell()) return;
     host.notices.notify({
       id: "kernel:storage-not-persisted",
       level: "warning",
-      message: "This browser may evict offline data.",
-      detail:
-        "Storage persistence was not granted, so the browser can clear the local workspace copy under disk pressure. Unsynced edits are the only thing at risk.",
+      // Risk and remedy in one breath, in the message: a `<details>` the reader has to
+      // open is not where you put the half that tells them what to do.
+      message:
+        "The browser may delete this workspace's offline copy if storage runs low. Sync while you are online so nothing is lost.",
     });
   });
 

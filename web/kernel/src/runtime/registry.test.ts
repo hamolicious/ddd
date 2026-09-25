@@ -100,7 +100,7 @@ describe("ExtensionRegistry", () => {
     registry.contribute("other", "commands.command", { id: "open", label: "Open too" });
 
     expect(registry.get<Item>("commands.command")).toEqual([{ id: "open", label: "Open" }]);
-    expect(reports[0]).toMatch(/duplicate key "open"/);
+    expect(reports[0]).toMatch(/Two plugins claim “open”/);
   });
 
   it("applies the duplicate-key rule to buffered contributions too", () => {
@@ -123,7 +123,7 @@ describe("ExtensionRegistry", () => {
       { id: "close", label: "Close" },
     ]);
     expect(reports).toHaveLength(1);
-    expect(reports[0]).toMatch(/duplicate key "open" — the contribution from "docs" wins/);
+    expect(reports[0]).toMatch(/Two plugins claim “open”\. docs is being used\./);
   });
 
   it("removePlugin withdraws everything a failed plugin contributed", () => {

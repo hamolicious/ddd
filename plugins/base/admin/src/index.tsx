@@ -61,11 +61,11 @@ interface RouterService {
 const SETTINGS_TITLES: Readonly<Record<AdminSectionId, { title: string; description: string }>> = {
   users: {
     title: "Users",
-    description: "Who can sign in, who is an administrator, and one-time reset links.",
+    description: "Accounts, admin rights, and password reset links.",
   },
   invites: {
     title: "Invites",
-    description: "Single-use, 7-day invite tokens. Registration needs one after the first user.",
+    description: "Single-use invite tokens, valid 7 days.",
   },
   audit: {
     title: "Audit log",
@@ -73,7 +73,7 @@ const SETTINGS_TITLES: Readonly<Record<AdminSectionId, { title: string; descript
   },
   orphans: {
     title: "Orphan files",
-    description: "Stored blobs that no document references. Reported, never auto-deleted.",
+    description: "Stored files no document references. Nothing is deleted automatically.",
   },
   snapshots: {
     title: "Snapshots",
@@ -85,7 +85,7 @@ const SETTINGS_TITLES: Readonly<Record<AdminSectionId, { title: string; descript
   },
   workspace: {
     title: "Workspace",
-    description: "Counters, and the markdown export that needs no database to restore.",
+    description: "Workspace counters and the markdown export.",
   },
 };
 
@@ -132,12 +132,23 @@ export default function activate(kernel: Kernel): AdminApi {
     // One settings section per admin area, each rendering the same component the tab does.
     ADMIN_SECTIONS.forEach((id, index) => {
       const meta = SETTINGS_TITLES[id];
+      // `embedded`: the settings shell draws the `<h2>` and the description above this,
+      // so the section must not draw its own heading a second line below them.
       const Section = (): ReactElement => (
-        <AdminSectionBody section={id} client={client} documents={kernel.documents} selfId={selfId} />
+        <AdminSectionBody
+          section={id}
+          client={client}
+          documents={kernel.documents}
+          selfId={selfId}
+          embedded
+        />
       );
       kernel.extensions.contribute<SettingsSection>(POINTS.settingsSection, {
         id: `admin.${id}`,
-        title: `Administration — ${meta.title}`,
+        // The title alone. "Administration — " on all seven was the main reason the
+        // settings section list was 1 860 px wide, and it duplicated the `<h2>` that
+        // renders directly beneath it.
+        title: meta.title,
         description: meta.description,
         order: 900 + index,
         component: Section,

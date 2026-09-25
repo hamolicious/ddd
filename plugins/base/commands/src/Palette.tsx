@@ -12,12 +12,20 @@
  * `kernel.ui.mount` (SPEC §6.4) — a plugin that wanted its own root would be taking a
  * mount point that is not its to take. The overlay is therefore a sibling of the app,
  * which is also what makes it survive a shell that re-renders underneath it.
+ *
+ * **On a phone it is a sheet measured against the *visual* viewport.** Android's soft
+ * keyboard does not shrink the layout viewport, so `position: fixed; inset: 0` covers the
+ * area behind the keyboard: the input survived (it is at the top) and the last options
+ * were unreachable underneath it. `visualViewport` is what reports the visible box, and
+ * it moves on scroll as well as on resize — the two custom properties below are that
+ * measurement, with `dvh` in the stylesheet as the fallback for a browser without the API.
  */
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent, ReactElement } from "react";
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactElement } from "react";
 import { createPortal } from "react-dom";
 
+import { useCompact, useVisibleViewport } from "../../_shared/compact.js";
 import { formatKeys } from "./keys.js";
 import { rankMatches } from "./match.js";
 import type { Command } from "../../_shared/points.js";
@@ -126,9 +134,22 @@ export function Palette({
   const listboxId = `${baseId}-list`;
   const activeId = results.length > 0 ? `${baseId}-option-${clamped}` : undefined;
 
+  // Measured only where it is used: on a wide screen the palette is a centred dialog
+  // with a `max-height` and there is nothing for a viewport listener to do.
+  const compact = useCompact();
+  const visible = useVisibleViewport(compact);
+  const sheet: CSSProperties | undefined =
+    compact && visible
+      ? ({
+          "--cmd-sheet-top": `${visible.top}px`,
+          "--cmd-sheet-height": `${visible.height}px`,
+        } as CSSProperties)
+      : undefined;
+
   return createPortal(
     <div
       className="cmd-overlay"
+      {...(sheet ? { style: sheet } : {})}
       // A click on the backdrop dismisses; a click inside must not.
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();

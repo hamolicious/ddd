@@ -22,6 +22,9 @@
  *    keystroke.
  * 4. **No `position: fixed` chrome.** On Android a fixed element is positioned against
  *    the *un*resized viewport, so a fixed status bar sits behind the keyboard.
+ * 5. **`min-width: 0` on every flex child too.** The height twin of rule 2. Without it
+ *    the editor refuses to be narrower than its longest line and `.cm-scroller`'s
+ *    horizontal scrolling leaks out to the page.
  */
 
 .editor-root {
@@ -29,6 +32,7 @@
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   height: 100%;
   color: var(--lm-text);
   font-family: var(--lm-font-sans);
@@ -40,18 +44,43 @@
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
 }
 
 .editor-surface .cm-editor {
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
+  max-width: 100%;
 }
 
-/* Comfortable reading measure without centring the caret column on wide screens. */
+/*
+ * Whatever a line does, it does inside here. Lines wrap (`EditorView.lineWrapping`), so
+ * the only things that can still be too wide are the ones CodeMirror will not break —
+ * and rule 3 says they scroll in `.cm-scroller`, not on the page.
+ */
+.editor-surface .cm-scroller {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+/*
+ * Comfortable reading measure without centring the caret column on wide screens, plus
+ * scroll headroom so the caret can reach the middle of the screen rather than sitting on
+ * the bottom edge above the keyboard.
+ *
+ * The headroom used to be `40vh`, which contradicts rule 1 three lines up: `vh` is the
+ * *large* viewport, so it is 338 px on an 844 px-tall phone whether the keyboard is open
+ * or not. `--lm-viewport-height` is the shell's measured `visualViewport.height`, which
+ * is the number rule 1 is actually about. The fallback is `100dvh` so this degrades to
+ * roughly the old behaviour wherever that token has not been painted yet.
+ */
 .editor-surface .cm-content {
   max-width: 88ch;
-  padding: calc(var(--lm-space) * 2) calc(var(--lm-space) * 2) 40vh;
+  padding: calc(var(--lm-space) * 2) calc(var(--lm-space) * 2)
+    calc(var(--lm-viewport-height, 100dvh) * 0.4);
 }
 
 .editor-status {
@@ -104,6 +133,7 @@
 .editor-readonly {
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
   margin: 0;
   padding: calc(var(--lm-space) * 2);
   overflow: auto;
@@ -115,9 +145,22 @@
   white-space: pre-wrap;
 }
 
-@media (max-width: 640px) {
+/* Same threshold as `_shared/compact.ts`'s `COMPACT_MEDIA_QUERY`; change both together. */
+@media (max-width: 640px), (max-height: 480px) and (pointer: coarse) {
   .editor-surface .cm-content {
-    padding: var(--lm-space) var(--lm-space) 40vh;
+    padding: var(--lm-space) calc(var(--lm-space) * 1.5)
+      calc(var(--lm-viewport-height, 100dvh) * 0.4);
+  }
+
+  /* The status line wraps rather than pushing the editor wide. */
+  .editor-status {
+    padding: calc(var(--lm-space) / 2) var(--lm-space);
+    overflow-wrap: anywhere;
+  }
+
+  .editor-notice {
+    padding: var(--lm-space);
+    overflow-wrap: anywhere;
   }
 
   /* Bigger hit area for the fold placeholder — 44 px targets (SPEC §6.5). */

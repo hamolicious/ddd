@@ -15,15 +15,34 @@
 .viewer-root {
   color: var(--lm-text);
   font-family: var(--lm-font-sans);
+  /* Without this the pane sizes to the widest unbreakable word, not to the screen. */
+  min-width: 0;
 }
 
+/*
+ * `anywhere`, not `break-word`: only `anywhere` reduces the element's min-content width,
+ * and it is that width an ancestor sizes to. With `break-word` one long URL made the
+ * whole reading column 659 px wide inside a 390 px pane — headings, paragraphs and all.
+ */
+/*
+ * `width: 100%` is load-bearing and was the other half of the 659 px column.
+ *
+ * `.docsurface-pane` is a column flex container, and an `auto` cross-axis margin on a
+ * flex item **cancels `align-items: stretch`**: `margin: 0 auto` therefore stopped this
+ * article filling the pane and made it size to fit-content instead — which, clamped by
+ * `max-width: 72ch`, is 659 px whatever the screen is. An explicit width restores the
+ * stretch, `max-width` still caps the measure on a desktop, and the auto margins still
+ * centre it there. Global `box-sizing: border-box` keeps the padding inside the 100%.
+ */
 .viewer-body {
+  width: 100%;
   max-width: 72ch;
+  min-width: 0;
   padding: calc(var(--lm-space) * 3) calc(var(--lm-space) * 2);
   margin: 0 auto;
   font-size: 1rem;
   line-height: 1.65;
-  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
 }
 
 .viewer-body > :first-child {
@@ -59,6 +78,8 @@
 
 .viewer-body a {
   color: var(--lm-link);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .viewer-body code {
@@ -67,10 +88,13 @@
   background: var(--lm-bg-subtle);
   font-family: var(--lm-font-mono);
   font-size: 0.9em;
+  overflow-wrap: anywhere;
 }
 
+/* A code block is the sanctioned exception: it scrolls inside its own box. */
 .viewer-body pre {
   padding: var(--lm-space);
+  max-width: 100%;
   overflow-x: auto;
   border: 1px solid var(--lm-border);
   border-radius: var(--lm-radius);
@@ -96,6 +120,7 @@
 
 .viewer-body table {
   display: block;
+  max-width: 100%;
   overflow-x: auto;
   border-collapse: collapse;
 }
@@ -227,9 +252,31 @@
   max-width: 62ch;
 }
 
-@media (max-width: 640px) {
+/*
+ * Phone reading measure.
+ *
+ * The desktop rules put 8 px of side padding on a 390 px screen, which is a line that
+ * starts at the bezel, and kept the desktop heading scale, which at that width gives an
+ * `h1` a third of the line box. Wider gutters (so the measure lands near 40 characters
+ * rather than 46), a touch more leading, and headings a step smaller.
+ */
+/* Same threshold as `_shared/compact.ts`'s `COMPACT_MEDIA_QUERY`; change both together. */
+@media (max-width: 640px), (max-height: 480px) and (pointer: coarse) {
   .viewer-body {
-    padding: calc(var(--lm-space) * 2) var(--lm-space);
+    padding: calc(var(--lm-space) * 2) calc(var(--lm-space) * 2);
+    line-height: 1.7;
+  }
+
+  .viewer-body h1 {
+    font-size: 1.4rem;
+  }
+
+  .viewer-body h2 {
+    font-size: 1.2rem;
+  }
+
+  .viewer-body h3 {
+    font-size: 1.05rem;
   }
 
   .viewer-attachment {

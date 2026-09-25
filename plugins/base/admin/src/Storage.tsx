@@ -24,23 +24,27 @@ import type { ReactElement } from "react";
 
 import type { DocumentsApi } from "@kernel";
 
+import { AdminSectionFrame } from "./AdminView.js";
 import { formatBytes, formatWhen, type AdminClient } from "./api.js";
 import { useAsync, useMutation } from "./hooks.js";
 
-export function OrphansSection({ client }: { readonly client: AdminClient }): ReactElement {
+export function OrphansSection({
+  client,
+  embedded,
+}: {
+  readonly client: AdminClient;
+  readonly embedded?: boolean;
+}): ReactElement {
   const orphans = useAsync(() => client.orphans(), []);
   const mutation = useMutation(() => orphans.reload());
   const rows = orphans.data ?? [];
   const total = rows.reduce((sum, row) => sum + row.attachment.size, 0);
 
   return (
-    <section className="admin-section" aria-labelledby="admin-orphans-heading">
-      <h3 id="admin-orphans-heading">Orphan files</h3>
-
+    <AdminSectionFrame id="orphans" title="Orphan files" embedded={embedded}>
       <p className="admin-note">
-        Blobs that no document’s text references — including <code>%%%</code> sections, since
-        the scan reads the materialized text. Nothing is deleted automatically. A file
-        referenced only by a document in Trash is <em>not</em> an orphan.
+        Files no document references. Nothing is deleted automatically; a file used only
+        by a trashed document is not an orphan.
       </p>
 
       {(orphans.error ?? mutation.error) && (
@@ -65,7 +69,7 @@ export function OrphansSection({ client }: { readonly client: AdminClient }): Re
       {orphans.loading ? (
         <p role="status">Loading…</p>
       ) : rows.length === 0 ? (
-        <p className="admin-empty">No orphan files. Every stored blob is referenced.</p>
+        <p className="admin-empty">No orphan files. Every stored file is referenced.</p>
       ) : (
         <>
           <p className="admin-note">
@@ -90,10 +94,10 @@ export function OrphansSection({ client }: { readonly client: AdminClient }): Re
                       {attachment.name}
                       <span className="admin-hint">{attachment.id}</span>
                     </th>
-                    <td>{attachment.mime}</td>
-                    <td>{formatBytes(attachment.size)}</td>
-                    <td>{formatWhen(attachment.created_at)}</td>
-                    <td>{formatWhen(flagged_at)}</td>
+                    <td data-label="Type">{attachment.mime}</td>
+                    <td data-label="Size">{formatBytes(attachment.size)}</td>
+                    <td data-label="Uploaded">{formatWhen(attachment.created_at)}</td>
+                    <td data-label="Flagged">{formatWhen(flagged_at)}</td>
                     <td className="admin-actions">
                       <button
                         type="button"
@@ -102,7 +106,7 @@ export function OrphansSection({ client }: { readonly client: AdminClient }): Re
                         onClick={() => {
                           if (
                             !confirm(
-                              `Delete ${attachment.name} permanently? The bytes are removed from storage and cannot be recovered.`,
+                              `Delete ${attachment.name} permanently? The file cannot be recovered.`,
                             )
                           ) {
                             return;
@@ -120,16 +124,21 @@ export function OrphansSection({ client }: { readonly client: AdminClient }): Re
           </div>
         </>
       )}
-    </section>
+    </AdminSectionFrame>
   );
 }
 
 export interface SnapshotsSectionProps {
   readonly client: AdminClient;
   readonly documents: DocumentsApi;
+  readonly embedded?: boolean;
 }
 
-export function SnapshotsSection({ client, documents }: SnapshotsSectionProps): ReactElement {
+export function SnapshotsSection({
+  client,
+  documents,
+  embedded,
+}: SnapshotsSectionProps): ReactElement {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<{ readonly id: string; readonly title: string } | undefined>();
 
@@ -154,12 +163,10 @@ export function SnapshotsSection({ client, documents }: SnapshotsSectionProps): 
   const mutation = useMutation(() => snapshots.reload());
 
   return (
-    <section className="admin-section" aria-labelledby="admin-snapshots-heading">
-      <h3 id="admin-snapshots-heading">Snapshots</h3>
-
+    <AdminSectionFrame id="snapshots" title="Snapshots" embedded={embedded}>
       <p className="admin-note">
-        Every document keeps its last 20 snapshots plus one per day for 30 days. Restoring
-        replaces the whole text — frontmatter included — in one CRDT transaction.
+        Every document keeps its last 20 snapshots plus one per day for 30 days.
+        Restoring replaces the whole text, frontmatter included.
       </p>
 
       <label className="admin-field">
@@ -220,10 +227,7 @@ export function SnapshotsSection({ client, documents }: SnapshotsSectionProps): 
           {snapshots.loading ? (
             <p role="status">Loading snapshots…</p>
           ) : (snapshots.data ?? []).length === 0 ? (
-            <p className="admin-empty">
-              No snapshots yet. They are taken on the first edit after a quiet period, and
-              capped daily.
-            </p>
+            <p className="admin-empty">No snapshots yet.</p>
           ) : (
             <div className="admin-table-scroll">
               <table className="admin-table">
@@ -240,9 +244,9 @@ export function SnapshotsSection({ client, documents }: SnapshotsSectionProps): 
                   {(snapshots.data ?? []).map((snapshot) => (
                     <tr key={snapshot.id}>
                       <th scope="row">{formatWhen(snapshot.created_at)}</th>
-                      <td>{snapshot.reason}</td>
-                      <td>{snapshot.title}</td>
-                      <td>{formatBytes(snapshot.size)}</td>
+                      <td data-label="Reason">{snapshot.reason}</td>
+                      <td data-label="Title then">{snapshot.title}</td>
+                      <td data-label="Size">{formatBytes(snapshot.size)}</td>
                       <td className="admin-actions">
                         <button
                           type="button"
@@ -251,7 +255,7 @@ export function SnapshotsSection({ client, documents }: SnapshotsSectionProps): 
                           onClick={() => {
                             if (
                               !confirm(
-                                `Restore this snapshot over “${selected.title}”?\n\nThe whole text is replaced for everyone, including anyone editing it right now. The current text is snapshotted first, so this is undoable.`,
+                                `Replace “${selected.title}” with this snapshot? Everyone sees the change; the current text is snapshotted first.`,
                               )
                             ) {
                               return;
@@ -272,18 +276,22 @@ export function SnapshotsSection({ client, documents }: SnapshotsSectionProps): 
           )}
         </>
       )}
-    </section>
+    </AdminSectionFrame>
   );
 }
 
-export function ExportSection({ client }: { readonly client: AdminClient }): ReactElement {
+export function ExportSection({
+  client,
+  embedded,
+}: {
+  readonly client: AdminClient;
+  readonly embedded?: boolean;
+}): ReactElement {
   const mutation = useMutation();
   const stats = useAsync(() => client.stats(), []);
 
   return (
-    <section className="admin-section" aria-labelledby="admin-export-heading">
-      <h3 id="admin-export-heading">Workspace</h3>
-
+    <AdminSectionFrame id="workspace" title="Workspace" embedded={embedded}>
       {stats.error && (
         <p className="admin-error" role="alert">
           {stats.error}
@@ -326,9 +334,8 @@ export function ExportSection({ client }: { readonly client: AdminClient }): Rea
       )}
 
       <p className="admin-note">
-        The export is a zip of every document as plain markdown — the recovery path that
-        needs no MongoDB. Back up the database as well (<code>docs/OPERATIONS.md</code>);
-        this export carries no CRDT history, snapshots or attachments.
+        A zip of every document as markdown. It does not include history, snapshots or
+        attachments — back up the database too.
       </p>
 
       {mutation.error && (
@@ -358,6 +365,6 @@ export function ExportSection({ client }: { readonly client: AdminClient }): Rea
       >
         {mutation.busy === "export" ? "Preparing…" : "Export every document as markdown"}
       </button>
-    </section>
+    </AdminSectionFrame>
   );
 }

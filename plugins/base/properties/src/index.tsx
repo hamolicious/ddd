@@ -279,17 +279,13 @@ function PropertiesPanel({
     <div className="properties-root">
       {row?.fm_parse_error ? (
         <p className="properties-warning" role="status">
-          At least one frontmatter line could not be read and is missing from the list below.
-          <strong> The document text is untouched</strong> — open edit mode to fix the line by
-          hand. (SPEC §3.4: a malformed line is dropped, never rewritten.)
+          One frontmatter line could not be read, so it is missing below. The text is
+          untouched — fix the line in edit mode.
         </p>
       ) : null}
 
       {rows.length === 0 ? (
-        <p className="properties-empty">
-          This document has no frontmatter yet. Adding a property writes a <code>---</code> block
-          at the top of the text.
-        </p>
+        <p className="properties-empty">No properties yet.</p>
       ) : (
         <dl className="properties-list">
           {rows.map((entry) => (
@@ -468,8 +464,8 @@ function AddPropertyRow({
         </p>
       ) : null}
       <p className="properties-hint">
-        Types follow the document: <code>3</code> is a number, <code>true</code> a boolean,{" "}
-        <code>&quot;3&quot;</code> a string, empty is null.
+        <code>3</code> is a number, <code>true</code> a boolean, <code>&quot;3&quot;</code>{" "}
+        text, empty is null.
       </p>
     </form>
   );
@@ -482,7 +478,7 @@ function AddPropertyRow({
  */
 function describeWriteFailure(failure: unknown): string {
   if (failure instanceof NotImplementedError) {
-    return "Frontmatter editing needs the kernel's splice helpers, which this build does not implement yet.";
+    return "This build cannot edit properties yet.";
   }
   if (failure instanceof Error) return failure.message;
   return String(failure);
