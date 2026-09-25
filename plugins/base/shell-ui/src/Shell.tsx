@@ -17,7 +17,7 @@
  *   activated, and `main.view` is live, so the resolution has to happen at render.
  */
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { Contribution, Kernel } from "@kernel";
 
@@ -25,6 +25,14 @@ import { POINTS, type MainView, type NavbarItem, type SidebarPanel } from "../..
 
 import { BoundedIcon, bounded, usePointEntries, useShell } from "./hooks.js";
 import { NoticeBell, SyncIndicator } from "./indicators.js";
+import {
+  KEYBOARD_STEP,
+  SIDEBAR_DEFAULT,
+  clampSidebarWidth,
+  rememberSidebarWidth,
+  sidebarMax,
+  storedSidebarWidth,
+} from "./resize.js";
 import type { ShellState, ViewSelection } from "./state.js";
 
 export interface ShellProps {
@@ -42,6 +50,58 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
   const sidebar = useRef<HTMLElement>(null);
   const toggle = useRef<HTMLButtonElement>(null);
   const drawer = shell.compact && shell.sidebarOpen;
+
+  // Sidebar width: user-draggable on a desktop layout (the drawer sizes itself).
+  // State holds the applied width; storage remembers it per device (resize.ts).
+  const [sidebarWidth, setSidebarWidth] = useState<number | undefined>(() => {
+    const stored = storedSidebarWidth();
+    return stored === undefined
+      ? undefined
+      : clampSidebarWidth(stored, globalThis.innerWidth ?? SIDEBAR_DEFAULT * 4);
+  });
+  const applyWidth = useCallback((px: number | undefined) => {
+    setSidebarWidth(px);
+    rememberSidebarWidth(px);
+  }, []);
+  const onResizeStart = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      // Primary button only; a touch drag scrolls, and compact mode has no resizer.
+      if (event.button !== 0) return;
+      const handle = event.currentTarget;
+      const startX = event.clientX;
+      const startWidth = sidebar.current?.getBoundingClientRect().width ?? SIDEBAR_DEFAULT;
+      handle.setPointerCapture(event.pointerId);
+      handle.dataset["dragging"] = "";
+      const onMove = (move: PointerEvent): void => {
+        setSidebarWidth(clampSidebarWidth(startWidth + (move.clientX - startX), innerWidth));
+      };
+      const onUp = (up: PointerEvent): void => {
+        handle.removeEventListener("pointermove", onMove);
+        handle.removeEventListener("pointerup", onUp);
+        handle.removeEventListener("pointercancel", onUp);
+        delete handle.dataset["dragging"];
+        rememberSidebarWidth(clampSidebarWidth(startWidth + (up.clientX - startX), innerWidth));
+      };
+      handle.addEventListener("pointermove", onMove);
+      handle.addEventListener("pointerup", onUp);
+      handle.addEventListener("pointercancel", onUp);
+    },
+    [],
+  );
+  const onResizeKey = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      const current = sidebar.current?.getBoundingClientRect().width ?? SIDEBAR_DEFAULT;
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        const delta = event.key === "ArrowLeft" ? -KEYBOARD_STEP : KEYBOARD_STEP;
+        applyWidth(clampSidebarWidth(current + delta, innerWidth));
+        event.preventDefault();
+      } else if (event.key === "Home") {
+        applyWidth(undefined); // back to the stylesheet's default
+        event.preventDefault();
+      }
+    },
+    [applyWidth],
+  );
 
   const active = views.find((entry) => entry.value.id === shell.view?.id);
 
@@ -137,11 +197,31 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
             tabIndex={-1}
             hidden={!shell.sidebarOpen}
             data-drawer={drawer ? "" : undefined}
+            style={
+              !drawer && sidebarWidth !== undefined ? { width: `${sidebarWidth}px` } : undefined
+            }
           >
             {panels.map((entry) => (
               <Panel key={entry.value.id} kernel={kernel} entry={entry} state={state} />
             ))}
           </aside>
+        ) : null}
+
+        {hasSidebar && shell.sidebarOpen && !shell.compact ? (
+          <div
+            className="shell-resizer"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize the sidebar (arrow keys; Home resets)"
+            aria-valuenow={sidebarWidth ?? SIDEBAR_DEFAULT}
+            aria-valuemin={192}
+            aria-valuemax={sidebarMax(globalThis.innerWidth ?? SIDEBAR_DEFAULT * 4)}
+            tabIndex={0}
+            onPointerDown={onResizeStart}
+            onKeyDown={onResizeKey}
+            onDoubleClick={() => applyWidth(undefined)}
+            title="Drag to resize. Double-click to reset."
+          />
         ) : null}
 
         {drawer ? (

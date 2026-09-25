@@ -350,6 +350,35 @@
   display: none;
 }
 
+/*
+ * The resize handle between sidebar and main. A 10px hit area straddling the
+ * sidebar's border (negative margins keep the layout width at 0), so the grabbable
+ * region is honest without a visible gutter. Desktop only — the component does not
+ * render it in compact mode, where the sidebar is a drawer.
+ */
+.shell-resizer {
+  flex: 0 0 10px;
+  margin-left: -5px;
+  margin-right: -5px;
+  cursor: col-resize;
+  position: relative;
+  z-index: 1;
+  touch-action: none;
+}
+
+.shell-resizer:hover,
+.shell-resizer[data-dragging],
+.shell-resizer:focus-visible {
+  background: linear-gradient(
+    to right,
+    transparent 4px,
+    var(--lm-accent) 4px,
+    var(--lm-accent) 6px,
+    transparent 6px
+  );
+  outline: none;
+}
+
 .shell-panel {
   margin-bottom: calc(var(--lm-space) * 0.5);
 }
