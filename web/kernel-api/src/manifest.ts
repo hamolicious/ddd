@@ -88,6 +88,13 @@ export interface InstalledPlugin {
   readonly state: PluginState;
   /** `true` for the base distribution — what `?safe=1` boots (SPEC §6.1). */
   readonly base: boolean;
+  /**
+   * Short content fingerprint of the frontend assets, appended by the loader as `?v=`.
+   * Busts every cache layer when the served bytes change without a version bump (a
+   * rebuilt base distribution); same bytes keep the same URL, so "immutable, cached
+   * forever" stays true. Absent on older servers — URLs are then plain, as before.
+   */
+  readonly assetsVersion?: string;
 }
 
 export interface ManifestProblem {

@@ -1016,6 +1016,12 @@ pub struct InstalledPlugin {
     /// reach Mongo therefore serves the last approved set rather than nothing.
     pub state: PluginState,
     pub base: bool,
+    /// Short content fingerprint of the frontend assets (module + style). The loader
+    /// appends it as `?v=` so the version-scoped-immutable cache story survives a
+    /// rebuild that does not bump the version — the M4 integration's "stale immutable
+    /// module" trap. Same bytes ⇒ same URL ⇒ still cached forever; new bytes ⇒ new URL.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub assets_version: Option<String>,
 }
 
 /// A plugin directory the registry refused, with the reason a human needs.
@@ -1232,17 +1238,34 @@ pub fn scan(dir: &Path) -> Registry {
     }
 
     for (id, (version, manifest)) in best {
+        let assets_version = frontend_assets_version(&dir.join(&id).join(&version), &manifest);
         registry.plugins.push(InstalledPlugin {
             base_url: format!("/plugins/{id}/{version}/"),
             base: BASE_PLUGIN_IDS.contains(&id.as_str()),
             state: PluginState::Enabled,
             manifest,
+            assets_version,
         });
     }
     registry
         .plugins
         .sort_by(|a, b| a.manifest.id.cmp(&b.manifest.id));
     registry
+}
+
+/// 12-hex fingerprint of the frontend's served bytes (module, then style), or `None`
+/// when there is no frontend or a file is unreadable — an unreadable file will fail at
+/// load time with its own error; a missing `?v=` must not hide that behind a cache hit.
+fn frontend_assets_version(package_dir: &Path, manifest: &PluginManifest) -> Option<String> {
+    use sha2::{Digest, Sha256};
+    let frontend = manifest.frontend.as_ref()?;
+    let mut combined = Sha256::new();
+    for relative in std::iter::once(&frontend.module).chain(frontend.style.as_ref()) {
+        let file_hash =
+            crate::plugininstall::zipcheck::sha256_file(&package_dir.join(relative)).ok()?;
+        combined.update(file_hash.as_bytes());
+    }
+    Some(hex::encode(combined.finalize())[..12].to_string())
 }
 
 fn read_manifest(dir: &Path, id: &str, version: &str) -> Result<PluginManifest, String> {
@@ -1578,6 +1601,7 @@ mod tests {
             base: false,
             state,
             manifest,
+            assets_version: None,
         }
     }
 

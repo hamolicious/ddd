@@ -76,7 +76,12 @@ export interface LoadReport {
 function packageUrl(plugin: InstalledPlugin, relative: string): string {
   const base = plugin.baseUrl.endsWith("/") ? plugin.baseUrl : `${plugin.baseUrl}/`;
   const href = globalThis.location?.href ?? "http://localhost/";
-  return new URL(`${base}${relative}`, href).href;
+  const url = new URL(`${base}${relative}`, href);
+  // The version-scoped URL is immutable by contract, but a rebuilt base distribution
+  // re-uses its version — `?v=` (the server's content fingerprint) makes "new bytes"
+  // mean "new URL" for the HTTP cache, the service worker, and the script cache alike.
+  if (plugin.assetsVersion) url.searchParams.set("v", plugin.assetsVersion);
+  return url.href;
 }
 
 /** A plugin module URL, version-scoped so it can be cached forever (SPEC §8). */

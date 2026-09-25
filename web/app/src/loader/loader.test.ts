@@ -52,6 +52,7 @@ function plugin(
     base?: boolean;
     state?: InstalledPlugin["state"];
     style?: string;
+    assetsVersion?: string;
   } = {},
 ): InstalledPlugin {
   const manifest: PluginManifest = {
@@ -69,6 +70,7 @@ function plugin(
     baseUrl: `/plugins/${id}/${manifest.version}/`,
     state: options.state ?? "enabled",
     base: options.base ?? true,
+    ...(options.assetsVersion ? { assetsVersion: options.assetsVersion } : {}),
   };
 }
 
@@ -286,6 +288,14 @@ describe("package URLs", () => {
     expect(moduleUrl(entry)).toBe("http://localhost/plugins/themes/2.1.0/frontend/index.mjs");
     expect(styleUrl(entry)).toBe("http://localhost/plugins/themes/2.1.0/style.css");
     expect(styleUrl(plugin("themes"))).toBeUndefined();
+  });
+
+  it("appends the server's content fingerprint so a rebuild at the same version busts every cache", () => {
+    const entry = plugin("themes", { version: "2.1.0", style: "style.css", assetsVersion: "abc123def456" });
+    expect(moduleUrl(entry)).toBe(
+      "http://localhost/plugins/themes/2.1.0/frontend/index.mjs?v=abc123def456",
+    );
+    expect(styleUrl(entry)).toBe("http://localhost/plugins/themes/2.1.0/style.css?v=abc123def456");
   });
 });
 
