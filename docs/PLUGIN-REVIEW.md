@@ -207,7 +207,9 @@ views in the sidebar's Views panel. Also the Trash view (restore within 30 days)
 - [ ] Mod+N creates a document and opens it.
 - [ ] Move to Trash, then restore from `#/trash`.
 
-**Notes.** Views list bullets fixed (2026-09-26).
+**Notes.** Views list bullets fixed; the list header's "New document" button removed —
+Mod+N and the palette create documents, and an empty workspace still offers "Create
+the first document" (2026-09-26).
 
 ## 10. `folders` — the folder tree
 

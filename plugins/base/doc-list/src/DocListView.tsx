@@ -79,11 +79,9 @@ export function DocListView({
 
   return (
     <section className="doclist doclist:flex doclist:flex-col doclist:gap-3 doclist:p-4 doclist:font-sans doclist:text-text doclist:compact:p-2 doclist:[&_:focus-visible]:outline-2 doclist:[&_:focus-visible]:outline-offset-1 doclist:[&_:focus-visible]:outline-focus doclist:[&_button]:tap-h doclist:[&_button]:cursor-pointer doclist:[&_button]:rounded doclist:[&_button]:border doclist:[&_button]:border-border doclist:[&_button]:bg-bg-subtle doclist:[&_button]:px-2 doclist:[&_button]:text-inherit doclist:disabled:[&_button]:cursor-default doclist:disabled:[&_button]:opacity-55" aria-labelledby="doclist-heading">
+      {/* No create button here: Mod+N and the palette's "New document" are the way in. */}
       <header className="doclist-header doclist:flex doclist:items-center doclist:justify-between doclist:gap-2 doclist:[&_h2]:m-0">
         <h2 id="doclist-heading">Documents</h2>
-        <button type="button" className="doclist-primary doclist:border-accent! doclist:bg-accent! doclist:text-accent-text!" onClick={onCreate}>
-          New document
-        </button>
       </header>
 
       <FilterBar
