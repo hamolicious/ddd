@@ -10,6 +10,7 @@
  * no sockets and no `fetch`.
  */
 
+import { embedReplace, embedToggle, type EmbedLocation } from "./embed-toggle.js";
 import type { Kernel } from "@kernel";
 
 import { regionsOf } from "./regions.js";
@@ -23,6 +24,7 @@ import { resolveMarkerOffset, type TaskLocation, type TaskScan } from "./tasks.j
  * recognise this one so it does not echo the change back into the selection.
  */
 export const TASK_SPLICE_ORIGIN = { plugin: "markdown", write: "taskState" } as const;
+export const EMBED_SPLICE_ORIGIN = { plugin: "markdown", write: "embed" } as const;
 
 /** The route pattern `document-surface` owns. See the INTEGRATION note in `activate`. */
 export const DOC_ROUTE = "/doc/:id";
@@ -72,13 +74,32 @@ export interface MarkdownRuntime {
   /** Hand the viewer the file (SPEC §3.6 chips are downloadable). */
   downloadAttachment(id: string): Promise<void>;
   /** Remember which embedded attachment the user is acting on, for the palette command. */
-  focusAttachment(id: string | null): void;
+  focusAttachment(id: string | null, site?: EmbedSite): void;
   focusedAttachment(): string | null;
+  /** Where the focused attachment is embedded, when it came from a rendered document. */
+  focusedSite(): EmbedSite | undefined;
+  /**
+   * {@link promote}, then, given where the file is embedded, replace that embed with a
+   * link to the new document. Resolves to the new document's id either way.
+   */
+  promoteEmbed(attachmentId: string, site?: EmbedSite): Promise<string>;
   /** SPEC §3.6: create the wrapper document for an embedded attachment. */
   promote(attachmentId: string, options?: { readonly path?: string }): Promise<string>;
   /** The one checkbox write path: a validated single-character text splice. */
   writeTaskMarker(request: TaskWriteRequest): Promise<void>;
+  /** Flip an embedded attachment between preview and link: add or remove its `!`. */
+  toggleEmbed(request: EmbedToggleRequest): Promise<void>;
 }
+
+/** One embed in one document: what the toggle and promote write to. */
+export interface EmbedSite {
+  readonly documentId: string;
+  /** As {@link TaskWriteRequest.offset}: `undefined` means "the rendered text is the body". */
+  readonly offset: number | undefined;
+  readonly location: EmbedLocation;
+}
+
+export type EmbedToggleRequest = EmbedSite;
 
 /** `kernel.services.get("router")` — the slice of it this plugin uses. */
 interface RouterLike {
@@ -124,6 +145,31 @@ export function createRuntime(kernel: Kernel): MarkdownRuntime & { dispose(): vo
   const blobCache = new Map<string, Promise<AttachmentBlob | null>>();
   const objectUrls: string[] = [];
   let focused: string | null = null;
+  let focusedSite: EmbedSite | undefined;
+
+  /** One validated splice at an embed, or a notice saying it was left alone. */
+  const spliceEmbed = async (
+    site: EmbedSite,
+    edit: (text: string, base: number) => ReturnType<typeof embedToggle>,
+  ): Promise<void> => {
+    const open = await kernel.documents.open(site.documentId);
+    try {
+      const text = open.text.toString();
+      const change = edit(text, site.offset ?? regionsOf(text).body.start);
+      if (!change) {
+        kernel.ui.notify({
+          id: `markdown.embed.${site.documentId}`,
+          level: "warning",
+          message: "The document changed while you were reading, so the file was left as it was.",
+          detail: "Reopen it and try again.",
+        });
+        return;
+      }
+      kernel.documents.splice.apply(open, [change], EMBED_SPLICE_ORIGIN);
+    } finally {
+      open.release();
+    }
+  };
 
   const fetchMeta = async (id: string): Promise<AttachmentMeta | null> => {
     try {
@@ -210,10 +256,23 @@ export function createRuntime(kernel: Kernel): MarkdownRuntime & { dispose(): vo
       anchor.click();
     },
 
-    focusAttachment: (id) => {
+    focusAttachment: (id, site) => {
       focused = id;
+      focusedSite = id === null ? undefined : site;
     },
     focusedAttachment: () => focused,
+    focusedSite: () => focusedSite,
+
+    promoteEmbed: async (attachmentId, site) => {
+      const created = await runtime.promote(attachmentId);
+      if (!site) return created;
+      const meta = await runtime.attachmentMeta(attachmentId);
+      const title = (meta?.name ?? attachmentId).replace(/[[\]\r\n]/g, "");
+      await spliceEmbed(site, (text, base) =>
+        embedReplace(text, base, site.location, `[${title}](doc://${created})`),
+      );
+      return created;
+    },
 
     promote: async (attachmentId, options) => {
       const meta = await runtime.attachmentMeta(attachmentId);
@@ -254,6 +313,8 @@ export function createRuntime(kernel: Kernel): MarkdownRuntime & { dispose(): vo
         open.release();
       }
     },
+
+    toggleEmbed: (site) => spliceEmbed(site, (text, base) => embedToggle(text, base, site.location)),
 
     dispose: () => {
       for (const url of objectUrls) URL.revokeObjectURL(url);

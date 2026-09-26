@@ -153,7 +153,7 @@ Binary files live in GridFS, outside the CRDT. Simple sync: whole-file, revision
 - Client cache: lazily fetched on first render + **opt-in background prefetch with a size budget** (setting); a missed file offline renders a "not available offline" chip. Never inline-serve `image/svg+xml` (stored-XSS vector): `nosniff` on everything, `Content-Disposition: attachment` except an allowlist of safe inline types.
 - Deletion explicit; background job flags orphans in admin; no auto-delete.
 
-**Attachments appear in the workspace as wrapper documents.** A standalone upload ("add file to workspace") creates a regular markdown document representing the file — `fm.title` from the filename, `fm.path` if uploaded into a folder, body embedding `attachment://<ulid>` — so folders, search, tags, Trash, `doc://` links, and the properties panel all apply to files with zero special-case machinery; the `viewer` renders a wrapper document as a full-page file preview. Pasting a file *into an existing document* only embeds it (no wrapper — doc lists don't drown in screenshots), and a **"promote to document"** command on any embedded attachment creates the wrapper later. Trashing a wrapper trashes the file reference; blobs nothing references surface in the orphan view. This removes the one object that was "served like a document but wasn't one."
+**Attachments appear in the workspace as wrapper documents.** A standalone upload ("add file to workspace") creates a regular markdown document representing the file — `fm.title` from the filename, `fm.path` if uploaded into a folder, body embedding `attachment://<ulid>` — so folders, search, tags, Trash, `doc://` links, and the properties panel all apply to files with zero special-case machinery; the `viewer` renders a wrapper document as a full-page file preview. Pasting a file *into an existing document* only embeds it (no wrapper — doc lists don't drown in screenshots), and a **"promote to document"** command on any embedded attachment creates the wrapper later and replaces the embed with a `doc://` link to it. Trashing a wrapper trashes the file reference; blobs nothing references surface in the orphan view. This removes the one object that was "served like a document but wasn't one."
 
 ## 4. Sync & Offline
 
@@ -301,10 +301,13 @@ Their genuine niche: **cron while nobody's looking, outbound HTTP with secrets, 
 | `themes` | Theme registry + picker; **overrides** kernel default tokens | `themes.theme` |
 | `doc-list` | Browse/sort/filter and **search** (the list, ranked; **default provider = the local index**, server provider as fallback/integration); "new document"; **Trash view** (restore, 30 d) | `search.provider` |
 | `folders` | Tree from `fm.path` (normalized `/` segments, `.`/`..`/empty stripped, case-sensitive, duplicate names allowed — docs are id-addressed); move = fm splice; "new document here" | — |
-| `markdown` | Parse/render pipeline (§6.6); resolves `attachment://` and **`doc://<ulid>`** (renders target title, navigates); "promote to document" command on embedded attachments (§3.6) | `markdown.*` |
+| `markdown` | Parse/render pipeline (§6.6); resolves `attachment://` (embeds through the winning `markdown.attachment` renderer, else its own image / chip) and **`doc://<ulid>`** (renders target title, navigates; `![](doc://…)` embeds the target's body, nested to a per-user depth, default 4, cycles become links); "promote to document" command on embedded attachments (§3.6) | `markdown.*` |
+| `attachments` | Files pasted, dropped or `/attach`ed into the editor are uploaded and embedded as a preview or a link, chosen per file extension; shows embeds through a viewer per extension (user's pick when several claim one) | `attachments.viewer` |
+| `slash-commands` | Type `/` in any editor for a menu of actions; editors publish an editor-neutral `text.surface` (caret, text before it, insert there) while mounted | `text.surface`, `slash.command` |
+| `native-preview` | Viewers for what a browser shows by itself: images, PDF, audio, video, plain text (never SVG or HTML) | — |
 | `document-surface` | Owns the document route + **mode registry**; `viewer`/`editor` are symmetric contributions | `document.mode` |
 | `viewer` | Read mode (hides fm block + `%%%` sections) | contributes `read` |
-| `editor` | Edit mode — CodeMirror 6 + `y-codemirror.next`; collapses machine sections; **must be usable with the Android soft keyboard (M5 acceptance)** | `editor.extension` |
+| `editor` | Edit mode — CodeMirror 6 + `y-codemirror.next`; collapses machine sections; paste / drop handlers take them before CodeMirror; publishes a `text.surface`; **must be usable with the Android soft keyboard (M5 acceptance)** | `editor.extension`, `editor.paste` |
 | `settings` | Settings shell | `settings.section` |
 | `admin` | Users, invites, pending installs + capability approval, plugin config, audit log, orphans, snapshots | — |
 

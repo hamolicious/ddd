@@ -30,12 +30,15 @@ browser's device toolbar at 390 × 844, and 844 × 390 for landscape.
 | 11 | `folders` | [x] | Lifted drags, folder reorder, tighter rows |
 | 12 | `search` | [x] | Folded into `doc-list`: search bar, docked on phones |
 | 13 | `document-surface` | [x] | Icon mode switch, phone bubble, save icon, any number of modes |
-| 14 | `editor` | [x] | Icon folds that re-collapse; save state moved to the header |
-| 15 | `markdown` | [ ] | |
-| 16 | `viewer` | [ ] | |
-| 17 | `admin` | [ ] | |
-| 18 | `extra-task-states` (example) | [ ] | |
-| 19 | `alt-editor` (example) | [ ] | |
+| 14 | `editor` | [x] | Icon folds that re-collapse; save state in the header; paste / drop hook; text surface |
+| 15 | `attachments` | [x] | New: paste to upload, preview / link per file type, viewer registry |
+| 16 | `native-preview` | [x] | New: images, PDF, audio, video, text viewers |
+| 16a | `slash-commands` | [x] | New: `/` menu over any editor's `text.surface`; `/attach` |
+| 17 | `markdown` | [ ] | `markdown.attachment`; preview / link toggle; promote → link; document embeds |
+| 18 | `viewer` | [ ] | File documents go through `markdown.attachment` |
+| 19 | `admin` | [ ] | |
+| 20 | `extra-task-states` (example) | [ ] | |
+| 21 | `alt-editor` (example) | [ ] | |
 
 `properties` was removed on 2026-09-26 and is not reviewed.
 
@@ -332,17 +335,89 @@ frontmatter could not be read.
 
 **Where to see it.** Any document → Edit.
 
-- [ ] Typing is saved and appears in a second browser within a second or two.
-- [ ] Machine sections fold and unfold: the chevron at the end of the `%%% id` line
+- [x] Typing is saved and appears in a second browser within a second or two.
+- [x] Machine sections fold and unfold: the chevron at the end of the `%%% id` line
   opens one and folds it back; the palette's "Collapse / Show machine sections" does all.
-- [ ] Broken frontmatter shows the "could not be read" notice.
-- [ ] Phone: the editor scrolls inside itself; the keyboard does not cover the cursor.
+- [x] Broken frontmatter shows the "could not be read" notice.
+- [x] Phone: the editor scrolls inside itself; the keyboard does not cover the cursor.
+- [x] Pasting plain text with `attachments` disabled pastes as before.
+- [x] Dragging a selection within the editor still moves the text.
 
 **Notes.** The "Saved" strip under the editor moved to the document header as an icon
 (2026-09-26). A folded `%%%` section is now a chevron icon with no text. Once opened,
-it shows a chevron in the same place that folds it again (2026-09-26).
+it shows a chevron in the same place that folds it again (2026-09-26). New
+`editor.paste` point: handlers see a paste or a drop (files and text) before
+CodeMirror, and the text they insert is followed through later edits, so an upload
+that finishes later can swap its placeholder. A drop inserts where it was dropped. It
+also publishes a `text.surface` for `slash-commands` (2026-09-26).
 
-## 15. `markdown` — rendering markdown
+## 15. `attachments` — pasting and showing files
+
+**What it does.** Pasting or dropping a file into Edit mode uploads it: an "Uploading name…"
+placeholder holds its place, then becomes `![name](attachment://…)` (preview) or
+`[name](attachment://…)` (link), per file type. It also owns the `attachments.viewer`
+registry and renders every embedded file through the viewer for its type; when several
+viewers claim a type, the user picks one. It depends on no plugin.
+
+**Where to see it.** Paste a screenshot or a copied file into a document in Edit mode;
+Settings → Attachments.
+
+- [x] Paste a screenshot: the placeholder appears at the cursor and becomes an image
+  embed; Read mode shows the image.
+- [x] Paste two files at once: both land, one per line, in order.
+- [x] Drag a file from the desktop onto a line: it lands where it was dropped.
+- [x] Paste a PDF: it is a link by default; switch `.pdf` to Preview and paste again: it
+  shows inline.
+- [x] Paste a type never seen before (`.heic`, say): it appears in Settings → Attachments.
+- [x] Switch to Read before a large upload finishes: the result still lands in place.
+- [x] Delete the placeholder mid-upload: nothing is put back, a notice says so.
+- [x] Offline paste: the placeholder goes, an error notice says it could not upload.
+- [x] Settings: Preview / Link per type saves and survives a reload; "Shown with" only
+  appears when two viewers claim a type.
+- [x] Disable it: embeds render the way `markdown` draws them (image or chip).
+
+**Notes.** New (2026-09-26).
+
+## 16. `native-preview` — browser viewers
+
+**What it does.** Viewers for every type a browser shows by itself: images, video,
+audio, PDF (the browser's own viewer in a frame) and plain text (the first 256 KB). Not
+SVG or HTML. All at the default order, so another plugin can take a type over.
+
+**Where to see it.** Any embedded file in Read mode; a file document (wrapper).
+
+- [x] Image, video, audio, PDF and text each show inline and full-page.
+- [x] A video in a codec the browser lacks says "cannot play", not a broken player.
+- [x] Android app: a PDF says "cannot show" rather than an empty frame.
+- [x] Phone: nothing is wider than the column; a PDF frame scrolls inside itself.
+- [x] Disable it: every type shows as `markdown`'s chip / image again.
+
+**Notes.** New (2026-09-26). PDFs needed `frame-src 'self' blob:` added to the app's
+CSP (`statics.rs`, `shell.rs`).
+
+## 16a. `slash-commands` — the `/` menu
+
+**What it does.** Typing `/` at the start of a word in an editor opens a dropdown of
+actions (`slash.command`), narrowed as you type. It works over any editor that publishes
+a `text.surface` — `editor` and the `alt-editor` example both do — and draws from
+`shell-ui`'s overlay spot. `attachments` adds `/attach`.
+
+**Where to see it.** Edit mode, type `/`.
+
+- [x] `/` at a line start or after a space opens it; `a/b` and URLs do not.
+- [x] Typing narrows; ↑ / ↓ move, Enter or Tab choose, Escape shuts it until the text
+  changes; a click or tap chooses without losing the editor's focus.
+- [x] `/attach` opens the device's file picker; chosen files land where `/attach` was
+  typed; cancelling leaves the text as it was, minus the `/attach`.
+- [x] Phone: the menu fits the width and sits above the caret when the keyboard is up.
+- [x] Android app: the file picker opens (needs the shell's file chooser).
+- [x] With `alt-editor` as Edit mode, the same menu works in the textarea.
+- [x] Disable it: `/` is just a character.
+
+**Notes.** New (2026-09-26). `alt-editor` declares the surface locally, as a
+third-party editor would.
+
+## 17. `markdown` — rendering markdown
 
 **What it does.** Turns markdown into what Read mode shows: headings, lists, tables,
 code, links between documents (`doc://`), attachments, and task checkboxes with a state
@@ -351,13 +426,27 @@ menu. Other plugins extend it (custom task markers, directives, code-fence rende
 **Where to see it.** A document with a bit of everything, in Read mode.
 
 - [ ] Tables and code blocks scroll inside themselves on a phone.
+- [ ] An embedded file's menu (right-click / long-press) says "Show as link" on a
+  preview and "Show as preview" on a link; each adds or removes the `!`.
+- [ ] "Promote to document" (menu or palette) creates the file's document, opens it,
+  and replaces the embed with a `[name](doc://…)` link to it.
+- [ ] `![](doc://…)` shows that document's body in a framed block, titled with a link
+  to it; an edit there shows here live; its checkboxes tick the embedded document.
+- [ ] Embeds nest up to Settings → Markdown's depth (default 4; 0 = links only); a
+  document already shown above (including itself) is a link.
 - [ ] Clicking a task toggles it; long-press / right-click opens the state menu.
 - [ ] `doc://` links open the target; a missing target is marked.
 - [ ] Attachments preview; "Promote attachment to document" works.
 
-**Notes.**
+**Notes.** Embeds (`![…](attachment://…)`) go through the new `markdown.attachment`
+point when something contributes to it (`attachments`), with markdown's own image /
+chip as the fallback; `MarkdownApi.renderAttachment` exposes the same to `viewer`. The
+file menu toggles preview / link, and promoting now swaps the embed for a link to the
+new document; both are guarded splices that write nothing if the text moved on.
+`![](doc://…)` embeds documents recursively, with a Settings → Markdown section for the
+depth (2026-09-26).
 
-## 16. `viewer` — Read mode
+## 18. `viewer` — Read mode
 
 **What it does.** The Read mode: the rendered body, with a properties header above it
 showing the frontmatter (dates formatted, lists as chips) and machine sections hidden.
@@ -369,9 +458,11 @@ Display only; editing happens in Edit mode.
 - [ ] Broken frontmatter: the header says which lines could not be read.
 - [ ] The text column holds its width on a phone; nothing overflows.
 
-**Notes.** The properties panel it referred readers to was removed (2026-09-26).
+**Notes.** The properties panel it referred readers to was removed (2026-09-26). A
+file document's preview goes through `markdown.renderAttachment` first, its own
+preview being the fallback (2026-09-26).
 
-## 17. `admin` — administration
+## 19. `admin` — administration
 
 **What it does.** Users, invites, the audit log, orphan files, snapshots, the plugin list
 (enable, disable, capabilities, configuration, cron), and a markdown export. Admins only.
@@ -386,7 +477,7 @@ Display only; editing happens in Edit mode.
 
 **Notes.** Styles lost in the migration restored (2026-09-26).
 
-## 18. `extra-task-states` (example)
+## 20. `extra-task-states` (example)
 
 **What it does.** Proves plugins can extend markdown: adds three task markers, `[/]` in
 progress, `[-]` dropped, `[?]` question.
@@ -395,7 +486,7 @@ progress, `[-]` dropped, `[?]` question.
 
 **Notes.**
 
-## 19. `alt-editor` (example)
+## 21. `alt-editor` (example)
 
 **What it does.** Proves the built-in editor is replaceable: a plain textarea Edit mode
 bound to the same live document.

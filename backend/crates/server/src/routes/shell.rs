@@ -761,7 +761,8 @@ fn nonce_of(synthesized: &BTreeMap<String, SynthesizedFile>) -> String {
 /// `media-src 'self' blob:` is the same addition `statics.rs` makes and needs no widening
 /// on either branch: an attachment is never played from its server URL. The client fetches
 /// the bytes (that is `connect-src`) and renders them from an object URL, exactly as
-/// `img-src`'s long-standing `blob:` exists for. See `statics::render_index`.
+/// `img-src`'s long-standing `blob:` exists for. `frame-src 'self' blob:` is the PDF
+/// half of the same thing. See `statics::render_index`.
 ///
 /// The markup itself is [`render_index_body`], shared with the browser page — only the
 /// policy differs, and only in `connect-src`.
@@ -775,7 +776,7 @@ fn shell_csp(nonce: &str, public_url: Option<&str>) -> String {
     format!(
         "default-src 'self'; script-src 'self' 'nonce-{nonce}' 'wasm-unsafe-eval'; \
          style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; \
-         media-src 'self' blob:; font-src 'self'; \
+         media-src 'self' blob:; frame-src 'self' blob:; font-src 'self'; \
          connect-src {connect}; worker-src 'self' blob:; \
          object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
     )
@@ -1110,6 +1111,7 @@ mod tests {
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data: blob:",
             "media-src 'self' blob:",
+            "frame-src 'self' blob:",
             "worker-src 'self' blob:",
             "object-src 'none'",
             "base-uri 'none'",

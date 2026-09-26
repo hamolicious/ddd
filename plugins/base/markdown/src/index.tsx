@@ -30,12 +30,16 @@ import type { ComponentType, ReactNode } from "react";
 
 import {
   POINTS,
+  markdownAttachmentShape,
   markdownComponentShape,
   markdownDirectiveShape,
   markdownFenceShape,
   markdownRemarkShape,
   markdownTaskStateShape,
   type Command,
+  type SettingsSection,
+  type MarkdownAttachment,
+  type MarkdownAttachmentProps,
   type MarkdownComponent,
   type MarkdownDirective,
   type MarkdownDirectiveProps,
@@ -45,6 +49,8 @@ import {
   type MarkdownTaskState,
 } from "../../_shared/points.js";
 
+import { type EmbedChain } from "./doc-embed.js";
+import { clampEmbedDepth, DEFAULT_EMBED_DEPTH, EMBED_DEPTH_KEY, MarkdownSettings } from "./MarkdownSettings.js";
 import { ProcessorCache } from "./processor.js";
 import { bodyOf, regionsOf, type DocumentRegions } from "./regions.js";
 import { renderTree, type RenderRegistries } from "./render.js";
@@ -72,6 +78,19 @@ export interface MarkdownApi {
   regions(text: string): DocumentRegions;
   /** The task states currently registered, in menu order. */
   taskStates(): readonly MarkdownTaskState[];
+  /**
+   * An attachment as the winning `markdown.attachment` renderer draws it, or `undefined`
+   * when none is contributed (the caller then draws its own). `fallback` is shown when
+   * the renderer has nothing for this file.
+   */
+  renderAttachment(
+    attachmentId: string,
+    options: {
+      readonly placement: "inline" | "page";
+      readonly alt?: string;
+      readonly fallback: ReactNode;
+    },
+  ): ReactNode | undefined;
   /** Turn an embedded `attachment://` into a wrapper document (SPEC §3.6). */
   promoteToDocument(attachmentId: string, options?: { readonly path?: string }): Promise<string>;
   /**
@@ -124,6 +143,12 @@ export default function activate(kernel: Kernel): MarkdownApi {
     key: (state) => state.marker,
     description: "A task marker: icon, label, menu order, and whether it counts as done.",
   });
+  const attachmentRenderers = kernel.extensions.definePoint<MarkdownAttachment>({
+    name: POINTS.markdownAttachment,
+    shape: markdownAttachmentShape,
+    key: (renderer) => renderer.id,
+    description: "What an embedded attachment:// renders as; the lowest order wins.",
+  });
 
   // The two built-in states (SPEC §6.6: "default `taskState` contributions").
   kernel.extensions.contribute<MarkdownTaskState>(POINTS.markdownTaskState, {
@@ -172,7 +197,7 @@ export default function activate(kernel: Kernel): MarkdownApi {
     renderRevision += 1;
     announce();
   });
-  for (const point of [directives, fences, components, taskStates]) {
+  for (const point of [directives, fences, components, taskStates, attachmentRenderers]) {
     point.subscribe(() => {
       renderRevision += 1;
       announce();
@@ -230,18 +255,70 @@ export default function activate(kernel: Kernel): MarkdownApi {
       );
     }
 
+    // The lowest `order` wins; a tie goes to whichever activated first.
+    const winner = [...attachmentRenderers.entries()].sort(
+      (a, b) => (a.value.order ?? 100) - (b.value.order ?? 100),
+    )[0];
+    const attachment: ComponentType<MarkdownAttachmentProps> | undefined = winner
+      ? kernel.ui.boundary(winner.value.component, {
+          point: POINTS.markdownAttachment,
+          pluginId: winner.pluginId,
+        })
+      : undefined;
+
     registries = {
       directives: directiveMap,
       fences: fenceMap,
       overrides: overrideMap,
       tasks: buildTaskRegistry(taskStates.get()),
+      attachment,
     };
     registriesRevision = renderRevision;
     return registries;
   };
 
-  const api: MarkdownApi = {
-    render: (text, options) => {
+  // -------------------------------------------------------------------------
+  // Embedded documents (`![](doc://…)`): how many levels deep, per user.
+  // -------------------------------------------------------------------------
+  try {
+    kernel.settings.defineSchema({
+      [EMBED_DEPTH_KEY]: {
+        type: "number",
+        label: "Embedded documents, levels deep",
+        description: "How far a document embedded in a document embedded in … is shown. 0 shows links.",
+        default: DEFAULT_EMBED_DEPTH,
+      },
+    });
+    kernel.settings.subscribe(() => {
+      renderRevision += 1;
+      announce();
+    });
+  } catch (error) {
+    kernel.log.warn("the embed depth setting is unavailable; using the default", error);
+  }
+  const embedDepth = (): number => {
+    try {
+      return clampEmbedDepth(kernel.settings.get(EMBED_DEPTH_KEY));
+    } catch {
+      return DEFAULT_EMBED_DEPTH;
+    }
+  };
+
+  kernel.extensions.contribute<SettingsSection>(POINTS.settingsSection, {
+    id: "markdown",
+    title: "Markdown",
+    order: 45,
+    description: "How documents embedded with ![](doc://…) are shown.",
+    component: () => <MarkdownSettings kernel={kernel} />,
+  });
+
+  const renderWith = (
+    text: string,
+    documentId: string | undefined,
+    offset: number | undefined,
+    chain: EmbedChain,
+    maxDepth: number,
+  ): ReactNode => {
       const resolved = currentRegistries();
       const processor = processors.get(parseRevision, () => remarkPlugins.get());
 
@@ -258,21 +335,51 @@ export default function activate(kernel: Kernel): MarkdownApi {
 
       const taskScan = scanTasks(tree, text, resolved.tasks);
       return renderTree(tree, text, {
-        documentId: options?.documentId,
-        offset: options?.offset,
+        documentId,
+        offset,
         registries: resolved,
         runtime,
         taskScan,
         // The recovery path for a checkbox whose offset drifted: re-parse the text as it
         // is *now* and match by ordinal (`tasks.ts`, `resolveMarkerOffset`).
         rescan: (body) => scanTasks(processor.parse(body), body, resolved.tasks),
+        embeds: {
+          chain,
+          maxDepth,
+          // The embedded document's own body, with its own id: its checkboxes write there.
+          renderBody: (row, next) => renderWith(bodyOf(row.content ?? ""), row.id, undefined, next, maxDepth),
+        },
       });
-    },
+  };
+
+  const api: MarkdownApi = {
+    render: (text, options) =>
+      renderWith(
+        text,
+        options?.documentId,
+        options?.offset,
+        { depth: 0, ancestors: options?.documentId ? [options.documentId] : [] },
+        embedDepth(),
+      ),
 
     bodyOf,
     regions: regionsOf,
 
     taskStates: () => currentRegistries().tasks.states,
+
+    renderAttachment: (attachmentId, options) => {
+      const Renderer = currentRegistries().attachment;
+      if (!Renderer) return undefined;
+      return (
+        <Renderer
+          id={attachmentId}
+          alt={options.alt}
+          placement={options.placement}
+          fallback={options.fallback}
+          frame={(content) => content}
+        />
+      );
+    },
 
     promoteToDocument: (attachmentId, options) => runtime.promote(attachmentId, options),
 
@@ -304,7 +411,10 @@ export default function activate(kernel: Kernel): MarkdownApi {
       // Creating the wrapper document is a REST call (SPEC §3.6, §5.1), so it rejects
       // offline. The palette closes on `run`, so without a notice here the command looked
       // like it had done nothing at all — the attachment's own menu already says so.
-      return runtime.promote(id).then(
+      // From the palette, the site is the one the focused attachment was touched at, and
+      // only when the id is that attachment's.
+      const site = id === runtime.focusedAttachment() ? runtime.focusedSite() : undefined;
+      return runtime.promoteEmbed(id, site).then(
         (documentId) => {
           runtime.focusAttachment(null);
           runtime.openDocument(documentId);

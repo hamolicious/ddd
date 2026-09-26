@@ -32,6 +32,7 @@
  */
 
 import { useEffect, useRef, useState, type ReactElement } from "react";
+import * as Y from "yjs";
 
 import type { Kernel, OpenDocument } from "@kernel";
 
@@ -45,6 +46,13 @@ import type { Kernel, OpenDocument } from "@kernel";
  * has only that too. Re-declaring is the honest cost of the microkernel boundary.
  */
 const DOCUMENT_MODE_POINT = "document.mode";
+/** `slash-commands`' point: this editor, as the `/` menu sees it. */
+const TEXT_SURFACE_POINT = "text.surface";
+
+interface Insertion {
+  replace(text: string): boolean;
+  remove(): boolean;
+}
 
 interface DocumentModeProps {
   readonly id: string;
@@ -119,6 +127,44 @@ function PlainEditor({
     return () => open.text.unobserve(observer);
   }, [open]);
 
+  // The `/` menu, and anything else that works at the caret. Published while live.
+  useEffect(() => {
+    const element = area.current;
+    if (!open || !element || phase !== "live") return undefined;
+    const listeners = new Set<() => void>();
+    const notify = (): void => {
+      for (const listener of [...listeners]) listener();
+    };
+    const events = ["input", "keyup", "click", "focus", "blur", "select"] as const;
+    for (const name of events) element.addEventListener(name, notify);
+    const lineStart = (): number => element.value.lastIndexOf("\n", element.selectionStart - 1) + 1;
+
+    const surface = kernel.extensions.contribute(TEXT_SURFACE_POINT, {
+      id: `alt-editor:${open.id}:${String((surfaceCount += 1))}`,
+      documentId: open.id,
+      element,
+      hasFocus: () => document.activeElement === element,
+      focus: () => element.focus(),
+      textBeforeCaret: () => element.value.slice(lineStart(), element.selectionStart),
+      caretRect: () => caretRect(element),
+      takeBeforeCaret: (length: number) => {
+        const to = element.selectionStart;
+        const from = Math.max(lineStart(), to - length);
+        open.doc.transact(() => open.text.delete(from, to - from), "alt-editor");
+        element.setSelectionRange(from, from);
+        return markAt(open.text, from);
+      },
+      subscribe: (listener: () => void) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    });
+    return () => {
+      surface.dispose();
+      for (const name of events) element.removeEventListener(name, notify);
+    };
+  }, [open, phase]);
+
   const onInput = (): void => {
     const element = area.current;
     if (!open || !element || open.phase !== "live") return;
@@ -177,6 +223,71 @@ const ROOT_CLASSES = "alteditor:flex alteditor:min-h-0 alteditor:flex-1 altedito
 const NOTE_CLASSES = "alteditor:m-0 alteditor:text-sm alteditor:text-text-muted";
 const AREA_CLASSES =
   "alteditor:min-h-48 alteditor:flex-1 alteditor:resize-y alteditor:whitespace-pre-wrap alteditor:rounded alteditor:border alteditor:border-border alteditor:bg-bg alteditor:p-2 alteditor:font-mono alteditor:text-[0.9rem] alteditor:leading-normal alteditor:text-text alteditor:[tab-size:2] alteditor:focus-visible:outline-2 alteditor:focus-visible:outline-offset-1 alteditor:focus-visible:outline-focus alteditor:read-only:bg-bg-subtle alteditor:read-only:text-text-muted";
+
+let surfaceCount = 0;
+
+/** Where the caret is on screen: a hidden copy of the textarea, measured at the caret. */
+function caretRect(element: HTMLTextAreaElement): { left: number; top: number; bottom: number } | null {
+  const style = getComputedStyle(element);
+  const mirror = document.createElement("div");
+  for (const property of [
+    "boxSizing", "width", "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
+    "borderTopWidth", "borderRightWidth", "borderBottomWidth", "borderLeftWidth",
+    "fontFamily", "fontSize", "fontWeight", "lineHeight", "letterSpacing", "tabSize", "wordSpacing",
+  ] as const) {
+    mirror.style[property] = style[property];
+  }
+  mirror.style.position = "absolute";
+  mirror.style.visibility = "hidden";
+  mirror.style.whiteSpace = "pre-wrap";
+  mirror.style.overflowWrap = "break-word";
+  mirror.textContent = element.value.slice(0, element.selectionStart);
+  const marker = document.createElement("span");
+  marker.textContent = "\u200b";
+  mirror.append(marker);
+  document.body.append(mirror);
+  const box = element.getBoundingClientRect();
+  const left = box.left + marker.offsetLeft - element.scrollLeft;
+  const top = box.top + marker.offsetTop - element.scrollTop;
+  const height = marker.offsetHeight;
+  mirror.remove();
+  return { left, top, bottom: top + height };
+}
+
+/**
+ * A spot in the text to insert at later, and each insert followed so it can be replaced
+ * (an upload's placeholder). Yjs relative positions, so edits elsewhere cannot move it.
+ */
+function markAt(text: Y.Text, index: number): { insert(content: string): Insertion } {
+  let spot = Y.createRelativePositionFromTypeIndex(text, index, -1);
+  const settled: Insertion = { replace: () => false, remove: () => false };
+  return {
+    insert: (content) => {
+      const doc = text.doc;
+      if (!doc || content.length === 0) return settled;
+      const found = Y.createAbsolutePositionFromRelativePosition(spot, doc);
+      const at = found && found.type === text ? found.index : text.length;
+      doc.transact(() => text.insert(at, content), "alt-editor");
+      spot = Y.createRelativePositionFromTypeIndex(text, at + content.length, -1);
+      const start = Y.createRelativePositionFromTypeIndex(text, at, 0);
+      const end = Y.createRelativePositionFromTypeIndex(text, at + content.length, -1);
+      let done = false;
+      const swap = (next: string): boolean => {
+        if (done) return false;
+        done = true;
+        const a = Y.createAbsolutePositionFromRelativePosition(start, doc);
+        const b = Y.createAbsolutePositionFromRelativePosition(end, doc);
+        if (!a || !b || text.toString().slice(a.index, b.index) !== content) return false;
+        doc.transact(() => {
+          text.delete(a.index, b.index - a.index);
+          if (next) text.insert(a.index, next);
+        }, "alt-editor");
+        return true;
+      };
+      return { replace: swap, remove: () => swap("") };
+    },
+  };
+}
 
 function commonPrefix(a: string, b: string): number {
   const max = Math.min(a.length, b.length);

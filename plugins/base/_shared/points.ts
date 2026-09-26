@@ -44,6 +44,7 @@ export const POINTS = {
   documentMode: "document.mode",
   /** `editor` */
   editorExtension: "editor.extension",
+  editorPaste: "editor.paste",
   /** `settings` */
   settingsSection: "settings.section",
   /** `markdown` */
@@ -52,6 +53,12 @@ export const POINTS = {
   markdownRemark: "markdown.remark",
   markdownComponent: "markdown.component",
   markdownTaskState: "markdown.taskState",
+  markdownAttachment: "markdown.attachment",
+  /** `attachments` */
+  attachmentViewer: "attachments.viewer",
+  /** `slash-commands` */
+  textSurface: "text.surface",
+  slashCommand: "slash.command",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -365,6 +372,60 @@ export const editorExtensionShape: Shape<EditorExtension> = s.object({
   order: s.optional(s.number()),
 });
 
+/**
+ * A paste and drop handler. The editor asks each one in `order` (default 100) when
+ * something is pasted or dropped onto it, and the first to return `true` takes it: the
+ * editor then does nothing with it. Returning `false` passes it on, and when nobody takes
+ * it CodeMirror handles it as usual.
+ *
+ * `paste` must answer synchronously, since the browser's paste or drop has to be
+ * cancelled in the same tick. Slow work (an upload) starts from here and finishes later through the
+ * {@link EditorInsertion} it got from `insert`.
+ */
+export interface EditorPaste {
+  readonly id: string;
+  readonly order?: number;
+  readonly paste: (event: EditorPasteEvent) => boolean;
+}
+
+export interface EditorPasteEvent {
+  readonly documentId: DocumentId;
+  /** A clipboard paste, or a drag dropped onto the text. */
+  readonly via: "paste" | "drop";
+  /** Files on the clipboard: a screenshot, or files copied in a file manager. */
+  readonly files: readonly File[];
+  /** The clipboard's plain text; empty when there is none. */
+  readonly text: string;
+  /**
+   * Put text where it was going: a paste replaces the selection, a drop lands where it
+   * was dropped. Every call inserts after the previous one, so several files land in the
+   * order they were inserted.
+   */
+  insert(text: string): EditorInsertion;
+}
+
+/**
+ * Text a paste handler put in, followed through later edits by this client and others.
+ * It keeps working after the user leaves Edit mode: it is anchored to the document, not
+ * to the editor.
+ */
+export interface EditorInsertion {
+  /**
+   * Swap the inserted text for `text`. Returns `false`, and changes nothing, when the
+   * inserted text has since been edited or deleted: the user's change wins. Either this
+   * or `remove` settles the insertion; later calls return `false`.
+   */
+  replace(text: string): boolean;
+  /** Take the inserted text out again, under the same rule as `replace`. */
+  remove(): boolean;
+}
+
+export const editorPasteShape: Shape<EditorPaste> = s.object({
+  id: s.string(),
+  order: s.optional(s.number()),
+  paste: s.func(),
+});
+
 // ---------------------------------------------------------------------------
 // settings
 // ---------------------------------------------------------------------------
@@ -488,4 +549,170 @@ export const markdownTaskStateShape: Shape<MarkdownTaskState> = s.object({
   icon: s.any(),
   order: s.optional(s.number()),
   done: s.optional(s.boolean()),
+});
+
+/**
+ * What an embedded file (`![name](attachment://<ulid>)`) renders as. **The lowest `order`
+ * wins**, and with none contributed `markdown` draws its own: an inline raster image, or
+ * a chip. `attachments` contributes the one that hands the file to a viewer for its type.
+ *
+ * Also what `viewer` shows for a wrapper document, through `MarkdownApi.renderAttachment`,
+ * with `placement: "page"`.
+ */
+export interface MarkdownAttachment {
+  readonly id: string;
+  readonly component: ComponentType<MarkdownAttachmentProps>;
+  readonly order?: number;
+}
+
+export interface MarkdownAttachmentProps {
+  /** The attachment's ULID. */
+  readonly id: string;
+  /** The embed's alt text, when it has one. */
+  readonly alt?: string;
+  /** `inline`: in the flow of a document. `page`: the whole view (a wrapper document). */
+  readonly placement: "inline" | "page";
+  /**
+   * What `markdown` would have drawn. Render it when this renderer has nothing better:
+   * no viewer for the type, or the file could not be loaded.
+   */
+  readonly fallback: ReactNode;
+  /**
+   * Wrap what this renderer draws in the caller's file actions (download, promote). Not
+   * applied to `fallback`, which carries its own.
+   */
+  readonly frame: (content: ReactNode) => ReactNode;
+}
+
+export const markdownAttachmentShape: Shape<MarkdownAttachment> = s.object({
+  id: s.string(),
+  component: s.component(),
+  order: s.optional(s.number()),
+});
+
+// ---------------------------------------------------------------------------
+// attachments
+// ---------------------------------------------------------------------------
+
+/**
+ * A way of showing files of some types, by extension. Several viewers may claim one
+ * extension: the lowest `order` shows it unless the user picked another in
+ * Settings → Attachments.
+ */
+export interface AttachmentViewer {
+  readonly id: string;
+  /** Shown in Settings → Attachments when viewers compete for a type. */
+  readonly label: string;
+  /** Lower case, no dot: `["png", "jpg"]`. */
+  readonly extensions: readonly string[];
+  readonly component: ComponentType<AttachmentViewerProps>;
+  readonly order?: number;
+}
+
+export interface AttachmentViewerProps {
+  readonly file: {
+    readonly id: string;
+    readonly name: string;
+    readonly mime: string;
+    readonly size: number;
+  };
+  /** The bytes, already fetched over the session (bearer token or cookie alike). */
+  readonly blob: Blob;
+  /** An object URL for `blob`, owned by `attachments`: do not revoke it. */
+  readonly url: string;
+  readonly placement: "inline" | "page";
+}
+
+export const attachmentViewerShape: Shape<AttachmentViewer> = s.object({
+  id: s.string(),
+  label: s.string(),
+  extensions: s.array(s.string()),
+  component: s.component(),
+  order: s.optional(s.number()),
+});
+
+// ---------------------------------------------------------------------------
+// slash-commands
+// ---------------------------------------------------------------------------
+
+/**
+ * A spot in a document to insert at later, anchored in the document rather than the
+ * editor (`_shared/text-mark.ts`). Each insert lands after the previous one.
+ */
+export interface TextMark {
+  insert(text: string): EditorInsertion;
+}
+
+/**
+ * An editor, as the slash menu (and anything else that works at the caret) sees it.
+ * **Editor-neutral on purpose**: `editor` (CodeMirror) and `alt-editor` (a textarea) both
+ * contribute one while mounted and dispose it on unmount, so the menu works in either.
+ */
+export interface TextSurface {
+  /** Unique per mounted editor. */
+  readonly id: string;
+  readonly documentId: DocumentId;
+  /** Where keys arrive. Listeners here, in the capture phase, run before the editor's. */
+  readonly element: HTMLElement;
+  hasFocus(): boolean;
+  focus(): void;
+  /** The caret's line, from its start up to the caret. */
+  textBeforeCaret(): string;
+  /** The caret on screen, for placing a popup; `null` when it is not visible. */
+  caretRect(): { readonly left: number; readonly top: number; readonly bottom: number } | null;
+  /** Delete `length` characters before the caret, and mark the spot they were in. */
+  takeBeforeCaret(length: number): TextMark;
+  /** Fires after every change to the text, the caret or focus. */
+  subscribe(listener: () => void): () => void;
+}
+
+export const textSurfaceShape: Shape<TextSurface> = s.object({
+  id: s.string(),
+  documentId: s.string(),
+  element: s.any(),
+  hasFocus: s.func(),
+  focus: s.func(),
+  textBeforeCaret: s.func(),
+  caretRect: s.func(),
+  takeBeforeCaret: s.func(),
+  subscribe: s.func(),
+});
+
+/** One entry in the `/` menu. Typing `/att` lists the commands whose title or keywords start with it. */
+export interface SlashCommand {
+  readonly id: string;
+  readonly title: string;
+  readonly description?: string;
+  readonly icon?: ReactNode;
+  /** Other words it is found by. */
+  readonly keywords?: readonly string[];
+  /** Position in the menu with nothing typed; default 100. */
+  readonly order?: number;
+  /** `false` ⇒ not offered in this document. */
+  readonly when?: (context: { readonly documentId: DocumentId }) => boolean;
+  /**
+   * Called with the typed `/command` already removed. Runs inside the key press or tap
+   * that chose it, so it may open a file picker or anything else that needs a user
+   * gesture.
+   */
+  readonly run: (context: SlashCommandContext) => void;
+}
+
+export interface SlashCommandContext {
+  readonly documentId: DocumentId;
+  /** Where the `/command` was: insert here, now or after something slow. */
+  readonly mark: TextMark;
+  /** Give the editor its focus back. */
+  focus(): void;
+}
+
+export const slashCommandShape: Shape<SlashCommand> = s.object({
+  id: s.string(),
+  title: s.string(),
+  description: s.optional(s.string()),
+  icon: s.optional(s.any()),
+  keywords: s.optional(s.array(s.string())),
+  order: s.optional(s.number()),
+  when: s.optional(s.func()),
+  run: s.func(),
 });

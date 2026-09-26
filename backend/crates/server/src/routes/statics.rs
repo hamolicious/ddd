@@ -527,12 +527,20 @@ fn render_index(html: &str, imports: &BTreeMap<String, String>, nonce: &str) -> 
     // been played. It is the same narrow shape — a blob URL is same-origin by construction
     // and cannot be minted by a remote page.
     //
+    // `frame-src 'self' blob:` is the fourth, and the same story again for PDFs: the
+    // `native-preview` plugin shows one in an `<iframe>` from an object URL, the only way
+    // a browser's built-in PDF viewer can be reached with the bytes the client already
+    // fetched (a bearer-token shell cannot load the API URL at all). The plugin re-types
+    // the bytes as `application/pdf` before minting the URL, so the frame gets the PDF
+    // viewer, never an HTML document; and a `blob:` document inherits this policy
+    // anyway, so it could not run a script if it were one.
+    //
     // The nonce is what authorises the one inline script on the page (the import map).
     // Everything else, including every plugin module, is `'self'`.
     let csp = format!(
         "default-src 'self'; script-src 'self' 'nonce-{nonce}' 'wasm-unsafe-eval'; \
          style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; \
-         media-src 'self' blob:; font-src 'self'; \
+         media-src 'self' blob:; frame-src 'self' blob:; font-src 'self'; \
          connect-src 'self' ws: wss:; worker-src 'self' blob:; object-src 'none'; \
          base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
     );
@@ -860,6 +868,7 @@ mod tests {
             csp.contains("media-src 'self' blob:"),
             "audio/video attachments"
         );
+        assert!(csp.contains("frame-src 'self' blob:"), "PDF attachments");
 
         // `script-src` is asserted whole. It is the one directive where an extra source
         // is a hole rather than a loosening: no `'unsafe-eval'` (only the narrow Wasm

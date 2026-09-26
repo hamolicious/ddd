@@ -23,6 +23,7 @@
     "style": "frontend/style.css"
   },
   "x-defines": [
+    "markdown.attachment",
     "markdown.component",
     "markdown.directive",
     "markdown.fence",

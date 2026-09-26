@@ -56,7 +56,7 @@ import {
   type DecorationSet,
 } from "@codemirror/view";
 import { defaultKeymap, indentWithTab } from "@codemirror/commands";
-import type { Kernel, Unsubscribe } from "@kernel";
+import type { Disposable, Kernel, Unsubscribe } from "@kernel";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import * as Y from "yjs";
@@ -64,11 +64,17 @@ import * as Y from "yjs";
 import {
   POINTS,
   editorExtensionShape,
+  editorPasteShape,
   type Command,
   type DocumentMode,
   type DocumentModeProps,
   type EditorExtension,
+  type EditorInsertion,
+  type EditorPaste,
+  type EditorPasteEvent,
+  type TextSurface,
 } from "../../_shared/points.js";
+import { markAt, trackInsertion } from "../../_shared/text-mark.js";
 import { markdownSyntax } from "./markdown-language.js";
 import {
   foldableRegionsOf,
@@ -235,12 +241,98 @@ export default function activate(kernel: Kernel): EditorApi {
     description: "A CodeMirror 6 extension, from the shared @codemirror/state instance.",
   });
 
+  const pastes = kernel.extensions.definePoint<EditorPaste>({
+    name: POINTS.editorPaste,
+    shape: editorPasteShape,
+    key: (entry) => entry.id,
+    description: "A paste / drop handler: takes files or text before CodeMirror does.",
+  });
+
+  /**
+   * Offer a paste or a drop to each `editor.paste` handler in `order`; the first to say
+   * `true` has it. A handler that throws is reported and skipped, never allowed to lose
+   * it: the next one, or CodeMirror, still gets it.
+   *
+   * A paste inserts at the selection; a drop where it was dropped (the selection when the
+   * pointer is not over text). A drop that is only text, such as moving a selection
+   * within the editor, still reaches handlers with no files and normally falls through.
+   */
+  const offer = (
+    documentId: string,
+    text: Y.Text,
+    view: EditorView,
+    via: "paste" | "drop",
+    data: DataTransfer,
+    start: { from: number; to: number },
+  ): boolean => {
+    const handlers = [...pastes.get()].sort((a, b) => (a.order ?? 100) - (b.order ?? 100));
+    if (handlers.length === 0) return false;
+
+    let open = true;
+    /** Where the next `insert` goes: `start` first, then after the last one. */
+    let at = start;
+    const event: EditorPasteEvent = {
+      documentId,
+      via,
+      files: Array.from(data.files),
+      text: data.getData("text/plain"),
+      insert: (content: string): EditorInsertion => {
+        if (!open) throw new Error("editor.paste: insert() is only valid while handling the paste");
+        const { from, to } = at;
+        view.dispatch({
+          changes: { from, to, insert: content },
+          selection: { anchor: from + content.length },
+          userEvent: via === "drop" ? "input.drop" : "input.paste",
+          scrollIntoView: true,
+        });
+        at = { from: from + content.length, to: from + content.length };
+        return trackInsertion(text, from, content);
+      },
+    };
+
+    try {
+      for (const handler of handlers) {
+        try {
+          if (handler.paste(event)) return true;
+        } catch (error) {
+          kernel.log.error(`editor.paste "${handler.id}" failed`, error);
+        }
+      }
+      return false;
+    } finally {
+      open = false;
+    }
+  };
+
+  const pasteHandler = (documentId: string, text: Y.Text): Extension =>
+    EditorView.domEventHandlers({
+      paste: (event, view) => {
+        const data = event.clipboardData;
+        if (!data || !offer(documentId, text, view, "paste", data, view.state.selection.main)) return false;
+        event.preventDefault();
+        return true;
+      },
+      drop: (event, view) => {
+        const data = event.dataTransfer;
+        if (!data) return false;
+        const point = view.posAtCoords({ x: event.clientX, y: event.clientY });
+        const start = point === null ? view.state.selection.main : { from: point, to: point };
+        if (!offer(documentId, text, view, "drop", data, start)) return false;
+        event.preventDefault();
+        view.focus();
+        return true;
+      },
+    });
+
   // There is deliberately no `defineSchema` here any more. This plugin used to declare
   // a `foldFrontmatter` per-user setting, defaulting to "fold it" — a setting no screen
   // rendered (POLISH-BACKLOG item 2), for a behaviour the owner asked to remove rather
   // than to make configurable. A preference whose only honest value is `false` is not a
   // preference, and leaving the key declared would keep a label and a description
   // written for a settings screen describing something the editor no longer does.
+
+  /** Numbers each mounted editor's `text.surface` id. */
+  let surfaceCount = 0;
 
   /** The view currently on screen. One document surface ⇒ at most one editor. */
   let live: EditorView | undefined;
@@ -311,6 +403,9 @@ export default function activate(kernel: Kernel): EditorApi {
       let view: EditorView | undefined;
       let undoManager: Y.UndoManager | undefined;
       let offPoint: Unsubscribe | undefined;
+      let surface: Disposable | undefined;
+      /** `text.surface` listeners: told about every text, caret and focus change. */
+      const watchers = new Set<() => void>();
 
       try {
         const extensionsCompartment = new Compartment();
@@ -336,6 +431,11 @@ export default function activate(kernel: Kernel): EditorApi {
               drawSelection(),
               dropCursor(),
               markdownSyntax,
+              pasteHandler(id, open.text),
+              EditorView.updateListener.of((update) => {
+                if (!update.docChanged && !update.selectionSet && !update.focusChanged) return;
+                for (const watcher of [...watchers]) watcher();
+              }),
 
               // --- the machine regions ---------------------------------------
               codeFolding({
@@ -416,6 +516,39 @@ export default function activate(kernel: Kernel): EditorApi {
           view?.dispatch({ effects: extensionsCompartment.reconfigure(contributedExtensions()) });
         });
 
+        // The caret, for the slash menu and anything else that works there. Contributed
+        // per mounted editor and withdrawn on unmount.
+        const bound = view;
+        const text = open.text;
+        const head = (): number => bound.state.selection.main.head;
+        surface = kernel.extensions.contribute<TextSurface>(POINTS.textSurface, {
+          id: `editor:${id}:${String((surfaceCount += 1))}`,
+          documentId: id,
+          element: bound.dom,
+          hasFocus: () => bound.hasFocus,
+          focus: () => bound.focus(),
+          textBeforeCaret: () => {
+            const line = bound.state.doc.lineAt(head());
+            return line.text.slice(0, head() - line.from);
+          },
+          caretRect: () => {
+            const rect = bound.coordsAtPos(head());
+            return rect ? { left: rect.left, top: rect.top, bottom: rect.bottom } : null;
+          },
+          takeBeforeCaret: (length) => {
+            const to = head();
+            const from = Math.max(bound.state.doc.lineAt(to).from, to - length);
+            bound.dispatch({ changes: { from, to }, selection: { anchor: from }, userEvent: "delete" });
+            return markAt(text, from);
+          },
+          subscribe: (listener) => {
+            watchers.add(listener);
+            return () => {
+              watchers.delete(listener);
+            };
+          },
+        });
+
         // `%%%` sections always start folded. Frontmatter never was folded here and
         // never is — it opens as plain, highlighted text like the rest of the document.
         setFolded(view, true);
@@ -429,6 +562,8 @@ export default function activate(kernel: Kernel): EditorApi {
       }
 
       return () => {
+        surface?.dispose();
+        watchers.clear();
         offPoint?.();
         if (live === view) live = undefined;
         view?.destroy();

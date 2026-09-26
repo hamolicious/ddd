@@ -1253,7 +1253,7 @@ URLs immutable (SPEC §8).
 
 ```rust
 // plugins.rs
-pub const BASE_PLUGIN_IDS: &[&str];                  // the 16 plugins of SPEC §6.5
+pub const BASE_PLUGIN_IDS: &[&str];                  // the 19 plugins of SPEC §6.5
 pub fn is_valid_plugin_id(id: &str) -> bool;         // ^[a-z0-9][a-z0-9-]{0,63}$
 pub fn is_valid_version(version: &str) -> bool;      // x.y.z with an optional tail
 pub fn safe_relative_path(path: &str) -> bool;

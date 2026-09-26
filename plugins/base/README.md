@@ -1,6 +1,6 @@
 # `plugins/base/` — the base distribution
 
-The visible app. Fourteen plugins that happen to ship with the server and are
+The visible app. Nineteen plugins that happen to ship with the server and are
 [installed like any other](../SPEC.md#62-package-manifest-capabilities) — individually
 replaceable, individually removable, and holding no privilege the kernel does not give
 every plugin.
@@ -35,10 +35,13 @@ dist/<id>/<version>/              build output = the installed layout the server
 | `themes` | theme registry + picker; overrides kernel tokens | `themes.theme` |
 | `doc-list` | browse/search/sort/filter, new document, Trash; local index is the default search provider | `search.provider` |
 | `folders` | drag-and-drop file tree over `fm.path`; every move is a splice | — |
-| `markdown` | the unified/remark → React pipeline | `markdown.directive/fence/remark/component/taskState` |
+| `markdown` | the unified/remark → React pipeline | `markdown.directive/fence/remark/component/taskState/attachment` |
+| `attachments` | paste-to-upload in the editor; shows embedded files through a viewer per file type | `attachments.viewer` |
+| `slash-commands` | the `/` menu in any editor, over editor-neutral text surfaces | `text.surface`, `slash.command` |
+| `native-preview` | viewers for what a browser shows natively: images, PDF, audio, video, text | — |
 | `document-surface` | the document route + mode registry | `document.mode` |
 | `viewer` | read mode | contributes `read` |
-| `editor` | edit mode (CodeMirror 6 + `y-codemirror.next`) | `editor.extension` |
+| `editor` | edit mode (CodeMirror 6 + `y-codemirror.next`) | `editor.extension`, `editor.paste` |
 | `settings` | the settings shell | `settings.section` |
 | `admin` | users, invites, audit, orphans, snapshots, plugins | — |
 
@@ -52,7 +55,7 @@ that had a backend half, so **every plugin in this directory is now frontend-onl
 
 ## How the base plugins relate
 
-Generated from the sixteen `manifest.json` `dependencies` fields — an arrow reads
+Generated from the nineteen `manifest.json` `dependencies` fields — an arrow reads
 **"depends on"**, and the loader's activation order is precisely a topological order of
 this graph (a dependency always activates first; a failed dependency skips its whole
 subtree). Every plugin additionally depends on `@kernel`, which is not drawn.
@@ -97,6 +100,13 @@ pass — `folders` telling `doc-list` where unfiled documents go — is a `kerne
 message precisely *because* the arrow it would need points the wrong way: `folders`
 already depends on `doc-list`, and the reverse edge would be a cycle the loader cannot
 order.
+
+`attachments`, `native-preview` and `slash-commands` are not drawn because they have no
+edges: every point they use is contributed to, never required. `attachments` puts a
+handler on `editor.paste`, a renderer on `markdown.attachment` and `/attach` on
+`slash.command`; `native-preview` puts viewers on `attachments.viewer`; `editor` puts a
+`text.surface` on `slash-commands`' point. Turning any one of them off costs its own
+feature and nothing downstream.
 
 Reading it bottom-up: `shell-ui` owns the frame everyone renders into, and `header`
 fills its top-bar spot (the plugins that put items in the bar do not depend on `header`:

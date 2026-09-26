@@ -42,6 +42,7 @@ use crate::config::Config;
 /// The base distribution (SPEC §6.5) — what `?safe=1` boots.
 pub const BASE_PLUGIN_IDS: &[&str] = &[
     "admin",
+    "attachments",
     "commands",
     "context-menu",
     "doc-list",
@@ -50,10 +51,12 @@ pub const BASE_PLUGIN_IDS: &[&str] = &[
     "folders",
     "header",
     "markdown",
+    "native-preview",
     "notices",
     "router",
     "settings",
     "shell-ui",
+    "slash-commands",
     "sync-status",
     "themes",
     "viewer",
@@ -1739,8 +1742,8 @@ mod tests {
     }
 
     #[test]
-    fn the_base_distribution_is_the_sixteen_plugins_of_spec_6_5() {
-        assert_eq!(BASE_PLUGIN_IDS.len(), 16);
+    fn the_base_distribution_is_the_nineteen_plugins_of_spec_6_5() {
+        assert_eq!(BASE_PLUGIN_IDS.len(), 19);
         assert!(BASE_PLUGIN_IDS.windows(2).all(|pair| pair[0] < pair[1]));
     }
 }

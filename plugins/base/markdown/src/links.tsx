@@ -25,7 +25,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { PopupMenu, type MenuItem } from "./menu.js";
-import { isInlineImage, type AttachmentMeta, type MarkdownRuntime } from "./runtime.js";
+import { isInlineImage, type AttachmentMeta, type EmbedSite, type MarkdownRuntime } from "./runtime.js";
 
 /** Load a value once per key, without tearing when the component unmounts mid-flight. */
 function useResolved<T>(key: string, load: (key: string) => Promise<T>): { value: T | undefined; done: boolean } {
@@ -112,9 +112,22 @@ export function DocLink({ id, label, fragment, runtime }: DocLinkProps): ReactNo
 // attachment://
 // ---------------------------------------------------------------------------
 
+/**
+ * How this attachment is written in the text, and the write that flips it. Absent when
+ * there is nowhere to write (a render with no document behind it).
+ */
+export interface EmbedToggle {
+  /** `true` for `![…](…)`, `false` for `[…](…)`. */
+  readonly preview: boolean;
+  readonly toggle: () => void;
+  /** Where it is, so promoting it can put a link to the new document in its place. */
+  readonly site: EmbedSite;
+}
+
 interface AttachmentActionsProps {
   readonly id: string;
   readonly runtime: MarkdownRuntime;
+  readonly embed?: EmbedToggle;
   readonly children: (open: () => void) => ReactNode;
 }
 
@@ -125,10 +138,20 @@ interface AttachmentActionsProps {
  * so a context menu on the object is where it belongs, and the same command is registered
  * in the palette against whichever attachment was last touched.
  */
-function AttachmentActions({ id, runtime, children }: AttachmentActionsProps): ReactNode {
+export function AttachmentActions({ id, runtime, embed, children }: AttachmentActionsProps): ReactNode {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const items: readonly MenuItem[] = [
+    ...(embed
+      ? [
+          {
+            id: "toggle-preview",
+            label: embed.preview ? "Show as link" : "Show as preview",
+            icon: embed.preview ? "🔗" : "🖼",
+            run: embed.toggle,
+          },
+        ]
+      : []),
     {
       id: "open",
       label: "Download file",
@@ -140,7 +163,7 @@ function AttachmentActions({ id, runtime, children }: AttachmentActionsProps): R
       label: "Promote to document",
       icon: "⧉",
       run: () => {
-        void runtime.promote(id).then(
+        void runtime.promoteEmbed(id, embed?.site).then(
           (documentId) => runtime.openDocument(documentId),
           (error: unknown) => {
             runtime.kernel.log.error("promote to document failed", { id, error });
@@ -160,14 +183,14 @@ function AttachmentActions({ id, runtime, children }: AttachmentActionsProps): R
       className="markdown:relative markdown:inline-block markdown:max-w-full"
       onContextMenu={(event) => {
         event.preventDefault();
-        runtime.focusAttachment(id);
+        runtime.focusAttachment(id, embed?.site);
         setMenuOpen(true);
       }}
-      onFocus={() => runtime.focusAttachment(id)}
-      onPointerDown={() => runtime.focusAttachment(id)}
+      onFocus={() => runtime.focusAttachment(id, embed?.site)}
+      onPointerDown={() => runtime.focusAttachment(id, embed?.site)}
     >
       {children(() => {
-        runtime.focusAttachment(id);
+        runtime.focusAttachment(id, embed?.site);
         setMenuOpen(true);
       })}
       {menuOpen ? (
@@ -181,6 +204,7 @@ export interface AttachmentProps {
   readonly id: string;
   readonly alt?: string;
   readonly runtime: MarkdownRuntime;
+  readonly embed?: EmbedToggle;
 }
 
 /**
@@ -190,7 +214,7 @@ export interface AttachmentProps {
  * a PDF, a zip, and notably an SVG (SPEC §3.6's stored-XSS rule, enforced in
  * `runtime.isInlineImage`).
  */
-export function AttachmentImage({ id, alt, runtime }: AttachmentProps): ReactNode {
+export function AttachmentImage({ id, alt, runtime, embed }: AttachmentProps): ReactNode {
   const load = useCallback((key: string) => runtime.attachmentBlob(key), [runtime]);
   const { value: blob, done } = useResolved(id, load);
 
@@ -202,10 +226,10 @@ export function AttachmentImage({ id, alt, runtime }: AttachmentProps): ReactNod
     );
   }
   if (!blob) return <AttachmentChip id={id} alt={alt} runtime={runtime} unavailable />;
-  if (!isInlineImage(blob.mime)) return <AttachmentChip id={id} alt={alt} runtime={runtime} />;
+  if (!isInlineImage(blob.mime)) return <AttachmentChip id={id} alt={alt} runtime={runtime} embed={embed} />;
 
   return (
-    <AttachmentActions id={id} runtime={runtime}>
+    <AttachmentActions id={id} runtime={runtime} embed={embed}>
       {(open) => (
         <img
           className="markdown:max-w-full markdown:rounded"
@@ -225,7 +249,7 @@ export interface AttachmentChipProps extends AttachmentProps {
 }
 
 /** A non-image attachment, or an image that could not be loaded: a chip. */
-export function AttachmentChip({ id, alt, runtime, unavailable }: AttachmentChipProps): ReactNode {
+export function AttachmentChip({ id, alt, runtime, unavailable, embed }: AttachmentChipProps): ReactNode {
   const load = useCallback((key: string) => runtime.attachmentMeta(key), [runtime]);
   const { value: meta } = useResolved<AttachmentMeta | null>(id, load);
   const name = alt && alt.length > 0 ? alt : (meta?.name ?? id);
@@ -239,7 +263,7 @@ export function AttachmentChip({ id, alt, runtime, unavailable }: AttachmentChip
   }
 
   return (
-    <AttachmentActions id={id} runtime={runtime}>
+    <AttachmentActions id={id} runtime={runtime} embed={embed}>
       {(open) => (
         <button
           type="button"

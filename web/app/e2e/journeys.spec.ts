@@ -32,13 +32,14 @@ import {
 /**
  * What `plugins/base/dist` holds, plus the one example plugin the suite installs.
  *
- * The 16 of SPEC §6.5's table plus `extra-task-states`. M4's two proof plugins
+ * The 19 of SPEC §6.5's table plus `extra-task-states`. M4's two proof plugins
  * (`calendar`, `agenda`) were removed on 2026-09-24; on 2026-09-26 `header` was split
  * out of `shell-ui`, `notices` and `sync-status` out of `header`, `context-menu` out of
- * `folders`, and `properties` was removed; `search` was folded into `doc-list`. The base distribution and `BASE_PLUGIN_IDS` —
- * what `?safe=1` boots — are the same sixteen. `safe-mode.spec.ts` is what pins that.
+ * `folders`, and `properties` was removed; `search` was folded into `doc-list`;
+ * `attachments`, `native-preview` and `slash-commands` were added. The base distribution and `BASE_PLUGIN_IDS` —
+ * what `?safe=1` boots — are the same nineteen. `safe-mode.spec.ts` is what pins that.
  */
-const EXPECTED_PLUGINS = 17;
+const EXPECTED_PLUGINS = 20;
 
 /**
  * `--lm-bg` as the `midnight` theme paints it (`plugins/base/themes/src/index.tsx`).

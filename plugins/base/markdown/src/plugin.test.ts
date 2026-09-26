@@ -134,7 +134,7 @@ function hasComponent(node: ReactNode, name: string): boolean {
 // ---------------------------------------------------------------------------
 
 describe("activate", () => {
-  it("defines the five markdown.* points", () => {
+  it("defines the six markdown.* points", () => {
     const host = fakeKernel();
     activate(host.kernel);
     expect(host.defined).toEqual([
@@ -143,6 +143,7 @@ describe("activate", () => {
       POINTS.markdownRemark,
       POINTS.markdownComponent,
       POINTS.markdownTaskState,
+      POINTS.markdownAttachment,
     ]);
   });
 

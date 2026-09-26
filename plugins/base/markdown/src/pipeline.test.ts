@@ -17,10 +17,15 @@
 import { describe, expect, it } from "vitest";
 import { createElement, isValidElement, type ReactNode } from "react";
 
-import type { MarkdownDirectiveProps, MarkdownFenceProps, MarkdownTaskState } from "../../_shared/points.js";
+import type {
+  MarkdownAttachmentProps,
+  MarkdownDirectiveProps,
+  MarkdownFenceProps,
+  MarkdownTaskState,
+} from "../../_shared/points.js";
 
 import { buildProcessor } from "./processor.js";
-import { renderTree, type RenderRegistries } from "./render.js";
+import { renderTree, type RenderOptions, type RenderRegistries } from "./render.js";
 import type { MarkdownRuntime } from "./runtime.js";
 import { buildTaskRegistry, scanTasks } from "./tasks.js";
 
@@ -48,6 +53,7 @@ interface Registries {
   readonly directives?: Record<string, (props: MarkdownDirectiveProps) => ReactNode>;
   readonly fences?: Record<string, (props: MarkdownFenceProps) => ReactNode>;
   readonly overrides?: Record<string, (props: Record<string, unknown>) => ReactNode>;
+  readonly attachment?: (props: MarkdownAttachmentProps) => ReactNode;
 }
 
 function registriesOf(options: Registries = {}): RenderRegistries {
@@ -56,6 +62,7 @@ function registriesOf(options: Registries = {}): RenderRegistries {
     fences: new Map(Object.entries(options.fences ?? {})) as RenderRegistries["fences"],
     overrides: new Map(Object.entries(options.overrides ?? {})) as RenderRegistries["overrides"],
     tasks: buildTaskRegistry(options.tasks ?? [TODO, DONE]),
+    attachment: options.attachment,
   };
 }
 
@@ -65,7 +72,10 @@ function registriesOf(options: Registries = {}): RenderRegistries {
  * `documentId` defaults to **undefined** so it stays out of most expectations; the tests
  * that care about it pass one.
  */
-function render(text: string, options: Registries & { readonly documentId?: string } = {}): string {
+function render(
+  text: string,
+  options: Registries & { readonly documentId?: string; readonly embeds?: RenderOptions["embeds"] } = {},
+): string {
   const processor = buildProcessor([]);
   const registries = registriesOf(options);
   const tree = processor.parse(text);
@@ -77,6 +87,7 @@ function render(text: string, options: Registries & { readonly documentId?: stri
       runtime: RUNTIME,
       taskScan: scanTasks(tree, text, registries.tasks),
       rescan: (body) => scanTasks(processor.parse(body), body, registries.tasks),
+      embeds: options.embeds,
     }),
   );
 }
@@ -457,6 +468,30 @@ describe("links and images", () => {
   it("routes attachment:// to a chip, and an image embed to the image renderer", () => {
     expect(render(`[file](attachment://${ULID})`)).toContain(`<AttachmentChip id="${ULID}" alt="file" />`);
     expect(render(`![shot](attachment://${ULID})`)).toContain(`<AttachmentImage id="${ULID}" alt="shot" />`);
+  });
+
+  it("hands an embed to the markdown.attachment renderer, with its own image as the fallback", () => {
+    const Renderer = (_props: MarkdownAttachmentProps): ReactNode => null;
+    const out = render(`![shot](attachment://${ULID})`, { attachment: Renderer });
+    expect(out).toContain(`<Renderer id="${ULID}" alt="shot" />`);
+    expect(out).not.toContain("<AttachmentImage");
+    // A link is still a chip: only embeds are the renderer's.
+    expect(render(`[file](attachment://${ULID})`, { attachment: Renderer })).toContain("<AttachmentChip");
+  });
+
+  it("embeds a doc:// image within the depth, as a block, and links past it or in a cycle", () => {
+    const embeds = (depth: number, ancestors: readonly string[] = []) => ({
+      chain: { depth, ancestors },
+      maxDepth: 4,
+      renderBody: () => null,
+    });
+    const embedded = render(`![](doc://${OTHER})`, { embeds: embeds(0) });
+    expect(embedded).toContain(`<DocEmbed id="${OTHER}"`);
+    expect(embedded).not.toContain("<p>");
+    expect(render(`![](doc://${OTHER})`, { embeds: embeds(4) })).toContain(`<DocLink id="${OTHER}"`);
+    expect(render(`![](doc://${OTHER})`, { embeds: embeds(1, [OTHER]) })).toContain(`<DocLink id="${OTHER}"`);
+    // No embeds configured at all: a link, as before.
+    expect(render(`![](doc://${OTHER})`)).toContain(`<DocLink id="${OTHER}"`);
   });
 
   it("opens http(s) links in a new tab with noopener", () => {

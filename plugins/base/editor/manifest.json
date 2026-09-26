@@ -26,6 +26,7 @@
     "style": "frontend/style.css"
   },
   "x-defines": [
-    "editor.extension"
+    "editor.extension",
+    "editor.paste"
   ]
 }

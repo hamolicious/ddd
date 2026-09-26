@@ -1,0 +1,20 @@
+{
+  "id": "attachments",
+  "version": "1.0.0",
+  "name": "Attachments",
+  "description": "Uploads files pasted into the editor, and shows embedded files with a viewer per file type.",
+  "author": "Life Manager base distribution",
+  "license": "MIT OR Apache-2.0",
+  "x-tailwind": true,
+  "kernel": "^1.0",
+  "peerLibraries": {
+    "react": "^18.0.0"
+  },
+  "frontend": {
+    "module": "frontend/index.mjs",
+    "style": "frontend/style.css"
+  },
+  "x-defines": [
+    "attachments.viewer"
+  ]
+}

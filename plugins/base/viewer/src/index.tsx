@@ -46,6 +46,11 @@ import {
 interface MarkdownApi {
   render(text: string, options?: { readonly documentId?: string }): ReactNode;
   bodyOf(text: string): string;
+  /** Newer `markdown` only; `undefined` result ⇒ nobody renders attachments, draw our own. */
+  renderAttachment?(
+    attachmentId: string,
+    options: { readonly placement: "inline" | "page"; readonly alt?: string; readonly fallback: ReactNode },
+  ): ReactNode | undefined;
 }
 
 interface AttachmentMeta {
@@ -82,7 +87,7 @@ export default function activate(kernel: Kernel): void {
     }
 
     if (wrapper) {
-      return <AttachmentPreview kernel={kernel} reference={wrapper} title={row.title} />;
+      return <AttachmentPreview kernel={kernel} markdown={markdown} reference={wrapper} title={row.title} />;
     }
 
     return (
@@ -137,12 +142,78 @@ type BlobState =
 
 function AttachmentPreview({
   kernel,
+  markdown,
   reference,
   title,
 }: {
   readonly kernel: Kernel;
+  readonly markdown: MarkdownApi;
   readonly reference: AttachmentReference;
   readonly title: string;
+}): ReactNode {
+  const [meta, setMeta] = useState<AttachmentMeta | undefined>(undefined);
+
+  // The caption's facts. The body loads the bytes itself, whichever body it is.
+  useEffect(() => {
+    let cancelled = false;
+    kernel.session
+      .fetch(`/attachments/${encodeURIComponent(reference.id)}/meta`)
+      .then((response) => response.json() as Promise<AttachmentMeta>)
+      .then((resolved) => {
+        if (!cancelled) setMeta(resolved);
+      })
+      .catch(() => {
+        // The body says why; the caption just stays short.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [kernel, reference.id]);
+
+  const name = meta?.name ?? reference.label ?? title;
+  const own = <OwnPreview kernel={kernel} reference={reference} name={name} />;
+  // A `markdown.attachment` renderer (the `attachments` plugin's viewers) goes first; this
+  // plugin's own preview is what it falls back to, and what shows without one.
+  let body: ReactNode = own;
+  try {
+    body = markdown.renderAttachment?.(reference.id, { placement: "page", alt: name, fallback: own }) ?? own;
+  } catch (error) {
+    kernel.log.error("markdown.renderAttachment threw; showing the built-in preview", error);
+  }
+
+  return (
+    <div className="viewer:flex viewer:min-w-0 viewer:justify-center viewer:p-4 viewer:font-sans viewer:text-text viewer:compact:p-2">
+      <figure className="viewer:m-0 viewer:flex viewer:w-full viewer:max-w-[min(100%,72ch)] viewer:flex-col viewer:gap-2">
+        {body}
+        <figcaption className="viewer:flex viewer:flex-col viewer:gap-0.5 viewer:text-sm">
+          <span className="viewer:break-words viewer:font-semibold">{name}</span>
+          <span className="viewer:text-sm viewer:text-text-muted">
+            {meta?.mime ?? "unknown type"} · {formatBytes(meta?.size)}
+            {meta?.revision !== undefined ? ` · revision ${meta.revision}` : ""}
+          </span>
+          <span className="viewer:mt-1">
+            {/* A same-origin link, so the server's Content-Disposition decides whether
+                it opens or downloads — the allowlist of safe inline types is the
+                server's call, not this plugin's (SPEC §3.6). */}
+            <a className="viewer:tap-h viewer:inline-flex viewer:items-center viewer:text-link viewer:focus-visible:outline-2 viewer:focus-visible:outline-offset-2 viewer:focus-visible:outline-focus" href={apiUrl(reference.id)} target="_blank" rel="noreferrer">
+              Open the file
+            </a>
+          </span>
+        </figcaption>
+      </figure>
+    </div>
+  );
+}
+
+/** The built-in preview: what a wrapper document shows with no attachment renderer. */
+function OwnPreview({
+  kernel,
+  reference,
+  name,
+}: {
+  readonly kernel: Kernel;
+  readonly reference: AttachmentReference;
+  readonly name: string;
 }): ReactNode {
   const [meta, setMeta] = useState<AttachmentMeta | undefined>(undefined);
   const [state, setState] = useState<BlobState>({ phase: "loading" });
@@ -218,30 +289,7 @@ function AttachmentPreview({
   }, [kernel, reference.id]);
 
   const kind = previewKindFor(meta?.mime);
-  const name = meta?.name ?? reference.label ?? title;
-
-  return (
-    <div className="viewer:flex viewer:min-w-0 viewer:justify-center viewer:p-4 viewer:font-sans viewer:text-text viewer:compact:p-2">
-      <figure className="viewer:m-0 viewer:flex viewer:max-w-[min(100%,72ch)] viewer:flex-col viewer:gap-2">
-        <PreviewBody kind={kind} state={state} name={name} />
-        <figcaption className="viewer:flex viewer:flex-col viewer:gap-0.5 viewer:text-sm">
-          <span className="viewer:break-words viewer:font-semibold">{name}</span>
-          <span className="viewer:text-sm viewer:text-text-muted">
-            {meta?.mime ?? "unknown type"} · {formatBytes(meta?.size)}
-            {meta?.revision !== undefined ? ` · revision ${meta.revision}` : ""}
-          </span>
-          <span className="viewer:mt-1">
-            {/* A same-origin link, so the server's Content-Disposition decides whether
-                it opens or downloads — the allowlist of safe inline types is the
-                server's call, not this plugin's (SPEC §3.6). */}
-            <a className="viewer:tap-h viewer:inline-flex viewer:items-center viewer:text-link viewer:focus-visible:outline-2 viewer:focus-visible:outline-offset-2 viewer:focus-visible:outline-focus" href={apiUrl(reference.id)} target="_blank" rel="noreferrer">
-              Open the file
-            </a>
-          </span>
-        </figcaption>
-      </figure>
-    </div>
-  );
+  return <PreviewBody kind={kind} state={state} name={name} />;
 }
 
 function PreviewBody({

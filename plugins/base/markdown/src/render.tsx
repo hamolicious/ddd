@@ -27,15 +27,18 @@
  * the only faithful reconstruction available once remark has consumed the syntax.
  */
 
+import type { DocumentRow } from "@kernel";
 import { createElement, Fragment, type ComponentType, type ReactNode } from "react";
 
 import type {
+  MarkdownAttachmentProps,
   MarkdownDirective,
   MarkdownDirectiveProps,
   MarkdownFenceProps,
 } from "../../_shared/points.js";
 
-import { AttachmentChip, AttachmentImage, DocLink } from "./links.js";
+import { AttachmentActions, AttachmentChip, AttachmentImage, DocLink, type EmbedToggle } from "./links.js";
+import { DocEmbed, mayEmbed, type EmbedChain } from "./doc-embed.js";
 import { sourceOf, spanOf, textOf, walk, type MdNode } from "./mdast.js";
 import type { MarkdownRuntime } from "./runtime.js";
 import { classifyUrl, fragmentOf, idFromScheme } from "./schemes.js";
@@ -55,6 +58,8 @@ export interface RenderRegistries {
   readonly fences: ReadonlyMap<string, ComponentType<MarkdownFenceProps>>;
   readonly overrides: ReadonlyMap<string, ComponentType<Record<string, unknown>>>;
   readonly tasks: TaskRegistry;
+  /** The `markdown.attachment` renderer that won, if any; else embeds render here. */
+  readonly attachment?: ComponentType<MarkdownAttachmentProps>;
 }
 
 export interface RenderOptions {
@@ -67,6 +72,12 @@ export interface RenderOptions {
   readonly taskScan: TaskScan;
   /** Re-locate markers in a (possibly changed) body — the click path's recovery. */
   readonly rescan: (body: string) => TaskScan;
+  /** `![](doc://…)` embeds; absent ⇒ they render as links. */
+  readonly embeds?: {
+    readonly chain: EmbedChain;
+    readonly maxDepth: number;
+    readonly renderBody: (row: DocumentRow, next: EmbedChain) => ReactNode;
+  };
 }
 
 interface Env extends RenderOptions {
@@ -133,7 +144,14 @@ function renderNode(node: MdNode, key: string, env: Env): ReactNode {
       );
 
     case "paragraph":
-      return <p key={key}>{renderChildren(node, env)}</p>;
+      // An embedded document is block content, which a `<p>` cannot hold.
+      return node.children?.some((child) => embeddedDocument(child, env) !== null) ? (
+        <div key={key} className="md-p">
+          {renderChildren(node, env)}
+        </div>
+      ) : (
+        <p key={key}>{renderChildren(node, env)}</p>
+      );
 
     case "heading": {
       const depth = Math.min(Math.max(node.depth ?? 1, 1), 6);
@@ -404,7 +422,9 @@ function renderLink(node: MdNode, key: string, env: Env): ReactNode {
 
   const attachment = idFromScheme(node.url, "attachment");
   if (attachment !== null) {
-    return <AttachmentChip key={key} id={attachment} alt={textOf(node)} runtime={env.runtime} />;
+    return (
+      <AttachmentChip key={key} id={attachment} alt={textOf(node)} runtime={env.runtime} embed={embedOf(node, env)} />
+    );
   }
 
   return (
@@ -423,6 +443,35 @@ function renderLink(node: MdNode, key: string, env: Env): ReactNode {
   );
 }
 
+/** The document an image node embeds at this point of the chain, or `null` for a link. */
+function embeddedDocument(node: MdNode, env: Env): string | null {
+  if (node.type !== "image" || !env.embeds || typeof node.url !== "string") return null;
+  const id = idFromScheme(node.url, "doc");
+  return id !== null && mayEmbed(env.embeds.chain, id, env.embeds.maxDepth) ? id : null;
+}
+
+/**
+ * The preview ⇄ link toggle for an `attachment://` link or image: where it is in the
+ * rendered text and the write that adds or removes its `!`. Nothing without a document
+ * to write to, or without a source position.
+ */
+function embedOf(node: MdNode, env: Env): EmbedToggle | undefined {
+  const documentId = env.documentId;
+  const span = spanOf(node);
+  const source = sourceOf(node, env.source);
+  if (documentId === undefined || !span || !source) return undefined;
+  const site = { documentId, offset: env.offset, location: { at: span.start, source } };
+  return {
+    preview: node.type === "image",
+    site,
+    toggle: () => {
+      env.runtime
+        .toggleEmbed(site)
+        .catch((error: unknown) => env.runtime.kernel.log.error("embed toggle failed", { documentId, error }));
+    },
+  };
+}
+
 /** An image. `attachment://` is the app's own scheme; `http(s)` is an ordinary `<img>`. */
 function renderImage(node: MdNode, key: string, env: Env): ReactNode {
   const verdict = classifyUrl(node.url);
@@ -436,14 +485,46 @@ function renderImage(node: MdNode, key: string, env: Env): ReactNode {
 
   const attachment = idFromScheme(node.url, "attachment");
   if (attachment !== null) {
-    return (
-      <AttachmentImage key={key} id={attachment} alt={node.alt ?? undefined} runtime={env.runtime} />
-    );
+    const alt = node.alt ?? undefined;
+    const embed = embedOf(node, env);
+    const renderer = env.registries.attachment;
+    if (!renderer) {
+      return <AttachmentImage key={key} id={attachment} alt={alt} runtime={env.runtime} embed={embed} />;
+    }
+    const own = <AttachmentImage id={attachment} alt={alt} runtime={env.runtime} embed={embed} />;
+    return createElement(renderer, {
+      key,
+      id: attachment,
+      alt,
+      placement: "inline",
+      fallback: own,
+      frame: (content: ReactNode) => (
+        <AttachmentActions id={attachment} runtime={env.runtime} embed={embed}>
+          {() => content}
+        </AttachmentActions>
+      ),
+    });
   }
 
-  // A `doc://` image has no bytes behind it; render the link instead of a broken frame.
+  // A `doc://` image has no bytes behind it: it embeds the document's body, or, past the
+  // depth limit or in a cycle, is a link.
   const documentTarget = idFromScheme(node.url, "doc");
   if (documentTarget !== null) {
+    const embeds = env.embeds;
+    if (embeds && embeddedDocument(node, env) !== null) {
+      const next: EmbedChain = {
+        depth: embeds.chain.depth + 1,
+        ancestors: [...embeds.chain.ancestors, documentTarget],
+      };
+      return (
+        <DocEmbed
+          key={key}
+          id={documentTarget}
+          runtime={env.runtime}
+          renderBody={(row) => embeds.renderBody(row, next)}
+        />
+      );
+    }
     return <DocLink key={key} id={documentTarget} runtime={env.runtime} />;
   }
 
