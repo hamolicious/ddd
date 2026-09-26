@@ -20,6 +20,8 @@ import type { ReactElement } from "react";
 
 import type { DocumentQuery, DocumentRow, DocumentsApi } from "@kernel";
 
+import type { ContextMenuApi } from "../../_shared/context-menu-api.js";
+
 import { FilterBar } from "./FilterBar.js";
 import {
   TRASHED_ONLY,
@@ -39,12 +41,15 @@ export interface DocListViewProps {
   readonly onOpen: (id: string) => void;
   readonly onCreate: () => void;
   readonly onDelete: (id: string) => Promise<void>;
+  /** `context-menu`'s service: the sort menu and each row's ⋯ menu. */
+  readonly menu: ContextMenuApi;
   /** Reports the ids currently rendered, so `DocListApi.visible()` is not a guess. */
   readonly onRendered?: (ids: readonly string[]) => void;
 }
 
 export function DocListView({
   documents,
+  menu,
   onOpen,
   onCreate,
   onDelete,
@@ -85,6 +90,7 @@ export function DocListView({
       </header>
 
       <FilterBar
+        menu={menu}
         draft={draft}
         onDraftChange={setDraft}
         sortField={sortField}
@@ -138,18 +144,40 @@ export function DocListView({
                 <div className="doclist-item-actions doclist:col-start-2 doclist:row-span-2 doclist:row-start-1 doclist:compact:[&_button]:px-1.5 doclist:compact:[&_button]:text-sm">
                   <button
                     type="button"
+                    className="doclist-row-menu doclist:inline-flex doclist:w-[var(--lm-tap-target)] doclist:items-center doclist:justify-center doclist:border-transparent! doclist:bg-transparent! doclist:p-0! doclist:text-text-muted doclist:hover:border-border! doclist:hover:text-text"
+                    aria-haspopup="menu"
+                    aria-label={`Actions for ${row.title}`}
                     disabled={busy === row.id}
-                    onClick={() => {
-                      setBusy(row.id);
-                      setError(undefined);
-                      void onDelete(row.id)
-                        .catch((cause: unknown) =>
-                          setError(cause instanceof Error ? cause.message : String(cause)),
-                        )
-                        .finally(() => setBusy(undefined));
-                    }}
+                    onClick={(event) =>
+                      menu.open({
+                        title: row.title,
+                        anchor: event.currentTarget,
+                        sections: [
+                          {
+                            items: [
+                              { id: "open", label: "Open", run: () => onOpen(row.id) },
+                              {
+                                id: "trash",
+                                label: "Move to Trash",
+                                hint: "Restorable for 30 days.",
+                                danger: true,
+                                run: () => {
+                                  setBusy(row.id);
+                                  setError(undefined);
+                                  void onDelete(row.id)
+                                    .catch((cause: unknown) =>
+                                      setError(cause instanceof Error ? cause.message : String(cause)),
+                                    )
+                                    .finally(() => setBusy(undefined));
+                                },
+                              },
+                            ],
+                          },
+                        ],
+                      })
+                    }
                   >
-                    Move to Trash
+                    ⋯
                   </button>
                 </div>
               </li>

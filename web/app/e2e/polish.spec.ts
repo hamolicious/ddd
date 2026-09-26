@@ -26,6 +26,7 @@ import {
   showSidebar,
   signIn,
   waitSynced,
+  trashRow,
 } from "./helpers.js";
 
 /** Nothing on the page may push the document wider than the viewport. */
@@ -139,7 +140,7 @@ test.describe("copy and labels that were wrong", () => {
     await signIn(page, ADMIN);
     const row = docRows(page).filter({ hasText: "Trash attribution fixture" });
     await expect(row).toHaveCount(1);
-    await row.getByRole("button", { name: /move to trash/i }).click();
+    await trashRow(page, row);
 
     await page.goto("/#/trash");
     const trashed = page.locator(".doclist-item").filter({ hasText: "Trash attribution fixture" });

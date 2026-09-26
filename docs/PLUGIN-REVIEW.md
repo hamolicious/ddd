@@ -23,18 +23,19 @@ browser's device toolbar at 390 × 844, and 844 × 390 for landscape.
 | 4 | `notices` | [x] | Split out of `header`; bell restyled |
 | 5 | `sync-status` | [x] | Split out of `header`; icon-only dot, ✕ / ↻ when down |
 | 6 | `commands` | [x] | Palette Escape, footer, bar button, list indent |
-| 7 | `settings` | [x] | Base sections first, extensions below a divider |
-| 8 | `themes` | [x] | No changes |
-| 9 | `doc-list` | [ ] | |
-| 10 | `folders` | [ ] | |
-| 11 | `search` | [ ] | |
-| 12 | `document-surface` | [ ] | |
-| 13 | `editor` | [ ] | |
-| 14 | `markdown` | [ ] | |
-| 15 | `viewer` | [ ] | |
-| 16 | `admin` | [ ] | |
-| 17 | `extra-task-states` (example) | [ ] | |
-| 18 | `alt-editor` (example) | [ ] | |
+| 7 | `context-menu` | [ ] | New: one menu / sheet service for every plugin |
+| 8 | `settings` | [x] | Base sections first, extensions below a divider |
+| 9 | `themes` | [x] | No changes |
+| 10 | `doc-list` | [ ] | |
+| 11 | `folders` | [ ] | |
+| 12 | `search` | [ ] | |
+| 13 | `document-surface` | [ ] | |
+| 14 | `editor` | [ ] | |
+| 15 | `markdown` | [ ] | |
+| 16 | `viewer` | [ ] | |
+| 17 | `admin` | [ ] | |
+| 18 | `extra-task-states` (example) | [ ] | |
+| 19 | `alt-editor` (example) | [ ] | |
 
 `properties` was removed on 2026-09-26 and is not reviewed.
 
@@ -163,7 +164,28 @@ searches and runs them (Mod+K), and per-user keyboard shortcuts with conflict re
 removed; the result list's 40 px left indent (lost in the migration) removed
 (2026-09-26).
 
-## 7. `settings` — the settings screen
+## 7. `context-menu` — menus and sheets
+
+**What it does.** One service every plugin uses to show a menu or a sheet: a list of
+actions (in titled sections, choices marked ✓), or a body the plugin draws itself. With
+the button that opened it on a wide screen it is a popover under that button; on a
+phone, or with no button, it is a bottom sheet (a centred dialog above phone width). It
+renders from `shell-ui`'s overlay spot. Split out of `folders` on 2026-09-26; `folders`
+and `doc-list` use it.
+
+**Where to see it.** Any ⋯ button (document rows, folder rows); the document list's sort
+icon; a folder's Move to… picker.
+
+- [ ] A popover sits under its button, right-aligned, and stays on screen near the edges.
+- [ ] Phone: the same menus are bottom sheets with a title and ✕.
+- [ ] Arrows, Home / End move between items; Tab stays inside; Escape and a click outside
+  close it; focus returns to the button that opened it.
+- [ ] Choice menus (sort) mark the current choice and open with focus on it.
+- [ ] Danger items (Move to Trash, Delete folder) are red.
+
+**Notes.**
+
+## 8. `settings` — the settings screen
 
 **What it does.** The Settings view: a list of sections contributed by other plugins,
 plus its own Account section (sign out). On a phone the list and the section take turns
@@ -179,7 +201,7 @@ on screen.
 
 **Notes.** Base / extension grouping added (2026-09-26).
 
-## 8. `themes` — appearance
+## 9. `themes` — appearance
 
 **What it does.** Theme registry and picker (Settings → Appearance). Themes override the
 kernel's colour and spacing tokens; light / dark can follow the system.
@@ -193,25 +215,32 @@ appearance" commands.
 
 **Notes.** No changes.
 
-## 9. `doc-list` — documents and Trash
+## 10. `doc-list` — documents and Trash
 
 **What it does.** The start page: every document, sortable and filterable, with saved
-views in the sidebar's Views panel. Also the Trash view (restore within 30 days) and the
-"New document" command.
+views in the sidebar's Views panel. The top row is three icons — sort (a menu of
+fields), direction (flips the order) and filters (a funnel that unfolds the filters, its
+badge counting those applied). Each row has a ⋯ menu with Open and Move to Trash. Also
+the Trash view (restore within 30 days) and the "New document" command.
 
 **Where to see it.** `#/`, `#/trash`, the Views panel. Mod+N for a new document.
 
-- [ ] Sort by each option; filters narrow the list and show how many matched.
+- [ ] Sort icon: each field sorts the list; direction icon flips it and says which way.
+- [ ] Funnel: unfolds the filters; filters narrow the list; the badge counts them, "Show
+  machine documents" included; Clear resets all of them.
 - [ ] Views panel: switching views changes the list; the current one is highlighted; no
   bullets.
 - [ ] Mod+N creates a document and opens it.
-- [ ] Move to Trash, then restore from `#/trash`.
+- [ ] Row ⋯ → Move to Trash, then restore from `#/trash`.
 
 **Notes.** Views list bullets fixed; the list header's "New document" button removed —
 Mod+N and the palette create documents, and an empty workspace still offers "Create
-the first document" (2026-09-26).
+the first document" (2026-09-26). Sort and direction became icons, the sort field a
+`context-menu` popover; "Filters" became a funnel icon with a count badge; "Show machine
+documents" is a filter (counted, cleared by Clear); each row's Move to Trash button
+became a ⋯ menu (2026-09-26).
 
-## 10. `folders` — the folder tree
+## 11. `folders` — the folder tree
 
 **What it does.** A tree in the sidebar built from each document's `path:`; documents
 with no path sit at the root. Moving a document or a folder rewrites only the `path:`
@@ -226,9 +255,10 @@ folder, rename, move and delete. Settings → Folders sets where new notes go.
 - [ ] Landscape phone: the ⋯ buttons are visible without hover.
 - [ ] Settings → Folders: "New notes go to" is honoured by Mod+N.
 
-**Notes.**
+**Notes.** The ⋯ menus, delete confirmation and Move to… picker now open through
+`context-menu` rather than the tree's own sheet (2026-09-26).
 
-## 11. `search` — search
+## 12. `search` — search
 
 **What it does.** The search page, over a local index that works offline, with the
 server's index as a second source. Each source's result or failure is reported.
@@ -241,7 +271,7 @@ server's index as a second source. Each source's result or failure is reported.
 
 **Notes.** The top-bar search box was removed (2026-09-26).
 
-## 12. `document-surface` — opening a document
+## 13. `document-surface` — opening a document
 
 **What it does.** Owns the `#/doc/<id>` page: loads the document, shows its title and the
 mode switcher (Read / Edit), and hands the document to the active mode. Mod+E cycles
@@ -256,7 +286,7 @@ modes.
 
 **Notes.**
 
-## 13. `editor` — Edit mode
+## 14. `editor` — Edit mode
 
 **What it does.** CodeMirror bound to the live document, so edits sync as you type. Shows
 frontmatter as raw text, can fold machine-written sections, and warns when the
@@ -271,7 +301,7 @@ frontmatter could not be read.
 
 **Notes.**
 
-## 14. `markdown` — rendering markdown
+## 15. `markdown` — rendering markdown
 
 **What it does.** Turns markdown into what Read mode shows: headings, lists, tables,
 code, links between documents (`doc://`), attachments, and task checkboxes with a state
@@ -286,7 +316,7 @@ menu. Other plugins extend it (custom task markers, directives, code-fence rende
 
 **Notes.**
 
-## 15. `viewer` — Read mode
+## 16. `viewer` — Read mode
 
 **What it does.** The Read mode: the rendered body, with a properties header above it
 showing the frontmatter (dates formatted, lists as chips) and machine sections hidden.
@@ -300,7 +330,7 @@ Display only; editing happens in Edit mode.
 
 **Notes.** The properties panel it referred readers to was removed (2026-09-26).
 
-## 16. `admin` — administration
+## 17. `admin` — administration
 
 **What it does.** Users, invites, the audit log, orphan files, snapshots, the plugin list
 (enable, disable, capabilities, configuration, cron), and a markdown export. Admins only.
@@ -315,7 +345,7 @@ Display only; editing happens in Edit mode.
 
 **Notes.** Styles lost in the migration restored (2026-09-26).
 
-## 17. `extra-task-states` (example)
+## 18. `extra-task-states` (example)
 
 **What it does.** Proves plugins can extend markdown: adds three task markers, `[/]` in
 progress, `[-]` dropped, `[?]` question.
@@ -324,7 +354,7 @@ progress, `[-]` dropped, `[?]` question.
 
 **Notes.**
 
-## 18. `alt-editor` (example)
+## 19. `alt-editor` (example)
 
 **What it does.** Proves the built-in editor is replaceable: a plain textarea Edit mode
 bound to the same live document.

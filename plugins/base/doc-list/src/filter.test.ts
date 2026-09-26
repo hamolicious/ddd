@@ -381,6 +381,8 @@ describe("appliedCount", () => {
    */
   it("counts what the query carries, not what the boxes hold", () => {
     expect(appliedCount({ combine: "and", clauses: [] })).toBe(0);
+    // Showing machine documents is a filter like any other, so it counts.
+    expect(appliedCount({ combine: "and", clauses: [], includeMachine: true })).toBe(1);
     expect(appliedCount({ combine: "and", clauses: [], titleContains: "   " })).toBe(0);
     expect(appliedCount({ combine: "and", clauses: [], titleContains: " x " })).toBe(1);
     expect(appliedCount({ combine: "and", clauses: [clause(), clause({ id: "b", value: "" })] })).toBe(1);

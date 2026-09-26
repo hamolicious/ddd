@@ -1,0 +1,219 @@
+/**
+ * The one open menu or sheet, drawn from the `shell.overlay` spot.
+ *
+ * **A portal**, because the sidebar declares `container-type: inline-size`, which makes
+ * it the containing block for `position: fixed` descendants: a menu rendered in place
+ * would be clipped inside a 288 px column.
+ *
+ * **Popover or sheet.** With an anchor on a wide screen it sits under the anchor,
+ * right-aligned to it and kept on screen; otherwise it is a bottom sheet on a phone and
+ * a centred dialog above that. Either way the backdrop takes the click that closes it,
+ * so a click outside never also lands on whatever is underneath.
+ */
+
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactElement, ReactNode } from "react";
+import { createPortal } from "react-dom";
+
+import type { MenuItem, MenuRequest, SheetRequest } from "../../_shared/context-menu-api.js";
+import { useCompact } from "../../_shared/compact.js";
+
+const FOCUSABLE = 'button:not([disabled]), input, select, textarea, [href], [tabindex]:not([tabindex="-1"])';
+const GAP = 4;
+
+export type Open = { readonly kind: "menu"; readonly request: MenuRequest } | {
+  readonly kind: "sheet";
+  readonly request: SheetRequest;
+};
+
+export function MenuHost({
+  open,
+  close,
+}: {
+  readonly open: Open | undefined;
+  readonly close: () => void;
+}): ReactNode {
+  if (!open) return null;
+  // Keyed on the request, so a new menu is a fresh mount: focus moves into it again.
+  return <Panel key={keyOf(open)} open={open} close={close} />;
+}
+
+const keys = new WeakMap<object, number>();
+let next = 0;
+function keyOf(open: Open): number {
+  let key = keys.get(open.request);
+  if (key === undefined) {
+    key = next++;
+    keys.set(open.request, key);
+  }
+  return key;
+}
+
+function Panel({ open, close }: { readonly open: Open; readonly close: () => void }): ReactElement {
+  const compact = useCompact();
+  const panel = useRef<HTMLDivElement | null>(null);
+  const { anchor, title, description } = open.request;
+  const popover = !compact && anchor instanceof HTMLElement && anchor.isConnected;
+  const [position, setPosition] = useState<{ top: number; left: number } | undefined>(undefined);
+
+  useLayoutEffect(() => {
+    if (!popover || !anchor || !panel.current) return;
+    const place = (): void => {
+      const box = anchor.getBoundingClientRect();
+      const own = panel.current?.getBoundingClientRect();
+      const width = own?.width ?? 0;
+      const height = own?.height ?? 0;
+      const left = Math.max(GAP, Math.min(box.right - width, innerWidth - width - GAP));
+      const below = box.bottom + GAP;
+      const top = below + height > innerHeight - GAP ? Math.max(GAP, box.top - height - GAP) : below;
+      setPosition({ top, left });
+    };
+    place();
+    addEventListener("resize", place);
+    return () => removeEventListener("resize", place);
+  }, [anchor, popover]);
+
+  useEffect(() => {
+    const restore = anchor ?? document.activeElement;
+    const target =
+      panel.current?.querySelector<HTMLElement>('[aria-checked="true"]') ??
+      panel.current?.querySelector<HTMLElement>(FOCUSABLE);
+    target?.focus();
+    return () => {
+      if (restore instanceof HTMLElement && restore.isConnected) restore.focus();
+    };
+  }, [anchor]);
+
+  // Escape closes wherever focus is, like the palette.
+  useEffect(() => {
+    const onEscape = (event: KeyboardEvent): void => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      close();
+    };
+    document.addEventListener("keydown", onEscape);
+    return () => document.removeEventListener("keydown", onEscape);
+  }, [close]);
+
+  const onKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const focusable = [...(panel.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])];
+    if (focusable.length === 0) return;
+    const index = focusable.indexOf(document.activeElement as HTMLElement);
+    const move = (to: number): void => {
+      event.preventDefault();
+      focusable[(to + focusable.length) % focusable.length]?.focus();
+    };
+    if (event.key === "ArrowDown") move(index + 1);
+    else if (event.key === "ArrowUp") move(index - 1);
+    else if (event.key === "Home") move(0);
+    else if (event.key === "End") move(focusable.length - 1);
+    else if (event.key === "Tab") {
+      // Nothing behind a modal menu is reachable, so Tab cycles inside it.
+      if (event.shiftKey && index <= 0) move(focusable.length - 1);
+      else if (!event.shiftKey && index === focusable.length - 1) move(0);
+    }
+  }, []);
+
+  const body =
+    open.kind === "menu" ? (
+      <MenuSections request={open.request} close={close} />
+    ) : (
+      open.request.render(close)
+    );
+
+  const panelClasses = popover
+    ? "context-menu ctxmenu:fixed ctxmenu:flex ctxmenu:max-h-[min(70vh,32rem)] ctxmenu:min-w-[14rem] ctxmenu:max-w-[min(22rem,calc(100vw-1rem))] ctxmenu:flex-col ctxmenu:gap-1 ctxmenu:overflow-y-auto ctxmenu:rounded-lg ctxmenu:border ctxmenu:border-border ctxmenu:bg-bg-raised ctxmenu:p-1 ctxmenu:font-sans ctxmenu:text-text ctxmenu:shadow-2"
+    : "context-menu ctxmenu:flex ctxmenu:max-h-[85dvh] ctxmenu:w-full ctxmenu:flex-col ctxmenu:gap-3 ctxmenu:overflow-y-auto ctxmenu:rounded-t-lg ctxmenu:border ctxmenu:border-b-0 ctxmenu:border-border ctxmenu:bg-bg-raised ctxmenu:p-4 ctxmenu:pb-[calc(var(--lm-space)*1.5+env(safe-area-inset-bottom,0px))] ctxmenu:font-sans ctxmenu:text-text ctxmenu:shadow-2 ctxmenu:sm:max-h-[40rem] ctxmenu:sm:max-w-[30rem] ctxmenu:sm:rounded-lg ctxmenu:sm:border-b ctxmenu:sm:pb-4";
+
+  return createPortal(
+    <div
+      className={`ctxmenu:fixed ctxmenu:inset-0 ctxmenu:z-[1000] ${popover ? "" : "ctxmenu:flex ctxmenu:items-end ctxmenu:justify-center ctxmenu:bg-bg-overlay ctxmenu:sm:items-center ctxmenu:sm:p-8"}`}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) close();
+      }}
+      onKeyDown={onKeyDown}
+    >
+      <div
+        ref={panel}
+        className={panelClasses}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        style={
+          popover
+            ? position
+              ? { top: position.top, left: position.left }
+              : { visibility: "hidden", top: 0, left: 0 }
+            : undefined
+        }
+      >
+        {popover ? null : (
+          <header className="ctxmenu:flex ctxmenu:items-center ctxmenu:gap-3">
+            <h2 className="ctxmenu:m-0 ctxmenu:min-w-0 ctxmenu:flex-1 ctxmenu:break-words ctxmenu:text-lg">{title}</h2>
+            <button
+              type="button"
+              className="ctxmenu:tap ctxmenu:shrink-0 ctxmenu:rounded ctxmenu:border ctxmenu:border-transparent ctxmenu:bg-transparent ctxmenu:text-text-muted ctxmenu:hover:border-border ctxmenu:hover:text-text"
+              aria-label="Close"
+              onClick={close}
+            >
+              ✕
+            </button>
+          </header>
+        )}
+        {description ? <p className="ctxmenu:m-0 ctxmenu:px-2 ctxmenu:text-sm ctxmenu:text-text-muted">{description}</p> : null}
+        {body}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+function MenuSections({
+  request,
+  close,
+}: {
+  readonly request: MenuRequest;
+  readonly close: () => void;
+}): ReactElement {
+  const choose = (item: MenuItem): void => {
+    close();
+    item.run();
+  };
+  return (
+    <>
+      {request.sections.map((section, index) => (
+        <div key={section.title ?? index} role="group" aria-label={section.title} className={index > 0 ? "ctxmenu:border-t ctxmenu:border-border ctxmenu:pt-1" : ""}>
+          {section.title ? (
+            <p className="ctxmenu:m-0 ctxmenu:px-3 ctxmenu:pb-0.5 ctxmenu:pt-1.5 ctxmenu:text-xs ctxmenu:font-semibold ctxmenu:uppercase ctxmenu:tracking-[0.04em] ctxmenu:text-text-muted">
+              {section.title}
+            </p>
+          ) : null}
+          <ul className="ctxmenu:m-0 ctxmenu:flex ctxmenu:list-none ctxmenu:flex-col ctxmenu:p-0">
+            {section.items.map((item) => (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  role={item.checked === undefined ? "menuitem" : "menuitemradio"}
+                  aria-checked={item.checked}
+                  disabled={item.disabled}
+                  className={`ctxmenu:tap-h ctxmenu:flex ctxmenu:w-full ctxmenu:items-center ctxmenu:gap-2 ctxmenu:rounded-md ctxmenu:border-0 ctxmenu:bg-transparent ctxmenu:px-3 ctxmenu:py-1 ctxmenu:text-left ctxmenu:hover:bg-bg-subtle ctxmenu:focus-visible:bg-bg-subtle ctxmenu:disabled:opacity-50 ${item.danger ? "ctxmenu:text-danger" : "ctxmenu:text-text"}`}
+                  onClick={() => choose(item)}
+                >
+                  {item.checked === undefined ? null : (
+                    <span aria-hidden="true" className="ctxmenu:w-4 ctxmenu:shrink-0 ctxmenu:text-accent">
+                      {item.checked ? "✓" : ""}
+                    </span>
+                  )}
+                  <span className="ctxmenu:flex ctxmenu:min-w-0 ctxmenu:flex-col">
+                    <span>{item.label}</span>
+                    {item.hint ? <small className="ctxmenu:text-text-muted">{item.hint}</small> : null}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </>
+  );
+}

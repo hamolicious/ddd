@@ -106,7 +106,7 @@ test("a broken plugin fails alone, and safe mode boots past it", async ({ browse
 
       // The app is alive: the shell, the list and the welcome documents are all there.
       await expect(page.getByRole("banner")).toBeVisible();
-      await expect(page.getByRole("button", { name: "Welcome to Life Manager" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Welcome to Life Manager", exact: true })).toBeVisible();
 
       // And it says so: **one aggregated notice**, not one per plugin (SPEC §6.4),
       // with a route to admin.
@@ -152,7 +152,7 @@ test("a broken plugin fails alone, and safe mode boots past it", async ({ browse
     try {
       await signIn(page, ADMIN, { path: "/?safe=1" });
       await expect(page.getByRole("banner")).toBeVisible();
-      await expect(page.getByRole("button", { name: "Welcome to Life Manager" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Welcome to Life Manager", exact: true })).toBeVisible();
       // The broken plugin is not base, so it was never imported and there is nothing
       // to report: no failure notice at all.
       await expect(page.getByText(/plugin[s]? failed to load/i)).toHaveCount(0);
@@ -215,7 +215,7 @@ test("a broken plugin fails alone, and safe mode boots past it", async ({ browse
     const { context, page } = await freshPage(browser, base);
     try {
       await signIn(page, ADMIN);
-      await expect(page.getByRole("button", { name: "Welcome to Life Manager" })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Welcome to Life Manager", exact: true })).toBeVisible();
       // No failure notice any more — the recovery needed nothing but the file.
       await expect(page.getByText(/plugin[s]? failed to load/i)).toHaveCount(0);
     } finally {
@@ -238,7 +238,7 @@ test("a plugin that throws while rendering costs a chip, not the application", a
     // the contributed `icon` were wrapped, one throw here unmounted the React root and
     // `#root` was empty — no shell, no notice strip, no way out.
     await expect(page.getByRole("banner")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Welcome to Life Manager" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Welcome to Life Manager", exact: true })).toBeVisible();
 
     // Two in-place chips: one for the panel component, one for the icon — the icon being
     // the case no `boundary(component)` call could reach, because a `ReactNode` is not a

@@ -5,7 +5,7 @@
  * This file is not part of `@kernel` and never will be. The kernel knows point
  * names only as opaque strings — it has no idea what a navbar or a document mode is
  * (SPEC §2) — and the moment it did, replacing `shell-ui` would mean a kernel change.
- * What the base distribution *does* need is for its sixteen plugins to agree on
+ * What the base distribution *does* need is for its seventeen plugins to agree on
  * these shapes without importing each other, which is exactly what a shared
  * declaration file is for.
  *

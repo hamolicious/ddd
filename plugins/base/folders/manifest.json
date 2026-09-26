@@ -9,6 +9,7 @@
   "kernel": "^1.0",
   "dependencies": {
     "commands": "^1.0",
+    "context-menu": "^1.0",
     "doc-list": "^1.0",
     "router": "^1.0",
     "shell-ui": "^1.0"

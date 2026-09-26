@@ -48,6 +48,7 @@ import type { ReactElement } from "react";
 
 import type { CoreValue, DocumentRow, Kernel, SettingsValue, Unsubscribe } from "@kernel";
 
+import type { ContextMenuApi } from "../../_shared/context-menu-api.js";
 import {
   EXCLUDE_MACHINE_DOCUMENTS,
   isMachineDocument,
@@ -172,6 +173,7 @@ const documentFromRoute = (route: string): string | undefined => {
 export default function activate(kernel: Kernel): FoldersApi {
   const docs = kernel.services.require<DocListService>("doc-list");
   const router = kernel.services.require<RouterService>("router");
+  const menu = kernel.services.require<ContextMenuApi>("context-menu");
 
   kernel.settings.defineSchema({
     [SETTINGS_KEYS.defaultLocation]: {
@@ -662,6 +664,7 @@ export default function activate(kernel: Kernel): FoldersApi {
     const live = useStore();
     return (
       <FolderTree
+        menu={menu}
         rows={live.rows}
         loading={live.loading}
         {...(live.error !== undefined ? { error: live.error } : {})}

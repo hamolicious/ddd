@@ -49,6 +49,7 @@ import type { Kernel } from "@kernel";
 import { DocListView, TrashView } from "./DocListView.js";
 import { ViewsPanel } from "./ViewsPanel.js";
 import { yamlScalar } from "./yaml.js";
+import type { ContextMenuApi } from "../../_shared/context-menu-api.js";
 import {
   POINTS,
   type Command,
@@ -83,6 +84,7 @@ interface RouterService {
 
 export default function activate(kernel: Kernel): DocListApi {
   const router = kernel.services.require<RouterService>("router");
+  const menu = kernel.services.require<ContextMenuApi>("context-menu");
 
   /**
    * Where an unfiled new document goes — the folder `folders` keeps as a per-user
@@ -137,6 +139,7 @@ export default function activate(kernel: Kernel): DocListApi {
   const ListHost = (): ReactElement => (
     <DocListView
       documents={kernel.documents}
+      menu={menu}
       onOpen={open}
       onCreate={() => create()}
       onDelete={(id) => kernel.documents.delete(id)}

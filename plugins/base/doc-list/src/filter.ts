@@ -361,7 +361,11 @@ export function invalidClauses(draft: FilterDraft): readonly string[] {
  */
 export function appliedCount(draft: FilterDraft): number {
   const usable = draft.clauses.filter((clause) => clauseProblem(clause) === undefined).length;
-  return usable + ((draft.titleContains ?? "").trim() !== "" ? 1 : 0);
+  return (
+    usable +
+    ((draft.titleContains ?? "").trim() !== "" ? 1 : 0) +
+    (draft.includeMachine === true ? 1 : 0)
+  );
 }
 
 /** The filter that selects trashed documents (used with `includeDeleted: true`). */

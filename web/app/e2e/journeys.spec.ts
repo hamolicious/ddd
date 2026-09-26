@@ -5,7 +5,7 @@
  * fails if any layer between the keypress and Mongo is wrong. That is deliberately a
  * different job from the 650 unit tests — those prove the pieces, this proves the
  * assembly, and the assembly is what M3 actually delivered (the loader, the import
- * map, the registries, sixteen plugins that have never run in the same page before).
+ * map, the registries, seventeen plugins that have never run in the same page before).
  *
  * Ordering matters and parallelism is off: they share one workspace and one
  * first-user account, in that order, exactly like a real session (SPEC §5.1 —
@@ -26,18 +26,19 @@ import {
   showSidebar,
   signIn,
   waitSynced,
+  trashRow,
 } from "./helpers.js";
 
 /**
  * What `plugins/base/dist` holds, plus the one example plugin the suite installs.
  *
- * The 16 of SPEC §6.5's table plus `extra-task-states`. M4's two proof plugins
+ * The 17 of SPEC §6.5's table plus `extra-task-states`. M4's two proof plugins
  * (`calendar`, `agenda`) were removed on 2026-09-24; on 2026-09-26 `header` was split
- * out of `shell-ui`, `notices` and `sync-status` out of `header`, and `properties` was
- * removed. The base distribution and `BASE_PLUGIN_IDS` — what `?safe=1` boots — are the
- * same sixteen. `safe-mode.spec.ts` is what pins that.
+ * out of `shell-ui`, `notices` and `sync-status` out of `header`, `context-menu` out of
+ * `folders`, and `properties` was removed. The base distribution and `BASE_PLUGIN_IDS` —
+ * what `?safe=1` boots — are the same seventeen. `safe-mode.spec.ts` is what pins that.
  */
-const EXPECTED_PLUGINS = 17;
+const EXPECTED_PLUGINS = 18;
 
 /**
  * `--lm-bg` as the `midnight` theme paints it (`plugins/base/themes/src/index.tsx`).
@@ -93,7 +94,7 @@ test("registering the first user boots the whole plugin distribution", async ({
     "Folders come from frontmatter",
     "Directives and machine sections",
   ]) {
-    await expect(main.getByRole("button", { name: title })).toBeVisible();
+    await expect(main.getByRole("button", { name: title, exact: true })).toBeVisible();
   }
   await expect(docRows(page).first()).toBeVisible();
 
@@ -154,7 +155,7 @@ test("a document created from the palette is edited in CodeMirror and the list f
   await expect(page.getByRole("heading", { level: 1, name: "Palette-made note" })).toBeVisible();
 
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "Palette-made note" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Palette-made note", exact: true })).toBeVisible();
 
   // And the server agrees, which is the difference between "the client rendered it"
   // and "the workspace has it".
@@ -256,7 +257,7 @@ test("dragging a document between folders splices fm.path and leaves the rest of
   );
   await expect(tree.getByRole("button", { name: "to", exact: true })).toBeVisible();
 
-  const row = page.getByRole("button", { name: "Moves by splice" });
+  const row = page.getByRole("button", { name: "Moves by splice", exact: true });
   await expect(row).toBeVisible();
   await row.dragTo(tree.getByRole("button", { name: "to", exact: true }));
 
@@ -294,7 +295,7 @@ test("search finds body text with the network down, and the document still opens
   await signIn(page);
   // Wait for the row to have reached the local projection before cutting the wire —
   // offline search reads IndexedDB, and a row that never arrived is not a bug.
-  await expect(page.getByRole("button", { name: "Offline searchable" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Offline searchable", exact: true })).toBeVisible();
 
   await context.setOffline(true);
   try {
@@ -415,7 +416,7 @@ test("a document moves to Trash and comes back", async ({ page, request, baseURL
   await page.goto("/");
   const row = docRows(page).filter({ hasText: "Doomed then saved" });
   await expect(row).toHaveCount(1);
-  await row.getByRole("button", { name: /move to trash/i }).click();
+  await trashRow(page, row);
   await expect(docRows(page).filter({ hasText: "Doomed then saved" })).toHaveCount(0);
 
   await page.goto("/#/trash");
@@ -462,7 +463,7 @@ test("an admin invite lets a second user register", async ({ page, browser, base
     );
     // A second real session in the same shared workspace (SPEC §2).
     await expect(other.getByRole("banner")).toBeVisible();
-    await expect(other.getByRole("button", { name: "Welcome to Life Manager" })).toBeVisible();
+    await expect(other.getByRole("button", { name: "Welcome to Life Manager", exact: true })).toBeVisible();
   } finally {
     await second.close();
   }

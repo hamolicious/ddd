@@ -25,7 +25,15 @@
 
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-import { ADMIN, createDocument, docRows, runCommand, showSidebar, signIn } from "./helpers.js";
+import {
+  ADMIN,
+  createDocument,
+  docRows,
+  runCommand,
+  showSidebar,
+  signIn,
+  trashRow,
+} from "./helpers.js";
 
 const PHONE = { width: 390, height: 844 };
 
@@ -112,8 +120,9 @@ test.describe("browse and find, at phone width", () => {
     expect(title?.width ?? 0).toBeLessThanOrEqual(PHONE.width);
     expect(title?.height ?? 0).toBeLessThan(60);
 
-    // Sort stays on screen; the condition builder is behind the toggle.
-    await expect(page.getByLabel("Sort by")).toBeVisible();
+    // Sort and direction stay on screen; the conditions are behind the toggle.
+    await expect(page.getByRole("button", { name: /^Sort by/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Order:/ })).toBeVisible();
     const filters = page.getByRole("button", { name: /^filters/i });
     await expect(filters).toHaveAttribute("aria-expanded", "false");
     await noHorizontalScroll(page, "the document list");
@@ -144,7 +153,7 @@ test.describe("browse and find, at phone width", () => {
 
     const row = docRows(page).filter({ hasText: title });
     await expect(row).toHaveCount(1);
-    await row.getByRole("button", { name: /move to trash/i }).click();
+    await trashRow(page, row);
 
     await page.goto("/#/trash");
     await expect(page.getByRole("heading", { name: "Trash" })).toBeVisible();
@@ -330,10 +339,10 @@ test.describe("the same phone, rotated and at the Android floor", () => {
     await expect(row).toBeVisible();
     await noHorizontalScroll(page, "the document list at 360 px");
 
-    // Title and action share the row; the title gives way, the action keeps its label.
-    const trash = row.getByRole("button", { name: /move to trash/i });
-    await expect(trash).toHaveText("Move to Trash");
-    expect((await edges(trash)).right).toBeLessThanOrEqual(360);
+    // Title and the row's ⋯ share the row; the title gives way, the ⋯ stays on screen.
+    const actions = row.getByRole("button", { name: /^Actions for/ });
+    await expect(actions).toBeVisible();
+    expect((await edges(actions)).right).toBeLessThanOrEqual(360);
     await tappable(row.locator(".doclist-open"), "the document title button at 360 px");
   });
 

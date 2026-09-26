@@ -338,7 +338,7 @@ test("a folder can be created empty, filled, renamed inline and survives a reloa
   // `:hover`/`:focus-within`/active), so the pointer has to be in the row first.
   await folderRow(page, name).hover();
   await page.getByRole("button", { name: `Actions for ${name}` }).click();
-  await page.getByRole("dialog").getByRole("button", { name: /^Rename/ }).click();
+  await page.getByRole("dialog").getByRole("menuitem", { name: /^Rename/ }).click();
   const rename = page.getByRole("textbox", { name: `Rename or move ${name}` });
   await expect(rename).toBeVisible();
   await rename.fill(renamed);
@@ -349,7 +349,7 @@ test("a folder can be created empty, filled, renamed inline and survives a reloa
   // bookkeeping and becomes a `path:` line like any other.
   await folderRow(page, renamed).hover();
   await page.getByRole("button", { name: `Actions for ${renamed}` }).click();
-  await page.getByRole("dialog").getByRole("button", { name: /^New document here/ }).click();
+  await page.getByRole("dialog").getByRole("menuitem", { name: /^New document here/ }).click();
   await expect(page).toHaveURL(/#\/doc\//);
   const id = /#\/doc\/([^?]+)/.exec(page.url())?.[1] ?? "";
   expect(id, "the folder's menu created a document").toBeTruthy();
@@ -388,13 +388,13 @@ test("deleting a folder moves its documents to the parent, by splice", async ({
   await page.getByRole("button", { name: `Actions for ${doomed}` }).click();
   const sheet = page.getByRole("dialog");
   await expect(sheet).toBeVisible();
-  await sheet.getByRole("button", { name: "Delete folder" }).click();
+  await sheet.getByRole("menuitem", { name: "Delete folder" }).click();
 
   // The choice the user is offered, in the words the plugin offers it in: the documents
   // have to go somewhere, because a folder is only a `path:` line.
   const confirm = page.getByRole("dialog");
   await expect(confirm).toBeVisible();
-  await confirm.getByRole("button", { name: `Move them to ${parent}` }).click();
+  await confirm.getByRole("menuitem", { name: `Move them to ${parent}` }).click();
   await waitSynced(page);
 
   // One splice: the path is the parent's, the rest of the file is untouched.
@@ -424,8 +424,8 @@ test("deleting a folder can send its documents to Trash instead", async ({
 
   await folderRow(page, folder).hover();
   await page.getByRole("button", { name: `Actions for ${folder}` }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Delete folder" }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Move them to Trash" }).click();
+  await page.getByRole("dialog").getByRole("menuitem", { name: "Delete folder" }).click();
+  await page.getByRole("dialog").getByRole("menuitem", { name: "Move them to Trash" }).click();
   await waitSynced(page);
 
   // A tombstone, not a purge (SPEC §3.5 — the id stays forever, and `GET
@@ -531,7 +531,7 @@ test("at 390 px a document is moved through the sheet, and the panel holds the p
   await expect(sheet).toBeVisible();
   // Scoped to the sheet: `doc-list`'s row action is "Move to Trash", and an unscoped
   // "Move to…" query matches both.
-  await sheet.getByRole("button", { name: "Move to…" }).click();
+  await sheet.getByRole("menuitem", { name: "Move to…" }).click();
 
   const picker = page.getByRole("dialog");
   await picker.getByRole("textbox", { name: "Filter folders" }).fill(to);
@@ -558,7 +558,7 @@ test("at 390 px a document is moved through the sheet, and the panel holds the p
 
   // And the sheet's own controls are tappable at that width (SPEC §6.5's 44 px).
   const small = await page.evaluate(() => {
-    return [...document.querySelectorAll<HTMLElement>(".folders-sheet button")]
+    return [...document.querySelectorAll<HTMLElement>(".context-menu button")]
       .map((element) => element.getBoundingClientRect())
       .filter((box) => box.width > 0 && box.height > 0)
       .filter((box) => box.height < 44 || box.width < 44).length;

@@ -123,7 +123,7 @@ test("the built-in editor is replaced by a separately-authored editor plugin", a
     // The app works: nothing about removing the built-in editor breaks the shell, the
     // list, or the documents.
     await expect(page.getByRole("banner")).toBeVisible();
-    const welcome = page.getByRole("button", { name: "Tasks and lists" });
+    const welcome = page.getByRole("button", { name: "Tasks and lists", exact: true });
     await expect(welcome).toBeVisible();
     await welcome.click();
 

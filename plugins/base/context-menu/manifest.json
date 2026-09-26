@@ -1,0 +1,18 @@
+{
+  "id": "context-menu",
+  "version": "1.0.0",
+  "name": "Context menu",
+  "description": "One menu and sheet service for every plugin: anchored popovers on a wide screen, bottom sheets on a phone.",
+  "author": "Life Manager base distribution",
+  "license": "MIT OR Apache-2.0",
+  "x-tailwind": { "prefix": "ctxmenu" },
+  "kernel": "^1.0",
+  "peerLibraries": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "frontend": {
+    "module": "frontend/index.mjs",
+    "style": "frontend/style.css"
+  }
+}

@@ -94,6 +94,12 @@ export async function waitSynced(page: Page): Promise<void> {
   );
 }
 
+/** Move one document-list row to Trash through its ⋯ menu. */
+export async function trashRow(page: Page, row: Locator): Promise<void> {
+  await row.getByRole("button", { name: /^Actions for/ }).click();
+  await page.getByRole("menuitem", { name: /^Move to Trash/ }).click();
+}
+
 /** The document list's rows, as the list renders them. */
 export function docRows(page: Page): Locator {
   return page.locator(".doclist-item");

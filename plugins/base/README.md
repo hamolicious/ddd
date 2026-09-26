@@ -27,6 +27,7 @@ dist/<id>/<version>/              build output = the installed layout the server
 |---|---|---|
 | `shell-ui` | layout, mobile breakpoint, a spot for the top bar, always-mounted overlays | `shell.header`, `shell.overlay`, `sidebar.panel`, `main.view` |
 | `header` | the top bar: `start`/`end` seats (the ☰ is `shell-ui`'s item), the "Top bar" ordering setting | `navbar.item` |
+| `context-menu` | the menu / sheet service: popover beside a button, bottom sheet on a phone | — |
 | `notices` | the notice bell, in the header's `end` seat | — |
 | `sync-status` | the sync pill, in the header's `end` seat | — |
 | `router` | URL ↔ view (hash-based) | `router.route` |
@@ -52,7 +53,7 @@ that had a backend half, so **every plugin in this directory is now frontend-onl
 
 ## How the base plugins relate
 
-Generated from the sixteen `manifest.json` `dependencies` fields — an arrow reads
+Generated from the seventeen `manifest.json` `dependencies` fields — an arrow reads
 **"depends on"**, and the loader's activation order is precisely a topological order of
 this graph (a dependency always activates first; a failed dependency skips its whole
 subtree). Every plugin additionally depends on `@kernel`, which is not drawn.
@@ -83,8 +84,8 @@ flowchart TD
     markdown --> commands & router
     document-surface --> commands & router & shell-ui
     editor --> commands
-    doc-list --> commands & router & shell-ui
-    folders --> commands & router & shell-ui
+    doc-list --> commands & context-menu & router & shell-ui
+    folders --> commands & context-menu & router & shell-ui
     search --> commands & router & shell-ui
     settings --> commands & router & shell-ui
     admin --> commands & router & shell-ui

@@ -18,15 +18,21 @@
  *   or the reverse. That claim was doubted once (`web/MOBILE-AUDIT.md`, Q5) and is now
  *   pinned by `filter.test.ts` rather than argued.
  *
- * **Sort is always on screen; the rest folds away.** Expanded, this bar cost the whole
+ * **Sort, direction and filters are the whole top row, three icons.** Sort opens a
+ * `context-menu` of fields, direction flips the order, and the funnel unfolds every
+ * filter — "Show machine documents" included — with a badge counting those applied.
+ *
+ * **The filters fold away.** Expanded, this bar cost the whole
  * first screen of a phone, so the browse view opened on no documents at all. The
  * disclosure is collapsed by default only on a compact viewport (`_shared/compact.ts`),
- * and the toggle carries the count of conditions currently applied so a folded filter
- * is never a silent one.
+ * and the funnel's badge counts the conditions applied (its accessible name says it too),
+ * so a folded filter is never a silent one.
  */
 
 import { useId, useState } from "react";
 import type { ReactElement } from "react";
+
+import type { ContextMenuApi } from "../../_shared/context-menu-api.js";
 
 import { useCompact } from "../../_shared/compact.js";
 import {
@@ -49,6 +55,8 @@ export interface FilterBarProps {
   readonly sortField: string;
   readonly sortDirection: "asc" | "desc";
   readonly onSortChange: (field: string, direction: "asc" | "desc") => void;
+  /** `context-menu`'s service, for the sort field menu. */
+  readonly menu: ContextMenuApi;
 }
 
 const OP_LABELS: readonly { readonly op: ClauseOp; readonly label: string }[] = [
@@ -86,6 +94,7 @@ export function FilterBar({
   sortField,
   sortDirection,
   onSortChange,
+  menu,
 }: FilterBarProps): ReactElement {
   // Row id → why it produces no clause. One computation, used both to mark the row and
   // to say what is wrong with it, so the mark and the query cannot disagree.
@@ -114,41 +123,33 @@ export function FilterBar({
   return (
     <div className="doclist-controls doclist:flex doclist:flex-col doclist:gap-2 doclist:rounded doclist:border doclist:border-border doclist:bg-bg-subtle doclist:p-2 doclist:[&_.doclist-checkbox]:tap-h doclist:[&_.doclist-checkbox]:inline-flex doclist:[&_.doclist-checkbox]:cursor-pointer doclist:[&_.doclist-checkbox]:items-center doclist:[&_.doclist-checkbox]:gap-1 doclist:[&_.doclist-checkbox]:whitespace-nowrap doclist:[&_.doclist-clause]:flex doclist:[&_.doclist-clause]:flex-wrap doclist:[&_.doclist-clause]:items-end doclist:[&_.doclist-clause]:gap-1.5 doclist:[&_.doclist-clause]:rounded doclist:[&_.doclist-clause]:border doclist:[&_.doclist-clause]:border-transparent doclist:[&_.doclist-clause]:p-1 doclist:[&_.doclist-clause-invalid]:border-warning doclist:[&_.doclist-field]:flex doclist:[&_.doclist-field]:flex-col doclist:[&_.doclist-field]:gap-0.5 doclist:[&_.doclist-field]:text-sm doclist:[&_.doclist-field]:text-text-muted doclist:[&_.doclist-field_input]:tap-h doclist:[&_.doclist-field_input]:rounded doclist:[&_.doclist-field_input]:border doclist:[&_.doclist-field_input]:border-border doclist:[&_.doclist-field_input]:bg-bg doclist:[&_.doclist-field_input]:px-2 doclist:[&_.doclist-field_input]:text-base doclist:[&_.doclist-field_input]:text-text doclist:[&_.doclist-field_select]:tap-h doclist:[&_.doclist-field_select]:rounded doclist:[&_.doclist-field_select]:border doclist:[&_.doclist-field_select]:border-border doclist:[&_.doclist-field_select]:bg-bg doclist:[&_.doclist-field_select]:px-2 doclist:[&_.doclist-field_select]:text-base doclist:[&_.doclist-field_select]:text-text doclist:[&_.doclist-grow]:flex-[1_1_12rem] doclist:compact:[&_.doclist-grow]:basis-full doclist:[&_.doclist-row]:flex doclist:[&_.doclist-row]:flex-wrap doclist:[&_.doclist-row]:items-end doclist:[&_.doclist-row]:gap-2 doclist:[&_.doclist-sort]:compact:flex-[1_1_8rem] doclist:compact:[&_.doclist-sort_select]:w-full">
       <div className="doclist-row">
-        <label className="doclist-field doclist-sort">
-          <span>Sort by</span>
-          <select
-            value={sortField}
-            onChange={(event) => onSortChange(event.target.value, sortDirection)}
-          >
-            {SORT_OPTIONS.map((option) => (
-              <option key={option.field} value={option.field}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="doclist-field doclist-sort">
-          <span>Direction</span>
-          <select
-            value={sortDirection}
-            onChange={(event) =>
-              onSortChange(sortField, event.target.value === "asc" ? "asc" : "desc")
-            }
-          >
-            <option value="desc">Newest / Z→A</option>
-            <option value="asc">Oldest / A→Z</option>
-          </select>
-        </label>
+        <SortControls
+          field={sortField}
+          direction={sortDirection}
+          onChange={onSortChange}
+          menu={menu}
+        />
 
         <button
           type="button"
-          className="doclist-filter-toggle doclist:ml-auto doclist:inline-flex doclist:items-center doclist:gap-1 doclist:aria-expanded:border-border-strong!"
+          className={`doclist-filter-toggle ${ICON_BUTTON} doclist:relative doclist:aria-expanded:border-border-strong!`}
           aria-expanded={expanded}
           aria-controls={panelId}
+          aria-label={applied > 0 ? `Filters, ${applied} applied` : "Filters"}
+          title="Filters"
           onClick={() => setExpanded((value) => !value)}
         >
-          Filters
-          {applied > 0 && <span className="doclist-filter-count doclist:rounded doclist:bg-accent-subtle doclist:px-1 doclist:text-sm doclist:tabular-nums">{applied}</span>}
+          <svg aria-hidden="true" viewBox="0 0 24 24" className="doclist:size-[1.15em]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M4 5h16l-6 7.5V19l-4-2v-4.5z" />
+          </svg>
+          {applied > 0 && (
+            <span
+              aria-hidden="true"
+              className="doclist-filter-count doclist:absolute doclist:-right-1 doclist:-top-1 doclist:min-w-[1.25em] doclist:rounded-full doclist:bg-accent doclist:px-0.5 doclist:text-center doclist:text-xs doclist:leading-[1.25em] doclist:text-accent-text doclist:tabular-nums"
+            >
+              {applied}
+            </span>
+          )}
         </button>
       </div>
 
@@ -315,15 +316,20 @@ export function FilterBar({
         >
           Add condition
         </button>
-        {(draft.clauses.length > 0 || (draft.titleContains ?? "") !== "") && (
+        {(draft.clauses.length > 0 ||
+          (draft.titleContains ?? "") !== "" ||
+          draft.includeMachine === true) && (
           <button
             type="button"
-            // Conditions only. "Show machine documents" is a view preference, not a
-            // condition — it has its own checkbox and no business being reset by a
-            // button that does not name it, which is what spreading a fresh literal
-            // over the draft used to do.
+            // Every filter, "Show machine documents" included: it is one of them.
             onClick={() =>
-              onDraftChange({ ...draft, combine: "and", clauses: [], titleContains: "" })
+              onDraftChange({
+                ...draft,
+                combine: "and",
+                clauses: [],
+                titleContains: "",
+                includeMachine: false,
+              })
             }
           >
             Clear
@@ -341,5 +347,81 @@ export function FilterBar({
       )}
       </div>
     </div>
+  );
+}
+
+const ICON_BUTTON =
+  "doclist:inline-flex doclist:w-[var(--lm-tap-target)] doclist:items-center doclist:justify-center doclist:p-0!";
+
+function SortControls({
+  field,
+  direction,
+  onChange,
+  menu,
+}: {
+  readonly field: string;
+  readonly direction: "asc" | "desc";
+  readonly onChange: (field: string, direction: "asc" | "desc") => void;
+  readonly menu: ContextMenuApi;
+}): ReactElement {
+  const current = SORT_OPTIONS.find((option) => option.field === field) ?? SORT_OPTIONS[0];
+  const byDate = current?.kind === "date";
+  const words =
+    direction === "desc"
+      ? byDate
+        ? "newest first"
+        : "Z to A"
+      : byDate
+        ? "oldest first"
+        : "A to Z";
+  const flipped =
+    direction === "desc" ? (byDate ? "oldest first" : "A to Z") : byDate ? "newest first" : "Z to A";
+
+  return (
+    <>
+      <button
+        type="button"
+        className={`doclist-sort-button ${ICON_BUTTON}`}
+        aria-haspopup="menu"
+        aria-label={`Sort by ${current?.label ?? field}`}
+        title={`Sort by ${current?.label ?? field}`}
+        onClick={(event) =>
+          menu.open({
+            title: "Sort by",
+            anchor: event.currentTarget,
+            sections: [
+              {
+                title: "Sort by",
+                items: SORT_OPTIONS.map((option) => ({
+                  id: option.field,
+                  label: option.label,
+                  checked: option.field === field,
+                  run: () => onChange(option.field, direction),
+                })),
+              },
+            ],
+          })
+        }
+      >
+        <svg aria-hidden="true" viewBox="0 0 24 24" className="doclist:size-[1.15em]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <path d="M4 6h16M7 12h10M10 18h4" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        className={`doclist-direction-button ${ICON_BUTTON}`}
+        aria-label={`Order: ${words}. Switch to ${flipped}`}
+        title={`Order: ${words}`}
+        onClick={() => onChange(field, direction === "desc" ? "asc" : "desc")}
+      >
+        <svg aria-hidden="true" viewBox="0 0 24 24" className="doclist:size-[1.15em]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          {direction === "desc" ? (
+            <path d="M12 5v14M6 13l6 6 6-6" />
+          ) : (
+            <path d="M12 19V5M6 11l6-6 6 6" />
+          )}
+        </svg>
+      </button>
+    </>
   );
 }

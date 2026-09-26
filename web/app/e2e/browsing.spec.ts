@@ -59,8 +59,8 @@ test("a machine-owned document is out of the list, the count and the tree — un
   await waitSynced(page);
 
   // The ordinary document is there; the machine-owned one is not.
-  await expect(page.getByRole("button", { name: "An ordinary note" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Machine owned thing" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "An ordinary note", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Machine owned thing", exact: true })).toHaveCount(0);
 
   // The sidebar count agrees with the list — the two disagreeing is the bug this
   // whole rule exists to fix, and it is the half a person actually notices.
@@ -77,8 +77,8 @@ test("a machine-owned document is out of the list, the count and the tree — un
 
   // The toggle is a view default, not access control: asking brings it back.
   await page.getByRole("checkbox", { name: /show machine documents/i }).check();
-  await expect(page.getByRole("button", { name: "Machine owned thing" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "An ordinary note" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Machine owned thing", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "An ordinary note", exact: true })).toBeVisible();
 
   // Hidden or not, a direct link always worked — nothing here changed what the
   // workspace holds or what a link resolves to.

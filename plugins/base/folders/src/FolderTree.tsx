@@ -59,7 +59,9 @@ import {
   reparentTarget,
   type PathRow,
 } from "./path.js";
-import { MovePicker, Sheet, SheetActions } from "./Sheet.js";
+import type { ContextMenuApi, MenuItem } from "../../_shared/context-menu-api.js";
+
+import { MovePicker } from "./MovePicker.js";
 import { ancestorsOf, buildFileTree, type TreeRow } from "./tree.js";
 
 /** The drag type a draggable document row should set. */
@@ -105,6 +107,8 @@ export type TreeTarget =
     };
 
 export interface FolderTreeProps {
+  /** `context-menu`'s service: every sheet this tree opens goes through it. */
+  readonly menu: ContextMenuApi;
   readonly rows: readonly PathRow[];
   readonly loading: boolean;
   readonly error?: string;
@@ -147,7 +151,7 @@ export interface FolderTreeProps {
 }
 
 type SheetState =
-  | { readonly kind: "actions"; readonly target: TreeTarget }
+  | { readonly kind: "actions"; readonly target: TreeTarget; readonly anchor?: HTMLElement }
   | { readonly kind: "move"; readonly target: TreeTarget }
   | {
       readonly kind: "delete";
@@ -166,6 +170,7 @@ const labelOf = (target: TreeTarget): string =>
   target.kind === "folder" ? target.path : target.title;
 
 export function FolderTree({
+  menu,
   rows,
   loading,
   error,
@@ -490,9 +495,9 @@ export function FolderTree({
   // Long press → the sheet
   // ---------------------------------------------------------------------------
 
-  const openActions = useCallback((target: TreeTarget) => {
+  const openActions = useCallback((target: TreeTarget, anchor?: HTMLElement) => {
     setActive(target.kind === "folder" ? `f:${target.path}` : `d:${target.id}`);
-    setSheet({ kind: "actions", target });
+    setSheet({ kind: "actions", target, ...(anchor ? { anchor } : {}) });
   }, []);
 
   const cancelLongPress = useCallback(() => {
@@ -833,7 +838,7 @@ export function FolderTree({
               title={`Move ${row.title}`}
               onClick={(event) => {
                 event.stopPropagation();
-                openActions(target);
+                openActions(target, event.currentTarget);
               }}
             >
               ⋯
@@ -973,7 +978,7 @@ export function FolderTree({
               title="Move, new folder, delete"
               onClick={(event) => {
                 event.stopPropagation();
-                openActions(target);
+                openActions(target, event.currentTarget);
               }}
             >
               ⋯
@@ -992,55 +997,53 @@ export function FolderTree({
   // The sheet
   // ---------------------------------------------------------------------------
 
-  const renderSheet = (): ReactElement | null => {
-    if (!sheet) return null;
+  // Every sheet goes through `context-menu`. Opened when `sheet` changes (not on every
+  // render: replacing an open menu closes the previous one, which would clear `sheet`).
+  useEffect(() => {
+    if (!sheet) {
+      menu.close();
+      return;
+    }
+    const onClose = (): void => setSheet(undefined);
+
     if (sheet.kind === "move") {
       const target = sheet.target;
-      return (
-        <Sheet
-          title={`Move ${labelOf(target)} to…`}
-          onClose={() => setSheet(undefined)}
-        >
+      menu.openSheet({
+        title: `Move ${labelOf(target)} to…`,
+        onClose,
+        render: () => (
           <MovePicker
             folders={tree.folders}
             subject={labelOf(target)}
-            currentFolder={
-              target.kind === "folder" ? parentOf(target.path) : target.path
-            }
-            {...(target.kind === "folder"
-              ? { excludeSubtree: target.path }
-              : {})}
+            currentFolder={target.kind === "folder" ? parentOf(target.path) : target.path}
+            {...(target.kind === "folder" ? { excludeSubtree: target.path } : {})}
             onChoose={(folder) => {
               setSheet(undefined);
               moveTarget(target, folder);
             }}
           />
-        </Sheet>
-      );
+        ),
+      });
+      return;
     }
 
     if (sheet.kind === "delete") {
       const parent = parentOf(sheet.path);
-      return (
-        <Sheet
-          title={`Delete ${sheet.path}?`}
-          description={
-            <>
-              A folder is only a <code>path:</code> line, so its{" "}
-              {sheet.documents} document
-              {sheet.documents === 1 ? "" : "s"} have to go somewhere.
-            </>
-          }
-          onClose={() => setSheet(undefined)}
-        >
-          <SheetActions
-            actions={[
+      menu.open({
+        title: `Delete ${sheet.path}?`,
+        description: (
+          <>
+            A folder is only a <code>path:</code> line, so its {sheet.documents} document
+            {sheet.documents === 1 ? "" : "s"} have to go somewhere.
+          </>
+        ),
+        onClose,
+        sections: [
+          {
+            items: [
               {
                 id: "parent",
-                label:
-                  parent === ""
-                    ? "Move them to Root"
-                    : `Move them to ${parent}`,
+                label: parent === "" ? "Move them to Root" : `Move them to ${parent}`,
                 hint: "One path splice per document; nothing is deleted.",
                 run: () => deleteFolder(sheet.path, "parent"),
               },
@@ -1051,37 +1054,27 @@ export function FolderTree({
                 danger: true,
                 run: () => deleteFolder(sheet.path, "trash"),
               },
-            ]}
-          />
-        </Sheet>
-      );
+            ],
+          },
+        ],
+      });
+      return;
     }
 
     const target = sheet.target;
-    const actions =
+    const items: MenuItem[] =
       target.kind === "folder"
         ? [
-            {
-              id: "open",
-              label: "Show this folder",
-              run: () => {
-                setSheet(undefined);
-                onSelectFolder(target.path);
-              },
-            },
+            { id: "open", label: "Show this folder", run: () => onSelectFolder(target.path) },
             {
               id: "new-document",
               label: "New document here",
-              run: () => {
-                setSheet(undefined);
-                onNewDocumentHere(target.path);
-              },
+              run: () => onNewDocumentHere(target.path),
             },
             {
               id: "new-folder",
               label: "New folder inside",
               run: () => {
-                setSheet(undefined);
                 revealFolder(target.path);
                 setEdit({ kind: "create", parent: target.path });
               },
@@ -1089,52 +1082,34 @@ export function FolderTree({
             {
               id: "rename",
               label: "Rename",
-              run: () => {
-                setSheet(undefined);
-                setEdit({ kind: "rename", path: target.path });
-              },
+              run: () => setEdit({ kind: "rename", path: target.path }),
             },
-            {
-              id: "move",
-              label: "Move to…",
-              run: () => setSheet({ kind: "move", target }),
-            },
+            { id: "move", label: "Move to…", run: () => setSheet({ kind: "move", target }) },
             {
               id: "delete",
               label: "Delete folder",
               danger: true,
-              run: () => {
-                setSheet(undefined);
-                startDelete(target.path);
-              },
+              run: () => startDelete(target.path),
             },
           ]
         : [
-            {
-              id: "open",
-              label: "Open",
-              run: () => {
-                setSheet(undefined);
-                onOpenDocument(target.id);
-              },
-            },
+            { id: "open", label: "Open", run: () => onOpenDocument(target.id) },
             {
               id: "move",
               label: "Move to…",
-              hint:
-                target.path === ""
-                  ? "Currently at root"
-                  : `Currently in ${target.path}`,
+              hint: target.path === "" ? "Currently at root" : `Currently in ${target.path}`,
               run: () => setSheet({ kind: "move", target }),
             },
           ];
-
-    return (
-      <Sheet title={labelOf(target)} onClose={() => setSheet(undefined)}>
-        <SheetActions actions={actions} />
-      </Sheet>
-    );
-  };
+    menu.open({
+      title: labelOf(target),
+      ...(sheet.anchor ? { anchor: sheet.anchor } : {}),
+      onClose,
+      sections: [{ items }],
+    });
+    // Only `sheet` opens or replaces the menu; the handlers above are read when it does.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sheet, menu]);
 
   if (loading) {
     return (
@@ -1236,7 +1211,6 @@ export function FolderTree({
           ) : null}
         </div>
       )}
-      {renderSheet()}
     </div>
   );
 }
