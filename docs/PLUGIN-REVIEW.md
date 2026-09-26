@@ -23,14 +23,14 @@ browser's device toolbar at 390 × 844, and 844 × 390 for landscape.
 | 4 | `notices` | [x] | Split out of `header`; bell restyled |
 | 5 | `sync-status` | [x] | Split out of `header`; icon-only dot, ✕ / ↻ when down |
 | 6 | `commands` | [x] | Palette Escape, footer, bar button, list indent |
-| 7 | `context-menu` | [ ] | New: one menu / sheet service for every plugin |
+| 7 | `context-menu` | [ ] | New: one menu / sheet service for every plugin. Deferred — reviewed last |
 | 8 | `settings` | [x] | Base sections first, extensions below a divider |
 | 9 | `themes` | [x] | No changes |
 | 10 | `doc-list` | [x] | Icon sort/direction/filters, row ⋯ menu, machine filter, paging |
 | 11 | `folders` | [x] | Lifted drags, folder reorder, tighter rows |
-| 12 | `search` | [ ] | Folded into `doc-list`: search bar, docked on phones |
-| 13 | `document-surface` | [ ] | Icon mode switch, phone bubble, save icon, any number of modes |
-| 14 | `editor` | [ ] | |
+| 12 | `search` | [x] | Folded into `doc-list`: search bar, docked on phones |
+| 13 | `document-surface` | [x] | Icon mode switch, phone bubble, save icon, any number of modes |
+| 14 | `editor` | [x] | Icon folds that re-collapse; save state moved to the header |
 | 15 | `markdown` | [ ] | |
 | 16 | `viewer` | [ ] | |
 | 17 | `admin` | [ ] | |
