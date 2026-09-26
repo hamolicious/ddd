@@ -2,7 +2,7 @@
   "id": "header",
   "version": "1.0.0",
   "name": "Header",
-  "description": "The top bar frame: sidebar toggle, brand, and start/end seats other plugins fill through navbar.item.",
+  "description": "The top bar frame: sidebar toggle, and start/end seats other plugins fill through navbar.item.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,

@@ -1,8 +1,8 @@
 /**
- * The top bar: the sidebar toggle, the brand, and two seats that other plugins fill.
+ * The top bar: the sidebar toggle and two seats that other plugins fill.
  *
  * Everything else in the bar is a `navbar.item` contribution placed in a seat by its
- * `side`: **`start`** (after the brand; grows, scrolls sideways when full) or **`end`**
+ * `side`: **`start`** (after the toggle; grows, scrolls sideways when full) or **`end`**
  * (pushed right; never shrinks). `order` sorts within a seat. Settings, Admin, the notice
  * bell (`notices`) and the sync pill (`sync-status`) all sit in `end` this way; the
  * header knows none of them.
@@ -60,8 +60,6 @@ export function Header({
           </span>
         </button>
       ) : null}
-
-      <span className="header:shrink-0 header:whitespace-nowrap header:font-semibold header:compact:hidden">Life Manager</span>
 
       <nav className="header:flex header:min-w-0 header:flex-1 header:items-center header:gap-2 header:compact:flex-wrap" aria-label="Main">
         <ul className="header:m-0 header:flex header:min-w-0 header:flex-1 header:list-none header:items-center header:gap-1 header:overflow-x-auto header:p-0 header:[scrollbar-width:thin] header:compact:order-2 header:compact:w-full header:compact:flex-none!" data-side="start">

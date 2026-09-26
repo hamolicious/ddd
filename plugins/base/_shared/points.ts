@@ -147,8 +147,8 @@ export interface NavbarItem {
   /** Sort within the seat; lower first. */
   readonly order?: number;
   /**
-   * The seat: `start` sits after the brand and grows (scrolling sideways when full);
-   * `end` is pushed right and never shrinks. Default `start`.
+   * The seat: `start` sits after the sidebar toggle and grows (scrolling sideways when
+   * full); `end` is pushed right and never shrinks. Default `start`.
    */
   readonly side?: "start" | "end";
   readonly onSelect?: () => void;

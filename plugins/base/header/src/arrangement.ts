@@ -37,7 +37,7 @@ export function createArrangementStore(kernel: Kernel): ArrangementStore {
       start: {
         type: "list",
         label: "Top bar, start seat",
-        description: "Item ids after the brand, in order.",
+        description: "Item ids on the left-hand side, in order.",
       },
       end: {
         type: "list",

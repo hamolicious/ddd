@@ -21,7 +21,7 @@ import { useArrangement } from "./hooks.js";
 import { SEATS, arrange, move, toggleHidden, type Arrangement, type Seat } from "./layout.js";
 
 const SEAT_TITLES: Record<Seat, string> = {
-  start: "Start — after the name",
+  start: "Start — left-hand side",
   end: "End — right-hand side",
 };
 

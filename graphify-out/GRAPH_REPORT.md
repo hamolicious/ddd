@@ -1,7 +1,7 @@
 # Graph Report - life-manager  (2026-09-26)
 
 ## Corpus Check
-- 508 files · ~656,283 words
+- 508 files · ~656,269 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 67 file(s) not represented in the graph (top: (none) 13, .xml 10, .xcconfig 8)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `43afc0d9`
+- Built from commit: `924ce70b`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -1384,11 +1384,11 @@ Nodes (3): panic_message(), Any, Send
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `react` connect `react` to `main.tsx`, `viewer/src/index.tsx`, `MountPoint`, `runtime.ts`, `ThemesController`, `markdown/src/index.tsx`, `fm-display.ts`, `DocListView.tsx`, `commands/src/index.tsx`, `normalizePath`, `_shared/boundary.tsx`, `Shell.tsx`, `Plugins.tsx`, `AppFrame.tsx`, `editor/src/index.tsx`, `FolderContents.tsx`, `search/src/index.tsx`, `theme.ts`, `alt-editor/src/index.tsx`, `router/src/index.tsx`, `AdminView.tsx`, `render.tsx`, `points.ts`, `folders/src/index.tsx`, `Palette.tsx`, `loader.ts`, `vitest`, `menu.tsx`, `PluginConfig.tsx`, `Sheet.tsx`, `src/filter.ts`, `importmap.ts`, `package.json`, `useMutation`, `document-surface/src/index.tsx`, `host.ts`?**
-  _High betweenness centrality (0.171) - this node is a cross-community bridge._
+  _High betweenness centrality (0.172) - this node is a cross-community bridge._
 - **Why does `String` connect `String` to `host_fns.rs`, `plugin_api.rs`, `attachments.rs`, `domain.rs`, `PluginHost`, `sync_ws.rs`, `server/src/plugins.rs`, `feed.rs`, `pluginhost_smoke.rs`, `ast.rs`, `pluginhost/cron.rs`, `sync.rs`, `docstore.rs`, `routes/documents.rs`, `zipcheck.rs`, `admin.rs`, `AppState`, `telemetry.rs`, `auth/mod.rs`, `PluginPool`, `Config`, `call_value`, `DocStoreError`, `value.rs`, `Value`, `server/tests/common/mod.rs`, `tests/statics.rs`, `rate_limit.rs`, `Date`, `.lock`, `shell_bundle.rs`, `pluginhost/limits.rs`, `plugin-sdk/src/kv.rs`, `invite.rs`, `routes/statics.rs`, `evaluator.rs`, `.create`, `pluginhost_runtime.rs`, `serve`, `Response`, `CircuitBreaker`, `yaml.rs`, `splice.rs`, `pluginhost_http.rs`, `document.rs`, `wasm.rs`, `health.rs`, `ConnectionSession`, `mongo.rs`, `migrations.rs`, `queue.rs`, `sections.rs`, `bootstrap`, `server/src/config.rs`, `frontmatter.rs`, `documents_query.rs`, `pluginhost/mod.rs`, `password.rs`, `conformance.rs`, `AppError`, `replace`, `pluginhost/hooks.rs`, `reset.rs`, `convergence.rs`, `main.rs`, `Option`, `title.rs`, `plugin-abi/src/http.rs`, `audit.rs`, `watcher.rs`, `Option`, `plugin-sdk/src/log.rs`, `write_envelope`, `ConfigGetOutput`, `.new`, `http_observability`, `wrapper_document_text`, `panic_message`?**
-  _High betweenness centrality (0.164) - this node is a cross-community bridge._
+  _High betweenness centrality (0.162) - this node is a cross-community bridge._
 - **Why does `AppState` connect `AppState` to `host_fns.rs`, `plugin_api.rs`, `bootstrap`, `attachments.rs`, `PluginHost`, `sync_ws.rs`, `feed.rs`, `pluginhost/mod.rs`, `pluginhost/cron.rs`, `sync.rs`, `routes/documents.rs`, `zipcheck.rs`, `admin.rs`, `replace`, `pluginhost/hooks.rs`, `reset.rs`, `telemetry.rs`, `main.rs`, `auth/mod.rs`, `Config`, `orphans`, `DocStoreError`, `seed.rs`, `server/tests/common/mod.rs`, `Option`, `rate_limit.rs`, `.lock`, `audit.rs`, `watcher.rs`, `Option`, `routes/mod.rs`, `invite.rs`, `routes/statics.rs`, `state.rs`, `pluginhost_runtime.rs`, `serve`, `Response`, `pluginhost_http.rs`, `String`, `health.rs`, `ConnectionSession`, `Collections`, `queue.rs`?**
-  _High betweenness centrality (0.093) - this node is a cross-community bridge._
+  _High betweenness centrality (0.098) - this node is a cross-community bridge._
 - **What connects `note`, `bundle_version`, `min_bridge_version` to the rest of the system?**
   _1857 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `kernel-api/src/index.ts` be split into smaller, more focused modules?**
