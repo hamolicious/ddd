@@ -1,7 +1,7 @@
 # Graph Report - life-manager  (2026-09-26)
 
 ## Corpus Check
-- 520 files · ~663,933 words
+- 520 files · ~663,968 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 67 file(s) not represented in the graph (top: (none) 13, .xml 10, .xcconfig 8)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `cee0949e`
+- Built from commit: `84d5dfcf`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -1361,9 +1361,9 @@ Nodes (4): FolderContents(), FolderContentsProps, folderFilter(), ref_foldertree
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `String` connect `String` to `host_fns.rs`, `plugin_api.rs`, `bootstrap`, `.from_env`, `plugininstall_flow.rs`, `call_value`, `attachments.rs`, `domain.rs`, `PluginHost`, `sync_ws.rs`, `server/src/plugins.rs`, `plugin-abi/src/http.rs`, `pluginhost/hooks.rs`, `ast.rs`, `feed.rs`, `password.rs`, `conformance.rs`, `pluginhost/cron.rs`, `docstore.rs`, `sync.rs`, `routes/documents.rs`, `AppError`, `zipcheck.rs`, `pluginhost_http.rs`, `AppState`, `Diagnostic`, `replace`, `telemetry.rs`, `convergence.rs`, `main.rs`, `auth/mod.rs`, `PluginPool`, `.create`, `plugin-abi/src/documents.rs`, `DocStoreError`, `value.rs`, `Value`, `AppResult`, `server/tests/common/mod.rs`, `tests/statics.rs`, `Date`, `title.rs`, `shell_bundle.rs`, `SyncHub`, `.new`, `pluginhost/limits.rs`, `documents_query.rs`, `pluginhost_smoke.rs`, `audit.rs`, `watcher.rs`, `Option`, `panic_message`, `plugin-sdk/src/log.rs`, `plugin-sdk/src/kv.rs`, `invite.rs`, `routes/statics.rs`, `evaluator.rs`, `Config`, `plugin-abi/src/lib.rs`, `pluginhost_runtime.rs`, `.lock`, `Response`, `CircuitBreaker`, `reset.rs`, `yaml.rs`, `splice.rs`, `pluginhost_routes.rs`, `document.rs`, `health.rs`, `serve`, `docstore_splice.rs`, `mongo.rs`, `migrations.rs`, `queue.rs`, `sections.rs`?**
-  _High betweenness centrality (0.199) - this node is a cross-community bridge._
+  _High betweenness centrality (0.201) - this node is a cross-community bridge._
 - **Why does `react` connect `react` to `runtime/index.ts`, `main.tsx`, `viewer/src/index.tsx`, `pipeline.test.ts`, `MarkdownRuntime`, `ThemesController`, `tasks.ts`, `fm-display.ts`, `commands/src/index.tsx`, `vitest`, `SyncIndicator.tsx`, `BarSettings.tsx`, `Shell.tsx`, `Plugins.tsx`, `markdown/src/index.tsx`, `editor/src/index.tsx`, `FolderContents.tsx`, `search/src/index.tsx`, `theme.ts`, `alt-editor/src/index.tsx`, `router/src/index.tsx`, `AdminView.tsx`, `render.tsx`, `Menu.tsx`, `points.ts`, `boot/api.ts`, `folders/src/index.tsx`, `KernelHost`, `menu.tsx`, `DocListView.tsx`, `Unsubscribe`, `PluginConfig.tsx`, `src/filter.ts`, `importmap.ts`, `package.json`, `useMutation`, `document-surface/src/index.tsx`?**
-  _High betweenness centrality (0.156) - this node is a cross-community bridge._
+  _High betweenness centrality (0.158) - this node is a cross-community bridge._
 - **Why does `AppState` connect `AppState` to `host_fns.rs`, `plugin_api.rs`, `bootstrap`, `plugininstall_flow.rs`, `attachments.rs`, `domain.rs`, `PluginHost`, `sync_ws.rs`, `feed.rs`, `pluginhost/hooks.rs`, `pluginhost/cron.rs`, `sync.rs`, `routes/documents.rs`, `pluginhost_http.rs`, `replace`, `telemetry.rs`, `Readiness`, `main.rs`, `auth/mod.rs`, `pluginhost/mod.rs`, `AppResult`, `DocStoreError`, `Value`, `seed.rs`, `server/tests/common/mod.rs`, `rate_limit.rs`, `SyncHub`, `Collections`, `audit.rs`, `watcher.rs`, `Option`, `routes/mod.rs`, `invite.rs`, `routes/statics.rs`, `Config`, `pluginhost_runtime.rs`, `Response`, `reset.rs`, `String`, `health.rs`, `serve`, `queue.rs`?**
   _High betweenness centrality (0.101) - this node is a cross-community bridge._
 - **What connects `note`, `bundle_version`, `min_bridge_version` to the rest of the system?**

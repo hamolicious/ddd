@@ -1266,9 +1266,9 @@
     "semantic_hash": ""
   },
   "plugins/base/doc-list/src/FilterBar.tsx": {
-    "mtime": 1790392658.2460804,
-    "seen": 1790399318.8354366,
-    "ast_hash": "b4980c4f8531f9039c0a0cbf290f490e",
+    "mtime": 1790428399.4849255,
+    "seen": 1790428443.20541,
+    "ast_hash": "771c08929d53e15331bf6b6fa919b714",
     "semantic_hash": ""
   },
   "plugins/base/doc-list/src/ViewsPanel.tsx": {
@@ -3330,9 +3330,9 @@
     "semantic_hash": ""
   },
   "docs/PLUGIN-REVIEW.md": {
-    "mtime": 1790399698.3738933,
-    "seen": 1790399706.5794592,
-    "ast_hash": "2d914509d7451d82ff33f135f24b47f1",
+    "mtime": 1790428310.5954309,
+    "seen": 1790428443.2137456,
+    "ast_hash": "b14eff9177bedf8a48944114100f25b3",
     "semantic_hash": ""
   },
   "plugins/base/settings/src/groups.test.ts": {

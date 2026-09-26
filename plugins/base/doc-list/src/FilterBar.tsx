@@ -21,6 +21,8 @@
  * **Sort, direction and filters are the whole top row, three icons.** Sort opens a
  * `context-menu` of fields, direction flips the order, and the funnel unfolds every
  * filter — "Show machine documents" included — with a badge counting those applied.
+ * While the filters are open the funnel stays lit in the accent colour, so the button
+ * that folds them away is the obvious one.
  *
  * **The filters fold away.** Expanded, this bar cost the whole
  * first screen of a phone, so the browse view opened on no documents at all. The
@@ -132,7 +134,7 @@ export function FilterBar({
 
         <button
           type="button"
-          className={`doclist-filter-toggle ${ICON_BUTTON} doclist:relative doclist:aria-expanded:border-border-strong!`}
+          className={`doclist-filter-toggle ${ICON_BUTTON} doclist:relative doclist:aria-expanded:border-accent! doclist:aria-expanded:bg-accent-subtle! doclist:aria-expanded:text-accent!`}
           aria-expanded={expanded}
           aria-controls={panelId}
           aria-label={applied > 0 ? `Filters, ${applied} applied` : "Filters"}
