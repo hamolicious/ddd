@@ -26,7 +26,7 @@ browser's device toolbar at 390 × 844, and 844 × 390 for landscape.
 | 7 | `context-menu` | [ ] | New: one menu / sheet service for every plugin |
 | 8 | `settings` | [x] | Base sections first, extensions below a divider |
 | 9 | `themes` | [x] | No changes |
-| 10 | `doc-list` | [ ] | |
+| 10 | `doc-list` | [x] | Icon sort/direction/filters, row ⋯ menu, machine filter, paging |
 | 11 | `folders` | [ ] | |
 | 12 | `search` | [ ] | |
 | 13 | `document-surface` | [ ] | |
