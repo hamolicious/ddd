@@ -35,7 +35,7 @@ browser's device toolbar at 390 × 844, and 844 × 390 for landscape.
 | 16 | `native-preview` | [x] | New: images, PDF, audio, video, text viewers |
 | 16a | `slash-commands` | [x] | New: `/` menu over any editor's `text.surface`; `/attach` |
 | 17 | `markdown` | [x] | `markdown.attachment`; preview / link toggle; promote → link; document embeds |
-| 18 | `viewer` | [ ] | File documents go through `markdown.attachment` |
+| 18 | `viewer` | [x] | File documents via `markdown.attachment`; borderless properties table and rule |
 | 19 | `admin` | [ ] | |
 | 20 | `extra-task-states` (example) | [ ] | |
 | 21 | `alt-editor` (example) | [ ] | |
@@ -454,13 +454,15 @@ Display only; editing happens in Edit mode.
 
 **Where to see it.** Any document → Read.
 
-- [ ] The properties header shows every key; empty ones are greyed, not dropped.
-- [ ] Broken frontmatter: the header says which lines could not be read.
-- [ ] The text column holds its width on a phone; nothing overflows.
+- [x] The properties header shows every key; empty ones are greyed, not dropped.
+- [x] Broken frontmatter: the header says which lines could not be read.
+- [x] The text column holds its width on a phone; nothing overflows.
 
 **Notes.** The properties panel it referred readers to was removed (2026-09-26). A
 file document's preview goes through `markdown.renderAttachment` first, its own
-preview being the fallback (2026-09-26).
+preview being the fallback (2026-09-26). The properties header is a table with no visible borders
+(keys in a fixed-width column, lined up with the body), and a rule separates it from
+the document (2026-09-26).
 
 ## 19. `admin` — administration
 

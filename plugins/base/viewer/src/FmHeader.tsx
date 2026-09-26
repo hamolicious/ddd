@@ -22,6 +22,13 @@
  *   bordered strip above every unadorned note is worse than no header, and most notes
  *   are unadorned.
  *
+ * It is a **table without visible borders** (owner ask, 2026-09-26): keys in one column,
+ * values in the next, aligned like a table and read out as one (each key is its row's
+ * header), with nothing drawn around the cells. One horizontal rule under it separates
+ * the properties from the document (owner ask, 2026-09-26). On a phone it stays
+ * two columns; the key column is a fixed width, so a long key wraps instead of starving
+ * the values.
+ *
  * `fm_parse_error` gets a small inline warning rather than silence, for the reason the
  * flag exists: a dropped line means the header below it is *incomplete*, and a reader
  * comparing it against the raw text needs to know which of the two is lying.
@@ -48,13 +55,15 @@ export function FmHeader({ fm, fmParseError }: FmHeaderProps): ReactNode {
   if (rows.length === 0 && !fmParseError) return null;
 
   return (
-    <div className="viewer-properties viewer:mx-auto viewer:w-full viewer:min-w-0 viewer:max-w-[72ch] viewer:px-4 viewer:pt-4 viewer:compact:px-4 viewer:compact:pt-4">
+    <div className="viewer-properties viewer:text-base viewer:mx-auto viewer:w-full viewer:min-w-0 viewer:max-w-[72ch] viewer:px-4 viewer:pt-4 viewer:compact:px-4 viewer:compact:pt-4">
       {rows.length > 0 ? (
-        <dl className="viewer-properties-list viewer:m-0 viewer:grid viewer:grid-cols-[minmax(0,max-content)_minmax(0,1fr)] viewer:gap-x-3 viewer:gap-y-1 viewer:border-b viewer:border-border viewer:pb-3 viewer:text-sm viewer:compact:grid-cols-1 viewer:compact:gap-0">
-          {rows.map((row) => (
-            <PropertyRow key={row.key} row={row} />
-          ))}
-        </dl>
+        <table className="viewer-properties-list viewer:mb-2 viewer:w-full viewer:table-fixed viewer:border-collapse viewer:border-0 viewer:text-sm">
+          <tbody>
+            {rows.map((row) => (
+              <PropertyRow key={row.key} row={row} />
+            ))}
+          </tbody>
+        </table>
       ) : null}
 
       {fmParseError ? (
@@ -63,18 +72,22 @@ export function FmHeader({ fm, fmParseError }: FmHeaderProps): ReactNode {
           untouched — fix the line in edit mode.
         </p>
       ) : null}
+
+      <hr className="viewer-properties-rule viewer:mb-0 viewer:mt-3 viewer:border-0 viewer:border-t viewer:border-border" />
     </div>
   );
 }
 
 function PropertyRow({ row }: { readonly row: FmDisplayRow }): ReactNode {
   return (
-    <div className="viewer-property viewer:contents viewer:compact:block viewer:compact:pb-1" data-kind={row.kind}>
-      <dt className="viewer-property-key viewer:m-0 viewer:min-w-0 viewer:break-words viewer:font-medium viewer:text-text-muted viewer:compact:text-xs">{row.key}</dt>
-      <dd className="viewer-property-value viewer:m-0 viewer:min-w-0 viewer:break-words viewer:text-text">
+    <tr className="viewer-property" data-kind={row.kind}>
+      <th scope="row" className="viewer-property-key viewer:w-[9rem] viewer:compact:w-[7rem] viewer:border-0 viewer:py-0.5 viewer:pl-0 viewer:pr-3 viewer:text-left viewer:align-top viewer:font-medium viewer:break-words viewer:text-text-muted">
+        {row.key}
+      </th>
+      <td className="viewer-property-value viewer:border-0 viewer:p-0 viewer:py-0.5 viewer:align-top viewer:break-words viewer:text-text">
         <PropertyValue row={row} />
-      </dd>
-    </div>
+      </td>
+    </tr>
   );
 }
 

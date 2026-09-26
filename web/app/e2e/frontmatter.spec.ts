@@ -58,17 +58,16 @@ const FIXTURE = [
 /**
  * The header's rows as key → printed value.
  *
- * Read out of the DOM rather than asserted through roles, for a reason: the list is a
- * two-column grid whose rows are `display: contents`, so the row elements have no box
- * for `toBeVisible` to measure — and the claim being made is about *pairing* (this key
- * shows this value), which a per-element assertion cannot state.
+ * Read out of the DOM rather than asserted per element, because the claim being made is
+ * about *pairing* (this key shows this value), which a per-element assertion cannot
+ * state. Each row is a `<tr>` with the key in its `<th>` and the value in its `<td>`.
  */
 async function headerRows(page: Page): Promise<Record<string, string>> {
   return await page.locator(".viewer-properties-list").evaluate((list) => {
     const rows: Record<string, string> = {};
     for (const row of list.querySelectorAll(".viewer-property")) {
-      const key = row.querySelector("dt")?.textContent?.trim() ?? "";
-      rows[key] = row.querySelector("dd")?.textContent?.trim() ?? "";
+      const key = row.querySelector("th")?.textContent?.trim() ?? "";
+      rows[key] = row.querySelector("td")?.textContent?.trim() ?? "";
     }
     return rows;
   });
@@ -247,16 +246,16 @@ test.describe("read mode shows the frontmatter as a properties header", () => {
     // Wait for this plugin's stylesheet, not just for its markup. `style.css` is a
     // `<link>` the kernel adds when the plugin activates (SPEC §6.4), so the rows can
     // be in the DOM a frame before the CSS that lays them out applies — and measuring
-    // then measures the *user agent's* `dl`: a block, with a 40 px `dd` indent that
-    // exists nowhere in the shipped layout. It fails, and it fails for a reason that
-    // has nothing to do with the rule under test.
+    // then measures the *user agent's* table: auto layout, where one long value widens
+    // the whole table past the screen. It fails, and it fails for a reason that has
+    // nothing to do with the rule under test.
     await expect
       .poll(() =>
         page
           .locator(".viewer-properties-list")
-          .evaluate((node) => getComputedStyle(node).display),
+          .evaluate((node) => getComputedStyle(node).tableLayout),
       )
-      .toBe("grid");
+      .toBe("fixed");
 
     // The same rule `mobile-routes.spec.ts` enforces everywhere, stated here against
     // the one surface this wave added: nothing scrolls the page sideways, and nothing
