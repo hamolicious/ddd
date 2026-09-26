@@ -70,7 +70,7 @@ export function PluginConfigForm({
 
   return (
     <form
-      className="admin-plugin-config"
+      className="admin-plugin-config admin:flex admin:flex-col admin:gap-2 admin:pt-2 admin:[&_label]:flex admin:[&_label]:items-center admin:[&_label]:gap-2 admin:[&_label]:text-[0.95em] admin:[&_label]:font-semibold admin:[&_label]:text-text"
       onSubmit={(event) => {
         event.preventDefault();
         setSaved(false);

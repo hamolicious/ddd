@@ -16569,7 +16569,7 @@
       "file_type": "code",
       "norm_label": "navitem()",
       "source_file": "plugins/base/header/src/Header.tsx",
-      "source_location": "L82"
+      "source_location": "L80"
     },
     {
       "id": "plugins_base_header_src_hooks_usearrangement",
@@ -92842,6 +92842,18 @@
       "type": "external"
     },
     {
+      "id": "ref_barsettings_js",
+      "label": "ref_barsettings_js",
+      "_origin": "semantic",
+      "community": 84,
+      "community_name": "points.ts",
+      "external": true,
+      "file_type": "concept",
+      "norm_label": "ref_barsettings_js",
+      "source_file": "",
+      "type": "external"
+    },
+    {
       "id": "ref_doclistview_js",
       "label": "ref_doclistview_js",
       "_origin": "semantic",
@@ -92890,6 +92902,18 @@
       "type": "external"
     },
     {
+      "id": "ref_noticebell_js",
+      "label": "ref_noticebell_js",
+      "_origin": "semantic",
+      "community": 84,
+      "community_name": "points.ts",
+      "external": true,
+      "file_type": "concept",
+      "norm_label": "ref_noticebell_js",
+      "source_file": "",
+      "type": "external"
+    },
+    {
       "id": "ref_picker_js",
       "label": "ref_picker_js",
       "_origin": "semantic",
@@ -92922,6 +92946,18 @@
       "external": true,
       "file_type": "concept",
       "norm_label": "ref_shell_js",
+      "source_file": "",
+      "type": "external"
+    },
+    {
+      "id": "ref_syncindicator_js",
+      "label": "ref_syncindicator_js",
+      "_origin": "semantic",
+      "community": 84,
+      "community_name": "points.ts",
+      "external": true,
+      "file_type": "concept",
+      "norm_label": "ref_syncindicator_js",
       "source_file": "",
       "type": "external"
     },
@@ -93042,39 +93078,6 @@
       "external": true,
       "file_type": "concept",
       "norm_label": "is_valid_key",
-      "source_file": "",
-      "type": "external"
-    },
-    {
-      "id": "ref_barsettings_js",
-      "label": "ref_barsettings_js",
-      "community": 84,
-      "community_name": "points.ts",
-      "external": true,
-      "file_type": "concept",
-      "norm_label": "ref_barsettings_js",
-      "source_file": "",
-      "type": "external"
-    },
-    {
-      "id": "ref_noticebell_js",
-      "label": "ref_noticebell_js",
-      "community": 84,
-      "community_name": "points.ts",
-      "external": true,
-      "file_type": "concept",
-      "norm_label": "ref_noticebell_js",
-      "source_file": "",
-      "type": "external"
-    },
-    {
-      "id": "ref_syncindicator_js",
-      "label": "ref_syncindicator_js",
-      "community": 84,
-      "community_name": "points.ts",
-      "external": true,
-      "file_type": "concept",
-      "norm_label": "ref_syncindicator_js",
       "source_file": "",
       "type": "external"
     }
@@ -265228,7 +265231,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/header/src/Header.tsx",
-      "source_location": "L82",
+      "source_location": "L80",
       "weight": 1.0
     },
     {
@@ -311675,5 +311678,5 @@
       "source_file": "backend/PROTOCOL.md"
     }
   ],
-  "built_at_commit": "43afc0d97111d65d44df1d628c54d180974bb2c0"
+  "built_at_commit": "924ce70b3677174a3e1523d06a21af3028c30aae"
 }

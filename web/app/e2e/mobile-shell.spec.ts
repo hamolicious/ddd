@@ -319,7 +319,7 @@ test.describe("phone in landscape (844 × 390)", () => {
     // the tree keys off the same query.
     const sidebar = page.getByRole("complementary", { name: /sidebar/i });
     await expect(sidebar).toBeHidden();
-    await page.locator(".header-sidebar-toggle").click();
+    await page.locator(".shell-sidebar-toggle").click();
     await expect(sidebar).toBeVisible();
     await expect(sidebar).toHaveCSS("position", "absolute");
     await page.keyboard.press("Escape");

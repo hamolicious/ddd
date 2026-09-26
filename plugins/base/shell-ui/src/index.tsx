@@ -14,6 +14,7 @@
  * - `state.ts` — the shell's own state (selected view, sidebar, breakpoint), outside
  *   React because the router and `matchMedia` both drive it from outside the tree.
  * - `Shell.tsx` — the layout, the landmarks, the drawer, the error boundaries.
+ * - `SidebarToggle.tsx` — the ☰, contributed to the header's `start` seat.
  * - `resize.ts` — the sidebar width, clamped and remembered per device.
  */
 
@@ -26,6 +27,7 @@ import {
   shellOverlayShape,
   sidebarPanelShape,
   type MainView,
+  type NavbarItem,
   type ShellHeader,
   type ShellOverlay,
   type SidebarPanel,
@@ -33,6 +35,7 @@ import {
 import type { ShellUiApi } from "../../_shared/shell-api.js";
 
 import { SIDEBAR_ID, Shell } from "./Shell.js";
+import { SidebarToggle } from "./SidebarToggle.js";
 import { ShellState } from "./state.js";
 
 export type { ShellUiApi } from "../../_shared/shell-api.js";
@@ -69,6 +72,16 @@ export default function activate(kernel: Kernel): ShellUiApi {
   // registry live: a plugin that contributes a panel or a view later — or fails and
   // has its contributions withdrawn — changes the layout without another mount.
   kernel.ui.mount(<Shell kernel={kernel} state={state} />);
+
+  // The ☰ is a seat item like any other, so the top bar needs no knowledge of the
+  // sidebar. It buffers until `header` defines the point, and is simply absent without it.
+  kernel.extensions.contribute<NavbarItem>(POINTS.navbarItem, {
+    id: "shell-ui.sidebar-toggle",
+    label: "Sidebar",
+    side: "start",
+    order: 0,
+    component: () => <SidebarToggle state={state} />,
+  });
 
   return {
     isCompact: () => state.compact,

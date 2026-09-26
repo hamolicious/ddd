@@ -292,7 +292,7 @@ Their genuine niche: **cron while nobody's looking, outbound HTTP with secrets, 
 | Plugin | Responsibility | Defines |
 |---|---|---|
 | `shell-ui` | Layout skeleton; **mobile breakpoint** (drawer sidebar, single pane, 44 px targets); a spot for the top bar; always-mounted overlays | `shell.header`, `shell.overlay`, `sidebar.panel`, `main.view` |
-| `header` | The top bar in `shell.header`: sidebar toggle and `start`/`end` seats other plugins fill; per-user order in Settings → Top bar | `navbar.item` |
+| `header` | The top bar in `shell.header`: `start`/`end` seats other plugins fill (the sidebar ☰ is `shell-ui`'s); per-user order and visibility in Settings → Top bar | `navbar.item` |
 | `notices` | The notice bell in the header's `end` seat: plugin failures, update prompts, other kernel notices | — |
 | `sync-status` | The sync pill in the header's `end` seat: status dot, unsynced count, retry / sign-in | — |
 | `router` | URL ↔ view | `router.route` |

@@ -1,16 +1,16 @@
 /**
  * `header` — the top bar, contributed to `shell-ui`'s `shell.header` spot.
  *
- * It draws only the frame — the sidebar toggle — and exposes two **seats**
- * through the `navbar.item` point: `side: "start"` and `side: "end"`, sorted by `order`.
- * Everything in them is another plugin's (Settings, Admin, `notices`' bell,
- * `sync-status`' pill), and none of them learns which plugin draws the bar. Replacing
- * the bar means contributing a `shell.header` with a lower `order` — and, if the
- * replacement keeps `navbar.item`, disabling this plugin so the point has one owner.
+ * It draws nothing of its own and exposes two **seats** through the `navbar.item`
+ * point: `side: "start"` and `side: "end"`, sorted by `order`. Everything in them is
+ * another plugin's (`shell-ui`'s ☰, Settings, Admin, `notices`' bell, `sync-status`'
+ * pill), and none of them learns which plugin draws the bar. Replacing the bar means
+ * contributing a `shell.header` with a lower `order` — and, if the replacement keeps
+ * `navbar.item`, disabling this plugin so the point has one owner.
  *
  * What lives where:
  *
- * - `Header.tsx` — the row: sidebar toggle, the two seats.
+ * - `Header.tsx` — the row: the two seats.
  * - `layout.ts` — which seat and position each item gets; pure and unit-tested.
  * - `arrangement.ts` — the user's arrangement, kept in `kernel.settings`.
  * - `BarSettings.tsx` — "Top bar" in Settings, where the arrangement is edited.
@@ -25,7 +25,6 @@ import {
   type SettingsSection,
   type ShellHeader,
 } from "../../_shared/points.js";
-import type { ShellUiApi } from "../../_shared/shell-api.js";
 
 import { createArrangementStore } from "./arrangement.js";
 import { BarSettings } from "./BarSettings.js";
@@ -39,12 +38,11 @@ export default function activate(kernel: Kernel): void {
     description: "An item in the top bar.",
   });
 
-  const shell = kernel.services.require<ShellUiApi>("shell-ui");
   const store = createArrangementStore(kernel);
 
   kernel.extensions.contribute<ShellHeader>(POINTS.shellHeader, {
     id: "header",
-    component: () => <Header kernel={kernel} shell={shell} store={store} />,
+    component: () => <Header kernel={kernel} store={store} />,
   });
 
   kernel.extensions.contribute<SettingsSection>(POINTS.settingsSection, {

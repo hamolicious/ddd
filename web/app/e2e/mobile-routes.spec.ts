@@ -270,7 +270,7 @@ test.describe("every route at 390 px", () => {
     // Not routes, but the three things that render *over* every route — and each was
     // a separate off-screen defect in the audit (the drawer's tree, the palette sheet,
     // and a notice panel clipped off the left edge).
-    const drawer = page.locator(".header-sidebar-toggle");
+    const drawer = page.locator(".shell-sidebar-toggle");
     await drawer.click();
     await expect(page.getByRole("complementary", { name: /sidebar/i })).toBeVisible();
     await page.waitForTimeout(250);

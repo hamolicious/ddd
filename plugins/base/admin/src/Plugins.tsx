@@ -300,7 +300,7 @@ function PendingCard({
   );
 
   return (
-    <li className="admin-plugin admin-plugin-pending">
+    <li className="admin-plugin admin-plugin-pending admin:border-s-4! admin:border-s-warning!">
       <PluginHead plugin={plugin} />
 
       <p className="admin-warning">
@@ -309,7 +309,7 @@ function PendingCard({
         not obtain yourself.
       </p>
 
-      <fieldset className="admin-capabilities">
+      <fieldset className="admin-capabilities admin:m-0 admin:flex admin:flex-col admin:gap-2 admin:rounded admin:border admin:border-border admin:p-2 admin:[&_legend]:px-1 admin:[&_legend]:font-semibold admin:[&_label]:tap-h admin:[&_label]:flex admin:[&_label]:items-start admin:[&_label]:gap-2 admin:[&_label_input]:size-6 admin:[&_label_input]:accent-accent">
         <legend>Capabilities requested</legend>
 
         {(requested.documents?.length ?? 0) > 0 ? (
@@ -437,7 +437,7 @@ function PendingCard({
         </p>
       )}
 
-      <label className="admin-confirm">
+      <label className="admin-confirm admin:tap-h admin:flex admin:items-start admin:gap-2 admin:text-[0.9em] admin:text-text admin:[&_input]:mt-[0.35em] admin:[&_input]:size-6 admin:[&_input]:flex-none admin:[&_input]:accent-accent">
         <input
           type="checkbox"
           checked={confirmed}
@@ -504,7 +504,7 @@ function HostPolicyNotes({ hosts }: { readonly hosts: readonly string[] }): Reac
   if (notes.length === 0) return null;
 
   return (
-    <ul className="admin-host-notes">
+    <ul className="admin-host-notes admin:m-0 admin:flex admin:list-none admin:flex-col admin:gap-1 admin:p-0">
       {notes.map(({ host, note }) => (
         <li
           key={host}
@@ -593,12 +593,12 @@ function InstalledCard({
         </div>
       </dl>
 
-      <div className="admin-plugin-capabilities">
+      <div className="admin-plugin-capabilities admin:mb-0 admin:mt-2">
         <strong>Approved capabilities:</strong>
         {capabilities.length === 0 ? (
           <span> none — no server host functions and no bridge calls</span>
         ) : (
-          <ul>
+          <ul className="admin:mb-0 admin:mt-1 admin:pl-5">
             {capabilities.map((entry) => (
               <li key={entry}>{entry}</li>
             ))}
@@ -672,7 +672,7 @@ function InstalledCard({
           </button>
         )}
 
-        <label className="admin-confirm">
+        <label className="admin-confirm admin:tap-h admin:flex admin:items-start admin:gap-2 admin:text-[0.9em] admin:text-text admin:[&_input]:mt-[0.35em] admin:[&_input]:size-6 admin:[&_input]:flex-none admin:[&_input]:accent-accent">
           <input
             type="checkbox"
             checked={purge}
@@ -719,7 +719,7 @@ function CronTable({
   const mutate = useMutation(onDone);
 
   return (
-    <div className="admin-plugin-cron">
+    <div className="admin-plugin-cron admin:flex admin:flex-col admin:gap-1">
       <strong>Scheduled jobs</strong> <span className="admin-note">(UTC; missed runs are skipped)</span>
       {/* The one table in this plugin with no `.admin-table-scroll` parent, and six
           columns to overflow with. It is invisible in a workspace whose plugins are all
@@ -824,9 +824,9 @@ function PluginLogs({
     );
   }
   return (
-    <ul className="admin-events">
+    <ul className="admin-events admin:mb-0 admin:mt-2 admin:flex admin:max-h-[18rem] admin:list-none admin:flex-col admin:gap-1 admin:overflow-y-auto admin:p-0 admin:text-[0.9em] admin:compact:max-h-none">
       {events.map((event, index) => (
-        <li key={`${event.at}-${index}`} className={`admin-event admin-event-${event.level}`}>
+        <li key={`${event.at}-${index}`} className={`admin-event admin-event-${event.level} admin:rounded admin:bg-bg-subtle admin:px-2 admin:py-1 ${event.level === "warn" ? "admin:border-s-[3px] admin:border-s-warning" : event.level === "error" ? "admin:border-s-[3px] admin:border-s-danger" : ""}`}>
           <code>{formatWhen(event.at)}</code> {event.message}
         </li>
       ))}
@@ -837,7 +837,7 @@ function PluginLogs({
 function HostSummary({ list }: { readonly list: PluginAdminList }): ReactElement {
   const { host, limits } = list;
   return (
-    <div className="admin-plugin-host">
+    <div className="admin-plugin-host admin:flex admin:flex-col admin:gap-1">
       <h4>Plugin host</h4>
       <p className="admin-note">
         {host.active} backend half/halves active, {host.disabled} disabled, {host.instances}{" "}
@@ -918,12 +918,12 @@ function ReadOnlyFallback({
               <span className={`admin-status admin-status-${plugin.state}`}>{plugin.state}</span>
               {plugin.base && <span className="admin-badge">base</span>}
             </p>
-            <div className="admin-plugin-capabilities">
+            <div className="admin-plugin-capabilities admin:mb-0 admin:mt-2">
               <strong>Capabilities:</strong>
               {describeCapabilities(plugin.manifest.capabilities).length === 0 ? (
                 <span> none declared</span>
               ) : (
-                <ul>
+                <ul className="admin:mb-0 admin:mt-1 admin:pl-5">
                   {describeCapabilities(plugin.manifest.capabilities).map((entry) => (
                     <li key={entry}>{entry}</li>
                   ))}

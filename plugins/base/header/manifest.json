@@ -2,14 +2,11 @@
   "id": "header",
   "version": "1.0.0",
   "name": "Header",
-  "description": "The top bar frame: sidebar toggle, and start/end seats other plugins fill through navbar.item.",
+  "description": "The top bar: start/end seats other plugins fill through navbar.item, with a per-user order in Settings.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
   "kernel": "^1.0",
-  "dependencies": {
-    "shell-ui": "^1.0"
-  },
   "peerLibraries": {
     "react": "^18.0.0"
   },

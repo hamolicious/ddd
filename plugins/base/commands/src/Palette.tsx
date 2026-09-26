@@ -70,6 +70,18 @@ export function Palette({
     };
   }, []);
 
+  // Escape closes wherever focus is: a key handler on the dialog alone missed it once
+  // focus had left the input (a click on the panel's padding drops it to <body>).
+  useEffect(() => {
+    const onEscape = (event: KeyboardEvent): void => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      onClose();
+    };
+    document.addEventListener("keydown", onEscape);
+    return () => document.removeEventListener("keydown", onEscape);
+  }, [onClose]);
+
   useEffect(() => {
     setActive(0);
   }, [query]);
@@ -93,11 +105,6 @@ export function Palette({
   const onKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
       switch (event.key) {
-        case "Escape":
-          event.preventDefault();
-          event.stopPropagation();
-          onClose();
-          return;
         case "ArrowDown":
           event.preventDefault();
           setActive((current) => (results.length === 0 ? 0 : (current + 1) % results.length));
@@ -161,6 +168,11 @@ export function Palette({
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
+        // A click on the panel's padding or list must not take focus off the input:
+        // the arrow keys, Enter and typing all go through it.
+        onMouseDown={(event) => {
+          if (event.target !== inputRef.current) event.preventDefault();
+        }}
       >
         <input
           ref={inputRef}
@@ -225,7 +237,8 @@ export function Palette({
           </p>
         )}
 
-        <p className="commands:m-0 commands:border-t commands:border-border commands:px-4 commands:py-2 commands:text-sm commands:text-text-muted" role="status" aria-live="polite">
+        {/* Not shown; still announced, so a screen reader hears how many matched. */}
+        <p className="commands:sr-only" role="status" aria-live="polite">
           {results.length} of {commands.length} commands
         </p>
       </div>

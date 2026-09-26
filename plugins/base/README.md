@@ -26,7 +26,7 @@ dist/<id>/<version>/              build output = the installed layout the server
 | Plugin | Responsibility | Defines |
 |---|---|---|
 | `shell-ui` | layout, mobile breakpoint, a spot for the top bar, always-mounted overlays | `shell.header`, `shell.overlay`, `sidebar.panel`, `main.view` |
-| `header` | the top bar frame: sidebar toggle, `start`/`end` seats, the "Top bar" ordering setting | `navbar.item` |
+| `header` | the top bar: `start`/`end` seats (the ☰ is `shell-ui`'s item), the "Top bar" ordering setting | `navbar.item` |
 | `notices` | the notice bell, in the header's `end` seat | — |
 | `sync-status` | the sync pill, in the header's `end` seat | — |
 | `router` | URL ↔ view (hash-based) | `router.route` |
@@ -78,7 +78,6 @@ flowchart TD
     subgraph foundation ["foundation"]
         router --> shell-ui
         commands --> shell-ui
-        header --> shell-ui
     end
 
     markdown --> commands & router

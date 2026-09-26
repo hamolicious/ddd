@@ -15,7 +15,7 @@
  * the symptom every one of those layout bugs produced.
  */
 
-import { expect, test } from "@playwright/test";
+import { expect, test, type WebSocketRoute } from "@playwright/test";
 
 import {
   ADMIN,
@@ -25,6 +25,7 @@ import {
   runCommand,
   showSidebar,
   signIn,
+  waitSynced,
 } from "./helpers.js";
 
 /** Nothing on the page may push the document wider than the viewport. */
@@ -95,7 +96,7 @@ test.describe("phone width (390px)", () => {
     await page.keyboard.press("Escape");
     await expect(sidebar).toBeHidden();
     // Focus goes back to the control that opened it, not to the top of the document.
-    await expect(page.locator(".header-sidebar-toggle")).toBeFocused();
+    await expect(page.locator(".shell-sidebar-toggle")).toBeFocused();
   });
 });
 
@@ -339,6 +340,62 @@ test.describe("the command palette", () => {
       const run = categories.slice(start, last + 1);
       expect(run.every((entry) => entry === category), `"${category}" is not contiguous`).toBe(true);
     }
+  });
+});
+
+test.describe("the command palette closes", () => {
+  test("on Escape even after a click inside it moved focus", async ({ page }) => {
+    await signIn(page, ADMIN);
+    await page.keyboard.press("ControlOrMeta+k");
+    const input = page.getByRole("combobox", { name: /command/i });
+    await expect(input).toBeVisible();
+
+    // The panel's own padding: not focusable, so a click there used to drop focus to
+    // <body>, where the dialog's key handler never heard Escape.
+    const panel = page.getByRole("dialog", { name: "Command palette" });
+    const box = await panel.boundingBox();
+    await page.mouse.click((box?.x ?? 0) + 4, (box?.y ?? 0) + (box?.height ?? 0) - 4);
+    await expect(input).toBeFocused();
+
+    await page.keyboard.press("Escape");
+    await expect(panel).toBeHidden();
+  });
+});
+
+test.describe("the sync status", () => {
+  test("a dropped connection shows a steady red ✕ that reconnects", async ({ page }) => {
+    // `context.setOffline` leaves an open WebSocket connected, so cut the socket itself:
+    // drop the live one, then refuse every reconnect until the test lets them through.
+    let refuse = false;
+    let live: WebSocketRoute | undefined;
+    await page.routeWebSocket(/\/api\/sync/, (ws) => {
+      if (refuse) {
+        void ws.close();
+        return;
+      }
+      live = ws;
+      ws.connectToServer();
+    });
+    await signIn(page, ADMIN);
+    await waitSynced(page);
+
+    refuse = true;
+    await live?.close();
+    const reconnect = page.getByRole("button", { name: "Offline. Reconnect" });
+    await expect(reconnect).toBeVisible({ timeout: 30_000 });
+    await expect(reconnect).not.toHaveText(/retry/i);
+
+    // Steady through the kernel's reconnect attempts, which each pass through
+    // "connecting": the ✕ used to blink with every one of them.
+    for (let i = 0; i < 8; i++) {
+      await page.waitForTimeout(500);
+      await expect(reconnect).toHaveCount(1);
+    }
+
+    refuse = false;
+    await reconnect.click();
+    await waitSynced(page);
+    await expect(reconnect).toHaveCount(0);
   });
 });
 

@@ -44,7 +44,7 @@ export function ViewsPanel({ documents, onNavigate, current }: ViewsPanelProps):
 
   return (
     <nav className="doclist-views" aria-label="Document views">
-      <ul>
+      <ul className="doclist:m-0 doclist:list-none doclist:p-0">
         {entries.map((entry) => (
           <li key={entry.path}>
             <button
