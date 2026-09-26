@@ -54,7 +54,6 @@ import {
   type Command,
   type KeybindingDefault,
   type MainView,
-  type NavbarItem,
   type Route,
   type SidebarPanel,
 } from "../../_shared/points.js";
@@ -182,13 +181,6 @@ export default function activate(kernel: Kernel): DocListApi {
     component: TrashHost,
   });
 
-  kernel.extensions.contribute<NavbarItem>(POINTS.navbarItem, {
-    id: "doc-list.new",
-    label: "New document",
-    side: "start",
-    order: 10,
-    onSelect: () => create(),
-  });
   kernel.extensions.contribute<SidebarPanel>(POINTS.sidebarPanel, {
     id: "doc-list.views",
     title: "Views",

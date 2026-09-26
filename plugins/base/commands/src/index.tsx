@@ -25,11 +25,10 @@
  * pending-prefix state with a timeout — the only stateful part, and it resets on any
  * key that continues nothing.
  *
- * **The palette renders inside a `navbar.item` component.** `shell-ui` owns the single
+ * **The palette renders as a `shell.overlay`.** `shell-ui` owns the single
  * `kernel.ui.mount` (SPEC §6.4), so a plugin needing a persistent React presence
- * contributes one; a navbar item is the contribution that is always rendered (by
- * `header`, in the shell's top-bar spot). The
- * overlay itself is a portal, so it is not laid out inside the navbar.
+ * contributes an always-mounted overlay. There is no button in the top bar: Mod+K (or
+ * whatever it is rebound to) is the way in.
  *
  * **Settings may be unavailable.** `kernel.settings` is document-backed (SPEC §6.4), so a
  * replaced kernel or a future contract can throw from it. Letting that escape
@@ -54,7 +53,6 @@ import {
 import { createKeybindingsSection } from "./KeybindingsSection.js";
 import {
   eventKeys,
-  formatKeys,
   isApplePlatform,
   isBareChord,
   isTypingTarget,
@@ -68,7 +66,7 @@ import {
   keybindingDefaultShape,
   type Command,
   type KeybindingDefault,
-  type NavbarItem,
+  type ShellOverlay,
   type SettingsSection,
 } from "../../_shared/points.js";
 
@@ -294,23 +292,13 @@ export default function activate(kernel: Kernel): CommandsApi {
     return resolved;
   };
 
-  const PaletteHost = (): ReactElement => {
+  const PaletteHost = (): ReactElement | null => {
     const bindings = useBindings();
     const [open, setOpen] = useState(paletteOpen);
     useEffect(() => api.onPaletteToggle(setOpen), []);
-    const trigger = bindings.byCommand.get("commands.openPalette");
 
     return (
       <>
-        <button
-          type="button"
-          className="commands:tap-h commands:box-border commands:inline-flex commands:cursor-pointer commands:items-center commands:gap-1.5 commands:rounded commands:border commands:border-border commands:bg-bg-subtle commands:px-3 commands:font-sans commands:text-text-muted commands:hover:border-border-strong commands:hover:text-text commands:compact:px-2"
-          onClick={() => api.openPalette()}
-          aria-haspopup="dialog"
-        >
-          Commands
-          {trigger && <kbd className="commands:shrink-0 commands:whitespace-nowrap commands:rounded commands:border commands:border-border commands:bg-bg-subtle commands:px-1.5 commands:font-mono commands:text-[0.85em] commands:text-text-muted commands:compact:hidden!">{formatKeys(trigger, apple)}</kbd>}
-        </button>
         {open && (
           <Palette
             commands={api.list()}
@@ -333,12 +321,8 @@ export default function activate(kernel: Kernel): CommandsApi {
     );
   };
 
-  kernel.extensions.contribute<NavbarItem>(POINTS.navbarItem, {
+  kernel.extensions.contribute<ShellOverlay>(POINTS.shellOverlay, {
     id: "commands.palette",
-    label: "Commands",
-    side: "end",
-    order: 20,
-    onSelect: () => api.openPalette(),
     component: PaletteHost,
   });
 

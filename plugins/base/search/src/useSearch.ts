@@ -1,5 +1,5 @@
 /**
- * The debounced, cancellable search hook shared by the navbar box and the results view.
+ * The debounced, cancellable search hook behind the results view.
  *
  * Two properties it has to hold, and both are about not lying to the user:
  *
@@ -38,7 +38,7 @@ export interface SearchState {
 export interface UseSearchOptions {
   readonly limit?: number;
   readonly debounceMs?: number;
-  /** `false` keeps the hook idle (a closed search box does not query). */
+  /** `false` keeps the hook idle: no query runs until the caller enables it. */
   readonly enabled?: boolean;
   /**
    * Include machine-owned documents — `fm.path` starting with `.`, such as the

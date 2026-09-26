@@ -1,11 +1,10 @@
 /**
  * `header` — the top bar, contributed to `shell-ui`'s `shell.header` spot.
  *
- * It owns `navbar.item`: the buttons and widgets other plugins put in the bar ("New
- * document", the search box, the command palette) contribute there and never learn
- * which plugin draws them. Replacing the bar means contributing a `shell.header` with a
- * lower `order` — and, if the replacement keeps `navbar.item`, disabling this plugin so
- * the point has one owner.
+ * It owns `navbar.item`: the buttons and widgets other plugins put in the bar (Settings,
+ * Admin) contribute there and never learn which plugin draws them. Replacing the bar
+ * means contributing a `shell.header` with a lower `order` — and, if the replacement
+ * keeps `navbar.item`, disabling this plugin so the point has one owner.
  *
  * What lives where:
  *

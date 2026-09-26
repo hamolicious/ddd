@@ -477,7 +477,7 @@ test('"New notes go to" decides where an unfiled document is created', async ({
   await picker.selectOption(home);
 
   // No reload between setting it and using it: the announcement is live.
-  await page.getByRole("button", { name: /New document/ }).first().click();
+  await runCommand(page, "New document");
   await expect(page).toHaveURL(/#\/doc\//);
   const filed = /#\/doc\/([^?]+)/.exec(page.url())?.[1] ?? "";
   await waitSynced(page);
@@ -487,7 +487,7 @@ test('"New notes go to" decides where an unfiled document is created', async ({
   // absence of a key, not `path: ""`.
   await page.goto("/#/settings/folders");
   await page.getByLabel("New notes go to").selectOption("");
-  await page.getByRole("button", { name: /New document/ }).first().click();
+  await runCommand(page, "New document");
   await expect(page).toHaveURL(/#\/doc\//);
   const unfiled = /#\/doc\/([^?]+)/.exec(page.url())?.[1] ?? "";
   expect(unfiled).not.toBe(filed);

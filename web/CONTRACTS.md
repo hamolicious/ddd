@@ -426,6 +426,7 @@ and announced; renaming a point or making a field required is not.
 | Point | Owner | Payload (required fields) |
 |---|---|---|
 | `shell.header` | `shell-ui` | `{ id, component, order? }` — the lowest `order` is rendered |
+| `shell.overlay` | `shell-ui` | `{ id, component }` — always mounted, outside the layout |
 | `navbar.item` | `header` | `{ id, label, icon?, order?, side?, onSelect?, component? }` |
 | `sidebar.panel` | `shell-ui` | `{ id, title, component, icon?, order?, defaultOpen? }` |
 | `main.view` | `shell-ui` | `{ id, component, title? }` — component gets `{ params? }` |

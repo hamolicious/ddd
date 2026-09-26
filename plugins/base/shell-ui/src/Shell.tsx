@@ -28,6 +28,7 @@ import {
   POINTS,
   type MainView,
   type ShellHeader,
+  type ShellOverlay,
   type SidebarPanel,
 } from "../../_shared/points.js";
 
@@ -55,6 +56,7 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
   const views = usePointEntries<MainView>(kernel, POINTS.mainView);
   const panels = usePointEntries<SidebarPanel>(kernel, POINTS.sidebarPanel);
   const headers = usePointEntries<ShellHeader>(kernel, POINTS.shellHeader);
+  const overlays = usePointEntries<ShellOverlay>(kernel, POINTS.shellOverlay);
 
   const main = useRef<HTMLElement>(null);
   const sidebar = useRef<HTMLElement>(null);
@@ -222,6 +224,10 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
           )}
         </main>
       </div>
+
+      {overlays.map((entry) => (
+        <OverlaySlot key={entry.value.id} kernel={kernel} entry={entry} />
+      ))}
     </div>
   );
 }
@@ -235,6 +241,17 @@ function pickHeader(
     if (!best || (entry.value.order ?? 100) < (best.value.order ?? 100)) best = entry;
   }
   return best;
+}
+
+function OverlaySlot({
+  kernel,
+  entry,
+}: {
+  readonly kernel: Kernel;
+  readonly entry: Contribution<ShellOverlay>;
+}): ReactNode {
+  const Rendered = bounded(kernel, entry.value.component, POINTS.shellOverlay, entry.pluginId);
+  return <Rendered />;
 }
 
 function HeaderSlot({

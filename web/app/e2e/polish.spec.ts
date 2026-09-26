@@ -47,23 +47,17 @@ async function noHorizontalScroll(page: import("@playwright/test").Page): Promis
 test.describe("phone width (390px)", () => {
   test.use({ viewport: { width: 390, height: 780 } });
 
-  test("the navbar fits, and both of its primary actions are reachable", async ({ page }) => {
+  test("the navbar fits, and its entries are reachable", async ({ page }) => {
     await signIn(page, ADMIN);
 
-    // The two things a person opens the app to do. They used to be squeezed to zero
-    // width by an end group that refused to shrink, which is invisible to a test that
-    // only checks the elements exist — so assert on the rendered width.
-    const create = page.getByRole("button", { name: "New document" }).first();
-    const search = page.getByRole("combobox", { name: /search documents/i });
-    await expect(create).toBeVisible();
-    await expect(search).toBeVisible();
-    for (const control of [create, search]) {
+    // What is left in the bar has to be a real tap target at phone width, not a label
+    // squeezed to nothing by the end group.
+    for (const name of ["Settings", "Admin"]) {
+      const control = page.getByRole("button", { name });
+      await expect(control).toBeVisible();
       const box = await control.boundingBox();
-      expect(box?.width ?? 0).toBeGreaterThan(60);
+      expect(box?.width ?? 0, `${name} is narrower than a tap target`).toBeGreaterThanOrEqual(40);
     }
-
-    // And the label is the whole label — "New docu…" is a truncation, not a button.
-    await expect(create).toHaveText("New document");
 
     await noHorizontalScroll(page);
   });

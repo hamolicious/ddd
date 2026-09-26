@@ -3,7 +3,7 @@
  *
  * **The default provider is the local index**, and that is a correctness statement,
  * not a performance one: the workspace must be searchable offline (SPEC §4.1), so the
- * thing the search box talks to by default is `kernel.documents.search`, which runs
+ * thing the search page talks to by default is `kernel.documents.search`, which runs
  * MiniSearch in a Worker against the replicated projection. The server's `?search=`
  * endpoint is contributed as a *second* provider — useful for very large workspaces,
  * scripts and integrations, and honest about needing a network.
@@ -26,7 +26,6 @@ import type { Kernel, SearchHit } from "@kernel";
 import { documentPath, queryParam, searchPath } from "./hash.js";
 import { mergeHits, type ProviderResult } from "./merge.js";
 import { ResultsView } from "./ResultsView.js";
-import { SearchBox } from "./SearchBox.js";
 import type { SearchEngine } from "./useSearch.js";
 import {
   POINTS,
@@ -34,7 +33,6 @@ import {
   type Command,
   type KeybindingDefault,
   type MainView,
-  type NavbarItem,
   type Route,
   type SearchProvider,
 } from "../../_shared/points.js";
@@ -141,28 +139,12 @@ export default function activate(kernel: Kernel): SearchApi {
   // Contributions
   // ---------------------------------------------------------------------------
 
-  const BoxHost = (): ReactElement => (
-    <SearchBox
-      engine={engine}
-      onOpenDocument={openDocument}
-      onOpenResults={(query) => router.navigate(searchPath(query))}
-    />
-  );
-
-  kernel.extensions.contribute<NavbarItem>(POINTS.navbarItem, {
-    id: "search.box",
-    label: "Search",
-    side: "start",
-    order: 30,
-    onSelect: () => api.open(),
-    component: BoxHost,
-  });
 
   const ResultsHost = (): ReactElement => {
     const [query, setQuery] = useState(() => queryParam(location.hash, "q"));
     const [count, setCount] = useState<number | undefined>(undefined);
 
-    // The URL is the state. A hash change (back, a link, the navbar box) re-reads it.
+    // The URL is the state. A hash change (back, a link, a command) re-reads it.
     useEffect(() => router.onChange(() => setQuery(queryParam(location.hash, "q"))), []);
 
     // "No matches" and "the index is still building" look identical without this.

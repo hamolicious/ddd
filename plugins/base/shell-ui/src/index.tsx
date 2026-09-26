@@ -2,11 +2,12 @@
  * `shell-ui` — the layout skeleton, and the only plugin that takes the kernel's UI
  * mount (SPEC §6.5).
  *
- * It owns three points and no features: a header spot, a sidebar of panels, and one
- * main region that renders whichever `main.view` the router selected. Everything
- * visible inside them belongs to somebody else — the top bar itself is the `header`
- * plugin — which is what makes this plugin replaceable: a different shell defines the
- * same three points and nothing else has to change.
+ * It owns four points and no features: a header spot, a sidebar of panels, one main
+ * region that renders whichever `main.view` the router selected, and always-mounted
+ * overlays (the command palette). Everything visible inside them belongs to somebody
+ * else — the top bar itself is the `header` plugin — which is what makes this plugin
+ * replaceable: a different shell defines the same four points and nothing else has to
+ * change.
  *
  * What lives where:
  *
@@ -22,9 +23,11 @@ import {
   POINTS,
   mainViewShape,
   shellHeaderShape,
+  shellOverlayShape,
   sidebarPanelShape,
   type MainView,
   type ShellHeader,
+  type ShellOverlay,
   type SidebarPanel,
 } from "../../_shared/points.js";
 import type { ShellUiApi } from "../../_shared/shell-api.js";
@@ -40,6 +43,12 @@ export default function activate(kernel: Kernel): ShellUiApi {
     shape: shellHeaderShape,
     key: (header) => header.id,
     description: "The row above the sidebar and main region; the lowest order is rendered.",
+  });
+  kernel.extensions.definePoint<ShellOverlay>({
+    name: POINTS.shellOverlay,
+    shape: shellOverlayShape,
+    key: (overlay) => overlay.id,
+    description: "An always-mounted component outside the layout (a palette, a toast stack).",
   });
   kernel.extensions.definePoint<SidebarPanel>({
     name: POINTS.sidebarPanel,

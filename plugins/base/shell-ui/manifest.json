@@ -17,6 +17,7 @@
   "x-defines": [
     "main.view",
     "shell.header",
+    "shell.overlay",
     "sidebar.panel"
   ]
 }

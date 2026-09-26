@@ -25,7 +25,7 @@ dist/<id>/<version>/              build output = the installed layout the server
 
 | Plugin | Responsibility | Defines |
 |---|---|---|
-| `shell-ui` | layout, mobile breakpoint, a spot for the top bar | `shell.header`, `sidebar.panel`, `main.view` |
+| `shell-ui` | layout, mobile breakpoint, a spot for the top bar, always-mounted overlays | `shell.header`, `shell.overlay`, `sidebar.panel`, `main.view` |
 | `header` | the top bar: sidebar toggle, navbar items, notices, sync-status indicator | `navbar.item` |
 | `router` | URL ↔ view (hash-based) | `router.route` |
 | `commands` | command registry, palette, keybindings | `commands.command`, `keybindings.default` |

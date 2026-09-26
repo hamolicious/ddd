@@ -34,6 +34,10 @@ flutter = { version = "3.47.5", checksum_expr = '"sha256:" + filter(fromJSON(bod
 [env]
 _.file = { path = ".env", redact = true }
 
+[tasks.update-graph]
+description = "update knowledge graph"
+run = "graphify ./docs --update"
+
 [tasks.dev]
 description = "Run the server against the compose Mongo (mongo in docker, server on the host), serving the built PWA + plugins"
 dir = "backend"

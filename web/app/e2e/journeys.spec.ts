@@ -97,13 +97,15 @@ test("registering the first user boots the whole plugin distribution", async ({
   await expect(docRows(page).first()).toBeVisible();
 
   // Contributions from across the distribution are on screen, which is the real
-  // assertion "every plugin activated" is standing in for: the navbar item is
-  // `doc-list`'s, the search box is `search`'s, the palette trigger is `commands`'s,
-  // the admin entry is `admin`'s, and the sync indicator is `shell-ui`'s own.
-  await expect(page.getByRole("button", { name: "New document" }).first()).toBeVisible();
-  await expect(page.getByRole("combobox", { name: /search documents/i })).toBeVisible();
-  await expect(page.getByRole("button", { name: /^Commands/ })).toBeVisible();
+  // assertion "every plugin activated" is standing in for: the bar is `header`'s, the
+  // admin and settings entries are `admin`'s and `settings`'s, and the palette —
+  // `commands`', mounted as a `shell.overlay` — answers Mod+K.
+  await expect(page.getByRole("banner").getByRole("navigation", { name: "Main" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Admin" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Settings" })).toBeVisible();
+  await page.keyboard.press("ControlOrMeta+k");
+  await expect(page.getByRole("combobox", { name: /command/i })).toBeVisible();
+  await page.keyboard.press("Escape");
 
   const registry = await pluginRegistry(request, baseURL as string);
   expect(registry.problems).toHaveLength(0);

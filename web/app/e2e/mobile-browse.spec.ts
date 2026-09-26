@@ -210,46 +210,6 @@ test.describe("browse and find, at phone width", () => {
     }
   });
 
-  test("the navbar search dropdown is wider than the box it hangs off", async ({
-    page,
-    request,
-    baseURL,
-  }) => {
-    await seed(request, baseURL as string);
-    await signIn(page, ADMIN);
-
-    const box = page.getByRole("combobox", { name: /search documents/i });
-    await box.click();
-    await box.fill("phoneneedle");
-
-    const dropdown = page.locator(".search-dropdown");
-    await expect(dropdown).toBeVisible();
-    await expect(dropdown.locator(".search-hit").first()).toBeVisible();
-
-    // The defect: the dropdown inherited the trigger's 10rem flex basis and rendered a
-    // title and a snippet in 141 px.
-    const trigger = await page.locator(".search-box").boundingBox();
-    const panel = await dropdown.boundingBox();
-    expect(panel?.width ?? 0).toBeGreaterThan(trigger?.width ?? 0);
-    expect(panel?.width ?? 0).toBeLessThanOrEqual(PHONE.width);
-
-    // A snippet is a run of <span>/<mark> children, so `text-overflow` never fired on
-    // it: the box clipped at 141 px over 500 px of content. Clamped, its content is no
-    // wider than its box.
-    const snippet = dropdown.locator(".search-hit-snippet").first();
-    if (await snippet.count()) {
-      const fits = await snippet.evaluate(
-        (element) => element.scrollWidth <= element.clientWidth + 1,
-      );
-      expect(fits, "the search snippet still overflows its box sideways").toBe(true);
-    }
-    await noHorizontalScroll(page, "the navbar search dropdown");
-
-    // And it still opens a document, which is the whole interaction.
-    await dropdown.locator(".search-hit").first().click();
-    await expect(page.getByRole("tablist", { name: /document mode/i })).toBeVisible();
-  });
-
   test("the results page fits and opens a result", async ({ page, request, baseURL }) => {
     await seed(request, baseURL as string);
     await signIn(page, ADMIN);

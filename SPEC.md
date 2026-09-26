@@ -291,7 +291,7 @@ Their genuine niche: **cron while nobody's looking, outbound HTTP with secrets, 
 
 | Plugin | Responsibility | Defines |
 |---|---|---|
-| `shell-ui` | Layout skeleton; **mobile breakpoint** (drawer sidebar, single pane, 44 px targets); a spot for the top bar | `shell.header`, `sidebar.panel`, `main.view` |
+| `shell-ui` | Layout skeleton; **mobile breakpoint** (drawer sidebar, single pane, 44 px targets); a spot for the top bar; always-mounted overlays | `shell.header`, `shell.overlay`, `sidebar.panel`, `main.view` |
 | `header` | The top bar in `shell.header`: sidebar toggle, navbar items, notices, sync-status indicator | `navbar.item` |
 | `router` | URL ↔ view | `router.route` |
 | `commands` | Command registry + palette (Ctrl+K) **+ keybindings** (per-user config; plugin-suggested defaults; first registration wins on conflict, conflicts listed) | `commands.command`, `keybindings.default` |
