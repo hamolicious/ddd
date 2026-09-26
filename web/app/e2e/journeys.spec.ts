@@ -5,7 +5,7 @@
  * fails if any layer between the keypress and Mongo is wrong. That is deliberately a
  * different job from the 650 unit tests — those prove the pieces, this proves the
  * assembly, and the assembly is what M3 actually delivered (the loader, the import
- * map, the registries, fourteen plugins that have never run in the same page before).
+ * map, the registries, sixteen plugins that have never run in the same page before).
  *
  * Ordering matters and parallelism is off: they share one workspace and one
  * first-user account, in that order, exactly like a real session (SPEC §5.1 —
@@ -31,13 +31,13 @@ import {
 /**
  * What `plugins/base/dist` holds, plus the one example plugin the suite installs.
  *
- * The 14 of SPEC §6.5's table plus `extra-task-states`. M4's two proof plugins
+ * The 16 of SPEC §6.5's table plus `extra-task-states`. M4's two proof plugins
  * (`calendar`, `agenda`) were removed on 2026-09-24; on 2026-09-26 `header` was split
- * out of `shell-ui` and `properties` was removed. The base distribution and
- * `BASE_PLUGIN_IDS` — what `?safe=1` boots — are the same fourteen. `safe-mode.spec.ts`
- * is what pins that.
+ * out of `shell-ui`, `notices` and `sync-status` out of `header`, and `properties` was
+ * removed. The base distribution and `BASE_PLUGIN_IDS` — what `?safe=1` boots — are the
+ * same sixteen. `safe-mode.spec.ts` is what pins that.
  */
-const EXPECTED_PLUGINS = 15;
+const EXPECTED_PLUGINS = 17;
 
 /**
  * `--lm-bg` as the `midnight` theme paints it (`plugins/base/themes/src/index.tsx`).

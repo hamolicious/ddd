@@ -1,23 +1,17 @@
 {
-  "id": "header",
+  "id": "sync-status",
   "version": "1.0.0",
-  "name": "Header",
-  "description": "The top bar frame: sidebar toggle, brand, and start/end seats other plugins fill through navbar.item.",
+  "name": "Sync status",
+  "description": "The sync pill in the header: synced/offline dot, unsynced count, retry and sign-in.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
   "kernel": "^1.0",
-  "dependencies": {
-    "shell-ui": "^1.0"
-  },
   "peerLibraries": {
     "react": "^18.0.0"
   },
   "frontend": {
     "module": "frontend/index.mjs",
     "style": "frontend/style.css"
-  },
-  "x-defines": [
-    "navbar.item"
-  ]
+  }
 }

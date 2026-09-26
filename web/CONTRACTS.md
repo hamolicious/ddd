@@ -500,12 +500,13 @@ Hard requirements:
 
 ## Area: base-shell
 
-**Owns:** `plugins/base/{shell-ui,header,router,commands,themes}/**`.
+**Owns:** `plugins/base/{shell-ui,header,notices,sync-status,router,commands,themes}/**`.
 
 - `shell-ui` is the only plugin that may call `kernel.ui.mount`.
 - The **mobile breakpoint** is this area's: drawer sidebar, single pane, 44 px targets
-  (`--lm-tap-target`), and the sync-status indicator (SPEC §6.5) — the indicator and the
-  top bar it sits in are `header`'s, rendered in `shell-ui`'s `shell.header` spot.
+  (`--lm-tap-target`), and the sync-status indicator (SPEC §6.5) — the indicator is
+  `sync-status`' contribution to the `end` seat of `header`'s bar, which is rendered in
+  `shell-ui`'s `shell.header` spot.
 - Landmarks, a skip link, a keyboard-operable palette and visible focus rings are
   requirements, not polish (SPEC §8).
 - Keybindings: user config wins, first registration wins between plugins, conflicts are

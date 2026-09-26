@@ -292,7 +292,9 @@ Their genuine niche: **cron while nobody's looking, outbound HTTP with secrets, 
 | Plugin | Responsibility | Defines |
 |---|---|---|
 | `shell-ui` | Layout skeleton; **mobile breakpoint** (drawer sidebar, single pane, 44 px targets); a spot for the top bar; always-mounted overlays | `shell.header`, `shell.overlay`, `sidebar.panel`, `main.view` |
-| `header` | The top bar in `shell.header`: sidebar toggle, navbar items, notices, sync-status indicator | `navbar.item` |
+| `header` | The top bar in `shell.header`: sidebar toggle, brand, and `start`/`end` seats other plugins fill; per-user order in Settings → Top bar | `navbar.item` |
+| `notices` | The notice bell in the header's `end` seat: plugin failures, update prompts, other kernel notices | — |
+| `sync-status` | The sync pill in the header's `end` seat: status dot, unsynced count, retry / sign-in | — |
 | `router` | URL ↔ view | `router.route` |
 | `commands` | Command registry + palette (Ctrl+K) **+ keybindings** (per-user config; plugin-suggested defaults; first registration wins on conflict, conflicts listed) | `commands.command`, `keybindings.default` |
 | `themes` | Theme registry + picker; **overrides** kernel default tokens | `themes.theme` |

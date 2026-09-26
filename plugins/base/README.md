@@ -26,7 +26,9 @@ dist/<id>/<version>/              build output = the installed layout the server
 | Plugin | Responsibility | Defines |
 |---|---|---|
 | `shell-ui` | layout, mobile breakpoint, a spot for the top bar, always-mounted overlays | `shell.header`, `shell.overlay`, `sidebar.panel`, `main.view` |
-| `header` | the top bar: sidebar toggle, navbar items, notices, sync-status indicator | `navbar.item` |
+| `header` | the top bar frame: sidebar toggle, brand, `start`/`end` seats, the "Top bar" ordering setting | `navbar.item` |
+| `notices` | the notice bell, in the header's `end` seat | — |
+| `sync-status` | the sync pill, in the header's `end` seat | — |
 | `router` | URL ↔ view (hash-based) | `router.route` |
 | `commands` | command registry, palette, keybindings | `commands.command`, `keybindings.default` |
 | `themes` | theme registry + picker; overrides kernel tokens | `themes.theme` |
@@ -50,7 +52,7 @@ that had a backend half, so **every plugin in this directory is now frontend-onl
 
 ## How the base plugins relate
 
-Generated from the fourteen `manifest.json` `dependencies` fields — an arrow reads
+Generated from the sixteen `manifest.json` `dependencies` fields — an arrow reads
 **"depends on"**, and the loader's activation order is precisely a topological order of
 this graph (a dependency always activates first; a failed dependency skips its whole
 subtree). Every plugin additionally depends on `@kernel`, which is not drawn.

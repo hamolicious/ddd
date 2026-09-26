@@ -269,9 +269,9 @@ test.describe("phone (390 × 844)", () => {
     });
     await signIn(page, ADMIN);
 
-    const bell = page.locator(".header-notice-bell");
+    const bell = page.locator(".notices-bell");
     await expect(bell).toBeVisible();
-    const panel = page.locator(".header-notice-panel");
+    const panel = page.locator(".notices-panel");
     if (await panel.isHidden()) await bell.click();
     await expect(panel).toBeVisible();
 
@@ -283,7 +283,7 @@ test.describe("phone (390 × 844)", () => {
     // And it is bounded by the visible height, not by the large viewport.
     expect(box?.height ?? 0).toBeLessThanOrEqual(PHONE.height * 0.6 + 1);
 
-    await tapTargets(page, ".header-notice-panel button");
+    await tapTargets(page, ".notices-panel button");
     await noSidewaysScroll(page);
   });
 

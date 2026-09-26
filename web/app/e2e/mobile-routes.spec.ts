@@ -283,7 +283,7 @@ test.describe("every route at 390 px", () => {
     failures.push(...(await measure(page, "the command palette")));
     await page.keyboard.press("Escape");
 
-    const bell = page.locator(".header-notice-bell");
+    const bell = page.locator(".notices-bell");
     if ((await bell.count()) > 0 && (await bell.isVisible())) {
       await bell.click();
       await page.waitForTimeout(250);

@@ -5,7 +5,7 @@
  * This file is not part of `@kernel` and never will be. The kernel knows point
  * names only as opaque strings — it has no idea what a navbar or a document mode is
  * (SPEC §2) — and the moment it did, replacing `shell-ui` would mean a kernel change.
- * What the base distribution *does* need is for its fourteen plugins to agree on
+ * What the base distribution *does* need is for its sixteen plugins to agree on
  * these shapes without importing each other, which is exactly what a shared
  * declaration file is for.
  *
@@ -136,19 +136,23 @@ export const mainViewShape: Shape<MainView> = s.object({
 // ---------------------------------------------------------------------------
 
 /**
- * One item in the navigation bar. `component` renders it; `onSelect` is the
- * shorthand for the common case (a button that runs a command).
+ * One item in the top bar, placed in one of the header's two seats. `component` renders
+ * it; `onSelect` is the shorthand for the common case (a button that runs a command).
  */
 export interface NavbarItem {
   readonly id: string;
   readonly label: string;
   /** Any renderable node — an inline SVG, a character, a component's output. */
   readonly icon?: ReactNode;
+  /** Sort within the seat; lower first. */
   readonly order?: number;
-  /** Placement hint; the shell decides what it can honour. */
+  /**
+   * The seat: `start` sits after the brand and grows (scrolling sideways when full);
+   * `end` is pushed right and never shrinks. Default `start`.
+   */
   readonly side?: "start" | "end";
   readonly onSelect?: () => void;
-  /** Takes over rendering entirely (a sync indicator, a search box). */
+  /** Takes over rendering entirely (the notice bell, the sync pill). */
   readonly component?: ComponentType<Record<string, never>>;
 }
 

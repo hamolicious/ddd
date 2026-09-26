@@ -49,10 +49,12 @@ pub const BASE_PLUGIN_IDS: &[&str] = &[
     "folders",
     "header",
     "markdown",
+    "notices",
     "router",
     "search",
     "settings",
     "shell-ui",
+    "sync-status",
     "themes",
     "viewer",
 ];
@@ -1737,8 +1739,8 @@ mod tests {
     }
 
     #[test]
-    fn the_base_distribution_is_the_fourteen_plugins_of_spec_6_5() {
-        assert_eq!(BASE_PLUGIN_IDS.len(), 14);
+    fn the_base_distribution_is_the_sixteen_plugins_of_spec_6_5() {
+        assert_eq!(BASE_PLUGIN_IDS.len(), 16);
         assert!(BASE_PLUGIN_IDS.windows(2).all(|pair| pair[0] < pair[1]));
     }
 }

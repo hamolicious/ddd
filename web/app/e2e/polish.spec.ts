@@ -341,3 +341,34 @@ test.describe("the command palette", () => {
     }
   });
 });
+
+test.describe("the top bar", () => {
+  test("its items can be reordered, moved between seats and hidden from Settings", async ({ page }) => {
+    await signIn(page, ADMIN);
+    const bar = page.getByRole("banner");
+    const endSeat = bar.locator('ul[data-side="end"]');
+    const startSeat = bar.locator('ul[data-side="start"]');
+
+    await page.goto("/#/settings/header.bar");
+    await expect(page.getByRole("heading", { name: /^End/ })).toBeVisible();
+
+    // Settings moves to the start seat, and the bar follows without a reload.
+    await page.getByRole("button", { name: "Move Settings to the start seat" }).click();
+    await expect(startSeat.getByRole("button", { name: "Settings" })).toBeVisible();
+    await expect(endSeat.getByRole("button", { name: "Settings" })).toHaveCount(0);
+
+    // It is a per-user setting, so it survives a reload.
+    await page.reload();
+    await expect(startSeat.getByRole("button", { name: "Settings" })).toBeVisible();
+
+    // Hidden: gone from the bar, still listed in Settings so it can come back.
+    await page.getByRole("button", { name: "Hide Admin" }).click();
+    await expect(bar.getByRole("button", { name: "Admin" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Show Admin" }).click();
+    await expect(endSeat.getByRole("button", { name: "Admin" })).toBeVisible();
+
+    // And reset puts every item back where its plugin asked to be.
+    await page.getByRole("button", { name: "Reset to default order" }).click();
+    await expect(endSeat.getByRole("button", { name: "Settings" })).toBeVisible();
+  });
+});
