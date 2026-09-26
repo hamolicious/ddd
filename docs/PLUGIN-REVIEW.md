@@ -23,7 +23,7 @@ browser's device toolbar at 390 × 844, and 844 × 390 for landscape.
 | 4 | `notices` | [x] | Split out of `header`; bell restyled |
 | 5 | `sync-status` | [x] | Split out of `header`; icon-only dot, ✕ / ↻ when down |
 | 6 | `commands` | [x] | Palette Escape, footer, bar button, list indent |
-| 7 | `settings` | [ ] | |
+| 7 | `settings` | [x] | No changes |
 | 8 | `themes` | [ ] | |
 | 9 | `doc-list` | [ ] | |
 | 10 | `folders` | [ ] | |
@@ -171,12 +171,12 @@ on screen.
 
 **Where to see it.** The ⚙ button, Mod+,, or `#/settings`.
 
-- [ ] Every section opens, and the URL names it (`#/settings/<id>`).
-- [ ] Phone: the list is full width; opening a section fills the screen; "All settings"
+- [x] Every section opens, and the URL names it (`#/settings/<id>`).
+- [x] Phone: the list is full width; opening a section fills the screen; "All settings"
   goes back.
-- [ ] Account: sign out warns when there are unsynced edits.
+- [x] Account: sign out warns when there are unsynced edits.
 
-**Notes.**
+**Notes.** No changes.
 
 ## 8. `themes` — appearance
 
