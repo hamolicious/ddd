@@ -185,14 +185,12 @@ test.describe("the folder tree", () => {
     await expect(active).toHaveCount(1);
     const folder = await active.locator(".folders-name").innerText();
 
+    // Folder operations now live behind one modest ellipsis menu. The old + and
+    // pencil controls were deliberately removed, but the active row's menu must
+    // remain keyboard reachable.
     await page.keyboard.press("Tab");
     await expect(
-      page.getByRole("button", { name: new RegExp(`new document in .*${folder}`, "i") }).first(),
-    ).toBeFocused();
-
-    await page.keyboard.press("Tab");
-    await expect(
-      page.getByRole("button", { name: new RegExp(`rename or move .*${folder}`, "i") }).first(),
+      page.getByRole("button", { name: new RegExp(`actions for .*${folder}`, "i") }).first(),
     ).toBeFocused();
 
     // And a row that is not active stays out of the way — one tab stop per tree, plus

@@ -132,6 +132,15 @@ function show(node: ReactNode, indent = ""): string {
   const attributes = SHOWN.filter((key) => props[key] !== undefined)
     .map((key) => {
       const value = props[key];
+      // Tailwind utilities are presentation details. Keep the renderer's stable semantic
+      // hooks in snapshots so a visual refactor does not rewrite every pipeline fixture.
+      if (key === "className" && typeof value === "string") {
+        const stable = value
+          .split(/\s+/)
+          .filter((name) => name.startsWith("md-") || name.startsWith("language-"))
+          .join(" ");
+        return `${key}=${JSON.stringify(stable || value)}`;
+      }
       // An mdast node is identified by its type; printing the whole node would bury the
       // assertion in position objects.
       if (key === "node") return `node=${JSON.stringify((value as { type: string }).type)}`;

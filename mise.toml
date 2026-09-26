@@ -59,6 +59,40 @@ run = [
   """,
 ]
 
+
+[tasks.dev-hot]
+description = "Hot reload ON :8080 — Vite serves the app there (LAN-exposed) and proxies /api, /plugins and the socket to the Rust server on :8081"
+dir = "web"
+# One URL for every device: the PC, the phone's browser (http://<this-machine's-LAN-ip>:8080),
+# and an adb-reversed phone all get live-reloading source. The Rust server hides on :8081.
+# The shell APP still serves its own downloaded bundle — it never hot reloads; use the
+# phone's Chrome against this port when iterating.
+run = [
+  "docker compose -f ../docker-compose.yaml up -d --wait mongo",
+  "npm install --no-audit --no-fund",
+  """
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cleanup() { [ -n "${SERVER_PID:-}" ] && kill "$SERVER_PID" 2>/dev/null || true; }
+  trap cleanup EXIT INT TERM
+  (
+    cd ../backend
+    BIND_ADDR=127.0.0.1:8081 \
+    WEB_DIST_DIR="${WEB_DIST_DIR:-../web/app/dist}" \
+    PLUGINS_DIR="${PLUGINS_DIR:-../plugins/base/dist}" \
+    KERNEL_DTS_PATH="${KERNEL_DTS_PATH:-../web/kernel-api/dist/kernel.d.ts}" \
+    cargo run --bin life-manager -- serve
+  ) &
+  SERVER_PID=$!
+  # Wait for the API before Vite starts proxying at it.
+  for _ in $(seq 1 120); do
+    curl -sf -o /dev/null http://127.0.0.1:8081/healthz && break
+    sleep 1
+  done
+  LM_SERVER=http://127.0.0.1:8081 npm run dev:app -- --port 8080 --host --strictPort
+  """,
+]
+
 [tasks.check]
 description = "Type-check the whole workspace (including tests) plus clippy"
 dir = "backend"

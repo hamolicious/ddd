@@ -33,25 +33,25 @@ export function SyncIndicator({ kernel }: { readonly kernel: Kernel }): ReactNod
   const status = describeSync(state);
 
   return (
-    <div className="shell-sync" data-tone={status.tone}>
-      <span className="shell-sync-text" role="status" aria-live="polite" title={status.detail}>
-        <span className="shell-sync-dot" aria-hidden="true" />
-        <span className="shell-sync-label">{status.label}</span>
+    <div className="group tap-h inline-flex items-center gap-1 whitespace-nowrap px-1 text-text-muted data-[tone=error]:text-text data-[tone=warn]:text-text" data-tone={status.tone}>
+      <span className="inline-flex items-center gap-1" role="status" aria-live="polite" title={status.detail}>
+        <span className="size-[0.6em] rounded-full bg-text-muted group-data-[tone=ok]:bg-success group-data-[tone=busy]:bg-accent group-data-[tone=warn]:bg-warning group-data-[tone=error]:bg-danger" aria-hidden="true" />
+        <span className={`shell-sync-label compact:text-sm ${status.tone === "ok" ? " compact:hidden" : ""}`}>{status.label}</span>
       </span>
       {status.pending > 0 ? (
-        <span className="shell-sync-pending" title={`${status.pending} unsynced`}>
+        <span className="rounded border border-warning px-1 text-sm text-text compact:text-xs" title={`${status.pending} unsynced`}>
           {status.pending} unsynced
         </span>
       ) : null}
       {status.action === "reconnect" ? (
-        <button type="button" className="shell-sync-action" onClick={() => kernel.sync.reconnectNow()}>
+        <button type="button" className="tap-h inline-flex cursor-pointer items-center justify-center rounded border border-border-strong bg-transparent px-1.5 underline" onClick={() => kernel.sync.reconnectNow()}>
           Retry
         </button>
       ) : null}
       {status.action === "reauth" ? (
         <button
           type="button"
-          className="shell-sync-action"
+          className="tap-h inline-flex cursor-pointer items-center justify-center rounded border border-border-strong bg-transparent px-1.5 underline"
           onClick={() => {
             // The kernel owns re-authentication; reloading is the one move a plugin
             // can make that always lands on the auth gate without clearing anything.
@@ -62,7 +62,7 @@ export function SyncIndicator({ kernel }: { readonly kernel: Kernel }): ReactNod
         </button>
       ) : null}
       {/* The whole sentence, for screen readers and for a hover that is not a tooltip race. */}
-      <span className="shell-visually-hidden">{status.detail}</span>
+      <span className="sr-only">{status.detail}</span>
     </div>
   );
 }
@@ -153,28 +153,28 @@ export function NoticeBell({ kernel }: { readonly kernel: Kernel }): ReactNode {
       : "info";
 
   return (
-    <div className="shell-notices" ref={container}>
+    <div className="relative inline-flex compact:static" ref={container}>
       <button
         type="button"
-        className="shell-notice-bell"
+        className="shell-notice-bell tap box-border inline-flex cursor-pointer items-center justify-center gap-1 rounded border border-border bg-transparent px-2.5 hover:bg-bg-raised compact:w-[var(--lm-tap-target)] compact:gap-0 compact:p-0! data-[level=warning]:border-warning data-[level=warning]:text-warning data-[level=error]:border-danger data-[level=error]:text-danger"
         data-level={worst}
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((value) => !value)}
       >
         <span aria-hidden="true">!</span>
-        <span className="shell-notice-count">{count}</span>
-        <span className="shell-visually-hidden">
+        <span className="tabular-nums">{count}</span>
+        <span className="sr-only">
           {count} notice{count === 1 ? "" : "s"}
         </span>
       </button>
-      <div id={panelId} className="shell-notice-panel" hidden={!open} role="group" aria-label="Notices">
+      <div id={panelId} className="shell-notice-panel absolute right-0 top-[calc(100%+var(--lm-space)*0.5)] z-25 max-h-[calc(var(--lm-viewport-height)*0.6)] w-[min(26rem,calc(100vw-var(--lm-space)*2))] overflow-y-auto rounded-lg border border-border bg-bg-raised p-2 shadow-2 compact:inset-x-2 compact:w-auto compact:pb-[calc(var(--lm-space)+var(--lm-safe-bottom))] [&_li]:border-b [&_li]:border-border [&_li]:py-1.5 [&_li:last-child]:border-b-0 [&_pre]:mt-1 [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_ul]:m-0 [&_ul]:list-none [&_ul]:p-0" hidden={!open} role="group" aria-label="Notices">
         <ul>
           {notices.map((notice) => (
             <li key={notice.id} data-level={notice.level}>
-              <p className="shell-notice-message">{notice.message}</p>
+              <p className={`mb-1 mt-0 [overflow-wrap:anywhere] ${notice.level === "error" ? " text-danger" : notice.level === "warning" ? " text-warning" : ""}`}>{notice.message}</p>
               {notice.pluginId ? (
-                <p className="shell-notice-plugin">
+                <p className="mb-1 mt-0 text-sm text-text-muted">
                   plugin <code>{notice.pluginId}</code>
                 </p>
               ) : null}
@@ -184,7 +184,7 @@ export function NoticeBell({ kernel }: { readonly kernel: Kernel }): ReactNode {
                   <pre>{notice.detail}</pre>
                 </details>
               ) : null}
-              <p className="shell-notice-actions">
+              <p className="m-0 flex flex-wrap gap-1">
                 {(notice.actions ?? []).map((action) => (
                   <button key={action.label} type="button" onClick={() => action.run()}>
                     {action.label}

@@ -1,6 +1,7 @@
 {
   "id": "alt-editor",
   "version": "1.0.0",
+  "x-tailwind": true,
   "kernel": "^1.0",
   "dependencies": {
     "document-surface": "^1.0"

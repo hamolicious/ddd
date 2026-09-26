@@ -65,11 +65,11 @@ export function ThemePicker({ kernel, controller }: ThemePickerProps): ReactNode
   void revision;
 
   return (
-    <div className="theme-picker">
-      <fieldset className="theme-fieldset">
+    <div className="theme-picker grid max-w-[34rem] gap-4 font-sans compact:max-w-none compact:gap-2">
+      <fieldset className="m-0 grid gap-0.5 rounded border border-border p-2">
         <legend>Appearance</legend>
         {(["system", "light", "dark"] as const).map((value) => (
-          <label key={value} className="theme-option">
+          <label key={value} className="tap-h flex cursor-pointer items-center gap-2 rounded px-1 hover:bg-bg-subtle">
             <input
               type="radio"
               name={`${group}-appearance`}
@@ -80,12 +80,12 @@ export function ThemePicker({ kernel, controller }: ThemePickerProps): ReactNode
                 void controller.setAppearance(value);
               }}
             />
-            <span className="theme-option-label">
+            <span className="flex-1">
               {value === "system" ? "Match my system" : value === "light" ? "Light" : "Dark"}
             </span>
           </label>
         ))}
-        <p className="theme-note">
+        <p className="mx-1 my-0.5 text-sm text-text-muted">
           Showing <strong>{scheme}</strong>.
         </p>
       </fieldset>
@@ -108,7 +108,7 @@ export function ThemePicker({ kernel, controller }: ThemePickerProps): ReactNode
       ))}
 
       {controller.durable ? null : (
-        <p className="theme-note theme-note-warning">
+        <p className="mx-1 my-0.5 text-sm text-warning">
           Saved on this device. It reaches your other devices when you are online.
         </p>
       )}
@@ -136,21 +136,21 @@ function SchemeGroup({
   readonly onSelect: (id: string | undefined) => void;
 }): ReactNode {
   return (
-    <fieldset className="theme-fieldset">
-      <legend>
+    <fieldset className="m-0 grid gap-0.5 rounded border border-border p-2">
+      <legend className="flex items-center gap-2 px-1 font-semibold">
         {scheme === "dark" ? "Dark theme" : "Light theme"}
-        {active ? <span className="theme-badge">active now</span> : null}
+        {active ? <span className="rounded border border-accent bg-accent-subtle px-1 text-xs font-normal lowercase text-text">active now</span> : null}
       </legend>
       {!active ? (
-        <p className="theme-note">Used in {scheme}.</p>
+        <p className="mx-1 my-0.5 text-sm text-text-muted">Used in {scheme}.</p>
       ) : null}
       {missing ? (
-        <p className="theme-note theme-note-warning">
+        <p className="mx-1 my-0.5 text-sm text-warning">
           The saved theme <code>{selected}</code> is not installed. Using the kernel default.
         </p>
       ) : null}
 
-      <label className="theme-option">
+      <label className="tap-h flex cursor-pointer items-center gap-2 rounded px-1 hover:bg-bg-subtle [&>input]:size-6 [&>input]:m-0 [&>input]:min-h-0 [&>input]:accent-accent">
         <input
           type="radio"
           name={`${group}-${scheme}`}
@@ -158,11 +158,11 @@ function SchemeGroup({
           onChange={() => onSelect(undefined)}
         />
         <Swatch tokens={undefined} />
-        <span className="theme-option-label">Kernel default</span>
+        <span className="flex-1">Kernel default</span>
       </label>
 
       {themes.map((theme) => (
-        <label key={theme.id} className="theme-option">
+        <label key={theme.id} className="tap-h flex cursor-pointer items-center gap-2 rounded px-1 hover:bg-bg-subtle [&>input]:size-6 [&>input]:m-0 [&>input]:min-h-0 [&>input]:accent-accent">
           <input
             type="radio"
             name={`${group}-${scheme}`}
@@ -171,12 +171,12 @@ function SchemeGroup({
             onChange={() => onSelect(theme.id)}
           />
           <Swatch tokens={preview(theme)} />
-          <span className="theme-option-label">{theme.name}</span>
+          <span className="flex-1">{theme.name}</span>
         </label>
       ))}
 
       {themes.length === 0 ? (
-        <p className="theme-note">
+        <p className="mx-1 my-0.5 text-sm text-text-muted">
           No {scheme} themes are installed beyond the kernel default.
         </p>
       ) : null}
@@ -195,9 +195,9 @@ function Swatch({ tokens }: { readonly tokens: Record<string, string> | undefine
     : undefined;
   const accent = tokens?.["--lm-accent"];
   return (
-    <span className="theme-swatch" style={style} aria-hidden="true">
+    <span className="inline-flex h-[1.7rem] w-12 shrink-0 items-center justify-center gap-[0.2em] rounded border border-border-strong bg-bg text-xs leading-none text-text compact:w-10" style={style} aria-hidden="true">
       Aa
-      <span className="theme-swatch-accent" style={accent ? { background: accent } : undefined} />
+      <span className="size-[0.55em] rounded-full bg-accent" style={accent ? { background: accent } : undefined} />
     </span>
   );
 }

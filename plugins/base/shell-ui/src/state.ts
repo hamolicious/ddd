@@ -19,9 +19,9 @@ import { COMPACT_MEDIA_QUERY } from "../../_shared/compact.js";
 /**
  * SPEC §6.5's mobile breakpoint: drawer sidebar, single pane.
  *
- * The string is `_shared/compact.ts`'s, not this file's, because every `style.css` in
- * the base distribution opens its compact block with the same query and a layout that
- * disagrees with `isCompact()` is worse than either behaviour alone.
+ * The string is `_shared/compact.ts`'s, not this file's, because every Tailwind plugin
+ * uses the shared `compact:` variant and a layout that disagrees with `isCompact()` is
+ * worse than either behaviour alone.
  */
 export const COMPACT_QUERY = COMPACT_MEDIA_QUERY;
 

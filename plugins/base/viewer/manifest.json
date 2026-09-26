@@ -5,6 +5,7 @@
   "description": "Read mode: renders the body, hides frontmatter and machine sections.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
+  "x-tailwind": true,
   "kernel": "^1.0",
   "dependencies": {
     "document-surface": "^1.0",

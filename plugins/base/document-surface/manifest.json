@@ -5,6 +5,7 @@
   "description": "Owns the document route and the mode registry.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
+  "x-tailwind": true,
   "kernel": "^1.0",
   "dependencies": {
     "commands": "^1.0",

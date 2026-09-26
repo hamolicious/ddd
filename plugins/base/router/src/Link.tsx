@@ -64,9 +64,7 @@ export function createLink(router: LinkRouter): (props: LinkProps) => ReactNode 
       <a
         href={router.url(to)}
         onClick={onClick}
-        // Always carries the plugin's own class, so `router`'s stylesheet can reach
-        // its links (the current-page weight) without an unprefixed global selector.
-        className={className === undefined ? "route-link" : `route-link ${className}`}
+        className={`${active ? "font-semibold" : ""}${className === undefined ? "" : ` ${className}`}`.trim()}
         {...(title !== undefined ? { title } : {})}
         {...(active ? { "aria-current": "page" as const } : {})}
       >

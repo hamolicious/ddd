@@ -224,7 +224,7 @@ export function InvitesSection({
         </div>
       )}
 
-      {invites.loading ? (
+      {invites.loading && invites.data === undefined ? (
         <p role="status">Loading invites…</p>
       ) : rows.length === 0 ? (
         <p className="admin-empty">No invites. People need one to register.</p>

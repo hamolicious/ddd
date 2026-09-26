@@ -190,7 +190,7 @@ export function SnapshotsSection({
           <li key={row.id}>
             <button
               type="button"
-              className={`admin-link${selected?.id === row.id ? " admin-link-active" : ""}`}
+              className={`admin-link ${selected?.id === row.id ? " admin-link-active" : ""}`}
               aria-current={selected?.id === row.id ? "true" : undefined}
               onClick={() => setSelected({ id: row.id, title: row.title })}
             >

@@ -73,10 +73,11 @@ export function DefaultLocation({
   const missing = current !== "" && !known.includes(current);
 
   return (
-    <div className="folders-settings">
-      <label className="folders-settings-row" htmlFor={id}>
+    <div className="flex flex-col gap-3 font-sans text-text">
+      <label className="flex flex-wrap items-center gap-3" htmlFor={id}>
         <span>New notes go to</span>
         <select
+          className="min-h-[var(--lm-tap-target)] min-w-0 flex-1 rounded border border-border bg-bg px-2 text-text"
           id={id}
           value={current}
           onChange={(event) => choose(event.target.value)}
@@ -90,13 +91,13 @@ export function DefaultLocation({
           ))}
         </select>
       </label>
-      <p className="folders-settings-note">
+      <p className="m-0 text-sm text-text-muted">
         A new document gets <code>path: {current === "" ? "…" : current}</code> in its
         frontmatter{current === "" ? " — or no path line at all, at the root" : ""}. Creating one
         from a folder’s <span aria-hidden="true">+</span> still files it in that folder.
       </p>
       {problem !== undefined ? (
-        <p className="folders-settings-error" role="alert">
+        <p className="m-0 text-sm text-danger" role="alert">
           {problem}
         </p>
       ) : null}

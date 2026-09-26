@@ -604,7 +604,7 @@ function ModeIcon({
   if (mode.icon === undefined || mode.icon === null || mode.icon === false) return null;
   const Icon = iconBoundaryFor(surface.kernel, mode, surface.ownerOf(mode));
   return (
-    <span className="docsurface-mode-icon">
+    <span className="inline-flex shrink-0 leading-none">
       <Icon node={mode.icon} />
     </span>
   );
@@ -644,7 +644,7 @@ function SurfaceView({
 
   if (id === undefined) {
     return (
-      <div className="docsurface-root docsurface-empty">
+      <div className="docsurface-root docsurface-empty flex h-full min-h-0 min-w-0 max-w-[62ch] flex-col px-4 py-6 font-sans text-text-muted">
         <p>No document selected.</p>
       </div>
     );
@@ -652,7 +652,7 @@ function SurfaceView({
 
   if (snapshot.status === "loading") {
     return (
-      <div className="docsurface-root docsurface-empty" aria-busy="true">
+      <div className="docsurface-root docsurface-empty flex h-full min-h-0 min-w-0 max-w-[62ch] flex-col px-4 py-6 font-sans text-text-muted" aria-busy="true">
         <p>Opening the document…</p>
       </div>
     );
@@ -660,10 +660,10 @@ function SurfaceView({
 
   if (snapshot.status === "missing" || !snapshot.row) {
     return (
-      <div className="docsurface-root docsurface-empty">
-        <h1 className="docsurface-title">Document not found</h1>
+      <div className="docsurface-root docsurface-empty flex h-full min-h-0 min-w-0 max-w-[62ch] flex-col px-4 py-6 font-sans text-text-muted">
+        <h1 className="mb-2 mt-0 break-words text-lg font-semibold leading-[1.3] text-text">Document not found</h1>
         <p>
-          No document with the id <code className="docsurface-id">{id}</code>. It may have been
+          No document with the id <code className="break-words font-mono text-sm">{id}</code>. It may have been
           deleted, or this device may still be syncing.
         </p>
       </div>
@@ -675,9 +675,9 @@ function SurfaceView({
   const active = visible.find((mode) => mode.id === snapshot.mode) ?? visible[0];
 
   return (
-    <div className="docsurface-root">
-      <header className="docsurface-header">
-        <h1 className="docsurface-title">{row.title}</h1>
+    <div className="docsurface-root flex h-full min-h-0 min-w-0 flex-col font-sans text-text">
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 compact:p-2">
+        <h1 className="m-0 break-words text-lg font-semibold leading-[1.3] compact:flex-[1_1_100%] compact:text-base">{row.title}</h1>
         <ModeTabs surface={surface} modes={visible} activeId={active?.id} />
       </header>
 
@@ -699,7 +699,7 @@ function SurfaceView({
         `fm` or the text it comes from, and none of them this one.
       */}
       {snapshot.hydrationError && !snapshot.handle ? (
-        <p className="docsurface-notice" role="status">
+        <p className="m-0 border-b border-border bg-bg-subtle px-4 py-2 text-sm text-text-muted" role="status">
           Cannot edit: the editable copy did not load
           {" ("}
           {snapshot.hydrationError}
@@ -709,7 +709,7 @@ function SurfaceView({
       ) : null}
 
       <section
-        className="docsurface-pane"
+        className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto"
         role="tabpanel"
         id={`docsurface-pane-${active?.id ?? "none"}`}
         aria-labelledby={active ? `docsurface-tab-${active.id}` : undefined}
@@ -725,7 +725,7 @@ function SurfaceView({
             line={line}
           />
         ) : (
-          <p className="docsurface-empty">
+          <p className="max-w-[62ch] px-4 py-6 text-text-muted">
             No plugin can display a document. Ask an administrator to install one.
           </p>
         )}
@@ -783,7 +783,7 @@ function ModeTabs({
   };
 
   return (
-    <div className="docsurface-modes" role="tablist" aria-label="Document mode" ref={container}>
+    <div className="flex gap-0.5 rounded border border-border bg-bg-subtle p-0.5 compact:w-full" role="tablist" aria-label="Document mode" ref={container}>
       {modes.map((mode, index) => {
         const selected = mode.id === activeId;
         return (
@@ -792,7 +792,7 @@ function ModeTabs({
             id={`docsurface-tab-${mode.id}`}
             type="button"
             role="tab"
-            className="docsurface-mode"
+            className="tap-h inline-flex cursor-pointer items-center gap-1 rounded-[calc(var(--lm-radius)-1px)] border-0 bg-transparent px-3 text-sm text-text-muted aria-selected:bg-bg-raised aria-selected:text-text aria-selected:shadow-1 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus compact:min-w-0 compact:flex-1 compact:justify-center compact:px-1.5"
             aria-selected={selected}
             aria-controls={`docsurface-pane-${mode.id}`}
             tabIndex={selected ? 0 : -1}
@@ -809,7 +809,7 @@ function ModeTabs({
             <ModeIcon surface={surface} mode={mode} />
             {/* A span, so a label too long for a 360 px segment ellipsises instead of
                 widening the header (see `.docsurface-mode-label`). */}
-            <span className="docsurface-mode-label">{mode.label}</span>
+            <span className="truncate">{mode.label}</span>
           </button>
         );
       })}
@@ -839,12 +839,12 @@ function TrashedBanner({
 }): ReactNode {
   const kernel = surface.kernel;
   return (
-    <p className="docsurface-notice docsurface-notice-danger" role="status">
+    <p className="m-0 border-b border-l-[3px] border-border border-l-danger bg-bg-subtle px-4 py-2 text-sm text-text" role="status">
       In the Trash{row.deleted_at ? ` since ${formatWhen(row.deleted_at)}` : ""}. Restorable for
       30 days.{" "}
       <button
         type="button"
-        className="docsurface-restore"
+        className="min-h-[calc(var(--lm-tap-target)-12px)] cursor-pointer rounded border border-border-strong bg-bg-raised px-2 text-sm text-text focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus"
         onClick={() => {
           void kernel.documents
             .restore(row.id)

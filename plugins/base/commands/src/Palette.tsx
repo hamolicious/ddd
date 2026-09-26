@@ -148,7 +148,7 @@ export function Palette({
 
   return createPortal(
     <div
-      className="cmd-overlay"
+      className="cmd-overlay fixed inset-0 z-[1000] flex items-start justify-center bg-bg-overlay px-2 pb-2 pt-12 compact:p-0"
       {...(sheet ? { style: sheet } : {})}
       // A click on the backdrop dismisses; a click inside must not.
       onMouseDown={(event) => {
@@ -157,14 +157,14 @@ export function Palette({
       onKeyDown={onKeyDown}
     >
       <div
-        className="cmd-palette"
+        className="cmd-palette flex max-h-[min(70vh,36rem)] w-full max-w-[42rem] flex-col overflow-hidden rounded-lg border border-border bg-bg-raised font-sans text-text shadow-2 focus-within:[&_:focus-visible]:outline-2 focus-within:[&_:focus-visible]:outline-offset-[-2px] focus-within:[&_:focus-visible]:outline-focus compact:fixed compact:inset-x-0 compact:top-[var(--cmd-sheet-top,0px)] compact:h-[var(--cmd-sheet-height,100dvh)] compact:max-h-none compact:max-w-none compact:rounded-none compact:border-0 compact:pb-[env(safe-area-inset-bottom,0px)]"
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
       >
         <input
           ref={inputRef}
-          className="cmd-input"
+          className="shrink-0 border-0 border-b border-border bg-transparent px-4 py-3 text-lg text-inherit compact:px-3 compact:py-2"
           type="text"
           role="combobox"
           aria-expanded="true"
@@ -179,17 +179,17 @@ export function Palette({
         />
 
         {conflictCount > 0 && (
-          <p className="cmd-conflict-banner">
+          <p className="m-0 border-b border-border px-4 py-2 text-sm text-warning">
             {conflictCount} keybinding {conflictCount === 1 ? "conflict" : "conflicts"}.{" "}
             {onShowConflicts && (
-              <button type="button" className="cmd-link" onClick={onShowConflicts}>
+              <button type="button" className="cursor-pointer border-0 bg-transparent text-link underline" onClick={onShowConflicts}>
                 Review in settings
               </button>
             )}
           </p>
         )}
 
-        <ul className="cmd-list" id={listboxId} role="listbox" ref={listRef} aria-label="Commands">
+        <ul className="cmd-list m-0 flex-1 list-none overflow-y-auto overscroll-contain py-1" id={listboxId} role="listbox" ref={listRef} aria-label="Commands">
           {results.map((result, index) => {
             const command = result.item;
             const keys = bindingFor(command.id);
@@ -199,33 +199,33 @@ export function Palette({
                 id={`${baseId}-option-${index}`}
                 role="option"
                 aria-selected={index === clamped}
-                className={`cmd-option${index === clamped ? " cmd-option-active" : ""}`}
+                className={`tap-h flex cursor-pointer items-center gap-2 px-4 compact:px-3 ${index === clamped ? " bg-accent-subtle" : ""}`}
                 onMouseEnter={() => setActive(index)}
                 onMouseDown={(event) => {
                   event.preventDefault();
                   run(command);
                 }}
               >
-                {command.icon !== undefined && <span className="cmd-icon">{command.icon}</span>}
-                <span className="cmd-title">
-                  {command.category && <span className="cmd-category">{command.category}</span>}
+                {command.icon !== undefined && <span className="shrink-0 text-text-muted">{command.icon}</span>}
+                <span className="min-w-0 flex-1 truncate">
+                  {command.category && <span className="cmd-category mr-0.5 text-text-muted after:content-['_›_']">{command.category}</span>}
                   {command.title}
                 </span>
-                {keys && <kbd className="cmd-keys">{formatKeys(keys)}</kbd>}
+                {keys && <kbd className="shrink-0 whitespace-nowrap rounded border border-border bg-bg-subtle px-1.5 font-mono text-[0.85em] text-text-muted">{formatKeys(keys)}</kbd>}
               </li>
             );
           })}
         </ul>
 
         {results.length === 0 && (
-          <p className="cmd-empty">
+          <p className="m-0 px-4 py-2 text-sm text-text-muted">
             {commands.length === 0
               ? "No commands are registered yet."
               : `Nothing matches “${query}”.`}
           </p>
         )}
 
-        <p className="cmd-status" role="status" aria-live="polite">
+        <p className="m-0 border-t border-border px-4 py-2 text-sm text-text-muted" role="status" aria-live="polite">
           {results.length} of {commands.length} commands
         </p>
       </div>

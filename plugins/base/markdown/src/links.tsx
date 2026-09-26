@@ -87,7 +87,7 @@ export function DocLink({ id, label, fragment, runtime }: DocLinkProps): ReactNo
 
   if (done && title === undefined && !hasLabel) {
     return (
-      <span className="md-chip md-chip-missing" title={`doc://${id}`}>
+      <span className="tap-h inline-flex items-center gap-1 rounded-lg border border-warning bg-bg-subtle px-2 py-1 text-warning" title={`doc://${id}`}>
         <span aria-hidden="true">⚠</span> missing document
       </span>
     );
@@ -95,7 +95,7 @@ export function DocLink({ id, label, fragment, runtime }: DocLinkProps): ReactNo
 
   return (
     <a
-      className="md-doc-link"
+      className="decoration-dotted"
       href={`doc://${id}${fragment ? `#${fragment}` : ""}`}
       title={title ?? id}
       onClick={(event) => {
@@ -157,7 +157,7 @@ function AttachmentActions({ id, runtime, children }: AttachmentActionsProps): R
 
   return (
     <span
-      className="md-attachment"
+      className="relative inline-block max-w-full"
       onContextMenu={(event) => {
         event.preventDefault();
         runtime.focusAttachment(id);
@@ -196,7 +196,7 @@ export function AttachmentImage({ id, alt, runtime }: AttachmentProps): ReactNod
 
   if (!done) {
     return (
-      <span className="md-attachment-loading" aria-busy="true" title={`attachment://${id}`}>
+      <span className="italic text-text-muted" aria-busy="true" title={`attachment://${id}`}>
         loading file…
       </span>
     );
@@ -208,7 +208,7 @@ export function AttachmentImage({ id, alt, runtime }: AttachmentProps): ReactNod
     <AttachmentActions id={id} runtime={runtime}>
       {(open) => (
         <img
-          className="md-image"
+          className="max-w-full rounded"
           src={blob.objectUrl}
           alt={alt ?? ""}
           loading="lazy"
@@ -232,7 +232,7 @@ export function AttachmentChip({ id, alt, runtime, unavailable }: AttachmentChip
 
   if (unavailable) {
     return (
-      <span className="md-chip md-chip-offline" title={`attachment://${id}`}>
+      <span className="tap-h inline-flex items-center gap-1 rounded-lg border border-dashed border-border bg-bg-subtle px-2 py-1 text-text-muted" title={`attachment://${id}`}>
         <span aria-hidden="true">⭘</span> {name} — not available offline
       </span>
     );
@@ -243,13 +243,13 @@ export function AttachmentChip({ id, alt, runtime, unavailable }: AttachmentChip
       {(open) => (
         <button
           type="button"
-          className="md-chip md-chip-file"
+          className="tap-h inline-flex cursor-pointer items-center gap-1 rounded-lg border border-border bg-bg-subtle px-2 py-1 text-text hover:bg-accent-subtle"
           title={`attachment://${id}`}
           aria-haspopup="menu"
           onClick={open}
         >
           <span aria-hidden="true">🗎</span> {name}
-          {meta ? <span className="md-chip-size">{formatSize(meta.size)}</span> : null}
+          {meta ? <span className="text-[0.85em] text-text-muted">{formatSize(meta.size)}</span> : null}
         </button>
       )}
     </AttachmentActions>

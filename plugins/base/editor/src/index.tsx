@@ -362,7 +362,7 @@ export default function activate(kernel: Kernel): EditorApi {
      * and nothing is waiting on the reader.
      */
     const parseNotice = row.fm_parse_error ? (
-      <p className="editor-notice" role="status">
+      <p className="editor-notice m-0 shrink-0 border-b border-border bg-bg-subtle px-4 py-2 text-sm text-text-muted compact:p-2 compact:break-words" role="status">
         One frontmatter line could not be read, so its key is missing everywhere else in
         the app. The text below is exactly what the document holds.
       </p>
@@ -370,31 +370,31 @@ export default function activate(kernel: Kernel): EditorApi {
 
     if (!open) {
       return (
-        <div className="editor-root editor-unhydrated">
-          <p className="editor-notice">
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col font-sans text-text">
+          <p className="editor-notice m-0 shrink-0 border-b border-border bg-bg-subtle px-4 py-2 text-sm text-text-muted compact:p-2 compact:break-words">
             Opening for editing… You can read it now. A document you have never opened
             stays read-only until this device reconnects.
           </p>
           {parseNotice}
-          <pre className="editor-readonly">{row.content ?? ""}</pre>
+          <pre className="m-0 min-h-0 min-w-0 flex-1 overflow-auto whitespace-pre-wrap bg-bg p-4 font-mono text-sm leading-[1.6] text-text-muted">{row.content ?? ""}</pre>
         </div>
       );
     }
 
     return (
-      <div className="editor-root" data-document={id}>
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col font-sans text-text" data-document={id}>
         {parseNotice}
         {failure ? (
-          <p className="editor-notice editor-notice-error" role="alert">
+          <p className="editor-notice editor-notice-error m-0 shrink-0 border-b border-l-[3px] border-border border-l-danger bg-bg-subtle px-4 py-2 text-sm text-text compact:p-2 compact:break-words" role="alert">
             The editor failed to start: {failure}
           </p>
         ) : null}
         {open.phase === "error" ? (
-          <p className="editor-notice" role="status">
+          <p className="editor-notice m-0 shrink-0 border-b border-border bg-bg-subtle px-4 py-2 text-sm text-text-muted compact:p-2 compact:break-words" role="status">
             Offline. Your edits are saved here and sync when the connection returns.
           </p>
         ) : null}
-        <div className="editor-surface" ref={host} />
+        <div className="editor-surface flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden [&_.cm-content]:max-w-[88ch] [&_.cm-content]:px-4 [&_.cm-content]:pb-[calc(var(--lm-viewport-height,100dvh)*0.4)] [&_.cm-content]:pt-4 compact:[&_.cm-content]:px-3 compact:[&_.cm-content]:pt-2 [&_.cm-editor]:min-h-0 [&_.cm-editor]:min-w-0 [&_.cm-editor]:max-w-full [&_.cm-editor]:flex-1 [&_.cm-scroller]:max-w-full [&_.cm-scroller]:overflow-x-auto [&_.cm-scroller]:overscroll-x-contain compact:[&_.cm-foldPlaceholder]:inline-block compact:[&_.cm-foldPlaceholder]:min-h-[calc(var(--lm-tap-target)-20px)] compact:[&_.cm-foldPlaceholder]:leading-[calc(var(--lm-tap-target)-20px)]" ref={host} />
         <SaveState kernel={kernel} />
       </div>
     );
@@ -474,7 +474,7 @@ function SaveState({ kernel }: { readonly kernel: Kernel }): ReactNode {
 
   return (
     <p
-      className="editor-status"
+      className="m-0 min-h-[calc(var(--lm-space)*3)] shrink-0 border-t border-border bg-bg-subtle px-4 py-1 text-xs text-text-muted data-[pending=true]:text-text data-[status=offline]:border-warning data-[status=offline]:text-text data-[status=auth-required]:border-warning data-[status=auth-required]:text-text data-[status=error]:border-danger data-[status=error]:text-text compact:px-2 compact:break-words"
       role="status"
       data-status={state.status}
       data-pending={state.pending > 0 ? "true" : "false"}

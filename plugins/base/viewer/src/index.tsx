@@ -60,6 +60,8 @@ interface AttachmentMeta {
 const MAX_INLINE_IMAGE_BYTES = 16 * 1024 * 1024;
 const MAX_INLINE_TEXT_BYTES = 256 * 1024;
 
+const READER_CLASSES = "mx-auto w-full min-w-0 max-w-[72ch] break-words px-4 py-6 text-base leading-[1.65] compact:py-4 compact:leading-[1.7] [&>:first-child]:mt-0 [&_h1]:mb-2 [&_h1]:mt-6 [&_h1]:text-2xl [&_h1]:leading-tight compact:[&_h1]:text-xl [&_h2]:mb-2 [&_h2]:mt-6 [&_h2]:text-xl [&_h2]:leading-tight compact:[&_h2]:text-lg [&_h3]:mb-2 [&_h3]:mt-6 [&_h3]:text-lg [&_h3]:leading-tight compact:[&_h3]:text-base [&_h4]:mb-2 [&_h4]:mt-6 [&_h4]:leading-tight [&_p]:mb-3 [&_p]:mt-0 [&_ul]:mb-3 [&_ol]:mb-3 [&_blockquote]:mb-3 [&_blockquote]:border-l-[3px] [&_blockquote]:border-border-strong [&_blockquote]:pl-3 [&_blockquote]:text-text-muted [&_pre]:mb-3 [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:border [&_pre]:border-border [&_pre]:bg-bg-subtle [&_pre]:p-2 [&_table]:mb-3 [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto [&_table]:border-collapse [&_a]:break-words [&_a]:text-link [&_code]:break-words [&_code]:rounded-[3px] [&_code]:bg-bg-subtle [&_code]:px-[0.3em] [&_code]:py-[0.1em] [&_code]:font-mono [&_code]:text-[0.9em] [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_img]:h-auto [&_img]:max-w-full [&_img]:rounded [&_th]:border [&_th]:border-border [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_td]:border [&_td]:border-border [&_td]:px-2 [&_td]:py-1 [&_td]:text-left [&_hr]:border-0 [&_hr]:border-t [&_hr]:border-border";
+
 export default function activate(kernel: Kernel): void {
   const markdown = kernel.services.require<MarkdownApi>("markdown");
 
@@ -73,7 +75,7 @@ export default function activate(kernel: Kernel): void {
       // this is the narrow window before the first sync completes — or a client that
       // learned of the document from a link before its row arrived.
       return (
-        <div className="viewer-root viewer-empty">
+        <div className="max-w-[62ch] min-w-0 px-4 py-6 font-sans text-text-muted">
           <p>This document’s text has not reached this device yet.</p>
         </div>
       );
@@ -87,9 +89,9 @@ export default function activate(kernel: Kernel): void {
       // The column, not the article: the properties header and the body share one
       // measure and one set of gutters, and `.viewer-body` keeps its own `max-width`
       // and auto margins so nothing about the reading column moves.
-      <div className="viewer-root viewer-read">
+      <div className="w-full min-w-0 font-sans text-text">
         <FmHeader fm={row.fm} fmParseError={row.fm_parse_error} />
-        <article className="viewer-body">{markdown.render(body ?? "", { documentId: id })}</article>
+        <article className={READER_CLASSES}>{markdown.render(body ?? "", { documentId: id })}</article>
       </div>
     );
   };
@@ -212,20 +214,20 @@ function AttachmentPreview({
   const name = meta?.name ?? reference.label ?? title;
 
   return (
-    <div className="viewer-root viewer-attachment">
-      <figure className="viewer-preview">
+    <div className="flex min-w-0 justify-center p-4 font-sans text-text compact:p-2">
+      <figure className="m-0 flex max-w-[min(100%,72ch)] flex-col gap-2">
         <PreviewBody kind={kind} state={state} name={name} />
-        <figcaption className="viewer-file">
-          <span className="viewer-file-name">{name}</span>
-          <span className="viewer-file-meta">
+        <figcaption className="flex flex-col gap-0.5 text-sm">
+          <span className="break-words font-semibold">{name}</span>
+          <span className="text-sm text-text-muted">
             {meta?.mime ?? "unknown type"} · {formatBytes(meta?.size)}
             {meta?.revision !== undefined ? ` · revision ${meta.revision}` : ""}
           </span>
-          <span className="viewer-file-actions">
+          <span className="mt-1">
             {/* A same-origin link, so the server's Content-Disposition decides whether
                 it opens or downloads — the allowlist of safe inline types is the
                 server's call, not this plugin's (SPEC §3.6). */}
-            <a className="viewer-file-link" href={apiUrl(reference.id)} target="_blank" rel="noreferrer">
+            <a className="tap-h inline-flex items-center text-link focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" href={apiUrl(reference.id)} target="_blank" rel="noreferrer">
               Open the file
             </a>
           </span>
@@ -246,54 +248,54 @@ function PreviewBody({
 }): ReactNode {
   if (state.phase === "loading") {
     return (
-      <div className="viewer-preview-frame" aria-busy="true">
-        <p className="viewer-muted">Loading the file…</p>
+      <div className="flex min-h-48 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border-strong bg-bg-subtle p-6 text-center" aria-busy="true">
+        <p className="text-sm text-text-muted">Loading the file…</p>
       </div>
     );
   }
 
   if (state.phase === "unavailable") {
     return (
-      <div className="viewer-preview-frame">
-        <p className="viewer-chip viewer-chip-offline">
+      <div className="flex min-h-48 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border-strong bg-bg-subtle p-6 text-center">
+        <p className="m-0 inline-block rounded-full border border-warning bg-bg-raised px-2.5 py-0.5 text-xs text-text">
           {state.offline ? "Not available offline" : "This file could not be loaded"}
         </p>
-        <p className="viewer-muted">{state.reason}</p>
+        <p className="text-sm text-text-muted">{state.reason}</p>
       </div>
     );
   }
 
   if (state.phase === "skipped") {
     return (
-      <div className="viewer-preview-frame">
-        <p className="viewer-chip">No inline preview</p>
-        <p className="viewer-muted">{state.reason}.</p>
+      <div className="flex min-h-48 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border-strong bg-bg-subtle p-6 text-center">
+        <p className="m-0 inline-block rounded-full border border-border-strong bg-bg-raised px-2.5 py-0.5 text-xs text-text-muted">No inline preview</p>
+        <p className="text-sm text-text-muted">{state.reason}.</p>
       </div>
     );
   }
 
   if (state.phase === "text") {
-    return <pre className="viewer-preview-text">{state.content}</pre>;
+    return <pre className="max-h-[70vh] overflow-auto whitespace-pre-wrap rounded border border-border bg-bg-subtle p-2 font-mono text-sm leading-[1.5]">{state.content}</pre>;
   }
 
   switch (kind) {
     case "image":
-      return <img className="viewer-preview-image" src={state.url} alt={name} />;
+      return <img className="mx-auto block h-auto max-h-[70vh] max-w-full rounded-lg bg-bg-subtle shadow-1" src={state.url} alt={name} />;
     case "audio":
-      return <audio className="viewer-preview-media" controls src={state.url} />;
+      return <audio className="w-full rounded" controls src={state.url} />;
     case "video":
-      return <video className="viewer-preview-media" controls src={state.url} />;
+      return <video className="w-full rounded" controls src={state.url} />;
     case "pdf":
       return (
-        <div className="viewer-preview-frame">
-          <p className="viewer-chip">PDF</p>
-          <p className="viewer-muted">PDFs cannot be shown inline. Open the file instead.</p>
+        <div className="flex min-h-48 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border-strong bg-bg-subtle p-6 text-center">
+          <p className="m-0 inline-block rounded-full border border-border-strong bg-bg-raised px-2.5 py-0.5 text-xs text-text-muted">PDF</p>
+          <p className="text-sm text-text-muted">PDFs cannot be shown inline. Open the file instead.</p>
         </div>
       );
     default:
       return (
-        <div className="viewer-preview-frame">
-          <p className="viewer-chip">File</p>
+        <div className="flex min-h-48 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border-strong bg-bg-subtle p-6 text-center">
+          <p className="m-0 inline-block rounded-full border border-border-strong bg-bg-raised px-2.5 py-0.5 text-xs text-text-muted">File</p>
         </div>
       );
   }

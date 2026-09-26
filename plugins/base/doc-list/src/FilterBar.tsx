@@ -112,7 +112,7 @@ export function FilterBar({
   };
 
   return (
-    <div className="doclist-controls">
+    <div className="doclist-controls flex flex-col gap-2 rounded border border-border bg-bg-subtle p-2 [&_.doclist-checkbox]:tap-h [&_.doclist-checkbox]:inline-flex [&_.doclist-checkbox]:cursor-pointer [&_.doclist-checkbox]:items-center [&_.doclist-checkbox]:gap-1 [&_.doclist-checkbox]:whitespace-nowrap [&_.doclist-clause]:flex [&_.doclist-clause]:flex-wrap [&_.doclist-clause]:items-end [&_.doclist-clause]:gap-1.5 [&_.doclist-clause]:rounded [&_.doclist-clause]:border [&_.doclist-clause]:border-transparent [&_.doclist-clause]:p-1 [&_.doclist-clause-invalid]:border-warning [&_.doclist-field]:flex [&_.doclist-field]:flex-col [&_.doclist-field]:gap-0.5 [&_.doclist-field]:text-sm [&_.doclist-field]:text-text-muted [&_.doclist-field_input]:tap-h [&_.doclist-field_input]:rounded [&_.doclist-field_input]:border [&_.doclist-field_input]:border-border [&_.doclist-field_input]:bg-bg [&_.doclist-field_input]:px-2 [&_.doclist-field_input]:text-base [&_.doclist-field_input]:text-text [&_.doclist-field_select]:tap-h [&_.doclist-field_select]:rounded [&_.doclist-field_select]:border [&_.doclist-field_select]:border-border [&_.doclist-field_select]:bg-bg [&_.doclist-field_select]:px-2 [&_.doclist-field_select]:text-base [&_.doclist-field_select]:text-text [&_.doclist-grow]:flex-[1_1_12rem] compact:[&_.doclist-grow]:basis-full [&_.doclist-row]:flex [&_.doclist-row]:flex-wrap [&_.doclist-row]:items-end [&_.doclist-row]:gap-2 [&_.doclist-sort]:compact:flex-[1_1_8rem] compact:[&_.doclist-sort_select]:w-full">
       <div className="doclist-row">
         <label className="doclist-field doclist-sort">
           <span>Sort by</span>
@@ -142,17 +142,17 @@ export function FilterBar({
 
         <button
           type="button"
-          className="doclist-filter-toggle"
+          className="doclist-filter-toggle ml-auto inline-flex items-center gap-1 aria-expanded:border-border-strong!"
           aria-expanded={expanded}
           aria-controls={panelId}
           onClick={() => setExpanded((value) => !value)}
         >
           Filters
-          {applied > 0 && <span className="doclist-filter-count">{applied}</span>}
+          {applied > 0 && <span className="doclist-filter-count rounded bg-accent-subtle px-1 text-sm tabular-nums">{applied}</span>}
         </button>
       </div>
 
-      <div className="doclist-filter-panel" id={panelId} hidden={!expanded}>
+      <div className={`doclist-filter-panel ${expanded ? "flex" : "hidden"} flex-col gap-2 border-t border-border pt-2`} id={panelId}>
       <div className="doclist-row">
         <label className="doclist-field doclist-grow">
           <span>Title contains</span>
@@ -193,16 +193,16 @@ export function FilterBar({
             </label>
           </div>
 
-          <ul className="doclist-clauses">
+          <ul className="doclist-clauses m-0 flex list-none flex-col gap-2 p-0">
             {draft.clauses.map((clause) => {
               const valueless = VALUELESS_OPS.includes(clause.op);
               return (
                 <li
                   key={clause.id}
-                  className={`doclist-clause${problems.has(clause.id) ? " doclist-clause-invalid" : ""}`}
+                  className={`doclist-clause ${problems.has(clause.id) ? " doclist-clause-invalid" : ""}`}
                 >
                   <label className="doclist-field">
-                    <span className="doclist-visually-hidden">Field</span>
+                    <span className="sr-only">Field</span>
                     <input
                       list="doclist-fields"
                       value={clause.field}
@@ -212,7 +212,7 @@ export function FilterBar({
                   </label>
 
                   <label className="doclist-field">
-                    <span className="doclist-visually-hidden">Operator</span>
+                    <span className="sr-only">Operator</span>
                     <select
                       value={clause.op}
                       onChange={(event) => patch(clause.id, { op: event.target.value as ClauseOp })}
@@ -228,7 +228,7 @@ export function FilterBar({
                   {!valueless && (
                     <>
                       <label className="doclist-field">
-                        <span className="doclist-visually-hidden">Value type</span>
+                        <span className="sr-only">Value type</span>
                         <select
                           value={clause.kind}
                           onChange={(event) =>
@@ -243,7 +243,7 @@ export function FilterBar({
                         </select>
                       </label>
                       <label className="doclist-field doclist-grow">
-                        <span className="doclist-visually-hidden">Value</span>
+                        <span className="sr-only">Value</span>
                         <input
                           value={clause.value}
                           placeholder={clause.kind === "date" ? "2026-09-23" : "Value"}
@@ -264,7 +264,7 @@ export function FilterBar({
 
                   <button
                     type="button"
-                    className="doclist-icon-button"
+                    className="doclist-icon-button min-w-[var(--lm-tap-target)]"
                     aria-label={`Remove condition: ${describeClause(clause)}`}
                     onClick={() =>
                       onDraftChange({
@@ -280,7 +280,7 @@ export function FilterBar({
                     // The reason, not a label. "Incomplete" was shown over a row whose
                     // boxes were all full — a text operator against a date value, say —
                     // and told the reader to finish typing something already typed.
-                    <p className="doclist-clause-note">
+                    <p className="doclist-clause-note m-0 flex-[1_1_100%] text-sm text-warning">
                       Not applied. {problems.get(clause.id)}
                     </p>
                   )}
@@ -332,7 +332,7 @@ export function FilterBar({
       </div>
 
       {filter !== undefined && (
-        <details className="doclist-json">
+        <details className="doclist-json text-sm text-text-muted [&>summary]:flex [&>summary]:min-h-[var(--lm-tap-target)] [&>summary]:cursor-pointer [&>summary]:items-center [&>pre]:mt-1 [&>pre]:overflow-x-auto [&>pre]:rounded [&>pre]:bg-bg [&>pre]:p-2 [&>pre]:font-mono">
           {/* A spec section number is a note to whoever builds this, not to whoever
               uses it. What a reader wants to know is what the block below *is*. */}
           <summary>Show the filter as JSON</summary>

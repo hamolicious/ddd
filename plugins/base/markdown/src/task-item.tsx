@@ -76,10 +76,10 @@ export function TaskCheckbox({
   const openMenu = (): void => setMenuOpen(true);
 
   return (
-    <span className="md-task-control">
+    <span className="md-task-control relative mx-[calc((var(--md-gutter)-var(--lm-tap-target))/2)] inline-flex min-w-[var(--lm-tap-target)] shrink-0 justify-center">
       <button
         type="button"
-        className="md-task-box"
+        className="md-task-box tap size-[var(--lm-tap-target)] touch-manipulation select-none cursor-pointer rounded border-0 bg-transparent p-0 text-[1.1em] leading-none text-inherit hover:enabled:bg-accent-subtle disabled:cursor-default disabled:opacity-55"
         // `role="checkbox"` with `aria-checked` is the right role even with more than two
         // states: `done` is the binary an assistive technology can act on, and `aria-label`
         // carries the state's real name ("In progress") so the nuance is not lost.

@@ -39,6 +39,8 @@ describe("Tailwind plugin packaging", () => {
     expect(css).not.toContain("@layer");
     expect(css).not.toMatch(/(^|[,{\s])button\s*[{,:]/m);
     expect(css).toContain("var(--lm-accent)");
+    // One spacing step is half a kernel space, so p-4 is two --lm-space.
+    expect(css).toMatch(/\.p-4\s*\{\s*padding:\s*calc\(calc\(var\(--lm-space\)\s*\*\s*0?\.5\)\s*\*\s*4\)/);
     expect(css).toContain(".tap");
     const rootBlocks = css.match(/:root[^{}]*\{[^}]*\}/g) ?? [];
     expect(rootBlocks.join("\n").match(/--[^:]+:/g)?.length ?? 0).toBeLessThan(10);

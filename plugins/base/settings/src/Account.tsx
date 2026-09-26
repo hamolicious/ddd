@@ -19,15 +19,15 @@ import type { Kernel } from "@kernel";
 export function AccountSection({ kernel }: { readonly kernel: Kernel }): ReactNode {
   const user = kernel.session.user;
   return (
-    <div className="settings-account">
-      <dl className="settings-facts">
+    <div className="grid gap-6">
+      <dl className="m-0 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 [&_dd]:m-0 [&_dt]:text-text-muted">
         <dt>Signed in as</dt>
         <dd>
           {user.email}
-          {user.isAdmin ? <span className="settings-badge">admin</span> : null}
+          {user.isAdmin ? <span className="ml-1.5 rounded border border-accent bg-accent-subtle px-1 text-xs uppercase">admin</span> : null}
         </dd>
         <dt>Name</dt>
-        <dd>{user.name ?? <span className="settings-muted">not set</span>}</dd>
+        <dd>{user.name ?? <span className="text-text-muted">not set</span>}</dd>
         <dt>Session</dt>
         <dd>{kernel.session.via === "bearer" ? "bearer token (app shell)" : "browser cookie"}</dd>
       </dl>
@@ -75,9 +75,9 @@ function PasswordForm({ kernel }: { readonly kernel: Kernel }): ReactNode {
   };
 
   return (
-    <form className="settings-form" onSubmit={(event) => void submit(event)}>
+    <form className="settings-form m-0 grid max-w-96 gap-2 compact:max-w-none [&_button]:tap-h [&_button]:cursor-pointer [&_button]:rounded [&_button]:border [&_button]:border-border-strong [&_button]:bg-bg-raised [&_button]:px-3 [&_button]:text-inherit [&_button[type=submit]]:justify-self-start [&_button[type=submit]]:border-accent [&_button[type=submit]]:bg-accent [&_button[type=submit]]:text-accent-text [&_h3]:m-0 [&_label]:grid [&_label]:gap-0.5 [&_input]:box-border [&_input]:tap-h [&_input]:w-full [&_input]:rounded [&_input]:border [&_input]:border-border [&_input]:bg-bg [&_input]:px-2.5 [&_input]:text-inherit" onSubmit={(event) => void submit(event)}>
       <h3>Change password</h3>
-      <p className="settings-muted">
+      <p className="text-text-muted">
         Changing your password signs out every other device. This one stays signed in.
       </p>
       <label>
@@ -112,12 +112,12 @@ function PasswordForm({ kernel }: { readonly kernel: Kernel }): ReactNode {
         />
       </label>
       {error ? (
-        <p className="settings-error" role="alert">
+        <p className="m-0 text-danger" role="alert">
           {error}
         </p>
       ) : null}
       {done ? (
-        <p className="settings-ok" role="status">
+        <p className="m-0 text-success" role="status">
           Password changed. Other devices have been signed out.
         </p>
       ) : null}
@@ -146,32 +146,32 @@ function SignOut({ kernel }: { readonly kernel: Kernel }): ReactNode {
   };
 
   return (
-    <section className="settings-signout">
+    <section className="grid max-w-[34rem] gap-2 compact:max-w-none [&_h3]:m-0">
       <h3>Sign out</h3>
-      <p className="settings-muted">
+      <p className="text-text-muted">
         Signing out clears this device's local copy of the workspace. Anything already
         synced stays on the server.
       </p>
       {pending > 0 ? (
-        <p className="settings-warning" role="status">
+        <p className="m-0 rounded border-l-[3px] border-warning bg-bg-subtle p-2" role="status">
           {pending} local edit{pending === 1 ? "" : "s"} {pending === 1 ? "has" : "have"} not
           reached the server yet. Wait for the sync indicator to settle, or sign out
           discarding them. Discarded edits cannot be recovered.
         </p>
       ) : null}
       {error ? (
-        <p className="settings-error" role="alert">
+        <p className="m-0 text-danger" role="alert">
           {error}
         </p>
       ) : null}
-      <div className="settings-actions">
+      <div className="flex flex-wrap gap-2 [&_button]:tap-h [&_button]:cursor-pointer [&_button]:rounded [&_button]:border [&_button]:border-border-strong [&_button]:bg-bg-raised [&_button]:px-3 [&_button]:text-inherit">
         <button type="button" disabled={busy} onClick={() => void signOut(false)}>
           Sign out
         </button>
         {pending > 0 ? (
           <button
             type="button"
-            className="settings-danger"
+            className="border-danger! bg-danger! text-danger-text!"
             disabled={busy}
             onClick={() => void signOut(true)}
           >

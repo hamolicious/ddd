@@ -49,9 +49,9 @@ export function FmHeader({ fm, fmParseError }: FmHeaderProps): ReactNode {
   if (rows.length === 0 && !fmParseError) return null;
 
   return (
-    <div className="viewer-properties">
+    <div className="viewer-properties mx-auto w-full min-w-0 max-w-[72ch] px-4 pt-4 compact:px-4 compact:pt-4">
       {rows.length > 0 ? (
-        <dl className="viewer-properties-list">
+        <dl className="viewer-properties-list m-0 grid grid-cols-[minmax(0,max-content)_minmax(0,1fr)] gap-x-3 gap-y-1 border-b border-border pb-3 text-sm compact:grid-cols-1 compact:gap-0">
           {rows.map((row) => (
             <PropertyRow key={row.key} row={row} />
           ))}
@@ -59,7 +59,7 @@ export function FmHeader({ fm, fmParseError }: FmHeaderProps): ReactNode {
       ) : null}
 
       {fmParseError ? (
-        <p className="viewer-properties-warning" role="status">
+        <p className="viewer-properties-warning mb-0 mt-2 border-l-[3px] border-warning pl-2 text-sm text-text-muted" role="status">
           One frontmatter line could not be read, so it is missing here. The text is
           untouched — fix the line in edit mode.
         </p>
@@ -70,9 +70,9 @@ export function FmHeader({ fm, fmParseError }: FmHeaderProps): ReactNode {
 
 function PropertyRow({ row }: { readonly row: FmDisplayRow }): ReactNode {
   return (
-    <div className="viewer-property" data-kind={row.kind}>
-      <dt className="viewer-property-key">{row.key}</dt>
-      <dd className="viewer-property-value">
+    <div className="viewer-property contents compact:block compact:pb-1" data-kind={row.kind}>
+      <dt className="viewer-property-key m-0 min-w-0 break-words font-medium text-text-muted compact:text-xs">{row.key}</dt>
+      <dd className="viewer-property-value m-0 min-w-0 break-words text-text">
         <PropertyValue row={row} />
       </dd>
     </div>
@@ -91,9 +91,9 @@ function PropertyValue({ row }: { readonly row: FmDisplayRow }): ReactNode {
   if (row.items !== undefined) {
     if (row.items.length === 0) return <EmptyValue />;
     return (
-      <span className="viewer-property-chips">
+      <span className="viewer-property-chips flex flex-wrap gap-1">
         {row.items.map((item, index) => (
-          <span className="viewer-property-chip" key={`${item}-${index}`}>
+          <span className="viewer-property-chip inline-block max-w-full break-words rounded-full border border-border bg-bg-subtle px-1.5 py-px text-[0.85em]" key={`${item}-${index}`}>
             {item}
           </span>
         ))}
@@ -113,7 +113,7 @@ function PropertyValue({ row }: { readonly row: FmDisplayRow }): ReactNode {
 
   if (row.kind === "boolean") {
     return (
-      <span className="viewer-property-flag" title={row.raw}>
+      <span className="viewer-property-flag tabular-nums" title={row.raw}>
         {row.text}
       </span>
     );
@@ -125,7 +125,7 @@ function PropertyValue({ row }: { readonly row: FmDisplayRow }): ReactNode {
 /** A key that is set but holds nothing. Shown, not hidden — see the file header. */
 function EmptyValue(): ReactNode {
   return (
-    <span className="viewer-property-empty" aria-label="not set">
+    <span className="viewer-property-empty text-text-muted" aria-label="not set">
       —
     </span>
   );

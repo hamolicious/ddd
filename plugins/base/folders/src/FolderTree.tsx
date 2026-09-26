@@ -74,6 +74,15 @@ const LONG_PRESS_MS = 500;
 /** A touch that travels this far was a scroll, not a press. */
 const LONG_PRESS_SLOP = 12;
 
+const NODE_CLASSES =
+  "folders-node group flex min-h-[calc(var(--lm-tap-target)/2)] items-center gap-0.5 rounded pr-0.5 pl-[calc(var(--lm-space)*0.5+var(--folders-indent)*min(var(--folders-depth,0),var(--folders-indent-cap)))] hover:bg-bg-subtle compact:min-h-[var(--lm-tap-target)]";
+const TWISTY_CLASSES =
+  "folders-twisty box-border flex w-[1.5rem] min-h-[1.5rem]! shrink-0 cursor-pointer items-center justify-center border-0! bg-transparent! p-0! text-text-muted compact:w-[var(--lm-tap-target)] compact:min-h-[var(--lm-tap-target)]!";
+const ROW_LABEL_CLASSES =
+  "min-w-0 flex-1 cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap border-0! bg-transparent! p-0! text-left font-sans text-inherit";
+const ACTIONS_CLASSES =
+  "folders-actions invisible flex shrink-0 gap-0.5 group-hover:visible group-focus-within:visible compact:visible [&>button]:box-border [&>button]:min-h-[1.75rem] [&>button]:min-w-[1.75rem] [&>button]:cursor-pointer [&>button]:rounded [&>button]:border [&>button]:border-transparent [&>button]:bg-transparent [&>button]:p-0 [&>button]:text-text-muted hover:[&>button]:border-border hover:[&>button]:text-text compact:[&>button]:min-h-[var(--lm-tap-target)] compact:[&>button]:min-w-[var(--lm-tap-target)]";
+
 export interface MoveProgress {
   readonly onProgress?: (done: number, total: number) => void;
 }
@@ -594,7 +603,7 @@ export function FolderTree({
 
   const editField = (state: EditState, initial: string, label: string): ReactElement => (
     <input
-      className="folders-rename"
+      className="folders-rename tap-h min-w-0 flex-1 rounded border border-accent bg-bg-raised px-1 font-sans text-text"
       type="text"
       autoFocus
       defaultValue={initial}
@@ -614,7 +623,7 @@ export function FolderTree({
   );
 
   const editControls = (state: EditState): ReactElement => (
-    <span className="folders-actions folders-actions-edit">
+    <span className={`${ACTIONS_CLASSES} folders-actions-edit visible`}>
       <button
         type="button"
         aria-label="Save"
@@ -637,10 +646,10 @@ export function FolderTree({
   const creatingRow = (parent: string, depth: number): ReactElement => (
     <div
       key={`new:${parent}`}
-      className="folders-node folders-node-editing"
+      className={`${NODE_CLASSES} folders-node-editing`}
       style={{ "--folders-depth": depth } as CSSProperties}
     >
-      <span className="folders-twisty" aria-hidden="true" />
+      <span className={TWISTY_CLASSES} aria-hidden="true" />
       {editField({ kind: "create", parent }, "", parent === "" ? "New folder name" : `New folder in ${parent}`)}
       {editControls({ kind: "create", parent })}
     </div>
@@ -665,13 +674,13 @@ export function FolderTree({
         <div
           key={row.key}
           {...common}
-          className={`folders-node folders-node-more${isActive ? " folders-node-active" : ""}`}
+          className={`${NODE_CLASSES} folders-node-more ${isActive ? " folders-node-active bg-accent-subtle" : ""}`}
           onMouseDown={() => setActive(row.key)}
         >
-          <span className="folders-twisty" aria-hidden="true" />
+          <span className={TWISTY_CLASSES} aria-hidden="true" />
           <button
             type="button"
-            className="folders-more"
+            className={`folders-more ${ROW_LABEL_CLASSES} text-[0.9em] text-text-muted`}
             tabIndex={-1}
             onClick={() => onSelectFolder(row.path)}
           >
@@ -689,9 +698,9 @@ export function FolderTree({
           key={row.key}
           {...common}
           className={[
-            "folders-node",
-            "folders-node-leaf",
-            isActive ? "folders-node-active" : "",
+            NODE_CLASSES,
+            "folders-node-leaf cursor-pointer",
+            isActive ? "folders-node-active bg-accent-subtle" : "",
           ]
             .filter(Boolean)
             .join(" ")}
@@ -718,9 +727,9 @@ export function FolderTree({
             onOpenDocument(row.id);
           }}
         >
-          <span className="folders-twisty" aria-hidden="true" />
-          <span className="folders-leaf-name">{row.title}</span>
-          <span className="folders-actions">
+          <span className={TWISTY_CLASSES} aria-hidden="true" />
+          <span className={`folders-leaf-name ${ROW_LABEL_CLASSES} text-link`}>{row.title}</span>
+          <span className={`${ACTIONS_CLASSES}${isActive ? " visible" : ""}`}>
             <button
               type="button"
               tabIndex={isActive ? 0 : -1}
@@ -758,10 +767,10 @@ export function FolderTree({
         {...common}
         {...(row.expandable ? { "aria-expanded": row.expanded } : {})}
         className={[
-          "folders-node",
-          isActive ? "folders-node-active" : "",
-          row.path === dropTarget ? "folders-node-drop" : "",
-          row.tracked ? "folders-node-empty" : "",
+          NODE_CLASSES,
+          isActive ? "folders-node-active bg-accent-subtle" : "",
+          row.path === dropTarget ? "folders-node-drop outline-2 outline-dashed outline-accent outline-offset-[-2px]" : "",
+          row.tracked ? "folders-node-empty italic text-text-muted" : "",
           renaming ? "folders-node-editing" : "",
         ]
           .filter(Boolean)
@@ -798,7 +807,7 @@ export function FolderTree({
         {row.expandable ? (
           <button
             type="button"
-            className="folders-twisty"
+            className={TWISTY_CLASSES}
             tabIndex={-1}
             aria-label={row.expanded ? `Collapse ${row.name}` : `Expand ${row.name}`}
             onClick={(event) => {
@@ -809,7 +818,7 @@ export function FolderTree({
             {row.expanded ? "▾" : "▸"}
           </button>
         ) : (
-          <span className="folders-twisty" aria-hidden="true" />
+          <span className={TWISTY_CLASSES} aria-hidden="true" />
         )}
 
         {renaming ? (
@@ -822,7 +831,7 @@ export function FolderTree({
         ) : (
           <button
             type="button"
-            className="folders-name"
+            className={`folders-name ${ROW_LABEL_CLASSES}`}
             tabIndex={-1}
             onClick={() => {
               if (consumePress()) return;
@@ -834,7 +843,7 @@ export function FolderTree({
         )}
 
         {!renaming && (
-          <span className="folders-count" aria-label={`${row.documents} documents`}>
+          <span className="folders-count shrink-0 text-[0.8em] tabular-nums text-text-muted" aria-label={`${row.documents} documents`}>
             {row.documents}
           </span>
         )}
@@ -851,33 +860,8 @@ export function FolderTree({
            * exactly one tab stop per tree plus the actions of the row the user is
            * standing on, and it follows the visible affordance: the row that shows its
            * buttons is the row whose buttons Tab reaches.
-           */
-          <span className="folders-actions">
-            <button
-              type="button"
-              tabIndex={isActive ? 0 : -1}
-              aria-label={`New document in ${row.path}`}
-              title="New document here"
-              onClick={(event) => {
-                event.stopPropagation();
-                onNewDocumentHere(row.path);
-              }}
-            >
-              +
-            </button>
-            <button
-              type="button"
-              tabIndex={isActive ? 0 : -1}
-              aria-label={`Rename or move ${row.path}`}
-              title="Rename"
-              onClick={(event) => {
-                event.stopPropagation();
-                setActive(row.key);
-                setEdit({ kind: "rename", path: row.path });
-              }}
-            >
-              ✎
-            </button>
+          */
+          <span className={`${ACTIONS_CLASSES}${isActive ? " visible" : ""}`}>
             <button
               type="button"
               tabIndex={isActive ? 0 : -1}
@@ -1037,42 +1021,42 @@ export function FolderTree({
 
   if (loading) {
     return (
-      <p className="folders-empty" role="status">
+      <p className="folders-empty m-0 flex flex-col gap-1 text-[0.85em] text-text-muted" role="status">
         Loading folders…
       </p>
     );
   }
 
   return (
-    <div className="folders">
+    <div className="folders flex flex-col gap-0.5 font-sans text-text">
       {error && (
-        <p className="folders-error" role="alert">
+        <p className="folders-error m-0 rounded border border-danger p-1.5 text-[0.9em]" role="alert">
           {error}
         </p>
       )}
       {problem && (
-        <p className="folders-error" role="alert">
+        <p className="folders-error m-0 rounded border border-danger p-1.5 text-[0.9em]" role="alert">
           {problem}{" "}
           {retry && (
-            <button type="button" className="folders-retry" onClick={retry.run}>
+            <button type="button" className="folders-retry min-h-[calc(var(--lm-tap-target)-12px)] cursor-pointer rounded border border-border-strong bg-bg-raised px-1.5 font-sans" onClick={retry.run}>
               Try again
             </button>
           )}
         </p>
       )}
       {progress && (
-        <p className="folders-progress" role="status">
+        <p className="folders-progress m-0 rounded border border-border p-1.5 text-[0.9em] text-text-muted" role="status">
           Moving documents… {progress.done} of {progress.total}
         </p>
       )}
 
       {visible.length === 0 && edit === undefined ? (
-        <div className="folders-empty">
+        <div className="folders-empty m-0 flex flex-col gap-1 text-[0.85em] text-text-muted">
           <p>No documents yet.</p>
         </div>
       ) : (
         <div
-          className={`folders-tree${dropTarget === "" ? " folders-tree-root-drop" : ""}`}
+          className={`folders-tree flex min-h-[calc(var(--lm-tap-target)*1.5)] flex-col pb-3 [--folders-indent:calc(var(--lm-space)*1.5)] [--folders-indent-cap:6] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus compact:[--folders-indent:calc(var(--lm-space)*0.75)] compact:[--folders-indent-cap:4] ${dropTarget === "" ? " folders-tree-root-drop rounded outline-2 outline-dashed outline-accent outline-offset-[-2px]" : ""}`}
           role="tree"
           aria-label="Folders"
           aria-busy={busy}
@@ -1102,7 +1086,7 @@ export function FolderTree({
             // tall the tree has grown (a document leaves its folder; a folder becomes
             // top-level).
             <div
-              className={`folders-root-dropzone${dropTarget === "" ? " folders-node-drop" : ""}`}
+              className={`folders-root-dropzone sticky bottom-0 z-[1] mt-0.5 rounded border border-dashed border-border-strong bg-bg-raised p-1.5 text-center text-[0.85rem] text-text-muted ${dropTarget === "" ? " folders-node-drop outline-2 outline-dashed outline-accent outline-offset-[-2px]" : ""}`}
               onDragOver={(event) => dragOverFolder(event, "", false)}
               onDragLeave={() =>
                 setDropTarget((current) => (current === "" ? undefined : current))
@@ -1120,7 +1104,7 @@ export function FolderTree({
         screen that cannot drag (HTML5 drag and drop does not fire from touch) was three
         sentences about gestures the reader does not have.
       */}
-      <p className="folders-hint">
+      <p className="folders-hint m-0 text-[0.85em] text-text-muted [&_code]:font-mono">
         {touchOnly ? (
           <>
             Long-press a row to move, rename or delete it. Moving a folder rewrites{" "}
@@ -1129,8 +1113,7 @@ export function FolderTree({
         ) : (
           <>
             Drag a document or a folder onto another folder — or onto Root — to move it.{" "}
-            <span aria-hidden="true">✎</span> or F2 renames, <span aria-hidden="true">⋯</span>{" "}
-            or M moves. Moving a folder rewrites <code>path</code> in every document inside
+            F2 renames; <span aria-hidden="true">⋯</span> or M moves. Moving a folder rewrites <code>path</code> in every document inside
             it.
           </>
         )}

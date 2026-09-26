@@ -303,12 +303,12 @@ export default function activate(kernel: Kernel): CommandsApi {
       <>
         <button
           type="button"
-          className="cmd-trigger"
+          className="tap-h box-border inline-flex cursor-pointer items-center gap-1.5 rounded border border-border bg-bg-subtle px-3 font-sans text-text-muted hover:border-border-strong hover:text-text compact:px-2"
           onClick={() => api.openPalette()}
           aria-haspopup="dialog"
         >
           Commands
-          {trigger && <kbd className="cmd-keys">{formatKeys(trigger, apple)}</kbd>}
+          {trigger && <kbd className="shrink-0 whitespace-nowrap rounded border border-border bg-bg-subtle px-1.5 font-mono text-[0.85em] text-text-muted compact:hidden!">{formatKeys(trigger, apple)}</kbd>}
         </button>
         {open && (
           <Palette

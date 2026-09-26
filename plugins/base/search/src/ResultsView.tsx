@@ -60,19 +60,20 @@ export function ResultsView({
   const trimmed = query.trim();
 
   return (
-    <section className="search-results" aria-labelledby="search-results-heading">
+    <section className="flex flex-col gap-3 p-4 font-sans text-text compact:p-2 [&_:focus-visible]:outline-2 [&_:focus-visible]:outline-offset-1 [&_:focus-visible]:outline-focus [&_h2]:m-0" aria-labelledby="search-results-heading">
       <h2 id="search-results-heading">Search</h2>
 
       <form
-        className="search-form"
+        className="flex flex-wrap items-stretch gap-2"
         onSubmit={(event) => {
           event.preventDefault();
           onQueryChange(query);
         }}
       >
-        <label className="search-field">
-          <span className="search-visually-hidden">Search documents</span>
+        <label className="flex-1">
+          <span className="sr-only">Search documents</span>
           <input
+            className="tap-h w-full rounded border border-border bg-bg px-2 text-inherit"
             type="search"
             value={query}
             autoFocus
@@ -81,8 +82,8 @@ export function ResultsView({
             onChange={(event) => setQuery(event.target.value)}
           />
         </label>
-        <button type="submit">Search</button>
-        <label className="search-toggle">
+        <button type="submit" className="tap-h cursor-pointer rounded border border-accent bg-accent px-4 text-accent-text compact:px-2">Search</button>
+        <label className="tap-h flex cursor-pointer items-center gap-1 whitespace-nowrap text-sm text-text-muted">
           <input
             type="checkbox"
             checked={includeMachine}
@@ -100,17 +101,17 @@ export function ResultsView({
         row; how many each returned is a question, not a headline.
       */}
       {state.results.length > 0 && trimmed !== "" && (
-        <details className="search-sources">
+        <details className="text-sm text-text-muted [&>summary]:flex [&>summary]:min-h-[var(--lm-tap-target)] [&>summary]:cursor-pointer [&>summary]:items-center">
           <summary>Where these came from</summary>
-          <ul className="search-providers" aria-label="Sources">
+          <ul className="m-0 flex list-none flex-wrap gap-3 p-0 text-sm text-text-muted" aria-label="Sources">
             {state.results.map((result) => (
               <li
                 key={result.providerId}
-                className={result.error ? "search-provider-failed" : undefined}
+                className={result.error ? "text-warning" : undefined}
               >
                 {result.label}:{" "}
                 {result.error ? (
-                  <span className="search-provider-error">unavailable: {result.error}</span>
+                  <span>unavailable: {result.error}</span>
                 ) : (
                   `${result.hits.length} result${result.hits.length === 1 ? "" : "s"}`
                 )}
@@ -121,19 +122,19 @@ export function ResultsView({
       )}
 
       {failures.length > 0 && (
-        <p className="search-note" role="status">
+        <p className="m-0 text-text-muted" role="status">
           Some results need a connection. These come from this device.
         </p>
       )}
 
       {trimmed === "" ? (
-        <p className="search-empty">Search titles, text and properties.</p>
+        <p className="m-0 text-text-muted">Search titles, text and properties.</p>
       ) : state.running ? (
-        <p className="search-empty" role="status">
+        <p className="m-0 text-text-muted" role="status">
           Searching…
         </p>
       ) : state.hits.length === 0 ? (
-        <p className="search-empty">
+        <p className="m-0 text-text-muted">
           Nothing matches “{trimmed}”.
           {/*
             The one hedge left, and it is down to a clause. `@kernel` reports no index
@@ -147,27 +148,27 @@ export function ResultsView({
           )}
         </p>
       ) : (
-        <ol className="search-list">
+        <ol className="m-0 flex list-none flex-col gap-3 p-0">
           {state.hits.map((hit) => {
             const row = state.rows.get(hit.id);
             const snippet = snippetFor(row?.content, hit.terms);
             return (
-              <li key={hit.id} className="search-result">
+              <li key={hit.id}>
                 <button
                   type="button"
-                  className="search-result-open"
+                  className="search-result-open tap-h max-w-full cursor-pointer break-words border-0 bg-transparent p-0 text-left text-lg text-link"
                   onClick={() => onOpenDocument(hit.id, snippet?.line)}
                 >
                   {row?.title ?? hit.id}
                 </button>
-                <p className="search-result-meta">
+                <p className="my-0.5 flex min-w-0 flex-wrap gap-2 text-sm text-text-muted">
                   {typeof row?.fm["path"] === "string" && row.fm["path"] !== "" && (
-                    <span className="search-result-path">{String(row.fm["path"])}</span>
+                    <span className="min-w-0 break-words font-mono">{String(row.fm["path"])}</span>
                   )}
-                  <span className="search-result-providers">{hit.providers.join(", ")}</span>
+                  <span>{hit.providers.join(", ")}</span>
                 </p>
                 {snippet && (
-                  <p className="search-result-snippet">
+                  <p className="line-clamp-3 break-words text-[0.88em] text-text-muted [&_mark]:bg-selection [&_mark]:text-inherit">
                     {splitHighlights(snippet).map((piece, index) =>
                       piece.hit ? <mark key={index}>{piece.text}</mark> : <span key={index}>{piece.text}</span>,
                     )}
@@ -179,7 +180,7 @@ export function ResultsView({
         </ol>
       )}
 
-      <p className="search-status" role="status" aria-live="polite">
+      <p className="m-0 text-text-muted" role="status" aria-live="polite">
         {trimmed === ""
           ? ""
           : state.running

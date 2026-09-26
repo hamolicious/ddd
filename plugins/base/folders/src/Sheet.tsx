@@ -77,20 +77,20 @@ export function Sheet({ title, description, onClose, children }: SheetProps): Re
 
   return createPortal(
     <div
-      className="folders-overlay"
+      className="fixed inset-0 z-[1000] flex items-end justify-center bg-bg-overlay sm:items-center sm:p-8"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
       onKeyDown={onKeyDown}
     >
-      <div className="folders-sheet" role="dialog" aria-modal="true" aria-label={title} ref={panel}>
-        <header className="folders-sheet-header">
-          <h2>{title}</h2>
-          <button type="button" className="folders-sheet-close" aria-label="Close" onClick={onClose}>
+      <div className="folders-sheet flex max-h-[85dvh] w-full flex-col gap-4 overflow-y-auto rounded-t-lg border border-border border-b-0 bg-bg-raised p-5 pb-[calc(var(--lm-space)*1.5+env(safe-area-inset-bottom,0px))] font-sans text-text shadow-2 sm:max-h-[40rem] sm:max-w-[30rem] sm:rounded-lg sm:border sm:pb-5" role="dialog" aria-modal="true" aria-label={title} ref={panel}>
+        <header className="flex items-center gap-3">
+          <h2 className="m-0 min-w-0 flex-1 break-words text-lg">{title}</h2>
+          <button type="button" className="tap shrink-0 rounded border border-transparent bg-transparent text-text-muted hover:border-border hover:text-text" aria-label="Close" onClick={onClose}>
             ✕
           </button>
         </header>
-        {description && <p className="folders-sheet-note">{description}</p>}
+        {description && <p className="m-0 text-sm text-text-muted">{description}</p>}
         {children}
       </div>
     </div>,
@@ -109,12 +109,12 @@ export interface SheetAction {
 /** The long-press menu: a list of real buttons, one per action. */
 export function SheetActions({ actions }: { readonly actions: readonly SheetAction[] }): ReactElement {
   return (
-    <ul className="folders-sheet-actions">
+    <ul className="m-0 flex list-none flex-col gap-1 p-0">
       {actions.map((action) => (
         <li key={action.id}>
           <button
             type="button"
-            className={action.danger ? "folders-sheet-danger" : undefined}
+            className={`flex min-h-[var(--lm-tap-target)] w-full flex-col items-start rounded-md border border-transparent bg-transparent px-3 py-2 text-left hover:border-border hover:bg-bg-subtle ${action.danger ? " text-danger" : ""}`}
             onClick={action.run}
           >
             <span>{action.label}</span>
@@ -164,10 +164,11 @@ export function MovePicker({
   }, [excludeSubtree, folders, query]);
 
   return (
-    <div className="folders-picker">
-      <label className="folders-picker-filter">
-        <span className="folders-visually-hidden">Filter folders</span>
+    <div className="flex min-h-0 flex-col gap-3">
+      <label>
+        <span className="sr-only">Filter folders</span>
         <input
+          className="min-h-[var(--lm-tap-target)] w-full rounded border border-border bg-bg px-3 text-text"
           type="text"
           value={query}
           placeholder="Filter folders…"
@@ -175,31 +176,33 @@ export function MovePicker({
         />
       </label>
 
-      <ul className="folders-picker-list">
+      <ul className="m-0 flex max-h-[50dvh] list-none flex-col gap-1 overflow-y-auto p-0 sm:max-h-[22rem]">
         <li>
           <button
             type="button"
+            className="tap-h flex w-full flex-col items-start rounded border border-transparent bg-transparent px-2 py-1 text-left hover:border-border hover:bg-bg-subtle aria-current:bg-accent-subtle"
             onClick={() => onChoose("")}
             aria-current={currentFolder === "" ? "true" : undefined}
           >
-            <span className="folders-picker-name">Root</span>
-            <span className="folders-picker-path">no folder</span>
+            <span>Root</span>
+            <span className="font-mono text-xs text-text-muted">no folder</span>
           </button>
         </li>
         {options.map((folder) => (
           <li key={folder}>
             <button
               type="button"
+              className="tap-h flex w-full flex-col items-start rounded border border-transparent bg-transparent px-2 py-1 text-left hover:border-border hover:bg-bg-subtle aria-current:bg-accent-subtle"
               onClick={() => onChoose(folder)}
               aria-current={folder === currentFolder ? "true" : undefined}
             >
-              <span className="folders-picker-name">{nameOf(folder)}</span>
-              <span className="folders-picker-path">{folder}</span>
+              <span>{nameOf(folder)}</span>
+              <span className="font-mono text-xs text-text-muted">{folder}</span>
             </button>
           </li>
         ))}
         {options.length === 0 && (
-          <li className="folders-picker-empty">
+          <li className="p-3 text-sm text-text-muted">
             No folder matches “{query.trim()}”. Move {subject} to Root, or close this and use
             “New folder”.
           </li>

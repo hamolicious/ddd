@@ -5,6 +5,7 @@
   "description": "URL to view, over the hash so the Flutter shell works from a local origin.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
+  "x-tailwind": true,
   "kernel": "^1.0",
   "dependencies": {
     "shell-ui": "^1.0"

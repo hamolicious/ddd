@@ -5,6 +5,7 @@
   "description": "Search UI over the local index, with the server index as a fallback provider.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
+  "x-tailwind": true,
   "kernel": "^1.0",
   "dependencies": {
     "commands": "^1.0",

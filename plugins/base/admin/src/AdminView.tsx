@@ -37,6 +37,12 @@ const LABELS: Readonly<Record<AdminSectionId, string>> = {
   workspace: "Workspace",
 };
 
+const ADMIN_SECTION_CLASSES = "flex flex-col gap-3 font-sans text-text [&_:focus-visible]:outline-2 [&_:focus-visible]:outline-offset-1 [&_:focus-visible]:outline-focus [&_button]:tap-h [&_button]:cursor-pointer [&_button]:rounded [&_button]:border [&_button]:border-border [&_button]:bg-bg-subtle [&_button]:px-2 [&_button]:text-inherit [&_button:disabled]:cursor-default [&_button:disabled]:opacity-55 [&_h3]:m-0 [&_h4]:m-0 [&_.admin-actions]:flex [&_.admin-actions]:flex-wrap [&_.admin-actions]:gap-1 [&_.admin-audit]:m-0 [&_.admin-audit]:flex [&_.admin-audit]:list-none [&_.admin-audit]:flex-col [&_.admin-audit]:gap-2 [&_.admin-audit]:p-0 [&_.admin-audit_li]:border-b [&_.admin-audit_li]:border-border [&_.admin-audit_li]:py-1.5 [&_.admin-audit-action]:font-mono [&_.admin-audit-action]:text-text [&_.admin-audit-head]:m-0 [&_.admin-audit-head]:flex [&_.admin-audit-head]:flex-wrap [&_.admin-audit-head]:items-baseline [&_.admin-audit-head]:gap-2 [&_.admin-audit-head]:text-sm [&_.admin-audit-head]:text-text-muted [&_.admin-audit-target]:mb-0 [&_.admin-audit-target]:mt-0.5 [&_.admin-badge]:ml-1 [&_.admin-badge]:inline-block [&_.admin-badge]:rounded [&_.admin-badge]:bg-bg-subtle [&_.admin-badge]:px-1 [&_.admin-badge]:text-xs [&_.admin-badge]:uppercase [&_.admin-callout]:m-0 [&_.admin-callout]:flex [&_.admin-callout]:flex-col [&_.admin-callout]:gap-2 [&_.admin-callout]:rounded [&_.admin-callout]:border [&_.admin-callout]:border-warning [&_.admin-callout]:bg-bg-subtle [&_.admin-callout]:p-2 [&_.admin-checkbox]:tap-h [&_.admin-checkbox]:flex [&_.admin-checkbox]:items-center [&_.admin-checkbox]:gap-1 [&_.admin-checkbox_input]:size-6 [&_.admin-checkbox_input]:accent-accent [&_.admin-danger]:border-danger! [&_.admin-danger]:text-danger! [&_.admin-details>summary]:tap-h [&_.admin-details>summary]:flex [&_.admin-details>summary]:cursor-pointer [&_.admin-details>summary]:items-center [&_.admin-empty]:m-0 [&_.admin-empty]:text-sm [&_.admin-empty]:text-text-muted [&_.admin-error]:m-0 [&_.admin-error]:rounded [&_.admin-error]:border [&_.admin-error]:border-danger [&_.admin-error]:p-2 [&_.admin-field]:flex [&_.admin-field]:min-w-48 [&_.admin-field]:flex-col [&_.admin-field]:gap-1 [&_.admin-field]:text-sm [&_.admin-field]:text-text-muted [&_.admin-field_input]:tap-h [&_.admin-field_input]:rounded [&_.admin-field_input]:border [&_.admin-field_input]:border-border [&_.admin-field_input]:bg-bg [&_.admin-field_input]:px-2 [&_.admin-field_input]:text-base [&_.admin-field_input]:text-text [&_.admin-form]:flex [&_.admin-form]:flex-col [&_.admin-form]:gap-2 [&_.admin-hint]:m-0 [&_.admin-hint]:block [&_.admin-hint]:break-words [&_.admin-hint]:text-xs [&_.admin-hint]:text-text-muted [&_.admin-inline-form]:flex [&_.admin-inline-form]:flex-wrap [&_.admin-inline-form]:items-end [&_.admin-inline-form]:gap-2 [&_.admin-link]:min-h-0! [&_.admin-link]:break-words [&_.admin-link]:border-0! [&_.admin-link]:bg-transparent! [&_.admin-link]:p-0! [&_.admin-link]:text-left [&_.admin-link]:text-link! [&_.admin-link-active]:font-semibold [&_.admin-link-active]:underline [&_.admin-note]:m-0 [&_.admin-note]:text-sm [&_.admin-note]:text-text-muted [&_.admin-picker]:m-0 [&_.admin-picker]:flex [&_.admin-picker]:list-none [&_.admin-picker]:flex-wrap [&_.admin-picker]:gap-2 [&_.admin-picker]:p-0 [&_.admin-plugin]:rounded [&_.admin-plugin]:border [&_.admin-plugin]:border-border [&_.admin-plugin]:p-2 [&_.admin-plugin-description]:mb-0 [&_.admin-plugin-description]:mt-1 [&_.admin-plugin-description]:text-text-muted [&_.admin-plugin-head]:m-0 [&_.admin-plugin-head]:flex [&_.admin-plugin-head]:flex-wrap [&_.admin-plugin-head]:items-baseline [&_.admin-plugin-head]:gap-2 [&_.admin-plugin-meta]:mt-2 [&_.admin-plugin-meta]:grid [&_.admin-plugin-meta]:grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] [&_.admin-plugin-meta]:gap-1.5 [&_.admin-plugin-meta_dd]:m-0 [&_.admin-plugin-meta_dd]:break-words [&_.admin-plugin-meta_dt]:text-xs [&_.admin-plugin-meta_dt]:text-text-muted [&_.admin-plugins]:m-0 [&_.admin-plugins]:flex [&_.admin-plugins]:list-none [&_.admin-plugins]:flex-col [&_.admin-plugins]:gap-2 [&_.admin-plugins]:p-0 [&_.admin-problems]:m-0 [&_.admin-problems]:flex [&_.admin-problems]:list-none [&_.admin-problems]:flex-col [&_.admin-problems]:gap-2 [&_.admin-problems]:p-0 [&_.admin-problems_li]:break-words [&_.admin-row-inactive]:opacity-60 [&_.admin-secret]:m-0 [&_.admin-secret]:flex [&_.admin-secret]:flex-wrap [&_.admin-secret]:items-center [&_.admin-secret]:gap-2 [&_.admin-secret]:rounded [&_.admin-secret]:border [&_.admin-secret]:border-accent [&_.admin-secret]:bg-accent-subtle [&_.admin-secret]:p-2 [&_.admin-secret_code]:flex-[1_1_20rem] [&_.admin-secret_code]:select-all [&_.admin-secret_code]:break-words [&_.admin-secret_code]:rounded [&_.admin-secret_code]:bg-bg [&_.admin-secret_code]:p-1 [&_.admin-secret_code]:font-mono [&_.admin-stats]:m-0 [&_.admin-stats]:grid [&_.admin-stats]:grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] [&_.admin-stats]:gap-2 [&_.admin-stats_dd]:m-0 [&_.admin-stats_dd]:text-lg [&_.admin-stats_dd]:tabular-nums [&_.admin-stats_dt]:text-xs [&_.admin-stats_dt]:uppercase [&_.admin-stats_dt]:text-text-muted [&_.admin-status]:ml-1 [&_.admin-status]:inline-block [&_.admin-status]:rounded [&_.admin-status]:bg-bg-subtle [&_.admin-status]:px-1 [&_.admin-status]:text-xs [&_.admin-status]:uppercase [&_.admin-status-enabled]:bg-accent-subtle [&_.admin-status-enabled]:text-text [&_.admin-status-pending]:bg-accent-subtle [&_.admin-status-pending]:text-text [&_.admin-status-failed]:bg-danger [&_.admin-status-failed]:text-danger-text [&_.admin-status-revoked]:bg-danger [&_.admin-status-revoked]:text-danger-text [&_.admin-table-scroll]:overflow-x-auto [&_.admin-table]:w-full [&_.admin-table]:border-collapse [&_.admin-table]:text-left [&_.admin-table_td]:whitespace-nowrap [&_.admin-table_td]:border-b [&_.admin-table_td]:border-border [&_.admin-table_td]:p-1.5 [&_.admin-table_td]:align-top [&_.admin-table_th]:whitespace-nowrap [&_.admin-table_th]:border-b [&_.admin-table_th]:border-border [&_.admin-table_th]:p-1.5 [&_.admin-table_th]:align-top [&_.admin-table_th]:font-normal [&_.admin-table_thead_th]:text-xs [&_.admin-table_thead_th]:uppercase [&_.admin-table_thead_th]:text-text-muted [&_.admin-warning]:m-0 [&_.admin-warning]:rounded [&_.admin-warning]:border [&_.admin-warning]:border-warning [&_.admin-warning]:p-2 [&_.admin-visually-hidden]:sr-only";
+
+const ADMIN_COMPACT_CLASSES = "compact:[&_.admin-actions]:flex-col compact:[&_.admin-actions>button]:w-full compact:[&_.admin-audit-target]:min-w-0 compact:[&_.admin-audit-target]:break-all compact:[&_.admin-field]:min-w-0 compact:[&_.admin-inline-form]:flex-col compact:[&_.admin-inline-form]:items-stretch compact:[&_.admin-link]:break-all compact:[&_.admin-table-scroll]:overflow-x-visible compact:[&_.admin-table]:block compact:[&_.admin-table_tbody]:block compact:[&_.admin-table_td]:block compact:[&_.admin-table_td]:whitespace-normal compact:[&_.admin-table_td]:break-words compact:[&_.admin-table_td]:border-0 compact:[&_.admin-table_td]:px-0 compact:[&_.admin-table_td]:py-0.5 compact:[&_.admin-table_th]:block compact:[&_.admin-table_th]:whitespace-normal compact:[&_.admin-table_th]:break-words compact:[&_.admin-table_th]:border-0 compact:[&_.admin-table_th]:px-0 compact:[&_.admin-table_th]:py-0.5 compact:[&_.admin-table_th[scope=row]]:mb-1 compact:[&_.admin-table_th[scope=row]]:font-semibold compact:[&_.admin-table_thead]:sr-only compact:[&_.admin-table_tr]:mb-2 compact:[&_.admin-table_tr]:block compact:[&_.admin-table_tr]:rounded compact:[&_.admin-table_tr]:border compact:[&_.admin-table_tr]:border-border compact:[&_.admin-table_tr]:bg-bg-raised compact:[&_.admin-table_tr]:p-2 compact:[&_.admin-table_.admin-actions]:mt-1.5 compact:[&_.admin-table_.admin-actions]:border-t compact:[&_.admin-table_.admin-actions]:border-border compact:[&_.admin-table_.admin-actions]:pt-1.5";
+
+const ADMIN_CLASSES = `${ADMIN_SECTION_CLASSES} ${ADMIN_COMPACT_CLASSES}`;
+
 export function isAdminSection(value: string): value is AdminSectionId {
   return (ADMIN_SECTIONS as readonly string[]).includes(value);
 }
@@ -63,9 +69,9 @@ export function AdminSectionFrame({
   readonly embedded?: boolean;
   readonly children: ReactNode;
 }): ReactElement {
-  if (embedded) return <section className="admin-section">{children}</section>;
+  if (embedded) return <section className={ADMIN_CLASSES}>{children}</section>;
   return (
-    <section className="admin-section" aria-labelledby={`admin-${id}-heading`}>
+    <section className={ADMIN_CLASSES} aria-labelledby={`admin-${id}-heading`}>
       <h3 id={`admin-${id}-heading`}>{title}</h3>
       {children}
     </section>
@@ -107,9 +113,9 @@ export function AdminView({
 
   if (!isAdmin) {
     return (
-      <section className="admin" aria-labelledby="admin-heading">
+      <section className="flex flex-col gap-3 p-4 font-sans text-text [&_h2]:m-0" aria-labelledby="admin-heading">
         <h2 id="admin-heading">Administration</h2>
-        <p className="admin-empty">
+        <p className="m-0 text-sm text-text-muted">
           You are not an administrator. Ask one to promote your account.
         </p>
       </section>
@@ -117,10 +123,10 @@ export function AdminView({
   }
 
   return (
-    <section className="admin" aria-labelledby="admin-heading">
+    <section className="flex flex-col gap-3 p-4 font-sans text-text [&_h2]:m-0 [&_:focus-visible]:outline-2 [&_:focus-visible]:outline-offset-1 [&_:focus-visible]:outline-focus" aria-labelledby="admin-heading">
       <h2 id="admin-heading">Administration</h2>
 
-      <div className="admin-tabs" role="tablist" aria-label="Administration sections" onKeyDown={onKeyDown}>
+      <div className="flex flex-wrap gap-1 border-b border-border" role="tablist" aria-label="Administration sections" onKeyDown={onKeyDown}>
         {ADMIN_SECTIONS.map((id) => (
           <button
             key={id}
@@ -130,7 +136,7 @@ export function AdminView({
             aria-selected={id === section}
             aria-controls={`admin-panel-${id}`}
             tabIndex={id === section ? 0 : -1}
-            className={`admin-tab${id === section ? " admin-tab-active" : ""}`}
+            className={`tap-h cursor-pointer rounded-t border border-transparent bg-transparent px-2 ${id === section ? " border-border border-b-bg bg-bg font-semibold" : ""}`}
             onClick={() => onSelectSection(id)}
           >
             {LABELS[id]}

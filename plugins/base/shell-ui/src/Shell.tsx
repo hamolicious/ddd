@@ -126,7 +126,7 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
   const hasSidebar = panels.length > 0;
 
   return (
-    <div className="shell-root" data-compact={shell.compact ? "" : undefined}>
+    <div className="shell-root flex h-full min-h-0 flex-col font-sans text-text" data-compact={shell.compact ? "" : undefined}>
       {/*
         A real anchor so it is the first tab stop and announces as a link — but the
         click is handled here: `href="#shell-main"` would rewrite `location.hash`,
@@ -134,7 +134,7 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
         would navigate away from it.
       */}
       <a
-        className="shell-skip"
+        className="tap-h absolute left-[calc(var(--lm-space)*0.5+var(--lm-safe-left))] top-[calc(var(--lm-space)*0.5+var(--lm-safe-top))] z-30 inline-flex -translate-y-[200%] items-center rounded bg-bg-raised px-2 py-1.5 shadow-2 focus:translate-y-0"
         href="#shell-main"
         onClick={(event) => {
           event.preventDefault();
@@ -144,34 +144,34 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
         Skip to content
       </a>
 
-      <header className="shell-navbar">
+      <header className="relative flex min-h-[var(--lm-tap-target)] shrink-0 items-center gap-2 border-b border-border bg-bg-subtle pb-1 pl-[calc(var(--lm-space)+var(--lm-safe-left))] pr-[calc(var(--lm-space)+var(--lm-safe-right))] pt-[calc(var(--lm-space)*0.5+var(--lm-safe-top))] compact:items-start compact:gap-1 compact:pb-0 compact:pl-[calc(var(--lm-space)*0.5+var(--lm-safe-left))] compact:pr-[calc(var(--lm-space)*0.5+var(--lm-safe-right))] compact:pt-[var(--lm-safe-top)]">
         {hasSidebar ? (
           <button
             ref={toggle}
             type="button"
-            className="shell-sidebar-toggle"
+            className="shell-sidebar-toggle tap box-border inline-flex cursor-pointer items-center justify-center gap-1 rounded border border-transparent bg-transparent px-2.5 hover:border-border hover:bg-bg-raised compact:w-[var(--lm-tap-target)] compact:p-0!"
             aria-expanded={shell.sidebarOpen}
             aria-controls="shell-sidebar"
             onClick={() => state.toggleSidebar()}
           >
             <span aria-hidden="true">☰</span>
-            <span className="shell-visually-hidden">
+            <span className="sr-only">
               {shell.sidebarOpen ? "Hide the sidebar" : "Show the sidebar"}
             </span>
           </button>
         ) : null}
 
-        <span className="shell-brand">Life Manager</span>
+        <span className="shrink-0 whitespace-nowrap font-semibold compact:hidden">Life Manager</span>
 
-        <nav className="shell-nav" aria-label="Main">
-          <ul className="shell-nav-list" data-side="start">
+        <nav className="flex min-w-0 flex-1 items-center gap-2 compact:flex-wrap" aria-label="Main">
+          <ul className="m-0 flex min-w-0 flex-1 list-none items-center gap-1 overflow-x-auto p-0 [scrollbar-width:thin] compact:order-2 compact:w-full compact:flex-none!" data-side="start">
             {items
               .filter((entry) => (entry.value.side ?? "start") === "start")
               .map((entry) => (
                 <NavItem key={entry.value.id} kernel={kernel} entry={entry} />
               ))}
           </ul>
-          <ul className="shell-nav-list" data-side="end">
+          <ul className="ml-auto m-0 flex shrink-0 list-none items-center gap-1 p-0 compact:max-w-full compact:overflow-x-auto compact:gap-0" data-side="end">
             {items
               .filter((entry) => entry.value.side === "end")
               .map((entry) => (
@@ -187,12 +187,12 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
         </nav>
       </header>
 
-      <div className="shell-body">
+      <div className="relative flex min-h-0 flex-1">
         {hasSidebar ? (
           <aside
             id="shell-sidebar"
             ref={sidebar}
-            className="shell-sidebar"
+            className="@container w-[min(18rem,32vw)] shrink-0 overflow-y-auto overscroll-contain border-r border-border bg-bg-subtle p-1 pb-[calc(var(--lm-space)*0.5+var(--lm-safe-bottom))] compact:absolute compact:inset-y-0 compact:left-0 compact:z-20 compact:w-[min(20rem,86vw)] compact:border-border-strong compact:shadow-2"
             aria-label="Sidebar"
             tabIndex={-1}
             hidden={!shell.sidebarOpen}
@@ -209,7 +209,7 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
 
         {hasSidebar && shell.sidebarOpen && !shell.compact ? (
           <div
-            className="shell-resizer"
+            className="relative z-[1] -mx-[5px] shrink-0 grow-0 basis-[10px] touch-none cursor-col-resize hover:bg-[linear-gradient(to_right,transparent_4px,var(--lm-accent)_4px,var(--lm-accent)_6px,transparent_6px)] focus-visible:bg-[linear-gradient(to_right,transparent_4px,var(--lm-accent)_4px,var(--lm-accent)_6px,transparent_6px)] focus-visible:outline-none data-[dragging]:bg-[linear-gradient(to_right,transparent_4px,var(--lm-accent)_4px,var(--lm-accent)_6px,transparent_6px)]"
             role="separator"
             aria-orientation="vertical"
             aria-label="Resize the sidebar (arrow keys; Home resets)"
@@ -226,7 +226,7 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
 
         {drawer ? (
           <div
-            className="shell-scrim"
+            className="absolute inset-0 z-15 bg-bg-overlay"
             // Decoration: Escape and the toggle are the accessible ways out, and a
             // focusable overlay would just be a tab stop that does nothing.
             aria-hidden="true"
@@ -237,7 +237,7 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
           />
         ) : null}
 
-        <main id="shell-main" ref={main} className="shell-main" tabIndex={-1}>
+        <main id="shell-main" ref={main} className="min-h-0 min-w-0 flex-1 overflow-auto focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus" tabIndex={-1}>
           {active ? (
             <ActiveView kernel={kernel} entry={active} view={shell.view} />
           ) : (
@@ -264,26 +264,29 @@ function NavItem({
       // box, which wants to grow) from a label the shell renders itself (a command
       // button, which wants its whole label or nothing). Without it the mobile navbar
       // shrank both in proportion and "New document" read "New docu…".
-      <li className="shell-nav-item" data-kind="component" data-plugin={entry.pluginId}>
+      <li className={`flex min-w-0 items-center ${(item.side ?? "start") === "start" ? " flex-1" : ""}`} data-kind="component" data-plugin={entry.pluginId}>
         <Rendered />
       </li>
     );
   }
+  const hasIcon = item.icon !== undefined && item.icon !== null && item.icon !== false;
   return (
-    <li className="shell-nav-item" data-kind="button" data-plugin={entry.pluginId}>
+    <li className="flex min-w-0 items-center compact:shrink-0" data-kind="button" data-plugin={entry.pluginId}>
       {item.onSelect ? (
-        <button type="button" className="shell-nav-button" onClick={() => item.onSelect?.()}>
-          <BoundedIcon
-            kernel={kernel}
-            node={item.icon}
-            point={POINTS.navbarItem}
-            pluginId={entry.pluginId}
-            className="shell-nav-icon"
-          />
-          <span className="shell-nav-label">{item.label}</span>
+        <button type="button" className={`tap box-border inline-flex cursor-pointer items-center justify-center gap-1 rounded border border-transparent bg-transparent px-2.5 hover:border-border hover:bg-bg-raised compact:px-1.5 compact:[&_.shell-nav-icon+_.shell-nav-label]:sr-only ${hasIcon ? " compact:w-[var(--lm-tap-target)] compact:p-0!" : ""}`} onClick={() => item.onSelect?.()}>
+          {hasIcon ? (
+            <BoundedIcon
+              kernel={kernel}
+              node={item.icon}
+              point={POINTS.navbarItem}
+              pluginId={entry.pluginId}
+              className="shell-nav-icon"
+            />
+          ) : null}
+          <span className="shell-nav-label truncate">{item.label}</span>
         </button>
       ) : (
-        <span className="shell-nav-static">{item.label}</span>
+        <span className="px-1 text-text-muted">{item.label}</span>
       )}
     </li>
   );
@@ -304,15 +307,16 @@ function Panel({
   const Rendered = bounded(kernel, panel.component, POINTS.sidebarPanel, entry.pluginId);
 
   return (
-    <section className="shell-panel" data-plugin={entry.pluginId}>
-      <h2 className="shell-panel-heading">
+    <section className="mb-1" data-plugin={entry.pluginId}>
+      <h2 className="m-0 text-sm font-semibold uppercase tracking-[0.04em]">
         <button
           type="button"
+          className="tap-h flex w-full cursor-pointer items-center gap-1 rounded border-0 bg-transparent px-1 text-left text-text-muted hover:bg-bg-raised hover:text-text"
           aria-expanded={open}
           aria-controls={bodyId}
           onClick={() => state.setPanelOpen(panel.id, !open)}
         >
-          <span className="shell-panel-caret" aria-hidden="true">
+          <span className="w-[1em]" aria-hidden="true">
             {open ? "▾" : "▸"}
           </span>
           <BoundedIcon
@@ -320,13 +324,13 @@ function Panel({
             node={panel.icon}
             point={POINTS.sidebarPanel}
             pluginId={entry.pluginId}
-            className="shell-panel-icon"
+            className="shrink-0"
           />
-          <span className="shell-panel-title">{panel.title}</span>
+          <span>{panel.title}</span>
         </button>
       </h2>
       {/* `hidden`, not unmounted: collapsing a panel must not throw away its state. */}
-      <div id={bodyId} className="shell-panel-body" hidden={!open}>
+      <div id={bodyId} className="px-1 pb-1" hidden={!open}>
         <Rendered />
       </div>
     </section>
@@ -355,7 +359,7 @@ function MissingView({
 }): ReactNode {
   if (!view) {
     return (
-      <div className="shell-empty">
+      <div className="mx-auto max-w-[34rem] px-4 py-8 text-text-muted [&_h1]:mb-2 [&_h1]:mt-0 [&_h1]:text-xl [&_h1]:text-text">
         <h1>Nothing open</h1>
         <p>
           {registered === 0
@@ -367,7 +371,7 @@ function MissingView({
     );
   }
   return (
-    <div className="shell-empty" role="status">
+    <div className="mx-auto max-w-[34rem] px-4 py-8 text-text-muted [&_h1]:mb-2 [&_h1]:mt-0 [&_h1]:text-xl [&_h1]:text-text" role="status">
       <h1>That view is not available</h1>
       <p>
         Nothing provides this view. Check the notices for a plugin that failed to load.

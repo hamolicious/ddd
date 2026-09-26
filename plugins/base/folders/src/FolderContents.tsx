@@ -104,16 +104,16 @@ export function FolderContents({
   }, [documents, query]);
 
   return (
-    <section className="folders-contents" aria-labelledby="folder-contents-heading">
-      <header className="folders-contents-header">
-        <h2 id="folder-contents-heading">{path === "" ? "Root" : path}</h2>
-        <button type="button" onClick={() => onNewDocumentHere(path)}>
+    <section className="mx-auto flex w-full max-w-[56rem] flex-col gap-5 p-3 font-sans text-text compact:p-2" aria-labelledby="folder-contents-heading">
+      <header className="flex flex-col gap-3 rounded-lg border border-border bg-bg-raised p-4 shadow-1 sm:flex-row sm:items-center sm:justify-between">
+        <h2 id="folder-contents-heading" className="m-0 font-mono text-lg">{path === "" ? "Root" : path}</h2>
+        <button type="button" className="tap rounded-md border border-border bg-bg-subtle px-3 hover:bg-accent-subtle" onClick={() => onNewDocumentHere(path)}>
           New document here
         </button>
       </header>
 
       {path !== "" && (
-        <label className="folders-checkbox">
+        <label className="flex min-h-[var(--lm-tap-target)] items-center gap-1 text-sm text-text-muted">
           <input
             type="checkbox"
             checked={includeSubfolders}
@@ -124,17 +124,17 @@ export function FolderContents({
       )}
 
       {state === "error" && (
-        <p className="folders-error" role="alert">
+        <p className="m-0 rounded-md border border-danger bg-bg-raised p-3 text-sm" role="alert">
           {error}
         </p>
       )}
 
       {state === "loading" ? (
-        <p className="folders-empty" role="status">
+        <p className="m-0 text-sm text-text-muted" role="status">
           Loading…
         </p>
       ) : rows.length === 0 ? (
-        <div className="folders-empty">
+        <div className="flex flex-col gap-3 text-sm text-text-muted">
           <p>
             {path === ""
               ? "Nothing at the root yet."
@@ -153,12 +153,12 @@ export function FolderContents({
           </p>
         </div>
       ) : (
-        <ul className="folders-doc-list">
+        <ul className="folders-doc-list m-0 flex list-none flex-col overflow-hidden rounded-lg border border-border bg-bg-raised shadow-1">
           {rows.map((row) => (
-            <li key={row.id}>
+            <li key={row.id} className="flex min-w-0 items-center gap-3 border-b border-border px-3 last:border-b-0">
               <button
                 type="button"
-                className="folders-doc"
+                className="folders-doc tap min-w-0 flex-1 truncate border-0 bg-transparent p-0 text-left text-link"
                 draggable
                 onDragStart={(event) => {
                   event.dataTransfer.setData(DOCUMENT_DRAG_TYPE, row.id);
@@ -169,18 +169,18 @@ export function FolderContents({
                 {row.title}
               </button>
               {includeSubfolders && row.path !== path && (
-                <span className="folders-doc-path">{row.path}</span>
+                <span className="folders-doc-path min-w-[3ch] truncate font-mono text-xs text-text-muted">{row.path}</span>
               )}
             </li>
           ))}
         </ul>
       )}
 
-      <details className="folders-json">
+      <details className="text-sm text-text-muted">
         {/* Same wording as the document list's own disclosure: a spec section number is
             a note to whoever builds this, not to whoever uses it. */}
         <summary>Show the filter as JSON</summary>
-        <pre>{JSON.stringify(query.filter, null, 2)}</pre>
+        <pre className="mt-2 overflow-x-auto rounded bg-bg-subtle p-3 font-mono">{JSON.stringify(query.filter, null, 2)}</pre>
       </details>
     </section>
   );

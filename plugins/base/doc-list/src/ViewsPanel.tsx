@@ -49,12 +49,12 @@ export function ViewsPanel({ documents, onNavigate, current }: ViewsPanelProps):
           <li key={entry.path}>
             <button
               type="button"
-              className={`doclist-view${current === entry.path ? " doclist-view-active" : ""}`}
+              className={`doclist-view tap-h flex w-full cursor-pointer items-center justify-between gap-2 rounded border-0 px-2 text-left font-sans text-text hover:bg-bg-subtle ${current === entry.path ? " doclist-view-active bg-accent-subtle" : " bg-transparent"}`}
               aria-current={current === entry.path ? "page" : undefined}
               onClick={() => onNavigate(entry.path)}
             >
               <span>{entry.label}</span>
-              {entry.count !== undefined && <span className="doclist-count">{entry.count}</span>}
+              {entry.count !== undefined && <span className="doclist-count text-sm tabular-nums text-text-muted">{entry.count}</span>}
             </button>
           </li>
         ))}

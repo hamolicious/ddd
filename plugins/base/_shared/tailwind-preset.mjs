@@ -50,7 +50,9 @@ export const TAILWIND_PRESET = String.raw`
   --radius: var(--lm-radius);
   --radius-md: var(--lm-radius);
   --radius-lg: var(--lm-radius-lg);
-  --spacing: var(--lm-space);
+  /* Half a kernel space, so the numeric scale reads like stock Tailwind's 4 px one
+     (p-2 = one --lm-space) while still following a theme that changes the token. */
+  --spacing: calc(var(--lm-space) * 0.5);
 }
 
 /* SPEC §6.5's 44 px touch target; @utility makes it variant-aware. */

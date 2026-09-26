@@ -137,14 +137,14 @@ function PlainEditor({
   // `row.content` is available offline for every document (SPEC §4.1).
   if (!open || phase === "hydrating" || phase === "error") {
     return (
-      <div className="altedit" data-testid="alt-editor">
-        <p className="altedit-note" role="status">
+      <div className={ROOT_CLASSES} data-testid="alt-editor">
+        <p className={NOTE_CLASSES} role="status">
           {phase === "error"
             ? "This document could not be hydrated, so it is read-only here."
             : "Loading the editable copy…"}
         </p>
         <textarea
-          className="altedit-area"
+          className={AREA_CLASSES}
           data-testid="alt-editor-area"
           aria-label="Document text (read-only)"
           readOnly
@@ -155,13 +155,13 @@ function PlainEditor({
   }
 
   return (
-    <div className="altedit" data-testid="alt-editor">
-      <p className="altedit-note">
+    <div className={ROOT_CLASSES} data-testid="alt-editor">
+      <p className={NOTE_CLASSES}>
         Plain-text editor from the <code>alt-editor</code> plugin — no CodeMirror.
       </p>
       <textarea
         ref={area}
-        className="altedit-area"
+        className={AREA_CLASSES}
         data-testid="alt-editor-area"
         aria-label="Document text"
         spellCheck={false}
@@ -170,6 +170,13 @@ function PlainEditor({
     </div>
   );
 }
+
+// `min-h-0` on every flex child, so the textarea is the only scroller — the same rule
+// the CodeMirror editor needs for the Android soft keyboard.
+const ROOT_CLASSES = "flex min-h-0 flex-1 flex-col gap-2 p-3";
+const NOTE_CLASSES = "m-0 text-sm text-text-muted";
+const AREA_CLASSES =
+  "min-h-48 flex-1 resize-y whitespace-pre-wrap rounded border border-border bg-bg p-2 font-mono text-[0.9rem] leading-normal text-text [tab-size:2] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus read-only:bg-bg-subtle read-only:text-text-muted";
 
 function commonPrefix(a: string, b: string): number {
   const max = Math.min(a.length, b.length);

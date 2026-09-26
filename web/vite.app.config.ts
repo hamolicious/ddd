@@ -26,7 +26,42 @@ const here = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 /** Where `mise run wasm` writes the generated wasm-bindgen package. */
 const wasmPkg = here("./kernel/src/wasm/pkg/life_manager_core.js");
 
+/**
+ * Dev-only `/sw.js`: a service worker that uninstalls itself.
+ *
+ * A browser that ever visited the *production* build on this origin (`mise run dev` on
+ * :8080, say) still has the Workbox worker registered, and it serves the precached old
+ * bundle cache-first — before this dev server sees a single request. "It served me an
+ * old build and nothing hot reloads" is that worker, every time. Browsers re-fetch
+ * `/sw.js` on navigation; handing them this byte-different worker makes the stale one
+ * replace itself with a suicide note: caches gone, registration gone, page reloaded
+ * straight from Vite.
+ */
+const swKillswitch = () => ({
+  name: "lm-dev-sw-killswitch",
+  configureServer(server: { middlewares: { use: (fn: (req: any, res: any, next: () => void) => void) => void } }) {
+    server.middlewares.use((req, res, next) => {
+      if (!req.url?.startsWith("/sw.js")) return next();
+      res.setHeader("content-type", "text/javascript");
+      res.setHeader("cache-control", "no-store");
+      res.end(`
+        self.addEventListener("install", () => self.skipWaiting());
+        self.addEventListener("activate", (event) => {
+          event.waitUntil((async () => {
+            for (const key of await caches.keys()) await caches.delete(key);
+            await self.registration.unregister();
+            for (const client of await self.clients.matchAll({ type: "window" })) {
+              client.navigate(client.url);
+            }
+          })());
+        });
+      `);
+    });
+  },
+});
+
 export default defineConfig(({ command }) => ({
+  plugins: command === "serve" ? [swKillswitch()] : [],
   root: here("./app"),
   publicDir: here("./app/public"),
   resolve: {

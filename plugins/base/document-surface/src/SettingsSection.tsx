@@ -107,11 +107,11 @@ export function DefaultModeSection({
   };
 
   return (
-    <div className="docsurface-settings">
-      <label className="docsurface-setting">
-        <span className="docsurface-setting-label">Open documents in</span>
+    <div className="flex max-w-[48ch] flex-col gap-2">
+      <label className="flex min-w-0 flex-col gap-1">
+        <span className="font-semibold text-text">Open documents in</span>
         <select
-          className="docsurface-setting-select"
+          className="tap-h min-w-0 max-w-full rounded border border-border-strong bg-bg-raised px-2 text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
           value={selected ?? ""}
           onChange={(event) => choose(event.target.value)}
         >
@@ -126,16 +126,16 @@ export function DefaultModeSection({
         </select>
       </label>
 
-      <p className="docsurface-setting-hint">
+      <p className="m-0 text-sm leading-[1.5] text-text-muted">
         Used when you open a document you have not switched modes on. Switching modes on
         a document is remembered for that document and wins over this.
       </p>
 
       {remembered > 0 ? (
-        <p className="docsurface-setting-hint">
+        <p className="m-0 text-sm leading-[1.5] text-text-muted">
           <button
             type="button"
-            className="docsurface-setting-button"
+            className="min-h-[calc(var(--lm-tap-target)-12px)] cursor-pointer rounded border border-border-strong bg-bg-raised px-2 text-sm text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
             onClick={() => {
               setProblem(undefined);
               void forgetRemembered()
@@ -155,7 +155,7 @@ export function DefaultModeSection({
       ) : null}
 
       {problem ? (
-        <p className="docsurface-setting-error" role="alert">
+        <p className="m-0 text-sm text-danger" role="alert">
           {problem}
         </p>
       ) : null}
