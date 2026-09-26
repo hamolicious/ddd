@@ -17,7 +17,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, OfflineError, me } from "./api.js";
+import { ApiError, OfflineError, me, resetTokenFromHash } from "./api.js";
 
 const originalFetch = globalThis.fetch;
 
@@ -80,5 +80,18 @@ describe("every pre-kernel call carries a deadline", () => {
 
     answerWith(async () => json({ error: { code: "server_error" } }, 500));
     await expect(me()).rejects.toBeInstanceOf(ApiError);
+  });
+});
+
+describe("resetTokenFromHash", () => {
+  it("reads the token out of a reset link", () => {
+    expect(resetTokenFromHash("#/reset/Ab_c-9")).toBe("Ab_c-9");
+  });
+
+  it("ignores every other address", () => {
+    expect(resetTokenFromHash("")).toBeUndefined();
+    expect(resetTokenFromHash("#/doc/01J")).toBeUndefined();
+    expect(resetTokenFromHash("#/reset/")).toBeUndefined();
+    expect(resetTokenFromHash("#/reset/a/b")).toBeUndefined();
   });
 });

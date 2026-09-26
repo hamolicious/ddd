@@ -202,7 +202,7 @@ Attachments: `POST /api/attachments` (streamed multipart), `GET /:id` (+`/meta`)
 
 Auth: `register` (first user → admin; else invite token), `login` (returns session cookie, or bearer token for shells), `logout`, `me`, `POST /api/auth/password` (change, requires current).
 
-Admin: invites (7-day expiry, single-use, listable, revocable, non-admin only), users (admin flag toggleable; last admin undeletable/undemotable; deleting a user revokes sessions, keeps attribution ids rendered "deleted user"), `POST /api/admin/users/:id/reset` (one-time reset link), plugin management, audit log, `GET /api/admin/export` (zip of every document as plain markdown — the no-Mongo disaster-recovery path).
+Admin: invites (7-day expiry, single-use, listable, revocable, non-admin only), users (admin flag toggleable; last admin undeletable/undemotable; deleting a user revokes sessions, keeps attribution ids rendered "deleted user"), `POST /api/admin/users/:id/reset` (one-time reset link: the token, plus `url` = `<PUBLIC_URL>/#/reset/<token>` when `PUBLIC_URL` is set; the app's sign-in screen opens a "set a new password" form at `#/reset/<token>`), plugin management, audit log, `GET /api/admin/export` (zip of every document as plain markdown — the no-Mongo disaster-recovery path).
 
 Break-glass: `life-manager reset-password --email …` CLI subcommand.
 

@@ -21,7 +21,8 @@ import { useState } from "react";
 import type { ReactElement } from "react";
 
 import { AdminSectionFrame } from "./AdminView.js";
-import { describeActor, formatWhen, type AdminClient, type CreatedInvite } from "./api.js";
+import { describeActor, formatWhen, resetLinkHere, type AdminClient, type CreatedInvite } from "./api.js";
+import { KeyIcon, TrashIcon } from "./icons.js";
 import { useAsync, useMutation } from "./hooks.js";
 
 export interface UsersSectionProps {
@@ -35,7 +36,7 @@ export interface UsersSectionProps {
 export function UsersSection({ client, selfId, embedded }: UsersSectionProps): ReactElement {
   const users = useAsync(() => client.users(), []);
   const mutation = useMutation(() => users.reload());
-  const [issued, setIssued] = useState<{ readonly email: string; readonly token: string } | undefined>();
+  const [issued, setIssued] = useState<{ readonly email: string; readonly link: string } | undefined>();
 
   const rows = users.data ?? [];
   const activeAdmins = rows.filter((user) => user.is_admin && user.is_active).length;
@@ -56,10 +57,11 @@ export function UsersSection({ client, selfId, embedded }: UsersSectionProps): R
       {issued && (
         <div className="admin-secret" role="status">
           <p>
-            Reset link for <strong>{issued.email}</strong>. Copy it now; it is shown once.
+            Reset link for <strong>{issued.email}</strong>. Send it to them: it opens a form
+            to choose a new password, and works once. Copy it now; it is shown once.
           </p>
-          <code>{issued.token}</code>
-          <CopyButton value={issued.token} />
+          <code>{issued.link}</code>
+          <CopyButton value={issued.link} />
           <button type="button" onClick={() => setIssued(undefined)}>
             Done
           </button>
@@ -120,15 +122,20 @@ export function UsersSection({ client, selfId, embedded }: UsersSectionProps): R
                         onClick={() =>
                           mutation.run(user.id, async () => {
                             const reset = await client.issueReset(user.id);
-                            setIssued({ email: user.email, token: reset.token });
+                            setIssued({ email: user.email, link: reset.url ?? resetLinkHere(reset.token) });
                           })
                         }
+                        className="admin-icon-button"
+                        aria-label={`Reset link for ${user.email}`}
+                        title="Reset link"
                       >
-                        Reset link
+                        <KeyIcon />
                       </button>
                       <button
                         type="button"
-                        className="admin-danger"
+                        className="admin-danger admin-icon-button"
+                        aria-label={`Delete ${user.email}`}
+                        title="Delete"
                         disabled={busy || !user.is_active || lastAdmin}
                         onClick={() => {
                           if (
@@ -141,7 +148,7 @@ export function UsersSection({ client, selfId, embedded }: UsersSectionProps): R
                           mutation.run(user.id, () => client.deleteUser(user.id));
                         }}
                       >
-                        Delete
+                        <TrashIcon />
                       </button>
                     </td>
                   </tr>
@@ -152,12 +159,6 @@ export function UsersSection({ client, selfId, embedded }: UsersSectionProps): R
         </div>
       )}
 
-      {/* The spec reference belonged to whoever built this screen, not to the
-          administrator reading it. The sentence says the same thing without it. */}
-      <p className="admin-note">
-        Everyone signed in can read, edit and delete every document. The audit log
-        records who did what.
-      </p>
     </AdminSectionFrame>
   );
 }

@@ -14,30 +14,95 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 
 import type { SessionUser } from "@kernel";
 
-import { ApiError, authBootstrap, login, register, type AuthBootstrap } from "./api.js";
+import { ApiError, authBootstrap, login, redeemReset, register, type AuthBootstrap } from "./api.js";
 
 export function AuthGate({
   onSignedIn,
   bearer,
+  resetToken,
 }: {
   readonly onSignedIn: (user: SessionUser, token?: string) => void;
   /** Shells authenticate with a bearer token (SPEC §5.2); browsers use the cookie. */
   readonly bearer?: boolean;
+  /** Opened from a reset link (`#/reset/<token>`): ask for a new password first. */
+  readonly resetToken?: string;
 }): ReactNode {
   const [state, setState] = useState<AuthBootstrap | undefined>();
-  const [mode, setMode] = useState<"sign-in" | "register">("sign-in");
+  const [mode, setMode] = useState<"sign-in" | "register" | "reset">(resetToken ? "reset" : "sign-in");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const [notice, setNotice] = useState<string | undefined>();
 
   useEffect(() => {
     authBootstrap()
       .then((bootstrap) => {
         setState(bootstrap);
         // A workspace with no users at all can only be registered into.
-        if (bootstrap.needs_first_user) setMode("register");
+        if (bootstrap.needs_first_user && !resetToken) setMode("register");
       })
       .catch((cause: unknown) => setError(describe(cause)));
   }, []);
+
+  const submitReset = (event: FormEvent<HTMLFormElement>): void => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const password = String(form.get("new-password") ?? "");
+    if (password !== String(form.get("confirm-password") ?? "")) {
+      setError("The two passwords are not the same.");
+      return;
+    }
+    setBusy(true);
+    setError(undefined);
+    redeemReset(resetToken ?? "", password)
+      .then(() => {
+        // The link is spent: take it out of the address so a reload does not ask again.
+        history.replaceState(null, "", location.pathname + location.search);
+        setMode("sign-in");
+        setNotice("Your password is changed. Sign in with it.");
+      })
+      .catch((cause: unknown) => setError(describe(cause)))
+      .finally(() => setBusy(false));
+  };
+
+  if (mode === "reset") {
+    return (
+      <div className="lm-auth">
+        <form className="lm-auth-form" onSubmit={submitReset}>
+          <h1>Set a new password</h1>
+          <p className="lm-auth-hint">
+            This link works once. Choose a password of at least 10 characters, then sign
+            in with it.
+          </p>
+
+          <label htmlFor="new-password">New password</label>
+          <input id="new-password" name="new-password" type="password" autoComplete="new-password" required minLength={10} />
+
+          <label htmlFor="confirm-password">New password again</label>
+          <input id="confirm-password" name="confirm-password" type="password" autoComplete="new-password" required minLength={10} />
+
+          {error ? (
+            <p className="lm-auth-error" role="alert">
+              {error}
+            </p>
+          ) : null}
+
+          <button type="submit" disabled={busy}>
+            {busy ? "Working…" : "Set password"}
+          </button>
+          <button
+            type="button"
+            className="lm-auth-switch"
+            onClick={() => {
+              setMode("sign-in");
+              setError(undefined);
+            }}
+          >
+            Back to sign in
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
@@ -61,6 +126,11 @@ export function AuthGate({
     <div className="lm-auth">
       <form className="lm-auth-form" onSubmit={submit}>
         <h1>Life Manager</h1>
+        {notice ? (
+          <p className="lm-auth-hint" role="status">
+            {notice}
+          </p>
+        ) : null}
         {state?.needs_first_user ? (
           <p className="lm-auth-hint">
             This workspace has no users yet. The account you create becomes the

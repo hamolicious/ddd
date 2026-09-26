@@ -1746,9 +1746,9 @@
     "semantic_hash": "4759774f4dbad259998f3fa13d41c5d5"
   },
   "plugins/base/viewer/src/FmHeader.tsx": {
-    "mtime": 1790385043.5616827,
-    "seen": 1790385251.643941,
-    "ast_hash": "a2246cb851aa7ba3c449c35991bdbf23",
+    "mtime": 1790441470.7394485,
+    "seen": 1790441674.80649,
+    "ast_hash": "0d0706fbbeb1e4405b9c02e95f533fdb",
     "semantic_hash": ""
   },
   "plugins/base/viewer/src/index.tsx": {
@@ -1824,9 +1824,9 @@
     "semantic_hash": ""
   },
   "web/app/e2e/frontmatter.spec.ts": {
-    "mtime": 1790437420.7820923,
-    "seen": 1790437630.0302584,
-    "ast_hash": "32e7d3bac9339cdc62034903fa95d1a2",
+    "mtime": 1790441419.5262,
+    "seen": 1790441674.8071027,
+    "ast_hash": "083d123524800248d2eb04fc499cc662",
     "semantic_hash": ""
   },
   "web/app/e2e/helpers.ts": {
@@ -3288,9 +3288,9 @@
     "semantic_hash": ""
   },
   "docs/PLUGIN-REVIEW.md": {
-    "mtime": 1790440439.7952938,
-    "seen": 1790440448.968831,
-    "ast_hash": "3e760d712ab2154ed7a58b46527c25df",
+    "mtime": 1790441666.3026667,
+    "seen": 1790441674.8144097,
+    "ast_hash": "0a25ddffdedc38d6db419c2e8a666968",
     "semantic_hash": ""
   },
   "plugins/base/settings/src/groups.test.ts": {

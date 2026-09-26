@@ -37,7 +37,7 @@ browser's device toolbar at 390 × 844, and 844 × 390 for landscape.
 | 17 | `markdown` | [x] | `markdown.attachment`; preview / link toggle; promote → link; document embeds |
 | 18 | `viewer` | [x] | File documents via `markdown.attachment`; borderless properties table and rule |
 | 19 | `admin` | [ ] | Reviewed per tab, 19a–19g |
-| 19a | ↳ Users | [ ] | |
+| 19a | ↳ Users | [x] | Icon buttons, aligned cells, phone label, reset is a link |
 | 19b | ↳ Invites | [ ] | |
 | 19c | ↳ Audit log | [ ] | |
 | 19d | ↳ Orphan files | [ ] | |
@@ -494,15 +494,20 @@ For every tab, as well as the common checks:
 
 **Where to see it.** `#/admin/users`; "Manage users" in the palette.
 
-- [ ] Every account is listed with its name, email, status, created and last sign-in.
-- [ ] The Admin checkbox grants and removes admin rights; the last admin's cannot be
+- [x] Every account is listed with its name, email, status, created and last sign-in.
+- [x] The Admin checkbox grants and removes admin rights; the last admin's cannot be
   removed. Your own row is marked "you".
-- [ ] "Reset link" shows a one-time link once, and Copy copies it (without clipboard
+- [x] "Reset link" shows a one-time link once, and Copy copies it (without clipboard
   access it says to select it and copy).
-- [ ] Delete asks first, says what happens to their writing, and is not offered for the
+- [x] Delete asks first, says what happens to their writing, and is not offered for the
   last admin.
 
-**Notes.**
+**Notes.** The sentence about everyone editing every document was removed. Reset and
+Delete are icon buttons (key, bin) named for the user they act on; an actions cell
+stays a table cell, which fixed rows whose borders did not line up (in every admin
+table). On a phone the Admin checkbox is labelled "Administrator". A reset is now a
+link, `<PUBLIC_URL>/#/reset/<token>` (or this app's address without `PUBLIC_URL`),
+that opens "Set a new password" on the sign-in screen (2026-09-26).
 
 ### 19b. Invites
 

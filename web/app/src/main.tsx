@@ -50,7 +50,7 @@ import {
 } from "@kernel/runtime/index.js";
 
 import { AuthGate } from "./boot/AuthGate.js";
-import { OfflineError, installedPlugins, logoutRequest, me } from "./boot/api.js";
+import { OfflineError, installedPlugins, logoutRequest, me, resetTokenFromHash } from "./boot/api.js";
 import {
   cachedPlugins,
   cachedSession,
@@ -197,7 +197,11 @@ async function boot(): Promise<void> {
     }
   }
 
-  if (!user) {
+  // A reset link (`#/reset/<token>`) is for someone who cannot sign in, so it shows the
+  // "set a new password" form whatever this device's session says.
+  const resetToken = resetTokenFromHash();
+
+  if (!user || resetToken) {
     // **A booted bundle.** The kernel is not up — there is no session to build one with —
     // but the sequence ran to completion and put a working login form on screen, which is
     // the only correct thing to show for "the server says you are not signed in".
@@ -217,6 +221,7 @@ async function boot(): Promise<void> {
         // `token !== undefined` was the wrong test — on first run there is no token yet,
         // which is exactly when the login form is shown.
         bearer={inShell()}
+        resetToken={resetToken}
         onSignedIn={(signedIn, issued) => {
           if (issued) rememberShellToken(issued);
           rememberSession(signedIn);

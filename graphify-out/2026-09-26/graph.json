@@ -3436,7 +3436,7 @@
       "file_type": "code",
       "norm_label": "fmheaderprops",
       "source_file": "plugins/base/viewer/src/FmHeader.tsx",
-      "source_location": "L35"
+      "source_location": "L42"
     },
     {
       "id": "plugins_base_markdown_src_plugin_test_fakekernel",
@@ -11887,7 +11887,7 @@
       "file_type": "code",
       "norm_label": "headerrows()",
       "source_file": "web/app/e2e/frontmatter.spec.ts",
-      "source_location": "L66"
+      "source_location": "L65"
     },
     {
       "id": "web_app_e2e_frontmatter_spec_storedsurfacesettings",
@@ -11899,7 +11899,7 @@
       "file_type": "code",
       "norm_label": "storedsurfacesettings()",
       "source_file": "web/app/e2e/frontmatter.spec.ts",
-      "source_location": "L329"
+      "source_location": "L328"
     },
     {
       "id": "web_app_e2e_helpers_createdocument",
@@ -17179,7 +17179,7 @@
       "file_type": "code",
       "norm_label": "emptyvalue()",
       "source_file": "plugins/base/viewer/src/FmHeader.tsx",
-      "source_location": "L125"
+      "source_location": "L138"
     },
     {
       "id": "plugins_base_viewer_src_fmheader_fmheader",
@@ -17191,7 +17191,7 @@
       "file_type": "code",
       "norm_label": "fmheader()",
       "source_file": "plugins/base/viewer/src/FmHeader.tsx",
-      "source_location": "L42"
+      "source_location": "L49"
     },
     {
       "id": "plugins_base_viewer_src_fmheader_propertyrow",
@@ -17203,7 +17203,7 @@
       "file_type": "code",
       "norm_label": "propertyrow()",
       "source_file": "plugins/base/viewer/src/FmHeader.tsx",
-      "source_location": "L70"
+      "source_location": "L81"
     },
     {
       "id": "plugins_base_viewer_src_fmheader_propertyvalue",
@@ -17215,7 +17215,7 @@
       "file_type": "code",
       "norm_label": "propertyvalue()",
       "source_file": "plugins/base/viewer/src/FmHeader.tsx",
-      "source_location": "L89"
+      "source_location": "L102"
     },
     {
       "id": "plugins_base_markdown_vitest_config_here",
@@ -65019,7 +65019,7 @@
       "node_kind": "heading",
       "norm_label": "19. `admin` \u2014 administration",
       "source_file": "docs/PLUGIN-REVIEW.md",
-      "source_location": "L465"
+      "source_location": "L467"
     },
     {
       "id": "docs_plugin_review_1_shell_ui_the_layout",
@@ -65043,7 +65043,7 @@
       "node_kind": "heading",
       "norm_label": "20. `extra-task-states` (example)",
       "source_file": "docs/PLUGIN-REVIEW.md",
-      "source_location": "L480"
+      "source_location": "L482"
     },
     {
       "id": "docs_plugin_review_21_alt_editor_example",
@@ -65055,7 +65055,7 @@
       "node_kind": "heading",
       "norm_label": "21. `alt-editor` (example)",
       "source_file": "docs/PLUGIN-REVIEW.md",
-      "source_location": "L489"
+      "source_location": "L491"
     },
     {
       "id": "docs_plugin_review_3_header_the_top_bar",
@@ -131558,7 +131558,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/viewer/src/FmHeader.tsx",
-      "source_location": "L43",
+      "source_location": "L50",
       "weight": 1.0
     },
     {
@@ -142262,7 +142262,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "web/app/e2e/frontmatter.spec.ts",
-      "source_location": "L329",
+      "source_location": "L328",
       "weight": 1.0
     },
     {
@@ -142274,7 +142274,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "web/app/e2e/frontmatter.spec.ts",
-      "source_location": "L66",
+      "source_location": "L65",
       "weight": 1.0
     },
     {
@@ -180029,7 +180029,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "plugins/base/viewer/src/FmHeader.tsx",
-      "source_location": "L33",
+      "source_location": "L40",
       "weight": 1.0
     },
     {
@@ -180041,7 +180041,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "plugins/base/viewer/src/FmHeader.tsx",
-      "source_location": "L33",
+      "source_location": "L40",
       "weight": 1.0
     },
     {
@@ -205302,7 +205302,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "plugins/base/viewer/src/FmHeader.tsx",
-      "source_location": "L30",
+      "source_location": "L37",
       "type_only": true,
       "weight": 1.0
     },
@@ -205315,7 +205315,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "plugins/base/viewer/src/FmHeader.tsx",
-      "source_location": "L31",
+      "source_location": "L38",
       "weight": 1.0
     },
     {
@@ -205327,7 +205327,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "plugins/base/viewer/src/FmHeader.tsx",
-      "source_location": "L33",
+      "source_location": "L40",
       "weight": 1.0
     },
     {
@@ -268043,7 +268043,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/PLUGIN-REVIEW.md",
-      "source_location": "L465",
+      "source_location": "L467",
       "weight": 1.0
     },
     {
@@ -268054,7 +268054,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/PLUGIN-REVIEW.md",
-      "source_location": "L480",
+      "source_location": "L482",
       "weight": 1.0
     },
     {
@@ -268065,7 +268065,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "docs/PLUGIN-REVIEW.md",
-      "source_location": "L489",
+      "source_location": "L491",
       "weight": 1.0
     },
     {
@@ -279708,13 +279708,24 @@
     },
     {
       "source": "plugins_base_viewer_src_fmheader",
+      "target": "plugins_base_viewer_src_fmheader_propertyvalue",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plugins/base/viewer/src/FmHeader.tsx",
+      "source_location": "L102",
+      "weight": 1.0
+    },
+    {
+      "source": "plugins_base_viewer_src_fmheader",
       "target": "plugins_base_viewer_src_fmheader_emptyvalue",
       "relation": "contains",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/viewer/src/FmHeader.tsx",
-      "source_location": "L125",
+      "source_location": "L138",
       "weight": 1.0
     },
     {
@@ -279725,7 +279736,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/viewer/src/FmHeader.tsx",
-      "source_location": "L35",
+      "source_location": "L42",
       "weight": 1.0
     },
     {
@@ -279736,7 +279747,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/viewer/src/FmHeader.tsx",
-      "source_location": "L42",
+      "source_location": "L49",
       "weight": 1.0
     },
     {
@@ -279747,18 +279758,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/viewer/src/FmHeader.tsx",
-      "source_location": "L70",
-      "weight": 1.0
-    },
-    {
-      "source": "plugins_base_viewer_src_fmheader",
-      "target": "plugins_base_viewer_src_fmheader_propertyvalue",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "plugins/base/viewer/src/FmHeader.tsx",
-      "source_location": "L89",
+      "source_location": "L81",
       "weight": 1.0
     },
     {
@@ -318354,7 +318354,7 @@
       "confidence_score": 0.85,
       "context": "argument",
       "source_file": "web/app/e2e/frontmatter.spec.ts",
-      "source_location": "L84",
+      "source_location": "L83",
       "weight": 1.0
     },
     {
@@ -322096,5 +322096,5 @@
       "source_file": "backend/PROTOCOL.md"
     }
   ],
-  "built_at_commit": "5294fd98997b6d6ecb03dc11343c1dc174d18d70"
+  "built_at_commit": "a4de8af1df7ed7330e9be65fbcd69eb2393f1a58"
 }

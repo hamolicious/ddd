@@ -151,6 +151,22 @@ const toUser = (view: UserView): SessionUser => ({
 /** Is this a fresh install (first user becomes admin) or invite-only? (SPEC §5.1) */
 export const authBootstrap = (): Promise<AuthBootstrap> => call<AuthBootstrap>("/auth/bootstrap");
 
+/** Spend a one-time reset token (from an admin's reset link) on a new password. */
+export async function redeemReset(token: string, newPassword: string): Promise<void> {
+  await call<void>("/auth/password/reset", {
+    method: "POST",
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
+}
+
+/**
+ * The token in a reset link, `#/reset/<token>`, when that is the address the app was
+ * opened at. Read before any session exists: the link is for someone who cannot sign in.
+ */
+export function resetTokenFromHash(hash: string = location.hash): string | undefined {
+  return /^#\/reset\/([A-Za-z0-9_-]+)$/.exec(hash)?.[1];
+}
+
 export async function login(email: string, password: string, bearer = false): Promise<Signed> {
   const session = await call<SessionResponse>("/auth/login", {
     method: "POST",

@@ -60,6 +60,17 @@ export interface PasswordResetIssued {
   readonly user_id: string;
   readonly token: string;
   readonly expires_at: string;
+  /** `<PUBLIC_URL>/#/reset/<token>`; absent when the server has no `PUBLIC_URL`. */
+  readonly url?: string;
+}
+
+/**
+ * A reset link at the address this app was loaded from, for a server without
+ * `PUBLIC_URL`. Right in a browser; in the Android app the address is the phone's own,
+ * so set `PUBLIC_URL` on a server whose admins use the app.
+ */
+export function resetLinkHere(token: string): string {
+  return `${location.origin}${location.pathname}#/reset/${token}`;
 }
 
 export interface AuditView {

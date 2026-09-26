@@ -201,6 +201,17 @@ pub struct PasswordResetResponse {
     pub user_id: Id,
     pub token: String,
     pub expires_at: Timestamp,
+    /// The link to hand the user: `<PUBLIC_URL>/#/reset/<token>`, which opens the app's
+    /// "set a new password" form. Only when `PUBLIC_URL` is configured: without it the
+    /// server has no name for itself that the user could reach, and the client builds
+    /// the link from the address it was loaded from instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+}
+
+/// `<public_url>/#/reset/<token>`. The token is URL-safe base64, so it needs no escaping.
+pub fn reset_link(public_url: Option<&str>, token: &str) -> Option<String> {
+    public_url.map(|origin| format!("{}/#/reset/{token}", origin.trim_end_matches('/')))
 }
 
 pub async fn list_users(
@@ -422,6 +433,7 @@ pub async fn create_password_reset(
 
     Ok(Json(PasswordResetResponse {
         user_id: target.id,
+        url: reset_link(state.config.public_url.as_deref(), &token),
         token,
         expires_at: issued.expires_at.into(),
     }))
@@ -898,6 +910,16 @@ async fn sum_attachment_bytes(state: &AppState) -> AppResult<u64> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_reset_link_names_the_public_url_or_nothing() {
+        assert_eq!(
+            super::reset_link(Some("https://lm.example.com/"), "abc_-1"),
+            Some("https://lm.example.com/#/reset/abc_-1".to_string())
+        );
+        assert_eq!(super::reset_link(None, "abc"), None);
+    }
+
     use std::io::Read;
 
     use super::*;
