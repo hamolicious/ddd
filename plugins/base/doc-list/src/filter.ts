@@ -66,8 +66,6 @@ export interface FilterClause {
 export interface FilterDraft {
   readonly combine: "and" | "or";
   readonly clauses: readonly FilterClause[];
-  /** Free text, matched case-insensitively against `title`. */
-  readonly titleContains?: string;
   /**
    * Show machine-owned documents — the ones whose `fm.path` starts with `.`, such as
    * the kernel's per-user settings documents (`_shared/machine-docs.ts`).
@@ -124,6 +122,13 @@ export const SORT_OPTIONS: readonly FieldOption[] = [
   { field: "fm.path", label: "Folder", kind: "str", sortable: true },
   { field: "id", label: "Id", kind: "str", sortable: true },
 ];
+
+/**
+ * "Best match": the search providers' ranking, offered only while a search is on and
+ * chosen automatically when one starts. Not a field — no query sorts on it; the list
+ * reorders its rows by rank (`DocListView`).
+ */
+export const RELEVANCE: FieldOption = { field: "relevance", label: "Best match", kind: "str", sortable: true };
 
 /**
  * `deleted_at` is not in {@link SORT_OPTIONS} because the main list never shows a
@@ -267,10 +272,6 @@ function buildClauseNode(clause: FilterClause, field: string): FilterJson | unde
 export function buildFilter(draft: FilterDraft): FilterJson | undefined {
   const nodes: FilterJson[] = [];
 
-  const title = draft.titleContains?.trim();
-  if (title !== undefined && title !== "") {
-    nodes.push({ text: { field: "title", mode: "contains", value: title } });
-  }
   for (const clause of draft.clauses) {
     const node = buildClause(clause);
     if (node) nodes.push(node);
@@ -355,17 +356,13 @@ export function invalidClauses(draft: FilterDraft): readonly string[] {
  * How many conditions the query actually carries — the number the folded filter bar
  * shows, so a collapsed bar is never a silent one.
  *
- * Counted from {@link buildFilter}'s own rules rather than from the row count: a title
- * box holding only spaces produces no clause, and a badge that counted it said "1
+ * Counted from {@link buildFilter}'s own rules rather than from the row count: a
+ * half-typed row produces no clause, and a badge that counted it would say "1
  * condition applied" over a query with none.
  */
 export function appliedCount(draft: FilterDraft): number {
   const usable = draft.clauses.filter((clause) => clauseProblem(clause) === undefined).length;
-  return (
-    usable +
-    ((draft.titleContains ?? "").trim() !== "" ? 1 : 0) +
-    (draft.includeMachine === true ? 1 : 0)
-  );
+  return usable + (draft.includeMachine === true ? 1 : 0);
 }
 
 /** The filter that selects trashed documents (used with `includeDeleted: true`). */

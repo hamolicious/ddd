@@ -2,7 +2,7 @@
   "id": "doc-list",
   "version": "1.0.0",
   "name": "Document list",
-  "description": "Browse, sort and filter documents; new document; the Trash view.",
+  "description": "Browse, search, sort and filter documents; new document; the Trash view.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
@@ -19,5 +19,8 @@
   "frontend": {
     "module": "frontend/index.mjs",
     "style": "frontend/style.css"
-  }
+  },
+  "x-defines": [
+    "search.provider"
+  ]
 }

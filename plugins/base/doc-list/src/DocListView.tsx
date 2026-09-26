@@ -14,21 +14,30 @@
  * server compiles it, and `kernel/src/query/filter.ts` mirrors it — so the sort key is
  * just a sort key, and the direction toggle is one query parameter.
  *
+ * **Search is this list, ranked.** The search bar runs the providers (`search/`) and the
+ * list's own live query then runs over the ids they found — so a result obeys the
+ * filters, hides machine documents, and updates live exactly as the plain list does.
+ * The sort switches to "Best match" when a search starts and back when it is cleared;
+ * any other sort still applies to the results. A result found only by the server, on a
+ * client that has not synced it yet, is not shown: the list is what this device holds.
+ * Each result carries the line that matched, and opening it opens at that line.
+ *
  * **Both are paged** (`pagination.ts`): a page of rows, then "Load N more", which also
  * loads by itself as it scrolls near. The count under the list is always the real total.
  * "Loading…" replaces the list only while it has nothing to show; a page on its way
  * keeps the rows already there.
  */
 
-import { useEffect, useMemo, useState } from "react";
-import type { ReactElement } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactElement, RefObject } from "react";
 
-import type { DocumentQuery, DocumentRow, DocumentsApi } from "@kernel";
+import type { DocumentQuery, DocumentRow, DocumentsApi, FilterJson } from "@kernel";
 
 import type { ContextMenuApi } from "../../_shared/context-menu-api.js";
 
 import { FilterBar } from "./FilterBar.js";
 import {
+  RELEVANCE,
   TRASHED_ONLY,
   buildEffectiveFilter,
   buildFilter,
@@ -36,18 +45,28 @@ import {
   type FilterDraft,
 } from "./filter.js";
 import { LoadMore } from "./LoadMore.js";
-import { limitFor, nextPageSize, showingText, usePages } from "./pagination.js";
+import { PAGE_SIZE, limitFor, nextPageSize, showingText, usePages } from "./pagination.js";
+import { snippetFor, splitHighlights, type Snippet } from "./search/merge.js";
+import { useSearch, type SearchEngine } from "./search/useSearch.js";
 import { useLiveQuery } from "./useLiveQuery.js";
 
 export interface DocListViewProps {
   readonly documents: DocumentsApi;
-  readonly onOpen: (id: string) => void;
+  /** Open a document; `line` deep-links a search result to the line that matched. */
+  readonly onOpen: (id: string, line?: number) => void;
   readonly onCreate: () => void;
   readonly onDelete: (id: string) => Promise<void>;
   /** `context-menu`'s service: the sort menu and each row's ⋯ menu. */
   readonly menu: ContextMenuApi;
   /** Reports the ids currently rendered, so `DocListApi.visible()` is not a guess. */
   readonly onRendered?: (ids: readonly string[]) => void;
+  /** The search providers (`search/providers.ts`). */
+  readonly search: SearchEngine;
+  /** The search text — the URL's `?q=`, owned by the host. */
+  readonly query: string;
+  readonly onQueryChange: (query: string) => void;
+  /** The search field, for the "Search documents" command. */
+  readonly searchInput?: RefObject<HTMLInputElement>;
 }
 
 export function DocListView({
@@ -57,10 +76,37 @@ export function DocListView({
   onCreate,
   onDelete,
   onRendered,
+  search,
+  query: text,
+  onQueryChange,
+  searchInput,
 }: DocListViewProps): ReactElement {
-  const [draft, setDraft] = useState<FilterDraft>({ combine: "and", clauses: [], titleContains: "" });
-  const [sortField, setSortField] = useState("updated_at");
+  const trimmed = text.trim();
+  const searching = trimmed !== "";
+  const [draft, setDraft] = useState<FilterDraft>({ combine: "and", clauses: [] });
+  const [sortField, setSortField] = useState(searching ? RELEVANCE.field : "updated_at");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+
+  // A search starts on "Best match" and, cleared, hands back the sort it interrupted.
+  const interrupted = useRef<{ field: string; direction: "asc" | "desc" } | undefined>(
+    searching ? { field: "updated_at", direction: "desc" } : undefined,
+  );
+  useEffect(() => {
+    if (searching && interrupted.current === undefined) {
+      interrupted.current = { field: sortField, direction: sortDirection };
+      setSortField(RELEVANCE.field);
+      setSortDirection("desc");
+    } else if (!searching && interrupted.current !== undefined) {
+      const previous = interrupted.current;
+      interrupted.current = undefined;
+      if (sortField === RELEVANCE.field) {
+        setSortField(previous.field);
+        setSortDirection(previous.direction);
+      }
+    }
+    // Only the start and the end of a search move the sort; a pick in between stays.
+  }, [searching]);
+  const byRank = sortField === RELEVANCE.field;
   const [busy, setBusy] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
 
@@ -69,17 +115,37 @@ export function DocListView({
   // machine-owned documents unless the draft asks for them (`_shared/machine-docs.ts`).
   const filter = buildFilter(draft);
   const effective = buildEffectiveFilter(draft);
-  const [pages, more] = usePages(JSON.stringify([effective, sortField, sortDirection]));
-  const query = useMemo<DocumentQuery>(
-    () => ({
-      ...(effective !== undefined ? { filter: effective } : {}),
-      sort: buildSort(sortField, sortDirection),
+  const [pages, more] = usePages(JSON.stringify([effective, sortField, sortDirection, trimmed]));
+  const found = useSearch(search, trimmed, { limit: limitFor(pages) });
+  const ids = found.hits.map((hit) => hit.id);
+  const query = useMemo<DocumentQuery>(() => {
+    const within: FilterJson = { in: { field: "id", values: ids.map((id) => ({ str: id })) } };
+    const filterJson = searching
+      ? effective === undefined
+        ? within
+        : { and: [effective, within] }
+      : effective;
+    return {
+      ...(filterJson !== undefined ? { filter: filterJson } : {}),
+      sort: buildSort(byRank ? "updated_at" : sortField, sortDirection),
       limit: limitFor(pages),
-    }),
-    [JSON.stringify(effective), sortDirection, sortField, pages],
-  );
+    };
+  }, [JSON.stringify(effective), sortDirection, sortField, pages, searching, ids.join(",")]);
 
-  const state = useLiveQuery(documents, query);
+  const live = useLiveQuery(documents, query);
+  const state = useMemo(() => {
+    if (!searching || !byRank) return live;
+    const rank = new Map(ids.map((id, index) => [id, index]));
+    const rows = [...live.rows].sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
+    return { ...live, rows: sortDirection === "desc" ? rows : rows.reverse() };
+  }, [live, searching, byRank, sortDirection, ids.join(",")]);
+  const terms = useMemo(() => new Map(found.hits.map((hit) => [hit.id, hit.terms])), [found.hits]);
+  // Providers that failed, offline the server one: its results need a connection.
+  const partial = searching && found.results.some((result) => result.error !== undefined);
+  // The providers have not answered this query yet (typing, or the debounce).
+  const pending = searching && (found.running || found.settled !== trimmed);
+  // More results may exist when the providers filled the page they were asked for.
+  const moreResults = searching && found.hits.length >= limitFor(pages);
   const rendered = state.rows.map((row) => row.id).join(",");
 
   useEffect(() => {
@@ -87,7 +153,7 @@ export function DocListView({
   }, [onRendered, rendered]);
 
   return (
-    <section className="doclist doclist:flex doclist:flex-col doclist:gap-3 doclist:p-4 doclist:font-sans doclist:text-text doclist:compact:p-2 doclist:[&_:focus-visible]:outline-2 doclist:[&_:focus-visible]:outline-offset-1 doclist:[&_:focus-visible]:outline-focus doclist:[&_button]:tap-h doclist:[&_button]:cursor-pointer doclist:[&_button]:rounded doclist:[&_button]:border doclist:[&_button]:border-border doclist:[&_button]:bg-bg-subtle doclist:[&_button]:px-2 doclist:[&_button]:text-inherit doclist:disabled:[&_button]:cursor-default doclist:disabled:[&_button]:opacity-55" aria-labelledby="doclist-heading">
+    <section className="doclist doclist:flex doclist:flex-col doclist:gap-3 doclist:p-4 doclist:font-sans doclist:text-text doclist:compact:min-h-full doclist:compact:p-2 doclist:[&_:focus-visible]:outline-2 doclist:[&_:focus-visible]:outline-offset-1 doclist:[&_:focus-visible]:outline-focus doclist:[&_button]:tap-h doclist:[&_button]:cursor-pointer doclist:[&_button]:rounded doclist:[&_button]:border doclist:[&_button]:border-border doclist:[&_button]:bg-bg-subtle doclist:[&_button]:px-2 doclist:[&_button]:text-inherit doclist:disabled:[&_button]:cursor-default doclist:disabled:[&_button]:opacity-55" aria-labelledby="doclist-heading">
       {/* No create button here: Mod+N and the palette's "New document" are the way in. */}
       <header className="doclist-header doclist:flex doclist:items-center doclist:justify-between doclist:gap-2 doclist:[&_h2]:m-0">
         <h2 id="doclist-heading">Documents</h2>
@@ -103,7 +169,16 @@ export function DocListView({
           setSortField(field);
           setSortDirection(direction);
         }}
+        query={text}
+        onQueryChange={onQueryChange}
+        {...(searchInput ? { searchInput } : {})}
       />
+
+      {partial && (
+        <p className="doclist-search-note doclist:m-0 doclist:text-sm doclist:text-text-muted" role="status">
+          Some results need a connection. These come from this device.
+        </p>
+      )}
 
       {state.error && (
         <p className="doclist-error doclist:m-0 doclist:rounded doclist:border doclist:border-danger doclist:p-2" role="alert">
@@ -116,17 +191,25 @@ export function DocListView({
         </p>
       )}
 
-      {state.loading && state.rows.length === 0 ? (
+      {(state.loading || pending) && state.rows.length === 0 ? (
         <p className="doclist-empty doclist:m-0 doclist:flex doclist:flex-col doclist:items-start doclist:gap-2 doclist:py-6 doclist:text-text-muted" role="status">
-          Loading…
+          {searching ? "Searching…" : "Loading…"}
         </p>
       ) : state.rows.length === 0 ? (
-        <EmptyState hasFilter={filter !== undefined} onCreate={onCreate} />
+        searching ? (
+          <p className="doclist-empty doclist:m-0 doclist:flex doclist:flex-col doclist:items-start doclist:gap-2 doclist:py-6 doclist:text-text-muted">
+            Nothing matches “{trimmed}”.
+          </p>
+        ) : (
+          <EmptyState hasFilter={filter !== undefined} onCreate={onCreate} />
+        )
       ) : (
         <>
           <ul className="doclist-items doclist:m-0 doclist:flex doclist:list-none doclist:flex-col doclist:p-0">
-            {state.rows.map((row) => (
-              <li key={row.id} className="doclist-item doclist:grid doclist:grid-cols-[minmax(0,1fr)_auto] doclist:grid-rows-2 doclist:items-center doclist:gap-x-2 doclist:border-b doclist:border-border doclist:py-0.5 doclist:compact:py-1">
+            {state.rows.map((row) => {
+              const snippet = searching ? snippetFor(row.content, terms.get(row.id) ?? []) : undefined;
+              return (
+              <li key={row.id} className={`doclist-item doclist:grid doclist:grid-cols-[minmax(0,1fr)_auto] ${snippet ? "doclist:grid-rows-[auto_auto_auto]" : "doclist:grid-rows-2"} doclist:items-center doclist:gap-x-2 doclist:border-b doclist:border-border doclist:py-0.5 doclist:compact:py-1`}>
                 <button
                   type="button"
                   className="doclist-open doclist:col-start-1 doclist:row-start-1 doclist:flex doclist:min-h-[calc(var(--lm-tap-target)/2)] doclist:min-w-0 doclist:items-center doclist:overflow-hidden doclist:text-ellipsis doclist:whitespace-nowrap doclist:border-0! doclist:bg-transparent! doclist:p-0! doclist:text-left doclist:text-lg doclist:text-link doclist:compact:min-h-[var(--lm-tap-target)]"
@@ -140,12 +223,13 @@ export function DocListView({
                     event.dataTransfer.setData("text/plain", row.id);
                     event.dataTransfer.effectAllowed = "move";
                   }}
-                  onClick={() => onOpen(row.id)}
+                  onClick={() => onOpen(row.id, snippet?.line)}
                 >
                   {row.title}
                 </button>
                 <Meta row={row} />
-                <div className="doclist-item-actions doclist:col-start-2 doclist:row-span-2 doclist:row-start-1 doclist:compact:[&_button]:px-1.5 doclist:compact:[&_button]:text-sm">
+                {snippet && <SnippetLine snippet={snippet} />}
+                <div className={`doclist-item-actions doclist:col-start-2 ${snippet ? "doclist:row-span-3" : "doclist:row-span-2"} doclist:row-start-1 doclist:compact:[&_button]:px-1.5 doclist:compact:[&_button]:text-sm`}>
                   <button
                     type="button"
                     className="doclist-row-menu doclist:inline-flex doclist:w-[var(--lm-tap-target)] doclist:items-center doclist:justify-center doclist:border-transparent! doclist:bg-transparent! doclist:p-0! doclist:text-text-muted doclist:hover:border-border! doclist:hover:text-text"
@@ -159,7 +243,7 @@ export function DocListView({
                         sections: [
                           {
                             items: [
-                              { id: "open", label: "Open", run: () => onOpen(row.id) },
+                              { id: "open", label: "Open", run: () => onOpen(row.id, snippet?.line) },
                               {
                                 id: "trash",
                                 label: "Move to Trash",
@@ -185,17 +269,35 @@ export function DocListView({
                   </button>
                 </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
-          {state.rows.length < state.total && (
-            <LoadMore count={nextPageSize(state.rows.length, state.total)} busy={state.loading} onMore={more} />
+          {(searching ? moreResults : state.rows.length < state.total) && (
+            <LoadMore
+              count={searching ? PAGE_SIZE : nextPageSize(state.rows.length, state.total)}
+              busy={state.loading || pending}
+              onMore={more}
+            />
           )}
           <p className="doclist-status doclist:m-0 doclist:text-sm doclist:text-text-muted" role="status" aria-live="polite">
-            {showingText(state.rows.length, state.total)}
+            {searching
+              ? `${state.rows.length.toLocaleString()}${moreResults ? "+" : ""} result${state.rows.length === 1 && !moreResults ? "" : "s"} for “${trimmed}”`
+              : showingText(state.rows.length, state.total)}
           </p>
         </>
       )}
     </section>
+  );
+}
+
+/** The line a search matched, its terms marked. */
+function SnippetLine({ snippet }: { readonly snippet: Snippet }): ReactElement {
+  return (
+    <p className="doclist-snippet doclist:col-start-1 doclist:row-start-3 doclist:mb-1 doclist:mt-0 doclist:line-clamp-2 doclist:min-w-0 doclist:break-words doclist:text-sm doclist:text-text-muted doclist:[&_mark]:bg-selection doclist:[&_mark]:text-inherit">
+      {splitHighlights(snippet).map((piece, index) =>
+        piece.hit ? <mark key={index}>{piece.text}</mark> : <span key={index}>{piece.text}</span>,
+      )}
+    </p>
   );
 }
 

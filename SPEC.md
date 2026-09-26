@@ -299,8 +299,7 @@ Their genuine niche: **cron while nobody's looking, outbound HTTP with secrets, 
 | `router` | URL ↔ view | `router.route` |
 | `commands` | Command registry + palette (Ctrl+K) **+ keybindings** (per-user config; plugin-suggested defaults; first registration wins on conflict, conflicts listed) | `commands.command`, `keybindings.default` |
 | `themes` | Theme registry + picker; **overrides** kernel default tokens | `themes.theme` |
-| `search` | Search UI; **default provider = the local index**; server provider as fallback/integration | `search.provider` |
-| `doc-list` | Browse/sort/filter; "new document"; **Trash view** (restore, 30 d) | — |
+| `doc-list` | Browse/sort/filter and **search** (the list, ranked; **default provider = the local index**, server provider as fallback/integration); "new document"; **Trash view** (restore, 30 d) | `search.provider` |
 | `folders` | Tree from `fm.path` (normalized `/` segments, `.`/`..`/empty stripped, case-sensitive, duplicate names allowed — docs are id-addressed); move = fm splice; "new document here" | — |
 | `markdown` | Parse/render pipeline (§6.6); resolves `attachment://` and **`doc://<ulid>`** (renders target title, navigates); "promote to document" command on embedded attachments (§3.6) | `markdown.*` |
 | `document-surface` | Owns the document route + **mode registry**; `viewer`/`editor` are symmetric contributions | `document.mode` |
@@ -309,7 +308,7 @@ Their genuine niche: **cron while nobody's looking, outbound HTTP with secrets, 
 | `settings` | Settings shell | `settings.section` |
 | `admin` | Users, invites, pending installs + capability approval, plugin config, audit log, orphans, snapshots | — |
 
-First run seeds a few deletable welcome documents demonstrating frontmatter, `fm.path`, task lists, and a directive; empty states written for doc-list/search/folders/Trash.
+First run seeds a few deletable welcome documents demonstrating frontmatter, `fm.path`, task lists, and a directive; empty states written for doc-list (search included)/folders/Trash.
 
 ### 6.6 Extensible markdown
 

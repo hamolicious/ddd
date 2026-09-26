@@ -171,7 +171,9 @@ export function isBareChord(chord: Chord): boolean {
 
 /** What the event's modifier keys spell, honouring the platform's `Mod`. */
 export function eventChord(
-  event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "shiftKey" | "altKey">,
+  event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "shiftKey" | "altKey"> & {
+    readonly code?: string;
+  },
   apple = isApplePlatform(),
 ): Chord {
   const modifiers: Modifier[] = [];
@@ -185,7 +187,11 @@ export function eventChord(
   if (event.shiftKey) modifiers.push("Shift");
   if (event.altKey) modifiers.push("Alt");
 
-  const raw = event.key;
+  // An input method that owns a chord (IBus and fcitx switch layouts on Ctrl+Space)
+  // hands the page `Unidentified` for its key. The physical key still says which it
+  // was, and without it the chord could be neither pressed nor recorded.
+  const raw =
+    event.key === "Unidentified" || event.key === "Process" ? keyFromCode(event.code) : event.key;
   // A modifier keydown on its own is not a chord; the resolver waits for a real key.
   if (["Control", "Meta", "Shift", "Alt", "CapsLock", "Dead"].includes(raw)) {
     return { modifiers: orderModifiers(modifiers), key: "" };
@@ -194,9 +200,22 @@ export function eventChord(
   return { modifiers: orderModifiers(modifiers), key };
 }
 
+/** `KeyboardEvent.code` → the `key` an unmodified US layout gives it; `""` when unknown. */
+function keyFromCode(code: string | undefined): string {
+  if (code === undefined || code === "") return "";
+  if (code === "Space") return " ";
+  const letter = /^Key([A-Z])$/.exec(code);
+  if (letter) return letter[1] as string;
+  const digit = /^(?:Digit|Numpad)(\d)$/.exec(code);
+  if (digit) return digit[1] as string;
+  return code;
+}
+
 /** The canonical spelling of the chord an event produced; `""` for a modifier-only event. */
 export function eventKeys(
-  event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "shiftKey" | "altKey">,
+  event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "shiftKey" | "altKey"> & {
+    readonly code?: string;
+  },
   apple = isApplePlatform(),
 ): string {
   return formatChordCanonical(eventChord(event, apple));

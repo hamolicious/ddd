@@ -434,7 +434,7 @@ and announced; renaming a point or making a field required is not.
 | `commands.command` | `commands` | `{ id, title, run, category?, icon?, when? }` |
 | `keybindings.default` | `commands` | `{ command, keys, when? }` — `keys` uses `Mod+…` |
 | `themes.theme` | `themes` | `{ id, name, scheme, tokens }` — token overrides only |
-| `search.provider` | `search` | `{ id, label, order?, search(query, options) }` |
+| `search.provider` | `doc-list` | `{ id, label, order?, search(query, options) }` |
 | `document.mode` | `document-surface` | `{ id, label, component, icon?, order?, when? }` |
 | `editor.extension` | `editor` | `{ id, extension, order? }` — a CodeMirror `Extension` |
 | `settings.section` | `settings` | `{ id, title, component, order?, description? }` |

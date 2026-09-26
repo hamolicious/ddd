@@ -230,7 +230,12 @@ export default function activate(kernel: Kernel): CommandsApi {
     }
 
     const candidate = pending === "" ? chord : `${pending} ${chord}`;
-    const commandId = resolved.byKeys.get(candidate);
+    // Off Apple, Mod *is* Ctrl — one key. The event spells it `Mod`, so a binding
+    // written with a literal `Ctrl` (chosen so a Mac keeps Ctrl rather than Cmd) is
+    // looked up under that spelling too, or it could never fire here.
+    const literal = apple ? undefined : candidate.replace(/\bMod\+/g, "Ctrl+");
+    const commandId =
+      resolved.byKeys.get(candidate) ?? (literal !== undefined ? resolved.byKeys.get(literal) : undefined);
     if (commandId !== undefined) {
       clearPending();
       event.preventDefault();

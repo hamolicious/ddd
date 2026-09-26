@@ -219,17 +219,54 @@ test.describe("browse and find, at phone width", () => {
     }
   });
 
-  test("the results page fits and opens a result", async ({ page, request, baseURL }) => {
+  test("search docks at the bottom, widens when focused, and opens a result", async ({
+    page,
+    request,
+    baseURL,
+  }) => {
     await seed(request, baseURL as string);
     await signIn(page, ADMIN);
 
+    // The old results page's address still opens the list, searching.
     await page.goto("/#/search?q=phoneneedle");
-    await expect(page.getByRole("heading", { name: "Search", level: 2 })).toBeVisible();
-    const results = page.locator(".search-result-open");
-    await expect(results.first()).toBeVisible({ timeout: 20_000 });
-    await noHorizontalScroll(page, "the search results page");
+    await expect(page.getByRole("heading", { name: "Documents", level: 2 })).toBeVisible();
+    await expect(page).toHaveURL(/#\/\?q=phoneneedle$/);
+    const results = page.locator(".doclist-open");
+    await expect(page.locator(".doclist-snippet").first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator(".doclist-snippet mark").first()).toHaveText("phoneneedle");
+    await noHorizontalScroll(page, "search results");
+
+    // Docked: the toolbar card sits on the bottom edge of the screen, filters opening upwards.
+    const card = page.locator(".doclist-controls");
+    const box = await card.boundingBox();
+    expect(Math.round((box?.y ?? 0) + (box?.height ?? 0))).toBe(PHONE.height);
+    await page.getByRole("button", { name: /^Filters/ }).click();
+    const panel = await page.locator(".doclist-filter-panel").boundingBox();
+    const bar = await page.locator(".doclist-toolbar").boundingBox();
+    expect((panel?.y ?? 0) + (panel?.height ?? 0)).toBeLessThanOrEqual((bar?.y ?? 0) + 1);
+    // Everything outside the card is dimmed while they are open; a tap there folds them.
+    const scrim = page.locator(".doclist-filter-scrim");
+    await expect(scrim).toBeVisible();
+    await scrim.click({ position: { x: 20, y: 120 } });
+    await expect(scrim).toHaveCount(0);
+    await expect(page.locator(".doclist-filter-panel")).toBeHidden();
+
+    // Focused, the field takes the icons' room; blurred, it gives it back.
+    const search = page.getByRole("searchbox", { name: "Search documents" });
+    const narrow = (await search.boundingBox())?.width ?? 0;
+    await search.focus();
+    await expect.poll(async () => (await search.boundingBox())?.width ?? 0).toBeGreaterThan(narrow + 100);
+    // Tucked away is out of reach too, not just out of sight.
+    const icons = page.locator(".doclist-toolbar-icons");
+    await expect(icons).toHaveAttribute("inert", "");
+    await expect.poll(async () => (await icons.boundingBox())?.width ?? 0).toBeLessThan(2);
+    await search.blur();
+    await expect.poll(async () => Math.round((await search.boundingBox())?.width ?? 0)).toBe(Math.round(narrow));
+    await expect(icons).not.toHaveAttribute("inert");
+    await expect(page.getByRole("button", { name: /^Order:/ })).toBeVisible();
 
     await results.first().click();
+    await expect(page).toHaveURL(/#\/doc\/[^?]+\?line=\d+$/);
     await expect(page.getByRole("tablist", { name: /document mode/i })).toBeVisible();
   });
 

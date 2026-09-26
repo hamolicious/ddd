@@ -18,21 +18,25 @@
  *   or the reverse. That claim was doubted once (`web/MOBILE-AUDIT.md`, Q5) and is now
  *   pinned by `filter.test.ts` rather than argued.
  *
- * **Sort, direction and filters are the whole top row, three icons.** Sort opens a
- * `context-menu` of fields, direction flips the order, and the funnel unfolds every
- * filter — "Show machine documents" included — with a badge counting those applied.
- * While the filters are open the funnel stays lit in the accent colour, so the button
- * that folds them away is the obvious one.
+ * **One toolbar: the search bar, then three icons.** Search runs the providers
+ * (`search/`) and turns the list into ranked results; sort opens a `context-menu` of
+ * fields ("Best match" joins them while a search is on), direction flips the order, and
+ * the funnel unfolds every filter — "Show machine documents" included — with a badge
+ * counting those applied. While the filters are open the funnel stays lit in the accent
+ * colour, so the button that folds them away is the obvious one.
  *
- * **The filters fold away.** Expanded, this bar cost the whole
- * first screen of a phone, so the browse view opened on no documents at all. The
- * disclosure is collapsed by default only on a compact viewport (`_shared/compact.ts`),
- * and the funnel's badge counts the conditions applied (its accessible name says it too),
+ * **On a phone the card docks to the bottom of the screen**, where a thumb is, and so
+ * the filters unfold *upwards*, over the results. Focusing the search bar there slides
+ * the three icons away so the field has the width; they slide back on blur. On a wide
+ * screen the bar sits at the top at its full width and nothing moves.
+ *
+ * **The filters start folded**, on every screen: the list is what the page is for. The
+ * funnel's badge counts the conditions applied (its accessible name says it too),
  * so a folded filter is never a silent one.
  */
 
 import { useId, useState } from "react";
-import type { ReactElement } from "react";
+import type { ReactElement, RefObject } from "react";
 
 import type { ContextMenuApi } from "../../_shared/context-menu-api.js";
 
@@ -41,6 +45,7 @@ import {
   FIELD_OPTIONS,
   SORT_OPTIONS,
   VALUELESS_OPS,
+  RELEVANCE,
   appliedCount,
   buildEffectiveFilter,
   clauseProblem,
@@ -59,6 +64,11 @@ export interface FilterBarProps {
   readonly onSortChange: (field: string, direction: "asc" | "desc") => void;
   /** `context-menu`'s service, for the sort field menu. */
   readonly menu: ContextMenuApi;
+  /** The search bar's text. Empty ⇒ the plain list. */
+  readonly query: string;
+  readonly onQueryChange: (query: string) => void;
+  /** The search field, so the "Search documents" command can focus it. */
+  readonly searchInput?: RefObject<HTMLInputElement>;
 }
 
 const OP_LABELS: readonly { readonly op: ClauseOp; readonly label: string }[] = [
@@ -97,6 +107,9 @@ export function FilterBar({
   sortDirection,
   onSortChange,
   menu,
+  query,
+  onQueryChange,
+  searchInput,
 }: FilterBarProps): ReactElement {
   // Row id → why it produces no clause. One computation, used both to mark the row and
   // to say what is wrong with it, so the mark and the query cannot disagree.
@@ -112,7 +125,10 @@ export function FilterBar({
 
   const compact = useCompact();
   const panelId = useId();
-  const [expanded, setExpanded] = useState(!compact);
+  const [expanded, setExpanded] = useState(false);
+  // Only a phone slides the icons away; a wide toolbar has room for both.
+  const [focused, setFocused] = useState(false);
+  const tucked = compact && focused;
   const applied = appliedCount(draft);
 
   const patch = (id: string, change: Partial<FilterClause>): void => {
@@ -123,13 +139,36 @@ export function FilterBar({
   };
 
   return (
-    <div className="doclist-controls doclist:flex doclist:flex-col doclist:gap-2 doclist:rounded doclist:border doclist:border-border doclist:bg-bg-subtle doclist:p-2 doclist:[&_.doclist-checkbox]:tap-h doclist:[&_.doclist-checkbox]:inline-flex doclist:[&_.doclist-checkbox]:cursor-pointer doclist:[&_.doclist-checkbox]:items-center doclist:[&_.doclist-checkbox]:gap-1 doclist:[&_.doclist-checkbox]:whitespace-nowrap doclist:[&_.doclist-clause]:flex doclist:[&_.doclist-clause]:flex-wrap doclist:[&_.doclist-clause]:items-end doclist:[&_.doclist-clause]:gap-1.5 doclist:[&_.doclist-clause]:rounded doclist:[&_.doclist-clause]:border doclist:[&_.doclist-clause]:border-transparent doclist:[&_.doclist-clause]:p-1 doclist:[&_.doclist-clause-invalid]:border-warning doclist:[&_.doclist-field]:flex doclist:[&_.doclist-field]:flex-col doclist:[&_.doclist-field]:gap-0.5 doclist:[&_.doclist-field]:text-sm doclist:[&_.doclist-field]:text-text-muted doclist:[&_.doclist-field_input]:tap-h doclist:[&_.doclist-field_input]:rounded doclist:[&_.doclist-field_input]:border doclist:[&_.doclist-field_input]:border-border doclist:[&_.doclist-field_input]:bg-bg doclist:[&_.doclist-field_input]:px-2 doclist:[&_.doclist-field_input]:text-base doclist:[&_.doclist-field_input]:text-text doclist:[&_.doclist-field_select]:tap-h doclist:[&_.doclist-field_select]:rounded doclist:[&_.doclist-field_select]:border doclist:[&_.doclist-field_select]:border-border doclist:[&_.doclist-field_select]:bg-bg doclist:[&_.doclist-field_select]:px-2 doclist:[&_.doclist-field_select]:text-base doclist:[&_.doclist-field_select]:text-text doclist:[&_.doclist-grow]:flex-[1_1_12rem] doclist:compact:[&_.doclist-grow]:basis-full doclist:[&_.doclist-row]:flex doclist:[&_.doclist-row]:flex-wrap doclist:[&_.doclist-row]:items-end doclist:[&_.doclist-row]:gap-2 doclist:[&_.doclist-sort]:compact:flex-[1_1_8rem] doclist:compact:[&_.doclist-sort_select]:w-full">
-      <div className="doclist-row">
+    <>
+    {compact && expanded && (
+      // A dim over everything but the docked card while its filters are open; a tap on
+      // it folds them. Only on a phone, where the panel sits over the results.
+      <div
+        aria-hidden="true"
+        className="doclist-filter-scrim doclist:fixed doclist:inset-0 doclist:z-[9] doclist:bg-black/30 doclist:transition-opacity doclist:duration-150 doclist:starting:opacity-0 doclist:motion-reduce:transition-none"
+        onClick={() => setExpanded(false)}
+      />
+    )}
+    <div className="doclist-controls doclist:flex doclist:flex-col doclist:compact:sticky doclist:compact:bottom-0 doclist:compact:z-10 doclist:compact:order-last doclist:compact:mt-auto doclist:compact:-mx-2 doclist:compact:-mb-2 doclist:compact:flex-col-reverse doclist:compact:rounded-none doclist:compact:border-x-0 doclist:compact:border-b-0 doclist:compact:border-border-strong doclist:compact:pb-[calc(0.5rem+var(--lm-safe-bottom))] doclist:compact:shadow-2 doclist:gap-2 doclist:rounded doclist:border doclist:border-border doclist:bg-bg-subtle doclist:p-2 doclist:[&_.doclist-checkbox]:tap-h doclist:[&_.doclist-checkbox]:inline-flex doclist:[&_.doclist-checkbox]:cursor-pointer doclist:[&_.doclist-checkbox]:items-center doclist:[&_.doclist-checkbox]:gap-1 doclist:[&_.doclist-checkbox]:whitespace-nowrap doclist:[&_.doclist-clause]:flex doclist:[&_.doclist-clause]:flex-wrap doclist:[&_.doclist-clause]:items-end doclist:[&_.doclist-clause]:gap-1.5 doclist:[&_.doclist-clause]:rounded doclist:[&_.doclist-clause]:border doclist:[&_.doclist-clause]:border-transparent doclist:[&_.doclist-clause]:p-1 doclist:[&_.doclist-clause-invalid]:border-warning doclist:[&_.doclist-field]:flex doclist:[&_.doclist-field]:flex-col doclist:[&_.doclist-field]:gap-0.5 doclist:[&_.doclist-field]:text-sm doclist:[&_.doclist-field]:text-text-muted doclist:[&_.doclist-field_input]:tap-h doclist:[&_.doclist-field_input]:rounded doclist:[&_.doclist-field_input]:border doclist:[&_.doclist-field_input]:border-border doclist:[&_.doclist-field_input]:bg-bg doclist:[&_.doclist-field_input]:px-2 doclist:[&_.doclist-field_input]:text-base doclist:[&_.doclist-field_input]:text-text doclist:[&_.doclist-field_select]:tap-h doclist:[&_.doclist-field_select]:rounded doclist:[&_.doclist-field_select]:border doclist:[&_.doclist-field_select]:border-border doclist:[&_.doclist-field_select]:bg-bg doclist:[&_.doclist-field_select]:px-2 doclist:[&_.doclist-field_select]:text-base doclist:[&_.doclist-field_select]:text-text doclist:[&_.doclist-grow]:flex-[1_1_12rem] doclist:compact:[&_.doclist-grow]:basis-full doclist:[&_.doclist-row]:flex doclist:[&_.doclist-row]:flex-wrap doclist:[&_.doclist-row]:items-end doclist:[&_.doclist-row]:gap-2 doclist:[&_.doclist-sort]:compact:flex-[1_1_8rem] doclist:compact:[&_.doclist-sort_select]:w-full">
+      <div className="doclist-toolbar doclist:flex doclist:items-center">
+        <SearchField
+          query={query}
+          onQueryChange={onQueryChange}
+          input={searchInput}
+          onFocusChange={setFocused}
+        />
+        <div
+          className={`doclist-toolbar-icons doclist:flex doclist:shrink-0 doclist:gap-2 doclist:overflow-hidden doclist:-my-0.5 doclist:py-0.5 doclist:transition-[max-width,margin,padding,opacity] doclist:duration-200 doclist:ease-out doclist:motion-reduce:transition-none ${tucked ? "doclist:ml-0 doclist:max-w-0 doclist:px-0 doclist:opacity-0" : "doclist:ml-1 doclist:max-w-[12rem] doclist:px-0.5 doclist:opacity-100"}`}
+          // Tucked away under a focused search on a phone: out of the tab order and the
+          // accessibility tree too, not just out of sight.
+          {...(tucked ? { inert: "" } : {})}
+        >
         <SortControls
           field={sortField}
           direction={sortDirection}
           onChange={onSortChange}
           menu={menu}
+          searching={query.trim() !== ""}
         />
 
         <button
@@ -153,20 +192,12 @@ export function FilterBar({
             </span>
           )}
         </button>
+        </div>
       </div>
 
-      <div className={`doclist-filter-panel ${expanded ? "doclist:flex" : "doclist:hidden"} doclist:flex-col doclist:gap-2 doclist:border-t doclist:border-border doclist:pt-2`} id={panelId}>
+      {/* Below the toolbar on a wide screen; above it, over the results, on a phone. */}
+      <div className={`doclist-filter-panel ${expanded ? "doclist:flex" : "doclist:hidden"} doclist:flex-col doclist:gap-2 doclist:border-t doclist:border-border doclist:pt-2 doclist:compact:max-h-[60dvh] doclist:compact:overflow-y-auto doclist:compact:overscroll-contain doclist:compact:border-t-0 doclist:compact:border-b doclist:compact:pt-0 doclist:compact:pb-2`} id={panelId}>
       <div className="doclist-row">
-        <label className="doclist-field doclist-grow">
-          <span>Title contains</span>
-          <input
-            type="search"
-            value={draft.titleContains ?? ""}
-            placeholder="Search titles"
-            onChange={(event) => onDraftChange({ ...draft, titleContains: event.target.value })}
-          />
-        </label>
-
         <label className="doclist-checkbox">
           <input
             type="checkbox"
@@ -318,9 +349,7 @@ export function FilterBar({
         >
           Add condition
         </button>
-        {(draft.clauses.length > 0 ||
-          (draft.titleContains ?? "") !== "" ||
-          draft.includeMachine === true) && (
+        {(draft.clauses.length > 0 || draft.includeMachine === true) && (
           <button
             type="button"
             // Every filter, "Show machine documents" included: it is one of them.
@@ -329,7 +358,6 @@ export function FilterBar({
                 ...draft,
                 combine: "and",
                 clauses: [],
-                titleContains: "",
                 includeMachine: false,
               })
             }
@@ -349,6 +377,7 @@ export function FilterBar({
       )}
       </div>
     </div>
+    </>
   );
 }
 
@@ -360,24 +389,25 @@ function SortControls({
   direction,
   onChange,
   menu,
+  searching,
 }: {
   readonly field: string;
   readonly direction: "asc" | "desc";
   readonly onChange: (field: string, direction: "asc" | "desc") => void;
   readonly menu: ContextMenuApi;
+  /** A search is on, so "Best match" is a sort. */
+  readonly searching: boolean;
 }): ReactElement {
-  const current = SORT_OPTIONS.find((option) => option.field === field) ?? SORT_OPTIONS[0];
-  const byDate = current?.kind === "date";
-  const words =
-    direction === "desc"
-      ? byDate
-        ? "newest first"
-        : "Z to A"
-      : byDate
-        ? "oldest first"
-        : "A to Z";
-  const flipped =
-    direction === "desc" ? (byDate ? "oldest first" : "A to Z") : byDate ? "newest first" : "Z to A";
+  const options = searching ? [RELEVANCE, ...SORT_OPTIONS] : SORT_OPTIONS;
+  const current = options.find((option) => option.field === field) ?? SORT_OPTIONS[0];
+  const [desc, asc] =
+    current === RELEVANCE
+      ? ["best match first", "best match last"]
+      : current?.kind === "date"
+        ? ["newest first", "oldest first"]
+        : ["Z to A", "A to Z"];
+  const words = direction === "desc" ? desc : asc;
+  const flipped = direction === "desc" ? asc : desc;
 
   return (
     <>
@@ -394,7 +424,7 @@ function SortControls({
             sections: [
               {
                 title: "Sort by",
-                items: SORT_OPTIONS.map((option) => ({
+                items: options.map((option) => ({
                   id: option.field,
                   label: option.label,
                   checked: option.field === field,
@@ -425,5 +455,44 @@ function SortControls({
         </svg>
       </button>
     </>
+  );
+}
+
+/**
+ * The search bar. A real `type="search"` field — so a phone's keyboard shows a search
+ * key and Escape clears it — with the magnifier drawn inside it rather than beside it.
+ */
+function SearchField({
+  query,
+  onQueryChange,
+  input,
+  onFocusChange,
+}: {
+  readonly query: string;
+  readonly onQueryChange: (query: string) => void;
+  readonly input: RefObject<HTMLInputElement> | undefined;
+  readonly onFocusChange: (focused: boolean) => void;
+}): ReactElement {
+  return (
+    <label className="doclist-search doclist:relative doclist:flex doclist:min-w-0 doclist:flex-1 doclist:items-center">
+      <span className="doclist:sr-only">Search documents</span>
+      <svg aria-hidden="true" viewBox="0 0 24 24" className="doclist:pointer-events-none doclist:absolute doclist:left-2.5 doclist:size-[1.05em] doclist:text-text-muted" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        <circle cx="11" cy="11" r="6.5" />
+        <path d="M16 16l4.5 4.5" />
+      </svg>
+      <input
+        ref={input}
+        className="doclist-search-input doclist:tap-h doclist:w-full doclist:min-w-0 doclist:rounded doclist:border doclist:border-border doclist:bg-bg doclist:py-0 doclist:pl-8 doclist:pr-2 doclist:text-base doclist:text-text"
+        type="search"
+        value={query}
+        spellCheck={false}
+        autoComplete="off"
+        enterKeyHint="search"
+        placeholder="Search documents"
+        onChange={(event) => onQueryChange(event.target.value)}
+        onFocus={() => onFocusChange(true)}
+        onBlur={() => onFocusChange(false)}
+      />
+    </label>
   );
 }

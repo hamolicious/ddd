@@ -13,8 +13,12 @@
  *
  * **`?line=N` moves the editor.** The parser is unit-tested
  * (`document-surface/src/line.test.ts`) and the search side builds the link
- * (`search/src/hash.ts`), but "the editor actually scrolled" is a CodeMirror viewport
+ * (`doc-list/src/search/hash.ts`), but "the editor actually scrolled" is a CodeMirror viewport
  * fact: it needs a real document long enough to scroll and a real layout to scroll in.
+ *
+ * **Search is the list, ranked.** Ctrl+Space focuses the list's search bar from
+ * anywhere; the results obey the list's filters (machine documents stay hidden until
+ * asked for) and clearing the search hands back the sort it interrupted.
  */
 
 import { expect, test } from "@playwright/test";
@@ -76,6 +80,7 @@ test("a machine-owned document is out of the list, the count and the tree — un
   await expect(tree.getByRole("treeitem", { name: /\.settings/ })).toHaveCount(0);
 
   // The toggle is a view default, not access control: asking brings it back.
+  await page.getByRole("button", { name: /^Filters/ }).click();
   await page.getByRole("checkbox", { name: /show machine documents/i }).check();
   await expect(page.getByRole("button", { name: "Machine owned thing", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "An ordinary note", exact: true })).toBeVisible();
@@ -84,6 +89,57 @@ test("a machine-owned document is out of the list, the count and the tree — un
   // workspace holds or what a link resolves to.
   await page.goto(`/#/doc/${ordinary}`);
   await expect(page.getByRole("tablist", { name: /document mode/i })).toBeVisible();
+});
+
+test("Ctrl+Space searches the list, which keeps its filters and its sort", async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const base = baseURL as string;
+  const needle = "quibblesearchword";
+  await createDocument(request, base, `---\ntitle: Quibble ordinary\n---\n\nsays ${needle}\n`);
+  await createDocument(
+    request,
+    base,
+    `---\ntitle: Quibble machine\npath: .settings\n---\n\nalso ${needle}\n`,
+  );
+
+  await signIn(page);
+  await waitSynced(page);
+  await page.goto("/#/trash");
+  await expect(page.getByRole("heading", { name: "Trash" })).toBeVisible();
+
+  await page.keyboard.press("Control+Space");
+  const search = page.getByRole("searchbox", { name: "Search documents" });
+  await expect(search).toBeFocused();
+  await expect(page).toHaveURL(/#\/$/);
+
+  await search.fill(needle);
+  await expect(page).toHaveURL(new RegExp(`#/\\?q=${needle}$`));
+  await expect(page.getByRole("button", { name: "Quibble ordinary", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Quibble machine", exact: true })).toHaveCount(0);
+  await expect(docRows(page)).toHaveCount(1);
+  await expect(page.getByRole("button", { name: /^Sort by Best match$/ })).toBeVisible();
+  await expect(page.locator(".doclist-status")).toHaveText(`1 result for “${needle}”`);
+
+  // The machine-document filter applies to results as it does to the list.
+  await page.getByRole("button", { name: /^Filters/ }).click();
+  await page.getByRole("checkbox", { name: /show machine documents/i }).check();
+  await expect(page.getByRole("button", { name: "Quibble machine", exact: true })).toBeVisible();
+  await expect(docRows(page)).toHaveCount(2);
+  await page.getByRole("checkbox", { name: /show machine documents/i }).uncheck();
+
+  // A space between words survives the round trip through the URL.
+  await search.fill(`${needle} `);
+  await search.press("x");
+  await expect(search).toHaveValue(`${needle} x`);
+
+  // Cleared: the plain list, in the order it had before.
+  await search.fill("");
+  await expect(page).toHaveURL(/#\/$/);
+  await expect(page.getByRole("button", { name: /^Sort by Last updated$/ })).toBeVisible();
+  await expect(page.locator(".doclist-status")).toContainText(/documents|Showing/);
 });
 
 test("?line=N opens the editor at that line, and a second link moves it again", async ({

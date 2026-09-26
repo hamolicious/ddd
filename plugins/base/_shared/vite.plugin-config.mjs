@@ -3,7 +3,7 @@
  * lives in `plugins/base/*`").
  *
  * Every base plugin is built with this function, and a third-party plugin can use it
- * verbatim — that is the point of it being a function in a file rather than seventeen
+ * verbatim — that is the point of it being a function in a file rather than sixteen
  * copies of a config. See `vite.config.example.mjs` next to it for standalone use.
  *
  * Three decisions, all of them consequences of how plugins are loaded:

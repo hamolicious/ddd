@@ -33,8 +33,7 @@ dist/<id>/<version>/              build output = the installed layout the server
 | `router` | URL ↔ view (hash-based) | `router.route` |
 | `commands` | command registry, palette, keybindings | `commands.command`, `keybindings.default` |
 | `themes` | theme registry + picker; overrides kernel tokens | `themes.theme` |
-| `search` | search UI; local index is the default provider | `search.provider` |
-| `doc-list` | browse/sort/filter, new document, Trash | — |
+| `doc-list` | browse/search/sort/filter, new document, Trash; local index is the default search provider | `search.provider` |
 | `folders` | drag-and-drop file tree over `fm.path`; every move is a splice | — |
 | `markdown` | the unified/remark → React pipeline | `markdown.directive/fence/remark/component/taskState` |
 | `document-surface` | the document route + mode registry | `document.mode` |
@@ -53,7 +52,7 @@ that had a backend half, so **every plugin in this directory is now frontend-onl
 
 ## How the base plugins relate
 
-Generated from the seventeen `manifest.json` `dependencies` fields — an arrow reads
+Generated from the sixteen `manifest.json` `dependencies` fields — an arrow reads
 **"depends on"**, and the loader's activation order is precisely a topological order of
 this graph (a dependency always activates first; a failed dependency skips its whole
 subtree). Every plugin additionally depends on `@kernel`, which is not drawn.
@@ -68,7 +67,6 @@ flowchart TD
 
     subgraph browse ["browse & find"]
         folders --> doc-list
-        search
     end
 
     subgraph config ["configuration"]
@@ -86,7 +84,6 @@ flowchart TD
     editor --> commands
     doc-list --> commands & context-menu & router & shell-ui
     folders --> commands & context-menu & router & shell-ui
-    search --> commands & router & shell-ui
     settings --> commands & router & shell-ui
     admin --> commands & router & shell-ui
     themes --> commands

@@ -1,5 +1,12 @@
 /**
- * `doc-list` — browse, sort, filter, create, and the **Trash view** (SPEC §6.5).
+ * `doc-list` — browse, search, sort, filter, create, and the **Trash view** (SPEC §6.5).
+ *
+ * **Search lives here** (it was its own plugin with its own results page). The list
+ * page's search bar runs every `search.provider` — this plugin defines the point and
+ * contributes the local index and the server's — and the list becomes the ranked
+ * results (`search/`, `DocListView`). The text is the URL's `?q=`, so a search survives
+ * reload and "back" from a result, and the old `#/search?q=` address opens the same
+ * list. "Search documents" (Ctrl+Space by default) opens the list and focuses the bar.
  *
  * Everything it shows comes from `kernel.documents.subscribe`, which is a *live* local
  * query: the list updates as the feed arrives, offline included, with no polling and no
@@ -41,12 +48,14 @@
  *   action.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactElement } from "react";
 
 import type { Kernel } from "@kernel";
 
 import { DocListView, TrashView } from "./DocListView.js";
+import { documentPath, listPath, queryParam } from "./search/hash.js";
+import { searchEngine } from "./search/providers.js";
 import { ViewsPanel } from "./ViewsPanel.js";
 import { yamlScalar } from "./yaml.js";
 import type { ContextMenuApi } from "../../_shared/context-menu-api.js";
@@ -108,7 +117,23 @@ export default function activate(kernel: Kernel): DocListApi {
   /** Ids the list last rendered, for `visible()`. */
   let visible: readonly string[] = [];
 
-  const open = (id: string): void => router.navigate(`/doc/${id}`);
+  const open = (id: string, line?: number): void => router.navigate(documentPath(id, line));
+
+  const search = searchEngine(kernel);
+
+  /**
+   * "Search documents" asks for the field before the list may be on screen, so the
+   * request waits here and the field takes it when it mounts; a list already open is
+   * focused at once.
+   */
+  let focusWanted = false;
+  let focusSearch: (() => void) | undefined;
+  const openSearch = (): void => {
+    const onList = router.current().split("?")[0] === "/";
+    if (!onList) router.navigate("/");
+    if (focusSearch) focusSearch();
+    else focusWanted = true;
+  };
 
   /**
    * Creating a document is offered from four places — `Mod+N`, the navbar, the palette
@@ -136,18 +161,63 @@ export default function activate(kernel: Kernel): DocListApi {
   // Views
   // ---------------------------------------------------------------------------
 
-  const ListHost = (): ReactElement => (
-    <DocListView
-      documents={kernel.documents}
-      menu={menu}
-      onOpen={open}
-      onCreate={() => create()}
-      onDelete={(id) => kernel.documents.delete(id)}
-      onRendered={(ids) => {
-        visible = ids;
-      }}
-    />
-  );
+  const ListHost = (): ReactElement => {
+    const [query, setQuery] = useState(() => queryParam(location.hash, "q"));
+    const input = useRef<HTMLInputElement>(null);
+
+    // The URL is the state: back, forward and links move the search box.
+    useEffect(() => {
+      // The old results page's address, spelled the list's way — on arrival, and on a
+      // hash change while the list is already on screen (same view, no remount).
+      const canonical = (): void => {
+        if (router.current().split("?")[0] === "/search") {
+          router.navigate(listPath(queryParam(location.hash, "q")), { replace: true });
+        }
+      };
+      canonical();
+      return router.onChange(() => {
+        canonical();
+        // Compared trimmed: the URL holds the trimmed text, and echoing it back would
+        // eat the space typed between two words.
+        const next = queryParam(location.hash, "q");
+        setQuery((current) => (current.trim() === next.trim() ? current : next));
+      });
+    }, []);
+    useEffect(() => {
+      focusSearch = () => {
+        input.current?.focus();
+        input.current?.select();
+      };
+      if (focusWanted) {
+        focusWanted = false;
+        focusSearch();
+      }
+      return () => {
+        focusSearch = undefined;
+      };
+    }, []);
+
+    return (
+      <DocListView
+        documents={kernel.documents}
+        menu={menu}
+        onOpen={open}
+        onCreate={() => create()}
+        onDelete={(id) => kernel.documents.delete(id)}
+        onRendered={(ids) => {
+          visible = ids;
+        }}
+        search={search}
+        query={query}
+        onQueryChange={(next) => {
+          setQuery(next);
+          // Replaced, not pushed: one history entry per search, not one per keystroke.
+          router.navigate(listPath(next), { replace: true });
+        }}
+        searchInput={input}
+      />
+    );
+  };
 
   const TrashHost = (): ReactElement => (
     <TrashView
@@ -171,6 +241,7 @@ export default function activate(kernel: Kernel): DocListApi {
   };
 
   kernel.extensions.contribute<Route>(POINTS.route, { path: "/", view: "doc-list.all", order: 900 });
+  kernel.extensions.contribute<Route>(POINTS.route, { path: "/search", view: "doc-list.all" });
   kernel.extensions.contribute<Route>(POINTS.route, { path: "/trash", view: "doc-list.trash" });
 
   kernel.extensions.contribute<MainView>(POINTS.mainView, {
@@ -206,6 +277,12 @@ export default function activate(kernel: Kernel): DocListApi {
       run: () => router.navigate("/"),
     },
     {
+      id: "doc-list.search",
+      title: "Search documents",
+      category: "Documents",
+      run: openSearch,
+    },
+    {
       id: "doc-list.openTrash",
       title: "Open Trash",
       category: "Documents",
@@ -217,6 +294,11 @@ export default function activate(kernel: Kernel): DocListApi {
   kernel.extensions.contribute<KeybindingDefault>(POINTS.keybinding, {
     command: "doc-list.new",
     keys: "Mod+N",
+  });
+  // Literal Ctrl, not Mod: Cmd+Space is the Mac's own search.
+  kernel.extensions.contribute<KeybindingDefault>(POINTS.keybinding, {
+    command: "doc-list.search",
+    keys: "Ctrl+Space",
   });
 
   // ---------------------------------------------------------------------------

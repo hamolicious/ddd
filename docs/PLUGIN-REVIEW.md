@@ -28,7 +28,7 @@ browser's device toolbar at 390 × 844, and 844 × 390 for landscape.
 | 9 | `themes` | [x] | No changes |
 | 10 | `doc-list` | [x] | Icon sort/direction/filters, row ⋯ menu, machine filter, paging |
 | 11 | `folders` | [x] | Lifted drags, folder reorder, tighter rows |
-| 12 | `search` | [ ] | |
+| 12 | `search` | [ ] | Folded into `doc-list`: search bar, docked on phones |
 | 13 | `document-surface` | [ ] | |
 | 14 | `editor` | [ ] | |
 | 15 | `markdown` | [ ] | |
@@ -270,18 +270,33 @@ with a lifted copy instead of the browser's translucent ghost; folders can be re
 longer take the app's button tap height); on a phone the chevron sits beside its name,
 its 44 px tap area reaching into the indent (2026-09-26).
 
-## 12. `search` — search
+## 12. `search` — now part of `doc-list`
 
-**What it does.** The search page, over a local index that works offline, with the
-server's index as a second source. Each source's result or failure is reported.
+**What it does.** Search is the document list's search bar, not a plugin or a page of
+its own. It runs every `search.provider` (now defined by `doc-list`): the local index,
+which works offline, and the server's. The list becomes the ranked results. It is still
+filtered like the list, and each result shows the line that matched.
 
-**Where to see it.** Mod+Shift+F, the "Search documents" command, or `#/search`.
+**Where to see it.** The search bar on `#/`. Ctrl+Space (or the "Search documents"
+command) opens the list and focuses it. The URL keeps the text (`#/?q=milk`), and the
+old `#/search?q=` address opens the same list.
 
-- [ ] Body text and titles both match; results open at the matching line.
-- [ ] Offline: search still finds documents already synced.
-- [ ] A failing source (the server one, offline) shows an error line, not an empty page.
+- [ ] Body text and titles both match; a result opens at the matching line.
+- [ ] Sort switches to "Best match" when a search starts and back when it is cleared.
+- [ ] Filters (machine documents included) apply to results.
+- [ ] Offline: search still finds documents already synced; the note says some results
+  need a connection.
+- [ ] Phone: the toolbar card is docked at the bottom; focusing search slides the three
+  icons away and blurring brings them back; the filters open upwards over the results.
+- [ ] Desktop: the search bar is at the top, the icons to its right, and the filters
+  start folded.
 
-**Notes.** The top-bar search box was removed (2026-09-26).
+**Notes.** The top-bar search box was removed (2026-09-26). Search was folded into
+`doc-list`, its page removed, "Title contains" replaced by the search bar, the
+default key moved from Mod+Shift+F to Ctrl+Space, and the filters start folded on a
+wide screen too (2026-09-26). The per-source counts ("Where these came from") went with
+the page. The list only shows documents already on this device, so a result found only
+by the server, before it has synced, does not appear.
 
 ## 13. `document-surface` — opening a document
 

@@ -150,7 +150,6 @@ describe("buildClause", () => {
 describe("buildFilter", () => {
   it("returns undefined for an empty draft rather than an all node", () => {
     expect(buildFilter({ combine: "and", clauses: [] })).toBeUndefined();
-    expect(buildFilter({ combine: "and", clauses: [], titleContains: "  " })).toBeUndefined();
   });
 
   it("returns a single node unwrapped", () => {
@@ -169,12 +168,6 @@ describe("buildFilter", () => {
         { cmp: { field: "fm.status", op: "eq", value: { str: "open" } } },
         { contains: { field: "fm.tags", value: { str: "work" } } },
       ],
-    });
-  });
-
-  it("turns the title box into a case-insensitive text node", () => {
-    expect(buildFilter({ combine: "and", clauses: [], titleContains: "Groceries" })).toEqual({
-      text: { field: "title", mode: "contains", value: "Groceries" },
     });
   });
 
@@ -375,19 +368,14 @@ describe("clauseProblem is exactly the builder's own verdict", () => {
 
 describe("appliedCount", () => {
   /**
-   * The number on the folded "Filters" toggle. It used to count a title box holding
-   * only spaces, because it tested `!== ""` where `buildFilter` tests `trim() !== ""` —
-   * a badge reading "1" over a query with no conditions in it.
+   * The number on the folded "Filters" toggle: the conditions the query carries, so a
+   * half-typed row does not light a badge over a query with nothing in it.
    */
   it("counts what the query carries, not what the boxes hold", () => {
     expect(appliedCount({ combine: "and", clauses: [] })).toBe(0);
     // Showing machine documents is a filter like any other, so it counts.
     expect(appliedCount({ combine: "and", clauses: [], includeMachine: true })).toBe(1);
-    expect(appliedCount({ combine: "and", clauses: [], titleContains: "   " })).toBe(0);
-    expect(appliedCount({ combine: "and", clauses: [], titleContains: " x " })).toBe(1);
     expect(appliedCount({ combine: "and", clauses: [clause(), clause({ id: "b", value: "" })] })).toBe(1);
-    expect(
-      appliedCount({ combine: "and", clauses: [clause()], titleContains: "notes" }),
-    ).toBe(2);
+    expect(appliedCount({ combine: "and", clauses: [clause()], includeMachine: true })).toBe(2);
   });
 });

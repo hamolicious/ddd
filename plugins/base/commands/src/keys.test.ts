@@ -76,8 +76,8 @@ describe("isBareChord", () => {
 describe("eventKeys", () => {
   const event = (over: Partial<KeyboardEvent>): Pick<
     KeyboardEvent,
-    "key" | "ctrlKey" | "metaKey" | "shiftKey" | "altKey"
-  > => ({ key: "k", ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, ...over });
+    "key" | "code" | "ctrlKey" | "metaKey" | "shiftKey" | "altKey"
+  > => ({ key: "k", code: "KeyK", ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, ...over });
 
   it("maps the platform's primary modifier to Mod", () => {
     expect(eventKeys(event({ ctrlKey: true }), false)).toBe("Mod+K");
@@ -97,6 +97,13 @@ describe("eventKeys", () => {
 
   it("names the space bar", () => {
     expect(eventKeys(event({ key: " " }), false)).toBe("Space");
+  });
+
+  it("reads the physical key when an input method hides the character", () => {
+    // IBus/fcitx own Ctrl+Space and report its key as Unidentified.
+    expect(eventKeys(event({ key: "Unidentified", code: "Space", ctrlKey: true }), false)).toBe("Mod+Space");
+    expect(eventKeys(event({ key: "Process", code: "KeyJ", ctrlKey: true }), false)).toBe("Mod+J");
+    expect(eventKeys(event({ key: "Unidentified", code: "" }), false)).toBe("");
   });
 });
 
