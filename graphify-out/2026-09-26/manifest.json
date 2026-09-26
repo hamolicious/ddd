@@ -1206,9 +1206,9 @@
     "semantic_hash": ""
   },
   "plugins/base/commands/src/Palette.tsx": {
-    "mtime": 1790387430.0569353,
-    "seen": 1790388224.8741705,
-    "ast_hash": "f7ad151f8b5b9cbf2d43f7a478be1123",
+    "mtime": 1790390976.3764405,
+    "seen": 1790391210.7099175,
+    "ast_hash": "2b98ab09f3cc2e54af28f2b896c52178",
     "semantic_hash": ""
   },
   "plugins/base/commands/src/bindings.test.ts": {
@@ -1398,10 +1398,10 @@
     "semantic_hash": "f13f5a390c44e50afd6ee6f3553220e0"
   },
   "plugins/base/folders/src/FolderContents.tsx": {
-    "mtime": 1790383625.782073,
-    "seen": 1790384127.0428853,
-    "ast_hash": "888c954dc6b4ee5dfd704360d3074083",
-    "semantic_hash": "888c954dc6b4ee5dfd704360d3074083"
+    "mtime": 1790390987.455191,
+    "seen": 1790391210.7108243,
+    "ast_hash": "2ec426b438e6ce197462c31af91f65c4",
+    "semantic_hash": ""
   },
   "plugins/base/folders/src/FolderTree.tsx": {
     "mtime": 1790384761.1213405,
@@ -1920,9 +1920,9 @@
     "semantic_hash": ""
   },
   "web/app/e2e/polish.spec.ts": {
-    "mtime": 1790387917.8688567,
-    "seen": 1790388224.8797174,
-    "ast_hash": "1302ec0db9b72b81de03d30922ebdf9e",
+    "mtime": 1790391185.2300134,
+    "seen": 1790391210.7137175,
+    "ast_hash": "a6ed7940f570ee1af62a77d22881d5e4",
     "semantic_hash": ""
   },
   "web/app/e2e/safe-mode.spec.ts": {
@@ -2814,10 +2814,10 @@
     "semantic_hash": "11107a74026ca3224eaa7722f136e90b"
   },
   "POLISH-BACKLOG.md": {
-    "mtime": 1790368169.851191,
-    "seen": 1790384127.043034,
-    "ast_hash": "0f8389ebc2d43ec2906b47df7cbf9f42",
-    "semantic_hash": "0f8389ebc2d43ec2906b47df7cbf9f42"
+    "mtime": 1790390895.8806934,
+    "seen": 1790391210.7178652,
+    "ast_hash": "1955914ccdc1ecf7678ef66ace34e5c5",
+    "semantic_hash": ""
   },
   "SPEC.md": {
     "mtime": 1790387581.2433603,
@@ -3333,6 +3333,12 @@
     "mtime": 1790387546.033504,
     "seen": 1790388224.878626,
     "ast_hash": "4809e5eb55b9a55052f3ca59487caf28",
+    "semantic_hash": ""
+  },
+  "docs/PLUGIN-REVIEW.md": {
+    "mtime": 1790391202.408685,
+    "seen": 1790391210.7184427,
+    "ast_hash": "446776caa84f358f9fe8c991f71655af",
     "semantic_hash": ""
   }
 }

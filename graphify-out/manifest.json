@@ -1686,10 +1686,10 @@
     "semantic_hash": "251f742f5f94a0ec3efe728e9cdc3fff"
   },
   "plugins/base/settings/src/SettingsView.tsx": {
-    "mtime": 1790383625.8870723,
-    "seen": 1790384127.0429168,
-    "ast_hash": "d8eccbbef08c4031b2f0bebf0f377f0f",
-    "semantic_hash": "d8eccbbef08c4031b2f0bebf0f377f0f"
+    "mtime": 1790391538.8453639,
+    "seen": 1790391752.2157547,
+    "ast_hash": "bbd1b2c369e2474866c29a44653dcf31",
+    "semantic_hash": ""
   },
   "plugins/base/settings/src/index.tsx": {
     "mtime": 1790221899.8339157,
@@ -1920,9 +1920,9 @@
     "semantic_hash": ""
   },
   "web/app/e2e/polish.spec.ts": {
-    "mtime": 1790391185.2300134,
-    "seen": 1790391210.7137175,
-    "ast_hash": "a6ed7940f570ee1af62a77d22881d5e4",
+    "mtime": 1790391556.5754783,
+    "seen": 1790391752.2170372,
+    "ast_hash": "521ad552bf1791e77d4ea4ff0f5094a0",
     "semantic_hash": ""
   },
   "web/app/e2e/safe-mode.spec.ts": {
@@ -3336,9 +3336,21 @@
     "semantic_hash": ""
   },
   "docs/PLUGIN-REVIEW.md": {
-    "mtime": 1790391202.408685,
-    "seen": 1790391210.7184427,
-    "ast_hash": "446776caa84f358f9fe8c991f71655af",
+    "mtime": 1790391569.611049,
+    "seen": 1790391752.2218606,
+    "ast_hash": "e86a46bbc8df4672fbeba2727018c35c",
+    "semantic_hash": ""
+  },
+  "plugins/base/settings/src/groups.test.ts": {
+    "mtime": 1790391526.0337088,
+    "seen": 1790391752.2157562,
+    "ast_hash": "68483ad74f4d60805dac75a7f6b62082",
+    "semantic_hash": ""
+  },
+  "plugins/base/settings/src/groups.ts": {
+    "mtime": 1790391526.003709,
+    "seen": 1790391752.2157574,
+    "ast_hash": "05d789396f057d0233badc23191be879",
     "semantic_hash": ""
   }
 }

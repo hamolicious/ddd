@@ -23,7 +23,7 @@ browser's device toolbar at 390 × 844, and 844 × 390 for landscape.
 | 4 | `notices` | [x] | Split out of `header`; bell restyled |
 | 5 | `sync-status` | [x] | Split out of `header`; icon-only dot, ✕ / ↻ when down |
 | 6 | `commands` | [x] | Palette Escape, footer, bar button, list indent |
-| 7 | `settings` | [x] | No changes |
+| 7 | `settings` | [x] | Base sections first, extensions below a divider |
 | 8 | `themes` | [ ] | |
 | 9 | `doc-list` | [ ] | |
 | 10 | `folders` | [ ] | |
@@ -175,8 +175,9 @@ on screen.
 - [x] Phone: the list is full width; opening a section fills the screen; "All settings"
   goes back.
 - [x] Account: sign out warns when there are unsynced edits.
+- [x] Sections from base plugins come first; an extension's sections sit below a divider.
 
-**Notes.** No changes.
+**Notes.** Base / extension grouping added (2026-09-26).
 
 ## 8. `themes` — appearance
 

@@ -429,3 +429,27 @@ test.describe("the top bar", () => {
     await expect(endSeat.getByRole("button", { name: "Settings" })).toBeVisible();
   });
 });
+
+test.describe("the settings list", () => {
+  test("puts base plugins' sections first and extensions below a divider", async ({ page }) => {
+    // No shipped extension contributes a settings section, so report `themes` as one.
+    // `base` only decides safe mode and this grouping; the plugin still loads.
+    await page.route("**/api/plugins", async (route) => {
+      const response = await route.fetch();
+      const body = (await response.json()) as {
+        plugins: { base: boolean; manifest: { id: string } }[];
+      };
+      for (const plugin of body.plugins) if (plugin.manifest.id === "themes") plugin.base = false;
+      await route.fulfill({ response, json: body });
+    });
+    await signIn(page, ADMIN);
+    await page.goto("/#/settings");
+
+    const nav = page.getByRole("navigation", { name: "Settings sections" });
+    const extensions = nav.getByRole("list", { name: "Extensions" });
+    await expect(extensions.getByRole("link", { name: "Appearance" })).toBeVisible();
+    await expect(nav.getByRole("separator")).toBeVisible();
+    await expect(nav.getByRole("list", { name: "Built-in" }).getByRole("link", { name: "Account" })).toBeVisible();
+    await expect(nav.getByRole("list", { name: "Built-in" }).getByRole("link", { name: "Appearance" })).toHaveCount(0);
+  });
+});

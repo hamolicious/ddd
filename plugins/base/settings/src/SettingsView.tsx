@@ -31,6 +31,8 @@ import type { Contribution, Kernel } from "@kernel";
 
 import { POINTS, type SettingsSection } from "../../_shared/points.js";
 
+import { groupByBase, useBasePluginIds } from "./groups.js";
+
 /**
  * The part of `router`'s API this plugin uses. Declared structurally rather than
  * imported: plugins interact through the registry only (SPEC §6.1), and importing
@@ -59,13 +61,36 @@ export function SettingsView({ kernel, router, params }: SettingsViewProps): Rea
     [kernel],
   );
 
+  const groups = groupByBase(sections, useBasePluginIds(kernel));
   const requested = params?.["section"];
   const chosen = sections.find((entry) => entry.value.id === requested);
   const active =
     chosen ??
     // An unknown section id falls back to the first rather than to an empty pane: the
     // id may belong to a plugin that has not activated, or has been uninstalled.
-    sections[0];
+    groups.base[0] ??
+    groups.extensions[0];
+
+  const list = (entries: readonly Contribution<SettingsSection>[], label: string): ReactNode => (
+    <ul className="settings:m-0 settings:list-none settings:p-0 settings:compact:grid settings:compact:gap-1" aria-label={label}>
+      {entries.map((entry) => (
+        <li key={entry.value.id}>
+          <a
+            href={router.url(`/settings/${encodeURIComponent(entry.value.id)}`)}
+            className="settings-nav-link settings:tap-h settings:flex settings:items-center settings:rounded settings:px-2 settings:text-inherit settings:no-underline settings:hover:bg-bg-subtle settings:aria-current:bg-accent-subtle settings:aria-current:font-semibold settings:compact:justify-between settings:compact:border settings:compact:border-border settings:compact:bg-bg-raised settings:compact:after:text-text-muted settings:compact:after:content-['›']"
+            {...(entry.value.id === active?.value.id ? { "aria-current": "page" as const } : {})}
+            onClick={(event) => {
+              if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+              event.preventDefault();
+              router.navigate(`/settings/${encodeURIComponent(entry.value.id)}`);
+            }}
+          >
+            {entry.value.title}
+          </a>
+        </li>
+      ))}
+    </ul>
+  );
 
   return (
     // `section` only when the URL actually named one that exists — `/settings` on its
@@ -84,26 +109,13 @@ export function SettingsView({ kernel, router, params }: SettingsViewProps): Rea
       ) : (
         <div className="settings:grid settings:grid-cols-[minmax(10rem,14rem)_1fr] settings:items-start settings:gap-4 settings:compact:grid-cols-1 settings:compact:gap-2">
           <nav className={`settings:min-w-0 ${chosen ? " settings:compact:hidden" : ""}`} aria-label="Settings sections">
-            <ul className="settings:m-0 settings:list-none settings:p-0 settings:compact:grid settings:compact:gap-1">
-              {sections.map((entry) => (
-                <li key={entry.value.id}>
-                  <a
-                    href={router.url(`/settings/${encodeURIComponent(entry.value.id)}`)}
-                    className="settings-nav-link settings:tap-h settings:flex settings:items-center settings:rounded settings:px-2 settings:text-inherit settings:no-underline settings:hover:bg-bg-subtle settings:aria-current:bg-accent-subtle settings:aria-current:font-semibold settings:compact:justify-between settings:compact:border settings:compact:border-border settings:compact:bg-bg-raised settings:compact:after:text-text-muted settings:compact:after:content-['›']"
-                    {...(entry.value.id === active?.value.id
-                      ? { "aria-current": "page" as const }
-                      : {})}
-                    onClick={(event) => {
-                      if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
-                      event.preventDefault();
-                      router.navigate(`/settings/${encodeURIComponent(entry.value.id)}`);
-                    }}
-                  >
-                    {entry.value.title}
-                  </a>
-                </li>
-              ))}
-            </ul>
+            {list(groups.base, "Built-in")}
+            {groups.extensions.length > 0 ? (
+              <>
+                <hr className="settings-divider settings:my-2 settings:border-0 settings:border-t settings:border-border" />
+                {list(groups.extensions, "Extensions")}
+              </>
+            ) : null}
           </nav>
 
           <div className={`settings-pane settings:min-w-0 settings:compact:overflow-x-auto ${chosen ? "" : " settings:compact:hidden"}`}>
