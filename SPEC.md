@@ -303,7 +303,6 @@ Their genuine niche: **cron while nobody's looking, outbound HTTP with secrets, 
 | `document-surface` | Owns the document route + **mode registry**; `viewer`/`editor` are symmetric contributions | `document.mode` |
 | `viewer` | Read mode (hides fm block + `%%%` sections) | contributes `read` |
 | `editor` | Edit mode — CodeMirror 6 + `y-codemirror.next`; collapses machine sections; **must be usable with the Android soft keyboard (M5 acceptance)** | `editor.extension` |
-| `properties` | **fm editing UI**: typed key/value rows (date pickers etc.), extensible per-key editors, writes via splice helper | `properties.editor` |
 | `settings` | Settings shell | `settings.section` |
 | `admin` | Users, invites, pending installs + capability approval, plugin config, audit log, orphans, snapshots | — |
 

@@ -5,7 +5,7 @@
  * fails if any layer between the keypress and Mongo is wrong. That is deliberately a
  * different job from the 650 unit tests — those prove the pieces, this proves the
  * assembly, and the assembly is what M3 actually delivered (the loader, the import
- * map, the registries, fifteen plugins that have never run in the same page before).
+ * map, the registries, fourteen plugins that have never run in the same page before).
  *
  * Ordering matters and parallelism is off: they share one workspace and one
  * first-user account, in that order, exactly like a real session (SPEC §5.1 —
@@ -31,12 +31,13 @@ import {
 /**
  * What `plugins/base/dist` holds, plus the one example plugin the suite installs.
  *
- * The 15 of SPEC §6.5's table plus `extra-task-states`. M4's two proof plugins
- * (`calendar`, `agenda`) were removed on 2026-09-24 and `header` was split out of
- * `shell-ui` on 2026-09-26; the base distribution and `BASE_PLUGIN_IDS` — what `?safe=1`
- * boots — are the same fifteen. `safe-mode.spec.ts` is what pins that.
+ * The 14 of SPEC §6.5's table plus `extra-task-states`. M4's two proof plugins
+ * (`calendar`, `agenda`) were removed on 2026-09-24; on 2026-09-26 `header` was split
+ * out of `shell-ui` and `properties` was removed. The base distribution and
+ * `BASE_PLUGIN_IDS` — what `?safe=1` boots — are the same fourteen. `safe-mode.spec.ts`
+ * is what pins that.
  */
-const EXPECTED_PLUGINS = 16;
+const EXPECTED_PLUGINS = 15;
 
 /**
  * `--lm-bg` as the `midnight` theme paints it (`plugins/base/themes/src/index.tsx`).
@@ -274,51 +275,7 @@ test("dragging a document between folders splices fm.path and leaves the rest of
 });
 
 // ---------------------------------------------------------------------------
-// 5. Properties: a typed date, written through the splice helper
-// ---------------------------------------------------------------------------
-
-test("the properties panel writes a date through the splice helper", async ({
-  page,
-  request,
-  baseURL,
-}) => {
-  const original = [
-    "---",
-    "title: Dated note",
-    "# a comment the panel must not eat",
-    "date: 2026-01-02",
-    "---",
-    "",
-    "body",
-    "",
-  ].join("\n");
-  const id = await createDocument(request, baseURL as string, original);
-
-  await signIn(page);
-  await openDocument(page, id);
-  await showSidebar(page);
-
-  await expect(page.locator(".properties-root")).toBeVisible();
-
-  // `properties` claims `date` with a real date editor (a date input, not a text box),
-  // because `eq` on an `fm` date is precision-sensitive (SPEC §3.4).
-  const dateInput = page.locator('.properties-root input[type="date"]').first();
-  await expect(dateInput).toBeVisible();
-  await expect(dateInput).toHaveValue("2026-01-02");
-
-  await dateInput.fill("2026-03-04");
-  await dateInput.blur();
-  await waitSynced(page);
-
-  await expect
-    .poll(async () => await rawText(request, baseURL as string, id), { timeout: 15_000 })
-    .toContain("date: 2026-03-04");
-  const written = await rawText(request, baseURL as string, id);
-  expect(written).toBe(original.replace("date: 2026-01-02", "date: 2026-03-04"));
-});
-
-// ---------------------------------------------------------------------------
-// 6. Offline: search finds body text, and the document is readable
+// 5. Offline: search finds body text, and the document is readable
 // ---------------------------------------------------------------------------
 
 test("search finds body text with the network down, and the document still opens", async ({
@@ -365,7 +322,7 @@ test("search finds body text with the network down, and the document still opens
 });
 
 // ---------------------------------------------------------------------------
-// 7. Two browsers, one document, live
+// 6. Two browsers, one document, live
 // ---------------------------------------------------------------------------
 
 test("a second browser context sees an edit live", async ({ page, browser, request, baseURL }) => {
@@ -402,7 +359,7 @@ test("a second browser context sees an edit live", async ({ page, browser, reque
 });
 
 // ---------------------------------------------------------------------------
-// 8. Themes: a pick survives a reload, because settings are a document
+// 7. Themes: a pick survives a reload, because settings are a document
 // ---------------------------------------------------------------------------
 
 test("a theme choice persists across a reload", async ({ page }) => {
@@ -444,7 +401,7 @@ test("a theme choice persists across a reload", async ({ page }) => {
 });
 
 // ---------------------------------------------------------------------------
-// 9. Trash: delete and restore
+// 8. Trash: delete and restore
 // ---------------------------------------------------------------------------
 
 test("a document moves to Trash and comes back", async ({ page, request, baseURL }) => {
@@ -473,7 +430,7 @@ test("a document moves to Trash and comes back", async ({ page, request, baseURL
 });
 
 // ---------------------------------------------------------------------------
-// 10. Admin: an invite, and a second user who uses it
+// 9. Admin: an invite, and a second user who uses it
 // ---------------------------------------------------------------------------
 
 test("an admin invite lets a second user register", async ({ page, browser, baseURL }) => {

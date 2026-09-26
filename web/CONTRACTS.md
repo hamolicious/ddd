@@ -437,7 +437,6 @@ and announced; renaming a point or making a field required is not.
 | `search.provider` | `search` | `{ id, label, order?, search(query, options) }` |
 | `document.mode` | `document-surface` | `{ id, label, component, icon?, order?, when? }` |
 | `editor.extension` | `editor` | `{ id, extension, order? }` — a CodeMirror `Extension` |
-| `properties.editor` | `properties` | `{ id, match(key, value), component, order? }` — the component gets `{ documentId, propertyKey, value, onChange }` |
 | `settings.section` | `settings` | `{ id, title, component, order?, description? }` |
 | `markdown.directive` | `markdown` | `{ name, kind: container/leaf/text, component }` |
 | `markdown.fence` | `markdown` | `{ language, component }` |
@@ -445,11 +444,10 @@ and announced; renaming a point or making a field required is not.
 | `markdown.component` | `markdown` | `{ node, component, order? }` |
 | `markdown.taskState` | `markdown` | `{ marker, label, icon, order?, done? }` |
 
-One field spelling is load-bearing and worth the note: `properties.editor`'s component prop
-is **`propertyKey`**, not `key`. `key` is reserved in JSX — `createElement` strips it from
-the props to use as the element key — so a point whose identifying field was called `key`
-could never deliver it, and the base panel had to pass the name twice to work at all. Any
-contribution field naming what a component must read gets the same treatment.
+One rule for any contribution field that names what a component must read: never call it
+`key`. `key` is reserved in JSX — `createElement` strips it from the props to use as the
+element key — so such a field can never be delivered. (The removed `properties.editor`
+point spelled it `propertyKey` for this reason.)
 
 Registry semantics, pinned by `kernel/src/runtime/registry.test.ts`: contributions to an
 undefined point **buffer**; a duplicate `definePoint` **throws**; `get`/`subscribe` are
@@ -517,10 +515,10 @@ Hard requirements:
 
 ## Area: base-docs
 
-**Owns:** `plugins/base/{doc-list,folders,document-surface,viewer,editor,properties}/**`.
+**Owns:** `plugins/base/{doc-list,folders,document-surface,viewer,editor}/**`.
 
-- **Every metadata write is a splice** (SPEC §3.3): `folders` moves and the `properties`
-  panel go through `kernel.documents.splice`, never a frontmatter rewrite.
+- **Every metadata write is a splice** (SPEC §3.3): `folders` moves go through
+  `kernel.documents.splice`, never a frontmatter rewrite.
 - `document-surface` owns hydration: it opens the document once, passes the handle to the
   active mode, and **releases** it on navigation. `viewer` and `editor` are symmetric
   contributions with no built-in favourite — that symmetry is what makes M3's acceptance

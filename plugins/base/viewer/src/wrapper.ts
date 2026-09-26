@@ -5,8 +5,7 @@
  * A wrapper is not a special object type: it is an ordinary markdown document whose
  * body embeds exactly one `attachment://<id>` and says nothing else. That is the whole
  * definition, and keeping it here — rather than as a flag in `fm` or a `%%%` section —
- * is what lets folders, search, tags, Trash, `doc://` links and the properties panel
- * apply to files with no special-case machinery. Rendering one as a file preview is a
+ * is what lets folders, search, tags, Trash and `doc://` links apply to files with no special-case machinery. Rendering one as a file preview is a
  * *presentation* decision, which is why it lives in `viewer`.
  *
  * Deliberately conservative: a document that embeds one image **and** has prose around

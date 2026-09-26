@@ -1,6 +1,6 @@
 /**
  * The document experience on a phone: `document-surface`, `viewer`, `editor`,
- * `properties`, `markdown`.
+ * `markdown`.
  *
  * Why a separate file from `polish.spec.ts`: that one pins a handful of shipped-build
  * regressions across the whole app, and its phone block is one test per *screen*. This
@@ -238,43 +238,6 @@ test.describe("the document experience at 390px", () => {
     // The menu is the interaction, not just a box: choosing a state writes it.
     await page.getByRole("menuitem", { name: /^done$/i }).click();
     await expect(page.getByRole("checkbox", { name: /done/i }).first()).toBeVisible();
-
-    await noDocumentOverflow(page);
-  });
-
-  test("properties rows stack label over value, with full-size controls", async ({
-    page,
-    request,
-    baseURL,
-  }) => {
-    const id = await createDocument(request, baseURL as string, WIDE);
-    await signIn(page, ADMIN);
-    await openDocument(page, id);
-    await showSidebar(page);
-
-    const panel = page.locator(".properties-root");
-    await expect(panel).toBeVisible();
-
-    // Stacked, not side by side: on a phone the key and its value each get the full
-    // column rather than a 34% / 66% split that truncates both.
-    const row = page.locator(".properties-row").first();
-    const stacked = await row.evaluate((node) => {
-      const key = node.querySelector(".properties-key")?.getBoundingClientRect();
-      const value = node.querySelector(".properties-value")?.getBoundingClientRect();
-      return key && value ? value.top >= key.bottom - 1 : false;
-    });
-    expect(stacked, "the label and its value are still on one line").toBe(true);
-
-    // The declaration claimed a 44 px target and shipped 34 px, on every row.
-    await tapTargets(page.locator(".properties-input"), "property field");
-    await tapTargets(page.locator(".properties-remove"), "remove property");
-    await tapTargets(page.locator(".properties-chip-remove"), "remove tag");
-
-    // Editing still works through the panel.
-    const title = page.locator(".properties-row", { hasText: "title" }).locator("input").first();
-    await title.fill("Renamed on a phone");
-    await title.blur();
-    await expect(page.locator(".docsurface-title")).toHaveText("Renamed on a phone");
 
     await noDocumentOverflow(page);
   });

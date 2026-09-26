@@ -1,35 +1,30 @@
 /**
  * **What kind of thing a frontmatter value is, and how to show one to a reader.**
  *
- * Two plugins in the base distribution render `fm`, and they must not disagree about
- * it: `properties` draws the editable panel (a date picker for a date, chips for a
- * list, a checkbox for a boolean), and `viewer` draws the read-mode properties header
- * above the body. A key that is a date in one and a string in the other is the same
+ * `viewer` draws the read-mode properties header above the body from this file. It
+ * lives in `_shared` rather than in `viewer` because any plugin that renders `fm` must
+ * agree with it: a key that is a date in one place and a string in another is the same
  * class of bug `_shared/machine-docs.ts` exists to prevent — a sidebar counting twelve
- * above a list of eleven — so the typing rules live here once and both import them.
+ * above a list of eleven — so the typing rules live here once.
  *
- * This is **a convention two plugins share, not a kernel concept** (SPEC §2: the kernel
+ * This is **a convention plugins share, not a kernel concept** (SPEC §2: the kernel
  * knows one domain model, a document is text). Nothing here is written to a document,
  * nothing here is compared against the server, and `PropertyKind` is not a wire type:
  * it is a decision about which control or which rendering a value gets.
  *
  * The rules are deliberately aligned with the shared core's **strict YAML subset**
  * (`crates/core/README.md` §2) rather than with JavaScript's idea of types, because
- * `properties` writes value *text* into the document with a splice and the Rust core
- * re-parses it. A date is an ISO-8601 **string** in YAML terms — the core canonicalizes
+ * the text comes from YAML and anything that writes a value back does so with a splice
+ * the Rust core re-parses. A date is an ISO-8601 **string** in YAML terms — the core canonicalizes
  * it at materialization (SPEC §3.4) — which is why `date` is a presentation kind here
  * and not a separate wire type.
  *
  * Two halves, with a line between them:
  *
- * - **Typing and ordering** ({@link inferKind}, {@link rowsFromFm}) — used by both.
+ * - **Typing and ordering** ({@link inferKind}, {@link rowsFromFm}).
  * - **Display formatting** ({@link fmDisplayRows}) — used by the read-mode header and
  *   by anything else that shows a value it cannot edit. Every function is pure, total
  *   and DOM-free; the markup is the consuming plugin's business.
- *
- * `properties` re-exports the first half from its own `rows.ts` and publishes the
- * second on its plugin API (`PropertiesApi.display`), so a third-party plugin that
- * cannot import this file still gets the same answers through the registry.
  */
 
 import type { CoreValue } from "@kernel";
@@ -161,8 +156,7 @@ export interface FmDisplayRow {
  * The read-mode header's rows, in the panel's order.
  *
  * Every key is kept, including ones whose value is empty: a `due` with no date is a
- * fact about the document, and dropping the row would make the header disagree with
- * the panel beside it about which properties exist. `empty` is how the caller decides
+ * fact about the document, and dropping the row would hide which properties exist. `empty` is how the caller decides
  * to grey one out rather than a reason to hide it.
  */
 export function fmDisplayRows(

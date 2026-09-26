@@ -76,9 +76,9 @@ export interface DocumentSurfaceApi {
   /** The hydrated handle for the current document; `undefined` while hydrating. */
   currentHandle(): OpenDocument | undefined;
   /**
-   * The live projection row of the document on screen. Added for `properties`, which
-   * renders `fm` for whatever is on screen and must not open a second subscription
-   * for it. Additive to the M3 scaffold's API.
+   * The live projection row of the document on screen, for a plugin that renders `fm`
+   * for whatever is on screen and must not open a second subscription for it. Additive
+   * to the M3 scaffold's API.
    */
   currentRow(): DocumentRow | undefined;
   modes(): readonly DocumentMode[];
@@ -684,17 +684,15 @@ function SurfaceView({
       {row.deleted ? <TrashedBanner surface={surface} row={row} /> : null}
       {/*
         `fm_parse_error` used to get a full-width notice here, and that was one
-        rendering too many and one layer too high. Too many: `properties` already warns
-        in its panel, and `viewer`'s read-mode header now warns beside the rows the
-        dropped line is missing from — three statements of one fact, two of them
-        stacked on the same screen. Too high: this plugin owns the route and the mode
+        rendering too many and one layer too high. Too many: `viewer`'s read-mode header
+        warns beside the rows the dropped line is missing from — two statements of one
+        fact, stacked on the same screen. Too high: this plugin owns the route and the mode
         registry and knows nothing else about a document (SPEC §6.5), and a
         frontmatter-shaped notice above every mode is knowledge about the text.
 
         The correction that followed: **each mode says it for itself.** Removing the
         notice from here left *edit* mode with no warning at all — the read-mode header
-        does not render there and the properties panel is a drawer that starts closed on
-        a phone — so `editor` now carries its own, which is also where the read-mode
+        does not render there — so `editor` now carries its own, which is also where the read-mode
         warning tells the reader to go. Three renderers, one per surface that shows
         `fm` or the text it comes from, and none of them this one.
       */}

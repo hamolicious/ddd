@@ -35,8 +35,20 @@ flutter = { version = "3.47.5", checksum_expr = '"sha256:" + filter(fromJSON(bod
 _.file = { path = ".env", redact = true }
 
 [tasks.update-graph]
-description = "update knowledge graph"
-run = "graphify ./docs --update"
+description = "Update the knowledge graph (code + docs, LLM extraction) through OpenRouter with GRAPHIFY_TOKEN from .env"
+# OpenRouter speaks the OpenAI API, so graphify's `openai` backend reaches it through
+# OPENAI_BASE_URL. `extract` is incremental: only files changed since the last run are
+# sent. `label --missing-only` names any community the extraction left as "Community N".
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+: "${GRAPHIFY_TOKEN:?set GRAPHIFY_TOKEN in .env}"
+export OPENAI_BASE_URL="https://openrouter.ai/api/v1"
+export OPENAI_API_KEY="$GRAPHIFY_TOKEN"
+model="anthropic/claude-sonnet-4.5"
+graphify extract . --backend openai --model "$model"
+graphify label . --missing-only --backend=openai --model="$model"
+"""
 
 [tasks.dev]
 description = "Run the server against the compose Mongo (mongo in docker, server on the host), serving the built PWA + plugins"

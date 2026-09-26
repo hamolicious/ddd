@@ -12,13 +12,12 @@
  * Three rules it keeps, each of them a decision rather than a detail:
  *
  * - **It is display-only.** No control, no `onChange`, no splice, nothing focusable
- *   except what the browser does with text. Editing frontmatter happens in the
- *   properties panel and in edit mode, where the raw block is now unfolded — two paths,
- *   not three. A header that quietly became a third editor would need the whole splice
- *   discipline of SPEC §3.3 for a surface whose job is reading.
- * - **It types values the same way the properties panel does**, because both read
- *   `_shared/fm-display.ts`. A key that is a date in the panel and a string here would
- *   be the `machine-docs.ts` bug in a different costume.
+ *   except what the browser does with text. Editing frontmatter happens in edit mode,
+ *   where the raw block is unfolded. A header that quietly became an editor would need
+ *   the whole splice discipline of SPEC §3.3 for a surface whose job is reading.
+ * - **It types values through `_shared/fm-display.ts`**, so any other plugin that
+ *   shows `fm` agrees with it. A key that is a date in one place and a string here
+ *   would be the `machine-docs.ts` bug in a different costume.
  * - **It renders nothing at all for a document with no frontmatter.** An empty
  *   bordered strip above every unadorned note is worse than no header, and most notes
  *   are unadorned.

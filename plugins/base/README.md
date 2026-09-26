@@ -37,7 +37,6 @@ dist/<id>/<version>/              build output = the installed layout the server
 | `document-surface` | the document route + mode registry | `document.mode` |
 | `viewer` | read mode | contributes `read` |
 | `editor` | edit mode (CodeMirror 6 + `y-codemirror.next`) | `editor.extension` |
-| `properties` | typed frontmatter editing, via splices | `properties.editor` |
 | `settings` | the settings shell | `settings.section` |
 | `admin` | users, invites, audit, orphans, snapshots, plugins | — |
 
@@ -51,7 +50,7 @@ that had a backend half, so **every plugin in this directory is now frontend-onl
 
 ## How the base plugins relate
 
-Generated from the fifteen `manifest.json` `dependencies` fields — an arrow reads
+Generated from the fourteen `manifest.json` `dependencies` fields — an arrow reads
 **"depends on"**, and the loader's activation order is precisely a topological order of
 this graph (a dependency always activates first; a failed dependency skips its whole
 subtree). Every plugin additionally depends on `@kernel`, which is not drawn.
@@ -62,7 +61,6 @@ flowchart TD
         viewer --> markdown
         viewer --> document-surface
         editor --> document-surface
-        properties --> document-surface
     end
 
     subgraph browse ["browse & find"]
@@ -84,7 +82,6 @@ flowchart TD
     markdown --> commands & router
     document-surface --> commands & router & shell-ui
     editor --> commands
-    properties --> commands
     doc-list --> commands & router & shell-ui
     folders --> commands & router & shell-ui
     search --> commands & router & shell-ui
@@ -106,7 +103,7 @@ Reading it bottom-up: `shell-ui` owns the frame everyone renders into, and `head
 fills its top-bar spot (the plugins that put items in the bar do not depend on `header`:
 contributions to `navbar.item` buffer until it is defined); `router` and
 `commands` are the two services almost everything consumes (URLs and actions); the
-document experience stacks `viewer`/`editor`/`properties` as peer *modes* on
+document experience stacks `viewer`/`editor` as peer *modes* on
 `document-surface`, with `markdown` as the rendering pipeline `viewer` consumes; and
 `folders` is the one browse plugin built on top of another (`doc-list`). Replacing any
 node means satisfying its incoming arrows — nothing else.
@@ -152,16 +149,9 @@ dependency would be the wrong shape of agreement.
 - **`machine-docs.ts`** — above. Three plugins, one rule about what to hide.
 - **`fm-display.ts`** — what kind of thing an `fm` value is (`inferKind`, `isDateKey`,
   `PREFERRED_KEY_ORDER`) and how to print one for a reader (`fmDisplayRows`,
-  `formatDateValue`). `properties` draws the editable panel; `viewer` draws read mode's
-  properties header. Two copies of "is `due` a date?" would show one document two
-  different ways on the same screen.
-
-The dependency `viewer → properties` would have been the obvious alternative and is the
-wrong one: a declared dependency means **read mode disappears when `properties` fails or
-is replaced** (a failed plugin skips its transitive dependents, SPEC §6.4) — a broken
-sidebar panel taking down document reading. A third-party plugin must not import
-`_shared` (it is not part of `@kernel`); it asks `properties` for the same function
-through `PropertiesApi.display(fm)`.
+  `formatDateValue`). `viewer` draws read mode's properties header from it. It was
+  shared with the `properties` editing panel, removed on 2026-09-26; it stays in
+  `_shared` so the next plugin that shows frontmatter types values the same way.
 
 ## The folder tree
 

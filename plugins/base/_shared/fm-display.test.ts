@@ -1,11 +1,9 @@
 /**
- * The typing and display rules two plugins share (`fm-display.ts`).
+ * The typing and display rules for frontmatter values (`fm-display.ts`).
  *
- * The reason this file exists is drift: `properties` draws the editable panel and
- * `viewer` draws the read-mode header, and if they disagreed about whether `due` is a
- * date the two would show the same document differently on the same screen. Every
- * assertion below is therefore about a rule *both* consume, not about either one's
- * markup.
+ * The reason the file exists is drift: `viewer` draws the read-mode header from it, and
+ * any other plugin that shows `fm` must agree about whether `due` is a date. Every
+ * assertion below is therefore about a shared rule, not about anyone's markup.
  */
 
 import { describe, expect, it } from "vitest";
@@ -164,8 +162,8 @@ describe("formatDateValue", () => {
 
 describe("formatScalar", () => {
   it("is the round-trippable form, not the pretty one", () => {
-    // `properties`' controls read this back through `parseScalarInput`, so a date has
-    // to come out as the text the document holds.
+    // A control that writes the value back re-parses this text, so a date has to come
+    // out as the text the document holds.
     expect(formatScalar("2026-09-23")).toBe("2026-09-23");
     expect(formatScalar(true)).toBe("true");
     expect(formatScalar(null)).toBe("");

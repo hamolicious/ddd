@@ -5,7 +5,7 @@
  * This file is not part of `@kernel` and never will be. The kernel knows point
  * names only as opaque strings — it has no idea what a navbar or a document mode is
  * (SPEC §2) — and the moment it did, replacing `shell-ui` would mean a kernel change.
- * What the base distribution *does* need is for its fifteen plugins to agree on
+ * What the base distribution *does* need is for its fourteen plugins to agree on
  * these shapes without importing each other, which is exactly what a shared
  * declaration file is for.
  *
@@ -20,7 +20,7 @@
 import { s, type Shape } from "@kernel";
 import type { ComponentType, ReactNode } from "react";
 import type { Extension } from "@codemirror/state";
-import type { CoreValue, DocumentId, DocumentRow, OpenDocument, SearchHit } from "@kernel";
+import type { DocumentId, DocumentRow, OpenDocument, SearchHit } from "@kernel";
 
 /** Every point name in the base distribution, grouped by its owner. */
 export const POINTS = {
@@ -44,8 +44,6 @@ export const POINTS = {
   documentMode: "document.mode",
   /** `editor` */
   editorExtension: "editor.extension",
-  /** `properties` */
-  propertiesEditor: "properties.editor",
   /** `settings` */
   settingsSection: "settings.section",
   /** `markdown` */
@@ -353,48 +351,6 @@ export interface EditorExtension {
 export const editorExtensionShape: Shape<EditorExtension> = s.object({
   id: s.string(),
   extension: s.any(),
-  order: s.optional(s.number()),
-});
-
-// ---------------------------------------------------------------------------
-// properties
-// ---------------------------------------------------------------------------
-
-/**
- * A typed editor for one kind of frontmatter value (a date picker, a path picker, a
- * tag list). Writes go through `kernel.documents.splice.setFrontmatterValue` — never
- * a whole-block rewrite (SPEC §3.3).
- */
-export interface PropertiesEditor {
-  readonly id: string;
-  /** Claim a key: by name, or by the shape of its current value. */
-  match: (key: string, value: CoreValue | undefined) => boolean;
-  readonly component: ComponentType<PropertiesEditorProps>;
-  /** Lower wins when two editors claim the same key. */
-  readonly order?: number;
-}
-
-export interface PropertiesEditorProps {
-  readonly documentId: DocumentId;
-  /**
-   * The frontmatter key being edited.
-   *
-   * Spelled `propertyKey` and **not** `key`: `key` is reserved in JSX and
-   * `createElement` strips it from the props to use as the element key, so a component
-   * declaring it can never receive it — `props.key` is `undefined` no matter what the
-   * caller passes. A point shape whose only identifying field cannot be delivered is not
-   * a contract a third party can write against, which is the whole purpose of this file.
-   */
-  readonly propertyKey: string;
-  readonly value: CoreValue | undefined;
-  /** Splices the new value into the frontmatter. */
-  readonly onChange: (value: CoreValue) => Promise<void>;
-}
-
-export const propertiesEditorShape: Shape<PropertiesEditor> = s.object({
-  id: s.string(),
-  match: s.func(),
-  component: s.component(),
   order: s.optional(s.number()),
 });
 

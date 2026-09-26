@@ -12,9 +12,9 @@
  *   (`FmHeader.tsx`). Hiding the block is right about the text and was wrong about the
  *   information: the date, the tags and the folder are things a reader wants, and the
  *   only place they appeared was a sidebar panel that is a drawer on a phone. The
- *   header is display-only; `properties` and edit mode remain the two ways to change a
- *   value, and both plugins type values through `_shared/fm-display.ts` so they cannot
- *   disagree about what a key is.
+ *   header is display-only; edit mode is the way to change a value. Values are typed
+ *   through `_shared/fm-display.ts` so any plugin that shows `fm` agrees on what a
+ *   key is.
  * - **Render an attachment wrapper document as a file preview** (SPEC §3.6). A wrapper
  *   is an ordinary document whose body embeds one `attachment://`, so this is a
  *   presentation decision, not a special object type. See `wrapper.ts`.

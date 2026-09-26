@@ -351,10 +351,8 @@ export default function activate(kernel: Kernel): EditorApi {
      * fix it.**
      *
      * `document-surface` used to carry this notice above every mode and stopped, because
-     * in read mode it was the third statement of one fact — `viewer`'s properties header
-     * and `properties`' panel already say it. In *edit* mode it was the only one: the
-     * header is read-mode-only and the panel is a `sidebar.panel`, which at 390 px is a
-     * drawer that starts closed. So the key silently missing from `fm` everywhere in the
+     * in read mode it repeated `viewer`'s properties header. In *edit* mode it was the
+     * only one: the header is read-mode-only. So the key silently missing from `fm` everywhere in the
      * app had no explanation on the one screen whose whole job is repairing the text —
      * and the read-mode warning's own advice is "fix the line in edit mode".
      *
