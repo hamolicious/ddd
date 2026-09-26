@@ -36,7 +36,14 @@ browser's device toolbar at 390 × 844, and 844 × 390 for landscape.
 | 16a | `slash-commands` | [x] | New: `/` menu over any editor's `text.surface`; `/attach` |
 | 17 | `markdown` | [x] | `markdown.attachment`; preview / link toggle; promote → link; document embeds |
 | 18 | `viewer` | [x] | File documents via `markdown.attachment`; borderless properties table and rule |
-| 19 | `admin` | [ ] | |
+| 19 | `admin` | [ ] | Reviewed per tab, 19a–19g |
+| 19a | ↳ Users | [ ] | |
+| 19b | ↳ Invites | [ ] | |
+| 19c | ↳ Audit log | [ ] | |
+| 19d | ↳ Orphan files | [ ] | |
+| 19e | ↳ Snapshots | [ ] | |
+| 19f | ↳ Plugins | [ ] | |
+| 19g | ↳ Workspace | [ ] | |
 | 20 | `extra-task-states` (example) | [ ] | |
 | 21 | `alt-editor` (example) | [ ] | |
 
@@ -468,16 +475,116 @@ the document (2026-09-26).
 
 **What it does.** Users, invites, the audit log, orphan files, snapshots, the plugin list
 (enable, disable, capabilities, configuration, cron), and a markdown export. Admins only.
+Seven tabs, reviewed one at a time below; tick `admin` when all seven are ticked.
 
-**Where to see it.** The 🛡 button or `#/admin`; its sections also appear in Settings.
+**Where to see it.** The 🛡 button, `#/admin`, or `#/admin/<tab>`; each tab also appears
+as a section in Settings. Every tab has an "Open …" palette command.
 
-- [ ] Every section loads; tables fit or scroll inside themselves at 390 px.
-- [ ] Create an invite; a second browser can register with it.
-- [ ] Plugins: disable / enable one; capability approvals and plugin config save.
-- [ ] Plugin event log: warnings and errors are marked on the left edge.
-- [ ] Export produces a markdown archive.
+For every tab, as well as the common checks:
+
+- [ ] The tab bar marks the current tab, the URL names it, and Back returns to the last.
+- [ ] Its tables fit, or scroll inside themselves, at 390 px; nothing scrolls the page
+  sideways.
+- [ ] Opened from Settings, it looks the same as in `#/admin`.
+- [ ] A non-admin going to `#/admin` sees "not an administrator", not an error or a blank.
 
 **Notes.** Styles lost in the migration restored (2026-09-26).
+
+### 19a. Users
+
+**Where to see it.** `#/admin/users`; "Manage users" in the palette.
+
+- [ ] Every account is listed with its name, email, status, created and last sign-in.
+- [ ] The Admin checkbox grants and removes admin rights; the last admin's cannot be
+  removed. Your own row is marked "you".
+- [ ] "Reset link" shows a one-time link once, and Copy copies it (without clipboard
+  access it says to select it and copy).
+- [ ] Delete asks first, says what happens to their writing, and is not offered for the
+  last admin.
+
+**Notes.**
+
+### 19b. Invites
+
+**Where to see it.** `#/admin/invites`; "Create an invite" in the palette.
+
+- [ ] Create, with or without an email, makes a link valid for 7 days; Copy copies it.
+- [ ] A second browser registers with that link; the invite then shows as used.
+- [ ] Revoke stops an unused invite from working.
+- [ ] Expired and used invites are marked, not hidden.
+
+**Notes.**
+
+### 19c. Audit log
+
+**Where to see it.** `#/admin/audit`; "Show the audit log" in the palette.
+
+- [ ] Recent actions are listed newest first, with the action, who, the target and
+  detail.
+- [ ] Filter by action (e.g. `document.delete`), by actor and by target; Clear resets
+  all three.
+- [ ] "Load more" pages further back, and keeps the filters.
+- [ ] Something you just did (trash a document, create an invite) appears.
+
+**Notes.**
+
+### 19d. Orphan files
+
+**Where to see it.** `#/admin/orphans`; "Show orphan files" in the palette.
+
+- [ ] Stored files no document references are listed with their name, type, size and
+  when they were uploaded.
+- [ ] Scan finds a new orphan: paste an image into a document, delete the embed, scan.
+- [ ] Delete removes one file, after asking; nothing is ever deleted automatically.
+- [ ] A file still referenced (even only from a `%%%` section) is never listed.
+
+**Notes.**
+
+### 19e. Snapshots
+
+**Where to see it.** `#/admin/snapshots`; "Browse snapshots" in the palette.
+
+- [ ] The document picker ("title contains…") finds a document, and its snapshots list
+  with when they were taken, why, and the title then.
+- [ ] "Take a snapshot" adds one now.
+- [ ] Restore asks first, then puts the document back to that text, and the change syncs
+  to an open copy in another browser.
+
+**Notes.**
+
+### 19f. Plugins
+
+**Where to see it.** `#/admin/plugins`; "Show installed plugins" in the palette.
+
+- [ ] The installed list shows every plugin, including `attachments`,
+  `native-preview` and `slash-commands`, with where it came from and its status.
+- [ ] Disable, reload: the rest of the app works and says what is missing. Enable
+  brings it back. Try the three new plugins; each costs only its own feature.
+- [ ] Upload a package: it lands pending. Its requested capabilities are listed;
+  Approve and enable, or Reject. An upgrade of an installed plugin also lands pending.
+- [ ] Configuration saves, and a bad value is refused with a reason.
+- [ ] A plugin with a backend shows its cron table (Run now works), runs, failures and
+  metrics.
+- [ ] The event log marks warnings and errors on the left edge; "Directories the server
+  could not load" lists any broken install.
+- [ ] Uninstall asks first; a base plugin carries a "base" badge and a warning that
+  removing it removes part of the app, with `?safe=bare` as the way back.
+- [ ] "If a plugin breaks the app" explains safe mode (`?safe=1`).
+
+**Notes.**
+
+### 19g. Workspace
+
+**Where to see it.** `#/admin/workspace`; "Export the workspace as markdown" in the
+palette.
+
+- [ ] The counters (documents, in Trash, permanently deleted ids, attachments, users,
+  schema version, oversized documents) match what the app shows.
+- [ ] "Export every document as markdown" downloads an archive: one `.md` per document,
+  frontmatter intact, in folders by `path:`.
+- [ ] Export works on a phone (the download is offered).
+
+**Notes.**
 
 ## 20. `extra-task-states` (example)
 
