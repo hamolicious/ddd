@@ -34,7 +34,7 @@ browser's device toolbar at 390 × 844, and 844 × 390 for landscape.
 | 15 | `attachments` | [x] | New: paste to upload, preview / link per file type, viewer registry |
 | 16 | `native-preview` | [x] | New: images, PDF, audio, video, text viewers |
 | 16a | `slash-commands` | [x] | New: `/` menu over any editor's `text.surface`; `/attach` |
-| 17 | `markdown` | [ ] | `markdown.attachment`; preview / link toggle; promote → link; document embeds |
+| 17 | `markdown` | [x] | `markdown.attachment`; preview / link toggle; promote → link; document embeds |
 | 18 | `viewer` | [ ] | File documents go through `markdown.attachment` |
 | 19 | `admin` | [ ] | |
 | 20 | `extra-task-states` (example) | [ ] | |
@@ -425,18 +425,18 @@ menu. Other plugins extend it (custom task markers, directives, code-fence rende
 
 **Where to see it.** A document with a bit of everything, in Read mode.
 
-- [ ] Tables and code blocks scroll inside themselves on a phone.
-- [ ] An embedded file's menu (right-click / long-press) says "Show as link" on a
+- [x] Tables and code blocks scroll inside themselves on a phone.
+- [x] An embedded file's menu (right-click / long-press) says "Show as link" on a
   preview and "Show as preview" on a link; each adds or removes the `!`.
-- [ ] "Promote to document" (menu or palette) creates the file's document, opens it,
+- [x] "Promote to document" (menu or palette) creates the file's document, opens it,
   and replaces the embed with a `[name](doc://…)` link to it.
-- [ ] `![](doc://…)` shows that document's body in a framed block, titled with a link
+- [x] `![](doc://…)` shows that document's body in a framed block, titled with a link
   to it; an edit there shows here live; its checkboxes tick the embedded document.
-- [ ] Embeds nest up to Settings → Markdown's depth (default 4; 0 = links only); a
+- [x] Embeds nest up to Settings → Markdown's depth (default 4; 0 = links only); a
   document already shown above (including itself) is a link.
-- [ ] Clicking a task toggles it; long-press / right-click opens the state menu.
-- [ ] `doc://` links open the target; a missing target is marked.
-- [ ] Attachments preview; "Promote attachment to document" works.
+- [x] Clicking a task toggles it; long-press / right-click opens the state menu.
+- [x] `doc://` links open the target; a missing target is marked.
+- [x] Attachments preview; "Promote attachment to document" works.
 
 **Notes.** Embeds (`![…](attachment://…)`) go through the new `markdown.attachment`
 point when something contributes to it (`attachments`), with markdown's own image /
