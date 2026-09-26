@@ -22,6 +22,21 @@ writer, duplicate lines under concurrency, parser resolves. Touches Rust + the T
 together, regenerates `corpus/splices.json`, rewords SPEC §3.3, and needs a decision about
 trailing comments on the line. A kernel/core wave, not a sweep.
 
+## 12. Every list query scans the whole local store
+
+`doc-list` is paged (a page of 50, then "Load more" / scroll), so what it renders and what a
+live re-run hands over no longer grows with the workspace. What still does, in the kernel:
+`QueryEngine.#scanRows` (`web/kernel/src/query/index.ts`) walks **every** projection row in
+IndexedDB, filters through the Wasm evaluator and sorts all matches in memory on each run
+and each relevant live re-run, then slices; and the sync feed mirrors every projection to
+every client in the first place. Fine at thousands, not at millions.
+
+The server already pages with keyset cursors (`GET /api/documents?cursor=&limit=`), but the
+PWA deliberately browses locally (offline, SPEC §4.1–4.2). **Options**, a product decision:
+IDB compound indexes on the common sort keys (`updated_at`, `title`) + keyset reads for
+unfiltered/indexed queries, a top-k partial sort for `limit`ed queries, or a partial mirror
+that browses the server past a local window. A kernel/sync wave, not a plugin change.
+
 ## 5. A document has no delete, and no way back to where you came from
 
 Open `#/doc/<id>` directly: no trash action (lives only on `doc-list` rows), no

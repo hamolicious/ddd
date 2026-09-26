@@ -232,13 +232,17 @@ the Trash view (restore within 30 days) and the "New document" command.
   bullets.
 - [ ] Mod+N creates a document and opens it.
 - [ ] Row ⋯ → Move to Trash, then restore from `#/trash`.
+- [ ] Paging: with more than 50 documents the list shows 50 and "Showing 50 of N";
+  scrolling near the end loads the next page; "Load N more" works by keyboard; changing
+  the sort or a filter starts again from one page. Trash pages the same way.
 
 **Notes.** Views list bullets fixed; the list header's "New document" button removed —
 Mod+N and the palette create documents, and an empty workspace still offers "Create
 the first document" (2026-09-26). Sort and direction became icons, the sort field a
 `context-menu` popover; "Filters" became a funnel icon with a count badge; "Show machine
 documents" is a filter (counted, cleared by Clear); each row's Move to Trash button
-became a ⋯ menu (2026-09-26).
+became a ⋯ menu (2026-09-26). Paged, 50 at a time, replacing the hard 200-row cap; the
+local engine's full-store scan behind it is POLISH-BACKLOG item 12 (2026-09-26).
 
 ## 11. `folders` — the folder tree
 

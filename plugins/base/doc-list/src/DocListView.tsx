@@ -9,10 +9,15 @@
  * **Trash sorts on `deleted_at`, in the engine.** It used to sort in this component
  * after the query, because the shared field space did not reach that root: the order
  * was then only correct over the page the query happened to return, and a workspace
- * with more tombstones than `TRASH_LIMIT` showed the wrong ones in a confident order.
+ * with more tombstones than one page showed the wrong ones in a confident order.
  * `deleted_at` is a fixed root of the DSL now (`core::filter::ast::FIXED_ROOTS`), the
  * server compiles it, and `kernel/src/query/filter.ts` mirrors it — so the sort key is
  * just a sort key, and the direction toggle is one query parameter.
+ *
+ * **Both are paged** (`pagination.ts`): a page of rows, then "Load N more", which also
+ * loads by itself as it scrolls near. The count under the list is always the real total.
+ * "Loading…" replaces the list only while it has nothing to show; a page on its way
+ * keeps the rows already there.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -30,11 +35,9 @@ import {
   buildSort,
   type FilterDraft,
 } from "./filter.js";
+import { LoadMore } from "./LoadMore.js";
+import { limitFor, nextPageSize, showingText, usePages } from "./pagination.js";
 import { useLiveQuery } from "./useLiveQuery.js";
-
-/** Trash holds at most 30 days of tombstones; one page covers a realistic workspace. */
-const TRASH_LIMIT = 1_000;
-const LIST_LIMIT = 200;
 
 export interface DocListViewProps {
   readonly documents: DocumentsApi;
@@ -66,13 +69,14 @@ export function DocListView({
   // machine-owned documents unless the draft asks for them (`_shared/machine-docs.ts`).
   const filter = buildFilter(draft);
   const effective = buildEffectiveFilter(draft);
+  const [pages, more] = usePages(JSON.stringify([effective, sortField, sortDirection]));
   const query = useMemo<DocumentQuery>(
     () => ({
       ...(effective !== undefined ? { filter: effective } : {}),
       sort: buildSort(sortField, sortDirection),
-      limit: LIST_LIMIT,
+      limit: limitFor(pages),
     }),
-    [JSON.stringify(effective), sortDirection, sortField],
+    [JSON.stringify(effective), sortDirection, sortField, pages],
   );
 
   const state = useLiveQuery(documents, query);
@@ -112,7 +116,7 @@ export function DocListView({
         </p>
       )}
 
-      {state.loading ? (
+      {state.loading && state.rows.length === 0 ? (
         <p className="doclist-empty doclist:m-0 doclist:flex doclist:flex-col doclist:items-start doclist:gap-2 doclist:py-6 doclist:text-text-muted" role="status">
           Loading…
         </p>
@@ -183,9 +187,11 @@ export function DocListView({
               </li>
             ))}
           </ul>
+          {state.rows.length < state.total && (
+            <LoadMore count={nextPageSize(state.rows.length, state.total)} busy={state.loading} onMore={more} />
+          )}
           <p className="doclist-status doclist:m-0 doclist:text-sm doclist:text-text-muted" role="status" aria-live="polite">
-            Showing {state.rows.length} of {state.total}
-            {state.total > LIST_LIMIT ? ` (first ${LIST_LIMIT})` : ""}
+            {showingText(state.rows.length, state.total)}
           </p>
         </>
       )}
@@ -221,15 +227,16 @@ export function TrashView({
   const [busy, setBusy] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
   const [newestFirst, setNewestFirst] = useState(true);
+  const [pages, more] = usePages(String(newestFirst));
 
   const query = useMemo<DocumentQuery>(
     () => ({
       filter: TRASHED_ONLY,
       includeDeleted: true,
       sort: buildSort("deleted_at", newestFirst ? "desc" : "asc"),
-      limit: TRASH_LIMIT,
+      limit: limitFor(pages),
     }),
-    [newestFirst],
+    [newestFirst, pages],
   );
   const state = useLiveQuery(documents, query);
   const rows = state.rows;
@@ -251,7 +258,7 @@ export function TrashView({
         </p>
       )}
 
-      {state.loading ? (
+      {state.loading && rows.length === 0 ? (
         <p className="doclist-empty doclist:m-0 doclist:flex doclist:flex-col doclist:items-start doclist:gap-2 doclist:py-6 doclist:text-text-muted" role="status">
           Loading…
         </p>
@@ -293,8 +300,13 @@ export function TrashView({
               </li>
             ))}
           </ul>
+          {rows.length < state.total && (
+            <LoadMore count={nextPageSize(rows.length, state.total)} busy={state.loading} onMore={more} />
+          )}
           <p className="doclist-status doclist:m-0 doclist:text-sm doclist:text-text-muted" role="status" aria-live="polite">
-            {rows.length} deleted document{rows.length === 1 ? "" : "s"}
+            {rows.length < state.total
+              ? showingText(rows.length, state.total)
+              : `${state.total.toLocaleString()} deleted document${state.total === 1 ? "" : "s"}`}
           </p>
         </>
       )}
