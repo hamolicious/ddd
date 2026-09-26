@@ -201,7 +201,7 @@ export function Palette({
           </p>
         )}
 
-        <ul className="cmd-list commands:m-0 commands:flex-1 commands:list-none commands:overflow-y-auto commands:overscroll-contain commands:py-1" id={listboxId} role="listbox" ref={listRef} aria-label="Commands">
+        <ul className="cmd-list commands:m-0 commands:flex-1 commands:list-none commands:overflow-y-auto commands:overscroll-contain commands:px-0 commands:py-1" id={listboxId} role="listbox" ref={listRef} aria-label="Commands">
           {results.map((result, index) => {
             const command = result.item;
             const keys = bindingFor(command.id);

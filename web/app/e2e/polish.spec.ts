@@ -350,11 +350,11 @@ test.describe("the command palette closes", () => {
     const input = page.getByRole("combobox", { name: /command/i });
     await expect(input).toBeVisible();
 
-    // The panel's own padding: not focusable, so a click there used to drop focus to
-    // <body>, where the dialog's key handler never heard Escape.
+    // The list's own top padding: inside the palette, not an option and not focusable,
+    // so a click there used to drop focus to <body>, where Escape went unheard.
     const panel = page.getByRole("dialog", { name: "Command palette" });
-    const box = await panel.boundingBox();
-    await page.mouse.click((box?.x ?? 0) + 4, (box?.y ?? 0) + (box?.height ?? 0) - 4);
+    await panel.getByRole("listbox").click({ position: { x: 8, y: 1 } });
+    await expect(panel).toBeVisible();
     await expect(input).toBeFocused();
 
     await page.keyboard.press("Escape");

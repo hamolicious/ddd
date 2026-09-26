@@ -153,7 +153,7 @@ export function FolderContents({
           </p>
         </div>
       ) : (
-        <ul className="folders-doc-list folders:m-0 folders:flex folders:list-none folders:flex-col folders:overflow-hidden folders:rounded-lg folders:border folders:border-border folders:bg-bg-raised folders:shadow-1">
+        <ul className="folders-doc-list folders:m-0 folders:flex folders:list-none folders:flex-col folders:p-0 folders:overflow-hidden folders:rounded-lg folders:border folders:border-border folders:bg-bg-raised folders:shadow-1">
           {rows.map((row) => (
             <li key={row.id} className="folders:flex folders:min-w-0 folders:items-center folders:gap-3 folders:border-b folders:border-border folders:px-3 folders:last:border-b-0">
               <button

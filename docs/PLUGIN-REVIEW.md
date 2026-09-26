@@ -22,7 +22,7 @@ browser's device toolbar at 390 × 844, and 844 × 390 for landscape.
 | 3 | `header` | [x] | Seats; Settings → Top bar reorder and hide |
 | 4 | `notices` | [x] | Split out of `header`; bell restyled |
 | 5 | `sync-status` | [x] | Split out of `header`; icon-only dot, ✕ / ↻ when down |
-| 6 | `commands` | [ ] | In progress: palette Escape, footer and bar button done |
+| 6 | `commands` | [x] | Palette Escape, footer, bar button, list indent |
 | 7 | `settings` | [ ] | |
 | 8 | `themes` | [ ] | |
 | 9 | `doc-list` | [ ] | |
@@ -151,16 +151,17 @@ searches and runs them (Mod+K), and per-user keyboard shortcuts with conflict re
 **Where to see it.** Mod+K anywhere; Settings → Keybindings.
 
 - [x] Mod+K opens the palette; Escape closes it, even after clicking inside it.
-- [ ] Typing filters; ↑ / ↓ / Home / End move; Enter runs; results are grouped by category.
-- [ ] Each command's shortcut is shown beside it.
-- [ ] On a phone the palette is a bottom sheet that fits above the keyboard.
-- [ ] Settings → Keybindings: Change captures the next key combination; Backspace
+- [x] Typing filters; ↑ / ↓ / Home / End move; Enter runs; results are grouped by category.
+- [x] Each command's shortcut is shown beside it.
+- [x] On a phone the palette is a bottom sheet that fits above the keyboard.
+- [x] Settings → Keybindings: Change captures the next key combination; Backspace
   unbinds; Esc cancels; Reset restores the default; "changed" badge appears.
-- [ ] A clash between two commands is listed under Conflicts with who won.
-- [ ] Rebinding survives a reload and works straight away.
+- [x] A clash between two commands is listed under Conflicts with who won.
+- [x] Rebinding survives a reload and works straight away.
 
 **Notes.** Top-bar button removed; palette moved to a `shell.overlay`; count footer
-removed (2026-09-26).
+removed; the result list's 40 px left indent (lost in the migration) removed
+(2026-09-26).
 
 ## 7. `settings` — the settings screen
 
