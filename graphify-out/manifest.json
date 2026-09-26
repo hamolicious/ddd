@@ -1404,9 +1404,9 @@
     "semantic_hash": ""
   },
   "plugins/base/folders/src/FolderTree.tsx": {
-    "mtime": 1790392262.7910798,
-    "seen": 1790399318.8359983,
-    "ast_hash": "ecfbd77364e9f1da8f5a62a005c5d0c2",
+    "mtime": 1790429457.45633,
+    "seen": 1790429690.797565,
+    "ast_hash": "8f45d5a444cfeb7ba2b145b04d8bff26",
     "semantic_hash": ""
   },
   "plugins/base/folders/src/empty-folders.test.ts": {
@@ -1422,9 +1422,9 @@
     "semantic_hash": "5a88edcb19a68a9072086e7db3ce8bae"
   },
   "plugins/base/folders/src/index.tsx": {
-    "mtime": 1790392292.7256525,
-    "seen": 1790399318.8360622,
-    "ast_hash": "1b0f9bcb952a65aa17ecd98fdf878bb0",
+    "mtime": 1790428852.4203937,
+    "seen": 1790429690.7976625,
+    "ast_hash": "4e5e0764840fced1fc79930cda81eaf2",
     "semantic_hash": ""
   },
   "plugins/base/folders/src/moves.test.ts": {
@@ -1452,16 +1452,16 @@
     "semantic_hash": "526d2b43d27cebfa430c749428a54587"
   },
   "plugins/base/folders/src/tree.test.ts": {
-    "mtime": 1790306025.5788724,
-    "seen": 1790384127.042891,
-    "ast_hash": "93a7b4468bf636f5ac43f381c74d2d1f",
-    "semantic_hash": "93a7b4468bf636f5ac43f381c74d2d1f"
+    "mtime": 1790428829.0229867,
+    "seen": 1790429690.7977924,
+    "ast_hash": "b99ab8f93c2e492b86291265dae0bb8a",
+    "semantic_hash": ""
   },
   "plugins/base/folders/src/tree.ts": {
-    "mtime": 1790306102.410281,
-    "seen": 1790384127.042892,
-    "ast_hash": "74b2425c351edb4dcf9c1c7219069389",
-    "semantic_hash": "74b2425c351edb4dcf9c1c7219069389"
+    "mtime": 1790428829.018949,
+    "seen": 1790429690.7977936,
+    "ast_hash": "d47897bffb6eb02dfe9ad9bdf955154a",
+    "semantic_hash": ""
   },
   "plugins/base/header/manifest.json": {
     "mtime": 1790387581.24284,
@@ -1932,9 +1932,9 @@
     "semantic_hash": "14fc7d7bb55ee4dfad60f7f9487c6bd4"
   },
   "web/app/e2e/zz-folder-tree.spec.ts": {
-    "mtime": 1790392626.1155791,
-    "seen": 1790399318.8386214,
-    "ast_hash": "e2d6d02d3f2c0133518ab896528de51c",
+    "mtime": 1790429131.587757,
+    "seen": 1790429690.8007534,
+    "ast_hash": "3085fab21340e64bf0e327bcb6697fe8",
     "semantic_hash": ""
   },
   "web/app/public/shell-bundle.json": {
@@ -2808,9 +2808,9 @@
     "semantic_hash": "11107a74026ca3224eaa7722f136e90b"
   },
   "POLISH-BACKLOG.md": {
-    "mtime": 1790399505.1014085,
-    "seen": 1790399706.5788894,
-    "ast_hash": "a1aeb8af78404eeb4f9ff7313821f38e",
+    "mtime": 1790429219.9738224,
+    "seen": 1790429690.8062136,
+    "ast_hash": "bc52e9e8721438b18bd40c0601933db0",
     "semantic_hash": ""
   },
   "SPEC.md": {
@@ -3330,9 +3330,9 @@
     "semantic_hash": ""
   },
   "docs/PLUGIN-REVIEW.md": {
-    "mtime": 1790428310.5954309,
-    "seen": 1790428443.2137456,
-    "ast_hash": "b14eff9177bedf8a48944114100f25b3",
+    "mtime": 1790429682.4853234,
+    "seen": 1790429690.806925,
+    "ast_hash": "e92fc6ab3aa98bd091850177ce8b506d",
     "semantic_hash": ""
   },
   "plugins/base/settings/src/groups.test.ts": {
@@ -3399,6 +3399,18 @@
     "mtime": 1790399485.1474926,
     "seen": 1790399706.5748687,
     "ast_hash": "1fa366569b2a94d575082d4089a28128",
+    "semantic_hash": ""
+  },
+  "plugins/base/folders/src/order.test.ts": {
+    "mtime": 1790428837.2459328,
+    "seen": 1790429690.7977262,
+    "ast_hash": "8a83b57e6aa5874ddd4a605831776a9c",
+    "semantic_hash": ""
+  },
+  "plugins/base/folders/src/order.ts": {
+    "mtime": 1790428812.7881026,
+    "seen": 1790429690.7977273,
+    "ast_hash": "627db72bd78596e6e0881796ec767439",
     "semantic_hash": ""
   }
 }

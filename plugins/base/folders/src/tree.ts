@@ -13,7 +13,7 @@
  *    with no folder just sit in root"*. Root is not a node; it is the level everything
  *    starts at, which is why {@link buildFileTree} returns rows at depth 0 for both.
  * 2. **Folders first, then documents, each sorted within its level.** Folders sort by
- *    name and documents by title, both with a code-unit tiebreaker after `localeCompare`
+ *    the user's own order (`order.ts`; unlisted ones after, by name) and documents by title, both with a code-unit tiebreaker after `localeCompare`
  *    so two names a collator calls equal (`Home` / `home`, which are two folders here)
  *    still order the same on every platform.
  * 3. **A folder that is not expanded contributes no descendant rows.** Expansion is the
@@ -26,6 +26,7 @@
  * view, where paging and filtering already live.
  */
 
+import { rankOf } from "./order.js";
 import { nameOf, normalizePath, parentOf, segmentsOf, type PathRow } from "./path.js";
 
 /** Documents shown per folder before the rest collapse into one "more" row. */
@@ -75,8 +76,10 @@ export type TreeRow = FolderTreeRow | DocumentTreeRow | MoreTreeRow;
 export interface FileTree {
   /** Depth-first, in draw order, collapsed subtrees omitted. */
   readonly rows: readonly TreeRow[];
-  /** Every folder that exists, derived and tracked alike, sorted. */
+  /** Every folder that exists, derived and tracked alike, sorted by path. */
   readonly folders: readonly string[];
+  /** Each parent's child folders in draw order (`""` is root): what a reorder rewrites. */
+  readonly children: ReadonlyMap<string, readonly string[]>;
   /** Documents sitting at root (no usable `fm.path`). */
   readonly rootDocuments: number;
   readonly totalDocuments: number;
@@ -97,6 +100,8 @@ export interface FileTreeOptions {
   readonly collapsed?: ReadonlySet<string>;
   /** Documents drawn per folder before the rest become a "more" row. */
   readonly leafLimit?: number;
+  /** The user's folder order (`order.ts`): listed folders first, in list order. */
+  readonly order?: readonly string[];
 }
 
 /** `localeCompare`, then code units, so the order never depends on the platform. */
@@ -162,8 +167,13 @@ export function buildFileTree(rows: readonly PathRow[], options: FileTreeOptions
     siblings.push(folder);
     childFolders.set(parent, siblings);
   }
+  const order = options.order ?? [];
   for (const siblings of childFolders.values()) {
-    siblings.sort((left, right) => compareText(nameOf(left), nameOf(right)));
+    siblings.sort((left, right) => {
+      const byRank = rankOf(order, left) - rankOf(order, right);
+      // Two unlisted folders are Infinity − Infinity = NaN apart: fall through to name.
+      return byRank < 0 || byRank > 0 ? byRank : compareText(nameOf(left), nameOf(right));
+    });
   }
   for (const bucket of documentsIn.values()) {
     bucket.sort((left, right) => {
@@ -217,6 +227,7 @@ export function buildFileTree(rows: readonly PathRow[], options: FileTreeOptions
   return {
     rows: out,
     folders: [...folders].sort(compareText),
+    children: childFolders,
     rootDocuments: documentsIn.get("")?.length ?? 0,
     totalDocuments: rows.length,
   };

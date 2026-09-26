@@ -253,14 +253,22 @@ folder, rename, move and delete. Settings → Folders sets where new notes go.
 
 **Where to see it.** The Folders panel; `#/folder`.
 
-- [ ] Drag a document onto a folder, and onto the root strip; the tree updates.
+- [ ] Drag a document onto a folder, and onto the root strip; the tree updates. The
+  dragged row lifts (a solid, shadowed copy under the pointer; a faded slot behind).
+- [ ] Drag a folder onto the top or bottom edge of another: a line shows where it goes,
+  and it lands before / after it (into that folder's parent if different). The order
+  survives a reload. The middle of a folder still means "inside".
 - [ ] ⋯ menu: every action works; rename is inline, never a browser prompt.
 - [ ] Keyboard: arrows move, Enter opens, F2 renames, M moves, Delete deletes a folder.
 - [ ] Landscape phone: the ⋯ buttons are visible without hover.
 - [ ] Settings → Folders: "New notes go to" is honoured by Mod+N.
 
 **Notes.** The ⋯ menus, delete confirmation and Move to… picker now open through
-`context-menu` rather than the tree's own sheet (2026-09-26).
+`context-menu` rather than the tree's own sheet (2026-09-26). Drags are pointer-driven
+with a lifted copy instead of the browser's translucent ghost; folders can be reordered
+(per-user `folderOrder` setting); desktop rows tightened to ~24 px (folder names no
+longer take the app's button tap height); on a phone the chevron sits beside its name,
+its 44 px tap area reaching into the indent (2026-09-26).
 
 ## 12. `search` — search
 

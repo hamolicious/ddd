@@ -110,3 +110,28 @@ describe("ancestorsOf", () => {
     expect(ancestorsOf("")).toEqual([]);
   });
 });
+
+describe("the user's folder order", () => {
+  const rows = [
+    { id: "1", title: "a", fm: { path: "alpha" } },
+    { id: "2", title: "b", fm: { path: "beta" } },
+    { id: "3", title: "c", fm: { path: "gamma" } },
+    { id: "4", title: "d", fm: { path: "beta/inner" } },
+  ];
+  const folderNames = (order?: readonly string[]): string[] =>
+    buildFileTree(rows, { ...(order ? { order } : {}), collapsed: new Set(["beta"]) })
+      .rows.filter((row) => row.kind === "folder")
+      .map((row) => (row.kind === "folder" ? row.path : ""));
+
+  it("puts listed folders first, in list order, and the rest after by name", () => {
+    expect(folderNames()).toEqual(["alpha", "beta", "gamma"]);
+    expect(folderNames(["gamma"])).toEqual(["gamma", "alpha", "beta"]);
+    expect(folderNames(["gamma", "alpha", "beta"])).toEqual(["gamma", "alpha", "beta"]);
+  });
+
+  it("reports each parent's children in draw order", () => {
+    const tree = buildFileTree(rows, { order: ["beta", "gamma"] });
+    expect(tree.children.get("")).toEqual(["beta", "gamma", "alpha"]);
+    expect(tree.children.get("beta")).toEqual(["beta/inner"]);
+  });
+});

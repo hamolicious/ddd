@@ -169,6 +169,67 @@ async function settled(
 // Rearranging folders
 // ---------------------------------------------------------------------------
 
+test("a folder dragged onto another's top edge goes before it, lifted, and stays there", async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const base = baseURL as string;
+  const parent = unique("order");
+  // Named so that by name they sort first, second, third.
+  const [first, second, third] = ["a", "b", "c"].map((letter) => unique(`${letter}-order`)) as [
+    string,
+    string,
+    string,
+  ];
+  const ids = await Promise.all(
+    [first, second, third].map((child) =>
+      createDocument(request, base, fixture(`In ${child}`, `${parent}/${child}`)),
+    ),
+  );
+  const order = async (): Promise<string[]> =>
+    (await tree(page).locator(".folders-node .folders-name").allTextContents()).filter((name) =>
+      [first, second, third].includes(name),
+    );
+
+  await signIn(page, ADMIN);
+  await openTree(page);
+  await expect(folderRow(page, third)).toBeVisible();
+  expect(await order()).toEqual([first, second, third]);
+
+  // Pick `third` up and carry it to the top edge of `first`.
+  const target = folderNode(page, first);
+  await folderNode(page, third).hover();
+  await page.mouse.down();
+  await target.hover({ position: { x: 40, y: 2 } });
+  await target.hover({ position: { x: 40, y: 2 } });
+
+  // Lifted, not a translucent ghost: an opaque copy under the pointer, and a line
+  // (not an outline) on the row it will go before.
+  const lifted = page.locator(".folders-lifted");
+  await expect(lifted).toBeVisible();
+  await expect(lifted).toContainText(third);
+  expect(await lifted.evaluate((element) => getComputedStyle(element).opacity)).toBe("1");
+  await expect(page.locator(".folders-node-before")).toHaveCount(1);
+  await expect(page.locator(".folders-node-drop")).toHaveCount(0);
+
+  await page.mouse.up();
+  await expect(lifted).toHaveCount(0);
+  await expect.poll(order).toEqual([third, first, second]);
+
+  // A reorder is the user's order, not a move: no document was written to.
+  for (const [index, child] of [first, second, third].entries()) {
+    expect(await rawText(request, base, ids[index] as string)).toContain(`path: ${parent}/${child}`);
+  }
+
+  // And it is stored: a reload draws the same order.
+  await waitSynced(page);
+  await page.reload();
+  await showSidebar(page);
+  await expect(folderRow(page, third)).toBeVisible();
+  await expect.poll(order).toEqual([third, first, second]);
+});
+
 test("dragging a folder into another re-prefixes every document inside it, one splice each", async ({
   page,
   request,

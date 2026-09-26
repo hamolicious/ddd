@@ -14,12 +14,20 @@
  * recoverable by simply doing it again: re-planning reads the live projection, and the
  * documents that already moved are not in the second plan.
  *
- * **Three ways to do everything, because one of them is a mouse gesture.** HTML5 drag
- * and drop does not exist on touch, so every drag has a keyboard and a touch equivalent
- * that ends in the same call: the row's ⋯ button, a long-press, a right-click, or `M` on
- * the active row opens the sheet (`Sheet.tsx`) with Move / Rename / Delete in it. This is
+ * **Three ways to do everything, because one of them is a mouse gesture.** Dragging is
+ * a mouse and pen gesture, so every drag has a keyboard and a touch equivalent that ends
+ * in the same call: the row's ⋯ button, a long-press, a right-click, or `M` on the active
+ * row opens a `context-menu` with Move / Rename / Delete in it. This is
  * `POLISH-BACKLOG.md` §3 — "a document can only be moved by dragging" — closed from the
  * folders side.
+ *
+ * **A drag lifts the row.** The tree's own drags are pointer-driven, not HTML5: the
+ * browser draws an HTML5 drag as a translucent ghost that no style can make solid, and a
+ * row should look picked up — an opaque, shadowed, slightly tilted copy under the
+ * pointer, with a faded slot where it came from. Dropping a folder on the top or bottom
+ * edge of another folder puts it before or after that one (the user's order, `order.ts`,
+ * joining that folder's parent if it has to); on the middle, inside it. HTML5 drops are
+ * still accepted, for rows other plugins make draggable (`doc-list`).
  *
  * **Keyboard-operable, as a real tree.** `role="tree"` with one tab stop and
  * `aria-activedescendant`: Arrow keys move and expand, `Home`/`End` jump, `Enter` opens
@@ -31,14 +39,14 @@
  * shell pins no `onJsPrompt` handler, so on a phone the old rename button may have done
  * nothing at all.
  *
- * The drag payload for a document is a plain `text/plain` document id, unchanged and
- * deliberately: `doc-list` rows and anything else that wants to be draggable into a
- * folder only has to set that, with no shared type and no import between plugins. A
- * *folder* drag adds `application/x-lm-folder` — a type nothing outside this plugin
- * sets, so a folder can never be mistaken for a document id.
+ * The HTML5 payload a document row from elsewhere sets is a plain `text/plain` document
+ * id, deliberately: `doc-list` rows and anything else that wants to be draggable into a
+ * folder only has to set that, with no shared type and no import between plugins.
+ * `application/x-lm-folder` is still read, for a folder dragged from an older build.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type {
   CSSProperties,
   DragEvent as ReactDragEvent,
@@ -47,11 +55,11 @@ import type {
   ReactElement,
 } from "react";
 
-import { useTouchOnly } from "../../_shared/compact.js";
 import { documentsUnder, planDocumentMove } from "./moves.js";
 import {
   isRecursiveRename,
   isWithin,
+  nameOf,
   joinPath,
   normalizePath,
   parentOf,
@@ -62,6 +70,7 @@ import {
 import type { ContextMenuApi, MenuItem } from "../../_shared/context-menu-api.js";
 
 import { MovePicker } from "./MovePicker.js";
+import { placeAmong, pruneOrder, withSiblings } from "./order.js";
 import { ancestorsOf, buildFileTree, type TreeRow } from "./tree.js";
 
 /** The drag type a draggable document row should set. */
@@ -75,15 +84,41 @@ const AUTO_EXPAND_MS = 650;
 const LONG_PRESS_MS = 500;
 /** A touch that travels this far was a scroll, not a press. */
 const LONG_PRESS_SLOP = 12;
+/** A mouse press that travels this far is a drag, not a click. */
+const DRAG_THRESHOLD = 5;
+/** The top and bottom share of a folder row that mean "before" / "after" rather than "into". */
+const EDGE = 0.3;
+
+/** Where a drag would land. `target` is the folder row a before/after is relative to. */
+type Drop =
+  | { readonly mode: "into"; readonly folder: string }
+  | { readonly mode: "before" | "after"; readonly folder: string; readonly target: string };
+
+/** The row being carried: what it is, and where to draw it. */
+interface Lift {
+  readonly target: TreeTarget;
+  readonly x: number;
+  readonly y: number;
+  /** Where in the row it was grabbed, so it does not jump to the pointer. */
+  readonly dx: number;
+  readonly dy: number;
+  readonly width: number;
+}
 
 const NODE_CLASSES =
   "folders-node folders:group folders:flex folders:min-h-[calc(var(--lm-tap-target)/2)] folders:items-center folders:gap-0.5 folders:rounded folders:pr-0.5 folders:pl-[calc(var(--lm-space)*0.5+var(--folders-indent)*min(var(--folders-depth,0),var(--folders-indent-cap)))] folders:hover:bg-bg-subtle folders:compact:min-h-[var(--lm-tap-target)]";
+// On a touch screen the twisty is a full tap target that reaches left into the indent,
+// with the chevron drawn at its right edge: 44 px to hit, 24 px of row, and no gap
+// between the chevron and its name.
 const TWISTY_CLASSES =
-  "folders-twisty folders:box-border folders:flex folders:w-[1.5rem] folders:min-h-[1.5rem]! folders:shrink-0 folders:cursor-pointer folders:items-center folders:justify-center folders:border-0! folders:bg-transparent! folders:p-0! folders:text-text-muted folders:compact:w-[var(--lm-tap-target)] folders:compact:min-h-[var(--lm-tap-target)]! folders:touch:w-[var(--lm-tap-target)] folders:touch:min-h-[var(--lm-tap-target)]!";
+  "folders-twisty folders:box-border folders:flex folders:w-[1.25rem] folders:min-h-[1.375rem]! folders:shrink-0 folders:cursor-pointer folders:items-center folders:justify-center folders:border-0! folders:bg-transparent! folders:p-0! folders:text-text-muted folders:compact:w-[var(--lm-tap-target)] folders:compact:ml-[calc(1.5rem-var(--lm-tap-target))] folders:compact:justify-end folders:compact:pr-[0.45rem]! folders:compact:min-h-[var(--lm-tap-target)]! folders:touch:w-[var(--lm-tap-target)] folders:touch:ml-[calc(1.5rem-var(--lm-tap-target))] folders:touch:justify-end folders:touch:pr-[0.45rem]! folders:touch:min-h-[var(--lm-tap-target)]!";
 const ROW_LABEL_CLASSES =
   "folders:min-w-0 folders:flex-1 folders:cursor-pointer folders:overflow-hidden folders:text-ellipsis folders:whitespace-nowrap folders:border-0! folders:bg-transparent! folders:p-0! folders:text-left folders:font-sans folders:text-inherit";
+// The app gives every <button> a tap-target height; on a pointer screen that made a
+// folder row (its name is a button) half again as tall as a document row (a span).
+const LABEL_BUTTON_CLASSES = `${ROW_LABEL_CLASSES} folders:min-h-0! folders:compact:min-h-[var(--lm-tap-target)]! folders:touch:min-h-[var(--lm-tap-target)]!`;
 const ACTIONS_CLASSES =
-  "folders-actions folders:invisible folders:flex folders:shrink-0 folders:gap-0.5 folders:group-hover:visible folders:group-focus-within:visible folders:compact:visible folders:[&>button]:box-border folders:[&>button]:min-h-[1.75rem] folders:[&>button]:min-w-[1.75rem] folders:[&>button]:cursor-pointer folders:[&>button]:rounded folders:[&>button]:border folders:[&>button]:border-transparent folders:[&>button]:bg-transparent folders:[&>button]:p-0 folders:[&>button]:text-text-muted folders:hover:[&>button]:border-border folders:hover:[&>button]:text-text folders:compact:[&>button]:min-h-[var(--lm-tap-target)] folders:compact:[&>button]:min-w-[var(--lm-tap-target)] folders:touch:visible folders:touch:[&>button]:min-h-[var(--lm-tap-target)] folders:touch:[&>button]:min-w-[var(--lm-tap-target)]";
+  "folders-actions folders:invisible folders:flex folders:shrink-0 folders:gap-0.5 folders:group-hover:visible folders:group-focus-within:visible folders:compact:visible folders:[&>button]:box-border folders:[&>button]:min-h-[1.375rem] folders:[&>button]:min-w-[1.375rem] folders:[&>button]:cursor-pointer folders:[&>button]:rounded folders:[&>button]:border folders:[&>button]:border-transparent folders:[&>button]:bg-transparent folders:[&>button]:p-0 folders:[&>button]:text-text-muted folders:hover:[&>button]:border-border folders:hover:[&>button]:text-text folders:compact:[&>button]:min-h-[var(--lm-tap-target)] folders:compact:[&>button]:min-w-[var(--lm-tap-target)] folders:touch:visible folders:touch:[&>button]:min-h-[var(--lm-tap-target)] folders:touch:[&>button]:min-w-[var(--lm-tap-target)]";
 
 export interface MoveProgress {
   readonly onProgress?: (done: number, total: number) => void;
@@ -117,6 +152,9 @@ export interface FolderTreeProps {
   /** Collapsed folder paths; persisted by the caller (per user, through settings). */
   readonly collapsed: ReadonlySet<string>;
   readonly onCollapsedChange: (next: ReadonlySet<string>) => void;
+  /** The user's folder order (`order.ts`), and how to store a new one. */
+  readonly order: readonly string[];
+  readonly onReorder: (next: readonly string[]) => Promise<void>;
   /**
    * Commands arriving from outside the panel — the palette's "New folder", "Move this
    * document to a folder…", and the keybindings on them. Subscribing rather than
@@ -177,6 +215,8 @@ export function FolderTree({
   emptyFolders,
   collapsed,
   onCollapsedChange,
+  order,
+  onReorder,
   requests,
   onMoveDocument,
   onMoveFolder,
@@ -186,15 +226,15 @@ export function FolderTree({
   onSelectFolder,
   onOpenDocument,
 }: FolderTreeProps): ReactElement {
-  const touchOnly = useTouchOnly();
   const tree = useMemo(
-    () => buildFileTree(rows, { extraFolders: emptyFolders, collapsed }),
-    [collapsed, emptyFolders, rows],
+    () => buildFileTree(rows, { extraFolders: emptyFolders, collapsed, order }),
+    [collapsed, emptyFolders, order, rows],
   );
   const visible = tree.rows;
 
   const [active, setActive] = useState<string | undefined>(undefined);
-  const [dropTarget, setDropTarget] = useState<string | undefined>(undefined);
+  const [drop, setDrop] = useState<Drop | undefined>(undefined);
+  const [lift, setLift] = useState<Lift | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | undefined>(undefined);
   const [progress, setProgress] = useState<
@@ -411,30 +451,24 @@ export function FolderTree({
   const endDrag = useCallback(() => {
     dragSource.current = undefined;
     setDragging(false);
-    setDropTarget(undefined);
+    setDrop(undefined);
+    setLift(undefined);
     cancelAutoExpand();
   }, [cancelAutoExpand]);
 
-  /** A folder may not be dropped into itself or into anything it contains. */
-  const dropAllowed = useCallback((folder: string): boolean => {
-    const source = dragSource.current;
+  /** A folder may not be dropped into itself, into anything it contains, or where it is. */
+  const intoAllowed = useCallback((folder: string, source: TreeTarget | undefined): boolean => {
     if (source?.kind !== "folder") return true;
-    return (
-      !isWithin(normalizePath(folder), source.path) &&
-      parentOf(source.path) !== folder
-    );
+    return !isWithin(normalizePath(folder), source.path) && parentOf(source.path) !== folder;
   }, []);
 
-  const dragOverFolder = useCallback(
-    (event: ReactDragEvent, folder: string, expandable: boolean) => {
-      if (!dropAllowed(folder)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      event.dataTransfer.dropEffect = "move";
-      setDropTarget(folder);
-      // Auto-expand: a drag that rests on a closed folder is a user trying to get
-      // inside it, and on a phone-sized panel there is no second hand to click with.
-      if (folder !== "" && expandable && collapsed.has(folder)) {
+  /**
+   * Auto-expand: a drag that rests on a closed folder is a user trying to get inside it,
+   * and on a phone-sized panel there is no second hand to click with.
+   */
+  const hoverFolder = useCallback(
+    (folder: string | undefined, expandable: boolean) => {
+      if (folder !== undefined && folder !== "" && expandable && collapsed.has(folder)) {
         if (autoExpand.current?.path === folder) return;
         cancelAutoExpand();
         autoExpand.current = {
@@ -448,7 +482,153 @@ export function FolderTree({
         cancelAutoExpand();
       }
     },
-    [cancelAutoExpand, collapsed, dropAllowed, setExpanded],
+    [cancelAutoExpand, collapsed, setExpanded],
+  );
+
+  /** Put `path` before or after the folder `target`, joining `target`'s parent if need be. */
+  const reorderFolder = useCallback(
+    (path: string, target: string, where: "before" | "after") => {
+      const parent = parentOf(target);
+      const next = parentOf(path) === parent ? path : reparentTarget(path, parent);
+      const placed = placeAmong(tree.children.get(parent) ?? [], next, target, where);
+      const stored = pruneOrder(
+        withSiblings(order, placed, [path]),
+        new Set([...tree.folders, next]),
+      );
+      run(async () => {
+        await onReorder(stored);
+        if (next !== path) {
+          await onMoveFolder(path, next, { onProgress });
+          revealFolder(next);
+        }
+      });
+    },
+    [onMoveFolder, onProgress, onReorder, order, revealFolder, run, tree],
+  );
+
+  // --- The tree's own drags: pointer events, a lifted copy under the pointer --------
+
+  /** What lies under the pointer, as a drop. `undefined` where nothing may land. */
+  const dropAt = useCallback(
+    (x: number, y: number, source: TreeTarget): Drop | undefined => {
+      const element = document
+        .elementFromPoint(x, y)
+        ?.closest<HTMLElement>("[data-drop-kind]");
+      if (!element) return undefined;
+      const kind = element.dataset["dropKind"];
+      const path = element.dataset["dropPath"] ?? "";
+      if (kind === "folder" && source.kind === "folder" && path !== source.path) {
+        const box = element.getBoundingClientRect();
+        const share = (y - box.top) / Math.max(1, box.height);
+        const where = share < EDGE ? "before" : share > 1 - EDGE ? "after" : undefined;
+        // Next to a folder is inside its parent, which may not be the dragged folder's own
+        // subtree either.
+        if (where && !isWithin(parentOf(path), source.path)) {
+          return { mode: where, folder: parentOf(path), target: path };
+        }
+      }
+      const folder = kind === "root" ? "" : path;
+      return intoAllowed(folder, source) ? { mode: "into", folder } : undefined;
+    },
+    [intoAllowed],
+  );
+
+  /** Read by the window listeners of a drag in flight, so they never act on stale state. */
+  const latest = useRef({ dropAt, hoverFolder, moveTarget, reorderFolder, visible });
+  latest.current = { dropAt, hoverFolder, moveTarget, reorderFolder, visible };
+
+  const liftStart = useCallback(
+    (event: ReactPointerEvent<HTMLElement>, target: TreeTarget) => {
+      if (event.pointerType === "touch" || event.button !== 0) return;
+      // The row's own controls keep their clicks; a field being typed in is not a handle.
+      if ((event.target as HTMLElement).closest(".folders-actions, .folders-twisty, input")) {
+        return;
+      }
+      const box = event.currentTarget.getBoundingClientRect();
+      const start = { x: event.clientX, y: event.clientY };
+      let lifted = false;
+      let last: Drop | undefined;
+
+      const place = (x: number, y: number): void => {
+        setLift({ target, x, y, dx: start.x - box.left, dy: start.y - box.top, width: box.width });
+        last = latest.current.dropAt(x, y, target);
+        setDrop(last);
+        const row =
+          last?.mode === "into"
+            ? latest.current.visible.find((entry) => entry.kind === "folder" && entry.path === last?.folder)
+            : undefined;
+        latest.current.hoverFolder(
+          last?.mode === "into" ? last.folder : undefined,
+          row?.kind === "folder" && row.expandable,
+        );
+      };
+      const onMove = (moveEvent: PointerEvent): void => {
+        if (!lifted) {
+          if (Math.hypot(moveEvent.clientX - start.x, moveEvent.clientY - start.y) < DRAG_THRESHOLD) {
+            return;
+          }
+          lifted = true;
+          dragSource.current = target;
+          setDragging(true);
+          document.body.style.setProperty("user-select", "none");
+          document.body.style.setProperty("cursor", "grabbing");
+          window.getSelection()?.removeAllRanges();
+        }
+        place(moveEvent.clientX, moveEvent.clientY);
+      };
+      const finish = (landed: boolean): void => {
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onUp);
+        window.removeEventListener("pointercancel", onCancel);
+        window.removeEventListener("keydown", onKey, true);
+        if (!lifted) return;
+        document.body.style.removeProperty("user-select");
+        document.body.style.removeProperty("cursor");
+        // The click that ends a drag lands on whatever is under the pointer; it is not
+        // a click on that thing.
+        const swallow = (click: MouseEvent): void => {
+          click.stopPropagation();
+          click.preventDefault();
+        };
+        window.addEventListener("click", swallow, { capture: true, once: true });
+        setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 0);
+        endDrag();
+        if (!landed || !last) return;
+        if (last.mode === "into") latest.current.moveTarget(target, last.folder);
+        else if (target.kind === "folder") {
+          latest.current.reorderFolder(target.path, last.target, last.mode);
+        }
+      };
+      const onUp = (upEvent: PointerEvent): void => {
+        if (lifted) last = latest.current.dropAt(upEvent.clientX, upEvent.clientY, target);
+        finish(true);
+      };
+      const onCancel = (): void => finish(false);
+      const onKey = (keyEvent: KeyboardEvent): void => {
+        if (keyEvent.key !== "Escape" || !lifted) return;
+        keyEvent.preventDefault();
+        keyEvent.stopPropagation();
+        finish(false);
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("pointercancel", onCancel);
+      window.addEventListener("keydown", onKey, true);
+    },
+    [endDrag],
+  );
+
+  // --- HTML5 drops, from rows other plugins make draggable (`doc-list`) -------------
+
+  const dragOverFolder = useCallback(
+    (event: ReactDragEvent, folder: string, expandable: boolean) => {
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.dropEffect = "move";
+      setDrop({ mode: "into", folder });
+      hoverFolder(folder, expandable);
+    },
+    [hoverFolder],
   );
 
   const dropOnFolder = useCallback(
@@ -456,40 +636,23 @@ export function FolderTree({
       event.preventDefault();
       event.stopPropagation();
       const target = normalizePath(folder);
-      const source = dragSource.current;
       endDrag();
-      // The payload is read back rather than trusted from `dragSource` alone: a drag can
-      // start in another plugin's row (`doc-list` sets the document id and nothing else),
-      // and then there is no source here to consult.
-      const draggedFolder = normalizePath(
-        event.dataTransfer.getData(FOLDER_DRAG_TYPE),
-      );
-      const folderPath =
-        draggedFolder !== ""
-          ? draggedFolder
-          : source?.kind === "folder"
-            ? source.path
-            : "";
-      if (folderPath !== "") {
-        moveFolder(folderPath, reparentTarget(folderPath, target));
+      const draggedFolder = normalizePath(event.dataTransfer.getData(FOLDER_DRAG_TYPE));
+      if (draggedFolder !== "") {
+        moveFolder(draggedFolder, reparentTarget(draggedFolder, target));
         return;
       }
-      moveDocument(
-        event.dataTransfer.getData(DOCUMENT_DRAG_TYPE).trim(),
-        target,
-      );
+      moveDocument(event.dataTransfer.getData(DOCUMENT_DRAG_TYPE).trim(), target);
     },
     [endDrag, moveDocument, moveFolder],
   );
 
-  const startDrag = useCallback((event: ReactDragEvent, target: TreeTarget) => {
-    dragSource.current = target;
-    setDragging(true);
-    event.dataTransfer.effectAllowed = "move";
-    if (target.kind === "folder")
-      event.dataTransfer.setData(FOLDER_DRAG_TYPE, target.path);
-    else event.dataTransfer.setData(DOCUMENT_DRAG_TYPE, target.id);
+  const leaveFolder = useCallback((folder: string) => {
+    setDrop((current) => (current?.mode === "into" && current.folder === folder ? undefined : current));
   }, []);
+
+  /** The folder an "into" drop is outlining, if any. */
+  const intoFolder = drop?.mode === "into" ? drop.folder : undefined;
 
   // ---------------------------------------------------------------------------
   // Long press → the sheet
@@ -750,12 +913,15 @@ export function FolderTree({
           key={row.key}
           {...common}
           className={`${NODE_CLASSES} folders-node-more ${isActive ? " folders-node-active folders:bg-accent-subtle" : ""}`}
+          // "…and 37 more" is inside its folder; a drop on it goes there.
+          data-drop-kind="document"
+          data-drop-path={row.path}
           onMouseDown={() => setActive(row.key)}
         >
           <span className={TWISTY_CLASSES} aria-hidden="true" />
           <button
             type="button"
-            className={`folders-more ${ROW_LABEL_CLASSES} folders:text-[0.9em] folders:text-text-muted`}
+            className={`folders-more ${LABEL_BUTTON_CLASSES} folders:text-[0.9em] folders:text-text-muted`}
             tabIndex={-1}
             onClick={() => onSelectFolder(row.path)}
           >
@@ -781,23 +947,22 @@ export function FolderTree({
             NODE_CLASSES,
             "folders-node-leaf folders:cursor-pointer",
             isActive ? "folders-node-active folders:bg-accent-subtle" : "",
+            lift?.target.kind === "document" && lift.target.id === row.id ? "folders-node-lifted folders:bg-bg-subtle folders:[&>*]:opacity-40" : "",
           ]
             .filter(Boolean)
             .join(" ")}
-          draggable
           title={row.title}
-          onDragStart={(event) => startDrag(event, target)}
-          onDragEnd={endDrag}
           // A drop on a document means "put this next to that one" — its folder.
+          data-drop-kind="document"
+          data-drop-path={row.path}
           onDragOver={(event) => dragOverFolder(event, row.path, false)}
-          onDragLeave={() =>
-            setDropTarget((current) =>
-              current === row.path ? undefined : current,
-            )
-          }
+          onDragLeave={() => leaveFolder(row.path)}
           onDrop={(event) => dropOnFolder(event, row.path)}
           onMouseDown={() => setActive(row.key)}
-          onPointerDown={(event) => pressStart(event, target)}
+          onPointerDown={(event) => {
+            pressStart(event, target);
+            liftStart(event, target);
+          }}
           onPointerMove={pressMove}
           onPointerUp={cancelLongPress}
           onPointerCancel={cancelLongPress}
@@ -859,9 +1024,16 @@ export function FolderTree({
         className={[
           NODE_CLASSES,
           isActive ? "folders-node-active folders:bg-accent-subtle" : "",
-          row.path === dropTarget
+          row.path === intoFolder
             ? "folders-node-drop folders:outline-2 folders:outline-dashed folders:outline-accent folders:outline-offset-[-2px]"
             : "",
+          drop?.mode === "before" && drop.target === row.path
+            ? "folders-node-before folders:shadow-[inset_0_2px_0_0_var(--lm-accent)]"
+            : "",
+          drop?.mode === "after" && drop.target === row.path
+            ? "folders-node-after folders:shadow-[inset_0_-2px_0_0_var(--lm-accent)]"
+            : "",
+          lift?.target.kind === "folder" && lift.target.path === row.path ? "folders-node-lifted folders:bg-bg-subtle folders:[&>*]:opacity-40" : "",
           row.tracked
             ? "folders-node-empty folders:italic folders:text-text-muted"
             : "",
@@ -869,18 +1041,16 @@ export function FolderTree({
         ]
           .filter(Boolean)
           .join(" ")}
-        draggable={!renaming}
-        onDragStart={(event) => startDrag(event, target)}
-        onDragEnd={endDrag}
+        data-drop-kind="folder"
+        data-drop-path={row.path}
         onDragOver={(event) => dragOverFolder(event, row.path, row.expandable)}
-        onDragLeave={() =>
-          setDropTarget((current) =>
-            current === row.path ? undefined : current,
-          )
-        }
+        onDragLeave={() => leaveFolder(row.path)}
         onDrop={(event) => dropOnFolder(event, row.path)}
         onMouseDown={() => setActive(row.key)}
-        onPointerDown={(event) => pressStart(event, target)}
+        onPointerDown={(event) => {
+          pressStart(event, target);
+          if (!renaming) liftStart(event, target);
+        }}
         onPointerMove={pressMove}
         onPointerUp={cancelLongPress}
         onPointerCancel={cancelLongPress}
@@ -935,7 +1105,7 @@ export function FolderTree({
         ) : (
           <button
             type="button"
-            className={`folders-name ${ROW_LABEL_CLASSES}`}
+            className={`folders-name ${LABEL_BUTTON_CLASSES}`}
             tabIndex={-1}
             onClick={() => {
               if (consumePress()) return;
@@ -1164,8 +1334,10 @@ export function FolderTree({
         </div>
       ) : (
         <div
-          className={`folders-tree folders:flex folders:min-h-[calc(var(--lm-tap-target)*1.5)] folders:flex-col folders:pb-3 folders:[--folders-indent:calc(var(--lm-space)*1.5)] folders:[--folders-indent-cap:6] folders:focus-visible:outline-2 folders:focus-visible:outline-offset-[-2px] folders:focus-visible:outline-focus folders:compact:[--folders-indent:calc(var(--lm-space)*0.75)] folders:compact:[--folders-indent-cap:4] ${dropTarget === "" ? " folders-tree-root-drop folders:rounded folders:outline-2 folders:outline-dashed folders:outline-accent folders:outline-offset-[-2px]" : ""}`}
+          className={`folders-tree folders:flex folders:min-h-[calc(var(--lm-tap-target)*1.5)] folders:flex-col folders:pb-3 folders:[--folders-indent:calc(var(--lm-space)*1.5)] folders:[--folders-indent-cap:6] folders:focus-visible:outline-2 folders:focus-visible:outline-offset-[-2px] folders:focus-visible:outline-focus folders:compact:[--folders-indent:calc(var(--lm-space)*0.75)] folders:compact:[--folders-indent-cap:4] ${intoFolder === "" ? " folders-tree-root-drop folders:rounded folders:outline-2 folders:outline-dashed folders:outline-accent folders:outline-offset-[-2px]" : ""}`}
           role="tree"
+          // Blank space in the tree is root, the way it is in every file manager.
+          data-drop-kind="root"
           aria-label="Folders"
           aria-busy={busy}
           tabIndex={0}
@@ -1197,13 +1369,10 @@ export function FolderTree({
             // tall the tree has grown (a document leaves its folder; a folder becomes
             // top-level).
             <div
-              className={`folders-root-dropzone folders:sticky folders:bottom-0 folders:z-[1] folders:mt-0.5 folders:rounded folders:border folders:border-dashed folders:border-border-strong folders:bg-bg-raised folders:p-1.5 folders:text-center folders:text-[0.85rem] folders:text-text-muted ${dropTarget === "" ? " folders-node-drop folders:outline-2 folders:outline-dashed folders:outline-accent folders:outline-offset-[-2px]" : ""}`}
+              className={`folders-root-dropzone folders:sticky folders:bottom-0 folders:z-[1] folders:mt-0.5 folders:rounded folders:border folders:border-dashed folders:border-border-strong folders:bg-bg-raised folders:p-1.5 folders:text-center folders:text-[0.85rem] folders:text-text-muted ${intoFolder === "" ? " folders-node-drop folders:outline-2 folders:outline-dashed folders:outline-accent folders:outline-offset-[-2px]" : ""}`}
               onDragOver={(event) => dragOverFolder(event, "", false)}
-              onDragLeave={() =>
-                setDropTarget((current) =>
-                  current === "" ? undefined : current,
-                )
-              }
+              data-drop-kind="root"
+              onDragLeave={() => leaveFolder("")}
               onDrop={(event) => dropOnFolder(event, "")}
             >
               Drop here to move to root
@@ -1211,6 +1380,36 @@ export function FolderTree({
           ) : null}
         </div>
       )}
+      {lift ? <Lifted lift={lift} /> : null}
     </div>
+  );
+}
+
+/**
+ * The row being carried: opaque, raised and a little tilted, under the pointer where it
+ * was grabbed. A portal, because the sidebar's `container-type` would otherwise make it
+ * the containing block of anything `position: fixed` inside it.
+ */
+function Lifted({ lift }: { readonly lift: Lift }): ReactElement {
+  const label = lift.target.kind === "folder" ? nameOf(lift.target.path) : lift.target.title;
+  return createPortal(
+    <div
+      className="folders-lifted folders:pointer-events-none folders:fixed folders:z-[1000] folders:flex folders:min-h-[calc(var(--lm-tap-target)/2)] folders:items-center folders:gap-1.5 folders:overflow-hidden folders:rounded folders:border folders:border-border-strong folders:bg-bg-raised folders:px-2 folders:font-sans folders:text-text folders:shadow-2"
+      style={{
+        left: lift.x - lift.dx,
+        top: lift.y - lift.dy,
+        width: lift.width,
+        transform: "rotate(1.5deg) scale(1.03)",
+      }}
+      aria-hidden="true"
+    >
+      <span className="folders:shrink-0 folders:text-text-muted">
+        {lift.target.kind === "folder" ? "▸" : "·"}
+      </span>
+      <span className="folders:min-w-0 folders:flex-1 folders:overflow-hidden folders:text-ellipsis folders:whitespace-nowrap">
+        {label}
+      </span>
+    </div>,
+    document.body,
   );
 }

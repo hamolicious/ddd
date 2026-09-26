@@ -81,8 +81,6 @@ their email's local part. A preference, not a defect.
   and ABI docs — deliberate (see `backend/CONTRACTS.md`); not a loose end.
 - The sync pill's expired-session state is still a "Sign in" text button, where offline
   and sync errors are now red ✕ / ↻ icons (`sync-status`).
-- Typecheck fails on the unused `touchOnly` in `plugins/base/folders/src/FolderTree.tsx`
-  (line 184).
 
 ---
 

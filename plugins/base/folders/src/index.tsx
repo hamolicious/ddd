@@ -38,6 +38,7 @@
  * | `defaultLocation` | Where "New document" files a note. Rendered as a picker in Settings. |
  * | `emptyFolders` | Folders created but not yet used. Dropped as soon as a document lands. |
  * | `collapsedFolders` | The folders this user closed. The negative is stored so an untouched tree is open. |
+ * | `folderOrder` | The user's own order for folders, set by dragging (`order.ts`). Unlisted folders sort by name. |
  *
  * Settings are per user and, as SPEC §6.4 states plainly, readable by other users of the
  * shared workspace. Folder names are not secrets and nothing else is kept here.
@@ -56,6 +57,7 @@ import {
 } from "../../_shared/machine-docs.js";
 
 import { DefaultLocation } from "./DefaultLocation.js";
+import { renameInOrder } from "./order.js";
 import {
   EMPTY_FOLDERS_KEY,
   mergeTracked,
@@ -102,6 +104,7 @@ export const SETTINGS_KEYS = {
   defaultLocation: "defaultLocation",
   emptyFolders: EMPTY_FOLDERS_KEY,
   collapsedFolders: "collapsedFolders",
+  folderOrder: "folderOrder",
 } as const;
 
 export interface MoveOptions {
@@ -188,6 +191,7 @@ export default function activate(kernel: Kernel): FoldersApi {
     // document knows what wrote these lines.
     [SETTINGS_KEYS.emptyFolders]: { type: "list", default: [] },
     [SETTINGS_KEYS.collapsedFolders]: { type: "list", default: [] },
+    [SETTINGS_KEYS.folderOrder]: { type: "list", default: [] },
   });
 
   // ---------------------------------------------------------------------------
@@ -202,6 +206,9 @@ export default function activate(kernel: Kernel): FoldersApi {
   let collapsed: ReadonlySet<string> = new Set(
     readTracked(kernel.settings.get(SETTINGS_KEYS.collapsedFolders)),
   );
+  let folderOrder = readTracked(kernel.settings.get(SETTINGS_KEYS.folderOrder));
+  /** A local order write in flight; adopting the stored value meanwhile would undo it. */
+  let orderWriting = 0;
 
   const publish = (): void => {
     for (const listener of [...listeners]) listener();
@@ -373,6 +380,17 @@ export default function activate(kernel: Kernel): FoldersApi {
     }, SETTINGS_DEBOUNCE_MS);
   };
 
+  const setFolderOrder = async (next: readonly string[]): Promise<void> => {
+    folderOrder = next;
+    publish();
+    orderWriting += 1;
+    try {
+      await writeSetting(SETTINGS_KEYS.folderOrder, [...next] as readonly CoreValue[]);
+    } finally {
+      orderWriting -= 1;
+    }
+  };
+
   // Settings change under us: another tab, another device, or our own write coming back
   // through sync. Guarded, because a throw from `activate` skips every dependent
   // (SPEC §6.4) and this is a convenience, not the feature.
@@ -400,6 +418,7 @@ export default function activate(kernel: Kernel): FoldersApi {
       if (collapsedTimer === undefined) {
         collapsed = new Set(readTracked(kernel.settings.get(SETTINGS_KEYS.collapsedFolders)));
       }
+      if (orderWriting === 0) folderOrder = readTracked(kernel.settings.get(SETTINGS_KEYS.folderOrder));
       if (readDefaultLocation() !== announced) announceDefaultLocation();
       publish();
     });
@@ -413,6 +432,7 @@ export default function activate(kernel: Kernel): FoldersApi {
     error?: string;
     emptyFolders: readonly string[];
     collapsed: ReadonlySet<string>;
+    folderOrder: readonly string[];
   } => {
     const [, setRevision] = useState(0);
     useEffect(() => {
@@ -427,6 +447,7 @@ export default function activate(kernel: Kernel): FoldersApi {
       loading,
       emptyFolders,
       collapsed,
+      folderOrder,
       ...(loadError !== undefined ? { error: loadError } : {}),
     };
   };
@@ -573,6 +594,9 @@ export default function activate(kernel: Kernel): FoldersApi {
       emptyFolders = tracked;
       await writeTracked(tracked);
     }
+    // Its place in the user's order goes with it.
+    const reordered = renameInOrder(folderOrder, source, target);
+    if (!sameTracked(folderOrder, reordered)) await setFolderOrder(reordered);
 
     if (failures.length > 0) throw failed(done, failures);
     return done;
@@ -671,6 +695,8 @@ export default function activate(kernel: Kernel): FoldersApi {
         emptyFolders={live.emptyFolders}
         collapsed={live.collapsed}
         onCollapsedChange={setCollapsed}
+        order={live.folderOrder}
+        onReorder={setFolderOrder}
         requests={(listener) => {
           requestListeners.add(listener);
           return () => {
