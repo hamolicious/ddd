@@ -100,6 +100,13 @@ export default function activate(kernel: Kernel): void {
     id: "read",
     label: "Read",
     order: 0,
+    // An open book. `currentColor`, so it follows the switch's selected/idle colours.
+    icon: (
+      <svg aria-hidden="true" viewBox="0 0 24 24" width="1.15em" height="1.15em" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 7c-1.5-1.3-4-2-7.5-2v12c3.5 0 6 .7 7.5 2 1.5-1.3 4-2 7.5-2V5c-3.5 0-6 .7-7.5 2z" />
+        <path d="M12 7v12" />
+      </svg>
+    ),
     component: Read,
   });
 }

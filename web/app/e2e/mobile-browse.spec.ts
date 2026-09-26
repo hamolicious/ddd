@@ -29,6 +29,7 @@ import {
   ADMIN,
   createDocument,
   docRows,
+  modeSwitch,
   runCommand,
   showSidebar,
   signIn,
@@ -137,7 +138,7 @@ test.describe("browse and find, at phone width", () => {
     // And the row still opens the document — the whole reason the target was widened.
     await filters.click();
     await rows.first().locator(".doclist-open").click();
-    await expect(page.getByRole("tablist", { name: /document mode/i })).toBeVisible();
+    await expect(modeSwitch(page)).toBeVisible();
   });
 
   test("Trash fits, and a deleted document can be restored", async ({ page, request, baseURL }) => {
@@ -215,7 +216,7 @@ test.describe("browse and find, at phone width", () => {
     if (await doc.count()) {
       await tappable(doc, "a document row in a folder");
       await doc.click();
-      await expect(page.getByRole("tablist", { name: /document mode/i })).toBeVisible();
+      await expect(modeSwitch(page)).toBeVisible();
     }
   });
 
@@ -267,7 +268,7 @@ test.describe("browse and find, at phone width", () => {
 
     await results.first().click();
     await expect(page).toHaveURL(/#\/doc\/[^?]+\?line=\d+$/);
-    await expect(page.getByRole("tablist", { name: /document mode/i })).toBeVisible();
+    await expect(modeSwitch(page)).toBeVisible();
   });
 
   test("the palette is a sheet that fits the viewport and runs a command", async ({ page }) => {

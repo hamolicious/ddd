@@ -123817,18 +123817,6 @@
     },
     {
       "source": "plugins_base_doc_list_src_index_activate",
-      "target": "plugins_base_doc_list_src_index_routerservice_onchange",
-      "relation": "calls",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "context": "call",
-      "source_file": "plugins/base/doc-list/src/index.tsx",
-      "source_location": "L173",
-      "weight": 1.0
-    },
-    {
-      "source": "plugins_base_doc_list_src_index_activate",
       "target": "plugins_base_doc_list_src_search_hash_listpath",
       "relation": "calls",
       "_origin": "ast",
@@ -123836,7 +123824,19 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/doc-list/src/index.tsx",
-      "source_location": "L182",
+      "source_location": "L174",
+      "weight": 1.0
+    },
+    {
+      "source": "plugins_base_doc_list_src_index_activate",
+      "target": "plugins_base_doc_list_src_index_routerservice_onchange",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "plugins/base/doc-list/src/index.tsx",
+      "source_location": "L178",
       "weight": 1.0
     },
     {
@@ -123848,7 +123848,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/doc-list/src/index.tsx",
-      "source_location": "L317",
+      "source_location": "L318",
       "weight": 1.0
     },
     {

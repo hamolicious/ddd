@@ -162,11 +162,17 @@ test.describe("the document experience at 390px", () => {
     await signIn(page, ADMIN);
     await openDocument(page, id);
 
-    const tabs = page.getByRole("tablist", { name: /document mode/i });
-    expect((await tabs.boundingBox())?.width ?? 0).toBeLessThanOrEqual(PHONE.width);
-    await tapTargets(page.getByRole("tab"), "mode tab");
+    // On a phone the switch is one floating button, bottom-right, inside the screen.
+    await expect(page.getByRole("tablist", { name: /document mode/i })).toBeHidden();
+    const bubble = page.getByRole("button", { name: "Switch to Edit" });
+    const box = await bubble.boundingBox();
+    expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(PHONE.width);
+    expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThanOrEqual(PHONE.height);
+    await tapTargets(bubble, "the mode button");
 
-    await page.getByRole("tab", { name: "Edit" }).click();
+    await bubble.click();
+    // It now offers the way back, as a book.
+    await expect(page.getByRole("button", { name: "Switch to Read" })).toBeVisible();
     const content = page.locator(".cm-content");
     await expect(content).toBeVisible();
     await expect(content).toContainText("Wide content probe");
@@ -251,14 +257,11 @@ test.describe("the document experience at 360px", () => {
     await signIn(page, ADMIN);
     await openDocument(page, id);
 
-    const tabs = page.getByRole("tablist", { name: /document mode/i });
-    const tabsBox = await tabs.boundingBox();
-    expect(tabsBox?.width ?? 0).toBeLessThanOrEqual(NARROW.width);
-    // Full labels, not a truncation: two modes have room even here.
-    await expect(page.getByRole("tab", { name: "Read" })).toHaveText("Read");
-    await expect(page.getByRole("tab", { name: "Edit" })).toHaveText("Edit");
+    const bubble = page.getByRole("button", { name: "Switch to Edit" });
+    const box = await bubble.boundingBox();
+    expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(NARROW.width);
 
-    await page.getByRole("tab", { name: "Edit" }).click();
+    await bubble.click();
     await expect(page.locator(".cm-content")).toBeVisible();
     await noDocumentOverflow(page);
   });

@@ -24,7 +24,7 @@
 
 import { expect, test, type Page } from "@playwright/test";
 
-import { ADMIN, createDocument, docRows, openDocument, signIn } from "./helpers.js";
+import { ADMIN, createDocument, docRows, modeSwitch, openDocument, signIn } from "./helpers.js";
 
 /**
  * A document with, in order: a paragraph at the body margin, a task list three levels
@@ -61,8 +61,12 @@ const LISTS = [
  * test of that setting would fail for a reason it does not name.
  */
 async function readPane(page: Page) {
+  // A phone switches with the floating button, a wide screen with the header tab.
+  await expect(modeSwitch(page)).toBeVisible();
+  const back = page.getByRole("button", { name: "Switch to Read" });
+  if (await back.isVisible()) await back.click();
   const tab = page.getByRole("tab", { name: "Read" });
-  if ((await tab.getAttribute("aria-selected")) !== "true") await tab.click();
+  if ((await tab.isVisible()) && (await tab.getAttribute("aria-selected")) !== "true") await tab.click();
   return page.getByRole("tabpanel", { name: "Read" });
 }
 

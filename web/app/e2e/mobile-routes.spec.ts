@@ -45,7 +45,7 @@
 
 import { devices, expect, test, type Page } from "@playwright/test";
 
-import { ADMIN, createDocument, signIn } from "./helpers.js";
+import { ADMIN, createDocument, modeSwitch, signIn } from "./helpers.js";
 
 /** SPEC §6.5's acceptance viewport: the phone the owner tests on. */
 const PHONE = { width: 390, height: 844 };
@@ -214,8 +214,8 @@ test.describe("every route at 390 px", () => {
     // layout over the same hostile content and has to hold the page just as read mode
     // does — CodeMirror's scroller is the usual way it does not.
     await page.goto(`/#/doc/${id}`);
-    await expect(page.getByRole("tablist", { name: /document mode/i })).toBeVisible();
-    await page.getByRole("tab", { name: /edit/i }).click();
+    await expect(modeSwitch(page)).toBeVisible();
+    await page.getByRole("button", { name: "Switch to Edit" }).click();
     await expect(page.locator(".cm-editor")).toBeVisible();
     await page.waitForTimeout(250);
     failures.push(...(await measure(page, `/doc/${id} in edit mode`)));

@@ -300,7 +300,14 @@ export interface DocumentMode {
   readonly component: ComponentType<DocumentModeProps>;
   readonly icon?: ReactNode;
   readonly order?: number;
-  /** `false` ⇒ hidden for this document (a mode that only handles attachments). */
+  /**
+   * The mode's own rule for whether it applies to this document: `false` ⇒ it is not
+   * offered — no tab, no place in the phone's switch, never chosen as the default. Any
+   * condition the plugin likes (a mode that only handles attachments, one for documents
+   * with a `fm.type`, one only for ones with machine sections). Asked again whenever the
+   * row changes, so a mode appears and disappears as the document does; a `when` that
+   * throws hides its mode and is reported. Absent ⇒ every document.
+   */
   readonly when?: (row: DocumentRow) => boolean;
 }
 

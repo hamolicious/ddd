@@ -1260,15 +1260,15 @@
     "semantic_hash": ""
   },
   "plugins/base/doc-list/src/DocListView.tsx": {
-    "mtime": 1790434058.1741054,
-    "seen": 1790434509.8704617,
-    "ast_hash": "11fad304d0f85bf9af7b45183bd44ed5",
+    "mtime": 1790435994.8383746,
+    "seen": 1790436024.7159705,
+    "ast_hash": "d14228ebc7a51b9d75886f96f5c197da",
     "semantic_hash": ""
   },
   "plugins/base/doc-list/src/FilterBar.tsx": {
-    "mtime": 1790434463.1717985,
-    "seen": 1790434509.8704627,
-    "ast_hash": "90cb2ef66ff8f8344e78d96a9fc52472",
+    "mtime": 1790435954.2311957,
+    "seen": 1790436024.7159724,
+    "ast_hash": "c611ae8e85ff4537788e4bdb573c6f98",
     "semantic_hash": ""
   },
   "plugins/base/doc-list/src/ViewsPanel.tsx": {
@@ -1290,9 +1290,9 @@
     "semantic_hash": ""
   },
   "plugins/base/doc-list/src/index.tsx": {
-    "mtime": 1790434089.7132633,
-    "seen": 1790434509.8705301,
-    "ast_hash": "3218973093986ba1e7b7faa103e4833b",
+    "mtime": 1790435155.8794825,
+    "seen": 1790436024.7161093,
+    "ast_hash": "390f44f7c7c8c73ad9916dab8738c99a",
     "semantic_hash": ""
   },
   "plugins/base/doc-list/src/useLiveQuery.ts": {
@@ -1818,9 +1818,9 @@
     "semantic_hash": ""
   },
   "web/app/e2e/browsing.spec.ts": {
-    "mtime": 1790434154.4193501,
-    "seen": 1790434509.8738313,
-    "ast_hash": "5362e9892a50d65927d4a71dee0ea1f8",
+    "mtime": 1790435817.8205194,
+    "seen": 1790436024.7196004,
+    "ast_hash": "689ac67dd16b134a82cfb1b7eb0caea4",
     "semantic_hash": ""
   },
   "web/app/e2e/frontmatter.spec.ts": {
@@ -1848,9 +1848,9 @@
     "semantic_hash": "f41a8602b793e9f9796c43c155fbcee1"
   },
   "web/app/e2e/mobile-browse.spec.ts": {
-    "mtime": 1790434133.9659827,
-    "seen": 1790434509.8739183,
-    "ast_hash": "f8802cd490ac577bae77033c70bdf5e8",
+    "mtime": 1790435827.254382,
+    "seen": 1790436024.7197127,
+    "ast_hash": "6f326743769da49ad43a7ffd588e1836",
     "semantic_hash": ""
   },
   "web/app/e2e/mobile-document.spec.ts": {

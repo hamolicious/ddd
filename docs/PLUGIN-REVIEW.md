@@ -29,7 +29,7 @@ browser's device toolbar at 390 × 844, and 844 × 390 for landscape.
 | 10 | `doc-list` | [x] | Icon sort/direction/filters, row ⋯ menu, machine filter, paging |
 | 11 | `folders` | [x] | Lifted drags, folder reorder, tighter rows |
 | 12 | `search` | [ ] | Folded into `doc-list`: search bar, docked on phones |
-| 13 | `document-surface` | [ ] | |
+| 13 | `document-surface` | [ ] | Icon mode switch, phone bubble, save icon, any number of modes |
 | 14 | `editor` | [ ] | |
 | 15 | `markdown` | [ ] | |
 | 16 | `viewer` | [ ] | |
@@ -300,18 +300,29 @@ by the server, before it has synced, does not appear.
 
 ## 13. `document-surface` — opening a document
 
-**What it does.** Owns the `#/doc/<id>` page: loads the document, shows its title and the
-mode switcher (Read / Edit), and hands the document to the active mode. Mod+E cycles
-modes.
+**What it does.** Owns the `#/doc/<id>` page. It loads the document, shows its title,
+the save state and the mode switch, and hands the document to the active mode. Any
+number of modes can register (`document.mode`), and each mode's own `when` decides
+which documents it is offered on. Mod+E cycles modes.
 
 **Where to see it.** Open any document.
 
-- [ ] The title and mode tabs fit at 390 px.
-- [ ] Mod+E switches Read ↔ Edit; the choice is kept per document.
+- [ ] Desktop: the title is on the left; on the right are the save icon and one icon
+  per mode (book = Read, pencil = Edit), in a short segmented control. Each icon's
+  tooltip is the mode's name.
+- [ ] Phone: the header is the title and the save icon. A round button bottom-right
+  shows the mode it switches to. With three or more modes it fans out the choices.
+- [ ] Save icon: a cloud with a tick when saved. It pulses while saving or
+  reconnecting and is crossed out offline; hover for the words.
+- [ ] Mod+E switches modes; the choice is kept per document.
 - [ ] Its settings section shows how many modes are remembered and can forget them.
 - [ ] A missing document shows "Document not found"; a trashed one shows the Trash banner.
 
-**Notes.**
+**Notes.** Read/Edit became icons, and the header became shorter (2026-09-26). The phone
+got the floating mode button. The editor's "Saved" strip moved into this header as an
+icon, shown in every mode. A new example, `plugins/examples/source-view`, is a third
+mode offered only on documents with frontmatter or machine sections. It is tested by
+`web/app/e2e/modes.spec.ts`.
 
 ## 14. `editor` — Edit mode
 
@@ -322,11 +333,14 @@ frontmatter could not be read.
 **Where to see it.** Any document → Edit.
 
 - [ ] Typing is saved and appears in a second browser within a second or two.
-- [ ] Machine sections fold and unfold ("Collapse / Show machine sections").
+- [ ] Machine sections fold and unfold: the chevron at the end of the `%%% id` line
+  opens one and folds it back; the palette's "Collapse / Show machine sections" does all.
 - [ ] Broken frontmatter shows the "could not be read" notice.
 - [ ] Phone: the editor scrolls inside itself; the keyboard does not cover the cursor.
 
-**Notes.**
+**Notes.** The "Saved" strip under the editor moved to the document header as an icon
+(2026-09-26). A folded `%%%` section is now a chevron icon with no text. Once opened,
+it shows a chevron in the same place that folds it again (2026-09-26).
 
 ## 15. `markdown` — rendering markdown
 

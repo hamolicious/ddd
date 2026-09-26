@@ -102,7 +102,7 @@ test.describe("phone width (390px)", () => {
 });
 
 test.describe("copy and labels that were wrong", () => {
-  test("a fold placeholder names the region it hides", async ({ page, request, baseURL }) => {
+  test("a fold placeholder names the region it hides, and folds again once opened", async ({ page, request, baseURL }) => {
     // A `%%%` section's owner is on the fence line the fold hides, so the chip is the
     // one place left to say it. This test used to assert a *second* placeholder reading
     // "⋯ frontmatter": the block was folded on open behind a per-user preference, and
@@ -120,14 +120,22 @@ test.describe("copy and labels that were wrong", () => {
     await openDocument(page, id);
     await page.getByRole("tab", { name: "Edit" }).click();
 
+    // An icon, no words on screen; its name says which plugin's data it hides.
     const placeholders = page.locator(".cm-foldPlaceholder");
     await expect(placeholders).toHaveCount(1);
-    await expect(placeholders.nth(0)).toHaveText("⋯ sweep-demo data");
+    await expect(placeholders.nth(0)).toHaveText("");
+    await expect(placeholders.nth(0)).toHaveAttribute("aria-label", "Expand sweep-demo data");
 
     // Still a fold, not just a label: clicking it puts the text back.
     await placeholders.nth(0).click();
     await expect(placeholders).toHaveCount(0);
     await expect(page.locator(".cm-content")).toContainText("key: value");
+
+    // And, opened, it can be put away again from the same place.
+    await page.getByRole("button", { name: "Collapse sweep-demo data" }).click();
+    await expect(placeholders).toHaveCount(1);
+    await expect(page.locator(".cm-content")).not.toContainText("key: value");
+    await expect(page.getByRole("button", { name: "Collapse sweep-demo data" })).toHaveCount(0);
   });
 
   test("Trash attributes a deletion in words, not a raw user id", async ({ page, request, baseURL }) => {

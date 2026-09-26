@@ -1,0 +1,20 @@
+{
+  "id": "source-view",
+  "version": "1.0.0",
+  "x-tailwind": true,
+  "kernel": "^1.0",
+  "dependencies": {
+    "document-surface": "^1.0"
+  },
+  "peerLibraries": {
+    "react": "^18.0.0"
+  },
+  "frontend": {
+    "module": "frontend/index.mjs",
+    "style": "frontend/style.css"
+  },
+  "name": "Source view",
+  "description": "A third, read-only `source` mode: the whole text, frontmatter and machine sections included. Offered only on documents that have either, to show a mode deciding for itself where it applies.",
+  "author": "Life Manager examples",
+  "license": "MIT OR Apache-2.0"
+}

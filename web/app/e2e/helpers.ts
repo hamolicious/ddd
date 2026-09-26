@@ -193,10 +193,22 @@ export async function createDocument(
   return id as string;
 }
 
-/** Open a document by id and wait for the surface's mode tabs. */
+/**
+ * Open a document by id and wait for the surface's mode switch — the header tabs on a
+ * wide screen, the floating button on a phone.
+ */
 export async function openDocument(page: Page, id: string): Promise<void> {
   await page.goto(`/#/doc/${id}`);
-  await expect(page.getByRole("tablist", { name: /document mode/i })).toBeVisible();
+  await expect(modeSwitch(page)).toBeVisible();
+}
+
+/** The document surface's mode switch, whichever form this viewport shows. */
+export function modeSwitch(page: Page): Locator {
+  // Both are in the page at every width; only one is shown.
+  return page
+    .getByRole("tablist", { name: /document mode/i })
+    .or(page.locator(".docsurface-mode-bubble"))
+    .filter({ visible: true });
 }
 
 /** The installed plugin registry as `/api/plugins` reports it, with a session. */

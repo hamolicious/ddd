@@ -1,7 +1,7 @@
 # Graph Report - life-manager  (2026-09-26)
 
 ## Corpus Check
-- 520 files · ~666,837 words
+- 520 files · ~666,931 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 67 file(s) not represented in the graph (top: (none) 13, .xml 10, .xcconfig 8)
 
@@ -1519,11 +1519,11 @@ Nodes (3): crate::error::AppError, From, Self
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Drop` connect `SyncHub` to `FolderTree.tsx`, `in_flight`, `.new`, `PluginPool`, `feed.rs`, `queue.rs`, `tests/statics.rs`, `shell_bundle.rs`?**
-  _High betweenness centrality (0.270) - this node is a cross-community bridge._
+  _High betweenness centrality (0.266) - this node is a cross-community bridge._
 - **Why does `react` connect `react` to `main.tsx`, `viewer/src/index.tsx`, `MarkdownRuntime`, `ThemesController`, `tasks.ts`, `fm-display.ts`, `commands/src/index.tsx`, `FolderTree.tsx`, `kernel-api/src/index.ts`, `doc-list/src/index.tsx`, `SyncIndicator.tsx`, `BarSettings.tsx`, `Shell.tsx`, `pipeline.test.ts`, `Plugins.tsx`, `path.ts`, `markdown/src/index.tsx`, `editor/src/index.tsx`, `AppFrame.tsx`, `runtime/boundary.tsx`, `theme.ts`, `alt-editor/src/index.tsx`, `Plugin review guide`, `normalizePath`, `AdminView.tsx`, `render.tsx`, `points.ts`, `Account.tsx`, `_shared/boundary.tsx`, `folders/src/index.tsx`, `boot/api.ts`, `Menu.tsx`, `loader.ts`, `menu.tsx`, `PluginConfig.tsx`, `src/filter.ts`, `importmap.ts`, `package.json`, `useMutation`, `document-surface/src/index.tsx`, `host.ts`?**
-  _High betweenness centrality (0.260) - this node is a cross-community bridge._
+  _High betweenness centrality (0.253) - this node is a cross-community bridge._
 - **Why does `String` connect `String` to `host_fns.rs`, `plugin_api.rs`, `zipcheck.rs`, `attachments.rs`, `domain.rs`, `PluginHost`, `sync_ws.rs`, `server/src/plugins.rs`, `feed.rs`, `pluginhost/hooks.rs`, `ast.rs`, `.fire`, `sync.rs`, `docstore.rs`, `routes/documents.rs`, `health.rs`, `pluginhost_http.rs`, `plugininstall/config.rs`, `telemetry.rs`, `auth/mod.rs`, `PluginPool`, `plugininstall_flow.rs`, `pluginhost/mod.rs`, `plugin-abi/src/documents.rs`, `DocStoreError`, `value.rs`, `Value`, `server/tests/common/mod.rs`, `tests/statics.rs`, `rate_limit.rs`, `Date`, `SyncHub`, `shell_bundle.rs`, `pluginhost/limits.rs`, `plugin-sdk/src/kv.rs`, `invite.rs`, `routes/statics.rs`, `evaluator.rs`, `Config`, `pluginhost_runtime.rs`, `.lock`, `Response`, `CircuitBreaker`, `yaml.rs`, `splice.rs`, `document.rs`, `shell.rs`, `plugininstall/mod.rs`, `admin.rs`, `serve`, `HostError`, `mongo.rs`, `migrations.rs`, `queue.rs`, `sections.rs`, `bootstrap`, `.from_env`, `call_value`, `.new`, `password.rs`, `conformance.rs`, `AppError`, `replace`, `Diagnostic`, `convergence.rs`, `AppState`, `main.rs`, `ChangeFeed`, `HookQueue`, `title.rs`, `documents_query.rs`, `audit.rs`, `watcher.rs`, `Option`, `ConfigGetOutput`, `MongoDocStore`, `ListQuery`, `.new`, `runtime.rs`, `Option`, `write_envelope`, `wrapper_document_text`, `in_flight`, `.parse`, `document_value`?**
-  _High betweenness centrality (0.206) - this node is a cross-community bridge._
+  _High betweenness centrality (0.205) - this node is a cross-community bridge._
 - **What connects `note`, `bundle_version`, `min_bridge_version` to the rest of the system?**
   _1870 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `bridge-fixtures.test.ts` be split into smaller, more focused modules?**

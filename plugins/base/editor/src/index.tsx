@@ -14,7 +14,9 @@
  *   human-owned, it is what edit mode is *for* when the thing being edited is a date
  *   or a tag list, and a block that collapses itself the moment a document opens is a
  *   control you have to defeat before you can type. Both regions stay part of the text
- *   and stay editable either way (SPEC §3.1, §6.5).
+ *   and stay editable either way (SPEC §3.1, §6.5). The fold is one icon at the end of
+ *   the `%%% id` line, in the same place both ways: a chevron to open it, and once
+ *   open, a chevron to put it away again.
  * - **Every write is a splice.** `yCollab` already produces minimal insert/delete pairs
  *   from CodeMirror transactions; nothing in this plugin may ever replace the whole
  *   text, because that destroys concurrent edits (SPEC §3.2).
@@ -32,10 +34,27 @@ import {
   codeFolding,
   foldEffect,
   foldService,
+  foldedRanges,
   unfoldEffect,
 } from "@codemirror/language";
-import { Compartment, EditorState, type Extension, type Text } from "@codemirror/state";
-import { EditorView, drawSelection, dropCursor, highlightSpecialChars, keymap } from "@codemirror/view";
+import {
+  Compartment,
+  EditorState,
+  RangeSetBuilder,
+  StateField,
+  type Extension,
+  type Text,
+} from "@codemirror/state";
+import {
+  Decoration,
+  EditorView,
+  WidgetType,
+  drawSelection,
+  dropCursor,
+  highlightSpecialChars,
+  keymap,
+  type DecorationSet,
+} from "@codemirror/view";
 import { defaultKeymap, indentWithTab } from "@codemirror/commands";
 import type { Kernel, Unsubscribe } from "@kernel";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -130,6 +149,83 @@ function foldRangeFor(doc: Text, region: Region): { from: number; to: number } |
   const firstLineEnd = doc.lineAt(region.start).to;
   return firstLineEnd < region.end ? { from: firstLineEnd, to: region.end } : null;
 }
+
+/** Chevron pointing down (open this) or up (put it away), drawn in the text colour. */
+function chevron(direction: "down" | "up"): SVGSVGElement {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", "1em");
+  svg.setAttribute("height", "1em");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "2.5");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", direction === "down" ? "M6 9l6 6 6-6" : "M6 15l6-6 6 6");
+  svg.append(path);
+  return svg;
+}
+
+/** The "put it away again" icon an open machine section carries where its fold chip was. */
+class RefoldWidget extends WidgetType {
+  constructor(
+    readonly from: number,
+    readonly to: number,
+    readonly name: string,
+  ) {
+    super();
+  }
+
+  override eq(other: RefoldWidget): boolean {
+    return other.from === this.from && other.to === this.to && other.name === this.name;
+  }
+
+  override toDOM(view: EditorView): HTMLElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "editor-refold";
+    button.title = "Collapse";
+    button.setAttribute("aria-label", `Collapse ${this.name}`);
+    button.append(chevron("up"));
+    // Not a caret move: the press must not take focus or the selection with it.
+    button.onmousedown = (event) => event.preventDefault();
+    button.onclick = () => view.dispatch({ effects: foldEffect.of({ from: this.from, to: this.to }) });
+    return button;
+  }
+
+  override ignoreEvent(): boolean {
+    return true;
+  }
+}
+
+/** One refold icon per machine section that is open right now. */
+function refoldIcons(state: EditorState): DecorationSet {
+  const folded = foldedRanges(state);
+  const builder = new RangeSetBuilder<Decoration>();
+  for (const region of foldableRegionsOf(regionsOf(state.doc))) {
+    const range = foldRangeFor(state.doc, region);
+    if (!range) continue;
+    let closed = false;
+    folded.between(range.from, range.from, (from) => {
+      if (from === range.from) closed = true;
+    });
+    if (closed) continue;
+    builder.add(
+      range.from,
+      range.from,
+      Decoration.widget({ widget: new RefoldWidget(range.from, range.to, foldLabel(state.doc, range.from)), side: 1 }),
+    );
+  }
+  return builder.finish();
+}
+
+const refold = StateField.define<DecorationSet>({
+  create: refoldIcons,
+  update: (_, transaction) => refoldIcons(transaction.state),
+  provide: (field) => EditorView.decorations.from(field),
+});
 
 export default function activate(kernel: Kernel): EditorApi {
   const extensions = kernel.extensions.definePoint<EditorExtension>({
@@ -244,16 +340,21 @@ export default function activate(kernel: Kernel): EditorApi {
               // --- the machine regions ---------------------------------------
               codeFolding({
                 preparePlaceholder: (state, range) => foldLabel(state.doc, range.from),
+                // An icon, no words: the `%%% id` line beside it already names the
+                // section, and the name stays the chip's accessible name and tooltip.
                 placeholderDOM: (_view, onclick, prepared: unknown) => {
+                  const name = typeof prepared === "string" ? prepared : "machine data";
                   const chip = document.createElement("span");
                   chip.className = "cm-foldPlaceholder";
-                  chip.textContent = `⋯ ${typeof prepared === "string" ? prepared : "machine data"}`;
-                  chip.title = "Expand";
-                  chip.setAttribute("aria-label", `Expand ${chip.textContent.slice(2)}`);
+                  chip.title = `Expand ${name}`;
+                  chip.setAttribute("role", "button");
+                  chip.setAttribute("aria-label", `Expand ${name}`);
+                  chip.append(chevron("down"));
                   chip.onclick = onclick;
                   return chip;
                 },
               }),
+              refold,
               // The fold service is what makes a region foldable *at all* — gutter,
               // keybinding and `foldEffect` alike. Frontmatter is absent from it on
               // purpose: not "folded: false", but no fold range, so nothing in
@@ -284,13 +385,22 @@ export default function activate(kernel: Kernel): EditorApi {
                 ".cm-selectionBackground, ::selection": { background: "var(--lm-selection)" },
                 "&.cm-focused .cm-selectionBackground": { background: "var(--lm-selection)" },
                 ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--lm-text)" },
-                ".cm-foldPlaceholder": {
-                  padding: "0 6px",
+                ".cm-foldPlaceholder, .editor-refold": {
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  verticalAlign: "middle",
+                  margin: "0 0 0 6px",
+                  padding: "1px 6px",
+                  minHeight: "0",
+                  font: "inherit",
                   border: "1px solid var(--lm-border-strong)",
                   borderRadius: "999px",
                   background: "var(--lm-bg-subtle)",
                   color: "var(--lm-text-muted)",
+                  cursor: "pointer",
                 },
+                ".cm-foldPlaceholder:hover, .editor-refold:hover": { color: "var(--lm-text)" },
               }),
 
               // --- everybody else's contributions ----------------------------
@@ -392,8 +502,7 @@ export default function activate(kernel: Kernel): EditorApi {
             Offline. Your edits are saved here and sync when the connection returns.
           </p>
         ) : null}
-        <div className="editor-surface editor:flex editor:min-h-0 editor:min-w-0 editor:flex-1 editor:flex-col editor:overflow-hidden editor:[&_.cm-content]:max-w-[88ch] editor:[&_.cm-content]:px-4 editor:[&_.cm-content]:pb-[calc(var(--lm-viewport-height,100dvh)*0.4)] editor:[&_.cm-content]:pt-4 editor:compact:[&_.cm-content]:px-3 editor:compact:[&_.cm-content]:pt-2 editor:[&_.cm-editor]:min-h-0 editor:[&_.cm-editor]:min-w-0 editor:[&_.cm-editor]:max-w-full editor:[&_.cm-editor]:flex-1 editor:[&_.cm-scroller]:max-w-full editor:[&_.cm-scroller]:overflow-x-auto editor:[&_.cm-scroller]:overscroll-x-contain editor:compact:[&_.cm-foldPlaceholder]:inline-block editor:compact:[&_.cm-foldPlaceholder]:min-h-[calc(var(--lm-tap-target)-20px)] editor:compact:[&_.cm-foldPlaceholder]:leading-[calc(var(--lm-tap-target)-20px)]" ref={host} />
-        <SaveState kernel={kernel} />
+        <div className="editor-surface editor:flex editor:min-h-0 editor:min-w-0 editor:flex-1 editor:flex-col editor:overflow-hidden editor:[&_.cm-content]:max-w-[88ch] editor:[&_.cm-content]:px-4 editor:[&_.cm-content]:pb-[calc(var(--lm-viewport-height,100dvh)*0.4)] editor:[&_.cm-content]:pt-4 editor:compact:[&_.cm-content]:px-3 editor:compact:[&_.cm-content]:pt-2 editor:[&_.cm-editor]:min-h-0 editor:[&_.cm-editor]:min-w-0 editor:[&_.cm-editor]:max-w-full editor:[&_.cm-editor]:flex-1 editor:[&_.cm-scroller]:max-w-full editor:[&_.cm-scroller]:overflow-x-auto editor:[&_.cm-scroller]:overscroll-x-contain editor:compact:[&_.cm-foldPlaceholder]:min-h-[calc(var(--lm-tap-target)-20px)]! editor:compact:[&_.cm-foldPlaceholder]:min-w-[calc(var(--lm-tap-target)-8px)] editor:compact:[&_.editor-refold]:min-h-[calc(var(--lm-tap-target)-20px)]! editor:compact:[&_.editor-refold]:min-w-[calc(var(--lm-tap-target)-8px)]" ref={host} />
       </div>
     );
   };
@@ -402,6 +511,13 @@ export default function activate(kernel: Kernel): EditorApi {
     id: "edit",
     label: "Edit",
     order: 10,
+    // A pencil. `currentColor`, so it follows the switch's selected/idle colours.
+    icon: (
+      <svg aria-hidden="true" viewBox="0 0 24 24" width="1.15em" height="1.15em" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 013 3L8 19z" />
+        <path d="M14.5 6.5l3 3" />
+      </svg>
+    ),
     component: Edit,
   });
 
@@ -435,49 +551,4 @@ export default function activate(kernel: Kernel): EditorApi {
   };
 
   return api;
-}
-
-/**
- * The editor's own save state, from `kernel.sync` (SPEC §6.4).
- *
- * `shell-ui` owns the always-visible workspace indicator; this one answers the question
- * a person asks *while typing* — "did that last sentence get out?" — which is the
- * `pending` count, not the connection state. There is no save button: an edit is a CRDT
- * update the moment it is typed.
- */
-function SaveState({ kernel }: { readonly kernel: Kernel }): ReactNode {
-  const [state, setState] = useState(() => kernel.sync.state);
-  useEffect(() => kernel.sync.subscribe(setState), [kernel]);
-
-  const label = (): string => {
-    if (state.pending > 0) {
-      return state.status === "offline"
-        ? `${state.pending} change${state.pending === 1 ? "" : "s"} saved on this device`
-        : `Saving ${state.pending} change${state.pending === 1 ? "" : "s"}…`;
-    }
-    switch (state.status) {
-      case "offline":
-        return "Offline. Everything typed is saved on this device.";
-      case "connecting":
-      case "syncing":
-        return "Reconnecting…";
-      case "auth-required":
-        return "Sign in again to sync. Nothing is lost.";
-      case "error":
-        return state.lastError ? `Sync error: ${state.lastError}` : "Sync error";
-      default:
-        return "Saved";
-    }
-  };
-
-  return (
-    <p
-      className="editor:m-0 editor:min-h-[calc(var(--lm-space)*3)] editor:shrink-0 editor:border-t editor:border-border editor:bg-bg-subtle editor:px-4 editor:py-1 editor:text-xs editor:text-text-muted editor:data-[pending=true]:text-text editor:data-[status=offline]:border-warning editor:data-[status=offline]:text-text editor:data-[status=auth-required]:border-warning editor:data-[status=auth-required]:text-text editor:data-[status=error]:border-danger editor:data-[status=error]:text-text editor:compact:px-2 editor:compact:break-words"
-      role="status"
-      data-status={state.status}
-      data-pending={state.pending > 0 ? "true" : "false"}
-    >
-      {label()}
-    </p>
-  );
 }

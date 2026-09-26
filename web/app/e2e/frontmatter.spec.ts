@@ -297,7 +297,7 @@ test.describe("edit mode shows the raw frontmatter block", () => {
     // the user came for. One placeholder, not two.
     const placeholders = page.locator(".cm-foldPlaceholder");
     await expect(placeholders).toHaveCount(1);
-    await expect(placeholders.nth(0)).toHaveText("⋯ sweep-demo data");
+    await expect(placeholders.nth(0)).toHaveAttribute("aria-label", "Expand sweep-demo data");
 
     // And there is no fold to *re*-collapse the frontmatter with: the fold service
     // offers the region no range at all, so nothing — a gutter arrow, `foldAll`, a

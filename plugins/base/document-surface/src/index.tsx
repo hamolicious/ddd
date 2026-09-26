@@ -17,6 +17,12 @@
  *   the same document would take two handles and hold the replica open twice.
  * - **Mode persistence.** The chosen mode per document is a per-user setting, so
  *   reopening a document returns you to how you were reading it.
+ *
+ * **The switch is icons.** On a wide screen, a compact segmented control in the header —
+ * each mode's `icon`, its label as the accessible name and tooltip (a mode with no icon
+ * shows its label). On a phone the header holds only the title, and a round button
+ * floats bottom-right showing the mode it switches *to* (the pencil while reading, the
+ * book while editing), where a thumb already is.
  */
 
 import type {
@@ -47,6 +53,7 @@ import {
   type SettingsSection,
 } from "../../_shared/points.js";
 import { lineFromPath } from "./line.js";
+import { SaveState } from "./SaveState.js";
 import { DefaultModeSection } from "./SettingsSection.js";
 import {
   DEFAULT_MODE_ID,
@@ -676,10 +683,12 @@ function SurfaceView({
 
   return (
     <div className="docsurface-root docsurface:flex docsurface:h-full docsurface:min-h-0 docsurface:min-w-0 docsurface:flex-col docsurface:font-sans docsurface:text-text">
-      <header className="docsurface:flex docsurface:flex-wrap docsurface:items-center docsurface:justify-between docsurface:gap-2 docsurface:border-b docsurface:border-border docsurface:px-4 docsurface:py-3 docsurface:compact:p-2">
-        <h1 className="docsurface-title docsurface:m-0 docsurface:break-words docsurface:text-lg docsurface:font-semibold docsurface:leading-[1.3] docsurface:compact:flex-[1_1_100%] docsurface:compact:text-base">{row.title}</h1>
+      <header className="docsurface:flex docsurface:items-center docsurface:gap-2 docsurface:border-b docsurface:border-border docsurface:px-4 docsurface:py-2 docsurface:compact:px-2">
+        <h1 className="docsurface-title docsurface:m-0 docsurface:min-w-0 docsurface:flex-1 docsurface:break-words docsurface:text-lg docsurface:font-semibold docsurface:leading-[1.3] docsurface:compact:text-base">{row.title}</h1>
+        <SaveState kernel={surface.kernel} />
         <ModeTabs surface={surface} modes={visible} activeId={active?.id} />
       </header>
+      <ModeBubble surface={surface} modes={visible} activeId={active?.id} />
 
       {row.deleted ? <TrashedBanner surface={surface} row={row} /> : null}
       {/*
@@ -707,7 +716,9 @@ function SurfaceView({
       ) : null}
 
       <section
-        className="docsurface-pane docsurface:flex docsurface:min-h-0 docsurface:min-w-0 docsurface:flex-1 docsurface:flex-col docsurface:overflow-auto"
+        // Room at the end on a phone, so the floating mode button never sits over the
+        // last lines of a document scrolled to the bottom.
+        className={`docsurface-pane docsurface:flex docsurface:min-h-0 docsurface:min-w-0 docsurface:flex-1 docsurface:flex-col docsurface:overflow-auto ${visible.length > 1 ? "docsurface:compact:pb-[calc(5rem+var(--lm-safe-bottom))]" : ""}`}
         role="tabpanel"
         id={`docsurface-pane-${active?.id ?? "none"}`}
         aria-labelledby={active ? `docsurface-tab-${active.id}` : undefined}
@@ -781,7 +792,7 @@ function ModeTabs({
   };
 
   return (
-    <div className="docsurface:flex docsurface:gap-0.5 docsurface:rounded docsurface:border docsurface:border-border docsurface:bg-bg-subtle docsurface:p-0.5 docsurface:compact:w-full" role="tablist" aria-label="Document mode" ref={container}>
+    <div className="docsurface-modes docsurface:flex docsurface:gap-0.5 docsurface:rounded docsurface:border docsurface:border-border docsurface:bg-bg-subtle docsurface:p-0.5 docsurface:compact:hidden" role="tablist" aria-label="Document mode" ref={container}>
       {modes.map((mode, index) => {
         const selected = mode.id === activeId;
         return (
@@ -790,7 +801,11 @@ function ModeTabs({
             id={`docsurface-tab-${mode.id}`}
             type="button"
             role="tab"
-            className="docsurface:tap-h docsurface:inline-flex docsurface:cursor-pointer docsurface:items-center docsurface:gap-1 docsurface:rounded-[calc(var(--lm-radius)-1px)] docsurface:border-0 docsurface:bg-transparent docsurface:px-3 docsurface:text-sm docsurface:text-text-muted docsurface:aria-selected:bg-bg-raised docsurface:aria-selected:text-text docsurface:aria-selected:shadow-1 docsurface:focus-visible:outline-2 docsurface:focus-visible:outline-offset-1 docsurface:focus-visible:outline-focus docsurface:compact:min-w-0 docsurface:compact:flex-1 docsurface:compact:justify-center docsurface:compact:px-1.5"
+            // Icon-only and short: the app's button tap height is a phone rule, and on a
+            // phone this control is not shown (`ModeBubble` is).
+            className={`docsurface:inline-flex docsurface:h-7 docsurface:min-h-0! docsurface:cursor-pointer docsurface:items-center docsurface:justify-center docsurface:gap-1 docsurface:rounded-[calc(var(--lm-radius)-1px)] docsurface:border-0 docsurface:bg-transparent docsurface:py-0! docsurface:text-sm docsurface:text-text-muted docsurface:hover:text-text docsurface:aria-selected:bg-bg-raised docsurface:aria-selected:text-accent docsurface:aria-selected:shadow-1 docsurface:focus-visible:outline-2 docsurface:focus-visible:outline-offset-1 docsurface:focus-visible:outline-focus ${hasIcon(mode) ? "docsurface:w-8 docsurface:px-0!" : "docsurface:px-2.5"}`}
+            aria-label={mode.label}
+            title={mode.label}
             aria-selected={selected}
             aria-controls={`docsurface-pane-${mode.id}`}
             tabIndex={selected ? 0 : -1}
@@ -804,13 +819,117 @@ function ModeTabs({
               event.preventDefault();
             }}
           >
-            <ModeIcon surface={surface} mode={mode} />
-            {/* A span, so a label too long for a 360 px segment ellipsises instead of
-                widening the header (see `.docsurface-mode-label`). */}
-            <span className="docsurface:truncate">{mode.label}</span>
+            {hasIcon(mode) ? (
+              <ModeIcon surface={surface} mode={mode} />
+            ) : (
+              <span className="docsurface:truncate">{mode.label}</span>
+            )}
           </button>
         );
       })}
+    </div>
+  );
+}
+
+function hasIcon(mode: DocumentMode): boolean {
+  return mode.icon !== undefined && mode.icon !== null && mode.icon !== false;
+}
+
+/**
+ * The phone's mode switch, bottom-right where a thumb already is. Any number of modes:
+ *
+ * - **Two** (read and edit): one round button that switches straight to the other mode
+ *   and shows *its* icon — the pencil while reading, the book while editing.
+ * - **More**: the button shows the current mode, and a tap fans the others out above
+ *   it, one round button each, with their labels beside them; picking one switches, and
+ *   a tap anywhere else (or Escape) folds them away.
+ */
+function ModeBubble({
+  surface,
+  modes,
+  activeId,
+}: {
+  readonly surface: Surface;
+  readonly modes: readonly DocumentMode[];
+  readonly activeId: string | undefined;
+}): ReactNode {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const away = (event: PointerEvent): void => {
+      if (!root.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const escape = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", away, true);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", away, true);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open]);
+
+  if (modes.length < 2) return null;
+  const current = modes.find((mode) => mode.id === activeId) ?? modes[0];
+  const others = modes.filter((mode) => mode !== current);
+  const toggle = modes.length === 2;
+  const shown = toggle ? others[0] : current;
+  if (!shown || !current) return null;
+
+  const face = (mode: DocumentMode): ReactNode =>
+    hasIcon(mode) ? (
+      <ModeIcon surface={surface} mode={mode} />
+    ) : (
+      <span className="docsurface:text-xs docsurface:font-semibold">{mode.label.slice(0, 2)}</span>
+    );
+
+  return (
+    <div
+      ref={root}
+      className="docsurface-mode-bubble docsurface:hidden docsurface:compact:flex docsurface:fixed docsurface:right-[calc(1rem+var(--lm-safe-right))] docsurface:bottom-[calc(1rem+var(--lm-safe-bottom))] docsurface:z-10 docsurface:flex-col docsurface:items-end docsurface:gap-3"
+    >
+      {open && (
+        <ul className="docsurface:m-0 docsurface:flex docsurface:list-none docsurface:flex-col docsurface:items-end docsurface:gap-2 docsurface:p-0 docsurface:pr-1" aria-label="Document modes">
+          {others.map((mode) => (
+            <li key={mode.id} className="docsurface:flex docsurface:items-center docsurface:gap-2">
+              <span aria-hidden="true" className="docsurface:rounded docsurface:bg-bg-raised docsurface:px-2 docsurface:py-1 docsurface:text-sm docsurface:text-text docsurface:shadow-1">
+                {mode.label}
+              </span>
+              <button
+                type="button"
+                className="docsurface:flex docsurface:size-12 docsurface:cursor-pointer docsurface:items-center docsurface:justify-center docsurface:rounded-full docsurface:border docsurface:border-border docsurface:bg-bg-raised docsurface:p-0 docsurface:text-lg docsurface:text-text docsurface:shadow-2"
+                aria-label={`Switch to ${mode.label}`}
+                onClick={() => {
+                  setOpen(false);
+                  void surface.setMode(mode.id);
+                }}
+              >
+                {face(mode)}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <button
+        type="button"
+        className="docsurface:flex docsurface:size-14 docsurface:cursor-pointer docsurface:items-center docsurface:justify-center docsurface:rounded-full docsurface:border-0 docsurface:bg-accent docsurface:p-0 docsurface:text-xl docsurface:text-accent-text docsurface:shadow-2 docsurface:active:scale-95 docsurface:focus-visible:outline-2 docsurface:focus-visible:outline-offset-2 docsurface:focus-visible:outline-focus"
+        {...(toggle
+          ? { "aria-label": `Switch to ${shown.label}`, title: `Switch to ${shown.label}` }
+          : {
+              "aria-label": `${current.label} mode. Choose another`,
+              title: "Document mode",
+              "aria-expanded": open,
+            })}
+        onClick={() => {
+          if (toggle) void surface.setMode(shown.id);
+          else setOpen((value) => !value);
+        }}
+      >
+        {face(shown)}
+      </button>
     </div>
   );
 }
