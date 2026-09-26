@@ -60,7 +60,7 @@ interface AttachmentMeta {
 const MAX_INLINE_IMAGE_BYTES = 16 * 1024 * 1024;
 const MAX_INLINE_TEXT_BYTES = 256 * 1024;
 
-const READER_CLASSES = "mx-auto w-full min-w-0 max-w-[72ch] break-words px-4 py-6 text-base leading-[1.65] compact:py-4 compact:leading-[1.7] [&>:first-child]:mt-0 [&_h1]:mb-2 [&_h1]:mt-6 [&_h1]:text-2xl [&_h1]:leading-tight compact:[&_h1]:text-xl [&_h2]:mb-2 [&_h2]:mt-6 [&_h2]:text-xl [&_h2]:leading-tight compact:[&_h2]:text-lg [&_h3]:mb-2 [&_h3]:mt-6 [&_h3]:text-lg [&_h3]:leading-tight compact:[&_h3]:text-base [&_h4]:mb-2 [&_h4]:mt-6 [&_h4]:leading-tight [&_p]:mb-3 [&_p]:mt-0 [&_ul]:mb-3 [&_ol]:mb-3 [&_blockquote]:mb-3 [&_blockquote]:border-l-[3px] [&_blockquote]:border-border-strong [&_blockquote]:pl-3 [&_blockquote]:text-text-muted [&_pre]:mb-3 [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:border [&_pre]:border-border [&_pre]:bg-bg-subtle [&_pre]:p-2 [&_table]:mb-3 [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto [&_table]:border-collapse [&_a]:break-words [&_a]:text-link [&_code]:break-words [&_code]:rounded-[3px] [&_code]:bg-bg-subtle [&_code]:px-[0.3em] [&_code]:py-[0.1em] [&_code]:font-mono [&_code]:text-[0.9em] [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_img]:h-auto [&_img]:max-w-full [&_img]:rounded [&_th]:border [&_th]:border-border [&_th]:px-2 [&_th]:py-1 [&_th]:text-left [&_td]:border [&_td]:border-border [&_td]:px-2 [&_td]:py-1 [&_td]:text-left [&_hr]:border-0 [&_hr]:border-t [&_hr]:border-border";
+const READER_CLASSES = "viewer:mx-auto viewer:w-full viewer:min-w-0 viewer:max-w-[72ch] viewer:break-words viewer:px-4 viewer:py-6 viewer:text-base viewer:leading-[1.65] viewer:compact:py-4 viewer:compact:leading-[1.7] viewer:[&>:first-child]:mt-0 viewer:[&_h1]:mb-2 viewer:[&_h1]:mt-6 viewer:[&_h1]:text-2xl viewer:[&_h1]:leading-tight viewer:compact:[&_h1]:text-xl viewer:[&_h2]:mb-2 viewer:[&_h2]:mt-6 viewer:[&_h2]:text-xl viewer:[&_h2]:leading-tight viewer:compact:[&_h2]:text-lg viewer:[&_h3]:mb-2 viewer:[&_h3]:mt-6 viewer:[&_h3]:text-lg viewer:[&_h3]:leading-tight viewer:compact:[&_h3]:text-base viewer:[&_h4]:mb-2 viewer:[&_h4]:mt-6 viewer:[&_h4]:leading-tight viewer:[&_p]:mb-3 viewer:[&_p]:mt-0 viewer:[&_ul]:mb-3 viewer:[&_ol]:mb-3 viewer:[&_blockquote]:mb-3 viewer:[&_blockquote]:border-l-[3px] viewer:[&_blockquote]:border-border-strong viewer:[&_blockquote]:pl-3 viewer:[&_blockquote]:text-text-muted viewer:[&_pre]:mb-3 viewer:[&_pre]:max-w-full viewer:[&_pre]:overflow-x-auto viewer:[&_pre]:rounded viewer:[&_pre]:border viewer:[&_pre]:border-border viewer:[&_pre]:bg-bg-subtle viewer:[&_pre]:p-2 viewer:[&_table]:mb-3 viewer:[&_table]:block viewer:[&_table]:max-w-full viewer:[&_table]:overflow-x-auto viewer:[&_table]:border-collapse viewer:[&_a]:break-words viewer:[&_a]:text-link viewer:[&_code]:break-words viewer:[&_code]:rounded-[3px] viewer:[&_code]:bg-bg-subtle viewer:[&_code]:px-[0.3em] viewer:[&_code]:py-[0.1em] viewer:[&_code]:font-mono viewer:[&_code]:text-[0.9em] viewer:[&_pre_code]:bg-transparent viewer:[&_pre_code]:p-0 viewer:[&_img]:h-auto viewer:[&_img]:max-w-full viewer:[&_img]:rounded viewer:[&_th]:border viewer:[&_th]:border-border viewer:[&_th]:px-2 viewer:[&_th]:py-1 viewer:[&_th]:text-left viewer:[&_td]:border viewer:[&_td]:border-border viewer:[&_td]:px-2 viewer:[&_td]:py-1 viewer:[&_td]:text-left viewer:[&_hr]:border-0 viewer:[&_hr]:border-t viewer:[&_hr]:border-border";
 
 export default function activate(kernel: Kernel): void {
   const markdown = kernel.services.require<MarkdownApi>("markdown");
@@ -75,7 +75,7 @@ export default function activate(kernel: Kernel): void {
       // this is the narrow window before the first sync completes — or a client that
       // learned of the document from a link before its row arrived.
       return (
-        <div className="max-w-[62ch] min-w-0 px-4 py-6 font-sans text-text-muted">
+        <div className="viewer:max-w-[62ch] viewer:min-w-0 viewer:px-4 viewer:py-6 viewer:font-sans viewer:text-text-muted">
           <p>This document’s text has not reached this device yet.</p>
         </div>
       );
@@ -89,7 +89,7 @@ export default function activate(kernel: Kernel): void {
       // The column, not the article: the properties header and the body share one
       // measure and one set of gutters, and `.viewer-body` keeps its own `max-width`
       // and auto margins so nothing about the reading column moves.
-      <div className="w-full min-w-0 font-sans text-text">
+      <div className="viewer:w-full viewer:min-w-0 viewer:font-sans viewer:text-text">
         <FmHeader fm={row.fm} fmParseError={row.fm_parse_error} />
         <article className={READER_CLASSES}>{markdown.render(body ?? "", { documentId: id })}</article>
       </div>
@@ -214,20 +214,20 @@ function AttachmentPreview({
   const name = meta?.name ?? reference.label ?? title;
 
   return (
-    <div className="flex min-w-0 justify-center p-4 font-sans text-text compact:p-2">
-      <figure className="m-0 flex max-w-[min(100%,72ch)] flex-col gap-2">
+    <div className="viewer:flex viewer:min-w-0 viewer:justify-center viewer:p-4 viewer:font-sans viewer:text-text viewer:compact:p-2">
+      <figure className="viewer:m-0 viewer:flex viewer:max-w-[min(100%,72ch)] viewer:flex-col viewer:gap-2">
         <PreviewBody kind={kind} state={state} name={name} />
-        <figcaption className="flex flex-col gap-0.5 text-sm">
-          <span className="break-words font-semibold">{name}</span>
-          <span className="text-sm text-text-muted">
+        <figcaption className="viewer:flex viewer:flex-col viewer:gap-0.5 viewer:text-sm">
+          <span className="viewer:break-words viewer:font-semibold">{name}</span>
+          <span className="viewer:text-sm viewer:text-text-muted">
             {meta?.mime ?? "unknown type"} · {formatBytes(meta?.size)}
             {meta?.revision !== undefined ? ` · revision ${meta.revision}` : ""}
           </span>
-          <span className="mt-1">
+          <span className="viewer:mt-1">
             {/* A same-origin link, so the server's Content-Disposition decides whether
                 it opens or downloads — the allowlist of safe inline types is the
                 server's call, not this plugin's (SPEC §3.6). */}
-            <a className="tap-h inline-flex items-center text-link focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus" href={apiUrl(reference.id)} target="_blank" rel="noreferrer">
+            <a className="viewer:tap-h viewer:inline-flex viewer:items-center viewer:text-link viewer:focus-visible:outline-2 viewer:focus-visible:outline-offset-2 viewer:focus-visible:outline-focus" href={apiUrl(reference.id)} target="_blank" rel="noreferrer">
               Open the file
             </a>
           </span>
@@ -248,54 +248,54 @@ function PreviewBody({
 }): ReactNode {
   if (state.phase === "loading") {
     return (
-      <div className="flex min-h-48 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border-strong bg-bg-subtle p-6 text-center" aria-busy="true">
-        <p className="text-sm text-text-muted">Loading the file…</p>
+      <div className="viewer:flex viewer:min-h-48 viewer:flex-col viewer:items-center viewer:justify-center viewer:gap-1 viewer:rounded-lg viewer:border viewer:border-dashed viewer:border-border-strong viewer:bg-bg-subtle viewer:p-6 viewer:text-center" aria-busy="true">
+        <p className="viewer:text-sm viewer:text-text-muted">Loading the file…</p>
       </div>
     );
   }
 
   if (state.phase === "unavailable") {
     return (
-      <div className="flex min-h-48 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border-strong bg-bg-subtle p-6 text-center">
-        <p className="m-0 inline-block rounded-full border border-warning bg-bg-raised px-2.5 py-0.5 text-xs text-text">
+      <div className="viewer:flex viewer:min-h-48 viewer:flex-col viewer:items-center viewer:justify-center viewer:gap-1 viewer:rounded-lg viewer:border viewer:border-dashed viewer:border-border-strong viewer:bg-bg-subtle viewer:p-6 viewer:text-center">
+        <p className="viewer:m-0 viewer:inline-block viewer:rounded-full viewer:border viewer:border-warning viewer:bg-bg-raised viewer:px-2.5 viewer:py-0.5 viewer:text-xs viewer:text-text">
           {state.offline ? "Not available offline" : "This file could not be loaded"}
         </p>
-        <p className="text-sm text-text-muted">{state.reason}</p>
+        <p className="viewer:text-sm viewer:text-text-muted">{state.reason}</p>
       </div>
     );
   }
 
   if (state.phase === "skipped") {
     return (
-      <div className="flex min-h-48 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border-strong bg-bg-subtle p-6 text-center">
-        <p className="m-0 inline-block rounded-full border border-border-strong bg-bg-raised px-2.5 py-0.5 text-xs text-text-muted">No inline preview</p>
-        <p className="text-sm text-text-muted">{state.reason}.</p>
+      <div className="viewer:flex viewer:min-h-48 viewer:flex-col viewer:items-center viewer:justify-center viewer:gap-1 viewer:rounded-lg viewer:border viewer:border-dashed viewer:border-border-strong viewer:bg-bg-subtle viewer:p-6 viewer:text-center">
+        <p className="viewer:m-0 viewer:inline-block viewer:rounded-full viewer:border viewer:border-border-strong viewer:bg-bg-raised viewer:px-2.5 viewer:py-0.5 viewer:text-xs viewer:text-text-muted">No inline preview</p>
+        <p className="viewer:text-sm viewer:text-text-muted">{state.reason}.</p>
       </div>
     );
   }
 
   if (state.phase === "text") {
-    return <pre className="max-h-[70vh] overflow-auto whitespace-pre-wrap rounded border border-border bg-bg-subtle p-2 font-mono text-sm leading-[1.5]">{state.content}</pre>;
+    return <pre className="viewer:max-h-[70vh] viewer:overflow-auto viewer:whitespace-pre-wrap viewer:rounded viewer:border viewer:border-border viewer:bg-bg-subtle viewer:p-2 viewer:font-mono viewer:text-sm viewer:leading-[1.5]">{state.content}</pre>;
   }
 
   switch (kind) {
     case "image":
-      return <img className="mx-auto block h-auto max-h-[70vh] max-w-full rounded-lg bg-bg-subtle shadow-1" src={state.url} alt={name} />;
+      return <img className="viewer:mx-auto viewer:block viewer:h-auto viewer:max-h-[70vh] viewer:max-w-full viewer:rounded-lg viewer:bg-bg-subtle viewer:shadow-1" src={state.url} alt={name} />;
     case "audio":
-      return <audio className="w-full rounded" controls src={state.url} />;
+      return <audio className="viewer:w-full viewer:rounded" controls src={state.url} />;
     case "video":
-      return <video className="w-full rounded" controls src={state.url} />;
+      return <video className="viewer:w-full viewer:rounded" controls src={state.url} />;
     case "pdf":
       return (
-        <div className="flex min-h-48 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border-strong bg-bg-subtle p-6 text-center">
-          <p className="m-0 inline-block rounded-full border border-border-strong bg-bg-raised px-2.5 py-0.5 text-xs text-text-muted">PDF</p>
-          <p className="text-sm text-text-muted">PDFs cannot be shown inline. Open the file instead.</p>
+        <div className="viewer:flex viewer:min-h-48 viewer:flex-col viewer:items-center viewer:justify-center viewer:gap-1 viewer:rounded-lg viewer:border viewer:border-dashed viewer:border-border-strong viewer:bg-bg-subtle viewer:p-6 viewer:text-center">
+          <p className="viewer:m-0 viewer:inline-block viewer:rounded-full viewer:border viewer:border-border-strong viewer:bg-bg-raised viewer:px-2.5 viewer:py-0.5 viewer:text-xs viewer:text-text-muted">PDF</p>
+          <p className="viewer:text-sm viewer:text-text-muted">PDFs cannot be shown inline. Open the file instead.</p>
         </div>
       );
     default:
       return (
-        <div className="flex min-h-48 flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border-strong bg-bg-subtle p-6 text-center">
-          <p className="m-0 inline-block rounded-full border border-border-strong bg-bg-raised px-2.5 py-0.5 text-xs text-text-muted">File</p>
+        <div className="viewer:flex viewer:min-h-48 viewer:flex-col viewer:items-center viewer:justify-center viewer:gap-1 viewer:rounded-lg viewer:border viewer:border-dashed viewer:border-border-strong viewer:bg-bg-subtle viewer:p-6 viewer:text-center">
+          <p className="viewer:m-0 viewer:inline-block viewer:rounded-full viewer:border viewer:border-border-strong viewer:bg-bg-raised viewer:px-2.5 viewer:py-0.5 viewer:text-xs viewer:text-text-muted">File</p>
         </div>
       );
   }

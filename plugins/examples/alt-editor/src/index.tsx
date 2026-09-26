@@ -173,10 +173,10 @@ function PlainEditor({
 
 // `min-h-0` on every flex child, so the textarea is the only scroller — the same rule
 // the CodeMirror editor needs for the Android soft keyboard.
-const ROOT_CLASSES = "flex min-h-0 flex-1 flex-col gap-2 p-3";
-const NOTE_CLASSES = "m-0 text-sm text-text-muted";
+const ROOT_CLASSES = "alteditor:flex alteditor:min-h-0 alteditor:flex-1 alteditor:flex-col alteditor:gap-2 alteditor:p-3";
+const NOTE_CLASSES = "alteditor:m-0 alteditor:text-sm alteditor:text-text-muted";
 const AREA_CLASSES =
-  "min-h-48 flex-1 resize-y whitespace-pre-wrap rounded border border-border bg-bg p-2 font-mono text-[0.9rem] leading-normal text-text [tab-size:2] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus read-only:bg-bg-subtle read-only:text-text-muted";
+  "alteditor:min-h-48 alteditor:flex-1 alteditor:resize-y alteditor:whitespace-pre-wrap alteditor:rounded alteditor:border alteditor:border-border alteditor:bg-bg alteditor:p-2 alteditor:font-mono alteditor:text-[0.9rem] alteditor:leading-normal alteditor:text-text alteditor:[tab-size:2] alteditor:focus-visible:outline-2 alteditor:focus-visible:outline-offset-1 alteditor:focus-visible:outline-focus alteditor:read-only:bg-bg-subtle alteditor:read-only:text-text-muted";
 
 function commonPrefix(a: string, b: string): number {
   const max = Math.min(a.length, b.length);

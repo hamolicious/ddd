@@ -70,26 +70,26 @@ export function SettingsView({ kernel, router, params }: SettingsViewProps): Rea
   return (
     // `section` only when the URL actually named one that exists — `/settings` on its
     // own is the index, and on a wide screen both views render whichever this says.
-    <div className="mx-auto max-w-[62rem] p-4 font-sans text-text compact:px-[calc(var(--lm-space)+var(--lm-safe-right))] compact:pb-[calc(var(--lm-space)+var(--lm-safe-bottom))] compact:pl-[calc(var(--lm-space)+var(--lm-safe-left))] compact:pt-2" data-view={chosen ? "section" : "index"}>
-      <header className="[&_h1]:mb-2 [&_h1]:mt-0 [&_h1]:text-2xl compact:[&_h1]:text-xl">
+    <div className="settings:mx-auto settings:max-w-[62rem] settings:p-4 settings:font-sans settings:text-text settings:compact:px-[calc(var(--lm-space)+var(--lm-safe-right))] settings:compact:pb-[calc(var(--lm-space)+var(--lm-safe-bottom))] settings:compact:pl-[calc(var(--lm-space)+var(--lm-safe-left))] settings:compact:pt-2" data-view={chosen ? "section" : "index"}>
+      <header className="settings:[&_h1]:mb-2 settings:[&_h1]:mt-0 settings:[&_h1]:text-2xl settings:compact:[&_h1]:text-xl">
         <h1>Settings</h1>
-        <p className="mb-4 mt-0 rounded border-l-[3px] border-warning bg-bg-subtle p-2 text-text-muted compact:mb-2 compact:text-sm">
+        <p className="settings:mb-4 settings:mt-0 settings:rounded settings:border-l-[3px] settings:border-warning settings:bg-bg-subtle settings:p-2 settings:text-text-muted settings:compact:mb-2 settings:compact:text-sm">
           Other people in this workspace can read your settings. Put secrets in admin
           plugin configuration, which is encrypted.
         </p>
       </header>
 
       {sections.length === 0 ? (
-        <p className="text-text-muted">No plugin has contributed any settings.</p>
+        <p className="settings:text-text-muted">No plugin has contributed any settings.</p>
       ) : (
-        <div className="grid grid-cols-[minmax(10rem,14rem)_1fr] items-start gap-4 compact:grid-cols-1 compact:gap-2">
-          <nav className={`min-w-0 ${chosen ? " compact:hidden" : ""}`} aria-label="Settings sections">
-            <ul className="m-0 list-none p-0 compact:grid compact:gap-1">
+        <div className="settings:grid settings:grid-cols-[minmax(10rem,14rem)_1fr] settings:items-start settings:gap-4 settings:compact:grid-cols-1 settings:compact:gap-2">
+          <nav className={`settings:min-w-0 ${chosen ? " settings:compact:hidden" : ""}`} aria-label="Settings sections">
+            <ul className="settings:m-0 settings:list-none settings:p-0 settings:compact:grid settings:compact:gap-1">
               {sections.map((entry) => (
                 <li key={entry.value.id}>
                   <a
                     href={router.url(`/settings/${encodeURIComponent(entry.value.id)}`)}
-                    className="settings-nav-link tap-h flex items-center rounded px-2 text-inherit no-underline hover:bg-bg-subtle aria-current:bg-accent-subtle aria-current:font-semibold compact:justify-between compact:border compact:border-border compact:bg-bg-raised compact:after:text-text-muted compact:after:content-['›']"
+                    className="settings-nav-link settings:tap-h settings:flex settings:items-center settings:rounded settings:px-2 settings:text-inherit settings:no-underline settings:hover:bg-bg-subtle settings:aria-current:bg-accent-subtle settings:aria-current:font-semibold settings:compact:justify-between settings:compact:border settings:compact:border-border settings:compact:bg-bg-raised settings:compact:after:text-text-muted settings:compact:after:content-['›']"
                     {...(entry.value.id === active?.value.id
                       ? { "aria-current": "page" as const }
                       : {})}
@@ -106,12 +106,12 @@ export function SettingsView({ kernel, router, params }: SettingsViewProps): Rea
             </ul>
           </nav>
 
-          <div className={`settings-pane min-w-0 compact:overflow-x-auto ${chosen ? "" : " compact:hidden"}`}>
+          <div className={`settings-pane settings:min-w-0 settings:compact:overflow-x-auto ${chosen ? "" : " settings:compact:hidden"}`}>
             {/* The way back out of a drilled-in section. A real link, because it is a
                 real navigation — and hidden by the stylesheet on a screen wide enough
                 to show the list beside the section anyway. */}
             <a
-              className="mb-1 hidden min-h-[var(--lm-tap-target)] items-center text-link before:mr-1 before:content-['‹'] compact:inline-flex"
+              className="settings:mb-1 settings:hidden settings:min-h-[var(--lm-tap-target)] settings:items-center settings:text-link settings:before:mr-1 settings:before:content-['‹'] settings:compact:inline-flex"
               href={router.url("/settings")}
               onClick={(event) => {
                 if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
@@ -150,10 +150,10 @@ function Section({
   );
 
   return (
-    <section className="compact:rounded-lg compact:border compact:border-border compact:bg-bg-raised compact:p-2 [&>h2]:mb-3 [&>h2]:mt-0 [&>h2]:text-lg" aria-labelledby={`settings-${section.id}`}>
+    <section className="settings:compact:rounded-lg settings:compact:border settings:compact:border-border settings:compact:bg-bg-raised settings:compact:p-2 settings:[&>h2]:mb-3 settings:[&>h2]:mt-0 settings:[&>h2]:text-lg" aria-labelledby={`settings-${section.id}`}>
       <h2 id={`settings-${section.id}`}>{section.title}</h2>
       {section.description ? (
-        <p className="mb-3 mt-1 text-text-muted">{section.description}</p>
+        <p className="settings:mb-3 settings:mt-1 settings:text-text-muted">{section.description}</p>
       ) : null}
       {/* No "provided by <plugin>" line: which plugin owns a section is an admin
           question, and it was a second grey sentence under every heading. */}

@@ -78,10 +78,10 @@ export function DocListView({
   }, [onRendered, rendered]);
 
   return (
-    <section className="doclist flex flex-col gap-3 p-4 font-sans text-text compact:p-2 [&_:focus-visible]:outline-2 [&_:focus-visible]:outline-offset-1 [&_:focus-visible]:outline-focus [&_button]:tap-h [&_button]:cursor-pointer [&_button]:rounded [&_button]:border [&_button]:border-border [&_button]:bg-bg-subtle [&_button]:px-2 [&_button]:text-inherit disabled:[&_button]:cursor-default disabled:[&_button]:opacity-55" aria-labelledby="doclist-heading">
-      <header className="doclist-header flex items-center justify-between gap-2 [&_h2]:m-0">
+    <section className="doclist doclist:flex doclist:flex-col doclist:gap-3 doclist:p-4 doclist:font-sans doclist:text-text doclist:compact:p-2 doclist:[&_:focus-visible]:outline-2 doclist:[&_:focus-visible]:outline-offset-1 doclist:[&_:focus-visible]:outline-focus doclist:[&_button]:tap-h doclist:[&_button]:cursor-pointer doclist:[&_button]:rounded doclist:[&_button]:border doclist:[&_button]:border-border doclist:[&_button]:bg-bg-subtle doclist:[&_button]:px-2 doclist:[&_button]:text-inherit doclist:disabled:[&_button]:cursor-default doclist:disabled:[&_button]:opacity-55" aria-labelledby="doclist-heading">
+      <header className="doclist-header doclist:flex doclist:items-center doclist:justify-between doclist:gap-2 doclist:[&_h2]:m-0">
         <h2 id="doclist-heading">Documents</h2>
-        <button type="button" className="doclist-primary border-accent! bg-accent! text-accent-text!" onClick={onCreate}>
+        <button type="button" className="doclist-primary doclist:border-accent! doclist:bg-accent! doclist:text-accent-text!" onClick={onCreate}>
           New document
         </button>
       </header>
@@ -98,30 +98,30 @@ export function DocListView({
       />
 
       {state.error && (
-        <p className="doclist-error m-0 rounded border border-danger p-2" role="alert">
+        <p className="doclist-error doclist:m-0 doclist:rounded doclist:border doclist:border-danger doclist:p-2" role="alert">
           {state.error}
         </p>
       )}
       {error && (
-        <p className="doclist-error m-0 rounded border border-danger p-2" role="alert">
+        <p className="doclist-error doclist:m-0 doclist:rounded doclist:border doclist:border-danger doclist:p-2" role="alert">
           {error}
         </p>
       )}
 
       {state.loading ? (
-        <p className="doclist-empty m-0 flex flex-col items-start gap-2 py-6 text-text-muted" role="status">
+        <p className="doclist-empty doclist:m-0 doclist:flex doclist:flex-col doclist:items-start doclist:gap-2 doclist:py-6 doclist:text-text-muted" role="status">
           Loading…
         </p>
       ) : state.rows.length === 0 ? (
         <EmptyState hasFilter={filter !== undefined} onCreate={onCreate} />
       ) : (
         <>
-          <ul className="doclist-items m-0 flex list-none flex-col p-0">
+          <ul className="doclist-items doclist:m-0 doclist:flex doclist:list-none doclist:flex-col doclist:p-0">
             {state.rows.map((row) => (
-              <li key={row.id} className="doclist-item grid grid-cols-[minmax(0,1fr)_auto] grid-rows-2 items-center gap-x-2 border-b border-border py-0.5 compact:py-1">
+              <li key={row.id} className="doclist-item doclist:grid doclist:grid-cols-[minmax(0,1fr)_auto] doclist:grid-rows-2 doclist:items-center doclist:gap-x-2 doclist:border-b doclist:border-border doclist:py-0.5 doclist:compact:py-1">
                 <button
                   type="button"
-                  className="doclist-open col-start-1 row-start-1 flex min-h-[calc(var(--lm-tap-target)/2)] min-w-0 items-center overflow-hidden text-ellipsis whitespace-nowrap border-0! bg-transparent! p-0! text-left text-lg text-link compact:min-h-[var(--lm-tap-target)]"
+                  className="doclist-open doclist:col-start-1 doclist:row-start-1 doclist:flex doclist:min-h-[calc(var(--lm-tap-target)/2)] doclist:min-w-0 doclist:items-center doclist:overflow-hidden doclist:text-ellipsis doclist:whitespace-nowrap doclist:border-0! doclist:bg-transparent! doclist:p-0! doclist:text-left doclist:text-lg doclist:text-link doclist:compact:min-h-[var(--lm-tap-target)]"
                   // Draggable so the `folders` tree can be dropped onto. The payload is a
                   // bare `text/plain` document id — no shared type and no import between
                   // plugins, which is the only way two plugins can agree on a drag
@@ -137,7 +137,7 @@ export function DocListView({
                   {row.title}
                 </button>
                 <Meta row={row} />
-                <div className="doclist-item-actions col-start-2 row-span-2 row-start-1 compact:[&_button]:px-1.5 compact:[&_button]:text-sm">
+                <div className="doclist-item-actions doclist:col-start-2 doclist:row-span-2 doclist:row-start-1 doclist:compact:[&_button]:px-1.5 doclist:compact:[&_button]:text-sm">
                   <button
                     type="button"
                     disabled={busy === row.id}
@@ -157,7 +157,7 @@ export function DocListView({
               </li>
             ))}
           </ul>
-          <p className="doclist-status m-0 text-sm text-text-muted" role="status" aria-live="polite">
+          <p className="doclist-status doclist:m-0 doclist:text-sm doclist:text-text-muted" role="status" aria-live="polite">
             Showing {state.rows.length} of {state.total}
             {state.total > LIST_LIMIT ? ` (first ${LIST_LIMIT})` : ""}
           </p>
@@ -209,37 +209,37 @@ export function TrashView({
   const rows = state.rows;
 
   return (
-    <section className="doclist flex flex-col gap-3 p-4 font-sans text-text compact:p-2 [&_:focus-visible]:outline-2 [&_:focus-visible]:outline-offset-1 [&_:focus-visible]:outline-focus [&_button]:tap-h [&_button]:cursor-pointer [&_button]:rounded [&_button]:border [&_button]:border-border [&_button]:bg-bg-subtle [&_button]:px-2 [&_button]:text-inherit" aria-labelledby="trash-heading">
-      <header className="doclist-header flex items-center justify-between gap-2 [&_h2]:m-0">
+    <section className="doclist doclist:flex doclist:flex-col doclist:gap-3 doclist:p-4 doclist:font-sans doclist:text-text doclist:compact:p-2 doclist:[&_:focus-visible]:outline-2 doclist:[&_:focus-visible]:outline-offset-1 doclist:[&_:focus-visible]:outline-focus doclist:[&_button]:tap-h doclist:[&_button]:cursor-pointer doclist:[&_button]:rounded doclist:[&_button]:border doclist:[&_button]:border-border doclist:[&_button]:bg-bg-subtle doclist:[&_button]:px-2 doclist:[&_button]:text-inherit" aria-labelledby="trash-heading">
+      <header className="doclist-header doclist:flex doclist:items-center doclist:justify-between doclist:gap-2 doclist:[&_h2]:m-0">
         <h2 id="trash-heading">Trash</h2>
         <button type="button" onClick={() => setNewestFirst((value) => !value)}>
           {newestFirst ? "Oldest first" : "Newest first"}
         </button>
       </header>
 
-      <p className="doclist-note m-0 text-sm text-text-muted">Deleted documents are kept for {retentionDays} days.</p>
+      <p className="doclist-note doclist:m-0 doclist:text-sm doclist:text-text-muted">Deleted documents are kept for {retentionDays} days.</p>
 
       {(state.error ?? error) && (
-        <p className="doclist-error m-0 rounded border border-danger p-2" role="alert">
+        <p className="doclist-error doclist:m-0 doclist:rounded doclist:border doclist:border-danger doclist:p-2" role="alert">
           {state.error ?? error}
         </p>
       )}
 
       {state.loading ? (
-        <p className="doclist-empty m-0 flex flex-col items-start gap-2 py-6 text-text-muted" role="status">
+        <p className="doclist-empty doclist:m-0 doclist:flex doclist:flex-col doclist:items-start doclist:gap-2 doclist:py-6 doclist:text-text-muted" role="status">
           Loading…
         </p>
       ) : rows.length === 0 ? (
-        <p className="doclist-empty m-0 flex flex-col items-start gap-2 py-6 text-text-muted">Trash is empty.</p>
+        <p className="doclist-empty doclist:m-0 doclist:flex doclist:flex-col doclist:items-start doclist:gap-2 doclist:py-6 doclist:text-text-muted">Trash is empty.</p>
       ) : (
         <>
-          <ul className="doclist-items m-0 flex list-none flex-col p-0">
+          <ul className="doclist-items doclist:m-0 doclist:flex doclist:list-none doclist:flex-col doclist:p-0">
             {rows.map((row) => (
-              <li key={row.id} className="doclist-item grid grid-cols-[minmax(0,1fr)_auto] grid-rows-2 items-center gap-x-2 border-b border-border py-0.5 compact:py-1">
-                <button type="button" className="doclist-open col-start-1 row-start-1 flex min-h-[calc(var(--lm-tap-target)/2)] min-w-0 items-center overflow-hidden text-ellipsis whitespace-nowrap border-0! bg-transparent! p-0! text-left text-lg text-link compact:min-h-[var(--lm-tap-target)]" onClick={() => onOpen(row.id)}>
+              <li key={row.id} className="doclist-item doclist:grid doclist:grid-cols-[minmax(0,1fr)_auto] doclist:grid-rows-2 doclist:items-center doclist:gap-x-2 doclist:border-b doclist:border-border doclist:py-0.5 doclist:compact:py-1">
+                <button type="button" className="doclist-open doclist:col-start-1 doclist:row-start-1 doclist:flex doclist:min-h-[calc(var(--lm-tap-target)/2)] doclist:min-w-0 doclist:items-center doclist:overflow-hidden doclist:text-ellipsis doclist:whitespace-nowrap doclist:border-0! doclist:bg-transparent! doclist:p-0! doclist:text-left doclist:text-lg doclist:text-link doclist:compact:min-h-[var(--lm-tap-target)]" onClick={() => onOpen(row.id)}>
                   {row.title}
                 </button>
-                <p className="doclist-meta col-start-1 row-start-2 mb-1 mt-0 flex min-w-0 flex-nowrap gap-2 overflow-hidden whitespace-nowrap text-sm text-text-muted [&>*]:shrink-0">
+                <p className="doclist-meta doclist:col-start-1 doclist:row-start-2 doclist:mb-1 doclist:mt-0 doclist:flex doclist:min-w-0 doclist:flex-nowrap doclist:gap-2 doclist:overflow-hidden doclist:whitespace-nowrap doclist:text-sm doclist:text-text-muted doclist:[&>*]:shrink-0">
                   <span>deleted {formatWhen(row.deleted_at)}</span>
                   {row.deleted_by && (
                     <span title={`user ${row.deleted_by}`}>
@@ -247,7 +247,7 @@ export function TrashView({
                     </span>
                   )}
                 </p>
-                <div className="doclist-item-actions col-start-2 row-span-2 row-start-1 compact:[&_button]:px-1.5 compact:[&_button]:text-sm">
+                <div className="doclist-item-actions doclist:col-start-2 doclist:row-span-2 doclist:row-start-1 doclist:compact:[&_button]:px-1.5 doclist:compact:[&_button]:text-sm">
                   <button
                     type="button"
                     disabled={busy === row.id}
@@ -267,7 +267,7 @@ export function TrashView({
               </li>
             ))}
           </ul>
-          <p className="doclist-status m-0 text-sm text-text-muted" role="status" aria-live="polite">
+          <p className="doclist-status doclist:m-0 doclist:text-sm doclist:text-text-muted" role="status" aria-live="polite">
             {rows.length} deleted document{rows.length === 1 ? "" : "s"}
           </p>
         </>
@@ -287,12 +287,12 @@ function EmptyState({
   // seeded welcome documents are for, and the reassurance that filtering is local was a
   // sentence answering a question nobody had asked.
   if (hasFilter) {
-    return <p className="doclist-empty m-0 flex flex-col items-start gap-2 py-6 text-text-muted">No document matches. Clear the filter.</p>;
+    return <p className="doclist-empty doclist:m-0 doclist:flex doclist:flex-col doclist:items-start doclist:gap-2 doclist:py-6 doclist:text-text-muted">No document matches. Clear the filter.</p>;
   }
   return (
-    <div className="doclist-empty m-0 flex flex-col items-start gap-2 py-6 text-text-muted">
+    <div className="doclist-empty doclist:m-0 doclist:flex doclist:flex-col doclist:items-start doclist:gap-2 doclist:py-6 doclist:text-text-muted">
       <p>No documents yet.</p>
-      <button type="button" className="doclist-primary border-accent! bg-accent! text-accent-text!" onClick={onCreate}>
+      <button type="button" className="doclist-primary doclist:border-accent! doclist:bg-accent! doclist:text-accent-text!" onClick={onCreate}>
         Create the first document
       </button>
     </div>
@@ -302,11 +302,11 @@ function EmptyState({
 function Meta({ row }: { readonly row: DocumentRow }): ReactElement {
   const path = typeof row.fm["path"] === "string" ? row.fm["path"] : undefined;
   return (
-    <p className="doclist-meta col-start-1 row-start-2 mb-1 mt-0 flex min-w-0 flex-nowrap gap-2 overflow-hidden whitespace-nowrap text-sm text-text-muted [&>*]:shrink-0">
-      {path && <span className="doclist-path min-w-[3ch] shrink overflow-hidden text-ellipsis font-mono">{path}</span>}
+    <p className="doclist-meta doclist:col-start-1 doclist:row-start-2 doclist:mb-1 doclist:mt-0 doclist:flex doclist:min-w-0 doclist:flex-nowrap doclist:gap-2 doclist:overflow-hidden doclist:whitespace-nowrap doclist:text-sm doclist:text-text-muted doclist:[&>*]:shrink-0">
+      {path && <span className="doclist-path doclist:min-w-[3ch] doclist:shrink doclist:overflow-hidden doclist:text-ellipsis doclist:font-mono">{path}</span>}
       <span>updated {formatWhen(row.updated_at)}</span>
       {row.fm_parse_error && (
-        <span className="doclist-warning text-warning" title="Some frontmatter lines could not be parsed">
+        <span className="doclist-warning doclist:text-warning" title="Some frontmatter lines could not be parsed">
           frontmatter problem
         </span>
       )}

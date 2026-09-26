@@ -269,9 +269,9 @@ test.describe("phone (390 × 844)", () => {
     });
     await signIn(page, ADMIN);
 
-    const bell = page.locator(".shell-notice-bell");
+    const bell = page.locator(".header-notice-bell");
     await expect(bell).toBeVisible();
-    const panel = page.locator(".shell-notice-panel");
+    const panel = page.locator(".header-notice-panel");
     if (await panel.isHidden()) await bell.click();
     await expect(panel).toBeVisible();
 
@@ -283,7 +283,7 @@ test.describe("phone (390 × 844)", () => {
     // And it is bounded by the visible height, not by the large viewport.
     expect(box?.height ?? 0).toBeLessThanOrEqual(PHONE.height * 0.6 + 1);
 
-    await tapTargets(page, ".shell-notice-panel button");
+    await tapTargets(page, ".header-notice-panel button");
     await noSidewaysScroll(page);
   });
 
@@ -319,7 +319,7 @@ test.describe("phone in landscape (844 × 390)", () => {
     // the tree keys off the same query.
     const sidebar = page.getByRole("complementary", { name: /sidebar/i });
     await expect(sidebar).toBeHidden();
-    await page.locator(".shell-sidebar-toggle").click();
+    await page.locator(".header-sidebar-toggle").click();
     await expect(sidebar).toBeVisible();
     await expect(sidebar).toHaveCSS("position", "absolute");
     await page.keyboard.press("Escape");

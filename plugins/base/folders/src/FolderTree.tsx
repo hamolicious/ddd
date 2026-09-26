@@ -75,13 +75,13 @@ const LONG_PRESS_MS = 500;
 const LONG_PRESS_SLOP = 12;
 
 const NODE_CLASSES =
-  "folders-node group flex min-h-[calc(var(--lm-tap-target)/2)] items-center gap-0.5 rounded pr-0.5 pl-[calc(var(--lm-space)*0.5+var(--folders-indent)*min(var(--folders-depth,0),var(--folders-indent-cap)))] hover:bg-bg-subtle compact:min-h-[var(--lm-tap-target)]";
+  "folders-node folders:group folders:flex folders:min-h-[calc(var(--lm-tap-target)/2)] folders:items-center folders:gap-0.5 folders:rounded folders:pr-0.5 folders:pl-[calc(var(--lm-space)*0.5+var(--folders-indent)*min(var(--folders-depth,0),var(--folders-indent-cap)))] folders:hover:bg-bg-subtle folders:compact:min-h-[var(--lm-tap-target)]";
 const TWISTY_CLASSES =
-  "folders-twisty box-border flex w-[1.5rem] min-h-[1.5rem]! shrink-0 cursor-pointer items-center justify-center border-0! bg-transparent! p-0! text-text-muted compact:w-[var(--lm-tap-target)] compact:min-h-[var(--lm-tap-target)]!";
+  "folders-twisty folders:box-border folders:flex folders:w-[1.5rem] folders:min-h-[1.5rem]! folders:shrink-0 folders:cursor-pointer folders:items-center folders:justify-center folders:border-0! folders:bg-transparent! folders:p-0! folders:text-text-muted folders:compact:w-[var(--lm-tap-target)] folders:compact:min-h-[var(--lm-tap-target)]! folders:touch:w-[var(--lm-tap-target)] folders:touch:min-h-[var(--lm-tap-target)]!";
 const ROW_LABEL_CLASSES =
-  "min-w-0 flex-1 cursor-pointer overflow-hidden text-ellipsis whitespace-nowrap border-0! bg-transparent! p-0! text-left font-sans text-inherit";
+  "folders:min-w-0 folders:flex-1 folders:cursor-pointer folders:overflow-hidden folders:text-ellipsis folders:whitespace-nowrap folders:border-0! folders:bg-transparent! folders:p-0! folders:text-left folders:font-sans folders:text-inherit";
 const ACTIONS_CLASSES =
-  "folders-actions invisible flex shrink-0 gap-0.5 group-hover:visible group-focus-within:visible compact:visible [&>button]:box-border [&>button]:min-h-[1.75rem] [&>button]:min-w-[1.75rem] [&>button]:cursor-pointer [&>button]:rounded [&>button]:border [&>button]:border-transparent [&>button]:bg-transparent [&>button]:p-0 [&>button]:text-text-muted hover:[&>button]:border-border hover:[&>button]:text-text compact:[&>button]:min-h-[var(--lm-tap-target)] compact:[&>button]:min-w-[var(--lm-tap-target)]";
+  "folders-actions folders:invisible folders:flex folders:shrink-0 folders:gap-0.5 folders:group-hover:visible folders:group-focus-within:visible folders:compact:visible folders:[&>button]:box-border folders:[&>button]:min-h-[1.75rem] folders:[&>button]:min-w-[1.75rem] folders:[&>button]:cursor-pointer folders:[&>button]:rounded folders:[&>button]:border folders:[&>button]:border-transparent folders:[&>button]:bg-transparent folders:[&>button]:p-0 folders:[&>button]:text-text-muted folders:hover:[&>button]:border-border folders:hover:[&>button]:text-text folders:compact:[&>button]:min-h-[var(--lm-tap-target)] folders:compact:[&>button]:min-w-[var(--lm-tap-target)] folders:touch:visible folders:touch:[&>button]:min-h-[var(--lm-tap-target)] folders:touch:[&>button]:min-w-[var(--lm-tap-target)]";
 
 export interface MoveProgress {
   readonly onProgress?: (done: number, total: number) => void;
@@ -603,7 +603,7 @@ export function FolderTree({
 
   const editField = (state: EditState, initial: string, label: string): ReactElement => (
     <input
-      className="folders-rename tap-h min-w-0 flex-1 rounded border border-accent bg-bg-raised px-1 font-sans text-text"
+      className="folders-rename folders:tap-h folders:min-w-0 folders:flex-1 folders:rounded folders:border folders:border-accent folders:bg-bg-raised folders:px-1 folders:font-sans folders:text-text"
       type="text"
       autoFocus
       defaultValue={initial}
@@ -623,7 +623,7 @@ export function FolderTree({
   );
 
   const editControls = (state: EditState): ReactElement => (
-    <span className={`${ACTIONS_CLASSES} folders-actions-edit visible`}>
+    <span className={`${ACTIONS_CLASSES} folders-actions-edit folders:visible`}>
       <button
         type="button"
         aria-label="Save"
@@ -674,13 +674,13 @@ export function FolderTree({
         <div
           key={row.key}
           {...common}
-          className={`${NODE_CLASSES} folders-node-more ${isActive ? " folders-node-active bg-accent-subtle" : ""}`}
+          className={`${NODE_CLASSES} folders-node-more ${isActive ? " folders-node-active folders:bg-accent-subtle" : ""}`}
           onMouseDown={() => setActive(row.key)}
         >
           <span className={TWISTY_CLASSES} aria-hidden="true" />
           <button
             type="button"
-            className={`folders-more ${ROW_LABEL_CLASSES} text-[0.9em] text-text-muted`}
+            className={`folders-more ${ROW_LABEL_CLASSES} folders:text-[0.9em] folders:text-text-muted`}
             tabIndex={-1}
             onClick={() => onSelectFolder(row.path)}
           >
@@ -699,8 +699,8 @@ export function FolderTree({
           {...common}
           className={[
             NODE_CLASSES,
-            "folders-node-leaf cursor-pointer",
-            isActive ? "folders-node-active bg-accent-subtle" : "",
+            "folders-node-leaf folders:cursor-pointer",
+            isActive ? "folders-node-active folders:bg-accent-subtle" : "",
           ]
             .filter(Boolean)
             .join(" ")}
@@ -728,8 +728,8 @@ export function FolderTree({
           }}
         >
           <span className={TWISTY_CLASSES} aria-hidden="true" />
-          <span className={`folders-leaf-name ${ROW_LABEL_CLASSES} text-link`}>{row.title}</span>
-          <span className={`${ACTIONS_CLASSES}${isActive ? " visible" : ""}`}>
+          <span className={`folders-leaf-name ${ROW_LABEL_CLASSES} folders:text-link`}>{row.title}</span>
+          <span className={`${ACTIONS_CLASSES}${isActive ? " folders:visible" : ""}`}>
             <button
               type="button"
               tabIndex={isActive ? 0 : -1}
@@ -768,9 +768,9 @@ export function FolderTree({
         {...(row.expandable ? { "aria-expanded": row.expanded } : {})}
         className={[
           NODE_CLASSES,
-          isActive ? "folders-node-active bg-accent-subtle" : "",
-          row.path === dropTarget ? "folders-node-drop outline-2 outline-dashed outline-accent outline-offset-[-2px]" : "",
-          row.tracked ? "folders-node-empty italic text-text-muted" : "",
+          isActive ? "folders-node-active folders:bg-accent-subtle" : "",
+          row.path === dropTarget ? "folders-node-drop folders:outline-2 folders:outline-dashed folders:outline-accent folders:outline-offset-[-2px]" : "",
+          row.tracked ? "folders-node-empty folders:italic folders:text-text-muted" : "",
           renaming ? "folders-node-editing" : "",
         ]
           .filter(Boolean)
@@ -843,7 +843,7 @@ export function FolderTree({
         )}
 
         {!renaming && (
-          <span className="folders-count shrink-0 text-[0.8em] tabular-nums text-text-muted" aria-label={`${row.documents} documents`}>
+          <span className="folders-count folders:shrink-0 folders:text-[0.8em] folders:tabular-nums folders:text-text-muted" aria-label={`${row.documents} documents`}>
             {row.documents}
           </span>
         )}
@@ -861,7 +861,7 @@ export function FolderTree({
            * standing on, and it follows the visible affordance: the row that shows its
            * buttons is the row whose buttons Tab reaches.
           */
-          <span className={`${ACTIONS_CLASSES}${isActive ? " visible" : ""}`}>
+          <span className={`${ACTIONS_CLASSES}${isActive ? " folders:visible" : ""}`}>
             <button
               type="button"
               tabIndex={isActive ? 0 : -1}
@@ -1021,42 +1021,42 @@ export function FolderTree({
 
   if (loading) {
     return (
-      <p className="folders-empty m-0 flex flex-col gap-1 text-[0.85em] text-text-muted" role="status">
+      <p className="folders-empty folders:m-0 folders:flex folders:flex-col folders:gap-1 folders:text-[0.85em] folders:text-text-muted" role="status">
         Loading folders…
       </p>
     );
   }
 
   return (
-    <div className="folders flex flex-col gap-0.5 font-sans text-text">
+    <div className="folders folders:flex folders:flex-col folders:gap-0.5 folders:font-sans folders:text-text">
       {error && (
-        <p className="folders-error m-0 rounded border border-danger p-1.5 text-[0.9em]" role="alert">
+        <p className="folders-error folders:m-0 folders:rounded folders:border folders:border-danger folders:p-1.5 folders:text-[0.9em]" role="alert">
           {error}
         </p>
       )}
       {problem && (
-        <p className="folders-error m-0 rounded border border-danger p-1.5 text-[0.9em]" role="alert">
+        <p className="folders-error folders:m-0 folders:rounded folders:border folders:border-danger folders:p-1.5 folders:text-[0.9em]" role="alert">
           {problem}{" "}
           {retry && (
-            <button type="button" className="folders-retry min-h-[calc(var(--lm-tap-target)-12px)] cursor-pointer rounded border border-border-strong bg-bg-raised px-1.5 font-sans" onClick={retry.run}>
+            <button type="button" className="folders-retry folders:min-h-[calc(var(--lm-tap-target)-12px)] folders:cursor-pointer folders:rounded folders:border folders:border-border-strong folders:bg-bg-raised folders:px-1.5 folders:font-sans" onClick={retry.run}>
               Try again
             </button>
           )}
         </p>
       )}
       {progress && (
-        <p className="folders-progress m-0 rounded border border-border p-1.5 text-[0.9em] text-text-muted" role="status">
+        <p className="folders-progress folders:m-0 folders:rounded folders:border folders:border-border folders:p-1.5 folders:text-[0.9em] folders:text-text-muted" role="status">
           Moving documents… {progress.done} of {progress.total}
         </p>
       )}
 
       {visible.length === 0 && edit === undefined ? (
-        <div className="folders-empty m-0 flex flex-col gap-1 text-[0.85em] text-text-muted">
+        <div className="folders-empty folders:m-0 folders:flex folders:flex-col folders:gap-1 folders:text-[0.85em] folders:text-text-muted">
           <p>No documents yet.</p>
         </div>
       ) : (
         <div
-          className={`folders-tree flex min-h-[calc(var(--lm-tap-target)*1.5)] flex-col pb-3 [--folders-indent:calc(var(--lm-space)*1.5)] [--folders-indent-cap:6] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus compact:[--folders-indent:calc(var(--lm-space)*0.75)] compact:[--folders-indent-cap:4] ${dropTarget === "" ? " folders-tree-root-drop rounded outline-2 outline-dashed outline-accent outline-offset-[-2px]" : ""}`}
+          className={`folders-tree folders:flex folders:min-h-[calc(var(--lm-tap-target)*1.5)] folders:flex-col folders:pb-3 folders:[--folders-indent:calc(var(--lm-space)*1.5)] folders:[--folders-indent-cap:6] folders:focus-visible:outline-2 folders:focus-visible:outline-offset-[-2px] folders:focus-visible:outline-focus folders:compact:[--folders-indent:calc(var(--lm-space)*0.75)] folders:compact:[--folders-indent-cap:4] ${dropTarget === "" ? " folders-tree-root-drop folders:rounded folders:outline-2 folders:outline-dashed folders:outline-accent folders:outline-offset-[-2px]" : ""}`}
           role="tree"
           aria-label="Folders"
           aria-busy={busy}
@@ -1086,7 +1086,7 @@ export function FolderTree({
             // tall the tree has grown (a document leaves its folder; a folder becomes
             // top-level).
             <div
-              className={`folders-root-dropzone sticky bottom-0 z-[1] mt-0.5 rounded border border-dashed border-border-strong bg-bg-raised p-1.5 text-center text-[0.85rem] text-text-muted ${dropTarget === "" ? " folders-node-drop outline-2 outline-dashed outline-accent outline-offset-[-2px]" : ""}`}
+              className={`folders-root-dropzone folders:sticky folders:bottom-0 folders:z-[1] folders:mt-0.5 folders:rounded folders:border folders:border-dashed folders:border-border-strong folders:bg-bg-raised folders:p-1.5 folders:text-center folders:text-[0.85rem] folders:text-text-muted ${dropTarget === "" ? " folders-node-drop folders:outline-2 folders:outline-dashed folders:outline-accent folders:outline-offset-[-2px]" : ""}`}
               onDragOver={(event) => dragOverFolder(event, "", false)}
               onDragLeave={() =>
                 setDropTarget((current) => (current === "" ? undefined : current))
@@ -1104,7 +1104,7 @@ export function FolderTree({
         screen that cannot drag (HTML5 drag and drop does not fire from touch) was three
         sentences about gestures the reader does not have.
       */}
-      <p className="folders-hint m-0 text-[0.85em] text-text-muted [&_code]:font-mono">
+      <p className="folders-hint folders:m-0 folders:text-[0.85em] folders:text-text-muted folders:[&_code]:font-mono">
         {touchOnly ? (
           <>
             Long-press a row to move, rename or delete it. Moving a folder rewrites{" "}

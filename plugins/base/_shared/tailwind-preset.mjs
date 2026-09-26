@@ -5,9 +5,39 @@
  * are linked after the app shell: preflight would restyle the whole application, and
  * layered utilities would lose to the shell's unlayered element rules. `@theme inline`
  * keeps the kernel-owned tokens live rather than writing global replacement values.
+ *
+ * **Every plugin gets its own class prefix** (`folders:flex`, `folders:compact:gap-1`).
+ * Each plugin's stylesheet is compiled on its own and they all land in one document, so
+ * unprefixed utilities are shared names: a stylesheet linked later that also emits
+ * `.invisible` or `.m-0` re-declares it *after* an earlier plugin's `visible` or
+ * `ml-auto`, and silently wins on that plugin's elements. With a prefix no two plugins
+ * emit the same selector, and each stylesheet's own ordering is the whole story.
  */
-export const TAILWIND_PRESET = String.raw`
-@import "tailwindcss/theme.css" source(none);
+
+/**
+ * The prefix a plugin's classes carry: `x-tailwind.prefix` from the manifest, or the
+ * plugin id with everything but `a-z` removed (Tailwind accepts nothing else).
+ *
+ * @param {{ id: string, "x-tailwind"?: unknown }} manifest
+ */
+export function tailwindPrefix(manifest) {
+  const option = manifest["x-tailwind"];
+  const chosen =
+    typeof option === "object" && option !== null && "prefix" in option
+      ? String(option.prefix)
+      : manifest.id.replace(/[^a-z]/g, "");
+  if (!/^[a-z]+$/.test(chosen)) {
+    throw new Error(`${manifest.id}: Tailwind prefix "${chosen}" must be lowercase a-z only`);
+  }
+  // The prefix also names the theme variables Tailwind emits (`--<prefix>-text-sm`), and
+  // `--lm-*` is the kernel's token namespace: `lm` would overwrite the app's theme.
+  if (chosen === "lm") throw new Error(`${manifest.id}: Tailwind prefix "lm" is reserved`);
+  return chosen;
+}
+
+/** @param {string} prefix `tailwindPrefix(manifest)`; `""` compiles unprefixed. */
+export const tailwindPreset = (prefix) => String.raw`
+@import "tailwindcss/theme.css" source(none)${prefix ? ` prefix(${prefix})` : ""};
 @import "tailwindcss/utilities.css" source(none);
 
 /* The kernel, rather than the OS preference, owns the active colour scheme. */
@@ -15,6 +45,10 @@ export const TAILWIND_PRESET = String.raw`
 
 /* Keep this in sync with _shared/compact.ts's COMPACT_MEDIA_QUERY. */
 @custom-variant compact (@media ((max-width: 640px) or ((max-height: 480px) and (pointer: coarse))));
+
+/* No pointer that can hover: a phone in landscape is above the compact width and still
+   cannot reveal anything that waits for :hover. */
+@custom-variant touch (@media (hover: none));
 
 @theme inline {
   /* Surfaces and text */

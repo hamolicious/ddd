@@ -98,10 +98,10 @@ export function SearchBox({
   const showDropdown = open && query.trim() !== "";
 
   return (
-    <div className="search-box relative max-w-md flex-[1_1_18rem] font-sans compact:min-w-0 compact:w-full compact:max-w-none compact:flex-none!" ref={rootRef} onKeyDown={onKeyDown}>
+    <div className="search-box search:relative search:max-w-md search:flex-[1_1_18rem] search:font-sans search:compact:min-w-0 search:compact:w-full search:compact:max-w-none search:compact:flex-none!" ref={rootRef} onKeyDown={onKeyDown}>
       <input
         ref={inputRef}
-        className="tap-h w-full rounded border border-border bg-bg px-2 text-text focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus"
+        className="search:tap-h search:w-full search:rounded search:border search:border-border search:bg-bg search:px-2 search:text-text search:focus-visible:outline-2 search:focus-visible:outline-offset-1 search:focus-visible:outline-focus"
         type="search"
         role="combobox"
         aria-expanded={showDropdown}
@@ -121,8 +121,8 @@ export function SearchBox({
       />
 
       {showDropdown && (
-        <div className="search-dropdown absolute inset-x-0 top-[calc(100%+4px)] z-[900] max-h-[min(60vh,28rem)] overflow-y-auto rounded border border-border bg-bg-raised text-text shadow-2 compact:fixed compact:inset-x-2 compact:top-auto compact:mt-1 compact:max-h-[min(50dvh,22rem)]">
-          <ul className="m-0 list-none p-0" id={listboxId} role="listbox" aria-label="Search results">
+        <div className="search-dropdown search:absolute search:inset-x-0 search:top-[calc(100%+4px)] search:z-[900] search:max-h-[min(60vh,28rem)] search:overflow-y-auto search:rounded search:border search:border-border search:bg-bg-raised search:text-text search:shadow-2 search:compact:fixed search:compact:inset-x-2 search:compact:top-auto search:compact:mt-1 search:compact:max-h-[min(50dvh,22rem)]">
+          <ul className="search:m-0 search:list-none search:p-0" id={listboxId} role="listbox" aria-label="Search results">
             {hits.map((hit, index) => {
               const row = state.rows.get(hit.id);
               const snippet = snippetFor(row?.content, hit.terms, { maxLength: 110 });
@@ -132,7 +132,7 @@ export function SearchBox({
                   id={`${baseId}-hit-${index}`}
                   role="option"
                   aria-selected={index === clamped}
-                  className={`search-hit block min-w-0 cursor-pointer px-2 py-1.5 ${index === clamped ? " search-hit-active bg-accent-subtle" : ""}`}
+                  className={`search-hit search:block search:min-w-0 search:cursor-pointer search:px-2 search:py-1.5 ${index === clamped ? " search-hit-active search:bg-accent-subtle" : ""}`}
                   onMouseEnter={() => setActive(index)}
                   onMouseDown={(event) => {
                     event.preventDefault();
@@ -140,9 +140,9 @@ export function SearchBox({
                     onOpenDocument(hit.id);
                   }}
                 >
-                  <span className="block truncate">{row?.title ?? hit.id}</span>
+                  <span className="search:block search:truncate">{row?.title ?? hit.id}</span>
                   {snippet && (
-                    <span className="search-hit-snippet line-clamp-2 break-words text-[0.88em] text-text-muted [&_mark]:bg-selection [&_mark]:text-inherit">
+                    <span className="search-hit-snippet search:line-clamp-2 search:break-words search:text-[0.88em] search:text-text-muted search:[&_mark]:bg-selection search:[&_mark]:text-inherit">
                       {splitHighlights(snippet).map((piece, pieceIndex) =>
                         piece.hit ? (
                           <mark key={pieceIndex}>{piece.text}</mark>
@@ -158,18 +158,18 @@ export function SearchBox({
           </ul>
 
           {hits.length === 0 && (
-            <p className="m-0 px-4 py-2 text-text-muted">
+            <p className="search:m-0 search:px-4 search:py-2 search:text-text-muted">
               {state.running ? "Searching…" : `Nothing matches “${query.trim()}”.`}
             </p>
           )}
 
-          <button type="button" className="tap-h w-full cursor-pointer border-0 border-t border-border bg-bg-subtle text-link" onMouseDown={(event) => {
+          <button type="button" className="search:tap-h search:w-full search:cursor-pointer search:border-0 search:border-t search:border-border search:bg-bg-subtle search:text-link" onMouseDown={(event) => {
             event.preventDefault();
             openResults();
           }}>
             See all results
           </button>
-          <p className="m-0 px-4 py-2 text-text-muted" role="status" aria-live="polite">
+          <p className="search:m-0 search:px-4 search:py-2 search:text-text-muted" role="status" aria-live="polite">
             {state.running ? "Searching" : `${hits.length} result${hits.length === 1 ? "" : "s"}`}
           </p>
         </div>

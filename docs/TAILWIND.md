@@ -20,14 +20,16 @@ obvious, so they are stated up front:
    to `button { background: var(--lm-bg-raised) }`. Verified in a browser: layered
    utilities computed to the app's 6 px radius / white background / 1 px border; the same
    declarations unlayered computed to the utility's values.
-2. **`prefix()` is forbidden.** Tailwind v4's prefix renames *theme variables* to
-   `--<prefix>-*`. With the obvious choice, `prefix(lm)`, the emitted theme block is
-   literally `:root { --lm-radius-lg: var(--lm-radius-lg); --lm-font-sans:
-   var(--lm-font-sans); … }` — self-referential custom properties, invalid at
-   computed-value time, which **unsets the kernel's own tokens for the whole document**.
-   A plugin's stylesheet would take down the app's theme. (Prefixes are also restricted
-   to lowercase ASCII letters, so `doc-list` and `shell-ui` could not use their ids
-   anyway.)
+2. **Every plugin needs its own `prefix()` — and it must never be `lm`.** *(Revised
+   2026-09-26; this document originally said the opposite, see §5.)* Plugin stylesheets
+   are compiled separately and linked into one document, so unprefixed utilities are
+   shared names, and a stylesheet linked later re-declares them after an earlier
+   plugin's variants and longhands. The build now prefixes each plugin (`folders:flex`,
+   `folders:compact:gap-1`) with its id minus everything but `a-z`, or
+   `"x-tailwind": { "prefix": "…" }`. `lm` stays forbidden: the prefix also names the
+   emitted theme variables (`--<prefix>-*`), and `prefix(lm)` emits
+   `:root { --lm-radius-lg: var(--lm-radius-lg); … }` — self-referential custom
+   properties that **unset the kernel's own tokens for the whole document**.
 
 ---
 
@@ -79,126 +81,30 @@ One compile, in the same `closeBundle` hook that copies today. The plugin's own
 utilities — the migration path for a plugin adding Tailwind to existing CSS is "nothing
 moves".
 
-### 2a. The preset — exact, verbatim
+### 2a. The preset
 
-This is what the build prepends. It is not a file the author writes; shipping it as
-`plugins/base/_shared/tailwind-preset.mjs` (a template string) keeps one copy for
-fourteen base plugins and every third party that uses `pluginConfig`.
+This is what the build prepends. It is not a file the author writes; one copy serves
+every base plugin and every third party that uses `pluginConfig`.
 
-```css
-/*
- * The blessed Tailwind preset for a Life Manager frontend plugin.
- *
- * Four decisions, each a consequence of how plugin CSS reaches the page:
- *
- * 1. Granular imports, no `preflight.css`. A reset per plugin would restyle the whole
- *    app — the app shell styles bare `button`/`input`/`a`/`summary` and every plugin's
- *    stylesheet is linked after it — and N plugins would ship N resets.
- * 2. No `layer(...)`. Unlayered declarations beat layered ones no matter the order, so
- *    a layered utility loses to the app shell's element rules. Utilities go unlayered
- *    and win on specificity (0,1,0 > 0,0,1) like any other class.
- * 3. `source(none)` + one explicit `@source`. Automatic detection walks up from the
- *    *current working directory*, which for `mise run plugins` is `web/` — it would
- *    scan the whole repo and emit every class in it into every plugin.
- * 4. `@theme inline`, mapped onto the kernel tokens. `inline` substitutes the value
- *    into the utility (`.bg-accent { background-color: var(--lm-accent) }`) instead of
- *    emitting a global `:root { --color-accent: … }` a plugin has no business writing.
- *    Themes and dark mode then follow for free: the kernel repaints `--lm-*` on
- *    `<html>` and every utility moves with it.
- */
+The live copy is `plugins/base/_shared/tailwind-preset.mjs` — `tailwindPreset(prefix)` and
+`tailwindPrefix(manifest)` — and it is the reference; a verbatim copy here went stale
+once already. What it sets up: granular `theme.css`/`utilities.css` imports with no
+preflight and no layers, the plugin's `prefix()`, the `dark`, `compact` and `touch`
+variants, `@theme inline` mapping every colour, radius, shadow and font onto the kernel
+tokens, `--spacing` as **half** of `--lm-space` (so the numeric scale reads like stock
+Tailwind's 4 px one: `p-2` is one space), and the `tap`/`tap-h` utilities.
 
-@import "tailwindcss/theme.css" source(none);
-@import "tailwindcss/utilities.css" source(none);
-
-/*
- * `dark:` keyed on what the kernel actually writes. `ThemeController` sets
- * `data-lm-scheme` on `document.documentElement` (runtime/theme.ts `writeTokens`), and
- * that is the only signal a plugin may branch on — `prefers-color-scheme` is wrong,
- * because the user's explicit light/dark preference overrides the OS.
- *
- * Reach for it rarely: the token map below already flips with the scheme. `dark:` is
- * for the handful of things a token cannot express (an image swap, a border that only
- * exists on dark).
- */
-@custom-variant dark (&:where([data-lm-scheme="dark"], [data-lm-scheme="dark"] *));
-
-/*
- * The house breakpoint — one definition, `_shared/compact.ts`'s `COMPACT_MEDIA_QUERY`.
- * Written with media-queries-4 `or` rather than a comma: a comma inside
- * `@custom-variant` is split by Tailwind and emits invalid CSS (a bare
- * `.compact\:hidden (max-height: 480px) and (pointer: coarse) { … }` — measured).
- */
-@custom-variant compact (@media ((max-width: 640px) or ((max-height: 480px) and (pointer: coarse))));
-
-@theme inline {
-  /* Surfaces and text */
-  --color-bg: var(--lm-bg);
-  --color-bg-subtle: var(--lm-bg-subtle);
-  --color-bg-raised: var(--lm-bg-raised);
-  --color-bg-overlay: var(--lm-bg-overlay);
-  --color-border: var(--lm-border);
-  --color-border-strong: var(--lm-border-strong);
-  --color-text: var(--lm-text);
-  --color-text-muted: var(--lm-text-muted);
-  --color-text-inverse: var(--lm-text-inverse);
-
-  /* Meaning */
-  --color-link: var(--lm-link);
-  --color-accent: var(--lm-accent);
-  --color-accent-text: var(--lm-accent-text);
-  --color-accent-subtle: var(--lm-accent-subtle);
-  --color-danger: var(--lm-danger);
-  --color-danger-text: var(--lm-danger-text);
-  --color-warning: var(--lm-warning);
-  --color-success: var(--lm-success);
-
-  /* Affordances */
-  --color-focus: var(--lm-focus-ring);
-  --color-selection: var(--lm-selection);
-  --shadow-1: var(--lm-shadow-1);
-  --shadow-2: var(--lm-shadow-2);
-
-  /* Type and metrics */
-  --font-sans: var(--lm-font-sans);
-  --font-mono: var(--lm-font-mono);
-  --radius: var(--lm-radius);        /* the bare `rounded` utility */
-  --radius-md: var(--lm-radius);
-  --radius-lg: var(--lm-radius-lg);
-
-  /*
-   * The spacing *ramp*, not one value: `p-4` compiles to
-   * `calc(var(--lm-space) * 4)`. `calc(var(--lm-space) * 0.5)` — the single most common
-   * expression in the base stylesheets — is `gap-0.5`. A theme that changes `--lm-space`
-   * rescales every margin in every Tailwind plugin, which is the whole point.
-   */
-  --spacing: var(--lm-space);
-}
-
-/*
- * SPEC §6.5's 44 px touch target. It cannot come from a theme namespace: mapping
- * `--container-tap` yields `w-tap` and nothing else — no `min-h-tap`, no `size-tap`
- * (measured). A `@utility` is the supported way, and it takes variants
- * (`compact:tap` works).
- */
-@utility tap {
-  min-height: var(--lm-tap-target);
-  min-width: var(--lm-tap-target);
-}
-@utility tap-h {
-  min-height: var(--lm-tap-target);
-}
-```
-
-Compiled output for a one-line fixture, to show the shape:
+What a plugin with the prefix `mp` and the classes `mp:flex mp:gap-2 mp:rounded-lg
+mp:bg-accent mp:p-4` gets, abridged:
 
 ```css
 /*! tailwindcss v4.3.3 | MIT License | https://tailwindcss.com */
-.flex        { display: flex; }
-.gap-2       { gap: calc(var(--lm-space) * 2); }
-.rounded-lg  { border-radius: var(--lm-radius-lg); }
-.bg-accent   { background-color: var(--lm-accent); }
-.p-4         { padding: calc(var(--lm-space) * 4); }
-.mp-root     { color: var(--lm-text); }   /* the plugin's own CSS, appended */
+.mp\:flex        { display: flex; }
+.mp\:gap-2       { gap: calc(calc(var(--lm-space) * 0.5) * 2); }
+.mp\:rounded-lg  { border-radius: var(--lm-radius-lg); }
+.mp\:bg-accent   { background-color: var(--lm-accent); }
+.mp\:p-4         { padding: calc(calc(var(--lm-space) * 0.5) * 4); }
+.mp-root         { color: var(--lm-text); }   /* the plugin's own CSS, appended */
 ```
 
 No preflight, no layers, no `:root` writes for anything token-shaped, and every value is
@@ -240,7 +146,7 @@ async function compileWithTailwind({ root, styleSource, out, resolveFrom }) {
   const from = join(nodeModules, ".lm-plugin-entry.css");
 
   const entry = [
-    TAILWIND_PRESET,                          // §2a, verbatim
+    tailwindPreset(prefix),                   // §2a; prefix = tailwindPrefix(manifest)
     `@source ${JSON.stringify(join(root, "src"))};`,
     existsSync(styleSource) ? `@import ${JSON.stringify(styleSource)};` : "",
   ].join("\n");
@@ -424,15 +330,20 @@ Hence the preset's bare `@import` with no `layer(...)`.
 
 ### Do compiled utilities from two plugins collide?
 
-Mostly harmlessly, with two exceptions.
+Unprefixed, yes — and not harmlessly. *(This section originally argued they were; the
+base-distribution migration proved otherwise, and the build now prefixes every plugin.)*
 
-- **The utilities themselves: harmless.** `.flex { display: flex }` is `.flex { display:
-  flex }` in every plugin. Identical rules at identical specificity — whichever wins,
-  the same pixels. **No Tailwind `prefix` is needed for utilities, and the per-plugin
-  class-prefix convention of SPEC §6.4 does not extend to them.** The convention exists
-  so two plugins' *semantic* names (`.settings-nav`, `.folders-nav`) do not mean two
-  different things; a utility name means exactly one thing by construction, which is the
-  property the convention was approximating.
+- **The utilities themselves: the ordering is the bug.** `.invisible { visibility:
+  hidden }` is the same rule in every plugin, but *where* it lands is not. Tailwind
+  orders one stylesheet correctly — `.invisible` before `.visible`, `.m-0` before
+  `.ml-auto`, base utilities before `compact:` overrides — and a stylesheet linked later
+  that also uses `invisible` or `m-0` re-declares it after all of those. Same
+  specificity, later wins: an earlier plugin's `visible`, `ml-auto` or `compact:*` loses
+  on that plugin's own elements. Measured in the base distribution: `themes` and
+  `markdown` cancelled `folders`' row actions, and five later stylesheets' `.hidden`
+  cancelled `settings`' `compact:inline-flex` back link. **Hence a per-plugin
+  `prefix()`**: no two plugins emit the same selector, and each stylesheet's own
+  ordering is the whole story.
 - **Version skew: real, bounded, cosmetic.** Utilities that reference a *stock* theme
   variable still emit it to a global `:root`. A plugin using `text-sm` ships
   `:root { --text-sm: 0.875rem }`; one using `bg-red-500` ships
@@ -444,7 +355,8 @@ Mostly harmlessly, with two exceptions.
   inline` so nothing `--lm-*`-derived is ever written globally (measured: a typical
   plugin's entire `:root` block is 2–4 declarations); pin the Tailwind version in the
   preset's docs the way `peerLibraries` pins the runtime layer; and an author who wants
-  certainty can prefix — see the next point for why the build must not do it for them.
+  certainty can prefix. *(Now moot: the build prefixes every plugin, and prefixed theme
+  variables are namespaced — `--folders-text-sm` — so skew stays inside one plugin.)*
 - **`@property` and the `--tw-*` fallback block** are emitted per plugin too
   (`@property --tw-outline-style { … }`, and a `@supports`-gated
   `*, ::before, ::after, ::backdrop { --tw-shadow: 0 0 #0000; … }` for old Safari). Same
@@ -475,8 +387,10 @@ Measured output, in full:
 A prefix is also a *variant* in v4 (`tw:flex`, `tw:hover:bg-accent`), so it is not a
 silent build flag — it changes every class the author writes. And prefixes accept
 lowercase ASCII letters only (`The prefix "lm7" is invalid`), so plugin ids with hyphens
-or digits cannot be used as one. Conclusion: the build never sets a prefix; an author who
-wants one sets it in their own `@theme`-carrying CSS and must not choose `lm`.
+or digits cannot be used as one directly. *Revised conclusion:* the build sets one per
+plugin anyway — the collisions above are worse than the longer class names — deriving it
+from the id with everything but `a-z` removed (`doc-list` → `doclist`) or taking
+`"x-tailwind": { "prefix": "…" }`, and refusing `lm` (`tailwindPrefix` in the preset).
 
 ### Dark mode and custom themes
 
@@ -532,7 +446,8 @@ a new test harness.
 
 **Build-time Tailwind v4 via `@tailwindcss/postcss`, invoked from the existing
 `closeBundle` hook, opt-in per plugin through `pluginConfig({ tailwind: true })`,
-utilities-only, unlayered, no prefix, tokens mapped with `@theme inline`.** The plugin
+utilities-only, unlayered, a per-plugin prefix (never `lm`), tokens mapped with
+`@theme inline`.** The plugin
 contract does not move: one ES module, blessed runtime external, `style.css` a sibling
 file linked on activation. The only sentence in SPEC §6.4 that needs touching is the CSS
 bullet, and only to add a clause.
@@ -577,7 +492,7 @@ the invariant test.**
 - **Preflight, at any opt-in level.** There is no correct per-plugin reset.
 - **A shared utilities layer, an import-map entry, or any server-side CSS compilation.**
   §4.
-- **`prefix()` set by the build.** §5. An author may set their own; `lm` is forbidden.
+- **Unprefixed utilities.** §5. The build always prefixes; `lm` is forbidden.
 - **Runtime/CDN Tailwind (the browser build).** It scans the DOM and would style other
   plugins' markup — a plugin reaching outside itself, which the prefix convention exists
   to prevent.
@@ -618,13 +533,18 @@ for doing so.
 
 | you want | write | compiles to |
 |---|---|---|
-| a surface | `bg-bg-raised text-text` | `var(--lm-bg-raised)` / `var(--lm-text)` |
-| the accent button | `bg-accent text-accent-text` | follows every theme |
-| one space unit | `gap-1`, `p-2` | `calc(var(--lm-space) * 1)`, `* 2` |
-| half a unit | `gap-0.5` | `calc(var(--lm-space) * 0.5)` |
-| the house radius | `rounded`, `rounded-lg` | `var(--lm-radius)`, `var(--lm-radius-lg)` |
-| a 44 px tap target | `tap`, `tap-h` | `var(--lm-tap-target)` |
-| the mobile branch | `compact:flex-col` | `COMPACT_MEDIA_QUERY` |
-| dark-only, rarely | `dark:border-border-strong` | `[data-lm-scheme="dark"]` |
-| to beat your own CSS | `p-0!` | `!important` |
-| not to overflow at 390 px | `min-w-0` on flex/grid children | — |
+Every class carries the plugin's prefix; `p:` below stands for yours (`folders:`).
+
+| you want | write | compiles to |
+|---|---|---|
+| a surface | `p:bg-bg-raised p:text-text` | `var(--lm-bg-raised)` / `var(--lm-text)` |
+| the accent button | `p:bg-accent p:text-accent-text` | follows every theme |
+| one space unit | `p:gap-2`, `p:p-4` (two units) | `--lm-space`, `* 2` — a step is half a space |
+| half a unit | `p:gap-1` | `calc(var(--lm-space) * 0.5)` |
+| the house radius | `p:rounded`, `p:rounded-lg` | `var(--lm-radius)`, `var(--lm-radius-lg)` |
+| a 44 px tap target | `p:tap`, `p:tap-h` | `var(--lm-tap-target)` |
+| the mobile branch | `p:compact:flex-col` | `COMPACT_MEDIA_QUERY` |
+| no hover (touch, any width) | `p:touch:visible` | `@media (hover: none)` |
+| dark-only, rarely | `p:dark:border-border-strong` | `[data-lm-scheme="dark"]` |
+| to beat your own CSS | `p:p-0!` | `!important` |
+| not to overflow at 390 px | `p:min-w-0` on flex/grid children | — |

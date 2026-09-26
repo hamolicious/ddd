@@ -25,11 +25,12 @@ describe("Tailwind plugin packaging", () => {
     writeFileSync(join(root, "manifest.json"), JSON.stringify({
       id: "tailwind-fixture",
       version: "1.0.0",
+      "x-tailwind": { prefix: "fixture" },
       frontend: { module: "frontend/index.mjs", style: "frontend/style.css" },
     }));
     writeFileSync(join(src, "index.tsx"), "export default function activate() {}\n");
     writeFileSync(join(src, "view.tsx"), [
-      "export const View = () => <button className=\"flex gap-2 rounded-lg bg-accent p-4 tap compact:tap-h\" />;",
+      "export const View = () => <button className=\"fixture:flex fixture:gap-2 fixture:rounded-lg fixture:bg-accent fixture:p-4 fixture:tap fixture:compact:tap-h hidden\" />;",
     ].join("\n"));
     writeFileSync(join(src, "style.css"), ".fixture-root { color: var(--lm-text); }\n");
 
@@ -40,8 +41,11 @@ describe("Tailwind plugin packaging", () => {
     expect(css).not.toMatch(/(^|[,{\s])button\s*[{,:]/m);
     expect(css).toContain("var(--lm-accent)");
     // One spacing step is half a kernel space, so p-4 is two --lm-space.
-    expect(css).toMatch(/\.p-4\s*\{\s*padding:\s*calc\(calc\(var\(--lm-space\)\s*\*\s*0?\.5\)\s*\*\s*4\)/);
-    expect(css).toContain(".tap");
+    expect(css).toMatch(/\.fixture\\:p-4\s*\{\s*padding:\s*calc\(calc\(var\(--lm-space\)\s*\*\s*0?\.5\)\s*\*\s*4\)/);
+    expect(css).toContain(".fixture\\:tap");
+    // Only the plugin's own prefix compiles: an unprefixed utility is another plugin's
+    // name and would be re-declared by every stylesheet that also used it.
+    expect(css).not.toMatch(/(^|[},\s])\.hidden\s*\{/);
     const rootBlocks = css.match(/:root[^{}]*\{[^}]*\}/g) ?? [];
     expect(rootBlocks.join("\n").match(/--[^:]+:/g)?.length ?? 0).toBeLessThan(10);
   });

@@ -64,7 +64,7 @@ export function createLink(router: LinkRouter): (props: LinkProps) => ReactNode 
       <a
         href={router.url(to)}
         onClick={onClick}
-        className={`${active ? "font-semibold" : ""}${className === undefined ? "" : ` ${className}`}`.trim()}
+        className={`${active ? "router:font-semibold" : ""}${className === undefined ? "" : ` ${className}`}`.trim()}
         {...(title !== undefined ? { title } : {})}
         {...(active ? { "aria-current": "page" as const } : {})}
       >

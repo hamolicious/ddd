@@ -77,20 +77,20 @@ export function Sheet({ title, description, onClose, children }: SheetProps): Re
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[1000] flex items-end justify-center bg-bg-overlay sm:items-center sm:p-8"
+      className="folders:fixed folders:inset-0 folders:z-[1000] folders:flex folders:items-end folders:justify-center folders:bg-bg-overlay folders:sm:items-center folders:sm:p-8"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
       onKeyDown={onKeyDown}
     >
-      <div className="folders-sheet flex max-h-[85dvh] w-full flex-col gap-4 overflow-y-auto rounded-t-lg border border-border border-b-0 bg-bg-raised p-5 pb-[calc(var(--lm-space)*1.5+env(safe-area-inset-bottom,0px))] font-sans text-text shadow-2 sm:max-h-[40rem] sm:max-w-[30rem] sm:rounded-lg sm:border sm:pb-5" role="dialog" aria-modal="true" aria-label={title} ref={panel}>
-        <header className="flex items-center gap-3">
-          <h2 className="m-0 min-w-0 flex-1 break-words text-lg">{title}</h2>
-          <button type="button" className="tap shrink-0 rounded border border-transparent bg-transparent text-text-muted hover:border-border hover:text-text" aria-label="Close" onClick={onClose}>
+      <div className="folders-sheet folders:flex folders:max-h-[85dvh] folders:w-full folders:flex-col folders:gap-4 folders:overflow-y-auto folders:rounded-t-lg folders:border folders:border-border folders:border-b-0 folders:bg-bg-raised folders:p-5 folders:pb-[calc(var(--lm-space)*1.5+env(safe-area-inset-bottom,0px))] folders:font-sans folders:text-text folders:shadow-2 folders:sm:max-h-[40rem] folders:sm:max-w-[30rem] folders:sm:rounded-lg folders:sm:border folders:sm:pb-5" role="dialog" aria-modal="true" aria-label={title} ref={panel}>
+        <header className="folders:flex folders:items-center folders:gap-3">
+          <h2 className="folders:m-0 folders:min-w-0 folders:flex-1 folders:break-words folders:text-lg">{title}</h2>
+          <button type="button" className="folders:tap folders:shrink-0 folders:rounded folders:border folders:border-transparent folders:bg-transparent folders:text-text-muted folders:hover:border-border folders:hover:text-text" aria-label="Close" onClick={onClose}>
             ✕
           </button>
         </header>
-        {description && <p className="m-0 text-sm text-text-muted">{description}</p>}
+        {description && <p className="folders:m-0 folders:text-sm folders:text-text-muted">{description}</p>}
         {children}
       </div>
     </div>,
@@ -109,12 +109,12 @@ export interface SheetAction {
 /** The long-press menu: a list of real buttons, one per action. */
 export function SheetActions({ actions }: { readonly actions: readonly SheetAction[] }): ReactElement {
   return (
-    <ul className="m-0 flex list-none flex-col gap-1 p-0">
+    <ul className="folders:m-0 folders:flex folders:list-none folders:flex-col folders:gap-1 folders:p-0">
       {actions.map((action) => (
         <li key={action.id}>
           <button
             type="button"
-            className={`flex min-h-[var(--lm-tap-target)] w-full flex-col items-start rounded-md border border-transparent bg-transparent px-3 py-2 text-left hover:border-border hover:bg-bg-subtle ${action.danger ? " text-danger" : ""}`}
+            className={`folders:flex folders:min-h-[var(--lm-tap-target)] folders:w-full folders:flex-col folders:items-start folders:rounded-md folders:border folders:border-transparent folders:bg-transparent folders:px-3 folders:py-2 folders:text-left folders:hover:border-border folders:hover:bg-bg-subtle ${action.danger ? " folders:text-danger" : ""}`}
             onClick={action.run}
           >
             <span>{action.label}</span>
@@ -164,11 +164,11 @@ export function MovePicker({
   }, [excludeSubtree, folders, query]);
 
   return (
-    <div className="flex min-h-0 flex-col gap-3">
+    <div className="folders:flex folders:min-h-0 folders:flex-col folders:gap-3">
       <label>
-        <span className="sr-only">Filter folders</span>
+        <span className="folders:sr-only">Filter folders</span>
         <input
-          className="min-h-[var(--lm-tap-target)] w-full rounded border border-border bg-bg px-3 text-text"
+          className="folders:min-h-[var(--lm-tap-target)] folders:w-full folders:rounded folders:border folders:border-border folders:bg-bg folders:px-3 folders:text-text"
           type="text"
           value={query}
           placeholder="Filter folders…"
@@ -176,33 +176,33 @@ export function MovePicker({
         />
       </label>
 
-      <ul className="m-0 flex max-h-[50dvh] list-none flex-col gap-1 overflow-y-auto p-0 sm:max-h-[22rem]">
+      <ul className="folders:m-0 folders:flex folders:max-h-[50dvh] folders:list-none folders:flex-col folders:gap-1 folders:overflow-y-auto folders:p-0 folders:sm:max-h-[22rem]">
         <li>
           <button
             type="button"
-            className="tap-h flex w-full flex-col items-start rounded border border-transparent bg-transparent px-2 py-1 text-left hover:border-border hover:bg-bg-subtle aria-current:bg-accent-subtle"
+            className="folders:tap-h folders:flex folders:w-full folders:flex-col folders:items-start folders:rounded folders:border folders:border-transparent folders:bg-transparent folders:px-2 folders:py-1 folders:text-left folders:hover:border-border folders:hover:bg-bg-subtle folders:aria-current:bg-accent-subtle"
             onClick={() => onChoose("")}
             aria-current={currentFolder === "" ? "true" : undefined}
           >
             <span>Root</span>
-            <span className="font-mono text-xs text-text-muted">no folder</span>
+            <span className="folders:font-mono folders:text-xs folders:text-text-muted">no folder</span>
           </button>
         </li>
         {options.map((folder) => (
           <li key={folder}>
             <button
               type="button"
-              className="tap-h flex w-full flex-col items-start rounded border border-transparent bg-transparent px-2 py-1 text-left hover:border-border hover:bg-bg-subtle aria-current:bg-accent-subtle"
+              className="folders:tap-h folders:flex folders:w-full folders:flex-col folders:items-start folders:rounded folders:border folders:border-transparent folders:bg-transparent folders:px-2 folders:py-1 folders:text-left folders:hover:border-border folders:hover:bg-bg-subtle folders:aria-current:bg-accent-subtle"
               onClick={() => onChoose(folder)}
               aria-current={folder === currentFolder ? "true" : undefined}
             >
               <span>{nameOf(folder)}</span>
-              <span className="font-mono text-xs text-text-muted">{folder}</span>
+              <span className="folders:font-mono folders:text-xs folders:text-text-muted">{folder}</span>
             </button>
           </li>
         ))}
         {options.length === 0 && (
-          <li className="p-3 text-sm text-text-muted">
+          <li className="folders:p-3 folders:text-sm folders:text-text-muted">
             No folder matches “{query.trim()}”. Move {subject} to Root, or close this and use
             “New folder”.
           </li>

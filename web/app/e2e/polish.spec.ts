@@ -101,7 +101,7 @@ test.describe("phone width (390px)", () => {
     await page.keyboard.press("Escape");
     await expect(sidebar).toBeHidden();
     // Focus goes back to the control that opened it, not to the top of the document.
-    await expect(page.locator(".shell-sidebar-toggle")).toBeFocused();
+    await expect(page.locator(".header-sidebar-toggle")).toBeFocused();
   });
 });
 

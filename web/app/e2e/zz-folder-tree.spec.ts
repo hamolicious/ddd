@@ -334,23 +334,25 @@ test("a folder can be created empty, filled, renamed inline and survives a reloa
 
   // Rename, inline. No `window.prompt` (POLISH-BACKLOG §4) — `refuseNativeDialogs`
   // above is what makes that a checked claim rather than a description.
-  // The row actions are hover-gated (`display: none` until `:hover`/`:focus-within`/
-  // active), so the pointer has to be in the row before its ✎ can be clicked.
+  // Folder operations live behind the row's ⋯ menu, which is hover-gated (hidden until
+  // `:hover`/`:focus-within`/active), so the pointer has to be in the row first.
   await folderRow(page, name).hover();
-  await page.getByRole("button", { name: `Rename or move ${name}` }).click();
+  await page.getByRole("button", { name: `Actions for ${name}` }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /^Rename/ }).click();
   const rename = page.getByRole("textbox", { name: `Rename or move ${name}` });
   await expect(rename).toBeVisible();
   await rename.fill(renamed);
   await rename.press("Enter");
   await expect(folderRow(page, renamed)).toBeVisible();
 
-  // Put a document in it through the row's own "+", and the folder stops being empty
+  // Put a document in it through the row's own menu, and the folder stops being empty
   // bookkeeping and becomes a `path:` line like any other.
   await folderRow(page, renamed).hover();
-  await page.getByRole("button", { name: `New document in ${renamed}` }).click();
+  await page.getByRole("button", { name: `Actions for ${renamed}` }).click();
+  await page.getByRole("dialog").getByRole("button", { name: /^New document here/ }).click();
   await expect(page).toHaveURL(/#\/doc\//);
   const id = /#\/doc\/([^?]+)/.exec(page.url())?.[1] ?? "";
-  expect(id, "the folder's + created a document").toBeTruthy();
+  expect(id, "the folder's menu created a document").toBeTruthy();
   await waitSynced(page);
 
   // The created text names the folder the button belongs to — an explicit path, which

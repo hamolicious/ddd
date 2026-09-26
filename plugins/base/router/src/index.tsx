@@ -130,13 +130,13 @@ export default function activate(kernel: Kernel): RouterApi {
     id: NOT_FOUND_VIEW,
     title: "Not found",
     component: ({ params }) => (
-      <div className="mx-auto max-w-[34rem] px-4 py-8 font-sans text-text-muted">
-        <h1 className="mb-2 mt-0 text-xl text-text">Nothing here</h1>
+      <div className="router:mx-auto router:max-w-[34rem] router:px-4 router:py-8 router:font-sans router:text-text-muted">
+        <h1 className="router:mb-2 router:mt-0 router:text-xl router:text-text">Nothing here</h1>
         <p>
-          No route matches <code className="break-all rounded border border-border bg-bg-subtle px-1">{params?.["path"] ?? current()}</code>.
+          No route matches <code className="router:break-all router:rounded router:border router:border-border router:bg-bg-subtle router:px-1">{params?.["path"] ?? current()}</code>.
         </p>
         <p>
-          <a className="tap-h inline-flex items-center" href="#/">Go to the start page</a>
+          <a className="router:tap-h router:inline-flex router:items-center" href="#/">Go to the start page</a>
         </p>
       </div>
     ),

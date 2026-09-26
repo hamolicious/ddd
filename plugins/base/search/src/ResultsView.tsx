@@ -60,20 +60,20 @@ export function ResultsView({
   const trimmed = query.trim();
 
   return (
-    <section className="flex flex-col gap-3 p-4 font-sans text-text compact:p-2 [&_:focus-visible]:outline-2 [&_:focus-visible]:outline-offset-1 [&_:focus-visible]:outline-focus [&_h2]:m-0" aria-labelledby="search-results-heading">
+    <section className="search:flex search:flex-col search:gap-3 search:p-4 search:font-sans search:text-text search:compact:p-2 search:[&_:focus-visible]:outline-2 search:[&_:focus-visible]:outline-offset-1 search:[&_:focus-visible]:outline-focus search:[&_h2]:m-0" aria-labelledby="search-results-heading">
       <h2 id="search-results-heading">Search</h2>
 
       <form
-        className="flex flex-wrap items-stretch gap-2"
+        className="search:flex search:flex-wrap search:items-stretch search:gap-2"
         onSubmit={(event) => {
           event.preventDefault();
           onQueryChange(query);
         }}
       >
-        <label className="flex-1">
-          <span className="sr-only">Search documents</span>
+        <label className="search:flex-1">
+          <span className="search:sr-only">Search documents</span>
           <input
-            className="tap-h w-full rounded border border-border bg-bg px-2 text-inherit"
+            className="search:tap-h search:w-full search:rounded search:border search:border-border search:bg-bg search:px-2 search:text-inherit"
             type="search"
             value={query}
             autoFocus
@@ -82,8 +82,8 @@ export function ResultsView({
             onChange={(event) => setQuery(event.target.value)}
           />
         </label>
-        <button type="submit" className="tap-h cursor-pointer rounded border border-accent bg-accent px-4 text-accent-text compact:px-2">Search</button>
-        <label className="tap-h flex cursor-pointer items-center gap-1 whitespace-nowrap text-sm text-text-muted">
+        <button type="submit" className="search:tap-h search:cursor-pointer search:rounded search:border search:border-accent search:bg-accent search:px-4 search:text-accent-text search:compact:px-2">Search</button>
+        <label className="search:tap-h search:flex search:cursor-pointer search:items-center search:gap-1 search:whitespace-nowrap search:text-sm search:text-text-muted">
           <input
             type="checkbox"
             checked={includeMachine}
@@ -101,13 +101,13 @@ export function ResultsView({
         row; how many each returned is a question, not a headline.
       */}
       {state.results.length > 0 && trimmed !== "" && (
-        <details className="text-sm text-text-muted [&>summary]:flex [&>summary]:min-h-[var(--lm-tap-target)] [&>summary]:cursor-pointer [&>summary]:items-center">
+        <details className="search:text-sm search:text-text-muted search:[&>summary]:flex search:[&>summary]:min-h-[var(--lm-tap-target)] search:[&>summary]:cursor-pointer search:[&>summary]:items-center">
           <summary>Where these came from</summary>
-          <ul className="m-0 flex list-none flex-wrap gap-3 p-0 text-sm text-text-muted" aria-label="Sources">
+          <ul className="search:m-0 search:flex search:list-none search:flex-wrap search:gap-3 search:p-0 search:text-sm search:text-text-muted" aria-label="Sources">
             {state.results.map((result) => (
               <li
                 key={result.providerId}
-                className={result.error ? "text-warning" : undefined}
+                className={result.error ? "search:text-warning" : undefined}
               >
                 {result.label}:{" "}
                 {result.error ? (
@@ -122,19 +122,19 @@ export function ResultsView({
       )}
 
       {failures.length > 0 && (
-        <p className="m-0 text-text-muted" role="status">
+        <p className="search:m-0 search:text-text-muted" role="status">
           Some results need a connection. These come from this device.
         </p>
       )}
 
       {trimmed === "" ? (
-        <p className="m-0 text-text-muted">Search titles, text and properties.</p>
+        <p className="search:m-0 search:text-text-muted">Search titles, text and properties.</p>
       ) : state.running ? (
-        <p className="m-0 text-text-muted" role="status">
+        <p className="search:m-0 search:text-text-muted" role="status">
           Searching…
         </p>
       ) : state.hits.length === 0 ? (
-        <p className="m-0 text-text-muted">
+        <p className="search:m-0 search:text-text-muted">
           Nothing matches “{trimmed}”.
           {/*
             The one hedge left, and it is down to a clause. `@kernel` reports no index
@@ -148,7 +148,7 @@ export function ResultsView({
           )}
         </p>
       ) : (
-        <ol className="m-0 flex list-none flex-col gap-3 p-0">
+        <ol className="search:m-0 search:flex search:list-none search:flex-col search:gap-3 search:p-0">
           {state.hits.map((hit) => {
             const row = state.rows.get(hit.id);
             const snippet = snippetFor(row?.content, hit.terms);
@@ -156,19 +156,19 @@ export function ResultsView({
               <li key={hit.id}>
                 <button
                   type="button"
-                  className="search-result-open tap-h max-w-full cursor-pointer break-words border-0 bg-transparent p-0 text-left text-lg text-link"
+                  className="search-result-open search:tap-h search:max-w-full search:cursor-pointer search:break-words search:border-0 search:bg-transparent search:p-0 search:text-left search:text-lg search:text-link"
                   onClick={() => onOpenDocument(hit.id, snippet?.line)}
                 >
                   {row?.title ?? hit.id}
                 </button>
-                <p className="my-0.5 flex min-w-0 flex-wrap gap-2 text-sm text-text-muted">
+                <p className="search:my-0.5 search:flex search:min-w-0 search:flex-wrap search:gap-2 search:text-sm search:text-text-muted">
                   {typeof row?.fm["path"] === "string" && row.fm["path"] !== "" && (
-                    <span className="min-w-0 break-words font-mono">{String(row.fm["path"])}</span>
+                    <span className="search:min-w-0 search:break-words search:font-mono">{String(row.fm["path"])}</span>
                   )}
                   <span>{hit.providers.join(", ")}</span>
                 </p>
                 {snippet && (
-                  <p className="line-clamp-3 break-words text-[0.88em] text-text-muted [&_mark]:bg-selection [&_mark]:text-inherit">
+                  <p className="search:line-clamp-3 search:break-words search:text-[0.88em] search:text-text-muted search:[&_mark]:bg-selection search:[&_mark]:text-inherit">
                     {splitHighlights(snippet).map((piece, index) =>
                       piece.hit ? <mark key={index}>{piece.text}</mark> : <span key={index}>{piece.text}</span>,
                     )}
@@ -180,7 +180,7 @@ export function ResultsView({
         </ol>
       )}
 
-      <p className="m-0 text-text-muted" role="status" aria-live="polite">
+      <p className="search:m-0 search:text-text-muted" role="status" aria-live="polite">
         {trimmed === ""
           ? ""
           : state.running

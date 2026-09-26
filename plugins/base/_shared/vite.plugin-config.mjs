@@ -3,7 +3,7 @@
  * lives in `plugins/base/*`").
  *
  * Every base plugin is built with this function, and a third-party plugin can use it
- * verbatim — that is the point of it being a function in a file rather than fourteen
+ * verbatim — that is the point of it being a function in a file rather than fifteen
  * copies of a config. See `vite.config.example.mjs` next to it for standalone use.
  *
  * Three decisions, all of them consequences of how plugins are loaded:
@@ -27,7 +27,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import { createRequire } from "node:module";
 import { basename, join, resolve } from "node:path";
 
-import { TAILWIND_PRESET } from "./tailwind-preset.mjs";
+import { tailwindPrefix, tailwindPreset } from "./tailwind-preset.mjs";
 
 /**
  * Compile a plugin stylesheet using Tailwind from `resolveFrom`.
@@ -37,14 +37,14 @@ import { TAILWIND_PRESET } from "./tailwind-preset.mjs";
  * intentionally have no node_modules directory. The preset omits preflight and does
  * not put utilities in a layer: both would conflict with app-shell CSS.
  */
-async function compileWithTailwind({ root, styleSource, out, resolveFrom }) {
+async function compileWithTailwind({ root, prefix, styleSource, out, resolveFrom }) {
   const require = createRequire(join(resolveFrom, "noop.cjs"));
   const { default: postcss } = await import(require.resolve("postcss"));
   const { default: tailwind } = await import(require.resolve("@tailwindcss/postcss"));
   const nodeModules = join(require.resolve("tailwindcss/package.json"), "..", "..");
   const from = join(nodeModules, ".lm-plugin-entry.css");
   const entry = [
-    TAILWIND_PRESET,
+    tailwindPreset(prefix),
     `@source ${JSON.stringify(join(root, "src"))};`,
     existsSync(styleSource) ? `@import ${JSON.stringify(styleSource)};` : "",
   ].join("\n");
@@ -84,16 +84,19 @@ export const RUNTIME_EXTERNALS = [
  * @param {string} options.root       The plugin directory (contains manifest.json).
  * @param {string} [options.outDir]   Where to write; default `<root>/dist`.
  * @param {string} [options.entry]    Default `<root>/src/index.tsx`.
- * @param {boolean} [options.tailwind] Compile `style.css` with the Tailwind preset.
+ * @param {boolean} [options.tailwind] Compile `style.css` with the Tailwind preset, under
+ *   the manifest's class prefix (`tailwindPrefix`). Default: the manifest's `x-tailwind`.
  * @param {string} [options.resolveFrom] Directory from which Tailwind resolves.
  * @returns {import("vite").InlineConfig}
  */
-export function pluginConfig({ root, outDir, entry, tailwind = false, resolveFrom = root }) {
+export function pluginConfig({ root, outDir, entry, tailwind, resolveFrom = root }) {
   const manifestPath = join(root, "manifest.json");
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   const out = outDir ?? join(root, "dist");
   const moduleName = manifest.frontend?.module ?? "frontend/index.mjs";
   const stylePath = manifest.frontend?.style;
+  const useTailwind = tailwind ?? Boolean(manifest["x-tailwind"]);
+  const prefix = useTailwind ? tailwindPrefix(manifest) : "";
 
   return {
     root,
@@ -145,8 +148,8 @@ export function pluginConfig({ root, outDir, entry, tailwind = false, resolveFro
           if (!stylePath) return;
           const source = resolve(root, "src", basename(stylePath));
           const target = join(out, stylePath);
-          if (tailwind) {
-            await compileWithTailwind({ root, styleSource: source, out: target, resolveFrom });
+          if (useTailwind) {
+            await compileWithTailwind({ root, prefix, styleSource: source, out: target, resolveFrom });
           } else if (existsSync(source)) {
             mkdirSync(join(target, ".."), { recursive: true });
             copyFileSync(source, target);

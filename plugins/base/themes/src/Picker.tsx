@@ -65,11 +65,11 @@ export function ThemePicker({ kernel, controller }: ThemePickerProps): ReactNode
   void revision;
 
   return (
-    <div className="theme-picker grid max-w-[34rem] gap-4 font-sans compact:max-w-none compact:gap-2">
-      <fieldset className="m-0 grid gap-0.5 rounded border border-border p-2">
+    <div className="theme-picker themes:grid themes:max-w-[34rem] themes:gap-4 themes:font-sans themes:compact:max-w-none themes:compact:gap-2">
+      <fieldset className="themes:m-0 themes:grid themes:gap-0.5 themes:rounded themes:border themes:border-border themes:p-2">
         <legend>Appearance</legend>
         {(["system", "light", "dark"] as const).map((value) => (
-          <label key={value} className="tap-h flex cursor-pointer items-center gap-2 rounded px-1 hover:bg-bg-subtle">
+          <label key={value} className="themes:tap-h themes:flex themes:cursor-pointer themes:items-center themes:gap-2 themes:rounded themes:px-1 themes:hover:bg-bg-subtle">
             <input
               type="radio"
               name={`${group}-appearance`}
@@ -80,12 +80,12 @@ export function ThemePicker({ kernel, controller }: ThemePickerProps): ReactNode
                 void controller.setAppearance(value);
               }}
             />
-            <span className="flex-1">
+            <span className="themes:flex-1">
               {value === "system" ? "Match my system" : value === "light" ? "Light" : "Dark"}
             </span>
           </label>
         ))}
-        <p className="mx-1 my-0.5 text-sm text-text-muted">
+        <p className="themes:mx-1 themes:my-0.5 themes:text-sm themes:text-text-muted">
           Showing <strong>{scheme}</strong>.
         </p>
       </fieldset>
@@ -108,7 +108,7 @@ export function ThemePicker({ kernel, controller }: ThemePickerProps): ReactNode
       ))}
 
       {controller.durable ? null : (
-        <p className="mx-1 my-0.5 text-sm text-warning">
+        <p className="themes:mx-1 themes:my-0.5 themes:text-sm themes:text-warning">
           Saved on this device. It reaches your other devices when you are online.
         </p>
       )}
@@ -136,21 +136,21 @@ function SchemeGroup({
   readonly onSelect: (id: string | undefined) => void;
 }): ReactNode {
   return (
-    <fieldset className="m-0 grid gap-0.5 rounded border border-border p-2">
-      <legend className="flex items-center gap-2 px-1 font-semibold">
+    <fieldset className="themes:m-0 themes:grid themes:gap-0.5 themes:rounded themes:border themes:border-border themes:p-2">
+      <legend className="themes:flex themes:items-center themes:gap-2 themes:px-1 themes:font-semibold">
         {scheme === "dark" ? "Dark theme" : "Light theme"}
-        {active ? <span className="rounded border border-accent bg-accent-subtle px-1 text-xs font-normal lowercase text-text">active now</span> : null}
+        {active ? <span className="themes:rounded themes:border themes:border-accent themes:bg-accent-subtle themes:px-1 themes:text-xs themes:font-normal themes:lowercase themes:text-text">active now</span> : null}
       </legend>
       {!active ? (
-        <p className="mx-1 my-0.5 text-sm text-text-muted">Used in {scheme}.</p>
+        <p className="themes:mx-1 themes:my-0.5 themes:text-sm themes:text-text-muted">Used in {scheme}.</p>
       ) : null}
       {missing ? (
-        <p className="mx-1 my-0.5 text-sm text-warning">
+        <p className="themes:mx-1 themes:my-0.5 themes:text-sm themes:text-warning">
           The saved theme <code>{selected}</code> is not installed. Using the kernel default.
         </p>
       ) : null}
 
-      <label className="tap-h flex cursor-pointer items-center gap-2 rounded px-1 hover:bg-bg-subtle [&>input]:size-6 [&>input]:m-0 [&>input]:min-h-0 [&>input]:accent-accent">
+      <label className="themes:tap-h themes:flex themes:cursor-pointer themes:items-center themes:gap-2 themes:rounded themes:px-1 themes:hover:bg-bg-subtle themes:[&>input]:size-6 themes:[&>input]:m-0 themes:[&>input]:min-h-0 themes:[&>input]:accent-accent">
         <input
           type="radio"
           name={`${group}-${scheme}`}
@@ -158,11 +158,11 @@ function SchemeGroup({
           onChange={() => onSelect(undefined)}
         />
         <Swatch tokens={undefined} />
-        <span className="flex-1">Kernel default</span>
+        <span className="themes:flex-1">Kernel default</span>
       </label>
 
       {themes.map((theme) => (
-        <label key={theme.id} className="tap-h flex cursor-pointer items-center gap-2 rounded px-1 hover:bg-bg-subtle [&>input]:size-6 [&>input]:m-0 [&>input]:min-h-0 [&>input]:accent-accent">
+        <label key={theme.id} className="themes:tap-h themes:flex themes:cursor-pointer themes:items-center themes:gap-2 themes:rounded themes:px-1 themes:hover:bg-bg-subtle themes:[&>input]:size-6 themes:[&>input]:m-0 themes:[&>input]:min-h-0 themes:[&>input]:accent-accent">
           <input
             type="radio"
             name={`${group}-${scheme}`}
@@ -171,12 +171,12 @@ function SchemeGroup({
             onChange={() => onSelect(theme.id)}
           />
           <Swatch tokens={preview(theme)} />
-          <span className="flex-1">{theme.name}</span>
+          <span className="themes:flex-1">{theme.name}</span>
         </label>
       ))}
 
       {themes.length === 0 ? (
-        <p className="mx-1 my-0.5 text-sm text-text-muted">
+        <p className="themes:mx-1 themes:my-0.5 themes:text-sm themes:text-text-muted">
           No {scheme} themes are installed beyond the kernel default.
         </p>
       ) : null}
@@ -195,9 +195,9 @@ function Swatch({ tokens }: { readonly tokens: Record<string, string> | undefine
     : undefined;
   const accent = tokens?.["--lm-accent"];
   return (
-    <span className="inline-flex h-[1.7rem] w-12 shrink-0 items-center justify-center gap-[0.2em] rounded border border-border-strong bg-bg text-xs leading-none text-text compact:w-10" style={style} aria-hidden="true">
+    <span className="themes:inline-flex themes:h-[1.7rem] themes:w-12 themes:shrink-0 themes:items-center themes:justify-center themes:gap-[0.2em] themes:rounded themes:border themes:border-border-strong themes:bg-bg themes:text-xs themes:leading-none themes:text-text themes:compact:w-10" style={style} aria-hidden="true">
       Aa
-      <span className="size-[0.55em] rounded-full bg-accent" style={accent ? { background: accent } : undefined} />
+      <span className="themes:size-[0.55em] themes:rounded-full themes:bg-accent" style={accent ? { background: accent } : undefined} />
     </span>
   );
 }

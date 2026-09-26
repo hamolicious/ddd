@@ -112,7 +112,7 @@ export function FilterBar({
   };
 
   return (
-    <div className="doclist-controls flex flex-col gap-2 rounded border border-border bg-bg-subtle p-2 [&_.doclist-checkbox]:tap-h [&_.doclist-checkbox]:inline-flex [&_.doclist-checkbox]:cursor-pointer [&_.doclist-checkbox]:items-center [&_.doclist-checkbox]:gap-1 [&_.doclist-checkbox]:whitespace-nowrap [&_.doclist-clause]:flex [&_.doclist-clause]:flex-wrap [&_.doclist-clause]:items-end [&_.doclist-clause]:gap-1.5 [&_.doclist-clause]:rounded [&_.doclist-clause]:border [&_.doclist-clause]:border-transparent [&_.doclist-clause]:p-1 [&_.doclist-clause-invalid]:border-warning [&_.doclist-field]:flex [&_.doclist-field]:flex-col [&_.doclist-field]:gap-0.5 [&_.doclist-field]:text-sm [&_.doclist-field]:text-text-muted [&_.doclist-field_input]:tap-h [&_.doclist-field_input]:rounded [&_.doclist-field_input]:border [&_.doclist-field_input]:border-border [&_.doclist-field_input]:bg-bg [&_.doclist-field_input]:px-2 [&_.doclist-field_input]:text-base [&_.doclist-field_input]:text-text [&_.doclist-field_select]:tap-h [&_.doclist-field_select]:rounded [&_.doclist-field_select]:border [&_.doclist-field_select]:border-border [&_.doclist-field_select]:bg-bg [&_.doclist-field_select]:px-2 [&_.doclist-field_select]:text-base [&_.doclist-field_select]:text-text [&_.doclist-grow]:flex-[1_1_12rem] compact:[&_.doclist-grow]:basis-full [&_.doclist-row]:flex [&_.doclist-row]:flex-wrap [&_.doclist-row]:items-end [&_.doclist-row]:gap-2 [&_.doclist-sort]:compact:flex-[1_1_8rem] compact:[&_.doclist-sort_select]:w-full">
+    <div className="doclist-controls doclist:flex doclist:flex-col doclist:gap-2 doclist:rounded doclist:border doclist:border-border doclist:bg-bg-subtle doclist:p-2 doclist:[&_.doclist-checkbox]:tap-h doclist:[&_.doclist-checkbox]:inline-flex doclist:[&_.doclist-checkbox]:cursor-pointer doclist:[&_.doclist-checkbox]:items-center doclist:[&_.doclist-checkbox]:gap-1 doclist:[&_.doclist-checkbox]:whitespace-nowrap doclist:[&_.doclist-clause]:flex doclist:[&_.doclist-clause]:flex-wrap doclist:[&_.doclist-clause]:items-end doclist:[&_.doclist-clause]:gap-1.5 doclist:[&_.doclist-clause]:rounded doclist:[&_.doclist-clause]:border doclist:[&_.doclist-clause]:border-transparent doclist:[&_.doclist-clause]:p-1 doclist:[&_.doclist-clause-invalid]:border-warning doclist:[&_.doclist-field]:flex doclist:[&_.doclist-field]:flex-col doclist:[&_.doclist-field]:gap-0.5 doclist:[&_.doclist-field]:text-sm doclist:[&_.doclist-field]:text-text-muted doclist:[&_.doclist-field_input]:tap-h doclist:[&_.doclist-field_input]:rounded doclist:[&_.doclist-field_input]:border doclist:[&_.doclist-field_input]:border-border doclist:[&_.doclist-field_input]:bg-bg doclist:[&_.doclist-field_input]:px-2 doclist:[&_.doclist-field_input]:text-base doclist:[&_.doclist-field_input]:text-text doclist:[&_.doclist-field_select]:tap-h doclist:[&_.doclist-field_select]:rounded doclist:[&_.doclist-field_select]:border doclist:[&_.doclist-field_select]:border-border doclist:[&_.doclist-field_select]:bg-bg doclist:[&_.doclist-field_select]:px-2 doclist:[&_.doclist-field_select]:text-base doclist:[&_.doclist-field_select]:text-text doclist:[&_.doclist-grow]:flex-[1_1_12rem] doclist:compact:[&_.doclist-grow]:basis-full doclist:[&_.doclist-row]:flex doclist:[&_.doclist-row]:flex-wrap doclist:[&_.doclist-row]:items-end doclist:[&_.doclist-row]:gap-2 doclist:[&_.doclist-sort]:compact:flex-[1_1_8rem] doclist:compact:[&_.doclist-sort_select]:w-full">
       <div className="doclist-row">
         <label className="doclist-field doclist-sort">
           <span>Sort by</span>
@@ -142,17 +142,17 @@ export function FilterBar({
 
         <button
           type="button"
-          className="doclist-filter-toggle ml-auto inline-flex items-center gap-1 aria-expanded:border-border-strong!"
+          className="doclist-filter-toggle doclist:ml-auto doclist:inline-flex doclist:items-center doclist:gap-1 doclist:aria-expanded:border-border-strong!"
           aria-expanded={expanded}
           aria-controls={panelId}
           onClick={() => setExpanded((value) => !value)}
         >
           Filters
-          {applied > 0 && <span className="doclist-filter-count rounded bg-accent-subtle px-1 text-sm tabular-nums">{applied}</span>}
+          {applied > 0 && <span className="doclist-filter-count doclist:rounded doclist:bg-accent-subtle doclist:px-1 doclist:text-sm doclist:tabular-nums">{applied}</span>}
         </button>
       </div>
 
-      <div className={`doclist-filter-panel ${expanded ? "flex" : "hidden"} flex-col gap-2 border-t border-border pt-2`} id={panelId}>
+      <div className={`doclist-filter-panel ${expanded ? "doclist:flex" : "doclist:hidden"} doclist:flex-col doclist:gap-2 doclist:border-t doclist:border-border doclist:pt-2`} id={panelId}>
       <div className="doclist-row">
         <label className="doclist-field doclist-grow">
           <span>Title contains</span>
@@ -193,7 +193,7 @@ export function FilterBar({
             </label>
           </div>
 
-          <ul className="doclist-clauses m-0 flex list-none flex-col gap-2 p-0">
+          <ul className="doclist-clauses doclist:m-0 doclist:flex doclist:list-none doclist:flex-col doclist:gap-2 doclist:p-0">
             {draft.clauses.map((clause) => {
               const valueless = VALUELESS_OPS.includes(clause.op);
               return (
@@ -202,7 +202,7 @@ export function FilterBar({
                   className={`doclist-clause ${problems.has(clause.id) ? " doclist-clause-invalid" : ""}`}
                 >
                   <label className="doclist-field">
-                    <span className="sr-only">Field</span>
+                    <span className="doclist:sr-only">Field</span>
                     <input
                       list="doclist-fields"
                       value={clause.field}
@@ -212,7 +212,7 @@ export function FilterBar({
                   </label>
 
                   <label className="doclist-field">
-                    <span className="sr-only">Operator</span>
+                    <span className="doclist:sr-only">Operator</span>
                     <select
                       value={clause.op}
                       onChange={(event) => patch(clause.id, { op: event.target.value as ClauseOp })}
@@ -228,7 +228,7 @@ export function FilterBar({
                   {!valueless && (
                     <>
                       <label className="doclist-field">
-                        <span className="sr-only">Value type</span>
+                        <span className="doclist:sr-only">Value type</span>
                         <select
                           value={clause.kind}
                           onChange={(event) =>
@@ -243,7 +243,7 @@ export function FilterBar({
                         </select>
                       </label>
                       <label className="doclist-field doclist-grow">
-                        <span className="sr-only">Value</span>
+                        <span className="doclist:sr-only">Value</span>
                         <input
                           value={clause.value}
                           placeholder={clause.kind === "date" ? "2026-09-23" : "Value"}
@@ -264,7 +264,7 @@ export function FilterBar({
 
                   <button
                     type="button"
-                    className="doclist-icon-button min-w-[var(--lm-tap-target)]"
+                    className="doclist-icon-button doclist:min-w-[var(--lm-tap-target)]"
                     aria-label={`Remove condition: ${describeClause(clause)}`}
                     onClick={() =>
                       onDraftChange({
@@ -280,7 +280,7 @@ export function FilterBar({
                     // The reason, not a label. "Incomplete" was shown over a row whose
                     // boxes were all full — a text operator against a date value, say —
                     // and told the reader to finish typing something already typed.
-                    <p className="doclist-clause-note m-0 flex-[1_1_100%] text-sm text-warning">
+                    <p className="doclist-clause-note doclist:m-0 doclist:flex-[1_1_100%] doclist:text-sm doclist:text-warning">
                       Not applied. {problems.get(clause.id)}
                     </p>
                   )}
@@ -332,7 +332,7 @@ export function FilterBar({
       </div>
 
       {filter !== undefined && (
-        <details className="doclist-json text-sm text-text-muted [&>summary]:flex [&>summary]:min-h-[var(--lm-tap-target)] [&>summary]:cursor-pointer [&>summary]:items-center [&>pre]:mt-1 [&>pre]:overflow-x-auto [&>pre]:rounded [&>pre]:bg-bg [&>pre]:p-2 [&>pre]:font-mono">
+        <details className="doclist-json doclist:text-sm doclist:text-text-muted doclist:[&>summary]:flex doclist:[&>summary]:min-h-[var(--lm-tap-target)] doclist:[&>summary]:cursor-pointer doclist:[&>summary]:items-center doclist:[&>pre]:mt-1 doclist:[&>pre]:overflow-x-auto doclist:[&>pre]:rounded doclist:[&>pre]:bg-bg doclist:[&>pre]:p-2 doclist:[&>pre]:font-mono">
           {/* A spec section number is a note to whoever builds this, not to whoever
               uses it. What a reader wants to know is what the block below *is*. */}
           <summary>Show the filter as JSON</summary>

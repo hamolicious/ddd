@@ -1,24 +1,25 @@
 /**
- * The two things the shell renders that are not somebody else's contribution: the
+ * The two things the header renders that are not somebody else's contribution: the
  * sync-status indicator and the notice bell.
  *
- * **Sync status** is `shell-ui`'s by SPEC §6.5, and it is a text label rather than a
- * coloured dot on purpose — "Offline" and "3 unsynced" are the two facts a user needs
- * before they close the tab, and a dot communicates neither. `aria-live="polite"`
- * announces transitions without stealing focus.
+ * **Sync status** was `shell-ui`'s by SPEC §6.5 and moved here with the top bar. It is
+ * a text label rather than a coloured dot on purpose — "Offline" and "3 unsynced" are
+ * the two facts a user needs before they close the tab, and a dot communicates neither.
+ * `aria-live="polite"` announces transitions without stealing focus.
  *
  * **The notice bell** is the in-shell way back to the kernel's notices (SPEC §6.4's
- * aggregated plugin-failure notice, SPEC §8's "update available — reload"). While this
- * shell holds the mount the bell is the *only* rendering of them: the kernel's frame
+ * aggregated plugin-failure notice, SPEC §8's "update available — reload"). While
+ * `shell-ui` holds the mount the bell is the *only* rendering of them: the kernel's frame
  * keeps its own strip in reserve for a workspace with no shell mounted, one whose holder
  * threw while rendering, and `?safe=bare`, where the kernel's own manager holds the mount
  * and draws no notices (`web/app/src/ui/AppFrame.tsx`). Both drew the list at once until
  * this was written down, which put every notice on screen twice and made "dismiss" a
  * thing you had to do in two places.
  *
- * The consequence for a *replacement* shell is worth stating: taking the mount means
- * taking this job. A shell that renders no notices leaves them reachable only through
- * `kernel.ui.notices()`.
+ * The consequence for a *replacement* header is worth stating: the kernel's strip stands
+ * down for whoever holds the mount (`shell-ui`), not for this plugin, so a header — or a
+ * workspace with no `shell.header` contribution at all — that renders no notices leaves
+ * them reachable only through `kernel.ui.notices()`.
  */
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
@@ -33,25 +34,25 @@ export function SyncIndicator({ kernel }: { readonly kernel: Kernel }): ReactNod
   const status = describeSync(state);
 
   return (
-    <div className="group tap-h inline-flex items-center gap-1 whitespace-nowrap px-1 text-text-muted data-[tone=error]:text-text data-[tone=warn]:text-text" data-tone={status.tone}>
-      <span className="inline-flex items-center gap-1" role="status" aria-live="polite" title={status.detail}>
-        <span className="size-[0.6em] rounded-full bg-text-muted group-data-[tone=ok]:bg-success group-data-[tone=busy]:bg-accent group-data-[tone=warn]:bg-warning group-data-[tone=error]:bg-danger" aria-hidden="true" />
-        <span className={`shell-sync-label compact:text-sm ${status.tone === "ok" ? " compact:hidden" : ""}`}>{status.label}</span>
+    <div className="header:group header:tap-h header:inline-flex header:items-center header:gap-1 header:whitespace-nowrap header:px-1 header:text-text-muted header:data-[tone=error]:text-text header:data-[tone=warn]:text-text" data-tone={status.tone}>
+      <span className="header:inline-flex header:items-center header:gap-1" role="status" aria-live="polite" title={status.detail}>
+        <span className="header:size-[0.6em] header:rounded-full header:bg-text-muted header:group-data-[tone=ok]:bg-success header:group-data-[tone=busy]:bg-accent header:group-data-[tone=warn]:bg-warning header:group-data-[tone=error]:bg-danger" aria-hidden="true" />
+        <span className={`header-sync-label header:compact:text-sm ${status.tone === "ok" ? " header:compact:hidden" : ""}`}>{status.label}</span>
       </span>
       {status.pending > 0 ? (
-        <span className="rounded border border-warning px-1 text-sm text-text compact:text-xs" title={`${status.pending} unsynced`}>
+        <span className="header:rounded header:border header:border-warning header:px-1 header:text-sm header:text-text header:compact:text-xs" title={`${status.pending} unsynced`}>
           {status.pending} unsynced
         </span>
       ) : null}
       {status.action === "reconnect" ? (
-        <button type="button" className="tap-h inline-flex cursor-pointer items-center justify-center rounded border border-border-strong bg-transparent px-1.5 underline" onClick={() => kernel.sync.reconnectNow()}>
+        <button type="button" className="header:tap-h header:inline-flex header:cursor-pointer header:items-center header:justify-center header:rounded header:border header:border-border-strong header:bg-transparent header:px-1.5 header:underline" onClick={() => kernel.sync.reconnectNow()}>
           Retry
         </button>
       ) : null}
       {status.action === "reauth" ? (
         <button
           type="button"
-          className="tap-h inline-flex cursor-pointer items-center justify-center rounded border border-border-strong bg-transparent px-1.5 underline"
+          className="header:tap-h header:inline-flex header:cursor-pointer header:items-center header:justify-center header:rounded header:border header:border-border-strong header:bg-transparent header:px-1.5 header:underline"
           onClick={() => {
             // The kernel owns re-authentication; reloading is the one move a plugin
             // can make that always lands on the auth gate without clearing anything.
@@ -62,7 +63,7 @@ export function SyncIndicator({ kernel }: { readonly kernel: Kernel }): ReactNod
         </button>
       ) : null}
       {/* The whole sentence, for screen readers and for a hover that is not a tooltip race. */}
-      <span className="sr-only">{status.detail}</span>
+      <span className="header:sr-only">{status.detail}</span>
     </div>
   );
 }
@@ -153,28 +154,28 @@ export function NoticeBell({ kernel }: { readonly kernel: Kernel }): ReactNode {
       : "info";
 
   return (
-    <div className="relative inline-flex compact:static" ref={container}>
+    <div className="header:relative header:inline-flex header:compact:static" ref={container}>
       <button
         type="button"
-        className="shell-notice-bell tap box-border inline-flex cursor-pointer items-center justify-center gap-1 rounded border border-border bg-transparent px-2.5 hover:bg-bg-raised compact:w-[var(--lm-tap-target)] compact:gap-0 compact:p-0! data-[level=warning]:border-warning data-[level=warning]:text-warning data-[level=error]:border-danger data-[level=error]:text-danger"
+        className="header-notice-bell header:tap header:box-border header:inline-flex header:cursor-pointer header:items-center header:justify-center header:gap-1 header:rounded header:border header:border-border header:bg-transparent header:px-2.5 header:hover:bg-bg-raised header:compact:w-[var(--lm-tap-target)] header:compact:gap-0 header:compact:p-0! header:data-[level=warning]:border-warning header:data-[level=warning]:text-warning header:data-[level=error]:border-danger header:data-[level=error]:text-danger"
         data-level={worst}
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((value) => !value)}
       >
         <span aria-hidden="true">!</span>
-        <span className="tabular-nums">{count}</span>
-        <span className="sr-only">
+        <span className="header:tabular-nums">{count}</span>
+        <span className="header:sr-only">
           {count} notice{count === 1 ? "" : "s"}
         </span>
       </button>
-      <div id={panelId} className="shell-notice-panel absolute right-0 top-[calc(100%+var(--lm-space)*0.5)] z-25 max-h-[calc(var(--lm-viewport-height)*0.6)] w-[min(26rem,calc(100vw-var(--lm-space)*2))] overflow-y-auto rounded-lg border border-border bg-bg-raised p-2 shadow-2 compact:inset-x-2 compact:w-auto compact:pb-[calc(var(--lm-space)+var(--lm-safe-bottom))] [&_li]:border-b [&_li]:border-border [&_li]:py-1.5 [&_li:last-child]:border-b-0 [&_pre]:mt-1 [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:whitespace-pre-wrap [&_ul]:m-0 [&_ul]:list-none [&_ul]:p-0" hidden={!open} role="group" aria-label="Notices">
+      <div id={panelId} className="header-notice-panel header:absolute header:right-0 header:top-[calc(100%+var(--lm-space)*0.5)] header:z-25 header:max-h-[calc(var(--lm-viewport-height)*0.6)] header:w-[min(26rem,calc(100vw-var(--lm-space)*2))] header:overflow-y-auto header:rounded-lg header:border header:border-border header:bg-bg-raised header:p-2 header:shadow-2 header:compact:inset-x-2 header:compact:w-auto header:compact:pb-[calc(var(--lm-space)+var(--lm-safe-bottom))] header:[&_li]:border-b header:[&_li]:border-border header:[&_li]:py-1.5 header:[&_li:last-child]:border-b-0 header:[&_pre]:mt-1 header:[&_pre]:max-w-full header:[&_pre]:overflow-x-auto header:[&_pre]:whitespace-pre-wrap header:[&_ul]:m-0 header:[&_ul]:list-none header:[&_ul]:p-0" hidden={!open} role="group" aria-label="Notices">
         <ul>
           {notices.map((notice) => (
             <li key={notice.id} data-level={notice.level}>
-              <p className={`mb-1 mt-0 [overflow-wrap:anywhere] ${notice.level === "error" ? " text-danger" : notice.level === "warning" ? " text-warning" : ""}`}>{notice.message}</p>
+              <p className={`header:mb-1 header:mt-0 header:[overflow-wrap:anywhere] ${notice.level === "error" ? " header:text-danger" : notice.level === "warning" ? " header:text-warning" : ""}`}>{notice.message}</p>
               {notice.pluginId ? (
-                <p className="mb-1 mt-0 text-sm text-text-muted">
+                <p className="header:mb-1 header:mt-0 header:text-sm header:text-text-muted">
                   plugin <code>{notice.pluginId}</code>
                 </p>
               ) : null}
@@ -184,7 +185,7 @@ export function NoticeBell({ kernel }: { readonly kernel: Kernel }): ReactNode {
                   <pre>{notice.detail}</pre>
                 </details>
               ) : null}
-              <p className="m-0 flex flex-wrap gap-1">
+              <p className="header:m-0 header:flex header:flex-wrap header:gap-1">
                 {(notice.actions ?? []).map((action) => (
                   <button key={action.label} type="button" onClick={() => action.run()}>
                     {action.label}

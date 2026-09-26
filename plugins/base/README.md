@@ -25,7 +25,8 @@ dist/<id>/<version>/              build output = the installed layout the server
 
 | Plugin | Responsibility | Defines |
 |---|---|---|
-| `shell-ui` | layout, mobile breakpoint, sync-status indicator | `navbar.item`, `sidebar.panel`, `main.view` |
+| `shell-ui` | layout, mobile breakpoint, a spot for the top bar | `shell.header`, `sidebar.panel`, `main.view` |
+| `header` | the top bar: sidebar toggle, navbar items, notices, sync-status indicator | `navbar.item` |
 | `router` | URL ↔ view (hash-based) | `router.route` |
 | `commands` | command registry, palette, keybindings | `commands.command`, `keybindings.default` |
 | `themes` | theme registry + picker; overrides kernel tokens | `themes.theme` |
@@ -50,7 +51,7 @@ that had a backend half, so **every plugin in this directory is now frontend-onl
 
 ## How the base plugins relate
 
-Generated from the fourteen `manifest.json` `dependencies` fields — an arrow reads
+Generated from the fifteen `manifest.json` `dependencies` fields — an arrow reads
 **"depends on"**, and the loader's activation order is precisely a topological order of
 this graph (a dependency always activates first; a failed dependency skips its whole
 subtree). Every plugin additionally depends on `@kernel`, which is not drawn.
@@ -77,6 +78,7 @@ flowchart TD
     subgraph foundation ["foundation"]
         router --> shell-ui
         commands --> shell-ui
+        header --> shell-ui
     end
 
     markdown --> commands & router
@@ -100,7 +102,9 @@ message precisely *because* the arrow it would need points the wrong way: `folde
 already depends on `doc-list`, and the reverse edge would be a cycle the loader cannot
 order.
 
-Reading it bottom-up: `shell-ui` owns the frame everyone renders into; `router` and
+Reading it bottom-up: `shell-ui` owns the frame everyone renders into, and `header`
+fills its top-bar spot (the plugins that put items in the bar do not depend on `header`:
+contributions to `navbar.item` buffer until it is defined); `router` and
 `commands` are the two services almost everything consumes (URLs and actions); the
 document experience stacks `viewer`/`editor`/`properties` as peer *modes* on
 `document-surface`, with `markdown` as the rendering pipeline `viewer` consumes; and

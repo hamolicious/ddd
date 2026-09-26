@@ -107,11 +107,11 @@ export function DefaultModeSection({
   };
 
   return (
-    <div className="flex max-w-[48ch] flex-col gap-2">
-      <label className="flex min-w-0 flex-col gap-1">
-        <span className="font-semibold text-text">Open documents in</span>
+    <div className="docsurface:flex docsurface:max-w-[48ch] docsurface:flex-col docsurface:gap-2">
+      <label className="docsurface:flex docsurface:min-w-0 docsurface:flex-col docsurface:gap-1">
+        <span className="docsurface:font-semibold docsurface:text-text">Open documents in</span>
         <select
-          className="tap-h min-w-0 max-w-full rounded border border-border-strong bg-bg-raised px-2 text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+          className="docsurface:tap-h docsurface:min-w-0 docsurface:max-w-full docsurface:rounded docsurface:border docsurface:border-border-strong docsurface:bg-bg-raised docsurface:px-2 docsurface:text-text docsurface:focus-visible:outline-2 docsurface:focus-visible:outline-offset-2 docsurface:focus-visible:outline-focus"
           value={selected ?? ""}
           onChange={(event) => choose(event.target.value)}
         >
@@ -126,16 +126,16 @@ export function DefaultModeSection({
         </select>
       </label>
 
-      <p className="m-0 text-sm leading-[1.5] text-text-muted">
+      <p className="docsurface:m-0 docsurface:text-sm docsurface:leading-[1.5] docsurface:text-text-muted">
         Used when you open a document you have not switched modes on. Switching modes on
         a document is remembered for that document and wins over this.
       </p>
 
       {remembered > 0 ? (
-        <p className="m-0 text-sm leading-[1.5] text-text-muted">
+        <p className="docsurface:m-0 docsurface:text-sm docsurface:leading-[1.5] docsurface:text-text-muted">
           <button
             type="button"
-            className="min-h-[calc(var(--lm-tap-target)-12px)] cursor-pointer rounded border border-border-strong bg-bg-raised px-2 text-sm text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+            className="docsurface:min-h-[calc(var(--lm-tap-target)-12px)] docsurface:cursor-pointer docsurface:rounded docsurface:border docsurface:border-border-strong docsurface:bg-bg-raised docsurface:px-2 docsurface:text-sm docsurface:text-text docsurface:focus-visible:outline-2 docsurface:focus-visible:outline-offset-2 docsurface:focus-visible:outline-focus"
             onClick={() => {
               setProblem(undefined);
               void forgetRemembered()
@@ -155,7 +155,7 @@ export function DefaultModeSection({
       ) : null}
 
       {problem ? (
-        <p className="m-0 text-sm text-danger" role="alert">
+        <p className="docsurface:m-0 docsurface:text-sm docsurface:text-danger" role="alert">
           {problem}
         </p>
       ) : null}

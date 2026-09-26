@@ -253,7 +253,7 @@ export default function activate(kernel: Kernel): MarkdownApi {
         // own parser is total. Showing the text beats showing nothing, and the error names
         // the pipeline so the aggregated notice has something to point at.
         kernel.log.error("markdown pipeline threw while parsing", error);
-        return <pre className="overflow-x-auto rounded border border-danger p-3 font-mono">{text}</pre>;
+        return <pre className="markdown:overflow-x-auto markdown:rounded markdown:border markdown:border-danger markdown:p-3 markdown:font-mono">{text}</pre>;
       }
 
       const taskScan = scanTasks(tree, text, resolved.tasks);

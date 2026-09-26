@@ -425,7 +425,8 @@ and announced; renaming a point or making a field required is not.
 
 | Point | Owner | Payload (required fields) |
 |---|---|---|
-| `navbar.item` | `shell-ui` | `{ id, label, icon?, order?, side?, onSelect?, component? }` |
+| `shell.header` | `shell-ui` | `{ id, component, order? }` — the lowest `order` is rendered |
+| `navbar.item` | `header` | `{ id, label, icon?, order?, side?, onSelect?, component? }` |
 | `sidebar.panel` | `shell-ui` | `{ id, title, component, icon?, order?, defaultOpen? }` |
 | `main.view` | `shell-ui` | `{ id, component, title? }` — component gets `{ params? }` |
 | `router.route` | `router` | `{ path, view, order? }` — `path` has `:name` segments |
@@ -500,11 +501,12 @@ Hard requirements:
 
 ## Area: base-shell
 
-**Owns:** `plugins/base/{shell-ui,router,commands,themes}/**`.
+**Owns:** `plugins/base/{shell-ui,header,router,commands,themes}/**`.
 
 - `shell-ui` is the only plugin that may call `kernel.ui.mount`.
 - The **mobile breakpoint** is this area's: drawer sidebar, single pane, 44 px targets
-  (`--lm-tap-target`), and the sync-status indicator (SPEC §6.5).
+  (`--lm-tap-target`), and the sync-status indicator (SPEC §6.5) — the indicator and the
+  top bar it sits in are `header`'s, rendered in `shell-ui`'s `shell.header` spot.
 - Landmarks, a skip link, a keyboard-operable palette and visible focus rings are
   requirements, not polish (SPEC §8).
 - Keybindings: user config wins, first registration wins between plugins, conflicts are

@@ -15,6 +15,7 @@
 import type { Unsubscribe } from "@kernel";
 
 import { COMPACT_MEDIA_QUERY } from "../../_shared/compact.js";
+import type { ShellLayout } from "../../_shared/shell-api.js";
 
 /**
  * SPEC §6.5's mobile breakpoint: drawer sidebar, single pane.
@@ -38,6 +39,7 @@ export interface ShellSnapshot {
   readonly compact: boolean;
   /** Desktop: the sidebar column is shown. Compact: the drawer is open. */
   readonly sidebarOpen: boolean;
+  readonly hasSidebar: boolean;
 }
 
 const EMPTY_PARAMS: Readonly<Record<string, string>> = Object.freeze({});
@@ -47,13 +49,15 @@ export class ShellState {
   readonly #layoutListeners = new Set<(compact: boolean) => void>();
   readonly #media: MediaQueryList | undefined;
   #snapshot: ShellSnapshot;
+  #layout: ShellLayout;
   #panels: Record<string, boolean>;
 
   constructor() {
     const media = typeof matchMedia === "function" ? matchMedia(COMPACT_QUERY) : undefined;
     this.#media = media;
     const compact = media?.matches ?? false;
-    this.#snapshot = { view: undefined, compact, sidebarOpen: !compact };
+    this.#snapshot = { view: undefined, compact, sidebarOpen: !compact, hasSidebar: false };
+    this.#layout = { compact, sidebarOpen: !compact, hasSidebar: false };
     this.#panels = readPanels();
     media?.addEventListener("change", () => this.#onBreakpoint());
   }
@@ -64,6 +68,9 @@ export class ShellState {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
   };
+
+  /** Cached: a new object only when one of its three fields changed. */
+  layout = (): ShellLayout => this.#layout;
 
   get compact(): boolean {
     return this.#snapshot.compact;
@@ -90,6 +97,12 @@ export class ShellState {
     this.#set({ sidebarOpen: next });
   }
 
+  /** The layout reports it; the shell sets it from the live `sidebar.panel` entries. */
+  setHasSidebar(hasSidebar: boolean): void {
+    if (hasSidebar === this.#snapshot.hasSidebar) return;
+    this.#set({ hasSidebar });
+  }
+
   /** Whether a sidebar panel is expanded; `defaultOpen` decides the first time. */
   panelOpen(id: string, defaultOpen: boolean): boolean {
     return this.#panels[id] ?? defaultOpen;
@@ -112,6 +125,15 @@ export class ShellState {
 
   #set(patch: Partial<ShellSnapshot>): void {
     this.#snapshot = { ...this.#snapshot, ...patch };
+    const { compact, sidebarOpen, hasSidebar } = this.#snapshot;
+    const layout = this.#layout;
+    if (
+      layout.compact !== compact ||
+      layout.sidebarOpen !== sidebarOpen ||
+      layout.hasSidebar !== hasSidebar
+    ) {
+      this.#layout = { compact, sidebarOpen, hasSidebar };
+    }
     for (const listener of [...this.#listeners]) listener();
   }
 }

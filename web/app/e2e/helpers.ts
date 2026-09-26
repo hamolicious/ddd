@@ -206,7 +206,7 @@ export async function pluginRegistry(
 
 /** Show the sidebar if it is collapsed (the state is per-device localStorage). */
 export async function showSidebar(page: Page): Promise<void> {
-  const toggle = page.locator(".shell-sidebar-toggle");
+  const toggle = page.locator(".header-sidebar-toggle");
   await expect(toggle).toBeVisible();
   if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
   await expect(page.getByRole("complementary", { name: /sidebar/i })).toBeVisible();

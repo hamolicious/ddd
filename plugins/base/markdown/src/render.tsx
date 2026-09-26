@@ -85,7 +85,7 @@ export function renderTree(tree: MdNode, source: string, options: RenderOptions)
   });
   const env: Env = { ...options, source, definitions };
   return (
-    <div className="md-root min-w-0 break-words font-sans leading-[1.6] text-text [--md-gutter:calc(var(--lm-space)*3)] [&>*+*]:mt-3 [&_:focus-visible]:outline-2 [&_:focus-visible]:outline-offset-2 [&_:focus-visible]:outline-focus [&_a]:break-words [&_a]:text-link [&_blockquote]:mx-0 [&_blockquote]:border-l-[3px] [&_blockquote]:border-border-strong [&_blockquote]:pl-4 [&_blockquote]:text-text-muted [&_h1]:my-2 [&_h1]:mt-6 [&_h1]:leading-tight [&_h2]:my-2 [&_h2]:mt-6 [&_h2]:leading-tight [&_h3]:my-2 [&_h3]:mt-6 [&_h3]:leading-tight [&_h4]:my-2 [&_h4]:mt-6 [&_h4]:leading-tight [&_h5]:my-2 [&_h5]:mt-6 [&_h5]:leading-tight [&_h6]:my-2 [&_h6]:mt-6 [&_h6]:leading-tight [&_hr]:border-0 [&_hr]:border-t [&_hr]:border-border [&_li>p]:my-0 [&_li>p+p]:mt-2">{renderChildren(tree, env)}</div>
+    <div className="md-root markdown:min-w-0 markdown:break-words markdown:font-sans markdown:leading-[1.6] markdown:text-text markdown:[--md-gutter:calc(var(--lm-space)*3)] markdown:[&>*+*]:mt-3 markdown:[&_:focus-visible]:outline-2 markdown:[&_:focus-visible]:outline-offset-2 markdown:[&_:focus-visible]:outline-focus markdown:[&_a]:break-words markdown:[&_a]:text-link markdown:[&_blockquote]:mx-0 markdown:[&_blockquote]:border-l-[3px] markdown:[&_blockquote]:border-border-strong markdown:[&_blockquote]:pl-4 markdown:[&_blockquote]:text-text-muted markdown:[&_h1]:my-2 markdown:[&_h1]:mt-6 markdown:[&_h1]:leading-tight markdown:[&_h2]:my-2 markdown:[&_h2]:mt-6 markdown:[&_h2]:leading-tight markdown:[&_h3]:my-2 markdown:[&_h3]:mt-6 markdown:[&_h3]:leading-tight markdown:[&_h4]:my-2 markdown:[&_h4]:mt-6 markdown:[&_h4]:leading-tight markdown:[&_h5]:my-2 markdown:[&_h5]:mt-6 markdown:[&_h5]:leading-tight markdown:[&_h6]:my-2 markdown:[&_h6]:mt-6 markdown:[&_h6]:leading-tight markdown:[&_hr]:border-0 markdown:[&_hr]:border-t markdown:[&_hr]:border-border markdown:[&_li>p]:my-0 markdown:[&_li>p+p]:mt-2">{renderChildren(tree, env)}</div>
   );
 }
 
@@ -127,7 +127,7 @@ function renderNode(node: MdNode, key: string, env: Env): ReactNode {
      */
     case "html":
       return (
-        <span key={key} className="md-raw-html border-b border-dashed border-border-strong font-mono text-[0.95em] text-text-muted" title="raw HTML is not rendered">
+        <span key={key} className="md-raw-html markdown:border-b markdown:border-dashed markdown:border-border-strong markdown:font-mono markdown:text-[0.95em] markdown:text-text-muted" title="raw HTML is not rendered">
           {node.value ?? ""}
         </span>
       );
@@ -152,7 +152,7 @@ function renderNode(node: MdNode, key: string, env: Env): ReactNode {
       return <del key={key}>{renderChildren(node, env)}</del>;
     case "inlineCode":
       return (
-        <code key={key} className="md-inline-code break-words rounded bg-bg-subtle px-[0.35em] py-[0.1em] font-mono text-[0.9em]">
+        <code key={key} className="md-inline-code markdown:break-words markdown:rounded markdown:bg-bg-subtle markdown:px-[0.35em] markdown:py-[0.1em] markdown:font-mono markdown:text-[0.9em]">
           {node.value ?? ""}
         </code>
       );
@@ -165,11 +165,11 @@ function renderNode(node: MdNode, key: string, env: Env): ReactNode {
 
     case "list":
       return node.ordered === true ? (
-        <ol key={key} start={node.start ?? undefined} className="md-list pl-[var(--md-gutter)]">
+        <ol key={key} start={node.start ?? undefined} className="md-list markdown:pl-[var(--md-gutter)]">
           {renderChildren(node, env)}
         </ol>
       ) : (
-        <ul key={key} className="md-list pl-[var(--md-gutter)]">
+        <ul key={key} className="md-list markdown:pl-[var(--md-gutter)]">
           {renderChildren(node, env)}
         </ul>
       );
@@ -290,7 +290,7 @@ function renderListItem(node: MdNode, key: string, env: Env): ReactNode {
           : value,
       );
   return (
-    <li key={key} className={`md-item md-task ${state.done === true ? " md-task-done" : ""} -ml-[var(--md-gutter)] flex list-none items-baseline gap-0 ${state.done === true ? " text-text-muted" : ""}`}>
+    <li key={key} className={`md-item md-task ${state.done === true ? " md-task-done" : ""} markdown:-ml-[var(--md-gutter)] markdown:flex markdown:list-none markdown:items-baseline markdown:gap-0 ${state.done === true ? " markdown:text-text-muted" : ""}`}>
       <TaskCheckbox
         state={state}
         registry={env.registries.tasks}
@@ -361,7 +361,7 @@ function renderCode(node: MdNode, key: string, env: Env): ReactNode {
     });
   }
   return (
-    <pre key={key} className="md-code overflow-x-auto rounded border border-border bg-bg-subtle p-3 font-mono">
+    <pre key={key} className="md-code markdown:overflow-x-auto markdown:rounded markdown:border markdown:border-border markdown:bg-bg-subtle markdown:p-3 markdown:font-mono">
       <code className={language ? `language-${language}` : undefined}>{node.value ?? ""}</code>
     </pre>
   );
@@ -410,7 +410,7 @@ function renderLink(node: MdNode, key: string, env: Env): ReactNode {
   return (
     <a
       key={key}
-      className="md-link break-words text-link"
+      className="md-link markdown:break-words markdown:text-link"
       href={verdict.url}
       title={node.title ?? undefined}
       // External destinations only, so `noopener`/`noreferrer` costs nothing and closes
@@ -452,7 +452,7 @@ function renderImage(node: MdNode, key: string, env: Env): ReactNode {
   return (
     <img
       key={key}
-      className="max-w-full rounded"
+      className="markdown:max-w-full markdown:rounded"
       src={verdict.url}
       alt={node.alt ?? ""}
       title={node.title ?? undefined}
@@ -481,8 +481,8 @@ function renderTable(node: MdNode, key: string, env: Env): ReactNode {
     );
 
   return (
-    <div key={key} className="md-table-scroll overflow-x-auto">
-      <table className="md-table min-w-full border-collapse [&_td]:border [&_td]:border-border [&_td]:px-2 [&_td]:py-1.5 [&_th]:border [&_th]:border-border [&_th]:bg-bg-subtle [&_th]:px-2 [&_th]:py-1.5">
+    <div key={key} className="md-table-scroll markdown:overflow-x-auto">
+      <table className="md-table markdown:min-w-full markdown:border-collapse markdown:[&_td]:border markdown:[&_td]:border-border markdown:[&_td]:px-2 markdown:[&_td]:py-1.5 markdown:[&_th]:border markdown:[&_th]:border-border markdown:[&_th]:bg-bg-subtle markdown:[&_th]:px-2 markdown:[&_th]:py-1.5">
         {head ? (
           <thead>
             <tr>{cells(head, "th")}</tr>
@@ -561,8 +561,8 @@ function renderLiteral(
 ): ReactNode {
   const literal = sourceOf(node, env.source) ?? textOf(node);
   const className = layout === "block"
-    ? "md-literal md-literal-block block overflow-x-auto whitespace-pre-wrap rounded border border-dashed border-border-strong p-2 font-mono text-[0.95em] text-text-muted"
-    : "md-literal border-b border-dashed border-border-strong font-mono text-[0.95em] text-text-muted";
+    ? "md-literal md-literal-block markdown:block markdown:overflow-x-auto markdown:whitespace-pre-wrap markdown:rounded markdown:border markdown:border-dashed markdown:border-border-strong markdown:p-2 markdown:font-mono markdown:text-[0.95em] markdown:text-text-muted"
+    : "md-literal markdown:border-b markdown:border-dashed markdown:border-border-strong markdown:font-mono markdown:text-[0.95em] markdown:text-text-muted";
   return layout === "block" ? (
     <div key={key} className={className} title={reason}>
       {literal}

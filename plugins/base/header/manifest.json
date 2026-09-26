@@ -1,12 +1,15 @@
 {
-  "id": "shell-ui",
+  "id": "header",
   "version": "1.0.0",
-  "name": "Shell UI",
-  "description": "Layout skeleton and mobile breakpoint: a header spot, the sidebar and the main region.",
+  "name": "Header",
+  "description": "The top bar: sidebar toggle, navbar items, notices and the sync-status indicator.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
   "kernel": "^1.0",
+  "dependencies": {
+    "shell-ui": "^1.0"
+  },
   "peerLibraries": {
     "react": "^18.0.0"
   },
@@ -15,8 +18,6 @@
     "style": "frontend/style.css"
   },
   "x-defines": [
-    "main.view",
-    "shell.header",
-    "sidebar.panel"
+    "navbar.item"
   ]
 }

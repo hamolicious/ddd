@@ -104,16 +104,16 @@ export function FolderContents({
   }, [documents, query]);
 
   return (
-    <section className="mx-auto flex w-full max-w-[56rem] flex-col gap-5 p-3 font-sans text-text compact:p-2" aria-labelledby="folder-contents-heading">
-      <header className="flex flex-col gap-3 rounded-lg border border-border bg-bg-raised p-4 shadow-1 sm:flex-row sm:items-center sm:justify-between">
-        <h2 id="folder-contents-heading" className="m-0 font-mono text-lg">{path === "" ? "Root" : path}</h2>
-        <button type="button" className="tap rounded-md border border-border bg-bg-subtle px-3 hover:bg-accent-subtle" onClick={() => onNewDocumentHere(path)}>
+    <section className="folders:mx-auto folders:flex folders:w-full folders:max-w-[56rem] folders:flex-col folders:gap-5 folders:p-3 folders:font-sans folders:text-text folders:compact:p-2" aria-labelledby="folder-contents-heading">
+      <header className="folders:flex folders:flex-col folders:gap-3 folders:rounded-lg folders:border folders:border-border folders:bg-bg-raised folders:p-4 folders:shadow-1 folders:sm:flex-row folders:sm:items-center folders:sm:justify-between">
+        <h2 id="folder-contents-heading" className="folders:m-0 folders:font-mono folders:text-lg">{path === "" ? "Root" : path}</h2>
+        <button type="button" className="folders:tap folders:rounded-md folders:border folders:border-border folders:bg-bg-subtle folders:px-3 folders:hover:bg-accent-subtle" onClick={() => onNewDocumentHere(path)}>
           New document here
         </button>
       </header>
 
       {path !== "" && (
-        <label className="flex min-h-[var(--lm-tap-target)] items-center gap-1 text-sm text-text-muted">
+        <label className="folders:flex folders:min-h-[var(--lm-tap-target)] folders:items-center folders:gap-1 folders:text-sm folders:text-text-muted">
           <input
             type="checkbox"
             checked={includeSubfolders}
@@ -124,17 +124,17 @@ export function FolderContents({
       )}
 
       {state === "error" && (
-        <p className="m-0 rounded-md border border-danger bg-bg-raised p-3 text-sm" role="alert">
+        <p className="folders:m-0 folders:rounded-md folders:border folders:border-danger folders:bg-bg-raised folders:p-3 folders:text-sm" role="alert">
           {error}
         </p>
       )}
 
       {state === "loading" ? (
-        <p className="m-0 text-sm text-text-muted" role="status">
+        <p className="folders:m-0 folders:text-sm folders:text-text-muted" role="status">
           Loading…
         </p>
       ) : rows.length === 0 ? (
-        <div className="flex flex-col gap-3 text-sm text-text-muted">
+        <div className="folders:flex folders:flex-col folders:gap-3 folders:text-sm folders:text-text-muted">
           <p>
             {path === ""
               ? "Nothing at the root yet."
@@ -153,12 +153,12 @@ export function FolderContents({
           </p>
         </div>
       ) : (
-        <ul className="folders-doc-list m-0 flex list-none flex-col overflow-hidden rounded-lg border border-border bg-bg-raised shadow-1">
+        <ul className="folders-doc-list folders:m-0 folders:flex folders:list-none folders:flex-col folders:overflow-hidden folders:rounded-lg folders:border folders:border-border folders:bg-bg-raised folders:shadow-1">
           {rows.map((row) => (
-            <li key={row.id} className="flex min-w-0 items-center gap-3 border-b border-border px-3 last:border-b-0">
+            <li key={row.id} className="folders:flex folders:min-w-0 folders:items-center folders:gap-3 folders:border-b folders:border-border folders:px-3 folders:last:border-b-0">
               <button
                 type="button"
-                className="folders-doc tap min-w-0 flex-1 truncate border-0 bg-transparent p-0 text-left text-link"
+                className="folders-doc folders:tap folders:min-w-0 folders:flex-1 folders:truncate folders:border-0 folders:bg-transparent folders:p-0 folders:text-left folders:text-link"
                 draggable
                 onDragStart={(event) => {
                   event.dataTransfer.setData(DOCUMENT_DRAG_TYPE, row.id);
@@ -169,18 +169,18 @@ export function FolderContents({
                 {row.title}
               </button>
               {includeSubfolders && row.path !== path && (
-                <span className="folders-doc-path min-w-[3ch] truncate font-mono text-xs text-text-muted">{row.path}</span>
+                <span className="folders-doc-path folders:min-w-[3ch] folders:truncate folders:font-mono folders:text-xs folders:text-text-muted">{row.path}</span>
               )}
             </li>
           ))}
         </ul>
       )}
 
-      <details className="text-sm text-text-muted">
+      <details className="folders:text-sm folders:text-text-muted">
         {/* Same wording as the document list's own disclosure: a spec section number is
             a note to whoever builds this, not to whoever uses it. */}
         <summary>Show the filter as JSON</summary>
-        <pre className="mt-2 overflow-x-auto rounded bg-bg-subtle p-3 font-mono">{JSON.stringify(query.filter, null, 2)}</pre>
+        <pre className="folders:mt-2 folders:overflow-x-auto folders:rounded folders:bg-bg-subtle folders:p-3 folders:font-mono">{JSON.stringify(query.filter, null, 2)}</pre>
       </details>
     </section>
   );

@@ -285,25 +285,25 @@ function PropertiesPanel({
 
   if (documentId === undefined) {
     return (
-      <div className="properties-root properties-empty flex min-w-0 flex-col gap-2 break-words p-2 font-sans text-sm text-text-muted">
+      <div className="properties-root properties-empty properties:flex properties:min-w-0 properties:flex-col properties:gap-2 properties:break-words properties:p-2 properties:font-sans properties:text-sm properties:text-text-muted">
         <p>Open a document to see its properties.</p>
       </div>
     );
   }
 
   return (
-    <div className="properties-root flex min-w-0 flex-col gap-2 break-words p-2 font-sans text-sm text-text">
+    <div className="properties-root properties:flex properties:min-w-0 properties:flex-col properties:gap-2 properties:break-words properties:p-2 properties:font-sans properties:text-sm properties:text-text">
       {row?.fm_parse_error ? (
-        <p className="m-0 border-l-[3px] border-warning bg-bg-subtle px-2 py-1 text-xs" role="status">
+        <p className="properties:m-0 properties:border-l-[3px] properties:border-warning properties:bg-bg-subtle properties:px-2 properties:py-1 properties:text-xs" role="status">
           One frontmatter line could not be read, so it is missing below. The text is
           untouched — fix the line in edit mode.
         </p>
       ) : null}
 
       {rows.length === 0 ? (
-        <p className="m-0 text-sm text-text-muted">No properties yet.</p>
+        <p className="properties:m-0 properties:text-sm properties:text-text-muted">No properties yet.</p>
       ) : (
-        <dl className="m-0 flex flex-col gap-1">
+        <dl className="properties:m-0 properties:flex properties:flex-col properties:gap-1">
           {rows.map((entry) => (
             <PropertyRowView
               key={entry.key}
@@ -361,13 +361,13 @@ function PropertyRowView({
   };
 
   return (
-    <div className="properties-row grid grid-cols-[minmax(6rem,34%)_1fr] items-start gap-x-2 gap-y-1 data-[busy=true]:opacity-60 compact:grid-cols-1 @max-[20rem]:grid-cols-1" data-kind={row.kind} data-busy={busy ? "true" : "false"}>
-      <dt className="properties-key m-0 break-words pt-1.5 text-text-muted compact:pt-0 @max-[20rem]:pt-0">
-        <span className="font-mono text-sm" title={`${row.key} (${row.kind})`}>
+    <div className="properties-row properties:grid properties:grid-cols-[minmax(6rem,34%)_1fr] properties:items-start properties:gap-x-2 properties:gap-y-1 properties:data-[busy=true]:opacity-60 properties:compact:grid-cols-1 properties:@max-[20rem]:grid-cols-1" data-kind={row.kind} data-busy={busy ? "true" : "false"}>
+      <dt className="properties-key properties:m-0 properties:break-words properties:pt-1.5 properties:text-text-muted properties:compact:pt-0 properties:@max-[20rem]:pt-0">
+        <span className="properties:font-mono properties:text-sm" title={`${row.key} (${row.kind})`}>
           {row.key}
         </span>
       </dt>
-      <dd className="properties-value m-0 flex min-w-0 flex-wrap items-center gap-1">
+      <dd className="properties-value properties:m-0 properties:flex properties:min-w-0 properties:flex-wrap properties:items-center properties:gap-1">
         {Editor ? (
           <Editor
             key={row.key}
@@ -377,11 +377,11 @@ function PropertyRowView({
             onChange={(value: CoreValue) => write(() => api.set(documentId, row.key, value))}
           />
         ) : (
-          <span className="m-0 text-sm text-text-muted">{formatScalar(row.value)}</span>
+          <span className="properties:m-0 properties:text-sm properties:text-text-muted">{formatScalar(row.value)}</span>
         )}
         <button
           type="button"
-          className="properties-remove tap size-[var(--lm-tap-target)] shrink-0 cursor-pointer rounded border border-transparent bg-transparent text-lg leading-none text-text-muted hover:border-border hover:text-danger focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus"
+          className="properties-remove properties:tap properties:size-[var(--lm-tap-target)] properties:shrink-0 properties:cursor-pointer properties:rounded properties:border properties:border-transparent properties:bg-transparent properties:text-lg properties:leading-none properties:text-text-muted properties:hover:border-border properties:hover:text-danger properties:focus-visible:outline-2 properties:focus-visible:outline-offset-1 properties:focus-visible:outline-focus"
           aria-label={`Remove ${row.key}`}
           title={`Remove ${row.key}`}
           onClick={() => void write(() => api.remove(documentId, row.key))}
@@ -389,7 +389,7 @@ function PropertyRowView({
           ×
         </button>
         {error ? (
-          <p className="m-0 flex-[1_1_100%] text-xs text-danger" role="alert">
+          <p className="properties:m-0 properties:flex-[1_1_100%] properties:text-xs properties:text-danger" role="alert">
             {error}
           </p>
         ) : null}
@@ -439,17 +439,17 @@ function AddPropertyRow({
 
   return (
     <form
-      className="flex flex-wrap items-end gap-1 border-t border-border pt-2"
+      className="properties:flex properties:flex-wrap properties:items-end properties:gap-1 properties:border-t properties:border-border properties:pt-2"
       onSubmit={(event) => {
         event.preventDefault();
         void submit();
       }}
     >
-      <label className="flex min-w-0 flex-[1_1_6rem] flex-col gap-0.5">
-        <span className="text-xs text-text-muted">New property</span>
+      <label className="properties:flex properties:min-w-0 properties:flex-[1_1_6rem] properties:flex-col properties:gap-0.5">
+        <span className="properties:text-xs properties:text-text-muted">New property</span>
         <input
           ref={keyInputRef}
-          className="properties-input tap-h min-w-0 flex-[1_1_6rem] rounded border border-border bg-bg-raised px-1.5 py-1 text-text focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus disabled:bg-bg-subtle disabled:text-text-muted"
+          className="properties-input properties:tap-h properties:min-w-0 properties:flex-[1_1_6rem] properties:rounded properties:border properties:border-border properties:bg-bg-raised properties:px-1.5 properties:py-1 properties:text-text properties:focus-visible:outline-2 properties:focus-visible:outline-offset-1 properties:focus-visible:outline-focus properties:disabled:bg-bg-subtle properties:disabled:text-text-muted"
           type="text"
           value={key}
           placeholder="name"
@@ -461,25 +461,25 @@ function AddPropertyRow({
           }}
         />
       </label>
-      <label className="flex min-w-0 flex-[1_1_6rem] flex-col gap-0.5">
-        <span className="text-xs text-text-muted">Value</span>
+      <label className="properties:flex properties:min-w-0 properties:flex-[1_1_6rem] properties:flex-col properties:gap-0.5">
+        <span className="properties:text-xs properties:text-text-muted">Value</span>
         <input
-          className="properties-input tap-h min-w-0 flex-[1_1_6rem] rounded border border-border bg-bg-raised px-1.5 py-1 text-text focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus disabled:bg-bg-subtle disabled:text-text-muted"
+          className="properties-input properties:tap-h properties:min-w-0 properties:flex-[1_1_6rem] properties:rounded properties:border properties:border-border properties:bg-bg-raised properties:px-1.5 properties:py-1 properties:text-text properties:focus-visible:outline-2 properties:focus-visible:outline-offset-1 properties:focus-visible:outline-focus properties:disabled:bg-bg-subtle properties:disabled:text-text-muted"
           type="text"
           value={value}
           placeholder="empty"
           onChange={(event) => setValue(event.target.value)}
         />
       </label>
-      <button type="submit" className="tap-h cursor-pointer rounded border border-border-strong bg-bg-raised px-3 text-text focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus disabled:cursor-default disabled:text-text-muted" disabled={busy || key.trim().length === 0}>
+      <button type="submit" className="properties:tap-h properties:cursor-pointer properties:rounded properties:border properties:border-border-strong properties:bg-bg-raised properties:px-3 properties:text-text properties:focus-visible:outline-2 properties:focus-visible:outline-offset-1 properties:focus-visible:outline-focus properties:disabled:cursor-default properties:disabled:text-text-muted" disabled={busy || key.trim().length === 0}>
         Add
       </button>
       {problem ? (
-        <p className="m-0 flex-[1_1_100%] text-xs text-danger" role="alert">
+        <p className="properties:m-0 properties:flex-[1_1_100%] properties:text-xs properties:text-danger" role="alert">
           {problem}
         </p>
       ) : null}
-      <p className="m-0 flex-[1_1_100%] text-xs text-text-muted">
+      <p className="properties:m-0 properties:flex-[1_1_100%] properties:text-xs properties:text-text-muted">
         <code>3</code> is a number, <code>true</code> a boolean, <code>&quot;3&quot;</code>{" "}
         text, empty is null.
       </p>
@@ -532,7 +532,7 @@ function TextValueEditor(props: ShippedEditorProps): ReactNode {
 
   return (
     <input
-      className="properties-input tap-h min-w-0 flex-[1_1_6rem] rounded border border-border bg-bg-raised px-1.5 py-1 text-text focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus disabled:bg-bg-subtle disabled:text-text-muted"
+      className="properties-input properties:tap-h properties:min-w-0 properties:flex-[1_1_6rem] properties:rounded properties:border properties:border-border properties:bg-bg-raised properties:px-1.5 properties:py-1 properties:text-text properties:focus-visible:outline-2 properties:focus-visible:outline-offset-1 properties:focus-visible:outline-focus properties:disabled:bg-bg-subtle properties:disabled:text-text-muted"
       type="text"
       value={draft}
       aria-label={field}
@@ -574,7 +574,7 @@ function NumberValueEditor(props: ShippedEditorProps): ReactNode {
 
   return (
     <input
-      className="properties-input tap-h min-w-0 flex-[1_1_6rem] rounded border border-border bg-bg-raised px-1.5 py-1 text-text focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus disabled:bg-bg-subtle disabled:text-text-muted"
+      className="properties-input properties:tap-h properties:min-w-0 properties:flex-[1_1_6rem] properties:rounded properties:border properties:border-border properties:bg-bg-raised properties:px-1.5 properties:py-1 properties:text-text properties:focus-visible:outline-2 properties:focus-visible:outline-offset-1 properties:focus-visible:outline-focus properties:disabled:bg-bg-subtle properties:disabled:text-text-muted"
       type="text"
       inputMode="decimal"
       value={draft}
@@ -595,7 +595,7 @@ function BooleanValueEditor(props: ShippedEditorProps): ReactNode {
   const { value, onChange } = props;
   const field = fieldOf(props);
   return (
-    <label className="tap-h inline-flex items-center gap-1 font-mono text-sm [&>input]:size-[1.1rem] [&>input]:accent-accent">
+    <label className="properties:tap-h properties:inline-flex properties:items-center properties:gap-1 properties:font-mono properties:text-sm properties:[&>input]:size-[1.1rem] properties:[&>input]:accent-accent">
       <input
         type="checkbox"
         checked={value === true}
@@ -625,23 +625,23 @@ function DateValueEditor(props: ShippedEditorProps): ReactNode {
   if (unparseable) {
     // Never overwrite text we could not read: show it, and let the user fix it.
     return (
-      <span className="flex min-w-0 flex-[1_1_6rem] flex-wrap items-center gap-1">
+      <span className="properties:flex properties:min-w-0 properties:flex-[1_1_6rem] properties:flex-wrap properties:items-center properties:gap-1">
         <input
-          className="properties-input tap-h min-w-0 flex-[1_1_6rem] rounded border border-border bg-bg-raised px-1.5 py-1 text-text focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus"
+          className="properties-input properties:tap-h properties:min-w-0 properties:flex-[1_1_6rem] properties:rounded properties:border properties:border-border properties:bg-bg-raised properties:px-1.5 properties:py-1 properties:text-text properties:focus-visible:outline-2 properties:focus-visible:outline-offset-1 properties:focus-visible:outline-focus"
           type="text"
           value={value}
           aria-label={field}
           onChange={(event) => void onChange(event.target.value)}
         />
-        <span className="m-0 text-sm text-text-muted">not a date the workspace can sort</span>
+        <span className="properties:m-0 properties:text-sm properties:text-text-muted">not a date the workspace can sort</span>
       </span>
     );
   }
 
   return (
-    <span className="flex min-w-0 flex-[1_1_6rem] flex-wrap items-center gap-1">
+    <span className="properties:flex properties:min-w-0 properties:flex-[1_1_6rem] properties:flex-wrap properties:items-center properties:gap-1">
       <input
-        className="properties-input properties-input-date tap-h min-w-0 flex-[1_1_8rem] rounded border border-border bg-bg-raised px-1.5 py-1 text-text focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus"
+        className="properties-input properties-input-date properties:tap-h properties:min-w-0 properties:flex-[1_1_8rem] properties:rounded properties:border properties:border-border properties:bg-bg-raised properties:px-1.5 properties:py-1 properties:text-text properties:focus-visible:outline-2 properties:focus-visible:outline-offset-1 properties:focus-visible:outline-focus"
         type="date"
         value={parts.date}
         aria-label={`${field} date`}
@@ -651,7 +651,7 @@ function DateValueEditor(props: ShippedEditorProps): ReactNode {
         }}
       />
       <input
-        className="properties-input properties-input-time tap-h min-w-0 flex-[0_1_6rem] rounded border border-border bg-bg-raised px-1.5 py-1 text-text focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus"
+        className="properties-input properties-input-time properties:tap-h properties:min-w-0 properties:flex-[0_1_6rem] properties:rounded properties:border properties:border-border properties:bg-bg-raised properties:px-1.5 properties:py-1 properties:text-text properties:focus-visible:outline-2 properties:focus-visible:outline-offset-1 properties:focus-visible:outline-focus"
         type="time"
         value={parts.time ?? ""}
         aria-label={`${field} time`}
@@ -692,15 +692,15 @@ function ListValueEditor(props: ShippedEditorProps): ReactNode {
   };
 
   return (
-    <span className="flex min-w-0 flex-[1_1_6rem] flex-wrap items-center gap-1">
+    <span className="properties:flex properties:min-w-0 properties:flex-[1_1_6rem] properties:flex-wrap properties:items-center properties:gap-1">
       {items.length > 0 ? (
-        <span className="flex flex-[1_1_100%] flex-wrap gap-1">
+        <span className="properties:flex properties:flex-[1_1_100%] properties:flex-wrap properties:gap-1">
           {items.map((item, index) => (
-            <span className="inline-flex items-center gap-0.5 rounded-full border border-border bg-bg-subtle py-px pl-2 pr-0.5 text-xs compact:min-h-[var(--lm-tap-target)] compact:pl-3 compact:text-sm" key={`${formatScalar(item)}-${index}`}>
+            <span className="properties:inline-flex properties:items-center properties:gap-0.5 properties:rounded-full properties:border properties:border-border properties:bg-bg-subtle properties:py-px properties:pl-2 properties:pr-0.5 properties:text-xs properties:compact:min-h-[var(--lm-tap-target)] properties:compact:pl-3 properties:compact:text-sm" key={`${formatScalar(item)}-${index}`}>
               {formatScalar(item)}
               <button
                 type="button"
-                className="properties-chip-remove size-5 cursor-pointer rounded-full border-0 bg-transparent text-text-muted hover:text-danger focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus compact:size-[var(--lm-tap-target)] compact:text-lg"
+                className="properties-chip-remove properties:size-5 properties:cursor-pointer properties:rounded-full properties:border-0 properties:bg-transparent properties:text-text-muted properties:hover:text-danger properties:focus-visible:outline-2 properties:focus-visible:outline-offset-1 properties:focus-visible:outline-focus properties:compact:size-[var(--lm-tap-target)] properties:compact:text-lg"
                 aria-label={`Remove ${formatScalar(item)} from ${field}`}
                 onClick={() => {
                   const next = items.filter((_, position) => position !== index);
@@ -716,7 +716,7 @@ function ListValueEditor(props: ShippedEditorProps): ReactNode {
         </span>
       ) : null}
       <input
-        className="properties-input tap-h min-w-0 flex-[1_1_6rem] rounded border border-border bg-bg-raised px-1.5 py-1 text-text focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-focus"
+        className="properties-input properties:tap-h properties:min-w-0 properties:flex-[1_1_6rem] properties:rounded properties:border properties:border-border properties:bg-bg-raised properties:px-1.5 properties:py-1 properties:text-text properties:focus-visible:outline-2 properties:focus-visible:outline-offset-1 properties:focus-visible:outline-focus"
         type="text"
         value={draft}
         aria-label={`${field}, comma separated`}

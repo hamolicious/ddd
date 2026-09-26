@@ -5,7 +5,7 @@
  * This file is not part of `@kernel` and never will be. The kernel knows point
  * names only as opaque strings — it has no idea what a navbar or a document mode is
  * (SPEC §2) — and the moment it did, replacing `shell-ui` would mean a kernel change.
- * What the base distribution *does* need is for its fourteen plugins to agree on
+ * What the base distribution *does* need is for its fifteen plugins to agree on
  * these shapes without importing each other, which is exactly what a shared
  * declaration file is for.
  *
@@ -25,9 +25,11 @@ import type { CoreValue, DocumentId, DocumentRow, OpenDocument, SearchHit } from
 /** Every point name in the base distribution, grouped by its owner. */
 export const POINTS = {
   /** `shell-ui` */
-  navbarItem: "navbar.item",
+  shellHeader: "shell.header",
   sidebarPanel: "sidebar.panel",
   mainView: "main.view",
+  /** `header` */
+  navbarItem: "navbar.item",
   /** `router` */
   route: "router.route",
   /** `commands` */
@@ -58,30 +60,21 @@ export const POINTS = {
 // ---------------------------------------------------------------------------
 
 /**
- * One item in the navigation bar. `component` renders it; `onSelect` is the
- * shorthand for the common case (a button that runs a command).
+ * The spot above the sidebar and main region. The shell renders one contribution here:
+ * the lowest `order` wins, so a replacement header only has to undercut the base one
+ * (which uses the default, 100). The component owns its whole row, `<header>` included.
  */
-export interface NavbarItem {
+export interface ShellHeader {
   readonly id: string;
-  readonly label: string;
-  /** Any renderable node — an inline SVG, a character, a component's output. */
-  readonly icon?: ReactNode;
+  readonly component: ComponentType<Record<string, never>>;
+  /** Lower wins; default 100. */
   readonly order?: number;
-  /** Placement hint; the shell decides what it can honour. */
-  readonly side?: "start" | "end";
-  readonly onSelect?: () => void;
-  /** Takes over rendering entirely (a sync indicator, a search box). */
-  readonly component?: ComponentType<Record<string, never>>;
 }
 
-export const navbarItemShape: Shape<NavbarItem> = s.object({
+export const shellHeaderShape: Shape<ShellHeader> = s.object({
   id: s.string(),
-  label: s.string(),
-  icon: s.optional(s.any()),
+  component: s.component(),
   order: s.optional(s.number()),
-  side: s.optional(s.literal("start", "end")),
-  onSelect: s.optional(s.func()),
-  component: s.optional(s.component()),
 });
 
 /** A panel in the sidebar (folders, tags, outline). Collapsible, orderable. */
@@ -120,6 +113,37 @@ export const mainViewShape: Shape<MainView> = s.object({
   id: s.string(),
   component: s.component(),
   title: s.optional(s.string()),
+});
+
+// ---------------------------------------------------------------------------
+// header
+// ---------------------------------------------------------------------------
+
+/**
+ * One item in the navigation bar. `component` renders it; `onSelect` is the
+ * shorthand for the common case (a button that runs a command).
+ */
+export interface NavbarItem {
+  readonly id: string;
+  readonly label: string;
+  /** Any renderable node — an inline SVG, a character, a component's output. */
+  readonly icon?: ReactNode;
+  readonly order?: number;
+  /** Placement hint; the shell decides what it can honour. */
+  readonly side?: "start" | "end";
+  readonly onSelect?: () => void;
+  /** Takes over rendering entirely (a sync indicator, a search box). */
+  readonly component?: ComponentType<Record<string, never>>;
+}
+
+export const navbarItemShape: Shape<NavbarItem> = s.object({
+  id: s.string(),
+  label: s.string(),
+  icon: s.optional(s.any()),
+  order: s.optional(s.number()),
+  side: s.optional(s.literal("start", "end")),
+  onSelect: s.optional(s.func()),
+  component: s.optional(s.component()),
 });
 
 // ---------------------------------------------------------------------------

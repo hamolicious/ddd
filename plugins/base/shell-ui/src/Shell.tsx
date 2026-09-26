@@ -1,15 +1,17 @@
 /**
- * The layout: navbar, sidebar, one main region. Everything inside them belongs to
- * another plugin, which is what makes this shell replaceable — a different shell
+ * The layout: a header spot, sidebar, one main region. Everything inside them belongs
+ * to another plugin, which is what makes this shell replaceable — a different shell
  * defines the same three points and nothing else has to change (SPEC §6.1).
  *
  * The properties that are requirements rather than styling:
  *
- * - **Landmarks and a skip link** (SPEC §8): `<header>`, `<nav>`, `<aside>`,
- *   `<main>`, and a first-tab-stop link that moves focus into the main region.
+ * - **Landmarks and a skip link** (SPEC §8): `<aside>`, `<main>`, and a first-tab-stop
+ *   link that moves focus into the main region. The `<header>` and its `<nav>` are the
+ *   header contribution's to render.
  * - **The mobile breakpoint** (SPEC §6.5): below it the sidebar is a drawer over a
- *   single pane, Escape closes it, focus moves into it when it opens and back to the
- *   toggle when it closes, and every control is at least `--lm-tap-target` tall.
+ *   single pane, Escape closes it, focus moves into it when it opens and back to
+ *   whatever opened it when it closes, and every control is at least
+ *   `--lm-tap-target` tall.
  * - **Every contributed component renders inside `kernel.ui.boundary`** (SPEC §6.4),
  *   so a panel that throws is a chip in the sidebar, not a blank application.
  * - **A view id the shell cannot resolve is a message, not an empty pane.** The
@@ -21,10 +23,15 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 
 import type { Contribution, Kernel } from "@kernel";
 
-import { POINTS, type MainView, type NavbarItem, type SidebarPanel } from "../../_shared/points.js";
+import { BoundedIcon, bounded, usePointEntries } from "../../_shared/boundary.js";
+import {
+  POINTS,
+  type MainView,
+  type ShellHeader,
+  type SidebarPanel,
+} from "../../_shared/points.js";
 
-import { BoundedIcon, bounded, usePointEntries, useShell } from "./hooks.js";
-import { NoticeBell, SyncIndicator } from "./indicators.js";
+import { useShell } from "./hooks.js";
 import {
   KEYBOARD_STEP,
   SIDEBAR_DEFAULT,
@@ -35,6 +42,9 @@ import {
 } from "./resize.js";
 import type { ShellState, ViewSelection } from "./state.js";
 
+/** The sidebar element's id — `ShellUiApi.sidebarId`, for a toggle's `aria-controls`. */
+export const SIDEBAR_ID = "shell-sidebar";
+
 export interface ShellProps {
   readonly kernel: Kernel;
   readonly state: ShellState;
@@ -44,12 +54,23 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
   const shell = useShell(state);
   const views = usePointEntries<MainView>(kernel, POINTS.mainView);
   const panels = usePointEntries<SidebarPanel>(kernel, POINTS.sidebarPanel);
-  const items = usePointEntries<NavbarItem>(kernel, POINTS.navbarItem);
+  const headers = usePointEntries<ShellHeader>(kernel, POINTS.shellHeader);
 
   const main = useRef<HTMLElement>(null);
   const sidebar = useRef<HTMLElement>(null);
-  const toggle = useRef<HTMLButtonElement>(null);
+  // The toggle is the header's, so the shell cannot hold a ref to it: whatever had
+  // focus when the drawer opened is where focus goes back to.
+  const opener = useRef<HTMLElement | null>(null);
   const drawer = shell.compact && shell.sidebarOpen;
+  const hasSidebar = panels.length > 0;
+
+  useEffect(() => state.setHasSidebar(hasSidebar), [state, hasSidebar]);
+
+  const closeDrawer = useCallback(() => {
+    state.toggleSidebar(false);
+    opener.current?.focus();
+    opener.current = null;
+  }, [state]);
 
   // Sidebar width: user-draggable on a desktop layout (the drawer sizes itself).
   // State holds the applied width; storage remembers it per device (resize.ts).
@@ -113,20 +134,20 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
   // The drawer is modal-ish: Escape closes it and focus goes back where it came from.
   useEffect(() => {
     if (!drawer) return;
+    const active = document.activeElement;
+    opener.current = active instanceof HTMLElement && active !== document.body ? active : null;
     sidebar.current?.focus();
     const onKey = (event: KeyboardEvent): void => {
-      if (event.key !== "Escape") return;
-      state.toggleSidebar(false);
-      toggle.current?.focus();
+      if (event.key === "Escape") closeDrawer();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [drawer, state]);
+  }, [drawer, closeDrawer]);
 
-  const hasSidebar = panels.length > 0;
+  const header = pickHeader(headers);
 
   return (
-    <div className="shell-root flex h-full min-h-0 flex-col font-sans text-text" data-compact={shell.compact ? "" : undefined}>
+    <div className="shell-root shellui:flex shellui:h-full shellui:min-h-0 shellui:flex-col shellui:font-sans shellui:text-text" data-compact={shell.compact ? "" : undefined}>
       {/*
         A real anchor so it is the first tab stop and announces as a link — but the
         click is handled here: `href="#shell-main"` would rewrite `location.hash`,
@@ -134,7 +155,7 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
         would navigate away from it.
       */}
       <a
-        className="tap-h absolute left-[calc(var(--lm-space)*0.5+var(--lm-safe-left))] top-[calc(var(--lm-space)*0.5+var(--lm-safe-top))] z-30 inline-flex -translate-y-[200%] items-center rounded bg-bg-raised px-2 py-1.5 shadow-2 focus:translate-y-0"
+        className="shellui:tap-h shellui:absolute shellui:left-[calc(var(--lm-space)*0.5+var(--lm-safe-left))] shellui:top-[calc(var(--lm-space)*0.5+var(--lm-safe-top))] shellui:z-30 shellui:inline-flex shellui:-translate-y-[200%] shellui:items-center shellui:rounded shellui:bg-bg-raised shellui:px-2 shellui:py-1.5 shellui:shadow-2 shellui:focus:translate-y-0"
         href="#shell-main"
         onClick={(event) => {
           event.preventDefault();
@@ -144,55 +165,14 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
         Skip to content
       </a>
 
-      <header className="relative flex min-h-[var(--lm-tap-target)] shrink-0 items-center gap-2 border-b border-border bg-bg-subtle pb-1 pl-[calc(var(--lm-space)+var(--lm-safe-left))] pr-[calc(var(--lm-space)+var(--lm-safe-right))] pt-[calc(var(--lm-space)*0.5+var(--lm-safe-top))] compact:items-start compact:gap-1 compact:pb-0 compact:pl-[calc(var(--lm-space)*0.5+var(--lm-safe-left))] compact:pr-[calc(var(--lm-space)*0.5+var(--lm-safe-right))] compact:pt-[var(--lm-safe-top)]">
-        {hasSidebar ? (
-          <button
-            ref={toggle}
-            type="button"
-            className="shell-sidebar-toggle tap box-border inline-flex cursor-pointer items-center justify-center gap-1 rounded border border-transparent bg-transparent px-2.5 hover:border-border hover:bg-bg-raised compact:w-[var(--lm-tap-target)] compact:p-0!"
-            aria-expanded={shell.sidebarOpen}
-            aria-controls="shell-sidebar"
-            onClick={() => state.toggleSidebar()}
-          >
-            <span aria-hidden="true">☰</span>
-            <span className="sr-only">
-              {shell.sidebarOpen ? "Hide the sidebar" : "Show the sidebar"}
-            </span>
-          </button>
-        ) : null}
+      {header ? <HeaderSlot kernel={kernel} entry={header} /> : null}
 
-        <span className="shrink-0 whitespace-nowrap font-semibold compact:hidden">Life Manager</span>
-
-        <nav className="flex min-w-0 flex-1 items-center gap-2 compact:flex-wrap" aria-label="Main">
-          <ul className="m-0 flex min-w-0 flex-1 list-none items-center gap-1 overflow-x-auto p-0 [scrollbar-width:thin] compact:order-2 compact:w-full compact:flex-none!" data-side="start">
-            {items
-              .filter((entry) => (entry.value.side ?? "start") === "start")
-              .map((entry) => (
-                <NavItem key={entry.value.id} kernel={kernel} entry={entry} />
-              ))}
-          </ul>
-          <ul className="ml-auto m-0 flex shrink-0 list-none items-center gap-1 p-0 compact:max-w-full compact:overflow-x-auto compact:gap-0" data-side="end">
-            {items
-              .filter((entry) => entry.value.side === "end")
-              .map((entry) => (
-                <NavItem key={entry.value.id} kernel={kernel} entry={entry} />
-              ))}
-            <li>
-              <NoticeBell kernel={kernel} />
-            </li>
-            <li>
-              <SyncIndicator kernel={kernel} />
-            </li>
-          </ul>
-        </nav>
-      </header>
-
-      <div className="relative flex min-h-0 flex-1">
+      <div className="shellui:relative shellui:flex shellui:min-h-0 shellui:flex-1">
         {hasSidebar ? (
           <aside
-            id="shell-sidebar"
+            id={SIDEBAR_ID}
             ref={sidebar}
-            className="@container w-[min(18rem,32vw)] shrink-0 overflow-y-auto overscroll-contain border-r border-border bg-bg-subtle p-1 pb-[calc(var(--lm-space)*0.5+var(--lm-safe-bottom))] compact:absolute compact:inset-y-0 compact:left-0 compact:z-20 compact:w-[min(20rem,86vw)] compact:border-border-strong compact:shadow-2"
+            className="shellui:@container shellui:w-[min(18rem,32vw)] shellui:shrink-0 shellui:overflow-y-auto shellui:overscroll-contain shellui:border-r shellui:border-border shellui:bg-bg-subtle shellui:p-1 shellui:pb-[calc(var(--lm-space)*0.5+var(--lm-safe-bottom))] shellui:compact:absolute shellui:compact:inset-y-0 shellui:compact:left-0 shellui:compact:z-20 shellui:compact:w-[min(20rem,86vw)] shellui:compact:border-border-strong shellui:compact:shadow-2"
             aria-label="Sidebar"
             tabIndex={-1}
             hidden={!shell.sidebarOpen}
@@ -209,7 +189,7 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
 
         {hasSidebar && shell.sidebarOpen && !shell.compact ? (
           <div
-            className="relative z-[1] -mx-[5px] shrink-0 grow-0 basis-[10px] touch-none cursor-col-resize hover:bg-[linear-gradient(to_right,transparent_4px,var(--lm-accent)_4px,var(--lm-accent)_6px,transparent_6px)] focus-visible:bg-[linear-gradient(to_right,transparent_4px,var(--lm-accent)_4px,var(--lm-accent)_6px,transparent_6px)] focus-visible:outline-none data-[dragging]:bg-[linear-gradient(to_right,transparent_4px,var(--lm-accent)_4px,var(--lm-accent)_6px,transparent_6px)]"
+            className="shellui:relative shellui:z-[1] shellui:-mx-[5px] shellui:shrink-0 shellui:grow-0 shellui:basis-[10px] shellui:touch-none shellui:cursor-col-resize shellui:hover:bg-[linear-gradient(to_right,transparent_4px,var(--lm-accent)_4px,var(--lm-accent)_6px,transparent_6px)] shellui:focus-visible:bg-[linear-gradient(to_right,transparent_4px,var(--lm-accent)_4px,var(--lm-accent)_6px,transparent_6px)] shellui:focus-visible:outline-none shellui:data-[dragging]:bg-[linear-gradient(to_right,transparent_4px,var(--lm-accent)_4px,var(--lm-accent)_6px,transparent_6px)]"
             role="separator"
             aria-orientation="vertical"
             aria-label="Resize the sidebar (arrow keys; Home resets)"
@@ -226,18 +206,15 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
 
         {drawer ? (
           <div
-            className="absolute inset-0 z-15 bg-bg-overlay"
+            className="shellui:absolute shellui:inset-0 shellui:z-15 shellui:bg-bg-overlay"
             // Decoration: Escape and the toggle are the accessible ways out, and a
             // focusable overlay would just be a tab stop that does nothing.
             aria-hidden="true"
-            onClick={() => {
-              state.toggleSidebar(false);
-              toggle.current?.focus();
-            }}
+            onClick={closeDrawer}
           />
         ) : null}
 
-        <main id="shell-main" ref={main} className="min-h-0 min-w-0 flex-1 overflow-auto focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-focus" tabIndex={-1}>
+        <main id="shell-main" ref={main} className="shellui:min-h-0 shellui:min-w-0 shellui:flex-1 shellui:overflow-auto shellui:focus:outline-none shellui:focus-visible:outline-2 shellui:focus-visible:outline-offset-[-2px] shellui:focus-visible:outline-focus" tabIndex={-1}>
           {active ? (
             <ActiveView kernel={kernel} entry={active} view={shell.view} />
           ) : (
@@ -249,47 +226,26 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
   );
 }
 
-function NavItem({
+/** The lowest `order` wins (default 100); a tie keeps registration order. */
+function pickHeader(
+  entries: readonly Contribution<ShellHeader>[],
+): Contribution<ShellHeader> | undefined {
+  let best: Contribution<ShellHeader> | undefined;
+  for (const entry of entries) {
+    if (!best || (entry.value.order ?? 100) < (best.value.order ?? 100)) best = entry;
+  }
+  return best;
+}
+
+function HeaderSlot({
   kernel,
   entry,
 }: {
   readonly kernel: Kernel;
-  readonly entry: Contribution<NavbarItem>;
+  readonly entry: Contribution<ShellHeader>;
 }): ReactNode {
-  const item = entry.value;
-  if (item.component) {
-    const Rendered = bounded(kernel, item.component, POINTS.navbarItem, entry.pluginId);
-    return (
-      // `data-kind` is what lets the stylesheet tell a plugin's own widget (a search
-      // box, which wants to grow) from a label the shell renders itself (a command
-      // button, which wants its whole label or nothing). Without it the mobile navbar
-      // shrank both in proportion and "New document" read "New docu…".
-      <li className={`flex min-w-0 items-center ${(item.side ?? "start") === "start" ? " flex-1" : ""}`} data-kind="component" data-plugin={entry.pluginId}>
-        <Rendered />
-      </li>
-    );
-  }
-  const hasIcon = item.icon !== undefined && item.icon !== null && item.icon !== false;
-  return (
-    <li className="flex min-w-0 items-center compact:shrink-0" data-kind="button" data-plugin={entry.pluginId}>
-      {item.onSelect ? (
-        <button type="button" className={`tap box-border inline-flex cursor-pointer items-center justify-center gap-1 rounded border border-transparent bg-transparent px-2.5 hover:border-border hover:bg-bg-raised compact:px-1.5 compact:[&_.shell-nav-icon+_.shell-nav-label]:sr-only ${hasIcon ? " compact:w-[var(--lm-tap-target)] compact:p-0!" : ""}`} onClick={() => item.onSelect?.()}>
-          {hasIcon ? (
-            <BoundedIcon
-              kernel={kernel}
-              node={item.icon}
-              point={POINTS.navbarItem}
-              pluginId={entry.pluginId}
-              className="shell-nav-icon"
-            />
-          ) : null}
-          <span className="shell-nav-label truncate">{item.label}</span>
-        </button>
-      ) : (
-        <span className="px-1 text-text-muted">{item.label}</span>
-      )}
-    </li>
-  );
+  const Rendered = bounded(kernel, entry.value.component, POINTS.shellHeader, entry.pluginId);
+  return <Rendered />;
 }
 
 function Panel({
@@ -307,16 +263,16 @@ function Panel({
   const Rendered = bounded(kernel, panel.component, POINTS.sidebarPanel, entry.pluginId);
 
   return (
-    <section className="mb-1" data-plugin={entry.pluginId}>
-      <h2 className="m-0 text-sm font-semibold uppercase tracking-[0.04em]">
+    <section className="shellui:mb-1" data-plugin={entry.pluginId}>
+      <h2 className="shellui:m-0 shellui:text-sm shellui:font-semibold shellui:uppercase shellui:tracking-[0.04em]">
         <button
           type="button"
-          className="tap-h flex w-full cursor-pointer items-center gap-1 rounded border-0 bg-transparent px-1 text-left text-text-muted hover:bg-bg-raised hover:text-text"
+          className="shellui:tap-h shellui:flex shellui:w-full shellui:cursor-pointer shellui:items-center shellui:gap-1 shellui:rounded shellui:border-0 shellui:bg-transparent shellui:px-1 shellui:text-left shellui:text-text-muted shellui:hover:bg-bg-raised shellui:hover:text-text"
           aria-expanded={open}
           aria-controls={bodyId}
           onClick={() => state.setPanelOpen(panel.id, !open)}
         >
-          <span className="w-[1em]" aria-hidden="true">
+          <span className="shellui:w-[1em]" aria-hidden="true">
             {open ? "▾" : "▸"}
           </span>
           <BoundedIcon
@@ -324,13 +280,13 @@ function Panel({
             node={panel.icon}
             point={POINTS.sidebarPanel}
             pluginId={entry.pluginId}
-            className="shrink-0"
+            className="shellui:shrink-0"
           />
           <span>{panel.title}</span>
         </button>
       </h2>
       {/* `hidden`, not unmounted: collapsing a panel must not throw away its state. */}
-      <div id={bodyId} className="px-1 pb-1" hidden={!open}>
+      <div id={bodyId} className="shellui:px-1 shellui:pb-1" hidden={!open}>
         <Rendered />
       </div>
     </section>
@@ -359,7 +315,7 @@ function MissingView({
 }): ReactNode {
   if (!view) {
     return (
-      <div className="mx-auto max-w-[34rem] px-4 py-8 text-text-muted [&_h1]:mb-2 [&_h1]:mt-0 [&_h1]:text-xl [&_h1]:text-text">
+      <div className="shellui:mx-auto shellui:max-w-[34rem] shellui:px-4 shellui:py-8 shellui:text-text-muted shellui:[&_h1]:mb-2 shellui:[&_h1]:mt-0 shellui:[&_h1]:text-xl shellui:[&_h1]:text-text">
         <h1>Nothing open</h1>
         <p>
           {registered === 0
@@ -371,7 +327,7 @@ function MissingView({
     );
   }
   return (
-    <div className="mx-auto max-w-[34rem] px-4 py-8 text-text-muted [&_h1]:mb-2 [&_h1]:mt-0 [&_h1]:text-xl [&_h1]:text-text" role="status">
+    <div className="shellui:mx-auto shellui:max-w-[34rem] shellui:px-4 shellui:py-8 shellui:text-text-muted shellui:[&_h1]:mb-2 shellui:[&_h1]:mt-0 shellui:[&_h1]:text-xl shellui:[&_h1]:text-text" role="status">
       <h1>That view is not available</h1>
       <p>
         Nothing provides this view. Check the notices for a plugin that failed to load.

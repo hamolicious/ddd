@@ -189,7 +189,7 @@ export function PopupMenu({ label, items, onClose }: PopupMenuProps): ReactNode 
 
   return (
     <div
-      className="absolute left-0 top-full z-20 flex min-w-48 max-w-[var(--md-menu-max-width,16rem)] translate-x-[var(--md-menu-shift,0px)] flex-col overflow-y-auto overscroll-contain rounded border border-border bg-bg-raised p-1 shadow-2 data-[place=above]:bottom-full data-[place=above]:top-auto max-h-[var(--md-menu-max-height,none)]"
+      className="markdown:absolute markdown:left-0 markdown:top-full markdown:z-20 markdown:flex markdown:min-w-48 markdown:max-w-[var(--md-menu-max-width,16rem)] markdown:translate-x-[var(--md-menu-shift,0px)] markdown:flex-col markdown:overflow-y-auto markdown:overscroll-contain markdown:rounded markdown:border markdown:border-border markdown:bg-bg-raised markdown:p-1 markdown:shadow-2 markdown:data-[place=above]:bottom-full markdown:data-[place=above]:top-auto markdown:max-h-[var(--md-menu-max-height,none)]"
       role="menu"
       aria-label={label}
       ref={root}
@@ -214,7 +214,7 @@ export function PopupMenu({ label, items, onClose }: PopupMenuProps): ReactNode 
           key={item.id}
           type="button"
           role="menuitem"
-          className="tap-h flex w-full shrink-0 cursor-pointer items-center gap-2 rounded border-0 bg-transparent px-2 py-1 text-left text-text hover:bg-accent-subtle focus-visible:bg-accent-subtle aria-current:font-semibold"
+          className="markdown:tap-h markdown:flex markdown:w-full markdown:shrink-0 markdown:cursor-pointer markdown:items-center markdown:gap-2 markdown:rounded markdown:border-0 markdown:bg-transparent markdown:px-2 markdown:py-1 markdown:text-left markdown:text-text markdown:hover:bg-accent-subtle markdown:focus-visible:bg-accent-subtle markdown:aria-current:font-semibold"
           aria-current={item.selected ? "true" : undefined}
           onClick={() => {
             // Focus back on the trigger before the action runs: choosing a state
@@ -225,7 +225,7 @@ export function PopupMenu({ label, items, onClose }: PopupMenuProps): ReactNode 
           }}
         >
           {item.icon === undefined ? null : (
-            <span className="min-w-[1.25em]" aria-hidden="true">
+            <span className="markdown:min-w-[1.25em]" aria-hidden="true">
               {item.icon}
             </span>
           )}

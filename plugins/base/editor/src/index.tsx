@@ -362,7 +362,7 @@ export default function activate(kernel: Kernel): EditorApi {
      * and nothing is waiting on the reader.
      */
     const parseNotice = row.fm_parse_error ? (
-      <p className="editor-notice m-0 shrink-0 border-b border-border bg-bg-subtle px-4 py-2 text-sm text-text-muted compact:p-2 compact:break-words" role="status">
+      <p className="editor-notice editor:m-0 editor:shrink-0 editor:border-b editor:border-border editor:bg-bg-subtle editor:px-4 editor:py-2 editor:text-sm editor:text-text-muted editor:compact:p-2 editor:compact:break-words" role="status">
         One frontmatter line could not be read, so its key is missing everywhere else in
         the app. The text below is exactly what the document holds.
       </p>
@@ -370,31 +370,31 @@ export default function activate(kernel: Kernel): EditorApi {
 
     if (!open) {
       return (
-        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col font-sans text-text">
-          <p className="editor-notice m-0 shrink-0 border-b border-border bg-bg-subtle px-4 py-2 text-sm text-text-muted compact:p-2 compact:break-words">
+        <div className="editor:flex editor:h-full editor:min-h-0 editor:min-w-0 editor:flex-1 editor:flex-col editor:font-sans editor:text-text">
+          <p className="editor-notice editor:m-0 editor:shrink-0 editor:border-b editor:border-border editor:bg-bg-subtle editor:px-4 editor:py-2 editor:text-sm editor:text-text-muted editor:compact:p-2 editor:compact:break-words">
             Opening for editing… You can read it now. A document you have never opened
             stays read-only until this device reconnects.
           </p>
           {parseNotice}
-          <pre className="m-0 min-h-0 min-w-0 flex-1 overflow-auto whitespace-pre-wrap bg-bg p-4 font-mono text-sm leading-[1.6] text-text-muted">{row.content ?? ""}</pre>
+          <pre className="editor:m-0 editor:min-h-0 editor:min-w-0 editor:flex-1 editor:overflow-auto editor:whitespace-pre-wrap editor:bg-bg editor:p-4 editor:font-mono editor:text-sm editor:leading-[1.6] editor:text-text-muted">{row.content ?? ""}</pre>
         </div>
       );
     }
 
     return (
-      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col font-sans text-text" data-document={id}>
+      <div className="editor:flex editor:h-full editor:min-h-0 editor:min-w-0 editor:flex-1 editor:flex-col editor:font-sans editor:text-text" data-document={id}>
         {parseNotice}
         {failure ? (
-          <p className="editor-notice editor-notice-error m-0 shrink-0 border-b border-l-[3px] border-border border-l-danger bg-bg-subtle px-4 py-2 text-sm text-text compact:p-2 compact:break-words" role="alert">
+          <p className="editor-notice editor-notice-error editor:m-0 editor:shrink-0 editor:border-b editor:border-l-[3px] editor:border-border editor:border-l-danger editor:bg-bg-subtle editor:px-4 editor:py-2 editor:text-sm editor:text-text editor:compact:p-2 editor:compact:break-words" role="alert">
             The editor failed to start: {failure}
           </p>
         ) : null}
         {open.phase === "error" ? (
-          <p className="editor-notice m-0 shrink-0 border-b border-border bg-bg-subtle px-4 py-2 text-sm text-text-muted compact:p-2 compact:break-words" role="status">
+          <p className="editor-notice editor:m-0 editor:shrink-0 editor:border-b editor:border-border editor:bg-bg-subtle editor:px-4 editor:py-2 editor:text-sm editor:text-text-muted editor:compact:p-2 editor:compact:break-words" role="status">
             Offline. Your edits are saved here and sync when the connection returns.
           </p>
         ) : null}
-        <div className="editor-surface flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden [&_.cm-content]:max-w-[88ch] [&_.cm-content]:px-4 [&_.cm-content]:pb-[calc(var(--lm-viewport-height,100dvh)*0.4)] [&_.cm-content]:pt-4 compact:[&_.cm-content]:px-3 compact:[&_.cm-content]:pt-2 [&_.cm-editor]:min-h-0 [&_.cm-editor]:min-w-0 [&_.cm-editor]:max-w-full [&_.cm-editor]:flex-1 [&_.cm-scroller]:max-w-full [&_.cm-scroller]:overflow-x-auto [&_.cm-scroller]:overscroll-x-contain compact:[&_.cm-foldPlaceholder]:inline-block compact:[&_.cm-foldPlaceholder]:min-h-[calc(var(--lm-tap-target)-20px)] compact:[&_.cm-foldPlaceholder]:leading-[calc(var(--lm-tap-target)-20px)]" ref={host} />
+        <div className="editor-surface editor:flex editor:min-h-0 editor:min-w-0 editor:flex-1 editor:flex-col editor:overflow-hidden editor:[&_.cm-content]:max-w-[88ch] editor:[&_.cm-content]:px-4 editor:[&_.cm-content]:pb-[calc(var(--lm-viewport-height,100dvh)*0.4)] editor:[&_.cm-content]:pt-4 editor:compact:[&_.cm-content]:px-3 editor:compact:[&_.cm-content]:pt-2 editor:[&_.cm-editor]:min-h-0 editor:[&_.cm-editor]:min-w-0 editor:[&_.cm-editor]:max-w-full editor:[&_.cm-editor]:flex-1 editor:[&_.cm-scroller]:max-w-full editor:[&_.cm-scroller]:overflow-x-auto editor:[&_.cm-scroller]:overscroll-x-contain editor:compact:[&_.cm-foldPlaceholder]:inline-block editor:compact:[&_.cm-foldPlaceholder]:min-h-[calc(var(--lm-tap-target)-20px)] editor:compact:[&_.cm-foldPlaceholder]:leading-[calc(var(--lm-tap-target)-20px)]" ref={host} />
         <SaveState kernel={kernel} />
       </div>
     );
@@ -474,7 +474,7 @@ function SaveState({ kernel }: { readonly kernel: Kernel }): ReactNode {
 
   return (
     <p
-      className="m-0 min-h-[calc(var(--lm-space)*3)] shrink-0 border-t border-border bg-bg-subtle px-4 py-1 text-xs text-text-muted data-[pending=true]:text-text data-[status=offline]:border-warning data-[status=offline]:text-text data-[status=auth-required]:border-warning data-[status=auth-required]:text-text data-[status=error]:border-danger data-[status=error]:text-text compact:px-2 compact:break-words"
+      className="editor:m-0 editor:min-h-[calc(var(--lm-space)*3)] editor:shrink-0 editor:border-t editor:border-border editor:bg-bg-subtle editor:px-4 editor:py-1 editor:text-xs editor:text-text-muted editor:data-[pending=true]:text-text editor:data-[status=offline]:border-warning editor:data-[status=offline]:text-text editor:data-[status=auth-required]:border-warning editor:data-[status=auth-required]:text-text editor:data-[status=error]:border-danger editor:data-[status=error]:text-text editor:compact:px-2 editor:compact:break-words"
       role="status"
       data-status={state.status}
       data-pending={state.pending > 0 ? "true" : "false"}
