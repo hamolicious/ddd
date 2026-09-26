@@ -24,7 +24,7 @@ browser's device toolbar at 390 × 844, and 844 × 390 for landscape.
 | 5 | `sync-status` | [x] | Split out of `header`; icon-only dot, ✕ / ↻ when down |
 | 6 | `commands` | [x] | Palette Escape, footer, bar button, list indent |
 | 7 | `settings` | [x] | Base sections first, extensions below a divider |
-| 8 | `themes` | [ ] | |
+| 8 | `themes` | [x] | No changes |
 | 9 | `doc-list` | [ ] | |
 | 10 | `folders` | [ ] | |
 | 11 | `search` | [ ] | |
@@ -187,11 +187,11 @@ kernel's colour and spacing tokens; light / dark can follow the system.
 **Where to see it.** Settings → Appearance; the "Change theme" and "Toggle light / dark
 appearance" commands.
 
-- [ ] Each theme applies instantly across every screen and survives a reload.
-- [ ] "System" follows the OS light / dark setting.
-- [ ] The toggle command flips light / dark.
+- [x] Each theme applies instantly across every screen and survives a reload.
+- [x] "System" follows the OS light / dark setting.
+- [x] The toggle command flips light / dark.
 
-**Notes.**
+**Notes.** No changes.
 
 ## 9. `doc-list` — documents and Trash
 
