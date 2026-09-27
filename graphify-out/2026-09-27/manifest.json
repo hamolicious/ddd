@@ -870,9 +870,9 @@
     "semantic_hash": ""
   },
   "backend/crates/server/src/routes/admin.rs": {
-    "mtime": 1790487118.8094597,
-    "seen": 1790487350.8559701,
-    "ast_hash": "1adca3ef3f632ef062edf6e377887d16",
+    "mtime": 1790500094.0674732,
+    "seen": 1790500168.5946667,
+    "ast_hash": "48828e50f629ecd3a731beb5958dc7cf",
     "semantic_hash": ""
   },
   "backend/crates/server/src/routes/attachments.rs": {
@@ -1128,9 +1128,9 @@
     "semantic_hash": ""
   },
   "plugins/base/admin/manifest.json": {
-    "mtime": 1790487665.278938,
-    "seen": 1790487882.7032409,
-    "ast_hash": "d2cf6df62498521dda6644f77072aa6c",
+    "mtime": 1790491395.120825,
+    "seen": 1790491546.1507504,
+    "ast_hash": "217e3ed723486b2cf7ab1fd279e9b045",
     "semantic_hash": ""
   },
   "plugins/base/admin/src/AdminView.tsx": {
@@ -1152,15 +1152,15 @@
     "semantic_hash": ""
   },
   "plugins/base/admin/src/Plugins.tsx": {
-    "mtime": 1790487669.1330607,
-    "seen": 1790487882.7033458,
-    "ast_hash": "ed46973814c041f8c5c6e4016e94339f",
+    "mtime": 1790491493.8622713,
+    "seen": 1790491546.150843,
+    "ast_hash": "8fc5a6d0b9bbd55bcca3973992c4092e",
     "semantic_hash": ""
   },
   "plugins/base/admin/src/Storage.tsx": {
-    "mtime": 1790490376.5794942,
-    "seen": 1790491330.5934021,
-    "ast_hash": "d391659c74d66d29ce58af8fcd9519ef",
+    "mtime": 1790500149.4338467,
+    "seen": 1790500168.5962079,
+    "ast_hash": "4f6068cf299d85d9d19c54b4d5c944e6",
     "semantic_hash": ""
   },
   "plugins/base/admin/src/Users.tsx": {
@@ -1176,21 +1176,21 @@
     "semantic_hash": "681d562464a1af35fed1204488712989"
   },
   "plugins/base/admin/src/api.ts": {
-    "mtime": 1790490368.4840636,
-    "seen": 1790491330.5934615,
-    "ast_hash": "38ee6e1b4c8aa248798b7d73ae7457b3",
+    "mtime": 1790500094.0680776,
+    "seen": 1790500168.596269,
+    "ast_hash": "e03659065892f17bbec26f6f122ba7f0",
     "semantic_hash": ""
   },
   "plugins/base/admin/src/hooks.ts": {
-    "mtime": 1790487665.27887,
-    "seen": 1790487882.703418,
-    "ast_hash": "faa8ac4e0ac1e9cef8070e77c930d4d7",
+    "mtime": 1790491395.1201262,
+    "seen": 1790491546.1509624,
+    "ast_hash": "50279b1ef6dbbb783182e59541eb6896",
     "semantic_hash": ""
   },
   "plugins/base/admin/src/index.tsx": {
-    "mtime": 1790490368.4834583,
-    "seen": 1790491330.593524,
-    "ast_hash": "c66e7eace61a8d0de4638f4bd4292367",
+    "mtime": 1790491395.1207554,
+    "seen": 1790491546.1509652,
+    "ast_hash": "3fade2107b1d6967d26a86d7062422f7",
     "semantic_hash": ""
   },
   "plugins/base/commands/manifest.json": {
@@ -2862,8 +2862,8 @@
     "semantic_hash": "e99a99b5cc82a168fc557eb23b8d5a96"
   },
   "backend/CONTRACTS.md": {
-    "mtime": 1790490392.6830676,
-    "seen": 1790491330.6058338,
+    "mtime": 1790500094.067848,
+    "seen": 1790500168.6111019,
     "ast_hash": "73865c45eecba4d0a83c6c4135735f7c",
     "semantic_hash": ""
   },
@@ -3288,9 +3288,9 @@
     "semantic_hash": ""
   },
   "docs/PLUGIN-REVIEW.md": {
-    "mtime": 1790490573.8194237,
-    "seen": 1790491330.6061642,
-    "ast_hash": "4b0ea71ce5a6c4ee0667e7fce1e3a2ee",
+    "mtime": 1790499243.7916138,
+    "seen": 1790500168.6113,
+    "ast_hash": "0f5c86d87341a7f80c99d833c976dee2",
     "semantic_hash": ""
   },
   "plugins/base/settings/src/groups.test.ts": {
@@ -3570,9 +3570,9 @@
     "semantic_hash": ""
   },
   "plugins/base/admin/src/icons.tsx": {
-    "mtime": 1790489815.5866506,
-    "seen": 1790489890.5670571,
-    "ast_hash": "013ae7d5aed0440f9fec92369683771a",
+    "mtime": 1790491395.1208856,
+    "seen": 1790491546.1509643,
+    "ast_hash": "3074bdac4d7b58a17db1dab5861ce867",
     "semantic_hash": ""
   },
   "web/app/e2e/admin-users.spec.ts": {
@@ -3639,6 +3639,12 @@
     "mtime": 1790490426.9198759,
     "seen": 1790491330.598581,
     "ast_hash": "3a639bb4386f96f8ed66f5513aac0ec2",
+    "semantic_hash": ""
+  },
+  "web/app/e2e/admin-plugins.spec.ts": {
+    "mtime": 1790491515.7997646,
+    "seen": 1790491546.1558409,
+    "ast_hash": "b5f5fff6914d7058e4ba19d28e1f085a",
     "semantic_hash": ""
   }
 }

@@ -846,7 +846,13 @@ pub struct AdminStats {
     pub attachment_bytes: u64,
     pub users: u64,
     pub schema_version: i32,
+    /// Documents whose `crdt` blob stayed above `large_history_bytes` at their last
+    /// flush since the server started ("Large edit history" in the UI).
     pub oversized_documents: u64,
+    /// `CRDT_COMPACT_THRESHOLD_BYTES`: what counts as a large edit history.
+    pub large_history_bytes: u64,
+    /// `CRDT_ALERT_THRESHOLD_BYTES`: above this the server logs a warning.
+    pub history_alert_bytes: u64,
 }
 
 pub async fn stats(
@@ -888,6 +894,8 @@ pub async fn stats(
             .schema_version
             .load(std::sync::atomic::Ordering::Relaxed),
         oversized_documents: state.docs.stats().oversized_docs as u64,
+        large_history_bytes: state.config.crdt_compact_threshold_bytes,
+        history_alert_bytes: state.config.crdt_alert_threshold_bytes,
     }))
 }
 

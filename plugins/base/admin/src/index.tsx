@@ -90,6 +90,7 @@ export default function activate(kernel: Kernel): AdminApi {
   const dialogs: Dialogs = {
     confirm: (request) => menu.confirm(request),
     modal: (request) => menu.modal(request),
+    openSheet: (request) => menu.openSheet(request),
   };
   const client = createAdminClient((path, init) => kernel.session.fetch(path, init));
   const admin = kernel.session.isAdmin();

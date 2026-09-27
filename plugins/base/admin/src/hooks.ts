@@ -13,7 +13,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 
-import type { ConfirmRequest, ModalRequest, ModalResult } from "../../_shared/context-menu-api.js";
+import type { ConfirmRequest, ModalRequest, ModalResult, SheetRequest } from "../../_shared/context-menu-api.js";
 
 export interface AsyncState<T> {
   readonly data: T | undefined;
@@ -84,6 +84,8 @@ export function useMutation(onDone?: () => void): Mutation {
 export interface Dialogs {
   confirm(request: ConfirmRequest): Promise<boolean>;
   modal(request: ModalRequest): Promise<ModalResult | undefined>;
+  /** A popover beside `anchor` (a bottom sheet on a phone) whose body the caller draws. */
+  openSheet(request: SheetRequest): void;
 }
 
 /**
@@ -97,7 +99,9 @@ export const DialogsContext = createContext<Dialogs>({
     const button = request.buttons?.find((candidate) => !candidate.dismiss)?.id ?? "ok";
     return Promise.resolve(window.confirm(request.title) ? { button, values: {} } : undefined);
   },
+  openSheet: () => {},
 });
 
 export const useConfirm = (): Dialogs["confirm"] => useContext(DialogsContext).confirm;
 export const useModal = (): Dialogs["modal"] => useContext(DialogsContext).modal;
+export const useSheet = (): Dialogs["openSheet"] => useContext(DialogsContext).openSheet;

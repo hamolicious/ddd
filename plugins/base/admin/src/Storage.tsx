@@ -18,6 +18,7 @@ import { AdminSectionFrame } from "./AdminView.js";
 import { formatBytes, formatWhen, type AdminClient } from "./api.js";
 import { useAsync, useConfirm, useMutation } from "./hooks.js";
 import { RefreshIcon, ScanIcon, TrashIcon } from "./icons.js";
+import { Info } from "./Info.js";
 
 export function OrphansSection({
   client,
@@ -181,7 +182,25 @@ export function ExportSection({
             <dd>{stats.data.schema_version}</dd>
           </div>
           <div>
-            <dt>Oversized documents</dt>
+            <dt>
+              Large edit history
+              <Info title="Large edit history">
+                <p className="admin:m-0">
+                  Documents whose saved edit history (what syncing between devices uses) is
+                  over {formatBytes(stats.data.large_history_bytes ?? 4 * 1024 * 1024)}. The
+                  text itself is capped at 1 MB; this is the history behind it.
+                </p>
+                <p className="admin:m-0">
+                  Large histories open and sync more slowly. The server logs a warning above{" "}
+                  {formatBytes(stats.data.history_alert_bytes ?? 8 * 1024 * 1024)}.
+                </p>
+                <p className="admin:m-0 admin:text-text-muted">
+                  Counted since the server started. Set with{" "}
+                  <code>CRDT_COMPACT_THRESHOLD_BYTES</code> and{" "}
+                  <code>CRDT_ALERT_THRESHOLD_BYTES</code>.
+                </p>
+              </Info>
+            </dt>
             <dd>{stats.data.oversized_documents}</dd>
           </div>
         </dl>

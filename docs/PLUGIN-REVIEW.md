@@ -36,14 +36,14 @@ browser's device toolbar at 390 × 844, and 844 × 390 for landscape.
 | 16a | `slash-commands` | [x] | New: `/` menu over any editor's `text.surface`; `/attach` |
 | 17 | `markdown` | [x] | `markdown.attachment`; preview / link toggle; promote → link; document embeds |
 | 18 | `viewer` | [x] | File documents via `markdown.attachment`; borderless properties table and rule |
-| 19 | `admin` | [ ] | Reviewed per tab, 19a–19g |
+| 19 | `admin` | [x] | Reviewed per tab, 19a–19g |
 | 19a | ↳ Users | [x] | Icon buttons, aligned cells, phone label, reset is a link |
 | 19b | ↳ Invites | [x] | Full invite link (`#/invite/<token>`), icon buttons, Revoke asks first |
 | 19c | ↳ Audit log | [x] | No changes |
 | 19d | ↳ Orphan files | [x] | Icon buttons; names open the file in the viewer (`#/file/<id>`) |
 | 19e | ↳ Snapshots | [x] | Moved out: now the `snapshots` plugin, per page, in the altbar (19h) |
 | 19f | ↳ Plugins | [x] | Notice always shown, drop-zone upload, compact rows with icon actions and details on demand |
-| 19g | ↳ Workspace | [ ] | |
+| 19g | ↳ Workspace | [x] | "Large edit history" with its thresholds behind an (i) popover |
 | 19h | `snapshots` | [ ] | New: the open document's snapshots in the altbar; `shell-ui` gained the altbar and its top-bar toggle |
 | 20 | `extra-task-states` (example) | [ ] | |
 | 21 | `alt-editor` (example) | [ ] | |
@@ -592,13 +592,15 @@ checkbox and the base-plugin warning. Host stats and limits are stat grids.
 **Where to see it.** `#/admin/workspace`; "Export the workspace as markdown" in the
 palette.
 
-- [ ] The counters (documents, in Trash, permanently deleted ids, attachments, users,
+- [x] The counters (documents, in Trash, permanently deleted ids, attachments, users,
   schema version, oversized documents) match what the app shows.
-- [ ] "Export every document as markdown" downloads an archive: one `.md` per document,
+- [x] "Export every document as markdown" downloads an archive: one `.md` per document,
   frontmatter intact, in folders by `path:`.
-- [ ] Export works on a phone (the download is offered).
+- [x] Export works on a phone (the download is offered).
 
-**Notes.**
+**Notes.** "Oversized documents" is now "Large edit history": documents whose saved
+edit history is over `CRDT_COMPACT_THRESHOLD_BYTES` (4 MiB by default). An (i) beside the
+label opens a popover (a sheet on a phone) with the thresholds the server is using.
 
 
 ### 19h. `snapshots` — the altbar panel

@@ -122,7 +122,12 @@ export interface AdminStats {
   readonly attachment_bytes: number;
   readonly users: number;
   readonly schema_version: number;
+  /** Documents whose edit history is over `large_history_bytes`, since the server started. */
   readonly oversized_documents: number;
+  /** `CRDT_COMPACT_THRESHOLD_BYTES` on the server. Absent from an older server. */
+  readonly large_history_bytes?: number;
+  /** `CRDT_ALERT_THRESHOLD_BYTES` on the server: it logs a warning above this. */
+  readonly history_alert_bytes?: number;
 }
 
 export interface InstalledPluginsResponse {
