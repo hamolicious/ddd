@@ -6,6 +6,8 @@
  * table row.
  */
 
+import { OfflineCopyNote } from "../../_shared/offline-copy.js";
+import { changesOfflineCopy } from "./offline.js";
 import { useCallback, useEffect, useState, type ReactElement, type ReactNode } from "react";
 
 import type { ConfirmRequest } from "../../_shared/context-menu-api.js";
@@ -133,6 +135,10 @@ export function ChangesPanel({
 
   return (
     <div className="changes chg:flex chg:flex-col chg:gap-2 chg:font-sans chg:text-text">
+      <OfflineCopyNote
+        state={changesOfflineCopy}
+        className="chg:m-0 chg:rounded chg:border chg:border-warning chg:px-2 chg:py-1 chg:text-sm chg:text-text-muted"
+      />
       <div className="chg:flex chg:items-center chg:gap-1">
         <button
           type="button"

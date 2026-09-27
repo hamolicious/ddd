@@ -34,6 +34,11 @@ import {
 import type { QueryEngine } from "../query/index.js";
 import type { SyncClient } from "../sync/client.js";
 import type { HydratedDoc } from "../sync/doc-hydration.js";
+import type { ParsedDocument } from "../wasm/index.js";
+import { NoticeCenter } from "./notices.js";
+import { OfflineCopies } from "./offline-copies.js";
+import { LocalRows, Outbox, isTransient } from "./outbox.js";
+import { mintUlid } from "./ulid.js";
 import {
   removeFrontmatterKey,
   removeSection,
@@ -93,7 +98,18 @@ export interface DocumentsHostOptions {
   readonly engine: QueryEngine;
   readonly sync: SyncClient;
   readonly api: ApiFetch;
+  readonly notices?: NoticeCenter;
+  /** Signed-in user, stamped on rows this device writes before the server does. */
+  readonly userId?: string;
+  /** The shared core's parser, for those rows' title and frontmatter. */
+  readonly parse?: (text: string) => ParsedDocument;
 }
+
+/** How long after a connection the offline copies start being refreshed. */
+const COPIES_DELAY_MS = 2_000;
+
+/** How long after offline edits are sent a trash elsewhere is still news. */
+const TRASHED_WATCH_MS = 30_000;
 
 /**
  * The splice helpers, per plugin.
@@ -211,7 +227,154 @@ export class SpliceHost implements DocumentSpliceApi {
  * per-plugin facade so `splice` can attribute writes to the calling plugin.
  */
 export class DocumentsHost {
-  constructor(private readonly options: DocumentsHostOptions) {}
+  readonly outbox: Outbox;
+  readonly local: LocalRows;
+  readonly copies: OfflineCopies;
+
+  readonly #notices: NoticeCenter;
+
+  constructor(private readonly options: DocumentsHostOptions) {
+    const store = options.sync.store;
+    this.#notices = options.notices ?? new NoticeCenter();
+    const parse =
+      options.parse ??
+      ((): ParsedDocument => {
+        throw new Error("no parser");
+      });
+    this.local = new LocalRows(store, parse, options.userId ?? "");
+    this.outbox = new Outbox({
+      store,
+      hydrator: options.sync.docs,
+      api: options.api,
+      notices: this.#notices,
+      online: () => this.#online(),
+      createNote: (text) => this.create({ text }),
+      // A queued create is counted by its note; trash and restore have none.
+      onChange: (ops) => options.sync.docs.setQueued?.(ops.filter((op) => op.kind !== "create").length),
+    });
+    this.copies = new OfflineCopies({
+      store,
+      hydrator: options.sync.docs,
+      api: options.api,
+      online: () => this.#online(),
+    });
+  }
+
+  /**
+   * Before the socket opens: notes made offline in an earlier session are held back from
+   * subscribing until the server has created them (it would answer `not_found`).
+   */
+  async start(): Promise<void> {
+    const ops = await this.outbox.ops().catch(() => []);
+    this.options.sync.docs.setQueued(ops.filter((op) => op.kind !== "create").length);
+    this.options.sync.docs.holdUntilCreated(ops.filter((op) => op.kind === "create").map((op) => op.id));
+    this.copies.start();
+  }
+
+  /**
+   * After every (re)connect: the queued creates, trashes and restores, in order; then
+   * edits made offline in notes that are not open now.
+   */
+  async afterConnect(): Promise<void> {
+    await this.outbox.drain().catch(() => undefined);
+    await this.options.sync.docs.sendUnsynced().catch(() => undefined);
+    // The offline copies are background work: not in the first moments after sign-in,
+    // while the person is starting to use the page.
+    setTimeout(() => void this.copies.refresh().catch(() => undefined), COPIES_DELAY_MS);
+  }
+
+  /** A local edit the server has not got: shown in the list straight away. */
+  onLocalEdit(id: string, text: string): void {
+    this.local.edited(id, text);
+  }
+
+  /**
+   * Offline edits to `id` were just sent. If the note was moved to Trash elsewhere
+   * meanwhile, say so: the edits are kept there, and nothing else would tell anyone
+   * (`docs/SYNC-DECISIONS.md` §3). The feed may bring the trash a moment later, so it
+   * is watched for a while.
+   */
+  onOfflineEditsSent(id: string): void {
+    const store = this.options.sync.store;
+    let done = false;
+    const check = async (): Promise<void> => {
+      if (done) return;
+      const row = await store.get(id).catch(() => undefined);
+      if (!row?.deleted || row.local) return;
+      const ours = (await this.outbox.ops()).some((op) => op.id === id && op.kind === "delete");
+      if (ours) return;
+      done = true;
+      stop();
+      this.#notices.notify({
+        id: `kernel:trashed-while-offline:${id}`,
+        level: "warning",
+        message: `“${row.title}” was moved to Trash while you were offline. Your changes are kept there.`,
+        actions: [
+          {
+            label: "Restore",
+            run: () => {
+              this.#notices.dismiss(`kernel:trashed-while-offline:${id}`);
+              void this.restore(id);
+            },
+          },
+          { label: "Open", run: () => void (location.hash = `#/doc/${id}`) },
+        ],
+      });
+    };
+    const unsubscribe = store.subscribe((change) => {
+      if (change.applied.includes(id)) void check();
+    });
+    const timer = setTimeout(() => stop(), TRASHED_WATCH_MS);
+    const stop = (): void => {
+      unsubscribe();
+      clearTimeout(timer);
+    };
+    void check();
+  }
+
+  /** Notes with unsent changes, open or not, plus queued trash and restore. */
+  async unsentCount(): Promise<number> {
+    const notes = await this.options.sync.docs.unsentIds().catch(() => []);
+    const queued = (await this.outbox.ops().catch(() => [])).filter((op) => op.kind !== "create");
+    return notes.length + queued.length;
+  }
+
+  /**
+   * Everything on this device the server has not got, as one Markdown file: each note
+   * with unsent changes in full, then any queued trash or restore. The way out when the
+   * person cannot sign in again (`docs/SYNC-DECISIONS.md` §6). `count` is the notes.
+   */
+  async exportUnsent(): Promise<{ readonly count: number; readonly text: string }> {
+    const docs = this.options.sync.docs;
+    const store = this.options.sync.store;
+    const parts: string[] = [];
+    let count = 0;
+    for (const id of await docs.unsentIds()) {
+      const text = await docs.localText(id);
+      if (text === undefined) continue;
+      const row = await store.get(id).catch(() => undefined);
+      count++;
+      parts.push(`<!-- note ${id}: ${row?.title ?? "Untitled"} -->\n\n${text.replace(/\n*$/, "\n")}`);
+    }
+    const queued = (await this.outbox.ops()).filter((op) => op.kind !== "create");
+    if (queued.length > 0) {
+      const lines = await Promise.all(
+        queued.map(async (op) => {
+          const title = (await store.get(op.id).catch(() => undefined))?.title ?? op.id;
+          return `- ${op.kind === "delete" ? "Move to Trash" : "Restore"}: ${title}`;
+        }),
+      );
+      parts.push(`<!-- also not sent -->\n\n${lines.join("\n")}\n`);
+    }
+    const header = `# Unsent changes\n\nSaved ${new Date().toLocaleString()}. These changes were made on this device and never reached the server.\n`;
+    return { count, text: [header, ...parts].join("\n---\n\n") };
+  }
+
+  /** Worth asking the server now; otherwise changes wait in the outbox. */
+  #online(): boolean {
+    const status = this.options.sync.state.status;
+    return status !== "offline" && status !== "auth-required" && status !== "error";
+  }
 
   async get(id: DocumentId): Promise<DocumentRow | undefined> {
     const row = await this.options.engine.get(id);
@@ -235,32 +398,70 @@ export class DocumentsHost {
   }
 
   async open(id: DocumentId): Promise<OpenDocument> {
+    // Made offline in another tab: not on the server yet, so not to be subscribed.
+    if (!this.options.sync.docs?.openIds?.includes(id)) {
+      const row = await Promise.resolve()
+        .then(() => this.options.sync.store.get(id))
+        .catch(() => undefined);
+      if (row?.local && row.seq === 0) this.options.sync.docs.holdUntilCreated([id]);
+    }
     const hydrated: HydratedDoc = await this.options.sync.open(id);
     return hydrated;
   }
 
   /**
-   * Create through REST (SPEC §5.1: the client mints the id, the server stamps the
-   * timestamps). The document arrives back through the feed like any other change —
-   * there is no second write path into the local store.
+   * Create a note. The device mints the id and builds the note's CRDT state, and the
+   * server creates the note from that state (SPEC §3.5, PROTOCOL.md §3.8). Online, this
+   * resolves once the server has it; offline, at once — the note is on this device,
+   * editable, and in the list, and it is sent on reconnect (`docs/SYNC-DECISIONS.md` §1).
    */
   async create(input: CreateDocumentInput): Promise<DocumentId> {
-    const response = await this.options.api("/documents", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(input.id ? { id: input.id, content: input.text } : { content: input.text }),
-    });
-    const body = (await response.json()) as { id?: string };
-    if (typeof body.id !== "string") throw new Error("create: server returned no id");
-    return body.id;
+    const id = input.id ?? mintUlid();
+    const text = normalizeText(input.text);
+    const docs = this.options.sync.docs;
+    const state = await docs.seed(id, text);
+    if (this.#online() && (await this.outbox.isEmpty())) {
+      try {
+        await this.options.api("/documents", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ id, state: toBase64(state) }),
+        });
+        docs.created(id);
+        return id;
+      } catch (error) {
+        if (!isTransient(error)) {
+          await docs.forget(id);
+          throw error;
+        }
+      }
+    }
+    await this.local.created(id, text);
+    await this.outbox.add({ kind: "create", id, at: Date.now(), state });
+    return id;
   }
 
+  /** Move to Trash; offline, shown at once and sent on reconnect. */
   async delete(id: DocumentId): Promise<void> {
-    await this.options.api(`/documents/${encodeURIComponent(id)}`, { method: "DELETE" });
+    await this.#trash(id, true);
   }
 
   async restore(id: DocumentId): Promise<void> {
-    await this.options.api(`/documents/${encodeURIComponent(id)}/restore`, { method: "POST" });
+    await this.#trash(id, false);
+  }
+
+  async #trash(id: DocumentId, deleted: boolean): Promise<void> {
+    if (this.#online() && (await this.outbox.isEmpty())) {
+      try {
+        const path = `/documents/${encodeURIComponent(id)}`;
+        await this.options.api(deleted ? path : `${path}/restore`, { method: deleted ? "DELETE" : "POST" });
+        return;
+      } catch (error) {
+        if (!isTransient(error)) throw error;
+      }
+    }
+    const before = await this.local.trashed(id, deleted);
+    await this.outbox.add({ kind: deleted ? "delete" : "restore", id, at: Date.now(), ...(before ? { before } : {}) });
   }
 
   forPlugin(pluginId: string): DocumentsApi {
@@ -278,4 +479,17 @@ export class DocumentsHost {
       splice,
     };
   }
+}
+
+/** What the server does to text on the way in (SPEC §3.1): no byte-order mark, LF only. */
+function normalizeText(text: string): string {
+  return text.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
+}
+
+function toBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  return btoa(binary);
 }

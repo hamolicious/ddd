@@ -777,7 +777,7 @@ function ActiveMode({
 /** Why the document cannot be edited, in words: the kernel's reason is for the log. */
 function editableMessage(reason: string | undefined): string {
   if (reason && /offline/i.test(reason)) {
-    return "This note has not been opened on this device before, so it cannot be edited offline. You can read it; editing works again once you are back online.";
+    return "This note has not been copied to this device yet, so it cannot be edited offline. You can read it; editing works again once you are back online.";
   }
   return "This note cannot be edited right now. You can still read it.";
 }

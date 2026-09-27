@@ -54,6 +54,11 @@ export interface SyncClientOptions {
    * ended while the device was offline read as "offline" forever.
    */
   readonly authProbe?: () => Promise<"ok" | "unauthenticated" | "unreachable">;
+  /**
+   * A connection is up and its feed has started: the moment to send what waited
+   * offline (queued creates and trashes, then unsent edits in notes that are closed).
+   */
+  readonly onConnected?: () => void;
   /** Injectable clock for tests: schedules the reconnect attempt. */
   readonly setTimeoutImpl?: (callback: () => void, ms: number) => unknown;
 }
@@ -235,6 +240,7 @@ export class SyncClient {
         // Documents first: an open editor resumes while the feed catches up.
         this.docs.resubscribeAll();
         await this.feed.start(message);
+        this.options.onConnected?.();
         return;
       }
       case "feed.batch":

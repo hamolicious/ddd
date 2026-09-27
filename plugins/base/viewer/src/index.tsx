@@ -32,6 +32,7 @@
  * both carriers and gives an honest "not available offline" state for free.
  */
 
+import { OFFLINE_COPY_HEADER, OfflineCopyNote, OfflineCopyState, offlineCopies } from "../../_shared/offline-copy.js";
 import type { Kernel } from "@kernel";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
@@ -176,12 +177,15 @@ function AttachmentPreview({
   readonly title: string;
 }): ReactNode {
   const [meta, setMeta] = useState<AttachmentMeta | undefined>(undefined);
+  // Offline, the page shows what was loaded before, and says so (docs/SYNC-DECISIONS.md §9).
+  const [offline] = useState(() => new OfflineCopyState());
 
   // The caption's facts. The body loads the bytes itself, whichever body it is.
   useEffect(() => {
     let cancelled = false;
-    kernel.session
-      .fetch(`/attachments/${encodeURIComponent(reference.id)}/meta`)
+    offlineCopies((path, init) => kernel.session.fetch(path, init), offline)(
+      `/attachments/${encodeURIComponent(reference.id)}/meta`,
+    )
       .then((response) => response.json() as Promise<AttachmentMeta>)
       .then((resolved) => {
         if (!cancelled) setMeta(resolved);
@@ -192,7 +196,7 @@ function AttachmentPreview({
     return () => {
       cancelled = true;
     };
-  }, [kernel, reference.id]);
+  }, [kernel, offline, reference.id]);
 
   const name = meta?.name ?? reference.label ?? title;
   const own = <OwnPreview kernel={kernel} reference={reference} name={name} />;
@@ -209,6 +213,10 @@ function AttachmentPreview({
     <div className="viewer:flex viewer:min-w-0 viewer:justify-center viewer:p-4 viewer:font-sans viewer:text-text viewer:compact:p-2">
       <figure className="viewer:m-0 viewer:flex viewer:w-full viewer:max-w-[min(100%,72ch)] viewer:flex-col viewer:gap-2">
         {body}
+        <OfflineCopyNote
+          state={offline}
+          className="viewer:m-0 viewer:rounded viewer:border viewer:border-warning viewer:px-2 viewer:py-1 viewer:text-sm viewer:text-text-muted"
+        />
         <figcaption className="viewer:flex viewer:flex-col viewer:gap-0.5 viewer:text-sm">
           <span className="viewer:break-words viewer:font-semibold">{name}</span>
           <span className="viewer:text-sm viewer:text-text-muted">
@@ -258,7 +266,7 @@ function OwnPreview({
     void (async () => {
       let resolved: AttachmentMeta | undefined;
       try {
-        const response = await kernel.session.fetch(`/attachments/${encodeURIComponent(reference.id)}/meta`);
+        const response = await kernel.session.fetch(`/attachments/${encodeURIComponent(reference.id)}/meta`, { headers: { [OFFLINE_COPY_HEADER]: "1" } });
         resolved = (await response.json()) as AttachmentMeta;
         if (cancelled) return;
         setMeta(resolved);
@@ -290,7 +298,7 @@ function OwnPreview({
       }
 
       try {
-        const response = await kernel.session.fetch(`/attachments/${encodeURIComponent(reference.id)}`);
+        const response = await kernel.session.fetch(`/attachments/${encodeURIComponent(reference.id)}`, { headers: { [OFFLINE_COPY_HEADER]: "1" } });
         if (kind === "text") {
           const content = await response.text();
           if (cancelled) return;

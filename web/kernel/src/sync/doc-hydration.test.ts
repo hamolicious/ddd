@@ -821,3 +821,100 @@ describe("robustness", () => {
     expect([...persistence.states.keys()].sort()).toEqual([DOC, OTHER].sort());
   });
 });
+
+describe("notes made on this device (docs/SYNC-DECISIONS.md §1)", () => {
+  it("seeds a replica that opens offline, is not subscribed until created, then sends its edits", async () => {
+    const persistence = new MemoryDocPersistence();
+    const { socket, hydrator, server, serve } = await fixture({ persistence, persistDebounceMs: 0 }, [DOC]);
+
+    const seed = await hydrator.seed(DOC, "# Train notes\n");
+    expect(persistence.states.get(DOC)?.unsynced).toBe(true);
+
+    const handle = await hydrator.open(DOC);
+    expect(handle.phase).toBe("live");
+    expect(handle.text.toString()).toBe("# Train notes\n");
+    handle.text.insert(handle.text.length, "more\n");
+    // Not on the server yet: nothing subscribed, the edit waits.
+    expect(socket.controlOfType("doc.subscribe")).toHaveLength(0);
+    expect(hydrator.pendingCount).toBeGreaterThan(0);
+
+    // The server creates it from the seed; then the handshake carries the rest, once.
+    Y.applyUpdate(server.get(DOC)!.doc, seed);
+    hydrator.created(DOC);
+    await settle();
+    serve();
+    await settle();
+    serve();
+    expect(socket.controlOfType("doc.subscribe").map((m) => m.id)).toEqual([DOC]);
+    expect(server.get(DOC)!.text.toString()).toBe("# Train notes\nmore\n");
+    expect(hydrator.pendingCount).toBe(0);
+  });
+
+  it("forget drops the replica and its queue", async () => {
+    const persistence = new MemoryDocPersistence();
+    const { hydrator } = await fixture({ persistence, persistDebounceMs: 0 });
+    await hydrator.seed(DOC, "x");
+    const handle = await hydrator.open(DOC);
+    handle.text.insert(0, "y");
+    await hydrator.forget(DOC);
+    expect(persistence.states.has(DOC)).toBe(false);
+    expect(hydrator.pendingCount).toBe(0);
+    expect(await hydrator.localText(DOC)).toBeUndefined();
+  });
+});
+
+describe("unsent replicas of closed notes", () => {
+  it("are opened, sent and released after a reconnect", async () => {
+    const persistence = new MemoryDocPersistence();
+    const { socket, hydrator, server, serve } = await fixture({ persistence, persistDebounceMs: 0 }, [DOC, OTHER]);
+    server.get(DOC)!.text.insert(0, "base\n");
+    // A replica with an edit the server never got (the tab was closed offline)…
+    const local = new Y.Doc();
+    Y.applyUpdate(local, Y.encodeStateAsUpdate(server.get(DOC)!.doc));
+    local.getText(TEXT_ROOT).insert(5, "edited offline\n");
+    await persistence.save(DOC, Y.encodeStateAsUpdate(local), { unsynced: true });
+    // …and one that is only a cached copy.
+    await persistence.save(OTHER, Y.encodeStateAsUpdate(new Y.Doc()), { unsynced: false });
+
+    const sending = hydrator.sendUnsynced();
+    // The server's own step 1 follows every subscribe (routes/sync.rs), before its step 2.
+    let answered = 0;
+    for (let i = 0; i < 6; i++) {
+      await settle();
+      const subscribes = socket.controlOfType("doc.subscribe");
+      for (const message of subscribes.slice(answered)) socket.deliverBinary(server.get(message.id as string)!.step1());
+      answered = subscribes.length;
+      serve();
+    }
+    await sending;
+
+    expect(server.get(DOC)!.text.toString()).toBe("base\nedited offline\n");
+    expect(socket.controlOfType("doc.subscribe").map((m) => m.id)).toEqual([DOC]);
+    expect(socket.controlOfType("doc.unsubscribe").map((m) => m.id)).toEqual([DOC]);
+  });
+
+  it("counts queued changes kept elsewhere in pending", async () => {
+    const onPending = vi.fn();
+    const { hydrator } = await fixture({ onPending });
+    hydrator.setQueued(2);
+    expect(hydrator.pendingCount).toBe(2);
+    expect(onPending).toHaveBeenLastCalledWith(2);
+  });
+
+  it("absorbs the server's state into a closed note's copy, keeping its unsent edits", async () => {
+    const persistence = new MemoryDocPersistence();
+    const { hydrator } = await fixture({ persistence, persistDebounceMs: 0 });
+    const server = new Y.Doc();
+    server.getText(TEXT_ROOT).insert(0, "server\n");
+    const local = new Y.Doc();
+    Y.applyUpdate(local, Y.encodeStateAsUpdate(server));
+    local.getText(TEXT_ROOT).insert(0, "mine\n");
+    await persistence.save(DOC, Y.encodeStateAsUpdate(local), { unsynced: true });
+    server.getText(TEXT_ROOT).insert(7, "later\n");
+
+    expect(await hydrator.absorb(DOC, Y.encodeStateAsUpdate(server), "v2")).toBe(true);
+    expect(await hydrator.localText(DOC)).toBe("mine\nserver\nlater\n");
+    expect(persistence.states.get(DOC)).toMatchObject({ unsynced: true, version: "v2" });
+    expect(await hydrator.unsentIds()).toEqual([DOC]);
+  });
+});

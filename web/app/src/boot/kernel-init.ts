@@ -96,6 +96,9 @@ export async function initKernel(options: KernelInitOptions): Promise<KernelRunt
       : {}),
     hydrator: {
       persistence: new IdbDocPersistence(store),
+      // Every note keeps an editable copy on the device (docs/SYNC-DECISIONS.md §7):
+      // nothing is pruned; a purge is what drops one.
+      persistedReplicas: Number.POSITIVE_INFINITY,
       ...(server ? { restBaseUrl: server } : {}),
       // A write the server refused as too large must not look saved: say which
       // document, and what to do. It clears itself once a trimmed version goes through.
@@ -116,6 +119,9 @@ export async function initKernel(options: KernelInitOptions): Promise<KernelRunt
           });
       },
       onRefusalCleared: (id) => host.notices.dismiss(`kernel:too-large:${id}`),
+      // Offline changes show in the list at once (docs/SYNC-DECISIONS.md §2).
+      onLocalEdit: (id, text) => host.documents.onLocalEdit(id, text),
+      onOfflineEditsSent: (id) => host.documents.onOfflineEditsSent(id),
       // Deleted for good elsewhere while this device held edits the server never got
       // (SPEC §4.1). The id can never come back, so the text is saved as a new note
       // straight away, before anything else can lose it, and the person is told.
@@ -158,6 +164,7 @@ export async function initKernel(options: KernelInitOptions): Promise<KernelRunt
         return "unreachable";
       }
     },
+    onConnected: () => void host.documents.afterConnect(),
     onState: (state) => {
       host.sync.update(state);
       // 4401 is "re-authenticate", and nothing else — local data is untouched
@@ -203,28 +210,55 @@ export async function initKernel(options: KernelInitOptions): Promise<KernelRunt
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") sync.reconnectNow();
   });
+  await host.documents.start();
   await sync.start();
 
-  // SPEC §6.4: ask for persistent storage at first login, warn if denied.
+  // SPEC §6.4: ask for persistent storage at first sign-in on this device, and warn
+  // only when that ask is refused (docs/SYNC-DECISIONS.md §12). Asking on every boot
+  // made some browsers prompt every time, and the warning showed on every launch.
   //
   // **Not inside the shell.** `navigator.storage.persist()` answers for a *browser*
   // profile's eviction policy; in the Flutter webview the workspace lives in the app's
   // own private storage, which Android clears only when the app is uninstalled or the
-  // user clears its data. The permission is routinely refused there, so the warning
-  // fired on every launch and said something untrue about the device it was on.
-  void host.capabilities.requestPersistence().then((report) => {
-    if (report.persisted || inShell()) return;
+  // user clears its data.
+  if (!inShell()) void askForPersistentStorage(host);
+
+  return { host, store, engine, sync, core };
+}
+
+/** Remembers, per device, that the browser has been asked. */
+const STORAGE_ASKED_KEY = "life-manager:storage-asked";
+
+async function askForPersistentStorage(host: KernelHost): Promise<void> {
+  let asked: string | null = null;
+  try {
+    asked = localStorage.getItem(STORAGE_ASKED_KEY);
+  } catch {
+    // No storage access: ask every time, which is the old behaviour.
+  }
+  if (asked !== null) return;
+  const ask = async (): Promise<void> => {
+    const report = await host.capabilities.requestPersistence();
+    try {
+      localStorage.setItem(STORAGE_ASKED_KEY, report.persisted ? "granted" : "refused");
+    } catch {
+      /* see above */
+    }
+    if (report.persisted) {
+      host.notices.dismiss("kernel:storage-not-persisted");
+      return;
+    }
     host.notices.notify({
       id: "kernel:storage-not-persisted",
       level: "warning",
       // Risk and remedy in one breath, in the message: a `<details>` the reader has to
       // open is not where you put the half that tells them what to do.
       message:
-        "The browser may delete this workspace's offline copy if storage runs low. Sync while you are online so nothing is lost.",
+        "The browser may delete this workspace's offline copy if storage runs low: it did not agree to keep it for good. Sync while you are online so nothing is lost.",
+      actions: [{ label: "Ask again", run: () => void ask() }],
     });
-  });
-
-  return { host, store, engine, sync, core };
+  };
+  await ask();
 }
 
 /** Stand-in for a core that failed to load (`mise run wasm` never run). */

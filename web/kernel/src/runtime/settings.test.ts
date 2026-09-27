@@ -52,7 +52,20 @@ class FakeWorkspace {
     this.engine = new QueryEngine(this.store, core);
     this.documents = new DocumentsHost({
       engine: this.engine,
-      sync: { open: (id: string) => Promise.resolve(this.#open(id)) } as unknown as SyncClient,
+      sync: {
+        open: (id: string) => Promise.resolve(this.#open(id)),
+        store: this.store,
+        state: { status: "synced" },
+        docs: {
+          seed: (_id: string, text: string) => {
+            const doc = new Y.Doc();
+            doc.getText("content").insert(0, text);
+            return Promise.resolve(Y.encodeStateAsUpdate(doc));
+          },
+          created: () => undefined,
+          forget: () => Promise.resolve(),
+        },
+      } as unknown as SyncClient,
       api: (path, init) => this.#api(path, init),
     });
   }
@@ -99,10 +112,17 @@ class FakeWorkspace {
   async #api(path: string, init?: RequestInit): Promise<Response> {
     if (path === "/documents" && init?.method === "POST") {
       this.creates += 1;
-      const body = JSON.parse(String(init.body)) as { id?: string; content: string };
+      const body = JSON.parse(String(init.body)) as { id?: string; content?: string; state?: string };
       this.#ids += 1;
       const id = body.id ?? `01J8ZDOC${String(this.#ids).padStart(17, "0")}`;
-      this.texts.set(id, body.content);
+      let content = body.content ?? "";
+      if (body.state !== undefined) {
+        // The device's own CRDT state (PROTOCOL.md §3.8): the text is what it holds.
+        const doc = new Y.Doc();
+        Y.applyUpdate(doc, Uint8Array.from(atob(body.state), (char) => char.charCodeAt(0)));
+        content = doc.getText("content").toString();
+      }
+      this.texts.set(id, content);
       await this.#materialize(id);
       return new Response(JSON.stringify({ id }), { status: 201 });
     }

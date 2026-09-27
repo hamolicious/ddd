@@ -125,6 +125,13 @@ export interface DocHydratorOptions {
    * gone through: the person trimmed the document. Clears whatever `onError` showed.
    */
   readonly onRefusalCleared?: (id: string) => void;
+  /**
+   * A local edit was kept for later (offline, or the note is not on the server yet):
+   * `text` is the document now. The kernel shows it in the list before the server has it.
+   */
+  readonly onLocalEdit?: (id: string, text: string) => void;
+  /** Offline edits to `id` were just sent, after a reconnect. */
+  readonly onOfflineEditsSent?: (id: string) => void;
   /** Local replica writes are coalesced over this window; tests set it to 0. */
   readonly persistDebounceMs?: number;
   /** `open()`'s first-round-trip deadline. */
@@ -188,6 +195,10 @@ export interface DocPersistence {
    * towards offering recovery.
    */
   peek?(id: string): Promise<StoredReplica | undefined>;
+  /** Merge the server's state into a replica that is not open, keeping its unsent edits. */
+  absorb?(id: string, state: Uint8Array, version: string): Promise<void>;
+  /** Every stored replica, with its flags. */
+  list?(): Promise<Array<{ id: string; unsynced: boolean; version?: string }>>;
 }
 
 /** Marks updates that came off the wire, so they are not echoed back to it. */
@@ -272,6 +283,15 @@ export class DocHydrator {
   readonly #open = new Map<string, DocEntry>();
   /** In-flight first opens, so concurrent callers share one replica. */
   readonly #opening = new Map<string, Promise<HydratedDoc>>();
+  /**
+   * Notes made on this device that the server has not created yet. They are not
+   * subscribed (the server would answer `not_found`); their edits wait in the journal.
+   */
+  readonly #awaitingCreate = new Set<string>();
+  /** Seeded replicas, for a hydrator with no persistence. */
+  readonly #seeds = new Map<string, Uint8Array>();
+  /** Changes waiting elsewhere (the kernel's outbox), counted in `pending` too. */
+  #queued = 0;
   #pending = 0;
 
   constructor(
@@ -342,7 +362,7 @@ export class DocHydrator {
     entry.refs = 1;
     this.#open.set(id, entry);
 
-    const persisted = await this.options.persistence?.load(id);
+    const persisted = this.#seeds.get(id) ?? (await this.options.persistence?.load(id));
     if (persisted && persisted.byteLength > 0) {
       try {
         Y.applyUpdate(entry.doc, persisted, RESTORE_ORIGIN);
@@ -353,6 +373,11 @@ export class DocHydrator {
           // Adopted: this tab sends them now, whichever tab made them.
           entry.journal = stored.journal.map((edit) => ({ ...edit, origin: TAB_ID }));
           entry.pending = stored.journal.length;
+          this.#recount();
+        } else if (stored?.unsynced || this.#awaitingCreate.has(id)) {
+          // Unsent, but with no journal to say when: a note made here, or a replica
+          // from before the journal. The handshake sends it; until then it counts.
+          entry.pending = 1;
           this.#recount();
         }
       } catch (cause) {
@@ -370,7 +395,7 @@ export class DocHydrator {
     this.#subscribe(entry);
     this.#evict();
 
-    if (this.transport.state !== "open") {
+    if (this.transport.state !== "open" || this.#awaitingCreate.has(id)) {
       if (entry.hasLocalState) {
         // Offline with a replica on disk: it *is* the document (SPEC §4.1 —
         // "editable offline = documents you've opened"). Sync happens on reconnect.
@@ -412,6 +437,116 @@ export class DocHydrator {
       entry.phase = "live";
     }
     return entry;
+  }
+
+  /**
+   * A note made on this device: its first state, stored as the replica and flagged
+   * unsent, so it opens and edits offline like any other. Returns that state, which is
+   * what the server is asked to create the note from (`POST /documents { id, state }`),
+   * so the edits made after it merge instead of repeating the text.
+   */
+  async seed(id: string, text: string): Promise<Uint8Array> {
+    const doc = new Y.Doc();
+    doc.getText(TEXT_ROOT).insert(0, text);
+    const state = Y.encodeStateAsUpdate(doc);
+    doc.destroy();
+    this.#awaitingCreate.add(id);
+    if (this.options.persistence) await this.options.persistence.save(id, state, { unsynced: true });
+    else this.#seeds.set(id, state);
+    return state;
+  }
+
+  /** Changes waiting outside the documents (queued trash, restore): part of `pending`. */
+  setQueued(count: number): void {
+    this.#queued = count;
+    this.#recount();
+  }
+
+  /** Notes still waiting for the server to create them (from the outbox, at boot). */
+  holdUntilCreated(ids: Iterable<string>): void {
+    for (const id of ids) this.#awaitingCreate.add(id);
+  }
+
+  /** The server has the note now: subscribe it, which sends every edit made since. */
+  created(id: string): void {
+    if (!this.#awaitingCreate.delete(id)) return;
+    this.#seeds.delete(id);
+    const entry = this.#open.get(id);
+    if (entry && !entry.subscribed) this.#subscribe(entry);
+  }
+
+  /** The note will never reach the server (it was saved under another id instead). */
+  async forget(id: string): Promise<void> {
+    this.#awaitingCreate.delete(id);
+    this.#seeds.delete(id);
+    const entry = this.#open.get(id);
+    if (entry) {
+      entry.pending = 0;
+      entry.journal = [];
+      this.#discard(entry);
+    }
+    await this.options.persistence?.drop(id).catch(() => undefined);
+  }
+
+  /** The text of a note as this device has it: open, stored, or seeded. */
+  async localText(id: string): Promise<string | undefined> {
+    const entry = this.#open.get(id);
+    if (entry) return entry.text.toString();
+    const state = this.#seeds.get(id) ?? (await this.options.persistence?.load(id));
+    if (!state) return undefined;
+    const scratch = new Y.Doc();
+    try {
+      Y.applyUpdate(scratch, state, RESTORE_ORIGIN);
+      return scratch.getText(TEXT_ROOT).toString();
+    } catch {
+      return undefined;
+    } finally {
+      scratch.destroy();
+    }
+  }
+
+  /**
+   * After a reconnect: send what stored replicas hold that the server lacks — edits made
+   * offline in a note that is not open now (closed, or the page was reloaded). Each is
+   * opened, synced and released in turn.
+   */
+  async sendUnsynced(): Promise<void> {
+    const replicas = (await this.options.persistence?.list?.().catch(() => [])) ?? [];
+    for (const replica of replicas) {
+      if (!replica.unsynced || this.#open.has(replica.id) || this.#awaitingCreate.has(replica.id)) continue;
+      if (this.transport.state !== "open") return;
+      try {
+        const handle = await this.open(replica.id);
+        handle.release();
+      } catch {
+        /* reported through onError; the next reconnect tries again */
+      }
+    }
+  }
+
+  /**
+   * The offline copy of a note that is not open: merge the server's state into the
+   * stored replica. Skipped while the note is open (it is live already).
+   */
+  async absorb(id: string, state: Uint8Array, version: string): Promise<boolean> {
+    const persistence = this.options.persistence;
+    if (!persistence?.absorb || this.#open.has(id) || this.#opening.has(id)) return false;
+    await persistence.absorb(id, state, version);
+    return true;
+  }
+
+  /** Notes holding edits the server has not got: open with a queue, or stored unsent. */
+  async unsentIds(): Promise<string[]> {
+    const ids = new Set<string>();
+    for (const entry of this.#open.values()) if (entry.pending > 0) ids.add(entry.id);
+    for (const replica of await this.replicas()) if (replica.unsynced) ids.add(replica.id);
+    for (const id of this.#awaitingCreate) ids.add(id);
+    return [...ids];
+  }
+
+  /** Every stored replica, with its flags (empty with no persistence). */
+  async replicas(): Promise<Array<{ id: string; unsynced: boolean; version?: string }>> {
+    return (await this.options.persistence?.list?.().catch(() => [])) ?? [];
   }
 
   /** Route an inbound binary frame to its document. */
@@ -642,7 +777,7 @@ export class DocHydrator {
   // -------------------------------------------------------------------------
 
   #subscribe(entry: DocEntry): void {
-    if (this.transport.state !== "open") return;
+    if (this.transport.state !== "open" || this.#awaitingCreate.has(entry.id)) return;
     const sv = Y.encodeStateVector(entry.doc);
     const hasLocalState = entry.hasLocalState;
     try {
@@ -791,6 +926,7 @@ export class DocHydrator {
     }
     this.#queue(entry, update);
     this.#schedulePersist(entry);
+    this.options.onLocalEdit?.(entry.id, entry.text.toString());
   }
 
   #queue(entry: DocEntry, update: Uint8Array): void {
@@ -822,6 +958,7 @@ export class DocHydrator {
         this.transport.sendBinary({ type: FrameType.History, docId: entry.id, payload: encodeHistory(edit.at, edit.update) });
       }
       this.#clearOutbox(entry);
+      this.options.onOfflineEditsSent?.(entry.id);
     } catch (cause) {
       // Too large for one frame: the state-vector handshake is the escape hatch (the
       // edits then arrive stamped when they did), and the journal stays until it runs.
@@ -842,7 +979,7 @@ export class DocHydrator {
   }
 
   #recount(): void {
-    let pending = 0;
+    let pending = this.#queued;
     for (const entry of this.#open.values()) pending += entry.pending;
     if (pending === this.#pending) return;
     this.#pending = pending;

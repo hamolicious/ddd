@@ -288,6 +288,12 @@ summary {
   margin: auto;
 }
 
+.lm-reauth .lm-auth-secondary {
+  border: 1px solid var(--lm-border);
+  background: transparent;
+  color: var(--lm-text);
+}
+
 .lm-reauth input[readonly] {
   color: var(--lm-text-muted);
   background: var(--lm-bg-subtle);

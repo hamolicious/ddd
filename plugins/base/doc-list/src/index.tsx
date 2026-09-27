@@ -137,8 +137,8 @@ export default function activate(kernel: Kernel): DocListApi {
 
   /**
    * Creating a document is offered from four places — `Mod+N`, the navbar, the palette
-   * and the folder tree — and **it can fail**: `documents.create` is REST (SPEC §5.1), so
-   * offline it rejects. Throwing the promise away (`void api.createDocument()`) meant the
+   * and the folder tree — and **it can fail**: offline it succeeds on the device, but
+   * the server can still refuse it (too large, say). Throwing the promise away (`void api.createDocument()`) meant the
    * palette closed, no document opened, and the only trace was an unhandled rejection in
    * the console. Every entry point goes through this instead, so a failure is a notice
    * with a retry, the way the delete and restore paths already surface theirs.
@@ -150,8 +150,7 @@ export default function activate(kernel: Kernel): DocListApi {
       kernel.ui.notify({
         id: "doc-list.create-failed",
         level: "error",
-        message: "Could not create the document — the server is unreachable.",
-        detail: `${message}\n\nExisting documents still work offline.`,
+        message: `Could not create the document: ${message}`,
         actions: [{ label: "Try again", run: () => create(options) }],
       });
     });

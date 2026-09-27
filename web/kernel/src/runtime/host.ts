@@ -90,6 +90,9 @@ export class KernelHost {
       engine: options.engine,
       sync: options.sync,
       api: this.session.fetch,
+      notices: this.notices,
+      userId: options.session.user.id,
+      parse: (text) => options.core.parseDocument(text),
     });
     this.settings = new SettingsHost({
       documents: this.documents,

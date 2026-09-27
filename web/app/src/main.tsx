@@ -490,7 +490,8 @@ async function signOut(
   bearer: string | undefined,
   options: LogoutOptions,
 ): Promise<void> {
-  const pending = current?.sync.pending ?? 0;
+  // Every unsent change on the device, not only the open notes': sign-out deletes them.
+  const pending = Math.max(current?.sync.pending ?? 0, (await current?.host.documents.unsentCount().catch(() => 0)) ?? 0);
   if (pending > 0 && !options.discardUnsynced) {
     throw new Error(
       `${pending} local edit${pending === 1 ? "" : "s"} have not reached the server yet. Wait for sync, or sign out discarding them.`,
@@ -507,9 +508,27 @@ async function signOut(
     current?.sync.stop();
     await current?.engine.close();
     await current?.store.clear();
+    await deletePluginDatabases();
+    // Server screens' offline copies (`kernel.session.fetch`, docs/SYNC-DECISIONS.md §9).
+    await globalThis.caches?.delete("life-manager:api").catch(() => false);
     rememberShellToken(undefined);
     forgetBootCache();
     location.assign("/");
+  }
+}
+
+/**
+ * Plugins that keep their own data on the device name its database `life-manager:…`
+ * (the files `attachments` holds while offline): it goes with the rest on sign-out.
+ */
+async function deletePluginDatabases(): Promise<void> {
+  try {
+    const databases = (await indexedDB.databases?.()) ?? [];
+    for (const { name } of databases) {
+      if (name?.startsWith("life-manager:")) indexedDB.deleteDatabase(name);
+    }
+  } catch {
+    // No listing in this browser: nothing more can be found to delete.
   }
 }
 

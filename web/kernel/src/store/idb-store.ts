@@ -74,6 +74,12 @@ export interface StoredDocState {
   readonly unsynced?: boolean;
   /** The offline edits in `state`, with when they were made (`docs/HISTORY.md`). */
   readonly journal?: readonly JournalEntry[];
+  /**
+   * The projection row's `updated_at` when the server's state was last merged in by the
+   * offline copy ({@link IdbDocPersistence.absorb}); absent for a replica only ever
+   * written by an open document.
+   */
+  readonly version?: string;
 }
 
 export interface LifeManagerDb extends DBSchema {
@@ -297,9 +303,11 @@ export class IdbProjectionStore implements ProjectionStore {
   async retainOnly(ids: ReadonlySet<string>): Promise<string[]> {
     const removed: string[] = [];
     const tx = this.db.transaction(STORE_PROJECTION, "readwrite");
-    let cursor = await tx.objectStore(STORE_PROJECTION).openKeyCursor();
+    let cursor = await tx.objectStore(STORE_PROJECTION).openCursor();
     while (cursor) {
-      if (!ids.has(cursor.primaryKey)) removed.push(cursor.primaryKey);
+      // A note made offline is not on the server yet: the pass cannot have mentioned it.
+      const madeHere = cursor.value.local === true && cursor.value.seq === 0;
+      if (!ids.has(cursor.primaryKey) && !madeHere) removed.push(cursor.primaryKey);
       cursor = await cursor.continue();
     }
     for (const id of removed) await tx.objectStore(STORE_PROJECTION).delete(id);
@@ -333,6 +341,34 @@ export class IdbProjectionStore implements ProjectionStore {
     // `lastKey === undefined` ⇒ the store is exhausted; a short chunk that did
     // scan rows still has to come back for the next key range.
     return { rows, lastKey: scanned >= ITERATE_CHUNK_ROWS ? lastKey : undefined };
+  }
+
+  async putLocal(rows: readonly StoredRow[]): Promise<void> {
+    if (rows.length === 0) return;
+    const tx = this.db.transaction(STORE_PROJECTION, "readwrite");
+    for (const row of rows) await tx.store.put({ ...row, local: true });
+    await tx.done;
+    const checkpoint = await this.checkpoint();
+    this.emit({ applied: rows.map((row) => row.id), purged: [], safeSeq: checkpoint.safeSeq });
+  }
+
+  async deleteLocal(ids: readonly string[]): Promise<void> {
+    if (ids.length === 0) return;
+    const tx = this.db.transaction(STORE_PROJECTION, "readwrite");
+    for (const id of ids) {
+      if ((await tx.store.get(id))?.local) await tx.store.delete(id);
+    }
+    await tx.done;
+    const checkpoint = await this.checkpoint();
+    this.emit({ applied: [], purged: [...ids], safeSeq: checkpoint.safeSeq });
+  }
+
+  async getMeta<T>(key: string): Promise<T | undefined> {
+    return (await this.db.get(STORE_META, key))?.value as T | undefined;
+  }
+
+  async setMeta(key: string, value: unknown): Promise<void> {
+    await this.db.put(STORE_META, { key, value });
   }
 
   async checkpoint(): Promise<SyncCheckpoint> {
@@ -487,8 +523,47 @@ export class IdbDocPersistence implements DocPersistence {
       touchedAt: this.#stamp(),
       unsynced: (meta?.unsynced ?? false) || foreign.length > 0,
       ...(journal.length > 0 ? { journal } : {}),
+      ...(existing?.version === undefined ? {} : { version: existing.version }),
     });
     await tx.done;
+  }
+
+  /**
+   * Merge the server's state into the stored replica (or store it, when there is none),
+   * leaving its unsent edits and their flag as they are: the offline copy of a note
+   * that is not open (`docs/SYNC-DECISIONS.md` §7). `version` says how current it is.
+   */
+  async absorb(id: string, state: Uint8Array, version: string): Promise<void> {
+    const tx = this.store.db.transaction(STORE_DOCS, "readwrite");
+    const existing = await tx.store.get(id);
+    let merged = state;
+    if (existing !== undefined) {
+      try {
+        merged = covers(existing.state, state) ? existing.state : Y.mergeUpdates([existing.state, state]);
+      } catch {
+        merged = state;
+      }
+    }
+    await tx.store.put({
+      ...(existing ?? { unsynced: false }),
+      id,
+      state: merged,
+      touchedAt: existing?.touchedAt ?? this.#stamp(),
+      version,
+    });
+    await tx.done;
+  }
+
+  /** Every stored replica: whether it holds unsent edits, and how current it is. */
+  async list(): Promise<Array<{ id: string; unsynced: boolean; version?: string }>> {
+    const found: Array<{ id: string; unsynced: boolean; version?: string }> = [];
+    let cursor = await this.store.db.transaction(STORE_DOCS).store.openCursor();
+    while (cursor) {
+      const { id, unsynced, version } = cursor.value;
+      found.push({ id, unsynced: unsynced === true, ...(version === undefined ? {} : { version }) });
+      cursor = await cursor.continue();
+    }
+    return found;
   }
 
   #stamp(): number {

@@ -113,6 +113,8 @@ test("an edit made offline reaches the server on reconnect, with the time it was
   await openDocument(page, id);
 
   await net.offline();
+  await page.getByRole("tab", { name: /^Edit/ }).click();
+  await expect(page.locator(".cm-content")).toBeVisible();
   const madeAt = Date.now();
   await typeAtEnd(page, "written with no signal");
   await expect(unsynced(page)).toBeVisible();
@@ -295,7 +297,12 @@ test("two tabs of one browser, both editing offline: neither tab's edit is lost"
   await expect.poll(() => rawText(request, baseURL!, id), { timeout: 20_000 }).toContain("from tab one");
 });
 
-test("a note trashed elsewhere while this device edits it offline", async ({ page, context, request, baseURL }) => {
+test("a note trashed elsewhere while this device edits it offline: kept there, said so, restorable", async ({
+  page,
+  context,
+  request,
+  baseURL,
+}) => {
   const id = await createDocument(request, baseURL!, "# Doomed\n\nkeep me\n");
   const net = await network(page, context);
   await signIn(page, ADMIN);
@@ -310,16 +317,23 @@ test("a note trashed elsewhere while this device edits it offline", async ({ pag
   expect(trashed.ok()).toBe(true);
 
   await net.online();
-  await page.waitForTimeout(3_000);
-  // Record what happens: is the offline edit kept (in Trash), and does the screen say so?
-  const server = await request.get(`${baseURL}/api/documents/${id}`);
-  const body = (await server.json()) as { content?: string; deleted?: boolean; deleted_at?: string };
-  console.log(`[trashed-offline] status=${server.status()} deleted=${JSON.stringify(body.deleted ?? body.deleted_at ?? null)} kept=${body.content?.includes("written after it was trashed")}`);
+  // The edit is kept, in Trash…
+  await expect.poll(() => rawText(request, baseURL!, id), { timeout: 20_000 }).toContain("written after it was trashed");
+  // …and the person is told, with a way back.
   const bell = page.getByRole("button", { name: /notice/i }).first();
-  if ((await bell.getAttribute("aria-expanded")) !== "true") await bell.click();
-  const notices = await page.getByRole("group", { name: "Notices" }).getByRole("listitem").allTextContents();
-  console.log(`[trashed-offline] notices: ${JSON.stringify(notices)}`);
-  expect(body.content ?? "").toContain("written after it was trashed");
+  const panel = page.getByRole("group", { name: "Notices" });
+  await expect(async () => {
+    if (!(await panel.isVisible())) await bell.click();
+    await expect(panel.getByText("“Doomed” was moved to Trash while you were offline. Your changes are kept there.")).toBeVisible({
+      timeout: 2_000,
+    });
+  }).toPass({ timeout: 20_000 });
+  await panel.getByRole("button", { name: "Restore" }).click();
+  await expect
+    .poll(async () => ((await (await request.get(`${baseURL}/api/documents/${id}`)).json()) as { deleted: boolean }).deleted, {
+      timeout: 20_000,
+    })
+    .toBe(false);
 });
 
 test("an offline edit that pushes a note over the size limit", async ({ page, context, request, baseURL }) => {
@@ -361,47 +375,80 @@ test("an offline edit that pushes a note over the size limit", async ({ page, co
   await expect(page.getByText(/over the size limit/)).toHaveCount(0);
 });
 
-test("server-only screens say they need the server instead of spinning", async ({ page, context, request, baseURL }) => {
+test("server-only screens show what they last loaded, marked as possibly out of date", async ({
+  page,
+  context,
+  request,
+  baseURL,
+}) => {
   const id = await createDocument(request, baseURL!, "# History offline\n\ntext\n");
   const net = await network(page, context);
   await signIn(page, ADMIN);
+  // Load them once while online.
+  await page.goto("/#/admin/users");
+  const admin = page.locator("#shell-main");
+  await expect(admin.getByText(ADMIN.email).first()).toBeVisible({ timeout: 20_000 });
   await openDocument(page, id);
-  await net.offline();
-
-  // The Changes panel.
   const toggle = page.locator(".shell-altbar-toggle");
   if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
   const altbar = page.getByRole("complementary", { name: "Side panel" });
-  // It loaded while online; ask it again now.
-  await altbar.getByRole("button", { name: "Refresh" }).click();
-  await expect(altbar.getByRole("alert").first()).toBeVisible({ timeout: 20_000 });
-  console.log(`[server-only] changes panel: ${JSON.stringify(await altbar.getByRole("alert").allTextContents())}`);
+  await expect(altbar.getByRole("button", { name: "Refresh" })).toBeVisible();
+  await net.offline();
 
-  // Admin → Users.
+  // The Changes panel: asked again offline, it shows the last answer and says so.
+  await altbar.getByRole("button", { name: "Refresh" }).click();
+  await expect(altbar.getByText(/You are offline\. This is what was loaded/)).toBeVisible({ timeout: 20_000 });
+  await expect(altbar.getByRole("alert")).toHaveCount(0);
+
+  // Admin → Users: the list, marked.
   await page.goto("/#/admin/users");
-  const admin = page.locator("#shell-main");
+  await expect(admin.getByText(/You are offline\. This is what was loaded/)).toBeVisible({ timeout: 20_000 });
+  await expect(admin.getByText(ADMIN.email).first()).toBeVisible();
+
+  // A screen never loaded on this device still says it needs the server.
+  await page.goto("/#/admin/audit");
   await expect(admin.getByRole("alert").first()).toBeVisible({ timeout: 20_000 });
-  console.log(`[server-only] admin users: ${JSON.stringify(await admin.getByRole("alert").allTextContents())}`);
-  await expect(admin.getByText("Loading users…")).toHaveCount(0);
+
+  // Back online, the mark goes.
+  await net.online();
+  await page.goto("/#/admin/users");
+  await expect(admin.getByText(ADMIN.email).first()).toBeVisible({ timeout: 20_000 });
+  await expect(admin.getByText(/You are offline\. This is what was loaded/)).toHaveCount(0);
 });
 
-test("creating a note offline: it says so, and Try again works once back online", async ({ page, context }) => {
+test("a note made offline: editable at once, in the list, and on the server after reconnect", async ({
+  page,
+  context,
+  request,
+  baseURL,
+}) => {
   const net = await network(page, context);
   await signIn(page, ADMIN);
   await net.offline();
   await page.keyboard.press("ControlOrMeta+k");
   await page.getByRole("combobox", { name: /command/i }).fill("New document");
   await page.keyboard.press("Enter");
-  const bell = page.getByRole("button", { name: /notice/i }).first();
-  await expect(bell).toHaveAccessibleName(/notice/, { timeout: 20_000 });
-  const panel = page.getByRole("group", { name: "Notices" });
-  await expect(async () => {
-    if (!(await panel.isVisible())) await bell.click();
-    await expect(panel.getByText("Could not create the document")).toBeVisible({ timeout: 2_000 });
-  }).toPass({ timeout: 15_000 });
+  await expect(page.getByRole("tab", { name: /^Edit/ })).toBeVisible({ timeout: 20_000 });
+  const id = /#\/doc\/([^?]+)/.exec(page.url())?.[1];
+  expect(id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+  const title = `Written on the train ${Date.now()}`;
+  await page.getByRole("tab", { name: /^Edit/ }).click();
+  await page.locator(".cm-content").click();
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.type(`# ${title}\n\nno signal here\n`);
+  await expect(unsynced(page)).toBeVisible();
+  // In the list already, under its title.
+  await page.goto("/#/");
+  await expect(page.getByRole("button", { name: title, exact: true })).toBeVisible({ timeout: 20_000 });
+  // Not on the server yet (asked with the suite's own session, over REST).
+  expect((await request.post(`${baseURL}/api/auth/login`, { data: ADMIN })).ok()).toBe(true);
+  expect((await request.get(`${baseURL}/api/documents/${id}`)).status()).toBe(404);
+
   await net.online();
-  await page.getByRole("button", { name: "Try again" }).first().click();
-  await expect(page.getByRole("tab", { name: /^Edit/ }).or(page.locator(".cm-content")).first()).toBeVisible({ timeout: 20_000 });
+  await expect.poll(() => rawText(request, baseURL!, id!), { timeout: 30_000 }).toContain("no signal here");
+  // Once, not twice.
+  expect((await rawText(request, baseURL!, id!)).split("no signal here").length).toBe(2);
+  await expect(unsynced(page)).toHaveCount(0, { timeout: 20_000 });
 });
 
 test("a session that expired while offline: sign in again, and the offline edit still arrives", async ({
@@ -430,39 +477,73 @@ test("a session that expired while offline: sign in again, and the offline edit 
   // It knows who was signed in, says nothing local was lost, and asks for the password.
   await expect(dialog.getByLabel("Email")).toHaveValue(ADMIN.email);
   await expect(page.getByText(/local edits have not reached the server/).first()).toBeVisible();
+  // Someone who cannot sign in again can still keep what did not sync.
+  const download = page.waitForEvent("download");
+  await dialog.getByRole("button", { name: "Save my unsent changes to a file" }).click();
+  const file = await download;
+  expect(file.suggestedFilename()).toMatch(/^unsent-changes-\d{4}-\d{2}-\d{2}\.md$/);
+  const saved = await (await import("node:fs/promises")).readFile((await file.path())!, "utf8");
+  expect(saved).toContain("day two, no signal");
+  expect(saved).toContain("# Long trip");
+  // The note, and the settings document (Edit mode is remembered there, offline too).
+  await expect(dialog.getByText(/^Saved \d+ notes? to a file\.$/)).toBeVisible();
   await dialog.getByLabel("Password").fill(ADMIN.password);
   await dialog.getByRole("button", { name: /sign in/i }).click();
   await expect(dialog).toHaveCount(0, { timeout: 20_000 });
   await expect.poll(() => rawText(request, baseURL!, id), { timeout: 30_000 }).toContain("day two, no signal");
 });
 
-test("things that need the server, tried offline: each one says so, in words", async ({
+test("trash, restore and any note's edits, offline: shown at once, sent on reconnect", async ({
   page,
   context,
   request,
   baseURL,
 }) => {
-  const title = `Offline chores ${Date.now()}`;
-  const id = await createDocument(request, baseURL!, `---\ntitle: ${title}\n---\n\nnever opened here\n`);
+  const stamp = Date.now();
+  const trashTitle = `Offline chores ${stamp}`;
+  const trashId = await createDocument(request, baseURL!, `---\ntitle: ${trashTitle}\n---\n\nto be trashed\n`);
+  const editTitle = `Never opened ${stamp}`;
+  const editId = await createDocument(request, baseURL!, `---\ntitle: ${editTitle}\n---\n\nnever opened here\n`);
   const net = await network(page, context);
   await signIn(page, ADMIN);
-  await expect(page.getByRole("button", { name: title, exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: trashTitle, exact: true })).toBeVisible();
+  // Every note gets an editable copy on the device while online (docs/SYNC-DECISIONS.md §7).
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          (id) =>
+            new Promise<boolean>((resolve) => {
+              const open = indexedDB.open("life-manager");
+              open.onsuccess = () => {
+                const get = open.result.transaction("docs").objectStore("docs").get(id);
+                get.onsuccess = () => resolve(get.result !== undefined);
+                get.onerror = () => resolve(false);
+              };
+              open.onerror = () => resolve(false);
+            }),
+          editId,
+        ),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
   await net.offline();
 
-  // Move to Trash: refused, said plainly, and the note stays.
-  await page.getByRole("button", { name: `Actions for ${title}` }).first().click();
+  // Move to Trash: gone from the list at once.
+  await page.getByRole("button", { name: `Actions for ${trashTitle}` }).first().click();
   await page.getByRole("menuitem", { name: "Move to Trash" }).click();
-  await expect(page.locator("#shell-main").getByRole("alert")).toContainText(/offline/i);
-  await expect(page.getByRole("button", { name: title, exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: trashTitle, exact: true })).toHaveCount(0);
+  await expect(page.locator("#shell-main").getByRole("alert")).toHaveCount(0);
 
-  // A note this device never opened: readable, not editable, one sentence saying why.
-  await page.goto(`/#/doc/${id}`);
-  await expect(page.getByText("never opened here").first()).toBeVisible({ timeout: 20_000 });
+  // A note this device never opened: editable offline, and a new title shows in the list.
+  await page.goto(`/#/doc/${editId}`);
   await page.getByRole("tab", { name: /^Edit/ }).click();
-  await expect(page.getByText(/has not been opened on this device before/)).toHaveCount(1);
-  await expect(page.getByText(/Opening for editing/)).toHaveCount(0);
-  await expect(page.getByText(new RegExp(id))).toHaveCount(0);
-  await expect(page.locator(".cm-content")).toHaveCount(0);
+  await expect(page.locator(".cm-content")).toContainText("never opened here");
+  await page.locator(".cm-line", { hasText: `title: ${editTitle}` }).click();
+  await page.keyboard.press("End");
+  await page.keyboard.type(" (renamed)");
+  await page.goto("/#/");
+  await expect(page.getByRole("button", { name: `${editTitle} (renamed)`, exact: true })).toBeVisible({ timeout: 20_000 });
 
   // The theme still switches.
   await page.goto("/#/settings/themes");
@@ -470,11 +551,34 @@ test("things that need the server, tried offline: each one says so, in words", a
   await expect(page.getByText("Showing dark")).toBeVisible();
 
   await net.online();
-  // Nothing was trashed behind the person's back.
-  expect((await (await request.get(`${baseURL}/api/documents/${id}`)).json()).deleted).toBe(false);
-  // Record whether the theme choice made offline survived a reload.
-  await page.reload();
-  await waitSynced(page);
-  await page.goto("/#/settings/themes");
-  console.log(`[needs-server] theme after reconnect: ${await page.getByText(/^Showing/).innerText()}`);
+  await expect
+    .poll(async () => ((await (await request.get(`${baseURL}/api/documents/${trashId}`)).json()) as { deleted: boolean }).deleted, {
+      timeout: 20_000,
+    })
+    .toBe(true);
+  await expect.poll(() => rawText(request, baseURL!, editId), { timeout: 20_000 }).toContain(`title: ${editTitle} (renamed)`);
+  await expect(unsynced(page)).toHaveCount(0, { timeout: 20_000 });
+});
+
+test("a file pasted offline waits on the device and goes in on reconnect", async ({ page, context, request, baseURL }) => {
+  const id = await createDocument(request, baseURL!, "# Receipts\n\n");
+  const net = await network(page, context);
+  await signIn(page, ADMIN);
+  await openDocument(page, id);
+  await page.getByRole("tab", { name: /^Edit/ }).click();
+  await expect(page.locator(".cm-content")).toContainText("Receipts");
+  await net.offline();
+
+  await page.locator(".cm-content").click();
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.locator(".cm-content").evaluate((editor) => {
+    const data = new DataTransfer();
+    data.items.add(new File(["total: 4.20\n"], "receipt.txt", { type: "text/plain" }));
+    editor.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+  });
+  await expect(page.locator(".cm-content")).toContainText(/Uploading receipt\.txt when back online… #[0-9a-f]{8}/, { timeout: 20_000 });
+
+  await net.online();
+  await expect.poll(() => rawText(request, baseURL!, id), { timeout: 30_000 }).toMatch(/\[receipt\.txt\]\(attachment:\/\/[0-9A-Z]{26}\)/);
+  expect(await rawText(request, baseURL!, id)).not.toContain("Uploading");
 });

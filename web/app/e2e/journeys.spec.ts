@@ -208,9 +208,9 @@ test("clicking a task toggles it and the state menu sets a plugin-contributed ma
   await expect(menu.getByRole("menuitem", { name: /in progress/i })).toBeVisible();
   await menu.getByRole("menuitem", { name: /in progress/i }).click();
 
-  await waitSynced(page);
+  // The status may still say "saved" from the first write: wait for the server's text.
+  await expect.poll(() => rawText(request, baseURL as string, id)).toContain("- [/] second");
   const text = await rawText(request, baseURL as string, id);
-  expect(text).toContain("- [/] second");
   // The first task is untouched: a marker write is a **one-character splice**, not a
   // re-render of the body (SPEC §3.3).
   expect(text).toContain("- [x] first");

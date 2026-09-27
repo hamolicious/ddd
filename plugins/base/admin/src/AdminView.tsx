@@ -12,6 +12,8 @@
  * behave.
  */
 
+import { OfflineCopyNote } from "../../_shared/offline-copy.js";
+import { adminOfflineCopy } from "./offline.js";
 import { useCallback } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, ReactElement, ReactNode } from "react";
 
@@ -161,6 +163,28 @@ export function AdminSectionBody({
   readonly selfId: string;
   /** True on the settings screen, which has already drawn this section's heading. */
   readonly embedded?: boolean;
+}): ReactElement {
+  return (
+    <>
+      <OfflineCopyNote
+        state={adminOfflineCopy}
+        className="admin:m-0 admin:mb-2 admin:rounded admin:border admin:border-warning admin:px-2 admin:py-1 admin:text-sm admin:text-text-muted"
+      />
+      <SectionBody section={section} client={client} selfId={selfId} embedded={embedded} />
+    </>
+  );
+}
+
+function SectionBody({
+  section,
+  client,
+  selfId,
+  embedded,
+}: {
+  readonly section: AdminSectionId;
+  readonly client: AdminClient;
+  readonly selfId: string;
+  readonly embedded?: boolean | undefined;
 }): ReactElement {
   switch (section) {
     case "users":

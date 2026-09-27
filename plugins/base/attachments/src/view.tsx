@@ -13,6 +13,7 @@
  * so a re-render never flickers.
  */
 
+import { OFFLINE_COPY_HEADER } from "../../_shared/offline-copy.js";
 import type { ExtensionPoint, Kernel, SettingsValue } from "@kernel";
 import { useEffect, useState, useSyncExternalStore, type ComponentType, type ReactNode } from "react";
 
@@ -104,14 +105,14 @@ export function createAttachmentView(kernel: Kernel, viewers: Viewers): Componen
 
   const loadMeta = (id: string) =>
     cached(metas, id, async () => {
-      const response = await kernel.session.fetch(`/attachments/${encodeURIComponent(id)}/meta`);
+      const response = await kernel.session.fetch(`/attachments/${encodeURIComponent(id)}/meta`, { headers: { [OFFLINE_COPY_HEADER]: "1" } });
       const body = (await response.json()) as Partial<FileMeta>;
       return { name: body.name ?? id, mime: body.mime ?? "", size: body.size ?? 0 };
     });
 
   const loadBytes = (id: string) =>
     cached(bytes, id, async () => {
-      const response = await kernel.session.fetch(`/attachments/${encodeURIComponent(id)}`);
+      const response = await kernel.session.fetch(`/attachments/${encodeURIComponent(id)}`, { headers: { [OFFLINE_COPY_HEADER]: "1" } });
       const blob = await response.blob();
       return { blob, url: URL.createObjectURL(blob) };
     });

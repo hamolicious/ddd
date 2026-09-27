@@ -487,6 +487,35 @@ cleared, an older client) still reaches the server through it, and then the chan
 marked offline and stamped when it arrived. A `HISTORY` frame shorter than 8 bytes is
 `doc.error { code: "malformed_update" }`.
 
+### 3.8 Notes made on the device (`POST /api/documents { id, state }`)
+
+A note made on a device (offline or not) is created from **the device's own CRDT
+state**, not its text: the client mints the ULID, builds a `Y.Doc` holding the text,
+keeps it as the note's replica, and sends
+
+```jsonc
+POST /api/documents
+{ "id": "01J8…", "state": "<base64 of the encoded state, update encoding v1>" }
+```
+
+The server builds the document from exactly that state. Two things follow:
+
+- **Edits made after it merge.** The replica's later edits (the journal, then the
+  handshake) are updates on top of the same state. Created from the text instead, the
+  server's insert and the device's would be two different inserts, and the text would
+  appear twice.
+- **A create sent twice is harmless.** When the reply is lost and the client sends it
+  again, the answer is `409`; the client then reads `GET /api/documents/:id?format=crdt`
+  and checks the server's state vector covers its seed. If it does, the note is its
+  own; if not, the id belongs to another note and the client saves its text as a new
+  note under a fresh id.
+
+`state` needs `id`, and excludes `content`. It is refused (`400`) when it is not a
+whole document (it depends on edits it does not carry) or its text would change under
+normalization (a byte-order mark, a carriage return); the size limit applies to the
+text as usual. Until the create succeeds the client does not subscribe to the id (the
+server would answer `not_found`); its edits wait in the journal.
+
 ---
 
 ## 4. `GET /api/sync/bootstrap` — cold start

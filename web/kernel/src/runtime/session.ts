@@ -25,6 +25,42 @@ export interface SessionHostOptions {
   readonly logout: (options: LogoutOptions) => Promise<void>;
 }
 
+/**
+ * Server-only screens offline (`docs/SYNC-DECISIONS.md` §9). A GET sent with
+ * {@link OFFLINE_COPY_HEADER} keeps its last good response in this cache; when the
+ * server cannot be reached, that response is returned instead of the offline error,
+ * with {@link CACHED_AT_HEADER} saying when it was loaded, so the screen can say it may be
+ * out of date. **Opt-in only**, per request: documents never come through here (they
+ * live in IndexedDB under the sync protocol), and a screen that does not mark a stale
+ * answer must not be handed one. Deleted on sign-out.
+ */
+export const API_CACHE = "life-manager:api";
+export const OFFLINE_COPY_HEADER = "x-life-manager-offline-copy";
+export const CACHED_AT_HEADER = "x-life-manager-cached-at";
+
+async function readOfflineCopy(url: string): Promise<Response | undefined> {
+  try {
+    const hit = await (await caches.open(API_CACHE)).match(url);
+    if (!hit) return undefined;
+    const headers = new Headers(hit.headers);
+    headers.set(CACHED_AT_HEADER, hit.headers.get("x-life-manager-stored-at") ?? "");
+    return new Response(await hit.blob(), { status: hit.status, statusText: hit.statusText, headers });
+  } catch {
+    return undefined;
+  }
+}
+
+async function writeOfflineCopy(url: string, response: Response): Promise<void> {
+  try {
+    const headers = new Headers(response.headers);
+    headers.set("x-life-manager-stored-at", new Date().toISOString());
+    const copy = new Response(await response.blob(), { status: response.status, statusText: response.statusText, headers });
+    await (await caches.open(API_CACHE)).put(url, copy);
+  } catch {
+    // No Cache Storage (an insecure origin, a full disk): the screen just has no copy.
+  }
+}
+
 export class SessionHost {
   readonly #authListeners = new Set<() => void>();
 
@@ -47,9 +83,15 @@ export class SessionHost {
       headers.set("authorization", `Bearer ${this.options.token}`);
     }
     const impl = this.options.fetchImpl ?? fetch;
+    const url = `${base}${path}`;
+    const keepCopy =
+      headers.has(OFFLINE_COPY_HEADER) &&
+      (init.method ?? "GET").toUpperCase() === "GET" &&
+      typeof caches !== "undefined";
+    headers.delete(OFFLINE_COPY_HEADER);
     let response: Response;
     try {
-      response = await impl(`${base}${path}`, {
+      response = await impl(url, {
         credentials: "same-origin",
         ...init,
         headers,
@@ -58,6 +100,8 @@ export class SessionHost {
       // The request never reached the server: offline, or the server is down. The
       // browser's own words ("Failed to fetch") were reaching the screen as-is.
       if (init.signal?.aborted) throw cause;
+      const copy = keepCopy ? await readOfflineCopy(url) : undefined;
+      if (copy) return copy;
       throw Object.assign(new Error("You are offline, or the server cannot be reached. Try again when you are back online."), {
         status: 0,
         code: "offline",
@@ -65,6 +109,7 @@ export class SessionHost {
       });
     }
     if (!response.ok) throw await errorFromEnvelope(response);
+    if (keepCopy) await writeOfflineCopy(url, response.clone());
     return response;
   };
 

@@ -413,6 +413,18 @@ pub trait DocStore: Send + Sync + 'static {
         actor: &Actor,
     ) -> Result<WriteOutcome, DocStoreError>;
 
+    /// Create a document from a device's own encoded Yjs state (update encoding v1):
+    /// a note made offline. Starting from the device's CRDT, not its text, is what lets
+    /// the device's later edits merge instead of duplicating the text. `id` is required
+    /// (the device minted it). Same errors as [`DocStore::create`], plus
+    /// [`DocStoreError::MalformedUpdate`] for bytes that are not a usable document.
+    async fn create_from_update(
+        &self,
+        id: Id,
+        update: &[u8],
+        actor: &Actor,
+    ) -> Result<WriteOutcome, DocStoreError>;
+
     /// Replace the whole text in one CRDT transaction (`PUT`, `PATCH`,
     /// machine-owned rewrites). Computes a minimal diff against the current text
     /// so unchanged regions keep their CRDT history.
@@ -1823,25 +1835,10 @@ fn row_from_projection(row: BsonDocument) -> Result<DocumentRow, DocStoreError> 
     bson::from_document(row).map_err(|err| DocStoreError::Bson(err.to_string()))
 }
 
-#[async_trait]
-impl DocStore for MongoDocStore {
-    async fn create(
-        &self,
-        id: Option<Id>,
-        text: &str,
-        actor: &Actor,
-    ) -> Result<WriteOutcome, DocStoreError> {
+impl MongoDocStore {
+    /// The shared tail of both create paths: a new document from a built `Y.Doc`.
+    async fn insert_new(&self, id: Id, doc: Doc, actor: &Actor) -> Result<WriteOutcome, DocStoreError> {
         let inner = &self.inner;
-        let id = match id {
-            Some(id) => {
-                if !is_valid_id(&id) {
-                    return Err(DocStoreError::InvalidId(id));
-                }
-                id
-            }
-            None => new_id(),
-        };
-
         // The graveyard is consulted by every create path: a long-offline client
         // can never resurrect a purged document (SPEC §3.5 → HTTP 410).
         if inner
@@ -1854,17 +1851,7 @@ impl DocStore for MongoDocStore {
             return Err(DocStoreError::Graveyarded(id));
         }
 
-        let text = normalize_input(text).into_owned();
-        inner.check_size(&text)?;
-
-        let doc = new_doc();
         let text_ref = doc.get_or_insert_text(TEXT_ROOT);
-        {
-            let mut txn = doc.transact_mut();
-            if !text.is_empty() {
-                text_ref.insert(&mut txn, 0, &text);
-            }
-        }
         let (update, state_vector, stored_text) = {
             let txn = doc.transact();
             (
@@ -1941,6 +1928,80 @@ impl DocStore for MongoDocStore {
             update,
             seq: 1,
         })
+    }
+}
+
+#[async_trait]
+impl DocStore for MongoDocStore {
+    async fn create(
+        &self,
+        id: Option<Id>,
+        text: &str,
+        actor: &Actor,
+    ) -> Result<WriteOutcome, DocStoreError> {
+        let inner = &self.inner;
+        let id = match id {
+            Some(id) => {
+                if !is_valid_id(&id) {
+                    return Err(DocStoreError::InvalidId(id));
+                }
+                id
+            }
+            None => new_id(),
+        };
+
+        let text = normalize_input(text).into_owned();
+        inner.check_size(&text)?;
+
+        let doc = new_doc();
+        let text_ref = doc.get_or_insert_text(TEXT_ROOT);
+        {
+            let mut txn = doc.transact_mut();
+            if !text.is_empty() {
+                text_ref.insert(&mut txn, 0, &text);
+            }
+        }
+        self.insert_new(id, doc, actor).await
+    }
+
+    async fn create_from_update(
+        &self,
+        id: Id,
+        update: &[u8],
+        actor: &Actor,
+    ) -> Result<WriteOutcome, DocStoreError> {
+        if !is_valid_id(&id) {
+            return Err(DocStoreError::InvalidId(id));
+        }
+        let doc = new_doc();
+        {
+            let decoded = Update::decode_v1(update)
+                .map_err(|err| DocStoreError::MalformedUpdate(err.to_string()))?;
+            let mut txn = doc.transact_mut();
+            txn.apply_update(decoded)
+                .map_err(|err| DocStoreError::MalformedUpdate(err.to_string()))?;
+        }
+        let text = {
+            let text_ref = doc.get_or_insert_text(TEXT_ROOT);
+            let txn = doc.transact();
+            // Pending structs mean the update depends on edits it does not carry: not a
+            // whole document.
+            if txn.store().pending_update().is_some() || txn.store().pending_ds().is_some() {
+                return Err(DocStoreError::MalformedUpdate(
+                    "the state depends on edits it does not include".to_string(),
+                ));
+            }
+            text_ref.get_string(&txn)
+        };
+        // The device normalizes before it seeds; text that would change under
+        // normalization would materialize differently from the CRDT that holds it.
+        if normalize_input(&text) != text {
+            return Err(DocStoreError::MalformedUpdate(
+                "the text has a byte-order mark or carriage returns".to_string(),
+            ));
+        }
+        self.inner.check_size(&text)?;
+        self.insert_new(id, doc, actor).await
     }
 
     async fn replace_text(

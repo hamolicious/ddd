@@ -395,3 +395,60 @@ describe("IdbDocPersistence", () => {
     expect(await persistence.peek(id(1))).toBeUndefined();
   });
 });
+
+describe("rows and copies this device made (docs/SYNC-DECISIONS.md §1, §7)", () => {
+  it("writes local rows whatever their seq, lets the feed replace them, and keeps unsent creates through a bootstrap", async () => {
+    const changes: StoreChange[] = [];
+    store.subscribe((change) => changes.push(change));
+    await store.putLocal([{ ...feedRow({ id: id(1), seq: 0 }), title: "made offline" }]);
+    await store.applyRows([feedRow({ id: id(2), seq: 5 })], checkpoint(5));
+    await store.putLocal([{ ...(await store.get(id(2)))!, title: "edited offline" }]);
+
+    expect(await store.get(id(1))).toMatchObject({ local: true, seq: 0 });
+    expect(await store.get(id(2))).toMatchObject({ local: true, seq: 5, title: "edited offline" });
+    expect(changes[0]?.applied).toEqual([id(1)]);
+
+    // A bootstrap pass that never mentions the unsent note keeps it; the rest goes.
+    expect(await store.retainOnly(new Set())).toEqual([id(2)]);
+    expect(await store.get(id(1))).toBeDefined();
+
+    await store.applyRows([feedRow({ id: id(1), seq: 6 })], checkpoint(6));
+    expect((await store.get(id(1)))?.local).toBeUndefined();
+
+    await store.putLocal([{ ...feedRow({ id: id(3), seq: 0 }) }]);
+    await store.deleteLocal([id(3), id(1)]);
+    expect(await store.get(id(3))).toBeUndefined();
+    // Only rows this device made up are deleted that way.
+    expect(await store.get(id(1))).toBeDefined();
+  });
+
+  it("keeps small values in meta", async () => {
+    await store.setMeta("outbox", [{ kind: "delete", id: id(1), at: 1 }]);
+    expect(await store.getMeta("outbox")).toEqual([{ kind: "delete", id: id(1), at: 1 }]);
+  });
+
+  it("absorbs a server state into a replica, keeping unsent edits, and lists replicas", async () => {
+    const docs = new IdbDocPersistence(store);
+    const server = new Y.Doc();
+    server.getText("content").insert(0, "server\n");
+    const local = new Y.Doc();
+    Y.applyUpdate(local, Y.encodeStateAsUpdate(server));
+    local.getText("content").insert(0, "mine\n");
+    await docs.save(id(1), Y.encodeStateAsUpdate(local), { unsynced: true });
+    server.getText("content").insert(7, "later\n");
+
+    await docs.absorb(id(1), Y.encodeStateAsUpdate(server), "2026-09-27T10:00:00Z");
+    await docs.absorb(id(2), Y.encodeStateAsUpdate(server), "2026-09-27T10:00:00Z");
+
+    const merged = new Y.Doc();
+    Y.applyUpdate(merged, (await docs.load(id(1)))!);
+    expect(merged.getText("content").toString()).toBe("mine\nserver\nlater\n");
+    expect(await docs.list()).toEqual([
+      { id: id(1), unsynced: true, version: "2026-09-27T10:00:00Z" },
+      { id: id(2), unsynced: false, version: "2026-09-27T10:00:00Z" },
+    ]);
+    // A later save by the open note keeps how current the copy is.
+    await docs.save(id(2), Y.encodeStateAsUpdate(server), { unsynced: false });
+    expect((await docs.list())[1]?.version).toBe("2026-09-27T10:00:00Z");
+  });
+});

@@ -29,11 +29,36 @@ export interface ReauthOverlayProps {
    * session hands back a *new* token, and the caller decides what to do with it.
    */
   readonly onSignedIn: (user: SessionUser, token?: string) => void;
+  /**
+   * Everything the server has not got, as a Markdown file: the way out for someone who
+   * cannot sign in again (password reset, account removed).
+   */
+  readonly exportUnsent?: () => Promise<{ readonly count: number; readonly text: string }>;
 }
 
-export function ReauthOverlay({ user, bearer, onSignedIn }: ReauthOverlayProps): ReactNode {
+export function ReauthOverlay({ user, bearer, onSignedIn, exportUnsent }: ReauthOverlayProps): ReactNode {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const [saved, setSaved] = useState<string | undefined>();
+
+  const save = (): void => {
+    if (!exportUnsent) return;
+    exportUnsent()
+      .then(({ count, text }) => {
+        if (count === 0 && !text.includes("also not sent")) {
+          setSaved("There are no unsent changes on this device.");
+          return;
+        }
+        const url = URL.createObjectURL(new Blob([text], { type: "text/markdown" }));
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `unsent-changes-${new Date().toISOString().slice(0, 10)}.md`;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 10_000);
+        setSaved(count === 1 ? "Saved 1 note to a file." : `Saved ${count} notes to a file.`);
+      })
+      .catch((cause: unknown) => setSaved(`Could not save: ${cause instanceof Error ? cause.message : String(cause)}`));
+  };
 
   const submit = (event: FormEvent<HTMLFormElement>): void => {
     event.preventDefault();
@@ -87,6 +112,20 @@ export function ReauthOverlay({ user, bearer, onSignedIn }: ReauthOverlayProps):
         <button type="submit" disabled={busy}>
           {busy ? "Signing in…" : "Sign in"}
         </button>
+
+        {exportUnsent ? (
+          <>
+            <p className="lm-auth-hint">Can’t sign in? Keep a copy of what has not synced.</p>
+            <button type="button" className="lm-auth-secondary" onClick={save}>
+              Save my unsent changes to a file
+            </button>
+            {saved ? (
+              <p className="lm-auth-hint" role="status">
+                {saved}
+              </p>
+            ) : null}
+          </>
+        ) : null}
       </form>
     </div>
   );

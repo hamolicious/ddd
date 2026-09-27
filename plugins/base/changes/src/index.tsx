@@ -20,6 +20,8 @@
  * - `api.ts` — the REST calls, and how their fields read to a person.
  */
 
+import { offlineCopies } from "../../_shared/offline-copy.js";
+import { changesOfflineCopy } from "./offline.js";
 import type { Kernel } from "@kernel";
 
 import type { ContextMenuApi } from "../../_shared/context-menu-api.js";
@@ -67,7 +69,8 @@ export default function activate(kernel: Kernel): void {
   const shell = kernel.services.require<ShellUiApi>("shell-ui");
   const markdown = kernel.services.require<MarkdownApi>("markdown");
   const router = kernel.services.require<RouterService>("router");
-  const client = createSnapshotsClient((path, init) => kernel.session.fetch(path, init));
+  // Offline, the panel and views show what they last loaded, marked (docs/SYNC-DECISIONS.md §9).
+  const client = createSnapshotsClient(offlineCopies((path, init) => kernel.session.fetch(path, init), changesOfflineCopy));
 
   kernel.extensions.contribute<AltbarPanel>(POINTS.altbarPanel, {
     id: "changes",

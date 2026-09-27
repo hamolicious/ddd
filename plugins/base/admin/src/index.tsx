@@ -27,6 +27,8 @@
  * chat when they need a colleague to look at an audit entry.
  */
 
+import { offlineCopies } from "../../_shared/offline-copy.js";
+import { adminOfflineCopy } from "./offline.js";
 import { useEffect, useState } from "react";
 import type { ReactElement } from "react";
 
@@ -92,7 +94,8 @@ export default function activate(kernel: Kernel): AdminApi {
     modal: (request) => menu.modal(request),
     openSheet: (request) => menu.openSheet(request),
   };
-  const client = createAdminClient((path, init) => kernel.session.fetch(path, init));
+  // Offline, each tab shows what it last loaded, marked (docs/SYNC-DECISIONS.md §9).
+  const client = createAdminClient(offlineCopies((path, init) => kernel.session.fetch(path, init), adminOfflineCopy));
   const admin = kernel.session.isAdmin();
   const selfId = kernel.session.user.id;
 

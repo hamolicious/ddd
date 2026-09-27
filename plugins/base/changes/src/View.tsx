@@ -8,6 +8,8 @@
  * to, and this text is not any document's current text.
  */
 
+import { OfflineCopyNote } from "../../_shared/offline-copy.js";
+import { changesOfflineCopy } from "./offline.js";
 import { useEffect, useState, type ReactElement, type ReactNode } from "react";
 
 import type { ConfirmRequest } from "../../_shared/context-menu-api.js";
@@ -73,6 +75,10 @@ export function SnapshotView({
 
   return (
     <div className="snapshot-view chg:flex chg:min-h-full chg:flex-col chg:font-sans chg:text-text">
+      <OfflineCopyNote
+        state={changesOfflineCopy}
+        className="chg:m-0 chg:rounded chg:border chg:border-warning chg:px-2 chg:py-1 chg:text-sm chg:text-text-muted"
+      />
       <DetachedBanner
         label="Snapshot"
         title={snapshot ? `Snapshot from ${when}` : "Snapshot"}

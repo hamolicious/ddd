@@ -69,6 +69,13 @@ export function AppFrame({ host, bearer, onSignedIn }: AppFrameProps): ReactNode
   // The 4401 path (SPEC §5.3): the socket asks for re-authentication and the app
   // asks the user, over the top of a workspace that is still there.
   useEffect(() => host.sync.api().subscribe((state) => setStatus(state.status)), [host]);
+  // Once asked, the sign-in stays up until syncing resumes: a reconnect attempt passes
+  // through `connecting`, and unmounting then wiped a half-typed password.
+  const [signInNeeded, setSignInNeeded] = useState(false);
+  useEffect(() => {
+    if (status === "auth-required") setSignInNeeded(true);
+    else if (status === "syncing" || status === "synced") setSignInNeeded(false);
+  }, [status]);
 
   // `?safe=bare` mounts the kernel's own `BareManager`, which renders no notices and has
   // no plugin behind it that could — so the strip is the only place they can appear there.
@@ -105,11 +112,12 @@ export function AppFrame({ host, bearer, onSignedIn }: AppFrameProps): ReactNode
           <NoShell bootMode={host.info.bootMode} />
         )}
       </div>
-      {status === "auth-required" ? (
+      {signInNeeded ? (
         <ReauthOverlay
           user={host.session.user}
           {...(bearer !== undefined ? { bearer } : {})}
           onSignedIn={onSignedIn}
+          exportUnsent={() => host.documents.exportUnsent()}
         />
       ) : null}
     </div>

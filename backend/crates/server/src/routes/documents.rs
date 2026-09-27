@@ -200,7 +200,13 @@ pub struct CreateRequest {
     #[serde(default)]
     pub id: Option<Id>,
     /// The full document text: frontmatter + body + `%%%` sections.
+    #[serde(default)]
     pub content: String,
+    /// Instead of `content`: the device's own encoded Yjs state (update encoding v1,
+    /// base64), for a note made offline. Needs `id`. Its later edits then merge into
+    /// this state instead of duplicating the text (PROTOCOL.md §3.8).
+    #[serde(default)]
+    pub state: Option<String>,
 }
 
 /// `PUT /api/documents/:id`.
@@ -458,13 +464,36 @@ pub async fn create(
     if let Some(id) = body.id.as_deref() {
         check_id(id)?;
     }
-    check_text_size(&body.content, state.config().max_document_bytes)?;
-
-    let outcome = state
-        .docs
-        .create(body.id.clone(), &body.content, &user.actor())
-        .await
-        .map_err(map_docstore)?;
+    let outcome = match body.state.as_deref() {
+        Some(encoded) => {
+            let Some(id) = body.id.clone() else {
+                return Err(AppError::BadRequest(
+                    "`state` needs the `id` the device minted".to_string(),
+                ));
+            };
+            if !body.content.is_empty() {
+                return Err(AppError::BadRequest(
+                    "send `content` or `state`, not both".to_string(),
+                ));
+            }
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(encoded)
+                .map_err(|_| AppError::BadRequest("`state` is not base64".to_string()))?;
+            state
+                .docs
+                .create_from_update(id, &bytes, &user.actor())
+                .await
+                .map_err(map_docstore)?
+        }
+        None => {
+            check_text_size(&body.content, state.config().max_document_bytes)?;
+            state
+                .docs
+                .create(body.id.clone(), &body.content, &user.actor())
+                .await
+                .map_err(map_docstore)?
+        }
+    };
 
     let view = load_view(&state, &outcome.id, false).await?;
     let location = format!("/api/documents/{}", view.id);

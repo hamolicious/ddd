@@ -53,6 +53,12 @@ export type StoreListener = (change: StoreChange) => void;
 /** A row as stored locally: the projection plus its feed sequence number. */
 export interface StoredRow extends ProjectionRow {
   readonly seq: number;
+  /**
+   * `true` ⇒ written by this device, not the feed: a note made offline (`seq` 0), or an
+   * offline edit, trash or restore shown before the server has it. The feed's next row
+   * for the id (a higher `seq`) replaces it.
+   */
+  readonly local?: boolean;
 }
 
 export interface ProjectionStore {
@@ -79,6 +85,18 @@ export interface ProjectionStore {
    * every local row whose id the pass never mentioned. Returns the ids removed.
    */
   retainOnly(ids: ReadonlySet<string>): Promise<string[]>;
+
+  /**
+   * Write rows this device derived itself ({@link StoredRow.local}), whatever their
+   * `seq`, and tell the listeners. The feed still wins: its next row for an id has a
+   * higher `seq`. Optional: a store without it cannot show offline changes early.
+   */
+  putLocal?(rows: readonly StoredRow[]): Promise<void>;
+  /** Drop rows this device made up (a local create the server refused). */
+  deleteLocal?(ids: readonly string[]): Promise<void>;
+  /** Small per-device values kept beside the checkpoint (the outbox). */
+  getMeta?<T>(key: string): Promise<T | undefined>;
+  setMeta?(key: string, value: unknown): Promise<void>;
 
   checkpoint(): Promise<SyncCheckpoint>;
   setCheckpoint(checkpoint: SyncCheckpoint): Promise<void>;

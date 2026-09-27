@@ -43,7 +43,7 @@ Key properties:
 
 - **Microkernel:** the kernel API is small, versioned, and the only public contract. All UI and features are plugins; the built-in ones are replaceable by design.
 - **Universal plugins:** one package = backend Wasm module + frontend React ES module, installed server-side; no client rebuilds.
-- **Offline-first:** every document readable and searchable offline; recently-opened documents editable offline; merges via CRDT.
+- **Offline-first:** every document readable, searchable and editable offline; creates, trash and restore queue until reconnect; merges via CRDT.
 - **Shared workspace:** all authenticated users see — and can edit or delete — every document. This is an explicit v1 decision; destructive/administrative actions are recorded in an audit log (§5.4). ACLs are v2, and the sync design (§4) deliberately keeps them possible.
 
 **The shared Rust core.** The frontmatter parser, `%%%` section parser, title resolver, and filter evaluator are written **once, in Rust**, used natively by the server and compiled to **Wasm for the client kernel**. Parity between offline and online behavior is by construction, not by test suite. (A conformance corpus still exists as a regression net.)
@@ -163,7 +163,7 @@ Binary files live in GridFS, outside the CRDT. Simple sync: whole-file, revision
 Clients do **not** replicate CRDT state for the whole workspace (2–10× plaintext, OOM territory in a webview, and forecloses ACLs). Instead:
 
 - **The projection** — `{_id, title, fm, plugins, content (plain text), updated_at, deleted}` — replicates to every client over a **workspace change feed**: a single sequence-numbered stream; reconnect = "everything since seq X", one round trip. Stored in one IndexedDB store. This is ~1× the size of the actual notes and powers everything read-only: **every document is readable and searchable offline.**
-- **Full Y.Docs hydrate lazily** — fetched when a document is opened for editing, LRU-cached (~20 in memory), persisted locally for recently/currently edited docs. **Editable offline = documents you've opened**; an unopened document is read-only offline until reconnect.
+- **Full Y.Docs hydrate lazily** — fetched when a document is opened for editing, LRU-cached (~20 in memory), persisted locally for **every** document (fetched in the background while online and kept current), so every document is editable offline; one not copied yet is read-only offline until reconnect (`docs/SYNC-DECISIONS.md` §7).
 - Deletions propagate through the feed (tombstone flag); the client drops local replicas of deleted docs — if one held unsynced edits, the user is offered "restore your version as a new document" before discard.
 - ACLs in v2 become a server-side filter on the feed — no protocol rewrite.
 - Bulk cold start: `GET /api/sync/bootstrap` streams the projection paged, with a first-run progress screen. Target: 5,000 docs < 30 s on LAN.
@@ -193,7 +193,7 @@ All under `/api`, authenticated (session cookie or bearer token). WebSocket is t
 | Route | Behavior |
 |---|---|
 | `GET /api/documents` | List/query: `filter` (the DSL, §4.2), `search`, `sort`, `cursor`/`limit`. |
-| `POST /api/documents` | Create (full text body). Existing `_id` → 409 (idempotent client retries); graveyarded `_id` → 410. Server stamps timestamps. |
+| `POST /api/documents` | Create (full text body, or `{ id, state }`: the device's own CRDT state, for notes made on a device — PROTOCOL.md §3.8). Existing `_id` → 409 (idempotent client retries); graveyarded `_id` → 410. Server stamps timestamps. |
 | `GET /api/documents/:id` | Materialized JSON (may force a flush). `?format=crdt` returns encoded CRDT state. |
 | `PUT /api/documents/:id` | Replace the full text (one CRDT transaction). |
 | `PATCH /api/documents/:id` | Body-text-level only: `{"content": …}` replaces text. **No `fm`/`plugins` patching** — machines write via `%%%` splices or own whole documents (§3.3). |

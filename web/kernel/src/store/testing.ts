@@ -7,6 +7,8 @@
  * implementation is tested against `fake-indexeddb` separately.
  */
 
+import * as Y from "yjs";
+
 import type { DocReplicaMeta, JournalEntry } from "../sync/doc-hydration.js";
 import type { FeedRow } from "../protocol.js";
 import {
@@ -113,8 +115,30 @@ export class MemoryProjectionStore implements ProjectionStore {
     return { applied, purged, ignored };
   }
 
+  readonly meta = new Map<string, unknown>();
+
+  async putLocal(rows: readonly StoredRow[]): Promise<void> {
+    for (const row of rows) this.rows.set(row.id, { ...row, local: true });
+    if (rows.length > 0) this.#emit({ applied: rows.map((row) => row.id), purged: [], safeSeq: this.#checkpoint.safeSeq });
+  }
+
+  async deleteLocal(ids: readonly string[]): Promise<void> {
+    for (const id of ids) if (this.rows.get(id)?.local) this.rows.delete(id);
+    if (ids.length > 0) this.#emit({ applied: [], purged: [...ids], safeSeq: this.#checkpoint.safeSeq });
+  }
+
+  async getMeta<T>(key: string): Promise<T | undefined> {
+    return this.meta.get(key) as T | undefined;
+  }
+
+  async setMeta(key: string, value: unknown): Promise<void> {
+    this.meta.set(key, structuredClone(value));
+  }
+
   async retainOnly(ids: ReadonlySet<string>): Promise<string[]> {
-    const removed = [...this.rows.keys()].filter((id) => !ids.has(id));
+    const removed = [...this.rows.entries()]
+      .filter(([id, row]) => !ids.has(id) && !(row.local === true && row.seq === 0))
+      .map(([id]) => id);
     for (const id of removed) this.rows.delete(id);
     if (removed.length > 0) {
       this.#emit({ applied: [], purged: removed, safeSeq: this.#checkpoint.safeSeq });
@@ -156,7 +180,7 @@ export class MemoryProjectionStore implements ProjectionStore {
 export class MemoryDocPersistence {
   readonly states = new Map<
     string,
-    { state: Uint8Array; touchedAt: number; unsynced: boolean; journal?: readonly JournalEntry[] }
+    { state: Uint8Array; touchedAt: number; unsynced: boolean; journal?: readonly JournalEntry[]; version?: string }
   >();
   saves = 0;
   drops = 0;
@@ -179,12 +203,31 @@ export class MemoryDocPersistence {
 
   async save(id: string, state: Uint8Array, meta?: DocReplicaMeta): Promise<void> {
     this.saves++;
+    const version = this.states.get(id)?.version;
     this.states.set(id, {
       state,
       touchedAt: ++this.#clock,
+      ...(version === undefined ? {} : { version }),
       unsynced: meta?.unsynced ?? false,
       ...(meta?.journal && meta.journal.length > 0 ? { journal: [...meta.journal] } : {}),
     });
+  }
+
+  async absorb(id: string, state: Uint8Array, version: string): Promise<void> {
+    const existing = this.states.get(id);
+    this.states.set(id, {
+      ...(existing ?? { unsynced: false, touchedAt: ++this.#clock }),
+      state: existing ? Y.mergeUpdates([existing.state, state]) : state,
+      version,
+    });
+  }
+
+  async list(): Promise<Array<{ id: string; unsynced: boolean; version?: string }>> {
+    return [...this.states.entries()].map(([id, entry]) => ({
+      id,
+      unsynced: entry.unsynced,
+      ...(entry.version === undefined ? {} : { version: entry.version }),
+    }));
   }
 
   async drop(id: string): Promise<void> {
