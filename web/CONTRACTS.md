@@ -678,7 +678,7 @@ ownership, recorded here because those are the two things this document exists t
 ## Frozen surfaces, extended additively
 
 Each one is the "adding an optional field is the one exception" rule, and each is
-announced rather than assumed. `docs/KERNEL-API.md` has the changelog entry; the contract
+announced rather than assumed. `dev-docs/resolved/KERNEL-API.md` has the changelog entry; the contract
 moved **1.0.0 → 1.1.0**, and `KERNEL_VERSION` in
 `backend/crates/server/src/plugins.rs` moved with it because the two are one number with
 nothing checking that automatically.
@@ -698,7 +698,7 @@ nothing checking that automatically.
   every consumer is in this repository and a `2.0.0` days after `1.0.0` for one field's
   semantics is a worse signal than the break it would describe. What replaces the gate is a
   one-per-plugin-per-key warning from `runtime/documents.ts` when a null arrives with no
-  `remove` field, pinned by `runtime/documents.test.ts`, and `docs/KERNEL-API.md`'s 1.1.0
+  `remove` field, pinned by `runtime/documents.test.ts`, and `dev-docs/resolved/KERNEL-API.md`'s 1.1.0
   entry records the reasoning and the condition that makes the next such change a major.
   `settings.set` spells `remove: false` for the same reason a caller should.
 - **`CoreBindings` gained `resolveTitle` and `normalizeDate`** (area `wasm`; see the

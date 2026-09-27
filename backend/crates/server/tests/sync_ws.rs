@@ -1679,7 +1679,7 @@ async fn bootstrap_pages_five_thousand_documents_well_inside_the_budget() {
 
 /// An offline edit carried over as a `HISTORY` frame is recorded at the time it was
 /// made (kept in order, never in the future), and marked offline; the catch-up diff of a
-/// handshake is marked offline too, stamped when it arrived (docs/HISTORY.md).
+/// handshake is marked offline too, stamped when it arrived (dev-docs/resolved/HISTORY.md).
 #[tokio::test]
 #[ignore = "needs a live MongoDB (MONGO_URI)"]
 async fn offline_edits_keep_the_time_they_were_made() {
@@ -1790,7 +1790,7 @@ async fn an_offline_edit_never_predates_its_document() {
 
 /// Live typing is folded into one change record per burst (a pause over two seconds
 /// starts another); a burst's edges still rebuild exactly, and a point inside it is
-/// refused rather than guessed (docs/HISTORY.md).
+/// refused rather than guessed (dev-docs/resolved/HISTORY.md).
 #[tokio::test]
 #[ignore = "needs a live MongoDB (MONGO_URI)"]
 async fn live_typing_folds_into_one_record_per_burst() {

@@ -1,5 +1,5 @@
 /**
- * Every note editable offline (`docs/SYNC-DECISIONS.md` §7).
+ * Every note editable offline (`dev-docs/resolved/SYNC-DECISIONS.md` §7).
  *
  * The projection already holds every note's *text* on every device, which makes them
  * readable offline. Editing needs the note's CRDT state: typing into a blank document

@@ -1,5 +1,5 @@
 /**
- * Changes made while the server cannot be reached (`docs/SYNC-DECISIONS.md` §1–§3).
+ * Changes made while the server cannot be reached (`dev-docs/resolved/SYNC-DECISIONS.md` §1–§3).
  *
  * Text edits already wait in each note's replica and journal (`sync/doc-hydration.ts`).
  * What they cannot carry are the three writes that are not text: **creating** a note,

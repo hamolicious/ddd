@@ -344,7 +344,7 @@ description = "Tail the server logs"
 run = "docker compose logs -f server"
 
 [tasks.backup]
-description = "Dump the database (documents + GridFS attachments) to ./backups — see docs/OPERATIONS.md"
+description = "Dump the database (documents + GridFS attachments) to ./backups — see dev-docs/resolved/OPERATIONS.md"
 run = '''
 set -euo pipefail
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"

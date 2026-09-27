@@ -96,7 +96,7 @@ export async function initKernel(options: KernelInitOptions): Promise<KernelRunt
       : {}),
     hydrator: {
       persistence: new IdbDocPersistence(store),
-      // Every note keeps an editable copy on the device (docs/SYNC-DECISIONS.md §7):
+      // Every note keeps an editable copy on the device (dev-docs/resolved/SYNC-DECISIONS.md §7):
       // nothing is pruned; a purge is what drops one.
       persistedReplicas: Number.POSITIVE_INFINITY,
       ...(server ? { restBaseUrl: server } : {}),
@@ -119,7 +119,7 @@ export async function initKernel(options: KernelInitOptions): Promise<KernelRunt
           });
       },
       onRefusalCleared: (id) => host.notices.dismiss(`kernel:too-large:${id}`),
-      // Offline changes show in the list at once (docs/SYNC-DECISIONS.md §2).
+      // Offline changes show in the list at once (dev-docs/resolved/SYNC-DECISIONS.md §2).
       onLocalEdit: (id, text) => host.documents.onLocalEdit(id, text),
       onOfflineEditsSent: (id) => host.documents.onOfflineEditsSent(id),
       // Deleted for good elsewhere while this device held edits the server never got
@@ -214,7 +214,7 @@ export async function initKernel(options: KernelInitOptions): Promise<KernelRunt
   await sync.start();
 
   // SPEC §6.4: ask for persistent storage at first sign-in on this device, and warn
-  // only when that ask is refused (docs/SYNC-DECISIONS.md §12). Asking on every boot
+  // only when that ask is refused (dev-docs/resolved/SYNC-DECISIONS.md §12). Asking on every boot
   // made some browsers prompt every time, and the warning showed on every launch.
   //
   // **Not inside the shell.** `navigator.storage.persist()` answers for a *browser*

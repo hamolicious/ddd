@@ -72,7 +72,7 @@ export interface StoredDocState {
    * (the conservative direction: a redundant prompt, never a lost edit).
    */
   readonly unsynced?: boolean;
-  /** The offline edits in `state`, with when they were made (`docs/HISTORY.md`). */
+  /** The offline edits in `state`, with when they were made (`dev-docs/resolved/HISTORY.md`). */
   readonly journal?: readonly JournalEntry[];
   /**
    * The projection row's `updated_at` when the server's state was last merged in by the
@@ -531,7 +531,7 @@ export class IdbDocPersistence implements DocPersistence {
   /**
    * Merge the server's state into the stored replica (or store it, when there is none),
    * leaving its unsent edits and their flag as they are: the offline copy of a note
-   * that is not open (`docs/SYNC-DECISIONS.md` §7). `version` says how current it is.
+   * that is not open (`dev-docs/resolved/SYNC-DECISIONS.md` §7). `version` says how current it is.
    */
   async absorb(id: string, state: Uint8Array, version: string): Promise<void> {
     const tx = this.store.db.transaction(STORE_DOCS, "readwrite");

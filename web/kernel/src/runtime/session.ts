@@ -26,7 +26,7 @@ export interface SessionHostOptions {
 }
 
 /**
- * Server-only screens offline (`docs/SYNC-DECISIONS.md` §9). A GET sent with
+ * Server-only screens offline (`dev-docs/resolved/SYNC-DECISIONS.md` §9). A GET sent with
  * {@link OFFLINE_COPY_HEADER} keeps its last good response in this cache; when the
  * server cannot be reached, that response is returned instead of the offline error,
  * with {@link CACHED_AT_HEADER} saying when it was loaded, so the screen can say it may be

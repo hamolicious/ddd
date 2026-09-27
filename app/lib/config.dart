@@ -46,7 +46,7 @@ const int kMaxFailedBoots = 2;
 /// foreground after that** — `routes/shell.rs`'s fingerprint cache and
 /// [kManifestTimeout]'s own doc are both written around that assumption, and an Android
 /// process routinely survives for days, so a once-per-launch check means a user who never
-/// cold-starts the app never learns a new bundle exists (`docs/OPERATIONS.md`: "devices
+/// cold-starts the app never learns a new bundle exists (`dev-docs/resolved/OPERATIONS.md`: "devices
 /// pick up a new bundle on their next launch").
 ///
 /// Throttled because `AppLifecycleState.resumed` fires far more often than a user would

@@ -1,6 +1,6 @@
 # `@kernel` changelog
 
-The contract plugins compile against (SPEC §6.4: "`docs/KERNEL-API.md` is the changelog").
+The contract plugins compile against (SPEC §6.4: "`dev-docs/resolved/KERNEL-API.md` is the changelog").
 The source of truth is `web/kernel-api/src/`; the generated single-file form is
 `web/kernel-api/dist/kernel.d.ts`, served at `/kernel.d.ts`.
 

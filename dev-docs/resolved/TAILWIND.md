@@ -481,7 +481,7 @@ bullet, and only to add a clause.
    theme mapped onto the kernel tokens) — an option for plugin authors, not a kernel
    concept: the output is an ordinary stylesheet and nothing in the kernel, loader or
    server knows the difference."* **+3 lines.**
-9. `docs/KERNEL-API.md` — nothing. The `@kernel` surface is unchanged.
+9. `dev-docs/resolved/KERNEL-API.md` — nothing. The `@kernel` surface is unchanged.
 
 **Estimated diff: ~300 added lines across 3 new files and 5 edited ones; zero deletions;
 zero backend, kernel or loader changes. Half a day, most of it the preset's comments and

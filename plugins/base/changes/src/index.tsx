@@ -69,7 +69,7 @@ export default function activate(kernel: Kernel): void {
   const shell = kernel.services.require<ShellUiApi>("shell-ui");
   const markdown = kernel.services.require<MarkdownApi>("markdown");
   const router = kernel.services.require<RouterService>("router");
-  // Offline, the panel and views show what they last loaded, marked (docs/SYNC-DECISIONS.md §9).
+  // Offline, the panel and views show what they last loaded, marked (dev-docs/resolved/SYNC-DECISIONS.md §9).
   const client = createSnapshotsClient(offlineCopies((path, init) => kernel.session.fetch(path, init), changesOfflineCopy));
 
   kernel.extensions.contribute<AltbarPanel>(POINTS.altbarPanel, {

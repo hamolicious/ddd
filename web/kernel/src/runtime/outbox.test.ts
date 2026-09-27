@@ -1,5 +1,5 @@
 /**
- * The outbox (`docs/SYNC-DECISIONS.md` §1–§2): creates, trashes and restores made while
+ * The outbox (`dev-docs/resolved/SYNC-DECISIONS.md` §1–§2): creates, trashes and restores made while
  * the server cannot be reached wait in order, show at once, and go out on reconnect —
  * and a create sent twice, or an id someone else took, loses nothing.
  */

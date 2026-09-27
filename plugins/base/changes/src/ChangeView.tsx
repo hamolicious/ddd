@@ -4,7 +4,7 @@
  * - **Changes**: what it did, as a diff. Each changed run of lines with a little unchanged
  *   text around it, removed lines struck in red, inserted lines in green.
  * - **Document then**: the whole note as it was right after it, rendered read only (from
- *   the server's nearest checkpoint, `docs/HISTORY.md`).
+ *   the server's nearest checkpoint, `dev-docs/resolved/HISTORY.md`).
  *
  * The banner offers the way back and Revert.
  */

@@ -31,7 +31,7 @@
  * upload finishes, it is left alone and a notice says the file was uploaded but not put
  * in (the orphan view in Admin → Storage will find it).
  *
- * **Offline** (`docs/SYNC-DECISIONS.md` §8), a file is kept on the device (`queue.ts`)
+ * **Offline** (`dev-docs/resolved/SYNC-DECISIONS.md` §8), a file is kept on the device (`queue.ts`)
  * and its placeholder stays, saying it waits for a connection; on reconnect it uploads
  * and the placeholder is swapped for the file, in whatever document it is in.
  */

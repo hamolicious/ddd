@@ -94,7 +94,7 @@ export default function activate(kernel: Kernel): AdminApi {
     modal: (request) => menu.modal(request),
     openSheet: (request) => menu.openSheet(request),
   };
-  // Offline, each tab shows what it last loaded, marked (docs/SYNC-DECISIONS.md §9).
+  // Offline, each tab shows what it last loaded, marked (dev-docs/resolved/SYNC-DECISIONS.md §9).
   const client = createAdminClient(offlineCopies((path, init) => kernel.session.fetch(path, init), adminOfflineCopy));
   const admin = kernel.session.isAdmin();
   const selfId = kernel.session.user.id;

@@ -1032,7 +1032,7 @@ pub struct Page { pub documents: Vec<DocumentRow>, pub next_cursor: Option<Strin
    `init_metrics` installed the recorder *before* setting its `OnceLock`, so two
    concurrent callers raced and the loser failed a valid `AppState::new` — fatal for
    parallel integration tests. It is one critical section now.
-4. `.env.example` / `docs/OPERATIONS.md`: **done in `.env.example`** — `APP_ORIGIN`
+4. `.env.example` / `dev-docs/resolved/OPERATIONS.md`: **done in `.env.example`** — `APP_ORIGIN`
    now says it is both the CORS allowlist and the mandatory WebSocket origin check,
    and ships with the Vite dev origin, because the failure mode (403 before
    authentication, page loads, socket never connects) is otherwise opaque. The stale
@@ -1743,7 +1743,7 @@ has a `plugin-builder` stage, and the admin approval screen exists. What is left
 3. **A plugin's capability grant is immutable once approved.** `approve` refuses anything
    not in `Pending`, so widening `http.hosts` on a running plugin means uninstall (without
    purge, which is lossless) and reinstall. That is a real workflow an operator will hit
-   the first time a feed moves host; `docs/OPERATIONS.md` documents the workaround. A
+   the first time a feed moves host; `dev-docs/resolved/OPERATIONS.md` documents the workaround. A
    re-approval path on an enabled record is the fix.
 4. **The upgrade pending window.** One record per plugin means installing 1.1.0 over an
    approved 1.0.0 sets the record to `pending` at 1.1.0 while 1.0.0 keeps serving.

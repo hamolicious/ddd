@@ -509,7 +509,7 @@ async function signOut(
     await current?.engine.close();
     await current?.store.clear();
     await deletePluginDatabases();
-    // Server screens' offline copies (`kernel.session.fetch`, docs/SYNC-DECISIONS.md §9).
+    // Server screens' offline copies (`kernel.session.fetch`, dev-docs/resolved/SYNC-DECISIONS.md §9).
     await globalThis.caches?.delete("life-manager:api").catch(() => false);
     rememberShellToken(undefined);
     forgetBootCache();

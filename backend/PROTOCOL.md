@@ -478,7 +478,7 @@ at its first. The journal is saved with the local replica, so it survives a relo
 
 On (re)subscribe the client sends the journal, oldest first, as `HISTORY` frames
 **before** any `SYNC_STEP2` of its own, then clears it. The server applies each like an
-`UPDATE` and records it in the document's history (`docs/HISTORY.md`) at the claimed
+`UPDATE` and records it in the document's history (`dev-docs/resolved/HISTORY.md`) at the claimed
 time, clamped between the previous change's time and now, marked offline, with the
 time it arrived kept beside it. The fan-out to other subscribers is an ordinary `UPDATE`.
 

@@ -30,7 +30,7 @@ CONTRACTS.md       file ownership and frozen signatures per builder area
 ```
 
 **One semver covers both plugin contracts.** A manifest's `kernel` range is checked
-against the `@kernel` surface *and* the host ABI; `docs/KERNEL-API.md` is the changelog
+against the `@kernel` surface *and* the host ABI; `dev-docs/resolved/KERNEL-API.md` is the changelog
 for the frontend half and `HOST-ABI.md` the specification for the backend half.
 
 ---
@@ -69,7 +69,7 @@ no `.env`.
 | `mise run wasm-check` | The core builds with no server deps (the Wasm shape) | `cargo check -p life-manager-core --no-default-features` |
 | `mise run wasm` | Build the core to Wasm for the kernel + node smoke test | see [`../web/README.md`](../web/README.md) |
 | `mise run build` | Release binary, same profile as the Docker image | `cargo build --release --locked --bin life-manager` |
-| `mise run backup` | `mongodump` (documents + GridFS) into `./backups` | see [`../docs/OPERATIONS.md`](../docs/OPERATIONS.md) |
+| `mise run backup` | `mongodump` (documents + GridFS) into `./backups` | see [`../dev-docs/resolved/OPERATIONS.md`](../dev-docs/resolved/OPERATIONS.md) |
 
 The Mongo-backed tests are `#[ignore]`d so a clean checkout tests green with no
 database. Run them against a live Mongo:
@@ -124,7 +124,7 @@ never enters shell history.
 Loaded from the real environment, falling back to a `.env` file (which never
 overrides a real variable). **Every** value is validated at boot — a bad variable
 is a boot failure, not a surprise at request time. `../.env.example` is the
-annotated copy-me file; [`../docs/OPERATIONS.md`](../docs/OPERATIONS.md) has the operational detail.
+annotated copy-me file; [`../dev-docs/resolved/OPERATIONS.md`](../dev-docs/resolved/OPERATIONS.md) has the operational detail.
 
 ### Required
 
@@ -153,8 +153,8 @@ annotated copy-me file; [`../docs/OPERATIONS.md`](../docs/OPERATIONS.md) has the
 |---|---|---|
 | `SHUTDOWN_GRACE_SECS` | `30` | §8 — drain, flush, exit within it. |
 | `TRASH_RETENTION_DAYS` | `30` | §3.5 — then the document purges, the id stays forever. |
-| `CHECKPOINT_EVERY_CHANGES` | `1000` | `docs/HISTORY.md` — a full-text checkpoint after this many changes, so any point in a document's history is at most this many steps from one. |
-| `RAW_CHANGE_DAYS` | `30` | `docs/HISTORY.md` — raw changes older than this are squashed into one record per group (one author, no pause over two minutes). |
+| `CHECKPOINT_EVERY_CHANGES` | `1000` | `dev-docs/resolved/HISTORY.md` — a full-text checkpoint after this many changes, so any point in a document's history is at most this many steps from one. |
+| `RAW_CHANGE_DAYS` | `30` | `dev-docs/resolved/HISTORY.md` — raw changes older than this are squashed into one record per group (one author, no pause over two minutes). |
 | `HISTORY_SQUASH_INTERVAL_SECS` | `3600` | How often the squash job runs. |
 | `INVITE_TTL_DAYS` | `7` | §5.1 |
 | `SESSION_IDLE_DAYS` / `SESSION_ABSOLUTE_DAYS` | `30` / `180` | §5.2 — rolling idle, hard absolute. |
@@ -435,5 +435,5 @@ cargo test -p life-manager-server \
   rows, so a counter seeded before it would hand those numbers out a second time.
 - **Telemetry: none, ever.** Nothing leaves the deployment.
 
-[`../docs/OPERATIONS.md`](../docs/OPERATIONS.md) covers deployment, backup/restore (including the GridFS and
+[`../dev-docs/resolved/OPERATIONS.md`](../dev-docs/resolved/OPERATIONS.md) covers deployment, backup/restore (including the GridFS and
 split-brain caveats), secret rotation and the runbook.

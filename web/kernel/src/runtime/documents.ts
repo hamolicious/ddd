@@ -72,7 +72,7 @@ const sectionEdits = (pluginId: string, edits: readonly SectionLineEdit[]): Sect
  * against 1.0.0 installs, passes the loader's boot re-check, and then quietly accretes
  * `key: null` lines where it meant to clear them. A warning is what is left: it names the
  * change at the call site that made it, which is the only place an author can act on it.
- * `docs/KERNEL-API.md`'s 1.1.0 entry records why this shipped as a minor and what would
+ * `dev-docs/resolved/KERNEL-API.md`'s 1.1.0 entry records why this shipped as a minor and what would
  * make it a major.
  *
  * Once per plugin and key. A splice inside a render loop must not turn a migration note
@@ -291,7 +291,7 @@ export class DocumentsHost {
   /**
    * Offline edits to `id` were just sent. If the note was moved to Trash elsewhere
    * meanwhile, say so: the edits are kept there, and nothing else would tell anyone
-   * (`docs/SYNC-DECISIONS.md` §3). The feed may bring the trash a moment later, so it
+   * (`dev-docs/resolved/SYNC-DECISIONS.md` §3). The feed may bring the trash a moment later, so it
    * is watched for a while.
    */
   onOfflineEditsSent(id: string): void {
@@ -342,7 +342,7 @@ export class DocumentsHost {
   /**
    * Everything on this device the server has not got, as one Markdown file: each note
    * with unsent changes in full, then any queued trash or restore. The way out when the
-   * person cannot sign in again (`docs/SYNC-DECISIONS.md` §6). `count` is the notes.
+   * person cannot sign in again (`dev-docs/resolved/SYNC-DECISIONS.md` §6). `count` is the notes.
    */
   async exportUnsent(): Promise<{ readonly count: number; readonly text: string }> {
     const docs = this.options.sync.docs;
@@ -413,7 +413,7 @@ export class DocumentsHost {
    * Create a note. The device mints the id and builds the note's CRDT state, and the
    * server creates the note from that state (SPEC §3.5, PROTOCOL.md §3.8). Online, this
    * resolves once the server has it; offline, at once — the note is on this device,
-   * editable, and in the list, and it is sent on reconnect (`docs/SYNC-DECISIONS.md` §1).
+   * editable, and in the list, and it is sent on reconnect (`dev-docs/resolved/SYNC-DECISIONS.md` §1).
    */
   async create(input: CreateDocumentInput): Promise<DocumentId> {
     const id = input.id ?? mintUlid();

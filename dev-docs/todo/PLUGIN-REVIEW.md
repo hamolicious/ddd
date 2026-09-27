@@ -615,7 +615,7 @@ toggled by the button at the right end of the top bar) shows its history, newest
 - **Snapshots**: whole copies you take with the camera, plus the one taken
   automatically before every restore. Kept forever.
 
-Every change is kept (see `docs/HISTORY.md`): a checkpoint every 1000 changes
+Every change is kept (see `dev-docs/resolved/HISTORY.md`): a checkpoint every 1000 changes
 (`CHECKPOINT_EVERY_CHANGES`) keeps any point in time quick to rebuild. Snapshots are
 only the ones you take and the automatic one before a restore. Anyone signed in can use
 all of it.

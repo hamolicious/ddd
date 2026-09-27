@@ -46,7 +46,7 @@ pub struct Config {
     ///
     /// Keys the derivation of every stored credential id
     /// ([`crate::auth::hash_token`]), so rotating it really does log everyone out
-    /// — that is the documented promise in `docs/OPERATIONS.md`, and it only
+    /// — that is the documented promise in `dev-docs/resolved/OPERATIONS.md`, and it only
     /// holds because the secret is in the derivation.
     pub session_secret: SessionSecret,
 
@@ -99,7 +99,7 @@ pub struct Config {
     pub trash_retention_days: u32,
     /// `CHECKPOINT_EVERY_CHANGES`, default 1000: a full-text checkpoint of a document
     /// after this many changes, so any point in its history is at most this many steps
-    /// from one (`docs/HISTORY.md`).
+    /// from one (`dev-docs/resolved/HISTORY.md`).
     pub checkpoint_every_changes: u32,
     /// `RAW_CHANGE_DAYS`, default 30: raw changes older than this are squashed into one
     /// record per group.

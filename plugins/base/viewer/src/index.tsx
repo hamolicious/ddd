@@ -177,7 +177,7 @@ function AttachmentPreview({
   readonly title: string;
 }): ReactNode {
   const [meta, setMeta] = useState<AttachmentMeta | undefined>(undefined);
-  // Offline, the page shows what was loaded before, and says so (docs/SYNC-DECISIONS.md §9).
+  // Offline, the page shows what was loaded before, and says so (dev-docs/resolved/SYNC-DECISIONS.md §9).
   const [offline] = useState(() => new OfflineCopyState());
 
   // The caption's facts. The body loads the bytes itself, whichever body it is.

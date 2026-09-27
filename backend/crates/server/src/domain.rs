@@ -339,7 +339,7 @@ pub struct DocumentChange {
     pub document_id: Id,
     /// The update-log `seq` of the last write this change covers.
     pub seq: i64,
-    /// The first, when live typing was folded into one record (`docs/HISTORY.md`);
+    /// The first, when live typing was folded into one record (`dev-docs/resolved/HISTORY.md`);
     /// absent for a single write.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub first_seq: Option<i64>,
@@ -400,7 +400,7 @@ impl DocumentChange {
 
 /// Collection `document_history` — the **squashed tier**: one group of changes (one
 /// author, no long pause) older than `RAW_CHANGE_DAYS`, as its net hunks against the text
-/// before `from_seq`. The raw changes it replaces are deleted (`docs/HISTORY.md`). Kept
+/// before `from_seq`. The raw changes it replaces are deleted (`dev-docs/resolved/HISTORY.md`). Kept
 /// forever.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentHistory {
@@ -445,7 +445,7 @@ impl DocumentHistory {
 
 /// Collection `document_checkpoints` — the full text at a `seq`, written every
 /// `CHECKPOINT_EVERY_CHANGES` changes and when a document is created. Any point in time
-/// is rebuilt from the nearest one (`docs/HISTORY.md`). Kept forever.
+/// is rebuilt from the nearest one (`dev-docs/resolved/HISTORY.md`). Kept forever.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentCheckpoint {
     #[serde(rename = "_id")]

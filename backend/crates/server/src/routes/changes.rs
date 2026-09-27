@@ -8,7 +8,7 @@
 //! | GET | `/api/documents/:id/text?at=<seq>` | the whole text as it was after `seq` |
 //! | POST | `/api/documents/:id/history/forget` | admin: wipe the history, keep the text |
 //!
-//! Every point in time is rebuilt from the nearest checkpoint (`docs/HISTORY.md`), so
+//! Every point in time is rebuilt from the nearest checkpoint (`dev-docs/resolved/HISTORY.md`), so
 //! none of this rewinds from today: a years-old change costs what last week's does.
 //!
 //! A group is addressed by the `seq` range it covers. Groups are computed here, not

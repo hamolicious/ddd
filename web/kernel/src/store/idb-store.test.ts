@@ -396,7 +396,7 @@ describe("IdbDocPersistence", () => {
   });
 });
 
-describe("rows and copies this device made (docs/SYNC-DECISIONS.md §1, §7)", () => {
+describe("rows and copies this device made (dev-docs/resolved/SYNC-DECISIONS.md §1, §7)", () => {
   it("writes local rows whatever their seq, lets the feed replace them, and keeps unsent creates through a bootstrap", async () => {
     const changes: StoreChange[] = [];
     store.subscribe((change) => changes.push(change));

@@ -17,7 +17,7 @@
  * ```
  *
  * **FROZEN.** One `kernel` semver covers this surface and the Wasm host ABI;
- * removals and signature changes are a major (SPEC §6.4). `docs/KERNEL-API.md` is
+ * removals and signature changes are a major (SPEC §6.4). `dev-docs/resolved/KERNEL-API.md` is
  * the changelog.
  */
 

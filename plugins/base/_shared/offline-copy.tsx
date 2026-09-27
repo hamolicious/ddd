@@ -1,5 +1,5 @@
 /**
- * Server-only screens offline (`docs/SYNC-DECISIONS.md` §9): the last-loaded answer,
+ * Server-only screens offline (`dev-docs/resolved/SYNC-DECISIONS.md` §9): the last-loaded answer,
  * marked as possibly out of date.
  *
  * A GET through `kernel.session.fetch` carrying {@link OFFLINE_COPY_HEADER} keeps its last

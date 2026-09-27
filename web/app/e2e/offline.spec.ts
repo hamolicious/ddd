@@ -1,5 +1,5 @@
 /**
- * Offline editing, end to end: the promise of SPEC §4.1 and `docs/HISTORY.md`, checked
+ * Offline editing, end to end: the promise of SPEC §4.1 and `dev-docs/resolved/HISTORY.md`, checked
  * the way a person would meet it.
  *
  * "Offline" here is both halves of the wire: `context.setOffline` stops HTTP, and the
@@ -507,7 +507,7 @@ test("trash, restore and any note's edits, offline: shown at once, sent on recon
   const net = await network(page, context);
   await signIn(page, ADMIN);
   await expect(page.getByRole("button", { name: trashTitle, exact: true })).toBeVisible();
-  // Every note gets an editable copy on the device while online (docs/SYNC-DECISIONS.md §7).
+  // Every note gets an editable copy on the device while online (dev-docs/resolved/SYNC-DECISIONS.md §7).
   await expect
     .poll(
       () =>

@@ -1,5 +1,5 @@
 //! Change history: what each write did to a document's **text**, kept so it can be
-//! read back and reverted (`docs/HISTORY.md`).
+//! read back and reverted (`dev-docs/resolved/HISTORY.md`).
 //!
 //! The update log (`document_updates`) is a sync buffer: binary Yjs updates, trimmed to
 //! a few hundred entries, and not invertible once compaction has dropped deleted content.

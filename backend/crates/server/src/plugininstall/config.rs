@@ -12,7 +12,7 @@
 //!
 //! > **Rotating `SESSION_SECRET` without setting `CONFIG_KEY` makes every stored secret
 //! > unreadable** — the plugins keep running and `config_get` reports the key as missing,
-//! > so an admin re-enters them. `docs/OPERATIONS.md` already says rotation "logs everyone
+//! > so an admin re-enters them. `dev-docs/resolved/OPERATIONS.md` already says rotation "logs everyone
 //! > out"; this is the second sentence of that paragraph.
 //!
 //! # The cipher

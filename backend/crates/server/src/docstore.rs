@@ -86,7 +86,7 @@ pub const ROOM_IDLE_TIMEOUT: Duration = Duration::from_secs(600);
 pub const UPDATE_LOG_KEEP_BYTES: u64 = 1024 * 1024;
 /// Per-document update-log retention, entries (SPEC §3.5).
 pub const UPDATE_LOG_KEEP_COUNT: u32 = 200;
-/// A full-text checkpoint after this many changes (`docs/HISTORY.md`).
+/// A full-text checkpoint after this many changes (`dev-docs/resolved/HISTORY.md`).
 pub const CHECKPOINT_EVERY_CHANGES: u32 = 1000;
 /// Live typing by one person with pauses shorter than this is folded into one record…
 const COALESCE_GAP_MS: i64 = 2_000;
@@ -375,7 +375,7 @@ pub enum DocStoreError {
 // The trait
 // ---------------------------------------------------------------------------
 
-/// When an edit was made, for its history record (`docs/HISTORY.md`).
+/// When an edit was made, for its history record (`dev-docs/resolved/HISTORY.md`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditTiming {
     /// Now, as it arrives.
@@ -649,7 +649,7 @@ struct RoomState {
     open_record: Option<OpenRecord>,
 }
 
-/// A change record still taking in live typing (`docs/HISTORY.md`).
+/// A change record still taking in live typing (`dev-docs/resolved/HISTORY.md`).
 struct OpenRecord {
     first_seq: i64,
     seq: i64,
@@ -738,7 +738,7 @@ impl MongoDocStore {
             }
         }));
 
-        // History squash (`docs/HISTORY.md`): raw changes past `RAW_CHANGE_DAYS` become
+        // History squash (`dev-docs/resolved/HISTORY.md`): raw changes past `RAW_CHANGE_DAYS` become
         // one record per group.
         let store = self.clone();
         handles.push(tokio::spawn(async move {
@@ -1073,7 +1073,7 @@ impl MongoDocStoreInner {
             Mutation::Splice(_) => crate::changes::hunks_from_edits(&state.text, &spliced),
             _ => crate::changes::hunks_between(&state.text, &text_after),
         };
-        // Live typing is folded into one record per short burst (`docs/HISTORY.md`):
+        // Live typing is folded into one record per short burst (`dev-docs/resolved/HISTORY.md`):
         // one record per keystroke was ~500 a minute. REST writes, restores, reverts
         // and offline edits are always records of their own.
         let foldable = matches!(mutation, Mutation::Update(_)) && timing == EditTiming::Live && !hunks.is_empty();
@@ -1371,7 +1371,7 @@ impl MongoDocStoreInner {
     }
 
     /// Squash raw changes older than `raw_change_days` into one record per closed group
-    /// (`docs/HISTORY.md`). Returns the number of groups written.
+    /// (`dev-docs/resolved/HISTORY.md`). Returns the number of groups written.
     async fn squash_history(&self) -> Result<usize, DocStoreError> {
         let cutoff = now_ms() - self.tuning.raw_change_days * DAY_MS;
         let ids: Vec<String> = self

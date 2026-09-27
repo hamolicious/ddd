@@ -822,7 +822,7 @@ describe("robustness", () => {
   });
 });
 
-describe("notes made on this device (docs/SYNC-DECISIONS.md §1)", () => {
+describe("notes made on this device (dev-docs/resolved/SYNC-DECISIONS.md §1)", () => {
   it("seeds a replica that opens offline, is not subscribed until created, then sends its edits", async () => {
     const persistence = new MemoryDocPersistence();
     const { socket, hydrator, server, serve } = await fixture({ persistence, persistDebounceMs: 0 }, [DOC]);

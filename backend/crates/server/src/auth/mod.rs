@@ -9,7 +9,7 @@
 //! `_id` is **HMAC-SHA256(`SESSION_SECRET`, token)**, hex. The secret is in the
 //! derivation on purpose: rotating it changes every stored id, which is exactly
 //! the "rotation logs everyone out" promise of SPEC §5.2 and
-//! `docs/OPERATIONS.md`. With an unkeyed hash, rotation would invalidate nothing.
+//! `dev-docs/resolved/OPERATIONS.md`. With an unkeyed hash, rotation would invalidate nothing.
 
 use std::cmp::min;
 use std::net::SocketAddr;

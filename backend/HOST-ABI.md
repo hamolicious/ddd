@@ -290,7 +290,7 @@ The two are different facts and the plugin cannot tell them apart from a result 
 second means a config key silently reads as unset forever.
 
 A value that is stored but cannot be **decrypted** is reported as *missing*, with a server
-log line. That is the `SESSION_SECRET`-rotated-without-`CONFIG_KEY` case (`docs/OPERATIONS.md`,
+log line. That is the `SESSION_SECRET`-rotated-without-`CONFIG_KEY` case (`dev-docs/resolved/OPERATIONS.md`,
 secret rotation): the honest answer to the plugin is "not configured", so it degrades the
 way it already knows how while an admin re-enters the value.
 

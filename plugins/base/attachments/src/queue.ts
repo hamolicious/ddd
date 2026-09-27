@@ -1,5 +1,5 @@
 /**
- * Files pasted while offline (`docs/SYNC-DECISIONS.md` §8): kept on this device, in this
+ * Files pasted while offline (`dev-docs/resolved/SYNC-DECISIONS.md` §8): kept on this device, in this
  * plugin's own IndexedDB database, and uploaded on reconnect. The placeholder stays in
  * the text meanwhile, made unique with a short token so it can be found again after a
  * reload, when the editor's insertion handle is long gone.

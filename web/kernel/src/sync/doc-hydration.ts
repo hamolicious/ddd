@@ -11,7 +11,7 @@
  * 1. **The persisted replica is the durable queue.** A local edit is written to
  *    the `docs` store as full encoded state, together with the **edit journal**:
  *    the offline edits as `{ at, update }` entries, so the server's history can say
- *    when each was made (`docs/HISTORY.md`). On reconnect the journal goes first,
+ *    when each was made (`dev-docs/resolved/HISTORY.md`). On reconnect the journal goes first,
  *    as `HISTORY` frames; the ordinary state-vector handshake after it is the
  *    safety net, and the only path when the journal is gone (an older replica, or
  *    site data cleared) — then the edits still arrive, stamped when they did.
