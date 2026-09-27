@@ -63,6 +63,7 @@
     "typescript": "~5.9.3",
     "vite": "^8.3.0",
     "vite-node": "^6.0.0",
-    "vitest": "^5.0.1"
+    "vitest": "^5.0.1",
+    "web-tree-sitter": "0.27.0"
   }
 }

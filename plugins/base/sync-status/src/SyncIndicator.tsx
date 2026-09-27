@@ -1,12 +1,17 @@
 /**
- * The sync-status pill: a coloured dot, plus an "n unsynced" chip (SPEC §6.5). When
- * the connection is down the dot becomes a button: a red ✕ while offline, a red ↻ after a
- * sync error, and clicking either reconnects. A lapsed session shows Sign in instead.
+ * The sync-status pill: a coloured dot, or — while edits are unsynced — the unsynced
+ * count in its place, in yellow (SPEC §6.5). When the connection is down a button joins
+ * it: a red ✕ while offline, a red ↻ after a sync error, and clicking either reconnects.
+ * A lapsed session shows Sign in instead.
  *
  * The dot has no visible word; the word ("Offline", "Synced") is in its `title` and in
- * its live region, which `aria-live="polite"` announces without stealing focus. "3
- * unsynced" stays visible text: an unsynced count is the one fact a user must see
- * before they close the tab, and a colour cannot carry a number.
+ * its live region, which `aria-live="polite"` announces without stealing focus. The
+ * count stays visible: it is the one fact a user must see before they close the tab,
+ * and a colour cannot carry a number.
+ *
+ * **The slot has a fixed width.** Dot and count share one box wide enough for "999+",
+ * so a bulk delete — hundreds of edits queued and drained in seconds — changes the digits
+ * and nothing else; the header does not jostle as the count grows, shrinks and vanishes.
  */
 
 import { useEffect, useState, type ReactNode } from "react";
@@ -64,9 +69,15 @@ export function SyncIndicator({ kernel }: { readonly kernel: Kernel }): ReactNod
   return (
     <div className="syncstatus:group syncstatus:tap-h syncstatus:inline-flex syncstatus:items-center syncstatus:gap-1 syncstatus:whitespace-nowrap syncstatus:px-1 syncstatus:text-text-muted syncstatus:data-[tone=error]:text-text syncstatus:data-[tone=warn]:text-text" data-tone={status.tone}>
       <span className="syncstatus:inline-flex syncstatus:items-center syncstatus:gap-1" role="status" aria-live="polite" title={status.detail}>
-        {status.action === "reconnect" ? null : (
-          <span className="syncstatus:size-[0.6em] syncstatus:rounded-full syncstatus:bg-text-muted syncstatus:group-data-[tone=ok]:bg-success syncstatus:group-data-[tone=busy]:bg-accent syncstatus:group-data-[tone=warn]:bg-warning syncstatus:group-data-[tone=error]:bg-danger" aria-hidden="true" />
-        )}
+        <span className="syncstatus:inline-flex syncstatus:w-[4ch] syncstatus:items-center syncstatus:justify-center syncstatus:tabular-nums">
+          {status.pending > 0 ? (
+            <span className="syncstatus:text-sm syncstatus:font-semibold syncstatus:text-warning syncstatus:compact:text-xs" aria-hidden="true" title={`${status.pending} unsynced`}>
+              {status.pending > 999 ? "999+" : status.pending}
+            </span>
+          ) : status.action === "reconnect" ? null : (
+            <span className="syncstatus:size-[0.6em] syncstatus:rounded-full syncstatus:bg-text-muted syncstatus:group-data-[tone=ok]:bg-success syncstatus:group-data-[tone=busy]:bg-accent syncstatus:group-data-[tone=warn]:bg-warning syncstatus:group-data-[tone=error]:bg-danger" aria-hidden="true" />
+          )}
+        </span>
         {/* An icon alone on screen; the word stays in the live region so a change is still announced. */}
         <span className="sync-status-label syncstatus:sr-only">{status.label}</span>
       </span>
@@ -99,11 +110,6 @@ export function SyncIndicator({ kernel }: { readonly kernel: Kernel }): ReactNod
             )}
           </svg>
         </button>
-      ) : null}
-      {status.pending > 0 ? (
-        <span className="syncstatus:rounded syncstatus:border syncstatus:border-warning syncstatus:px-1 syncstatus:text-sm syncstatus:text-text syncstatus:compact:text-xs" title={`${status.pending} unsynced`}>
-          {status.pending} unsynced
-        </span>
       ) : null}
       {status.action === "reauth" ? (
         <button

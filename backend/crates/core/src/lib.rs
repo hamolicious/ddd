@@ -9,8 +9,8 @@
 //!   `mongo` feature, and only for [`filter::mongo`].
 //! - Every function here must be deterministic and stateless: the same input
 //!   text always yields the same output on both sides.
-//! - Byte-exact fence handling; per-line tolerant parsing (a malformed line is
-//!   dropped and recorded, never fatal).
+//! - Byte-exact fence handling; tolerant parsing (a malformed line or block-sequence
+//!   item is dropped and recorded, never fatal).
 
 pub mod date;
 pub mod diagnostics;
@@ -44,4 +44,4 @@ pub use value::{Map, Value};
 
 /// Version of the shared-core semantics. Bumped when parsing or evaluation
 /// output changes in a way that invalidates materialized data.
-pub const CORE_SEMANTICS_VERSION: u32 = 1;
+pub const CORE_SEMANTICS_VERSION: u32 = 2;

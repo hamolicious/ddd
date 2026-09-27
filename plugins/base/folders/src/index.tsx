@@ -597,6 +597,13 @@ export default function activate(kernel: Kernel): FoldersApi {
     await setPath(documentId, normalizePath(path));
   };
 
+  /** Tombstone one document; if it is the one on screen, show the folder it was in. */
+  const deleteDocument = async (documentId: string): Promise<void> => {
+    const folder = normalizePath(rows.find((row) => row.id === documentId)?.fm["path"]);
+    await kernel.documents.delete(documentId);
+    if (documentFromRoute(router.current()) === documentId) router.navigate(folderPath(folder));
+  };
+
   const failed = (moved: number, failures: readonly string[]): Error =>
     new Error(
       `moved ${moved} document${moved === 1 ? "" : "s"}; ${failures.length} failed: ${failures[0] ?? ""}`,
@@ -721,6 +728,9 @@ export default function activate(kernel: Kernel): FoldersApi {
 
   const TreeHost = (): ReactElement => {
     const live = useStore();
+    // The open document, whatever opened it: the tree reveals it.
+    const [openDocument, setOpenDocument] = useState(() => documentFromRoute(router.current()));
+    useEffect(() => router.onChange((route) => setOpenDocument(documentFromRoute(route))), []);
     return (
       <FolderTree
         menu={menu}
@@ -742,9 +752,11 @@ export default function activate(kernel: Kernel): FoldersApi {
         onMoveFolder={renameFolder}
         onCreateFolder={createFolder}
         onDeleteFolder={deleteFolder}
+        onDeleteDocument={deleteDocument}
         onNewDocumentHere={(folder) => docs.newDocument({ path: folder })}
         onSelectFolder={(folder) => router.navigate(folderPath(folder))}
         onOpenDocument={(id) => router.navigate(`/doc/${id}`)}
+        {...(openDocument !== undefined ? { openDocument } : {})}
       />
     );
   };
@@ -811,6 +823,18 @@ export default function activate(kernel: Kernel): FoldersApi {
       run: () => docs.newDocument({ path: api.current() ?? readDefaultLocation() }),
     },
     {
+      id: "folders.expandAll",
+      title: "Expand all folders",
+      category: "Folders",
+      run: () => request({ kind: "fold", path: "", expanded: true }),
+    },
+    {
+      id: "folders.collapseAll",
+      title: "Collapse all folders",
+      category: "Folders",
+      run: () => request({ kind: "fold", path: "", expanded: false }),
+    },
+    {
       id: "folders.renameFolder",
       title: "Rename this folder",
       category: "Folders",
@@ -867,6 +891,38 @@ export default function activate(kernel: Kernel): FoldersApi {
           const row = rows.find((candidate) => candidate.id === id);
           request({
             kind: "move",
+            target: {
+              kind: "document",
+              id,
+              title: row?.title ?? stored?.title ?? "this document",
+              path: normalizePath(row?.fm["path"] ?? stored?.fm["path"]),
+            },
+          });
+        })();
+      },
+    },
+    {
+      id: "folders.deleteDocument",
+      title: "Delete this document",
+      category: "Folders",
+      when: () => documentFromRoute(router.current()) !== undefined,
+      run: () => {
+        const id = documentFromRoute(router.current());
+        if (id === undefined) return;
+        // Same refusal as the move above: the route can name an app-maintained document.
+        void (async () => {
+          const stored = await kernel.documents.get(id);
+          if (stored !== undefined && isMachineDocument(stored)) {
+            kernel.ui.notify({
+              id: "folders.machine-document",
+              level: "warning",
+              message: "This document is maintained by the app and cannot be deleted.",
+            });
+            return;
+          }
+          const row = rows.find((candidate) => candidate.id === id);
+          request({
+            kind: "delete-document",
             target: {
               kind: "document",
               id,

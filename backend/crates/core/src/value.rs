@@ -1,8 +1,9 @@
 //! The value model shared by frontmatter, machine sections and the filter DSL.
 //!
-//! Strict YAML subset (SPEC §3.4): block mappings, flow sequences, scalars typed
-//! string / int / float / bool / null. Dates stay [`Value::Str`] at parse time
-//! and are normalized to canonical form at materialization ([`crate::date`]).
+//! Strict YAML subset (SPEC §3.4): block mappings, flow sequences, top-level
+//! frontmatter block sequences, and scalars typed string / int / float / bool /
+//! null. Dates stay [`Value::Str`] at parse time and are normalized to canonical
+//! form at materialization ([`crate::date`]).
 
 use std::collections::BTreeMap;
 

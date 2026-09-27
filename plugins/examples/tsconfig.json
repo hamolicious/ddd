@@ -40,7 +40,8 @@
          the server resolves, exactly as it is for a base plugin. */
       "react": ["../../web/node_modules/@types/react"],
       "react/jsx-runtime": ["../../web/node_modules/@types/react/jsx-runtime"],
-      "yjs": ["../../web/node_modules/yjs"]
+      "yjs": ["../../web/node_modules/yjs"],
+      "vitest": ["../../web/node_modules/vitest"]
     }
   },
   "include": ["*/src/**/*.ts", "*/src/**/*.tsx"],

@@ -55,11 +55,14 @@ export const POINTS = {
   markdownComponent: "markdown.component",
   markdownTaskState: "markdown.taskState",
   markdownAttachment: "markdown.attachment",
+  markdownCodeBlock: "markdown.codeBlock",
   /** `attachments` */
   attachmentViewer: "attachments.viewer",
   /** `slash-commands` */
   textSurface: "text.surface",
   slashCommand: "slash.command",
+  /** `syntax-highlight` */
+  syntaxLanguage: "syntax.language",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -630,6 +633,32 @@ export const markdownAttachmentShape: Shape<MarkdownAttachment> = s.object({
   order: s.optional(s.number()),
 });
 
+/**
+ * The renderer for a fenced code block that no `markdown.fence` claims: ```rust, ```ts,
+ * or a fence with no language at all. **The lowest `order` wins**, and with none
+ * contributed `markdown` draws its own `<pre>`. A `markdown.fence` for the block's
+ * language always goes first — this is the default for code, not an override of fences.
+ */
+export interface MarkdownCodeBlock {
+  readonly id: string;
+  readonly component: ComponentType<MarkdownCodeBlockProps>;
+  readonly order?: number;
+}
+
+export interface MarkdownCodeBlockProps {
+  readonly code: string;
+  /** The info string's first word, as written (`ts`, `Rust`); absent when there is none. */
+  readonly language?: string;
+  readonly meta?: string;
+  readonly documentId?: DocumentId;
+}
+
+export const markdownCodeBlockShape: Shape<MarkdownCodeBlock> = s.object({
+  id: s.string(),
+  component: s.component(),
+  order: s.optional(s.number()),
+});
+
 // ---------------------------------------------------------------------------
 // attachments
 // ---------------------------------------------------------------------------
@@ -770,3 +799,40 @@ export const slashCommandShape: Shape<SlashCommand> = s.object({
   run: s.func(),
 });
 
+
+// ---------------------------------------------------------------------------
+// syntax-highlight
+// ---------------------------------------------------------------------------
+
+/**
+ * A tree-sitter grammar code blocks can be highlighted with. Offered in
+ * Settings → Code languages; nothing is downloaded until the user installs it, and an
+ * installed language is fetched once per device (the service worker keeps it).
+ *
+ * The URLs must be same-origin (the CSP allows nothing else): a plugin serves its
+ * grammars from its own `frontend/` directory and builds them from `import.meta.url`.
+ * The grammar must be built for the ABI of the `web-tree-sitter` that `syntax-highlight`
+ * bundles.
+ */
+export interface SyntaxLanguage {
+  /** Canonical name, lowercase: `rust`, `typescript`. */
+  readonly id: string;
+  /** Display name: `Rust`, `TypeScript`. */
+  readonly name: string;
+  /** Other info strings that mean this language, lowercase: `rs`, `ts`. */
+  readonly aliases?: readonly string[];
+  readonly wasmUrl: string;
+  /** A tree-sitter `highlights.scm` query. */
+  readonly highlightsUrl: string;
+  /** Download size in bytes, shown before installing. */
+  readonly size?: number;
+}
+
+export const syntaxLanguageShape: Shape<SyntaxLanguage> = s.object({
+  id: s.string(),
+  name: s.string(),
+  aliases: s.optional(s.array(s.string())),
+  wasmUrl: s.string(),
+  highlightsUrl: s.string(),
+  size: s.optional(s.number()),
+});

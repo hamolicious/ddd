@@ -9,7 +9,7 @@ pub const MAX_FRONTMATTER_BYTES: usize = 64 * 1024;
 pub const MAX_FRONTMATTER_KEYS: usize = 200;
 /// Maximum nesting depth of maps/sequences inside frontmatter.
 pub const MAX_NESTING_DEPTH: usize = 5;
-/// Maximum items in a flow sequence.
+/// Maximum items in a flow or frontmatter block sequence.
 pub const MAX_ARRAY_ITEMS: usize = 1000;
 /// Maximum byte length of a single string scalar.
 pub const MAX_STRING_VALUE_BYTES: usize = 8 * 1024;

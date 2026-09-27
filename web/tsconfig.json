@@ -62,7 +62,10 @@
          test files `import { describe, it } from "vitest"`, and the same upward
          node resolution that misses `react` above misses `vitest` too, so every
          plugin suite reported TS2307 while running fine under the runner. */
-      "vitest": ["node_modules/vitest"]
+      "vitest": ["node_modules/vitest"],
+      /* Not part of the runtime layer either: a library `syntax-highlight` bundles,
+         named in its manifest's `x-bundle` and resolved from here at build time. */
+      "web-tree-sitter": ["node_modules/web-tree-sitter"]
     }
   },
   "include": [

@@ -51,6 +51,7 @@ pub const BASE_PLUGIN_IDS: &[&str] = &[
     "editor",
     "fm-autocomplete",
     "folders",
+    "graph",
     "header",
     "indexer",
     "markdown",
@@ -61,6 +62,7 @@ pub const BASE_PLUGIN_IDS: &[&str] = &[
     "shell-ui",
     "slash-commands",
     "sync-status",
+    "syntax-highlight",
     "themes",
     "viewer",
     "welcome",
@@ -1746,8 +1748,8 @@ mod tests {
     }
 
     #[test]
-    fn the_base_distribution_is_the_twenty_three_plugins_of_spec_6_5() {
-        assert_eq!(BASE_PLUGIN_IDS.len(), 23);
+    fn the_base_distribution_is_the_twenty_five_plugins_of_spec_6_5() {
+        assert_eq!(BASE_PLUGIN_IDS.len(), 25);
         assert!(BASE_PLUGIN_IDS.windows(2).all(|pair| pair[0] < pair[1]));
     }
 }

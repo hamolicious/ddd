@@ -1,0 +1,203 @@
+{
+  "generated_at": "2026-09-27T22:56:11.632118+00:00",
+  "nodes": {
+    "backend_crates_server_src_domain_attachment": {
+      "code_fingerprint": "59ba0a1c8038e97423fa0d636ad5609c4e2fbe845a8debcf62e828e29b4cfc9d",
+      "label": "Attachment",
+      "last": "2026-09-27T22:06:38.296573+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-27T22:06:38.296573+00:00",
+          "outcome": "useful",
+          "q": "what would it take to import attachments too?"
+        }
+      ],
+      "score": 0.999205193,
+      "source_file": "backend/crates/server/src/domain.rs",
+      "status": "tentative",
+      "uses": 1
+    },
+    "backend_crates_server_src_domain_uploadsession": {
+      "code_fingerprint": "59ba0a1c8038e97423fa0d636ad5609c4e2fbe845a8debcf62e828e29b4cfc9d",
+      "label": "UploadSession",
+      "last": "2026-09-27T22:20:58.629430+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-27T22:20:58.629430+00:00",
+          "outcome": "useful",
+          "q": "do it; keep it clean"
+        }
+      ],
+      "score": 0.999435105,
+      "source_file": "backend/crates/server/src/domain.rs",
+      "status": "tentative",
+      "uses": 1
+    },
+    "plugins_base_attachments_src_uploads_createuploads": {
+      "code_fingerprint": "2a95d566949a994b3b5cc4629413d6317821a8533a5d878686f9b27feb6fe826",
+      "label": "createUploads()",
+      "last": "2026-09-27T22:06:38.296573+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-27T22:06:38.296573+00:00",
+          "outcome": "useful",
+          "q": "what would it take to import attachments too?"
+        }
+      ],
+      "score": 0.999205193,
+      "source_file": "plugins/base/attachments/src/uploads.ts",
+      "status": "tentative",
+      "uses": 1
+    },
+    "plugins_base_attachments_src_uploads_uploads": {
+      "code_fingerprint": "2a95d566949a994b3b5cc4629413d6317821a8533a5d878686f9b27feb6fe826",
+      "label": "Uploads",
+      "last": "2026-09-27T22:20:58.629430+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-27T22:20:58.629430+00:00",
+          "outcome": "useful",
+          "q": "do it; keep it clean"
+        }
+      ],
+      "score": 0.999435105,
+      "source_file": "plugins/base/attachments/src/uploads.ts",
+      "status": "tentative",
+      "uses": 1
+    },
+    "plugins_examples_obsidian_importer_manifest": {
+      "code_fingerprint": "8a61bd01035b0491fca3c33de545f0119097d34a72d1425a59bf18859ed44981",
+      "label": "obsidian-importer/manifest.json",
+      "last": "2026-09-27T22:20:58.629430+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-27T22:20:58.629430+00:00",
+          "outcome": "useful",
+          "q": "do it; keep it clean"
+        }
+      ],
+      "score": 0.999435105,
+      "source_file": "plugins/examples/obsidian-importer/manifest.json",
+      "status": "tentative",
+      "uses": 1
+    },
+    "plugins_examples_obsidian_importer_src_import": {
+      "code_fingerprint": "ed3ced52065619395eea87f40d9276383c34e9b817afae001045ad50d4d1125e",
+      "label": "import.ts",
+      "last": "2026-09-27T22:50:40.466201+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-27T22:50:40.466201+00:00",
+          "outcome": "useful",
+          "q": "okay it imported the attachments but didnt link them"
+        }
+      ],
+      "score": 0.999911444,
+      "source_file": "plugins/examples/obsidian-importer/src/import.ts",
+      "status": "tentative",
+      "uses": 1
+    },
+    "plugins_examples_obsidian_importer_src_links_linktarget": {
+      "code_fingerprint": "e5ea15639c9b737f662d2705215d606b758ddea304b871c0f300b75375aec299",
+      "label": "LinkTarget",
+      "last": "2026-09-27T22:50:40.466201+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-27T22:50:40.466201+00:00",
+          "outcome": "useful",
+          "q": "okay it imported the attachments but didnt link them"
+        }
+      ],
+      "score": 0.999911444,
+      "source_file": "plugins/examples/obsidian-importer/src/links.ts",
+      "status": "tentative",
+      "uses": 1
+    },
+    "plugins_examples_obsidian_importer_src_links_resolver": {
+      "code_fingerprint": "e5ea15639c9b737f662d2705215d606b758ddea304b871c0f300b75375aec299",
+      "label": "Resolver",
+      "last": "2026-09-27T22:50:40.466201+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-27T22:50:40.466201+00:00",
+          "outcome": "useful",
+          "q": "okay it imported the attachments but didnt link them"
+        }
+      ],
+      "score": 0.999911444,
+      "source_file": "plugins/examples/obsidian-importer/src/links.ts",
+      "status": "tentative",
+      "uses": 1
+    },
+    "plugins_examples_obsidian_importer_src_links_rewritewikilinks": {
+      "code_fingerprint": "e5ea15639c9b737f662d2705215d606b758ddea304b871c0f300b75375aec299",
+      "label": "rewriteWikilinks()",
+      "last": "2026-09-27T22:50:40.466201+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-27T22:50:40.466201+00:00",
+          "outcome": "useful",
+          "q": "okay it imported the attachments but didnt link them"
+        }
+      ],
+      "score": 0.999911444,
+      "source_file": "plugins/examples/obsidian-importer/src/links.ts",
+      "status": "tentative",
+      "uses": 1
+    },
+    "plugins_examples_obsidian_importer_src_links_wikilinkrewrite": {
+      "code_fingerprint": "e5ea15639c9b737f662d2705215d606b758ddea304b871c0f300b75375aec299",
+      "label": "WikilinkRewrite",
+      "last": "2026-09-27T22:20:58.629430+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-27T22:20:58.629430+00:00",
+          "outcome": "useful",
+          "q": "do it; keep it clean"
+        }
+      ],
+      "score": 0.999435105,
+      "source_file": "plugins/examples/obsidian-importer/src/links.ts",
+      "status": "tentative",
+      "uses": 1
+    },
+    "plugins_examples_obsidian_importer_src_zip_test_zip": {
+      "code_fingerprint": "cbff203e628f82c5df0d454807b28e1d5b5facb98c460761b04d46a51f80157e",
+      "label": "zip()",
+      "last": "2026-09-27T22:20:58.629430+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-27T22:20:58.629430+00:00",
+          "outcome": "useful",
+          "q": "do it; keep it clean"
+        },
+        {
+          "date": "2026-09-27T22:06:38.296573+00:00",
+          "outcome": "useful",
+          "q": "what would it take to import attachments too?"
+        }
+      ],
+      "score": 1.998640298,
+      "source_file": "plugins/examples/obsidian-importer/src/zip.test.ts",
+      "status": "preferred",
+      "uses": 2
+    },
+    "web_kernel_api_src_session_sessionapi": {
+      "code_fingerprint": "f0bb6bd4083a2531bf24733fb669c1c69a0e20e53769faa2e2004d65993c6814",
+      "label": "SessionApi",
+      "last": "2026-09-27T22:06:38.296573+00:00",
+      "provenance": [
+        {
+          "date": "2026-09-27T22:06:38.296573+00:00",
+          "outcome": "useful",
+          "q": "what would it take to import attachments too?"
+        }
+      ],
+      "score": 0.999205193,
+      "source_file": "web/kernel-api/src/session.ts",
+      "status": "tentative",
+      "uses": 1
+    }
+  },
+  "version": 1
+}

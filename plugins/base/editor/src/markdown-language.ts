@@ -105,7 +105,8 @@ export const markdownLanguage = StreamLanguage.define<MarkdownState>({
       if (fence) {
         state.fence = fence[1] ?? "```";
         // The info string (```ts) names the language the `markdown.fence` point
-        // dispatches on — worth its own colour.
+        // dispatches on — worth its own colour. The body stays one monospace token
+        // here: colouring code is `syntax-highlight`'s `editor.extension`, over this.
         if (!stream.eol()) {
           stream.skipToEnd();
           return "labelName";

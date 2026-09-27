@@ -34,6 +34,7 @@ import {
   markdownComponentShape,
   markdownDirectiveShape,
   markdownFenceShape,
+  markdownCodeBlockShape,
   markdownRemarkShape,
   markdownTaskStateShape,
   type Command,
@@ -44,6 +45,8 @@ import {
   type MarkdownDirective,
   type MarkdownDirectiveProps,
   type MarkdownFence,
+  type MarkdownCodeBlock,
+  type MarkdownCodeBlockProps,
   type MarkdownFenceProps,
   type MarkdownRemark,
   type MarkdownTaskState,
@@ -125,6 +128,12 @@ export default function activate(kernel: Kernel): MarkdownApi {
     key: (fence) => fence.language,
     description: "A renderer for fenced code of one language.",
   });
+  const codeBlocks = kernel.extensions.definePoint<MarkdownCodeBlock>({
+    name: POINTS.markdownCodeBlock,
+    shape: markdownCodeBlockShape,
+    key: (renderer) => renderer.id,
+    description: "What fenced code no `markdown.fence` claims renders as; the lowest order wins.",
+  });
   const remarkPlugins = kernel.extensions.definePoint<MarkdownRemark>({
     name: POINTS.markdownRemark,
     shape: markdownRemarkShape,
@@ -197,7 +206,7 @@ export default function activate(kernel: Kernel): MarkdownApi {
     renderRevision += 1;
     announce();
   });
-  for (const point of [directives, fences, components, taskStates, attachmentRenderers]) {
+  for (const point of [directives, fences, codeBlocks, components, taskStates, attachmentRenderers]) {
     point.subscribe(() => {
       renderRevision += 1;
       announce();
@@ -266,9 +275,20 @@ export default function activate(kernel: Kernel): MarkdownApi {
         })
       : undefined;
 
+    const codeWinner = [...codeBlocks.entries()].sort(
+      (a, b) => (a.value.order ?? 100) - (b.value.order ?? 100),
+    )[0];
+    const codeBlock: ComponentType<MarkdownCodeBlockProps> | undefined = codeWinner
+      ? kernel.ui.boundary(codeWinner.value.component, {
+          point: POINTS.markdownCodeBlock,
+          pluginId: codeWinner.pluginId,
+        })
+      : undefined;
+
     registries = {
       directives: directiveMap,
       fences: fenceMap,
+      codeBlock,
       overrides: overrideMap,
       tasks: buildTaskRegistry(taskStates.get()),
       attachment,

@@ -456,6 +456,9 @@ test("deleting a folder moves its documents to the parent, by splice", async ({
   const confirm = page.getByRole("dialog");
   await expect(confirm).toBeVisible();
   await confirm.getByRole("menuitem", { name: `Move them to ${parent}` }).click();
+  // Then the "are you sure?", which says where they are going.
+  await expect(page.getByRole("dialog")).toContainText(`move to ${parent}`);
+  await page.getByRole("dialog").getByRole("button", { name: "Delete folder" }).click();
   await waitSynced(page);
 
   // One splice: the path is the parent's, the rest of the file is untouched.
@@ -487,6 +490,7 @@ test("deleting a folder can send its documents to Trash instead", async ({
   await page.getByRole("button", { name: `Actions for ${folder}` }).click();
   await page.getByRole("dialog").getByRole("menuitem", { name: "Delete folder" }).click();
   await page.getByRole("dialog").getByRole("menuitem", { name: "Move them to Trash" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Move to Trash" }).click();
   await waitSynced(page);
 
   // A tombstone, not a purge (SPEC §3.5 — the id stays forever, and `GET
@@ -508,6 +512,79 @@ test("deleting a folder can send its documents to Trash instead", async ({
     .poll(async () => await rawText(request, base, id), { timeout: 20_000 })
     .toContain(`path: ${folder}`);
   expect(await rawText(request, base, id)).toBe(fixture(title, folder));
+});
+
+test("a document can be deleted from the tree, after a confirm", async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const base = baseURL as string;
+  const folder = unique("binned");
+  const title = unique("Unwanted note");
+  await createDocument(request, base, fixture(title, folder));
+
+  await signIn(page, ADMIN);
+  refuseNativeDialogs(page);
+  await openTree(page);
+  const leaf = page.locator(".folders-node-leaf", { hasText: title }).first();
+  await expect(leaf).toBeVisible();
+
+  await leaf.hover();
+  await leaf.getByRole("button", { name: "Document actions" }).click();
+  await page.getByRole("dialog").getByRole("menuitem", { name: "Delete" }).click();
+
+  // Cancel first: nothing happens.
+  await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
+  await expect(leaf).toBeVisible();
+
+  await leaf.hover();
+  await leaf.getByRole("button", { name: "Document actions" }).click();
+  await page.getByRole("dialog").getByRole("menuitem", { name: "Delete" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Move to Trash" }).click();
+  await waitSynced(page);
+
+  await expect(page.locator(".folders-node-leaf", { hasText: title })).toHaveCount(0);
+  await page.goto("/#/trash");
+  await expect(page.locator(".doclist-item").filter({ hasText: title })).toHaveCount(1);
+});
+
+test("a folder folds and unfolds recursively: alt-click, the menu, and Shift+arrows", async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const base = baseURL as string;
+  const top = unique("deep");
+  await createDocument(request, base, fixture("Deep leaf", `${top}/mid/low`));
+
+  await signIn(page, ADMIN);
+  await openTree(page);
+  const panel = tree(page);
+  await expect(folderRow(page, top)).toBeVisible();
+
+  // Collapse all inside, then open only the top: its descendants stay folded.
+  await folderRow(page, top).hover();
+  await page.getByRole("button", { name: `Actions for ${top}` }).click();
+  await page.getByRole("dialog").getByRole("menuitem", { name: "Collapse all inside" }).click();
+  await expect(folderRow(page, "mid")).toHaveCount(0);
+  await panel.getByRole("button", { name: `Expand ${top}` }).click();
+  await expect(folderRow(page, "mid")).toBeVisible();
+  await expect(folderRow(page, "low")).toHaveCount(0);
+
+  // Alt-click on the twisty opens the whole subtree.
+  await panel.getByRole("button", { name: `Collapse ${top}` }).click();
+  await panel.getByRole("button", { name: `Expand ${top}` }).click({ modifiers: ["Alt"] });
+  await expect(folderRow(page, "low")).toBeVisible();
+
+  // And Shift+ArrowLeft on the active row folds it all again.
+  await folderRow(page, top).click();
+  await panel.focus();
+  await page.keyboard.press("Shift+ArrowLeft");
+  await expect(folderRow(page, "mid")).toHaveCount(0);
+  await page.keyboard.press("ArrowRight");
+  await expect(folderRow(page, "mid")).toBeVisible();
+  await expect(folderRow(page, "low")).toHaveCount(0);
 });
 
 // ---------------------------------------------------------------------------

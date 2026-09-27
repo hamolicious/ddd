@@ -14,7 +14,16 @@
  */
 
 export interface UploadResponse {
-  readonly attachment: { readonly id: string; readonly name: string };
+  readonly attachment: {
+    readonly id: string;
+    readonly name: string;
+    readonly mime: string;
+    readonly size: number;
+    readonly sha256: string;
+    readonly revision: number;
+  };
+  readonly reference: string;
+  readonly document_id?: string;
 }
 
 interface Session {
@@ -30,8 +39,12 @@ export interface SendOptions {
   /** The upload to carry on with, if one was opened before. */
   readonly uploadId?: string;
   readonly signal: AbortSignal;
+  /** Ask the server to create the ordinary document that represents this file. */
+  readonly wrapper?: boolean;
+  /** `fm.path` for that wrapper document. Ignored when `wrapper` is false. */
+  readonly path?: string;
   /** A new upload was opened on the server: keep its id, so a later attempt resumes it. */
-  readonly onSession: (uploadId: string) => void;
+  readonly onSession: (uploadId: string) => void | Promise<void>;
   /** The server has `sent` bytes. */
   readonly onProgress: (sent: number) => void;
 }
@@ -48,9 +61,9 @@ export async function sendInChunks(fetch: Fetch, blob: Blob, name: string, optio
     const session = await call<Session>("/uploads", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name, size: blob.size }),
+      body: JSON.stringify({ name, size: blob.size, wrapper: options.wrapper ?? false, path: options.path }),
     });
-    options.onSession(session.id);
+    await options.onSession(session.id);
     return session;
   };
   const where = (id: string): Promise<Session> => call<Session>(`/uploads/${encodeURIComponent(id)}`);
@@ -111,6 +124,36 @@ export async function sendInChunks(fetch: Fetch, blob: Blob, name: string, optio
     const fresh = await open();
     return { session: fresh, offset: fresh.offset };
   }
+}
+
+/** Public service returned by the `attachments` plugin to declared dependents. */
+export interface AttachmentsApi {
+  /** Upload one file through the server's resumable chunk protocol. */
+  upload(blob: Blob, name: string, options?: UploadOptions): Promise<UploadResponse>;
+}
+
+export interface UploadOptions {
+  readonly uploadId?: string;
+  readonly signal?: AbortSignal;
+  readonly wrapper?: boolean;
+  readonly path?: string;
+  readonly onSession?: (uploadId: string) => void | Promise<void>;
+  readonly onProgress?: (sent: number) => void;
+}
+
+/** Bind the generic attachment service to the authenticated kernel fetch. */
+export function createAttachmentsApi(fetch: Fetch): AttachmentsApi {
+  return {
+    upload: (blob, name, options = {}) =>
+      sendInChunks(fetch, blob, name, {
+        uploadId: options.uploadId,
+        signal: options.signal ?? new AbortController().signal,
+        wrapper: options.wrapper,
+        path: options.path,
+        onSession: options.onSession ?? (() => undefined),
+        onProgress: options.onProgress ?? (() => undefined),
+      }),
+  };
 }
 
 /** Cancel an upload on the server. Best effort: one left behind is swept after a day. */

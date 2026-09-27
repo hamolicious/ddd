@@ -24,6 +24,7 @@
   },
   "x-defines": [
     "markdown.attachment",
+    "markdown.codeBlock",
     "markdown.component",
     "markdown.directive",
     "markdown.fence",

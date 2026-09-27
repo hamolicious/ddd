@@ -50,6 +50,7 @@ export default function activate(kernel: Kernel): IndexerApi {
     stats: (scope) => index.stats(scope),
     fmFields: (scope) => index.fmFields(scope),
     fmValues: (key, scope) => index.fmValues(key, scope),
+    documents: (scope) => index.documents(scope),
     connections: (id) => index.connections(id),
     subscribe(listener) {
       listeners.add(listener);

@@ -56,10 +56,11 @@ import {
 import { extensionOf, pasteAs, schema, settingKey } from "./kinds.js";
 import { newToken, waitingPlaceholder, type WaitingUpload } from "./queue.js";
 import { createUploads } from "./uploads.js";
+import { createAttachmentsApi, type AttachmentsApi } from "./uploader.js";
 import { FileTypeSettings } from "./FileTypeSettings.js";
 import { createAttachmentView, createViewers } from "./view.js";
 
-export default function activate(kernel: Kernel): void {
+export default function activate(kernel: Kernel): AttachmentsApi {
   try {
     kernel.settings.defineSchema(schema());
   } catch (error) {
@@ -176,4 +177,6 @@ export default function activate(kernel: Kernel): void {
     description: "How each file type is pasted, and which viewer shows it.",
     component: () => <FileTypeSettings kernel={kernel} viewers={viewers} />,
   });
+
+  return createAttachmentsApi(kernel.session.fetch.bind(kernel.session));
 }

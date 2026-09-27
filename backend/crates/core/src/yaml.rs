@@ -1,20 +1,20 @@
 //! The strict-subset YAML line machinery shared by [`crate::frontmatter`] and
 //! [`crate::sections`] (SPEC §3.4).
 //!
-//! **Per-line and stateless.** Every line is parsed on its own: no indentation
-//! state, no continuation, no look-behind. A line is either a top-level
-//! `key: value` pair, a blank/comment line, or malformed — and a malformed line
-//! is dropped and recorded, never fatal. That is what guarantees a mid-edit
-//! broken quote can never make client and server disagree.
+//! Values are normally parsed one physical line at a time. Frontmatter additionally
+//! accepts one deliberately narrow continuation form: an empty top-level key followed
+//! by an indented block sequence. Each item is still parsed independently, so a broken
+//! item is dropped without changing how any later top-level line is interpreted.
 //!
 //! Consequences, deliberate and documented in `README.md`:
-//! - Nesting comes from *flow* collections (`{…}` / `[…]`), never from
-//!   indentation. Indented lines are malformed.
-//! - Block sequences (`- item`) are outside the subset; those lines are dropped.
+//! - Nested mappings still come from *flow* collections (`{…}` / `[…]`), never
+//!   from indentation.
+//! - Block sequences are supported only as a top-level frontmatter value. Machine
+//!   sections remain one key per line.
 
 use crate::date::Date;
 use crate::diagnostics::{Diagnostic, DiagnosticKind};
-use crate::limits::is_valid_key;
+use crate::limits::{MAX_ARRAY_ITEMS, is_valid_key};
 use crate::value::{Map, Value, ValueReject, parse_value, split_key, unquote_key};
 
 /// One physical line of a document, with byte offsets into the source text.
@@ -206,12 +206,47 @@ pub(crate) struct BlockParse {
 /// `first_line` is the 1-based document line number of `inner`'s first line so
 /// diagnostics carry document coordinates. `max_keys` is the applicable cap.
 pub(crate) fn parse_block_lines(inner: &str, first_line: u32, max_keys: usize) -> BlockParse {
+    parse_lines(inner, first_line, max_keys, false)
+}
+
+/// Parse frontmatter, including top-level indented block sequences.
+pub(crate) fn parse_frontmatter_lines(inner: &str, first_line: u32, max_keys: usize) -> BlockParse {
+    parse_lines(inner, first_line, max_keys, true)
+}
+
+fn parse_lines(
+    inner: &str,
+    first_line: u32,
+    max_keys: usize,
+    allow_block_sequences: bool,
+) -> BlockParse {
     let mut map = Map::new();
     let mut diagnostics = Vec::new();
     let mut had_error = false;
-    for line in lines(inner) {
+    let source = lines(inner);
+    let mut cursor = 0usize;
+    while cursor < source.len() {
+        let line = source[cursor];
         let number = first_line.saturating_add(u32::try_from(line.index).unwrap_or(u32::MAX));
-        match parse_line(line.content) {
+        let mut consumed = 1usize;
+        let mut outcome = parse_line(line.content);
+        if allow_block_sequences
+            && empty_value_key(line.content).is_some()
+            && let LineOutcome::Pair { key, .. } = &outcome
+        {
+            let (items, used, mut item_diagnostics) =
+                block_sequence(&source, cursor + 1, first_line);
+            if used > 0 {
+                had_error |= !item_diagnostics.is_empty();
+                diagnostics.append(&mut item_diagnostics);
+                consumed += used;
+                outcome = LineOutcome::Pair {
+                    key: key.clone(),
+                    value: Value::List(items),
+                };
+            }
+        }
+        match outcome {
             LineOutcome::Skip => {}
             LineOutcome::Reject { kind, key, message } => {
                 had_error = true;
@@ -227,6 +262,7 @@ pub(crate) fn parse_block_lines(inner: &str, first_line: u32, max_keys: usize) -
                         Some(key),
                         "key count cap reached; remaining keys dropped",
                     ));
+                    cursor += consumed;
                     continue;
                 }
                 if known {
@@ -241,11 +277,127 @@ pub(crate) fn parse_block_lines(inner: &str, first_line: u32, max_keys: usize) -
                 map.insert(key, value);
             }
         }
+        cursor += consumed;
     }
     BlockParse {
         map,
         diagnostics,
         had_error,
+    }
+}
+
+/// A valid top-level key whose value is physically empty (`key:`). Comments after
+/// the colon are intentionally not continuation syntax: preserving them while a
+/// multi-line value is replaced would be ambiguous.
+fn empty_value_key(content: &str) -> Option<String> {
+    if content.starts_with([' ', '\t']) {
+        return None;
+    }
+    let (raw_key, raw_value) = split_key(content.trim())?;
+    if !raw_value.trim().is_empty() {
+        return None;
+    }
+    let key = unquote_key(raw_key);
+    is_valid_key(&key).then_some(key)
+}
+
+/// Collect consecutive indented `- value` lines after an empty top-level key.
+/// Returns `(parsed items, physical lines consumed, diagnostics)`.
+fn block_sequence(
+    source: &[Line<'_>],
+    start: usize,
+    first_line: u32,
+) -> (Vec<Value>, usize, Vec<Diagnostic>) {
+    let Some(first) = source.get(start) else {
+        return (Vec::new(), 0, Vec::new());
+    };
+    let Some((indent, _)) = block_item(first.content) else {
+        return (Vec::new(), 0, Vec::new());
+    };
+    let mut items = Vec::new();
+    let mut diagnostics = Vec::new();
+    let mut used = 0usize;
+    for line in &source[start..] {
+        let Some((item_indent, raw)) = block_item(line.content) else {
+            break;
+        };
+        if item_indent != indent {
+            break;
+        }
+        used += 1;
+        let number = first_line.saturating_add(u32::try_from(line.index).unwrap_or(u32::MAX));
+        if used > MAX_ARRAY_ITEMS {
+            diagnostics.push(Diagnostic::new(
+                DiagnosticKind::LimitExceeded,
+                number,
+                None,
+                "block sequence exceeds the item cap; remaining items dropped",
+            ));
+            continue;
+        }
+        match parse_value(raw, 2) {
+            Ok(value) => items.push(value),
+            Err(reject) => {
+                let (kind, message) = reject_detail(reject);
+                diagnostics.push(Diagnostic::new(kind, number, None, message));
+            }
+        }
+    }
+    (items, used, diagnostics)
+}
+
+/// An indented block-sequence item. Indentationless YAML sequences stay unsupported:
+/// requiring indentation keeps a stray top-level `- item` from attaching to the key
+/// above it after a mid-edit deletion.
+fn block_item(content: &str) -> Option<(usize, &str)> {
+    let indent = content.len() - content.trim_start_matches([' ', '\t']).len();
+    if indent == 0 {
+        return None;
+    }
+    let rest = &content[indent..];
+    if rest == "-" {
+        return Some((indent, ""));
+    }
+    rest.strip_prefix("- ").map(|value| (indent, value))
+}
+
+/// Last line in the expanded value owned by the top-level key at `header`, if any.
+pub(crate) fn expanded_value_end<'s, 't>(
+    source: &'s [Line<'t>],
+    header: usize,
+) -> Option<&'s Line<'t>> {
+    empty_value_key(source.get(header)?.content)?;
+    let first = source.get(header + 1)?;
+    let (indent, _) = block_item(first.content)?;
+    let mut last = first;
+    for line in &source[header + 2..] {
+        let Some((item_indent, _)) = block_item(line.content) else {
+            break;
+        };
+        if item_indent != indent {
+            break;
+        }
+        last = line;
+    }
+    Some(last)
+}
+
+fn reject_detail(reject: ValueReject) -> (DiagnosticKind, &'static str) {
+    match reject {
+        ValueReject::Depth => (
+            DiagnosticKind::LimitExceeded,
+            "value nesting exceeds the depth cap",
+        ),
+        ValueReject::ArrayItems => (
+            DiagnosticKind::LimitExceeded,
+            "flow collection exceeds the item cap",
+        ),
+        ValueReject::StringBytes => (
+            DiagnosticKind::LimitExceeded,
+            "string value exceeds the length cap",
+        ),
+        ValueReject::Unsupported(message) => (DiagnosticKind::UnsupportedFeature, message),
+        ValueReject::Malformed(message) => (DiagnosticKind::InvalidValue, message),
     }
 }
 
@@ -321,12 +473,50 @@ mod tests {
     }
 
     #[test]
-    fn block_sequences_and_indentation_are_dropped() {
+    fn machine_block_sequences_and_indentation_are_dropped() {
         let parsed = parse_block_lines("tags:\n  - a\n  - b\nok: 1\n", 1, 200);
         assert!(parsed.had_error);
         assert_eq!(parsed.map.get("tags"), Some(&Value::Null));
         assert_eq!(parsed.map.get("ok"), Some(&Value::Int(1)));
         assert_eq!(parsed.diagnostics.len(), 2);
+    }
+
+    #[test]
+    fn frontmatter_block_sequences_are_materialized() {
+        let parsed = parse_frontmatter_lines(
+            "tags:\n  - work\n  - home\nrefs:\n\t- \"[[work]]\"\nok: 1\n",
+            1,
+            200,
+        );
+        assert!(!parsed.had_error);
+        assert_eq!(
+            parsed.map.get("tags"),
+            Some(&Value::List(vec![
+                Value::Str("work".into()),
+                Value::Str("home".into()),
+            ]))
+        );
+        assert_eq!(
+            parsed.map.get("refs"),
+            Some(&Value::List(vec![Value::Str("[[work]]".into())]))
+        );
+    }
+
+    #[test]
+    fn one_bad_block_item_does_not_drop_the_rest() {
+        let parsed =
+            parse_frontmatter_lines("tags:\n  - good\n  - [broken\n  - last\nok: 1\n", 1, 200);
+        assert!(parsed.had_error);
+        assert_eq!(
+            parsed.map.get("tags"),
+            Some(&Value::List(vec![
+                Value::Str("good".into()),
+                Value::Str("last".into()),
+            ]))
+        );
+        assert_eq!(parsed.map.get("ok"), Some(&Value::Int(1)));
+        assert_eq!(parsed.diagnostics.len(), 1);
+        assert_eq!(parsed.diagnostics[0].line, 3);
     }
 
     #[test]

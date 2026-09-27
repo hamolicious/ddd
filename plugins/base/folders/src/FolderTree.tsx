@@ -31,8 +31,9 @@
  *
  * **Keyboard-operable, as a real tree.** `role="tree"` with one tab stop and
  * `aria-activedescendant`: Arrow keys move and expand, `Home`/`End` jump, `Enter` opens
- * (a folder filters the list to it, a document opens it), `F2` renames, `M` moves,
- * `Delete` deletes a folder. The active row's actions are the one thing Tab may enter.
+ * (a folder filters the list to it, a document opens it), `Shift+→`/`Shift+←` expand or
+ * collapse a folder and everything inside it, `F2` renames, `M` moves,
+ * `Delete` deletes the active folder or document. The active row's actions are the one thing Tab may enter.
  *
  * **No `window.prompt` anywhere.** Renaming is an inline field in the row it renames;
  * `POLISH-BACKLOG.md` §4 has the three reasons, of which the first is that the Flutter
@@ -67,7 +68,7 @@ import {
   reparentTarget,
   type PathRow,
 } from "./path.js";
-import type { ContextMenuApi, MenuItem } from "../../_shared/context-menu-api.js";
+import type { ConfirmRequest, ContextMenuApi, MenuItem } from "../../_shared/context-menu-api.js";
 
 import { MovePicker } from "./MovePicker.js";
 import { placeAmong, pruneOrder, withSiblings } from "./order.js";
@@ -129,6 +130,12 @@ export type TreeRequest =
   | { readonly kind: "create-folder"; readonly parent: string }
   | { readonly kind: "rename-folder"; readonly path: string }
   | { readonly kind: "delete-folder"; readonly path: string }
+  /** Expand or collapse a folder and every folder inside it; `""` is the whole tree. */
+  | { readonly kind: "fold"; readonly path: string; readonly expanded: boolean }
+  | {
+      readonly kind: "delete-document";
+      readonly target: Extract<TreeTarget, { kind: "document" }>;
+    }
   | { readonly kind: "move"; readonly target: TreeTarget };
 
 /** What a sheet, a drag or a key is acting on. */
@@ -182,10 +189,18 @@ export interface FolderTreeProps {
     mode: "parent" | "trash",
     options?: MoveProgress,
   ) => Promise<number>;
+  /** Tombstone one document (SPEC §3.5): restorable from Trash. */
+  readonly onDeleteDocument: (documentId: string) => Promise<void>;
   readonly onNewDocumentHere: (folder: string) => void;
   /** Show the documents in a folder (`""` = the root view). */
   readonly onSelectFolder: (folder: string) => void;
   readonly onOpenDocument: (documentId: string) => void;
+  /**
+   * The document open in the main view, however it was opened — a link, the graph, the
+   * palette. The tree expands its folders, makes it the active row and scrolls it into
+   * view, once each time it changes.
+   */
+  readonly openDocument?: string;
 }
 
 type SheetState =
@@ -195,7 +210,18 @@ type SheetState =
       readonly kind: "delete";
       readonly path: string;
       readonly documents: number;
-    };
+    }
+  /** The "are you sure?" every delete ends in, whatever was chosen before it. */
+  | { readonly kind: "confirm"; readonly action: DeleteAction };
+
+type DeleteAction =
+  | {
+      readonly kind: "folder";
+      readonly path: string;
+      readonly mode: "parent" | "trash";
+      readonly documents: number;
+    }
+  | { readonly kind: "document"; readonly id: string; readonly title: string };
 
 type EditState =
   | { readonly kind: "rename"; readonly path: string }
@@ -222,13 +248,21 @@ export function FolderTree({
   onMoveFolder,
   onCreateFolder,
   onDeleteFolder,
+  onDeleteDocument,
   onNewDocumentHere,
   onSelectFolder,
   onOpenDocument,
+  openDocument,
 }: FolderTreeProps): ReactElement {
   const tree = useMemo(
-    () => buildFileTree(rows, { extraFolders: emptyFolders, collapsed, order }),
-    [collapsed, emptyFolders, order, rows],
+    () =>
+      buildFileTree(rows, {
+        extraFolders: emptyFolders,
+        collapsed,
+        order,
+        ...(openDocument !== undefined ? { reveal: openDocument } : {}),
+      }),
+    [collapsed, emptyFolders, openDocument, order, rows],
   );
   const visible = tree.rows;
 
@@ -256,13 +290,44 @@ export function FolderTree({
   /** A long-press already acted; the click that follows it must not act again. */
   const pressHandled = useRef(false);
 
+  // Reveal the open document: once per document, as soon as its row has arrived (on a cold
+  // start the tree can be drawn before the projection has it).
+  const revealed = useRef<string | undefined>(undefined);
+  const scrollPending = useRef(false);
+  useEffect(() => {
+    if (openDocument === undefined || revealed.current === openDocument) return;
+    const row = rows.find((candidate) => candidate.id === openDocument);
+    if (!row) return;
+    revealed.current = openDocument;
+    const folder = normalizePath(row.fm["path"]);
+    const closed = folder === "" ? [] : [...ancestorsOf(folder), folder].filter((path) => collapsed.has(path));
+    if (closed.length > 0) {
+      const next = new Set(collapsed);
+      for (const path of closed) next.delete(path);
+      onCollapsedChange(next);
+    }
+    setActive(`d:${openDocument}`);
+    scrollPending.current = true;
+  }, [collapsed, onCollapsedChange, openDocument, rows]);
+
+  const treeElement = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!scrollPending.current || active !== `d:${openDocument}`) return;
+    const element = treeElement.current?.querySelector('[role="treeitem"][aria-selected="true"]');
+    if (!element) return;
+    scrollPending.current = false;
+    element.scrollIntoView({ block: "nearest" });
+  });
+
   // An active row that just disappeared (its folder collapsed, its document moved) would
   // leave `aria-activedescendant` pointing at nothing.
   useEffect(() => {
+    // …except the open document on its way in: its folders are opening this same moment.
+    if (scrollPending.current && active === `d:${openDocument}`) return;
     if (active !== undefined && !visible.some((row) => row.key === active)) {
       setActive(visible[0]?.key);
     }
-  }, [active, visible]);
+  }, [active, openDocument, visible]);
 
   useEffect(
     () => () => {
@@ -284,6 +349,24 @@ export function FolderTree({
       onCollapsedChange(updated);
     },
     [collapsed, onCollapsedChange],
+  );
+
+  /**
+   * Expand or collapse `path` and every folder below it (`""`: all of them). Collapsing
+   * the descendants too is the point: opening the folder again later shows them folded.
+   */
+  const setExpandedDeep = useCallback(
+    (path: string, next: boolean) => {
+      const root = normalizePath(path);
+      const updated = new Set(collapsed);
+      for (const folder of tree.folders) {
+        if (root !== "" && folder !== root && !folder.startsWith(`${root}/`)) continue;
+        if (next) updated.delete(folder);
+        else updated.add(folder);
+      }
+      onCollapsedChange(updated);
+    },
+    [collapsed, onCollapsedChange, tree.folders],
   );
 
   /** Open everything between root and `path`, so a folder just created or moved shows. */
@@ -399,17 +482,37 @@ export function FolderTree({
     [onDeleteFolder, onProgress, run],
   );
 
-  /** Deleting an empty folder asks nothing: nothing but a settings line goes away. */
+  const deleteDocument = useCallback(
+    (id: string) => {
+      setSheet(undefined);
+      run(() => onDeleteDocument(id));
+    },
+    [onDeleteDocument, run],
+  );
+
+  /**
+   * A folder with documents in it first asks where they go; every delete then ends in a
+   * confirm. An empty folder skips the first question — there is nothing to place.
+   */
   const startDelete = useCallback(
     (path: string) => {
       const documents = documentsUnder(rows, path).length;
       if (documents === 0) {
-        deleteFolder(path, "parent");
+        setSheet({ kind: "confirm", action: { kind: "folder", path, mode: "parent", documents } });
         return;
       }
       setSheet({ kind: "delete", path, documents });
     },
-    [deleteFolder, rows],
+    [rows],
+  );
+
+  const startDeleteDocument = useCallback(
+    (target: Extract<TreeTarget, { kind: "document" }>) =>
+      setSheet({
+        kind: "confirm",
+        action: { kind: "document", id: target.id, title: target.title },
+      }),
+    [],
   );
 
   // A command, a keybinding, or anything else outside this panel.
@@ -427,13 +530,19 @@ export function FolderTree({
         case "delete-folder":
           startDelete(request.path);
           return;
+        case "fold":
+          setExpandedDeep(request.path, request.expanded);
+          return;
+        case "delete-document":
+          startDeleteDocument(request.target);
+          return;
         case "move":
           setSheet({ kind: "move", target: request.target });
           return;
         default:
       }
     });
-  }, [requests, revealFolder, startDelete]);
+  }, [requests, revealFolder, setExpandedDeep, startDelete, startDeleteDocument]);
 
   // ---------------------------------------------------------------------------
   // Drag and drop
@@ -753,7 +862,10 @@ export function FolderTree({
           move(visible.length - 1);
           return;
         case "ArrowRight":
-          if (row?.kind === "folder" && row.expandable && !row.expanded) {
+          if (event.shiftKey && row?.kind === "folder" && row.expandable) {
+            event.preventDefault();
+            setExpandedDeep(row.path, true);
+          } else if (row?.kind === "folder" && row.expandable && !row.expanded) {
             event.preventDefault();
             setExpanded(row.path, true);
           } else if (row?.kind === "folder" && row.expandable) {
@@ -763,6 +875,10 @@ export function FolderTree({
         case "ArrowLeft": {
           if (!row) return;
           event.preventDefault();
+          if (event.shiftKey && row.kind === "folder" && row.expandable) {
+            setExpandedDeep(row.path, false);
+            return;
+          }
           if (row.kind === "folder" && row.expandable && row.expanded) {
             setExpanded(row.path, false);
             return;
@@ -789,12 +905,17 @@ export function FolderTree({
             setEdit({ kind: "rename", path: row.path });
           }
           return;
-        case "Delete":
-          if (row?.kind === "folder") {
+        case "Delete": {
+          const target = targetOf(row);
+          if (target?.kind === "folder") {
             event.preventDefault();
-            startDelete(row.path);
+            startDelete(target.path);
+          } else if (target?.kind === "document") {
+            event.preventDefault();
+            startDeleteDocument(target);
           }
           return;
+        }
         case "m":
         case "M": {
           // The keyboard half of a drag. Named in the hint, because a shortcut nobody
@@ -815,7 +936,9 @@ export function FolderTree({
       onOpenDocument,
       onSelectFolder,
       setExpanded,
+      setExpandedDeep,
       startDelete,
+      startDeleteDocument,
       targetOf,
       visible,
     ],
@@ -1000,7 +1123,7 @@ export function FolderTree({
                * app by accessible name.
                */
               aria-label="Document actions"
-              title={`Move ${row.title}`}
+              title={`Move or delete ${row.title}`}
               onClick={(event) => {
                 event.stopPropagation();
                 openActions(target, event.currentTarget);
@@ -1080,9 +1203,12 @@ export function FolderTree({
             aria-label={
               row.expanded ? `Collapse ${row.name}` : `Expand ${row.name}`
             }
+            title="Alt-click to include every folder inside"
             onClick={(event) => {
               event.stopPropagation();
-              setExpanded(row.path, !row.expanded);
+              // Alt (Option) or Shift: the folder and everything under it, as in VS Code.
+              if (event.altKey || event.shiftKey) setExpandedDeep(row.path, !row.expanded);
+              else setExpanded(row.path, !row.expanded);
             }}
           >
             {row.expanded ? "▾" : "▸"}
@@ -1215,20 +1341,43 @@ export function FolderTree({
                 id: "parent",
                 label: parent === "" ? "Move them to Root" : `Move them to ${parent}`,
                 hint: "One path splice per document; nothing is deleted.",
-                run: () => deleteFolder(sheet.path, "parent"),
+                run: () =>
+                  setSheet({
+                    kind: "confirm",
+                    action: { kind: "folder", path: sheet.path, mode: "parent", documents: sheet.documents },
+                  }),
               },
               {
                 id: "trash",
                 label: "Move them to Trash",
                 hint: "Restorable for 30 days, like any deleted document.",
                 danger: true,
-                run: () => deleteFolder(sheet.path, "trash"),
+                run: () =>
+                  setSheet({
+                    kind: "confirm",
+                    action: { kind: "folder", path: sheet.path, mode: "trash", documents: sheet.documents },
+                  }),
               },
             ],
           },
         ],
       });
       return;
+    }
+
+    if (sheet.kind === "confirm") {
+      const action = sheet.action;
+      let live = true;
+      void menu.confirm(confirmRequest(action)).then((confirmed) => {
+        if (!live) return;
+        setSheet(undefined);
+        if (!confirmed) return;
+        if (action.kind === "document") deleteDocument(action.id);
+        else deleteFolder(action.path, action.mode);
+      });
+      return () => {
+        live = false;
+      };
     }
 
     const target = sheet.target;
@@ -1250,6 +1399,16 @@ export function FolderTree({
               },
             },
             {
+              id: "expand-all",
+              label: "Expand all inside",
+              run: () => setExpandedDeep(target.path, true),
+            },
+            {
+              id: "collapse-all",
+              label: "Collapse all inside",
+              run: () => setExpandedDeep(target.path, false),
+            },
+            {
               id: "rename",
               label: "Rename",
               run: () => setEdit({ kind: "rename", path: target.path }),
@@ -1269,6 +1428,13 @@ export function FolderTree({
               label: "Move to…",
               hint: target.path === "" ? "Currently at root" : `Currently in ${target.path}`,
               run: () => setSheet({ kind: "move", target }),
+            },
+            {
+              id: "delete",
+              label: "Delete",
+              hint: "Restorable from Trash for 30 days.",
+              danger: true,
+              run: () => startDeleteDocument(target),
             },
           ];
     menu.open({
@@ -1335,6 +1501,7 @@ export function FolderTree({
       ) : (
         <div
           className={`folders-tree folders:flex folders:min-h-[calc(var(--lm-tap-target)*1.5)] folders:flex-col folders:pb-3 folders:[--folders-indent:calc(var(--lm-space)*1.5)] folders:[--folders-indent-cap:6] folders:focus-visible:outline-2 folders:focus-visible:outline-offset-[-2px] folders:focus-visible:outline-focus folders:compact:[--folders-indent:calc(var(--lm-space)*0.75)] folders:compact:[--folders-indent-cap:4] ${intoFolder === "" ? " folders-tree-root-drop folders:rounded folders:outline-2 folders:outline-dashed folders:outline-accent folders:outline-offset-[-2px]" : ""}`}
+          ref={treeElement}
           role="tree"
           // Blank space in the tree is root, the way it is in every file manager.
           data-drop-kind="root"
@@ -1383,6 +1550,43 @@ export function FolderTree({
       {lift ? <Lifted lift={lift} /> : null}
     </div>
   );
+}
+
+const plural = (count: number): string => `${count} document${count === 1 ? "" : "s"}`;
+
+/** The last question before a delete goes through. */
+function confirmRequest(action: DeleteAction): ConfirmRequest {
+  if (action.kind === "document") {
+    return {
+      title: `Delete “${action.title}”?`,
+      description: "It goes to Trash, where it can be restored for 30 days.",
+      confirmLabel: "Move to Trash",
+      danger: true,
+    };
+  }
+  if (action.documents === 0) {
+    return {
+      title: `Delete “${action.path}”?`,
+      description: "The folder is empty; nothing else changes.",
+      confirmLabel: "Delete folder",
+      danger: true,
+    };
+  }
+  if (action.mode === "trash") {
+    return {
+      title: `Delete “${action.path}” and its ${plural(action.documents)}?`,
+      description: "They go to Trash, where they can be restored for 30 days.",
+      confirmLabel: "Move to Trash",
+      danger: true,
+    };
+  }
+  const parent = parentOf(action.path);
+  return {
+    title: `Delete “${action.path}”?`,
+    description: `Its ${plural(action.documents)} move to ${parent === "" ? "Root" : parent}.`,
+    confirmLabel: "Delete folder",
+    danger: true,
+  };
 }
 
 /**

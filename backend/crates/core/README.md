@@ -40,9 +40,10 @@ Three properties every function here holds to:
   errors; it drops the offending line and records a `Diagnostic`.
 - **Deterministic.** The same bytes give the same result on both sides, always.
   No locale, no clock, no hashing that varies by target.
-- **Stateless per line.** Frontmatter and `%%%` bodies are parsed one line at a
-  time, with no indentation state and no look-behind, so a mid-edit broken quote
-  can never make client and server disagree about the *rest* of the block.
+- **Locally recoverable.** Values are parsed one physical line at a time. The
+  only continuation form is a run of equally indented sequence items beneath an
+  empty top-level frontmatter key, so a broken item cannot change how later
+  top-level lines are interpreted. `%%%` bodies remain strictly per-line.
 
 ---
 
@@ -115,8 +116,8 @@ non-empty body line → `"Untitled"`.
 
 ## 2. The strict YAML subset
 
-Supported: a **block mapping of top-level `key: value` lines**, with scalars and
-**flow** collections as values.
+Supported: a **block mapping of top-level `key: value` lines**, with scalars,
+**flow** collections, and top-level indented block sequences as values.
 
 ```yaml
 title: Groceries          # string
@@ -125,6 +126,9 @@ ratio: 1.5                # float (1e3 is a float too)
 done: true                # bool  (true/True/TRUE, false/False/FALSE)
 owner: null               # null  (null/Null/NULL, ~, or an empty value)
 tags: [work, home]        # flow sequence
+hubs:                     # expanded sequence (frontmatter only)
+  - "[[work]]"
+  - "[[home]]"
 meta: {a: 1, b: [x, y]}   # flow mapping
 quoted: "12"              # string, not an int
 apostrophe: 'it''s'       # single quotes: '' is a literal '
@@ -135,7 +139,7 @@ Explicitly **not** supported (each is a dropped line plus a diagnostic):
 | Construct | Example | Diagnostic |
 |---|---|---|
 | Indented / nested block mappings | `  sub: 1` | `malformed_line` |
-| Block sequences | `- item` | `unsupported_feature` |
+| Indentationless or nested block sequences | `- item`, `  key:` then `    - item` | `unsupported_feature` / `malformed_line` |
 | Anchors / aliases / tags | `&a`, `*a`, `!!str` | `unsupported_feature` |
 | Block scalars | `key: \|`, `key: >` | `unsupported_feature` |
 | Merge keys | `<<: other` | `unsupported_feature` |
@@ -143,9 +147,10 @@ Explicitly **not** supported (each is a dropped line plus a diagnostic):
 | `key:value` without a space | `title:X` | `malformed_line` |
 | Unterminated quote or bracket | `a: "half`, `a: [1, 2` | `invalid_value` |
 
-**Nesting comes from flow collections, not indentation.** That is what makes the
-parser genuinely per-line and stateless, and it is why `MAX_NESTING_DEPTH`
-applies to `[...]` / `{...}` nesting.
+**Nested structures come from flow collections, not indentation.** A top-level
+frontmatter key may use equally indented `- value` continuation lines, but its
+items are independently parsed values. `MAX_NESTING_DEPTH` applies to `[...]` /
+`{...}` nesting.
 
 Other line rules:
 

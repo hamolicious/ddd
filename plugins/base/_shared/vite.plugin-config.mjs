@@ -20,12 +20,20 @@
  *    activation. It is copied normally, or compiled with the opt-in Tailwind preset.
  *
  * A plugin that needs a library *outside* the runtime layer bundles it normally. That
- * is allowed and sometimes right — the cost is bundle size, not correctness.
+ * is allowed and sometimes right — the cost is bundle size, not correctness. A base
+ * plugin has no `node_modules`, so it names such a library in its manifest's `x-bundle`
+ * and the library resolves from `resolveFrom` (`web/node_modules`); anything else still
+ * resolves from nothing.
+ *
+ * A plugin that needs more than a module and a stylesheet in its package (a `.wasm`, data
+ * files) has a `build.mjs` next to its manifest: its default export runs after the build
+ * with `{ root, outDir, resolveFrom }` and writes whatever it needs under `frontend/`.
  */
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { tailwindPrefix, tailwindPreset } from "./tailwind-preset.mjs";
 
@@ -79,6 +87,17 @@ export const RUNTIME_EXTERNALS = [
   "remark-directive",
 ];
 
+/** The directory of package `name`, as resolved from `require`'s location. */
+function packageDir(require, name) {
+  let dir = dirname(require.resolve(name));
+  while (!existsSync(join(dir, "package.json")) || JSON.parse(readFileSync(join(dir, "package.json"), "utf8")).name !== name) {
+    const up = dirname(dir);
+    if (up === dir) throw new Error(`x-bundle: cannot find the package directory of ${name}`);
+    dir = up;
+  }
+  return dir;
+}
+
 /**
  * @param {object} options
  * @param {string} options.root       The plugin directory (contains manifest.json).
@@ -97,6 +116,9 @@ export function pluginConfig({ root, outDir, entry, tailwind, resolveFrom = root
   const stylePath = manifest.frontend?.style;
   const useTailwind = tailwind ?? Boolean(manifest["x-tailwind"]);
   const prefix = useTailwind ? tailwindPrefix(manifest) : "";
+  const bundled = manifest["x-bundle"] ?? [];
+  const requireFrom = createRequire(join(resolveFrom, "noop.cjs"));
+  const bundledDirs = bundled.map((name) => packageDir(requireFrom, name));
 
   return {
     root,
@@ -108,6 +130,9 @@ export function pluginConfig({ root, outDir, entry, tailwind, resolveFrom = root
       // The base plugins live outside `web/`, and everything they import is either
       // relative or external — so there is nothing to resolve from node_modules here.
       extensions: [".tsx", ".ts", ".jsx", ".js", ".json"],
+      // The package directory, not `require.resolve`'s file: Vite then picks the
+      // package's browser/ESM entry itself, where `require` would hand it the CommonJS one.
+      alias: bundled.map((name, i) => ({ find: new RegExp(`^${name}$`), replacement: bundledDirs[i] })),
     },
     esbuild: {
       // The plugins are TSX with the automatic JSX runtime, resolved through the import
@@ -139,22 +164,44 @@ export function pluginConfig({ root, outDir, entry, tailwind, resolveFrom = root
     },
     plugins: [
       {
+        // Library mode inlines every `new URL("x.wasm", import.meta.url)` as base64, so a
+        // bundled library's own wasm would ride along in the module whether it is used or
+        // not. Hide the pattern from Vite: the URL still resolves at runtime, and the
+        // plugin ships (or points the library at) the file itself, from its `build.mjs`.
+        name: "lm-bundled-assets",
+        enforce: "pre",
+        transform(code, id) {
+          if (!bundledDirs.some((dir) => id.startsWith(`${dir}/`))) return null;
+          const out = code.replace(
+            /new URL\((\s*(["'`])[^"'`]+\2\s*),\s*import\.meta\.url\s*\)/g,
+            "new URL($1, String(import.meta.url))",
+          );
+          return out === code ? null : { code: out, map: null };
+        },
+      },
+      {
         name: "lm-plugin-package",
         async closeBundle() {
           // The manifest travels with the build — the server serves this directory as
           // the installed plugin, so the copy here is what `/api/plugins` reads.
           mkdirSync(out, { recursive: true });
           writeFileSync(join(out, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
-          if (!stylePath) return;
-          const source = resolve(root, "src", basename(stylePath));
-          const target = join(out, stylePath);
-          if (useTailwind) {
-            await compileWithTailwind({ root, prefix, styleSource: source, out: target, resolveFrom });
-          } else if (existsSync(source)) {
-            mkdirSync(join(target, ".."), { recursive: true });
-            copyFileSync(source, target);
-          } else {
-            this.warn(`manifest declares ${stylePath} but ${source} does not exist`);
+          if (stylePath) {
+            const source = resolve(root, "src", basename(stylePath));
+            const target = join(out, stylePath);
+            if (useTailwind) {
+              await compileWithTailwind({ root, prefix, styleSource: source, out: target, resolveFrom });
+            } else if (existsSync(source)) {
+              mkdirSync(join(target, ".."), { recursive: true });
+              copyFileSync(source, target);
+            } else {
+              this.warn(`manifest declares ${stylePath} but ${source} does not exist`);
+            }
+          }
+          const step = join(root, "build.mjs");
+          if (existsSync(step)) {
+            const { default: run } = await import(pathToFileURL(step).href);
+            await run({ root, outDir: out, resolveFrom });
           }
         },
       },

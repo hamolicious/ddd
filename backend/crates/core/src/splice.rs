@@ -53,9 +53,10 @@ pub fn set_frontmatter_value(
     }
 
     if let Some(span) = frontmatter::value_span(text, key) {
-        // `key:` with no value has an empty span sitting right after the colon;
-        // keep the canonical single space.
-        let needs_space = span.is_empty() && text[..span.start].ends_with(':');
+        // `key:` with no same-line value starts its span right after the colon.
+        // This covers both an empty value and an expanded sequence; keep the
+        // canonical single space when replacing either one.
+        let needs_space = text[..span.start].ends_with(':');
         let replacement = if needs_space {
             format!(" {serialized}")
         } else {

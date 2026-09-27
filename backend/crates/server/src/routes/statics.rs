@@ -123,15 +123,20 @@ pub struct InstalledResponse {
 
 /// Authenticated: the plugin list names what is installed in this workspace, which is
 /// not public information. The loader runs after the auth gate, so it always has a
-/// session (SPEC §6.4).
+/// session (SPEC §6.4). Every user needs the list to boot, but the refused directories
+/// are for the admin screen only: plugins are an administrator's business.
 pub async fn installed(
     State(state): State<AppState>,
-    _user: AuthUser,
+    user: AuthUser,
 ) -> AppResult<axum::Json<InstalledResponse>> {
     let registry = plugins::registry(&state.config);
     Ok(axum::Json(InstalledResponse {
         plugins: registry.plugins().to_vec(),
-        problems: registry.problems().to_vec(),
+        problems: if user.is_admin() {
+            registry.problems().to_vec()
+        } else {
+            Vec::new()
+        },
         disabled: state.config.disable_plugins,
     }))
 }

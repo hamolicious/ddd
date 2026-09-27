@@ -1,0 +1,16 @@
+{
+  "id": "obsidian-importer",
+  "version": "1.4.2",
+  "kernel": "^1.0",
+  "dependencies": {
+    "attachments": "^1.1.0",
+    "commands": "^1.0"
+  },
+  "frontend": {
+    "module": "frontend/index.mjs"
+  },
+  "name": "Obsidian importer",
+  "description": "Imports notes and attachments from an Obsidian vault ZIP, preserving paths and resolving links.",
+  "author": "Life Manager examples",
+  "license": "MIT OR Apache-2.0"
+}

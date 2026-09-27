@@ -19,6 +19,7 @@ import { createElement, isValidElement, type ReactNode } from "react";
 
 import type {
   MarkdownAttachmentProps,
+  MarkdownCodeBlockProps,
   MarkdownDirectiveProps,
   MarkdownFenceProps,
   MarkdownTaskState,
@@ -54,6 +55,7 @@ interface Registries {
   readonly fences?: Record<string, (props: MarkdownFenceProps) => ReactNode>;
   readonly overrides?: Record<string, (props: Record<string, unknown>) => ReactNode>;
   readonly attachment?: (props: MarkdownAttachmentProps) => ReactNode;
+  readonly codeBlock?: (props: MarkdownCodeBlockProps) => ReactNode;
 }
 
 function registriesOf(options: Registries = {}): RenderRegistries {
@@ -63,6 +65,7 @@ function registriesOf(options: Registries = {}): RenderRegistries {
     overrides: new Map(Object.entries(options.overrides ?? {})) as RenderRegistries["overrides"],
     tasks: buildTaskRegistry(options.tasks ?? [TODO, DONE]),
     attachment: options.attachment,
+    codeBlock: options.codeBlock,
   };
 }
 
@@ -356,6 +359,27 @@ describe("markdown.fence", () => {
 
   it("renders a fence with no language as a plain code block", () => {
     expect(render("```\nplain\n```")).toContain('<pre className="md-code">');
+  });
+});
+
+describe("markdown.codeBlock", () => {
+  const Mermaid = (): ReactNode => null;
+  const Highlighted = (): ReactNode => null;
+
+  it("renders fenced code no fence claims", () => {
+    expect(render("```rust {1}\nfn main() {}\n```", { codeBlock: Highlighted, documentId: ULID })).toContain(
+      `<Highlighted language="rust" code="fn main() {}" meta="{1}" documentId="${ULID}" />`,
+    );
+  });
+
+  it("renders a fence with no language, without one", () => {
+    expect(render("```\nplain\n```", { codeBlock: Highlighted })).toContain('<Highlighted code="plain" />');
+  });
+
+  it("leaves a claimed language to its fence", () => {
+    expect(render("```mermaid\ngraph TD\n```", { fences: { mermaid: Mermaid }, codeBlock: Highlighted })).toContain(
+      "<Mermaid",
+    );
   });
 });
 

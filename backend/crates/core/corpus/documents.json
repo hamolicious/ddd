@@ -271,6 +271,36 @@
       }
     },
     {
+      "name": "frontmatter-expanded-sequences",
+      "input": "---\nhubs:\n  - \"[[work]]\"\ntags:\n  - work\n  - home\nmixed:\n  - 1\n  - true\n  - null\nnested:\n  - [a, b]\n---\n",
+      "expect": {
+        "title": "Untitled",
+        "fm": {
+          "hubs": [
+            "[[work]]"
+          ],
+          "mixed": [
+            1,
+            true,
+            null
+          ],
+          "nested": [
+            [
+              "a",
+              "b"
+            ]
+          ],
+          "tags": [
+            "work",
+            "home"
+          ]
+        },
+        "fm_parse_error": false,
+        "plugins": {},
+        "diagnostics": []
+      }
+    },
+    {
       "name": "duplicate-keys-last-wins",
       "input": "---\na: 1\nb: first\na: 2\nb: second\n---\n",
       "expect": {

@@ -55,6 +55,8 @@ export default defineConfig({
       // plugin tests and every base plugin's suite is stranded.
       "../plugins/base/**/*.test.ts",
       "../plugins/base/**/*.test.tsx",
+      "../plugins/examples/**/*.test.ts",
+      "../plugins/examples/**/*.test.tsx",
     ],
   },
 });

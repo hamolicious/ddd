@@ -68,7 +68,7 @@ pub fn parse_block(inner: &str, first_line: u32) -> Frontmatter {
             )],
         };
     }
-    let parsed = yaml::parse_block_lines(inner, first_line, MAX_FRONTMATTER_KEYS);
+    let parsed = yaml::parse_frontmatter_lines(inner, first_line, MAX_FRONTMATTER_KEYS);
     Frontmatter {
         map: parsed.map,
         had_error: parsed.had_error,
@@ -123,8 +123,9 @@ pub fn parse(text: &str) -> (Option<(Span, Span)>, Frontmatter) {
 /// value yields an empty span at the end of the line.
 pub fn value_span(text: &str, key: &str) -> Option<Span> {
     let (_, inner) = find_block(text)?;
+    let block_lines = yaml::lines(inner.slice(text));
     let mut found = None;
-    for line in yaml::lines(inner.slice(text)) {
+    for (index, line) in block_lines.iter().enumerate() {
         if yaml::line_key(line.content).as_deref() != Some(key) {
             continue;
         }
@@ -138,7 +139,10 @@ pub fn value_span(text: &str, key: &str) -> Option<Span> {
         let trail = rest.len() - rest.trim_end_matches([' ', '\t']).len();
         let start = after + lead;
         let end = (line_end - trail).max(start);
-        found = Some(Span::new(start, end));
+        let expanded_end = yaml::expanded_value_end(&block_lines, index)
+            .map(|last| inner.start + last.end)
+            .unwrap_or(end);
+        found = Some(Span::new(start, expanded_end));
     }
     found
 }
@@ -155,10 +159,17 @@ pub(crate) fn line_spans(text: &str, key: &str) -> Vec<Span> {
     let Some((_, inner)) = find_block(text) else {
         return Vec::new();
     };
-    yaml::lines(inner.slice(text))
-        .into_iter()
-        .filter(|line| yaml::line_key(line.content).as_deref() == Some(key))
-        .map(|line| Span::new(inner.start + line.start, inner.start + line.full_end))
+    let block_lines = yaml::lines(inner.slice(text));
+    block_lines
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| yaml::line_key(line.content).as_deref() == Some(key))
+        .map(|(index, line)| {
+            let end = yaml::expanded_value_end(&block_lines, index)
+                .map(|last| last.full_end)
+                .unwrap_or(line.full_end);
+            Span::new(inner.start + line.start, inner.start + end)
+        })
         .collect()
 }
 
@@ -236,5 +247,18 @@ mod tests {
         assert_eq!(fm.map.get("a"), Some(&Value::Int(2)));
         assert_eq!(value_span(text, "a").unwrap().slice(text), "2");
         assert_eq!(line_spans(text, "a").len(), 2);
+    }
+
+    #[test]
+    fn expanded_sequence_spans_include_the_item_lines() {
+        let text = "---\nhubs:\n  - work\n  - home\nnext: 1\n---\n";
+        assert_eq!(
+            value_span(text, "hubs").unwrap().slice(text),
+            "\n  - work\n  - home"
+        );
+        assert_eq!(
+            line_span(text, "hubs").unwrap().slice(text),
+            "hubs:\n  - work\n  - home\n"
+        );
     }
 }

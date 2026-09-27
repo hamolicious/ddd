@@ -21,6 +21,7 @@ import type {
   FieldScope,
   FmField,
   FmValueCount,
+  IndexedDocument,
   IndexScope,
   NoteConnections,
   OutgoingConnection,
@@ -47,6 +48,7 @@ interface Derived {
   readonly tallies: ReadonlyMap<string, FieldTally>;
   readonly incoming: ReadonlyMap<DocumentId, readonly Connection[]>;
   readonly stats: { readonly human: WorkspaceStats; readonly all: WorkspaceStats };
+  readonly documents: readonly IndexedDocument[];
 }
 
 const NO_CONNECTIONS: NoteConnections = { outgoing: [], incoming: [] };
@@ -141,6 +143,11 @@ export class WorkspaceIndex {
     return Object.assign(new Map(data.fields), { machine: data.machine });
   }
 
+  documents(scope: IndexScope = {}): readonly IndexedDocument[] {
+    const { documents } = this.#derive();
+    return scope.includeMachine ? documents : documents.filter((document) => !document.machine);
+  }
+
   connections(id: DocumentId): NoteConnections {
     const entry = this.#entries.get(id);
     if (!entry || entry.data.deleted) return NO_CONNECTIONS;
@@ -206,7 +213,11 @@ export class WorkspaceIndex {
       all: this.#stats(live, counts, connected),
     };
 
-    this.#derived = { fields, tallies, incoming, stats };
+    const documents = live
+      .map(({ id, title, folder, machine }) => ({ id, title, folder, machine }))
+      .sort((a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
+
+    this.#derived = { fields, tallies, incoming, stats, documents };
     return this.#derived;
   }
 

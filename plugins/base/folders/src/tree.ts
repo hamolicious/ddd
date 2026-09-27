@@ -102,6 +102,11 @@ export interface FileTreeOptions {
   readonly leafLimit?: number;
   /** The user's folder order (`order.ts`): listed folders first, in list order. */
   readonly order?: readonly string[];
+  /**
+   * A document that is drawn even past `leafLimit` — the open one, so the tree can show
+   * it whatever its folder holds. It still needs its folders expanded to be on screen.
+   */
+  readonly reveal?: string;
 }
 
 /** `localeCompare`, then code units, so the order never depends on the platform. */
@@ -208,6 +213,8 @@ export function buildFileTree(rows: readonly PathRow[], options: FileTreeOptions
 
     const leaves = documentsIn.get(parent) ?? [];
     const shown = leaves.slice(0, leafLimit);
+    const revealed = options.reveal === undefined ? undefined : leaves.find((leaf) => leaf.id === options.reveal);
+    if (revealed && !shown.includes(revealed)) shown.push(revealed);
     for (const leaf of shown) out.push({ ...leaf, depth });
     if (leaves.length > shown.length) {
       out.push({

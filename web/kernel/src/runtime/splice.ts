@@ -99,9 +99,9 @@ export function setFrontmatterValue(text: string, key: string, value: FmValue): 
 
   const span = valueSpan(text, key);
   if (span !== undefined) {
-    // `key:` with no value has an empty span right after the colon; keep the
-    // canonical single space.
-    const needsSpace = span.start === span.end && text.slice(0, span.start).endsWith(":");
+    // `key:` with no same-line value starts its span right after the colon.
+    // This covers both an empty value and an expanded sequence.
+    const needsSpace = text.slice(0, span.start).endsWith(":");
     return [{ range: span, text: needsSpace ? ` ${serialized}` : serialized }];
   }
 
@@ -311,6 +311,31 @@ function lineKey(content: string): string | undefined {
   return isValidKey(key) ? key : undefined;
 }
 
+/** `yaml::expanded_value_end` — last item line of an indented top-level sequence. */
+function expandedValueEnd(lines: readonly Line[], header: number): Line | undefined {
+  const line = lines[header];
+  if (!line || line.content.startsWith(" ") || line.content.startsWith("\t")) return undefined;
+  const split = splitKey(line.content.trim());
+  if (!split || split[1].trim().length > 0) return undefined;
+  const first = lines[header + 1];
+  const indent = first ? blockItemIndent(first.content) : undefined;
+  if (indent === undefined) return undefined;
+  let last = first;
+  for (const item of lines.slice(header + 2)) {
+    if (blockItemIndent(item.content) !== indent) break;
+    last = item;
+  }
+  return last;
+}
+
+function blockItemIndent(content: string): number | undefined {
+  let indent = 0;
+  while (content[indent] === " " || content[indent] === "\t") indent += 1;
+  const trimmed = content.slice(indent);
+  if (indent === 0 || (trimmed !== "-" && !trimmed.startsWith("- "))) return undefined;
+  return indent;
+}
+
 // ---------------------------------------------------------------------------
 // frontmatter.rs — spans
 // ---------------------------------------------------------------------------
@@ -345,7 +370,8 @@ export function valueSpan(text: string, key: string): Span | undefined {
   const block = findBlock(text);
   if (!block) return undefined;
   let found: Span | undefined;
-  for (const line of splitLines(text.slice(block.inner.start, block.inner.end))) {
+  const lines = splitLines(text.slice(block.inner.start, block.inner.end));
+  for (const [index, line] of lines.entries()) {
     if (lineKey(line.content) !== key) continue;
     const lineStart = block.inner.start + line.start;
     const lineEnd = block.inner.start + line.end;
@@ -357,7 +383,11 @@ export function valueSpan(text: string, key: string): Span | undefined {
     const trail = rest.length - trimEndSpaces(rest).length;
     const start = after + lead;
     const end = Math.max(lineEnd - trail, start);
-    found = { start, end };
+    const expanded = expandedValueEnd(lines, index);
+    found = {
+      start,
+      end: expanded ? block.inner.start + expanded.end : end,
+    };
   }
   return found;
 }
@@ -366,11 +396,13 @@ export function valueSpan(text: string, key: string): Span | undefined {
 export function frontmatterLineSpans(text: string, key: string): Span[] {
   const block = findBlock(text);
   if (!block) return [];
-  return splitLines(text.slice(block.inner.start, block.inner.end))
-    .filter((line) => lineKey(line.content) === key)
-    .map((line) => ({
+  const lines = splitLines(text.slice(block.inner.start, block.inner.end));
+  return lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => lineKey(line.content) === key)
+    .map(({ line, index }) => ({
       start: block.inner.start + line.start,
-      end: block.inner.start + line.fullEnd,
+      end: block.inner.start + (expandedValueEnd(lines, index)?.fullEnd ?? line.fullEnd),
     }));
 }
 

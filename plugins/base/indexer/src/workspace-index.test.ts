@@ -21,6 +21,21 @@ function build() {
   return index;
 }
 
+describe("WorkspaceIndex — documents", () => {
+  it("lists live human documents by title, with their folder", () => {
+    expect(build().documents()).toEqual([
+      { id: "A", title: "A", folder: "work/notes", machine: false },
+      { id: "B", title: "B", folder: "", machine: false },
+      { id: "C", title: "C", folder: "work", machine: false },
+      { id: "L", title: "Lone", folder: "", machine: false },
+    ]);
+  });
+
+  it("adds machine-owned documents when asked", () => {
+    expect(build().documents({ includeMachine: true }).map((d) => d.id)).toEqual(["A", "B", "C", "L", "S"]);
+  });
+});
+
 describe("WorkspaceIndex — connections", () => {
   it("answers outgoing with each target's state", () => {
     expect(build().connections("A").outgoing).toEqual([

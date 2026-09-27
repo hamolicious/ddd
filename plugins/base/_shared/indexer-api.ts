@@ -61,6 +61,16 @@ export interface NoteConnections {
   readonly incoming: readonly Connection[];
 }
 
+/** One live document, as the index knows it: enough to draw it without reading the row. */
+export interface IndexedDocument {
+  readonly id: DocumentId;
+  readonly title: string;
+  /** `fm.path`, `""` at the root. */
+  readonly folder: string;
+  /** Machine-owned (`_shared/machine-docs.ts`). */
+  readonly machine: boolean;
+}
+
 export interface FmField {
   /** The key; a nested one as a dotted path from the top level (`project.status`). */
   readonly key: string;
@@ -136,6 +146,8 @@ export interface IndexerApi {
   fmFields(scope?: FieldScope): readonly FmField[];
   /** The values one key (dotted for a nested one) holds, most-used first. */
   fmValues(key: string, scope?: FieldScope): readonly FmValueCount[];
+  /** Every live document, by title; machine-owned ones only with `includeMachine`. */
+  documents(scope?: IndexScope): readonly IndexedDocument[];
   /** Outgoing and incoming connections of one document. An unknown id has none. */
   connections(id: DocumentId): NoteConnections;
   /** Called after every change to any index. */

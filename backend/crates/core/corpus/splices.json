@@ -88,6 +88,35 @@
       "edits": 1
     },
     {
+      "name": "set-replaces-an-expanded-sequence",
+      "text": "---\ntags:\n  - old\n  - home\nnext: 1\n---\n",
+      "op": {
+        "kind": "set_fm",
+        "key": "tags",
+        "value": [
+          "work"
+        ]
+      },
+      "expect": "---\ntags: [work]\nnext: 1\n---\n",
+      "edits": 1,
+      "replaced": [
+        "\n  - old\n  - home"
+      ]
+    },
+    {
+      "name": "remove-deletes-an-expanded-sequence",
+      "text": "---\ntags:\n  - old\n  - home\nnext: 1\n---\n",
+      "op": {
+        "kind": "remove_fm",
+        "key": "tags"
+      },
+      "expect": "---\nnext: 1\n---\n",
+      "edits": 1,
+      "replaced": [
+        "tags:\n  - old\n  - home\n"
+      ]
+    },
+    {
       "name": "set-targets-the-last-duplicate",
       "text": "---\na: 1\na: 2\n---\n",
       "op": {

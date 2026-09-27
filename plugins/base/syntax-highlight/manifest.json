@@ -1,0 +1,24 @@
+{
+  "id": "syntax-highlight",
+  "version": "1.0.0",
+  "name": "Syntax highlighting",
+  "description": "Highlights fenced code with tree-sitter grammars, in read mode and in the editor. Languages are installed when you need them.",
+  "author": "Life Manager base distribution",
+  "license": "MIT OR Apache-2.0",
+  "x-bundle": [
+    "web-tree-sitter"
+  ],
+  "kernel": "^1.0",
+  "peerLibraries": {
+    "@codemirror/state": "^6.0.0",
+    "@codemirror/view": "^6.0.0",
+    "react": "^18.0.0"
+  },
+  "frontend": {
+    "module": "frontend/index.mjs",
+    "style": "frontend/style.css"
+  },
+  "x-defines": [
+    "syntax.language"
+  ]
+}

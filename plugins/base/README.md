@@ -1,6 +1,6 @@
 # `plugins/base/` — the base distribution
 
-The visible app. Twenty-three plugins that happen to ship with the server and are
+The visible app. Twenty-five plugins that happen to ship with the server and are
 [installed like any other](../SPEC.md#62-package-manifest-capabilities) — individually
 replaceable, individually removable, and holding no privilege the kernel does not give
 every plugin.
@@ -37,19 +37,21 @@ dist/<id>/<version>/              build output = the installed layout the server
 | `themes` | theme registry + picker; overrides kernel tokens | `themes.theme` |
 | `doc-list` | browse/search/sort/filter, new document, Trash; local index is the default search provider | `search.provider` |
 | `folders` | drag-and-drop file tree over `fm.path`; every move is a splice | — |
-| `markdown` | the unified/remark → React pipeline | `markdown.directive/fence/remark/component/taskState/attachment` |
-| `attachments` | paste-to-upload in the editor; shows embedded files through a viewer per file type | `attachments.viewer` |
+| `markdown` | the unified/remark → React pipeline | `markdown.directive/fence/codeBlock/remark/component/taskState/attachment` |
+| `attachments` | paste-to-upload in the editor; shows embedded files through a viewer per file type; provides its resumable upload service to declared dependents | `attachments.viewer` |
 | `slash-commands` | the `/` menu in any editor, over editor-neutral text surfaces | `text.surface`, `slash.command` |
 | `native-preview` | viewers for what a browser shows natively: images, PDF, audio, video, text | — |
 | `document-surface` | the document route + mode registry | `document.mode` |
 | `viewer` | read mode, and the file page (`#/file/<id>`) | contributes `read` |
 | `changes` | the open document's history in the altbar: changes and snapshots, view, revert, restore | — |
+| `syntax-highlight` | fenced code highlighted with tree-sitter, in read mode and the editor; users install catalog languages as needed, or upload their own grammar + `highlights.scm` | `syntax.language` |
 | `editor` | edit mode (CodeMirror 6 + `y-codemirror.next`) | `editor.extension`, `editor.paste` |
 | `settings` | the settings shell | `settings.section` |
 | `admin` | users, invites, audit, orphans, plugins | — |
 | `welcome` | fills a new, empty workspace with a short tour: one note per base feature | — |
 | `indexer` | workspace stats, every frontmatter field and its values, each note's incoming and outgoing connections — rebuilt locally on every edit, read through its service | — |
 | `fm-autocomplete` | while typing frontmatter in an editor, suggests the keys in use and then the typed key's values, from `indexer` | — |
+| `graph` | every note and its links as a live force-directed graph: the whole workspace at `#/graph`, the open note's neighbourhood in the altbar; built from `indexer`'s documents and outgoing connections | — |
 
 That is the whole table. `calendar` and `agenda` — M4's proof plugins, which shipped here
 and were never in `BASE_PLUGIN_IDS` — were **removed** on 2026-09-24 at the owner's
@@ -61,7 +63,7 @@ that had a backend half, so **every plugin in this directory is now frontend-onl
 
 ## How the base plugins relate
 
-Generated from the twenty-three `manifest.json` `dependencies` fields — an arrow reads
+Generated from the twenty-five `manifest.json` `dependencies` fields — an arrow reads
 **"depends on"**, and the loader's activation order is precisely a topological order of
 this graph (a dependency always activates first; a failed dependency skips its whole
 subtree). Every plugin additionally depends on `@kernel`, which is not drawn.
@@ -77,6 +79,7 @@ flowchart TD
     subgraph browse ["browse & find"]
         folders --> doc-list
         fm-autocomplete --> indexer
+        graph --> indexer
     end
 
     subgraph config ["configuration"]
@@ -98,6 +101,7 @@ flowchart TD
     admin --> commands & context-menu & router & shell-ui
     changes --> context-menu & markdown & router & shell-ui
     themes --> commands
+    graph --> commands & router & shell-ui
 ```
 
 The graph is **unchanged by the core-improvements pass**: nothing declared a new
@@ -109,13 +113,15 @@ message precisely *because* the arrow it would need points the wrong way: `folde
 already depends on `doc-list`, and the reverse edge would be a cycle the loader cannot
 order.
 
-`attachments`, `native-preview`, `slash-commands` and `welcome` are not drawn because they have no
-edges: every point they use is contributed to, never required. `attachments` puts a
+`attachments`, `native-preview`, `slash-commands`, `syntax-highlight` and `welcome` are not drawn
+because they have no edges: every point they use is contributed to, never required.
+`syntax-highlight` puts a renderer on `markdown.codeBlock`, a decoration on `editor.extension` and
+a section on `settings.section`; without it, code is the plain `<pre>` it always was. `attachments` puts a
 handler on `editor.paste`, a renderer on `markdown.attachment` and `/attach` on
 `slash.command`; `native-preview` puts viewers on `attachments.viewer`; `editor` puts a
 `text.surface` on `slash-commands`' point. Turning any one of them off costs its own
 feature and nothing downstream. `indexer` touches no point at all: it is a service, and
-`fm-autocomplete` is the one arrow into it. `fm-autocomplete` reads the editors' `text.surface`
+`fm-autocomplete` and `graph` are the arrows into it. `fm-autocomplete` reads the editors' `text.surface`
 contributions without depending on `slash-commands`, which defines that point: the
 surfaces are the editors', and without them there is simply no menu.
 

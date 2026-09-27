@@ -83,7 +83,9 @@ function options(overrides: Partial<Parameters<typeof sendInChunks>[3]> = {}) {
     sessions,
     value: {
       signal: new AbortController().signal,
-      onSession: (id: string) => sessions.push(id),
+      onSession: (id: string) => {
+        sessions.push(id);
+      },
       onProgress: (sent: number) => progress.push(sent),
       ...overrides,
     },
@@ -107,6 +109,26 @@ describe("sendInChunks", () => {
       "POST /uploads/u1/complete",
     ]);
     expect(progress).toEqual([0, 4, 8, 10]);
+  });
+
+  it("persists a new session before sending its first byte", async () => {
+    const server = fakeServer(4);
+    let release!: () => void;
+    const persisted = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const pending = sendInChunks(
+      server.fetch,
+      file(4),
+      "f.bin",
+      options({ onSession: () => persisted }).value,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(server.calls).toEqual(["POST /uploads"]);
+    release();
+    await pending;
+    expect(server.calls).toContain("PATCH /uploads/u1?offset=0");
   });
 
   it("carries on an upload it is given from where the server is", async () => {

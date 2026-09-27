@@ -32,6 +32,7 @@ import { createElement, Fragment, type ComponentType, type ReactNode } from "rea
 
 import type {
   MarkdownAttachmentProps,
+  MarkdownCodeBlockProps,
   MarkdownDirective,
   MarkdownDirectiveProps,
   MarkdownFenceProps,
@@ -56,6 +57,8 @@ const DIRECTIVE_KINDS: Readonly<Record<string, MarkdownDirective["kind"]>> = {
 export interface RenderRegistries {
   readonly directives: ReadonlyMap<string, ComponentType<MarkdownDirectiveProps>>;
   readonly fences: ReadonlyMap<string, ComponentType<MarkdownFenceProps>>;
+  /** The `markdown.codeBlock` renderer that won, if any; else code renders as a `<pre>`. */
+  readonly codeBlock?: ComponentType<MarkdownCodeBlockProps>;
   readonly overrides: ReadonlyMap<string, ComponentType<Record<string, unknown>>>;
   readonly tasks: TaskRegistry;
   /** The `markdown.attachment` renderer that won, if any; else embeds render here. */
@@ -366,7 +369,10 @@ function editFirstText(node: MdNode, rewrite: (value: string) => string): MdNode
   return visit(node);
 }
 
-/** A fenced code block: a contributed `markdown.fence` renderer, or a `<pre>`. */
+/**
+ * A fenced code block: the `markdown.fence` renderer for its language, else the winning
+ * `markdown.codeBlock` renderer, else a `<pre>`.
+ */
 function renderCode(node: MdNode, key: string, env: Env): ReactNode {
   const language = (node.lang ?? "").trim();
   const fence = env.registries.fences.get(language) ?? env.registries.fences.get(language.toLowerCase());
@@ -374,6 +380,15 @@ function renderCode(node: MdNode, key: string, env: Env): ReactNode {
     return createElement(fence, {
       key,
       code: node.value ?? "",
+      meta: node.meta ?? undefined,
+      documentId: env.documentId,
+    });
+  }
+  if (env.registries.codeBlock) {
+    return createElement(env.registries.codeBlock, {
+      key,
+      code: node.value ?? "",
+      language: language || undefined,
       meta: node.meta ?? undefined,
       documentId: env.documentId,
     });

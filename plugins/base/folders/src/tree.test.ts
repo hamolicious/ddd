@@ -84,6 +84,14 @@ describe("buildFileTree", () => {
     expect(more?.kind === "more" && more.hidden).toBe(4);
   });
 
+  it("draws the revealed document past the cap, and counts it out of the rest", () => {
+    const rows = Array.from({ length: 7 }, (_, index) => doc(`${index}`, `doc ${index}`, "big"));
+    const tree = buildFileTree(rows, { leafLimit: 3, reveal: "5" });
+    expect(keys(tree.rows)).toEqual(["f:big", "d:0", "d:1", "d:2", "d:5", "m:big"]);
+    const more = tree.rows[5];
+    expect(more?.kind === "more" && more.hidden).toBe(3);
+  });
+
   it("caps root documents the same way", () => {
     const rows = Array.from({ length: 4 }, (_, index) => doc(`${index}`, `doc ${index}`));
     const tree = buildFileTree(rows, { leafLimit: 2 });

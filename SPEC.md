@@ -101,7 +101,7 @@ Accepted caveat: concurrent edits to the same syntax markers can merge into brie
 
 The shared Rust core parses, with the same code on both sides:
 
-- **Strict YAML subset:** block mappings, flow sequences, scalars typed string/int/float/bool/null. No anchors, aliases, merge keys, tags, multi-doc, block scalars. Duplicate keys: last wins.
+- **Strict YAML subset:** block mappings, flow sequences, top-level indented block sequences, and scalars typed string/int/float/bool/null. No anchors, aliases, merge keys, tags, multi-doc, block scalars. Duplicate keys: last wins.
 - **Per-line tolerant parsing (stateless):** a malformed line is dropped and recorded; remaining keys parse. Deterministic on any input — a mid-edit broken quote never makes client and server disagree.
 - **Hardening caps** (enforced at parse): frontmatter block ≤ 64 KB, ≤ 200 keys, nesting ≤ 5, arrays ≤ 1000 items, string values ≤ 8 KB. Keys must match `^[A-Za-z0-9_-]{1,64}$`; non-conforming keys are dropped from `fm` (text untouched), `fm_parse_error` set.
 - **Fence rules (byte-exact, both sides):** frontmatter opens only if `---` is the literal first line; closes at the next `---` line; CRLF normalized; no BOM special-casing beyond stripping. `%%%` sections: last contiguous run of `%%% <id>`…`%%%` fences at end of document.
@@ -311,7 +311,9 @@ Their genuine niche: **cron while nobody's looking, outbound HTTP with secrets, 
 | `welcome` | First run: fills an empty workspace with a short tour, one note per base feature | — |
 | `indexer` | Indexes the local projection on every change, offline included: workspace stats, every frontmatter field (nested keys dotted) with its values, and each document's outgoing and incoming `doc://` connections (links, embeds, frontmatter references). Writes nothing; other plugins read it through its service | — |
 | `fm-autocomplete` | While frontmatter is typed in any editor with a `text.surface`, suggests the keys in use across the workspace, then the typed key's existing values (most-used first), from `indexer` | — |
+| `graph` | Every note and its links as a live force-directed graph (zoom, pan, drag, hover to highlight a note's neighbours, click to open; filters, groups by folder, display and force settings): the whole workspace at `#/graph`, the open note's neighbourhood in the altbar. Built from `indexer`'s documents and outgoing connections | — |
 | `changes` | The open document's history in the altbar: every change (grouped by author and pause) and snapshot; view any of them read only, revert a change, restore a snapshot | — |
+| `syntax-highlight` | Fenced code highlighted with tree-sitter grammars, in read mode (`markdown.codeBlock`) and while editing (`editor.extension`). A pinned catalog of grammars ships in the package; each user installs the languages they want (a per-user setting, from Settings → Code languages or a button on the block), and each device fetches one the first time it needs it. Users can also upload their own grammar (`.wasm`) and `highlights.scm`: checked in the browser, then stored as attachments | `syntax.language` |
 | `editor` | Edit mode — CodeMirror 6 + `y-codemirror.next`; collapses machine sections; paste / drop handlers take them before CodeMirror; publishes a `text.surface`; **must be usable with the Android soft keyboard (M5 acceptance)** | `editor.extension`, `editor.paste` |
 | `settings` | Settings shell | `settings.section` |
 | `admin` | Users, invites, pending installs + capability approval, plugin config, audit log, orphans | — |
@@ -320,7 +322,7 @@ First run: the `welcome` plugin fills an empty workspace with a deletable tour, 
 
 ### 6.6 Extensible markdown
 
-The `markdown` plugin owns the unified/remark → React pipeline and exposes: `markdown.directive` (`:::name` / `:name[…]`), `markdown.fence` (per-language renderers), `markdown.remark` (raw plugins — the escalated path), `markdown.component` (AST node overrides), `markdown.taskState` (marker → `{icon, label, menu order, done?}`).
+The `markdown` plugin owns the unified/remark → React pipeline and exposes: `markdown.directive` (`:::name` / `:name[…]`), `markdown.fence` (per-language renderers), `markdown.codeBlock` (the renderer for fenced code no fence claims; lowest `order` wins, else a plain `<pre>`), `markdown.remark` (raw plugins — the escalated path), `markdown.component` (AST node overrides), `markdown.taskState` (marker → `{icon, label, menu order, done?}`).
 
 - Directives + fences are the blessed syntaxes: named, collision-free, degrade to literal text when the plugin is absent.
 - Built-in task states (`[ ]`, `[x]`) are default `taskState` contributions. Shipped interaction (rendering plugin's decision, replaceable): left-click toggles non-off → off, off → on; right-click / **long-press on touch** opens the state menu.
