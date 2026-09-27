@@ -13,7 +13,7 @@
 import { embedReplace, embedToggle, type EmbedLocation } from "./embed-toggle.js";
 import type { Kernel } from "@kernel";
 
-import { regionsOf } from "./regions.js";
+import { regionsOf } from "../../_shared/regions.js";
 import { resolveMarkerOffset, type TaskLocation, type TaskScan } from "./tasks.js";
 
 /**

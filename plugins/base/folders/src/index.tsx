@@ -72,6 +72,7 @@ import { FolderContents } from "./FolderContents.js";
 import { FolderTree, type TreeRequest } from "./FolderTree.js";
 import { documentsUnder, planFolderMove } from "./moves.js";
 import { buildTree, isRecursiveRename, normalizePath, parentOf, type PathRow } from "./path.js";
+import { settledMoves, withPendingPaths } from "./pending.js";
 import {
   POINTS,
   type Command,
@@ -93,6 +94,13 @@ const TREE_ROW_LIMIT = 20_000;
  * §4.1), so a wide fan-out evicts the user's editable working set to move metadata.
  */
 const MOVE_CONCURRENCY = 6;
+
+/**
+ * How long a move is drawn ahead of the projection. The echo normally takes about a
+ * second (the server's 500 ms materialization debounce plus the feed); offline, the
+ * kernel's own local row lands within a quarter of that.
+ */
+const PENDING_MOVE_TTL_MS = 15_000;
 
 /** Collapsing a folder is a settings splice; a burst of clicks should not be a burst of them. */
 const SETTINGS_DEBOUNCE_MS = 400;
@@ -199,7 +207,15 @@ export default function activate(kernel: Kernel): FoldersApi {
   // ---------------------------------------------------------------------------
 
   const listeners = new Set<() => void>();
+  /** What the projection says — `rows` is this with the moves in flight applied. */
+  let projected: readonly PathRow[] = [];
   let rows: readonly PathRow[] = [];
+  /** Moves written and not yet echoed by the projection (`pending.ts`). */
+  const pendingPaths = new Map<string, string>();
+  const derive = (): void => {
+    for (const id of settledMoves(projected, pendingPaths)) pendingPaths.delete(id);
+    rows = withPendingPaths(projected, pendingPaths);
+  };
   let loading = true;
   let loadError: string | undefined;
   let emptyFolders = readTracked(kernel.settings.get(SETTINGS_KEYS.emptyFolders));
@@ -353,7 +369,8 @@ export default function activate(kernel: Kernel): FoldersApi {
         limit: TREE_ROW_LIMIT,
       });
       const take = (result: { rows: readonly DocumentRow[] }): void => {
-        rows = result.rows.map((row) => ({ id: row.id, title: row.title, fm: row.fm }));
+        projected = result.rows.map((row) => ({ id: row.id, title: row.title, fm: row.fm }));
+        derive();
         loading = false;
         pruneEmptyFolders();
         publish();
@@ -550,12 +567,30 @@ export default function activate(kernel: Kernel): FoldersApi {
 
   const setPath = async (documentId: string, path: string): Promise<void> => {
     await refuseMachineWrite(documentId, path);
-    // The whole feature, in one call: no re-serialization of the frontmatter block.
-    if (path === "") {
-      await kernel.documents.splice.removeFrontmatterKey(documentId, "path");
-      return;
+    // Drawn where it is going from now, not a feed round trip from now (`pending.ts`).
+    pendingPaths.set(documentId, path);
+    rows = withPendingPaths(projected, pendingPaths);
+    publish();
+    try {
+      // The whole feature, in one call: no re-serialization of the frontmatter block.
+      if (path === "") await kernel.documents.splice.removeFrontmatterKey(documentId, "path");
+      else await kernel.documents.splice.setFrontmatterValue(documentId, "path", path);
+      // A move the projection never echoes must not be drawn forever: that would hide
+      // exactly the lost write this tree once suffered from. After the grace period
+      // the projection is the truth again, whatever it says.
+      setTimeout(() => {
+        if (pendingPaths.get(documentId) !== path) return;
+        pendingPaths.delete(documentId);
+        derive();
+        publish();
+      }, PENDING_MOVE_TTL_MS);
+    } catch (cause) {
+      // Only if this is still the move on record: a later one owns the entry now.
+      if (pendingPaths.get(documentId) === path) pendingPaths.delete(documentId);
+      derive();
+      publish();
+      throw cause;
     }
-    await kernel.documents.splice.setFrontmatterValue(documentId, "path", path);
   };
 
   const move = async (documentId: string, path: string): Promise<void> => {

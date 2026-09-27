@@ -664,3 +664,72 @@ test("refuses to file a machine-owned document into a folder", async ({
   expect(await rawText(request, base, id)).toBe(original);
   expect(await rawText(request, base, id)).toContain("path: .probe-machine");
 });
+
+// ---------------------------------------------------------------------------
+// The same document, moved again and again
+// ---------------------------------------------------------------------------
+
+/**
+ * Every move of a document the client has held before must reach the server.
+ *
+ * The bug this pins lost every second move of the same document, by drag and by menu
+ * alike, with nothing on screen to say so. A move opens the document, splices it and
+ * releases it; the server's `doc.subscribed` for that open routinely arrived *after*
+ * the release's `doc.unsubscribe`, the client believed it, and the next move's `UPDATE`
+ * went out with no `doc.subscribe` in front of it — which the server drops. The tests
+ * above only ever move a document once, so they could not see it.
+ */
+test("a document moved back and forth lands every move, by drag and by menu", async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const base = baseURL as string;
+  const a = unique("hop-a");
+  const b = unique("hop-b");
+  const title = unique("Hops between folders");
+  const original = fixture(title, a);
+  const id = await createDocument(request, base, original);
+  // Anchors, so neither folder disappears when the document leaves it.
+  await createDocument(request, base, fixture("Stays in a", a));
+  await createDocument(request, base, fixture("Stays in b", b));
+
+  await signIn(page, ADMIN);
+  refuseNativeDialogs(page);
+  // Hydrated once before any move, the way a document the user has been reading is.
+  await openDocument(page, id);
+  await openTree(page);
+  await expect(folderRow(page, a)).toBeVisible();
+  await expect(folderRow(page, b)).toBeVisible();
+
+  const leaf = page.locator(".folders-node-leaf", { hasText: title }).first();
+  const byDrag = async (to: string): Promise<void> => {
+    await dragOnto(page, leaf, folderNode(page, to));
+  };
+  const byMenu = async (to: string): Promise<void> => {
+    await leaf.hover();
+    await leaf.getByRole("button", { name: "Document actions" }).click();
+    await page.getByRole("dialog").getByRole("menuitem", { name: "Move to…" }).click();
+    const picker = page.getByRole("dialog");
+    await picker.getByRole("textbox", { name: "Filter folders" }).fill(to);
+    await picker.getByRole("button", { name: to }).first().click();
+  };
+
+  const hops: Array<[string, (to: string) => Promise<void>]> = [
+    [b, byDrag],
+    [a, byDrag],
+    [b, byDrag],
+    [a, byMenu],
+    [b, byMenu],
+    [a, byMenu],
+  ];
+  for (const [index, [to, how]] of hops.entries()) {
+    await how(to);
+    await waitSynced(page);
+    const stored = await settled(request, base, id, `path: ${to}\n`);
+    expect(stored, `move ${index + 1} (to ${to})`).toBe(
+      original.replace(`path: ${a}`, `path: ${to}`),
+    );
+    await expect(leaf).toBeVisible();
+  }
+});

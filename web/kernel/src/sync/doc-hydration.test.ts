@@ -18,7 +18,7 @@ import {
 import { SyncTransport } from "./transport.js";
 import { MockSocket, ServerDoc, settle } from "./testing.js";
 import { MemoryDocPersistence } from "../store/testing.js";
-import { FrameType, type DocError } from "../protocol.js";
+import { FrameType, type BinaryFrame, type ClientControl, type DocError } from "../protocol.js";
 
 const DOC = "01J8ZQ0M3M4YQV0X0PTN9R2G7C";
 const OTHER = "01J8ZQ0M3M4YQV0X0PTN9R2G7D";
@@ -247,6 +247,94 @@ describe("open", () => {
 
     await expect(opening).rejects.toThrow(/gone/);
     expect(hydrator.openIds).toEqual([]);
+  });
+});
+
+describe("short opens (a folder move: open, splice, release)", () => {
+  /**
+   * The server as `routes/sync.rs` actually behaves, which `fixture`'s `serve` is too
+   * polite to: it reads the client's frames **in the order they were sent**, drops a
+   * frame for a document this socket is not subscribed to, and queues `doc.subscribed`
+   * apart from document frames — so the ack can reach the client after the client has
+   * already unsubscribed. `deliverAcks` is that late control queue.
+   */
+  function strictServer(socket: MockSocket, doc: ServerDoc) {
+    const log: Array<{ control: ClientControl } | { frame: BinaryFrame }> = [];
+    const send = socket.send.bind(socket);
+    socket.send = (data) => {
+      send(data);
+      if (typeof data === "string") log.push({ control: socket.sentControl.at(-1)! });
+      else log.push({ frame: socket.sentBinary.at(-1)! });
+    };
+    let subscribed = false;
+    const acks: string[] = [];
+    return {
+      serve(): void {
+        for (const item of log.splice(0)) {
+          if ("control" in item) {
+            if (item.control.t === "doc.subscribe") {
+              subscribed = true;
+              acks.push(item.control.id);
+            }
+            if (item.control.t === "doc.unsubscribe") subscribed = false;
+            continue;
+          }
+          if (!subscribed) continue; // "dropping a frame for a document this socket has not subscribed to"
+          if (item.frame.type === FrameType.SyncStep1) socket.deliverBinary(doc.step2(item.frame.payload));
+          else doc.apply(item.frame);
+        }
+      },
+      deliverAcks(): void {
+        for (const id of acks.splice(0)) {
+          socket.deliver({
+            t: "doc.subscribed",
+            id,
+            materialized_version: "v1",
+            updated_at: "2026-09-24T09:00:00.000Z",
+            deleted: false,
+          });
+        }
+      },
+    };
+  }
+
+  it("lands every write when the subscribe ack arrives after the unsubscribe", async () => {
+    // The folder tree bug: every second move of the same document was lost. The first
+    // move's late ack marked the released replica subscribed, so the second move sent
+    // no `doc.subscribe` and its `UPDATE` went to a server that dropped it.
+    const { socket, hydrator } = await fixture();
+    const doc = new ServerDoc(DOC);
+    const server = strictServer(socket, doc);
+
+    for (const letter of ["a", "b", "c", "d"]) {
+      const opening = hydrator.open(DOC);
+      await settle();
+      server.serve();
+      const handle = await opening;
+      handle.text.insert(handle.text.length, letter);
+      handle.release();
+      server.serve();
+      server.deliverAcks();
+    }
+
+    expect(doc.text.toString()).toBe("abcd");
+    expect(socket.controlOfType("doc.subscribe")).toHaveLength(4);
+  });
+
+  it("still flushes offline edits on an ack for a subscription that is live", async () => {
+    const { socket, hydrator } = await fixture();
+    const doc = new ServerDoc(DOC);
+    const server = strictServer(socket, doc);
+    const opening = hydrator.open(DOC);
+    await settle();
+    server.serve();
+    const handle = await opening;
+    server.deliverAcks();
+
+    handle.text.insert(0, "kept open");
+    server.serve();
+    expect(doc.text.toString()).toBe("kept open");
+    handle.release();
   });
 });
 

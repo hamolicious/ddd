@@ -189,18 +189,15 @@ test.describe("read mode shows the frontmatter as a properties header", () => {
     expect(rows["title"]).toBe("Half readable");
     expect(rows["broken"]).toBeUndefined();
 
-    // ...and **once in edit mode too**, which is where the read-mode warning has just
-    // sent the reader. Removing `document-surface`'s notice left this mode with none at
-    // all: the read-mode header does not render here, and `properties` is a
-    // `sidebar.panel` — a drawer that starts closed at 390 px — so the key missing from
-    // `fm` everywhere in the app had no explanation on the one screen that can fix it.
+    // ...and **not in edit mode**. A line is malformed for a moment every time a key is
+    // typed (`stat` before its `:`), and a notice that came and went on those keystrokes
+    // pushed the text being typed up and down. The malformed line is right there in the
+    // text, and read mode says what it costs.
     await page.getByRole("tab", { name: "Edit" }).click();
     await expect(page.locator(".cm-content")).toBeVisible();
-    await expect(page.locator(".editor-notice")).toContainText(/could not be read/i);
-    // Still exactly one voice per screen, which is the rule that removed the surface's.
     expect(
       await page.locator(".docsurface-root").getByText(/could not be read/i).count(),
-    ).toBe(1);
+    ).toBe(0);
     // The text itself is untouched — the malformed line is right there to be fixed.
     await expect(page.locator(".cm-content")).toContainText('broken: "unterminated');
   });
@@ -210,13 +207,11 @@ test.describe("read mode shows the frontmatter as a properties header", () => {
     request,
     baseURL,
   }) => {
-    // The other half of the claim above: the notice is a consequence of
-    // `fm_parse_error`, not decoration on every editor.
+    // Read mode's warning is a consequence of `fm_parse_error`, not decoration.
     const id = await createDocument(request, baseURL as string, FIXTURE);
     await signIn(page, ADMIN);
     await openDocument(page, id);
-    await page.getByRole("tab", { name: "Edit" }).click();
-    await expect(page.locator(".cm-content")).toBeVisible();
+    await expect(page.locator(".viewer-properties")).toBeVisible();
     expect(
       await page.locator(".docsurface-root").getByText(/could not be read/i).count(),
     ).toBe(0);

@@ -309,6 +309,8 @@ Their genuine niche: **cron while nobody's looking, outbound HTTP with secrets, 
 | `document-surface` | Owns the document route + **mode registry**; `viewer`/`editor` are symmetric contributions | `document.mode` |
 | `viewer` | Read mode (hides fm block + `%%%` sections); the file page `#/file/<id>` | contributes `read` |
 | `welcome` | First run: fills an empty workspace with a short tour, one note per base feature | — |
+| `indexer` | Indexes the local projection on every change, offline included: workspace stats, every frontmatter field (nested keys dotted) with its values, and each document's outgoing and incoming `doc://` connections (links, embeds, frontmatter references). Writes nothing; other plugins read it through its service | — |
+| `fm-autocomplete` | While frontmatter is typed in any editor with a `text.surface`, suggests the keys in use across the workspace, then the typed key's existing values (most-used first), from `indexer` | — |
 | `changes` | The open document's history in the altbar: every change (grouped by author and pause) and snapshot; view any of them read only, revert a change, restore a snapshot | — |
 | `editor` | Edit mode — CodeMirror 6 + `y-codemirror.next`; collapses machine sections; paste / drop handlers take them before CodeMirror; publishes a `text.surface`; **must be usable with the Android soft keyboard (M5 acceptance)** | `editor.extension`, `editor.paste` |
 | `settings` | Settings shell | `settings.section` |

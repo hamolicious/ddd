@@ -1,6 +1,6 @@
 # `plugins/base/` — the base distribution
 
-The visible app. Twenty-one plugins that happen to ship with the server and are
+The visible app. Twenty-three plugins that happen to ship with the server and are
 [installed like any other](../SPEC.md#62-package-manifest-capabilities) — individually
 replaceable, individually removable, and holding no privilege the kernel does not give
 every plugin.
@@ -13,6 +13,8 @@ reference for writing a plugin — there is deliberately no scaffolding CLI (SPE
 _shared/points.ts                 the extension points: names, types, shape validators
 _shared/machine-docs.ts           the one rule three plugins share about hiding documents
 _shared/fm-display.ts             what kind of thing an fm value is, and how to show one
+_shared/regions.ts                where the frontmatter, body and `%%%` sections are in a text
+_shared/indexer-api.ts            the `indexer` service's types, for the plugins that read it
 _shared/compact.ts                "this is a phone": the breakpoint, and the hooks that read it
 _shared/vite.plugin-config.mjs    the reference build config (SPEC §6.4)
 _shared/vite.config.example.mjs   how a standalone plugin uses it
@@ -46,6 +48,8 @@ dist/<id>/<version>/              build output = the installed layout the server
 | `settings` | the settings shell | `settings.section` |
 | `admin` | users, invites, audit, orphans, plugins | — |
 | `welcome` | fills a new, empty workspace with a short tour: one note per base feature | — |
+| `indexer` | workspace stats, every frontmatter field and its values, each note's incoming and outgoing connections — rebuilt locally on every edit, read through its service | — |
+| `fm-autocomplete` | while typing frontmatter in an editor, suggests the keys in use and then the typed key's values, from `indexer` | — |
 
 That is the whole table. `calendar` and `agenda` — M4's proof plugins, which shipped here
 and were never in `BASE_PLUGIN_IDS` — were **removed** on 2026-09-24 at the owner's
@@ -57,7 +61,7 @@ that had a backend half, so **every plugin in this directory is now frontend-onl
 
 ## How the base plugins relate
 
-Generated from the twenty-one `manifest.json` `dependencies` fields — an arrow reads
+Generated from the twenty-three `manifest.json` `dependencies` fields — an arrow reads
 **"depends on"**, and the loader's activation order is precisely a topological order of
 this graph (a dependency always activates first; a failed dependency skips its whole
 subtree). Every plugin additionally depends on `@kernel`, which is not drawn.
@@ -72,6 +76,7 @@ flowchart TD
 
     subgraph browse ["browse & find"]
         folders --> doc-list
+        fm-autocomplete --> indexer
     end
 
     subgraph config ["configuration"]
@@ -109,7 +114,10 @@ edges: every point they use is contributed to, never required. `attachments` put
 handler on `editor.paste`, a renderer on `markdown.attachment` and `/attach` on
 `slash.command`; `native-preview` puts viewers on `attachments.viewer`; `editor` puts a
 `text.surface` on `slash-commands`' point. Turning any one of them off costs its own
-feature and nothing downstream.
+feature and nothing downstream. `indexer` touches no point at all: it is a service, and
+`fm-autocomplete` is the one arrow into it. `fm-autocomplete` reads the editors' `text.surface`
+contributions without depending on `slash-commands`, which defines that point: the
+surfaces are the editors', and without them there is simply no menu.
 
 Reading it bottom-up: `shell-ui` owns the frame everyone renders into, and `header`
 fills its top-bar spot (the plugins that put items in the bar do not depend on `header`:
@@ -153,7 +161,7 @@ because `.hidden` typed into an inline folder rename is the same hole from the o
 side. Anyone adding a write here inherits that obligation; `EXCLUDE_MACHINE_DOCUMENTS` on
 a subscription is not it.
 
-## Two shared files, and why each is not a dependency
+## The shared files, and why each is not a dependency
 
 `_shared/` holds what several base plugins must agree about *exactly*, where a manifest
 dependency would be the wrong shape of agreement.
@@ -164,6 +172,15 @@ dependency would be the wrong shape of agreement.
   `formatDateValue`). `viewer` draws read mode's properties header from it. It was
   shared with the `properties` editing panel, removed on 2026-09-26; it stays in
   `_shared` so the next plugin that shows frontmatter types values the same way.
+  `indexer` types the fields it indexes with the same `inferKind`.
+- **`regions.ts`** — where the frontmatter, the body and the `%%%` run are in a text.
+  `markdown` renders the body and `indexer` counts and scans it; a link that one of them
+  treats as body and the other as machine data would be a backlink nobody can see.
+  (`editor` still has its own differently-shaped copy; the header of `regions.ts` says
+  what would retire both.)
+- **`indexer-api.ts`** — the types of `indexer`'s service. Unlike the two above it *is*
+  backed by a dependency: a plugin that reads the indexes declares `"indexer"`, and this
+  file is only the shape it gets back, the same arrangement as `context-menu-api.ts`.
 
 ## The folder tree
 

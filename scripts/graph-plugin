@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+prefilter=""
+node_args=()
+
+while (($#)); do
+  case "$1" in
+    -h|--help)
+      exec node scripts/graph-plugin.mjs --help
+      ;;
+    --port)
+      node_args+=("$1")
+      shift
+      if (($# == 0)); then
+        echo "graph-plugin: --port requires a value" >&2
+        exit 2
+      fi
+      node_args+=("$1")
+      ;;
+    --port=*|--no-open|--dry-run)
+      node_args+=("$1")
+      ;;
+    -* )
+      echo "graph-plugin: unknown option: $1" >&2
+      exit 2
+      ;;
+    *)
+      if [[ -n "$prefilter" ]]; then
+        echo "graph-plugin: expected one plugin prefilter, received: $1" >&2
+        exit 2
+      fi
+      prefilter="$1"
+      ;;
+  esac
+  shift
+done
+
+plugins=()
+for manifest in plugins/base/*/manifest.json plugins/examples/*/manifest.json; do
+  [[ -f "$manifest" ]] || continue
+  plugin_dir="${manifest%/manifest.json}"
+  plugins+=("${plugin_dir##*/}")
+done
+
+if ((${#plugins[@]} == 0)); then
+  echo "graph-plugin: no plugin manifests found" >&2
+  exit 1
+fi
+
+mapfile -t plugins < <(printf '%s\n' "${plugins[@]}" | sort -u)
+matches=()
+if [[ -n "$prefilter" ]]; then
+  # An exact name wins over substring matches (`editor` must not also offer
+  # `alt-editor`). Otherwise narrow the list before fzf sees it.
+  for plugin in "${plugins[@]}"; do
+    if [[ "${plugin,,}" == "${prefilter,,}" ]]; then
+      matches=("$plugin")
+      break
+    fi
+  done
+  if ((${#matches[@]} == 0)); then
+    for plugin in "${plugins[@]}"; do
+      [[ "${plugin,,}" == *"${prefilter,,}"* ]] && matches+=("$plugin")
+    done
+  fi
+else
+  matches=("${plugins[@]}")
+fi
+
+if ((${#matches[@]} == 0)); then
+  echo "graph-plugin: no plugin matched '$prefilter'" >&2
+  exit 1
+elif ((${#matches[@]} == 1)); then
+  selected="${matches[0]}"
+else
+  if ! command -v fzf >/dev/null 2>&1; then
+    echo "graph-plugin: fzf is required when more than one plugin matches" >&2
+    exit 1
+  fi
+  selected="$(
+    printf '%s\n' "${matches[@]}" |
+      fzf --select-1 --height='~40%' \
+        --prompt='Plugin graph › ' \
+        --header='Select a plugin to show with its direct graph neighbours'
+  )" || exit $?
+fi
+
+exec node scripts/graph-plugin.mjs "$selected" "${node_args[@]}"

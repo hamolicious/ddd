@@ -704,6 +704,17 @@ export interface TextSurface {
   takeBeforeCaret(length: number): TextMark;
   /** Fires after every change to the text, the caret or focus. */
   subscribe(listener: () => void): () => void;
+  /**
+   * The whole text from the start of the document up to the caret — what tells
+   * `fm-autocomplete` the caret is in the frontmatter. Optional: a surface without it
+   * still gets the `/` menu, and no autocomplete.
+   */
+  documentBeforeCaret?(): string;
+  /**
+   * Replace `length` characters before the caret (never past the line start) with `text`,
+   * leaving the caret after it: choosing a suggestion. Optional, like the above.
+   */
+  replaceBeforeCaret?(length: number, text: string): void;
 }
 
 export const textSurfaceShape: Shape<TextSurface> = s.object({
@@ -716,6 +727,8 @@ export const textSurfaceShape: Shape<TextSurface> = s.object({
   caretRect: s.func(),
   takeBeforeCaret: s.func(),
   subscribe: s.func(),
+  documentBeforeCaret: s.optional(s.func()),
+  replaceBeforeCaret: s.optional(s.func()),
 });
 
 /** One entry in the `/` menu. Typing `/att` lists the commands whose title or keywords start with it. */
@@ -756,3 +769,4 @@ export const slashCommandShape: Shape<SlashCommand> = s.object({
   when: s.optional(s.func()),
   run: s.func(),
 });
+

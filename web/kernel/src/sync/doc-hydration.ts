@@ -601,9 +601,16 @@ export class DocHydrator {
   /** `doc.subscribed`: the server has us in the room (PROTOCOL.md §3.3). */
   onSubscribed(message: DocSubscribed): void {
     const entry = this.#open.get(message.id);
-    if (!entry) return;
+    // An ack for a subscription this client has since withdrawn. The server queues
+    // control messages apart from document frames, and `doc.unsubscribe` clears only
+    // the latter, so the `doc.subscribed` of a short open (a folder move: open,
+    // splice, release) routinely lands *after* the unsubscribe. Believing it would
+    // mark the document subscribed while the server has it unsubscribed, and the
+    // next edit would go out as an `UPDATE` the server drops without a word.
+    // `#subscribe` sets the flag when it sends, so a live subscription never needs
+    // the ack to set it.
+    if (!entry || !entry.subscribed) return;
     entry.acked = true;
-    entry.subscribed = true;
     // Anything queued while offline goes now; the handshake that follows is the
     // safety net, not the mechanism.
     this.#flush(entry);

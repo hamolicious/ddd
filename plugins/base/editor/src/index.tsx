@@ -541,6 +541,16 @@ export default function activate(kernel: Kernel): EditorApi {
             bound.dispatch({ changes: { from, to }, selection: { anchor: from }, userEvent: "delete" });
             return markAt(text, from);
           },
+          documentBeforeCaret: () => bound.state.doc.sliceString(0, head()),
+          replaceBeforeCaret: (length, insert) => {
+            const to = head();
+            const from = Math.max(bound.state.doc.lineAt(to).from, to - length);
+            bound.dispatch({
+              changes: { from, to, insert },
+              selection: { anchor: from + insert.length },
+              userEvent: "input.complete",
+            });
+          },
           subscribe: (listener) => {
             watchers.add(listener);
             return () => {
@@ -592,24 +602,11 @@ export default function activate(kernel: Kernel): EditorApi {
     }, [line, open, failure]);
 
     /*
-     * **The frontmatter line the parser dropped (SPEC §3.4), said in the mode that can
-     * fix it.**
-     *
-     * `document-surface` used to carry this notice above every mode and stopped, because
-     * in read mode it repeated `viewer`'s properties header. In *edit* mode it was the
-     * only one: the header is read-mode-only. So the key silently missing from `fm` everywhere in the
-     * app had no explanation on the one screen whose whole job is repairing the text —
-     * and the read-mode warning's own advice is "fix the line in edit mode".
-     *
-     * It is a `status`, not an `alert`: the document opened fine, the text is intact,
-     * and nothing is waiting on the reader.
+     * **No parse-error notice here.** A frontmatter line is malformed for a moment every
+     * time someone types a new key (`stat` before its `:`), and a banner that appeared and
+     * vanished on those keystrokes pushed the text being typed up and down. Read mode's
+     * properties header still says when a line could not be read (`viewer/src/FmHeader.tsx`).
      */
-    const parseNotice = row.fm_parse_error ? (
-      <p className="editor-notice editor:m-0 editor:shrink-0 editor:border-b editor:border-border editor:bg-bg-subtle editor:px-4 editor:py-2 editor:text-sm editor:text-text-muted editor:compact:p-2 editor:compact:break-words" role="status">
-        One frontmatter line could not be read, so its key is missing everywhere else in
-        the app. The text below is exactly what the document holds.
-      </p>
-    ) : null;
 
     if (!open) {
       return (
@@ -620,7 +617,6 @@ export default function activate(kernel: Kernel): EditorApi {
               Opening for editing…
             </p>
           )}
-          {parseNotice}
           <pre className="editor:m-0 editor:min-h-0 editor:min-w-0 editor:flex-1 editor:overflow-auto editor:whitespace-pre-wrap editor:bg-bg editor:p-4 editor:font-mono editor:text-sm editor:leading-[1.6] editor:text-text-muted">{row.content ?? ""}</pre>
         </div>
       );
@@ -628,7 +624,6 @@ export default function activate(kernel: Kernel): EditorApi {
 
     return (
       <div className="editor:flex editor:h-full editor:min-h-0 editor:min-w-0 editor:flex-1 editor:flex-col editor:font-sans editor:text-text" data-document={id}>
-        {parseNotice}
         {failure ? (
           <p className="editor-notice editor-notice-error editor:m-0 editor:shrink-0 editor:border-b editor:border-l-[3px] editor:border-border editor:border-l-danger editor:bg-bg-subtle editor:px-4 editor:py-2 editor:text-sm editor:text-text editor:compact:p-2 editor:compact:break-words" role="alert">
             The editor failed to start: {failure}

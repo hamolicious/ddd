@@ -50,6 +50,52 @@ graphify extract . --backend openai --model "$model"
 graphify label . --missing-only --backend=openai --model="$model"
 """
 
+[tasks.serve-graph]
+description = "Serve graphify-out/graph.html and open it in the browser (set GRAPHIFY_OPEN=0 for headless use)"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+
+graph_dir="graphify-out"
+graph_file="$graph_dir/graph.html"
+port="${GRAPHIFY_PORT:-8000}"
+url="http://127.0.0.1:$port/graph.html"
+
+if [[ ! -f "$graph_file" ]]; then
+  echo "Missing $graph_file; run 'mise run update-graph' first." >&2
+  exit 1
+fi
+
+python="python3"
+if [[ -s "$graph_dir/.graphify_python" ]]; then
+  python="$(<"$graph_dir/.graphify_python")"
+fi
+
+echo "Serving the graph at $url (Ctrl-C to stop)"
+
+if [[ "${GRAPHIFY_OPEN:-1}" != "0" ]]; then
+  (
+    sleep 0.5
+    if command -v xdg-open >/dev/null 2>&1; then
+      xdg-open "$url" >/dev/null 2>&1 || echo "Could not open a browser; visit $url manually."
+    elif command -v open >/dev/null 2>&1; then
+      open "$url" || echo "Could not open a browser; visit $url manually."
+    elif command -v cmd.exe >/dev/null 2>&1; then
+      cmd.exe /c start "" "$url" >/dev/null 2>&1 || echo "Could not open a browser; visit $url manually."
+    else
+      echo "No browser opener found; visit $url manually."
+    fi
+  ) &
+fi
+
+exec "$python" -m http.server "$port" --bind 127.0.0.1 --directory "$graph_dir"
+"""
+
+[tasks.graph-plugin]
+description = "Pick a plugin with fzf and open its isolated Graphify neighbourhood (optional argument prefilters; unique matches auto-select)"
+raw = true
+run = "scripts/graph-plugin"
+
 [tasks.dev]
 description = "Run the server against the compose Mongo (mongo in docker, server on the host), serving the built PWA + plugins"
 dir = "backend"

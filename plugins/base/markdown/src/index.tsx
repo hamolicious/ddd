@@ -52,7 +52,7 @@ import {
 import { type EmbedChain } from "./doc-embed.js";
 import { clampEmbedDepth, DEFAULT_EMBED_DEPTH, EMBED_DEPTH_KEY, MarkdownSettings } from "./MarkdownSettings.js";
 import { ProcessorCache } from "./processor.js";
-import { bodyOf, regionsOf, type DocumentRegions } from "./regions.js";
+import { bodyOf, regionsOf, type DocumentRegions } from "../../_shared/regions.js";
 import { renderTree, type RenderRegistries } from "./render.js";
 import { createRuntime } from "./runtime.js";
 import { buildTaskRegistry, scanTasks } from "./tasks.js";

@@ -7,6 +7,10 @@
  * task checkbox writes a text splice at an absolute document offset while the pipeline
  * only ever sees the body.
  *
+ * Shared, not a dependency: `markdown` renders the body and `indexer` counts and scans it,
+ * and the two must agree to the byte about where it is — a link inside a `%%%` section
+ * that one of them counts and the other hides is the drift this file exists to prevent.
+ *
  * ---
  *
  * **INTEGRATION (area `wasm` / `kernel-runtime`): this file should not exist.**
@@ -31,8 +35,9 @@
  * 3. Delete this file; `regionsOf` becomes `kernel.core.documentRegions`.
  *
  * `editor` (area `base-docs`) needs the same three spans to collapse the machine
- * regions, and `viewer` already calls `markdown.bodyOf`, so this is one shared need,
- * not a markdown quirk. Until then the code below mirrors the Rust line-for-line and
+ * regions (it has its own copy, `editor/src/regions.ts`), `viewer` calls
+ * `markdown.bodyOf`, and `indexer` imports this file, so this is one shared need, not a
+ * markdown quirk. Until then the code below mirrors the Rust line-for-line and
  * `regions.test.ts` pins the cases that matter.
  *
  * Known, accepted divergence from the Rust: `core::document::normalize_input` converts a

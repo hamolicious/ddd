@@ -154,6 +154,17 @@ function PlainEditor({
         element.setSelectionRange(from, from);
         return markAt(open.text, from);
       },
+      documentBeforeCaret: () => element.value.slice(0, element.selectionStart),
+      replaceBeforeCaret: (length: number, insert: string) => {
+        const to = element.selectionStart;
+        const from = Math.max(lineStart(), to - length);
+        open.doc.transact(() => {
+          open.text.delete(from, to - from);
+          open.text.insert(from, insert);
+        }, "alt-editor");
+        element.setSelectionRange(from + insert.length, from + insert.length);
+        notify();
+      },
       subscribe: (listener: () => void) => {
         listeners.add(listener);
         return () => listeners.delete(listener);
