@@ -80,3 +80,43 @@ test("on a phone the altbar is a drawer from the right, one drawer at a time", a
   await expect(altbar).toBeHidden();
   await expect(page.getByRole("complementary", { name: /sidebar/i })).toBeVisible();
 });
+
+test("View shows a snapshot read only, detached from the current text", async ({ page, request, baseURL }) => {
+  await signIn(page, ADMIN);
+  const original = "# Then\n\n- [ ] a task back then\n";
+  const id = await createDocument(request, baseURL!, original);
+  await openDocument(page, id);
+
+  const toggle = page.locator(".shell-altbar-toggle");
+  const altbar = page.getByRole("complementary", { name: "Side panel" });
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+  await altbar.getByRole("button", { name: "Take a snapshot now" }).click();
+  await expect(altbar.getByText("Snapshot taken.")).toBeVisible();
+  const changed = await request.put(`${baseURL}/api/documents/${id}`, { data: { content: "# Now\n\nDifferent.\n" } });
+  expect(changed.ok()).toBe(true);
+
+  const row = altbar.getByRole("listitem").filter({ hasText: "Taken by hand" }).first();
+  await row.getByRole("button", { name: /^View the snapshot from / }).click();
+  expect(new URL(page.url()).hash).toMatch(new RegExp(`^#/doc/${id}/snapshot/[A-Za-z0-9]+$`));
+
+  const banner = page.getByRole("region", { name: "Snapshot" });
+  await expect(banner).toContainText("Read only");
+  await expect(page.getByRole("heading", { name: "Then" })).toBeVisible();
+  // The altbar stays, and marks the snapshot on screen.
+  await expect(row).toHaveAttribute("aria-current", "true");
+
+  // Read only: the old task's checkbox writes nothing.
+  const checkbox = page.getByRole("checkbox").first();
+  if (await checkbox.isEnabled()) await checkbox.click({ force: true });
+  expect(await rawText(request, baseURL!, id)).toBe("# Now\n\nDifferent.\n");
+
+  await banner.getByRole("link", { name: "Current version" }).click();
+  expect(new URL(page.url()).hash).toBe(`#/doc/${id}`);
+
+  // Restore from the view puts it back and returns to the current version.
+  await row.getByRole("button", { name: /^View the snapshot from / }).click();
+  await banner.getByRole("button", { name: "Restore this" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Restore" }).click();
+  await expect.poll(() => new URL(page.url()).hash).toBe(`#/doc/${id}`);
+  expect(await rawText(request, baseURL!, id)).toBe(original);
+});

@@ -44,7 +44,8 @@ browser's device toolbar at 390 × 844, and 844 × 390 for landscape.
 | 19e | ↳ Snapshots | [x] | Moved out: now the `snapshots` plugin, per page, in the altbar (19h) |
 | 19f | ↳ Plugins | [x] | Notice always shown, drop-zone upload, compact rows with icon actions and details on demand |
 | 19g | ↳ Workspace | [x] | "Large edit history" with its thresholds behind an (i) popover |
-| 19h | `snapshots` | [ ] | New: the open document's snapshots in the altbar; `shell-ui` gained the altbar and its top-bar toggle |
+| 19h | `snapshots` | [ ] | New: the open document's snapshots in the altbar, with a read-only View; `shell-ui` gained the altbar and its top-bar toggle |
+| 19i | Offline, the whole app | [ ] | Next: what using the app without a connection is like, end to end |
 | 20 | `extra-task-states` (example) | [ ] | |
 | 21 | `alt-editor` (example) | [ ] | |
 
@@ -618,10 +619,44 @@ the current text as a "Before a restore" snapshot, so a restore can be undone.
 - [ ] The altbar's edge drags to resize; arrow keys on the edge too; double-click resets.
 - [ ] Take adds a "Taken by hand" snapshot; each row shows when, why, size and the title then.
 - [ ] Restore asks first, then puts the text back, and an open copy in another browser follows.
+- [ ] View (the eye) opens the snapshot read only at `#/doc/<id>/snapshot/<snapshot>`,
+  under a banner with its date, reason and title then. Checkboxes there change nothing.
+  The list marks the snapshot on screen; the eye again, or "Current version", goes back.
+  "Restore this" restores it and returns to the current version.
 - [ ] Phone: the altbar is a drawer from the right; opening the sidebar closes it; Escape
   and a tap outside close it.
 
 **Notes.**
+## 19i. Offline — the whole app
+
+**What it is.** Not one plugin: what the app is like with no connection, from start to
+finish. The promise (SPEC §4.1): every document already synced is readable, searchable
+and editable offline, edits queue and merge on reconnect, and anything that needs the
+server says so rather than failing silently.
+
+**How to test.** DevTools → Network → Offline, or stop the server. On a phone, flight
+mode. Try each item both on a desktop and on a phone.
+
+- [ ] Going offline: the sync dot becomes ✕ within a few seconds and stays (no blinking);
+  hovering it says what is going on.
+- [ ] Reload while offline: the app still starts, from the device's copy, signed in.
+- [ ] Browse: the document list, Trash, folders and counts all show what was last synced.
+- [ ] Search finds synced documents, and says the server's results are missing.
+- [ ] Open, read and edit a document; the unsynced count grows, then clears on reconnect.
+- [ ] Create a document, rename or move a folder, trash and restore a document offline;
+  each one lands on the server after reconnecting.
+- [ ] Two devices edit the same document offline; after both reconnect the text holds
+  both edits.
+- [ ] Paste an image offline: it says it could not upload; nothing is left half-done.
+- [ ] Server-only screens say they need a connection instead of spinning: Admin tabs,
+  the snapshots panel and View, the file page, plugin install.
+- [ ] Settings and theme changes made offline apply now and sync later.
+- [ ] Sign-in expired while offline: the workspace stays readable, and it asks to sign in
+  again once back online.
+- [ ] Nothing offline shows a native browser dialog or a blank screen.
+
+**Notes.**
+
 ## 20. `extra-task-states` (example)
 
 **What it does.** Proves plugins can extend markdown: adds three task markers, `[/]` in

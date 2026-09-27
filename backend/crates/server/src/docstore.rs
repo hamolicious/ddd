@@ -471,6 +471,9 @@ pub trait DocStore: Send + Sync + 'static {
     /// Snapshots for a document, newest first.
     async fn snapshots(&self, id: &str) -> Result<Vec<DocumentSnapshot>, DocStoreError>;
 
+    /// One snapshot of a document, with its text.
+    async fn snapshot_by_id(&self, id: &str, snapshot_id: &str) -> Result<DocumentSnapshot, DocStoreError>;
+
     /// Restore a snapshot: one CRDT transaction replacing the full text.
     async fn restore_snapshot(
         &self,
@@ -1754,19 +1757,22 @@ impl DocStore for MongoDocStore {
         Ok(snapshots)
     }
 
+    async fn snapshot_by_id(&self, id: &str, snapshot_id: &str) -> Result<DocumentSnapshot, DocStoreError> {
+        self.inner
+            .collections
+            .document_snapshots()
+            .find_one(doc! { "_id": snapshot_id, "document_id": id })
+            .await?
+            .ok_or_else(|| DocStoreError::SnapshotNotFound(snapshot_id.to_string()))
+    }
+
     async fn restore_snapshot(
         &self,
         id: &str,
         snapshot_id: &str,
         actor: &Actor,
     ) -> Result<WriteOutcome, DocStoreError> {
-        let snapshot = self
-            .inner
-            .collections
-            .document_snapshots()
-            .find_one(doc! { "_id": snapshot_id, "document_id": id })
-            .await?
-            .ok_or_else(|| DocStoreError::SnapshotNotFound(snapshot_id.to_string()))?;
+        let snapshot = self.snapshot_by_id(id, snapshot_id).await?;
 
         // Keep the pre-restore state recoverable.
         self.snapshot(id, "pre_restore", actor).await?;
@@ -1851,20 +1857,12 @@ fn binary(bytes: Vec<u8>) -> Binary {
     }
 }
 
-/// Cheap title for snapshot rows: the shared core resolves the real one at
-/// materialization, but a snapshot is only ever previewed.
+/// A snapshot row's title: the shared core's, so `title:` in the frontmatter wins over
+/// the first line exactly as it does for the document itself. (A first-line shortcut
+/// here once titled every snapshot of such a document "title: …".)
 fn title_of(text: &str) -> String {
-    text.lines()
-        .map(str::trim)
-        .find(|line| !line.is_empty() && *line != "---")
-        .map(|line| {
-            let line = line.trim_start_matches('#').trim();
-            line.chars()
-                .take(limits::TITLE_FALLBACK_MAX_CHARS)
-                .collect::<String>()
-        })
-        .filter(|line| !line.is_empty())
-        .unwrap_or_else(|| limits::UNTITLED.to_string())
+    let normalized = normalize_input(text);
+    parse_document(normalized.as_ref()).title
 }
 
 /// One `Y.Text` splice, in **UTF-16 code units** (SPEC §3.2 `OffsetKind::Utf16`).
@@ -2231,6 +2229,7 @@ mod tests {
         assert_eq!(title_of("# Heading\n\nbody"), "Heading");
         assert_eq!(title_of("\n\nfirst line\n"), "first line");
         assert_eq!(title_of("   \n"), limits::UNTITLED);
+        assert_eq!(title_of("---\ntitle: Shopping\n---\n# Groceries\n"), "Shopping");
     }
 
     #[test]

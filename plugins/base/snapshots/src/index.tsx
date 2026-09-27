@@ -10,27 +10,45 @@
  * Any signed-in user may do all three, as with editing: snapshots are part of the
  * document, not an administrator's tool.
  *
- * - `Panel.tsx` — the list, the take / refresh / restore actions.
- * - `api.ts` — the three REST calls and the labels for a snapshot's reason.
+ * - `Panel.tsx` — the list, the take / refresh / view / restore actions.
+ * - `View.tsx` — one snapshot, read only, at `#/doc/<id>/snapshot/<snapshot>`.
+ * - `api.ts` — the four REST calls and the labels for a snapshot's reason.
  */
 
 import type { Kernel } from "@kernel";
 
 import type { ContextMenuApi } from "../../_shared/context-menu-api.js";
-import { POINTS, type AltbarPanel, type Command, type ShownView } from "../../_shared/points.js";
+import {
+  POINTS,
+  type AltbarPanel,
+  type Command,
+  type MainView,
+  type Route,
+  type ShownView,
+} from "../../_shared/points.js";
 import type { ShellUiApi } from "../../_shared/shell-api.js";
 
 import { createSnapshotsClient } from "./api.js";
 import { SnapshotsPanel } from "./Panel.js";
+import { SnapshotView, type MarkdownApi } from "./View.js";
 
 /** `document-surface`'s view: `#/doc/<id>`. */
 const DOCUMENT_VIEW = "document.surface";
+/** This plugin's own view: one snapshot, read only. */
+const SNAPSHOT_VIEW = "snapshots.view";
 
-const isDocument = (view: ShownView): boolean => view.id === DOCUMENT_VIEW && Boolean(view.params["id"]);
+const isDocument = (view: ShownView): boolean =>
+  (view.id === DOCUMENT_VIEW || view.id === SNAPSHOT_VIEW) && Boolean(view.params["id"]);
+
+interface RouterService {
+  navigate(path: string): void;
+}
 
 export default function activate(kernel: Kernel): void {
   const menu = kernel.services.require<ContextMenuApi>("context-menu");
   const shell = kernel.services.require<ShellUiApi>("shell-ui");
+  const markdown = kernel.services.require<MarkdownApi>("markdown");
+  const router = kernel.services.require<RouterService>("router");
   const client = createSnapshotsClient((path, init) => kernel.session.fetch(path, init));
 
   // The panel's title says what it is; the camera in the top bar would say nothing.
@@ -43,8 +61,26 @@ export default function activate(kernel: Kernel): void {
       <SnapshotsPanel
         key={view.params["id"]}
         documentId={view.params["id"] ?? ""}
+        viewing={view.id === SNAPSHOT_VIEW ? view.params["snapshot"] : undefined}
         client={client}
         confirm={(request) => menu.confirm(request)}
+        navigate={(path) => router.navigate(path)}
+      />
+    ),
+  });
+
+  kernel.extensions.contribute<Route>(POINTS.route, { path: "/doc/:id/snapshot/:snapshot", view: SNAPSHOT_VIEW });
+  kernel.extensions.contribute<MainView>(POINTS.mainView, {
+    id: SNAPSHOT_VIEW,
+    title: "Snapshot",
+    component: ({ params }) => (
+      <SnapshotView
+        documentId={params?.["id"] ?? ""}
+        snapshotId={params?.["snapshot"] ?? ""}
+        client={client}
+        markdown={markdown}
+        confirm={(request) => menu.confirm(request)}
+        navigate={(path) => router.navigate(path)}
       />
     ),
   });

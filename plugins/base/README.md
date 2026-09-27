@@ -90,7 +90,7 @@ flowchart TD
     folders --> commands & context-menu & router & shell-ui
     settings --> commands & router & shell-ui
     admin --> commands & context-menu & router & shell-ui
-    snapshots --> context-menu & shell-ui
+    snapshots --> context-menu & markdown & router & shell-ui
     themes --> commands
 ```
 

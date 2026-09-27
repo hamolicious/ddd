@@ -13,6 +13,7 @@
 //! | DELETE | `/api/documents/:id` | tombstone → Trash (30 d) → purge; id → graveyard forever |
 //! | POST | `/api/documents/:id/restore` | out of Trash |
 //! | GET | `/api/documents/:id/snapshots` | list snapshots |
+//! | GET | `/api/documents/:id/snapshots/:snapshot_id` | one snapshot, with its text |
 //! | POST | `/api/documents/:id/snapshots/:snapshot_id/restore` | restore a snapshot |
 //!
 //! The Trash view is `GET /api/documents?trash=trashed` — a tombstoned document
@@ -91,6 +92,7 @@ pub fn router() -> Router<AppState> {
         )
         .route("/{id}/restore", post(restore))
         .route("/{id}/snapshots", get(list_snapshots).post(create_snapshot))
+        .route("/{id}/snapshots/{snapshot_id}", get(get_snapshot))
         .route(
             "/{id}/snapshots/{snapshot_id}/restore",
             post(restore_snapshot),
@@ -649,6 +651,44 @@ pub async fn list_snapshots(
             })
             .collect(),
     ))
+}
+
+/// A snapshot with the text it holds: what a read-only look at an earlier version needs.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SnapshotContentView {
+    #[serde(flatten)]
+    pub snapshot: SnapshotView,
+    pub content: String,
+}
+
+pub async fn get_snapshot(
+    State(state): State<AppState>,
+    _user: AuthUser,
+    Path((id, snapshot_id)): Path<(String, String)>,
+) -> AppResult<Json<SnapshotContentView>> {
+    check_id(&id)?;
+    if !is_valid_id(&snapshot_id) {
+        return Err(AppError::bad_request(format!(
+            "invalid snapshot id `{snapshot_id}`: expected a ULID"
+        )));
+    }
+    let snapshot = state
+        .docs
+        .snapshot_by_id(&id, &snapshot_id)
+        .await
+        .map_err(map_docstore)?;
+    Ok(Json(SnapshotContentView {
+        snapshot: SnapshotView {
+            id: snapshot.id,
+            document_id: snapshot.document_id,
+            title: snapshot.title,
+            reason: snapshot.reason,
+            created_at: snapshot.created_at.into(),
+            created_by: snapshot.created_by,
+            size: snapshot.content.len(),
+        },
+        content: snapshot.content,
+    }))
 }
 
 pub async fn create_snapshot(

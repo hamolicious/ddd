@@ -14,11 +14,17 @@ export interface SnapshotView {
   readonly size: number;
 }
 
+/** One snapshot with its full text (frontmatter and all). */
+export interface SnapshotContent extends SnapshotView {
+  readonly content: string;
+}
+
 export type ApiFetch = (path: string, init?: RequestInit) => Promise<Response>;
 
 export interface SnapshotsClient {
   /** Newest first. */
   list(documentId: string): Promise<readonly SnapshotView[]>;
+  get(documentId: string, snapshotId: string): Promise<SnapshotContent>;
   take(documentId: string): Promise<void>;
   restore(documentId: string, snapshotId: string): Promise<void>;
 }
@@ -28,6 +34,8 @@ export function createSnapshotsClient(fetchApi: ApiFetch): SnapshotsClient {
   return {
     list: async (documentId) =>
       (await (await fetchApi(`/documents/${id(documentId)}/snapshots`)).json()) as readonly SnapshotView[],
+    get: async (documentId, snapshotId) =>
+      (await (await fetchApi(`/documents/${id(documentId)}/snapshots/${id(snapshotId)}`)).json()) as SnapshotContent,
     take: async (documentId) => {
       await fetchApi(`/documents/${id(documentId)}/snapshots`, {
         method: "POST",

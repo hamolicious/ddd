@@ -9,6 +9,8 @@
   "kernel": "^1.0",
   "dependencies": {
     "context-menu": "^1.0",
+    "markdown": "^1.0",
+    "router": "^1.0",
     "shell-ui": "^1.0"
   },
   "peerLibraries": {

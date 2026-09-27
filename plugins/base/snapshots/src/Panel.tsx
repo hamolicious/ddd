@@ -27,12 +27,17 @@ const BUTTON =
 
 export function SnapshotsPanel({
   documentId,
+  viewing,
   client,
   confirm,
+  navigate,
 }: {
   readonly documentId: string;
+  /** The snapshot open in the main view, marked in the list. */
+  readonly viewing: string | undefined;
   readonly client: SnapshotsClient;
   readonly confirm: (request: ConfirmRequest) => Promise<boolean>;
+  readonly navigate: (path: string) => void;
 }): ReactElement {
   const [rows, setRows] = useState<readonly SnapshotView[] | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -56,7 +61,9 @@ export function SnapshotsPanel({
     };
   }, [client, documentId]);
 
-  useEffect(load, [load]);
+  // Again whenever the viewed snapshot changes: a restore from the snapshot's own view
+  // lands back here, and the list has a new "Before a restore" row.
+  useEffect(load, [load, viewing]);
 
   const run = (key: string, action: () => Promise<void>, done: string): void => {
     setBusy(key);
@@ -126,7 +133,8 @@ export function SnapshotsPanel({
           {rows.map((snapshot) => (
             <li
               key={snapshot.id}
-              className="snap:flex snap:items-center snap:gap-2 snap:border-b snap:border-border snap:py-1.5 snap:last:border-b-0"
+              aria-current={snapshot.id === viewing ? "true" : undefined}
+              className={`snap:flex snap:items-center snap:gap-2 snap:border-b snap:border-border snap:py-1.5 snap:last:border-b-0 ${snapshot.id === viewing ? "snap:-mx-1 snap:rounded snap:bg-accent-subtle snap:px-1" : ""}`}
             >
               <div className="snap:flex snap:min-w-0 snap:flex-1 snap:flex-col">
                 <span className="snap:text-sm">{formatWhen(snapshot.created_at)}</span>
@@ -135,6 +143,25 @@ export function SnapshotsPanel({
                 </Quiet>
                 <Quiet title={snapshot.title}>“{snapshot.title}”</Quiet>
               </div>
+              <button
+                type="button"
+                className={BUTTON}
+                aria-label={`View the snapshot from ${formatWhen(snapshot.created_at)}`}
+                aria-pressed={snapshot.id === viewing}
+                title="View, read only"
+                onClick={() =>
+                  navigate(
+                    snapshot.id === viewing
+                      ? `/doc/${encodeURIComponent(documentId)}`
+                      : `/doc/${encodeURIComponent(documentId)}/snapshot/${encodeURIComponent(snapshot.id)}`,
+                  )
+                }
+              >
+                <svg {...ICON}>
+                  <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </button>
               <button
                 type="button"
                 className={`${BUTTON} snap:border-danger! snap:text-danger!`}
@@ -150,7 +177,10 @@ export function SnapshotsPanel({
                     danger: true,
                     anchor: event.currentTarget,
                   }).then((ok) => {
-                    if (ok) run(snapshot.id, () => client.restore(documentId, snapshot.id), "Restored.");
+                    if (!ok) return;
+                    run(snapshot.id, () => client.restore(documentId, snapshot.id), "Restored.");
+                    // Restored from its own view: the current version is now this one.
+                    if (snapshot.id === viewing) navigate(`/doc/${encodeURIComponent(documentId)}`);
                   });
                 }}
               >
