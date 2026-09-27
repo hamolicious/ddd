@@ -94,3 +94,41 @@ export function RefreshIcon(): ReactElement {
     </svg>
   );
 }
+
+/** A power symbol: enable / disable. */
+export function PowerIcon(): ReactElement {
+  return (
+    <svg {...common}>
+      <path d="M12 3v9" />
+      <path d="M6.3 6.3a8 8 0 1 0 11.4 0" />
+    </svg>
+  );
+}
+
+/** A chevron: expand (it turns when open). */
+export function ChevronIcon(): ReactElement {
+  return (
+    <svg {...common}>
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
+/** A triangle: run now. */
+export function PlayIcon(): ReactElement {
+  return (
+    <svg {...common}>
+      <path d="M7 5l12 7-12 7z" />
+    </svg>
+  );
+}
+
+/** A box with an arrow out: upload a package. */
+export function UploadIcon(): ReactElement {
+  return (
+    <svg {...common}>
+      <path d="M12 15V4M7 9l5-5 5 5" />
+      <path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4" />
+    </svg>
+  );
+}

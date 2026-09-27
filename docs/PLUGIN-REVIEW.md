@@ -42,7 +42,7 @@ browser's device toolbar at 390 × 844, and 844 × 390 for landscape.
 | 19c | ↳ Audit log | [x] | No changes |
 | 19d | ↳ Orphan files | [x] | Icon buttons; names open the file in the viewer (`#/file/<id>`) |
 | 19e | ↳ Snapshots | [x] | Moved out: now the `snapshots` plugin, per page, in the altbar (19h) |
-| 19f | ↳ Plugins | [ ] | |
+| 19f | ↳ Plugins | [x] | Notice always shown, drop-zone upload, compact rows with icon actions and details on demand |
 | 19g | ↳ Workspace | [ ] | |
 | 19h | `snapshots` | [ ] | New: the open document's snapshots in the altbar; `shell-ui` gained the altbar and its top-bar toggle |
 | 20 | `extra-task-states` (example) | [ ] | |
@@ -566,22 +566,26 @@ use them, not only admins. Reviewed as 19h.
 
 **Where to see it.** `#/admin/plugins`; "Show installed plugins" in the palette.
 
-- [ ] The installed list shows every plugin, including `attachments`,
+- [x] The installed list shows every plugin, including `attachments`,
   `native-preview` and `slash-commands`, with where it came from and its status.
-- [ ] Disable, reload: the rest of the app works and says what is missing. Enable
+- [x] Disable, reload: the rest of the app works and says what is missing. Enable
   brings it back. Try the three new plugins; each costs only its own feature.
-- [ ] Upload a package: it lands pending. Its requested capabilities are listed;
+- [x] Upload a package: it lands pending. Its requested capabilities are listed;
   Approve and enable, or Reject. An upgrade of an installed plugin also lands pending.
-- [ ] Configuration saves, and a bad value is refused with a reason.
-- [ ] A plugin with a backend shows its cron table (Run now works), runs, failures and
+- [x] Configuration saves, and a bad value is refused with a reason.
+- [x] A plugin with a backend shows its cron table (Run now works), runs, failures and
   metrics.
-- [ ] The event log marks warnings and errors on the left edge; "Directories the server
+- [x] The event log marks warnings and errors on the left edge; "Directories the server
   could not load" lists any broken install.
-- [ ] Uninstall asks first; a base plugin carries a "base" badge and a warning that
+- [x] Uninstall asks first; a base plugin carries a "base" badge and a warning that
   removing it removes part of the app, with `?safe=bare` as the way back.
-- [ ] "If a plugin breaks the app" explains safe mode (`?safe=1`).
+- [x] "If a plugin breaks the app" explains safe mode (`?safe=1`).
 
-**Notes.**
+**Notes.** The trust notice and the safe-mode line always show. Upload is a drop zone;
+choosing or dropping a package uploads it (it only lands pending). Each plugin is a compact
+row with icon actions (power, uninstall, details); details are a two-column list, then
+scheduled jobs, configuration and host events. Uninstall is a modal holding the purge
+checkbox and the base-plugin warning. Host stats and limits are stat grids.
 
 ### 19g. Workspace
 

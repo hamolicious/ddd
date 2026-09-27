@@ -33,8 +33,8 @@
  * The server authorizes every route underneath; hiding a button here is a courtesy.
  */
 
-import { useMemo, useState } from "react";
-import type { ReactElement } from "react";
+import { useMemo, useRef, useState } from "react";
+import type { ReactElement, ReactNode } from "react";
 
 import type { InstalledPlugin, PluginCapabilities } from "@kernel";
 
@@ -50,7 +50,8 @@ import {
   type PluginCronState,
 } from "./api.js";
 import { AdminSectionFrame } from "./AdminView.js";
-import { useAsync, useConfirm, useMutation } from "./hooks.js";
+import { useAsync, useConfirm, useModal, useMutation } from "./hooks.js";
+import { CheckIcon, ChevronIcon, PlayIcon, PowerIcon, TrashIcon, UploadIcon } from "./icons.js";
 import { PluginConfigForm } from "./PluginConfig.js";
 
 export function PluginsSection({
@@ -77,25 +78,22 @@ export function PluginsSection({
 
   return (
     <AdminSectionFrame id="plugins" title="Plugins" embedded={embedded}>
-      {/* Two paragraphs of essay before the first control cost ~440 px on a phone, so the
-          recovery routes — which matter once something is already broken, not while you
-          are reading about trust — moved behind a disclosure. */}
+      {/* Both halves always show: the recovery line is short, and it is what you need
+          when something is already broken. */}
       <div className="admin-callout">
-        <p>
+        <p className="admin:m-0">
           <strong>Installing a plugin is an act of trust.</strong> Its frontend half runs
           unsandboxed in every user’s session, with full access to the page, the whole
           workspace and the signed-in credentials. The <code>capabilities</code> below gate
           only the <em>server</em> host functions and native bridge calls — they are not a
           sandbox for the browser half.
         </p>
-        <details className="admin-details">
-          <summary>If a plugin breaks the app</summary>
-          <p className="admin-note">
-            <code>?safe=1</code> boots the base distribution only. <code>?safe=bare</code>{" "}
-            boots a minimal built-in plugin manager. <code>DISABLE_PLUGINS=1</code> on the
-            server disables every plugin for every client.
-          </p>
-        </details>
+        <p className="admin-note">
+          <strong className="admin:text-text">If a plugin breaks the app:</strong>{" "}
+          <code>?safe=1</code> boots the base distribution only, <code>?safe=bare</code> a
+          minimal built-in plugin manager, and <code>DISABLE_PLUGINS=1</code> on the server
+          turns every plugin off for every client.
+        </p>
       </div>
 
       {list.data?.plugins_disabled === true && (
@@ -150,7 +148,7 @@ export function PluginsSection({
             </ul>
           )}
 
-          <h4>Installed</h4>
+          <h4>Installed ({live.length})</h4>
           {live.length === 0 ? (
             <p className="admin-empty">No plugins installed.</p>
           ) : (
@@ -190,6 +188,9 @@ export function PluginsSection({
   );
 }
 
+/** The accent fill for the one button a card is for (Approve). */
+const PRIMARY = "admin:border-accent! admin:bg-accent! admin:text-accent-text!";
+
 // ---------------------------------------------------------------------------
 // Upload
 // ---------------------------------------------------------------------------
@@ -203,42 +204,64 @@ function UploadPanel({
   readonly list: PluginAdminList | undefined;
   readonly onDone: () => void;
 }): ReactElement {
-  const [file, setFile] = useState<File | undefined>(undefined);
   const [outcome, setOutcome] = useState<string | undefined>(undefined);
+  const [over, setOver] = useState(false);
+  const input = useRef<HTMLInputElement | null>(null);
   const upload = useMutation(onDone);
   const cap = list?.limits.max_package_bytes;
+  const busy = upload.busy !== undefined;
+
+  // Choosing is uploading: a package only lands pending, and approving it is the act.
+  const send = (file: File | undefined): void => {
+    if (!file || busy) return;
+    setOutcome(undefined);
+    upload.run(file.name, async () => {
+      const result = await client.uploadPlugin(file);
+      setOutcome(
+        `${result.id} ${result.version} uploaded — ${result.state}` +
+          (result.replaced != null ? `, replacing ${result.replaced}` : "") +
+          (result.warnings.length > 0 ? `. Warnings: ${result.warnings.join("; ")}` : ""),
+      );
+    });
+    if (input.current) input.current.value = "";
+  };
 
   return (
-    <form
-      className="admin-form"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (!file) return;
-        setOutcome(undefined);
-        upload.run("upload", async () => {
-          const result = await client.uploadPlugin(file);
-          setOutcome(
-            `${result.id} ${result.version} uploaded — ${result.state}` +
-              (result.replaced != null ? `, replacing ${result.replaced}` : "") +
-              (result.warnings.length > 0 ? `. Warnings: ${result.warnings.join("; ")}` : ""),
-          );
-          setFile(undefined);
-        });
-      }}
-    >
-      <div className="admin-field">
-        <label htmlFor="admin-plugin-package">Install or upgrade a plugin (.zip)</label>
-        <input
-          id="admin-plugin-package"
-          type="file"
-          accept=".zip,application/zip"
-          onChange={(event) => setFile(event.target.files?.[0] ?? undefined)}
-        />
-        <p className="admin-note">
-          Uploads wait for approval. Nothing runs until you approve it. A new version of an
-          installed plugin upgrades it.
-          {cap !== undefined && <> Maximum package size {formatBytes(cap)}.</>}
-        </p>
+    <div className="admin:flex admin:flex-col admin:gap-2">
+      <div
+        className={`admin-upload admin:flex admin:flex-wrap admin:items-center admin:gap-3 admin:rounded-lg admin:border-2 admin:border-dashed admin:p-3 ${over ? "admin:border-accent admin:bg-accent-subtle" : "admin:border-border admin:bg-bg-subtle"}`}
+        onDragOver={(event) => {
+          event.preventDefault();
+          setOver(true);
+        }}
+        onDragLeave={() => setOver(false)}
+        onDrop={(event) => {
+          event.preventDefault();
+          setOver(false);
+          send(event.dataTransfer.files[0]);
+        }}
+      >
+        <span className="admin:flex admin:size-10 admin:shrink-0 admin:items-center admin:justify-center admin:rounded-full admin:bg-bg admin:text-text-muted admin:text-xl">
+          <UploadIcon />
+        </span>
+        <div className="admin:flex admin:min-w-48 admin:flex-1 admin:flex-col admin:gap-0.5">
+          <strong>Install or upgrade a plugin</strong>
+          <span className="admin:text-sm admin:text-text-muted">
+            Drop a <code>.zip</code> here or choose one. It waits for your approval; nothing
+            runs until then.{cap !== undefined && <> Up to {formatBytes(cap)}.</>}
+          </span>
+        </div>
+        <label className="admin:tap-h admin:inline-flex admin:cursor-pointer admin:items-center admin:gap-1.5 admin:rounded admin:border admin:border-accent admin:bg-accent admin:px-3 admin:text-accent-text admin:has-[:focus-visible]:outline-2 admin:has-[:focus-visible]:outline-offset-1 admin:has-[:focus-visible]:outline-focus">
+          <input
+            ref={input}
+            className="admin:sr-only"
+            type="file"
+            accept=".zip,application/zip"
+            disabled={busy}
+            onChange={(event) => send(event.target.files?.[0])}
+          />
+          {busy ? `Uploading ${upload.busy}…` : "Choose a package"}
+        </label>
       </div>
       {upload.error !== undefined && (
         <p className="admin-error" role="alert">
@@ -250,12 +273,7 @@ function UploadPanel({
           {outcome}
         </p>
       )}
-      <div className="admin-actions">
-        <button type="submit" disabled={!file || upload.busy !== undefined}>
-          {upload.busy !== undefined ? "Uploading…" : "Upload package"}
-        </button>
-      </div>
-    </form>
+    </div>
   );
 }
 
@@ -456,6 +474,9 @@ function PendingCard({
       <div className="admin-actions">
         <button
           type="button"
+          className={`admin-icon-button ${PRIMARY}`}
+          aria-label={`Approve and enable ${plugin.id} ${plugin.version}`}
+          title="Approve and enable"
           disabled={!confirmed || problems.length > 0 || mutate.busy !== undefined}
           onClick={() =>
             mutate.run("approve", () =>
@@ -463,11 +484,13 @@ function PendingCard({
             )
           }
         >
-          {mutate.busy === "approve" ? "Approving…" : "Approve and enable"}
+          <CheckIcon />
         </button>
         <button
           type="button"
-          className="admin-danger"
+          className="admin-danger admin-icon-button"
+          aria-label={`Reject and delete ${plugin.id} ${plugin.version}`}
+          title="Reject and delete"
           disabled={mutate.busy !== undefined}
           onClick={(event) => {
             void confirm({
@@ -480,7 +503,7 @@ function PendingCard({
             });
           }}
         >
-          Reject and delete
+          <TrashIcon />
         </button>
       </div>
     </li>
@@ -538,14 +561,89 @@ function InstalledCard({
   readonly plugin: PluginAdminView;
   readonly onDone: () => void;
 }): ReactElement {
-  const [purge, setPurge] = useState(false);
+  const [open, setOpen] = useState(false);
   const mutate = useMutation(onDone);
-  const confirm = useConfirm();
+  const modal = useModal();
   const capabilities = describeCapabilities(plugin.capabilities_approved);
+  const name = plugin.manifest.name ?? plugin.id;
+  const enabled = plugin.state === "enabled";
+  const toggleLabel = enabled ? "Disable" : plugin.breaker.open ? "Re-enable and clear the breaker" : "Enable";
+  const detailsId = `admin-plugin-details-${plugin.id}`;
 
   return (
-    <li className="admin-plugin">
-      <PluginHead plugin={plugin} />
+    <li className="admin-plugin admin:flex admin:flex-col admin:gap-2">
+      <div className="admin:flex admin:items-start admin:gap-2">
+        <div className="admin:min-w-0 admin:flex-1">
+          <PluginHead plugin={plugin} />
+        </div>
+        <div className="admin-actions admin:shrink-0">
+          <button
+            type="button"
+            className={`admin-icon-button ${enabled ? "" : "admin:text-text-muted"}`}
+            aria-label={`${toggleLabel} ${name}`}
+            aria-pressed={enabled}
+            title={toggleLabel}
+            disabled={mutate.busy !== undefined}
+            onClick={() =>
+              enabled
+                ? mutate.run("disable", () => client.disablePlugin(plugin.id))
+                : mutate.run("enable", () => client.enablePlugin(plugin.id))
+            }
+          >
+            <PowerIcon />
+          </button>
+          <button
+            type="button"
+            className="admin-danger admin-icon-button"
+            aria-label={`Uninstall ${name}`}
+            title="Uninstall"
+            disabled={mutate.busy !== undefined}
+            onClick={(event) => {
+              void modal({
+                title: `Uninstall ${name}?`,
+                description: plugin.base ? (
+                  <>
+                    It is part of the base app, so that part goes with it.{" "}
+                    <code>?safe=bare</code> is the way back.
+                  </>
+                ) : undefined,
+                fields: [
+                  {
+                    kind: "checkbox",
+                    id: "purge",
+                    label: "Also delete its data",
+                    hint: "Its key-value store and its %%% sections in every document. This cannot be undone; without it, a reinstall picks up where it left off.",
+                  },
+                ],
+                buttons: [
+                  { id: "cancel", label: "Cancel", dismiss: true },
+                  { id: "uninstall", label: "Uninstall", tone: "danger", default: true },
+                ],
+                anchor: event.currentTarget,
+              }).then((result) => {
+                if (!result) return;
+                const purge = result.values["purge"] === true;
+                mutate.run("uninstall", () => client.uninstallPlugin(plugin.id, purge));
+              });
+            }}
+          >
+            <TrashIcon />
+          </button>
+          <button
+            type="button"
+            className="admin-icon-button"
+            aria-label={`Details for ${name}`}
+            title={open ? "Hide details" : "Details"}
+            aria-expanded={open}
+            aria-controls={detailsId}
+            onClick={() => setOpen(!open)}
+          >
+            <span className={`admin:inline-flex ${open ? "admin:rotate-180" : ""}`}>
+              <ChevronIcon />
+            </span>
+          </button>
+        </div>
+      </div>
 
       {plugin.breaker.open && (
         <p className="admin-warning" role="status">
@@ -569,152 +667,109 @@ function InstalledCard({
       {plugin.last_error != null && plugin.state !== "failed" && (
         <p className="admin-note">Last error: {plugin.last_error}</p>
       )}
-
-      <dl className="admin-plugin-meta">
-        <div>
-          <dt>Installed</dt>
-          <dd>
-            {formatWhen(plugin.installed_at)} ({describeSource(plugin)})
-          </dd>
-        </div>
-        <div>
-          <dt>Approved</dt>
-          <dd>{plugin.approved_at == null ? "—" : formatWhen(plugin.approved_at)}</dd>
-        </div>
-        <div>
-          <dt>Backend half</dt>
-          <dd>{plugin.has_backend ? describeBackend(plugin) : "none"}</dd>
-        </div>
-        <div>
-          <dt>Kernel range</dt>
-          <dd>
-            <code>{plugin.manifest.kernel}</code>
-          </dd>
-        </div>
-        <div>
-          <dt>Dependencies</dt>
-          <dd>{formatRanges(plugin.manifest.dependencies)}</dd>
-        </div>
-        <div>
-          <dt>Peer libraries</dt>
-          <dd>{formatRanges(plugin.manifest.peerLibraries)}</dd>
-        </div>
-      </dl>
-
-      <div className="admin-plugin-capabilities admin:mb-0 admin:mt-2">
-        <strong>Approved capabilities:</strong>
-        {capabilities.length === 0 ? (
-          <span> none — no server host functions and no bridge calls</span>
-        ) : (
-          <ul className="admin:mb-0 admin:mt-1 admin:pl-5">
-            {capabilities.map((entry) => (
-              <li key={entry}>{entry}</li>
-            ))}
-          </ul>
-        )}
-        {plugin.capabilities_differ && (
-          <p className="admin-note">
-            This differs from what the package requested (
-            {describeCapabilities(plugin.capabilities_requested).join("; ") || "nothing"}). A
-            narrowed plugin can fail in ways its author never tested.
-          </p>
-        )}
-      </div>
-
-      {plugin.routes.length > 0 && (
-        <p className="admin-note">
-          Routes:{" "}
-          {plugin.routes
-            .map(
-              (route) =>
-                `${route.method} /api/plugins/${plugin.id}${route.path}${route.public ? " (public)" : ""}`,
-            )
-            .join(", ")}
-        </p>
-      )}
-
-      {plugin.cron.length > 0 && (
-        <CronTable client={client} plugin={plugin} onDone={onDone} />
-      )}
-
-      <MetricsSummary plugin={plugin} />
-
-      {Object.keys(plugin.config_schema).length > 0 && (
-        <details className="admin-details">
-          <summary>Configuration</summary>
-          <PluginConfigForm client={client} plugin={plugin} />
-        </details>
-      )}
-
-      <details className="admin-details">
-        <summary>Recent host events</summary>
-        <PluginLogs client={client} plugin={plugin} />
-      </details>
-
       {mutate.error !== undefined && (
         <p className="admin-error" role="alert">
           {mutate.error}
         </p>
       )}
 
-      <div className="admin-actions">
-        {plugin.state === "enabled" ? (
-          <button
-            type="button"
-            disabled={mutate.busy !== undefined}
-            onClick={() => mutate.run("disable", () => client.disablePlugin(plugin.id))}
-          >
-            {mutate.busy === "disable" ? "Disabling…" : "Disable"}
-          </button>
-        ) : (
-          <button
-            type="button"
-            disabled={mutate.busy !== undefined}
-            onClick={() => mutate.run("enable", () => client.enablePlugin(plugin.id))}
-          >
-            {mutate.busy === "enable"
-              ? "Enabling…"
-              : plugin.breaker.open
-                ? "Re-enable and clear the breaker"
-                : "Enable"}
-          </button>
-        )}
+      {/* A class, not `hidden`: the flex utility would win over the attribute. */}
+      <div
+        id={detailsId}
+        className={`${open ? "admin:flex" : "admin:hidden"} admin:flex-col admin:gap-3 admin:border-t admin:border-border admin:pt-2`}
+      >
+        {open && (
+          <>
+            <Facts
+              rows={[
+                ["Source", describeSource(plugin)],
+                ["Installed", formatWhen(plugin.installed_at)],
+                ["Approved", plugin.approved_at == null ? "—" : formatWhen(plugin.approved_at)],
+                ["Server part", plugin.has_backend ? describeBackend(plugin) : "None; it runs in the browser only"],
+                ["Kernel", <code key="kernel">{plugin.manifest.kernel}</code>],
+                ["Depends on", formatRanges(plugin.manifest.dependencies)],
+                ["Libraries", formatRanges(plugin.manifest.peerLibraries)],
+                [
+                  "Capabilities",
+                  capabilities.length === 0 ? (
+                    "None"
+                  ) : (
+                    <ul key="capabilities" className="admin:m-0 admin:pl-4">
+                      {capabilities.map((entry) => (
+                        <li key={entry}>{entry}</li>
+                      ))}
+                    </ul>
+                  ),
+                ],
+                ...(plugin.capabilities_differ
+                  ? ([
+                      [
+                        "Requested",
+                        `${describeCapabilities(plugin.capabilities_requested).join("; ") || "nothing"}. A narrowed plugin can fail in ways its author never tested.`,
+                      ],
+                    ] as const)
+                  : []),
+                ...(plugin.routes.length > 0
+                  ? ([
+                      [
+                        "Routes",
+                        plugin.routes
+                          .map(
+                            (route) =>
+                              `${route.method} /api/plugins/${plugin.id}${route.path}${route.public ? " (public)" : ""}`,
+                          )
+                          .join(", "),
+                      ],
+                    ] as const)
+                  : []),
+                ...(plugin.has_backend ? ([["Activity", <Activity key="activity" plugin={plugin} />]] as const) : []),
+              ]}
+            />
 
-        <label className="admin-confirm admin:tap-h admin:flex admin:items-start admin:gap-2 admin:text-[0.9em] admin:text-text admin:[&_input]:mt-[0.35em] admin:[&_input]:size-6 admin:[&_input]:flex-none admin:[&_input]:accent-accent">
-          <input
-            type="checkbox"
-            checked={purge}
-            onChange={(event) => setPurge(event.target.checked)}
-          />
-          also delete this plugin’s data (its key-value store and its <code>%%%</code> sections
-          in every document)
-        </label>
-        <button
-          type="button"
-          className="admin-danger"
-          disabled={mutate.busy !== undefined}
-          onClick={(event) => {
-            void confirm({
-              title: purge ? `Uninstall ${plugin.id} and delete its stored data?` : `Uninstall ${plugin.id}?`,
-              description: purge ? "This cannot be undone." : "Its stored data is kept for a reinstall.",
-              confirmLabel: "Uninstall",
-              danger: true,
-              anchor: event.currentTarget,
-            }).then((ok) => {
-              if (ok) mutate.run("uninstall", () => client.uninstallPlugin(plugin.id, purge));
-            });
-          }}
-        >
-          {mutate.busy === "uninstall" ? "Uninstalling…" : "Uninstall"}
-        </button>
+            {plugin.cron.length > 0 && (
+              <DetailSection title="Scheduled jobs">
+                <CronTable client={client} plugin={plugin} onDone={onDone} />
+              </DetailSection>
+            )}
+
+            {Object.keys(plugin.config_schema).length > 0 && (
+              <DetailSection title="Configuration">
+                <PluginConfigForm client={client} plugin={plugin} />
+              </DetailSection>
+            )}
+
+            <DetailSection title="Recent host events">
+              <PluginLogs client={client} plugin={plugin} />
+            </DetailSection>
+          </>
+        )}
       </div>
-      {plugin.base && (
-        <p className="admin-note">
-          Uninstalling this removes part of the app. <code>?safe=bare</code> is the way
-          back.
-        </p>
-      )}
     </li>
+  );
+}
+
+/** Label on the left, value on the right; one column of labels for the whole card. */
+function Facts({ rows }: { readonly rows: readonly (readonly [string, ReactNode])[] }): ReactElement {
+  return (
+    <dl className="admin:m-0 admin:grid admin:grid-cols-[minmax(6rem,9rem)_1fr] admin:gap-x-3 admin:gap-y-1.5 admin:text-sm">
+      {rows.map(([label, value]) => (
+        <div key={label} className="admin:contents">
+          <dt className="admin:text-text-muted">{label}</dt>
+          <dd className="admin:m-0 admin:min-w-0 admin:break-words">{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function DetailSection({ title, children }: { readonly title: string; readonly children: ReactNode }): ReactElement {
+  return (
+    <section className="admin:flex admin:flex-col admin:gap-1">
+      <h5 className="admin:m-0 admin:text-xs admin:font-semibold admin:uppercase admin:tracking-[0.04em] admin:text-text-muted">
+        {title}
+      </h5>
+      {children}
+    </section>
   );
 }
 
@@ -732,7 +787,7 @@ function CronTable({
 
   return (
     <div className="admin-plugin-cron admin:flex admin:flex-col admin:gap-1">
-      <strong>Scheduled jobs</strong> <span className="admin-note">(UTC; missed runs are skipped)</span>
+      <span className="admin-note">In UTC; missed runs are skipped.</span>
       {/* The one table in this plugin with no `.admin-table-scroll` parent, and six
           columns to overflow with. It is invisible in a workspace whose plugins are all
           frontend-only, which is why nothing caught it. */}
@@ -761,6 +816,8 @@ function CronTable({
                 <td className="admin-actions">
                   <button
                     type="button"
+                    className="admin-icon-button"
+                    aria-label={`Run ${job.expression} now`}
                     disabled={!plugin.active || mutate.busy !== undefined}
                     title={
                       plugin.active
@@ -777,7 +834,7 @@ function CronTable({
                       });
                     }}
                   >
-                    {mutate.busy === `cron-${job.index}` ? "Running…" : "Run now"}
+                    <PlayIcon />
                   </button>
                 </td>
               </tr>
@@ -799,17 +856,17 @@ function CronTable({
   );
 }
 
-function MetricsSummary({ plugin }: { readonly plugin: PluginAdminView }): ReactElement {
+/** A backend half's cron and host-event counts, one line. */
+function Activity({ plugin }: { readonly plugin: PluginAdminView }): ReactElement {
   const metrics = plugin.metrics;
   return (
-    <p className="admin-note">
-      Cron: {metrics.cron_jobs} job(s), {metrics.cron_runs} run(s), {metrics.cron_failures}{" "}
+    <>
+      {metrics.cron_jobs} cron job(s), {metrics.cron_runs} run(s), {metrics.cron_failures}{" "}
       failure(s)
-      {metrics.last_cron_run != null && <> · last {formatWhen(metrics.last_cron_run)}</>}
-      {metrics.last_cron_status != null && <> ({metrics.last_cron_status})</>} ·{" "}
-      {metrics.recent_events} recent host event(s). Per-call latency and failure counts are on{" "}
-      <code>/metrics</code>, labelled by plugin.
-    </p>
+      {metrics.last_cron_run != null && <>, last {formatWhen(metrics.last_cron_run)}</>}
+      {metrics.last_cron_status != null && <> ({metrics.last_cron_status})</>}; {metrics.recent_events}{" "}
+      recent host event(s). Per-call timings are on <code>/metrics</code>.
+    </>
   );
 }
 
@@ -849,22 +906,36 @@ function PluginLogs({
 function HostSummary({ list }: { readonly list: PluginAdminList }): ReactElement {
   const { host, limits } = list;
   return (
-    <div className="admin-plugin-host admin:flex admin:flex-col admin:gap-1">
+    <>
       <h4>Plugin host</h4>
-      <p className="admin-note">
-        {host.active} backend half/halves active, {host.disabled} disabled, {host.instances}{" "}
-        pooled instance(s), {host.calls_in_flight} call(s) in flight, {host.cron_jobs} cron
-        job(s) scheduled, {host.hooks_pending} hook(s) pending. Host ABI version{" "}
-        {list.abi_version}.
-      </p>
-      <p className="admin-note">
-        Limits this server applies: {limits.call_timeout_ms} ms per call,{" "}
-        {limits.cron_timeout_ms} ms per cron run, {formatBytes(limits.memory_bytes)} memory,{" "}
-        {limits.max_instances} instance(s) per plugin, breaker after {limits.breaker_threshold}{" "}
-        consecutive failures, {limits.http_timeout_ms} ms outbound timeout and{" "}
-        {formatBytes(limits.max_http_response_bytes)} response cap.
-        {!limits.cron_enabled && <> Cron is disabled on this server.</>}
-      </p>
+      <dl className="admin-stats">
+        <Stat label="Backends active" value={host.active} />
+        <Stat label="Disabled" value={host.disabled} />
+        <Stat label="Pooled instances" value={host.instances} />
+        <Stat label="Calls in flight" value={host.calls_in_flight} />
+        <Stat label="Cron jobs" value={limits.cron_enabled ? host.cron_jobs : "off"} />
+        <Stat label="Hooks pending" value={host.hooks_pending} />
+        <Stat label="Host ABI" value={list.abi_version} />
+      </dl>
+      <h4>Limits per plugin</h4>
+      <dl className="admin-stats">
+        <Stat label="Per call" value={`${limits.call_timeout_ms} ms`} />
+        <Stat label="Per cron run" value={`${limits.cron_timeout_ms} ms`} />
+        <Stat label="Memory" value={formatBytes(limits.memory_bytes)} />
+        <Stat label="Instances" value={limits.max_instances} />
+        <Stat label="Breaker after" value={`${limits.breaker_threshold} failures`} />
+        <Stat label="Outbound timeout" value={`${limits.http_timeout_ms} ms`} />
+        <Stat label="Response cap" value={formatBytes(limits.max_http_response_bytes)} />
+      </dl>
+    </>
+  );
+}
+
+function Stat({ label, value }: { readonly label: string; readonly value: ReactNode }): ReactElement {
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd>{value}</dd>
     </div>
   );
 }

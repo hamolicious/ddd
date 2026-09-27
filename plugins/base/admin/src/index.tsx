@@ -34,8 +34,8 @@ import type { Kernel } from "@kernel";
 
 import { AdminSectionBody, AdminView, ADMIN_SECTIONS, isAdminSection, type AdminSectionId } from "./AdminView.js";
 import { createAdminClient } from "./api.js";
-import { ConfirmContext } from "./hooks.js";
-import type { ConfirmRequest, ContextMenuApi } from "../../_shared/context-menu-api.js";
+import { DialogsContext, type Dialogs } from "./hooks.js";
+import type { ContextMenuApi } from "../../_shared/context-menu-api.js";
 import {
   POINTS,
   type Command,
@@ -87,7 +87,10 @@ const SETTINGS_TITLES: Readonly<Record<AdminSectionId, { title: string; descript
 export default function activate(kernel: Kernel): AdminApi {
   const router = kernel.services.require<RouterService>("router");
   const menu = kernel.services.require<ContextMenuApi>("context-menu");
-  const confirm = (request: ConfirmRequest): Promise<boolean> => menu.confirm(request);
+  const dialogs: Dialogs = {
+    confirm: (request) => menu.confirm(request),
+    modal: (request) => menu.modal(request),
+  };
   const client = createAdminClient((path, init) => kernel.session.fetch(path, init));
   const admin = kernel.session.isAdmin();
   const selfId = kernel.session.user.id;
@@ -108,7 +111,7 @@ export default function activate(kernel: Kernel): AdminApi {
     const [section, setSection] = useState(() => sectionFromRoute(router.current()));
     useEffect(() => router.onChange((route) => setSection(sectionFromRoute(route))), []);
     return (
-      <ConfirmContext.Provider value={confirm}>
+      <DialogsContext.Provider value={dialogs}>
         <AdminView
           client={client}
           isAdmin={admin}
@@ -116,7 +119,7 @@ export default function activate(kernel: Kernel): AdminApi {
           section={section}
           onSelectSection={(next) => router.navigate(`/admin/${next}`)}
         />
-      </ConfirmContext.Provider>
+      </DialogsContext.Provider>
     );
   };
 
@@ -133,14 +136,14 @@ export default function activate(kernel: Kernel): AdminApi {
       // `embedded`: the settings shell draws the `<h2>` and the description above this,
       // so the section must not draw its own heading a second line below them.
       const Section = (): ReactElement => (
-        <ConfirmContext.Provider value={confirm}>
+        <DialogsContext.Provider value={dialogs}>
           <AdminSectionBody
             section={id}
             client={client}
             selfId={selfId}
             embedded
           />
-        </ConfirmContext.Provider>
+        </DialogsContext.Provider>
       );
       kernel.extensions.contribute<SettingsSection>(POINTS.settingsSection, {
         id: `admin.${id}`,

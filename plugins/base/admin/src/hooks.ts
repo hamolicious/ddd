@@ -13,7 +13,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 
-import type { ConfirmRequest } from "../../_shared/context-menu-api.js";
+import type { ConfirmRequest, ModalRequest, ModalResult } from "../../_shared/context-menu-api.js";
 
 export interface AsyncState<T> {
   readonly data: T | undefined;
@@ -81,13 +81,23 @@ export function useMutation(onDone?: () => void): Mutation {
   return { busy, error, run, clearError: () => setError(undefined) };
 }
 
-/**
- * "Are you sure?" before a destructive action: `context-menu`'s `confirm`, provided by
- * `index.tsx`. The default is the browser's own dialog, for a section rendered without
- * the provider (a test).
- */
-export const ConfirmContext = createContext<(request: ConfirmRequest) => Promise<boolean>>(
-  (request) => Promise.resolve(window.confirm(request.title)),
-);
+export interface Dialogs {
+  confirm(request: ConfirmRequest): Promise<boolean>;
+  modal(request: ModalRequest): Promise<ModalResult | undefined>;
+}
 
-export const useConfirm = (): ((request: ConfirmRequest) => Promise<boolean>) => useContext(ConfirmContext);
+/**
+ * "Are you sure?" and other questions before a destructive action: `context-menu`'s
+ * `confirm` and `modal`, provided by `index.tsx`. The default is the browser's own
+ * dialog, for a section rendered without the provider (a test).
+ */
+export const DialogsContext = createContext<Dialogs>({
+  confirm: (request) => Promise.resolve(window.confirm(request.title)),
+  modal: (request) => {
+    const button = request.buttons?.find((candidate) => !candidate.dismiss)?.id ?? "ok";
+    return Promise.resolve(window.confirm(request.title) ? { button, values: {} } : undefined);
+  },
+});
+
+export const useConfirm = (): Dialogs["confirm"] => useContext(DialogsContext).confirm;
+export const useModal = (): Dialogs["modal"] => useContext(DialogsContext).modal;

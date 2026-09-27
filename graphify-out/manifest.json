@@ -1128,9 +1128,9 @@
     "semantic_hash": ""
   },
   "plugins/base/admin/manifest.json": {
-    "mtime": 1790487665.278938,
-    "seen": 1790487882.7032409,
-    "ast_hash": "d2cf6df62498521dda6644f77072aa6c",
+    "mtime": 1790491395.120825,
+    "seen": 1790491546.1507504,
+    "ast_hash": "217e3ed723486b2cf7ab1fd279e9b045",
     "semantic_hash": ""
   },
   "plugins/base/admin/src/AdminView.tsx": {
@@ -1152,9 +1152,9 @@
     "semantic_hash": ""
   },
   "plugins/base/admin/src/Plugins.tsx": {
-    "mtime": 1790487669.1330607,
-    "seen": 1790487882.7033458,
-    "ast_hash": "ed46973814c041f8c5c6e4016e94339f",
+    "mtime": 1790491493.8622713,
+    "seen": 1790491546.150843,
+    "ast_hash": "8fc5a6d0b9bbd55bcca3973992c4092e",
     "semantic_hash": ""
   },
   "plugins/base/admin/src/Storage.tsx": {
@@ -1182,15 +1182,15 @@
     "semantic_hash": ""
   },
   "plugins/base/admin/src/hooks.ts": {
-    "mtime": 1790487665.27887,
-    "seen": 1790487882.703418,
-    "ast_hash": "faa8ac4e0ac1e9cef8070e77c930d4d7",
+    "mtime": 1790491395.1201262,
+    "seen": 1790491546.1509624,
+    "ast_hash": "50279b1ef6dbbb783182e59541eb6896",
     "semantic_hash": ""
   },
   "plugins/base/admin/src/index.tsx": {
-    "mtime": 1790490368.4834583,
-    "seen": 1790491330.593524,
-    "ast_hash": "c66e7eace61a8d0de4638f4bd4292367",
+    "mtime": 1790491395.1207554,
+    "seen": 1790491546.1509652,
+    "ast_hash": "3fade2107b1d6967d26a86d7062422f7",
     "semantic_hash": ""
   },
   "plugins/base/commands/manifest.json": {
@@ -3570,9 +3570,9 @@
     "semantic_hash": ""
   },
   "plugins/base/admin/src/icons.tsx": {
-    "mtime": 1790489815.5866506,
-    "seen": 1790489890.5670571,
-    "ast_hash": "013ae7d5aed0440f9fec92369683771a",
+    "mtime": 1790491395.1208856,
+    "seen": 1790491546.1509643,
+    "ast_hash": "3074bdac4d7b58a17db1dab5861ce867",
     "semantic_hash": ""
   },
   "web/app/e2e/admin-users.spec.ts": {
@@ -3639,6 +3639,12 @@
     "mtime": 1790490426.9198759,
     "seen": 1790491330.598581,
     "ast_hash": "3a639bb4386f96f8ed66f5513aac0ec2",
+    "semantic_hash": ""
+  },
+  "web/app/e2e/admin-plugins.spec.ts": {
+    "mtime": 1790491515.7997646,
+    "seen": 1790491546.1558409,
+    "ast_hash": "b5f5fff6914d7058e4ba19d28e1f085a",
     "semantic_hash": ""
   }
 }
