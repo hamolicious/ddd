@@ -17,7 +17,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, OfflineError, me, resetTokenFromHash } from "./api.js";
+import { ApiError, OfflineError, inviteTokenFromHash, me, resetTokenFromHash } from "./api.js";
 
 const originalFetch = globalThis.fetch;
 
@@ -93,5 +93,17 @@ describe("resetTokenFromHash", () => {
     expect(resetTokenFromHash("#/doc/01J")).toBeUndefined();
     expect(resetTokenFromHash("#/reset/")).toBeUndefined();
     expect(resetTokenFromHash("#/reset/a/b")).toBeUndefined();
+  });
+});
+
+describe("inviteTokenFromHash", () => {
+  it("reads the token out of an invite link", () => {
+    expect(inviteTokenFromHash("#/invite/Ab_c-9")).toBe("Ab_c-9");
+  });
+
+  it("ignores every other address", () => {
+    expect(inviteTokenFromHash("#/reset/Ab_c-9")).toBeUndefined();
+    expect(inviteTokenFromHash("#/invite/")).toBeUndefined();
+    expect(inviteTokenFromHash("#/invite/a/b")).toBeUndefined();
   });
 });

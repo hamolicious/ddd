@@ -50,7 +50,7 @@ import {
 } from "@kernel/runtime/index.js";
 
 import { AuthGate } from "./boot/AuthGate.js";
-import { OfflineError, installedPlugins, logoutRequest, me, resetTokenFromHash } from "./boot/api.js";
+import { OfflineError, installedPlugins, inviteTokenFromHash, logoutRequest, me, resetTokenFromHash } from "./boot/api.js";
 import {
   cachedPlugins,
   cachedSession,
@@ -222,6 +222,7 @@ async function boot(): Promise<void> {
         // which is exactly when the login form is shown.
         bearer={inShell()}
         resetToken={resetToken}
+        inviteToken={inviteTokenFromHash()}
         onSignedIn={(signedIn, issued) => {
           if (issued) rememberShellToken(issued);
           rememberSession(signedIn);

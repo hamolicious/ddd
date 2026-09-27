@@ -50,7 +50,7 @@ import {
   type PluginCronState,
 } from "./api.js";
 import { AdminSectionFrame } from "./AdminView.js";
-import { useAsync, useMutation } from "./hooks.js";
+import { useAsync, useConfirm, useMutation } from "./hooks.js";
 import { PluginConfigForm } from "./PluginConfig.js";
 
 export function PluginsSection({
@@ -279,6 +279,7 @@ function PendingCard({
   const [hosts, setHosts] = useState((requested.http?.hosts ?? []).join(", "));
   const [confirmed, setConfirmed] = useState(false);
   const mutate = useMutation(onDone);
+  const confirm = useConfirm();
 
   const granted: PluginCapabilities = useMemo(() => {
     const value: {
@@ -468,9 +469,15 @@ function PendingCard({
           type="button"
           className="admin-danger"
           disabled={mutate.busy !== undefined}
-          onClick={() => {
-            if (!confirm(`Delete the pending package ${plugin.id} ${plugin.version}?`)) return;
-            mutate.run("reject", () => client.rejectPlugin(plugin.id, plugin.version));
+          onClick={(event) => {
+            void confirm({
+              title: `Delete the pending package ${plugin.id} ${plugin.version}?`,
+              confirmLabel: "Reject and delete",
+              danger: true,
+              anchor: event.currentTarget,
+            }).then((ok) => {
+              if (ok) mutate.run("reject", () => client.rejectPlugin(plugin.id, plugin.version));
+            });
           }}
         >
           Reject and delete
@@ -533,6 +540,7 @@ function InstalledCard({
 }): ReactElement {
   const [purge, setPurge] = useState(false);
   const mutate = useMutation(onDone);
+  const confirm = useConfirm();
   const capabilities = describeCapabilities(plugin.capabilities_approved);
 
   return (
@@ -685,12 +693,16 @@ function InstalledCard({
           type="button"
           className="admin-danger"
           disabled={mutate.busy !== undefined}
-          onClick={() => {
-            const message = purge
-              ? `Uninstall ${plugin.id} and delete its stored data? This cannot be undone.`
-              : `Uninstall ${plugin.id}? Its stored data is kept for a reinstall.`;
-            if (!confirm(message)) return;
-            mutate.run("uninstall", () => client.uninstallPlugin(plugin.id, purge));
+          onClick={(event) => {
+            void confirm({
+              title: purge ? `Uninstall ${plugin.id} and delete its stored data?` : `Uninstall ${plugin.id}?`,
+              description: purge ? "This cannot be undone." : "Its stored data is kept for a reinstall.",
+              confirmLabel: "Uninstall",
+              danger: true,
+              anchor: event.currentTarget,
+            }).then((ok) => {
+              if (ok) mutate.run("uninstall", () => client.uninstallPlugin(plugin.id, purge));
+            });
           }}
         >
           {mutate.busy === "uninstall" ? "Uninstalling…" : "Uninstall"}

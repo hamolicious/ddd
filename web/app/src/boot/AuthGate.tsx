@@ -20,15 +20,20 @@ export function AuthGate({
   onSignedIn,
   bearer,
   resetToken,
+  inviteToken,
 }: {
   readonly onSignedIn: (user: SessionUser, token?: string) => void;
   /** Shells authenticate with a bearer token (SPEC §5.2); browsers use the cookie. */
   readonly bearer?: boolean;
   /** Opened from a reset link (`#/reset/<token>`): ask for a new password first. */
   readonly resetToken?: string;
+  /** Opened from an invite link (`#/invite/<token>`): register, with the token filled in. */
+  readonly inviteToken?: string;
 }): ReactNode {
   const [state, setState] = useState<AuthBootstrap | undefined>();
-  const [mode, setMode] = useState<"sign-in" | "register" | "reset">(resetToken ? "reset" : "sign-in");
+  const [mode, setMode] = useState<"sign-in" | "register" | "reset">(
+    resetToken ? "reset" : inviteToken ? "register" : "sign-in",
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [notice, setNotice] = useState<string | undefined>();
@@ -117,7 +122,11 @@ export function AuthGate({
         ? register(email, password, invite || undefined, bearer ?? false)
         : login(email, password, bearer ?? false);
     attempt
-      .then((signed) => onSignedIn(signed.user, signed.token))
+      .then((signed) => {
+        // A spent invite link is not a view: leave the workspace at its start.
+        if (inviteToken) history.replaceState(null, "", location.pathname + location.search);
+        onSignedIn(signed.user, signed.token);
+      })
       .catch((cause: unknown) => setError(describe(cause)))
       .finally(() => setBusy(false));
   };
@@ -154,7 +163,7 @@ export function AuthGate({
         {mode === "register" && state?.invite_required ? (
           <>
             <label htmlFor="invite">Invite token</label>
-            <input id="invite" name="invite" type="text" required />
+            <input id="invite" name="invite" type="text" required defaultValue={inviteToken} />
           </>
         ) : null}
 

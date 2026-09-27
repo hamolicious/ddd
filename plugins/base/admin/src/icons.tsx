@@ -36,3 +36,41 @@ export function TrashIcon(): ReactElement {
     </svg>
   );
 }
+
+/** A struck circle: revoke. */
+export function RevokeIcon(): ReactElement {
+  return (
+    <svg {...common}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M5.6 5.6l12.8 12.8" />
+    </svg>
+  );
+}
+
+/** Two sheets: copy. */
+export function CopyIcon(): ReactElement {
+  return (
+    <svg {...common}>
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <path d="M5 15V5a1 1 0 0 1 1-1h9" />
+    </svg>
+  );
+}
+
+/** A tick: copied. */
+export function CheckIcon(): ReactElement {
+  return (
+    <svg {...common}>
+      <path d="M5 12l5 5 9-10" />
+    </svg>
+  );
+}
+
+/** A cross: dismiss. */
+export function CloseIcon(): ReactElement {
+  return (
+    <svg {...common}>
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  );
+}

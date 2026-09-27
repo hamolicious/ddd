@@ -32,7 +32,20 @@ test("a reset link from Admin → Users sets a new password", async ({ page, bro
   await expect(page.getByRole("button", { name: `Delete ${email}` })).toBeVisible();
   await expect(page.getByText("Everyone signed in can read")).toHaveCount(0);
 
+  // Both actions ask first; cancelling either changes nothing.
   await reset.click();
+  const ask = page.getByRole("dialog", { name: `Make a reset link for ${email}?` });
+  await ask.getByRole("button", { name: "Cancel" }).click();
+  await expect(ask).toHaveCount(0);
+  await expect(page.locator(".admin-secret")).toHaveCount(0);
+  await page.getByRole("button", { name: `Delete ${email}` }).click();
+  const remove = page.getByRole("dialog", { name: `Delete ${email}?` });
+  await expect(remove.getByRole("button", { name: "Cancel" })).toBeFocused();
+  await remove.getByRole("button", { name: "Cancel" }).click();
+  await expect(remove).toHaveCount(0);
+
+  await reset.click();
+  await ask.getByRole("button", { name: "Make link" }).click();
   const link = (await page.locator(".admin-secret code").textContent())!.trim();
   expect(link).toMatch(/#\/reset\/[A-Za-z0-9_-]+$/);
 

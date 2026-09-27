@@ -26,7 +26,7 @@ import type { DocumentsApi } from "@kernel";
 
 import { AdminSectionFrame } from "./AdminView.js";
 import { formatBytes, formatWhen, type AdminClient } from "./api.js";
-import { useAsync, useMutation } from "./hooks.js";
+import { useAsync, useConfirm, useMutation } from "./hooks.js";
 
 export function OrphansSection({
   client,
@@ -37,6 +37,7 @@ export function OrphansSection({
 }): ReactElement {
   const orphans = useAsync(() => client.orphans(), []);
   const mutation = useMutation(() => orphans.reload());
+  const confirm = useConfirm();
   const rows = orphans.data ?? [];
   const total = rows.reduce((sum, row) => sum + row.attachment.size, 0);
 
@@ -103,15 +104,15 @@ export function OrphansSection({
                         type="button"
                         className="admin-danger"
                         disabled={mutation.busy === attachment.id}
-                        onClick={() => {
-                          if (
-                            !confirm(
-                              `Delete ${attachment.name} permanently? The file cannot be recovered.`,
-                            )
-                          ) {
-                            return;
-                          }
-                          mutation.run(attachment.id, () => client.deleteAttachment(attachment.id));
+                        onClick={(event) => {
+                          void confirm({
+                            title: `Delete ${attachment.name} permanently?`,
+                            description: "The file cannot be recovered.",
+                            danger: true,
+                            anchor: event.currentTarget,
+                          }).then((ok) => {
+                            if (ok) mutation.run(attachment.id, () => client.deleteAttachment(attachment.id));
+                          });
                         }}
                       >
                         Delete
@@ -161,6 +162,7 @@ export function SnapshotsSection({
     [selected?.id ?? ""],
   );
   const mutation = useMutation(() => snapshots.reload());
+  const confirm = useConfirm();
 
   return (
     <AdminSectionFrame id="snapshots" title="Snapshots" embedded={embedded}>
@@ -252,17 +254,18 @@ export function SnapshotsSection({
                           type="button"
                           className="admin-danger"
                           disabled={mutation.busy === snapshot.id}
-                          onClick={() => {
-                            if (
-                              !confirm(
-                                `Replace “${selected.title}” with this snapshot? Everyone sees the change; the current text is snapshotted first.`,
-                              )
-                            ) {
-                              return;
-                            }
-                            mutation.run(snapshot.id, () =>
-                              client.restoreSnapshot(selected.id, snapshot.id),
-                            );
+                          onClick={(event) => {
+                            void confirm({
+                              title: `Replace “${selected.title}” with this snapshot?`,
+                              description: "Everyone sees the change. The current text is snapshotted first.",
+                              confirmLabel: "Restore",
+                              danger: true,
+                              anchor: event.currentTarget,
+                            }).then((ok) => {
+                              if (ok) {
+                                mutation.run(snapshot.id, () => client.restoreSnapshot(selected.id, snapshot.id));
+                              }
+                            });
                           }}
                         >
                           Restore

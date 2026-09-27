@@ -15,16 +15,22 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import type { KeyboardEvent as ReactKeyboardEvent, ReactElement, ReactNode } from "react";
 import { createPortal } from "react-dom";
 
-import type { MenuItem, MenuRequest, SheetRequest } from "../../_shared/context-menu-api.js";
+import type { MenuItem, MenuRequest, ModalRequest, ModalResult, SheetRequest } from "../../_shared/context-menu-api.js";
 import { useCompact } from "../../_shared/compact.js";
+
+import { ModalForm } from "./Modal.js";
 
 const FOCUSABLE = 'button:not([disabled]), input, select, textarea, [href], [tabindex]:not([tabindex="-1"])';
 const GAP = 4;
 
-export type Open = { readonly kind: "menu"; readonly request: MenuRequest } | {
-  readonly kind: "sheet";
-  readonly request: SheetRequest;
-};
+export type Open =
+  | { readonly kind: "menu"; readonly request: MenuRequest }
+  | { readonly kind: "sheet"; readonly request: SheetRequest }
+  | {
+      readonly kind: "modal";
+      readonly request: ModalRequest & { readonly onClose: () => void };
+      readonly settle: (result: ModalResult) => void;
+    };
 
 export function MenuHost({
   open,
@@ -53,7 +59,8 @@ function Panel({ open, close }: { readonly open: Open; readonly close: () => voi
   const compact = useCompact();
   const panel = useRef<HTMLDivElement | null>(null);
   const { anchor, title, description } = open.request;
-  const popover = !compact && anchor instanceof HTMLElement && anchor.isConnected;
+  // A modal is a question, not a menu: always centred, the anchor only takes focus back.
+  const popover = open.kind !== "modal" && !compact && anchor instanceof HTMLElement && anchor.isConnected;
   const [position, setPosition] = useState<{ top: number; left: number } | undefined>(undefined);
 
   useLayoutEffect(() => {
@@ -76,6 +83,7 @@ function Panel({ open, close }: { readonly open: Open; readonly close: () => voi
   useEffect(() => {
     const restore = anchor ?? document.activeElement;
     const target =
+      panel.current?.querySelector<HTMLElement>("[data-autofocus]") ??
       panel.current?.querySelector<HTMLElement>('[aria-checked="true"]') ??
       panel.current?.querySelector<HTMLElement>(FOCUSABLE);
     target?.focus();
@@ -103,6 +111,9 @@ function Panel({ open, close }: { readonly open: Open; readonly close: () => voi
       event.preventDefault();
       focusable[(to + focusable.length) % focusable.length]?.focus();
     };
+    // Arrows and Home / End belong to a modal's text fields and selects.
+    const list = open.kind !== "modal";
+    if (!list && event.key !== "Tab") return;
     if (event.key === "ArrowDown") move(index + 1);
     else if (event.key === "ArrowUp") move(index - 1);
     else if (event.key === "Home") move(0);
@@ -112,11 +123,13 @@ function Panel({ open, close }: { readonly open: Open; readonly close: () => voi
       if (event.shiftKey && index <= 0) move(focusable.length - 1);
       else if (!event.shiftKey && index === focusable.length - 1) move(0);
     }
-  }, []);
+  }, [open.kind]);
 
   const body =
     open.kind === "menu" ? (
       <MenuSections request={open.request} close={close} />
+    ) : open.kind === "modal" ? (
+      <ModalForm request={open.request} settle={open.settle} close={close} />
     ) : (
       open.request.render(close)
     );

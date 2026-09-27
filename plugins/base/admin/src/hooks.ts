@@ -11,7 +11,9 @@
  * rather than a dependency-array trick.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
+
+import type { ConfirmRequest } from "../../_shared/context-menu-api.js";
 
 export interface AsyncState<T> {
   readonly data: T | undefined;
@@ -78,3 +80,14 @@ export function useMutation(onDone?: () => void): Mutation {
 
   return { busy, error, run, clearError: () => setError(undefined) };
 }
+
+/**
+ * "Are you sure?" before a destructive action: `context-menu`'s `confirm`, provided by
+ * `index.tsx`. The default is the browser's own dialog, for a section rendered without
+ * the provider (a test).
+ */
+export const ConfirmContext = createContext<(request: ConfirmRequest) => Promise<boolean>>(
+  (request) => Promise.resolve(window.confirm(request.title)),
+);
+
+export const useConfirm = (): ((request: ConfirmRequest) => Promise<boolean>) => useContext(ConfirmContext);

@@ -167,6 +167,14 @@ export function resetTokenFromHash(hash: string = location.hash): string | undef
   return /^#\/reset\/([A-Za-z0-9_-]+)$/.exec(hash)?.[1];
 }
 
+/**
+ * The token in an invite link, `#/invite/<token>`: opens registration with it filled in.
+ * Only read when nobody is signed in on this device.
+ */
+export function inviteTokenFromHash(hash: string = location.hash): string | undefined {
+  return /^#\/invite\/([A-Za-z0-9_-]+)$/.exec(hash)?.[1];
+}
+
 export async function login(email: string, password: string, bearer = false): Promise<Signed> {
   const session = await call<SessionResponse>("/auth/login", {
     method: "POST",

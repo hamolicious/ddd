@@ -11,8 +11,8 @@
  *   as "deleted user" (`api.ts`). Nothing that user wrote is removed — this is a shared
  *   workspace (SPEC §5.4).
  * - **Invites are single-use and expire in 7 days**, and the **token is returned exactly
- *   once**. It is therefore shown with a copy button and a warning, and never fetched
- *   again — the listing only has its hash.
+ *   once**. It is shown once, as a link, with a copy button, and never fetched again —
+ *   the listing only has its hash.
  * - **A reset link is issued once too**, and it is the recovery path when someone cannot
  *   sign in. The CLI (`life-manager reset-password`) is the break-glass below it.
  */
@@ -21,9 +21,9 @@ import { useState } from "react";
 import type { ReactElement } from "react";
 
 import { AdminSectionFrame } from "./AdminView.js";
-import { describeActor, formatWhen, resetLinkHere, type AdminClient, type CreatedInvite } from "./api.js";
-import { KeyIcon, TrashIcon } from "./icons.js";
-import { useAsync, useMutation } from "./hooks.js";
+import { describeActor, formatWhen, inviteLinkHere, resetLinkHere, type AdminClient, type CreatedInvite } from "./api.js";
+import { CheckIcon, CloseIcon, CopyIcon, KeyIcon, RevokeIcon, TrashIcon } from "./icons.js";
+import { useAsync, useConfirm, useMutation } from "./hooks.js";
 
 export interface UsersSectionProps {
   readonly client: AdminClient;
@@ -36,6 +36,7 @@ export interface UsersSectionProps {
 export function UsersSection({ client, selfId, embedded }: UsersSectionProps): ReactElement {
   const users = useAsync(() => client.users(), []);
   const mutation = useMutation(() => users.reload());
+  const confirm = useConfirm();
   const [issued, setIssued] = useState<{ readonly email: string; readonly link: string } | undefined>();
 
   const rows = users.data ?? [];
@@ -62,9 +63,7 @@ export function UsersSection({ client, selfId, embedded }: UsersSectionProps): R
           </p>
           <code>{issued.link}</code>
           <CopyButton value={issued.link} />
-          <button type="button" onClick={() => setIssued(undefined)}>
-            Done
-          </button>
+          <DoneButton onClick={() => setIssued(undefined)} />
         </div>
       )}
 
@@ -119,12 +118,20 @@ export function UsersSection({ client, selfId, embedded }: UsersSectionProps): R
                       <button
                         type="button"
                         disabled={busy || !user.is_active}
-                        onClick={() =>
-                          mutation.run(user.id, async () => {
-                            const reset = await client.issueReset(user.id);
-                            setIssued({ email: user.email, link: reset.url ?? resetLinkHere(reset.token) });
-                          })
-                        }
+                        onClick={(event) => {
+                          void confirm({
+                            title: `Make a reset link for ${user.email}?`,
+                            description: "Any earlier reset link for them stops working. Their password is unchanged until they use the new one.",
+                            confirmLabel: "Make link",
+                            anchor: event.currentTarget,
+                          }).then((ok) => {
+                            if (!ok) return;
+                            mutation.run(user.id, async () => {
+                              const reset = await client.issueReset(user.id);
+                              setIssued({ email: user.email, link: reset.url ?? resetLinkHere(reset.token) });
+                            });
+                          });
+                        }}
                         className="admin-icon-button"
                         aria-label={`Reset link for ${user.email}`}
                         title="Reset link"
@@ -137,15 +144,15 @@ export function UsersSection({ client, selfId, embedded }: UsersSectionProps): R
                         aria-label={`Delete ${user.email}`}
                         title="Delete"
                         disabled={busy || !user.is_active || lastAdmin}
-                        onClick={() => {
-                          if (
-                            !confirm(
-                              `Delete ${user.email}? Their sessions end now; what they wrote stays, attributed to a deleted user.`,
-                            )
-                          ) {
-                            return;
-                          }
-                          mutation.run(user.id, () => client.deleteUser(user.id));
+                        onClick={(event) => {
+                          void confirm({
+                            title: `Delete ${user.email}?`,
+                            description: "Their sessions end now. What they wrote stays, attributed to a deleted user.",
+                            danger: true,
+                            anchor: event.currentTarget,
+                          }).then((ok) => {
+                            if (ok) mutation.run(user.id, () => client.deleteUser(user.id));
+                          });
                         }}
                       >
                         <TrashIcon />
@@ -172,8 +179,10 @@ export function InvitesSection({
 }): ReactElement {
   const invites = useAsync(() => client.invites(), []);
   const mutation = useMutation(() => invites.reload());
+  const confirm = useConfirm();
   const [email, setEmail] = useState("");
   const [created, setCreated] = useState<CreatedInvite | undefined>(undefined);
+  const link = created ? (created.url ?? inviteLinkHere(created.token)) : "";
   const users = useAsync(() => client.users(), []);
 
   const rows = invites.data ?? [];
@@ -214,14 +223,12 @@ export function InvitesSection({
       {created && (
         <div className="admin-secret" role="status">
           <p>
-            Invite token, <strong>shown once</strong>. Single-use; expires{" "}
+            Invite link, <strong>shown once</strong>. Single-use; expires{" "}
             {formatWhen(created.invite.expires_at)}.
           </p>
-          <code>{created.token}</code>
-          <CopyButton value={created.token} />
-          <button type="button" onClick={() => setCreated(undefined)}>
-            Done
-          </button>
+          <code>{link}</code>
+          <CopyButton value={link} />
+          <DoneButton onClick={() => setCreated(undefined)} />
         </div>
       )}
 
@@ -264,10 +271,23 @@ export function InvitesSection({
                   <td className="admin-actions">
                     <button
                       type="button"
+                      className="admin-danger admin-icon-button"
+                      aria-label={`Revoke invite for ${invite.email ?? "any address"}`}
+                      title="Revoke"
                       disabled={mutation.busy === invite.id || invite.status !== "pending"}
-                      onClick={() => mutation.run(invite.id, () => client.revokeInvite(invite.id))}
+                      onClick={(event) => {
+                        void confirm({
+                          title: `Revoke the invite for ${invite.email ?? "any address"}?`,
+                          description: "Its link stops working. This cannot be undone.",
+                          confirmLabel: "Revoke",
+                          danger: true,
+                          anchor: event.currentTarget,
+                        }).then((ok) => {
+                          if (ok) mutation.run(invite.id, () => client.revokeInvite(invite.id));
+                        });
+                      }}
                     >
-                      Revoke
+                      <RevokeIcon />
                     </button>
                   </td>
                 </tr>
@@ -276,10 +296,6 @@ export function InvitesSection({
           </table>
         </div>
       )}
-
-      <p className="admin-note">
-        A lost token cannot be recovered. Revoke it and create another.
-      </p>
     </AdminSectionFrame>
   );
 }
@@ -294,6 +310,9 @@ export function CopyButton({ value }: { readonly value: string }): ReactElement 
   return (
     <button
       type="button"
+      className={state === "failed" ? undefined : "admin-icon-button"}
+      aria-label={state === "copied" ? "Copied" : "Copy"}
+      title={state === "copied" ? "Copied" : "Copy"}
       onClick={() => {
         void navigator.clipboard
           ?.writeText(value)
@@ -302,7 +321,16 @@ export function CopyButton({ value }: { readonly value: string }): ReactElement 
         if (!navigator.clipboard) setState("failed");
       }}
     >
-      {state === "copied" ? "Copied" : state === "failed" ? "Select it above and copy" : "Copy"}
+      {state === "copied" ? <CheckIcon /> : state === "failed" ? "Select it above and copy" : <CopyIcon />}
+    </button>
+  );
+}
+
+/** Dismiss a shown-once link. */
+function DoneButton({ onClick }: { readonly onClick: () => void }): ReactElement {
+  return (
+    <button type="button" className="admin-icon-button" aria-label="Done" title="Done" onClick={onClick}>
+      <CloseIcon />
     </button>
   );
 }

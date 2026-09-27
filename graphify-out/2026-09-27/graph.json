@@ -10304,7 +10304,7 @@
       "file_type": "code",
       "norm_label": "copybutton()",
       "source_file": "plugins/base/admin/src/Users.tsx",
-      "source_location": "L308"
+      "source_location": "L300"
     },
     {
       "id": "plugins_base_admin_src_users_donebutton",
@@ -10316,7 +10316,7 @@
       "file_type": "code",
       "norm_label": "donebutton()",
       "source_file": "plugins/base/admin/src/Users.tsx",
-      "source_location": "L330"
+      "source_location": "L322"
     },
     {
       "id": "plugins_base_admin_src_users_invitessection",
@@ -10328,7 +10328,7 @@
       "file_type": "code",
       "norm_label": "invitessection()",
       "source_file": "plugins/base/admin/src/Users.tsx",
-      "source_location": "L173"
+      "source_location": "L165"
     },
     {
       "id": "plugins_base_admin_src_users_userssection",
@@ -97010,18 +97010,6 @@
       "type": "external"
     },
     {
-      "id": "ref_modal_js",
-      "label": "ref_modal_js",
-      "_origin": "semantic",
-      "community": 90,
-      "community_name": "react",
-      "external": true,
-      "file_type": "concept",
-      "norm_label": "ref_modal_js",
-      "source_file": "",
-      "type": "external"
-    },
-    {
       "id": "ref_reauthoverlay_js",
       "label": "ref_reauthoverlay_js",
       "_origin": "semantic",
@@ -97114,6 +97102,17 @@
       "external": true,
       "file_type": "concept",
       "norm_label": "crate",
+      "source_file": "",
+      "type": "external"
+    },
+    {
+      "id": "ref_modal_js",
+      "label": "ref_modal_js",
+      "community": 90,
+      "community_name": "react",
+      "external": true,
+      "file_type": "concept",
+      "norm_label": "ref_modal_js",
       "source_file": "",
       "type": "external"
     }
@@ -126144,7 +126143,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/admin/src/Users.tsx",
-      "source_location": "L180",
+      "source_location": "L172",
       "weight": 1.0
     },
     {
@@ -126156,7 +126155,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/admin/src/Users.tsx",
-      "source_location": "L181",
+      "source_location": "L173",
       "weight": 1.0
     },
     {
@@ -126168,7 +126167,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/admin/src/Users.tsx",
-      "source_location": "L182",
+      "source_location": "L174",
       "weight": 1.0
     },
     {
@@ -126180,7 +126179,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/admin/src/Users.tsx",
-      "source_location": "L185",
+      "source_location": "L177",
       "weight": 1.0
     },
     {
@@ -126192,7 +126191,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/admin/src/Users.tsx",
-      "source_location": "L227",
+      "source_location": "L219",
       "weight": 1.0
     },
     {
@@ -126204,7 +126203,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/admin/src/Users.tsx",
-      "source_location": "L262",
+      "source_location": "L254",
       "weight": 1.0
     },
     {
@@ -126228,7 +126227,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/admin/src/Users.tsx",
-      "source_location": "L131",
+      "source_location": "L124",
       "weight": 1.0
     },
     {
@@ -271010,7 +271009,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/admin/src/Users.tsx",
-      "source_location": "L173",
+      "source_location": "L165",
       "weight": 1.0
     },
     {
@@ -271032,7 +271031,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/admin/src/Users.tsx",
-      "source_location": "L308",
+      "source_location": "L300",
       "weight": 1.0
     },
     {
@@ -271043,7 +271042,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/admin/src/Users.tsx",
-      "source_location": "L330",
+      "source_location": "L322",
       "weight": 1.0
     },
     {

@@ -66,6 +66,11 @@ pub struct CreateInviteRequest {
 pub struct CreateInviteResponse {
     pub invite: InviteView,
     pub token: String,
+    /// The link to hand the invitee: `<PUBLIC_URL>/#/invite/<token>`, which opens the
+    /// app's registration form with the token filled in. Only when `PUBLIC_URL` is
+    /// configured, as for [`PasswordResetResponse::url`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -155,6 +160,7 @@ pub async fn create_invite(
     let now = BsonDateTime::now();
     Ok(Json(CreateInviteResponse {
         invite: InviteView::from_invite(created, now),
+        url: app_link(state.config.public_url.as_deref(), "invite", &token),
         token,
     }))
 }
@@ -209,9 +215,9 @@ pub struct PasswordResetResponse {
     pub url: Option<String>,
 }
 
-/// `<public_url>/#/reset/<token>`. The token is URL-safe base64, so it needs no escaping.
-pub fn reset_link(public_url: Option<&str>, token: &str) -> Option<String> {
-    public_url.map(|origin| format!("{}/#/reset/{token}", origin.trim_end_matches('/')))
+/// `<public_url>/#/<route>/<token>`. The token is URL-safe base64, so it needs no escaping.
+pub fn app_link(public_url: Option<&str>, route: &str, token: &str) -> Option<String> {
+    public_url.map(|origin| format!("{}/#/{route}/{token}", origin.trim_end_matches('/')))
 }
 
 pub async fn list_users(
@@ -433,7 +439,7 @@ pub async fn create_password_reset(
 
     Ok(Json(PasswordResetResponse {
         user_id: target.id,
-        url: reset_link(state.config.public_url.as_deref(), &token),
+        url: app_link(state.config.public_url.as_deref(), "reset", &token),
         token,
         expires_at: issued.expires_at.into(),
     }))
@@ -912,12 +918,16 @@ async fn sum_attachment_bytes(state: &AppState) -> AppResult<u64> {
 mod tests {
 
     #[test]
-    fn a_reset_link_names_the_public_url_or_nothing() {
+    fn an_app_link_names_the_public_url_or_nothing() {
         assert_eq!(
-            super::reset_link(Some("https://lm.example.com/"), "abc_-1"),
+            super::app_link(Some("https://lm.example.com/"), "reset", "abc_-1"),
             Some("https://lm.example.com/#/reset/abc_-1".to_string())
         );
-        assert_eq!(super::reset_link(None, "abc"), None);
+        assert_eq!(
+            super::app_link(Some("https://lm.example.com"), "invite", "abc"),
+            Some("https://lm.example.com/#/invite/abc".to_string())
+        );
+        assert_eq!(super::app_link(None, "reset", "abc"), None);
     }
 
     use std::io::Read;

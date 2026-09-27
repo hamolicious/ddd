@@ -5,19 +5,22 @@
  * choice items marked `checked`) or `openSheet` with a body it draws itself, and this
  * plugin shows it: a popover beside the anchor on a wide screen, a bottom sheet on a
  * phone. It renders from `shell-ui`'s `shell.overlay` spot, so no plugin needs a React
- * presence of its own to show a menu. The contract is `_shared/context-menu-api.ts`.
+ * presence of its own to show a menu. `modal` and `confirm` ask a question in the same
+ * frame and resolve with the answer. The contract is `_shared/context-menu-api.ts`.
  *
  * - `Menu.tsx` — the popover / sheet, focus handling and the action list.
+ * - `Modal.tsx` — a modal's fields, buttons and validation; `confirm` as a modal.
  */
 
 import { useSyncExternalStore, type ReactNode } from "react";
 
 import type { Kernel } from "@kernel";
 
-import type { ContextMenuApi } from "../../_shared/context-menu-api.js";
+import type { ContextMenuApi, ModalRequest, ModalResult } from "../../_shared/context-menu-api.js";
 import { POINTS, type ShellOverlay } from "../../_shared/points.js";
 
 import { MenuHost, type Open } from "./Menu.js";
+import { confirmModal } from "./Modal.js";
 
 export type { ContextMenuApi } from "../../_shared/context-menu-api.js";
 
@@ -47,9 +50,23 @@ export default function activate(kernel: Kernel): ContextMenuApi {
     component: Host,
   });
 
+  const modal = (request: ModalRequest): Promise<ModalResult | undefined> =>
+    new Promise((resolve) => {
+      // The first answer wins: a chosen button settles before `close` fires `onClose`.
+      let settled = false;
+      const settle = (result: ModalResult | undefined): void => {
+        if (settled) return;
+        settled = true;
+        resolve(result);
+      };
+      set({ kind: "modal", request: { ...request, onClose: () => settle(undefined) }, settle });
+    });
+
   return {
     open: (request) => set({ kind: "menu", request }),
     openSheet: (request) => set({ kind: "sheet", request }),
+    modal,
+    confirm: async (request) => (await modal(confirmModal(request)))?.button === "confirm",
     close,
   };
 }

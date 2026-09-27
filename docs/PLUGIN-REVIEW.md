@@ -38,7 +38,7 @@ browser's device toolbar at 390 × 844, and 844 × 390 for landscape.
 | 18 | `viewer` | [x] | File documents via `markdown.attachment`; borderless properties table and rule |
 | 19 | `admin` | [ ] | Reviewed per tab, 19a–19g |
 | 19a | ↳ Users | [x] | Icon buttons, aligned cells, phone label, reset is a link |
-| 19b | ↳ Invites | [ ] | |
+| 19b | ↳ Invites | [x] | Full invite link (`#/invite/<token>`), icon buttons, Revoke asks first |
 | 19c | ↳ Audit log | [ ] | |
 | 19d | ↳ Orphan files | [ ] | |
 | 19e | ↳ Snapshots | [ ] | |
@@ -181,7 +181,9 @@ actions (in titled sections, choices marked ✓), or a body the plugin draws its
 the button that opened it on a wide screen it is a popover under that button; on a
 phone, or with no button, it is a bottom sheet (a centred dialog above phone width). It
 renders from `shell-ui`'s overlay spot. Split out of `folders` on 2026-09-26; `folders`
-and `doc-list` use it.
+and `doc-list` use it. Since 2026-09-27 it also raises modals: `modal` (text, textarea,
+checkbox and select fields; plain / primary / danger buttons; validation) and `confirm`
+("are you sure?", optionally type-to-confirm). Admin's destructive actions use `confirm`.
 
 **Where to see it.** Any ⋯ button (document rows, folder rows); the document list's sort
 icon; a folder's Move to… picker.
@@ -192,6 +194,9 @@ icon; a folder's Move to… picker.
   close it; focus returns to the button that opened it.
 - [ ] Choice menus (sort) mark the current choice and open with focus on it.
 - [ ] Danger items (Move to Trash, Delete folder) are red.
+- [ ] Modals (Admin → Invites → Revoke): centred on a wide screen, a bottom sheet on a
+  phone; Cancel, Escape, ✕ and a click outside all cancel; a dangerous one starts on
+  Cancel and its confirm button is red; Enter in a field presses the default button.
 
 **Notes.**
 
@@ -513,12 +518,15 @@ that opens "Set a new password" on the sign-in screen (2026-09-26).
 
 **Where to see it.** `#/admin/invites`; "Create an invite" in the palette.
 
-- [ ] Create, with or without an email, makes a link valid for 7 days; Copy copies it.
-- [ ] A second browser registers with that link; the invite then shows as used.
-- [ ] Revoke stops an unused invite from working.
-- [ ] Expired and used invites are marked, not hidden.
+- [x] Create, with or without an email, makes a link valid for 7 days; Copy copies it.
+- [x] A second browser registers with that link; the invite then shows as used.
+- [x] Revoke stops an unused invite from working.
+- [x] Expired and used invites are marked, not hidden.
 
-**Notes.**
+**Notes.** The invite is shown as a link, `<PUBLIC_URL>/#/invite/<token>` (or this app's
+address), which opens registration with the token filled in. Revoke, Copy and Done are icon
+buttons. Revoke asks first in a `context-menu` modal, and so do Users' reset link and delete.
+The "lost token" note is gone.
 
 ### 19c. Audit log
 

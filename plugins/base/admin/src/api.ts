@@ -54,6 +54,8 @@ export interface CreatedInvite {
   readonly invite: InviteView;
   /** Returned exactly once, at creation. */
   readonly token: string;
+  /** `<PUBLIC_URL>/#/invite/<token>`; absent when the server has no `PUBLIC_URL`. */
+  readonly url?: string;
 }
 
 export interface PasswordResetIssued {
@@ -71,6 +73,11 @@ export interface PasswordResetIssued {
  */
 export function resetLinkHere(token: string): string {
   return `${location.origin}${location.pathname}#/reset/${token}`;
+}
+
+/** An invite link at the address this app was loaded from; see `resetLinkHere`. */
+export function inviteLinkHere(token: string): string {
+  return `${location.origin}${location.pathname}#/invite/${token}`;
 }
 
 export interface AuditView {
