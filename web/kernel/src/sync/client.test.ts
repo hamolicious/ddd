@@ -54,6 +54,7 @@ function makeClient(
     store?: MemoryProjectionStore;
     persistence?: MemoryDocPersistence;
     autoReconnect?: boolean;
+    authProbe?: () => Promise<"ok" | "unauthenticated" | "unreachable">;
   } = {},
 ): Harness {
   MockSocket.reset();
@@ -70,6 +71,7 @@ function makeClient(
     bootstrap: { url: `${ORIGIN}/api/sync/bootstrap`, fetchImpl: emptyBootstrapFetch },
     hydrator: { syncTimeoutMs: 100, persistDebounceMs: 0, persistence: options.persistence },
     autoReconnect: options.autoReconnect ?? true,
+    ...(options.authProbe ? { authProbe: options.authProbe } : {}),
     onState: (state) => states.push(state),
     setTimeoutImpl: (run, delay) => {
       scheduled.push({ delay, run });
@@ -169,10 +171,41 @@ describe("close codes", () => {
     expect((await store.checkpoint()).safeSeq).toBe(1);
     expect(harness.scheduled).toHaveLength(0);
 
-    // A successful re-login restarts the loop without losing anything.
+    // A successful re-login restarts the loop without losing anything, even right after
+    // another reconnect attempt (the throttle does not apply to signing back in).
     harness.client.reconnectNow();
     expect(MockSocket.instances).toHaveLength(2);
+    MockSocket.last.serverClose(CloseCode.Unauthenticated, "still signed out");
+    await settle();
+    harness.client.reconnectNow();
+    expect(MockSocket.instances).toHaveLength(3);
     expect(store.cleared).toBe(0);
+  });
+
+  it("a connection refused before it opens asks whether the session is still valid", async () => {
+    // A refused upgrade (HTTP 401) reaches a browser as a plain failed connection.
+    let verdict: "ok" | "unauthenticated" | "unreachable" = "unreachable";
+    const harness = makeClient({ authProbe: () => Promise.resolve(verdict) });
+    const socket = await started(harness);
+    socket.serverClose(1006, "");
+    await settle();
+    harness.scheduled.splice(0).at(-1)?.run();
+    await settle();
+
+    // Offline: the probe cannot reach the server either, so keep trying.
+    MockSocket.last.serverClose(1006, "");
+    await settle();
+    expect(harness.client.status).toBe("offline");
+    expect(harness.scheduled).toHaveLength(1);
+
+    // The session ended meanwhile: ask the person to sign in, and stop retrying.
+    verdict = "unauthenticated";
+    harness.scheduled.splice(0).at(-1)?.run();
+    await settle();
+    MockSocket.last.serverClose(1006, "");
+    await settle();
+    expect(harness.client.status).toBe("auth-required");
+    expect(harness.scheduled).toHaveLength(0);
   });
 
   it("reconnects with backoff after an ordinary close", async () => {

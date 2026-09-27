@@ -25,12 +25,13 @@
  */
 
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
+import * as Y from "yjs";
 
 import type { FeedRow } from "../protocol.js";
 // Type-only: `DocPersistence` is the hydrator's contract for this store's `docs`
 // half (web/CONTRACTS.md, area web-store). Erased at build time — `store/` still
 // has no runtime edge to `sync/`.
-import type { DocPersistence, DocReplicaMeta, StoredReplica } from "../sync/doc-hydration.js";
+import { TAB_ID, type DocPersistence, type DocReplicaMeta, type JournalEntry, type StoredReplica } from "../sync/doc-hydration.js";
 import {
   EMPTY_CHECKPOINT,
   type AppliedRows,
@@ -72,7 +73,7 @@ export interface StoredDocState {
    */
   readonly unsynced?: boolean;
   /** The offline edits in `state`, with when they were made (`docs/HISTORY.md`). */
-  readonly journal?: readonly { readonly at: number; readonly lastAt: number; readonly update: Uint8Array }[];
+  readonly journal?: readonly JournalEntry[];
 }
 
 export interface LifeManagerDb extends DBSchema {
@@ -454,14 +455,40 @@ export class IdbDocPersistence implements DocPersistence {
     };
   }
 
+  /**
+   * Save a replica **without overwriting another tab's work**. Tabs of one browser share
+   * this store, each with its own in-memory document: a plain `put` let the last tab to
+   * save erase edits another tab made offline and never sent (closed before it could).
+   * So, in one transaction: another tab's journal entries this state does not already
+   * hold are kept, and the stored state is merged into ours rather than replaced. Both
+   * are lossless (CRDT state and updates merge); the next tab to open the document
+   * adopts the kept entries and sends them.
+   */
   async save(id: string, state: Uint8Array, meta?: DocReplicaMeta): Promise<void> {
-    await this.store.db.put(STORE_DOCS, {
+    const tx = this.store.db.transaction(STORE_DOCS, "readwrite");
+    const existing = await tx.store.get(id);
+    const ours = meta?.journal ?? [];
+    let foreign: JournalEntry[] = [];
+    let merged = state;
+    try {
+      foreign = (existing?.journal ?? []).filter((entry) => entry.origin !== TAB_ID && !holds(state, entry.update));
+      if (existing !== undefined && (foreign.length > 0 || !covers(state, existing.state))) {
+        merged = Y.mergeUpdates([existing.state, state]);
+      }
+    } catch {
+      // Bytes that are not a Yjs state (never written by the hydrator): nothing to merge.
+      foreign = [];
+      merged = state;
+    }
+    const journal = [...foreign, ...ours].sort((a, b) => a.at - b.at);
+    await tx.store.put({
       id,
-      state,
+      state: merged,
       touchedAt: this.#stamp(),
-      unsynced: meta?.unsynced ?? false,
-      ...(meta?.journal && meta.journal.length > 0 ? { journal: meta.journal } : {}),
+      unsynced: (meta?.unsynced ?? false) || foreign.length > 0,
+      ...(journal.length > 0 ? { journal } : {}),
     });
+    await tx.done;
   }
 
   #stamp(): number {
@@ -512,4 +539,30 @@ export class IdbDocPersistence implements DocPersistence {
     await tx.done;
     return evicted;
   }
+}
+
+/** `state` already has everything `update` would add or delete (a text-only document). */
+function holds(state: Uint8Array, update: Uint8Array): boolean {
+  const doc = new Y.Doc();
+  Y.applyUpdate(doc, state);
+  const vector = Y.encodeStateVector(doc);
+  const text = doc.getText("content").toString();
+  Y.applyUpdate(doc, update);
+  const same =
+    text === doc.getText("content").toString() && equalBytes(vector, Y.encodeStateVector(doc));
+  doc.destroy();
+  return same;
+}
+
+/** Every insertion in `other` is already in `state` (by state vector). */
+function covers(state: Uint8Array, other: Uint8Array): boolean {
+  const ours = Y.decodeStateVector(Y.encodeStateVectorFromUpdate(state));
+  for (const [client, clock] of Y.decodeStateVector(Y.encodeStateVectorFromUpdate(other))) {
+    if ((ours.get(client) ?? 0) < clock) return false;
+  }
+  return true;
+}
+
+function equalBytes(a: Uint8Array, b: Uint8Array): boolean {
+  return a.length === b.length && a.every((byte, index) => byte === b[index]);
 }

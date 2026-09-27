@@ -42,11 +42,34 @@ export const DEFAULT_LRU_SIZE = 20;
 /** The root `Y.Text` key — pinned by SPEC §3.2; must match the server's `TEXT_ROOT`. */
 export const TEXT_ROOT = "content";
 
+/** After a too-large refusal, a burst of edits is offered again once it pauses this long. */
+const REFUSED_RETRY_MS = 1_500;
+/** …and this long after offering, the server is asked whether it took it. */
+const REFUSED_VERIFY_MS = 1_000;
+
+/** Every insertion in `ours` is in `theirs` (both encoded state vectors). */
+function coversVector(theirs: Uint8Array, ours: Uint8Array): boolean {
+  const server = Y.decodeStateVector(theirs);
+  for (const [client, clock] of Y.decodeStateVector(ours)) {
+    if ((server.get(client) ?? 0) < clock) return false;
+  }
+  return true;
+}
+
 /** Offline edits closer together than this are one journal entry, timed at the first. */
 export const JOURNAL_MERGE_MS = 2_000;
 
+/**
+ * This tab. Tabs of one browser share the `docs` store; each journal entry says which
+ * tab made it, so a save can keep another tab's unsent edits instead of overwriting them.
+ */
+export const TAB_ID: string =
+  typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `tab-${Math.random().toString(36).slice(2)}`;
+
 /** One offline edit, or a run of them, and when it began. */
 export interface JournalEntry {
+  /** The tab that made it ({@link TAB_ID}); absent on entries from before tabs were told apart. */
+  readonly origin?: string;
   /** Epoch ms of the first edit in the entry. */
   readonly at: number;
   /** Epoch ms of the last, for merging the next one in. */
@@ -97,6 +120,11 @@ export interface DocHydratorOptions {
   /** Documents that keep a local replica; default {@link DEFAULT_PERSISTED_REPLICAS}. */
   readonly persistedReplicas?: number;
   readonly onError?: (id: string, error: DocError) => void;
+  /**
+   * A write the server had refused as too large (`too_large` without a hint) has now
+   * gone through: the person trimmed the document. Clears whatever `onError` showed.
+   */
+  readonly onRefusalCleared?: (id: string) => void;
   /** Local replica writes are coalesced over this window; tests set it to 0. */
   readonly persistDebounceMs?: number;
   /** `open()`'s first-round-trip deadline. */
@@ -188,6 +216,17 @@ class DocEntry implements HydratedDoc {
   journal: JournalEntry[] = [];
   /** Number of local transactions in `journal` — the honest "pending" count. */
   pending = 0;
+  /**
+   * The server refused this document's latest state as over the size limit. Until a
+   * later state is accepted, local edits stay here (counted as pending) and each burst
+   * of them is offered to the server again with a full handshake.
+   */
+  refused = false;
+  /** An edit since the refusal is waiting to be offered with the next handshake. */
+  retryPending = false;
+  /** The next server step 1 is only to learn whether the last offer was accepted. */
+  verifyOnly = false;
+  retryTimer: ReturnType<typeof setTimeout> | undefined;
   /** Local state not yet written to the `docs` store. */
   dirty = false;
   /**
@@ -311,7 +350,8 @@ export class DocHydrator {
         // Offline edits from before a reload: their journal comes back with them.
         const stored = await this.options.persistence?.peek?.(id);
         if (stored?.unsynced && stored.journal && stored.journal.length > 0) {
-          entry.journal = [...stored.journal];
+          // Adopted: this tab sends them now, whichever tab made them.
+          entry.journal = stored.journal.map((edit) => ({ ...edit, origin: TAB_ID }));
           entry.pending = stored.journal.length;
           this.#recount();
         }
@@ -383,12 +423,16 @@ export class DocHydrator {
 
     switch (frame.type) {
       case FrameType.SyncStep1: {
+        entry.acked = true;
+        if (entry.refused) {
+          this.#onStep1WhileRefused(entry, frame.payload);
+          return;
+        }
         // "Here is what I have" — answer with everything they lack, which is also
         // how offline edits reach the server after a reconnect. Note what this
         // does *not* do: mark the document synced. Their step 1 says nothing
         // about our content arriving; only their step 2 does.
         this.#sendStep2(entry, frame.payload);
-        entry.acked = true;
         return;
       }
       case FrameType.SyncStep2:
@@ -444,6 +488,7 @@ export class DocHydrator {
           // unchanged, and downloading the whole document would prove it. That one
           // is surfaced to the caller through `onError` and nothing else.
           if (error.hint === "rest") void this.#hydrateOverRest(entry);
+          else this.#markRefused(entry);
           break;
         case "gone":
         case "not_found":
@@ -664,6 +709,58 @@ export class DocHydrator {
     }
   }
 
+  /**
+   * The server refused this document's state as too large. Nothing it has is lost, but
+   * what this device holds cannot be saved: say so (pending stays above zero, so the
+   * status never claims "saved"), keep every edit, and wait for the person to trim.
+   */
+  #markRefused(entry: DocEntry): void {
+    entry.refused = true;
+    entry.verifyOnly = false;
+    if (entry.pending === 0) {
+      entry.pending = 1;
+      this.#recount();
+    }
+    entry.dirty = true;
+    this.#schedulePersist(entry);
+  }
+
+  /** After a refusal, a burst of edits is offered again with a full handshake. */
+  #scheduleRetry(entry: DocEntry): void {
+    entry.retryPending = true;
+    if (entry.retryTimer !== undefined) clearTimeout(entry.retryTimer);
+    entry.retryTimer = setTimeout(() => {
+      entry.retryTimer = undefined;
+      if (entry.refused && this.transport.state === "open") this.#subscribe(entry);
+    }, REFUSED_RETRY_MS);
+  }
+
+  #onStep1WhileRefused(entry: DocEntry, serverVector: Uint8Array): void {
+    if (coversVector(serverVector, Y.encodeStateVector(entry.doc))) {
+      // The server has everything this device has: the trimmed state went through.
+      entry.refused = false;
+      entry.retryPending = false;
+      entry.verifyOnly = false;
+      this.#clearOutbox(entry);
+      this.options.onRefusalCleared?.(entry.id);
+      return;
+    }
+    if (entry.verifyOnly) {
+      // It did not: still refused, and nothing new to offer until the next edit.
+      entry.verifyOnly = false;
+      return;
+    }
+    if (!entry.retryPending) return;
+    entry.retryPending = false;
+    this.#sendStep2(entry, serverVector);
+    // Then ask once more, only to learn whether that was accepted. A refusal answers
+    // with `too_large` first and keeps the document flagged.
+    entry.verifyOnly = true;
+    setTimeout(() => {
+      if (entry.refused && entry.verifyOnly && this.transport.state === "open") this.#subscribe(entry);
+    }, REFUSED_VERIFY_MS);
+  }
+
   #onLocalUpdate(entry: DocEntry, update: Uint8Array, origin: unknown): void {
     entry.dirty = true;
     entry.hasLocalState = true;
@@ -676,6 +773,13 @@ export class DocHydrator {
       return;
     }
 
+    if (entry.refused) {
+      // Kept here, and offered again as a whole once the burst ends.
+      this.#queue(entry, update);
+      this.#schedulePersist(entry);
+      this.#scheduleRetry(entry);
+      return;
+    }
     if (this.transport.state === "open" && entry.subscribed) {
       try {
         this.transport.sendBinary({ type: FrameType.Update, docId: entry.id, payload: update });
@@ -694,12 +798,13 @@ export class DocHydrator {
     const last = entry.journal.at(-1);
     if (last && now - last.lastAt <= JOURNAL_MERGE_MS) {
       entry.journal[entry.journal.length - 1] = {
+        origin: TAB_ID,
         at: last.at,
         lastAt: now,
         update: Y.mergeUpdates([last.update, update]),
       };
     } else {
-      entry.journal.push({ at: now, lastAt: now, update });
+      entry.journal.push({ origin: TAB_ID, at: now, lastAt: now, update });
     }
     entry.pending++;
     this.#recount();

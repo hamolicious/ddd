@@ -47,11 +47,23 @@ export class SessionHost {
       headers.set("authorization", `Bearer ${this.options.token}`);
     }
     const impl = this.options.fetchImpl ?? fetch;
-    const response = await impl(`${base}${path}`, {
-      credentials: "same-origin",
-      ...init,
-      headers,
-    });
+    let response: Response;
+    try {
+      response = await impl(`${base}${path}`, {
+        credentials: "same-origin",
+        ...init,
+        headers,
+      });
+    } catch (cause) {
+      // The request never reached the server: offline, or the server is down. The
+      // browser's own words ("Failed to fetch") were reaching the screen as-is.
+      if (init.signal?.aborted) throw cause;
+      throw Object.assign(new Error("You are offline, or the server cannot be reached. Try again when you are back online."), {
+        status: 0,
+        code: "offline",
+        cause,
+      });
+    }
     if (!response.ok) throw await errorFromEnvelope(response);
     return response;
   };

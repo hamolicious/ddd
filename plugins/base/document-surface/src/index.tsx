@@ -707,11 +707,7 @@ function SurfaceView({
       */}
       {snapshot.hydrationError && !snapshot.handle ? (
         <p className="docsurface:m-0 docsurface:border-b docsurface:border-border docsurface:bg-bg-subtle docsurface:px-4 docsurface:py-2 docsurface:text-sm docsurface:text-text-muted" role="status">
-          Cannot edit: the editable copy did not load
-          {" ("}
-          {snapshot.hydrationError}
-          {"). "}
-          You can still read it.
+          {editableMessage(snapshot.hydrationError)}
         </p>
       ) : null}
 
@@ -732,6 +728,7 @@ function SurfaceView({
             row={row}
             open={snapshot.handle}
             line={line}
+            unavailable={Boolean(snapshot.hydrationError && !snapshot.handle)}
           />
         ) : (
           <p className="docsurface:max-w-[62ch] docsurface:px-4 docsurface:py-6 docsurface:text-text-muted">
@@ -752,6 +749,7 @@ function ActiveMode({
   row,
   open,
   line,
+  unavailable,
 }: {
   readonly kernel: Kernel;
   readonly mode: DocumentMode;
@@ -760,11 +758,28 @@ function ActiveMode({
   readonly row: DocumentRow;
   readonly open?: OpenDocument;
   readonly line?: number;
+  readonly unavailable: boolean;
 }): ReactNode {
   const Component = boundaryFor(kernel, mode, owner);
   // Spread rather than `line={line}`: `exactOptionalPropertyTypes` is on, so an
   // absent line has to be an absent *prop*, not a prop whose value is `undefined`.
-  return <Component id={id} row={row} open={open} {...(line !== undefined ? { line } : {})} />;
+  return (
+    <Component
+      id={id}
+      row={row}
+      open={open}
+      {...(line !== undefined ? { line } : {})}
+      {...(unavailable ? { unavailable } : {})}
+    />
+  );
+}
+
+/** Why the document cannot be edited, in words: the kernel's reason is for the log. */
+function editableMessage(reason: string | undefined): string {
+  if (reason && /offline/i.test(reason)) {
+    return "This note has not been opened on this device before, so it cannot be edited offline. You can read it; editing works again once you are back online.";
+  }
+  return "This note cannot be edited right now. You can still read it.";
 }
 
 /**

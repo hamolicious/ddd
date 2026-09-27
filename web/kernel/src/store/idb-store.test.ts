@@ -10,6 +10,7 @@
 import "fake-indexeddb/auto";
 
 import { beforeEach, describe, expect, it } from "vitest";
+import * as Y from "yjs";
 
 import {
   CHECKPOINT_KEY,
@@ -297,6 +298,43 @@ describe("clear", () => {
 });
 
 describe("IdbDocPersistence", () => {
+  it("keeps another tab's unsent edits when this tab saves", async () => {
+    const persistence = new IdbDocPersistence(store);
+    // Both tabs start from the same document.
+    const base = new Y.Doc();
+    base.getText("content").insert(0, "base\n");
+    const baseState = Y.encodeStateAsUpdate(base);
+
+    // Another tab edits offline and saves, then is closed.
+    const other = new Y.Doc();
+    Y.applyUpdate(other, baseState);
+    const before = Y.encodeStateVector(other);
+    other.getText("content").insert(5, "from the other tab\n");
+    const otherEdit = Y.encodeStateAsUpdate(other, before);
+    await persistence.save(id(1), Y.encodeStateAsUpdate(other), {
+      unsynced: true,
+      journal: [{ origin: "another-tab", at: 1_000, lastAt: 1_000, update: otherEdit }],
+    });
+
+    // This tab, which never saw that edit, saves its own offline edit afterwards.
+    const mine = new Y.Doc();
+    Y.applyUpdate(mine, baseState);
+    const mineBefore = Y.encodeStateVector(mine);
+    mine.getText("content").insert(0, "mine\n");
+    await persistence.save(id(1), Y.encodeStateAsUpdate(mine), {
+      unsynced: true,
+      journal: [{ at: 2_000, lastAt: 2_000, update: Y.encodeStateAsUpdate(mine, mineBefore) }],
+    });
+
+    const stored = await persistence.peek(id(1));
+    const reopened = new Y.Doc();
+    Y.applyUpdate(reopened, stored!.state);
+    expect(reopened.getText("content").toString()).toContain("from the other tab");
+    expect(reopened.getText("content").toString()).toContain("mine");
+    expect(stored!.unsynced).toBe(true);
+    expect(stored!.journal?.map((entry) => entry.at)).toEqual([1_000, 2_000]);
+  });
+
   it("round-trips a replica and drops it", async () => {
     const persistence = new IdbDocPersistence(store);
     await persistence.save(id(1), new Uint8Array([9, 8, 7]));

@@ -97,6 +97,66 @@ export async function initKernel(options: KernelInitOptions): Promise<KernelRunt
     hydrator: {
       persistence: new IdbDocPersistence(store),
       ...(server ? { restBaseUrl: server } : {}),
+      // A write the server refused as too large must not look saved: say which
+      // document, and what to do. It clears itself once a trimmed version goes through.
+      onError: (id, error) => {
+        if (error.code !== "too_large" || error.hint === "rest") return;
+        void store
+          .get(id)
+          .catch(() => undefined)
+          .then((row) => {
+            host.notices.notify({
+              id: `kernel:too-large:${id}`,
+              level: "error",
+              message: `“${row?.title ?? "A document"}” is over the size limit, so your latest changes are not saved to the server.`,
+              detail:
+                "They are kept on this device. Remove some text (or move part of it to another document) and it saves again.",
+              actions: [{ label: "Open it", run: () => void (location.hash = `#/doc/${id}`) }],
+            });
+          });
+      },
+      onRefusalCleared: (id) => host.notices.dismiss(`kernel:too-large:${id}`),
+      // Deleted for good elsewhere while this device held edits the server never got
+      // (SPEC §4.1). The id can never come back, so the text is saved as a new note
+      // straight away, before anything else can lose it, and the person is told.
+      onReplicaDiscarded: ({ id, hadUnsyncedEdits, text }) => {
+        if (!hadUnsyncedEdits || text.trim() === "") return;
+        const recover = (): void => {
+          host.documents
+            .create({ text })
+            .then((recovered) => {
+              host.notices.notify({
+                id: `kernel:recovered:${id}`,
+                level: "warning",
+                message:
+                  "A note you had changed on this device was deleted for good elsewhere. Your version was saved as a new note.",
+                actions: [{ label: "Open it", run: () => void (location.hash = `#/doc/${recovered}`) }],
+              });
+            })
+            .catch((cause: unknown) => {
+              host.notices.notify({
+                id: `kernel:recovered:${id}`,
+                level: "error",
+                message:
+                  "A note you had changed on this device was deleted for good elsewhere, and your version could not be saved yet.",
+                detail: `${cause instanceof Error ? cause.message : String(cause)}\n\nYour text:\n${text}`,
+                actions: [{ label: "Try again", run: recover }],
+              });
+            });
+        };
+        recover();
+      },
+    },
+    authProbe: async () => {
+      try {
+        const response = await fetch(`${server ?? ""}/api/auth/me`, {
+          credentials: "same-origin",
+          ...(options.bearerToken ? { headers: { authorization: `Bearer ${options.bearerToken}` } } : {}),
+        });
+        return response.status === 401 ? "unauthenticated" : "ok";
+      } catch {
+        return "unreachable";
+      }
     },
     onState: (state) => {
       host.sync.update(state);

@@ -47,6 +47,13 @@ export interface SyncClientOptions {
   readonly onState?: (state: FeedState) => void;
   /** `true` (default) reconnects with the PROTOCOL.md §8 backoff. */
   readonly autoReconnect?: boolean;
+  /**
+   * Asks the server, over plain HTTP, whether this session is still valid. Used when a
+   * connection attempt fails without ever opening: a refused upgrade (HTTP 401) looks
+   * exactly like a network failure to a browser, and without asking, a session that
+   * ended while the device was offline read as "offline" forever.
+   */
+  readonly authProbe?: () => Promise<"ok" | "unauthenticated" | "unreachable">;
   /** Injectable clock for tests: schedules the reconnect attempt. */
   readonly setTimeoutImpl?: (callback: () => void, ms: number) => unknown;
 }
@@ -67,6 +74,8 @@ export class SyncClient {
   /** Consecutive `4400` closes (PROTOCOL.md §7). */
   #protocolErrors = 0;
   #transportError: string | undefined;
+  /** The current connection attempt reached `open` (reset at each attempt). */
+  #attemptOpened = false;
   #state: FeedState = { status: "offline", safeSeq: 0, headSeq: 0, pending: 0 };
   #unsubscribeStore: (() => void) | undefined;
 
@@ -173,7 +182,10 @@ export class SyncClient {
     const now = Date.now();
     if (this.#stopped) return;
     if (this.transport.state !== "closed") return;
-    if (now - this.#lastReconnectNow < RECONNECT_NOW_THROTTLE_MS) return;
+    // Not while signed out: the call after a successful sign-in is the only way out of
+    // `auth-required`, and throttling it (a Reconnect click moments before) left the
+    // sign-in dialog up for good.
+    if (this.feed.state.status !== "auth-required" && now - this.#lastReconnectNow < RECONNECT_NOW_THROTTLE_MS) return;
     this.#lastReconnectNow = now;
     this.#reconnectPending = false;
     // An explicit user action clears the skew counter: a reload or a re-login is
@@ -261,14 +273,16 @@ export class SyncClient {
     this.#welcomeSeen = false;
     this.#welcome = undefined;
     this.feed.onConnecting();
+    this.#attemptOpened = false;
     try {
       await this.transport.connect();
+      this.#attemptOpened = true;
       this.#backoff.markOpen();
     } catch {
       // `onClose` runs for a socket that closed before opening and has the close
       // code; a connect that never produced one lands here.
       if (this.feed.state.status !== "auth-required") this.feed.onDisconnected("offline");
-      this.#scheduleReconnect(undefined);
+      this.#retryOrAskToSignIn(undefined);
     }
   }
 
@@ -302,7 +316,35 @@ export class SyncClient {
     // `undefined` ⇒ terminal (4401/4403/4409): only a user action restarts the
     // loop, via `reconnectNow()`.
     if (delay === undefined) return;
+    if (status === "offline" && !this.#attemptOpened) {
+      this.#retryOrAskToSignIn(delay);
+      return;
+    }
     this.#scheduleReconnect(delay);
+  }
+
+  /**
+   * A connection attempt that never opened: offline, or a refused upgrade. Ask the
+   * server which (when it can be asked at all) before trying again: a session that is
+   * gone must ask the person to sign in, not retry into the same wall forever.
+   */
+  #retryOrAskToSignIn(delay: number | undefined): void {
+    const probe = this.options.authProbe;
+    if (!probe) {
+      this.#scheduleReconnect(delay);
+      return;
+    }
+    void probe()
+      .catch(() => "unreachable" as const)
+      .then((verdict) => {
+        if (this.#stopped) return;
+        if (verdict === "unauthenticated") {
+          this.#transportError = "the session has ended; sign in again";
+          this.feed.onDisconnected("auth-required");
+          return;
+        }
+        this.#scheduleReconnect(delay);
+      });
   }
 
   #onError(error: Error): void {

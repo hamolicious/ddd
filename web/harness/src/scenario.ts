@@ -100,7 +100,13 @@ export function parseArgs(argv: readonly string[] = process.argv.slice(2)): Harn
     if (!match) continue;
     const [, key, value] = match as unknown as [string, string, string];
     const field = key.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
-    config[field] = /^\d+(\.\d+)?$/.test(value) ? Number(value) : value;
+    const parsed = /^\d+(\.\d+)?$/.test(value) ? Number(value) : value;
+    // The chaos knobs live one level down; a top-level flag for them was silently ignored.
+    if (field === "dropSocket" || field === "concurrentEditors") {
+      config["chaos"] = { ...(config["chaos"] as HarnessConfig["chaos"]), [field]: parsed };
+      continue;
+    }
+    config[field] = parsed;
   }
   return config as unknown as HarnessConfig;
 }

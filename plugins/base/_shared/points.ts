@@ -371,6 +371,12 @@ export interface DocumentModeProps {
    * error. It is a deep link, not a state: a mode must render correctly without it.
    */
   readonly line?: number;
+  /**
+   * Set when the document cannot be opened for editing (offline and never opened on
+   * this device, say): the surface has already said why, in words. A mode that edits
+   * shows the text read-only instead of waiting for a handle that is not coming.
+   */
+  readonly unavailable?: boolean;
 }
 
 export const documentModeShape: Shape<DocumentMode> = s.object({

@@ -392,7 +392,7 @@ export default function activate(kernel: Kernel): EditorApi {
     });
   };
 
-  const Edit = ({ id, row, open, line }: DocumentModeProps): ReactNode => {
+  const Edit = ({ id, row, open, line, unavailable }: DocumentModeProps): ReactNode => {
     const host = useRef<HTMLDivElement | null>(null);
     const [failure, setFailure] = useState<string | undefined>(undefined);
 
@@ -614,10 +614,12 @@ export default function activate(kernel: Kernel): EditorApi {
     if (!open) {
       return (
         <div className="editor:flex editor:h-full editor:min-h-0 editor:min-w-0 editor:flex-1 editor:flex-col editor:font-sans editor:text-text">
-          <p className="editor-notice editor:m-0 editor:shrink-0 editor:border-b editor:border-border editor:bg-bg-subtle editor:px-4 editor:py-2 editor:text-sm editor:text-text-muted editor:compact:p-2 editor:compact:break-words">
-            Opening for editing… You can read it now. A document you have never opened
-            stays read-only until this device reconnects.
-          </p>
+          {/* When it cannot open at all, the surface has already said why. */}
+          {unavailable ? null : (
+            <p className="editor-notice editor:m-0 editor:shrink-0 editor:border-b editor:border-border editor:bg-bg-subtle editor:px-4 editor:py-2 editor:text-sm editor:text-text-muted editor:compact:p-2 editor:compact:break-words" role="status">
+              Opening for editing…
+            </p>
+          )}
           {parseNotice}
           <pre className="editor:m-0 editor:min-h-0 editor:min-w-0 editor:flex-1 editor:overflow-auto editor:whitespace-pre-wrap editor:bg-bg editor:p-4 editor:font-mono editor:text-sm editor:leading-[1.6] editor:text-text-muted">{row.content ?? ""}</pre>
         </div>
