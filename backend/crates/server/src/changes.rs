@@ -37,9 +37,13 @@ pub struct Hunk {
     pub inserted: String,
 }
 
-/// What one write did: its hunks in ascending, non-overlapping order.
+/// What one write (or a run of them folded together) did: its hunks against the text
+/// before `first_seq`, in ascending, non-overlapping order.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Change {
+    /// The first update this change covers; equal to `seq` for a single write.
+    pub first_seq: i64,
+    /// The last update it covers.
     pub seq: i64,
     pub at_ms: i64,
     pub by: Option<String>,
@@ -210,14 +214,14 @@ pub fn group(newest_first: &[Change], gap_ms: i64) -> Vec<Group> {
         let removed: usize = change.hunks.iter().map(|hunk| hunk.removed.chars().count()).sum();
         match groups.last_mut() {
             Some(open) if open.by == change.by && open.started_ms - change.at_ms <= gap_ms => {
-                open.from_seq = change.seq;
+                open.from_seq = change.first_seq;
                 open.started_ms = change.at_ms;
                 open.changes += 1;
                 open.inserted_chars += inserted;
                 open.removed_chars += removed;
             }
             _ => groups.push(Group {
-                from_seq: change.seq,
+                from_seq: change.first_seq,
                 to_seq: change.seq,
                 started_ms: change.at_ms,
                 ended_ms: change.at_ms,
@@ -407,7 +411,7 @@ mod tests {
     use super::*;
 
     fn change(seq: i64, at_ms: i64, by: &str, before: &str, after: &str) -> Change {
-        Change { seq, at_ms, by: Some(by.to_string()), hunks: diff_hunk(before, after).into_iter().collect() }
+        Change { first_seq: seq, seq, at_ms, by: Some(by.to_string()), hunks: diff_hunk(before, after).into_iter().collect() }
     }
 
     #[test]
@@ -432,7 +436,7 @@ mod tests {
                 Hunk { pos: 28, removed: String::new(), inserted: "- [ ] passport\n".into() },
             ]
         );
-        let change = Change { seq: 1, at_ms: 0, by: None, hunks };
+        let change = Change { first_seq: 1, seq: 1, at_ms: 0, by: None, hunks };
         assert_eq!(invert(new, &change).unwrap(), old);
     }
 
@@ -457,7 +461,7 @@ mod tests {
                 let insert: String = (0..next(3)).map(|_| pieces[next(pieces.len())]).collect();
                 edited.replace_range(from..to, &insert);
             }
-            let change = Change { seq: round, at_ms: 0, by: None, hunks: hunks_between(&text, &edited) };
+            let change = Change { first_seq: round, seq: round, at_ms: 0, by: None, hunks: hunks_between(&text, &edited) };
             assert_eq!(invert(&edited, &change).as_deref(), Ok(text.as_str()), "round {round}: {text:?} -> {edited:?}");
             text = edited;
         }
@@ -499,7 +503,7 @@ mod tests {
             TextEdit { range: Span { start: 0, end: 5 }, text: "A".into() },
         ];
         let new = life_manager_core::splice::apply(old, &edits);
-        let change = Change { seq: 1, at_ms: 0, by: None, hunks: hunks_from_edits(old, &edits) };
+        let change = Change { first_seq: 1, seq: 1, at_ms: 0, by: None, hunks: hunks_from_edits(old, &edits) };
         assert_eq!(invert(&new, &change).unwrap(), old);
     }
 

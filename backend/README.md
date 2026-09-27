@@ -154,6 +154,8 @@ annotated copy-me file; [`../docs/OPERATIONS.md`](../docs/OPERATIONS.md) has the
 | `SHUTDOWN_GRACE_SECS` | `30` | §8 — drain, flush, exit within it. |
 | `TRASH_RETENTION_DAYS` | `30` | §3.5 — then the document purges, the id stays forever. |
 | `CHECKPOINT_EVERY_CHANGES` | `1000` | `docs/HISTORY.md` — a full-text checkpoint after this many changes, so any point in a document's history is at most this many steps from one. |
+| `RAW_CHANGE_DAYS` | `30` | `docs/HISTORY.md` — raw changes older than this are squashed into one record per group (one author, no pause over two minutes). |
+| `HISTORY_SQUASH_INTERVAL_SECS` | `3600` | How often the squash job runs. |
 | `INVITE_TTL_DAYS` | `7` | §5.1 |
 | `SESSION_IDLE_DAYS` / `SESSION_ABSOLUTE_DAYS` | `30` / `180` | §5.2 — rolling idle, hard absolute. |
 | `LOGIN_MAX_ATTEMPTS` / `LOGIN_ATTEMPT_WINDOW_SECS` | `10` / `900` | §5.2 — per-IP *and* per-account backoff. |

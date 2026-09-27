@@ -6,6 +6,7 @@
 //! | GET | `/api/documents/:id/changes/:from/:to` | one group's diff, with context |
 //! | POST | `/api/documents/:id/changes/:from/:to/revert` | undo that group as a new edit |
 //! | GET | `/api/documents/:id/text?at=<seq>` | the whole text as it was after `seq` |
+//! | POST | `/api/documents/:id/history/forget` | admin: wipe the history, keep the text |
 //!
 //! Every point in time is rebuilt from the nearest checkpoint (`docs/HISTORY.md`), so
 //! none of this rewinds from today: a years-old change costs what last week's does.
@@ -22,9 +23,9 @@ use bson::doc;
 use futures::TryStreamExt;
 use serde::{Deserialize, Serialize};
 
-use crate::auth::AuthUser;
+use crate::auth::{AdminUser, AuthUser};
 use crate::changes::{self, Change, RevertError};
-use crate::domain::{AuditEntry, DocumentChange, DocumentView, Timestamp};
+use crate::domain::{AuditEntry, DocumentChange, DocumentView, RevertNote, StoredHunk, Timestamp};
 use crate::error::{AppError, AppResult};
 use crate::routes::documents::{check_id, map_docstore};
 use crate::state::AppState;
@@ -61,6 +62,10 @@ pub struct ChangeGroupView {
     /// When this group is one revert: the group it undid.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reverts: Option<RevertedRange>,
+    /// Older history, kept as the group's net effect rather than every write.
+    pub squashed: bool,
+    /// Some of it was made offline and carried over on reconnect.
+    pub offline: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -85,51 +90,69 @@ pub async fn list_changes(
 ) -> AppResult<Json<ChangesPage>> {
     check_id(&id)?;
     let limit = params.limit.unwrap_or(DEFAULT_GROUPS).clamp(1, 200);
+
+    // The raw tier, grouped here.
     let records = state.docs.changes(&id, params.before, FETCH).await.map_err(map_docstore)?;
     let full_page = records.len() as i64 == FETCH;
     let newest_first: Vec<Change> = records.iter().map(DocumentChange::to_change).collect();
-    let mut groups = changes::group(&newest_first, changes::GROUP_GAP_MS);
-
+    let mut raw_groups = changes::group(&newest_first, changes::GROUP_GAP_MS);
     // The oldest group of a full page may continue on the next one: leave it for then.
-    if full_page && groups.len() > 1 {
-        groups.pop();
+    if full_page && raw_groups.len() > 1 {
+        raw_groups.pop();
     }
-    let more = groups.len() > limit || full_page;
-    groups.truncate(limit);
-    let next_before = if more { groups.last().map(|group| group.from_seq) } else { None };
-
-    let labels = labels(&state, groups.iter().filter_map(|group| group.by.clone())).await?;
     let by_seq: HashMap<i64, &DocumentChange> = records.iter().map(|record| (record.seq, record)).collect();
-
-    let views = groups
+    let mut drafts: Vec<Draft> = raw_groups
         .into_iter()
         .map(|group| {
             // Oldest first, so the excerpt reads in the order it was typed.
             let members: Vec<&DocumentChange> =
                 (group.from_seq..=group.to_seq).filter_map(|seq| by_seq.get(&seq).copied()).collect();
-            // Separate places are separate pieces; keystrokes in one place run together.
-            let pieces = |pick: fn(&crate::domain::StoredHunk) -> &str| -> String {
-                let mut out: Vec<String> = Vec::new();
-                let mut last_end: Option<i64> = None;
-                for hunk in members.iter().flat_map(|change| change.hunks.iter()) {
-                    let text = pick(hunk);
-                    if text.trim().is_empty() {
-                        continue;
-                    }
-                    match (out.last_mut(), last_end) {
-                        (Some(open), Some(end)) if end == hunk.pos => open.push_str(text),
-                        _ => out.push(text.to_string()),
-                    }
-                    last_end = Some(hunk.pos + hunk.inserted.len() as i64);
-                }
-                out.join(" … ")
-            };
-            let inserted = pieces(|hunk| hunk.inserted.as_str());
-            let removed = pieces(|hunk| hunk.removed.as_str());
             let reverts = match members.as_slice() {
-                [only] => only.reverts.as_ref().map(|note| RevertedRange { from_seq: note.from_seq, to_seq: note.to_seq }),
+                [only] => only.reverts.clone(),
                 _ => None,
             };
+            Draft {
+                hunks: members.iter().flat_map(|change| change.hunks.iter().cloned()).collect(),
+                reverts,
+                squashed: false,
+                offline: members.iter().any(|change| change.offline),
+                group,
+            }
+        })
+        .collect();
+
+    // The squashed tier: already grouped.
+    let squashed = state.docs.squashed(&id, params.before, limit as i64 + 1).await.map_err(map_docstore)?;
+    let squashed_full = squashed.len() > limit;
+    drafts.extend(squashed.into_iter().map(|record| Draft {
+        group: changes::Group {
+            from_seq: record.from_seq,
+            to_seq: record.to_seq,
+            started_ms: record.started_at.timestamp_millis(),
+            ended_ms: record.ended_at.timestamp_millis(),
+            by: record.created_by.clone(),
+            changes: record.changes.max(0) as usize,
+            inserted_chars: record.hunks.iter().map(|hunk| hunk.inserted.chars().count()).sum(),
+            removed_chars: record.hunks.iter().map(|hunk| hunk.removed.chars().count()).sum(),
+        },
+        hunks: record.hunks,
+        reverts: record.reverts,
+        squashed: true,
+        offline: record.offline,
+    }));
+
+    drafts.sort_by(|a, b| b.group.to_seq.cmp(&a.group.to_seq));
+    let more = drafts.len() > limit || full_page || squashed_full;
+    drafts.truncate(limit);
+    let next_before = if more { drafts.last().map(|draft| draft.group.from_seq) } else { None };
+
+    let labels = labels(&state, drafts.iter().filter_map(|draft| draft.group.by.clone())).await?;
+    let views = drafts
+        .into_iter()
+        .map(|draft| {
+            let inserted = pieces(&draft.hunks, |hunk| hunk.inserted.as_str());
+            let removed = pieces(&draft.hunks, |hunk| hunk.removed.as_str());
+            let group = draft.group;
             ChangeGroupView {
                 from_seq: group.from_seq,
                 to_seq: group.to_seq,
@@ -142,12 +165,45 @@ pub async fn list_changes(
                 removed_chars: group.removed_chars,
                 inserted_excerpt: excerpt(&inserted),
                 removed_excerpt: excerpt(&removed),
-                reverts,
+                reverts: draft
+                    .reverts
+                    .map(|note| RevertedRange { from_seq: note.from_seq, to_seq: note.to_seq }),
+                squashed: draft.squashed,
+                offline: draft.offline,
             }
         })
         .collect();
 
     Ok(Json(ChangesPage { groups: views, next_before }))
+}
+
+/// A group on its way to the list, from either tier.
+struct Draft {
+    group: changes::Group,
+    /// In order: a raw group's members' hunks, or a squashed group's net ones.
+    hunks: Vec<StoredHunk>,
+    reverts: Option<RevertNote>,
+    squashed: bool,
+    offline: bool,
+}
+
+/// What was typed (or deleted), in order: separate places are separate pieces joined by
+/// " … "; keystrokes in one place run together.
+fn pieces(hunks: &[StoredHunk], pick: fn(&StoredHunk) -> &str) -> String {
+    let mut out: Vec<String> = Vec::new();
+    let mut last_end: Option<i64> = None;
+    for hunk in hunks {
+        let text = pick(hunk);
+        if text.trim().is_empty() {
+            continue;
+        }
+        match (out.last_mut(), last_end) {
+            (Some(open), Some(end)) if end == hunk.pos => open.push_str(text),
+            _ => out.push(text.to_string()),
+        }
+        last_end = Some(hunk.pos + hunk.inserted.len() as i64);
+    }
+    out.join(" … ")
 }
 
 #[derive(Debug, Serialize)]
@@ -183,15 +239,24 @@ pub async fn get_change(
 
     let first = group.first().expect("load_group returns a non-empty group");
     let last = group.last().expect("load_group returns a non-empty group");
+    // A squashed group is one unit standing for the writes it was made of: its record
+    // knows when it started and how many there were.
+    let squashed = state
+        .collections
+        .document_history()
+        .find_one(doc! { "document_id": &id, "from_seq": from, "to_seq": to })
+        .await?;
     let labels = labels(&state, first.by.clone()).await?;
     Ok(Json(ChangeDetail {
         from_seq: from,
         to_seq: to,
-        started_at: Timestamp::from_millis(first.at_ms),
+        started_at: Timestamp::from_millis(
+            squashed.as_ref().map_or(first.at_ms, |record| record.started_at.timestamp_millis()),
+        ),
         ended_at: Timestamp::from_millis(last.at_ms),
         by_label: label_of(first.by.as_deref(), &labels),
         by: first.by.clone(),
-        changes: group.len(),
+        changes: squashed.as_ref().map_or(group.len(), |record| record.changes.max(0) as usize),
         hunks: changes::shown_hunks(&before, &after)
             .into_iter()
             .map(|hunk| ShownHunkView {
@@ -250,13 +315,30 @@ async fn load_group(state: &AppState, id: &str, from: i64, to: i64) -> AppResult
     if from > to || from < 1 {
         return Err(AppError::bad_request("a change range is from..=to, from at least 1"));
     }
-    let records = state.docs.changes_since(id, from).await.map_err(map_docstore)?;
-    let (group, later): (Vec<Change>, Vec<Change>) =
-        records.iter().map(DocumentChange::to_change).partition(|change| change.seq <= to);
+    let units = state.docs.changes_since(id, from).await.map_err(map_docstore)?;
+    let (group, later): (Vec<Change>, Vec<Change>) = units.into_iter().partition(|change| change.seq <= to);
     if group.is_empty() {
         return Err(AppError::NotFound("change"));
     }
     Ok((group, later))
+}
+
+/// Wipe a document's history: changes, squashed groups, checkpoints and snapshots. The
+/// text stays. For the "I pasted a secret" case; audited.
+pub async fn forget_history(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(id): Path<String>,
+) -> AppResult<axum::http::StatusCode> {
+    check_id(&id)?;
+    state.docs.forget_history(&id).await.map_err(map_docstore)?;
+    state
+        .audit(
+            AuditEntry::new("history.forget", Some(&admin.actor()), "document", Some(id.clone()))
+                .with_ip(admin.0.session.ip.clone()),
+        )
+        .await;
+    Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
 #[derive(Debug, Deserialize)]

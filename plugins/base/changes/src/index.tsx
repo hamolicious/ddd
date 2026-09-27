@@ -79,6 +79,7 @@ export default function activate(kernel: Kernel): void {
         key={view.params["id"]}
         documentId={view.params["id"] ?? ""}
         viewing={viewingOf(view)}
+        isAdmin={kernel.session.isAdmin()}
         client={client}
         confirm={(request) => menu.confirm(request)}
         navigate={(path) => router.navigate(path)}

@@ -13,6 +13,7 @@ import * as Y from "yjs";
 
 import {
   FrameType,
+  decodeHistory,
   PROTOCOL_VERSION,
   decodeFrame,
   encodeFrame,
@@ -173,9 +174,20 @@ export class ServerDoc {
   }
 
   /** Apply what the client sent, the way the docstore would. */
+  /** `HISTORY` frames as the server receives them: when they were made, in order. */
+  readonly history: { readonly madeAtMs: number; readonly text: string }[] = [];
+
   apply(frame: BinaryFrame): void {
+    if (frame.type === FrameType.History) {
+      const decoded = decodeHistory(frame.payload);
+      if (!decoded) return;
+      Y.applyUpdate(this.doc, decoded.update, "server");
+      this.history.push({ madeAtMs: decoded.madeAtMs, text: this.text.toString() });
+      return;
+    }
     Y.applyUpdate(this.doc, frame.payload, "server");
   }
+
 }
 
 /** Flush the microtask queue (and any zero-delay timers) the client may be on. */

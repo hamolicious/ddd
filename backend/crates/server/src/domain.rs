@@ -337,14 +337,30 @@ pub struct DocumentChange {
     #[serde(rename = "_id")]
     pub id: Id,
     pub document_id: Id,
-    /// The update-log `seq` of the write that made this change.
+    /// The update-log `seq` of the last write this change covers.
     pub seq: i64,
+    /// The first, when live typing was folded into one record (`docs/HISTORY.md`);
+    /// absent for a single write.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub first_seq: Option<i64>,
+    /// When the first write was made.
     pub created_at: BsonDateTime,
+    /// When the last folded-in write was made; absent for a single write.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ended_at: Option<BsonDateTime>,
     pub created_by: Option<String>,
+    /// Against the text before `first_seq`.
     pub hunks: Vec<StoredHunk>,
     /// Set on the change a revert wrote: the group it undid.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reverts: Option<RevertNote>,
+    /// Made while the author was offline, and carried over on reconnect.
+    /// `created_at` is then when it was made (the client's claim, kept in order);
+    /// `received_at` is when the server got it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub offline: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub received_at: Option<BsonDateTime>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -365,8 +381,54 @@ impl DocumentChange {
     /// The pure form `changes.rs` works on.
     pub fn to_change(&self) -> crate::changes::Change {
         crate::changes::Change {
+            first_seq: self.first_seq.unwrap_or(self.seq),
             seq: self.seq,
-            at_ms: self.created_at.timestamp_millis(),
+            at_ms: self.ended_at.unwrap_or(self.created_at).timestamp_millis(),
+            by: self.created_by.clone(),
+            hunks: self
+                .hunks
+                .iter()
+                .map(|hunk| crate::changes::Hunk {
+                    pos: hunk.pos.max(0) as usize,
+                    removed: hunk.removed.clone(),
+                    inserted: hunk.inserted.clone(),
+                })
+                .collect(),
+        }
+    }
+}
+
+/// Collection `document_history` — the **squashed tier**: one group of changes (one
+/// author, no long pause) older than `RAW_CHANGE_DAYS`, as its net hunks against the text
+/// before `from_seq`. The raw changes it replaces are deleted (`docs/HISTORY.md`). Kept
+/// forever.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentHistory {
+    #[serde(rename = "_id")]
+    pub id: Id,
+    pub document_id: Id,
+    pub from_seq: i64,
+    pub to_seq: i64,
+    pub started_at: BsonDateTime,
+    pub ended_at: BsonDateTime,
+    pub created_by: Option<String>,
+    /// Writes the group was made of.
+    pub changes: i64,
+    pub hunks: Vec<StoredHunk>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reverts: Option<RevertNote>,
+    /// Some of the writes were made offline.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub offline: bool,
+}
+
+impl DocumentHistory {
+    /// As one change ending at `to_seq`: what replay, diffs and revert work on.
+    pub fn to_change(&self) -> crate::changes::Change {
+        crate::changes::Change {
+            first_seq: self.from_seq,
+            seq: self.to_seq,
+            at_ms: self.ended_at.timestamp_millis(),
             by: self.created_by.clone(),
             hunks: self
                 .hunks

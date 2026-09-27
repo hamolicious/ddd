@@ -1,13 +1,13 @@
 # Graph Report - life-manager  (2026-09-27)
 
 ## Corpus Check
-- 568 files · ~702,038 words
+- 571 files · ~703,846 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 67 file(s) not represented in the graph (top: (none) 13, .xml 10, .xcconfig 8)
 
 ## Summary
-- 8661 nodes · 19984 edges · 335 communities (264 shown, 71 thin omitted)
-- Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 354 edges (avg confidence: 0.84)
+- 8682 nodes · 20003 edges · 336 communities (267 shown, 69 thin omitted)
+- Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 356 edges (avg confidence: 0.84)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
@@ -21,20 +21,20 @@
 - plugin_api.rs
 - host_fns.rs
 - main.tsx
-- runtime/capabilities.ts
+- runtime/index.ts
 - runtime/documents.ts
-- AppState
+- attachments.rs
 - domain.rs
-- client.test.ts
+- sim-client.ts
 - sync_ws.rs
 - filesystem_test.dart
 - server/src/plugins.rs
 - feed.rs
-- pluginhost/hooks.rs
+- HookKind
 - ast.rs
 - helpers.ts
 - main.dart
-- pluginhost/cron.rs
+- .fire
 - sync.rs
 - ThemesController
 - docstore.rs
@@ -44,25 +44,25 @@
 - Plugin review guide
 - fm-display.ts
 - filesystem.dart
-- ref_node_fs
+- vitest
 - health.rs
 - HostError
 - plugininstall/config.rs
 - ExtensionRegistry
 - notifications.dart
-- commands/src/index.tsx
+- keys.ts
 - telemetry.rs
 - FolderTree.tsx
-- convergence.ts
+- perf.ts
 - auth/mod.rs
 - src/changes.rs
 - splice.ts
 - PluginPool
 - zipcheck.rs
-- Timestamp
-- plugin-abi/src/documents.rs
+- pluginhost/hooks.rs
+- call_value
 - DocStoreError
-- react
+- ref_kernel
 - ConfigGetOutput
 - ShellState
 - DocHydrator
@@ -74,7 +74,7 @@
 - Date
 - SyncHub
 - shell_bundle.rs
-- runtime/index.ts
+- scenario.ts
 - HarnessClient
 - pluginhost/limits.rs
 - GeneratedPluginRegistrant.swift
@@ -98,7 +98,7 @@
 - routes/statics.rs
 - QueryEngine
 - evaluator.rs
-- CircuitBreaker
+- pluginhost_smoke.rs
 - pluginhost_runtime.rs
 - invite.rs
 - .lock
@@ -106,14 +106,14 @@
 - folders/src/index.tsx
 - RestClient
 - pluginhost_routes.rs
-- context-menu-api.ts
-- loader.ts
-- editor/src/regions.ts
+- react
+- KernelHost
+- replace
 - notifications_capability_test.dart
 - manifest.dart
-- seed.rs
+- docstoreerror
 - admin/src/api.ts
-- ref_kernel
+- attachments/src/index.tsx
 - yaml.rs
 - splice.rs
 - wasm.rs
@@ -123,13 +123,13 @@
 - editor/src/index.tsx
 - AdminClient
 - pluginhost/mod.rs
-- plugininstall/mod.rs
+- AppState
 - names.rs
 - admin.rs
 - serve
 - plugininstall_flow.rs
 - importmap.ts
-- bootstrap.ts
+- feed-client.ts
 - mongo.rs
 - core/tests/common/mod.rs
 - migrations.rs
@@ -158,7 +158,7 @@
 - protocol.ts
 - frontmatter.rs
 - runtime/settings.ts
-- bridge-fixtures.test.ts
+- activate
 - notices/manifest.json
 - folders/manifest.json
 - boot_guard.dart
@@ -175,13 +175,13 @@
 - slash-commands/src/controller.ts
 - settings/manifest.json
 - vite.runtime.config.ts
-- yjs
-- Command
+- @playwright/test
+- Palette.tsx
 - MessageHandler
-- convergence.rs
-- plugininstall_zip.rs
+- shape.ts
+- pluginhost/cron.rs
 - changes/manifest.json
-- markdown/src/regions.ts
+- plugin-abi/src/events.rs
 - themes/manifest.json
 - commands/manifest.json
 - context-menu/manifest.json
@@ -195,10 +195,10 @@
 - viewer/manifest.json
 - ref_indicators_js
 - Plugins.tsx
-- super
+- plugin-abi/src/http.rs
 - Win32Window
 - scripts
-- DocumentMode
+- OffsetDateTime
 - Flutter App Branding
 - title.rs
 - documents_query.rs
@@ -206,16 +206,16 @@
 - reset.rs
 - shell-ui/manifest.json
 - extra-task-states/manifest.json
-- call_value
+- SettingsView.tsx
 - config.dart
 - audit.rs
-- doc-list/src/index.tsx
+- POINTS
 - Option
 - icons.tsx
 - alt-editor/src/index.tsx
 - watcher.rs
-- Unsubscribe
-- DocStoreWorkers
+- signIn
+- state.rs
 - ndjson_stream
 - AdminView.tsx
 - devDependencies
@@ -234,7 +234,7 @@
 - windows/flutter/generated_plugin_registrant.cc
 - MessageHandler
 - routes/changes.rs
-- scenario.ts
+- assertConvergence
 - Collections
 - Shell.tsx
 - menu.tsx
@@ -243,12 +243,12 @@
 - Linux CMakeLists (Project-level)
 - WorkerSearchIndex
 - linux/flutter/generated_plugin_registrant.cc
-- markdown-language.ts
+- build-wasm-plugins.mjs
 - docstore_splice.rs
-- changes/src/api.ts
-- write_export_zip
+- Document history
+- welcome/manifest.json
 - Mobile Layout Defects (39 items)
-- sim-client.ts
+- PluginHostError
 - Operations Guide
 - life-manager-plugin-abi
 - LaunchImage README
@@ -349,14 +349,14 @@
 - M3 Build Contracts
 - Demo Index HTML
 - Yrs CRDT Library
-- MongoDocStoreInner
+- MongoDocStore
 - routes/mod.rs
 - BarSettings.tsx
 - M5 Build Contracts (Flutter Shell)
 - flutter_window.h
-- modes.test.ts
-- Surface
-- ListQuery
+- FoldersApi
+- frontmatter.spec.ts
+- Vec
 - Point
 - Size
 - .create
@@ -366,37 +366,38 @@
 - CLAUDE.md
 - ref_searchbox_js
 - .new
-- build-wasm-plugins.mjs
-- Panel.tsx
-- ChangeView.tsx
-- vitest
+- ref_node_path
+- gridfs_byte_stream
+- in_flight
+- machine-docs.ts
 - IdbSearchPersistence
 - init_metrics
 - ref_sheet_js
-- runtime.rs
+- zz-folder-tree.spec.ts
 - Deadline
-- source-view/src/index.tsx
+- .parse
 - QueryResult
-- 19. `admin` — administration
-- CallCounters
-- SnapshotsClient
-- bson
+- FakeWorkspace
+- orphans
+- PluginConfig.tsx
+- mobile-document.spec.ts
 - plugin-sdk/src/log.rs
-- crate::error::AppError
+- mobile-routes.spec.ts
+- ContextMenuApi
+- life_manager_plugin_abi_as_abi
 - .fmt
-- spawn_shutdown_watchdog
 
 ## God Nodes (most connected - your core abstractions)
-1. `AppState` - 263 edges
+1. `AppState` - 260 edges
 2. `Value` - 118 edges
 3. `react` - 86 edges
-4. `DocStoreError` - 75 edges
+4. `DocStoreError` - 76 edges
 5. `Response` - 65 edges
 6. `vitest` - 61 edges
 7. `HostError` - 57 edges
 8. `Config` - 52 edges
-9. `Actor` - 47 edges
-10. `AuthUser` - 46 edges
+9. `AuthUser` - 47 edges
+10. `Actor` - 46 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `2. `router` — URLs to views` --references--> `Link()`  [INFERRED]
@@ -419,19 +420,19 @@
 - **Shared Core Components** — backend_shared_core, backend_filter_dsl, backend_splice_helpers [EXTRACTED 1.00]
 - **Sync Protocol Components** — backend_protocol, backend_feed, backend_crdt_sync, backend_bootstrap, backend_safe_seq [EXTRACTED 1.00]
 
-## Communities (335 total, 71 thin omitted)
+## Communities (336 total, 69 thin omitted)
 
 ### Community 0 - "settings.test.ts"
-Cohesion: 0.06
-Nodes (29): ref_life_manager_core_wasm, KernelRuntime, canonicalizeDates(), encodeBase32(), mintUlid(), PKG, CoreMap, available (+21 more)
+Cohesion: 0.07
+Nodes (27): ref_life_manager_core_wasm, canonicalizeDates(), encodeBase32(), mintUlid(), PKG, CoreMap, available, openFilter (+19 more)
 
 ### Community 1 - "points.ts"
-Cohesion: 0.05
-Nodes (51): deactivate(), dispose(), DONE, PARTIAL, Registries, RUNTIME, show(), SHOWN (+43 more)
+Cohesion: 0.04
+Nodes (67): createSnapshotsClient(), activate(), isDocument(), RouterService, viewingOf(), teardown, activate(), deactivate() (+59 more)
 
 ### Community 2 - "plugin_api.rs"
 Cohesion: 0.05
-Nodes (109): asyncwriteext, AdminUser, ClientMeta, MaybeAuthUser, FromRequestParts, RateKey, CronState, a_cron_job_that_has_never_run_is_still_reported() (+101 more)
+Nodes (110): asyncwriteext, AdminUser, ClientMeta, MaybeAuthUser, FromRequestParts, RateKey, CronState, a_cron_job_that_has_never_run_is_still_reported() (+102 more)
 
 ### Community 3 - "host_fns.rs"
 Cohesion: 0.04
@@ -439,27 +440,27 @@ Nodes (54): HttpResponseOutput, a_nested_value_is_not_representable_one_key_per_
 
 ### Community 4 - "main.tsx"
 Cohesion: 0.04
-Nodes (90): ref_boot_authgate_js, ref_boot_shellsection_js, ref_safe_mode_baremanager_js, ref_ui_appframe_js, ref_ui_bootscreen_js, workbox-window, ApiError, authBootstrap (+82 more)
+Nodes (89): ref_boot_authgate_js, ref_boot_shellsection_js, ref_safe_mode_baremanager_js, ref_ui_appframe_js, ref_ui_bootscreen_js, workbox-window, ApiError, authBootstrap (+81 more)
 
-### Community 5 - "runtime/capabilities.ts"
-Cohesion: 0.06
-Nodes (29): CapabilitiesApi, CapabilityName, CapabilitySupport, FileExport, FilesystemCapability, NotificationPermissionState, NotificationRequest, NotificationsCapability (+21 more)
+### Community 5 - "runtime/index.ts"
+Cohesion: 0.03
+Nodes (71): CapabilitiesApi, CapabilityName, CapabilitySupport, FileExport, FilesystemCapability, NotificationPermissionState, NotificationRequest, NotificationsCapability (+63 more)
 
 ### Community 6 - "runtime/documents.ts"
-Cohesion: 0.06
-Nodes (21): CreateDocumentInput, DocumentId, DocumentQuery, DocumentsApi, DocumentSpliceApi, OpenDocument, SectionLineEdit, SpliceTarget (+13 more)
+Cohesion: 0.05
+Nodes (37): CreateDocumentInput, DocumentId, DocumentPhase, DocumentQuery, DocumentQueryResult, DocumentRow, DocumentsApi, DocumentSpliceApi (+29 more)
 
-### Community 7 - "AppState"
-Cohesion: 0.04
-Nodes (91): AtomicI32, AttachmentView, auth, attachment_reference(), attachment_references_are_extracted_from_text(), attachment_refs(), ATTACHMENT_SCHEME, check_attachment_id() (+83 more)
+### Community 7 - "attachments.rs"
+Cohesion: 0.06
+Nodes (42): AttachmentView, auth, ATTACHMENT_SCHEME, content_disposition(), content_disposition_escapes_the_filename(), DEFAULT_LIMIT, DOWNLOAD_CHUNK_BYTES, extension() (+34 more)
 
 ### Community 8 - "domain.rs"
-Cohesion: 0.14
-Nodes (29): Attachment, AttachmentView, AuditEntry, BsonDateTime, Document, DocumentChange, DocumentRow, DocumentSnapshot (+21 more)
-
-### Community 9 - "client.test.ts"
 Cohesion: 0.08
-Nodes (18): BinaryFrame, ClientControl, encodeFrame(), FrameType, MemoryDocPersistence, clients, emptyBootstrapFetch, started() (+10 more)
+Nodes (43): Status, Attachment, AttachmentView, AuditEntry, BsonDateTime, Document, DocumentChange, DocumentCheckpoint (+35 more)
+
+### Community 9 - "sim-client.ts"
+Cohesion: 0.06
+Nodes (27): TEXT_ROOT, ClientStats, DocEntry, REMOTE, SimClientOptions, RFC-3339, BinaryFrame, ClientControl (+19 more)
 
 ### Community 10 - "sync_ws.rs"
 Cohesion: 0.08
@@ -474,28 +475,28 @@ Cohesion: 0.06
 Nodes (56): a_missing_directory_is_a_problem_not_a_panic(), BASE_PLUGIN_IDS, cell(), compare_versions(), DOCUMENT_RIGHTS, frontend_assets_version(), HOOK_NAMES, HttpCapability (+48 more)
 
 ### Community 13 - "feed.rs"
-Cohesion: 0.07
-Nodes (31): atomic, a_dropped_allocation_burns_its_sequence_number(), a_truncated_page_never_splits_one_sequence_number(), allocation_is_monotonic(), BOOTSTRAP_DEFAULT_LIMIT, BOOTSTRAP_MAX_LIMIT, commit_notifies_subscribers(), feed() (+23 more)
+Cohesion: 0.08
+Nodes (29): a_dropped_allocation_burns_its_sequence_number(), a_truncated_page_never_splits_one_sequence_number(), allocation_is_monotonic(), BOOTSTRAP_DEFAULT_LIMIT, BOOTSTRAP_MAX_LIMIT, commit_notifies_subscribers(), feed(), FEED_BATCH_DEFAULT_ROWS (+21 more)
 
-### Community 14 - "pluginhost/hooks.rs"
-Cohesion: 0.06
-Nodes (42): EmitInput, EmitOutput, EventPayload, DocumentEvent, HookKind, Option, Self, Origin (+34 more)
+### Community 14 - "HookKind"
+Cohesion: 0.12
+Nodes (19): DocumentEvent, HookKind, Option, Self, Origin, a_delete_carries_the_deleting_actor_and_no_document(), document(), origin_from_stored() (+11 more)
 
 ### Community 15 - "ast.rs"
-Cohesion: 0.09
-Nodes (24): classify(), date_literals_must_parse(), DYNAMIC_ROOTS, Filter, .MAX_DEPTH, .MAX_NODES, FilterParseError, FIXED_ROOTS (+16 more)
+Cohesion: 0.08
+Nodes (29): classify(), date_literals_must_parse(), DYNAMIC_ROOTS, FieldPath, Filter, .MAX_DEPTH, .MAX_NODES, FilterParseError (+21 more)
 
 ### Community 16 - "helpers.ts"
-Cohesion: 0.05
-Nodes (46): @playwright/test, Pasted, LONG_DOC, MACHINE_DOC, FIXTURE, PHONE, ADMIN, createDocument() (+38 more)
+Cohesion: 0.16
+Nodes (14): LONG_DOC, MACHINE_DOC, createDocument(), currentDocumentId(), docRows(), ensureApiSession(), pluginRegistry(), runCommand() (+6 more)
 
 ### Community 17 - "main.dart"
 Cohesion: 0.03
 Nodes (74): actions, _armWatchdog, _auth, _block, _blockedDetail, _blockedTitle, BootFlow, _BootFlowState (+66 more)
 
-### Community 18 - "pluginhost/cron.rs"
-Cohesion: 0.07
-Nodes (50): a_cron_slot_can_only_be_claimed_once_at_a_time(), a_job_that_has_never_run_waits_for_a_real_slot(), a_panicking_run_still_releases_its_slot(), a_slot_already_covered_by_last_run_is_idle(), a_slot_arriving_while_the_previous_run_is_in_flight_does_not_overlap(), bit(), count_between_counts_strictly_between_and_respects_the_cap(), CronClaim (+42 more)
+### Community 18 - ".fire"
+Cohesion: 0.15
+Nodes (14): CronScheduler, err_code(), rfc3339(), Arc, FnOnce, HashMap, JoinHandle, Self (+6 more)
 
 ### Community 19 - "sync.rs"
 Cohesion: 0.03
@@ -507,7 +508,7 @@ Nodes (28): Theme, themeShape, AppliedThemes, NO_SELECTION, preview(), Layer, mi
 
 ### Community 21 - "docstore.rs"
 Cohesion: 0.04
-Nodes (56): async_trait, canonicalize_date_value(), canonicalize_dates(), CHANGE_RETENTION_DAYS, common_prefix_len(), common_suffix_len(), CRDT_ALERT_THRESHOLD_BYTES, CRDT_COMPACT_THRESHOLD_BYTES (+48 more)
+Nodes (62): async_trait, a_compiled_dsl_filter_is_anded_with_the_tombstone_clause(), an_empty_search_adds_no_clause(), canonicalize_date_value(), canonicalize_dates(), CHECKPOINT_EVERY_CHANGES, common_prefix_len(), common_suffix_len() (+54 more)
 
 ### Community 22 - "webview_host.dart"
 Cohesion: 0.03
@@ -515,15 +516,15 @@ Nodes (68): allowedHosts, _applyHeaders, auth, bearerToken, _BootstrapValues, br
 
 ### Community 23 - "routes/documents.rs"
 Cohesion: 0.07
-Nodes (61): axum, AuthUser, User, API_SNAPSHOT_REASON, check_id(), check_text_size(), clamp_limit(), create() (+53 more)
+Nodes (59): AuthUser, User, API_SNAPSHOT_REASON, check_id(), check_text_size(), clamp_limit(), create(), create_snapshot() (+51 more)
 
 ### Community 24 - "idb-store.ts"
 Cohesion: 0.07
-Nodes (23): FeedRow, apply(), CHECKPOINT_KEY, DB_NAME, DB_VERSION, DEFAULT_DOC_REPLICAS_KEPT, IdbDocPersistence, IdbProjectionStore (+15 more)
+Nodes (22): FeedRow, apply(), CHECKPOINT_KEY, DB_NAME, DB_VERSION, DEFAULT_DOC_REPLICAS_KEPT, IdbDocPersistence, IdbProjectionStore (+14 more)
 
 ### Community 25 - "Plugin review guide"
-Cohesion: 0.08
-Nodes (26): 10. `doc-list` — documents and Trash, 11. `folders` — the folder tree, 12. `search` — now part of `doc-list`, 13. `document-surface` — opening a document, 14. `editor` — Edit mode, 15. `attachments` — pasting and showing files, 16. `native-preview` — browser viewers, 16a. `slash-commands` — the `/` menu (+18 more)
+Cohesion: 0.06
+Nodes (34): 10. `doc-list` — documents and Trash, 11. `folders` — the folder tree, 12. `search` — now part of `doc-list`, 13. `document-surface` — opening a document, 14. `editor` — Edit mode, 15. `attachments` — pasting and showing files, 16. `native-preview` — browser viewers, 16a. `slash-commands` — the `/` menu (+26 more)
 
 ### Community 26 - "fm-display.ts"
 Cohesion: 0.19
@@ -533,45 +534,45 @@ Nodes (17): daysInMonth(), displayRow(), FmDisplayRow, fmDisplayRows(), formatDa
 Cohesion: 0.03
 Nodes (65): accept, auth, base64, bytes, _client, close, config, _dispositionFilename (+57 more)
 
-### Community 28 - "ref_node_fs"
+### Community 28 - "vitest"
 Cohesion: 0.04
-Nodes (49): tailwindPrefix(), tailwindPreset(), roots, root, compileWithTailwind(), pluginConfig(), RUNTIME_EXTERNALS, ref_node_fs (+41 more)
+Nodes (50): tailwindPrefix(), tailwindPreset(), roots, root, compileWithTailwind(), pluginConfig(), RUNTIME_EXTERNALS, ref_node_fs (+42 more)
 
 ### Community 29 - "health.rs"
-Cohesion: 0.17
-Nodes (22): check_migrations(), check_mongo(), check_plugin_host(), check_plugins(), CheckResult, healthz(), healthz_answers_without_any_state(), MONGO_PING_TIMEOUT (+14 more)
+Cohesion: 0.14
+Nodes (25): axum, check_migrations(), check_mongo(), check_plugin_host(), check_plugins(), CheckResult, healthz(), healthz_answers_without_any_state() (+17 more)
 
 ### Community 30 - "HostError"
-Cohesion: 0.15
-Nodes (35): HostError, Display, Error, Option, EmitClientInput, Option, call_plugin(), check_event() (+27 more)
+Cohesion: 0.16
+Nodes (33): HostError, Display, Error, Option, call_plugin(), check_event(), check_kv_key(), config_get() (+25 more)
 
 ### Community 31 - "plugininstall/config.rs"
-Cohesion: 0.07
-Nodes (47): aead, a_different_key_cannot_open_it(), a_sealed_value_round_trips(), aad(), AAD_SEPARATOR, cipher(), cipher_for_tests(), clear() (+39 more)
+Cohesion: 0.08
+Nodes (45): aead, a_different_key_cannot_open_it(), a_sealed_value_round_trips(), aad(), AAD_SEPARATOR, cipher(), cipher_for_tests(), CONFIG_KEY_VAR (+37 more)
 
 ### Community 32 - "ExtensionRegistry"
 Cohesion: 0.08
-Nodes (16): ContributeOptions, Contribution, DEFAULT_CONTRIBUTION_ORDER, ExtensionPoint, ExtensionPointDefinition, ExtensionsApi, formatIssues(), s (+8 more)
+Nodes (15): ContributeOptions, Contribution, DEFAULT_CONTRIBUTION_ORDER, ExtensionPoint, ExtensionPointDefinition, ExtensionsApi, formatIssues(), Shape (+7 more)
 
 ### Community 33 - "notifications.dart"
 Cohesion: 0.03
 Nodes (60): AndroidFlutterLocalNotificationsPlugin? get, _android, androidId, areEnabled, _asked, at, body, cancel (+52 more)
 
-### Community 34 - "commands/src/index.tsx"
-Cohesion: 0.07
-Nodes (39): 6. `commands` — actions and shortcuts, BindingConflict, collectPrefixes(), parseOverrides(), resolveBindings(), ResolvedBindings, serializeOverrides(), activate() (+31 more)
+### Community 34 - "keys.ts"
+Cohesion: 0.13
+Nodes (23): 6. `commands` — actions and shortcuts, BindingsController, createKeybindingsSection(), useRevision(), APPLE_SYMBOLS, canonicalKey(), Chord, chordsOf() (+15 more)
 
 ### Community 35 - "telemetry.rs"
 Cohesion: 0.04
-Nodes (50): ATTACHMENT_BYTES, BUILD_INFO, CONFIG_MAX_ATTACHMENT_BYTES, CONFIG_MAX_DOCUMENT_BYTES, DIRTY_ROOMS, DOCUMENTS_TOTAL, FEED_HEAD_SEQ, FEED_SAFE_SEQ (+42 more)
+Nodes (54): ATTACHMENT_BYTES, BUILD_INFO, CONFIG_MAX_ATTACHMENT_BYTES, CONFIG_MAX_DOCUMENT_BYTES, DIRTY_ROOMS, DOCUMENTS_TOTAL, FEED_HEAD_SEQ, FEED_SAFE_SEQ (+46 more)
 
 ### Community 36 - "FolderTree.tsx"
-Cohesion: 0.08
-Nodes (54): DefaultLocation(), DefaultLocationProps, DOCUMENT_DRAG_TYPE, EditState, FOLDER_DRAG_TYPE, FolderTree(), FolderTreeProps, labelOf() (+46 more)
+Cohesion: 0.10
+Nodes (38): DOCUMENT_DRAG_TYPE, EditState, FOLDER_DRAG_TYPE, FolderTree(), labelOf(), Lift, Lifted(), messageOf() (+30 more)
 
-### Community 37 - "convergence.ts"
-Cohesion: 0.15
-Nodes (30): JournalEntry, main(), printDetail(), printProtocolViolations(), run(), staleFeedDocuments, ulidForIndex(), ClientMemoryReport (+22 more)
+### Community 37 - "perf.ts"
+Cohesion: 0.19
+Nodes (17): ClientMemoryReport, fmtMiB(), main(), measureClientMemory(), percentile(), PerfReport, printReport(), run() (+9 more)
 
 ### Community 38 - "auth/mod.rs"
 Cohesion: 0.07
@@ -579,55 +580,55 @@ Nodes (42): authorization, AuthVia, bearer_from_subprotocols(), BEARER_PREFIX, b
 
 ### Community 39 - "src/changes.rs"
 Cohesion: 0.12
-Nodes (33): a_diff_hunk_is_the_middle_that_changed(), Change, Conflict, CONTEXT_LINES, diff_hunk(), first_lines(), Gap, Group (+25 more)
+Nodes (35): a_diff_hunk_is_the_middle_that_changed(), apply_forward(), Change, Conflict, CONTEXT_LINES, diff_hunk(), first_lines(), Gap (+27 more)
 
 ### Community 40 - "splice.ts"
 Cohesion: 0.10
 Nodes (48): clamp(), doubleQuoted(), findBlock(), floatShape(), formatNumber(), frontmatterInsertPoint(), frontmatterLineSpans(), guard() (+40 more)
 
 ### Community 41 - "PluginPool"
-Cohesion: 0.09
-Nodes (32): PluginLimits, Default, PluginHostError, Error, StatusCode, Blueprint, InstanceGuard, PluginPool (+24 more)
+Cohesion: 0.10
+Nodes (28): PluginLimits, Default, Blueprint, InstanceGuard, PluginPool, Pooled, Arc, AtomicBool (+20 more)
 
 ### Community 42 - "zipcheck.rs"
-Cohesion: 0.10
-Nodes (34): check_entry_name(), entry_allowed(), export_section_has(), extract(), ExtractedPackage, FRONTEND_PREFIX, hostile_names_are_refused_lexically(), inside_root() (+26 more)
+Cohesion: 0.07
+Nodes (59): check_entry_name(), entry_allowed(), export_section_has(), extract(), ExtractedPackage, FRONTEND_PREFIX, hostile_names_are_refused_lexically(), inside_root() (+51 more)
 
-### Community 43 - "Timestamp"
-Cohesion: 0.13
-Nodes (10): D, Deserialize, Error, Into, Ok, Result, S, Self (+2 more)
+### Community 43 - "pluginhost/hooks.rs"
+Cohesion: 0.11
+Nodes (30): atomic, a_continuously_edited_document_still_delivers_within_the_ceiling(), a_declared_hook_with_no_handler_is_not_scheduled(), a_document_being_delivered_defers_rather_than_races(), a_panicking_delivery_still_releases_its_document(), a_plugin_is_never_told_about_its_own_change(), a_purge_is_not_a_hook(), active() (+22 more)
 
-### Community 44 - "plugin-abi/src/documents.rs"
-Cohesion: 0.10
-Nodes (20): CreateDocumentInput, deserialize_present(), DocumentValue, GetDocumentInput, GetDocumentOutput, QueryDocumentsInput, QueryDocumentsOutput, RewriteDocumentInput (+12 more)
+### Community 44 - "call_value"
+Cohesion: 0.07
+Nodes (42): CreateDocumentInput, deserialize_present(), DocumentValue, GetDocumentInput, GetDocumentOutput, QueryDocumentsInput, QueryDocumentsOutput, RewriteDocumentInput (+34 more)
 
 ### Community 45 - "DocStoreError"
 Cohesion: 0.11
-Nodes (16): binary(), CrdtState, decode_cursor(), DocStore, DocStoreError, MongoDocStore, Id, Result (+8 more)
+Nodes (13): binary(), decode_cursor(), DocStore, DocStoreError, effective_limit(), Mutation, Id, Result (+5 more)
 
-### Community 46 - "react"
+### Community 46 - "ref_kernel"
 Cohesion: 0.06
-Nodes (27): Tone, DefaultModeSection(), DefaultModeSectionProps, describe(), clampEmbedDepth(), DEFAULT_EMBED_DEPTH, EMBED_DEPTH_KEY, MarkdownSettings() (+19 more)
+Nodes (26): Tone, DefaultModeSection(), DefaultModeSectionProps, describe(), clampEmbedDepth(), DEFAULT_EMBED_DEPTH, EMBED_DEPTH_KEY, MarkdownSettings() (+18 more)
 
 ### Community 47 - "ConfigGetOutput"
-Cohesion: 0.21
-Nodes (12): ConfigGetInput, ConfigGetOutput, JsonMap, Option, Vec, all(), get(), require_string() (+4 more)
+Cohesion: 0.39
+Nodes (5): ConfigGetInput, ConfigGetOutput, JsonMap, Option, Vec
 
 ### Community 48 - "ShellState"
-Cohesion: 0.09
-Nodes (14): ShellLayout, activate(), ShellProps, COMPACT_QUERY, EMPTY_PARAMS, readAltbar(), readPanels(), sameParams() (+6 more)
+Cohesion: 0.07
+Nodes (15): ShellLayout, ShellUiApi, activate(), ShellProps, COMPACT_QUERY, EMPTY_PARAMS, readAltbar(), readPanels() (+7 more)
 
 ### Community 49 - "DocHydrator"
-Cohesion: 0.08
-Nodes (7): DocError, DocResync, DocSubscribed, encodeControl(), DocEntry, DocHydrator, DocPersistence
+Cohesion: 0.07
+Nodes (9): DocError, DocResync, DocSubscribed, encodeControl(), DocEntry, DocHydrator, DocPersistence, openAndRelease() (+1 more)
 
 ### Community 50 - "login_screen.dart"
 Cohesion: 0.04
 Nodes (47): auth, body, build, _busy, _client, close, createState, detail (+39 more)
 
 ### Community 51 - "src/filter.ts"
-Cohesion: 0.14
-Nodes (30): appliedCount(), buildClause(), buildClauseNode(), buildEffectiveFilter(), buildFilter(), buildLiteral(), calendarValid(), ClauseOp (+22 more)
+Cohesion: 0.15
+Nodes (29): appliedCount(), buildClause(), buildClauseNode(), buildEffectiveFilter(), buildFilter(), buildLiteral(), calendarValid(), ClauseOp (+21 more)
 
 ### Community 52 - "server/tests/common/mod.rs"
 Cohesion: 0.09
@@ -642,8 +643,8 @@ Cohesion: 0.14
 Nodes (15): AppError, Bucket, RateLimited, RateLimiter, RateLimiterInner, Arc, Duration, From (+7 more)
 
 ### Community 55 - "Date"
-Cohesion: 0.08
-Nodes (31): CANONICAL_SHAPE_REGEX, civil_from_days(), Date, date_only_canonicalizes(), DateError, DatePrecision, days_from_civil(), days_in_month() (+23 more)
+Cohesion: 0.07
+Nodes (34): CANONICAL_SHAPE_REGEX, civil_from_days(), Date, date_only_canonicalizes(), DateError, DatePrecision, days_from_civil(), days_in_month() (+26 more)
 
 ### Community 56 - "SyncHub"
 Cohesion: 0.10
@@ -651,15 +652,19 @@ Nodes (25): BootstrapSlot, close_all_sockets(), close_session_sockets(), close_u
 
 ### Community 57 - "shell_bundle.rs"
 Cohesion: 0.14
-Nodes (35): ShellManifest, a_rebuild_moves_the_version(), a_symlink_out_of_a_root_is_not_bundled(), both_shell_routes_need_a_session(), collect(), entries(), Fixture, header_value() (+27 more)
+Nodes (34): a_rebuild_moves_the_version(), a_symlink_out_of_a_root_is_not_bundled(), both_shell_routes_need_a_session(), collect(), entries(), Fixture, header_value(), inline_nonce() (+26 more)
 
-### Community 58 - "runtime/index.ts"
-Cohesion: 0.05
-Nodes (40): ref_boundary_js, ref_mount_js, KernelInitOptions, Recorded, BootMode, Kernel, KernelInfo, PluginManifest (+32 more)
+### Community 58 - "scenario.ts"
+Cohesion: 0.18
+Nodes (21): JournalEntry, main(), printDetail(), printProtocolViolations(), run(), staleFeedDocuments, harnessCore, ulidForIndex() (+13 more)
+
+### Community 59 - "HarnessClient"
+Cohesion: 0.12
+Nodes (4): bytesToBase64(), ConvergenceTimeout, HarnessClient, withTimeout()
 
 ### Community 60 - "pluginhost/limits.rs"
-Cohesion: 0.13
-Nodes (15): a_nested_deadline_never_extends_the_budget(), configuration_may_lower_a_cap_and_never_raise_one(), HashMap, Mutex, Result, Self, VecDeque, sweeping_drops_only_fully_aged_windows() (+7 more)
+Cohesion: 0.11
+Nodes (16): AtomicU32, a_nested_deadline_never_extends_the_budget(), CallCounters, configuration_may_lower_a_cap_and_never_raise_one(), HashMap, Mutex, Result, Self (+8 more)
 
 ### Community 61 - "GeneratedPluginRegistrant.swift"
 Cohesion: 0.05
@@ -679,11 +684,11 @@ Nodes (42): active, attemptingBoot, bootSucceeded, canRevert, _capped, _copyDire
 
 ### Community 66 - "theme.ts"
 Cohesion: 0.08
-Nodes (22): BoundaryInfo, ColorScheme, ColorSchemePreference, DEFAULT_DARK_TOKENS, DEFAULT_LIGHT_TOKENS, NoticeAction, NoticeLevel, THEME_TOKEN_NAMES (+14 more)
+Nodes (19): ColorScheme, ColorSchemePreference, DEFAULT_DARK_TOKENS, DEFAULT_LIGHT_TOKENS, NoticeAction, NoticeLevel, THEME_TOKEN_NAMES, ThemeTokenName (+11 more)
 
 ### Community 67 - "query/index.ts"
 Cohesion: 0.08
-Nodes (30): minisearch, ProjectionRow, flattenForIndex(), INDEX_FIELDS, indexDocument(), IndexedDocument, MemorySearchPersistence, MiniSearchIndex (+22 more)
+Nodes (28): ProjectionRow, flattenForIndex(), INDEX_FIELDS, indexDocument(), IndexedDocument, MemorySearchPersistence, MiniSearchIndex, miniSearchOptions() (+20 more)
 
 ### Community 68 - "updater.dart"
 Cohesion: 0.05
@@ -702,16 +707,16 @@ Cohesion: 0.15
 Nodes (15): Circuit Breaker, Backend Host ABI, Plugin Capabilities, Plugin Config, Plugin Cron, Plugin Document Hooks, Plugin Host (Extism Runtime), Plugin Outbound HTTP (+7 more)
 
 ### Community 72 - "plugin-sdk/src/kv.rs"
-Cohesion: 0.13
-Nodes (25): abi, EmitClientOutput, KvSetOutput, emit(), emit_client(), emit_client_to(), Result, T (+17 more)
+Cohesion: 0.09
+Nodes (34): abi, KvSetOutput, all(), get(), require_string(), Option, Result, string() (+26 more)
 
 ### Community 73 - "bundle_fixtures.dart"
 Cohesion: 0.05
 Nodes (37): appChunk, bearers, bundleFiles, bytes, clearLog, create, dir, downloads (+29 more)
 
 ### Community 74 - "main.ts"
-Cohesion: 0.11
-Nodes (34): api(), authBootstrap, createDocument(), errorFrom(), login(), logout(), me(), register() (+26 more)
+Cohesion: 0.12
+Nodes (32): api(), authBootstrap, createDocument(), errorFrom(), login(), logout(), me(), register() (+24 more)
 
 ### Community 75 - "compilerOptions"
 Cohesion: 0.05
@@ -722,12 +727,12 @@ Cohesion: 0.16
 Nodes (15): wchar_t, Scale(), Create, Destroy, SetQuitOnClose, Show, UpdateTheme, Win32Window::Win32Window() (+7 more)
 
 ### Community 77 - "query/filter.ts"
-Cohesion: 0.15
-Nodes (18): keys(), CoreValue, compareNumbers(), compareRows(), compareStrings(), isMap(), MISSING, orderFields() (+10 more)
+Cohesion: 0.14
+Nodes (20): keys(), CoreValue, compareNumbers(), compareRows(), compareStrings(), isMap(), MISSING, orderFields() (+12 more)
 
 ### Community 78 - "sync/index.ts"
-Cohesion: 0.08
-Nodes (31): CloseCode, MAX_FRAME_BYTES, backoffDelay(), backoffForClose(), BackoffOptions, BackoffState, DEFAULT_BACKOFF, BootstrapOptions (+23 more)
+Cohesion: 0.10
+Nodes (26): BEARER_SUBPROTOCOL_PREFIX, SUBPROTOCOL, BootstrapOptions, BootstrapResult, MAX_PROTOCOL_ERROR_RETRIES, RECONNECT_NOW_THROTTLE_MS, SyncClientOptions, DEFAULT_LRU_SIZE (+18 more)
 
 ### Community 79 - "routes/statics.rs"
 Cohesion: 0.06
@@ -741,16 +746,16 @@ Nodes (4): Query, page(), QueryEngine, SearchIndex
 Cohesion: 0.14
 Nodes (32): arrays_need_explicit_operators(), compare(), compare_dynamic(), compare_rows(), dates_compare_on_canonical_text(), dynamic_type_mismatch_is_no_match_not_error(), EvalError, evaluate() (+24 more)
 
-### Community 82 - "CircuitBreaker"
-Cohesion: 0.10
-Nodes (14): a_success_resets_the_consecutive_count(), a_zero_threshold_is_clamped_to_one(), BreakerState, BreakerTransition, CircuitBreaker, five_in_a_row_opens_it_and_only_an_admin_closes_it(), plugins_are_counted_independently(), Default (+6 more)
+### Community 82 - "pluginhost_smoke.rs"
+Cohesion: 0.18
+Nodes (22): _Shared, a_payload_reaches_the_plugin_and_a_value_comes_back(), a_plugin_refusal_is_a_successful_call_with_an_error_envelope(), an_http_route_answers_through_the_envelope(), FakeHost, fixture(), functions(), host_fn() (+14 more)
 
 ### Community 83 - "pluginhost_runtime.rs"
-Cohesion: 0.08
-Nodes (64): _Shared, ABI_VERSION, a_missing_module_fails_activation_without_publishing_anything(), a_payload_reaches_the_plugin_and_a_value_comes_back(), a_plugin_owns_what_it_created_and_nothing_else(), a_plugin_reads_its_own_write_back(), a_plugin_refusal_is_a_successful_call_and_never_counts_on_the_breaker(), a_plugin_without_a_backend_half_is_simply_not_active() (+56 more)
+Cohesion: 0.07
+Nodes (52): a_success_resets_the_consecutive_count(), a_zero_threshold_is_clamped_to_one(), BreakerState, BreakerTransition, CircuitBreaker, five_in_a_row_opens_it_and_only_an_admin_closes_it(), plugins_are_counted_independently(), Default (+44 more)
 
 ### Community 84 - "invite.rs"
-Cohesion: 0.18
+Cohesion: 0.17
 Nodes (16): claim(), create(), invite(), list(), LIST_LIMIT, mark_used_by(), release(), revoke() (+8 more)
 
 ### Community 85 - ".lock"
@@ -758,32 +763,32 @@ Cohesion: 0.14
 Nodes (15): _Message, a_flushed_batch_moves_the_resync_point(), control_messages_outrank_data(), document_overflow_only_drops_the_offending_document(), FeedItem, Outbox, OutboxState, repeated_overflow_closes_with_4408() (+7 more)
 
 ### Community 86 - "PluginHost"
-Cohesion: 0.09
-Nodes (20): ActiveEntry, ActivePlugin, CallOutcome, hosts(), PluginHost, PluginHostWorkers, report_unload(), Arc (+12 more)
+Cohesion: 0.10
+Nodes (18): ActiveEntry, ActivePlugin, hosts(), PluginHost, PluginHostStats, PluginHostWorkers, report_unload(), Arc (+10 more)
 
 ### Community 87 - "folders/src/index.tsx"
-Cohesion: 0.09
-Nodes (22): EMPTY_FOLDERS_KEY, mergeTracked(), pruneTracked(), readTracked(), renameTracked(), sameTracked(), TRACKED_LIMIT, withFolder() (+14 more)
+Cohesion: 0.10
+Nodes (35): DefaultLocation(), DefaultLocationProps, EMPTY_FOLDERS_KEY, mergeTracked(), pruneTracked(), readTracked(), renameTracked(), sameTracked() (+27 more)
 
 ### Community 88 - "RestClient"
-Cohesion: 0.10
+Cohesion: 0.11
 Nodes (16): authenticate(), base64ToBytes(), BootstrapMeasurement, BootstrapOptions, CrdtState, DocumentView, HttpError, ndjsonLines() (+8 more)
 
 ### Community 89 - "pluginhost_routes.rs"
 Cohesion: 0.17
 Nodes (22): a_plugin_cannot_set_a_cookie_on_this_origin(), a_plugin_with_no_backend_half_answers_404(), a_plugins_own_refusal_keeps_its_code(), a_public_route_the_admin_declined_needs_a_session(), a_route_needs_a_session_unless_the_manifest_declared_it_public(), a_traversal_attempt_is_refused_rather_than_silently_missed(), an_unknown_plugin_route_or_method_is_a_404(), fixture() (+14 more)
 
-### Community 90 - "context-menu-api.ts"
+### Community 90 - "react"
+Cohesion: 0.03
+Nodes (67): AsyncState, Dialogs, Mutation, useSheet(), activate(), AdminApi, RouterService, SETTINGS_TITLES (+59 more)
+
+### Community 91 - "KernelHost"
 Cohesion: 0.05
-Nodes (40): AsyncState, Dialogs, DialogsContext, Mutation, useSheet(), activate(), AdminApi, RouterService (+32 more)
+Nodes (40): ref_reauthoverlay_js, installedPlugins(), PluginsEntry, SafeMode, safeModeFrom(), safeModeUrl(), FailedPlugin, linkStylesheet() (+32 more)
 
-### Community 91 - "loader.ts"
-Cohesion: 0.08
-Nodes (32): ref_reauthoverlay_js, installedPlugins(), SafeMode, safeModeFrom(), safeModeUrl(), FailedPlugin, failureNotice(), linkStylesheet() (+24 more)
-
-### Community 92 - "editor/src/regions.ts"
-Cohesion: 0.26
-Nodes (11): documentRegions, foldableRegions(), foldableRegionsOf(), LineReader, Region, regionAt(), regionsOf(), SectionRegion (+3 more)
+### Community 92 - "replace"
+Cohesion: 0.24
+Nodes (20): attachment_reference(), check_attachment_id(), delete(), discard_blob(), download(), list(), load_attachment(), meta() (+12 more)
 
 ### Community 93 - "notifications_capability_test.dart"
 Cohesion: 0.06
@@ -793,33 +798,29 @@ Nodes (32): LocalNotificationPort, NotificationPort, ScheduledNotification, andr
 Cohesion: 0.04
 Nodes (57): BridgeException, actual, BundleFile, bundleVersion, checked, files, fromJson, indexCsp (+49 more)
 
-### Community 95 - "seed.rs"
-Cohesion: 0.16
-Nodes (21): already_seeded(), CROCKFORD, DIRECTIVES, every_welcome_document_opens_with_frontmatter(), FOLDERS, mark_seeded(), AppResult, Id (+13 more)
-
 ### Community 96 - "admin/src/api.ts"
-Cohesion: 0.07
-Nodes (36): AdminStats, ApiFetch, AttachmentView, AuditQuery, AuditView, configSubmission(), ConfigValueState, CronRunResult (+28 more)
+Cohesion: 0.08
+Nodes (30): AdminStats, ApiFetch, AttachmentView, AuditQuery, AuditView, ConfigValueState, CronRunResult, hostPolicyNote (+22 more)
 
-### Community 97 - "ref_kernel"
-Cohesion: 0.07
-Nodes (35): FileTypeSettings(), LABELS, activate(), describe(), UploadResponse, extensionOf(), extensionOfKey(), knownExtensions() (+27 more)
+### Community 97 - "attachments/src/index.tsx"
+Cohesion: 0.08
+Nodes (29): FileTypeSettings(), LABELS, activate(), describe(), UploadResponse, extensionOf(), extensionOfKey(), knownExtensions() (+21 more)
 
 ### Community 98 - "yaml.rs"
-Cohesion: 0.12
-Nodes (24): Diagnostic, DiagnosticKind, Into, Option, Self, block_sequences_and_indentation_are_dropped(), BlockParse, dates_normalize_at_parse() (+16 more)
+Cohesion: 0.11
+Nodes (28): Diagnostic, DiagnosticKind, Into, Option, Self, is_valid_key(), split_key(), block_sequences_and_indentation_are_dropped() (+20 more)
 
 ### Community 99 - "splice.rs"
 Cohesion: 0.17
 Nodes (27): CoreError, appends_a_second_section_to_the_existing_run(), apply(), clamp_boundary(), creates_the_section_and_the_run(), duplicate_key_lines_are_cleaned_up_by_the_next_write(), fills_an_empty_value(), guard() (+19 more)
 
 ### Community 100 - "wasm.rs"
-Cohesion: 0.11
-Nodes (17): CORE_SEMANTICS_VERSION, date_field(), evaluate_filter(), map_field(), map_to_json(), normalize_date(), parse_document(), parse_document_is_total_on_garbage() (+9 more)
+Cohesion: 0.14
+Nodes (14): date_field(), evaluate_filter(), map_field(), map_to_json(), normalize_date(), parse_document(), parse_document_is_total_on_garbage(), parse_document_returns_the_projection_fields() (+6 more)
 
 ### Community 101 - "ops.ts"
-Cohesion: 0.13
-Nodes (28): applyOp(), escapeRegExp(), findLine(), FM_KEYS, frontmatterEnd(), frontmatterValue(), indexOfLineEnd(), isFenceRun() (+20 more)
+Cohesion: 0.12
+Nodes (28): applyOp(), chooseOp(), escapeRegExp(), findLine(), FM_KEYS, frontmatterEnd(), frontmatterValue(), indexOfLineEnd() (+20 more)
 
 ### Community 102 - "document.rs"
 Cohesion: 0.12
@@ -827,47 +828,47 @@ Nodes (22): bom_is_stripped_only(), content_fingerprint(), crlf_is_normalized_an
 
 ### Community 103 - "String"
 Cohesion: 0.05
-Nodes (77): asyncreadext_as, From, String, call_plugin(), config_get(), create_document(), emit(), emit_client() (+69 more)
+Nodes (78): asyncreadext_as, From, String, call_plugin(), config_get(), create_document(), emit(), emit_client() (+70 more)
 
 ### Community 104 - "editor/src/index.tsx"
-Cohesion: 0.14
-Nodes (15): activate(), chevron(), documentLines(), EditorApi, foldLabel(), foldRangeFor(), refold, refoldIcons() (+7 more)
+Cohesion: 0.06
+Nodes (39): activate(), chevron(), documentLines(), EditorApi, foldLabel(), foldRangeFor(), refold, refoldIcons() (+31 more)
 
 ### Community 106 - "pluginhost/mod.rs"
-Cohesion: 0.09
-Nodes (21): a_callee_sees_the_remaining_budget_not_a_fresh_one(), a_chain_shares_one_deadline_and_counts_its_depth(), a_host_failure_forwarded_to_a_plugin_leaks_nothing(), a_top_level_invocation_starts_the_stack_with_itself(), AppError, CallKind, config(), HOST_NAMESPACE (+13 more)
+Cohesion: 0.11
+Nodes (21): a_callee_sees_the_remaining_budget_not_a_fresh_one(), a_chain_shares_one_deadline_and_counts_its_depth(), a_host_failure_forwarded_to_a_plugin_leaks_nothing(), a_top_level_invocation_starts_the_stack_with_itself(), CallFailure, CallKind, CallOutcome, config() (+13 more)
 
-### Community 107 - "plugininstall/mod.rs"
-Cohesion: 0.14
-Nodes (53): ABSENT_DISABLED_REASON, activate(), adopt_installed_directory(), approve(), approve_locked(), check_backend_module(), deactivate(), delete_record() (+45 more)
+### Community 107 - "AppState"
+Cohesion: 0.12
+Nodes (62): clear(), purge(), ABSENT_DISABLED_REASON, activate(), adopt_installed_directory(), approve(), approve_locked(), check_backend_module() (+54 more)
 
 ### Community 108 - "names.rs"
 Cohesion: 0.07
 Nodes (26): ABI_VERSION, CALL, CALL_PLUGIN, CLIENT_EVENT_MESSAGE, CLIENT_EVENT_PREFIX, CONFIG_GET, CREATE_DOCUMENT, CRON (+18 more)
 
 ### Community 109 - "admin.rs"
-Cohesion: 0.09
-Nodes (46): AdminStats, app_link(), AUDIT_DEFAULT_LIMIT, AUDIT_MAX_LIMIT, AuditParams, AuditResponse, AuditView, create_invite() (+38 more)
+Cohesion: 0.07
+Nodes (58): AdminStats, app_link(), AUDIT_DEFAULT_LIMIT, AUDIT_MAX_LIMIT, AuditParams, AuditResponse, AuditView, ChannelWriter (+50 more)
 
 ### Community 110 - "serve"
 Cohesion: 0.12
 Nodes (20): an_empty_payload_is_a_valid_frame(), Connection, ConnectionSession, encode_frame(), feed_loop(), frames_round_trip(), parse_frame(), ParsedFrame (+12 more)
 
 ### Community 111 - "plugininstall_flow.rs"
-Cohesion: 0.20
-Nodes (32): a_backend_half_without_the_abi_export_is_refused(), a_dropped_package_lands_as_pending_too_and_the_archive_is_kept(), a_missing_dependency_is_refused_and_rolls_back(), a_package_for_another_kernel_major_never_reaches_the_filesystem(), a_plugin_whose_package_is_gone_is_retired_and_keeps_its_data(), a_refused_drop_is_moved_to_rejected_with_the_reason(), a_rejected_package_leaves_nothing_behind(), a_secret_is_write_only_for_the_admin_and_readable_by_the_plugin() (+24 more)
+Cohesion: 0.10
+Nodes (50): arc, Fixture, replace_text_is_a_minimal_diff(), Replica, replicas_converge_and_materialization_matches_the_core(), Database, Doc, Option (+42 more)
 
 ### Community 112 - "importmap.ts"
-Cohesion: 0.10
-Nodes (15): ref_react_dom_client, ref_react_jsx_runtime, RUNTIME_SPECIFIER_NAMES, DEV_MODULES, ImportMap, installDevImportMap(), isIdentifier(), missingSpecifiers() (+7 more)
+Cohesion: 0.08
+Nodes (16): ref_react_dom_client, ref_react_jsx_runtime, RUNTIME_SPECIFIER_NAMES, DEV_MODULES, ImportMap, installDevImportMap(), isIdentifier(), missingSpecifiers() (+8 more)
 
-### Community 113 - "bootstrap.ts"
-Cohesion: 0.11
-Nodes (18): BootstrapFooter, BootstrapHeader, BootstrapLine, DEFAULT_BOOTSTRAP_LIMIT, PROTOCOL_VERSION, feedRow(), baseUrl(), BootstrapClient (+10 more)
+### Community 113 - "feed-client.ts"
+Cohesion: 0.14
+Nodes (17): BootstrapFooter, BootstrapHeader, BootstrapLine, feedRow(), baseUrl(), BootstrapClient, BootstrapHttpError, BootstrapProgress (+9 more)
 
 ### Community 114 - "mongo.rs"
-Cohesion: 0.10
-Nodes (31): CompareOp, FieldPath, Literal, Display, Formatter, Self, always(), Column (+23 more)
+Cohesion: 0.12
+Nodes (28): CompareOp, Literal, CompileError, always(), compile(), compile_any(), compile_cmp(), compile_every() (+20 more)
 
 ### Community 115 - "core/tests/common/mod.rs"
 Cohesion: 0.22
@@ -878,40 +879,40 @@ Cohesion: 0.15
 Nodes (31): acquire_lock(), current_holder(), current_version(), ensure_meta_document(), highest_feed_seq(), holder_id(), is_namespace_exists(), LOCK_TTL_SECS (+23 more)
 
 ### Community 117 - "queue.rs"
-Cohesion: 0.14
-Nodes (21): acquire(), expiry(), held(), holder(), IN_PROCESS, InstallLock, LOCK_HEARTBEAT, LOCK_ID (+13 more)
+Cohesion: 0.15
+Nodes (20): acquire(), expiry(), held(), IN_PROCESS, InstallLock, LOCK_HEARTBEAT, LOCK_ID, LOCK_TTL (+12 more)
 
 ### Community 118 - "package.json"
-Cohesion: 0.06
-Nodes (29): @codemirror/commands, @codemirror/lang-markdown, @codemirror/view, fake-indexeddb, idb, @lezer/markdown, postcss, remark-directive (+21 more)
+Cohesion: 0.05
+Nodes (31): @codemirror/commands, @codemirror/lang-markdown, @codemirror/view, fake-indexeddb, idb, @lezer/highlight, @lezer/markdown, minisearch (+23 more)
 
 ### Community 119 - "new_id"
-Cohesion: 0.18
+Cohesion: 0.16
 Nodes (17): new_id(), assert_plain(), AT_MILLIS, AT_RFC3339, attachment_view_is_plain_json(), binary(), document_row_and_document_agree_on_the_view(), document_view_is_plain_json_throughout() (+9 more)
 
 ### Community 120 - "ProjectionStore"
 Cohesion: 0.10
-Nodes (8): DEFAULT_BATCH_MAX_ROWS, FeedBatch, FeedReset, FeedResync, ProjectionStore, FeedClient, FeedClientOptions, MAX_BOOTSTRAP_ATTEMPTS_PER_CONNECTION
+Nodes (5): FeedBatch, FeedReset, FeedResync, ProjectionStore, FeedClient
 
 ### Community 121 - "sections.rs"
-Cohesion: 0.16
-Nodes (22): adjacent_and_blank_separated_sections_join_the_run(), DOC, duplicate_key_lines_resolve_last_occurrence_wins(), duplicate_sections_merge_later_wins(), empty_section_body(), FENCE, FENCE_OPEN, insert_point() (+14 more)
+Cohesion: 0.15
+Nodes (23): adjacent_and_blank_separated_sections_join_the_run(), DOC, duplicate_key_lines_resolve_last_occurrence_wins(), duplicate_sections_merge_later_wins(), empty_section_body(), FENCE, FENCE_OPEN, insert_point() (+15 more)
 
 ### Community 122 - "Users.tsx"
 Cohesion: 0.15
-Nodes (25): AuditPage, CreatedInvite, describeActor(), formatBytes(), formatWhen(), inviteLinkHere(), resetLinkHere(), AuditSection() (+17 more)
+Nodes (24): AuditPage, CreatedInvite, describeActor(), formatBytes(), formatWhen(), inviteLinkHere(), resetLinkHere(), AuditSection() (+16 more)
 
 ### Community 123 - "document-surface/src/index.tsx"
-Cohesion: 0.13
-Nodes (20): ActiveMode(), boundaryFor(), byId(), cssEscape(), formatWhen(), hasIcon(), iconBoundaryFor(), IconSlot() (+12 more)
+Cohesion: 0.06
+Nodes (38): activate(), ActiveMode(), boundaryFor(), byId(), cssEscape(), DocumentSurfaceApi, formatWhen(), hasIcon() (+30 more)
 
 ### Community 124 - "compilerOptions"
 Cohesion: 0.08
 Nodes (25): compilerOptions, baseUrl, isolatedModules, jsx, lib, module, moduleDetection, moduleResolution (+17 more)
 
 ### Community 125 - "render.tsx"
-Cohesion: 0.07
-Nodes (55): RFC-3986, MdNode, MdPoint, MdPosition, sourceOf(), spanOf(), textOf(), walk() (+47 more)
+Cohesion: 0.08
+Nodes (58): RFC-3986, MdNode, MdPoint, MdPosition, sourceOf(), spanOf(), textOf(), walk() (+50 more)
 
 ### Community 126 - "my_application.cc"
 Cohesion: 0.10
@@ -927,7 +928,7 @@ Nodes (22): ref_node_crypto, ref_node_zlib, archive, argv, centralBuffer, centra
 
 ### Community 129 - "dependencies"
 Cohesion: 0.08
-Nodes (24): dependencies, @codemirror/commands, @codemirror/lang-markdown, @codemirror/language, @codemirror/state, @codemirror/view, idb, @lezer/common (+16 more)
+Nodes (25): dependencies, @codemirror/commands, @codemirror/lang-markdown, @codemirror/language, @codemirror/state, @codemirror/view, idb, @lezer/common (+17 more)
 
 ### Community 130 - "utils.cpp"
 Cohesion: 0.18
@@ -943,7 +944,7 @@ Nodes (43): a_public_url_yields_both_spellings_of_its_origin(), Config, CONFIG_K
 
 ### Community 133 - "db/mod.rs"
 Cohesion: 0.08
-Nodes (30): ATTACHMENTS, AUDIT_LOG, connect(), CONNECT_TIMEOUT, DELETED_IDS, DOCUMENT_CHANGES, DOCUMENT_SNAPSHOTS, DOCUMENT_UPDATES (+22 more)
+Nodes (31): ATTACHMENTS, AUDIT_LOG, connect(), CONNECT_TIMEOUT, DELETED_IDS, DOCUMENT_CHANGES, DOCUMENT_CHECKPOINTS, DOCUMENT_SNAPSHOTS (+23 more)
 
 ### Community 134 - "source-view/manifest.json"
 Cohesion: 0.12
@@ -954,32 +955,32 @@ Cohesion: 0.14
 Nodes (19): DocumentModeProps, activate(), apiUrl(), AttachmentMeta, AttachmentPreview(), BlobState, describe(), MarkdownApi (+11 more)
 
 ### Community 136 - "pluginhost_http.rs"
-Cohesion: 0.20
-Nodes (23): CallFailure, a_conditional_get_answered_304_is_a_response_not_a_redirect(), a_redirect_to_an_unapproved_host_is_refused_at_the_hop(), a_response_over_the_cap_is_refused_rather_than_truncated(), a_slow_upstream_times_out_inside_the_invocations_budget(), an_approved_host_on_a_deliberately_allowed_cidr_is_reachable(), an_approved_name_that_resolves_to_a_refused_address_is_still_blocked(), an_undeclared_host_is_blocked_and_no_http_at_all_is_capability_denied() (+15 more)
+Cohesion: 0.21
+Nodes (22): a_conditional_get_answered_304_is_a_response_not_a_redirect(), a_redirect_to_an_unapproved_host_is_refused_at_the_hop(), a_response_over_the_cap_is_refused_rather_than_truncated(), a_slow_upstream_times_out_inside_the_invocations_budget(), an_approved_host_on_a_deliberately_allowed_cidr_is_reachable(), an_approved_name_that_resolves_to_a_refused_address_is_still_blocked(), an_undeclared_host_is_blocked_and_no_http_at_all_is_capability_denied(), authorization_goes_out_and_host_is_refused() (+14 more)
 
 ### Community 137 - "Value"
-Cohesion: 0.07
-Nodes (38): is_valid_key(), check_unsupported(), double_quoted(), float_shape(), flow_collections_nest(), format_float(), inline_yaml_round_trips(), int_shape() (+30 more)
+Cohesion: 0.06
+Nodes (41): check_unsupported(), double_quoted(), float_shape(), flow_collections_nest(), format_float(), inline_yaml_round_trips(), int_shape(), map_from_bson() (+33 more)
 
 ### Community 138 - "markdown/manifest.json"
 Cohesion: 0.08
 Nodes (23): author, dependencies, commands, router, description, frontend, module, style (+15 more)
 
 ### Community 139 - "protocol.ts"
-Cohesion: 0.08
-Nodes (26): BEARER_SUBPROTOCOL_PREFIX, BootstrapRowLine, ConnectionLimits, decodeFrame(), DocErrorCode, DocSubscribe, DocUnsubscribe, FEED_SEQ_NONE (+18 more)
+Cohesion: 0.07
+Nodes (33): BootstrapRowLine, CloseCode, ConnectionLimits, decodeFrame(), DEFAULT_BATCH_MAX_ROWS, DEFAULT_BOOTSTRAP_LIMIT, DocErrorCode, DocSubscribe (+25 more)
 
 ### Community 140 - "frontmatter.rs"
-Cohesion: 0.20
-Nodes (20): diagnostics_use_document_line_numbers(), duplicate_key_targets_the_last_occurrence(), empty_block_parses_to_nothing(), FENCE, find_block(), Frontmatter, insert_point(), line_span() (+12 more)
+Cohesion: 0.22
+Nodes (19): diagnostics_use_document_line_numbers(), duplicate_key_targets_the_last_occurrence(), empty_block_parses_to_nothing(), FENCE, find_block(), Frontmatter, insert_point(), line_span() (+11 more)
 
 ### Community 141 - "runtime/settings.ts"
-Cohesion: 0.09
-Nodes (12): FilterJson, QuerySubscription, SettingsApi, asSettingsValue(), sameValues(), SETTINGS_OWNER_KEY, SettingsEdit, settingsFilter() (+4 more)
+Cohesion: 0.08
+Nodes (13): FilterJson, QuerySubscription, SETTINGS_DOC_PATH, SettingsApi, asSettingsValue(), sameValues(), SETTINGS_OWNER_KEY, SettingsEdit (+5 more)
 
-### Community 142 - "bridge-fixtures.test.ts"
-Cohesion: 0.10
-Nodes (25): BRIDGE_FIXTURES_DIR, BridgeFixtureCase, BridgeFixtureFile, BridgeFixtureIndex, BridgeFixtureRequest, BridgeFixtureResponse, fixtureCase(), fixtureIndex() (+17 more)
+### Community 142 - "activate"
+Cohesion: 0.15
+Nodes (9): BindingConflict, collectPrefixes(), parseOverrides(), resolveBindings(), ResolvedBindings, serializeOverrides(), activate(), CommandsApi (+1 more)
 
 ### Community 143 - "notices/manifest.json"
 Cohesion: 0.14
@@ -998,8 +999,8 @@ Cohesion: 0.13
 Nodes (17): Argon2, AppError, PasswordError, From, hash(), hasher(), MAX_LENGTH, MEMORY_KIB (+9 more)
 
 ### Community 147 - "conformance.rs"
-Cohesion: 0.14
-Nodes (14): apply_op(), corpus_rows(), CorpusRow, filter_corpus_errors_are_refused_by_both_sides(), filter_corpus_evaluator_and_mongo_agree(), json_map(), map_to_json(), Map (+6 more)
+Cohesion: 0.13
+Nodes (15): map_to_bson(), apply_op(), corpus_rows(), CorpusRow, filter_corpus_errors_are_refused_by_both_sides(), filter_corpus_evaluator_and_mongo_agree(), json_map(), map_to_json() (+7 more)
 
 ### Community 148 - "document-surface/manifest.json"
 Cohesion: 0.09
@@ -1007,7 +1008,7 @@ Nodes (22): author, dependencies, commands, router, shell-ui, description, front
 
 ### Community 149 - "runtime.ts"
 Cohesion: 0.05
-Nodes (43): byId(), DocEmbed(), DocEmbedProps, EmbedChain, ROOT_CHAIN, useRow(), EmbedLocation, embedReplace() (+35 more)
+Nodes (45): byId(), DocEmbed(), DocEmbedProps, EmbedChain, ROOT_CHAIN, useRow(), EmbedLocation, embedReplace() (+37 more)
 
 ### Community 150 - "indexes.rs"
 Cohesion: 0.13
@@ -1030,48 +1031,48 @@ Cohesion: 0.08
 Nodes (23): author, dependencies, commands, context-menu, router, shell-ui, description, frontend (+15 more)
 
 ### Community 155 - "SyncClient"
-Cohesion: 0.15
-Nodes (8): initKernel(), unavailableCore(), ServerControl, Welcome, BootstrapProgress, SyncClient, Harness, FeedState
+Cohesion: 0.18
+Nodes (5): Welcome, DocumentsHostOptions, SyncClient, Harness, FeedState
 
 ### Community 156 - "slash-commands/src/controller.ts"
-Cohesion: 0.13
-Nodes (8): SlashCommand, TextSurface, createController(), MenuState, SlashController, activate(), matchCommands(), slashQuery()
+Cohesion: 0.12
+Nodes (11): ShellOverlay, SlashCommand, slashCommandShape, TextSurface, textSurfaceShape, createController(), MenuState, SlashController (+3 more)
 
 ### Community 157 - "settings/manifest.json"
 Cohesion: 0.09
 Nodes (21): author, dependencies, commands, router, shell-ui, description, frontend, module (+13 more)
 
 ### Community 158 - "vite.runtime.config.ts"
-Cohesion: 0.14
-Nodes (13): packageOf(), RUNTIME_MANIFEST_FILE, RUNTIME_SPECIFIERS, RuntimeSpecifier, wasmPkg, input, manifestPlugin, outDir (+5 more)
+Cohesion: 0.19
+Nodes (12): packageOf(), RUNTIME_MANIFEST_FILE, RUNTIME_SPECIFIERS, RuntimeSpecifier, input, manifestPlugin, outDir, readVersion() (+4 more)
 
-### Community 159 - "yjs"
-Cohesion: 0.23
-Nodes (6): TextMark, INSERTION_ORIGIN, markAt(), settled, trackInsertion(), yjs
+### Community 159 - "@playwright/test"
+Cohesion: 0.18
+Nodes (6): @playwright/test, Pasted, ADMIN, rawText(), settled(), page()
 
-### Community 160 - "Command"
-Cohesion: 0.11
-Nodes (17): Matchable, MatchResult, rankMatches(), scoreMatch(), subsequence(), COMMANDS, Palette(), PaletteProps (+9 more)
+### Community 160 - "Palette.tsx"
+Cohesion: 0.15
+Nodes (15): Matchable, MatchResult, rankMatches(), scoreMatch(), subsequence(), COMMANDS, Palette(), PaletteProps (+7 more)
 
 ### Community 161 - "MessageHandler"
 Cohesion: 0.18
 Nodes (10): DartProject, HWND, LPARAM, LRESULT, UINT, WPARAM, FlutterWindow::FlutterWindow(), MessageHandler (+2 more)
 
-### Community 162 - "convergence.rs"
-Cohesion: 0.15
-Nodes (18): arc, Fixture, replace_text_is_a_minimal_diff(), Replica, replicas_converge_and_materialization_matches_the_core(), Database, Doc, Option (+10 more)
+### Community 162 - "shape.ts"
+Cohesion: 0.23
+Nodes (18): anyValue(), array(), boolean(), component(), FieldsOf, func(), issue(), literal() (+10 more)
 
-### Community 163 - "plugininstall_zip.rs"
-Cohesion: 0.21
-Nodes (25): a_declared_module_that_is_not_in_the_archive_is_refused(), a_file_that_is_not_a_zip_is_refused(), a_manifest_that_is_not_json_is_refused_without_extracting(), a_module_the_manifest_does_not_declare_is_refused(), a_stable_file_is_waited_for_and_a_growing_one_times_out(), a_symlink_entry_is_refused_outright(), a_version_string_cannot_escape_the_staging_root(), a_zip_bomb_is_stopped_while_streaming() (+17 more)
+### Community 163 - "pluginhost/cron.rs"
+Cohesion: 0.17
+Nodes (15): a_job_that_has_never_run_waits_for_a_real_slot(), a_slot_already_covered_by_last_run_is_idle(), a_slot_arriving_while_the_previous_run_is_in_flight_does_not_overlap(), count_between_counts_strictly_between_and_respects_the_cap(), DAY_NAMES, day_of_month_and_day_of_week_are_ored_when_both_are_restricted(), downtime_fires_once_and_reports_the_slots_it_slept_through(), MAX_MISSED_COUNT (+7 more)
 
 ### Community 164 - "changes/manifest.json"
 Cohesion: 0.08
 Nodes (23): author, dependencies, context-menu, markdown, router, shell-ui, description, frontend (+15 more)
 
-### Community 165 - "markdown/src/regions.ts"
-Cohesion: 0.13
-Nodes (14): activate(), MarkdownApi, ProcessorCache, bodyOf(), bodyStart(), DocumentRegions, findFrontmatter(), findSectionRun() (+6 more)
+### Community 165 - "plugin-abi/src/events.rs"
+Cohesion: 0.22
+Nodes (15): EmitClientInput, EmitClientOutput, EmitInput, EmitOutput, Option, emit(), emit_client(), emit_client_to() (+7 more)
 
 ### Community 166 - "themes/manifest.json"
 Cohesion: 0.10
@@ -1094,7 +1095,7 @@ Cohesion: 0.11
 Nodes (17): author, dependencies, document-surface, description, frontend, module, style, id (+9 more)
 
 ### Community 171 - "ChangeFeed"
-Cohesion: 0.13
+Cohesion: 0.12
 Nodes (21): TrashFilter, BootstrapPage, ChangeFeed, collect_rows(), FeedError, FeedPage, FeedRow, max_feed_seq() (+13 more)
 
 ### Community 172 - "Response"
@@ -1102,8 +1103,8 @@ Cohesion: 0.09
 Nodes (36): get(), get_with_headers(), post_json(), request(), Response, JsonMap, Option, Result (+28 more)
 
 ### Community 173 - "HookQueue"
-Cohesion: 0.10
-Nodes (29): a_continuously_edited_document_still_delivers_within_the_ceiling(), a_document_being_delivered_defers_rather_than_races(), a_panicking_delivery_still_releases_its_document(), a_purge_is_not_a_hook(), changes_inside_the_window_coalesce_into_one_delivery(), HookClaim, HookDispatcher, HookQueue (+21 more)
+Cohesion: 0.12
+Nodes (18): a_restore_is_never_reported_as_a_creation(), an_untouched_row_delivers_created_and_an_edited_one_delivers_changed(), deliver(), HookClaim, HookDispatcher, HookQueue, prune(), Arc (+10 more)
 
 ### Community 174 - "header/manifest.json"
 Cohesion: 0.13
@@ -1118,12 +1119,12 @@ Cohesion: 0.11
 Nodes (18): author, dependencies, document-surface, markdown, description, frontend, module, style (+10 more)
 
 ### Community 178 - "Plugins.tsx"
-Cohesion: 0.18
-Nodes (12): parseHostList(), PluginAdminList, PluginCronState, useModal(), describeBackend(), describeCapabilities(), describeSource(), formatRanges() (+4 more)
+Cohesion: 0.15
+Nodes (14): parseHostList(), PluginAdminList, PluginCronState, useModal(), describeBackend(), describeCapabilities(), describeSource(), formatRanges() (+6 more)
 
-### Community 179 - "super"
-Cohesion: 0.07
-Nodes (36): CronPayload, Option, a_json_route_response_carries_its_content_type(), base64_decode(), base64_encode(), base64_round_trips_including_the_padding_cases(), HttpRequestInput, HttpRouteRequest (+28 more)
+### Community 179 - "plugin-abi/src/http.rs"
+Cohesion: 0.09
+Nodes (30): a_json_route_response_carries_its_content_type(), base64_decode(), base64_encode(), base64_round_trips_including_the_padding_cases(), HttpRequestInput, HttpRouteRequest, HttpRouteResponse, RequestUser (+22 more)
 
 ### Community 180 - "Win32Window"
 Cohesion: 0.16
@@ -1133,17 +1134,17 @@ Nodes (18): FlutterWindow, flutter_controller_, OnCreate, OnDestroy, project_, D
 Cohesion: 0.12
 Nodes (16): scripts, build, build:app, build:plugins, dev, dev:app, e2e, e2e:app (+8 more)
 
-### Community 182 - "DocumentMode"
-Cohesion: 0.13
-Nodes (6): DocumentSurfaceApi, ModeIcon(), RouterService, safeDecode(), SurfaceView(), DocumentMode
+### Community 182 - "OffsetDateTime"
+Cohesion: 0.37
+Nodes (9): bit(), CronDecision, CronSchedule, decide(), Option, slot(), to_offset(), truncate_to_minute() (+1 more)
 
 ### Community 183 - "Flutter App Branding"
 Cohesion: 0.13
 Nodes (15): Android App Icon (xhdpi), Android App Icon (xxhdpi), iOS App Icon (1024x1024@1x), iOS App Icon (20x20@1x), iOS App Icon (20x20@2x), iOS App Icon (20x20@3x), iOS App Icon (29x29@1x), iOS App Icon (29x29@2x) (+7 more)
 
 ### Community 184 - "title.rs"
-Cohesion: 0.22
-Nodes (10): body_line_fallback_is_truncated(), first_heading(), first_non_empty_line(), fm(), frontmatter_title_wins(), resolve(), Map, Option (+2 more)
+Cohesion: 0.24
+Nodes (9): body_line_fallback_is_truncated(), first_heading(), first_non_empty_line(), fm(), frontmatter_title_wins(), resolve(), Map, Option (+1 more)
 
 ### Community 185 - "documents_query.rs"
 Cohesion: 0.13
@@ -1154,8 +1155,8 @@ Cohesion: 0.14
 Nodes (7): assert_rfc3339(), ALPHA, create_is_idempotent_by_id_and_honours_the_graveyard(), responses_never_carry_extended_json(), trash_filters_partition_the_workspace(), http, @lezer/common
 
 ### Community 187 - "reset.rs"
-Cohesion: 0.28
-Nodes (12): apply_new_password(), consume(), issue(), AppError, Id, Option, Result, User (+4 more)
+Cohesion: 0.12
+Nodes (18): actor, anyhow, appstate, reset_password(), Result, apply_new_password(), consume(), issue() (+10 more)
 
 ### Community 188 - "shell-ui/manifest.json"
 Cohesion: 0.13
@@ -1165,9 +1166,9 @@ Nodes (14): author, description, frontend, module, style, id, kernel, license (+
 Cohesion: 0.13
 Nodes (14): author, dependencies, markdown, description, frontend, module, id, markdown (+6 more)
 
-### Community 190 - "call_value"
-Cohesion: 0.19
-Nodes (22): SpliceSectionOutput, WriteDocumentOutput, create(), create_with_id(), get(), get_metadata(), query(), query_all() (+14 more)
+### Community 190 - "SettingsView.tsx"
+Cohesion: 0.23
+Nodes (9): baseIdsFrom(), groupByBase(), Grouped, readCache(), entries, useBasePluginIds(), RouterService, SettingsView() (+1 more)
 
 ### Community 191 - "config.dart"
 Cohesion: 0.09
@@ -1177,29 +1178,29 @@ Nodes (16): api, kBootWatchdog, kBridgeHandlerName, kBridgeVersion, kLoopbackOri
 Cohesion: 0.16
 Nodes (13): record(), record_simple(), BsonDocument, Option, TARGET_ATTACHMENT, TARGET_DOCUMENT, TARGET_INVITE, TARGET_PLUGIN (+5 more)
 
-### Community 193 - "doc-list/src/index.tsx"
-Cohesion: 0.17
-Nodes (12): activate(), DocListApi, RouterService, documentPath(), listPath(), queryParam(), searchEngine(), hasControlCharacter() (+4 more)
+### Community 193 - "POINTS"
+Cohesion: 0.10
+Nodes (17): activate(), DocListApi, RouterService, documentPath(), listPath(), queryParam(), searchEngine(), hasControlCharacter() (+9 more)
 
 ### Community 194 - "Option"
 Cohesion: 0.16
 Nodes (12): a_bootstrap_cursor_carries_the_pinned_watermark(), bootstrap_flags_accept_both_spellings(), BootstrapCursor, BootstrapCursor<'a>, BootstrapFooter, BootstrapHeader, ClientMessage, NdjsonPage (+4 more)
 
 ### Community 196 - "alt-editor/src/index.tsx"
-Cohesion: 0.23
-Nodes (9): AltEditorApi, applyMinimalEdit(), caretRect(), commonPrefix(), DocumentModeProps, Insertion, markAt(), PlainEditor() (+1 more)
+Cohesion: 0.12
+Nodes (18): AltEditorApi, applyMinimalEdit(), caretRect(), commonPrefix(), DocumentModeProps, Insertion, markAt(), PlainEditor() (+10 more)
 
 ### Community 197 - "watcher.rs"
-Cohesion: 0.15
-Nodes (18): actor, anyhow, appstate, reset_password(), Result, handle_one(), INSTALLED_DIR, move_aside() (+10 more)
+Cohesion: 0.23
+Nodes (14): handle_one(), INSTALLED_DIR, move_aside(), POLL_INTERVAL, REJECTED_DIR, Duration, JoinHandle, Option (+6 more)
 
-### Community 198 - "Unsubscribe"
-Cohesion: 0.07
-Nodes (14): ContractViolationError, CoreUnavailableError, KernelError, notImplemented(), NotImplementedError, PluginError, EventsApi, Unsubscribe (+6 more)
+### Community 198 - "signIn"
+Cohesion: 0.14
+Nodes (8): pluginsActivated(), signIn(), LANDSCAPE, PHONE, boot(), REGISTRY, repo, web
 
-### Community 199 - "DocStoreWorkers"
-Cohesion: 0.33
-Nodes (5): DocStoreWorkers, JoinHandle, DOCSTORE_WORKERS, Mutex, Vec
+### Community 199 - "state.rs"
+Cohesion: 0.12
+Nodes (12): AtomicI32, DOCSTORE_WORKERS, Readiness, Arc, AtomicBool, Default, Instant, Mutex (+4 more)
 
 ### Community 200 - "ndjson_stream"
 Cohesion: 0.17
@@ -1254,12 +1255,12 @@ Cohesion: 0.12
 Nodes (15): author, description, frontend, module, style, id, kernel, license (+7 more)
 
 ### Community 213 - "main.rs"
-Cohesion: 0.16
-Nodes (18): Cli, Command, main(), MAINTENANCE_INTERVAL, maintenance_loop(), Duration, Option, PrometheusHandle (+10 more)
+Cohesion: 0.17
+Nodes (17): Cli, Command, main(), MAINTENANCE_INTERVAL, maintenance_loop(), Duration, Option, PrometheusHandle (+9 more)
 
 ### Community 214 - "kernel-api/src/index.ts"
-Cohesion: 0.05
-Nodes (69): DocumentPhase, DocumentQueryResult, DocumentRow, SearchHit, SearchOptions, SortDirection, SortKey, TextRange (+61 more)
+Cohesion: 0.03
+Nodes (69): ref_boundary_js, ref_mount_js, KernelInitOptions, ContractViolationError, CoreUnavailableError, KernelError, notImplemented(), NotImplementedError (+61 more)
 
 ### Community 215 - "windows/flutter/generated_plugin_registrant.cc"
 Cohesion: 0.20
@@ -1270,32 +1271,32 @@ Cohesion: 0.36
 Nodes (10): HWND, LPARAM, LRESULT, UINT, WPARAM, EnableFullDpiSupportIfAvailable(), GetHandle, GetThisFromHandle (+2 more)
 
 ### Community 217 - "routes/changes.rs"
-Cohesion: 0.13
-Nodes (31): ChangeDetail, ChangeGroupView, ChangesPage, ChangesParams, DEFAULT_GROUPS, excerpt(), EXCERPT_CHARS, FETCH (+23 more)
+Cohesion: 0.15
+Nodes (32): ChangeDetail, ChangeGroupView, ChangesPage, ChangesParams, DEFAULT_GROUPS, excerpt(), EXCERPT_CHARS, FETCH (+24 more)
 
-### Community 218 - "scenario.ts"
-Cohesion: 0.16
-Nodes (11): deepEqual(), harnessCore, markersIn(), assertConvergence(), cheapHash(), ConvergenceDetail, DEFAULT_CONFIG, DocumentVerdict (+3 more)
+### Community 218 - "assertConvergence"
+Cohesion: 0.18
+Nodes (5): deepEqual(), markersIn(), assertConvergence(), cheapHash(), SimulatedClient
 
 ### Community 219 - "Collections"
-Cohesion: 0.16
+Cohesion: 0.15
 Nodes (5): Collections, Collection, Self, User, GridFsBucket
 
 ### Community 220 - "Shell.tsx"
-Cohesion: 0.07
-Nodes (26): createSnapshotsClient(), activate(), isDocument(), RouterService, viewingOf(), AltbarPanel, ShownView, ShellUiApi (+18 more)
+Cohesion: 0.14
+Nodes (17): ALTBAR_WIDTH_KEY, clampSidebarWidth(), KEYBOARD_STEP, rememberSidebarWidth(), SIDEBAR_DEFAULT, SIDEBAR_MIN, sidebarMax(), storedSidebarWidth() (+9 more)
 
 ### Community 221 - "menu.tsx"
 Cohesion: 0.31
 Nodes (6): clampIntoViewport(), isRestorable(), LongPress, MenuItem, PopupMenu(), PopupMenuProps
 
 ### Community 222 - "DocListView.tsx"
-Cohesion: 0.10
-Nodes (33): DocListView(), DocListViewProps, formatWhen(), Meta(), SnippetLine(), TrashView(), TrashViewProps, buildSort() (+25 more)
+Cohesion: 0.13
+Nodes (28): DocListView(), DocListViewProps, formatWhen(), Meta(), SnippetLine(), TrashView(), TrashViewProps, buildSort() (+20 more)
 
 ### Community 223 - "SyncTransport"
 Cohesion: 0.20
-Nodes (5): open(), makeClient(), connected(), closeCodeAllowedFromClient(), SyncTransport
+Nodes (5): connected(), closeCodeAllowedFromClient(), resolveSyncUrl(), subprotocols(), SyncTransport
 
 ### Community 224 - "Linux CMakeLists (Project-level)"
 Cohesion: 0.36
@@ -1305,29 +1306,29 @@ Nodes (8): Linux CMakeLists (Project-level), Linux Flutter CMakeLists, Linux Run
 Cohesion: 0.29
 Nodes (5): fl_register_plugins(), FlPluginRegistry, flutter_linux, flutter_secure_storage_linux_plugin, url_launcher_plugin
 
-### Community 227 - "markdown-language.ts"
-Cohesion: 0.14
-Nodes (7): markdownLanguage, MarkdownState, markdownStyle, markdownSyntax, @codemirror/language, @codemirror/state, @lezer/highlight
+### Community 227 - "build-wasm-plugins.mjs"
+Cohesion: 0.13
+Nodes (12): argv, baseDir, built, debug, distRoot, pluginsRoot, prebuilt, repo (+4 more)
 
 ### Community 228 - "docstore_splice.rs"
 Cohesion: 0.19
 Nodes (15): a_concurrent_edit_cannot_make_a_section_purge_delete_body_text(), a_concurrent_edit_cannot_shift_a_splice_onto_someone_elses_text(), a_refused_computation_writes_nothing(), a_splice_writes_exactly_what_its_closure_computed(), document(), PLUGIN, Client, Database (+7 more)
 
-### Community 229 - "changes/src/api.ts"
-Cohesion: 0.21
-Nodes (11): ApiFetch, ChangeDetail, ChangeGroup, ChangesPage, describeReason(), formatWhen(), REASONS, SnapshotContent (+3 more)
+### Community 229 - "Document history"
+Cohesion: 0.17
+Nodes (11): Configuration, Document history, Forget history, Offline times, Phases, Principles, Reading, Scale (estimates, to be measured) (+3 more)
 
-### Community 230 - "write_export_zip"
-Cohesion: 0.25
-Nodes (12): ChannelWriter, export_zip_of_an_empty_workspace_is_still_valid(), export_zip_streams_a_readable_archive(), Bytes, Error, Receiver, Result, Sender (+4 more)
+### Community 230 - "welcome/manifest.json"
+Cohesion: 0.17
+Nodes (11): author, description, frontend, module, id, kernel, license, name (+3 more)
 
 ### Community 231 - "Mobile Layout Defects (39 items)"
 Cohesion: 0.33
 Nodes (6): Mobile Audit (2026-09-25), A-1: No env(safe-area-inset-*), B-1: One Unbreakable Token Scrolls Entire Document Pane, C-1: Primary 'Open Document' Control is 22.5 px Tall, Mobile Layout Defects (39 items), Mobile Prose Defects (101 items)
 
-### Community 232 - "sim-client.ts"
-Cohesion: 0.15
-Nodes (10): chooseOp(), OpKind, OpRecord, ClientStats, ConvergenceTimeout, DocEntry, REMOTE, SimClientOptions (+2 more)
+### Community 232 - "PluginHostError"
+Cohesion: 0.25
+Nodes (5): AppError, PluginHostError, Error, From, StatusCode
 
 ### Community 233 - "Operations Guide"
 Cohesion: 0.40
@@ -1369,9 +1370,9 @@ Nodes (3): Import Map Mechanism, Web App Index HTML, App Icon SVG
 Cohesion: 0.14
 Nodes (14): Docker Compose Configuration, Polish Backlog, Concurrent Frontmatter Key Writes (Correctness), Trash Permanent Delete and Empty, Life Manager Project Specification, Vision (Microkernel Document Manager), Out of Scope for v1 / v2 Seams, Known Risks (+6 more)
 
-### Community 299 - "MongoDocStoreInner"
-Cohesion: 0.14
-Nodes (14): effective_limit(), MongoDocStoreInner, Mutation, now_ms(), Room, Arc, AtomicBool, AtomicI64 (+6 more)
+### Community 299 - "MongoDocStore"
+Cohesion: 0.13
+Nodes (16): DocStoreTuning, MongoDocStore, MongoDocStoreInner, now_ms(), Room, RoomState, Arc, AtomicBool (+8 more)
 
 ### Community 300 - "routes/mod.rs"
 Cohesion: 0.18
@@ -1389,13 +1390,13 @@ Nodes (8): Shell Capability Bridge Contract, M5 Build Contracts (Flutter Shell),
 Cohesion: 0.39
 Nodes (5): dart_project, flutter_view_controller, functional, memory, windows
 
-### Community 304 - "modes.test.ts"
-Cohesion: 0.27
-Nodes (10): byOrder(), DEFAULT_MODE_ID, MODE_MEMORY_CAP, nextModeId(), parseModeMemory(), rememberMode(), resolveModeId(), serializeModeMemory() (+2 more)
+### Community 305 - "frontmatter.spec.ts"
+Cohesion: 0.22
+Nodes (6): FIXTURE, PHONE, modeSwitch(), openDocument(), LISTS, readPane()
 
-### Community 306 - "ListQuery"
-Cohesion: 0.18
-Nodes (13): a_compiled_dsl_filter_is_anded_with_the_tombstone_clause(), an_empty_search_adds_no_clause(), DocStoreStats, list_filter(), ListQuery, Page, query(), RoomState (+5 more)
+### Community 306 - "Vec"
+Cohesion: 0.25
+Nodes (7): CrdtState, DocStoreWorkers, Page, DocumentRow, JoinHandle, Option, Vec
 
 ### Community 307 - "Point"
 Cohesion: 0.50
@@ -1406,8 +1407,8 @@ Cohesion: 0.50
 Nodes (3): Size, height, width
 
 ### Community 309 - ".create"
-Cohesion: 0.22
-Nodes (13): crdt_state_survives_a_room_eviction(), create_get_replace_roundtrip(), DocStoreTuning, duplicate_id_conflicts_and_graveyard_is_gone(), list_rows_carry_no_crdt_bytes(), oversized_text_is_rejected(), purging_writes_an_audit_entry(), Default (+5 more)
+Cohesion: 0.33
+Nodes (10): crdt_state_survives_a_room_eviction(), create_get_replace_roundtrip(), duplicate_id_conflicts_and_graveyard_is_gone(), list_rows_carry_no_crdt_bytes(), oversized_text_is_rejected(), purging_writes_an_audit_entry(), snapshot_and_restore(), store() (+2 more)
 
 ### Community 310 - "attachments/manifest.json"
 Cohesion: 0.13
@@ -1425,77 +1426,89 @@ Nodes (7): ref_virtual_lm_precache, workbox-precaching, workbox-routing, workbox
 Cohesion: 0.32
 Nodes (3): ErrorCode, Into, Self
 
-### Community 316 - "build-wasm-plugins.mjs"
-Cohesion: 0.06
-Nodes (25): ref_node_child_process, REGISTRY, repo, web, api, bodies, body, declared (+17 more)
+### Community 316 - "ref_node_path"
+Cohesion: 0.09
+Nodes (15): ref_node_child_process, ref_node_path, REGISTRY, repo, web, brokenModule, api, bodies (+7 more)
 
-### Community 317 - "Panel.tsx"
-Cohesion: 0.18
-Nodes (6): formatBytes(), Entry, ICON, SnapshotRow(), Viewing, ref_changeview_js
+### Community 317 - "gridfs_byte_stream"
+Cohesion: 0.20
+Nodes (10): gridfs_byte_stream(), map_gridfs_open(), multipart_error(), AppError, Bytes, Error, Result, Stream (+2 more)
 
-### Community 318 - "ChangeView.tsx"
-Cohesion: 0.23
-Nodes (9): formatRange(), ChangeView(), describe(), KIND, revertRequest(), ChangeRow(), ChangesPanel(), describe() (+1 more)
+### Community 318 - "in_flight"
+Cohesion: 0.31
+Nodes (6): a_cron_slot_can_only_be_claimed_once_at_a_time(), a_panicking_run_still_releases_its_slot(), CronClaim, in_flight(), HashSet, StdMutex
 
-### Community 319 - "vitest"
-Cohesion: 0.24
-Nodes (8): ViewsPanel(), ViewsPanelProps, EXCLUDE_MACHINE_DOCUMENTS, isMachineDocument(), isMachinePath(), MACHINE_PATH_PREFIX, ref_kernel_wasm, vitest
+### Community 319 - "machine-docs.ts"
+Cohesion: 0.11
+Nodes (19): EMPTY, LiveQueryState, useLiveQuery(), ViewsPanel(), ViewsPanelProps, EXCLUDE_MACHINE_DOCUMENTS, isMachineDocument(), isMachinePath() (+11 more)
 
 ### Community 321 - "init_metrics"
-Cohesion: 0.21
-Nodes (13): describe(), init_metrics(), init_tracing(), METRICS, metrics_handler(), metrics_handler_renders_prometheus_text(), recorder_builder(), OnceLock (+5 more)
+Cohesion: 0.25
+Nodes (11): describe(), init_metrics(), init_tracing(), METRICS, metrics_handler(), metrics_handler_renders_prometheus_text(), recorder_builder(), PrometheusHandle (+3 more)
 
-### Community 323 - "runtime.rs"
-Cohesion: 0.27
-Nodes (10): dispatch(), dispatch_unit(), emit(), emit_value(), escape(), parse(), F, I (+2 more)
+### Community 323 - "zz-folder-tree.spec.ts"
+Cohesion: 0.28
+Nodes (3): folderRow(), openTree(), tree()
 
 ### Community 324 - "Deadline"
 Cohesion: 0.29
 Nodes (4): Deadline, Duration, Instant, WRITE_WINDOW
 
-### Community 325 - "source-view/src/index.tsx"
-Cohesion: 0.25
-Nodes (9): activate(), STATES, TaskState, activate(), DocumentModeProps, hasHiddenParts(), Source(), web_kernel_api_dist_kernel_d (+1 more)
+### Community 325 - ".parse"
+Cohesion: 0.64
+Nodes (6): CronParseError, parse_field(), parse_item(), parse_value(), Into, Result
 
 ### Community 326 - "QueryResult"
 Cohesion: 0.31
 Nodes (3): QueryResult, LiveQuery, Subscription
 
-### Community 327 - "19. `admin` — administration"
-Cohesion: 0.25
-Nodes (8): 19. `admin` — administration, 19a. Users, 19b. Invites, 19c. Audit log, 19d. Orphan files, 19e. Snapshots, 19f. Plugins, 19g. Workspace
+### Community 328 - "orphans"
+Cohesion: 0.52
+Nodes (7): attachment_references_are_extracted_from_text(), attachment_refs(), find_orphans(), orphans(), OrphanView, Vec, scan_orphans()
 
-### Community 330 - "bson"
-Cohesion: 0.33
-Nodes (3): m1_row(), PRE_FEED_ROWS, bson
+### Community 329 - "PluginConfig.tsx"
+Cohesion: 0.38
+Nodes (6): configSubmission(), normalizeConfigValues(), PluginAdminView, PluginConfigSchemaField, PluginConfigView, PluginConfigForm()
+
+### Community 330 - "mobile-document.spec.ts"
+Cohesion: 0.29
+Nodes (3): NARROW, PHONE, WIDE
 
 ### Community 331 - "plugin-sdk/src/log.rs"
 Cohesion: 0.24
 Nodes (10): LogInput, LogLevel, MAX_LOG_LINES_PER_CALL, MAX_LOG_MESSAGE_BYTES, debug(), emit(), error(), info() (+2 more)
 
-### Community 332 - "crate::error::AppError"
-Cohesion: 0.50
-Nodes (3): crate::error::AppError, From, Self
+### Community 332 - "mobile-routes.spec.ts"
+Cohesion: 0.33
+Nodes (5): HOSTILE, measure(), Overflow, PHONE, sweep()
+
+### Community 333 - "ContextMenuApi"
+Cohesion: 0.33
+Nodes (3): activate(), FolderTreeProps, ContextMenuApi
+
+### Community 334 - "life_manager_plugin_abi_as_abi"
+Cohesion: 0.40
+Nodes (4): ABI_VERSION, extism_pdk, life_manager_plugin_abi_as_abi, serde_json
 
 ## Knowledge Gaps
-- **1989 isolated node(s):** `note`, `bundle_version`, `min_bridge_version`, `index_csp`, `files` (+1984 more)
-  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 3277 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **71 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **2004 isolated node(s):** `note`, `bundle_version`, `min_bridge_version`, `index_csp`, `files` (+1999 more)
+  These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 3295 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
+- **69 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `String` connect `String` to `plugin_api.rs`, `host_fns.rs`, `AppState`, `domain.rs`, `sync_ws.rs`, `server/src/plugins.rs`, `feed.rs`, `pluginhost/hooks.rs`, `ast.rs`, `pluginhost/cron.rs`, `sync.rs`, `docstore.rs`, `routes/documents.rs`, `health.rs`, `HostError`, `plugininstall/config.rs`, `telemetry.rs`, `auth/mod.rs`, `src/changes.rs`, `PluginPool`, `zipcheck.rs`, `Timestamp`, `plugin-abi/src/documents.rs`, `DocStoreError`, `ConfigGetOutput`, `server/tests/common/mod.rs`, `tests/statics.rs`, `Date`, `SyncHub`, `shell_bundle.rs`, `pluginhost/limits.rs`, `plugin-sdk/src/kv.rs`, `routes/statics.rs`, `evaluator.rs`, `CircuitBreaker`, `pluginhost_runtime.rs`, `invite.rs`, `.lock`, `PluginHost`, `pluginhost_routes.rs`, `yaml.rs`, `splice.rs`, `wasm.rs`, `document.rs`, `pluginhost/mod.rs`, `plugininstall/mod.rs`, `admin.rs`, `serve`, `plugininstall_flow.rs`, `mongo.rs`, `migrations.rs`, `queue.rs`, `sections.rs`, `bootstrap`, `Config`, `pluginhost_http.rs`, `Value`, `password.rs`, `conformance.rs`, `convergence.rs`, `plugininstall_zip.rs`, `ChangeFeed`, `Response`, `HookQueue`, `super`, `title.rs`, `documents_query.rs`, `reset.rs`, `call_value`, `audit.rs`, `Option`, `watcher.rs`, `AppError`, `write_envelope`, `main.rs`, `routes/changes.rs`, `docstore_splice.rs`, `write_export_zip`, `MongoDocStoreInner`, `ListQuery`, `.new`, `runtime.rs`, `plugin-sdk/src/log.rs`?**
-  _High betweenness centrality (0.249) - this node is a cross-community bridge._
-- **Why does `Drop` connect `SyncHub` to `FolderTree.tsx`, `PluginPool`, `feed.rs`, `HookQueue`, `pluginhost/cron.rs`, `queue.rs`, `tests/statics.rs`, `shell_bundle.rs`?**
-  _High betweenness centrality (0.248) - this node is a cross-community bridge._
-- **Why does `react` connect `react` to `points.ts`, `main.tsx`, `viewer/src/index.tsx`, `ThemesController`, `runtime.ts`, `fm-display.ts`, `slash-commands/src/controller.ts`, `Command`, `commands/src/index.tsx`, `FolderTree.tsx`, `BarSettings.tsx`, `ShellState`, `Plugins.tsx`, `src/filter.ts`, `runtime/index.ts`, `Panel.tsx`, `ChangeView.tsx`, `vitest`, `doc-list/src/index.tsx`, `theme.ts`, `icons.tsx`, `alt-editor/src/index.tsx`, `source-view/src/index.tsx`, `router/src/index.tsx`, `Unsubscribe`, `AdminView.tsx`, `FolderContents.tsx`, `folders/src/index.tsx`, `context-menu-api.ts`, `loader.ts`, `Shell.tsx`, `menu.tsx`, `DocListView.tsx`, `admin/src/api.ts`, `ref_kernel`, `changes/src/api.ts`, `editor/src/index.tsx`, `importmap.ts`, `package.json`, `Users.tsx`, `document-surface/src/index.tsx`, `render.tsx`?**
-  _High betweenness centrality (0.233) - this node is a cross-community bridge._
+- **Why does `String` connect `String` to `plugin_api.rs`, `host_fns.rs`, `attachments.rs`, `domain.rs`, `sync_ws.rs`, `server/src/plugins.rs`, `feed.rs`, `HookKind`, `ast.rs`, `.fire`, `sync.rs`, `docstore.rs`, `routes/documents.rs`, `health.rs`, `HostError`, `plugininstall/config.rs`, `telemetry.rs`, `auth/mod.rs`, `src/changes.rs`, `PluginPool`, `zipcheck.rs`, `call_value`, `DocStoreError`, `ConfigGetOutput`, `server/tests/common/mod.rs`, `tests/statics.rs`, `Date`, `SyncHub`, `shell_bundle.rs`, `pluginhost/limits.rs`, `plugin-sdk/src/kv.rs`, `routes/statics.rs`, `evaluator.rs`, `pluginhost_smoke.rs`, `pluginhost_runtime.rs`, `invite.rs`, `.lock`, `PluginHost`, `pluginhost_routes.rs`, `replace`, `yaml.rs`, `splice.rs`, `wasm.rs`, `document.rs`, `pluginhost/mod.rs`, `AppState`, `admin.rs`, `serve`, `plugininstall_flow.rs`, `mongo.rs`, `migrations.rs`, `queue.rs`, `sections.rs`, `bootstrap`, `Config`, `pluginhost_http.rs`, `Value`, `password.rs`, `conformance.rs`, `plugin-abi/src/events.rs`, `ChangeFeed`, `Response`, `HookQueue`, `plugin-abi/src/http.rs`, `title.rs`, `documents_query.rs`, `reset.rs`, `audit.rs`, `Option`, `watcher.rs`, `AppError`, `write_envelope`, `main.rs`, `routes/changes.rs`, `docstore_splice.rs`, `PluginHostError`, `MongoDocStore`, `Vec`, `.new`, `in_flight`, `.parse`, `plugin-sdk/src/log.rs`?**
+  _High betweenness centrality (0.244) - this node is a cross-community bridge._
+- **Why does `Drop` connect `SyncHub` to `FolderTree.tsx`, `PluginPool`, `feed.rs`, `HookQueue`, `queue.rs`, `tests/statics.rs`, `shell_bundle.rs`, `in_flight`?**
+  _High betweenness centrality (0.224) - this node is a cross-community bridge._
+- **Why does `react` connect `react` to `points.ts`, `main.tsx`, `viewer/src/index.tsx`, `ThemesController`, `runtime.ts`, `fm-display.ts`, `slash-commands/src/controller.ts`, `Palette.tsx`, `keys.ts`, `FolderTree.tsx`, `BarSettings.tsx`, `ref_kernel`, `ShellState`, `Plugins.tsx`, `src/filter.ts`, `SettingsView.tsx`, `machine-docs.ts`, `POINTS`, `theme.ts`, `icons.tsx`, `alt-editor/src/index.tsx`, `router/src/index.tsx`, `PluginConfig.tsx`, `AdminView.tsx`, `FolderContents.tsx`, `kernel-api/src/index.ts`, `folders/src/index.tsx`, `KernelHost`, `Shell.tsx`, `menu.tsx`, `DocListView.tsx`, `attachments/src/index.tsx`, `editor/src/index.tsx`, `importmap.ts`, `package.json`, `Users.tsx`, `document-surface/src/index.tsx`, `render.tsx`?**
+  _High betweenness centrality (0.213) - this node is a cross-community bridge._
 - **What connects `note`, `bundle_version`, `min_bridge_version` to the rest of the system?**
-  _1989 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _2004 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `settings.test.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.057859703020993344 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07372549019607844 - nodes in this community are weakly interconnected._
 - **Should `points.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.052917232021709636 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.03903693314633006 - nodes in this community are weakly interconnected._
 - **Should `plugin_api.rs` be split into smaller, more focused modules?**
-  _Cohesion score 0.04843968327899394 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.04774980930587338 - nodes in this community are weakly interconnected._

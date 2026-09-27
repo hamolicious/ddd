@@ -96,6 +96,7 @@ pub fn router() -> Router<AppState> {
         .route("/{id}/snapshots/{snapshot_id}", get(get_snapshot))
         .route("/{id}/changes", get(super::changes::list_changes))
         .route("/{id}/text", get(super::changes::text_at))
+        .route("/{id}/history/forget", post(super::changes::forget_history))
         .route("/{id}/changes/{from}/{to}", get(super::changes::get_change))
         .route("/{id}/changes/{from}/{to}/revert", post(super::changes::revert_change))
         .route(

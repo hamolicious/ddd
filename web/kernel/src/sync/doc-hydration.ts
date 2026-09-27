@@ -9,15 +9,17 @@
  * Three things here decide whether offline editing actually works:
  *
  * 1. **The persisted replica is the durable queue.** A local edit is written to
- *    the `docs` store as full encoded state; the in-memory outbox is only a
- *    reconnect optimization. Reloading the page mid-flight therefore loses
- *    nothing: reopening the document replays the offline edits to the server
- *    through the ordinary state-vector handshake.
+ *    the `docs` store as full encoded state, together with the **edit journal**:
+ *    the offline edits as `{ at, update }` entries, so the server's history can say
+ *    when each was made (`docs/HISTORY.md`). On reconnect the journal goes first,
+ *    as `HISTORY` frames; the ordinary state-vector handshake after it is the
+ *    safety net, and the only path when the journal is gone (an older replica, or
+ *    site data cleared) — then the edits still arrive, stamped when they did.
  * 2. **Every recovery move is a re-derivation.** `doc.resync`, a reconnect, and a
  *    `too_large` fallback all end in "send a state vector, apply the diff" —
  *    never a replay of remembered frames.
  * 3. **Local edits are never dropped to make room.** The LRU evicts only
- *    documents with no live handle *and* an empty outbox.
+ *    documents with no live handle *and* an empty journal.
  *
  * **FROZEN INTERFACE.**
  */
@@ -26,6 +28,7 @@ import * as Y from "yjs";
 
 import {
   FrameType,
+  encodeHistory,
   type BinaryFrame,
   type DocError,
   type DocResync,
@@ -38,6 +41,18 @@ export const DEFAULT_LRU_SIZE = 20;
 
 /** The root `Y.Text` key — pinned by SPEC §3.2; must match the server's `TEXT_ROOT`. */
 export const TEXT_ROOT = "content";
+
+/** Offline edits closer together than this are one journal entry, timed at the first. */
+export const JOURNAL_MERGE_MS = 2_000;
+
+/** One offline edit, or a run of them, and when it began. */
+export interface JournalEntry {
+  /** Epoch ms of the first edit in the entry. */
+  readonly at: number;
+  /** Epoch ms of the last, for merging the next one in. */
+  readonly lastAt: number;
+  readonly update: Uint8Array;
+}
 
 /** Local replica writes are coalesced over this window. */
 export const PERSIST_DEBOUNCE_MS = 500;
@@ -86,7 +101,7 @@ export interface DocHydratorOptions {
   readonly persistDebounceMs?: number;
   /** `open()`'s first-round-trip deadline. */
   readonly syncTimeoutMs?: number;
-  /** Called whenever the outbox depth changes — the `pending` half of sync status. */
+  /** Called whenever the journal depth changes — the `pending` half of sync status. */
   readonly onPending?: (pending: number) => void;
   /**
    * A local replica was discarded because the document was purged server-side
@@ -119,6 +134,8 @@ export interface DocHydratorOptions {
 export interface DocReplicaMeta {
   /** `true` ⇒ the replica holds local edits the socket has not carried. */
   readonly unsynced: boolean;
+  /** Those edits, with when they were made. Empty or absent when in sync. */
+  readonly journal?: readonly JournalEntry[];
 }
 
 /** A persisted replica as {@link DocPersistence.peek} reports it. */
@@ -167,9 +184,9 @@ class DocEntry implements HydratedDoc {
   synced = false;
   /** `doc.subscribed` seen on the current connection. */
   acked = false;
-  /** Merged local updates the socket has not carried yet (offline edits). */
-  outbox: Uint8Array | undefined;
-  /** Number of local transactions in `outbox` — the honest "pending" count. */
+  /** Local edits the socket has not carried yet (offline edits), oldest first. */
+  journal: JournalEntry[] = [];
+  /** Number of local transactions in `journal` — the honest "pending" count. */
   pending = 0;
   /** Local state not yet written to the `docs` store. */
   dirty = false;
@@ -291,6 +308,13 @@ export class DocHydrator {
       try {
         Y.applyUpdate(entry.doc, persisted, RESTORE_ORIGIN);
         entry.hasLocalState = true;
+        // Offline edits from before a reload: their journal comes back with them.
+        const stored = await this.options.persistence?.peek?.(id);
+        if (stored?.unsynced && stored.journal && stored.journal.length > 0) {
+          entry.journal = [...stored.journal];
+          entry.pending = stored.journal.length;
+          this.#recount();
+        }
       } catch (cause) {
         // A corrupt local blob must not make the document unopenable: drop it and
         // hydrate from the server instead.
@@ -608,6 +632,8 @@ export class DocHydrator {
 
   #sendStep2(entry: DocEntry, theirStateVector: Uint8Array): void {
     if (this.transport.state !== "open") return;
+    // The journal first: it carries the times this diff would lose.
+    this.#flush(entry);
     let update: Uint8Array;
     try {
       update = Y.encodeStateAsUpdate(entry.doc, theirStateVector);
@@ -641,7 +667,7 @@ export class DocHydrator {
   #onLocalUpdate(entry: DocEntry, update: Uint8Array, origin: unknown): void {
     entry.dirty = true;
     entry.hasLocalState = true;
-    // Persist *after* the outbox has been updated, never before: the saved record
+    // Persist *after* the journal has been updated, never before: the saved record
     // carries an `unsynced` flag taken from `entry.pending`, and with a zero
     // debounce a save ordered first would stamp "in sync" onto the very blob that
     // is about to become the only copy of an offline edit.
@@ -656,7 +682,7 @@ export class DocHydrator {
         this.#schedulePersist(entry);
         return;
       } catch {
-        /* fall through to the outbox */
+        /* fall through to the journal */
       }
     }
     this.#queue(entry, update);
@@ -664,27 +690,43 @@ export class DocHydrator {
   }
 
   #queue(entry: DocEntry, update: Uint8Array): void {
-    entry.outbox = entry.outbox ? Y.mergeUpdates([entry.outbox, update]) : update;
+    const now = Date.now();
+    const last = entry.journal.at(-1);
+    if (last && now - last.lastAt <= JOURNAL_MERGE_MS) {
+      entry.journal[entry.journal.length - 1] = {
+        at: last.at,
+        lastAt: now,
+        update: Y.mergeUpdates([last.update, update]),
+      };
+    } else {
+      entry.journal.push({ at: now, lastAt: now, update });
+    }
     entry.pending++;
     this.#recount();
   }
 
+  /**
+   * Send the journal as `HISTORY` frames, oldest first, so the server can record when
+   * each edit was made. Runs before any `SYNC_STEP2` of ours: sent after, the diff
+   * would already carry these edits and the times would be lost.
+   */
   #flush(entry: DocEntry): void {
-    const queued = entry.outbox;
-    if (!queued || this.transport.state !== "open") return;
+    if (entry.journal.length === 0 || this.transport.state !== "open") return;
     try {
-      this.transport.sendBinary({ type: FrameType.Update, docId: entry.id, payload: queued });
+      for (const edit of entry.journal) {
+        this.transport.sendBinary({ type: FrameType.History, docId: entry.id, payload: encodeHistory(edit.at, edit.update) });
+      }
       this.#clearOutbox(entry);
     } catch (cause) {
-      // Too large for one frame: the state-vector handshake is the escape hatch,
-      // and the queue stays put until it runs.
+      // Too large for one frame: the state-vector handshake is the escape hatch (the
+      // edits then arrive stamped when they did), and the journal stays until it runs.
       this.#reportError(entry.id, "too_large", `could not flush offline edits: ${String(cause)}`);
     }
   }
 
   #clearOutbox(entry: DocEntry): void {
-    if (entry.pending === 0 && entry.outbox === undefined) return;
-    entry.outbox = undefined;
+    if (entry.pending === 0 && entry.journal.length === 0) return;
+    entry.journal = [];
     entry.pending = 0;
     // The bytes on disk have not changed, but the *flag* on them has: the replica is
     // no longer holding anything the server lacks, so it may be pruned again. Left
@@ -777,7 +819,7 @@ export class DocHydrator {
       // The flag travels with the bytes, so the two can never disagree: `prune`
       // refuses to evict this replica while it holds unsynced edits, and a purge
       // offers it back instead of deleting it (SPEC §4.1).
-      .save(entry.id, state, { unsynced: entry.pending > 0 })
+      .save(entry.id, state, { unsynced: entry.pending > 0, journal: entry.journal })
       .then(() =>
         persistence.prune(
           Math.max(this.options.persistedReplicas ?? DEFAULT_PERSISTED_REPLICAS, this.lruSize),

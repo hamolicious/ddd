@@ -101,6 +101,11 @@ pub struct Config {
     /// after this many changes, so any point in its history is at most this many steps
     /// from one (`docs/HISTORY.md`).
     pub checkpoint_every_changes: u32,
+    /// `RAW_CHANGE_DAYS`, default 30: raw changes older than this are squashed into one
+    /// record per group.
+    pub raw_change_days: u32,
+    /// `HISTORY_SQUASH_INTERVAL_SECS`, default 3600: how often the squash job runs.
+    pub history_squash_interval: Duration,
     /// `INVITE_TTL_DAYS`, default 7 (SPEC §5.1).
     pub invite_ttl_days: u32,
     /// `SESSION_IDLE_DAYS`, default 30 (SPEC §5.2).
@@ -303,6 +308,8 @@ impl Config {
             trust_proxy_headers: parse_bool("TRUST_PROXY_HEADERS", false)?,
             trash_retention_days: parse_var("TRASH_RETENTION_DAYS", 30u32)?,
             checkpoint_every_changes: parse_var("CHECKPOINT_EVERY_CHANGES", 1000u32)?,
+            raw_change_days: parse_var("RAW_CHANGE_DAYS", 30u32)?,
+            history_squash_interval: Duration::from_secs(parse_var("HISTORY_SQUASH_INTERVAL_SECS", 3600u64)?),
             invite_ttl_days: parse_var("INVITE_TTL_DAYS", 7u32)?,
             session_idle_days: parse_var("SESSION_IDLE_DAYS", 30u32)?,
             session_absolute_days: parse_var("SESSION_ABSOLUTE_DAYS", 180u32)?,
@@ -682,6 +689,8 @@ mod tests {
             trust_proxy_headers: false,
             trash_retention_days: 30,
             checkpoint_every_changes: 1000,
+            raw_change_days: 30,
+            history_squash_interval: Duration::from_secs(3600),
             invite_ttl_days: 7,
             session_idle_days: 30,
             session_absolute_days: 180,

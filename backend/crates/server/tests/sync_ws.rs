@@ -1676,3 +1676,181 @@ async fn bootstrap_pages_five_thousand_documents_well_inside_the_budget() {
 
     app.cleanup().await;
 }
+
+/// An offline edit carried over as a `HISTORY` frame is recorded at the time it was
+/// made (kept in order, never in the future), and marked offline; the catch-up diff of a
+/// handshake is marked offline too, stamped when it arrived (docs/HISTORY.md).
+#[tokio::test]
+#[ignore = "needs a live MongoDB (MONGO_URI)"]
+async fn offline_edits_keep_the_time_they_were_made() {
+    use futures::TryStreamExt;
+    let Some(app) = TestApp::spawn().await else {
+        return;
+    };
+    let id = app.create_document("start\n").await;
+    let mut socket = connected(&app).await;
+    let client = hydrate(&mut socket, &id).await;
+
+    // The claimed time must fall after the document was created (anything earlier is
+    // pulled forward to it: an edit cannot predate its document) and before it arrives.
+    let created = bson::DateTime::now().timestamp_millis();
+    tokio::time::sleep(std::time::Duration::from_millis(1_500)).await;
+    let now = bson::DateTime::now().timestamp_millis();
+    let made_earlier = created + 500;
+    let history = |made_at: i64, update: &[u8]| {
+        let mut payload = (made_at as u64).to_be_bytes().to_vec();
+        payload.extend_from_slice(update);
+        payload
+    };
+    // Made a second ago, offline.
+    let first = client.insert(6, "offline one\n");
+    socket.send(build_frame(frame::HISTORY, &id, &history(made_earlier, &first))).await.expect("send");
+    // A clock in the future is pulled back to now.
+    let second = client.insert(18, "offline two\n");
+    socket.send(build_frame(frame::HISTORY, &id, &history(now + 86_400_000, &second))).await.expect("send");
+    // A handshake catch-up: offline, stamped on arrival.
+    let third = client.insert(30, "caught up\n");
+    socket.send(build_frame(frame::SYNC_STEP2, &id, &third)).await.expect("send");
+    // A live edit afterwards.
+    let fourth = client.insert(40, "live\n");
+    socket.send(build_frame(frame::UPDATE, &id, &fourth)).await.expect("send");
+
+    // Wait for all four to land.
+    let deadline = std::time::Instant::now() + TIMEOUT;
+    let changes = loop {
+        let mut cursor = app
+            .state
+            .collections
+            .document_changes()
+            .find(bson::doc! { "document_id": &id })
+            .sort(bson::doc! { "seq": 1 })
+            .await
+            .expect("changes");
+        let mut changes = Vec::new();
+        while let Some(change) = cursor.try_next().await.expect("change") {
+            changes.push(change);
+        }
+        if changes.len() == 4 || std::time::Instant::now() > deadline {
+            break changes;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    };
+    assert_eq!(changes.len(), 4, "every edit is one change");
+    let at: Vec<i64> = changes.iter().map(|change| change.created_at.timestamp_millis()).collect();
+    let offline: Vec<bool> = changes.iter().map(|change| change.offline).collect();
+
+    assert_eq!(offline, vec![true, true, true, false]);
+    assert_eq!(at[0], made_earlier, "the claimed time is kept: {at:?}");
+    assert!(at[1] <= bson::DateTime::now().timestamp_millis(), "never in the future: {at:?}");
+    assert!(at.windows(2).all(|pair| pair[0] <= pair[1]), "history stays in order: {at:?}");
+    assert!(changes[0].received_at.is_some(), "an offline change says when it arrived");
+    assert!(changes[3].received_at.is_none());
+
+    app.cleanup().await;
+}
+
+/// An offline edit that claims to predate its document is recorded when the document
+/// was created, not before it.
+#[tokio::test]
+#[ignore = "needs a live MongoDB (MONGO_URI)"]
+async fn an_offline_edit_never_predates_its_document() {
+    use futures::TryStreamExt;
+    let Some(app) = TestApp::spawn().await else {
+        return;
+    };
+    let created = bson::DateTime::now().timestamp_millis();
+    let id = app.create_document("start\n").await;
+    let mut socket = connected(&app).await;
+    let client = hydrate(&mut socket, &id).await;
+    let update = client.insert(6, "from last year\n");
+    let mut payload = ((created - 365 * 86_400_000) as u64).to_be_bytes().to_vec();
+    payload.extend_from_slice(&update);
+    socket.send(build_frame(frame::HISTORY, &id, &payload)).await.expect("send");
+
+    let deadline = std::time::Instant::now() + TIMEOUT;
+    let change = loop {
+        let found = app
+            .state
+            .collections
+            .document_changes()
+            .find(bson::doc! { "document_id": &id })
+            .await
+            .expect("changes")
+            .try_next()
+            .await
+            .expect("change");
+        if found.is_some() || std::time::Instant::now() > deadline {
+            break found.expect("the edit is recorded");
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    };
+    assert!(change.created_at.timestamp_millis() >= created, "{:?} is before {created}", change.created_at);
+    app.cleanup().await;
+}
+
+/// Live typing is folded into one change record per burst (a pause over two seconds
+/// starts another); a burst's edges still rebuild exactly, and a point inside it is
+/// refused rather than guessed (docs/HISTORY.md).
+#[tokio::test]
+#[ignore = "needs a live MongoDB (MONGO_URI)"]
+async fn live_typing_folds_into_one_record_per_burst() {
+    use futures::TryStreamExt;
+    let Some(app) = TestApp::spawn().await else {
+        return;
+    };
+    let id = app.create_document("").await;
+    let mut socket = connected(&app).await;
+    let client = hydrate(&mut socket, &id).await;
+
+    let mut typed = String::new();
+    for ch in "hello".chars() {
+        let update = client.insert(typed.len() as u32, &ch.to_string());
+        typed.push(ch);
+        socket.send(build_frame(frame::UPDATE, &id, &update)).await.expect("send");
+    }
+    tokio::time::sleep(std::time::Duration::from_millis(2_600)).await;
+    for ch in " world".chars() {
+        let update = client.insert(typed.len() as u32, &ch.to_string());
+        typed.push(ch);
+        socket.send(build_frame(frame::UPDATE, &id, &update)).await.expect("send");
+    }
+
+    let deadline = std::time::Instant::now() + TIMEOUT;
+    let records = loop {
+        let mut cursor = app
+            .state
+            .collections
+            .document_changes()
+            .find(bson::doc! { "document_id": &id })
+            .sort(bson::doc! { "seq": 1 })
+            .await
+            .expect("changes");
+        let mut records = Vec::new();
+        while let Some(change) = cursor.try_next().await.expect("change") {
+            records.push(change);
+        }
+        let last_seq = records.last().map_or(0, |change| change.seq);
+        if last_seq >= 12 || std::time::Instant::now() > deadline {
+            break records;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    };
+    // Update 1 is the creation; "hello" is 2..=6, " world" is 7..=12.
+    let ranges: Vec<(i64, i64)> = records.iter().map(|c| (c.first_seq.unwrap_or(c.seq), c.seq)).collect();
+    assert_eq!(ranges, vec![(2, 6), (7, 12)], "one record per burst");
+
+    let text = |seq: i64| {
+        let uri = format!("/api/documents/{id}/text?at={seq}");
+        let app = &app;
+        async move { app.get(&uri).await }
+    };
+    let (status, body) = text(6).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(serde_json::from_slice::<serde_json::Value>(&body).unwrap()["content"], "hello");
+    let (status, body) = text(12).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(serde_json::from_slice::<serde_json::Value>(&body).unwrap()["content"], "hello world");
+    assert_eq!(text(4).await.0, StatusCode::CONFLICT, "inside a burst is refused");
+
+    app.cleanup().await;
+}

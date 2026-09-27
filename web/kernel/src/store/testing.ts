@@ -7,6 +7,7 @@
  * implementation is tested against `fake-indexeddb` separately.
  */
 
+import type { DocReplicaMeta, JournalEntry } from "../sync/doc-hydration.js";
 import type { FeedRow } from "../protocol.js";
 import {
   EMPTY_CHECKPOINT,
@@ -155,7 +156,7 @@ export class MemoryProjectionStore implements ProjectionStore {
 export class MemoryDocPersistence {
   readonly states = new Map<
     string,
-    { state: Uint8Array; touchedAt: number; unsynced: boolean }
+    { state: Uint8Array; touchedAt: number; unsynced: boolean; journal?: readonly JournalEntry[] }
   >();
   saves = 0;
   drops = 0;
@@ -168,17 +169,21 @@ export class MemoryDocPersistence {
     return entry.state;
   }
 
-  async peek(id: string): Promise<{ state: Uint8Array; unsynced: boolean } | undefined> {
+  async peek(
+    id: string,
+  ): Promise<{ state: Uint8Array; unsynced: boolean; journal?: readonly JournalEntry[] } | undefined> {
     const entry = this.states.get(id);
-    return entry ? { state: entry.state, unsynced: entry.unsynced } : undefined;
+    if (!entry) return undefined;
+    return { state: entry.state, unsynced: entry.unsynced, ...(entry.journal ? { journal: entry.journal } : {}) };
   }
 
-  async save(id: string, state: Uint8Array, meta?: { readonly unsynced: boolean }): Promise<void> {
+  async save(id: string, state: Uint8Array, meta?: DocReplicaMeta): Promise<void> {
     this.saves++;
     this.states.set(id, {
       state,
       touchedAt: ++this.#clock,
       unsynced: meta?.unsynced ?? false,
+      ...(meta?.journal && meta.journal.length > 0 ? { journal: [...meta.journal] } : {}),
     });
   }
 

@@ -34,6 +34,9 @@ const LOGIN_ATTEMPT_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 /// - `document_snapshots`: `{document_id: 1, created_at: -1}`.
 /// - `document_changes`: `{document_id: 1, seq: -1}` unique (history, newest first).
 /// - `document_checkpoints`: `{document_id: 1, seq: -1}` unique (nearest checkpoint).
+/// - `document_history`: `{document_id: 1, from_seq: 1}` unique (squash is an upsert),
+///   `{document_id: 1, to_seq: -1}` (newest first).
+/// - `document_changes`: also `{created_at: 1}` (the squash job's sweep).
 /// - `deleted_ids`: `_id` only (the graveyard is id-keyed and permanent).
 /// - `users`: unique `email`.
 /// - `sessions`: `user_id`, TTL on `absolute_expires_at`.
@@ -145,6 +148,24 @@ pub fn all() -> Vec<IndexSpec> {
             "document_changes_doc_seq",
             doc! { "document_id": 1, "seq": -1 },
             Some(IndexOptions::builder().unique(true).build()),
+        ),
+        index(
+            super::DOCUMENT_HISTORY,
+            "document_history_doc_from",
+            doc! { "document_id": 1, "from_seq": 1 },
+            Some(IndexOptions::builder().unique(true).build()),
+        ),
+        index(
+            super::DOCUMENT_HISTORY,
+            "document_history_doc_to",
+            doc! { "document_id": 1, "to_seq": -1 },
+            None,
+        ),
+        index(
+            super::DOCUMENT_CHANGES,
+            "document_changes_created",
+            doc! { "created_at": 1 },
+            None,
         ),
         index(
             super::DOCUMENT_CHECKPOINTS,

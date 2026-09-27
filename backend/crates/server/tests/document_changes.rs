@@ -142,3 +142,122 @@ async fn checkpoints_rebuild_every_point_in_time() {
 
     app.cleanup().await;
 }
+
+/// Past `RAW_CHANGE_DAYS`, raw changes squash into one record per group: the list shows
+/// the same groups, their edges and diffs still rebuild, a point inside one is refused,
+/// and a squashed group still reverts. Then forget history wipes all of it but the text.
+#[tokio::test]
+#[ignore = "requires MONGO_URI"]
+async fn old_history_squashes_and_can_be_forgotten() {
+    use futures::TryStreamExt;
+    let Some(app) = TestApp::start().await else {
+        return;
+    };
+    let id = app.create_document("one\n").await;
+    let put = |content: &'static str| {
+        let uri = format!("/api/documents/{id}");
+        let app = &app;
+        async move { app.put_json(&uri, json!({ "content": content })).await.expect_status(StatusCode::OK); }
+    };
+    // Group A (the user, 3 writes), group B (a plugin, 1 write), group C (the user, 2).
+    put("one\ntwo\n").await;
+    put("one\ntwo\nthree\n").await;
+    put("ONE\ntwo\nthree\n").await;
+    app.state
+        .docs
+        .replace_text(&id, "ONE\ntwo\nthree\nfrom a plugin\n", &Actor::Plugin("helper".into()))
+        .await
+        .expect("plugin write");
+    put("ONE\ntwo\nthree\nfrom a plugin\nfour\n").await;
+    put("ONE\n2\nthree\nfrom a plugin\nfour\n").await;
+
+    let before = app.get(&format!("/api/documents/{id}/changes")).await.json();
+    let edges: Vec<(i64, i64)> = before["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|group| (group["from_seq"].as_i64().unwrap(), group["to_seq"].as_i64().unwrap()))
+        .collect();
+    assert_eq!(edges, vec![(6, 7), (5, 5), (2, 4)]);
+
+    // Age every change past the window, then squash.
+    app.state
+        .collections
+        .document_changes()
+        .update_many(
+            bson::doc! { "document_id": &id },
+            bson::doc! { "$set": { "created_at": bson::DateTime::from_millis(bson::DateTime::now().timestamp_millis() - 40 * 86_400_000) } },
+        )
+        .await
+        .expect("age changes");
+    let written = app.state.docs.squash_history_now().await.expect("squash");
+    assert_eq!(written, 3);
+    let raw_left = app
+        .state
+        .collections
+        .document_changes()
+        .count_documents(bson::doc! { "document_id": &id })
+        .await
+        .unwrap();
+    assert_eq!(raw_left, 0, "squashed raw changes are deleted");
+    // Running it again changes nothing.
+    assert_eq!(app.state.docs.squash_history_now().await.expect("squash again"), 0);
+
+    let after = app.get(&format!("/api/documents/{id}/changes")).await.json();
+    let groups = after["groups"].as_array().unwrap();
+    assert_eq!(groups.len(), 3);
+    assert!(groups.iter().all(|group| group["squashed"] == json!(true)));
+    assert_eq!(groups[2]["changes"], json!(3));
+
+    // Group edges still rebuild; a point inside a squashed group does not.
+    assert_eq!(text_at(&app, &id, 1).await.json()["content"], json!("one\n"));
+    assert_eq!(text_at(&app, &id, 4).await.json()["content"], json!("ONE\ntwo\nthree\n"));
+    assert_eq!(text_at(&app, &id, 7).await.json()["content"], json!("ONE\n2\nthree\nfrom a plugin\nfour\n"));
+    text_at(&app, &id, 3).await.expect_status(StatusCode::CONFLICT);
+    // Checkpoints only at edges: none inside a squashed group.
+    let mut cursor = app
+        .state
+        .collections
+        .document_checkpoints()
+        .find(bson::doc! { "document_id": &id })
+        .await
+        .unwrap();
+    let mut seqs = Vec::new();
+    while let Some(checkpoint) = cursor.try_next().await.unwrap() {
+        seqs.push(checkpoint.seq);
+    }
+    for seq in &seqs {
+        assert!(![2, 3, 6].contains(seq), "checkpoint {seq} is inside a squashed group ({seqs:?})");
+    }
+
+    let diff = app.get(&format!("/api/documents/{id}/changes/2/4")).await.json();
+    assert_eq!(diff["changes"], json!(3));
+    // The plugin's squashed line reverts; everything else stays.
+    app.post_json(&format!("/api/documents/{id}/changes/5/5/revert"), json!({}))
+        .await
+        .expect_status(StatusCode::OK);
+    assert_eq!(
+        app.get(&format!("/api/documents/{id}")).await.json()["content"],
+        json!("ONE\n2\nthree\nfour\n")
+    );
+
+    // Forget history: only the text is left, and history starts again from it.
+    app.post_json(&format!("/api/documents/{id}/history/forget"), json!({}))
+        .await
+        .expect_status(StatusCode::NO_CONTENT);
+    let forgotten = app.get(&format!("/api/documents/{id}/changes")).await.json();
+    assert_eq!(forgotten["groups"], json!([]));
+    assert_eq!(app.get(&format!("/api/documents/{id}/snapshots")).await.json(), json!([]));
+    put("ONE\n2\nthree\nfour\nfive\n").await;
+    let fresh = app.get(&format!("/api/documents/{id}/changes")).await.json();
+    let (from, to) = (fresh["groups"][0]["from_seq"].as_i64().unwrap(), fresh["groups"][0]["to_seq"].as_i64().unwrap());
+    let diff = app.get(&format!("/api/documents/{id}/changes/{from}/{to}")).await;
+    diff.expect_status(StatusCode::OK);
+    assert_eq!(diff.json()["hunks"][0]["inserted"], json!("five\n"));
+
+    app.cleanup().await;
+}
+
+async fn text_at(app: &TestApp, id: &str, seq: i64) -> common::ApiResponse {
+    app.get(&format!("/api/documents/{id}/text?at={seq}")).await
+}

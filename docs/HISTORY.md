@@ -83,12 +83,25 @@ An admin action per document: deletes its changes, squashed groups, checkpoints 
 snapshots, writes a fresh checkpoint of the current text, and records who did it in the
 audit log. For the "I pasted a secret" case.
 
-## Scale (estimates, to be measured)
+## Folding live typing
 
-- Raw tier: bounded by `RAW_CHANGE_DAYS` of writes per document.
-- Squashed tier: roughly 5–15 MB a year for a note edited constantly; MongoDB compresses
-  text 3–5× on disk.
-- Checkpoints: one full text per 1000 writes.
+The editor sends one update per keystroke: measured at **534 writes a minute** for a fast
+typist (about 9 characters a second). One record each would be ~32 000 records per hour
+of typing. So live typing by one person is **folded** into one record per burst: a pause
+over 2 seconds, or a record spanning 10 seconds, starts the next. A folded record covers
+`first_seq..=seq`; the text at an update inside it is not kept (asking for it is a 409),
+its edges are. REST writes, restores, reverts, plugin splices and offline edits are
+never folded. A checkpoint closes the open record, so checkpoints sit on record edges.
+
+## Scale (measured)
+
+| | |
+|---|---|
+| Live typing, fast | ~8 records a minute, ~330 bytes each: ~160 KB per hour of typing |
+| Checkpoints | one per 1000 records: every ~2 hours of continuous typing |
+| After `RAW_CHANGE_DAYS` | one record per group (a person's burst of work); smaller again |
+
+MongoDB compresses text on disk on top of this.
 
 ## Configuration
 
@@ -100,10 +113,14 @@ audit log. For the "I pasted a secret" case.
 
 ## Phases
 
-1. **Checkpoints and reading any point in time.** Changes are kept (no trimming);
-   checkpoints every 1000; `GET /documents/:id/text?at=<seq>`; "view as of here"; group
-   diffs and reverts rebuilt from checkpoints; automatic snapshots removed.
-2. **Squashing and forget history.** The background job, `document_history`, readers
-   that merge both tiers, the admin action.
-3. **Edit journal and `HISTORY` frames.** Real offline times, the offline mark.
-4. **Measure** on real notes; tune `CHECKPOINT_EVERY_CHANGES` and `RAW_CHANGE_DAYS`.
+1. **Checkpoints and reading any point in time.** Done: changes are kept, checkpoints
+   every 1000, `GET /documents/:id/text?at=<seq>`, "Document then", diffs and reverts
+   rebuilt from checkpoints, automatic snapshots removed.
+2. **Squashing and forget history.** Done: `document_history`, the hourly job
+   (`squash_history`), readers that merge both tiers and skip raw records a squashed
+   group covers, checkpoints inside a squashed group replaced by one at its end, and
+   `POST /documents/:id/history/forget` (admin, audited).
+3. **Edit journal and `HISTORY` frames.** Done: `PROTOCOL.md` §3.7. Offline changes are
+   marked, timed when made (clamped), with the arrival time kept beside it.
+4. **Measure.** Done: typing measured at 534 writes a minute, which led to folding live
+   typing (above): ~8 records a minute. Defaults kept.

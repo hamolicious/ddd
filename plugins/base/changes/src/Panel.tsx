@@ -52,9 +52,12 @@ export function ChangesPanel({
   client,
   confirm,
   navigate,
+  isAdmin,
 }: {
   readonly documentId: string;
   readonly viewing: Viewing | undefined;
+  /** Admins get "Forget this note's history". */
+  readonly isAdmin: boolean;
   readonly client: SnapshotsClient;
   readonly confirm: (request: ConfirmRequest) => Promise<boolean>;
   readonly navigate: (path: string) => void;
@@ -238,6 +241,30 @@ export function ChangesPanel({
           {busy === "older" ? "Loading…" : "Show older"}
         </button>
       )}
+
+      {isAdmin && groups !== undefined && (
+        <button
+          type="button"
+          className="chg:tap-h chg:mt-2 chg:cursor-pointer chg:self-start chg:rounded chg:border-0 chg:bg-transparent chg:px-0 chg:text-xs chg:text-danger chg:underline"
+          disabled={busy !== undefined}
+          onClick={(event) => {
+            void confirm({
+              title: "Forget this note's history?",
+              description:
+                "Every change and snapshot of this note is deleted for good; the note itself stays as it is. Use it when something was typed that should not be kept.",
+              confirmLabel: "Forget history",
+              danger: true,
+              anchor: event.currentTarget,
+            }).then((ok) => {
+              if (!ok) return;
+              run("forget", () => client.forget(documentId), "History forgotten.");
+              if (viewing !== undefined) navigate(doc);
+            });
+          }}
+        >
+          Forget this note's history
+        </button>
+      )}
     </div>
   );
 }
@@ -265,6 +292,8 @@ function ChangeRow({
         </span>
         <Quiet>
           {group.reverts ? "Reverted an earlier change · " : ""}
+          {group.squashed ? "merged · " : ""}
+          {group.offline ? "offline · " : ""}
           <span className="chg:text-success">+{group.inserted_chars}</span>{" "}
           <span className="chg:text-danger">−{group.removed_chars}</span> · {edits}
         </Quiet>

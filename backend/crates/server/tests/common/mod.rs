@@ -82,6 +82,8 @@ pub fn test_config(mongo_uri: String, database: String) -> Config {
         trust_proxy_headers: false,
         trash_retention_days: 3,
         checkpoint_every_changes: 3,
+        raw_change_days: 30,
+        history_squash_interval: Duration::from_secs(3600),
         invite_ttl_days: 7,
         session_idle_days: 30,
         session_absolute_days: 180,

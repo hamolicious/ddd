@@ -347,6 +347,7 @@ All CRDT and awareness traffic is **binary** WebSocket frames:
 | `0x03` | `UPDATE` | both | an incremental Yjs update, encoding v1 |
 | `0x04` | `AWARENESS` | both | `awarenessProtocol.encodeAwarenessUpdate(...)` — **relayed opaquely, never parsed, never persisted** |
 | `0x05` | `AWARENESS_QUERY` | client → server | empty; asks the server to re-relay nothing (no-op in M2; reserved so presence UI in v2 needs no new frame type) |
+| `0x06` | `HISTORY` | client → server | an edit made offline: 8 bytes big-endian epoch ms (when it was made), then a Yjs update, encoding v1 (§3.7) |
 | `0x10`–`0x1F` | reserved | — | plugin event channels (M4). A client must ignore unknown types ≥ `0x10`; the server closes **4400** on unknown types < `0x10` |
 
 This is deliberately *not* the y-websocket framing: that protocol muxes nothing
@@ -468,6 +469,23 @@ unsubscribed from, is dropped.
 `code` ∈ `invalid_id` | `not_found` | `gone` | `too_many_subscriptions` |
 `malformed_update` | `too_large` | `contended` | `internal`. `retryable: true`
 means "the same subscribe may succeed later" (`contended`, `internal`).
+
+### 3.7 Offline edits and their times (`HISTORY`)
+
+Edits made while a document's subscription is down are kept by the client in an **edit
+journal**: `{ at, update }` entries, edits closer than 2 s merged into one entry timed
+at its first. The journal is saved with the local replica, so it survives a reload.
+
+On (re)subscribe the client sends the journal, oldest first, as `HISTORY` frames
+**before** any `SYNC_STEP2` of its own, then clears it. The server applies each like an
+`UPDATE` and records it in the document's history (`docs/HISTORY.md`) at the claimed
+time, clamped between the previous change's time and now, marked offline, with the
+time it arrived kept beside it. The fan-out to other subscribers is an ordinary `UPDATE`.
+
+The handshake's `SYNC_STEP2` stays the safety net: a journal that was lost (site data
+cleared, an older client) still reaches the server through it, and then the change is
+marked offline and stamped when it arrived. A `HISTORY` frame shorter than 8 bytes is
+`doc.error { code: "malformed_update" }`.
 
 ---
 

@@ -45,6 +45,12 @@ export const FrameType = {
   Update: 0x03,
   Awareness: 0x04,
   AwarenessQuery: 0x05,
+  /**
+   * An edit made while offline, with when it was made: 8 bytes of big-endian epoch
+   * milliseconds, then a Yjs update (encoding v1). Client → server, sent on reconnect
+   * before the state-vector exchange (PROTOCOL.md §3.7).
+   */
+  History: 0x06,
 } as const;
 
 export type FrameType = (typeof FrameType)[keyof typeof FrameType];
@@ -421,4 +427,19 @@ export function encodeControl(message: ClientControl): string {
 /** `true` when the close code must stop the reconnect loop. */
 export function isTerminalClose(code: number): boolean {
   return TERMINAL_CLOSE_CODES.includes(code);
+}
+
+/** A `HISTORY` payload: when the edit was made, then the update. */
+export function encodeHistory(madeAtMs: number, update: Uint8Array): Uint8Array {
+  const out = new Uint8Array(8 + update.length);
+  new DataView(out.buffer).setBigUint64(0, BigInt(Math.max(0, Math.floor(madeAtMs))));
+  out.set(update, 8);
+  return out;
+}
+
+/** The inverse of {@link encodeHistory}; `undefined` for a payload too short to hold a time. */
+export function decodeHistory(payload: Uint8Array): { madeAtMs: number; update: Uint8Array } | undefined {
+  if (payload.length < 8) return undefined;
+  const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+  return { madeAtMs: Number(view.getBigUint64(0)), update: payload.subarray(8) };
 }

@@ -92,7 +92,7 @@ async function fixture(options: DocHydratorOptions = {}, docs: string[] = [DOC])
         socket.deliverBinary(doc.step2(frame.payload));
         continue;
       }
-      if (frame.type === FrameType.SyncStep2 || frame.type === FrameType.Update) {
+      if (frame.type === FrameType.SyncStep2 || frame.type === FrameType.Update || frame.type === FrameType.History) {
         doc.apply(frame);
       }
     }
@@ -352,6 +352,94 @@ describe("editing", () => {
     expect(handle.text.toString()).toContain("server line");
     expect(server.get(DOC)!.text.toString()).toBe(handle.text.toString());
     expect(hydrator.pendingCount).toBe(0);
+  });
+
+  it("journals offline edits with when they were made, and sends them before its diff", async () => {
+    const now = vi.spyOn(Date, "now");
+    now.mockReturnValue(1_000);
+    const { socket, hydrator, transport, server, serve } = await fixture();
+    const opening = hydrator.open(DOC);
+    await settle();
+    serve();
+    const handle = await opening;
+
+    socket.serverClose(1001, "network gone");
+    hydrator.onDisconnected();
+    now.mockReturnValue(10_000);
+    handle.text.insert(0, "a");
+    now.mockReturnValue(11_500); // within the merge window: the same entry
+    handle.text.insert(1, "b");
+    now.mockReturnValue(60_000); // a new entry
+    handle.text.insert(2, "c");
+    expect(hydrator.pendingCount).toBe(3);
+
+    const reconnected = await connect(transport);
+    hydrator.resubscribeAll();
+    reconnected.deliver({
+      t: "doc.subscribed",
+      id: DOC,
+      materialized_version: "v1",
+      updated_at: "2026-09-24T09:00:00.000Z",
+      deleted: false,
+    });
+    await settle();
+    reconnected.deliverBinary(server.get(DOC)!.step1());
+    const sent = reconnected.sentBinary.splice(0);
+    const kinds = sent.map((frame) => frame.type);
+    // The journal goes first; the diff after it is the safety net.
+    expect(kinds.filter((kind) => kind === FrameType.History)).toHaveLength(2);
+    const lastHistory = kinds.lastIndexOf(FrameType.History);
+    const firstStep2 = kinds.indexOf(FrameType.SyncStep2);
+    expect(firstStep2 === -1 || firstStep2 > lastHistory).toBe(true);
+    for (const frame of sent) if (frame.type !== FrameType.SyncStep1) server.get(DOC)!.apply(frame);
+
+    expect(server.get(DOC)!.history.map((entry) => entry.madeAtMs)).toEqual([10_000, 60_000]);
+    expect(server.get(DOC)!.history.map((entry) => entry.text)).toEqual(["ab", "abc"]);
+    expect(server.get(DOC)!.text.toString()).toBe("abc");
+    expect(hydrator.pendingCount).toBe(0);
+    now.mockRestore();
+  });
+
+  it("keeps the journal across a reload, times and all", async () => {
+    const now = vi.spyOn(Date, "now");
+    now.mockReturnValue(1_000);
+    const persistence = new MemoryDocPersistence();
+    const first = await fixture({ persistence, persistDebounceMs: 0 });
+    const opening = first.hydrator.open(DOC);
+    await settle();
+    first.serve();
+    const handle = await opening;
+
+    first.socket.serverClose(1001, "network gone");
+    first.hydrator.onDisconnected();
+    now.mockReturnValue(20_000);
+    handle.text.insert(0, "written offline, then the tab closed\n");
+    await settle();
+    expect(persistence.states.get(DOC)?.unsynced).toBe(true);
+    expect(persistence.states.get(DOC)?.journal?.map((entry) => entry.at)).toEqual([20_000]);
+
+    // A new page: a new hydrator over the same local store, back online.
+    now.mockReturnValue(90_000);
+    const second = await fixture({ persistence, persistDebounceMs: 0 });
+    second.server.get(DOC)!.apply({ type: FrameType.Update, docId: DOC, payload: first.server.get(DOC)!.step2(new Uint8Array([0])).payload });
+    const reopening = second.hydrator.open(DOC);
+    await settle();
+    expect(second.hydrator.pendingCount).toBe(1);
+    second.socket.deliver({
+      t: "doc.subscribed",
+      id: DOC,
+      materialized_version: "v1",
+      updated_at: "2026-09-24T09:00:00.000Z",
+      deleted: false,
+    });
+    await settle();
+    second.serve();
+    await reopening;
+
+    expect(second.server.get(DOC)!.history.map((entry) => entry.madeAtMs)).toEqual([20_000]);
+    expect(second.server.get(DOC)!.text.toString()).toContain("written offline");
+    expect(second.hydrator.pendingCount).toBe(0);
+    now.mockRestore();
   });
 
   it("answers doc.resync with a fresh state vector", async () => {

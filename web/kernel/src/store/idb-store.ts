@@ -30,7 +30,7 @@ import type { FeedRow } from "../protocol.js";
 // Type-only: `DocPersistence` is the hydrator's contract for this store's `docs`
 // half (web/CONTRACTS.md, area web-store). Erased at build time — `store/` still
 // has no runtime edge to `sync/`.
-import type { DocPersistence } from "../sync/doc-hydration.js";
+import type { DocPersistence, DocReplicaMeta, StoredReplica } from "../sync/doc-hydration.js";
 import {
   EMPTY_CHECKPOINT,
   type AppliedRows,
@@ -71,6 +71,8 @@ export interface StoredDocState {
    * (the conservative direction: a redundant prompt, never a lost edit).
    */
   readonly unsynced?: boolean;
+  /** The offline edits in `state`, with when they were made (`docs/HISTORY.md`). */
+  readonly journal?: readonly { readonly at: number; readonly lastAt: number; readonly update: Uint8Array }[];
 }
 
 export interface LifeManagerDb extends DBSchema {
@@ -442,20 +444,23 @@ export class IdbDocPersistence implements DocPersistence {
    * path uses, where "did this hold unsynced edits?" is the whole question and
    * bumping the LRU of a document that is about to be deleted would be nonsense.
    */
-  async peek(id: string): Promise<{ state: Uint8Array; unsynced?: boolean } | undefined> {
+  async peek(id: string): Promise<StoredReplica | undefined> {
     const row = await this.store.db.get(STORE_DOCS, id);
     if (!row) return undefined;
-    return row.unsynced === undefined
-      ? { state: row.state }
-      : { state: row.state, unsynced: row.unsynced };
+    return {
+      state: row.state,
+      ...(row.unsynced === undefined ? {} : { unsynced: row.unsynced }),
+      ...(row.journal === undefined ? {} : { journal: row.journal }),
+    };
   }
 
-  async save(id: string, state: Uint8Array, meta?: { readonly unsynced: boolean }): Promise<void> {
+  async save(id: string, state: Uint8Array, meta?: DocReplicaMeta): Promise<void> {
     await this.store.db.put(STORE_DOCS, {
       id,
       state,
       touchedAt: this.#stamp(),
       unsynced: meta?.unsynced ?? false,
+      ...(meta?.journal && meta.journal.length > 0 ? { journal: meta.journal } : {}),
     });
   }
 

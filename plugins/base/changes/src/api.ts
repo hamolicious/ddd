@@ -35,6 +35,10 @@ export interface ChangeGroup {
   readonly removed_excerpt: string;
   /** Set when this group is a revert: the group it undid. */
   readonly reverts?: { readonly from_seq: number; readonly to_seq: number };
+  /** Older history, kept as the group's net effect rather than every write. */
+  readonly squashed: boolean;
+  /** Some of it was made offline and carried over on reconnect; the times are when it was made. */
+  readonly offline: boolean;
 }
 
 export interface ChangesPage {
@@ -73,6 +77,8 @@ export interface SnapshotsClient {
   revert(documentId: string, from: number, to: number): Promise<void>;
   /** The whole text as it was after update `seq`. */
   textAt(documentId: string, seq: number): Promise<string>;
+  /** Admin only: wipe the history; the text stays. */
+  forget(documentId: string): Promise<void>;
 }
 
 export function createSnapshotsClient(fetchApi: ApiFetch): SnapshotsClient {
@@ -100,6 +106,9 @@ export function createSnapshotsClient(fetchApi: ApiFetch): SnapshotsClient {
       (await (await fetchApi(`/documents/${id(documentId)}/changes/${from}/${to}`)).json()) as ChangeDetail,
     revert: async (documentId, from, to) => {
       await fetchApi(`/documents/${id(documentId)}/changes/${from}/${to}/revert`, { method: "POST" });
+    },
+    forget: async (documentId) => {
+      await fetchApi(`/documents/${id(documentId)}/history/forget`, { method: "POST" });
     },
     textAt: async (documentId, seq) =>
       ((await (await fetchApi(`/documents/${id(documentId)}/text?at=${seq}`)).json()) as { content: string }).content,
