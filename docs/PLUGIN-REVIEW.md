@@ -39,7 +39,7 @@ browser's device toolbar at 390 × 844, and 844 × 390 for landscape.
 | 19 | `admin` | [ ] | Reviewed per tab, 19a–19g |
 | 19a | ↳ Users | [x] | Icon buttons, aligned cells, phone label, reset is a link |
 | 19b | ↳ Invites | [x] | Full invite link (`#/invite/<token>`), icon buttons, Revoke asks first |
-| 19c | ↳ Audit log | [ ] | |
+| 19c | ↳ Audit log | [x] | No changes |
 | 19d | ↳ Orphan files | [ ] | |
 | 19e | ↳ Snapshots | [ ] | |
 | 19f | ↳ Plugins | [ ] | |
@@ -532,14 +532,14 @@ The "lost token" note is gone.
 
 **Where to see it.** `#/admin/audit`; "Show the audit log" in the palette.
 
-- [ ] Recent actions are listed newest first, with the action, who, the target and
+- [x] Recent actions are listed newest first, with the action, who, the target and
   detail.
-- [ ] Filter by action (e.g. `document.delete`), by actor and by target; Clear resets
+- [x] Filter by action (e.g. `document.delete`), by actor and by target; Clear resets
   all three.
-- [ ] "Load more" pages further back, and keeps the filters.
-- [ ] Something you just did (trash a document, create an invite) appears.
+- [x] "Load more" pages further back, and keeps the filters.
+- [x] Something you just did (trash a document, create an invite) appears.
 
-**Notes.**
+**Notes.** No changes.
 
 ### 19d. Orphan files
 
