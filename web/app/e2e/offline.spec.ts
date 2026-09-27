@@ -576,9 +576,114 @@ test("a file pasted offline waits on the device and goes in on reconnect", async
     data.items.add(new File(["total: 4.20\n"], "receipt.txt", { type: "text/plain" }));
     editor.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
   });
-  await expect(page.locator(".cm-content")).toContainText(/Uploading receipt\.txt when back online… #[0-9a-f]{8}/, { timeout: 20_000 });
+  await expect(page.locator(".cm-content")).toContainText(/!\[Uploading receipt\.txt…\]\(attachment:\/\/waiting-[0-9a-f]{8}\)/, { timeout: 20_000 });
 
   await net.online();
   await expect.poll(() => rawText(request, baseURL!, id), { timeout: 30_000 }).toMatch(/\[receipt\.txt\]\(attachment:\/\/[0-9A-Z]{26}\)/);
   expect(await rawText(request, baseURL!, id)).not.toContain("Uploading");
+});
+
+test("several files pasted offline all wait, and all go in on reconnect", async ({ page, context, request, baseURL }) => {
+  const id = await createDocument(request, baseURL!, "# Scans\n\n");
+  const net = await network(page, context);
+  await signIn(page, ADMIN);
+  await openDocument(page, id);
+  await page.getByRole("tab", { name: /^Edit/ }).click();
+  await expect(page.locator(".cm-content")).toContainText("Scans");
+  await net.offline();
+
+  const paste = (names: readonly string[]) =>
+    page.locator(".cm-content").evaluate((editor, list) => {
+      const data = new DataTransfer();
+      for (const name of list) data.items.add(new File([`${name}\n`], name, { type: "text/plain" }));
+      editor.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+    }, names);
+
+  await page.locator(".cm-content").click();
+  await page.keyboard.press("ControlOrMeta+End");
+  // Three in one paste, then one more on its own.
+  await paste(["a.txt", "b.txt", "c.txt"]);
+  for (const name of ["a", "b", "c"]) {
+    await expect(page.locator(".cm-content")).toContainText(new RegExp(`Uploading ${name}\\.txt…\\]\\(attachment://waiting-[0-9a-f]{8}\\)`), { timeout: 20_000 });
+  }
+  await page.keyboard.press("ControlOrMeta+End");
+  await page.keyboard.press("Enter");
+  await paste(["d.txt"]);
+  await expect(page.locator(".cm-content")).toContainText(/Uploading d\.txt…\]\(attachment:\/\/waiting-[0-9a-f]{8}\)/, { timeout: 20_000 });
+
+  await net.online();
+  for (const name of ["a", "b", "c", "d"]) {
+    await expect
+      .poll(() => rawText(request, baseURL!, id), { timeout: 30_000 })
+      .toMatch(new RegExp(`\\[${name}\\.txt\\]\\(attachment://[0-9A-Z]{26}\\)`));
+  }
+  expect(await rawText(request, baseURL!, id)).not.toContain("Uploading");
+});
+
+test("files attached with /attach offline all wait, two picks in a row", async ({ page, context, request, baseURL }) => {
+  const id = await createDocument(request, baseURL!, "# Picks\n\n");
+  const net = await network(page, context);
+  await signIn(page, ADMIN);
+  await openDocument(page, id);
+  await page.getByRole("tab", { name: /^Edit/ }).click();
+  await expect(page.locator(".cm-content")).toContainText("Picks");
+  await net.offline();
+
+  const attach = async (names: readonly string[]) => {
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("ControlOrMeta+End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("/attach");
+    const chooser = page.waitForEvent("filechooser");
+    await page.keyboard.press("Enter");
+    await (await chooser).setFiles(names.map((name) => ({ name, mimeType: "text/plain", buffer: Buffer.from(`${name}\n`) })));
+  };
+
+  await attach(["p.txt", "q.txt"]);
+  for (const name of ["p", "q"]) {
+    await expect(page.locator(".cm-content")).toContainText(new RegExp(`Uploading ${name}\\.txt…`), { timeout: 20_000 });
+  }
+  await attach(["r.txt"]);
+  await expect(page.locator(".cm-content")).toContainText(/Uploading r\.txt…/, { timeout: 20_000 });
+
+  await net.online();
+  for (const name of ["p", "q", "r"]) {
+    await expect
+      .poll(() => rawText(request, baseURL!, id), { timeout: 30_000 })
+      .toMatch(new RegExp(`\\[${name}\\.txt\\]\\(attachment://[0-9A-Z]{26}\\)`));
+  }
+});
+
+test("an image pasted offline is shown from the device while it waits", async ({ page, context, request, baseURL }) => {
+  const id = await createDocument(request, baseURL!, "# Photos\n\n");
+  const net = await network(page, context);
+  await signIn(page, ADMIN);
+  await openDocument(page, id);
+  await page.getByRole("tab", { name: /^Edit/ }).click();
+  await expect(page.locator(".cm-content")).toContainText("Photos");
+  await net.offline();
+
+  await page.locator(".cm-content").click();
+  await page.keyboard.press("ControlOrMeta+End");
+  // A 1×1 PNG.
+  const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+  await page.locator(".cm-content").evaluate((editor, base64) => {
+    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+    const data = new DataTransfer();
+    data.items.add(new File([bytes], "dot.png", { type: "image/png" }));
+    editor.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+  }, png);
+  await expect(page.locator(".cm-content")).toContainText(/attachment:\/\/waiting-[0-9a-f]{8}/, { timeout: 20_000 });
+
+  // Read mode draws the picture from the device, and says it has not gone up yet.
+  await page.getByRole("tab", { name: /^Read/ }).click();
+  const read = page.getByRole("tabpanel", { name: "Read" });
+  await expect(read.locator("[data-waiting-upload] img")).toHaveAttribute("src", /^blob:/);
+  await expect(read).toContainText(/uploads when you are back online/i);
+  await expect(read).not.toContainText("Uploading dot.png");
+
+  await net.online();
+  await expect.poll(() => rawText(request, baseURL!, id), { timeout: 30_000 }).toMatch(/!\[dot\.png\]\(attachment:\/\/[0-9A-Z]{26}\)/);
+  await expect(read.locator("[data-waiting-upload]")).toHaveCount(0, { timeout: 20_000 });
+  await expect(read.locator("img")).toHaveCount(1);
 });

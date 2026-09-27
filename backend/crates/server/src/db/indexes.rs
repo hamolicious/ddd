@@ -46,6 +46,10 @@ const LOGIN_ATTEMPT_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 /// - `login_attempts`: `{email: 1, created_at: -1}`, `{ip: 1, created_at: -1}`,
 ///   TTL on `created_at` (window + a margin).
 /// - `attachments`: `sha256`, `deleted_at`, `updated_at`.
+/// - `attachments.files` / `attachments.chunks` (GridFS): the driver's own two,
+///   declared under the driver's names so creating them is a no-op wherever the
+///   driver got there first; chunked uploads write chunks before any file exists.
+/// - `uploads`: `user_id`, `expires_at` (the sweep).
 /// - `audit_log`: `{created_at: -1}`, `{actor: 1, created_at: -1}`,
 ///   `{target_id: 1}`.
 ///
@@ -264,6 +268,31 @@ pub fn all() -> Vec<IndexSpec> {
             super::ATTACHMENTS,
             "attachments_updated_at",
             doc! { "updated_at": -1 },
+            None,
+        ),
+        // GridFS: exactly what the driver creates on a bucket's first upload (same
+        // keys, same generated names, no options), because a chunked upload's
+        // chunks may be the first thing ever written to the bucket.
+        index(
+            super::GRIDFS_FILES,
+            "filename_1_uploadDate_1",
+            doc! { "filename": 1, "uploadDate": 1 },
+            None,
+        ),
+        index(
+            super::GRIDFS_CHUNKS,
+            "files_id_1_n_1",
+            doc! { "files_id": 1, "n": 1 },
+            None,
+        ),
+        // ---- uploads ----------------------------------------------------
+        // Not a TTL index: an expired session's chunks must go with it, which the
+        // maintenance sweep does (`routes/uploads.rs`).
+        index(super::UPLOADS, "uploads_user", doc! { "user_id": 1 }, None),
+        index(
+            super::UPLOADS,
+            "uploads_expires_at",
+            doc! { "expires_at": 1 },
             None,
         ),
         // ---- audit log --------------------------------------------------

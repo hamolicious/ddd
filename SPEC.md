@@ -142,7 +142,7 @@ Supporting collections:
 
 **Migrations:** `meta.schema_version`; ordered idempotent migrations run at boot under an advisory lock; server refuses to start if DB is newer than the binary. All indexes declared in one list, created idempotently at boot.
 
-**Limits (hard, enforced, client-visible errors):** document text ≤ 1 MB (Mongo's 16 MB ceiling stays far away; `crdt` monitored, compacted aggressively above 4 MB, alerting above 8 MB; GridFS spill is the named escape hatch). Attachments ≤ `MAX_ATTACHMENT_BYTES` (default 25 MB), streamed to GridFS without buffering, MIME sniff-checked.
+**Limits (hard, enforced, client-visible errors):** document text ≤ 1 MB (Mongo's 16 MB ceiling stays far away; `crdt` monitored, compacted aggressively above 4 MB, alerting above 8 MB; GridFS spill is the named escape hatch). Attachments ≤ `MAX_ATTACHMENT_BYTES` (default 100 MB; `0` is no limit), streamed to GridFS without buffering, MIME sniff-checked.
 
 ### 3.6 Attachments
 
@@ -199,7 +199,7 @@ All under `/api`, authenticated (session cookie or bearer token). WebSocket is t
 | `PATCH /api/documents/:id` | Body-text-level only: `{"content": …}` replaces text. **No `fm`/`plugins` patching** — machines write via `%%%` splices or own whole documents (§3.3). |
 | `DELETE /api/documents/:id` | Tombstone → Trash (30 d) → purge; id → graveyard forever. |
 
-Attachments: `POST /api/attachments` (streamed multipart), `GET /:id` (+`/meta`), `PUT /:id` (`If-Match` revision), `DELETE /:id`, `GET /` (admin/orphans).
+Attachments: `POST /api/attachments` (streamed multipart), `GET /:id` (+`/meta`), `PUT /:id` (`If-Match` revision), `DELETE /:id`, `GET /` (admin/orphans). Chunked, resumable uploads: `POST /api/uploads` (`{name, size}` → a session), `GET /:id` (where it is), `PATCH /:id?offset=n` (the next chunk; 409 when `n` is not where the server is), `POST /:id/complete` (the attachment, as `POST /api/attachments` answers), `DELETE /:id`; an unfinished upload is swept a day after its last chunk.
 
 Auth: `register` (first user → admin; else invite token), `login` (returns session cookie, or bearer token for shells), `logout`, `me`, `POST /api/auth/password` (change, requires current).
 
@@ -303,7 +303,7 @@ Their genuine niche: **cron while nobody's looking, outbound HTTP with secrets, 
 | `doc-list` | Browse/sort/filter and **search** (the list, ranked; **default provider = the local index**, server provider as fallback/integration); "new document"; **Trash view** (restore, 30 d) | `search.provider` |
 | `folders` | Tree from `fm.path` (normalized `/` segments, `.`/`..`/empty stripped, case-sensitive, duplicate names allowed — docs are id-addressed); move = fm splice; "new document here" | — |
 | `markdown` | Parse/render pipeline (§6.6); resolves `attachment://` (embeds through the winning `markdown.attachment` renderer, else its own image / chip) and **`doc://<ulid>`** (renders target title, navigates; `![](doc://…)` embeds the target's body, nested to a per-user depth, default 4, cycles become links); "promote to document" command on embedded attachments (§3.6) | `markdown.*` |
-| `attachments` | Files pasted, dropped or `/attach`ed into the editor are uploaded and embedded as a preview or a link, chosen per file extension; shows embeds through a viewer per extension (user's pick when several claim one) | `attachments.viewer` |
+| `attachments` | Files pasted, dropped or `/attach`ed into the editor are uploaded in resumable chunks (a notice per file: progress bar, destination, time left, Pause/Cancel/Open) and embedded as a preview or a link, chosen per file extension; shows embeds through a viewer per extension (user's pick when several claim one) | `attachments.viewer` |
 | `slash-commands` | Type `/` in any editor for a menu of actions; editors publish an editor-neutral `text.surface` (caret, text before it, insert there) while mounted | `text.surface`, `slash.command` |
 | `native-preview` | Viewers for what a browser shows by itself: images, PDF, audio, video, plain text (never SVG or HTML) | — |
 | `document-surface` | Owns the document route + **mode registry**; `viewer`/`editor` are symmetric contributions | `document.mode` |

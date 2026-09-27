@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { extensionOf, knownExtensions, pasteAs, placeholder, reference, schema, settingKey } from "./kinds.js";
+import { extensionOf, knownExtensions, pasteAs, reference, schema, settingKey } from "./kinds.js";
+import { waitingPlaceholder, waitingToken } from "./queue.js";
 
 describe("extensionOf", () => {
   it("reads the name, lower case", () => {
@@ -52,6 +53,12 @@ describe("text", () => {
 
   it("keeps brackets and line breaks out of the label", () => {
     expect(reference("[x]\ny.png", "01J", "link")).toBe("[xy.png](attachment://01J)");
-    expect(placeholder("[x].png")).toBe("[Uploading x.png…]");
+    expect(waitingPlaceholder("[x].png", "1a2b3c4d")).toBe("![Uploading x.png…](attachment://waiting-1a2b3c4d)");
+  });
+
+  it("reads the token back out of a placeholder's id, and nothing out of a real one", () => {
+    expect(waitingToken("waiting-1a2b3c4d")).toBe("1a2b3c4d");
+    expect(waitingToken("01J0000000000000000000000A")).toBeUndefined();
+    expect(waitingToken("waiting-")).toBeUndefined();
   });
 });

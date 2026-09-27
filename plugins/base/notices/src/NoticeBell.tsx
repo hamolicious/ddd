@@ -77,13 +77,17 @@ export function NoticeBell({ kernel }: { readonly kernel: Kernel }): ReactNode {
    *
    * Once, too: a re-render, or a plugin that throws on every paint and pushes the same
    * aggregate notice again, must not re-open a panel the user closed.
+   *
+   * **Not for a notice with a progress bar.** An upload per pasted file would otherwise
+   * open the panel over the editor at every paste. The bar under the bell (below) says
+   * something is under way, and the panel has the rest.
    */
   useEffect(() => {
     const previous = announced.current ?? new Set<string>();
     // Only the ids still on the list are remembered, so a notice that was dismissed and
     // later raised again is a new one rather than one the user has already answered.
     announced.current = new Set(notices.map((notice) => notice.id));
-    if (notices.some((notice) => !previous.has(notice.id))) setOpen(true);
+    if (notices.some((notice) => !previous.has(notice.id) && !notice.progress)) setOpen(true);
   }, [notices]);
 
   useEffect(() => {
@@ -103,6 +107,8 @@ export function NoticeBell({ kernel }: { readonly kernel: Kernel }): ReactNode {
   }, [open]);
 
   if (count === 0) return null;
+
+  const running = notices.flatMap((notice) => (notice.progress ? [clamp01(notice.progress.value)] : []));
 
   const worst = notices.some((notice) => notice.level === "error")
     ? "error"
@@ -144,6 +150,15 @@ export function NoticeBell({ kernel }: { readonly kernel: Kernel }): ReactNode {
         <span className="notices:sr-only">
           {count} notice{count === 1 ? "" : "s"}
         </span>
+        {/* Something under way: a bar under the bell, so it shows with the panel closed. */}
+        {running.length > 0 ? (
+          <span aria-hidden="true" className="notices:absolute notices:inset-x-1.5 notices:bottom-1 notices:h-[3px] notices:overflow-hidden notices:rounded-full notices:bg-border">
+            <span
+              className="notices:block notices:h-full notices:bg-accent notices:transition-[width] notices:duration-300"
+              style={{ width: `${(running.reduce((total, value) => total + value, 0) / running.length) * 100}%` }}
+            />
+          </span>
+        ) : null}
       </button>
       <div id={panelId} className="notices-panel notices:absolute notices:right-0 notices:top-[calc(100%+var(--lm-space)*0.5)] notices:z-25 notices:max-h-[calc(var(--lm-viewport-height)*0.6)] notices:w-[min(26rem,calc(100vw-var(--lm-space)*2))] notices:overflow-y-auto notices:rounded-lg notices:border notices:border-border notices:bg-bg-raised notices:p-2 notices:shadow-2 notices:compact:inset-x-2 notices:compact:w-auto notices:compact:pb-[calc(var(--lm-space)+var(--lm-safe-bottom))] notices:[&_li]:border-b notices:[&_li]:border-border notices:[&_li]:py-1.5 notices:[&_li:last-child]:border-b-0 notices:[&_pre]:mt-1 notices:[&_pre]:max-w-full notices:[&_pre]:overflow-x-auto notices:[&_pre]:whitespace-pre-wrap notices:[&_ul]:m-0 notices:[&_ul]:list-none notices:[&_ul]:p-0" hidden={!open} role="group" aria-label="Notices">
         <ul>
@@ -168,10 +183,38 @@ export function NoticeBell({ kernel }: { readonly kernel: Kernel }): ReactNode {
                   </button>
                 ))}
               </p>
+              {notice.progress ? <ProgressBar value={notice.progress.value} label={notice.progress.label} /> : null}
             </li>
           ))}
         </ul>
       </div>
     </div>
   );
+}
+
+/** Along the bottom of a notice: how far its work has got, and the label under the bar. */
+function ProgressBar({ value, label }: { readonly value: number; readonly label?: string }): ReactNode {
+  const share = clamp01(value);
+  return (
+    <div
+      className="notices:mt-1.5 notices:flex notices:flex-col notices:gap-0.5"
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(share * 100)}
+      aria-valuetext={label}
+    >
+      <span className="notices:block notices:h-1 notices:overflow-hidden notices:rounded-full notices:bg-border">
+        <span
+          className="notices:block notices:h-full notices:rounded-full notices:bg-accent notices:transition-[width] notices:duration-300"
+          style={{ width: `${share * 100}%` }}
+        />
+      </span>
+      {label ? <span className="notices:self-end notices:text-sm notices:text-text-muted notices:tabular-nums">{label}</span> : null}
+    </div>
+  );
+}
+
+function clamp01(value: number): number {
+  return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
 }

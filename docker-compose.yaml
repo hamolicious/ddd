@@ -73,7 +73,7 @@ services:
       BIND_ADDR: 0.0.0.0:8080
       # Required, >= 32 bytes, no default (SPEC §5.2). Rotating it logs everyone out.
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required and must be at least 32 bytes}
-      MAX_ATTACHMENT_BYTES: ${MAX_ATTACHMENT_BYTES:-26214400}
+      MAX_ATTACHMENT_BYTES: ${MAX_ATTACHMENT_BYTES:-104857600}
       # Origin allowlist: CORS *and* the mandatory WebSocket origin check. Since M3 the
       # server serves the PWA itself, so its own origin must be in here or the page loads
       # and the socket is refused with 403 before it authenticates (PROTOCOL.md §1.2).

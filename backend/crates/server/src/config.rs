@@ -10,8 +10,8 @@ use thiserror::Error;
 
 /// Default Mongo database name.
 pub const DEFAULT_DATABASE: &str = "life_manager";
-/// Default attachment size cap (SPEC §3.5).
-pub const DEFAULT_MAX_ATTACHMENT_BYTES: u64 = 25 * 1024 * 1024;
+/// Default attachment size cap (SPEC §3.5). `0` in the environment means no cap.
+pub const DEFAULT_MAX_ATTACHMENT_BYTES: u64 = 100 * 1024 * 1024;
 /// Minimum `SESSION_SECRET` length in bytes (SPEC §5.2). No default value exists.
 pub const MIN_SESSION_SECRET_BYTES: usize = 32;
 /// Default listen address.
@@ -53,7 +53,8 @@ pub struct Config {
     // ---- optional, with defaults ----
     /// `MONGO_DATABASE`, default [`DEFAULT_DATABASE`].
     pub mongo_database: String,
-    /// `MAX_ATTACHMENT_BYTES`, default 25 MiB (SPEC §3.5).
+    /// `MAX_ATTACHMENT_BYTES`, default 100 MiB (SPEC §3.5); `0` is no cap. Read it
+    /// through [`Config::attachment_limit`].
     pub max_attachment_bytes: u64,
     /// `MAX_DOCUMENT_BYTES`, default 1 MiB (SPEC §3.5); clamped to the shared
     /// core's hard cap.
@@ -229,6 +230,11 @@ pub enum ConfigError {
 }
 
 impl Config {
+    /// The largest attachment accepted, or `None` when `MAX_ATTACHMENT_BYTES` is `0`.
+    pub fn attachment_limit(&self) -> Option<u64> {
+        (self.max_attachment_bytes > 0).then_some(self.max_attachment_bytes)
+    }
+
     /// Read and validate the environment. Loads a `.env` file first when present
     /// (dev convenience; never overrides real env vars).
     ///
@@ -309,7 +315,10 @@ impl Config {
             trash_retention_days: parse_var("TRASH_RETENTION_DAYS", 30u32)?,
             checkpoint_every_changes: parse_var("CHECKPOINT_EVERY_CHANGES", 1000u32)?,
             raw_change_days: parse_var("RAW_CHANGE_DAYS", 30u32)?,
-            history_squash_interval: Duration::from_secs(parse_var("HISTORY_SQUASH_INTERVAL_SECS", 3600u64)?),
+            history_squash_interval: Duration::from_secs(parse_var(
+                "HISTORY_SQUASH_INTERVAL_SECS",
+                3600u64,
+            )?),
             invite_ttl_days: parse_var("INVITE_TTL_DAYS", 7u32)?,
             session_idle_days: parse_var("SESSION_IDLE_DAYS", 30u32)?,
             session_absolute_days: parse_var("SESSION_ABSOLUTE_DAYS", 180u32)?,
@@ -672,6 +681,14 @@ mod tests {
         let secret = SessionSecret::new(vec![b'a'; 32]).expect("valid");
         assert_eq!(format!("{secret:?}"), "SessionSecret(<redacted>)");
         assert!(!format!("{secret:?}").contains("aaaa"));
+    }
+
+    #[test]
+    fn a_zero_attachment_limit_means_no_limit() {
+        let mut config = config_with_origins(&[]);
+        assert_eq!(config.attachment_limit(), Some(100 * 1024 * 1024));
+        config.max_attachment_bytes = 0;
+        assert_eq!(config.attachment_limit(), None);
     }
 
     fn config_with_origins(origins: &[&str]) -> Config {

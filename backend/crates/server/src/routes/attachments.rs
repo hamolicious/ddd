@@ -2,7 +2,7 @@
 //!
 //! Hard rules, not negotiable:
 //! - Streamed to GridFS **without buffering** the whole file; over
-//!   `MAX_ATTACHMENT_BYTES` → 413.
+//!   `MAX_ATTACHMENT_BYTES` → 413 (`0` is no limit).
 //! - MIME is **sniffed** from the bytes, never taken from the client.
 //! - `nosniff` on every response; `Content-Disposition: attachment` except for
 //!   [`INLINE_SAFE_TYPES`]. `image/svg+xml` is **never** served inline.
@@ -20,6 +20,9 @@
 //! | DELETE | `/api/attachments/:id` | explicit deletion, audited |
 //! | GET | `/api/attachments` | admin listing |
 //! | GET/POST | `/api/attachments/orphans[/scan]` | admin orphan view; never deletes |
+//!
+//! A file can also arrive in chunks, resumably: `/api/uploads` (`uploads.rs`), which
+//! ends in the same row and the same answer as `POST /api/attachments`.
 
 use std::collections::BTreeMap;
 
@@ -186,12 +189,12 @@ pub struct OrphanView {
 }
 
 /// The bytes after a successful stream into GridFS.
-struct StoredBlob {
-    gridfs_id: Bson,
-    name: String,
-    mime: String,
-    size: u64,
-    sha256: String,
+pub(crate) struct StoredBlob {
+    pub gridfs_id: Bson,
+    pub name: String,
+    pub mime: String,
+    pub size: u64,
+    pub sha256: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -205,18 +208,38 @@ pub async fn upload(
     Query(params): Query<UploadParams>,
     multipart: Multipart,
 ) -> AppResult<Response> {
-    let wrapper_path = match params.path.as_deref() {
-        Some(raw) if raw.len() > MAX_WRAPPER_PATH_BYTES => {
-            return Err(AppError::bad_request(format!(
-                "path is limited to {MAX_WRAPPER_PATH_BYTES} bytes"
-            )));
-        }
-        Some(raw) => normalize_folder_path(raw),
-        None => None,
-    };
+    let wrapper_path = wrapper_path(params.path.as_deref())?;
+    let blob = store_upload(&state, multipart, upload_limit(&state)).await?;
+    let (view, document_id) =
+        record_upload(&state, &user, blob, params.wrapper, wrapper_path.as_deref()).await?;
+    Ok(created(view, document_id))
+}
 
-    let limit = state.config().max_attachment_bytes;
-    let blob = store_upload(&state, multipart, limit).await?;
+/// `MAX_ATTACHMENT_BYTES` as a byte budget: no cap is a budget nothing reaches.
+fn upload_limit(state: &AppState) -> u64 {
+    state.config().attachment_limit().unwrap_or(u64::MAX)
+}
+
+/// The `path` a wrapper document goes in, validated and normalized.
+pub(crate) fn wrapper_path(raw: Option<&str>) -> AppResult<Option<String>> {
+    match raw {
+        Some(raw) if raw.len() > MAX_WRAPPER_PATH_BYTES => Err(AppError::bad_request(format!(
+            "path is limited to {MAX_WRAPPER_PATH_BYTES} bytes"
+        ))),
+        Some(raw) => Ok(normalize_folder_path(raw)),
+        None => Ok(None),
+    }
+}
+
+/// Give stored bytes their `attachments` row, and the wrapper document when asked
+/// for one. Shared by the one-request upload and the chunked one (`uploads.rs`).
+pub(crate) async fn record_upload(
+    state: &AppState,
+    user: &AuthUser,
+    blob: StoredBlob,
+    wrapper: bool,
+    wrapper_path: Option<&str>,
+) -> AppResult<(AttachmentView, Option<Id>)> {
     let actor = user.actor();
     let now = BsonDateTime::now();
 
@@ -243,15 +266,14 @@ pub async fn upload(
         .await
     {
         // Never leave bytes behind that no row points at.
-        discard_blob(&state, blob.gridfs_id).await;
+        discard_blob(state, blob.gridfs_id).await;
         return Err(err.into());
     }
 
     let view = AttachmentView::from(attachment);
-    let reference = attachment_reference(&view.id);
 
-    let document_id = if params.wrapper {
-        let text = wrapper_document_text(&view, wrapper_path.as_deref());
+    let document_id = if wrapper {
+        let text = wrapper_document_text(&view, wrapper_path);
         let outcome = state
             .docs
             .create(None, &text, &actor)
@@ -262,8 +284,14 @@ pub async fn upload(
         None
     };
 
+    Ok((view, document_id))
+}
+
+/// `201 Created` for a new attachment, `Location` pointing at its bytes.
+pub(crate) fn created(view: AttachmentView, document_id: Option<Id>) -> Response {
     let location = format!("/api/attachments/{}", view.id);
-    Ok((
+    let reference = attachment_reference(&view.id);
+    (
         StatusCode::CREATED,
         [(header::LOCATION, location)],
         Json(UploadResponse {
@@ -273,7 +301,7 @@ pub async fn upload(
             document_id,
         }),
     )
-        .into_response())
+        .into_response()
 }
 
 /// `GET /api/attachments/:id` — streams the bytes with the safe-serving headers.
@@ -337,8 +365,7 @@ pub async fn replace(
     let expected_revision = parse_if_match(&headers)?;
     let existing = load_attachment(&state, &id).await?;
 
-    let limit = state.config().max_attachment_bytes;
-    let blob = store_upload(&state, multipart, limit).await?;
+    let blob = store_upload(&state, multipart, upload_limit(&state)).await?;
 
     // Identical bytes auto-resolve, revision mismatch or not (SPEC §3.6).
     if blob.sha256 == existing.sha256 {
@@ -840,7 +867,7 @@ async fn load_attachment(state: &AppState, id: &str) -> AppResult<Attachment> {
 
 /// Drop GridFS bytes nothing references any more. Best effort: a failure here is
 /// a storage leak for the orphan view to surface, never a failed request.
-async fn discard_blob(state: &AppState, gridfs_id: Bson) {
+pub(crate) async fn discard_blob(state: &AppState, gridfs_id: Bson) {
     if let Err(err) = state.collections.gridfs().delete(gridfs_id.clone()).await {
         tracing::warn!(?gridfs_id, error = %err, "failed to delete gridfs blob");
     }

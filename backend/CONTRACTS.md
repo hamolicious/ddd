@@ -506,7 +506,7 @@ Hard requirements:
   `core::filter::mongo::compile`, and reject invalid filters with 400. Never pass
   client JSON to Mongo.
 - Attachments: streamed to GridFS without buffering, `MAX_ATTACHMENT_BYTES` →
-  413, **MIME sniffed** from bytes, `X-Content-Type-Options: nosniff` on every
+  413 (`0` is no limit; read it through `Config::attachment_limit`), **MIME sniffed** from bytes, `X-Content-Type-Options: nosniff` on every
   response, `Content-Disposition: attachment` except `INLINE_SAFE_TYPES` —
   `image/svg+xml` is never inline. Replace requires `If-Match: <revision>`;
   mismatch → 409; identical `sha256` auto-resolves. Deletion is explicit; orphans
@@ -545,7 +545,7 @@ pub async fn seed::already_seeded(state: &AppState) -> AppResult<bool>;
 Hard requirements (SPEC §3.5, §5.2, §8):
 
 - `SESSION_SECRET` is **required, ≥ 32 bytes, no default**; the server refuses to
-  start without it. `MONGO_URI` required. `MAX_ATTACHMENT_BYTES` default 25 MiB.
+  start without it. `MONGO_URI` required. `MAX_ATTACHMENT_BYTES` default 100 MiB, `0` for no limit.
 - Migrations: ordered, idempotent, run at boot under an **advisory lock**; the
   server refuses to start if `meta.schema_version` is newer than the binary.
 - **All indexes in one list** (`db::indexes::all`), created idempotently at boot.

@@ -80,11 +80,21 @@ copy. A note not copied yet is readable and says "has not been copied to this de
 
 ## 8. Uploading files offline
 
-A file pasted or attached offline is kept on the device (IndexedDB, up to 100 MB in total)
-and its placeholder stays, reading "Uploading *name* when back online… #token". On
-reconnect it uploads and the placeholder becomes the link or preview, in whichever note
-holds it, even after a reload. Over the limit it is refused as before. Signing out deletes
-waiting files.
+Every file pasted or attached is kept on the device (IndexedDB, up to 100 MB in total) until
+the server has all of it, and goes up in chunks (`/api/uploads`): a dropped connection, a
+pause or a reload carries on from the last chunk the server kept. Over the 100 MB a file
+still uploads, from memory, and a reload loses it. Each upload has a notice with a progress
+bar, where the file goes, the time left, and Pause, Cancel and Open.
+
+A file pasted or attached offline is kept on the device the same way
+and its placeholder stays: an embed of `attachment://waiting-<token>` whose alt text reads
+"Uploading *name*…" (the same placeholder an online upload has while its request runs, so
+nothing is rewritten when the connection turns out to be gone). Read mode shows the file
+from the device meanwhile
+(an image as the image, anything linked as a chip), noting it is on this device only; a
+device without the file says it has not been uploaded yet. The server ignores the id, as it
+is not a ULID. On reconnect it uploads and the placeholder becomes the link or preview, in whichever note
+holds it, even after a reload. Signing out deletes waiting files.
 
 ## 9. Server-only screens offline
 

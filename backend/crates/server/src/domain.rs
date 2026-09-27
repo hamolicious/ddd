@@ -683,6 +683,41 @@ impl From<Attachment> for AttachmentView {
     }
 }
 
+/// Collection `uploads` — a chunked upload on its way in (SPEC §3.6,
+/// `routes/uploads.rs`). The bytes received so far are already GridFS chunks of
+/// `gridfs_id`; the GridFS file record and the [`Attachment`] row are written when
+/// it completes. The row outlives completion (with `attachment_id` set) so a client
+/// that lost the answer can ask again, and is swept `expires_at` after its last use.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UploadSession {
+    #[serde(rename = "_id")]
+    pub id: Id,
+    /// Only this user may add to, finish, or cancel it.
+    pub user_id: Id,
+    /// Sanitized filename.
+    pub name: String,
+    /// Declared total size; the upload is complete when `offset` reaches it.
+    pub size: u64,
+    /// Bytes received and stored so far.
+    pub offset: u64,
+    /// The GridFS file id the chunks belong to.
+    pub gridfs_id: bson::Bson,
+    /// The first bytes, kept for MIME sniffing at completion.
+    pub head: Binary,
+    /// Create a wrapper document on completion, in folder `path`.
+    #[serde(default)]
+    pub wrapper: bool,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub path: Option<String>,
+    /// Set once completed.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub attachment_id: Option<Id>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub document_id: Option<Id>,
+    pub created_at: BsonDateTime,
+    pub expires_at: BsonDateTime,
+}
+
 // ---------------------------------------------------------------------------
 // audit log, meta
 // ---------------------------------------------------------------------------

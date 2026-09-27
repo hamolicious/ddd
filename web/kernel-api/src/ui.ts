@@ -162,6 +162,17 @@ export interface NoticeAction {
 }
 
 /**
+ * Something under way, drawn as a bar along the bottom of its notice. Update it by
+ * notifying the same id again.
+ */
+export interface NoticeProgress {
+  /** 0 to 1. */
+  readonly value: number;
+  /** Beside the bar, e.g. the time left. */
+  readonly label?: string;
+}
+
+/**
  * One line in the notice strip. The kernel uses it for the aggregated
  * failed-plugin notice and the single "update available — reload" flow (SPEC §8);
  * plugins use it for anything a user must be told once.
@@ -173,6 +184,8 @@ export interface Notice {
   readonly message: string;
   readonly detail?: string;
   readonly actions?: readonly NoticeAction[];
+  /** A notice about work in progress (an upload, say) carries how far it has got. */
+  readonly progress?: NoticeProgress;
   /** Set by the kernel when the notice is about a plugin. */
   readonly pluginId?: string;
 }

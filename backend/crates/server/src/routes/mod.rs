@@ -8,6 +8,7 @@
 //! /api/auth/*                      -> auth.rs
 //! /api/documents*                  -> documents.rs              (authenticated)
 //! /api/attachments*                -> attachments.rs            (authenticated)
+//! /api/uploads*                    -> uploads.rs                (authenticated)
 //! /api/admin/*                     -> admin.rs                  (admin only)
 //! /api/sync, /api/sync/bootstrap   -> sync.rs                   (authenticated)
 //! /api/plugins                     -> statics.rs                (authenticated)
@@ -29,6 +30,7 @@ pub mod plugin_api;
 pub mod shell;
 pub mod statics;
 pub mod sync;
+pub mod uploads;
 
 use std::time::Duration;
 
@@ -57,6 +59,7 @@ pub fn router(state: AppState, metrics: PrometheusHandle) -> Router {
         .nest("/auth", auth::router())
         .nest("/documents", documents::router())
         .nest("/attachments", attachments::router())
+        .nest("/uploads", uploads::router())
         .nest("/admin", admin::router())
         // M4: plugin management lives beside the rest of admin but in its own file —
         // `plugin_api.rs` owns both halves of the plugin HTTP surface (the admin screens

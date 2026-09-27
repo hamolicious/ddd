@@ -11,6 +11,11 @@
  * the API URL: the Android shell authenticates with a bearer token a `src` cannot carry
  * (SPEC §5.2). One URL per attachment for the life of the page, like `markdown`'s cache,
  * so a re-render never flickers.
+ *
+ * **A file not uploaded yet** (`attachment://waiting-<token>`, `queue.ts`) is shown from
+ * this device — uploading now, or kept until a connection returns: the same viewer, the
+ * local bytes, and a line saying which. Without `frame`: downloading or promoting a file the server does not have
+ * would only fail. On a device that does not hold it, it is a chip saying so.
  */
 
 import { OFFLINE_COPY_HEADER } from "../../_shared/offline-copy.js";
@@ -24,6 +29,7 @@ import {
   type MarkdownAttachmentProps,
 } from "../../_shared/points.js";
 import { extensionOf, viewKey } from "./kinds.js";
+import { onQueueChange, transfers, waiting, waitingToken, type TransferState, type WaitingUpload } from "./queue.js";
 
 export interface FileMeta {
   readonly name: string;
@@ -131,7 +137,96 @@ export function createAttachmentView(kernel: Kernel, viewers: Viewers): Componen
     version += 1;
   });
 
-  return function AttachmentView({ id, placement, fallback, frame }: MarkdownAttachmentProps): ReactNode {
+  /** One object URL per waiting file for the life of the page, so a re-render never flickers. */
+  const urls = new Map<string, string>();
+  const urlOf = (entry: WaitingUpload): string => {
+    let url = urls.get(entry.token);
+    if (!url) {
+      url = URL.createObjectURL(entry.blob);
+      urls.set(entry.token, url);
+    }
+    return url;
+  };
+
+  /** On its way from this tab, else kept on this device (another tab has it), else not here. */
+  const findWaiting = async (token: string): Promise<Found | null> => {
+    const now = transfers.get(token);
+    if (now) return { entry: now.entry, state: now.state, sent: now.sent };
+    const kept = await waiting.get(token).catch(() => undefined);
+    return kept ? { entry: kept, state: "offline", sent: 0 } : null;
+  };
+
+  function WaitingFile({ token, placement, alt }: { token: string; placement: "inline" | "page"; alt?: string }): ReactNode {
+    useSyncExternalStore(viewers.subscribe, () => version);
+    const [found, setFound] = useState<Found | null | undefined>(undefined);
+    useEffect(() => {
+      let live = true;
+      const look = (): void => {
+        void findWaiting(token).then((value) => {
+          if (live) setFound(value);
+        });
+      };
+      look();
+      // It moves from uploading to waiting when the upload finds no connection.
+      const off = onQueueChange(look);
+      return () => {
+        live = false;
+        off();
+      };
+    }, [token]);
+
+    if (found === undefined) {
+      return (
+        <span className="attachments:italic attachments:text-text-muted" aria-busy="true">
+          loading file…
+        </span>
+      );
+    }
+    if (!found) {
+      // Pasted on another device, which has not uploaded it yet.
+      const name = alt?.replace(/^Uploading (.*?)(?: when back online)?…$/, "$1") || "A file";
+      return (
+        <span className="attachments:inline-flex attachments:items-center attachments:gap-1 attachments:rounded-lg attachments:border attachments:border-dashed attachments:border-border attachments:bg-bg-subtle attachments:px-2 attachments:py-1 attachments:text-text-muted">
+          <span aria-hidden="true">⭘</span> {name} — not uploaded yet from the device it was added on
+        </span>
+      );
+    }
+
+    const { entry } = found;
+    const url = urlOf(entry);
+    const note = (
+      <span className="attachments:text-sm attachments:text-text-muted" role="status">
+        <span aria-hidden="true">⏳</span>{" "}
+        {noteFor(found)}
+      </span>
+    );
+    const extension = entry.as === "preview" ? extensionOf(entry.name, entry.type) : undefined;
+    const choice = extension ? viewers.resolve(extension) : undefined;
+    if (!choice) {
+      return (
+        <span className="attachments:inline-flex attachments:flex-wrap attachments:items-center attachments:gap-2">
+          <span className="attachments:inline-flex attachments:items-center attachments:gap-1 attachments:rounded-lg attachments:border attachments:border-border attachments:bg-bg-subtle attachments:px-2 attachments:py-1">
+            <span aria-hidden="true">🗎</span> {entry.name}
+          </span>
+          {note}
+        </span>
+      );
+    }
+    const View = guard(choice.viewer, choice.pluginId);
+    return (
+      <span className="attachments:inline-flex attachments:max-w-full attachments:flex-col attachments:gap-1" data-waiting-upload={token}>
+        <View
+          file={{ id: `waiting-${token}`, name: entry.name, mime: entry.type, size: entry.blob.size }}
+          blob={entry.blob}
+          url={url}
+          placement={placement}
+        />
+        {note}
+      </span>
+    );
+  }
+
+  function UploadedFile({ id, placement, fallback, frame }: MarkdownAttachmentProps): ReactNode {
     useSyncExternalStore(viewers.subscribe, () => version);
 
     const [meta, setMeta] = useState<FileMeta | null | undefined>(undefined);
@@ -180,5 +275,35 @@ export function createAttachmentView(kernel: Kernel, viewers: Viewers): Componen
         placement={placement}
       />,
     );
+  }
+
+  return function AttachmentView(props: MarkdownAttachmentProps): ReactNode {
+    const token = waitingToken(props.id);
+    return token === undefined ? (
+      <UploadedFile {...props} />
+    ) : (
+      <WaitingFile token={token} placement={props.placement} {...(props.alt === undefined ? {} : { alt: props.alt })} />
+    );
   };
+}
+
+interface Found {
+  readonly entry: WaitingUpload;
+  readonly state: TransferState;
+  readonly sent: number;
+}
+
+/** Under a file that is not on the server yet: how far it has got. */
+function noteFor({ entry, state, sent }: Found): string {
+  const share = entry.blob.size > 0 ? Math.floor((sent / entry.blob.size) * 100) : 0;
+  switch (state) {
+    case "uploading":
+      return share > 0 ? `Uploading… ${String(share)}%` : "Uploading…";
+    case "queued":
+      return "Waiting to upload";
+    case "paused":
+      return `Upload paused at ${String(share)}%`;
+    case "offline":
+      return "On this device only — uploads when you are back online";
+  }
 }

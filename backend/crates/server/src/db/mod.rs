@@ -17,7 +17,7 @@ use crate::domain::{
     Attachment, AuditEntry, Document, DocumentChange, DocumentCheckpoint, DocumentHistory,
     DocumentSnapshot,
     DocumentUpdate, GraveyardEntry, Invite,
-    LoginAttempt, PasswordReset, SchemaMeta, Session, User,
+    LoginAttempt, PasswordReset, SchemaMeta, Session, UploadSession, User,
 };
 
 pub const DOCUMENTS: &str = "documents";
@@ -33,6 +33,7 @@ pub const INVITES: &str = "invites";
 pub const PASSWORD_RESETS: &str = "password_resets";
 pub const LOGIN_ATTEMPTS: &str = "login_attempts";
 pub const ATTACHMENTS: &str = "attachments";
+pub const UPLOADS: &str = "uploads";
 pub const AUDIT_LOG: &str = "audit_log";
 pub const META: &str = "meta";
 /// Reserved for M4 (plugin host); indexes are not created before then.
@@ -42,6 +43,13 @@ pub const PLUGIN_CONFIG: &str = "plugin_config";
 
 /// GridFS bucket holding attachment bytes (SPEC §3.6).
 pub const GRIDFS_BUCKET: &str = "attachments";
+/// The bucket's two collections. Named here because chunked uploads
+/// (`routes/uploads.rs`) write chunks and the file record themselves.
+pub const GRIDFS_FILES: &str = "attachments.files";
+pub const GRIDFS_CHUNKS: &str = "attachments.chunks";
+/// Size of one GridFS chunk: the driver's default, stated so that chunked uploads
+/// can cut the same chunks the driver does.
+pub const GRIDFS_CHUNK_BYTES: u32 = 255 * 1024;
 
 /// `_id` of the single `meta` document holding the schema version.
 pub const META_SCHEMA_ID: &str = "schema";
@@ -181,6 +189,10 @@ impl Collections {
         self.db.collection(ATTACHMENTS)
     }
 
+    pub fn uploads(&self) -> Collection<UploadSession> {
+        self.db.collection(UPLOADS)
+    }
+
     pub fn audit_log(&self) -> Collection<AuditEntry> {
         self.db.collection(AUDIT_LOG)
     }
@@ -194,6 +206,7 @@ impl Collections {
         self.db.gridfs_bucket(
             mongodb::options::GridFsBucketOptions::builder()
                 .bucket_name(GRIDFS_BUCKET.to_string())
+                .chunk_size_bytes(GRIDFS_CHUNK_BYTES)
                 .build(),
         )
     }

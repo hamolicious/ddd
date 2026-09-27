@@ -151,10 +151,27 @@ function NoticeStrip({
           <button type="button" aria-label="Dismiss" onClick={() => onDismiss(notice.id)}>
             ×
           </button>
+          {notice.progress ? (
+            <div
+              className="lm-notice-progress"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(clamp01(notice.progress.value) * 100)}
+              aria-valuetext={notice.progress.label}
+            >
+              <span style={{ width: `${clamp01(notice.progress.value) * 100}%` }} />
+              {notice.progress.label ? <small>{notice.progress.label}</small> : null}
+            </div>
+          ) : null}
         </li>
       ))}
     </ul>
   );
+}
+
+function clamp01(value: number): number {
+  return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
 }
 
 /**

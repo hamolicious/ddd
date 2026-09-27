@@ -87,7 +87,3 @@ export function reference(name: string, id: string, as: PasteAs): string {
   return `${as === "preview" ? "!" : ""}[${label}](attachment://${id})`;
 }
 
-/** What sits in the text while the upload runs. Plain text in both modes. */
-export function placeholder(name: string): string {
-  return `[Uploading ${name.replace(/[[\]\r\n]/g, "")}…]`;
-}

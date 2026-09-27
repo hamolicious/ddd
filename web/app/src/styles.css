@@ -178,6 +178,28 @@ summary {
   white-space: pre-wrap;
 }
 
+/* A notice's progress: a bar along the bottom of it, the label under the bar's end. */
+.lm-notice-progress {
+  flex: 1 0 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  background: linear-gradient(var(--lm-border), var(--lm-border)) top / 100% 4px no-repeat;
+}
+
+.lm-notice-progress > span {
+  align-self: flex-start;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--lm-accent);
+  transition: width 0.3s ease-out;
+}
+
+.lm-notice-progress > small {
+  color: var(--lm-text-muted);
+}
+
 /* ---- boot, auth, empty states ------------------------------------------ */
 
 .lm-boot,

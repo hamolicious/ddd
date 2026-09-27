@@ -144,7 +144,7 @@ annotated copy-me file; [`../dev-docs/resolved/OPERATIONS.md`](../dev-docs/resol
 | `COOKIE_SECURE` | `true` | Set `false` only for plain-http local dev. |
 | `LOG_FORMAT` | `json` | `json` (deployed) or `pretty` (local). |
 | `RUST_LOG` | `info` | Standard `tracing` filter. |
-| `MAX_ATTACHMENT_BYTES` | 25 MiB | Enforced by a streaming counter, never by buffering. |
+| `MAX_ATTACHMENT_BYTES` | 100 MiB | `0` is no limit. Enforced by a streaming counter, never by buffering; a chunked upload (`/api/uploads`) is checked against it before its first chunk. |
 | `MAX_DOCUMENT_BYTES` | 1 MiB | May only be *lowered*; the shared core's 1 MiB cap is the ceiling. |
 
 ### Tuning (defaults match the spec; safe to omit)

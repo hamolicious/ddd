@@ -113,7 +113,7 @@ boot failure, not a warning.** A value that is set but empty counts as unset.
 
 | Variable | Default | Notes |
 |---|---|---|
-| `MAX_ATTACHMENT_BYTES` | `26214400` (25 MiB) | Streamed to GridFS; over the cap → 413. |
+| `MAX_ATTACHMENT_BYTES` | `104857600` (100 MiB) | Streamed to GridFS; over the cap → 413. `0` is no limit. |
 | `MAX_DOCUMENT_BYTES` | `1048576` (1 MiB) | Document text cap. **Clamped to the shared core's 1 MiB** — it can only be lowered, because client and server must agree on what is too large. |
 | `CRDT_COMPACT_THRESHOLD_BYTES` | `4194304` (4 MiB) | Compact a document's CRDT blob above this. |
 | `CRDT_ALERT_THRESHOLD_BYTES` | `8388608` (8 MiB) | Alert above this — watch `lm_documents_oversized`. |

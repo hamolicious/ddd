@@ -129,6 +129,7 @@ export {
   type ColorSchemePreference,
   type Notice,
   type NoticeAction,
+  type NoticeProgress,
   type NoticeLevel,
   type ThemeTokenName,
   type ThemeTokens,

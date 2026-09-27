@@ -243,7 +243,7 @@ async fn shutdown(grace: Duration) {
 
 /// Periodic housekeeping that belongs to no single request: gauge sampling,
 /// Prometheus upkeep (the recorder needs it to expire idle metrics), and the
-/// login rate limiter's sweep.
+/// login rate limiter's sweep, and expired chunked uploads.
 async fn maintenance_loop(state: AppState, metrics: metrics_exporter_prometheus::PrometheusHandle) {
     let mut ticker = tokio::time::interval(MAINTENANCE_INTERVAL);
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -259,5 +259,6 @@ async fn maintenance_loop(state: AppState, metrics: metrics_exporter_prometheus:
         telemetry::sample_gauges(&state).await;
         metrics.run_upkeep();
         state.login_limiter.sweep();
+        routes::uploads::sweep_expired(&state).await;
     }
 }
