@@ -20,22 +20,22 @@ test("plugin rows are compact, with icon actions and details on demand", async (
   await expect(page.getByText("If a plugin breaks the app:")).toBeVisible();
   await expect(page.getByText("Choose a package")).toBeVisible();
 
-  const toggle = page.getByRole("button", { name: "Details for Snapshots" });
-  await expect(page.getByRole("button", { name: "Disable Snapshots" })).toBeVisible();
+  const toggle = page.getByRole("button", { name: "Details for Changes" });
+  await expect(page.getByRole("button", { name: "Disable Changes" })).toBeVisible();
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
-  await expect(page.locator("#admin-plugin-details-snapshots")).toBeHidden();
+  await expect(page.locator("#admin-plugin-details-changes")).toBeHidden();
   await toggle.click();
-  const details = page.locator("#admin-plugin-details-snapshots");
+  const details = page.locator("#admin-plugin-details-changes");
   await expect(details).toBeVisible();
   await expect(details.getByText("Depends on")).toBeVisible();
-  await expect(details.getByText("context-menu ^1.0, shell-ui ^1.0")).toBeVisible();
+  await expect(details.getByText("context-menu ^1.0, markdown ^1.0, router ^1.0, shell-ui ^1.0")).toBeVisible();
 
-  await page.getByRole("button", { name: "Uninstall Snapshots" }).click();
-  const modal = page.getByRole("dialog", { name: "Uninstall Snapshots?" });
+  await page.getByRole("button", { name: "Uninstall Changes" }).click();
+  const modal = page.getByRole("dialog", { name: "Uninstall Changes?" });
   await expect(modal.getByText("?safe=bare")).toBeVisible();
   const purge = modal.getByRole("checkbox", { name: "Also delete its data" });
   await expect(purge).not.toBeChecked();
   await modal.getByRole("button", { name: "Cancel" }).click();
   await expect(modal).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Disable Snapshots" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Disable Changes" })).toBeVisible();
 });

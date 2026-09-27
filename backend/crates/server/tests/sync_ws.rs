@@ -268,7 +268,6 @@ fn base_config() -> Option<(Config, metrics_exporter_prometheus::PrometheusHandl
                 "integration-test-session-secret-at-least-32-bytes",
             );
             std::env::set_var("APP_ORIGIN", ORIGIN);
-            std::env::set_var("SEED_WELCOME_DOCS", "false");
             std::env::set_var("BIND_ADDR", "127.0.0.1:0");
         }
         true

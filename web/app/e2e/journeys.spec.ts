@@ -32,15 +32,16 @@ import {
 /**
  * What `plugins/base/dist` holds, plus the one example plugin the suite installs.
  *
- * The 20 of SPEC §6.5's table plus `extra-task-states`. M4's two proof plugins
+ * The 21 of SPEC §6.5's table plus `extra-task-states`. M4's two proof plugins
  * (`calendar`, `agenda`) were removed on 2026-09-24; on 2026-09-26 `header` was split
  * out of `shell-ui`, `notices` and `sync-status` out of `header`, `context-menu` out of
  * `folders`, and `properties` was removed; `search` was folded into `doc-list`;
  * `attachments`, `native-preview` and `slash-commands` were added; on 2026-09-27
- * `snapshots` moved out of `admin` into a plugin of its own. The base distribution and `BASE_PLUGIN_IDS` —
- * what `?safe=1` boots — are the same twenty. `safe-mode.spec.ts` is what pins that.
+ * `snapshots` moved out of `admin` into a plugin of its own, since renamed `changes`;
+ * `welcome` replaced the server's own first-run seeding. The base distribution and `BASE_PLUGIN_IDS` —
+ * what `?safe=1` boots — are the same twenty-one. `safe-mode.spec.ts` is what pins that.
  */
-const EXPECTED_PLUGINS = 21;
+const EXPECTED_PLUGINS = 22;
 
 /**
  * `--lm-bg` as the `midnight` theme paints it (`plugins/base/themes/src/index.tsx`).
@@ -82,8 +83,7 @@ test("registering the first user boots the whole plugin distribution", async ({
   await expect(page.getByRole("navigation", { name: "Main" })).toBeVisible();
   await expect(page.getByRole("link", { name: /skip to content/i })).toBeAttached();
 
-  // First run seeds deletable welcome documents demonstrating frontmatter, `fm.path`,
-  // task lists and a directive (SPEC §6.5).
+  // First run: the `welcome` plugin fills the empty workspace with its tour.
   //
   // Scoped to the main region, not the whole page. The assertion means "`doc-list` is
   // showing them", and any sidebar plugin that links the same documents by title is
@@ -92,8 +92,15 @@ test("registering the first user boots the whole plugin distribution", async ({
   const main = page.locator("#shell-main");
   for (const title of [
     "Welcome to Life Manager",
+    "Writing in markdown",
     "Tasks and lists",
+    "Properties",
     "Folders come from frontmatter",
+    "Embedding notes",
+    "Files and images",
+    "Finding things",
+    "History and changes",
+    "Keyboard and commands",
     "Directives and machine sections",
   ]) {
     await expect(main.getByRole("button", { name: title, exact: true })).toBeVisible();

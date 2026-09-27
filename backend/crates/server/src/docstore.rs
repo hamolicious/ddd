@@ -52,7 +52,9 @@ use yrs::{Doc, GetString, OffsetKind, Options, ReadTxn, StateVector, Text, Trans
 
 use crate::db;
 use crate::domain::{
-    Actor, AuditEntry, Document, DocumentRow, DocumentSnapshot, DocumentUpdate, Id, is_valid_id,
+    Actor, AuditEntry, Document, DocumentChange, DocumentCheckpoint, DocumentRow, DocumentSnapshot,
+    DocumentUpdate, Id,
+    StoredHunk, is_valid_id,
     new_id,
 };
 use crate::telemetry::names;
@@ -83,18 +85,14 @@ pub const ROOM_IDLE_TIMEOUT: Duration = Duration::from_secs(600);
 pub const UPDATE_LOG_KEEP_BYTES: u64 = 1024 * 1024;
 /// Per-document update-log retention, entries (SPEC §3.5).
 pub const UPDATE_LOG_KEEP_COUNT: u32 = 200;
+/// A full-text checkpoint after this many changes (`docs/HISTORY.md`).
+pub const CHECKPOINT_EVERY_CHANGES: u32 = 1000;
 /// Compact the `crdt` blob aggressively above this size (SPEC §3.5).
 pub const CRDT_COMPACT_THRESHOLD_BYTES: u64 = 4 * 1024 * 1024;
 /// Alert above this `crdt` size (SPEC §3.5).
 pub const CRDT_ALERT_THRESHOLD_BYTES: u64 = 8 * 1024 * 1024;
-/// Snapshots always kept, newest first (SPEC §3.5).
-pub const SNAPSHOT_KEEP_RECENT: usize = 20;
-/// Beyond [`SNAPSHOT_KEEP_RECENT`], keep one snapshot per day for this many days.
-pub const SNAPSHOT_KEEP_DAILY_DAYS: i64 = 30;
 /// A document sits in Trash this long before it is purged (SPEC §3.5).
 pub const TRASH_RETENTION_DAYS: i64 = 30;
-/// "First edit after quiescence" threshold for the snapshot policy.
-pub const SNAPSHOT_QUIESCENCE: Duration = Duration::from_secs(600);
 /// Default page size when a [`ListQuery`] does not set one.
 pub const DEFAULT_PAGE_LIMIT: u32 = 50;
 /// Hard page-size ceiling (the route clamps too).
@@ -144,6 +142,8 @@ pub struct DocStoreTuning {
     pub crdt_alert_threshold_bytes: u64,
     /// Days a tombstone sits in Trash before purge (`TRASH_RETENTION_DAYS`).
     pub trash_retention_days: i64,
+    /// A checkpoint after this many changes (`CHECKPOINT_EVERY_CHANGES`).
+    pub checkpoint_every_changes: u32,
 }
 
 impl Default for DocStoreTuning {
@@ -157,6 +157,7 @@ impl Default for DocStoreTuning {
             crdt_compact_threshold_bytes: CRDT_COMPACT_THRESHOLD_BYTES,
             crdt_alert_threshold_bytes: CRDT_ALERT_THRESHOLD_BYTES,
             trash_retention_days: TRASH_RETENTION_DAYS,
+            checkpoint_every_changes: CHECKPOINT_EVERY_CHANGES,
         }
     }
 }
@@ -174,6 +175,7 @@ impl DocStoreTuning {
             crdt_compact_threshold_bytes: config.crdt_compact_threshold_bytes,
             crdt_alert_threshold_bytes: config.crdt_alert_threshold_bytes,
             trash_retention_days: i64::from(config.trash_retention_days),
+            checkpoint_every_changes: config.checkpoint_every_changes.max(1),
         }
     }
 }
@@ -338,6 +340,10 @@ pub enum DocStoreError {
     Contended(Id),
     #[error("snapshot {0} not found")]
     SnapshotNotFound(Id),
+    /// No checkpoint at or before `seq`, or the changes after it do not replay: the
+    /// history cannot say what the text was then.
+    #[error("the history of {0} cannot be rebuilt at seq {1}")]
+    HistoryGap(Id, i64),
     /// A [`DocStore::splice`] closure declined to produce edits for the text it was shown.
     /// The caller's own message, because only the caller knows what it was trying to write.
     #[error("the splice is not representable: {0}")]
@@ -471,6 +477,25 @@ pub trait DocStore: Send + Sync + 'static {
     /// Snapshots for a document, newest first.
     async fn snapshots(&self, id: &str) -> Result<Vec<DocumentSnapshot>, DocStoreError>;
 
+    /// Recorded changes, newest first: those with `seq < before` when given, at most
+    /// `limit` of them.
+    async fn changes(
+        &self,
+        id: &str,
+        before: Option<i64>,
+        limit: i64,
+    ) -> Result<Vec<DocumentChange>, DocStoreError>;
+
+    /// Every recorded change with `seq >= from`, oldest first.
+    async fn changes_since(&self, id: &str, from: i64) -> Result<Vec<DocumentChange>, DocStoreError>;
+
+    /// The text as it was after update `seq`: the nearest checkpoint at or before it,
+    /// then the recorded changes up to it (at most `CHECKPOINT_EVERY_CHANGES` of them).
+    async fn text_at(&self, id: &str, seq: i64) -> Result<String, DocStoreError>;
+
+    /// Mark the change written at `seq` as the revert of changes `from..=to`.
+    async fn note_revert(&self, id: &str, seq: i64, from: i64, to: i64) -> Result<(), DocStoreError>;
+
     /// One snapshot of a document, with its text.
     async fn snapshot_by_id(&self, id: &str, snapshot_id: &str) -> Result<DocumentSnapshot, DocStoreError>;
 
@@ -548,10 +573,8 @@ struct RoomState {
     pending_actor: Option<String>,
     /// Timestamp of the most recent unflushed write.
     pending_updated_at: Option<BsonDateTime>,
-    /// Epoch millis of the newest snapshot, when known.
-    last_snapshot_ms: Option<i64>,
-    /// Epoch millis of the previous write (snapshot quiescence policy).
-    last_write_ms: i64,
+    /// Changes recorded since the newest checkpoint.
+    changes_since_checkpoint: u32,
 }
 
 impl Room {
@@ -778,16 +801,21 @@ impl MongoDocStoreInner {
         // The log may have carried the document past its last materialization.
         let dirty = text != stored.content;
 
-        let newest_snapshot = self
+        let checkpoint_seq = self
             .collections
-            .document_snapshots()
+            .document_checkpoints()
             .find(doc! { "document_id": id })
-            .sort(doc! { "created_at": -1 })
+            .sort(doc! { "seq": -1 })
             .limit(1)
             .await?
             .try_next()
             .await?
-            .map(|snapshot| snapshot.created_at.timestamp_millis());
+            .map_or(0, |checkpoint| checkpoint.seq);
+        let changes_since_checkpoint = self
+            .collections
+            .document_changes()
+            .count_documents(doc! { "document_id": id, "seq": { "$gt": checkpoint_seq } })
+            .await? as u32;
 
         Ok(Room {
             id: id.to_string(),
@@ -802,8 +830,7 @@ impl MongoDocStoreInner {
                 stored_title: stored.title,
                 pending_actor: None,
                 pending_updated_at: None,
-                last_snapshot_ms: newest_snapshot,
-                last_write_ms: stored.updated_at.timestamp_millis(),
+                changes_since_checkpoint,
             }),
         })
     }
@@ -880,18 +907,6 @@ impl MongoDocStoreInner {
             });
         }
 
-        // 2. Snapshot policy (SPEC §3.5) — decoupled from compaction, and taken
-        //    *before* the edit lands, so "restore" means "the version I had
-        //    before this edit".
-        let now = now_ms();
-        if candidate != state.text
-            && let Some(reason) = snapshot_reason(&state, now)
-        {
-            let snapshot_id = self.write_snapshot(&room.id, &state, reason, actor).await?;
-            tracing::debug!(document = %room.id, %snapshot_id, reason, "snapshot taken");
-            state.last_snapshot_ms = Some(now);
-        }
-
         // 3. Apply to the hot doc in one transaction.
         let text_ref = state.doc.get_or_insert_text(TEXT_ROOT);
         let before = {
@@ -940,12 +955,27 @@ impl MongoDocStoreInner {
             });
         }
 
+        // What this write did to the text, for the Changes view and revert. A splice
+        // knows its exact edits; anything else is diffed, one hunk per place it changed.
+        let hunks = match mutation {
+            Mutation::Splice(_) => crate::changes::hunks_from_edits(&state.text, &spliced),
+            _ => crate::changes::hunks_between(&state.text, &text_after),
+        };
+
         state.text = text_after;
 
         // 4. Append to the update log: durability for the applied update and the
         //    M2 broadcast payload.
         let seq = state.seq + 1;
         self.append_update(&room.id, seq, &update, actor).await?;
+        if !hunks.is_empty() {
+            self.append_change(&room.id, seq, hunks, actor).await?;
+            state.changes_since_checkpoint += 1;
+            if state.changes_since_checkpoint >= self.tuning.checkpoint_every_changes {
+                self.write_checkpoint(&room.id, seq, &state.text).await?;
+                state.changes_since_checkpoint = 0;
+            }
+        }
         state.seq = seq;
         metrics::counter!(names::UPDATES_APPLIED).increment(1);
 
@@ -953,7 +983,6 @@ impl MongoDocStoreInner {
         room.dirty.store(true, Ordering::Relaxed);
         state.pending_actor = Some(actor.as_stored());
         state.pending_updated_at = Some(BsonDateTime::now());
-        state.last_write_ms = now;
 
         // 5. Materialize. M1: synchronous. M2: drop this call and let the
         //    debounce worker coalesce (the room is already marked dirty).
@@ -1095,6 +1124,46 @@ impl MongoDocStoreInner {
         Ok(())
     }
 
+    async fn append_change(
+        &self,
+        document_id: &str,
+        seq: i64,
+        hunks: Vec<crate::changes::Hunk>,
+        actor: &Actor,
+    ) -> Result<(), DocStoreError> {
+        let entry = DocumentChange {
+            id: new_id(),
+            document_id: document_id.to_string(),
+            seq,
+            created_at: BsonDateTime::now(),
+            created_by: Some(actor.as_stored()),
+            hunks: hunks
+                .into_iter()
+                .map(|hunk| StoredHunk {
+                    pos: hunk.pos as i64,
+                    removed: hunk.removed,
+                    inserted: hunk.inserted,
+                })
+                .collect(),
+            reverts: None,
+        };
+        self.collections.document_changes().insert_one(entry).await?;
+        Ok(())
+    }
+
+    /// The full text at `seq`: where rebuilding any point in time starts from.
+    async fn write_checkpoint(&self, document_id: &str, seq: i64, text: &str) -> Result<(), DocStoreError> {
+        let checkpoint = DocumentCheckpoint {
+            id: new_id(),
+            document_id: document_id.to_string(),
+            seq,
+            text: text.to_string(),
+            created_at: BsonDateTime::now(),
+        };
+        self.collections.document_checkpoints().insert_one(checkpoint).await?;
+        Ok(())
+    }
+
     /// Trim the per-document update log to [`UPDATE_LOG_KEEP_COUNT`] entries and
     /// [`UPDATE_LOG_KEEP_BYTES`] bytes. A normal collection, never capped.
     async fn trim_update_log(&self, document_id: &str) -> Result<(), DocStoreError> {
@@ -1170,39 +1239,7 @@ impl MongoDocStoreInner {
             .document_snapshots()
             .insert_one(snapshot)
             .await?;
-        self.prune_snapshots(document_id).await?;
         Ok(snapshot_id)
-    }
-
-    /// Per-document retention: last [`SNAPSHOT_KEEP_RECENT`] + one per day for
-    /// [`SNAPSHOT_KEEP_DAILY_DAYS`] days (SPEC §3.5).
-    async fn prune_snapshots(&self, document_id: &str) -> Result<(), DocStoreError> {
-        let mut cursor = self
-            .collections
-            .raw(db::DOCUMENT_SNAPSHOTS)
-            .find(doc! { "document_id": document_id })
-            .projection(doc! { "_id": 1, "created_at": 1 })
-            .sort(doc! { "created_at": -1 })
-            .await?;
-
-        let mut rows = Vec::new();
-        while let Some(row) = cursor.try_next().await? {
-            let id = row.get_str("_id").unwrap_or_default().to_string();
-            let at = row
-                .get_datetime("created_at")
-                .map(|at| at.timestamp_millis())
-                .unwrap_or(0);
-            rows.push((id, at));
-        }
-
-        let prune = snapshots_to_prune(&rows, now_ms());
-        if !prune.is_empty() {
-            self.collections
-                .document_snapshots()
-                .delete_many(doc! { "_id": { "$in": prune } })
-                .await?;
-        }
-        Ok(())
     }
 
     /// Purge every document whose Trash retention has run out (SPEC §3.5).
@@ -1295,6 +1332,14 @@ impl MongoDocStoreInner {
             .await?;
         self.collections
             .document_snapshots()
+            .delete_many(doc! { "document_id": id })
+            .await?;
+        self.collections
+            .document_changes()
+            .delete_many(doc! { "document_id": id })
+            .await?;
+        self.collections
+            .document_checkpoints()
             .delete_many(doc! { "document_id": id })
             .await?;
         self.drop_room(id);
@@ -1461,6 +1506,8 @@ impl DocStore for MongoDocStore {
         feed_allocation.commit(crate::feed::FeedChangeKind::Upsert);
 
         inner.append_update(&id, 1, &update, actor).await?;
+        // History starts here: every point in time is rebuilt from a checkpoint.
+        inner.write_checkpoint(&id, 1, &stored_text).await?;
         metrics::counter!(names::UPDATES_APPLIED).increment(1);
 
         inner.insert_room(Room {
@@ -1476,8 +1523,7 @@ impl DocStore for MongoDocStore {
                 stored_title: materialized.title.clone(),
                 pending_actor: None,
                 pending_updated_at: None,
-                last_snapshot_ms: None,
-                last_write_ms: now_ms(),
+                changes_since_checkpoint: 0,
             }),
         });
 
@@ -1730,12 +1776,11 @@ impl DocStore for MongoDocStore {
 
     async fn snapshot(&self, id: &str, reason: &str, actor: &Actor) -> Result<Id, DocStoreError> {
         let room = self.inner.room(id).await?;
-        let mut state = room.state.lock().await;
+        let state = room.state.lock().await;
         let snapshot_id = self
             .inner
             .write_snapshot(&room.id, &state, reason, actor)
             .await?;
-        state.last_snapshot_ms = Some(now_ms());
         Ok(snapshot_id)
     }
 
@@ -1755,6 +1800,94 @@ impl DocStore for MongoDocStore {
             snapshots.push(snapshot);
         }
         Ok(snapshots)
+    }
+
+    async fn changes(
+        &self,
+        id: &str,
+        before: Option<i64>,
+        limit: i64,
+    ) -> Result<Vec<DocumentChange>, DocStoreError> {
+        if !is_valid_id(id) {
+            return Err(DocStoreError::InvalidId(id.to_string()));
+        }
+        let mut filter = doc! { "document_id": id };
+        if let Some(before) = before {
+            filter.insert("seq", doc! { "$lt": before });
+        }
+        let mut cursor = self
+            .inner
+            .collections
+            .document_changes()
+            .find(filter)
+            .sort(doc! { "seq": -1 })
+            .limit(limit.max(1))
+            .await?;
+        let mut changes = Vec::new();
+        while let Some(change) = cursor.try_next().await? {
+            changes.push(change);
+        }
+        Ok(changes)
+    }
+
+    async fn changes_since(&self, id: &str, from: i64) -> Result<Vec<DocumentChange>, DocStoreError> {
+        if !is_valid_id(id) {
+            return Err(DocStoreError::InvalidId(id.to_string()));
+        }
+        let mut cursor = self
+            .inner
+            .collections
+            .document_changes()
+            .find(doc! { "document_id": id, "seq": { "$gte": from } })
+            .sort(doc! { "seq": 1 })
+            .await?;
+        let mut changes = Vec::new();
+        while let Some(change) = cursor.try_next().await? {
+            changes.push(change);
+        }
+        Ok(changes)
+    }
+
+    async fn text_at(&self, id: &str, seq: i64) -> Result<String, DocStoreError> {
+        if !is_valid_id(id) {
+            return Err(DocStoreError::InvalidId(id.to_string()));
+        }
+        let gap = || DocStoreError::HistoryGap(id.to_string(), seq);
+        let checkpoint = self
+            .inner
+            .collections
+            .document_checkpoints()
+            .find(doc! { "document_id": id, "seq": { "$lte": seq } })
+            .sort(doc! { "seq": -1 })
+            .limit(1)
+            .await?
+            .try_next()
+            .await?
+            .ok_or_else(gap)?;
+        let mut cursor = self
+            .inner
+            .collections
+            .document_changes()
+            .find(doc! { "document_id": id, "seq": { "$gt": checkpoint.seq, "$lte": seq } })
+            .sort(doc! { "seq": 1 })
+            .await?;
+        let mut changes = Vec::new();
+        while let Some(change) = cursor.try_next().await? {
+            changes.push(change.to_change());
+        }
+        crate::changes::replay(&checkpoint.text, &changes).map_err(|_| gap())
+    }
+
+    async fn note_revert(&self, id: &str, seq: i64, from: i64, to: i64) -> Result<(), DocStoreError> {
+        self.inner
+            .collections
+            .document_changes()
+            .update_one(
+                doc! { "document_id": id, "seq": seq },
+                doc! { "$set": { "reverts": { "from_seq": from, "to_seq": to } } },
+            )
+            .await?;
+        Ok(())
     }
 
     async fn snapshot_by_id(&self, id: &str, snapshot_id: &str) -> Result<DocumentSnapshot, DocStoreError> {
@@ -1969,45 +2102,6 @@ fn edit_deltas(
     Ok(splices)
 }
 
-/// Snapshot policy (SPEC §3.5): first edit after quiescence, plus a daily cap.
-fn snapshot_reason(state: &RoomState, now_ms: i64) -> Option<&'static str> {
-    match state.last_snapshot_ms {
-        None => Some("quiescence"),
-        Some(last) => {
-            if now_ms - state.last_write_ms >= SNAPSHOT_QUIESCENCE.as_millis() as i64 {
-                Some("quiescence")
-            } else if last.div_euclid(DAY_MS) != now_ms.div_euclid(DAY_MS) {
-                Some("daily")
-            } else {
-                None
-            }
-        }
-    }
-}
-
-/// Which snapshots fall outside retention. `snapshots` is `(id, created_at_ms)`
-/// **newest first**.
-fn snapshots_to_prune(snapshots: &[(String, i64)], now_ms: i64) -> Vec<String> {
-    let cutoff_day = now_ms.div_euclid(DAY_MS) - SNAPSHOT_KEEP_DAILY_DAYS;
-    let mut seen_days: HashSet<i64> = HashSet::new();
-    let mut prune = Vec::new();
-    for (index, (id, at)) in snapshots.iter().enumerate() {
-        let day = at.div_euclid(DAY_MS);
-        if index < SNAPSHOT_KEEP_RECENT {
-            seen_days.insert(day);
-            continue;
-        }
-        if day <= cutoff_day {
-            prune.push(id.clone());
-            continue;
-        }
-        if seen_days.insert(day) {
-            continue;
-        }
-        prune.push(id.clone());
-    }
-    prune
-}
 
 fn encode_cursor(offset: usize) -> String {
     B64.encode(format!("o:{offset}"))
@@ -2191,37 +2285,6 @@ mod tests {
             limits::MAX_DOCUMENT_BYTES,
             "the shared core's hard cap can never be raised by config"
         );
-    }
-
-    #[test]
-    fn snapshot_retention_keeps_the_recent_window() {
-        let now = 30 * DAY_MS;
-        let rows: Vec<(String, i64)> = (0..SNAPSHOT_KEEP_RECENT)
-            .map(|i| (format!("s{i}"), now - i as i64 * 1000))
-            .collect();
-        assert!(snapshots_to_prune(&rows, now).is_empty());
-    }
-
-    #[test]
-    fn snapshot_retention_keeps_one_per_day_then_prunes() {
-        let now = 100 * DAY_MS;
-        let mut rows: Vec<(String, i64)> = Vec::new();
-        // Fill the recent window with today's snapshots.
-        for i in 0..SNAPSHOT_KEEP_RECENT {
-            rows.push((format!("recent{i}"), now - i as i64 * 1000));
-        }
-        // Two snapshots on the same (recent) day beyond the window — an hour
-        // apart, so both fall on day 98: keep the newest, prune the older.
-        rows.push(("day1-new".into(), now - 2 * DAY_MS + 3_600_000));
-        rows.push(("day1-old".into(), now - 2 * DAY_MS));
-        // Older than the daily retention horizon: pruned outright.
-        rows.push(("ancient".into(), now - 90 * DAY_MS));
-
-        let prune = snapshots_to_prune(&rows, now);
-        assert!(prune.contains(&"day1-old".to_string()));
-        assert!(prune.contains(&"ancient".to_string()));
-        assert!(!prune.contains(&"day1-new".to_string()));
-        assert!(!prune.contains(&"recent0".to_string()));
     }
 
     #[test]

@@ -75,16 +75,22 @@ export class SessionHost {
   }
 }
 
-/** The server's `{error:{code,message}}` envelope, unwrapped (backend/README.md). */
-async function errorFromEnvelope(response: Response): Promise<Error> {
+/**
+ * The server's error envelope as an `Error`: the message is the server's own sentence,
+ * ready to show a person; `status` and `code` are there for callers that branch on them
+ * (a 409 on a create that is allowed to lose the race, say).
+ */
+async function errorFromEnvelope(response: Response): Promise<Error & { status: number; code?: string }> {
   let message = `${response.status} ${response.statusText}`;
+  let code: string | undefined;
   try {
     const body = (await response.json()) as { error?: { code?: string; message?: string } };
-    if (body.error?.message) message = `${body.error.code ?? response.status}: ${body.error.message}`;
+    if (body.error?.message) message = body.error.message;
+    code = body.error?.code;
   } catch {
     // Not an envelope (a proxy, an empty body): the status line will do.
   }
-  const error = new Error(message);
+  const error = Object.assign(new Error(message), { status: response.status, ...(code ? { code } : {}) });
   error.name = response.status === 401 ? "Unauthorized" : "ApiError";
   return error;
 }

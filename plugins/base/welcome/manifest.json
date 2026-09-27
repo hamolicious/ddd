@@ -1,0 +1,15 @@
+{
+  "id": "welcome",
+  "version": "1.0.0",
+  "name": "Welcome",
+  "description": "Fills a new, empty workspace with a short tour: one note per base feature, all deletable.",
+  "author": "Life Manager base distribution",
+  "license": "MIT OR Apache-2.0",
+  "kernel": "^1.0",
+  "peerLibraries": {
+    "react": "^18.0.0"
+  },
+  "frontend": {
+    "module": "frontend/index.mjs"
+  }
+}

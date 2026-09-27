@@ -1,6 +1,6 @@
 # `plugins/base/` — the base distribution
 
-The visible app. Twenty plugins that happen to ship with the server and are
+The visible app. Twenty-one plugins that happen to ship with the server and are
 [installed like any other](../SPEC.md#62-package-manifest-capabilities) — individually
 replaceable, individually removable, and holding no privilege the kernel does not give
 every plugin.
@@ -41,10 +41,11 @@ dist/<id>/<version>/              build output = the installed layout the server
 | `native-preview` | viewers for what a browser shows natively: images, PDF, audio, video, text | — |
 | `document-surface` | the document route + mode registry | `document.mode` |
 | `viewer` | read mode, and the file page (`#/file/<id>`) | contributes `read` |
-| `snapshots` | the open document's snapshots in the altbar: take, restore | — |
+| `changes` | the open document's history in the altbar: changes and snapshots, view, revert, restore | — |
 | `editor` | edit mode (CodeMirror 6 + `y-codemirror.next`) | `editor.extension`, `editor.paste` |
 | `settings` | the settings shell | `settings.section` |
 | `admin` | users, invites, audit, orphans, plugins | — |
+| `welcome` | fills a new, empty workspace with a short tour: one note per base feature | — |
 
 That is the whole table. `calendar` and `agenda` — M4's proof plugins, which shipped here
 and were never in `BASE_PLUGIN_IDS` — were **removed** on 2026-09-24 at the owner's
@@ -56,7 +57,7 @@ that had a backend half, so **every plugin in this directory is now frontend-onl
 
 ## How the base plugins relate
 
-Generated from the twenty `manifest.json` `dependencies` fields — an arrow reads
+Generated from the twenty-one `manifest.json` `dependencies` fields — an arrow reads
 **"depends on"**, and the loader's activation order is precisely a topological order of
 this graph (a dependency always activates first; a failed dependency skips its whole
 subtree). Every plugin additionally depends on `@kernel`, which is not drawn.
@@ -90,7 +91,7 @@ flowchart TD
     folders --> commands & context-menu & router & shell-ui
     settings --> commands & router & shell-ui
     admin --> commands & context-menu & router & shell-ui
-    snapshots --> context-menu & markdown & router & shell-ui
+    changes --> context-menu & markdown & router & shell-ui
     themes --> commands
 ```
 
@@ -103,7 +104,7 @@ message precisely *because* the arrow it would need points the wrong way: `folde
 already depends on `doc-list`, and the reverse edge would be a cycle the loader cannot
 order.
 
-`attachments`, `native-preview` and `slash-commands` are not drawn because they have no
+`attachments`, `native-preview`, `slash-commands` and `welcome` are not drawn because they have no
 edges: every point they use is contributed to, never required. `attachments` puts a
 handler on `editor.paste`, a renderer on `markdown.attachment` and `/attach` on
 `slash.command`; `native-preview` puts viewers on `attachments.viewer`; `editor` puts a

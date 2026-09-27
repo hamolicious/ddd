@@ -1,11 +1,11 @@
 {
-  "id": "snapshots",
+  "id": "changes",
   "version": "1.0.0",
-  "name": "Snapshots",
-  "description": "The open document's snapshots in the side panel: take one, restore one.",
+  "name": "Changes",
+  "description": "The open document's history in the side panel: every change and snapshot, to view, revert or restore.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
-  "x-tailwind": { "prefix": "snap" },
+  "x-tailwind": { "prefix": "chg" },
   "kernel": "^1.0",
   "dependencies": {
     "context-menu": "^1.0",

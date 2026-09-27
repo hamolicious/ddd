@@ -63,6 +63,7 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
 ulid = "3.0.0"
 yrs = "0.28.0"
 zip = "8.6.0"
+similar = "3.2.0"
 
 # CONTRACTS.md freezes the dependency list; this is the one addition, and it is
 # test-only. The M2 sync layer cannot be integration-tested without a WebSocket

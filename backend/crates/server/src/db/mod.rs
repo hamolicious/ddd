@@ -14,13 +14,16 @@ use mongodb::{Client, Collection, Database};
 
 use crate::config::Config;
 use crate::domain::{
-    Attachment, AuditEntry, Document, DocumentSnapshot, DocumentUpdate, GraveyardEntry, Invite,
+    Attachment, AuditEntry, Document, DocumentChange, DocumentCheckpoint, DocumentSnapshot,
+    DocumentUpdate, GraveyardEntry, Invite,
     LoginAttempt, PasswordReset, SchemaMeta, Session, User,
 };
 
 pub const DOCUMENTS: &str = "documents";
 pub const DOCUMENT_UPDATES: &str = "document_updates";
 pub const DOCUMENT_SNAPSHOTS: &str = "document_snapshots";
+pub const DOCUMENT_CHANGES: &str = "document_changes";
+pub const DOCUMENT_CHECKPOINTS: &str = "document_checkpoints";
 pub const DELETED_IDS: &str = "deleted_ids";
 pub const USERS: &str = "users";
 pub const SESSIONS: &str = "sessions";
@@ -134,6 +137,14 @@ impl Collections {
 
     pub fn document_snapshots(&self) -> Collection<DocumentSnapshot> {
         self.db.collection(DOCUMENT_SNAPSHOTS)
+    }
+
+    pub fn document_changes(&self) -> Collection<DocumentChange> {
+        self.db.collection(DOCUMENT_CHANGES)
+    }
+
+    pub fn document_checkpoints(&self) -> Collection<DocumentCheckpoint> {
+        self.db.collection(DOCUMENT_CHECKPOINTS)
     }
 
     pub fn deleted_ids(&self) -> Collection<GraveyardEntry> {

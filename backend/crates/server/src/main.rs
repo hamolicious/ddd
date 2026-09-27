@@ -13,9 +13,8 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use clap::{Parser, Subcommand};
-use life_manager_server::domain::Actor;
 use life_manager_server::{
-    auth, config::Config, db, pluginhost, plugininstall, plugins, routes, seed, state::AppState,
+    auth, config::Config, db, pluginhost, plugininstall, plugins, routes, state::AppState,
     telemetry,
 };
 use tracing::{error, info, warn};
@@ -92,15 +91,6 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         .migrations_complete
         .store(true, Ordering::Relaxed);
     info!(schema_version, "schema ready");
-
-    if state.config.seed_welcome_docs {
-        match seed::seed_if_needed(&state, &Actor::System).await {
-            Ok(0) => {}
-            Ok(count) => info!(documents = count, "seeded welcome documents"),
-            // A failed seed is cosmetic: the workspace works empty.
-            Err(err) => warn!(error = %err, "seeding welcome documents failed"),
-        }
-    }
 
     // Scan the plugin directory at boot rather than lazily on the first request.
     // The registry is cached either way, so this is not about speed — it is about

@@ -22,6 +22,7 @@
 pub mod admin;
 pub mod attachments;
 pub mod auth;
+pub mod changes;
 pub mod documents;
 pub mod health;
 pub mod plugin_api;

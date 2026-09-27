@@ -15,11 +15,11 @@
 //! | `plugininstall/*` | install-flow (M4: zip, queue, watcher, config + secrets) |
 //! | `auth` | auth |
 //! | `routes/*` | http-routes; `routes/plugin_api.rs` is wasm-host + agenda-admin (M4) |
-//! | `seed` | http-routes |
 //!
 //! Nobody adds a module here without agreement — a new module means a new owner.
 
 pub mod auth;
+pub mod changes;
 pub mod config;
 pub mod db;
 pub mod docstore;
@@ -30,7 +30,6 @@ pub mod pluginhost;
 pub mod plugininstall;
 pub mod plugins;
 pub mod routes;
-pub mod seed;
 pub mod state;
 pub mod telemetry;
 

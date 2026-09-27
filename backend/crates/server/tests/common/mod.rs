@@ -81,6 +81,7 @@ pub fn test_config(mongo_uri: String, database: String) -> Config {
         cookie_secure: false,
         trust_proxy_headers: false,
         trash_retention_days: 3,
+        checkpoint_every_changes: 3,
         invite_ttl_days: 7,
         session_idle_days: 30,
         session_absolute_days: 180,
@@ -93,7 +94,6 @@ pub fn test_config(mongo_uri: String, database: String) -> Config {
         login_max_attempts: 50,
         login_attempt_window: Duration::from_secs(60),
         shutdown_grace: Duration::from_secs(5),
-        seed_welcome_docs: false,
         // M3: no frontend and no plugins in the integration harness. `web_dist_dir:
         // None` is what makes the SPA fallback answer "API only" instead of hunting for
         // a bundle, and an empty `plugins_dir` keeps `/api/plugins` deterministic.

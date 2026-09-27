@@ -329,6 +329,72 @@ pub struct DocumentUpdate {
     pub created_by: Option<String>,
 }
 
+/// Collection `document_changes` — what each text-changing write did to the text, as
+/// hunks against the text before it (`changes.rs`). Kept `CHANGE_RETENTION_DAYS`; the
+/// history the Changes view reads and a revert rewinds through.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentChange {
+    #[serde(rename = "_id")]
+    pub id: Id,
+    pub document_id: Id,
+    /// The update-log `seq` of the write that made this change.
+    pub seq: i64,
+    pub created_at: BsonDateTime,
+    pub created_by: Option<String>,
+    pub hunks: Vec<StoredHunk>,
+    /// Set on the change a revert wrote: the group it undid.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reverts: Option<RevertNote>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StoredHunk {
+    /// Byte offset into the text before the change.
+    pub pos: i64,
+    pub removed: String,
+    pub inserted: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RevertNote {
+    pub from_seq: i64,
+    pub to_seq: i64,
+}
+
+impl DocumentChange {
+    /// The pure form `changes.rs` works on.
+    pub fn to_change(&self) -> crate::changes::Change {
+        crate::changes::Change {
+            seq: self.seq,
+            at_ms: self.created_at.timestamp_millis(),
+            by: self.created_by.clone(),
+            hunks: self
+                .hunks
+                .iter()
+                .map(|hunk| crate::changes::Hunk {
+                    pos: hunk.pos.max(0) as usize,
+                    removed: hunk.removed.clone(),
+                    inserted: hunk.inserted.clone(),
+                })
+                .collect(),
+        }
+    }
+}
+
+/// Collection `document_checkpoints` — the full text at a `seq`, written every
+/// `CHECKPOINT_EVERY_CHANGES` changes and when a document is created. Any point in time
+/// is rebuilt from the nearest one (`docs/HISTORY.md`). Kept forever.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DocumentCheckpoint {
+    #[serde(rename = "_id")]
+    pub id: Id,
+    pub document_id: Id,
+    /// The text after every update up to and including this one.
+    pub seq: i64,
+    pub text: String,
+    pub created_at: BsonDateTime,
+}
+
 /// Collection `document_snapshots` — per-document retention (last 20 + one per
 /// day for 30 days).
 #[derive(Debug, Clone, Serialize, Deserialize)]

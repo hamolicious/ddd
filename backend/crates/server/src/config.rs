@@ -97,6 +97,10 @@ pub struct Config {
     pub trust_proxy_headers: bool,
     /// `TRASH_RETENTION_DAYS`, default 30 (SPEC §3.5).
     pub trash_retention_days: u32,
+    /// `CHECKPOINT_EVERY_CHANGES`, default 1000: a full-text checkpoint of a document
+    /// after this many changes, so any point in its history is at most this many steps
+    /// from one (`docs/HISTORY.md`).
+    pub checkpoint_every_changes: u32,
     /// `INVITE_TTL_DAYS`, default 7 (SPEC §5.1).
     pub invite_ttl_days: u32,
     /// `SESSION_IDLE_DAYS`, default 30 (SPEC §5.2).
@@ -121,8 +125,6 @@ pub struct Config {
     pub login_attempt_window: Duration,
     /// `SHUTDOWN_GRACE_SECS`, default 30 (SPEC §8).
     pub shutdown_grace: Duration,
-    /// `SEED_WELCOME_DOCS`, default true (SPEC §6.5 first run).
-    pub seed_welcome_docs: bool,
 
     // ---- M3: serving the PWA and the plugin distribution (SPEC §6.4, §8) ----
     /// `WEB_DIST_DIR` — the built PWA (`web/app/dist`). Unset ⇒ the server serves
@@ -300,6 +302,7 @@ impl Config {
             // audit-log origin (SPEC §5.2, §5.4).
             trust_proxy_headers: parse_bool("TRUST_PROXY_HEADERS", false)?,
             trash_retention_days: parse_var("TRASH_RETENTION_DAYS", 30u32)?,
+            checkpoint_every_changes: parse_var("CHECKPOINT_EVERY_CHANGES", 1000u32)?,
             invite_ttl_days: parse_var("INVITE_TTL_DAYS", 7u32)?,
             session_idle_days: parse_var("SESSION_IDLE_DAYS", 30u32)?,
             session_absolute_days: parse_var("SESSION_ABSOLUTE_DAYS", 180u32)?,
@@ -318,7 +321,6 @@ impl Config {
             login_max_attempts: parse_var("LOGIN_MAX_ATTEMPTS", 10u32)?,
             login_attempt_window: parse_secs("LOGIN_ATTEMPT_WINDOW_SECS", 900)?,
             shutdown_grace: parse_secs("SHUTDOWN_GRACE_SECS", DEFAULT_SHUTDOWN_GRACE_SECS)?,
-            seed_welcome_docs: parse_bool("SEED_WELCOME_DOCS", true)?,
 
             web_dist_dir: var("WEB_DIST_DIR").map(PathBuf::from),
             plugins_dir: plugins_dir.clone(),
@@ -378,6 +380,12 @@ impl Config {
             return Err(ConfigError::Invalid {
                 var: "CRDT_ALERT_THRESHOLD_BYTES",
                 reason: "must be at least CRDT_COMPACT_THRESHOLD_BYTES".to_string(),
+            });
+        }
+        if config.checkpoint_every_changes == 0 {
+            return Err(ConfigError::Invalid {
+                var: "CHECKPOINT_EVERY_CHANGES",
+                reason: "must be greater than zero".to_string(),
             });
         }
         if config.login_max_attempts == 0 {
@@ -673,6 +681,7 @@ mod tests {
             cookie_secure: true,
             trust_proxy_headers: false,
             trash_retention_days: 30,
+            checkpoint_every_changes: 1000,
             invite_ttl_days: 7,
             session_idle_days: 30,
             session_absolute_days: 180,
@@ -685,7 +694,6 @@ mod tests {
             login_max_attempts: 10,
             login_attempt_window: Duration::from_secs(900),
             shutdown_grace: Duration::from_secs(DEFAULT_SHUTDOWN_GRACE_SECS),
-            seed_welcome_docs: true,
             web_dist_dir: None,
             plugins_dir: PathBuf::from(DEFAULT_PLUGINS_DIR),
             kernel_dts_path: None,

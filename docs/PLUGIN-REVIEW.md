@@ -44,7 +44,7 @@ browser's device toolbar at 390 × 844, and 844 × 390 for landscape.
 | 19e | ↳ Snapshots | [x] | Moved out: now the `snapshots` plugin, per page, in the altbar (19h) |
 | 19f | ↳ Plugins | [x] | Notice always shown, drop-zone upload, compact rows with icon actions and details on demand |
 | 19g | ↳ Workspace | [x] | "Large edit history" with its thresholds behind an (i) popover |
-| 19h | `snapshots` | [ ] | New: the open document's snapshots in the altbar, with a read-only View; `shell-ui` gained the altbar and its top-bar toggle |
+| 19h | `changes` | [ ] | New: the open document's history in the altbar — changes and snapshots, view, revert, restore; `shell-ui` gained the altbar and its top-bar toggle |
 | 19i | Offline, the whole app | [ ] | Next: what using the app without a connection is like, end to end |
 | 20 | `extra-task-states` (example) | [ ] | |
 | 21 | `alt-editor` (example) | [ ] | |
@@ -604,29 +604,46 @@ edit history is over `CRDT_COMPACT_THRESHOLD_BYTES` (4 MiB by default). An (i) b
 label opens a popover (a sheet on a phone) with the thresholds the server is using.
 
 
-### 19h. `snapshots` — the altbar panel
+### 19h. `changes` — the document's history, in the altbar
 
 **What it does.** On an open document, the altbar (the column opposite the sidebar,
-toggled by the button at the right end of the top bar) shows its snapshots, newest
-first. Take one now, refresh, or restore one. Restoring asks first, and the server keeps
-the current text as a "Before a restore" snapshot, so a restore can be undone.
+toggled by the button at the right end of the top bar) shows its history, newest first:
+
+- **Changes**: every edit to the text, grouped per person until they pause for two
+  minutes. Each row shows who, when, how much (+ added, − removed) and the start of
+  what was typed and deleted.
+- **Snapshots**: whole copies you take with the camera, plus the one taken
+  automatically before every restore. Kept forever.
+
+Every change is kept (see `docs/HISTORY.md`): a checkpoint every 1000 changes
+(`CHECKPOINT_EVERY_CHANGES`) keeps any point in time quick to rebuild. Snapshots are
+only the ones you take and the automatic one before a restore. Anyone signed in can use
+all of it.
 
 **Where to see it.** Open any document, then the side-panel button at the top right, or
-"Show this document's snapshots" in the palette.
+"Show this document's changes" in the palette.
 
 - [ ] The toggle only appears on a document; it opens and closes the altbar, and that is
-  remembered on this device.
-- [ ] The altbar's edge drags to resize; arrow keys on the edge too; double-click resets.
-- [ ] Take adds a "Taken by hand" snapshot; each row shows when, why, size and the title then.
-- [ ] Restore asks first, then puts the text back, and an open copy in another browser follows.
-- [ ] View (the eye) opens the snapshot read only at `#/doc/<id>/snapshot/<snapshot>`,
-  under a banner with its date, reason and title then. Checkboxes there change nothing.
-  The list marks the snapshot on screen; the eye again, or "Current version", goes back.
-  "Restore this" restores it and returns to the current version.
-- [ ] Phone: the altbar is a drawer from the right; opening the sidebar closes it; Escape
-  and a tap outside close it.
+  remembered on this device. The altbar's edge drags to resize; arrow keys on the edge too.
+- [ ] Type, pause two minutes, type again: two change rows. Another person's edits are
+  their own rows, with their name.
+- [ ] View on a change (the eye) shows what it did as a diff: removed lines struck in red,
+  added lines in green, a little unchanged text around them. "Document then" shows the
+  whole note as it was right after it. Both read only.
+- [ ] Revert on a change asks first, then undoes just that change as a new one; later
+  edits elsewhere stay. The new row says "Reverted an earlier change".
+- [ ] Revert when someone has since changed the same text: nothing changes, and it says
+  who was in the way.
+- [ ] Take adds a "Taken by hand" snapshot; editing adds none on its own. View on a
+  snapshot shows the whole note as it was, read only; Restore asks first and puts it
+  back ("Before a restore" appears).
+- [ ] "Show older" pages back through history.
+- [ ] An open copy in another browser follows a revert or a restore.
+- [ ] Phone: the altbar is a drawer from the right; opening the sidebar closes it; the
+  change and snapshot pages keep their buttons on a row of their own.
 
 **Notes.**
+
 ## 19i. Offline — the whole app
 
 **What it is.** Not one plugin: what the app is like with no connection, from start to

@@ -14,6 +14,7 @@
 //! | POST | `/api/documents/:id/restore` | out of Trash |
 //! | GET | `/api/documents/:id/snapshots` | list snapshots |
 //! | GET | `/api/documents/:id/snapshots/:snapshot_id` | one snapshot, with its text |
+//! | GET, POST | `/api/documents/:id/changes…`, `/text?at=` | history, revert, text at a point (`changes.rs`) |
 //! | POST | `/api/documents/:id/snapshots/:snapshot_id/restore` | restore a snapshot |
 //!
 //! The Trash view is `GET /api/documents?trash=trashed` — a tombstoned document
@@ -93,6 +94,10 @@ pub fn router() -> Router<AppState> {
         .route("/{id}/restore", post(restore))
         .route("/{id}/snapshots", get(list_snapshots).post(create_snapshot))
         .route("/{id}/snapshots/{snapshot_id}", get(get_snapshot))
+        .route("/{id}/changes", get(super::changes::list_changes))
+        .route("/{id}/text", get(super::changes::text_at))
+        .route("/{id}/changes/{from}/{to}", get(super::changes::get_change))
+        .route("/{id}/changes/{from}/{to}/revert", post(super::changes::revert_change))
         .route(
             "/{id}/snapshots/{snapshot_id}/restore",
             post(restore_snapshot),
@@ -356,7 +361,7 @@ pub fn snapshot_reason(raw: Option<&str>) -> AppResult<&'static str> {
 }
 
 /// Reject a document id the docstore would reject anyway, before touching Mongo.
-fn check_id(id: &str) -> AppResult<()> {
+pub(crate) fn check_id(id: &str) -> AppResult<()> {
     if is_valid_id(id) {
         Ok(())
     } else {
@@ -400,6 +405,9 @@ pub(crate) fn map_docstore(err: DocStoreError) -> AppError {
             AppError::Conflict("concurrent write lost the race; retry".to_string())
         }
         DocStoreError::SnapshotNotFound(_) => AppError::NotFound("snapshot"),
+        DocStoreError::HistoryGap(..) => AppError::Conflict(
+            "this document's history cannot be rebuilt at that point".to_string(),
+        ),
         other => AppError::DocStore(other),
     }
 }

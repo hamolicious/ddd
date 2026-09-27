@@ -157,6 +157,8 @@ impl AppError {
                 DocStoreError::SpliceRefused(_) => StatusCode::UNPROCESSABLE_ENTITY,
                 // A lost optimistic-concurrency race: the client may retry.
                 DocStoreError::Contended(_) => StatusCode::CONFLICT,
+                // The history cannot say what the text was at that point.
+                DocStoreError::HistoryGap(..) => StatusCode::CONFLICT,
                 DocStoreError::Db(_) | DocStoreError::Bson(_) | DocStoreError::Other(_) => {
                     StatusCode::INTERNAL_SERVER_ERROR
                 }

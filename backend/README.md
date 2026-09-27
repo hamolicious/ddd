@@ -146,7 +146,6 @@ annotated copy-me file; [`../docs/OPERATIONS.md`](../docs/OPERATIONS.md) has the
 | `RUST_LOG` | `info` | Standard `tracing` filter. |
 | `MAX_ATTACHMENT_BYTES` | 25 MiB | Enforced by a streaming counter, never by buffering. |
 | `MAX_DOCUMENT_BYTES` | 1 MiB | May only be *lowered*; the shared core's 1 MiB cap is the ceiling. |
-| `SEED_WELCOME_DOCS` | `true` | First-run welcome documents (SPEC §6.5). Skipped if the workspace has ever held a document. |
 
 ### Tuning (defaults match the spec; safe to omit)
 
@@ -154,6 +153,7 @@ annotated copy-me file; [`../docs/OPERATIONS.md`](../docs/OPERATIONS.md) has the
 |---|---|---|
 | `SHUTDOWN_GRACE_SECS` | `30` | §8 — drain, flush, exit within it. |
 | `TRASH_RETENTION_DAYS` | `30` | §3.5 — then the document purges, the id stays forever. |
+| `CHECKPOINT_EVERY_CHANGES` | `1000` | `docs/HISTORY.md` — a full-text checkpoint after this many changes, so any point in a document's history is at most this many steps from one. |
 | `INVITE_TTL_DAYS` | `7` | §5.1 |
 | `SESSION_IDLE_DAYS` / `SESSION_ABSOLUTE_DAYS` | `30` / `180` | §5.2 — rolling idle, hard absolute. |
 | `LOGIN_MAX_ATTEMPTS` / `LOGIN_ATTEMPT_WINDOW_SECS` | `10` / `900` | §5.2 — per-IP *and* per-account backoff. |

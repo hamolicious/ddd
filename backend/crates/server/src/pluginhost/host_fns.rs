@@ -436,6 +436,10 @@ fn map_docstore_error(error: DocStoreError) -> abi::HostError {
         DocStoreError::SnapshotNotFound(id) => {
             abi::HostError::new(abi::ErrorCode::NotFound, format!("no snapshot {id}"))
         }
+        DocStoreError::HistoryGap(id, seq) => abi::HostError::new(
+            abi::ErrorCode::NotFound,
+            format!("the history of {id} cannot be rebuilt at seq {seq}"),
+        ),
         // The caller's own message: a section edit the fence grammar cannot hold.
         DocStoreError::SpliceRefused(message) => invalid(message),
         // Never the database's own message: it can carry a connection string.

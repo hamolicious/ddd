@@ -141,6 +141,7 @@ async fn a_store_enforces_its_own_tuning() {
         crdt_compact_threshold_bytes: 16 * 1024,
         crdt_alert_threshold_bytes: 32 * 1024,
         trash_retention_days: 1,
+        checkpoint_every_changes: 2,
     };
     let feed = ChangeFeed::new(db::Collections::new(db.clone()));
     let store = MongoDocStore::new(db.clone(), tuning, feed);

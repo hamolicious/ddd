@@ -134,8 +134,9 @@ Collection `documents`:
 
 Supporting collections:
 
+- `document_changes`, `document_checkpoints` — every edit's effect on the text (hunks, who, when), kept forever, with a full-text checkpoint every `CHECKPOINT_EVERY_CHANGES` (1000) changes so any point in time is rebuilt from the nearest one. The Changes view, its diffs, "document then" and revert are built on them. Design and phases: `docs/HISTORY.md`.
 - `document_updates` — incremental Yjs updates, **normal collection, trimmed per-document** (keep last N bytes/updates per doc; never a capped collection). Fallback when a client predates the window: full state-vector sync against `crdt`. Correctness never depends on retention.
-- `document_snapshots` — **per-document retention** (last 20 + one per day for 30 days), taken on a time/change policy (first edit after quiescence, daily cap) — decoupled from compaction. Restore = CRDT transaction replacing the full text (fm included); warns if other users are actively subscribed.
+- `document_snapshots` — whole-text restore points, kept forever: the ones a user takes, and one taken automatically before every restore (so a restore can be undone). No automatic time-based snapshots: change history and checkpoints cover them. Restore = CRDT transaction replacing the full text (fm included); warns if other users are actively subscribed.
 - `deleted_ids` — **permanent graveyard** (id + deleted_at/by). Consulted by every sync/create path; a long-offline client can never resurrect a deleted document. Trash view shows tombstoned docs for 30 days (restorable), then the doc purges but the id stays forever.
 - `users`, `sessions`, `invites`, `plugins`, `plugin_kv`, `plugin_config`, `audit_log`, `attachments`, `meta` (schema version).
 
@@ -307,12 +308,13 @@ Their genuine niche: **cron while nobody's looking, outbound HTTP with secrets, 
 | `native-preview` | Viewers for what a browser shows by itself: images, PDF, audio, video, plain text (never SVG or HTML) | — |
 | `document-surface` | Owns the document route + **mode registry**; `viewer`/`editor` are symmetric contributions | `document.mode` |
 | `viewer` | Read mode (hides fm block + `%%%` sections); the file page `#/file/<id>` | contributes `read` |
-| `snapshots` | The open document's snapshots in the altbar: take one, restore one | — |
+| `welcome` | First run: fills an empty workspace with a short tour, one note per base feature | — |
+| `changes` | The open document's history in the altbar: every change (grouped by author and pause) and snapshot; view any of them read only, revert a change, restore a snapshot | — |
 | `editor` | Edit mode — CodeMirror 6 + `y-codemirror.next`; collapses machine sections; paste / drop handlers take them before CodeMirror; publishes a `text.surface`; **must be usable with the Android soft keyboard (M5 acceptance)** | `editor.extension`, `editor.paste` |
 | `settings` | Settings shell | `settings.section` |
 | `admin` | Users, invites, pending installs + capability approval, plugin config, audit log, orphans | — |
 
-First run seeds a few deletable welcome documents demonstrating frontmatter, `fm.path`, task lists, and a directive; empty states written for doc-list (search included)/folders/Trash.
+First run: the `welcome` plugin fills an empty workspace with a deletable tour, one note per base feature (fixed ids, once per workspace, never on a workspace that already has notes); empty states written for doc-list (search included)/folders/Trash.
 
 ### 6.6 Extensible markdown
 
