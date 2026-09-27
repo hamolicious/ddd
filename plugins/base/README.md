@@ -1,6 +1,6 @@
 # `plugins/base/` — the base distribution
 
-The visible app. Nineteen plugins that happen to ship with the server and are
+The visible app. Twenty plugins that happen to ship with the server and are
 [installed like any other](../SPEC.md#62-package-manifest-capabilities) — individually
 replaceable, individually removable, and holding no privilege the kernel does not give
 every plugin.
@@ -25,9 +25,9 @@ dist/<id>/<version>/              build output = the installed layout the server
 
 | Plugin | Responsibility | Defines |
 |---|---|---|
-| `shell-ui` | layout, mobile breakpoint, a spot for the top bar, always-mounted overlays | `shell.header`, `shell.overlay`, `sidebar.panel`, `main.view` |
+| `shell-ui` | layout, mobile breakpoint, a spot for the top bar, the altbar opposite the sidebar, always-mounted overlays | `shell.header`, `shell.overlay`, `sidebar.panel`, `altbar.panel`, `main.view` |
 | `header` | the top bar: `start`/`end` seats (the ☰ is `shell-ui`'s item), the "Top bar" ordering setting | `navbar.item` |
-| `context-menu` | the menu / sheet service: popover beside a button, bottom sheet on a phone | — |
+| `context-menu` | the menu / sheet / modal service: popover beside a button, bottom sheet on a phone; `modal` and `confirm` | — |
 | `notices` | the notice bell, in the header's `end` seat | — |
 | `sync-status` | the sync pill, in the header's `end` seat | — |
 | `router` | URL ↔ view (hash-based) | `router.route` |
@@ -40,10 +40,11 @@ dist/<id>/<version>/              build output = the installed layout the server
 | `slash-commands` | the `/` menu in any editor, over editor-neutral text surfaces | `text.surface`, `slash.command` |
 | `native-preview` | viewers for what a browser shows natively: images, PDF, audio, video, text | — |
 | `document-surface` | the document route + mode registry | `document.mode` |
-| `viewer` | read mode | contributes `read` |
+| `viewer` | read mode, and the file page (`#/file/<id>`) | contributes `read` |
+| `snapshots` | the open document's snapshots in the altbar: take, restore | — |
 | `editor` | edit mode (CodeMirror 6 + `y-codemirror.next`) | `editor.extension`, `editor.paste` |
 | `settings` | the settings shell | `settings.section` |
-| `admin` | users, invites, audit, orphans, snapshots, plugins | — |
+| `admin` | users, invites, audit, orphans, plugins | — |
 
 That is the whole table. `calendar` and `agenda` — M4's proof plugins, which shipped here
 and were never in `BASE_PLUGIN_IDS` — were **removed** on 2026-09-24 at the owner's
@@ -55,7 +56,7 @@ that had a backend half, so **every plugin in this directory is now frontend-onl
 
 ## How the base plugins relate
 
-Generated from the nineteen `manifest.json` `dependencies` fields — an arrow reads
+Generated from the twenty `manifest.json` `dependencies` fields — an arrow reads
 **"depends on"**, and the loader's activation order is precisely a topological order of
 this graph (a dependency always activates first; a failed dependency skips its whole
 subtree). Every plugin additionally depends on `@kernel`, which is not drawn.
@@ -88,7 +89,8 @@ flowchart TD
     doc-list --> commands & context-menu & router & shell-ui
     folders --> commands & context-menu & router & shell-ui
     settings --> commands & router & shell-ui
-    admin --> commands & router & shell-ui
+    admin --> commands & context-menu & router & shell-ui
+    snapshots --> context-menu & shell-ui
     themes --> commands
 ```
 

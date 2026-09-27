@@ -1,6 +1,6 @@
 /**
- * The shell's own state: which `main.view` is showing, whether the sidebar is
- * open, and whether we are below the mobile breakpoint.
+ * The shell's own state: which `main.view` is showing, whether the sidebar and the
+ * altbar are open, and whether we are below the mobile breakpoint.
  *
  * It lives outside React because two of the three are driven from *outside* the
  * React tree — the router calls `setMainView` during its own activation, and
@@ -28,6 +28,8 @@ export const COMPACT_QUERY = COMPACT_MEDIA_QUERY;
 
 /** Where the per-device panel collapse state is remembered. */
 const PANELS_KEY = "life-manager.shell-ui.panels";
+/** Whether the altbar column is shown on a wide screen, per device. */
+const ALTBAR_KEY = "life-manager.shell-ui.altbar";
 
 export interface ViewSelection {
   readonly id: string;
@@ -40,6 +42,10 @@ export interface ShellSnapshot {
   /** Desktop: the sidebar column is shown. Compact: the drawer is open. */
   readonly sidebarOpen: boolean;
   readonly hasSidebar: boolean;
+  /** Desktop: the altbar column is shown. Compact: its drawer is open. */
+  readonly altbarOpen: boolean;
+  /** Some `altbar.panel` has something to say about the current view. */
+  readonly hasAltbar: boolean;
 }
 
 const EMPTY_PARAMS: Readonly<Record<string, string>> = Object.freeze({});
@@ -56,8 +62,16 @@ export class ShellState {
     const media = typeof matchMedia === "function" ? matchMedia(COMPACT_QUERY) : undefined;
     this.#media = media;
     const compact = media?.matches ?? false;
-    this.#snapshot = { view: undefined, compact, sidebarOpen: !compact, hasSidebar: false };
-    this.#layout = { compact, sidebarOpen: !compact, hasSidebar: false };
+    const altbarOpen = !compact && readAltbar();
+    this.#snapshot = {
+      view: undefined,
+      compact,
+      sidebarOpen: !compact,
+      hasSidebar: false,
+      altbarOpen,
+      hasAltbar: false,
+    };
+    this.#layout = { compact, sidebarOpen: !compact, hasSidebar: false, altbarOpen, hasAltbar: false };
     this.#panels = readPanels();
     media?.addEventListener("change", () => this.#onBreakpoint());
   }
@@ -87,14 +101,34 @@ export class ShellState {
     if (current && current.id === next.id && sameParams(current.params, next.params)) return;
     // Navigating on a phone closes the drawer: single pane means the view the user
     // just asked for has to be the thing they see (SPEC §6.5).
-    const sidebarOpen = this.#snapshot.compact ? false : this.#snapshot.sidebarOpen;
-    this.#set({ view: next, sidebarOpen });
+    const compact = this.#snapshot.compact;
+    const sidebarOpen = compact ? false : this.#snapshot.sidebarOpen;
+    const altbarOpen = compact ? false : this.#snapshot.altbarOpen;
+    this.#set({ view: next, sidebarOpen, altbarOpen });
   }
 
   toggleSidebar(open?: boolean): void {
     const next = open ?? !this.#snapshot.sidebarOpen;
     if (next === this.#snapshot.sidebarOpen) return;
-    this.#set({ sidebarOpen: next });
+    // On a phone the two drawers share the screen: opening one closes the other.
+    this.#set(next && this.#snapshot.compact ? { sidebarOpen: true, altbarOpen: false } : { sidebarOpen: next });
+  }
+
+  toggleAltbar(open?: boolean): void {
+    const next = open ?? !this.#snapshot.altbarOpen;
+    if (next === this.#snapshot.altbarOpen) return;
+    if (this.#snapshot.compact) {
+      this.#set(next ? { altbarOpen: true, sidebarOpen: false } : { altbarOpen: false });
+      return;
+    }
+    writeAltbar(next);
+    this.#set({ altbarOpen: next });
+  }
+
+  /** The layout reports it, from the `altbar.panel` entries that accept the current view. */
+  setHasAltbar(hasAltbar: boolean): void {
+    if (hasAltbar === this.#snapshot.hasAltbar) return;
+    this.#set({ hasAltbar });
   }
 
   /** The layout reports it; the shell sets it from the live `sidebar.panel` entries. */
@@ -118,21 +152,23 @@ export class ShellState {
   #onBreakpoint(): void {
     const compact = this.#media?.matches ?? false;
     if (compact === this.#snapshot.compact) return;
-    // Crossing into compact closes the drawer; crossing out restores the column.
-    this.#set({ compact, sidebarOpen: !compact });
+    // Crossing into compact closes the drawers; crossing out restores the columns.
+    this.#set({ compact, sidebarOpen: !compact, altbarOpen: !compact && readAltbar() });
     for (const listener of [...this.#layoutListeners]) listener(compact);
   }
 
   #set(patch: Partial<ShellSnapshot>): void {
     this.#snapshot = { ...this.#snapshot, ...patch };
-    const { compact, sidebarOpen, hasSidebar } = this.#snapshot;
+    const { compact, sidebarOpen, hasSidebar, altbarOpen, hasAltbar } = this.#snapshot;
     const layout = this.#layout;
     if (
       layout.compact !== compact ||
       layout.sidebarOpen !== sidebarOpen ||
-      layout.hasSidebar !== hasSidebar
+      layout.hasSidebar !== hasSidebar ||
+      layout.altbarOpen !== altbarOpen ||
+      layout.hasAltbar !== hasAltbar
     ) {
-      this.#layout = { compact, sidebarOpen, hasSidebar };
+      this.#layout = { compact, sidebarOpen, hasSidebar, altbarOpen, hasAltbar };
     }
     for (const listener of [...this.#listeners]) listener();
   }
@@ -161,6 +197,22 @@ function readPanels(): Record<string, boolean> {
   } catch {
     // Private mode, or somebody else's JSON. Defaults are always correct.
     return {};
+  }
+}
+
+function readAltbar(): boolean {
+  try {
+    return localStorage.getItem(ALTBAR_KEY) === "open";
+  } catch {
+    return false;
+  }
+}
+
+function writeAltbar(open: boolean): void {
+  try {
+    localStorage.setItem(ALTBAR_KEY, open ? "open" : "closed");
+  } catch {
+    // Per-device convenience only.
   }
 }
 

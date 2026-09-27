@@ -2,7 +2,7 @@
   "id": "shell-ui",
   "version": "1.0.0",
   "name": "Shell UI",
-  "description": "Layout skeleton and mobile breakpoint: a header spot, the sidebar and the main region.",
+  "description": "Layout skeleton and mobile breakpoint: a header spot, the sidebar, the main region and the altbar.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
@@ -15,6 +15,7 @@
     "style": "frontend/style.css"
   },
   "x-defines": [
+    "altbar.panel",
     "main.view",
     "shell.header",
     "shell.overlay",

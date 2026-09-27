@@ -114,16 +114,6 @@ export interface OrphanView {
   readonly flagged_at: string;
 }
 
-export interface SnapshotView {
-  readonly id: string;
-  readonly document_id: string;
-  readonly title: string;
-  readonly reason: string;
-  readonly created_at: string;
-  readonly created_by: string | null;
-  readonly size: number;
-}
-
 export interface AdminStats {
   readonly documents: number;
   readonly trashed_documents: number;
@@ -357,9 +347,6 @@ export interface AdminClient {
   scanOrphans(): Promise<readonly OrphanView[]>;
   deleteAttachment(id: string): Promise<void>;
 
-  snapshots(documentId: string): Promise<readonly SnapshotView[]>;
-  createSnapshot(documentId: string): Promise<void>;
-  restoreSnapshot(documentId: string, snapshotId: string): Promise<void>;
 
   plugins(): Promise<InstalledPluginsResponse>;
   /** The zip of every document as plain markdown — the no-Mongo recovery path. */
@@ -427,11 +414,6 @@ export function createAdminClient(fetchApi: ApiFetch): AdminClient {
     scanOrphans: () => json<readonly OrphanView[]>("/attachments/orphans/scan", { method: "POST" }),
     deleteAttachment: (attachmentId) => send(`/attachments/${id(attachmentId)}`, { method: "DELETE" }),
 
-    snapshots: (documentId) => json<readonly SnapshotView[]>(`/documents/${id(documentId)}/snapshots`),
-    createSnapshot: (documentId) =>
-      send(`/documents/${id(documentId)}/snapshots`, postJson({ reason: "manual" })),
-    restoreSnapshot: (documentId, snapshotId) =>
-      send(`/documents/${id(documentId)}/snapshots/${id(snapshotId)}/restore`, { method: "POST" }),
 
     plugins: () => json<InstalledPluginsResponse>("/plugins"),
     exportWorkspace: async () => (await fetchApi("/admin/export")).blob(),

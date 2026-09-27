@@ -15,15 +15,13 @@
 import { useCallback } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, ReactElement, ReactNode } from "react";
 
-import type { DocumentsApi } from "@kernel";
-
 import type { AdminClient } from "./api.js";
 import { AuditSection } from "./Audit.js";
 import { PluginsSection } from "./Plugins.js";
-import { ExportSection, OrphansSection, SnapshotsSection } from "./Storage.js";
+import { ExportSection, OrphansSection } from "./Storage.js";
 import { InvitesSection, UsersSection } from "./Users.js";
 
-export const ADMIN_SECTIONS = ["users", "invites", "audit", "orphans", "snapshots", "plugins", "workspace"] as const;
+export const ADMIN_SECTIONS = ["users", "invites", "audit", "orphans", "plugins", "workspace"] as const;
 
 export type AdminSectionId = (typeof ADMIN_SECTIONS)[number];
 
@@ -32,7 +30,6 @@ const LABELS: Readonly<Record<AdminSectionId, string>> = {
   invites: "Invites",
   audit: "Audit log",
   orphans: "Orphan files",
-  snapshots: "Snapshots",
   plugins: "Plugins",
   workspace: "Workspace",
 };
@@ -80,7 +77,6 @@ export function AdminSectionFrame({
 
 export interface AdminViewProps {
   readonly client: AdminClient;
-  readonly documents: DocumentsApi;
   readonly isAdmin: boolean;
   readonly selfId: string;
   readonly section: AdminSectionId;
@@ -89,7 +85,6 @@ export interface AdminViewProps {
 
 export function AdminView({
   client,
-  documents,
   isAdmin,
   selfId,
   section,
@@ -148,7 +143,6 @@ export function AdminView({
         <AdminSectionBody
           section={section}
           client={client}
-          documents={documents}
           selfId={selfId}
         />
       </div>
@@ -159,13 +153,11 @@ export function AdminView({
 export function AdminSectionBody({
   section,
   client,
-  documents,
   selfId,
   embedded,
 }: {
   readonly section: AdminSectionId;
   readonly client: AdminClient;
-  readonly documents: DocumentsApi;
   readonly selfId: string;
   /** True on the settings screen, which has already drawn this section's heading. */
   readonly embedded?: boolean;
@@ -179,8 +171,6 @@ export function AdminSectionBody({
       return <AuditSection client={client} embedded={embedded} />;
     case "orphans":
       return <OrphansSection client={client} embedded={embedded} />;
-    case "snapshots":
-      return <SnapshotsSection client={client} documents={documents} embedded={embedded} />;
     case "plugins":
       return <PluginsSection client={client} embedded={embedded} />;
     default:

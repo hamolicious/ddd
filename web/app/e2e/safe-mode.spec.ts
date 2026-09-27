@@ -20,7 +20,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { expect, test, type Browser } from "@playwright/test";
+import { expect, test, type Browser, type Page } from "@playwright/test";
 
 import { ADMIN, signIn } from "./helpers.js";
 
@@ -88,6 +88,15 @@ test.afterAll(() => {
   writeFileSync(brokenModule, original);
 });
 
+/**
+ * The welcome document, found in the folder tree rather than the list: the list shows
+ * the newest 50, and by the time this spec runs the suite has made more than that, so
+ * the oldest document (this one) is on page two.
+ */
+function welcomeDocument(page: Page) {
+  return page.getByRole("tree", { name: "Folders" }).getByRole("treeitem", { name: "Welcome to Life Manager", exact: true });
+}
+
 async function freshPage(browser: Browser, baseURL: string) {
   const context = await browser.newContext({ baseURL });
   return { context, page: await context.newPage() };
@@ -106,7 +115,7 @@ test("a broken plugin fails alone, and safe mode boots past it", async ({ browse
 
       // The app is alive: the shell, the list and the welcome documents are all there.
       await expect(page.getByRole("banner")).toBeVisible();
-      await expect(page.getByRole("button", { name: "Welcome to Life Manager", exact: true })).toBeVisible();
+      await expect(welcomeDocument(page)).toBeVisible();
 
       // And it says so: **one aggregated notice**, not one per plugin (SPEC §6.4),
       // with a route to admin.
@@ -152,7 +161,7 @@ test("a broken plugin fails alone, and safe mode boots past it", async ({ browse
     try {
       await signIn(page, ADMIN, { path: "/?safe=1" });
       await expect(page.getByRole("banner")).toBeVisible();
-      await expect(page.getByRole("button", { name: "Welcome to Life Manager", exact: true })).toBeVisible();
+      await expect(welcomeDocument(page)).toBeVisible();
       // The broken plugin is not base, so it was never imported and there is nothing
       // to report: no failure notice at all.
       await expect(page.getByText(/plugin[s]? failed to load/i)).toHaveCount(0);
@@ -215,7 +224,7 @@ test("a broken plugin fails alone, and safe mode boots past it", async ({ browse
     const { context, page } = await freshPage(browser, base);
     try {
       await signIn(page, ADMIN);
-      await expect(page.getByRole("button", { name: "Welcome to Life Manager", exact: true })).toBeVisible();
+      await expect(welcomeDocument(page)).toBeVisible();
       // No failure notice any more — the recovery needed nothing but the file.
       await expect(page.getByText(/plugin[s]? failed to load/i)).toHaveCount(0);
     } finally {
@@ -238,7 +247,7 @@ test("a plugin that throws while rendering costs a chip, not the application", a
     // the contributed `icon` were wrapped, one throw here unmounted the React root and
     // `#root` was empty — no shell, no notice strip, no way out.
     await expect(page.getByRole("banner")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Welcome to Life Manager", exact: true })).toBeVisible();
+    await expect(welcomeDocument(page)).toBeVisible();
 
     // Two in-place chips: one for the panel component, one for the icon — the icon being
     // the case no `boundary(component)` call could reach, because a `ReactNode` is not a

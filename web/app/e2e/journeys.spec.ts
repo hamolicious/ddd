@@ -32,14 +32,15 @@ import {
 /**
  * What `plugins/base/dist` holds, plus the one example plugin the suite installs.
  *
- * The 19 of SPEC §6.5's table plus `extra-task-states`. M4's two proof plugins
+ * The 20 of SPEC §6.5's table plus `extra-task-states`. M4's two proof plugins
  * (`calendar`, `agenda`) were removed on 2026-09-24; on 2026-09-26 `header` was split
  * out of `shell-ui`, `notices` and `sync-status` out of `header`, `context-menu` out of
  * `folders`, and `properties` was removed; `search` was folded into `doc-list`;
- * `attachments`, `native-preview` and `slash-commands` were added. The base distribution and `BASE_PLUGIN_IDS` —
- * what `?safe=1` boots — are the same nineteen. `safe-mode.spec.ts` is what pins that.
+ * `attachments`, `native-preview` and `slash-commands` were added; on 2026-09-27
+ * `snapshots` moved out of `admin` into a plugin of its own. The base distribution and `BASE_PLUGIN_IDS` —
+ * what `?safe=1` boots — are the same twenty. `safe-mode.spec.ts` is what pins that.
  */
-const EXPECTED_PLUGINS = 20;
+const EXPECTED_PLUGINS = 21;
 
 /**
  * `--lm-bg` as the `midnight` theme paints it (`plugins/base/themes/src/index.tsx`).
@@ -448,8 +449,10 @@ test("an admin invite lets a second user register", async ({ page, browser, base
   // region is the only place the test can read it either.
   const shown = invites.getByRole("status");
   await expect(shown).toContainText(/shown once/i);
-  const value = ((await shown.locator("code").first().textContent()) ?? "").trim();
-  expect(value.length, `token looked wrong: ${value}`).toBeGreaterThan(15);
+  // Shown as a link (`…#/invite/<token>`); the gate's invite field takes the token.
+  const link = ((await shown.locator("code").first().textContent()) ?? "").trim();
+  const value = link.split("#/invite/")[1] ?? "";
+  expect(value.length, `link looked wrong: ${link}`).toBeGreaterThan(15);
 
   // It shows up as a pending invite in the listing, which is the admin-visible half.
   await expect(invites.getByRole("row").filter({ hasText: "pending" })).toHaveCount(1);

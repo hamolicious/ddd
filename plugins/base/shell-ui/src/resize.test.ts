@@ -18,6 +18,7 @@ beforeAll(() => {
 });
 
 import {
+  ALTBAR_WIDTH_KEY,
   SIDEBAR_DEFAULT,
   SIDEBAR_MIN,
   clampSidebarWidth,
@@ -55,6 +56,14 @@ describe("persistence", () => {
     expect(storedSidebarWidth()).toBe(333);
     rememberSidebarWidth(undefined);
     expect(storedSidebarWidth()).toBeUndefined();
+  });
+
+  it("keeps the altbar's width apart from the sidebar's", () => {
+    rememberSidebarWidth(300);
+    rememberSidebarWidth(250, ALTBAR_WIDTH_KEY);
+    expect(storedSidebarWidth()).toBe(300);
+    expect(storedSidebarWidth(ALTBAR_WIDTH_KEY)).toBe(250);
+    rememberSidebarWidth(undefined, ALTBAR_WIDTH_KEY);
   });
 
   it("ignores a corrupt stored value", () => {

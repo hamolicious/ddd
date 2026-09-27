@@ -291,7 +291,7 @@ Their genuine niche: **cron while nobody's looking, outbound HTTP with secrets, 
 
 | Plugin | Responsibility | Defines |
 |---|---|---|
-| `shell-ui` | Layout skeleton; **mobile breakpoint** (drawer sidebar, single pane, 44 px targets); a spot for the top bar; always-mounted overlays | `shell.header`, `shell.overlay`, `sidebar.panel`, `main.view` |
+| `shell-ui` | Layout skeleton; **mobile breakpoint** (drawer sidebar, single pane, 44 px targets); a spot for the top bar; the altbar (panels about the current view, opposite the sidebar, toggled from the top bar); always-mounted overlays | `shell.header`, `shell.overlay`, `sidebar.panel`, `altbar.panel`, `main.view` |
 | `header` | The top bar in `shell.header`: `start`/`end` seats other plugins fill (the sidebar ☰ is `shell-ui`'s); per-user order and visibility in Settings → Top bar | `navbar.item` |
 | `context-menu` | One menu / sheet / modal service for every plugin: anchored popover on a wide screen, bottom sheet on a phone; `modal` (fields and buttons) and `confirm` ("are you sure?") resolve with the answer | — |
 | `notices` | The notice bell in the header's `end` seat: plugin failures, update prompts, other kernel notices | — |
@@ -306,10 +306,11 @@ Their genuine niche: **cron while nobody's looking, outbound HTTP with secrets, 
 | `slash-commands` | Type `/` in any editor for a menu of actions; editors publish an editor-neutral `text.surface` (caret, text before it, insert there) while mounted | `text.surface`, `slash.command` |
 | `native-preview` | Viewers for what a browser shows by itself: images, PDF, audio, video, plain text (never SVG or HTML) | — |
 | `document-surface` | Owns the document route + **mode registry**; `viewer`/`editor` are symmetric contributions | `document.mode` |
-| `viewer` | Read mode (hides fm block + `%%%` sections) | contributes `read` |
+| `viewer` | Read mode (hides fm block + `%%%` sections); the file page `#/file/<id>` | contributes `read` |
+| `snapshots` | The open document's snapshots in the altbar: take one, restore one | — |
 | `editor` | Edit mode — CodeMirror 6 + `y-codemirror.next`; collapses machine sections; paste / drop handlers take them before CodeMirror; publishes a `text.surface`; **must be usable with the Android soft keyboard (M5 acceptance)** | `editor.extension`, `editor.paste` |
 | `settings` | Settings shell | `settings.section` |
-| `admin` | Users, invites, pending installs + capability approval, plugin config, audit log, orphans, snapshots | — |
+| `admin` | Users, invites, pending installs + capability approval, plugin config, audit log, orphans | — |
 
 First run seeds a few deletable welcome documents demonstrating frontmatter, `fm.path`, task lists, and a directive; empty states written for doc-list (search included)/folders/Trash.
 

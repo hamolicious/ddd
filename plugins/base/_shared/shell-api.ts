@@ -15,6 +15,10 @@ export interface ShellLayout {
   readonly sidebarOpen: boolean;
   /** At least one `sidebar.panel` is contributed; with none there is nothing to toggle. */
   readonly hasSidebar: boolean;
+  /** Desktop: the altbar column is shown. Compact: its drawer is open. */
+  readonly altbarOpen: boolean;
+  /** Some `altbar.panel` accepts the current view; with none there is no altbar. */
+  readonly hasAltbar: boolean;
 }
 
 export interface ShellUiApi {
@@ -31,6 +35,10 @@ export interface ShellUiApi {
   readonly sidebarId: string;
   /** Open or close the drawer sidebar (mobile) / collapse it (desktop). */
   toggleSidebar(open?: boolean): void;
+  /** The altbar element's id, for a toggle's `aria-controls`. */
+  readonly altbarId: string;
+  /** Open or close the altbar: a column on a wide screen, a drawer on a phone. */
+  toggleAltbar(open?: boolean): void;
   /** Which `main.view` is showing; the router sets it. */
   setMainView(id: string, params?: Readonly<Record<string, string>>): void;
 }

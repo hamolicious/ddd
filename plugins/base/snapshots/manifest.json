@@ -1,0 +1,21 @@
+{
+  "id": "snapshots",
+  "version": "1.0.0",
+  "name": "Snapshots",
+  "description": "The open document's snapshots in the side panel: take one, restore one.",
+  "author": "Life Manager base distribution",
+  "license": "MIT OR Apache-2.0",
+  "x-tailwind": { "prefix": "snap" },
+  "kernel": "^1.0",
+  "dependencies": {
+    "context-menu": "^1.0",
+    "shell-ui": "^1.0"
+  },
+  "peerLibraries": {
+    "react": "^18.0.0"
+  },
+  "frontend": {
+    "module": "frontend/index.mjs",
+    "style": "frontend/style.css"
+  }
+}

@@ -1,6 +1,6 @@
 /**
- * `admin` — users, invites, the audit log, orphan attachments, snapshots, and the
- * plugin list (SPEC §6.5).
+ * `admin` — users, invites, the audit log, orphan attachments, and the plugin list
+ * (SPEC §6.5). A document's snapshots are the `snapshots` plugin's, in the altbar.
  *
  * Every screen here is a thin client over `/api/admin/*` and two admin-facing corners of
  * the document and attachment APIs, all of which the server already authorizes: an
@@ -19,9 +19,6 @@
  *
  * - **Audit log** (SPEC §5.4): in a shared workspace any user can delete any document,
  *   so "who deleted this" is the only accountability there is.
- * - **Snapshots**: restore replaces the whole text in one CRDT transaction, under any open
- *   editor. The server warns in its own logs when other users are subscribed but does not
- *   return that count, so the confirmation here warns unconditionally.
  * - **Orphans**: blobs nothing references. Flagged, never auto-deleted (SPEC §3.6).
  *
  * **Where the sections live.** Each one is contributed as a `settings.section` *and*
@@ -77,10 +74,6 @@ const SETTINGS_TITLES: Readonly<Record<AdminSectionId, { title: string; descript
     title: "Orphan files",
     description: "Stored files no document references. Nothing is deleted automatically.",
   },
-  snapshots: {
-    title: "Snapshots",
-    description: "Per-document history, and restoring a document to an earlier text.",
-  },
   plugins: {
     title: "Plugins",
     description: "What is installed, and exactly what each plugin is trusted with.",
@@ -118,7 +111,6 @@ export default function activate(kernel: Kernel): AdminApi {
       <ConfirmContext.Provider value={confirm}>
         <AdminView
           client={client}
-          documents={kernel.documents}
           isAdmin={admin}
           selfId={selfId}
           section={section}
@@ -145,7 +137,6 @@ export default function activate(kernel: Kernel): AdminApi {
           <AdminSectionBody
             section={id}
             client={client}
-            documents={kernel.documents}
             selfId={selfId}
             embedded
           />
@@ -201,12 +192,6 @@ export default function activate(kernel: Kernel): AdminApi {
         title: "Show the audit log",
         category: "Admin",
         run: () => api.open("audit"),
-      },
-      {
-        id: "admin.snapshots",
-        title: "Browse snapshots",
-        category: "Admin",
-        run: () => api.open("snapshots"),
       },
       {
         id: "admin.orphans",

@@ -2,11 +2,12 @@
  * `shell-ui` — the layout skeleton, and the only plugin that takes the kernel's UI
  * mount (SPEC §6.5).
  *
- * It owns four points and no features: a header spot, a sidebar of panels, one main
- * region that renders whichever `main.view` the router selected, and always-mounted
- * overlays (the command palette). Everything visible inside them belongs to somebody
+ * It owns five points and no features: a header spot, a sidebar of panels, one main
+ * region that renders whichever `main.view` the router selected, an altbar of panels
+ * about that view (opposite the sidebar), and always-mounted overlays (the command
+ * palette). Everything visible inside them belongs to somebody
  * else — the top bar itself is the `header` plugin — which is what makes this plugin
- * replaceable: a different shell defines the same four points and nothing else has to
+ * replaceable: a different shell defines the same five points and nothing else has to
  * change.
  *
  * What lives where:
@@ -15,17 +16,20 @@
  *   React because the router and `matchMedia` both drive it from outside the tree.
  * - `Shell.tsx` — the layout, the landmarks, the drawer, the error boundaries.
  * - `SidebarToggle.tsx` — the ☰, contributed to the header's `start` seat.
- * - `resize.ts` — the sidebar width, clamped and remembered per device.
+ * - `AltbarToggle.tsx` — the altbar's button, in the header's `end` seat.
+ * - `resize.ts` — the column widths, clamped and remembered per device.
  */
 
 import { type Kernel } from "@kernel";
 
 import {
   POINTS,
+  altbarPanelShape,
   mainViewShape,
   shellHeaderShape,
   shellOverlayShape,
   sidebarPanelShape,
+  type AltbarPanel,
   type MainView,
   type NavbarItem,
   type ShellHeader,
@@ -34,7 +38,8 @@ import {
 } from "../../_shared/points.js";
 import type { ShellUiApi } from "../../_shared/shell-api.js";
 
-import { SIDEBAR_ID, Shell } from "./Shell.js";
+import { AltbarToggle } from "./AltbarToggle.js";
+import { ALTBAR_ID, SIDEBAR_ID, Shell } from "./Shell.js";
 import { SidebarToggle } from "./SidebarToggle.js";
 import { ShellState } from "./state.js";
 
@@ -59,6 +64,12 @@ export default function activate(kernel: Kernel): ShellUiApi {
     key: (panel) => panel.id,
     description: "A collapsible panel in the sidebar.",
   });
+  kernel.extensions.definePoint<AltbarPanel>({
+    name: POINTS.altbarPanel,
+    shape: altbarPanelShape,
+    key: (panel) => panel.id,
+    description: "A collapsible panel in the altbar, opposite the sidebar, about the current view.",
+  });
   kernel.extensions.definePoint<MainView>({
     name: POINTS.mainView,
     shape: mainViewShape,
@@ -82,6 +93,14 @@ export default function activate(kernel: Kernel): ShellUiApi {
     order: 0,
     component: () => <SidebarToggle state={state} />,
   });
+  // Rightmost, mirroring the ☰: each button sits on the side of the column it opens.
+  kernel.extensions.contribute<NavbarItem>(POINTS.navbarItem, {
+    id: "shell-ui.altbar-toggle",
+    label: "Side panel",
+    side: "end",
+    order: 2000,
+    component: () => <AltbarToggle state={state} />,
+  });
 
   return {
     isCompact: () => state.compact,
@@ -90,6 +109,8 @@ export default function activate(kernel: Kernel): ShellUiApi {
     subscribeLayout: state.subscribe,
     sidebarId: SIDEBAR_ID,
     toggleSidebar: (open) => state.toggleSidebar(open),
+    altbarId: ALTBAR_ID,
+    toggleAltbar: (open) => state.toggleAltbar(open),
     setMainView: (id, params) => state.setMainView(id, params),
   };
 }

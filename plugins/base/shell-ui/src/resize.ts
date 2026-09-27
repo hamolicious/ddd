@@ -1,5 +1,5 @@
 /**
- * Sidebar resizing: the pure width rules, kept out of the component so they can be
+ * Sidebar and altbar resizing: the pure width rules, the same for both columns, kept out of the component so they can be
  * tested without a DOM.
  *
  * The width is a **per-device** preference — it answers "how wide on this screen",
@@ -13,6 +13,8 @@ export const SIDEBAR_DEFAULT = 288; // matches the stylesheet's `min(18rem, 32vw
 export const KEYBOARD_STEP = 16;
 
 const STORAGE_KEY = "lm.shell.sidebar-width";
+/** The altbar's width, remembered apart from the sidebar's. */
+export const ALTBAR_WIDTH_KEY = "lm.shell.altbar-width";
 
 /** The widest the sidebar may be: never squeezes `main` below half the viewport. */
 export function sidebarMax(viewportWidth: number): number {
@@ -24,9 +26,9 @@ export function clampSidebarWidth(px: number, viewportWidth: number): number {
   return Math.min(Math.max(Math.round(px), SIDEBAR_MIN), sidebarMax(viewportWidth));
 }
 
-export function storedSidebarWidth(): number | undefined {
+export function storedSidebarWidth(key: string = STORAGE_KEY): number | undefined {
   try {
-    const raw = globalThis.localStorage?.getItem(STORAGE_KEY);
+    const raw = globalThis.localStorage?.getItem(key);
     if (!raw) return undefined;
     const parsed = Number(raw);
     return Number.isFinite(parsed) ? parsed : undefined;
@@ -35,10 +37,10 @@ export function storedSidebarWidth(): number | undefined {
   }
 }
 
-export function rememberSidebarWidth(px: number | undefined): void {
+export function rememberSidebarWidth(px: number | undefined, key: string = STORAGE_KEY): void {
   try {
-    if (px === undefined) globalThis.localStorage?.removeItem(STORAGE_KEY);
-    else globalThis.localStorage?.setItem(STORAGE_KEY, String(px));
+    if (px === undefined) globalThis.localStorage?.removeItem(key);
+    else globalThis.localStorage?.setItem(key, String(px));
   } catch {
     // Storage refused: the width still applies for this page's lifetime.
   }

@@ -28,6 +28,7 @@ export const POINTS = {
   shellHeader: "shell.header",
   shellOverlay: "shell.overlay",
   sidebarPanel: "sidebar.panel",
+  altbarPanel: "altbar.panel",
   mainView: "main.view",
   /** `header` */
   navbarItem: "navbar.item",
@@ -118,6 +119,39 @@ export const sidebarPanelShape: Shape<SidebarPanel> = s.object({
   icon: s.optional(s.any()),
   order: s.optional(s.number()),
   defaultOpen: s.optional(s.boolean()),
+});
+
+/** Which `main.view` is showing, and the route's params: what an altbar panel is about. */
+export interface ShownView {
+  readonly id: string;
+  readonly params: Readonly<Record<string, string>>;
+}
+
+/**
+ * A panel in the altbar: the column opposite the sidebar, about whatever the main view
+ * is showing (a document's snapshots, its outline). The shell draws the ones whose
+ * `when` accepts the current view; with none, the altbar and its toggle are absent.
+ */
+export interface AltbarPanel {
+  readonly id: string;
+  readonly title: string;
+  readonly component: ComponentType<{ readonly view: ShownView }>;
+  readonly icon?: ReactNode;
+  readonly order?: number;
+  /** `true` ⇒ the panel starts expanded on first run. Default `true`. */
+  readonly defaultOpen?: boolean;
+  /** Whether this panel has anything to say about `view`. Default: every view. */
+  readonly when?: (view: ShownView) => boolean;
+}
+
+export const altbarPanelShape: Shape<AltbarPanel> = s.object({
+  id: s.string(),
+  title: s.string(),
+  component: s.component(),
+  icon: s.optional(s.any()),
+  order: s.optional(s.number()),
+  defaultOpen: s.optional(s.boolean()),
+  when: s.optional(s.func()),
 });
 
 /**

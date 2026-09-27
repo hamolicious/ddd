@@ -41,9 +41,10 @@ browser's device toolbar at 390 × 844, and 844 × 390 for landscape.
 | 19b | ↳ Invites | [x] | Full invite link (`#/invite/<token>`), icon buttons, Revoke asks first |
 | 19c | ↳ Audit log | [x] | No changes |
 | 19d | ↳ Orphan files | [x] | Icon buttons; names open the file in the viewer (`#/file/<id>`) |
-| 19e | ↳ Snapshots | [ ] | |
+| 19e | ↳ Snapshots | [x] | Moved out: now the `snapshots` plugin, per page, in the altbar (19h) |
 | 19f | ↳ Plugins | [ ] | |
 | 19g | ↳ Workspace | [ ] | |
+| 19h | `snapshots` | [ ] | New: the open document's snapshots in the altbar; `shell-ui` gained the altbar and its top-bar toggle |
 | 20 | `extra-task-states` (example) | [ ] | |
 | 21 | `alt-editor` (example) | [ ] | |
 
@@ -557,15 +558,9 @@ creates nothing.
 
 ### 19e. Snapshots
 
-**Where to see it.** `#/admin/snapshots`; "Browse snapshots" in the palette.
-
-- [ ] The document picker ("title contains…") finds a document, and its snapshots list
-  with when they were taken, why, and the title then.
-- [ ] "Take a snapshot" adds one now.
-- [ ] Restore asks first, then puts the document back to that text, and the change syncs
-  to an open copy in another browser.
-
-**Notes.**
+Moved out of admin on 2026-09-27. Snapshots are per document, so they became the
+`snapshots` plugin, shown in the altbar next to the open document. Any signed-in user can
+use them, not only admins. Reviewed as 19h.
 
 ### 19f. Plugins
 
@@ -601,6 +596,26 @@ palette.
 
 **Notes.**
 
+
+### 19h. `snapshots` — the altbar panel
+
+**What it does.** On an open document, the altbar (the column opposite the sidebar,
+toggled by the button at the right end of the top bar) shows its snapshots, newest
+first. Take one now, refresh, or restore one. Restoring asks first, and the server keeps
+the current text as a "Before a restore" snapshot, so a restore can be undone.
+
+**Where to see it.** Open any document, then the side-panel button at the top right, or
+"Show this document's snapshots" in the palette.
+
+- [ ] The toggle only appears on a document; it opens and closes the altbar, and that is
+  remembered on this device.
+- [ ] The altbar's edge drags to resize; arrow keys on the edge too; double-click resets.
+- [ ] Take adds a "Taken by hand" snapshot; each row shows when, why, size and the title then.
+- [ ] Restore asks first, then puts the text back, and an open copy in another browser follows.
+- [ ] Phone: the altbar is a drawer from the right; opening the sidebar closes it; Escape
+  and a tap outside close it.
+
+**Notes.**
 ## 20. `extra-task-states` (example)
 
 **What it does.** Proves plugins can extend markdown: adds three task markers, `[/]` in
