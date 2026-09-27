@@ -27,6 +27,7 @@ import type { DocumentsApi } from "@kernel";
 import { AdminSectionFrame } from "./AdminView.js";
 import { formatBytes, formatWhen, type AdminClient } from "./api.js";
 import { useAsync, useConfirm, useMutation } from "./hooks.js";
+import { RefreshIcon, ScanIcon, TrashIcon } from "./icons.js";
 
 export function OrphansSection({
   client,
@@ -54,16 +55,25 @@ export function OrphansSection({
         </p>
       )}
 
-      <div className="admin-inline-form">
+      <div className="admin-actions">
         <button
           type="button"
+          className="admin-icon-button"
+          aria-label="Run the scan now"
+          title="Run the scan now"
           disabled={mutation.busy === "scan"}
           onClick={() => mutation.run("scan", () => client.scanOrphans())}
         >
-          Run the scan now
+          <ScanIcon />
         </button>
-        <button type="button" onClick={() => orphans.reload()}>
-          Refresh
+        <button
+          type="button"
+          className="admin-icon-button"
+          aria-label="Refresh"
+          title="Refresh"
+          onClick={() => orphans.reload()}
+        >
+          <RefreshIcon />
         </button>
       </div>
 
@@ -92,7 +102,10 @@ export function OrphansSection({
                 {rows.map(({ attachment, flagged_at }) => (
                   <tr key={attachment.id}>
                     <th scope="row">
-                      {attachment.name}
+                      {/* The viewer's file page: look before deleting. */}
+                      <a className="admin-link" href={`#/file/${encodeURIComponent(attachment.id)}`}>
+                        {attachment.name}
+                      </a>
                       <span className="admin-hint">{attachment.id}</span>
                     </th>
                     <td data-label="Type">{attachment.mime}</td>
@@ -102,7 +115,9 @@ export function OrphansSection({
                     <td className="admin-actions">
                       <button
                         type="button"
-                        className="admin-danger"
+                        className="admin-danger admin-icon-button"
+                        aria-label={`Delete ${attachment.name}`}
+                        title="Delete"
                         disabled={mutation.busy === attachment.id}
                         onClick={(event) => {
                           void confirm({
@@ -115,7 +130,7 @@ export function OrphansSection({
                           });
                         }}
                       >
-                        Delete
+                        <TrashIcon />
                       </button>
                     </td>
                   </tr>

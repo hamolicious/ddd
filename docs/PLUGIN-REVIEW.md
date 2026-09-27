@@ -40,7 +40,7 @@ browser's device toolbar at 390 × 844, and 844 × 390 for landscape.
 | 19a | ↳ Users | [x] | Icon buttons, aligned cells, phone label, reset is a link |
 | 19b | ↳ Invites | [x] | Full invite link (`#/invite/<token>`), icon buttons, Revoke asks first |
 | 19c | ↳ Audit log | [x] | No changes |
-| 19d | ↳ Orphan files | [ ] | |
+| 19d | ↳ Orphan files | [x] | Icon buttons; names open the file in the viewer (`#/file/<id>`) |
 | 19e | ↳ Snapshots | [ ] | |
 | 19f | ↳ Plugins | [ ] | |
 | 19g | ↳ Workspace | [ ] | |
@@ -545,13 +545,15 @@ The "lost token" note is gone.
 
 **Where to see it.** `#/admin/orphans`; "Show orphan files" in the palette.
 
-- [ ] Stored files no document references are listed with their name, type, size and
+- [x] Stored files no document references are listed with their name, type, size and
   when they were uploaded.
-- [ ] Scan finds a new orphan: paste an image into a document, delete the embed, scan.
-- [ ] Delete removes one file, after asking; nothing is ever deleted automatically.
-- [ ] A file still referenced (even only from a `%%%` section) is never listed.
+- [x] Scan finds a new orphan: paste an image into a document, delete the embed, scan.
+- [x] Delete removes one file, after asking; nothing is ever deleted automatically.
+- [x] A file still referenced (even only from a `%%%` section) is never listed.
 
-**Notes.**
+**Notes.** Scan, Refresh and Delete are icon buttons. Each file's name opens it on the
+viewer's file page, `#/file/<id>`: the same page a promoted file gets, and looking at a file
+creates nothing.
 
 ### 19e. Snapshots
 

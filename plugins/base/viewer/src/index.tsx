@@ -19,6 +19,9 @@
  *   is an ordinary document whose body embeds one `attachment://`, so this is a
  *   presentation decision, not a special object type. See `wrapper.ts`.
  *
+ * It also serves `#/file/<id>`: the same file page for an attachment no document wraps
+ * (Admin → Orphan files links there). Looking at a file creates nothing.
+ *
  * It renders from `row.content` — the projection — so a document is readable offline
  * and before hydration finishes. The hydrated handle is only needed for editing.
  *
@@ -32,7 +35,13 @@
 import type { Kernel } from "@kernel";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
-import { POINTS, type DocumentMode, type DocumentModeProps } from "../../_shared/points.js";
+import {
+  POINTS,
+  type DocumentMode,
+  type DocumentModeProps,
+  type MainView,
+  type Route,
+} from "../../_shared/points.js";
 import { FmHeader } from "./FmHeader.js";
 import {
   formatBytes,
@@ -114,6 +123,21 @@ export default function activate(kernel: Kernel): void {
     ),
     component: Read,
   });
+
+  // A bare file, by attachment id: the wrapper page without the wrapper.
+  const File = ({ params }: { readonly params?: Readonly<Record<string, string>> }): ReactNode => {
+    const id = params?.["id"] ?? "";
+    if (!/^[A-Za-z0-9_-]+$/.test(id)) {
+      return (
+        <div className="viewer:max-w-[62ch] viewer:min-w-0 viewer:px-4 viewer:py-6 viewer:font-sans viewer:text-text-muted">
+          <p>That is not a file address.</p>
+        </div>
+      );
+    }
+    return <AttachmentPreview key={id} kernel={kernel} markdown={markdown} reference={{ id, embedded: true }} title="File" />;
+  };
+  kernel.extensions.contribute<Route>(POINTS.route, { path: "/file/:id", view: "viewer.file" });
+  kernel.extensions.contribute<MainView>(POINTS.mainView, { id: "viewer.file", title: "File", component: File });
 }
 
 /**
