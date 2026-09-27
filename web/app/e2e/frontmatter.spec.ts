@@ -29,7 +29,7 @@
 
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 
-import { ADMIN, createDocument, openDocument, signIn, waitSynced } from "./helpers.js";
+import { ADMIN, createDocument, modeSwitch, openDocument, signIn, waitSynced } from "./helpers.js";
 
 /** SPEC §6.5's acceptance viewport — the header has to hold it like everything else. */
 const PHONE = { width: 390, height: 844 };
@@ -334,6 +334,27 @@ async function storedSurfaceSettings(
 }
 
 test.describe('the "Open documents in" setting', () => {
+  // A reload straight into a document boots the plugins one at a time, and `editor`
+  // activates before `viewer`: the surface used to settle on Edit — the only mode loaded
+  // when the document first resolved — and keep it once Read arrived. The suite's
+  // preference is Read (see the restore below), so no setting is changed here.
+  test("is respected on a reload straight into a document", async ({ page, request, baseURL }) => {
+    const id = await createDocument(
+      request,
+      baseURL as string,
+      "---\ntitle: Reloads in the chosen mode\npath: sweep\n---\n\nbody\n",
+    );
+    await signIn(page, ADMIN);
+    await openDocument(page, id);
+    await page.reload();
+    await expect(modeSwitch(page)).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Edit" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Read" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
   test("is reachable, and decides how the next document opens", async ({
     page,
     request,
@@ -380,6 +401,16 @@ test.describe('the "Open documents in" setting', () => {
         "true",
       );
       await expect(page.locator(".cm-content")).toContainText("title: Opens in the chosen mode");
+
+      // And a reload of that document opens in the editor too: the preference is read
+      // on a cold boot, not only from the value this tab just wrote.
+      await page.reload();
+      await expect(modeSwitch(page)).toBeVisible();
+      await expect(page.getByRole("tab", { name: "Edit" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      await expect(page.locator(".cm-editor")).toBeVisible();
 
       // "Unless the mode switch says otherwise": a per-document choice still wins, and
       // it survives leaving the document and coming back.

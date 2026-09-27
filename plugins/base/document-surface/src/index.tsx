@@ -293,6 +293,12 @@ class Surface {
   #queryOff: Unsubscribe | undefined;
   #memory: Map<string, string> | undefined;
   #memoryTimer: ReturnType<typeof setTimeout> | undefined;
+  /**
+   * Whether the mode on screen was picked by the user (`setMode`) rather than resolved.
+   * Only a picked mode is sticky when the registry changes: modes arrive one plugin at a
+   * time on a cold boot, and a resolved one is just "the best of what had loaded so far".
+   */
+  #chosen = false;
 
   constructor(
     readonly kernel: Kernel,
@@ -302,7 +308,11 @@ class Surface {
     // which mode should be active — an uninstalled editor must fall back to reading.
     this.point.subscribe(() => {
       if (this.#snapshot.documentId === undefined) return;
-      const mode = this.#resolve(this.#snapshot.mode);
+      // Re-resolved from scratch unless the user picked the current mode. On a reload
+      // straight into a document, `editor` activates before `viewer`, so `edit` was the
+      // only candidate when the document first resolved — keeping it would override a
+      // "Read" preference on every refresh.
+      const mode = this.#resolve(this.#chosen ? this.#snapshot.mode : undefined);
       if (mode !== this.#snapshot.mode) this.#patch({ mode });
       else this.#emit();
     });
@@ -340,6 +350,7 @@ class Surface {
   show(id: DocumentId | undefined): void {
     if (id === this.#snapshot.documentId) return;
     const generation = ++this.#generation;
+    this.#chosen = false;
     this.#teardown();
     if (id === undefined) {
       this.#set({ status: "idle" });
@@ -364,6 +375,7 @@ class Surface {
       this.kernel.log.warn(`no visible document.mode "${modeId}"`);
       return;
     }
+    this.#chosen = true;
     this.#patch({ mode: modeId });
     rememberMode(this.#memoryMap(), documentId, modeId);
     this.#scheduleMemoryWrite();
