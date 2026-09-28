@@ -70,7 +70,11 @@ services:
     environment:
       MONGO_URI: mongodb://mongo:27017
       MONGO_DATABASE: ${MONGO_DATABASE:-life_manager}
-      BIND_ADDR: 0.0.0.0:8080
+      # The port the server listens on inside the container. `SERVER_PORT` is the host
+      # side of the mapping below; this is the container side, and the healthcheck and
+      # the caddy upstream follow it. Change it only when something else in the
+      # container network already owns 8080.
+      BIND_ADDR: 0.0.0.0:${BACKEND_PORT:-8080}
       # Required, >= 32 bytes, no default (SPEC §5.2). Rotating it logs everyone out.
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required and must be at least 32 bytes}
       MAX_ATTACHMENT_BYTES: ${MAX_ATTACHMENT_BYTES:-104857600}
@@ -102,7 +106,7 @@ services:
       # Must stay below stop_grace_period (SPEC §8: exit within 30 s).
       SHUTDOWN_GRACE_SECS: ${SHUTDOWN_GRACE_SECS:-30}
     ports:
-      - "${SERVER_PORT:-8080}:8080"
+      - "${SERVER_PORT:-8080}:${BACKEND_PORT:-8080}"
     healthcheck:
       # Liveness (never touches Mongo). `bash` rather than CMD-SHELL's dash:
       # /dev/tcp is a bash feature, and the image ships no curl.
@@ -110,7 +114,7 @@ services:
         - CMD
         - bash
         - -c
-        - 'exec 3<>/dev/tcp/127.0.0.1/8080 && printf "GET /healthz HTTP/1.0\r\nHost: localhost\r\n\r\n" >&3 && grep -q "200 OK" <&3'
+        - 'exec 3<>/dev/tcp/127.0.0.1/${BACKEND_PORT:-8080} && printf "GET /healthz HTTP/1.0\r\nHost: localhost\r\n\r\n" >&3 && grep -q "200 OK" <&3'
       interval: 15s
       timeout: 5s
       retries: 5
@@ -139,6 +143,8 @@ services:
       DOMAIN: ${DOMAIN:-localhost}
       # Optional: an address for ACME expiry notices.
       ACME_EMAIL: ${ACME_EMAIL:-}
+      # Where the server listens (see the server's BIND_ADDR); the Caddyfile proxies to it.
+      BACKEND_PORT: ${BACKEND_PORT:-8080}
     ports:
       - "80:80"
       - "443:443"
