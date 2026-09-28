@@ -151,3 +151,27 @@ describe("transitiveDependents", () => {
     expect([...transitiveDependents("unrelated", plugins)]).toEqual([]);
   });
 });
+
+describe("the base distribution's order (PLUGIN-PROTOCOLS §9 step 4)", () => {
+  it("is the one the server's resolver is pinned to", async () => {
+    const { readFileSync, readdirSync, existsSync } = await import("node:fs");
+    const { dirname, resolve } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const repo = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
+    const base = resolve(repo, "plugins/base");
+    const plugins = readdirSync(base)
+      .filter((id) => existsSync(resolve(base, id, "manifest.json")))
+      .map((id) => ({
+        manifest: JSON.parse(readFileSync(resolve(base, id, "manifest.json"), "utf8")),
+        baseUrl: `/plugins/${id}/1.0.0/`,
+        state: "enabled" as const,
+        base: true,
+      }));
+    const corpus = JSON.parse(readFileSync(resolve(repo, "backend/crates/core/corpus/wiring.json"), "utf8")) as {
+      base_order: string[];
+    };
+    const result = resolveOrder(plugins, { kernelVersion: KERNEL_API_VERSION });
+    expect(result.skipped).toEqual([]);
+    expect(result.order.map((p) => p.manifest.id)).toEqual(corpus.base_order);
+  });
+});

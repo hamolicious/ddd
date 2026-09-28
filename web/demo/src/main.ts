@@ -94,6 +94,10 @@ function unavailableCore(reason: string): CoreBindings {
     resolveTitle: fail,
     normalizeDate: fail,
     semanticsVersion: () => -1,
+    resolveWiring: fail,
+    planWiring: fail,
+    wiringCandidates: fail,
+    shapeFits: fail,
   };
 }
 

@@ -9,6 +9,8 @@
  * Filter *compilation* stays server-side (SPEC §4.2): the client evaluates.
  */
 
+import type { ApplyPlan, PortCandidate, Resolution, ShapeJson, WiringInput, WiringOverrides } from "@kernel";
+
 import type { CoreMap, ProjectionRow } from "../protocol.js";
 
 /** What `parse_document` returns (the JSON of `ParsedDocument`'s public half). */
@@ -69,6 +71,31 @@ export interface CoreBindings {
    * server's would. Returns the input unchanged when it is not a date.
    */
   normalizeDate(input: string): string;
+  /** `core::wiring::resolve` (PLUGIN-PROTOCOLS §6). */
+  resolveWiring(input: WiringInput): Resolution;
+  /** `core::wiring::plan` (§6c). */
+  planWiring(request: WiringPlanRequest): ApplyPlan;
+  /** `core::wiring::candidates` (§6b). */
+  wiringCandidates(input: WiringInput, port: string, dir: "in" | "out"): readonly PortCandidate[];
+  /** `core::wiring::fits` (§6b). */
+  shapeFits(offer: ShapeJson, need: ShapeJson): readonly string[];
+}
+
+export interface WiringPlanRequest {
+  readonly before: Resolution;
+  readonly after: Resolution;
+  readonly beforeWiring: WiringOverrides;
+  readonly afterWiring: WiringOverrides;
+  readonly hot: readonly string[];
+}
+
+/** A wiring export answered `{ error }`: the input did not parse. */
+function wiringResult<T>(json: string): T {
+  const value = JSON.parse(json) as T | { readonly error?: string };
+  if (value && typeof value === "object" && !Array.isArray(value) && typeof (value as { error?: unknown }).error === "string") {
+    throw new Error(`core::wiring refused its input: ${(value as { error: string }).error}`);
+  }
+  return value as T;
 }
 
 /** Project a stored projection row into the evaluator's row shape. */
@@ -106,6 +133,11 @@ export function loadCore(initInput?: BufferSource | WebAssembly.Module | URL | s
       semanticsVersion: () => mod.core_semantics_version(),
       resolveTitle: (text: string) => mod.resolve_title(text),
       normalizeDate: (input: string) => mod.normalize_date(input),
+      resolveWiring: (input) => wiringResult<Resolution>(mod.resolve_wiring(JSON.stringify(input))),
+      planWiring: (request) => wiringResult<ApplyPlan>(mod.plan_wiring(JSON.stringify(request))),
+      wiringCandidates: (input, port, dir) =>
+        wiringResult<readonly PortCandidate[]>(mod.wiring_candidates(JSON.stringify(input), port, dir)),
+      shapeFits: (offer, need) => wiringResult<readonly string[]>(mod.shape_fits(JSON.stringify(offer), JSON.stringify(need))),
     } satisfies CoreBindings;
   })();
   return cached;

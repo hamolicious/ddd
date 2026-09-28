@@ -10,6 +10,7 @@
 //! | [`parse_document`] | frontmatter + `%%%` sections + title (SPEC §3.1, §3.4) |
 //! | [`evaluate_filter`] | the filter DSL over one projection row (SPEC §4.2) |
 //! | [`core_semantics_version`] | staleness check against the server's `welcome` |
+//! | [`resolve_wiring`], [`plan_wiring`], [`wiring_candidates`], [`shape_fits`] | the plugin wiring resolver, for the wiring editor's previews (PLUGIN-PROTOCOLS §6) |
 //!
 //! **Filter *compilation* is deliberately absent.** Compiling to Mongo is the
 //! server's job (SPEC §4.2) and needs `bson`, which the Wasm build does not have.
@@ -200,5 +201,83 @@ mod tests {
     #[test]
     fn semantics_version_is_reported() {
         assert_eq!(core_semantics_version(), crate::CORE_SEMANTICS_VERSION);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Plugin wiring (PLUGIN-PROTOCOLS §6). The server resolves natively and ships the result,
+// so boot never needs these; the wiring editor calls them to preview a draft.
+// ---------------------------------------------------------------------------
+
+fn error_json(message: impl std::fmt::Display) -> String {
+    serde_json::json!({ "error": message.to_string() }).to_string()
+}
+
+/// `ResolveInput` JSON → `Resolution` JSON, or `{ "error": … }` for input that does not parse.
+#[wasm_bindgen]
+pub fn resolve_wiring(input_json: &str) -> String {
+    match serde_json::from_str::<crate::wiring::ResolveInput>(input_json) {
+        Ok(input) => {
+            serde_json::to_string(&crate::wiring::resolve(&input)).unwrap_or_else(error_json)
+        }
+        Err(err) => error_json(err),
+    }
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PlanRequest {
+    before: crate::wiring::Resolution,
+    after: crate::wiring::Resolution,
+    #[serde(default)]
+    before_wiring: crate::wiring::Wiring,
+    #[serde(default)]
+    after_wiring: crate::wiring::Wiring,
+    #[serde(default)]
+    hot: Vec<String>,
+}
+
+/// `{ before, after, beforeWiring, afterWiring, hot }` → `ApplyPlan` JSON.
+#[wasm_bindgen]
+pub fn plan_wiring(request_json: &str) -> String {
+    match serde_json::from_str::<PlanRequest>(request_json) {
+        Ok(request) => {
+            let hot = request.hot.into_iter().collect();
+            let plan = crate::wiring::plan(
+                &request.before,
+                &request.after,
+                &request.before_wiring,
+                &request.after_wiring,
+                &hot,
+            );
+            serde_json::to_string(&plan).unwrap_or_else(error_json)
+        }
+        Err(err) => error_json(err),
+    }
+}
+
+/// Every port on the other side of `port` that shares its protocol or fits its shape.
+/// `dir` is `"in"` for a consumed port, `"out"` for a provided one. JSON array.
+#[wasm_bindgen]
+pub fn wiring_candidates(input_json: &str, port: &str, dir: &str) -> String {
+    match serde_json::from_str::<crate::wiring::ResolveInput>(input_json) {
+        Ok(input) => serde_json::to_string(&crate::wiring::candidates(&input, port, dir))
+            .unwrap_or_else(error_json),
+        Err(err) => error_json(err),
+    }
+}
+
+/// Why offering shape `offer` where `need` is required fails: a JSON array of reasons,
+/// empty when it fits (§6b).
+#[wasm_bindgen]
+pub fn shape_fits(offer_json: &str, need_json: &str) -> String {
+    let parsed = serde_json::from_str::<crate::wiring::Shape>(offer_json).and_then(|offer| {
+        serde_json::from_str::<crate::wiring::Shape>(need_json).map(|need| (offer, need))
+    });
+    match parsed {
+        Ok((offer, need)) => {
+            serde_json::to_string(&crate::wiring::fits(&offer, &need)).unwrap_or_else(error_json)
+        }
+        Err(err) => error_json(err),
     }
 }

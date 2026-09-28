@@ -41,6 +41,7 @@ import {
   KERNEL_API_VERSION,
   type InstalledPlugin,
   type LogoutOptions,
+  type ResolvedPluginSet,
   type SessionUser,
 } from "@kernel";
 import {
@@ -53,6 +54,7 @@ import { AuthGate } from "./boot/AuthGate.js";
 import { OfflineError, installedPlugins, inviteTokenFromHash, logoutRequest, me, resetTokenFromHash } from "./boot/api.js";
 import {
   cachedPlugins,
+  cachedResolution,
   cachedSession,
   cachedWiring,
   forgetBootCache,
@@ -420,13 +422,17 @@ async function activatePlugins(
     });
   }
 
-  const { plugins, wiringVersion } = await installedSet(host, bearer, offlineBoot);
+  const { plugins, wiringVersion, resolved } = await installedSet(host, bearer, offlineBoot);
   wiringWatch.setRunning(wiringVersion);
+  // The server resolved the wiring for both boot modes; the loader activates from the one
+  // this page is in (PLUGIN-PROTOCOLS §6), and orders by itself only without one.
+  const resolution = resolved ? (baseOnly ? resolved.safe : resolved.normal) : undefined;
   const report = await loadPlugins({
     host,
     plugins,
     kernelVersion: KERNEL_API_VERSION,
     baseOnly,
+    ...(resolution ? { resolution } : {}),
   });
 
   console.info(
@@ -453,17 +459,22 @@ async function installedSet(
   host: KernelHost,
   bearer: string | undefined,
   offlineBoot: boolean,
-): Promise<{ readonly plugins: readonly InstalledPlugin[]; readonly wiringVersion: number }> {
+): Promise<{
+  readonly plugins: readonly InstalledPlugin[];
+  readonly wiringVersion: number;
+  readonly resolved?: ResolvedPluginSet;
+}> {
   try {
-    const { plugins, wiring } = await installedPlugins(bearer);
-    rememberPlugins(plugins, wiring);
-    return { plugins, wiringVersion: wiring?.version ?? 0 };
+    const { plugins, wiring, resolved } = await installedPlugins(bearer);
+    rememberPlugins(plugins, wiring, resolved);
+    return { plugins, wiringVersion: wiring?.version ?? 0, ...(resolved ? { resolved } : {}) };
   } catch (error) {
     if (!(error instanceof OfflineError)) throw error;
     const remembered = cachedPlugins();
     if (remembered) {
       console.info(`[loader] offline: activating the ${remembered.length} plugins last seen here`);
-      return { plugins: remembered, wiringVersion: cachedWiring()?.version ?? 0 };
+      const resolved = cachedResolution();
+      return { plugins: remembered, wiringVersion: cachedWiring()?.version ?? 0, ...(resolved ? { resolved } : {}) };
     }
     host.notices.notify({
       id: "kernel:plugins-unavailable",

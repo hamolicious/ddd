@@ -129,6 +129,9 @@ pub struct InstalledResponse {
     /// Every registered protocol (PLUGIN-PROTOCOLS §3), including those whose owner is
     /// gone, so a client can still type-check wires.
     pub protocols: Vec<life_manager_core::wiring::ProtocolPackage>,
+    /// The live wiring resolved against the served set, for normal and `?safe=1` boots
+    /// (PLUGIN-PROTOCOLS §6): the loader activates from it, so boot needs no Wasm.
+    pub resolved: crate::wiring::ResolvedSet,
 }
 
 /// Authenticated: the plugin list names what is installed in this workspace, which is
@@ -140,6 +143,13 @@ pub async fn installed(
     user: AuthUser,
 ) -> AppResult<axum::Json<InstalledResponse>> {
     let registry = plugins::registry(&state.config);
+    let wiring = crate::wiring::load(&state).await;
+    let protocols: Vec<life_manager_core::wiring::ProtocolPackage> = crate::protocols::all(&state)
+        .await
+        .into_values()
+        .map(|protocol| protocol.package)
+        .collect();
+    let resolved = crate::wiring::resolve_served(&registry, protocols.clone(), &wiring);
     Ok(axum::Json(InstalledResponse {
         plugins: registry.plugins().to_vec(),
         problems: if user.is_admin() {
@@ -148,12 +158,9 @@ pub async fn installed(
             Vec::new()
         },
         disabled: state.config.disable_plugins,
-        wiring: crate::wiring::load(&state).await,
-        protocols: crate::protocols::all(&state)
-            .await
-            .into_values()
-            .map(|protocol| protocol.package)
-            .collect(),
+        wiring,
+        protocols,
+        resolved,
     }))
 }
 

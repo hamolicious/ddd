@@ -196,7 +196,24 @@ export {
   type ProtocolSource,
 } from "./protocols.js";
 
-export { EMPTY_WIRING, WIRE_ARROW, type LiveWiring, type WiringOverrides } from "./wiring.js";
+export {
+  EMPTY_WIRING,
+  WIRE_ARROW,
+  splitPortKey,
+  splitProtocolRef,
+  type ApplyPlan,
+  type LiveWiring,
+  type PortCandidate,
+  type Resolution,
+  type ResolvedPluginSet,
+  type ResolvedWire,
+  type SkipReason,
+  type WiringChange,
+  type WiringDiagnostic,
+  type WiringInput,
+  type WiringOverrides,
+  type WiringPlugin,
+} from "./wiring.js";
 
 export type {
   ActivateFn,

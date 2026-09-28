@@ -35,7 +35,7 @@
  * 401 — the one case where the server has actually said the session is gone.
  */
 
-import type { InstalledPlugin, LiveWiring, SessionUser } from "@kernel";
+import type { InstalledPlugin, LiveWiring, ResolvedPluginSet, SessionUser } from "@kernel";
 
 const SESSION_KEY = "life-manager.boot.session";
 const PLUGINS_KEY = "life-manager.boot.plugins";
@@ -53,6 +53,8 @@ interface PluginsEntry {
   readonly plugins: readonly InstalledPlugin[];
   /** Optional in version 1: entries written before wiring existed have none. */
   readonly wiring?: LiveWiring;
+  /** The server's resolution of that wiring, so an offline boot activates the same way. */
+  readonly resolved?: ResolvedPluginSet;
 }
 
 function read<T>(key: string): T | undefined {
@@ -96,8 +98,17 @@ export function cachedSession(): SessionUser | undefined {
 }
 
 /** Remember the installed set, and the wiring it runs under, after `GET /api/plugins`. */
-export function rememberPlugins(plugins: readonly InstalledPlugin[], wiring?: LiveWiring): void {
-  write(PLUGINS_KEY, { v: CACHE_VERSION, plugins, ...(wiring ? { wiring } : {}) } satisfies PluginsEntry);
+export function rememberPlugins(
+  plugins: readonly InstalledPlugin[],
+  wiring?: LiveWiring,
+  resolved?: ResolvedPluginSet,
+): void {
+  write(PLUGINS_KEY, {
+    v: CACHE_VERSION,
+    plugins,
+    ...(wiring ? { wiring } : {}),
+    ...(resolved ? { resolved } : {}),
+  } satisfies PluginsEntry);
 }
 
 /**
@@ -109,6 +120,13 @@ export function cachedPlugins(): readonly InstalledPlugin[] | undefined {
   const entry = read<PluginsEntry>(PLUGINS_KEY);
   if (!entry || entry.v !== CACHE_VERSION) return undefined;
   return Array.isArray(entry.plugins) ? entry.plugins : undefined;
+}
+
+/** The server's resolution the remembered plugin set was served with, when there is one. */
+export function cachedResolution(): ResolvedPluginSet | undefined {
+  const entry = read<PluginsEntry>(PLUGINS_KEY);
+  if (!entry || entry.v !== CACHE_VERSION) return undefined;
+  return Array.isArray(entry.resolved?.normal?.order) ? entry.resolved : undefined;
 }
 
 /** The wiring the remembered plugin set was served with, when there is one. */

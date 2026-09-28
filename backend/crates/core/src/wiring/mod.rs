@@ -10,6 +10,15 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+pub mod resolve;
+pub mod semver;
+
+pub use resolve::{
+    ApplyPlan, Change, ConsumedPort, Diagnostic, PluginDescriptor, PortCandidate, PortStatus,
+    ProvidedPort, Resolution, ResolveInput, ResolvedWire, Severity, SkipReason, Skipped,
+    candidates, plan, resolve,
+};
+
 /// `wiring.json`: the overrides on top of automatic wiring, per workspace.
 ///
 /// Keys are port keys, `<plugin>:<port>`; wires are `"<from> -> <to>"`, provider first.

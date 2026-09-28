@@ -25,7 +25,9 @@ import type { SessionApi } from "./session.js";
 import type { SettingsApi } from "./settings.js";
 import type { SyncApi } from "./sync.js";
 import type { CoreMap, KernelLogger } from "./types.js";
+import type { ShapeJson } from "./shape.js";
 import type { UiApi } from "./ui.js";
+import type { ApplyPlan, PortCandidate, Resolution, WiringInput, WiringOverrides } from "./wiring.js";
 
 /**
  * The shared Rust core, in the client (SPEC §2: parity by construction).
@@ -44,6 +46,24 @@ export interface CoreApi {
   normalizeDate(input: string): string;
   /** The core's semantics version, compared against the server's at connect. */
   semanticsVersion(): number;
+  /**
+   * Resolve plugin wiring with the server's own resolver (PLUGIN-PROTOCOLS §6): what the
+   * wiring editor previews a draft with. Throws `CoreUnavailableError` without the Wasm
+   * core, which is the editor's cue to go read-only.
+   */
+  resolveWiring(input: WiringInput): Resolution;
+  /** What applying `after` on a client running `before` does (§6c). */
+  planWiring(request: {
+    readonly before: Resolution;
+    readonly after: Resolution;
+    readonly beforeWiring: WiringOverrides;
+    readonly afterWiring: WiringOverrides;
+    readonly hot: readonly string[];
+  }): ApplyPlan;
+  /** Every port that could connect to `port`, and why not when it cannot (§6b). */
+  wiringCandidates(input: WiringInput, port: string, dir: "in" | "out"): readonly PortCandidate[];
+  /** Why offering `offer` where `need` is required fails; empty when it fits (§6b). */
+  shapeFits(offer: ShapeJson, need: ShapeJson): readonly string[];
 }
 
 export interface ParsedText {

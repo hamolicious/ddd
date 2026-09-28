@@ -16,7 +16,7 @@
  * here went to a 404 in the shell until this was a function.
  */
 
-import type { InstalledPlugin, LiveWiring, ProtocolPackage, SessionUser } from "@kernel";
+import type { InstalledPlugin, LiveWiring, ProtocolPackage, ResolvedPluginSet, SessionUser } from "@kernel";
 
 import { apiBase } from "./shell.js";
 
@@ -215,6 +215,8 @@ export interface PluginList {
   readonly wiring?: LiveWiring;
   /** Every registered protocol, owners gone included (PLUGIN-PROTOCOLS §3). */
   readonly protocols?: readonly ProtocolPackage[];
+  /** The live wiring resolved against this list by the server, per boot mode (§6). */
+  readonly resolved?: ResolvedPluginSet;
 }
 
 /**

@@ -24,10 +24,11 @@ import {
   type InstalledPlugin,
   type Kernel,
   type PluginModule,
+  type Resolution,
 } from "@kernel";
 import type { KernelHost } from "@kernel/runtime/index.js";
 
-import { resolveOrder, transitiveDependents, type SkippedPlugin } from "./order.js";
+import { dependentsOf, orderFromResolution, resolveOrder, transitiveDependents, type SkippedPlugin } from "./order.js";
 
 export interface LoadOptions {
   readonly host: KernelHost;
@@ -35,6 +36,12 @@ export interface LoadOptions {
   readonly kernelVersion: string;
   /** `?safe=1` — base distribution only. */
   readonly baseOnly?: boolean;
+  /**
+   * The server's resolution of the live wiring for this boot mode (PLUGIN-PROTOCOLS §6).
+   * When present it decides the order and the skips; absent (an older server, or a list
+   * cached before resolutions existed) the loader orders by `dependencies` itself.
+   */
+  readonly resolution?: Resolution;
   /** Injectable for tests; production uses a bare dynamic `import()`. */
   readonly importModule?: (url: string) => Promise<unknown>;
   /** Called after each plugin, for a boot progress line. */
@@ -120,11 +127,16 @@ export async function loadPlugins(options: LoadOptions): Promise<LoadReport> {
     });
   }
 
-  const resolved = resolveOrder(wellFormed, {
-    kernelVersion: options.kernelVersion,
-    ...(options.baseOnly !== undefined ? { baseOnly: options.baseOnly } : {}),
-  });
+  const resolution = options.resolution;
+  const resolved = resolution
+    ? orderFromResolution(wellFormed, resolution, { kernelVersion: options.kernelVersion })
+    : resolveOrder(wellFormed, {
+        kernelVersion: options.kernelVersion,
+        ...(options.baseOnly !== undefined ? { baseOnly: options.baseOnly } : {}),
+      });
   skipped.push(...resolved.skipped);
+  const dependents = (failed: string): Iterable<string> =>
+    resolution ? dependentsOf(new Set([failed]), resolution).keys() : transitiveDependents(failed, resolved.order);
 
   const activated: string[] = [];
   const failed: FailedPlugin[] = [];
@@ -154,7 +166,7 @@ export async function loadPlugins(options: LoadOptions): Promise<LoadReport> {
       failed.push({ pluginId: id, error });
       options.onProgress?.({ pluginId: id, index, total: resolved.order.length, outcome: "failed" });
 
-      for (const dependent of transitiveDependents(id, resolved.order)) {
+      for (const dependent of dependents(id)) {
         if (dead.has(dependent)) continue;
         dead.add(dependent);
         skipped.push({

@@ -928,6 +928,16 @@ async fn disable_plugins_is_the_server_side_half_of_safe_mode() {
             "disabled": true,
             "wiring": { "version": 0, "unplugged": [], "bind": {}, "cut": [], "add": [], "order": {} },
             "protocols": [],
+            "resolved": {
+                "normal": {
+                    "order": [], "skipped": [], "wires": [], "bindings": {}, "seats": {}, "bench": {},
+                    "listeners": {}, "activation": [], "diagnostics": [], "status": {}
+                },
+                "safe": {
+                    "order": [], "skipped": [], "wires": [], "bindings": {}, "seats": {}, "bench": {},
+                    "listeners": {}, "activation": [], "diagnostics": [], "status": {}
+                },
+            },
         }),
         "DISABLE_PLUGINS must say *why* the app is bare (SPEC §6.1)"
     );

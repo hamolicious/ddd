@@ -15,7 +15,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 
-import { KERNEL_API_VERSION, type InstalledPlugin, type Kernel, type PluginManifest } from "@kernel";
+import { KERNEL_API_VERSION, type InstalledPlugin, type Kernel, type PluginManifest, type Resolution } from "@kernel";
 import type { KernelHost } from "@kernel/runtime/index.js";
 
 import { failureNotice, loadPlugins, moduleUrl, styleUrl, type LoadReport } from "./loader.js";
@@ -27,7 +27,7 @@ interface Recorded {
   readonly retracted: string[];
 }
 
-/** The three members of `KernelHost` the loader uses, and nothing else. */
+/** The members of `KernelHost` the loader uses, and nothing else. */
 function fakeHost(): Recorded {
   const forPlugin: string[] = [];
   const published: [string, unknown][] = [];
@@ -95,7 +95,7 @@ function modules(
 const load = (
   plugins: readonly InstalledPlugin[],
   activations: Readonly<Record<string, (kernel: Kernel) => unknown>>,
-  extra: { baseOnly?: boolean } = {},
+  extra: { baseOnly?: boolean; resolution?: Resolution } = {},
 ): Promise<{ report: LoadReport; recorded: Recorded; imported: string[] }> => {
   const recorded = fakeHost();
   const { imported, importModule } = modules(activations);
@@ -105,8 +105,90 @@ const load = (
     kernelVersion: KERNEL_API_VERSION,
     importModule,
     ...(extra.baseOnly !== undefined ? { baseOnly: extra.baseOnly } : {}),
+    ...(extra.resolution ? { resolution: extra.resolution } : {}),
   }).then((report) => ({ report, recorded, imported }));
 };
+
+/** A server resolution: an order, required edges, and skips. */
+function resolution(
+  order: readonly string[],
+  requires: readonly [provider: string, consumer: string][] = [],
+  skipped: Resolution["skipped"] = [],
+): Resolution {
+  return {
+    order,
+    skipped,
+    wires: [],
+    bindings: {},
+    seats: {},
+    bench: {},
+    listeners: {},
+    activation: requires.map(([provider, consumer]) => ({ provider, consumer, required: true })),
+    diagnostics: [],
+    status: {},
+  };
+}
+
+describe("activating from the server's resolution (PLUGIN-PROTOCOLS §6)", () => {
+  it("follows the resolved order and reports the server's skips", async () => {
+    const order: string[] = [];
+    const record = (id: string) => () => void order.push(id);
+    const { report } = await load(
+      [plugin("a"), plugin("b"), plugin("c"), plugin("off")],
+      { a: record("a"), b: record("b"), c: record("c") },
+      {
+        resolution: resolution(["c", "a", "b"], [], [
+          { plugin: "off", reason: "missing-service", detail: "index needs lm/workspace-index and nothing that fits is wired" },
+        ]),
+      },
+    );
+    expect(order).toEqual(["c", "a", "b"]);
+    expect(report.activated).toEqual(["c", "a", "b"]);
+    expect(report.skipped).toEqual([
+      { pluginId: "off", reason: "missing-service", detail: "index needs lm/workspace-index and nothing that fits is wired" },
+    ]);
+  });
+
+  it("still refuses a kernel range this client does not implement, and what requires it", async () => {
+    const { report, imported } = await load(
+      [plugin("future", { kernel: "^9.0" }), plugin("user"), plugin("free")],
+      { future: () => undefined, user: () => undefined, free: () => undefined },
+      { resolution: resolution(["future", "free", "user"], [["future", "user"]]) },
+    );
+    expect(report.activated).toEqual(["free"]);
+    expect(report.skipped.map((s) => [s.pluginId, s.reason])).toEqual([
+      ["future", "kernel-mismatch"],
+      ["user", "service-skipped"],
+    ]);
+    expect(imported.some((url) => url.includes("/future/"))).toBe(false);
+  });
+
+  it("skips what requires a plugin that throws, through the activation edges", async () => {
+    const { report, imported } = await load(
+      [plugin("provider"), plugin("consumer"), plugin("optional-user")],
+      {
+        provider: () => {
+          throw new Error("boom");
+        },
+        consumer: () => undefined,
+        "optional-user": () => undefined,
+      },
+      {
+        resolution: {
+          ...resolution(["provider", "consumer", "optional-user"], [["provider", "consumer"]]),
+          activation: [
+            { provider: "provider", consumer: "consumer", required: true },
+            { provider: "provider", consumer: "optional-user", required: false },
+          ],
+        },
+      },
+    );
+    expect(report.failed.map((f) => f.pluginId)).toEqual(["provider"]);
+    expect(report.skipped.map((s) => [s.pluginId, s.reason])).toEqual([["consumer", "dependency-skipped"]]);
+    expect(report.activated).toEqual(["optional-user"]);
+    expect(imported.some((url) => url.includes("/consumer/"))).toBe(false);
+  });
+});
 
 describe("the happy path", () => {
   it("activates in topological order and publishes each returned API", async () => {

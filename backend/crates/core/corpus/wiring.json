@@ -1,0 +1,354 @@
+{
+  "_comment": "Conformance corpus for core::wiring (PLUGIN-PROTOCOLS §6, §6a, §6b, §6c). Each case resolves `plugins` against `protocols` with `wiring` and asserts only the fields it lists; `plan` resolves again with `plan.wiring` and asserts the apply plan. `base_order` pins the base distribution's activation order, which the loader had before the resolver existed. Run natively by crates/core/tests/wiring.rs and through Wasm by web/scripts/wasm-smoke.mjs.",
+  "base_order": ["attachments", "context-menu", "header", "indexer", "native-preview", "notices", "shell-ui", "slash-commands", "sync-status", "syntax-highlight", "welcome", "commands", "fm-autocomplete", "router", "doc-list", "document-surface", "graph", "markdown", "settings", "admin", "changes", "editor", "folders", "themes", "viewer"],
+  "protocols": [
+    { "id": "t/svc", "version": "1.0.0", "kind": "service", "owner": "prov", "shape": { "object": { "a": "func", "b": "func" } } },
+    { "id": "t/svc", "version": "1.1.0", "kind": "service", "owner": "prov", "shape": { "object": { "a": "func", "b": "func", "c": "func" } } },
+    { "id": "t/svc2", "version": "1.0.0", "kind": "service", "owner": "other", "shape": { "object": { "a": "func" } } },
+    { "id": "t/slot", "version": "1.0.0", "kind": "slot", "owner": "host", "key": "id", "shape": { "object": { "id": "string", "title": { "optional": "string" } } } },
+    { "id": "t/wide", "version": "1.0.0", "kind": "slot", "owner": "wide", "shape": { "object": { "id": "string", "title": "string", "extra": "number" } } },
+    { "id": "t/narrow", "version": "1.0.0", "kind": "slot", "owner": "narrow", "shape": { "object": { "name": "string" } } },
+    { "id": "t/evt", "version": "1.0.0", "kind": "event", "owner": "em", "sticky": true, "shape": { "object": { "path": "string" } } }
+  ],
+  "cases": [
+    {
+      "name": "a legacy plugin that owns a service protocol provides it on an implicit port",
+      "plugins": [
+        { "id": "prov", "version": "1.0.0" },
+        { "id": "cons", "version": "1.0.0", "consumes": { "api": { "protocol": "t/svc@^1.0", "needs": ["a"] } } },
+        { "id": "old", "version": "1.0.0", "dependencies": { "prov": "^1.0" } }
+      ],
+      "expect": {
+        "order": ["prov", "cons", "old"],
+        "bindings": { "cons:api": "prov:~svc" },
+        "skipped": {}
+      }
+    },
+    {
+      "name": "one provider binds automatically, and activates first",
+      "plugins": [
+        { "id": "prov", "version": "1.0.0", "provides": { "api": { "protocol": "t/svc@1.0.0" } } },
+        { "id": "cons", "version": "1.0.0", "consumes": { "api": { "protocol": "t/svc@^1.0", "needs": ["a"] } } }
+      ],
+      "expect": { "order": ["prov", "cons"], "bindings": { "cons:api": "prov:api" }, "skipped": {}, "diagnostics": [] }
+    },
+    {
+      "name": "several providers: the base distribution's is used, with a warning",
+      "plugins": [
+        { "id": "a-prov", "version": "1.0.0", "provides": { "api": { "protocol": "t/svc@1.0.0" } } },
+        { "id": "z-prov", "version": "1.0.0", "base": true, "provides": { "api": { "protocol": "t/svc@1.0.0" } } },
+        { "id": "cons", "version": "1.0.0", "consumes": { "api": { "protocol": "t/svc@^1.0" } } }
+      ],
+      "expect": {
+        "order": ["a-prov", "z-prov", "cons"],
+        "bindings": { "cons:api": "z-prov:api" },
+        "status": { "a-prov:api": "unheard", "cons:api": "providers:2" },
+        "diagnostics": ["warning several-providers cons", "warning unheard a-prov"]
+      }
+    },
+    {
+      "name": "a pin wins over the base preference",
+      "plugins": [
+        { "id": "a-prov", "version": "1.0.0", "provides": { "api": { "protocol": "t/svc@1.0.0" } } },
+        { "id": "z-prov", "version": "1.0.0", "base": true, "provides": { "api": { "protocol": "t/svc@1.0.0" } } },
+        { "id": "cons", "version": "1.0.0", "consumes": { "api": { "protocol": "t/svc@^1.0" } } }
+      ],
+      "wiring": { "bind": { "cons:api": "a-prov:api" } },
+      "expect": {
+        "bindings": { "cons:api": "a-prov:api" },
+        "status": { "cons:api": "pinned:2", "z-prov:api": "unheard" },
+        "diagnostics": ["warning unheard z-prov"]
+      }
+    },
+    {
+      "name": "a pinned provider that is missing falls back, with a warning, and the pin stays",
+      "plugins": [
+        { "id": "z-prov", "version": "1.0.0", "base": true, "provides": { "api": { "protocol": "t/svc@1.0.0" } } },
+        { "id": "cons", "version": "1.0.0", "consumes": { "api": { "protocol": "t/svc@^1.0" } } }
+      ],
+      "wiring": { "bind": { "cons:api": "gone:api" } },
+      "expect": {
+        "order": ["z-prov", "cons"],
+        "bindings": { "cons:api": "z-prov:api" },
+        "status": { "cons:api": "pin-missing" },
+        "diagnostics": ["warning pin-missing cons"]
+      }
+    },
+    {
+      "name": "bound to null: a required service port leaves its plugin out",
+      "plugins": [
+        { "id": "prov", "version": "1.0.0", "provides": { "api": { "protocol": "t/svc@1.0.0" } } },
+        { "id": "cons", "version": "1.0.0", "consumes": { "api": { "protocol": "t/svc@^1.0" } } }
+      ],
+      "wiring": { "bind": { "cons:api": null } },
+      "expect": {
+        "order": ["prov"],
+        "skipped": { "cons": "missing-service" },
+        "bindings": {},
+        "status": { "cons:api": "missing", "prov:api": "unheard" },
+        "diagnostics": ["error missing-service cons", "warning unheard prov"]
+      }
+    },
+    {
+      "name": "an optional service with no provider still activates",
+      "plugins": [
+        { "id": "cons", "version": "1.0.0", "consumes": { "api": { "protocol": "t/svc@^1.0", "optional": true } } }
+      ],
+      "expect": { "order": ["cons"], "skipped": {}, "status": { "cons:api": "optional" }, "diagnostics": [] }
+    },
+    {
+      "name": "unplugging a provider stops what requires it, transitively; optional users carry on",
+      "plugins": [
+        { "id": "prov", "version": "1.0.0", "provides": { "api": { "protocol": "t/svc@1.0.0" } } },
+        { "id": "cons", "version": "1.0.0", "consumes": { "api": { "protocol": "t/svc@^1.0" } }, "provides": { "api2": { "protocol": "t/svc2@1.0.0" } } },
+        { "id": "opt", "version": "1.0.0", "consumes": { "api": { "protocol": "t/svc@^1.0", "optional": true } } },
+        { "id": "leaf", "version": "1.0.0", "consumes": { "api2": { "protocol": "t/svc2@^1.0" } } }
+      ],
+      "expect": { "order": ["prov", "cons", "opt", "leaf"], "skipped": {} },
+      "plan": {
+        "wiring": { "unplugged": ["prov"] },
+        "hot": ["prov", "cons", "opt", "leaf"],
+        "expect": {
+          "stop": ["leaf", "cons", "prov"],
+          "start": [],
+          "restart": ["opt"],
+          "alsoStops": ["leaf", "cons"],
+          "alsoStarts": [],
+          "cold": [],
+          "addedErrors": 1,
+          "changes": [
+            { "kind": "unplug", "plugin": "prov" },
+            { "kind": "bind", "port": "opt:api", "from": "prov:api" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "a plugin may feed its own slot, never consume its own service",
+      "plugins": [
+        { "id": "host", "version": "1.0.0", "consumes": { "items": { "protocol": "t/slot@^1.0" } }, "provides": { "builtin": { "protocol": "t/slot@1.0.0" } } },
+        { "id": "selfish", "version": "1.0.0", "consumes": { "use": { "protocol": "t/svc@^1.0" } }, "provides": { "api": { "protocol": "t/svc@1.0.0" } } }
+      ],
+      "expect": {
+        "order": ["host"],
+        "seats": { "host:items": ["host:builtin"] },
+        "skipped": { "selfish": "missing-service" },
+        "diagnostics": ["error missing-service selfish", "warning unheard selfish"]
+      }
+    },
+    {
+      "name": "across protocols, a slot fits by shape but wires only by hand",
+      "plugins": [
+        { "id": "host", "version": "1.0.0", "consumes": { "items": { "protocol": "t/slot@^1.0" } } },
+        { "id": "wide", "version": "1.0.0", "provides": { "p": { "protocol": "t/wide@1.0.0" } } },
+        { "id": "narrow", "version": "1.0.0", "provides": { "n": { "protocol": "t/narrow@1.0.0" } } }
+      ],
+      "expect": { "seats": {}, "status": { "wide:p": "unheard", "narrow:n": "unheard" } }
+    },
+    {
+      "name": "an added by-shape wire takes a seat; one whose types do not fit does not",
+      "plugins": [
+        { "id": "host", "version": "1.0.0", "consumes": { "items": { "protocol": "t/slot@^1.0" } } },
+        { "id": "wide", "version": "1.0.0", "provides": { "p": { "protocol": "t/wide@1.0.0" } } },
+        { "id": "narrow", "version": "1.0.0", "provides": { "n": { "protocol": "t/narrow@1.0.0" } } }
+      ],
+      "wiring": { "add": ["narrow:n -> host:items", "wide:p -> host:items"] },
+      "expect": { "seats": { "host:items": ["wide:p"] }, "status": { "narrow:n": "unheard" } }
+    },
+    {
+      "name": "services never wire across protocols, even pinned",
+      "plugins": [
+        { "id": "other", "version": "1.0.0", "provides": { "api": { "protocol": "t/svc2@1.0.0" } } },
+        { "id": "cons", "version": "1.0.0", "consumes": { "api": { "protocol": "t/svc@^1.0", "needs": ["a"] } } }
+      ],
+      "wiring": { "bind": { "cons:api": "other:api" } },
+      "expect": { "order": ["other"], "skipped": { "cons": "missing-service" }, "bindings": {} }
+    },
+    {
+      "name": "a provider at a version outside the range does not fit, and is diagnosed",
+      "plugins": [
+        { "id": "prov", "version": "1.0.0", "provides": { "api": { "protocol": "t/svc@1.0.0" } } },
+        { "id": "cons", "version": "1.0.0", "consumes": { "api": { "protocol": "t/svc@^1.1", "needs": ["c"] } } }
+      ],
+      "expect": {
+        "order": ["prov"],
+        "skipped": { "cons": "missing-service" },
+        "status": { "cons:api": "missing", "prov:api": "no-fit" },
+        "diagnostics": ["error missing-service cons", "warning no-fit prov"]
+      }
+    },
+    {
+      "name": "seats follow the order hint, then plugin id",
+      "plugins": [
+        { "id": "host", "version": "1.0.0", "consumes": { "items": { "protocol": "t/slot@^1.0" } } },
+        { "id": "b", "version": "1.0.0", "provides": { "p": { "protocol": "t/slot@1.0.0", "order": 10 } } },
+        { "id": "a", "version": "1.0.0", "provides": { "p": { "protocol": "t/slot@1.0.0", "order": 10 } } },
+        { "id": "c", "version": "1.0.0", "provides": { "p": { "protocol": "t/slot@1.0.0" } } },
+        { "id": "z", "version": "1.0.0", "provides": { "p": { "protocol": "t/slot@1.0.0", "order": 0 } } }
+      ],
+      "expect": { "seats": { "host:items": ["z:p", "a:p", "b:p", "c:p"] } },
+      "plan": {
+        "wiring": { "order": { "host:items": ["c:p", "b:p"] } },
+        "hot": [],
+        "expect": {
+          "stop": [],
+          "start": [],
+          "restart": [],
+          "hosts": ["host:items"],
+          "cold": [],
+          "changes": [{ "kind": "seats", "port": "host:items", "seats": ["c:p", "b:p", "z:p", "a:p"], "added": [], "removed": [] }]
+        }
+      }
+    },
+    {
+      "name": "a single-seat host shows the first and benches the rest",
+      "plugins": [
+        { "id": "host", "version": "1.0.0", "consumes": { "header": { "protocol": "t/slot@^1.0", "seats": 1 } } },
+        { "id": "a", "version": "1.0.0", "provides": { "p": { "protocol": "t/slot@1.0.0", "order": 5 } } },
+        { "id": "b", "version": "1.0.0", "provides": { "p": { "protocol": "t/slot@1.0.0", "order": 1 } } }
+      ],
+      "expect": { "seats": { "host:header": ["b:p"] }, "bench": { "host:header": ["a:p"] }, "status": { "host:header": "benched:1" } }
+    },
+    {
+      "name": "a cut wire leaves its seat",
+      "plugins": [
+        { "id": "host", "version": "1.0.0", "consumes": { "items": { "protocol": "t/slot@^1.0" } } },
+        { "id": "a", "version": "1.0.0", "provides": { "p": { "protocol": "t/slot@1.0.0" } } },
+        { "id": "b", "version": "1.0.0", "provides": { "p": { "protocol": "t/slot@1.0.0" } } }
+      ],
+      "wiring": { "cut": ["a:p -> host:items"] },
+      "expect": { "seats": { "host:items": ["b:p"] }, "status": { "a:p": "unheard" } }
+    },
+    {
+      "name": "a needs key the protocol lacks is an error, and the rest still binds",
+      "plugins": [
+        { "id": "prov", "version": "1.0.0", "provides": { "api": { "protocol": "t/svc@1.0.0" } } },
+        { "id": "cons", "version": "1.0.0", "consumes": { "api": { "protocol": "t/svc@^1.0", "needs": ["a", "zz"] } } }
+      ],
+      "expect": { "order": ["prov", "cons"], "bindings": { "cons:api": "prov:api" }, "diagnostics": ["error unknown-need cons"] }
+    },
+    {
+      "name": "legacy dependencies order activation and skip as they always did",
+      "plugins": [
+        { "id": "lib", "version": "1.0.0" },
+        { "id": "app", "version": "1.0.0", "dependencies": { "lib": "^1.0" } },
+        { "id": "old", "version": "1.0.0", "dependencies": { "lib": "^2.0" } },
+        { "id": "lost", "version": "1.0.0", "dependencies": { "nothere": "^1.0" } },
+        { "id": "chain", "version": "1.0.0", "dependencies": { "old": "^1.0" } }
+      ],
+      "expect": {
+        "order": ["lib", "app"],
+        "skipped": { "chain": "dependency-skipped", "lost": "missing-dependency", "old": "dependency-version" }
+      }
+    },
+    {
+      "name": "activation goes a sorted layer at a time",
+      "plugins": [
+        { "id": "d", "version": "1.0.0", "dependencies": { "b": "*", "c": "*" } },
+        { "id": "b", "version": "1.0.0", "dependencies": { "a": "*" } },
+        { "id": "c", "version": "1.0.0", "dependencies": { "a": "*" } },
+        { "id": "e", "version": "1.0.0" },
+        { "id": "a", "version": "1.0.0" }
+      ],
+      "expect": { "order": ["a", "e", "b", "c", "d"] }
+    },
+    {
+      "name": "a cycle skips everything in and behind it",
+      "plugins": [
+        { "id": "x", "version": "1.0.0", "dependencies": { "y": "*" } },
+        { "id": "y", "version": "1.0.0", "dependencies": { "x": "*" } },
+        { "id": "z", "version": "1.0.0", "dependencies": { "x": "*" } },
+        { "id": "w", "version": "1.0.0" }
+      ],
+      "expect": {
+        "order": ["w"],
+        "skipped": { "x": "cycle", "y": "cycle", "z": "cycle" },
+        "diagnostics": ["error cycle x", "error cycle y", "error cycle z"]
+      }
+    },
+    {
+      "name": "a cycle through an optional service is broken by dropping that wire",
+      "plugins": [
+        { "id": "p1", "version": "1.0.0", "provides": { "api": { "protocol": "t/svc@1.0.0" } }, "consumes": { "back": { "protocol": "t/svc2@^1.0", "optional": true } } },
+        { "id": "p2", "version": "1.0.0", "provides": { "api2": { "protocol": "t/svc2@1.0.0" } }, "consumes": { "api": { "protocol": "t/svc@^1.0" } } }
+      ],
+      "expect": {
+        "order": ["p1", "p2"],
+        "skipped": {},
+        "bindings": { "p2:api": "p1:api" },
+        "diagnostics": ["warning optional-cycle p1"]
+      }
+    },
+    {
+      "name": "safe mode keeps the base distribution; a pin to a left-out plugin falls back",
+      "plugins": [
+        { "id": "core", "version": "1.0.0", "base": true, "provides": { "api": { "protocol": "t/svc@1.0.0" } } },
+        { "id": "extra", "version": "1.0.0", "provides": { "api": { "protocol": "t/svc@1.0.0" } } },
+        { "id": "cons", "version": "1.0.0", "base": true, "consumes": { "api": { "protocol": "t/svc@^1.0" } } }
+      ],
+      "wiring": { "bind": { "cons:api": "extra:api" } },
+      "base_only": true,
+      "expect": {
+        "order": ["core", "cons"],
+        "skipped": { "extra": "disabled" },
+        "bindings": { "cons:api": "core:api" },
+        "status": { "cons:api": "pin-missing" }
+      }
+    },
+    {
+      "name": "an event reaches every listener that is not cut",
+      "plugins": [
+        { "id": "em", "version": "1.0.0", "provides": { "loc": { "protocol": "t/evt@1.0.0" } } },
+        { "id": "l1", "version": "1.0.0", "consumes": { "loc": { "protocol": "t/evt@^1.0" } } },
+        { "id": "l2", "version": "1.0.0", "consumes": { "loc": { "protocol": "t/evt@^1.0" } } }
+      ],
+      "wiring": { "cut": ["em:loc -> l2:loc"] },
+      "expect": { "order": ["em", "l1", "l2"], "listeners": { "l1:loc": ["em:loc"] } }
+    },
+    {
+      "name": "rebinding a service restarts its consumer and what uses that through services",
+      "plugins": [
+        { "id": "prov1", "version": "1.0.0", "base": true, "provides": { "api": { "protocol": "t/svc@1.0.0" } } },
+        { "id": "prov2", "version": "1.0.0", "provides": { "api": { "protocol": "t/svc@1.0.0" } } },
+        { "id": "cons", "version": "1.0.0", "consumes": { "api": { "protocol": "t/svc@^1.0" } }, "provides": { "api2": { "protocol": "t/svc2@1.0.0" } } },
+        { "id": "down", "version": "1.0.0", "consumes": { "api2": { "protocol": "t/svc2@^1.0" } } }
+      ],
+      "expect": { "bindings": { "cons:api": "prov1:api", "down:api2": "cons:api2" } },
+      "plan": {
+        "wiring": { "bind": { "cons:api": "prov2:api" } },
+        "hot": ["cons", "prov1", "prov2"],
+        "expect": {
+          "stop": [],
+          "start": [],
+          "restart": ["cons", "down"],
+          "hosts": [],
+          "cold": ["down"],
+          "changes": [{ "kind": "bind", "port": "cons:api", "from": "prov1:api", "to": "prov2:api" }]
+        }
+      }
+    },
+    {
+      "name": "plugging a plugin back in starts it and what needed it",
+      "plugins": [
+        { "id": "prov", "version": "1.0.0", "provides": { "api": { "protocol": "t/svc@1.0.0" } } },
+        { "id": "cons", "version": "1.0.0", "consumes": { "api": { "protocol": "t/svc@^1.0" } } },
+        { "id": "host", "version": "1.0.0", "consumes": { "items": { "protocol": "t/slot@^1.0" } } },
+        { "id": "item", "version": "1.0.0", "provides": { "p": { "protocol": "t/slot@1.0.0" } } }
+      ],
+      "wiring": { "unplugged": ["prov", "item"] },
+      "expect": { "order": ["host"], "skipped": { "cons": "missing-service", "item": "disabled", "prov": "disabled" } },
+      "plan": {
+        "wiring": {},
+        "hot": ["prov", "cons", "host", "item"],
+        "expect": {
+          "stop": [],
+          "start": ["item", "prov", "cons"],
+          "alsoStarts": ["cons"],
+          "restart": [],
+          "hosts": [],
+          "changes": [{ "kind": "plug", "plugin": "item" }, { "kind": "plug", "plugin": "prov" }]
+        }
+      }
+    }
+  ]
+}

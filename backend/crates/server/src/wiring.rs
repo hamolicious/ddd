@@ -380,3 +380,81 @@ pub async fn mirror_plugin_states(
         warn!(error = %err, action, plugin = subject, "could not write a wiring version");
     }
 }
+
+// ---------------------------------------------------------------------------
+// Resolution: what the loader activates from (PLUGIN-PROTOCOLS §6)
+// ---------------------------------------------------------------------------
+
+/// The live wiring resolved for a page: normal boots and `?safe=1` boots.
+#[derive(Debug, Clone, Serialize)]
+pub struct ResolvedSet {
+    pub normal: life_manager_core::wiring::Resolution,
+    pub safe: life_manager_core::wiring::Resolution,
+}
+
+/// What the resolver needs from one served plugin.
+pub fn descriptor(
+    plugin: &crate::plugins::InstalledPlugin,
+) -> life_manager_core::wiring::PluginDescriptor {
+    use life_manager_core::wiring as core;
+    let manifest = &plugin.manifest;
+    core::PluginDescriptor {
+        id: manifest.id.clone(),
+        version: manifest.version.clone(),
+        base: plugin.base,
+        enabled: plugin.state == PluginState::Enabled,
+        hot: manifest.hot,
+        frontend: manifest.frontend.is_some(),
+        provides: manifest
+            .provides
+            .iter()
+            .map(|(name, port)| {
+                (
+                    name.clone(),
+                    core::ProvidedPort {
+                        protocol: port.protocol.clone(),
+                        order: port.order,
+                    },
+                )
+            })
+            .collect(),
+        consumes: manifest
+            .consumes
+            .iter()
+            .map(|(name, port)| {
+                (
+                    name.clone(),
+                    core::ConsumedPort {
+                        protocol: port.protocol.clone(),
+                        needs: port.needs.clone(),
+                        optional: port.optional,
+                        seats: port.seats,
+                    },
+                )
+            })
+            .collect(),
+        dependencies: manifest.dependencies.clone(),
+    }
+}
+
+/// Resolve the served plugin set against `live`, natively: the loader reads the result,
+/// so boot never needs the Wasm core (§6).
+pub fn resolve_served(
+    registry: &crate::plugins::Registry,
+    protocols: Vec<life_manager_core::wiring::ProtocolPackage>,
+    live: &LiveWiring,
+) -> ResolvedSet {
+    use life_manager_core::wiring as core;
+    let input = core::ResolveInput {
+        plugins: registry.plugins().iter().map(descriptor).collect(),
+        protocols,
+        wiring: live.wiring.clone(),
+        base_only: false,
+    };
+    let normal = core::resolve(&input);
+    let safe = core::resolve(&core::ResolveInput {
+        base_only: true,
+        ..input
+    });
+    ResolvedSet { normal, safe }
+}
