@@ -1,6 +1,6 @@
 # `plugins/base/` — the base distribution
 
-The visible app. Twenty-five plugins that happen to ship with the server and are
+The visible app. Twenty-seven plugins that happen to ship with the server and are
 [installed like any other](../SPEC.md#62-package-manifest-capabilities) — individually
 replaceable, individually removable, and holding no privilege the kernel does not give
 every plugin.
@@ -35,7 +35,9 @@ dist/<id>/<version>/              build output = the installed layout the server
 | `commands` | command registry, palette, keybindings | `commands.command`, `keybindings.default` |
 | `themes` | theme registry + picker; overrides kernel tokens | `themes.theme` |
 | `doc-list` | browse/search/sort/filter, new document, Trash; local index is the default search provider | `search.provider` |
-| `folders` | drag-and-drop file tree over `fm.path`; every move is a splice | — |
+| `folders` | drag-and-drop file tree over `fm.path`; every move is a splice; hosts other plugins' colours and icons for folder rows and entries in a folder's menu, and announces renames and deletes on `lm/folders.moved` | `folders.decoration`, `folders.menu-item` |
+| `folder-style` | a background and an icon for any folder, from "Color and icon…" in its menu, with black or white text by contrast; per-user, in settings; follows the folder through renames and deletes | — |
+| `icons` | the Tabler icon set, packed at build time from a pinned npm tarball (`tabler.json`, `build.mjs`) and fetched a shard at a time; serves `lm/icons`: `Icon`, `Picker`, search | — |
 | `markdown` | the unified/remark → React pipeline | `markdown.directive/fence/codeBlock/remark/component/taskState/attachment` |
 | `attachments` | paste-to-upload in the editor; shows embedded files through a viewer per file type; serves its resumable upload service (`lm/attachments`) | `attachments.viewer` |
 | `slash-commands` | the `/` menu in any editor, over editor-neutral text surfaces | `text.surface`, `slash.command` |
@@ -99,9 +101,11 @@ flowchart TD
     settings --> router
     admin --> router & shell-ui & context-menu
     changes --> markdown & router & shell-ui & context-menu
+    folder-style --> context-menu
+    folder-style -.-> icons
 ```
 
-`attachments`, `commands`, `editor`, `header`, `native-preview`, `notices`,
+`attachments`, `commands`, `editor`, `header`, `icons`, `native-preview`, `notices`,
 `slash-commands`, `sync-status`, `syntax-highlight` and `welcome` are not drawn because
 they use no service: everything they do goes through **slots**, which never order
 activation. A slot is many-to-one — providers offer items on a provided port, a host
@@ -119,7 +123,10 @@ them off costs its own feature and nothing downstream.
 The one message that points the other way is an **event**: `folders` tells `doc-list`
 where unfiled documents go on `lm/folders.default-location`, a sticky event, because
 `folders` already uses `doc-list`'s `lm/document-browser` and a service the other way
-round would be a cycle.
+round would be a cycle. `folders` also announces renames and deletes on
+`lm/folders.moved`, which is how `folder-style` keeps a folder's look with the folder;
+the look itself reaches the tree through the `folders.decoration` slot, and the "Color and
+icon…" entry through `folders.menu-item`, so `folders` never learns the plugin exists.
 
 Reading it bottom-up: `shell-ui` owns the frame everyone renders into and serves the
 layout (`lm/shell`); `router` turns URLs into views and is the service almost everything
@@ -134,7 +141,7 @@ wiring editor (the admin plugin's Wiring tab), not in the consumer.
 
 Every contract between base plugins is a **protocol package** inside the plugin that owns
 it (`dev-docs/todo/PLUGIN-PROTOCOLS.html` §3): `header/protocols/navbar.item/`,
-`indexer/protocols/workspace-index/`, and so on, 35 in all (8 services, 26 slots, 1 event).
+`indexer/protocols/workspace-index/`, and so on, 39 in all (9 services, 28 slots, 2 events).
 Each package has one hand-written file, `shape.mjs`; `protocol.json`, `index.d.ts` and
 `README.md` are generated from it, and it is where a protocol's meaning is written down:
 

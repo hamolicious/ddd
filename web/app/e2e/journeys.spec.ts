@@ -32,7 +32,7 @@ import {
 /**
  * What `plugins/base/dist` holds, plus the one example plugin the suite installs.
  *
- * The 25 of SPEC §6.5's table plus `extra-task-states`. M4's two proof plugins
+ * The 27 of SPEC §6.5's table plus `extra-task-states`. M4's two proof plugins
  * (`calendar`, `agenda`) were removed on 2026-09-24; on 2026-09-26 `header` was split
  * out of `shell-ui`, `notices` and `sync-status` out of `header`, `context-menu` out of
  * `folders`, and `properties` was removed; `search` was folded into `doc-list`;
@@ -41,10 +41,11 @@ import {
  * `welcome` replaced the server's own first-run seeding; `indexer` and `fm-autocomplete`
  * were added, and then `graph`; then `syntax-highlight`; on 2026-09-28 the `wiring`
  * editor (PLUGIN-PROTOCOLS §7) was added as a plugin and, the same day, folded into
- * `admin` as its Wiring tab. The base distribution and `BASE_PLUGIN_IDS` — what
- * `?safe=1` boots — are the same twenty-five. `safe-mode.spec.ts` is what pins that.
+ * `admin` as its Wiring tab; then `icons` and `folder-style`. The base distribution and
+ * `BASE_PLUGIN_IDS` — what `?safe=1` boots — are the same twenty-seven.
+ * `safe-mode.spec.ts` is what pins that.
  */
-const EXPECTED_PLUGINS = 26;
+const EXPECTED_PLUGINS = 28;
 
 /**
  * `--lm-bg` as the `midnight` theme paints it (`plugins/base/themes/src/index.tsx`).

@@ -1,0 +1,23 @@
+{
+  "id": "icons",
+  "version": "1.0.0",
+  "name": "Icons",
+  "description": "The Tabler icon set, served for other plugins to draw and to let people pick from.",
+  "author": "Life Manager base distribution",
+  "license": "MIT OR Apache-2.0",
+  "x-tailwind": true,
+  "kernel": "^2.0",
+  "hot": true,
+  "provides": {
+    "icons": {
+      "protocol": "lm/icons@1.0.0"
+    }
+  },
+  "peerLibraries": {
+    "react": "^18.0.0"
+  },
+  "frontend": {
+    "module": "frontend/index.mjs",
+    "style": "frontend/style.css"
+  }
+}

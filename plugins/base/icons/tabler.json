@@ -1,0 +1,16 @@
+{
+  "$comment": "The icon set `build.mjs` packs into frontend/tabler/: one npm package, pinned to a version and its `integrity` (no install scripts run). `suggested` is what the picker shows before anything is typed; the build fails on a name the set does not have.",
+  "package": "@tabler/icons",
+  "version": "3.48.0",
+  "integrity": "sha512-lQk06gVHNVBnJp0UOgtth54mcZBJM7rdYKsAxKOProj1bbSAx+/xiuOWfHlyvgdL3M+Y+I0HINrjHa3ygp8eXQ==",
+  "suggested": [
+    "folder", "folder-filled", "home", "briefcase", "book", "notebook", "school", "bookmark",
+    "star", "heart", "flag", "bulb", "target", "rocket", "flame", "trophy",
+    "calendar", "clock", "checklist", "list-check", "note", "file-text", "archive", "inbox",
+    "code", "terminal-2", "tools", "settings", "lock", "key", "database", "cloud",
+    "photo", "camera", "music", "movie", "palette", "brush", "device-gamepad-2", "puzzle",
+    "world", "map-pin", "plane", "car", "shopping-cart", "wallet", "coin", "receipt",
+    "chart-bar", "users", "user", "mail", "message", "phone", "gift", "coffee",
+    "leaf", "plant", "paw", "sun", "moon", "barbell", "stethoscope", "pill"
+  ]
+}

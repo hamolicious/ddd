@@ -1,0 +1,45 @@
+{
+  "id": "folder-style",
+  "version": "1.0.0",
+  "name": "Folder colors and icons",
+  "description": "Give any folder a color and an icon, from its menu in the folder tree.",
+  "author": "Life Manager base distribution",
+  "license": "MIT OR Apache-2.0",
+  "x-tailwind": true,
+  "kernel": "^2.0",
+  "hot": true,
+  "consumes": {
+    "icons": {
+      "protocol": "lm/icons@^1.0",
+      "needs": [
+        "Icon",
+        "Picker"
+      ],
+      "optional": true
+    },
+    "menu": {
+      "protocol": "lm/context-menu@^1.0",
+      "needs": [
+        "openSheet"
+      ]
+    },
+    "moved": {
+      "protocol": "lm/folders.moved@^1.0"
+    }
+  },
+  "provides": {
+    "look": {
+      "protocol": "lm/folders.decoration@1.0.0"
+    },
+    "edit": {
+      "protocol": "lm/folders.menu-item@1.0.0"
+    }
+  },
+  "peerLibraries": {
+    "react": "^18.0.0"
+  },
+  "frontend": {
+    "module": "frontend/index.mjs",
+    "style": "frontend/style.css"
+  }
+}

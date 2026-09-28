@@ -810,3 +810,74 @@ test("a document moved back and forth lands every move, by drag and by menu", as
     await expect(leaf).toBeVisible();
   }
 });
+
+test("a folder takes a background and an icon from its menu, keeps them on reload and through a rename", async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const base = baseURL as string;
+  const name = unique("dressed");
+  const renamed = `${name}-renamed`;
+  await createDocument(request, base, fixture(unique("inside"), name));
+
+  await signIn(page, ADMIN);
+  refuseNativeDialogs(page);
+  await openTree(page);
+  await expect(folderRow(page, name)).toBeVisible();
+
+  // `folder-style`'s entry, which `folders` lists without knowing who offered it.
+  await folderRow(page, name).hover();
+  await page.getByRole("button", { name: `Actions for ${name}` }).click();
+  await page.getByRole("dialog").getByRole("menuitem", { name: "Color and icon…" }).click();
+  const sheet = page.getByRole("dialog");
+  await sheet.getByRole("button", { name: "#1971c2" }).click();
+
+  // With nothing typed the grid holds every icon, but draws only the rows in view, and
+  // scrolling reaches the last one.
+  const grid = sheet.getByRole("listbox", { name: "Icons" });
+  await expect(sheet.getByRole("status").filter({ hasText: /^[\d,]+ icons$/ })).toBeVisible();
+  const total = Number((await grid.getByRole("option").first().getAttribute("aria-setsize")) ?? "0");
+  expect(total).toBeGreaterThan(5000);
+  expect(await grid.getByRole("option").count()).toBeLessThan(300);
+  await grid.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect(grid.locator(`[aria-posinset="${total}"]`)).toBeVisible();
+
+  await sheet.getByRole("searchbox", { name: "Search icons" }).fill("rocket");
+  await sheet.getByRole("option", { name: "rocket", exact: true }).click();
+  await page.screenshot({ path: process.env["LM_SHOT_DIR"] ? `${process.env["LM_SHOT_DIR"]}/sheet.png` : undefined });
+  // No "Done": every change is already applied. Closing the sheet writes it at once.
+  await page.keyboard.press("Escape");
+  await expect(sheet).toHaveCount(0);
+
+  const dressed = async (folder: string): Promise<void> => {
+    // The pill takes the background, and the text on it is whichever of black and white
+    // reads better: white, on this blue.
+    const pill = folderNode(page, folder).locator(".folders-dressed");
+    await expect(pill).toHaveCSS("background-color", "rgb(25, 113, 194)");
+    await expect(pill).toHaveCSS("color", "rgb(255, 255, 255)");
+    // The icon is drawn once its shard of the Tabler set has arrived.
+    await expect(pill.locator(".folders-icon svg path").first()).toBeAttached();
+  };
+  await dressed(name);
+  if (process.env["LM_SHOT_DIR"]) {
+    await folderNode(page, name).screenshot({ path: `${process.env["LM_SHOT_DIR"]}/row.png` });
+  }
+
+  // Stored per user, so it is still there after a reload.
+  await waitSynced(page);
+  await page.reload();
+  await showSidebar(page);
+  await dressed(name);
+
+  // And a rename carries it along (`lm/folders.moved`).
+  await folderRow(page, name).hover();
+  await page.getByRole("button", { name: `Actions for ${name}` }).click();
+  await page.getByRole("dialog").getByRole("menuitem", { name: /^Rename/ }).click();
+  const rename = page.getByRole("textbox", { name: `Rename or move ${name}` });
+  await rename.fill(renamed);
+  await rename.press("Enter");
+  await dressed(renamed);
+});

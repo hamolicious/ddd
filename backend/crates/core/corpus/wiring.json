@@ -1,6 +1,6 @@
 {
   "_comment": "Conformance corpus for core::wiring (PLUGIN-PROTOCOLS §6, §6a, §6b, §6c). Each case resolves `plugins` against `protocols` with `wiring` and asserts only the fields it lists; `plan` resolves again with `plan.wiring` and asserts the apply plan. `base_order` pins the base distribution's activation order from the real manifests' service wires. Run natively by crates/core/tests/wiring.rs and through Wasm by web/scripts/wasm-smoke.mjs.",
-  "base_order": ["attachments", "commands", "context-menu", "editor", "header", "indexer", "native-preview", "notices", "shell-ui", "slash-commands", "sync-status", "syntax-highlight", "welcome", "fm-autocomplete", "router", "admin", "doc-list", "document-surface", "graph", "markdown", "settings", "changes", "folders", "themes", "viewer"],
+  "base_order": ["attachments", "commands", "context-menu", "editor", "header", "icons", "indexer", "native-preview", "notices", "shell-ui", "slash-commands", "sync-status", "syntax-highlight", "welcome", "fm-autocomplete", "folder-style", "router", "admin", "doc-list", "document-surface", "graph", "markdown", "settings", "changes", "folders", "themes", "viewer"],
   "protocols": [
     { "id": "t/svc", "version": "1.0.0", "kind": "service", "owner": "prov", "shape": { "object": { "a": "func", "b": "func" } } },
     { "id": "t/svc", "version": "1.1.0", "kind": "service", "owner": "prov", "shape": { "object": { "a": "func", "b": "func", "c": "func" } } },

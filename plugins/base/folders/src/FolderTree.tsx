@@ -201,6 +201,20 @@ export interface FolderTreeProps {
    * view, once each time it changes.
    */
   readonly openDocument?: string;
+  /** Another plugin's colour and icon for a folder row (`lm/folders.decoration`). */
+  readonly look?: (path: string) => FolderRowLook | undefined;
+  /** Other plugins' entries for a folder's menu (`lm/folders.menu-item`), before "Delete folder". */
+  readonly extraActions?: (path: string, anchor?: HTMLElement) => readonly MenuItem[];
+}
+
+/**
+ * How a folder row is dressed: `icon` is drawn before the name, both in `color`, on a pill
+ * of `background`.
+ */
+export interface FolderRowLook {
+  readonly background?: string;
+  readonly color?: string;
+  readonly icon?: ReactElement;
 }
 
 type SheetState =
@@ -253,6 +267,8 @@ export function FolderTree({
   onSelectFolder,
   onOpenDocument,
   openDocument,
+  look,
+  extraActions,
 }: FolderTreeProps): ReactElement {
   const tree = useMemo(
     () =>
@@ -1139,6 +1155,7 @@ export function FolderTree({
 
     const target: TreeTarget = { kind: "folder", path: row.path };
     const renaming = edit?.kind === "rename" && edit.path === row.path;
+    const dressed = look?.(row.path);
     rowElements.push(
       <div
         key={row.key}
@@ -1238,7 +1255,7 @@ export function FolderTree({
               onSelectFolder(row.path);
             }}
           >
-            {row.name}
+            {dressed === undefined ? row.name : <Dressed look={dressed} name={row.name} />}
           </button>
         )}
 
@@ -1295,12 +1312,23 @@ export function FolderTree({
 
   // Every sheet goes through `context-menu`. Opened when `sheet` changes (not on every
   // render: replacing an open menu closes the previous one, which would clear `sheet`).
+  //
+  // `menu.close()` only when the tree dropped its own sheet. When the menu closed itself
+  // it is already shut, and the menu or sheet open now may be someone else's: an entry
+  // from `lm/folders.menu-item` opens its own sheet as the actions menu closes, and
+  // closing again here would shut that one.
+  const closedByMenu = useRef(false);
   useEffect(() => {
+    const byMenu = closedByMenu.current;
+    closedByMenu.current = false;
     if (!sheet) {
-      menu.close();
+      if (!byMenu) menu.close();
       return;
     }
-    const onClose = (): void => setSheet(undefined);
+    const onClose = (): void => {
+      closedByMenu.current = true;
+      setSheet(undefined);
+    };
 
     if (sheet.kind === "move") {
       const target = sheet.target;
@@ -1414,6 +1442,7 @@ export function FolderTree({
               run: () => setEdit({ kind: "rename", path: target.path }),
             },
             { id: "move", label: "Move to…", run: () => setSheet({ kind: "move", target }) },
+            ...(extraActions?.(target.path, sheet.anchor) ?? []),
             {
               id: "delete",
               label: "Delete folder",
@@ -1594,6 +1623,27 @@ function confirmRequest(action: DeleteAction): ConfirmRequest {
  * was grabbed. A portal, because the sidebar's `container-type` would otherwise make it
  * the containing block of anything `position: fixed` inside it.
  */
+/**
+ * A decorated folder name: the icon and the name side by side, centred on one line, on a
+ * pill when there is a background. One flex box for both is what keeps the icon level
+ * with the text, whatever the font's line height.
+ */
+function Dressed({ look, name }: { readonly look: FolderRowLook; readonly name: string }): ReactElement {
+  const pill = look.background !== undefined;
+  return (
+    <span
+      className={`folders-dressed folders:inline-flex folders:max-w-full folders:items-center folders:gap-1 folders:align-middle folders:leading-[1.4] ${pill ? "folders-dressed-pill folders:rounded folders:px-1.5" : ""}`}
+      style={{
+        ...(look.background !== undefined ? { background: look.background } : {}),
+        ...(look.color !== undefined ? { color: look.color } : {}),
+      }}
+    >
+      {look.icon}
+      <span className="folders:min-w-0 folders:overflow-hidden folders:text-ellipsis">{name}</span>
+    </span>
+  );
+}
+
 function Lifted({ lift }: { readonly lift: Lift }): ReactElement {
   const label = lift.target.kind === "folder" ? nameOf(lift.target.path) : lift.target.title;
   return createPortal(

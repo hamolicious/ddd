@@ -1,6 +1,6 @@
 {
   "id": "folders",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "Folders",
   "description": "A drag-and-drop file tree over fm.path; every move is a frontmatter splice.",
   "author": "Life Manager base distribution",
@@ -31,6 +31,12 @@
         "confirm",
         "close"
       ]
+    },
+    "decorations": {
+      "protocol": "lm/folders.decoration@^1.0"
+    },
+    "actions": {
+      "protocol": "lm/folders.menu-item@^1.0"
     }
   },
   "provides": {
@@ -53,6 +59,9 @@
     },
     "location": {
       "protocol": "lm/folders.default-location@1.0.0"
+    },
+    "moved": {
+      "protocol": "lm/folders.moved@1.0.0"
     }
   },
   "peerLibraries": {

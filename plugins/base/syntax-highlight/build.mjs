@@ -23,12 +23,12 @@
  * does not have, fails the build here instead of failing quietly on someone's phone.
  */
 
-import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+
+import { extract, fetchTarball } from "../_shared/npm-tarball.mjs";
 
 /** @param {{ root: string, outDir: string, resolveFrom: string }} options */
 export default async function build({ root, outDir, resolveFrom }) {
@@ -47,7 +47,7 @@ export default async function build({ root, outDir, resolveFrom }) {
     const spec = `${language.package}@${language.version}`;
     let file = tarballs.get(spec);
     if (!file) {
-      file = fetchTarball(spec, language.integrity, cache);
+      file = fetchTarball(spec, language.integrity, cache, "languages.json");
       tarballs.set(spec, file);
     }
     return file;
@@ -73,35 +73,6 @@ export default async function build({ root, outDir, resolveFrom }) {
   writeFileSync(join(frontend, "languages", "index.json"), `${JSON.stringify({ sizes }, null, 2)}\n`);
 
   await verify(require, frontend, catalog);
-}
-
-/** `npm pack` into the cache unless a tarball with the pinned integrity is already there. */
-function fetchTarball(spec, integrity, cache) {
-  const [algorithm, expected] = String(integrity ?? "").split("-", 2);
-  if (!algorithm || !expected) throw new Error(`${spec}: languages.json pins no integrity`);
-  const name = `${spec.replace(/^@/, "").replace(/[/@]/g, "-")}.tgz`;
-  const file = join(cache, name);
-  const matches = () =>
-    existsSync(file) && createHash(algorithm).update(readFileSync(file)).digest("base64") === expected;
-  if (matches()) return file;
-
-  const packed = JSON.parse(
-    execFileSync("npm", ["pack", spec, "--json", "--pack-destination", cache], { encoding: "utf8" }),
-  )[0].filename;
-  // npm names scoped tarballs `scope-name-version.tgz`; ours is the same shape, but be exact.
-  const packedFile = join(cache, packed.replace(/^@/, "").replace(/\//g, "-"));
-  if (packedFile !== file) copyFileSync(packedFile, file);
-  if (!matches()) throw new Error(`${spec}: the tarball does not match the integrity pinned in languages.json`);
-  return file;
-}
-
-/** One file out of an npm tarball. */
-function extract(tarball, path) {
-  try {
-    return execFileSync("tar", ["-xzOf", tarball, `package/${path}`], { maxBuffer: 64 * 1024 * 1024 });
-  } catch {
-    throw new Error(`${tarball}: has no ${path}`);
-  }
 }
 
 async function verify(require, frontend, catalog) {

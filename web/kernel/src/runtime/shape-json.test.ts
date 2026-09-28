@@ -103,6 +103,6 @@ describe("the protocol packages", () => {
       cwd: web,
       encoding: "utf8",
     });
-    expect(out).toMatch(/35 protocols up to date/);
+    expect(out).toMatch(/39 protocols up to date/);
   }, 60_000);
 });

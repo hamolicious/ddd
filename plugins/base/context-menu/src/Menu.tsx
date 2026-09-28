@@ -77,7 +77,14 @@ function Panel({ open, close }: { readonly open: Open; readonly close: () => voi
     };
     place();
     addEventListener("resize", place);
-    return () => removeEventListener("resize", place);
+    // A sheet's body can grow after it opens (a list that loads): placed only at its first
+    // size, it would run off the bottom of the screen instead of flipping above.
+    const growth = new ResizeObserver(place);
+    growth.observe(panel.current);
+    return () => {
+      removeEventListener("resize", place);
+      growth.disconnect();
+    };
   }, [anchor, popover]);
 
   useEffect(() => {

@@ -49,14 +49,18 @@ import type { ReactElement } from "react";
 
 import type { CoreValue, DocumentRow, Kernel, SettingsValue, Unsubscribe } from "@kernel";
 import type { Command } from "@protocols/lm/commands.command";
-import type { ContextMenu } from "@protocols/lm/context-menu";
+import type { ContextMenu, MenuItem } from "@protocols/lm/context-menu";
 import type { DocumentBrowser } from "@protocols/lm/document-browser";
+import type { FolderDecoration, FolderLook } from "@protocols/lm/folders.decoration";
+import type { FolderMenuItem } from "@protocols/lm/folders.menu-item";
+import type { FolderMoved } from "@protocols/lm/folders.moved";
 import type { MainView } from "@protocols/lm/main.view";
 import type { Router } from "@protocols/lm/router";
 import type { Route } from "@protocols/lm/router.route";
 import type { SettingsSection } from "@protocols/lm/settings.section";
 import type { SidebarPanel } from "@protocols/lm/sidebar.panel";
 
+import { BoundedIcon, useSlotEntries } from "../../_shared/boundary.js";
 import {
   EXCLUDE_MACHINE_DOCUMENTS,
   isMachineDocument,
@@ -76,7 +80,7 @@ import {
   withoutFolder,
 } from "./empty-folders.js";
 import { FolderContents } from "./FolderContents.js";
-import { FolderTree, type TreeRequest } from "./FolderTree.js";
+import { FolderTree, type FolderRowLook, type TreeRequest } from "./FolderTree.js";
 import { documentsUnder, planFolderMove } from "./moves.js";
 import { buildTree, isRecursiveRename, normalizePath, parentOf, type PathRow } from "./path.js";
 import { settledMoves, withPendingPaths } from "./pending.js";
@@ -109,6 +113,9 @@ const SETTINGS_DEBOUNCE_MS = 400;
  * what other plugins can hear without depending on this one (see `announceDefaultLocation`).
  */
 export const DEFAULT_LOCATION_PORT = "location";
+
+/** The provided event port that announces renames and deletes (`lm/folders.moved`). */
+export const MOVED_PORT = "moved";
 
 export const SETTINGS_KEYS = {
   defaultLocation: "defaultLocation",
@@ -178,6 +185,9 @@ export default function activate(kernel: Kernel): FoldersApi {
   const docs = kernel.ports.use<Pick<DocumentBrowser, "newDocument">>("browser");
   const router = kernel.ports.use<Pick<Router, "navigate" | "current" | "onChange">>("router");
   const menu = kernel.ports.use<Pick<ContextMenu, "open" | "openSheet" | "confirm" | "close">>("menu");
+  // Other plugins' colours and icons for folder rows, and their entries in a folder's menu.
+  const decorations = kernel.ports.collect<FolderDecoration>("decorations");
+  const actions = kernel.ports.collect<FolderMenuItem>("actions");
 
   kernel.settings.defineSchema({
     [SETTINGS_KEYS.defaultLocation]: {
@@ -596,7 +606,28 @@ export default function activate(kernel: Kernel): FoldersApi {
       `moved ${moved} document${moved === 1 ? "" : "s"}; ${failures.length} failed: ${failures[0] ?? ""}`,
     );
 
+  /** Tell whoever keeps something per folder path that a folder moved or went away. */
+  const announceMoved = (payload: FolderMoved): void => {
+    kernel.ports.emit(MOVED_PORT, payload);
+  };
+
   const renameFolder = async (
+    from: string,
+    to: string,
+    options?: MoveOptions,
+  ): Promise<number> => {
+    const moved = await moveFolder(from, to, options);
+    const source = normalizePath(from);
+    const target = normalizePath(to);
+    if (source !== target) announceMoved({ from: source, to: target });
+    return moved;
+  };
+
+  /**
+   * `renameFolder` without the announcement: deleting a folder "to its parent" is this
+   * same move, and must be announced as a delete, not as a rename onto the parent.
+   */
+  const moveFolder = async (
     from: string,
     to: string,
     options?: MoveOptions,
@@ -662,6 +693,7 @@ export default function activate(kernel: Kernel): FoldersApi {
     const contents = documentsUnder(rows, target);
     if (contents.length === 0) {
       await forget(target);
+      announceMoved({ from: target });
       return 0;
     }
 
@@ -675,9 +707,10 @@ export default function activate(kernel: Kernel): FoldersApi {
         throw failed(done, failures);
       }
     } else {
-      moved = await renameFolder(target, parentOf(target), options);
+      moved = await moveFolder(target, parentOf(target), options);
     }
     await forget(target);
+    announceMoved(mode === "trash" ? { from: target } : { from: target, contentsTo: parentOf(target) });
     return moved;
   };
 
@@ -713,8 +746,100 @@ export default function activate(kernel: Kernel): FoldersApi {
   // Contributions
   // ---------------------------------------------------------------------------
 
+  /**
+   * The decorations, read for one render. `decorate` is another plugin's code on the
+   * tree's hottest path, so a throw costs that folder its look and nothing else.
+   */
+  const lookOf = (entries: ReturnType<typeof decorations.entries>) =>
+    (path: string): FolderRowLook | undefined => {
+      let background: string | undefined;
+      let color: string | undefined;
+      let icon: ReactElement | undefined;
+      for (const { pluginId, value } of entries) {
+        if (background !== undefined && color !== undefined && icon !== undefined) break;
+        let look: FolderLook | undefined;
+        try {
+          look = value.decorate(path);
+        } catch (cause) {
+          kernel.log.warn(`folder decoration ${value.id} failed for ${path}`, cause);
+          continue;
+        }
+        if (background === undefined && typeof look?.background === "string" && look.background !== "") {
+          background = look.background;
+        }
+        if (color === undefined && typeof look?.color === "string" && look.color !== "") color = look.color;
+        if (icon === undefined && look?.icon !== undefined && look.icon !== null) {
+          icon = (
+            <BoundedIcon
+              kernel={kernel}
+              node={look.icon}
+              point="folders.decoration"
+              pluginId={pluginId}
+              className="folders-icon folders:flex folders:shrink-0 folders:items-center folders:[&_svg]:block folders:[&_svg]:size-[1.05em]"
+            />
+          );
+        }
+      }
+      return background === undefined && color === undefined && icon === undefined
+        ? undefined
+        : {
+            ...(background !== undefined ? { background } : {}),
+            ...(color !== undefined ? { color } : {}),
+            ...(icon !== undefined ? { icon } : {}),
+          };
+    };
+
+  /** Each decoration's `onChange`, followed for as long as the tree is on screen. */
+  const useDecorations = (): ReturnType<typeof decorations.entries> => {
+    const entries = useSlotEntries(decorations);
+    const [, setRevision] = useState(0);
+    useEffect(() => {
+      const bump = (): void => setRevision((value) => value + 1);
+      const stops = entries.map(({ value }) => {
+        try {
+          return value.onChange(bump);
+        } catch (cause) {
+          kernel.log.warn(`folder decoration ${value.id} cannot be followed`, cause);
+          return () => undefined;
+        }
+      });
+      return () => {
+        for (const stop of stops) stop();
+      };
+    }, [entries]);
+    return entries;
+  };
+
+  /** Other plugins' entries for a folder's menu, in seat order. */
+  const extraActionsOf = (entries: ReturnType<typeof actions.entries>) =>
+    (path: string, anchor?: HTMLElement): MenuItem[] =>
+      entries.flatMap(({ value }) => {
+        try {
+          if (value.when !== undefined && !value.when(path)) return [];
+        } catch (cause) {
+          kernel.log.warn(`folder menu item ${value.id} failed its check`, cause);
+          return [];
+        }
+        return [
+          {
+            id: `extra:${value.id}`,
+            label: value.label,
+            ...(value.hint !== undefined ? { hint: value.hint } : {}),
+            run: () => {
+              try {
+                value.run(path, anchor);
+              } catch (cause) {
+                kernel.log.warn(`folder menu item ${value.id} failed`, cause);
+              }
+            },
+          },
+        ];
+      });
+
   const TreeHost = (): ReactElement => {
     const live = useStore();
+    const look = lookOf(useDecorations());
+    const extraActions = extraActionsOf(useSlotEntries(actions));
     // The open document, whatever opened it: the tree reveals it.
     const [openDocument, setOpenDocument] = useState(() => documentFromRoute(router.current()));
     useEffect(() => router.onChange((route) => setOpenDocument(documentFromRoute(route))), []);
@@ -744,6 +869,8 @@ export default function activate(kernel: Kernel): FoldersApi {
         onSelectFolder={(folder) => router.navigate(folderPath(folder))}
         onOpenDocument={(id) => router.navigate(`/doc/${id}`)}
         {...(openDocument !== undefined ? { openDocument } : {})}
+        look={look}
+        extraActions={extraActions}
       />
     );
   };

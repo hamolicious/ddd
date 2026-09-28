@@ -1,0 +1,16 @@
+{
+  "id": "lm/folders.decoration",
+  "version": "1.0.0",
+  "kind": "slot",
+  "owner": "folders",
+  "types": "index.d.ts",
+  "description": "Dresses folder rows in the tree: a background, a text colour, an icon, in any combination. The icon and the name are drawn together in a pill that takes `background`. The tree asks `decorate` for every folder it draws and redraws when `onChange` fires. With several providers, each field comes from the first one in seat order that sets it.",
+  "key": "id",
+  "shape": {
+    "object": {
+      "id": "string",
+      "decorate": "func",
+      "onChange": "func"
+    }
+  }
+}

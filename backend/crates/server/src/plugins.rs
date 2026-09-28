@@ -50,9 +50,11 @@ pub const BASE_PLUGIN_IDS: &[&str] = &[
     "document-surface",
     "editor",
     "fm-autocomplete",
+    "folder-style",
     "folders",
     "graph",
     "header",
+    "icons",
     "indexer",
     "markdown",
     "native-preview",
@@ -1555,8 +1557,8 @@ mod tests {
     }
 
     #[test]
-    fn the_base_distribution_is_the_twenty_five_plugins_of_spec_6_5() {
-        assert_eq!(BASE_PLUGIN_IDS.len(), 25);
+    fn the_base_distribution_is_the_twenty_seven_plugins_of_spec_6_5() {
+        assert_eq!(BASE_PLUGIN_IDS.len(), 27);
         assert!(BASE_PLUGIN_IDS.windows(2).all(|pair| pair[0] < pair[1]));
     }
 }
