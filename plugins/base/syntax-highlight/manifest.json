@@ -8,7 +8,7 @@
   "x-bundle": [
     "web-tree-sitter"
   ],
-  "kernel": "^1.0",
+  "kernel": "^2.0",
   "hot": true,
   "consumes": {
     "languages": {
@@ -38,8 +38,5 @@
   "frontend": {
     "module": "frontend/index.mjs",
     "style": "frontend/style.css"
-  },
-  "x-defines": [
-    "syntax.language"
-  ]
+  }
 }

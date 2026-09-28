@@ -2,16 +2,13 @@
   "id": "source-view",
   "version": "1.0.0",
   "x-tailwind": true,
-  "kernel": "^1.0",
+  "kernel": "^2.0",
   "hot": true,
   "provides": {
     "mode": {
       "protocol": "lm/document.mode@1.0.0",
       "order": 30
     }
-  },
-  "dependencies": {
-    "document-surface": "^1.0"
   },
   "peerLibraries": {
     "react": "^18.0.0"

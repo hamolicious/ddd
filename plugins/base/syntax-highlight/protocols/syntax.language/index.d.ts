@@ -2,8 +2,9 @@
  * lm/syntax.language@1.0.0: slot, owned by `syntax-highlight`.
  *
  * A tree-sitter grammar code blocks can be highlighted with. Offered in Settings, Code
- * languages; nothing is downloaded until the user installs it. The URLs must be
- * same-origin: a plugin serves its grammars from its own `frontend/` directory. The
+ * languages; nothing is downloaded until the user installs it, and an installed language
+ * is fetched once per device. The URLs must be same-origin: a plugin serves its grammars
+ * from its own `frontend/` directory and builds the URLs from `import.meta.url`. The
  * grammar must be built for the ABI of the `web-tree-sitter` that `syntax-highlight`
  * bundles.
  *
@@ -19,7 +20,7 @@ export interface SyntaxLanguage {
   readonly id: string;
   /** Display name: `Rust`, `TypeScript`. */
   readonly name: string;
-  /** Other info strings that mean this language: `rs`, `ts`. */
+  /** Other info strings that mean this language, lowercase: `rs`, `ts`. */
   readonly aliases?: readonly (string)[];
   readonly wasmUrl: string;
   /** A tree-sitter `highlights.scm` query. */

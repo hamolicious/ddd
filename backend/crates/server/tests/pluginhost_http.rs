@@ -199,8 +199,7 @@ impl HttpHarness {
             manifest: PluginManifest {
                 id: "hello-backend".to_string(),
                 version: "1.0.0".to_string(),
-                kernel: "^1.0".to_string(),
-                dependencies: BTreeMap::new(),
+                kernel: "^2.0".to_string(),
                 peer_libraries: BTreeMap::new(),
                 frontend: None,
                 capabilities: capabilities.clone(),
@@ -211,6 +210,7 @@ impl HttpHarness {
                     cron: Vec::new(),
                     routes: Vec::new(),
                     events: Vec::new(),
+                    calls: Vec::new(),
                 }),
                 name: None,
                 description: None,

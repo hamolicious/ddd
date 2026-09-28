@@ -15,12 +15,19 @@ wrapper document, with \`placement: "page"\`.`,
 export interface MarkdownAttachmentProps {
   /** The attachment's ULID. */
   readonly id: string;
+  /** The embed's alt text, when it has one. */
   readonly alt?: string;
   /** \`inline\`: in the flow of a document. \`page\`: the whole view. */
   readonly placement: "inline" | "page";
-  /** What markdown would have drawn: render it when this renderer has nothing better. */
+  /**
+   * What markdown would have drawn. Render it when this renderer has nothing better: no
+   * viewer for the type, or the file could not be loaded.
+   */
   readonly fallback: ReactNode;
-  /** Wrap what this renderer draws in the caller's file actions (download, promote). */
+  /**
+   * Wrap what this renderer draws in the caller's file actions (download, promote). Not for
+   * \`fallback\`, which carries its own.
+   */
   readonly frame: (content: ReactNode) => ReactNode;
 }`,
   shape: s.object({

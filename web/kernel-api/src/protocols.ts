@@ -10,8 +10,8 @@
 import type { Shape, ShapeJson } from "./shape.js";
 
 /**
- * - `service`: one provider answers each consumer port (replaces `services.require`).
- * - `slot`: many contributors feed a host port, in seat order (replaces extension points).
+ * - `service`: one provider answers each consumer port.
+ * - `slot`: many providers feed a host port, in seat order.
  * - `event`: a typed message stream, many to many.
  */
 export type ProtocolKind = "service" | "slot" | "event";

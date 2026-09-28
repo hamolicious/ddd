@@ -2,10 +2,11 @@
  * lm/editor.paste@1.0.0: slot, owned by `editor`.
  *
  * A paste and drop handler. The editor asks each one in seat order when something is
- * pasted or dropped onto it, and the first to return `true` takes it. `paste` must answer
- * synchronously, since the browser's paste or drop is cancelled in the same tick; slow
- * work (an upload) starts here and finishes later through the `EditorInsertion` it got
- * from `insert`.
+ * pasted or dropped onto it, and the first to return `true` takes it: the editor then does
+ * nothing with it. `false` passes it on; when nobody takes it, CodeMirror handles it as
+ * usual. `paste` must answer synchronously, since the browser's paste or drop is cancelled
+ * in the same tick; slow work (an upload) starts here and finishes later through the
+ * `EditorInsertion` it got from `insert`.
  *
  * GENERATED from shape.mjs by web/scripts/gen-protocols.ts. Do not edit.
  */
@@ -24,7 +25,10 @@ export interface EditorPasteEvent {
   readonly files: readonly File[];
   /** The clipboard's plain text; empty when there is none. */
   readonly text: string;
-  /** Put text where it was going. Every call inserts after the previous one. */
+  /**
+   * Put text where it was going: a paste replaces the selection, a drop lands where it was
+   * dropped. Every call inserts after the previous one, so several files land in order.
+   */
   insert(text: string): EditorInsertion;
 }
 
@@ -33,7 +37,11 @@ export interface EditorPasteEvent {
  * the editor, so it keeps working after the user leaves Edit mode.
  */
 export interface EditorInsertion {
-  /** Swap the inserted text for `text`; `false`, changing nothing, when it has since been edited. */
+  /**
+   * Swap the inserted text for `text`. `false`, changing nothing, when it has since been
+   * edited or deleted: the user's change wins. This or `remove` settles the insertion; later
+   * calls return `false`.
+   */
   replace(text: string): boolean;
   /** Take the inserted text out again, under the same rule. */
   remove(): boolean;

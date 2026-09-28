@@ -447,7 +447,6 @@ pub fn descriptor(
                 )
             })
             .collect(),
-        dependencies: manifest.dependencies.clone(),
     }
 }
 

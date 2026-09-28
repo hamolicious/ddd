@@ -1,6 +1,6 @@
 # `plugins/base/` — the base distribution
 
-The visible app. Twenty-five plugins that happen to ship with the server and are
+The visible app. Twenty-six plugins that happen to ship with the server and are
 [installed like any other](../SPEC.md#62-package-manifest-capabilities) — individually
 replaceable, individually removable, and holding no privilege the kernel does not give
 every plugin.
@@ -10,16 +10,15 @@ case anywhere in the kernel, the kernel would be wrong.** This directory is also
 reference for writing a plugin — there is deliberately no scaffolding CLI (SPEC §10).
 
 ```
-_shared/points.ts                 the extension points: names, types, shape validators
 _shared/machine-docs.ts           the one rule three plugins share about hiding documents
 _shared/fm-display.ts             what kind of thing an fm value is, and how to show one
 _shared/regions.ts                where the frontmatter, body and `%%%` sections are in a text
-_shared/indexer-api.ts            the `indexer` service's types, for the plugins that read it
 _shared/compact.ts                "this is a phone": the breakpoint, and the hooks that read it
 _shared/vite.plugin-config.mjs    the reference build config (SPEC §6.4)
 _shared/vite.config.example.mjs   how a standalone plugin uses it
 _shared/vite.config.tailwind.example.mjs  Tailwind-enabled standalone build
-<id>/manifest.json                SPEC §6.2
+<id>/manifest.json                SPEC §6.2: `provides` and `consumes` name the plugin's ports
+<id>/protocols/<name>/shape.mjs   a protocol the plugin owns; the rest of the package is generated
 <id>/src/index.tsx                `export default function activate(kernel) { … }`
 <id>/src/style.css                linked on activation; classes prefixed per plugin
 dist/<id>/<version>/              build output = the installed layout the server serves
@@ -38,7 +37,7 @@ dist/<id>/<version>/              build output = the installed layout the server
 | `doc-list` | browse/search/sort/filter, new document, Trash; local index is the default search provider | `search.provider` |
 | `folders` | drag-and-drop file tree over `fm.path`; every move is a splice | — |
 | `markdown` | the unified/remark → React pipeline | `markdown.directive/fence/codeBlock/remark/component/taskState/attachment` |
-| `attachments` | paste-to-upload in the editor; shows embedded files through a viewer per file type; provides its resumable upload service to declared dependents | `attachments.viewer` |
+| `attachments` | paste-to-upload in the editor; shows embedded files through a viewer per file type; serves its resumable upload service (`lm/attachments`) | `attachments.viewer` |
 | `slash-commands` | the `/` menu in any editor, over editor-neutral text surfaces | `text.surface`, `slash.command` |
 | `native-preview` | viewers for what a browser shows natively: images, PDF, audio, video, text | — |
 | `document-surface` | the document route + mode registry | `document.mode` |
@@ -64,17 +63,17 @@ that had a backend half, so **every plugin in this directory is now frontend-onl
 
 ## How the base plugins relate
 
-Generated from the twenty-five `manifest.json` `dependencies` fields — an arrow reads
-**"depends on"**, and the loader's activation order is precisely a topological order of
-this graph (a dependency always activates first; a failed dependency skips its whole
-subtree). Every plugin additionally depends on `@kernel`, which is not drawn.
+Drawn from the service ports in the manifests' `consumes`: an arrow reads **"uses a
+service of"**, solid for a required port and dotted for an optional one. These wires are
+all the resolver orders activation by (PLUGIN-PROTOCOLS §6): a provider activates before
+the plugins that use it, and one that does not activate takes down every plugin that
+requires it. Every plugin additionally uses `@kernel`, which is not drawn.
 
 ```mermaid
 flowchart TD
     subgraph documents ["document experience"]
         viewer --> markdown
-        viewer --> document-surface
-        editor --> document-surface
+        document-surface
     end
 
     subgraph browse ["browse & find"]
@@ -84,56 +83,54 @@ flowchart TD
     end
 
     subgraph config ["configuration"]
-        themes --> settings
-        admin --> settings
+        themes -.-> settings
+        admin
     end
 
     subgraph foundation ["foundation"]
         router --> shell-ui
-        commands --> shell-ui
+        context-menu
     end
 
-    markdown --> commands & router
-    document-surface --> commands & router & shell-ui
-    editor --> commands
-    doc-list --> commands & context-menu & router & shell-ui
-    folders --> commands & context-menu & router & shell-ui
-    settings --> commands & router & shell-ui
-    admin --> commands & context-menu & router & shell-ui
-    changes --> context-menu & markdown & router & shell-ui
-    themes --> commands
-    graph --> commands & router & shell-ui
+    markdown -.-> router
+    document-surface --> router
+    doc-list --> router & context-menu
+    folders --> router & context-menu
+    graph --> router & shell-ui
+    settings --> router
+    admin --> router & context-menu
+    changes --> markdown & router & shell-ui & context-menu
+    wiring --> router & shell-ui & context-menu
 ```
 
-The graph is **unchanged by the core-improvements pass**: nothing declared a new
-dependency. `folders` gained `react-dom` in `peerLibraries` (its move sheet is a
-`createPortal`), which is a blessed runtime-layer specifier resolved through the server's
-import map, not an edge in this graph. The one new cross-plugin relationship in that
-pass — `folders` telling `doc-list` where unfiled documents go — is a `kernel.events`
-message precisely *because* the arrow it would need points the wrong way: `folders`
-already depends on `doc-list`, and the reverse edge would be a cycle the loader cannot
-order.
+`attachments`, `commands`, `editor`, `header`, `native-preview`, `notices`,
+`slash-commands`, `sync-status`, `syntax-highlight` and `welcome` are not drawn because
+they use no service: everything they do goes through **slots**, which never order
+activation. A slot is many-to-one — providers offer items on a provided port, a host
+collects them on a consumed port in seat order — and the wiring seats them wherever both
+ends are running, whichever activated first. `header` hosts `navbar.item` and seven plugins
+put items in the bar without either side naming the other; `commands` hosts every
+`commands.command` and `keybindings.default`; `editor` offers a `text.surface` that
+`slash-commands` and `fm-autocomplete` host. `attachments` serves `lm/attachments` (the
+`obsidian-importer` example uses it) and puts a handler on `editor.paste`, a renderer on
+`markdown.attachment` and `/attach` on `slash.command`; `native-preview` puts viewers on
+`attachments.viewer`; `syntax-highlight` puts a renderer on `markdown.codeBlock`, a
+decoration on `editor.extension` and a section on `settings.section`. Turning any one of
+them off costs its own feature and nothing downstream.
 
-`attachments`, `native-preview`, `slash-commands`, `syntax-highlight` and `welcome` are not drawn
-because they have no edges: every point they use is contributed to, never required.
-`syntax-highlight` puts a renderer on `markdown.codeBlock`, a decoration on `editor.extension` and
-a section on `settings.section`; without it, code is the plain `<pre>` it always was. `attachments` puts a
-handler on `editor.paste`, a renderer on `markdown.attachment` and `/attach` on
-`slash.command`; `native-preview` puts viewers on `attachments.viewer`; `editor` puts a
-`text.surface` on `slash-commands`' point. Turning any one of them off costs its own
-feature and nothing downstream. `indexer` touches no point at all: it is a service, and
-`fm-autocomplete` and `graph` are the arrows into it. `fm-autocomplete` reads the editors' `text.surface`
-contributions without depending on `slash-commands`, which defines that point: the
-surfaces are the editors', and without them there is simply no menu.
+The one message that points the other way is an **event**: `folders` tells `doc-list`
+where unfiled documents go on `lm/folders.default-location`, a sticky event, because
+`folders` already uses `doc-list`'s `lm/document-browser` and a service the other way
+round would be a cycle.
 
-Reading it bottom-up: `shell-ui` owns the frame everyone renders into, and `header`
-fills its top-bar spot (the plugins that put items in the bar do not depend on `header`:
-contributions to `navbar.item` buffer until it is defined); `router` and
-`commands` are the two services almost everything consumes (URLs and actions); the
-document experience stacks `viewer`/`editor` as peer *modes* on
-`document-surface`, with `markdown` as the rendering pipeline `viewer` consumes; and
-`folders` is the one browse plugin built on top of another (`doc-list`). Replacing any
-node means satisfying its incoming arrows — nothing else.
+Reading it bottom-up: `shell-ui` owns the frame everyone renders into and serves the
+layout (`lm/shell`); `router` turns URLs into views and is the service almost everything
+uses; the document experience stacks `viewer` and `editor` as peer *modes* offered to
+`document-surface`, with `markdown`'s renderer the one service `viewer` needs; `indexer`
+serves the workspace index that `graph` and `fm-autocomplete` read; and `folders` is the
+one browse plugin built on another (`doc-list`). Replacing any node means serving the
+protocols on its incoming arrows — which plugin does is a wiring decision, made in the
+`wiring` editor, not in the consumer.
 
 ## Protocols and ports
 
@@ -141,7 +138,7 @@ Every contract between base plugins is a **protocol package** inside the plugin 
 it (`dev-docs/todo/PLUGIN-PROTOCOLS.html` §3): `header/protocols/navbar.item/`,
 `indexer/protocols/workspace-index/`, and so on, 35 in all (8 services, 26 slots, 1 event).
 Each package has one hand-written file, `shape.mjs`; `protocol.json`, `index.d.ts` and
-`README.md` are generated from it:
+`README.md` are generated from it, and it is where a protocol's meaning is written down:
 
 ```
 cd web && npm run generate          # after editing a shape.mjs or schema/manifest.schema.json
@@ -157,8 +154,10 @@ owner is gone, and serves each one's types at `/protocols/<id>/<version>/index.d
 Each manifest names its **ports**: `provides` (a protocol at the exact version it
 implements, with an optional `order` hint for default seats) and `consumes` (a range, with
 `needs` listing the members it reads, `optional` for a service it can live without, and
-`seats: 1` for a host that shows one contributor). Port names are local to the plugin and
-never change once published, because wiring refers to them.
+`seats: 1` for a host that shows one provider). Port names are local to the plugin and
+never change once published, because wiring refers to them. There is no other way for two
+plugins to reach each other: since `@kernel` 2.0 the manifest has no `dependencies`, and
+the kernel no `extensions` or `services`.
 
 ## Machine-owned documents
 
@@ -193,10 +192,11 @@ because `.hidden` typed into an inline folder rename is the same hole from the o
 side. Anyone adding a write here inherits that obligation; `EXCLUDE_MACHINE_DOCUMENTS` on
 a subscription is not it.
 
-## The shared files, and why each is not a dependency
+## The shared files, and why each is not a protocol
 
-`_shared/` holds what several base plugins must agree about *exactly*, where a manifest
-dependency would be the wrong shape of agreement.
+`_shared/` holds what several base plugins must agree about *exactly*, where a protocol
+would be the wrong shape of agreement: a rule or a helper each of them runs itself, not a
+value one plugin hands another.
 
 - **`machine-docs.ts`** — above. Three plugins, one rule about what to hide.
 - **`fm-display.ts`** — what kind of thing an `fm` value is (`inferKind`, `isDateKey`,
@@ -210,9 +210,9 @@ dependency would be the wrong shape of agreement.
   treats as body and the other as machine data would be a backlink nobody can see.
   (`editor` still has its own differently-shaped copy; the header of `regions.ts` says
   what would retire both.)
-- **`indexer-api.ts`** — the types of `indexer`'s service. Unlike the two above it *is*
-  backed by a dependency: a plugin that reads the indexes declares `"indexer"`, and this
-  file is only the shape it gets back, the same arrangement as `context-menu-api.ts`.
+
+The types of what plugins *do* hand each other — every slot item and every service — are
+in the protocol packages, never here.
 
 ## The folder tree
 
@@ -260,25 +260,47 @@ a base plugin imports is either relative or external.
 
 ## Writing one
 
+```json
+{
+  "id": "hello",
+  "version": "1.0.0",
+  "kernel": "^2.0",
+  "hot": true,
+  "consumes": { "router": { "protocol": "lm/router@^1.0", "needs": ["navigate"] } },
+  "provides": {
+    "nav": { "protocol": "lm/navbar.item@1.0.0" },
+    "greeter": { "protocol": "acme/greeter@1.0.0" }
+  },
+  "frontend": { "module": "frontend/index.mjs" }
+}
+```
+
 ```tsx
 import type { Kernel } from "@kernel";
+import type { Router } from "@protocols/lm/router";
 
 export default function activate(kernel: Kernel) {
-  kernel.extensions.contribute("navbar.item", { id: "hello", label: "Hello" });
-  return { greet: () => "hi" };      // this plugin's API, for its declared dependents
+  const router = kernel.ports.use<Router>("router");          // whatever the wiring bound
+  kernel.ports.offer("nav", { id: "hello", label: "Hello", onSelect: () => router.navigate("/hello") });
+  kernel.ports.serve("greeter", { greet: () => "hi" });       // for whoever consumes acme/greeter
 }
 ```
 
 Five things worth knowing before the first line:
 
-1. **The `kernel` you are handed is yours.** Contributions, settings, your `%%%` section,
-   your log lines and your service access are all attributed to your plugin id without you
-   passing one. You cannot act as another plugin, and it cannot act as you.
-2. **Activation is reload-only, in topological order.** By the time your `activate` runs,
-   every declared dependency has returned its API; `kernel.services.require("markdown")`
-   is synchronous and cannot be undeclared.
-3. **Throwing from `activate` fails your plugin and skips everything that depends on it**,
-   with one aggregated notice. Fail loudly and early rather than half-registering.
+1. **The `kernel` you are handed is yours.** Offers, settings, your `%%%` section, your
+   log lines and your ports are all attributed to your plugin id without you passing one.
+   You cannot act as another plugin, and it cannot act as you.
+2. **Ports are the only way out, and they are checked.** `use`, `offer`, `serve`,
+   `collect`, `emit` and `on` take your own port names; an undeclared one throws, an item
+   or service that does not match its protocol throws at you, and a service handle
+   refuses any member outside the port's `needs`. By the time your `activate` runs, every
+   service you require has been served; which plugin serves it is the wiring's choice.
+3. **Throwing from `activate` fails your plugin and skips every plugin that requires a
+   service you provide**, with one aggregated notice. Fail loudly and early rather than
+   half-registering. Whatever you built outside the kernel (window listeners, timers) is
+   your `export function deactivate()`'s to release; it runs on every stop, and `"hot":
+   true` is your promise that it does.
 4. **Never rewrite frontmatter or another plugin's `%%%` section.** `kernel.documents.splice`
    is the only sanctioned write path for metadata (SPEC §3.3), and it is mandatory
    discipline, not a convenience.

@@ -5,7 +5,7 @@
   "description": "Fills a new, empty workspace with a short tour: one note per base feature, all deletable.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
-  "kernel": "^1.0",
+  "kernel": "^2.0",
   "hot": true,
   "peerLibraries": {
     "react": "^18.0.0"

@@ -146,10 +146,10 @@ fn write_plugin(plugins: &Path, id: &str, version: &str) {
         json!({
             "id": id,
             "version": version,
-            "kernel": "^1.0",
+            "kernel": "^2.0",
             "peerLibraries": { "react": "^18.0.0" },
             "frontend": { "module": "frontend/index.mjs", "style": "frontend/style.css" },
-            "x-defines": ["main.view"],
+            "x-tailwind": { "prefix": "main" },
         })
         .to_string(),
     )
@@ -882,7 +882,7 @@ async fn the_installed_list_needs_a_session_and_reports_refusals() {
     // The manifest passes through untouched, `peerLibraries` spelling included, and
     // unknown keys survive so an M3 server does not eat an M4 manifest's `capabilities`.
     assert_eq!(plugin["manifest"]["peerLibraries"]["react"], "^18.0.0");
-    assert_eq!(plugin["manifest"]["x-defines"][0], "main.view");
+    assert_eq!(plugin["manifest"]["x-tailwind"]["prefix"], "main");
 
     // A bad directory disables one plugin and is reported — never fatal, and never
     // silent, or the admin screen shows a mysteriously missing feature.

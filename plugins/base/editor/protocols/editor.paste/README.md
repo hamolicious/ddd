@@ -3,9 +3,11 @@
 `1.0.0` · slot · owned by `editor` · key `id`
 
 A paste and drop handler. The editor asks each one in seat order when something is pasted or
-dropped onto it, and the first to return `true` takes it. `paste` must answer synchronously,
-since the browser's paste or drop is cancelled in the same tick; slow work (an upload) starts
-here and finishes later through the `EditorInsertion` it got from `insert`.
+dropped onto it, and the first to return `true` takes it: the editor then does nothing with
+it. `false` passes it on; when nobody takes it, CodeMirror handles it as usual. `paste` must
+answer synchronously, since the browser's paste or drop is cancelled in the same tick; slow
+work (an upload) starts here and finishes later through the `EditorInsertion` it got from
+`insert`.
 
 | Key | Type | Required | |
 |---|---|---|---|

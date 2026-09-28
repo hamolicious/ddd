@@ -41,7 +41,6 @@ export function installTestHooks(host: KernelHost, runtime: PluginRuntime, baseO
       frontend: plugin.manifest.frontend !== undefined,
       ...(plugin.manifest.provides ? { provides: plugin.manifest.provides } : {}),
       ...(plugin.manifest.consumes ? { consumes: plugin.manifest.consumes } : {}),
-      ...(plugin.manifest.dependencies ? { dependencies: plugin.manifest.dependencies } : {}),
     })),
     protocols,
     wiring,

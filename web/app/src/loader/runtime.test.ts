@@ -79,9 +79,7 @@ function harness(plugins: InstalledPlugin[], order: string[], plan: PlanFake) {
     },
     ports: {
       configure: (config: { resolution: Resolution }) => void configured.push(config.resolution),
-      adoptLegacyApi: () => undefined,
     },
-    services: { publish: () => undefined },
     forPlugin: () => ({}),
     retract: (id: string) => void log.push(`retract ${id}`),
   } as unknown as KernelHost;

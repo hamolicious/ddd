@@ -3,7 +3,7 @@
  */
 
 /** The `@kernel` contract version (`x-kernel-version`). The server's `KERNEL_VERSION` is generated from the same line. */
-export const MANIFEST_KERNEL_VERSION = "1.2.0";
+export const MANIFEST_KERNEL_VERSION = "2.0.0";
 
 export interface PluginFrontend {
   /** Path inside the package, e.g. `frontend/index.mjs`. */
@@ -53,6 +53,8 @@ export interface PluginBackend {
   readonly routes?: readonly (string)[];
   /** Server-bus events delivered to `lm_event`, namespaced (`other-plugin:something`). */
   readonly events?: readonly (string)[];
+  /** Plugin ids whose backend `lm_call` this half may reach through `call_plugin` (HOST-ABI.md §3.10). Replaces the `dependencies` allowlist removed in `@kernel` 2.0. */
+  readonly calls?: readonly (string)[];
 }
 
 export interface ProvidedPort {
@@ -83,8 +85,6 @@ export interface PluginManifest {
   readonly version: string;
   /** Semver range against the `@kernel` contract version. */
   readonly kernel: string;
-  /** Plugin id → semver range. Resolved server-side at install. Legacy: `consumes` replaces it. */
-  readonly dependencies?: Readonly<Record<string, string>>;
   /** Blessed runtime-layer libraries and their ranges (SPEC §6.4). */
   readonly peerLibraries?: Readonly<Record<string, string>>;
   /** The frontend half. */
@@ -115,6 +115,10 @@ export interface PluginManifest {
 
 /** The schema itself, for `validateManifest`. */
 export const MANIFEST_SCHEMA: ManifestSchemaNode = {
+  "x-removed": {
+    "dependencies": "was removed in @kernel 2.0: declare the services you use as `consumes` ports",
+    "x-defines": "was removed in @kernel 2.0: declare the slots you host as `consumes` ports"
+  },
   "type": "object",
   "required": [
     "id",
@@ -133,13 +137,6 @@ export const MANIFEST_SCHEMA: ManifestSchemaNode = {
     "kernel": {
       "type": "string",
       "format": "semver-range"
-    },
-    "dependencies": {
-      "type": "object",
-      "additionalProperties": {
-        "type": "string",
-        "format": "semver-range"
-      }
     },
     "peerLibraries": {
       "type": "object",
@@ -326,6 +323,13 @@ export const MANIFEST_SCHEMA: ManifestSchemaNode = {
           "items": {
             "type": "string"
           }
+        },
+        "calls": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "plugin-id"
+          }
         }
       }
     },
@@ -391,4 +395,6 @@ export interface ManifestSchemaNode {
   readonly format?: string;
   readonly minimum?: number;
   readonly $defs?: Readonly<Record<string, ManifestSchemaNode>>;
+  /** Fields a manifest may no longer carry, each with the message that says what replaced it. */
+  readonly "x-removed"?: Readonly<Record<string, string>>;
 }

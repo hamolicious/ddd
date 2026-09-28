@@ -3,10 +3,14 @@
   "$id": "https://life-manager.dev/schema/manifest.schema.json",
   "title": "PluginManifest",
   "description": "A plugin's manifest.json (SPEC §6.2). The one source for the Rust and TypeScript manifest types and validators: `node web/scripts/gen-manifest.mjs` writes both, and `--check` fails when either is stale.",
-  "x-kernel-version": "1.2.0",
+  "x-kernel-version": "2.0.0",
   "x-rust-name": "PluginManifest",
   "x-rust-derive": ["Debug", "Clone", "Default", "PartialEq", "Serialize", "Deserialize"],
   "x-rust-extra": true,
+  "x-removed": {
+    "dependencies": "was removed in @kernel 2.0: declare the services you use as `consumes` ports",
+    "x-defines": "was removed in @kernel 2.0: declare the slots you host as `consumes` ports"
+  },
   "type": "object",
   "required": ["id", "version", "kernel"],
   "properties": {
@@ -24,11 +28,6 @@
       "type": "string",
       "format": "semver-range",
       "description": "Semver range against the `@kernel` contract version."
-    },
-    "dependencies": {
-      "type": "object",
-      "additionalProperties": { "type": "string", "format": "semver-range" },
-      "description": "Plugin id → semver range. Resolved server-side at install. Legacy: `consumes` replaces it."
     },
     "peerLibraries": {
       "type": "object",
@@ -188,6 +187,11 @@
           "type": "array",
           "items": { "type": "string" },
           "description": "Server-bus events delivered to `lm_event`, namespaced (`other-plugin:something`)."
+        },
+        "calls": {
+          "type": "array",
+          "items": { "type": "string", "format": "plugin-id" },
+          "description": "Plugin ids whose backend `lm_call` this half may reach through `call_plugin` (HOST-ABI.md §3.10). Replaces the `dependencies` allowlist removed in `@kernel` 2.0."
         }
       }
     },

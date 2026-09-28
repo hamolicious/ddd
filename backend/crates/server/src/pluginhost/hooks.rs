@@ -1427,7 +1427,7 @@ mod tests {
                 public_routes: Vec::new(),
                 notifications: false,
             },
-            dependencies: Default::default(),
+            calls: Default::default(),
             hooks: hooks.to_vec(),
             cron: Vec::new(),
             routes: Vec::new(),

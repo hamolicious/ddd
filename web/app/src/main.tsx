@@ -353,7 +353,7 @@ async function followWiring(): Promise<void> {
     const runtime = pluginRuntime;
     const context = bootContext;
     if (!runtime || !context) {
-      // No runtime: a boot without a resolution (an older server's list), or `?safe=bare`.
+      // No runtime: `?safe=bare`, or a boot whose list carried no live wiring.
       reloadPending = true;
       reloadPrompt.askForWiring();
       return;
@@ -493,22 +493,34 @@ async function activatePlugins(
 
   const { plugins, wiringVersion, wiring, resolved, protocols } = await installedSet(host, bearer, offlineBoot);
   // The server resolved the wiring for both boot modes; the loader activates from the one
-  // this page is in (PLUGIN-PROTOCOLS §6), and orders by itself only without one.
+  // this page is in (PLUGIN-PROTOCOLS §6).
   const resolution = resolved ? (baseOnly ? resolved.safe : resolved.normal) : undefined;
+  bootContext = { bearer, baseOnly };
+  if (!resolution) {
+    // A list without a resolution: cached here before resolutions existed, or served by
+    // a server older than wiring. The order is the server's alone since `@kernel` 2.0, so
+    // no plugin starts; the one reload prompt says so, and a reload while online fetches
+    // a list that has one. (An empty list already has its own notice.)
+    if (plugins.length > 0) {
+      console.warn("[loader] the plugin list has no resolution; not activating plugins until a reload fetches one");
+      reloadPending = true;
+      reloadPrompt.askForStale();
+    }
+    return;
+  }
   const activeModules = new Map<string, ActiveModule>();
   const report = await loadPlugins({
     host,
     plugins,
     kernelVersion: KERNEL_API_VERSION,
-    baseOnly,
-    ...(resolution ? { resolution } : {}),
+    resolution,
     ...(protocols ? { protocols } : {}),
     activeModules,
   });
 
-  // Hot apply needs the server's resolution to diff against; without one (an older
-  // server, or a cache from before wiring) a change asks for a reload instead.
-  if (resolution && wiring) {
+  // Hot apply needs the live wiring to diff against; without one a change asks for a
+  // reload instead.
+  if (wiring) {
     pluginRuntime = new PluginRuntime({
       host,
       current: { plugins, wiring, resolution, protocols: protocols ?? [] },
@@ -516,7 +528,6 @@ async function activatePlugins(
       importMap: () => new Set(Object.keys(pageImportMap()?.imports ?? {})),
     });
   }
-  bootContext = { bearer, baseOnly };
   if (pluginRuntime) installTestHooks(host, pluginRuntime, baseOnly);
   // Only now: a newer version seen during boot is applied to the finished plugin set.
   wiringWatch.setRunning(wiringVersion);

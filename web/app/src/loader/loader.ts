@@ -5,18 +5,18 @@
  *
  * 1. **One aggregated notice.** A workspace with three broken plugins shows one
  *    notice listing them and linking to admin, never three modals.
- * 2. **A failed `activate()` skips all transitive dependents** and withdraws
- *    everything the failed plugin had already registered — a plugin that defined a
- *    point and then threw must not leave a half-claimed registry behind.
- * 3. **Every contributed component is wrapped in an error boundary.** That happens
- *    in `kernel.ui.boundary`, which the consumers of a point call; the loader's part
+ * 2. **A failed `activate()` skips every plugin that requires a service it provides**,
+ *    transitively, and withdraws everything the failed plugin had already registered —
+ *    a plugin that offered an item and then threw must not leave it behind.
+ * 3. **Every offered component is wrapped in an error boundary.** That happens in
+ *    `kernel.ui.boundary`, which the hosts of a slot call; the loader's part
  *    is passing the report channel through so a render failure lands in the same
  *    notice as an activation failure.
  * 4. **`style.css` is linked on activation** (SPEC §6.4), not bundled into the
  *    module, so a plugin's CSS is visible in devtools as a file with its name on it.
  *
- * Activation is **reload-only**: plugins load once, here, in topological order.
- * There is no hot path, and installing or enabling one prompts a reload.
+ * Boot activates here, in the order the server's resolution gives (PLUGIN-PROTOCOLS §6);
+ * later wiring changes are applied in place by the plugin runtime (`runtime.ts`, §6c).
  */
 
 import {
@@ -29,20 +29,17 @@ import {
 } from "@kernel";
 import type { KernelHost } from "@kernel/runtime/index.js";
 
-import { dependentsOf, orderFromResolution, resolveOrder, transitiveDependents, type SkippedPlugin } from "./order.js";
+import { dependentsOf, orderFromResolution, type SkippedPlugin } from "./order.js";
 
 export interface LoadOptions {
   readonly host: KernelHost;
   readonly plugins: readonly InstalledPlugin[];
   readonly kernelVersion: string;
-  /** `?safe=1` — base distribution only. */
-  readonly baseOnly?: boolean;
   /**
-   * The server's resolution of the live wiring for this boot mode (PLUGIN-PROTOCOLS §6).
-   * When present it decides the order and the skips; absent (an older server, or a list
-   * cached before resolutions existed) the loader orders by `dependencies` itself.
+   * The server's resolution of the live wiring for this boot mode (PLUGIN-PROTOCOLS §6):
+   * the order and the skips. There is no other source of an order.
    */
-  readonly resolution?: Resolution;
+  readonly resolution: Resolution;
   /** Every registered protocol, from the plugin list: what the ports runtime checks against. */
   readonly protocols?: readonly ProtocolPackage[];
   /** Injectable for tests; production uses a bare dynamic `import()`. */
@@ -142,22 +139,16 @@ export async function loadPlugins(options: LoadOptions): Promise<LoadReport> {
   }
 
   const resolution = options.resolution;
-  const resolved = resolution
-    ? orderFromResolution(wellFormed, resolution, { kernelVersion: options.kernelVersion })
-    : resolveOrder(wellFormed, {
-        kernelVersion: options.kernelVersion,
-        ...(options.baseOnly !== undefined ? { baseOnly: options.baseOnly } : {}),
-      });
+  const resolved = orderFromResolution(wellFormed, resolution, { kernelVersion: options.kernelVersion });
   skipped.push(...resolved.skipped);
   // The ports runtime learns the protocols, every manifest and the wiring before the
   // first `activate`, so a plugin can `use` and `collect` from its first line (§5).
   options.host.ports.configure({
     protocols: options.protocols ?? [],
     manifests: wellFormed.map((plugin) => plugin.manifest),
-    ...(resolution ? { resolution } : {}),
+    resolution,
   });
-  const dependents = (failed: string): Iterable<string> =>
-    resolution ? dependentsOf(new Set([failed]), resolution).keys() : transitiveDependents(failed, resolved.order);
+  const dependents = (failed: string): Iterable<string> => dependentsOf(new Set([failed]), resolution).keys();
 
   const activated: string[] = [];
   const failed: FailedPlugin[] = [];
@@ -175,18 +166,14 @@ export async function loadPlugins(options: LoadOptions): Promise<LoadReport> {
         throw new Error("the frontend module has no default-exported activate(kernel) function");
       }
       kernel = options.host.forPlugin(plugin.manifest);
-      const api = await module.default(kernel);
-      options.host.services.publish(id, api);
-      // A 1.x provider returns its API: it is served on the service ports it declares,
-      // checked against their protocols, so a consumer on ports can use it (§5).
-      options.host.ports.adoptLegacyApi(id, api);
+      await module.default(kernel);
       options.activeModules?.set(id, { plugin, module });
       activated.push(id);
       options.onProgress?.({ pluginId: id, index, total: resolved.order.length, outcome: "activated" });
     } catch (cause) {
       const error = cause instanceof Error ? cause : new Error(String(cause));
-      // Withdraw whatever it managed to register before throwing: a point it
-      // defined, a contribution it made, a mount it took.
+      // Withdraw whatever it managed to register before throwing: an item it
+      // offered, a service it served, a mount it took.
       options.host.retract(id);
       failed.push({ pluginId: id, error });
       options.onProgress?.({ pluginId: id, index, total: resolved.order.length, outcome: "failed" });
@@ -196,8 +183,8 @@ export async function loadPlugins(options: LoadOptions): Promise<LoadReport> {
         dead.add(dependent);
         skipped.push({
           pluginId: dependent,
-          reason: "dependency-skipped",
-          detail: `"${id}" failed to activate`,
+          reason: "service-skipped",
+          detail: `"${id}", which provides a service it requires, failed to activate`,
         });
       }
     }

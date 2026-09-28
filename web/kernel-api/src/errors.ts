@@ -22,9 +22,9 @@ export class KernelError extends Error {
 }
 
 /**
- * A plugin's contribution or call violated the contract: an unknown extension
- * point shape, a duplicate `definePoint`, a `require()` of an undeclared
- * dependency. Thrown loudly and never swallowed (SPEC §6.4: "rejects loudly").
+ * A plugin's offer or call violated the contract: an item or service that does not
+ * match its protocol, an undeclared port, a member read outside a port's `needs`.
+ * Thrown loudly and never swallowed (SPEC §6.4: "rejects loudly").
  */
 export class ContractViolationError extends KernelError {}
 

@@ -1,8 +1,9 @@
 /**
  * The one reload prompt (SPEC §8, PLUGIN-PROTOCOLS §6c).
  *
- * Two things can ask a user to reload: a new app bundle waiting in the service worker, and
- * a wiring change this client cannot apply in place. They share one notice, so a user is
+ * Three things can ask a user to reload: a new app bundle waiting in the service worker, a
+ * wiring change this client cannot apply in place, and a plugin list with no resolution to
+ * activate from (one cached before resolutions existed, or served by an older server). They share one notice, so a user is
  * never asked twice, and one Reload covers both: when a new worker is waiting it takes
  * control first, so the reload lands on the newest bundle *and* the newest wiring.
  *
@@ -16,7 +17,7 @@ import type { Notice } from "@kernel";
 /** The id the service-worker update has always used, kept so there is one notice. */
 export const RELOAD_NOTICE_ID = "kernel:update-available";
 
-export type ReloadReason = "update" | "wiring";
+export type ReloadReason = "update" | "wiring" | "stale";
 
 export class ReloadPrompt {
   #applyUpdate: (() => void) | undefined;
@@ -42,6 +43,14 @@ export class ReloadPrompt {
     this.#ask("wiring");
   }
 
+  /**
+   * The plugin list carries no resolution, so no plugin can start (`@kernel` 2.0: the order
+   * is the server's alone). A reload while online fetches one.
+   */
+  askForStale(): void {
+    this.#ask("stale");
+  }
+
   get reasons(): ReadonlySet<ReloadReason> {
     return this.#reasons;
   }
@@ -61,7 +70,11 @@ export class ReloadPrompt {
     this.#notify({
       id: RELOAD_NOTICE_ID,
       level: "info",
-      message: this.#reasons.has("update") ? "An update is available." : "Plugins changed.",
+      message: this.#reasons.has("update")
+        ? "An update is available."
+        : this.#reasons.has("stale")
+          ? "Plugins need updating. Reload while online."
+          : "Plugins changed.",
       actions: [{ label: "Reload", run: () => this.reload() }],
     });
   }

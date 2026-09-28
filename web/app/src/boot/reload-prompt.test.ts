@@ -35,6 +35,17 @@ describe("the reload prompt", () => {
     notice?.actions?.[0]?.run();
     expect(reloadPage).toHaveBeenCalledOnce();
   });
+
+  it("says a list without a resolution needs a reload while online", () => {
+    const reloadPage = vi.fn();
+    const prompt = new ReloadPrompt(reloadPage);
+    let notice: Notice | undefined;
+    prompt.attach((n) => (notice = n));
+    prompt.askForStale();
+    expect(notice?.message).toBe("Plugins need updating. Reload while online.");
+    notice?.actions?.[0]?.run();
+    expect(reloadPage).toHaveBeenCalledOnce();
+  });
 });
 
 describe("the wiring watch", () => {

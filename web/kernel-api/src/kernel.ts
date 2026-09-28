@@ -2,15 +2,15 @@
  * The `@kernel` module itself: what a plugin's `activate()` receives.
  *
  * **The object is per-plugin.** Every call is attributed to the plugin that made
- * it — contributions carry its id, `settings` reads its namespace, `splice` writes
- * its `%%%` section, `services.require` is checked against its declared
- * dependencies, and `log` is prefixed with its id. A plugin cannot spoof another
- * by passing an id, because it never passes one.
+ * it — offers carry its id, `settings` reads its namespace, `splice` writes its
+ * `%%%` section, `ports` resolves its own port names against its own manifest, and
+ * `log` is prefixed with its id. A plugin cannot spoof another by passing an id,
+ * because it never passes one.
  *
- * **Activation is reload-only** (SPEC §6.4). Plugins load once at boot in
- * topological order; `deactivate` exists for symmetry and for the `?safe=bare`
- * teardown, and installing or enabling a plugin prompts "reload to activate".
- * Backend halves still hot-load (M4) — that asymmetry is deliberate.
+ * **Activation follows the wiring** (PLUGIN-PROTOCOLS §6, §6c). Plugins activate in
+ * the order the server's resolution gives, providers before the consumers of their
+ * services; a wiring change stops, restarts and starts plugins in place, and
+ * `deactivate` runs on every stop.
  *
  * **FROZEN.**
  */
@@ -18,10 +18,8 @@
 import type { CapabilitiesApi } from "./capabilities.js";
 import type { DocumentsApi } from "./documents.js";
 import type { EventsApi } from "./events.js";
-import type { ExtensionsApi } from "./extensions.js";
 import type { PluginManifest } from "./manifest.js";
 import type { PortsApi } from "./ports.js";
-import type { ServicesApi } from "./services.js";
 import type { SessionApi } from "./session.js";
 import type { SettingsApi } from "./settings.js";
 import type { SyncApi } from "./sync.js";
@@ -96,14 +94,10 @@ export interface Kernel {
 
   readonly documents: DocumentsApi;
   /**
-   * Services, slots and events through the plugin's own ports (PLUGIN-PROTOCOLS §5). New in
-   * 1.2.0; from 2.0 the only way plugins reach each other.
+   * Services, slots and events through the plugin's own ports (PLUGIN-PROTOCOLS §5): the
+   * only way plugins reach each other.
    */
   readonly ports: PortsApi;
-  /** 1.x: kept as a shim over `ports` until 2.0. */
-  readonly extensions: ExtensionsApi;
-  /** 1.x: kept as a shim over `ports` until 2.0. */
-  readonly services: ServicesApi;
   readonly events: EventsApi;
   readonly settings: SettingsApi;
   readonly session: SessionApi;
@@ -115,16 +109,20 @@ export interface Kernel {
 }
 
 /**
- * A frontend plugin module. `activate`'s return value becomes the plugin's API for
- * its dependents (`kernel.services.require`); returning nothing is fine for a
- * plugin nobody depends on.
+ * A frontend plugin module. `activate` offers, serves and subscribes through
+ * `kernel.ports`; its return value is ignored (a service is `kernel.ports.serve`d).
  *
- * Throwing from `activate` marks the plugin failed and **skips every transitive
- * dependent**, with one aggregated notice linking to admin (SPEC §6.4).
+ * Throwing from `activate` marks the plugin failed and **skips every plugin that
+ * requires a service it provides**, with one aggregated notice linking to admin
+ * (SPEC §6.4).
  */
 export type ActivateFn = (kernel: Kernel) => unknown | Promise<unknown>;
 
-/** Defined for symmetry; activation is reload-only, so it runs only on teardown. */
+/**
+ * Runs on every stop: a wiring change, a restart, `?safe=bare` teardown. It releases what
+ * the plugin built outside the kernel (window listeners, timers); the kernel withdraws the
+ * rest (PLUGIN-PROTOCOLS §6c).
+ */
 export type DeactivateFn = () => void | Promise<void>;
 
 export interface PluginModule {

@@ -6,7 +6,7 @@
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
-  "kernel": "^1.0",
+  "kernel": "^2.0",
   "hot": true,
   "consumes": {
     "browser": {
@@ -54,13 +54,6 @@
     "location": {
       "protocol": "lm/folders.default-location@1.0.0"
     }
-  },
-  "dependencies": {
-    "commands": "^1.0",
-    "context-menu": "^1.0",
-    "doc-list": "^1.0",
-    "router": "^1.0",
-    "shell-ui": "^1.0"
   },
   "peerLibraries": {
     "react": "^18.0.0",

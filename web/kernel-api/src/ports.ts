@@ -9,7 +9,7 @@
  * - **Services.** `serve(port, api)` provides one; `use(port)` returns what the wiring bound
  *   to a consumed port. The handle is limited to the port's `needs`: reading any other key
  *   throws `ContractViolationError`, in development and production alike.
- * - **Slots.** `offer(port, items)` contributes to every host wired to the port;
+ * - **Slots.** `offer(port, items)` offers items to every host wired to the port;
  *   `collect(port)` is a host's live list, **in seat order**. A plugin that offers several
  *   items on one port keeps them together, in the order it offered them.
  * - **Events.** `emit(port, payload)` reaches every listener wired to the port;
@@ -19,7 +19,7 @@
  * Every value is checked against the protocol's shape: an offer that does not match throws
  * at the provider, which is where the mistake is cheap to find. An undeclared port throws.
  *
- * **FROZEN** from 1.2.0; additive changes only until 2.0.
+ * **FROZEN.** New in 1.2.0; since 2.0.0 the only way plugins reach each other.
  */
 
 import type { Disposable, Unsubscribe } from "./types.js";

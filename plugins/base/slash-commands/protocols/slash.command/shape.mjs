@@ -7,7 +7,9 @@ export default {
   kind: "slot",
   name: "SlashCommand",
   key: "id",
-  description: "One entry in the `/` menu. Typing `/att` lists the commands whose title or keywords start with it.",
+  description: `
+One entry in the \`/\` menu. Typing \`/att\` lists the commands whose title or keywords start with
+it. With nothing typed, and among equally good matches, commands appear in seat order.`,
   imports: `import type { DocumentId } from "@kernel";
 
 import type { TextMark } from "@protocols/lm/text.surface";`,
@@ -32,6 +34,8 @@ export interface SlashCommandContext {
     run: s
       .func()
       .as("(context: SlashCommandContext) => void")
-      .describe("Called with the typed `/command` removed, inside the key press or tap that chose it."),
+      .describe(
+        "Called with the typed `/command` removed, inside the key press or tap that chose it, so it may open a file picker or anything else that needs a user gesture.",
+      ),
   }),
 };

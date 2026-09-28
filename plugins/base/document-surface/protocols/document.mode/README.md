@@ -13,6 +13,6 @@ first one whose `when` accepts the document is the default.
 | `component` | `ComponentType<DocumentModeProps>` | yes |  |
 | `icon` | `ReactNode` |  |  |
 | `order` | `number` |  | Default-seat hint only; the wiring's seat order wins. |
-| `when` | `(row: DocumentRow) => boolean` |  | Whether the mode applies to this document; asked again whenever the row changes. Absent: every document. |
+| `when` | `(row: DocumentRow) => boolean` |  | Whether the mode applies to this document; `false`: no tab, no place in the switch, never the default. Asked again whenever the row changes. One that throws hides its mode and is reported. Absent: every document. |
 
 Types: `index.d.ts`. GENERATED from shape.mjs by web/scripts/gen-protocols.ts. Do not edit.

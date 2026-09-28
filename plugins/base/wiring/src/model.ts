@@ -43,8 +43,6 @@ export interface Port {
   readonly seats?: number;
   /** The default-seat hint of a provided port. */
   readonly order?: number;
-  /** A legacy plugin's port the resolver made up (`~name`). */
-  readonly implicit: boolean;
   readonly side: Side;
 }
 
@@ -103,7 +101,6 @@ export function wiringInput(
     frontend: plugin.manifest.frontend !== undefined,
     ...(plugin.manifest.provides ? { provides: plugin.manifest.provides } : {}),
     ...(plugin.manifest.consumes ? { consumes: plugin.manifest.consumes } : {}),
-    ...(plugin.manifest.dependencies ? { dependencies: plugin.manifest.dependencies } : {}),
   }));
   return { plugins: list, protocols, wiring: overridesOf(wiring), baseOnly };
 }
@@ -198,7 +195,6 @@ export function buildGraph(plugins: readonly InstalledPlugin[], protocols: Proto
         ...(consumed.needs ? { needs: consumed.needs } : {}),
         ...(consumed.optional ? { optional: true } : {}),
         ...(consumed.seats !== undefined ? { seats: consumed.seats } : {}),
-        implicit: false,
         side: sideOf("in", kind),
       });
     }
@@ -214,7 +210,6 @@ export function buildGraph(plugins: readonly InstalledPlugin[], protocols: Proto
         protocol,
         version,
         ...(provided.order !== undefined ? { order: provided.order } : {}),
-        implicit: false,
         side: sideOf("out", kind),
       });
     }
@@ -229,43 +224,12 @@ export function buildGraph(plugins: readonly InstalledPlugin[], protocols: Proto
       ports: own,
     });
   }
-  // Ports the resolver made up for legacy plugins (`plugin:~name`): they exist only in
-  // the wires, so they are added from there.
-  const byId = new Map(nodes.map((node) => [node.id, node]));
-  const implicit = new Map<string, Port[]>();
-  for (const wire of resolution.wires) {
-    for (const [key, dir] of [
-      [wire.from, "out"],
-      [wire.to, "in"],
-    ] as const) {
-      if (ports.has(key)) continue;
-      const [plugin, name] = splitPortKey(key);
-      if (!byId.has(plugin)) continue;
-      const port: Port = {
-        key,
-        plugin,
-        name,
-        dir,
-        kind: wire.kind,
-        protocol: dir === "out" ? wire.offerProtocol : wire.protocol,
-        version: "",
-        implicit: true,
-        side: sideOf(dir, wire.kind),
-      };
-      ports.set(key, port);
-      implicit.set(plugin, [...(implicit.get(plugin) ?? []), port]);
-    }
-  }
-  const finished = nodes.map((node) => {
-    const extra = implicit.get(node.id);
-    return extra ? { ...node, ports: [...node.ports, ...extra] } : node;
-  });
   const wires: Wire[] = resolution.wires
     .filter((wire) => ports.has(wire.from) && ports.has(wire.to))
     .map((wire) => ({ ...wire, key: wireKey(wire.from, wire.to), fromNode: nodeOfPort(wire.from), toNode: nodeOfPort(wire.to) }));
   const seatCount: Record<string, number> = {};
   for (const wire of wires) if (wire.kind === "slot" && !wire.bench) seatCount[wire.to] = (seatCount[wire.to] ?? 0) + 1;
-  return { nodes: finished, byId: new Map(finished.map((node) => [node.id, node])), ports, wires, seatCount };
+  return { nodes, byId: new Map(nodes.map((node) => [node.id, node])), ports, wires, seatCount };
 }
 
 /** The wires into a host, seats first in seat order, then the bench. */

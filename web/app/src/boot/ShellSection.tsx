@@ -29,27 +29,18 @@ import { inShell, readShellManifest, shellInfo, type ShellManifestInfo } from ".
 export const SHELL_SECTION_ID = "shell";
 
 /**
- * Contribute the section, in the shell only. Attributed to `kernel`, so the settings
- * screen's "provided by" line tells the truth.
+ * Offer the section, in the shell only. Attributed to `kernel`, so the settings screen's
+ * "provided by" line tells the truth; no plugin provides it, so it follows the wired seats.
  */
 export function contributeShellSection(host: KernelHost): void {
   if (!inShell()) return;
-  host.extensions.contribute(
-    "kernel",
-    "settings.section",
-    {
-      id: SHELL_SECTION_ID,
-      title: "This device",
-      description:
-        "Bridge version, native capabilities and the bundle running on this device.",
-      order: 90,
-      component: () => <ShellSection host={host} />,
-    },
-    // `order` twice on purpose: the base plugins spell it inside the value, and the
-    // registry sorts on the option (`registry.ts`). Matching both keeps this section
-    // last on the screen whichever one the settings plugin reads.
-    { order: 90 },
-  );
+  host.ports.offerAsKernel("lm/settings.section", {
+    id: SHELL_SECTION_ID,
+    title: "This device",
+    description: "Bridge version, native capabilities and the bundle running on this device.",
+    order: 90,
+    component: () => <ShellSection host={host} />,
+  });
 }
 
 function ShellSection({ host }: { readonly host: KernelHost }): ReactNode {

@@ -20,10 +20,15 @@ export interface DocumentModeProps {
   readonly open?: OpenDocument;
   /**
    * A 1-based line to reveal (\`#/doc/<id>?line=42\`). Best effort and the mode's own
-   * business; a number past the end is clamped, never an error.
+   * business; a number past the end is clamped, never an error. A deep link, not a state:
+   * the mode must render correctly without it.
    */
   readonly line?: number;
-  /** Set when the document cannot be opened for editing: show the text read-only instead. */
+  /**
+   * Set when the document cannot be opened for editing (offline and never opened on this
+   * device, say). The surface has already said why; a mode that edits shows the text
+   * read-only instead of waiting for a handle that is not coming.
+   */
   readonly unavailable?: boolean;
 }`,
   shape: s.object({
@@ -34,6 +39,8 @@ export interface DocumentModeProps {
     order: s.optional(s.number()).describe("Default-seat hint only; the wiring's seat order wins."),
     when: s
       .optional(s.func().as("(row: DocumentRow) => boolean"))
-      .describe("Whether the mode applies to this document; asked again whenever the row changes. Absent: every document."),
+      .describe(
+        "Whether the mode applies to this document; `false`: no tab, no place in the switch, never the default. Asked again whenever the row changes. One that throws hides its mode and is reported. Absent: every document.",
+      ),
   }),
 };

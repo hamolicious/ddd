@@ -201,9 +201,7 @@ export class PluginRuntime {
         throw new Error("the frontend module has no default-exported activate(kernel) function");
       }
       const kernel: Kernel = host.forPlugin(plugin.manifest);
-      const api = await module.default(kernel);
-      host.services.publish(id, api);
-      host.ports.adoptLegacyApi(id, api);
+      await module.default(kernel);
       this.options.active.set(id, { plugin, module });
       return undefined;
     } catch (error) {

@@ -53,8 +53,6 @@ export interface WiringPlugin {
   readonly consumes?: Readonly<
     Record<string, { readonly protocol: string; readonly needs?: readonly string[]; readonly optional?: boolean; readonly seats?: number }>
   >;
-  /** Legacy: plugin id → range. */
-  readonly dependencies?: Readonly<Record<string, string>>;
 }
 
 export interface WiringInput {
@@ -69,9 +67,6 @@ export type SkipReason =
   | "disabled"
   | "missing-service"
   | "service-skipped"
-  | "missing-dependency"
-  | "dependency-version"
-  | "dependency-skipped"
   | "cycle";
 
 export interface ResolvedWire {
@@ -111,7 +106,7 @@ export interface Resolution {
   readonly bench: Readonly<Record<string, readonly string[]>>;
   /** Event listener port → the emitting ports it hears. */
   readonly listeners: Readonly<Record<string, readonly string[]>>;
-  readonly activation: readonly { readonly provider: string; readonly consumer: string; readonly required: boolean; readonly legacy?: boolean }[];
+  readonly activation: readonly { readonly provider: string; readonly consumer: string; readonly required: boolean }[];
   readonly diagnostics: readonly WiringDiagnostic[];
   /** Port → its badge: `pinned`, `providers`, `pin-missing`, `missing`, `optional`, `benched`, `unheard`, `no-fit`. */
   readonly status: Readonly<Record<string, { readonly code: string; readonly count?: number }>>;

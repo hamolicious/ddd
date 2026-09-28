@@ -364,8 +364,8 @@ web/
 │   ├── errors.ts       KernelError + notImplemented()
 │   ├── shape.ts        minimal runtime shape validation (`s.object({…})`)
 │   ├── documents.ts    queries, open→Y.Doc, create/delete, the SPLICE HELPERS
-│   ├── extensions.ts   definePoint / contribute / get / subscribe
-│   ├── services.ts     what activate() returned, for declared dependents
+│   ├── ports.ts        kernel.ports: use / serve / offer / collect / emit / on
+│   ├── protocols.ts    protocol packages; wiring.ts the resolver's types
 │   ├── events.ts       the ephemeral bus + KernelEvents
 │   ├── settings.ts     per-user settings documents
 │   ├── session.ts      user, authenticated fetch, logout
@@ -377,8 +377,7 @@ web/
 ├── kernel-api/tsconfig.build.json + scripts/build-kernel-dts.mjs        [scaffold]
 ├── kernel/src/runtime/              the implementation              [kernel-runtime]
 │   ├── host.ts         KernelHost + forPlugin(manifest)            (done)
-│   ├── registry.ts     the extension registry + registry.test.ts   (done)
-│   ├── services.ts     declared-dependency enforcement             (done)
+│   ├── ports.ts        slots, services and events by port + ports.test.ts (done)
 │   ├── events.ts       the bus                                     (done)
 │   ├── notices.ts      the notice centre                           (done)
 │   ├── theme.ts        token layers + colour-scheme resolution      (done)
@@ -405,7 +404,7 @@ web/
 └── scripts/build-app.mjs, scripts/build-plugins.mjs                     [scaffold]
 
 plugins/base/
-├── _shared/points.ts                the frozen point shapes              [scaffold]
+├── <id>/protocols/<name>/shape.mjs  a protocol the plugin owns (the rest is generated)
 ├── _shared/vite.plugin-config.mjs   the reference build config           [scaffold]
 ├── shell-ui, router, commands, themes                                  [base-shell]
 ├── doc-list, folders, document-surface, viewer, editor, properties      [base-docs]
@@ -415,50 +414,33 @@ plugins/base/
 backend/  — see backend/CONTRACTS.md, area server-static
 ```
 
-## The frozen extension points
+## Protocols (formerly the frozen extension points)
 
-Names, payload types and shape validators live in **one** file,
-`plugins/base/_shared/points.ts`. They are *not* part of `@kernel`: the kernel knows
-point names only as opaque strings (SPEC §2), and the moment it knew what a navbar was,
-replacing `shell-ui` would be a kernel change. Adding an **optional** field is allowed
-and announced; renaming a point or making a field required is not.
+Every contract between plugins is a **protocol package** inside the plugin that owns it,
+`plugins/base/<owner>/protocols/<name>/`: a hand-written `shape.mjs`, and the generated
+`protocol.json`, `index.d.ts` and `README.md` (`plugins/base/README.md`, "Protocols and
+ports"). They are *not* part of `@kernel`: the kernel knows protocols only as data it is
+handed with the plugin list (SPEC §2), and the moment it knew what a navbar was, replacing
+`shell-ui` would be a kernel change. Each package's README is its reference; adding an
+**optional** field is a minor of that protocol, anything else a major.
 
-| Point | Owner | Payload (required fields) |
-|---|---|---|
-| `shell.header` | `shell-ui` | `{ id, component, order? }` — the lowest `order` is rendered |
-| `shell.overlay` | `shell-ui` | `{ id, component }` — always mounted, outside the layout |
-| `navbar.item` | `header` | `{ id, label, icon?, order?, side?, onSelect?, component? }` |
-| `sidebar.panel` | `shell-ui` | `{ id, title, component, icon?, order?, defaultOpen? }` |
-| `main.view` | `shell-ui` | `{ id, component, title? }` — component gets `{ params? }` |
-| `router.route` | `router` | `{ path, view, order? }` — `path` has `:name` segments |
-| `commands.command` | `commands` | `{ id, title, run, category?, icon?, when? }` |
-| `keybindings.default` | `commands` | `{ command, keys, when? }` — `keys` uses `Mod+…` |
-| `themes.theme` | `themes` | `{ id, name, scheme, tokens }` — token overrides only |
-| `search.provider` | `doc-list` | `{ id, label, order?, search(query, options) }` |
-| `document.mode` | `document-surface` | `{ id, label, component, icon?, order?, when? }` |
-| `editor.extension` | `editor` | `{ id, extension, order? }` — a CodeMirror `Extension` |
-| `settings.section` | `settings` | `{ id, title, component, order?, description? }` |
-| `markdown.directive` | `markdown` | `{ name, kind: container/leaf/text, component }` |
-| `markdown.fence` | `markdown` | `{ language, component }` |
-| `markdown.remark` | `markdown` | `{ id, plugin, options?, order? }` — the escalated path |
-| `markdown.component` | `markdown` | `{ node, component, order? }` |
-| `markdown.taskState` | `markdown` | `{ marker, label, icon, order?, done? }` |
+`@kernel` 2.0 removed the old paths: there is no `kernel.extensions`, no
+`kernel.services`, no manifest `dependencies` or `x-defines`, and no
+`plugins/base/_shared/points.ts`. A plugin names its ports in `provides`/`consumes` and
+reaches them through `kernel.ports` (`dev-docs/resolved/KERNEL-API.md`, 2.0.0).
 
-One rule for any contribution field that names what a component must read: never call it
-`key`. `key` is reserved in JSX — `createElement` strips it from the props to use as the
-element key — so such a field can never be delivered. (The removed `properties.editor`
-point spelled it `propertyKey` for this reason.)
+One rule for any item field that names what a component must read: never call it `key`.
+`key` is reserved in JSX — `createElement` strips it from the props to use as the element
+key — so such a field can never be delivered. (The removed `properties.editor` point
+spelled it `propertyKey` for this reason.)
 
-Registry semantics, pinned by `kernel/src/runtime/registry.test.ts`: contributions to an
-undefined point **buffer**; a duplicate `definePoint` **throws**; `get`/`subscribe` are
-**live** (`subscribe` fires immediately); a malformed contribution **throws at the
-contributor**; ordering is `order` ascending then contribution sequence; a duplicate
-`key` means **first registration wins** and the loser is reported; a **throwing subscriber
-is isolated** — the other subscribers are still notified and the throw is reported against
-the subscriber, never raised into the contributor's `activate()`; and `removePlugin`
-(the loader's `retract`) releases the **points** a plugin defined as well as its
-contributions, so contributions to them re-buffer and a replacement plugin can define the
-same names.
+Slot semantics, pinned by `kernel/src/runtime/ports.test.ts`: a host's `collect` is
+**live** (`subscribe` fires immediately) and lists items **in seat order**, one provider's
+items together in offer order; an item that does not match its protocol **throws at the
+provider**; a duplicate key means the **lower seat wins** and the other is reported once; a
+**throwing subscriber is isolated** — the others are still notified and the throw is
+reported against the subscriber; and `removePlugin` (the loader's `retract`) withdraws a
+plugin's items, services and listeners.
 
 ## Area: kernel-runtime
 
@@ -473,7 +455,8 @@ Hard requirements:
   comes from `host.forPlugin(manifest)`; no API takes a plugin id from its caller.
 - **The loader's failure rules are not negotiable** (SPEC §6.4): an `activate()` throw
   marks the plugin failed, withdraws what it registered (`host.retract`), and skips
-  **all transitive dependents**; the outcome is **one** aggregated notice.
+  **every plugin that requires a service it provides**, transitively, through the
+  resolution's activation edges; the outcome is **one** aggregated notice.
 - **Every contributed component renders inside `kernel.ui.boundary`**, and the **mount
   itself renders inside a boundary the app owns** (`AppFrame`). The per-contribution
   wrappers cannot cover the shell's own render or the contributed `icon` fields (a
@@ -710,7 +693,7 @@ nothing checking that automatically.
   deleted. It is **omitted, never sent as null**, for a live document — that is what
   Mongo stores and what `missing` is asked about, and a null would make the client
   answer `exists` where the server answers `missing` for every live row.
-- **`plugins/base/_shared/points.ts`'s `DocumentModeProps` gained `line?: number`** — the
+- **`DocumentModeProps` (then in `plugins/base/_shared/points.ts`, now `lm/document.mode`) gained `line?: number`** — the
   1-based line of `#/doc/<id>?line=42`. The surface parses the query and hands the number
   down; honouring it is a mode's own business (`editor` moves the cursor and scrolls, a
   rendered mode may ignore it).
@@ -793,6 +776,10 @@ server returns, what the local index holds or what `kernel.documents` answers ch
 # Core-improvements pass (2026-09-25) — area `base-docs` / `base-markdown`
 
 ## A cross-plugin seam with no contract change: `folders:default-location`
+
+*Superseded (PLUGIN-PROTOCOLS §9 step 8): the message is now the sticky event protocol
+`lm/folders.default-location`, and `kernel.services` no longer exists. Kept as the record
+of why the seam points this way.*
 
 `doc-list.createDocument` needs to ask "where do unfiled documents go?", and the plugin
 that knows is `folders` — which **depends on** `doc-list`. `kernel.services.get("folders")`

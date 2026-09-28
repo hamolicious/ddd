@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 /// The `@kernel` contract version this server implements (`x-kernel-version`). The web
 /// bundle's `KERNEL_API_VERSION` is generated from the same line.
-pub const KERNEL_VERSION: &str = "1.2.0";
+pub const KERNEL_VERSION: &str = "2.0.0";
 
 /// A plugin's manifest.json (SPEC §6.2). The one source for the Rust and TypeScript manifest types and validators: `node web/scripts/gen-manifest.mjs` writes both, and `--check` fails when either is stale.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -20,9 +20,6 @@ pub struct PluginManifest {
     pub version: String,
     /// Semver range against the `@kernel` contract version.
     pub kernel: String,
-    /// Plugin id → semver range. Resolved server-side at install. Legacy: `consumes` replaces it.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub dependencies: BTreeMap<String, String>,
     /// Blessed runtime-layer libraries and their ranges (SPEC §6.4).
     #[serde(
         default,
@@ -143,6 +140,9 @@ pub struct PluginBackend {
     /// Server-bus events delivered to `lm_event`, namespaced (`other-plugin:something`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub events: Vec<String>,
+    /// Plugin ids whose backend `lm_call` this half may reach through `call_plugin` (HOST-ABI.md §3.10). Replaces the `dependencies` allowlist removed in `@kernel` 2.0.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub calls: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

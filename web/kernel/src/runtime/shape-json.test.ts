@@ -11,9 +11,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { s, shapeFromJSON, validate, type ProtocolPackage, type ShapeJson } from "@kernel";
-
-import { POINTS } from "../../../../plugins/base/_shared/points.js";
+import { s, shapeFromJSON, splitProtocolRef, validate, type PluginManifest, type ProtocolPackage, type ShapeJson } from "@kernel";
 
 const web = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -80,9 +78,18 @@ describe("the protocol packages", () => {
       ),
     );
 
-  it("cover every extension point and every shared service", () => {
-    for (const point of Object.values(POINTS)) {
-      expect(packages.find((p) => p.id === `lm/${point}`), point).toMatchObject({ kind: "slot" });
+  it("cover every protocol a base or example manifest provides or consumes", () => {
+    for (const tree of ["plugins/base", "plugins/examples"]) {
+      const root = resolve(web, "..", tree);
+      for (const id of readdirSync(root)) {
+        const path = resolve(root, id, "manifest.json");
+        if (!existsSync(path)) continue;
+        const manifest = JSON.parse(readFileSync(path, "utf8")) as PluginManifest;
+        for (const port of [...Object.values(manifest.provides ?? {}), ...Object.values(manifest.consumes ?? {})]) {
+          const [protocol] = splitProtocolRef(port.protocol);
+          expect(packages.some((p) => p.id === protocol), `${id}: ${port.protocol}`).toBe(true);
+        }
+      }
     }
     for (const service of ["lm/workspace-index", "lm/context-menu", "lm/shell"]) {
       expect(packages.find((p) => p.id === service), service).toMatchObject({ kind: "service" });

@@ -14,7 +14,8 @@
 
 import * as Y from "yjs";
 
-import type { EditorInsertion, TextMark } from "./points.js";
+import type { EditorInsertion } from "@protocols/lm/editor.paste";
+import type { TextMark } from "@protocols/lm/text.surface";
 
 /**
  * Origin of the edits made through these. Not one `Y.UndoManager` tracks, so Mod-Z after

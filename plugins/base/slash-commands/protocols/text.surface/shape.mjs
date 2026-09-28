@@ -15,7 +15,10 @@ while mounted and withdraw it on unmount. One provider can feed several hosts.`,
 
 import type { EditorInsertion } from "@protocols/lm/editor.paste";`,
   declarations: `
-/** A spot in a document to insert at later, anchored in the document rather than the editor. */
+/**
+ * A spot in a document to insert at later, anchored in the document rather than the editor.
+ * Each insert lands after the previous one.
+ */
 export interface TextMark {
   insert(text: string): EditorInsertion;
 }`,
@@ -37,9 +40,13 @@ export interface TextMark {
     subscribe: s.func().as("(listener: () => void) => () => void").describe("Fires after every change to the text, the caret or focus."),
     documentBeforeCaret: s
       .optional(s.func().as("() => string"))
-      .describe("The whole text up to the caret: what tells autocomplete the caret is in the frontmatter."),
+      .describe(
+        "The whole text up to the caret: what tells autocomplete the caret is in the frontmatter. A surface without it still gets the `/` menu, and no autocomplete.",
+      ),
     replaceBeforeCaret: s
       .optional(s.func().as("(length: number, text: string) => void"))
-      .describe("Replace `length` characters before the caret with `text`, leaving the caret after it."),
+      .describe(
+        "Replace `length` characters before the caret, never past the line start, with `text`, leaving the caret after it: choosing a suggestion.",
+      ),
   }),
 };

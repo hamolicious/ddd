@@ -1,11 +1,11 @@
 [
   {
     "name": "minimal",
-    "manifest": { "id": "demo", "version": "1.0.0", "kernel": "^1.0" },
+    "manifest": { "id": "demo", "version": "1.0.0", "kernel": "^2.0" },
     "problems": []
   },
   {
-    "name": "a full legacy manifest",
+    "name": "a full manifest",
     "manifest": {
       "id": "graph",
       "version": "1.0.0",
@@ -14,20 +14,30 @@
       "author": "Life Manager base distribution",
       "license": "MIT OR Apache-2.0",
       "x-tailwind": { "prefix": "graph" },
-      "x-defines": ["graph.thing"],
-      "kernel": "^1.0",
-      "dependencies": { "commands": "^1.0", "indexer": "~1.2.0" },
+      "kernel": "^2.0",
       "peerLibraries": { "react": "^18.0.0" },
       "frontend": { "module": "frontend/index.mjs", "style": "frontend/style.css" }
     },
     "problems": []
   },
   {
+    "name": "a 1.x manifest: dependencies and x-defines were removed in @kernel 2.0",
+    "manifest": {
+      "id": "graph",
+      "version": "1.0.0",
+      "x-defines": ["graph.thing"],
+      "kernel": "^1.0",
+      "dependencies": { "commands": "^1.0", "indexer": "~1.2.0" },
+      "frontend": { "module": "frontend/index.mjs" }
+    },
+    "problems": ["dependencies", "x-defines"]
+  },
+  {
     "name": "a manifest with ports",
     "manifest": {
       "id": "graph",
       "version": "2.0.0",
-      "kernel": "^1.2",
+      "kernel": "^2.0",
       "hot": true,
       "consumes": {
         "index": { "protocol": "lm/workspace-index@^1.0", "needs": ["ready", "subscribe"] },
@@ -82,36 +92,35 @@
   },
   {
     "name": "bad id and version",
-    "manifest": { "id": "Bad_Id", "version": "1.0", "kernel": "^1.0" },
+    "manifest": { "id": "Bad_Id", "version": "1.0", "kernel": "^2.0" },
     "problems": ["id", "version"]
   },
   {
     "name": "a version that escapes its directory",
-    "manifest": { "id": "demo", "version": "1.0.0-../../../srv", "kernel": "^1.0" },
+    "manifest": { "id": "demo", "version": "1.0.0-../../../srv", "kernel": "^2.0" },
     "problems": ["version"]
   },
   {
     "name": "a version with an empty prerelease identifier",
-    "manifest": { "id": "demo", "version": "1.0.0-a..b", "kernel": "^1.0" },
+    "manifest": { "id": "demo", "version": "1.0.0-a..b", "kernel": "^2.0" },
     "problems": ["version"]
   },
   {
-    "name": "kernel and dependency ranges",
+    "name": "kernel and library ranges",
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
       "kernel": "latest",
-      "dependencies": { "router": "^1.x", "shell-ui": 1 },
-      "peerLibraries": { "react": ">=18.0.0" }
+      "peerLibraries": { "react": ">=18.0.0", "yjs": "^13.x", "d3": 7 }
     },
-    "problems": ["kernel", "dependencies.router", "dependencies.shell-ui"]
+    "problems": ["kernel", "peerLibraries.yjs", "peerLibraries.d3"]
   },
   {
     "name": "frontend paths",
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^1.0",
+      "kernel": "^2.0",
       "frontend": { "module": "../escape.mjs", "style": "/abs.css" }
     },
     "problems": ["frontend.module", "frontend.style"]
@@ -121,7 +130,7 @@
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^1.0",
+      "kernel": "^2.0",
       "frontend": { "style": null }
     },
     "problems": ["frontend.module", "frontend.style"]
@@ -131,7 +140,7 @@
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^1.0",
+      "kernel": "^2.0",
       "frontend": { "module": "frontend/index..mjs" }
     },
     "problems": []
@@ -141,7 +150,7 @@
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^1.0",
+      "kernel": "^2.0",
       "capabilities": {
         "documents": ["read", "writes"],
         "http": { "hosts": "example.com" },
@@ -155,7 +164,7 @@
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^1.0",
+      "kernel": "^2.0",
       "config": {
         "a": { "type": "date" },
         "b": { "secret": true },
@@ -169,7 +178,7 @@
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^1.0",
+      "kernel": "^2.0",
       "backend": { "hooks": ["document.opened"], "cron": [5] }
     },
     "problems": ["backend.module", "backend.hooks[0]", "backend.cron[0]"]
@@ -179,7 +188,7 @@
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^1.0",
+      "kernel": "^2.0",
       "provides": {
         "Bad": { "protocol": "lm/main.view@1.0.0" },
         "view": { "protocol": "lm/main.view@^1.0" },
@@ -209,17 +218,17 @@
   },
   {
     "name": "hot must be a boolean",
-    "manifest": { "id": "demo", "version": "1.0.0", "kernel": "^1.0", "hot": "yes" },
+    "manifest": { "id": "demo", "version": "1.0.0", "kernel": "^2.0", "hot": "yes" },
     "problems": ["hot"]
   },
   {
     "name": "unknown top-level keys pass through",
-    "manifest": { "id": "demo", "version": "1.0.0", "kernel": "^1.0", "futureField": { "a": 1 }, "x-own": true },
+    "manifest": { "id": "demo", "version": "1.0.0", "kernel": "^2.0", "futureField": { "a": 1 }, "x-own": true },
     "problems": []
   },
   {
     "name": "metadata types",
-    "manifest": { "id": "demo", "version": "1.0.0", "kernel": "^1.0", "name": 5, "license": null },
+    "manifest": { "id": "demo", "version": "1.0.0", "kernel": "^2.0", "name": 5, "license": null },
     "problems": ["name", "license"]
   },
   {
@@ -227,7 +236,7 @@
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^1.0",
+      "kernel": "^2.0",
       "provides": { "view": { "protocol": "lm/main.@1.0.0" } }
     },
     "problems": ["provides.view.protocol"]

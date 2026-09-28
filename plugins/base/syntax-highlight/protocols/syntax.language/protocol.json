@@ -4,7 +4,7 @@
   "kind": "slot",
   "owner": "syntax-highlight",
   "types": "index.d.ts",
-  "description": "A tree-sitter grammar code blocks can be highlighted with. Offered in Settings, Code languages; nothing is downloaded until the user installs it. The URLs must be same-origin: a plugin serves its grammars from its own `frontend/` directory. The grammar must be built for the ABI of the `web-tree-sitter` that `syntax-highlight` bundles.",
+  "description": "A tree-sitter grammar code blocks can be highlighted with. Offered in Settings, Code languages; nothing is downloaded until the user installs it, and an installed language is fetched once per device. The URLs must be same-origin: a plugin serves its grammars from its own `frontend/` directory and builds the URLs from `import.meta.url`. The grammar must be built for the ABI of the `web-tree-sitter` that `syntax-highlight` bundles.",
   "key": "id",
   "shape": {
     "object": {

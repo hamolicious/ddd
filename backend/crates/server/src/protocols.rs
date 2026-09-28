@@ -638,7 +638,7 @@ mod tests {
         .unwrap();
         let manifest = |needs: &[&str]| -> PluginManifest {
             serde_json::from_value(serde_json::json!({
-                "id": "demo", "version": "1.0.0", "kernel": "^1.0",
+                "id": "demo", "version": "1.0.0", "kernel": "^2.0",
                 "consumes": { "router": { "protocol": "lm/router@^1.0", "needs": needs } }
             }))
             .unwrap()

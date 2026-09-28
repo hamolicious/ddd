@@ -11,7 +11,6 @@ const port = (plugin: string, name: string, dir: "in" | "out", kind: "service" |
   kind,
   protocol: `lm/${name}`,
   version: "1.0.0",
-  implicit: false,
   side: (kind === "slot") === (dir === "in") ? "L" : "R",
   ...extra,
 });

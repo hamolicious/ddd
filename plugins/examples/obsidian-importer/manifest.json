@@ -1,7 +1,7 @@
 {
   "id": "obsidian-importer",
   "version": "1.4.2",
-  "kernel": "^1.0",
+  "kernel": "^2.0",
   "hot": true,
   "consumes": {
     "attachments": {
@@ -19,10 +19,6 @@
       "protocol": "lm/navbar.item@1.0.0",
       "order": 85
     }
-  },
-  "dependencies": {
-    "attachments": "^1.1.0",
-    "commands": "^1.0"
   },
   "frontend": {
     "module": "frontend/index.mjs"

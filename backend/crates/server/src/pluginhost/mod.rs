@@ -53,7 +53,7 @@ pub mod host_fns;
 pub mod limits;
 pub mod pool;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
@@ -86,8 +86,8 @@ pub struct ActivePlugin {
     pub version: String,
     /// **Approved**, not requested (SPEC §6.2): the admin's decision is what gates.
     pub capabilities: abi::Capabilities,
-    /// Declared dependencies — the allowlist for `call_plugin`.
-    pub dependencies: BTreeMap<String, String>,
+    /// `backend.calls` — the allowlist for `call_plugin`.
+    pub calls: BTreeSet<String>,
     pub hooks: Vec<abi::hooks::HookKind>,
     pub cron: Vec<String>,
     pub routes: Vec<RouteSpec>,
@@ -699,7 +699,7 @@ impl PluginHost {
             id: record.id.clone(),
             version: record.version.clone(),
             capabilities,
-            dependencies: record.manifest.dependencies.clone(),
+            calls: backend.calls.iter().cloned().collect(),
             hooks,
             cron: backend.cron.clone(),
             routes,

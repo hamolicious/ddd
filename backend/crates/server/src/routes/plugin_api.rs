@@ -1817,7 +1817,7 @@ mod admin_surface_tests {
             "_id": "calendar",
             "version": "1.0.0",
             "state": "enabled",
-            "manifest": { "id": "calendar", "version": "1.0.0", "kernel": "^1.0" },
+            "manifest": { "id": "calendar", "version": "1.0.0", "kernel": "^2.0" },
             "source": { "kind": "upload", "filename": "calendar-1.0.0.zip" },
             "installed_at": "2026-09-24T00:00:00Z",
         });
@@ -1868,7 +1868,7 @@ mod admin_surface_tests {
             "manifest": {
                 "id": "calendar",
                 "version": "1.0.0",
-                "kernel": "^1.0",
+                "kernel": "^2.0",
                 "backend": { "module": "backend.wasm", "cron": ["0 6 * * *", "0 18 * * *"] },
             },
             "cron_state": [
@@ -1914,7 +1914,7 @@ mod admin_surface_tests {
             "manifest": {
                 "id": "calendar",
                 "version": "1.0.0",
-                "kernel": "^1.0",
+                "kernel": "^2.0",
                 "backend": { "module": "backend.wasm", "cron": ["0 6 * * *"] },
             },
         }));
@@ -1936,7 +1936,7 @@ mod admin_surface_tests {
             "manifest": {
                 "id": "calendar",
                 "version": "1.1.0",
-                "kernel": "^1.0",
+                "kernel": "^2.0",
                 "backend": { "module": "backend.wasm", "cron": ["*/30 * * * *"] },
             },
             "cron_state": [
@@ -2009,7 +2009,7 @@ mod admin_surface_tests {
             "manifest": {
                 "id": "calendar",
                 "version": "1.0.0",
-                "kernel": "^1.0",
+                "kernel": "^2.0",
                 "capabilities": { "documents": ["read", "write"] }
             },
             "capabilities_approved": { "documents": ["read"] },
@@ -2025,7 +2025,7 @@ mod admin_surface_tests {
             "manifest": {
                 "id": "calendar",
                 "version": "1.0.0",
-                "kernel": "^1.0",
+                "kernel": "^2.0",
                 "capabilities": { "documents": ["read"] }
             },
         }));

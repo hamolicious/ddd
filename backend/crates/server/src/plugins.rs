@@ -593,11 +593,9 @@ pub struct PluginConfigEntry {
 // Resolution (SPEC §6.1, §6.4) — shared by the installer and the import map
 // ---------------------------------------------------------------------------
 
-/// A resolved load order plus what it implies for the import map.
+/// The one version of each peer library a set of plugins gets, for the import map.
 #[derive(Debug, Clone, Default)]
 pub struct Resolution {
-    /// Plugin ids in topological order — the order both halves load in (SPEC §6.1).
-    pub order: Vec<String>,
     /// Library → the single version every plugin will get.
     pub peer_versions: BTreeMap<String, String>,
     /// Non-fatal notes for the admin screen.
@@ -606,28 +604,14 @@ pub struct Resolution {
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ResolveError {
-    #[error("`{plugin}` needs `{dependency}` {range}, which is not installed")]
-    Missing {
-        plugin: String,
-        dependency: String,
-        range: String,
-    },
-    #[error("`{plugin}` needs `{dependency}` {range}, but {found} is installed")]
-    Unsatisfied {
-        plugin: String,
-        dependency: String,
-        range: String,
-        found: String,
-    },
-    #[error("dependency cycle: {0}")]
-    Cycle(String),
     #[error(
         "`{library}` is required as {ranges} by different plugins, with no version satisfying all of them"
     )]
     PeerConflict { library: String, ranges: String },
 }
 
-/// Resolve dependencies and peer libraries over a set of manifests.
+/// Resolve the peer libraries over a set of manifests. (Activation order is the wiring
+/// resolver's, `life_manager_core::wiring`, over `provides`/`consumes`.)
 ///
 /// **One resolution, two consumers** (the promise M3 left open): the installer runs it to
 /// decide whether a package may be installed at all, and `/importmap.json` runs it to pick
@@ -635,75 +619,6 @@ pub enum ResolveError {
 /// after load (SPEC §6.4), which is why the choice has to be made here, once, over the
 /// whole installed set, rather than per plugin at load time.
 pub fn resolve(manifests: &[PluginManifest]) -> Result<Resolution, ResolveError> {
-    let installed: BTreeMap<&str, &PluginManifest> = manifests
-        .iter()
-        .map(|manifest| (manifest.id.as_str(), manifest))
-        .collect();
-
-    // --- dependencies ------------------------------------------------------
-    // Every edge is checked before any ordering happens, so the error a plugin author
-    // sees names the range and the installed version rather than "cycle".
-    for manifest in manifests {
-        for (dependency, range) in &manifest.dependencies {
-            let Some(found) = installed.get(dependency.as_str()) else {
-                return Err(ResolveError::Missing {
-                    plugin: manifest.id.clone(),
-                    dependency: dependency.clone(),
-                    range: range.clone(),
-                });
-            };
-            if !satisfies(&found.version, range)? {
-                return Err(ResolveError::Unsatisfied {
-                    plugin: manifest.id.clone(),
-                    dependency: dependency.clone(),
-                    range: range.clone(),
-                    found: found.version.clone(),
-                });
-            }
-        }
-    }
-
-    // --- topological order (Kahn, alphabetical tie-break) ------------------
-    // Deterministic on purpose: the load order is part of what a plugin observes (a
-    // dependency's `activate()` return value is its API, SPEC §6.4), so two boots of the
-    // same installed set must order identically.
-    let mut remaining: BTreeMap<&str, usize> = manifests
-        .iter()
-        .map(|manifest| {
-            let unmet = manifest
-                .dependencies
-                .keys()
-                .filter(|dependency| installed.contains_key(dependency.as_str()))
-                .count();
-            (manifest.id.as_str(), unmet)
-        })
-        .collect();
-    let mut order: Vec<String> = Vec::with_capacity(manifests.len());
-    while !remaining.is_empty() {
-        let ready: Vec<&str> = remaining
-            .iter()
-            .filter(|(_, unmet)| **unmet == 0)
-            .map(|(id, _)| *id)
-            .collect();
-        if ready.is_empty() {
-            let mut stuck: Vec<&str> = remaining.keys().copied().collect();
-            stuck.sort_unstable();
-            return Err(ResolveError::Cycle(stuck.join(" → ")));
-        }
-        for id in ready {
-            remaining.remove(id);
-            order.push(id.to_string());
-            // Decrement the dependents of `id`.
-            for manifest in manifests {
-                if manifest.dependencies.contains_key(id)
-                    && let Some(unmet) = remaining.get_mut(manifest.id.as_str())
-                {
-                    *unmet = unmet.saturating_sub(1);
-                }
-            }
-        }
-    }
-
     // --- peer libraries ---------------------------------------------------
     // One version of each library for every plugin, chosen here, because an import map
     // cannot change after load (SPEC §6.4). The choice is the highest floor any declared
@@ -758,7 +673,6 @@ pub fn resolve(manifests: &[PluginManifest]) -> Result<Resolution, ResolveError>
     }
 
     Ok(Resolution {
-        order,
         peer_versions,
         warnings,
     })
@@ -1009,15 +923,6 @@ impl Registry {
             .iter()
             .map(|plugin| plugin.manifest.clone())
             .collect()
-    }
-
-    /// Resolve the installed set: load order, one version per peer library, warnings.
-    ///
-    /// The second consumer of [`resolve`] the M3 notes promised (the installer is the
-    /// first): `/importmap.json` needs the peer-library choice, and the loader needs the
-    /// topological order.
-    pub fn resolution(&self) -> Result<Resolution, ResolveError> {
-        resolve(&self.manifests())
     }
 
     /// The manifests of the plugins that will actually be *loaded* — `enabled` only.
@@ -1505,7 +1410,7 @@ mod tests {
         let manifest: PluginManifest = serde_json::from_value(serde_json::json!({
             "id": id,
             "version": "1.0.0",
-            "kernel": "^1.0",
+            "kernel": "^2.0",
             "peerLibraries": peer_libraries,
             "frontend": { "module": "frontend/index.mjs" },
         }))

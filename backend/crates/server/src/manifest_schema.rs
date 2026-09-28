@@ -9,7 +9,10 @@
 //! It interprets exactly the subset the schema uses: `type`, `required`, `properties`,
 //! `additionalProperties`, `propertyNames`, `items`, `enum`, `minimum`, `$ref` and a fixed
 //! set of `format`s. Unknown top-level keys are allowed on purpose, so an older server
-//! still accepts a manifest written for a newer one; `x-*` is the author's own space.
+//! still accepts a manifest written for a newer one; `x-*` is the author's own space. The
+//! one exception is `x-removed`: fields a past contract had and a major removed
+//! (`dependencies`, `x-defines` in `@kernel` 2.0), refused with the message that names
+//! their replacement rather than silently ignored.
 
 use std::sync::OnceLock;
 
@@ -102,8 +105,16 @@ fn check(node: &Value, value: &Value, path: &str, problems: &mut Vec<ManifestPro
                 }
             }
             let properties = node.get("properties").and_then(Value::as_object);
+            let removed = node.get("x-removed").and_then(Value::as_object);
             for (key, entry) in object {
                 let at = join(path, key);
+                if let Some(message) = removed
+                    .and_then(|removed| removed.get(key))
+                    .and_then(Value::as_str)
+                {
+                    push(problems, &at, message);
+                    continue;
+                }
                 if let Some(property) = properties.and_then(|props| props.get(key)) {
                     check(property, entry, &at, problems);
                     continue;

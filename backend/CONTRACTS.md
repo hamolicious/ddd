@@ -1258,8 +1258,11 @@ pub fn is_valid_plugin_id(id: &str) -> bool;         // ^[a-z0-9][a-z0-9-]{0,63}
 pub fn is_valid_version(version: &str) -> bool;      // x.y.z with an optional tail
 pub fn safe_relative_path(path: &str) -> bool;
 pub struct PluginFrontend { module, style }
-pub struct PluginManifest { id, version, kernel, dependencies, peer_libraries,
-                            frontend, name, description, author, license, extra }
+pub struct PluginManifest { id, version, kernel, peer_libraries, frontend,
+                            capabilities, config, backend, provides, consumes, hot,
+                            name, description, author, license, extra }
+                            // generated from schema/manifest.schema.json; `dependencies`
+                            // and `x-defines` were removed in @kernel 2.0
 pub struct InstalledPlugin { manifest, base_url, state, base }   // camelCase on the wire
 pub struct PluginProblem { path, message }
 pub struct Registry;                                 // plugins(), problems(), root(),
@@ -1558,7 +1561,7 @@ pub struct HostError { code, message, detail }
 
 ```rust
 pub const HOST_NAMESPACE: &str = "extism:host/user";
-pub struct ActivePlugin { id, version, capabilities, dependencies, hooks, cron, routes,
+pub struct ActivePlugin { id, version, capabilities, calls, hooks, cron, routes,
     events, config_keys, wasm_path, module_sha256, abi_version, exports }
 pub enum CallKind { Init, Hook(HookKind), Cron{index}, Route, Invoked{caller,function},
                     Event{emitter} }        // export_name(), timeout(), label()

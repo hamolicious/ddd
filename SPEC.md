@@ -229,7 +229,7 @@ Any user can edit or delete any document — stated, intended, v1. `audit_log` r
 ### 6.1 Principles
 
 - Plugins are first-order citizens; the base distribution is installed like any other plugins and individually replaceable.
-- Plugins depend on plugins (semver); server resolves the graph at install; both sides load in topological order.
+- Plugins reach each other through ports speaking versioned protocols (`provides`/`consumes`, `dev-docs/todo/PLUGIN-PROTOCOLS.html`); the server resolves the wiring and the frontend activates in its order, providers before the consumers of their services.
 - Interaction only through the kernel registry — never direct imports or direct Wasm linking.
 - **Trust model, stated plainly:** installing a plugin runs its frontend code unsandboxed in every user's session — full DOM, workspace, and credentials. `capabilities` gate *server host functions* and *native bridge calls* only. The install UI says exactly this. Frontend isolation is v2 research. Recovery: **safe mode** — `?safe=1` boots base plugins only, `?safe=bare` boots a minimal built-in plugin manager; `DISABLE_PLUGINS=1` server-side.
 
@@ -249,8 +249,8 @@ my-plugin-1.2.0.zip
 {
   "id": "my-plugin",
   "version": "1.2.0",
-  "kernel": "^1.0",
-  "dependencies": { "folders": "^2.0" },
+  "kernel": "^2.0",
+  "consumes": { "router": { "protocol": "lm/router@^1.0", "needs": ["navigate"] } },
   "peerLibraries": { "@codemirror/view": "^6" },
   "capabilities": {
     "documents": ["read", "write"],
@@ -273,7 +273,7 @@ my-plugin-1.2.0.zip
 
 Their genuine niche: **cron while nobody's looking, outbound HTTP with secrets, inbound webhooks** — and authoring machine-owned documents. Not a mirror of the client.
 
-- **Host functions** (capability-gated): `get_document`, `query_documents` (the DSL), `create_document(text)`, `splice_section(id, plugin_id, yaml_line_edits)` (the only in-document write primitive — line splices into the caller's own `%%%` section), `rewrite_document(id, text)` (machine-owned docs only — creator-plugin check), `kv_get/set`, `config_get`, `emit`, `emit_client(event, payload, user_id?)` (per-user targeting supported; ephemeral, no offline replay), `call_plugin` (callee must be a declared dependency; no reentrancy; depth ≤ 3), `http_request` (per declared hosts).
+- **Host functions** (capability-gated): `get_document`, `query_documents` (the DSL), `create_document(text)`, `splice_section(id, plugin_id, yaml_line_edits)` (the only in-document write primitive — line splices into the caller's own `%%%` section), `rewrite_document(id, text)` (machine-owned docs only — creator-plugin check), `kv_get/set`, `config_get`, `emit`, `emit_client(event, payload, user_id?)` (per-user targeting supported; ephemeral, no offline replay), `call_plugin` (callee must be listed in the manifest's `backend.calls`; no reentrancy; depth ≤ 3), `http_request` (per declared hosts).
 - **Resource limits:** per-call wall clock 5 s (cron 60 s), memory 128 MB, epoch-based interruption; instances pooled (Extism calls are non-reentrant); circuit breaker disables a plugin after 5 consecutive failures/timeouts, surfaced in admin with manual re-enable. Hot unload waits on in-flight calls (refcount).
 - **Hooks:** `document.created/changed/deleted` — at-most-once, fire-and-forget, no retry (failures logged/counted); debounced 2 s per doc; payload carries `origin` (user or plugin id) and is **never delivered to the plugin that caused the change**; per-plugin-per-doc write cap (10/min) as a loop backstop; ordering per-document only.
 - **Cron:** UTC; missed runs skipped; `last_run` persisted; no overlapping executions.
@@ -282,10 +282,10 @@ Their genuine niche: **cron while nobody's looking, outbound HTTP with secrets, 
 
 - **Blessed runtime layer:** the kernel's contract includes a versioned set of shared singletons served via one server-computed import map — `react`, `react/jsx-runtime`, `react-dom`, `react-dom/client`, `yjs`, `@kernel`, plus the extension-point-coupled libraries `@codemirror/state`, `@codemirror/view`, `@lezer/*`, and the `unified`/`remark` set. Plugins declare `peerLibraries` ranges; the server resolves all installed plugins' ranges to single versions at install (import maps can't change post-load). Honest consequence, stated: replacing the `editor` row means another *CodeMirror-based* editor; swapping the runtime layer itself is a kernel-major event.
 - `activate(kernel)` default export; return value registered as the plugin's API for dependents. `deactivate` is defined for symmetry but activation remains **reload-only** (plugins load once at boot, topo order; changes prompt "reload to activate"). Backend halves still hot-load.
-- **Every contribution is wrapped in an error boundary** (in-place "plugin X failed"); an `activate()` throw marks the plugin failed and **skips all transitive dependents**; one aggregated notice links to admin.
+- **Every contribution is wrapped in an error boundary** (in-place "plugin X failed"); an `activate()` throw marks the plugin failed and **skips every plugin that requires a service it provides**, transitively; one aggregated notice links to admin.
 - **CSS:** per-plugin class prefix convention + `style.css` linked on activation; no shadow DOM in v1. The reference build config can compile that stylesheet with Tailwind (utilities only, no preflight, unlayered, mapped onto kernel tokens, and every class under a per-plugin Tailwind prefix such as `folders:flex` so separately compiled stylesheets never re-declare each other's utilities) as an author option, not a kernel concept: the output remains an ordinary stylesheet and the kernel, loader and server do not distinguish it.
 - **Types are the contract:** `web/kernel` publishes `@life-manager/kernel` types (also served at `/kernel.d.ts`); a reference Vite config lives in `plugins/base/*`. `dev-docs/resolved/KERNEL-API.md` is the changelog. One `kernel` semver covers both the `@kernel` surface and the Wasm host ABI; removals/signature changes = major. Server enforces at install; the loader independently re-checks each plugin at boot against its own bundle version and hard-skips mismatches (protects stale offline clients).
-- **`@kernel` surface:** `documents` (projection queries + live subscriptions, open→hydrated `Y.Doc`, create/delete, the **splice helpers** for fm values and `%%%` sections), `extensions` (`definePoint`/`contribute`/`get`; contributions to undefined points buffer until defined; duplicate `definePoint` throws; schema = minimal runtime shape validation, rejects loudly), `services`, `events`, `settings` (per-user, stored as per-user settings documents — synced/offline for free; **visible to other users in the shared pool**, documented), `capabilities` (feature-detect + bridge), `session`, `sync` (observable status: `offline/connecting/syncing/synced/auth-required/error` + pending count), `ui` (mount point + **kernel-shipped default light/dark token values**).
+- **`@kernel` surface:** `documents` (projection queries + live subscriptions, open→hydrated `Y.Doc`, create/delete, the **splice helpers** for fm values and `%%%` sections), `ports` (services, slots and events through the plugin's own port names, wired by the server's resolution; items and services are checked against their protocol's shape, rejecting loudly; a service handle is limited to the port's `needs`), `events`, `settings` (per-user, stored as per-user settings documents — synced/offline for free; **visible to other users in the shared pool**, documented), `capabilities` (feature-detect + bridge), `session`, `sync` (observable status: `offline/connecting/syncing/synced/auth-required/error` + pending count), `ui` (mount point + **kernel-shipped default light/dark token values**).
 - Kernel calls `navigator.storage.persist()` at first login; warns visibly if denied or if quota nears (`estimate()`).
 
 ### 6.5 Base distribution

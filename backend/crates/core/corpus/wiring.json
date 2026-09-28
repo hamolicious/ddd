@@ -1,10 +1,11 @@
 {
-  "_comment": "Conformance corpus for core::wiring (PLUGIN-PROTOCOLS §6, §6a, §6b, §6c). Each case resolves `plugins` against `protocols` with `wiring` and asserts only the fields it lists; `plan` resolves again with `plan.wiring` and asserts the apply plan. `base_order` pins the base distribution's activation order, which the loader had before the resolver existed. Run natively by crates/core/tests/wiring.rs and through Wasm by web/scripts/wasm-smoke.mjs.",
-  "base_order": ["attachments", "context-menu", "header", "indexer", "native-preview", "notices", "shell-ui", "slash-commands", "sync-status", "syntax-highlight", "welcome", "commands", "fm-autocomplete", "router", "doc-list", "document-surface", "graph", "markdown", "settings", "wiring", "admin", "changes", "editor", "folders", "themes", "viewer"],
+  "_comment": "Conformance corpus for core::wiring (PLUGIN-PROTOCOLS §6, §6a, §6b, §6c). Each case resolves `plugins` against `protocols` with `wiring` and asserts only the fields it lists; `plan` resolves again with `plan.wiring` and asserts the apply plan. `base_order` pins the base distribution's activation order from the real manifests' service wires. Run natively by crates/core/tests/wiring.rs and through Wasm by web/scripts/wasm-smoke.mjs.",
+  "base_order": ["attachments", "commands", "context-menu", "editor", "header", "indexer", "native-preview", "notices", "shell-ui", "slash-commands", "sync-status", "syntax-highlight", "welcome", "fm-autocomplete", "router", "admin", "doc-list", "document-surface", "graph", "markdown", "settings", "wiring", "changes", "folders", "themes", "viewer"],
   "protocols": [
     { "id": "t/svc", "version": "1.0.0", "kind": "service", "owner": "prov", "shape": { "object": { "a": "func", "b": "func" } } },
     { "id": "t/svc", "version": "1.1.0", "kind": "service", "owner": "prov", "shape": { "object": { "a": "func", "b": "func", "c": "func" } } },
     { "id": "t/svc2", "version": "1.0.0", "kind": "service", "owner": "other", "shape": { "object": { "a": "func" } } },
+    { "id": "t/svc3", "version": "1.0.0", "kind": "service", "owner": "c", "shape": { "object": { "a": "func" } } },
     { "id": "t/slot", "version": "1.0.0", "kind": "slot", "owner": "host", "key": "id", "shape": { "object": { "id": "string", "title": { "optional": "string" } } } },
     { "id": "t/wide", "version": "1.0.0", "kind": "slot", "owner": "wide", "shape": { "object": { "id": "string", "title": "string", "extra": "number" } } },
     { "id": "t/narrow", "version": "1.0.0", "kind": "slot", "owner": "narrow", "shape": { "object": { "name": "string" } } },
@@ -12,16 +13,16 @@
   ],
   "cases": [
     {
-      "name": "a legacy plugin that owns a service protocol provides it on an implicit port",
+      "name": "only declared ports wire: owning a protocol provides nothing, and dependencies are ignored",
       "plugins": [
         { "id": "prov", "version": "1.0.0" },
         { "id": "cons", "version": "1.0.0", "consumes": { "api": { "protocol": "t/svc@^1.0", "needs": ["a"] } } },
-        { "id": "old", "version": "1.0.0", "dependencies": { "prov": "^1.0" } }
+        { "id": "old", "version": "1.0.0", "dependencies": { "nothere": "^1.0" } }
       ],
       "expect": {
-        "order": ["prov", "cons", "old"],
-        "bindings": { "cons:api": "prov:~svc" },
-        "skipped": {}
+        "order": ["old", "prov"],
+        "bindings": {},
+        "skipped": { "cons": "missing-service" }
       }
     },
     {
@@ -228,36 +229,22 @@
       "expect": { "order": ["prov", "cons"], "bindings": { "cons:api": "prov:api" }, "diagnostics": ["error unknown-need cons"] }
     },
     {
-      "name": "legacy dependencies order activation and skip as they always did",
-      "plugins": [
-        { "id": "lib", "version": "1.0.0" },
-        { "id": "app", "version": "1.0.0", "dependencies": { "lib": "^1.0" } },
-        { "id": "old", "version": "1.0.0", "dependencies": { "lib": "^2.0" } },
-        { "id": "lost", "version": "1.0.0", "dependencies": { "nothere": "^1.0" } },
-        { "id": "chain", "version": "1.0.0", "dependencies": { "old": "^1.0" } }
-      ],
-      "expect": {
-        "order": ["lib", "app"],
-        "skipped": { "chain": "dependency-skipped", "lost": "missing-dependency", "old": "dependency-version" }
-      }
-    },
-    {
       "name": "activation goes a sorted layer at a time",
       "plugins": [
-        { "id": "d", "version": "1.0.0", "dependencies": { "b": "*", "c": "*" } },
-        { "id": "b", "version": "1.0.0", "dependencies": { "a": "*" } },
-        { "id": "c", "version": "1.0.0", "dependencies": { "a": "*" } },
+        { "id": "d", "version": "1.0.0", "consumes": { "b": { "protocol": "t/svc@^1.0" }, "c": { "protocol": "t/svc3@^1.0" } } },
+        { "id": "b", "version": "1.0.0", "consumes": { "a": { "protocol": "t/svc2@^1.0" } }, "provides": { "api": { "protocol": "t/svc@1.0.0" } } },
+        { "id": "c", "version": "1.0.0", "consumes": { "a": { "protocol": "t/svc2@^1.0" } }, "provides": { "api": { "protocol": "t/svc3@1.0.0" } } },
         { "id": "e", "version": "1.0.0" },
-        { "id": "a", "version": "1.0.0" }
+        { "id": "a", "version": "1.0.0", "provides": { "api": { "protocol": "t/svc2@1.0.0" } } }
       ],
       "expect": { "order": ["a", "e", "b", "c", "d"] }
     },
     {
       "name": "a cycle skips everything in and behind it",
       "plugins": [
-        { "id": "x", "version": "1.0.0", "dependencies": { "y": "*" } },
-        { "id": "y", "version": "1.0.0", "dependencies": { "x": "*" } },
-        { "id": "z", "version": "1.0.0", "dependencies": { "x": "*" } },
+        { "id": "x", "version": "1.0.0", "provides": { "api": { "protocol": "t/svc@1.0.0" } }, "consumes": { "back": { "protocol": "t/svc2@^1.0" } } },
+        { "id": "y", "version": "1.0.0", "provides": { "api2": { "protocol": "t/svc2@1.0.0" } }, "consumes": { "api": { "protocol": "t/svc@^1.0" } } },
+        { "id": "z", "version": "1.0.0", "consumes": { "api": { "protocol": "t/svc@^1.0" } } },
         { "id": "w", "version": "1.0.0" }
       ],
       "expect": {

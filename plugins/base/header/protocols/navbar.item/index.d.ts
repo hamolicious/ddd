@@ -23,7 +23,7 @@ export interface NavbarItem {
   readonly icon?: ReactNode;
   /** Default-seat hint only; the wiring's seat order wins. */
   readonly order?: number;
-  /** `start` sits after the sidebar toggle and grows; `end` is pushed right and never shrinks. Default `start`. */
+  /** `start` sits after the sidebar toggle and grows, scrolling sideways when full; `end` is pushed right and never shrinks. Default `start`. */
   readonly side?: "start" | "end";
   readonly onSelect?: () => void;
   /** Takes over rendering entirely (the notice bell, the sync pill). */

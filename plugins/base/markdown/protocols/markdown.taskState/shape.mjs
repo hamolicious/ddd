@@ -10,7 +10,7 @@ export default {
   description: `
 A task marker. \`[ ]\` and \`[x]\` are markdown's own; a plugin may add \`[/]\`, \`[-]\`, \`[?]\`.
 Marker meaning comes from the client, so a client without the providing plugin renders the
-marker as literal text. States appear in the state menu in seat order.`,
+marker as literal text and can count tasks differently. States appear in the state menu in seat order.`,
   shape: s.object({
     marker: s.string().describe("The single character inside the brackets; `\" \"` for unchecked."),
     label: s.string(),

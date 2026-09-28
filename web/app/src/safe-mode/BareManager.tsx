@@ -7,9 +7,8 @@
  *
  * **What decides "would load" is the server's resolution** (PLUGIN-PROTOCOLS §6): the
  * live wiring resolved against this list, as `GET /api/plugins` ships it, with this
- * client's own kernel-range check on top (`orderFromResolution`). A list without one — an
- * older server, or a cached list — falls back to the loader's legacy `resolveOrder` over
- * `dependencies`, so the column is never blank.
+ * client's own kernel-range check on top (`orderFromResolution`). A list without one (a
+ * server older than wiring) cannot say, and the column says that rather than guessing.
  *
  * **The write path is admin-only, and it is the way back** (PLUGIN-PROTOCOLS §7, §10): a
  * plugin that is disabled or unplugged gets a *Plug in* button, and the wiring history
@@ -38,7 +37,7 @@ import {
   type WiringVersionInfo,
 } from "../boot/api.js";
 import { safeModeUrl } from "../boot/safe-mode.js";
-import { orderFromResolution, resolveOrder, type SkippedPlugin } from "../loader/order.js";
+import { orderFromResolution, type SkippedPlugin } from "../loader/order.js";
 
 export interface BareManagerProps {
   /** The bearer token, for shells; a browser's session is its cookie. */
@@ -101,13 +100,11 @@ export function BareManager({ token, user }: BareManagerProps): ReactNode {
   const liveWiring = wiringLive ?? list?.wiring;
   const unplugged = new Set(liveWiring?.unplugged ?? []);
 
-  // Step 8: the server's resolution when the list carries one; the legacy resolver
-  // over `dependencies` only for a list without it.
-  const resolved = plugins
-    ? list?.resolved
+  // The server's resolution decides; without one nothing can be said about a plugin.
+  const resolved =
+    plugins && list?.resolved
       ? orderFromResolution(plugins, list.resolved.normal, { kernelVersion: KERNEL_API_VERSION })
-      : resolveOrder(plugins, { kernelVersion: KERNEL_API_VERSION })
-    : undefined;
+      : undefined;
   const skipReason = new Map<string, SkippedPlugin>(
     (resolved?.skipped ?? []).map((entry) => [entry.pluginId, entry]),
   );
@@ -195,7 +192,11 @@ export function BareManager({ token, user }: BareManagerProps): ReactNode {
                       </td>
                       <td data-label="Base">{plugin.base ? "yes" : "no"}</td>
                       <td data-label="Would load">
-                        {skipped ? `no — ${skipped.detail}` : "yes"}
+                        {resolved === undefined
+                          ? "unknown: the server sent no resolution"
+                          : skipped
+                            ? `no — ${skipped.detail}`
+                            : "yes"}
                         {admin && pluggable(plugin) ? (
                           <button
                             type="button"

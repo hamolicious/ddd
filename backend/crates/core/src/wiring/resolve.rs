@@ -20,12 +20,9 @@
 //!   on the bench. Event ports hear every fitting emitter.
 //! - A required service port with no provider skips its plugin, and so does a provider
 //!   that is skipped. An optional port just stays unbound.
-//! - Legacy `dependencies` order activation and skip like they always did, so a manifest
-//!   written before ports resolves exactly as it did.
-//! - Activation is Kahn's algorithm over service wires and dependencies, **a layer at a
-//!   time with each layer sorted by id** — the loader's order before this resolver
-//!   existed, so the base set activates in the order it always has. A cycle through
-//!   optional wires is broken by dropping them; any other cycle skips every plugin in it.
+//! - Activation is Kahn's algorithm over service wires, **a layer at a time with each
+//!   layer sorted by id**. A cycle through optional wires is broken by dropping them; any
+//!   other cycle skips every plugin in it.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -38,16 +35,12 @@ use super::{ProtocolKind, ProtocolPackage, Shape, Wiring, fits, split_port, spli
 // Input
 // ---------------------------------------------------------------------------
 
-/// Implicit ports (a legacy plugin's, or a legacy call's) start with `~`, which a declared
-/// port name never contains.
-pub const IMPLICIT_PREFIX: &str = "~";
-
 fn yes() -> bool {
     true
 }
 
-/// What the resolver needs to know about one installed plugin: its manifest's ports and
-/// legacy dependencies, and whether it may run at all.
+/// What the resolver needs to know about one installed plugin: its manifest's ports, and
+/// whether it may run at all.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PluginDescriptor {
@@ -71,9 +64,6 @@ pub struct PluginDescriptor {
     pub provides: BTreeMap<String, ProvidedPort>,
     #[serde(default)]
     pub consumes: BTreeMap<String, ConsumedPort>,
-    /// Legacy: plugin id → range. Orders activation and skips like it always did.
-    #[serde(default)]
-    pub dependencies: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -125,13 +115,7 @@ pub enum SkipReason {
     MissingService,
     /// A required service's provider is itself skipped.
     ServiceSkipped,
-    /// Legacy: a dependency that is not installed.
-    MissingDependency,
-    /// Legacy: a dependency at a version outside the range.
-    DependencyVersion,
-    /// Legacy: a dependency that is installed but not activating.
-    DependencySkipped,
-    /// In, or behind, a cycle of service wires or dependencies.
+    /// In, or behind, a cycle of service wires.
     Cycle,
 }
 
@@ -182,9 +166,6 @@ pub struct ActivationEdge {
     pub provider: String,
     pub consumer: String,
     pub required: bool,
-    /// A legacy `dependencies` entry rather than a service wire.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub legacy: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -200,7 +181,7 @@ pub struct Diagnostic {
     pub severity: Severity,
     /// Stable: `missing-service`, `unknown-need`, `several-providers`, `pin-missing`,
     /// `no-fit`, `unheard`, `unknown-protocol`, `duplicate-port`, `cycle`,
-    /// `optional-cycle`, `missing-dependency`, `dependency-version`.
+    /// `optional-cycle`.
     pub code: String,
     pub plugin: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -446,44 +427,9 @@ pub fn resolve(input: &ResolveInput) -> Resolution {
     let add: BTreeSet<&str> = wiring.add.iter().map(String::as_str).collect();
     let mut out = Resolution::default();
 
-    // Legacy plugins declare no ports. One that owns a service protocol still provides it,
-    // on an implicit port named after the protocol (`~workspace-index`), so a plugin that
-    // has moved to ports can use a provider that has not yet (§5, "shims are temporary").
-    let with_implicit: Vec<PluginDescriptor> = input
-        .plugins
-        .iter()
-        .map(|plugin| {
-            if !plugin.provides.is_empty() || !plugin.consumes.is_empty() {
-                return plugin.clone();
-            }
-            let mut plugin = plugin.clone();
-            for package in &input.protocols {
-                if package.owner == plugin.id && package.kind == ProtocolKind::Service {
-                    let name = package
-                        .id
-                        .split_once('/')
-                        .map(|(_, n)| n)
-                        .unwrap_or(&package.id);
-                    plugin
-                        .provides
-                        .entry(format!("{IMPLICIT_PREFIX}{name}"))
-                        .or_insert_with(|| ProvidedPort {
-                            protocol: package.key(),
-                            order: None,
-                        });
-                }
-            }
-            plugin
-        })
-        .collect();
-    let mut plugins: Vec<&PluginDescriptor> = with_implicit.iter().collect();
-    plugins.sort_by(|a, b| a.id.cmp(&b.id));
-    let installed: BTreeMap<&str, &PluginDescriptor> = plugins
-        .iter()
-        .map(|plugin| (plugin.id.as_str(), *plugin))
-        .collect();
-
     // --- who takes part --------------------------------------------------------------
+    let mut plugins: Vec<&PluginDescriptor> = input.plugins.iter().collect();
+    plugins.sort_by(|a, b| a.id.cmp(&b.id));
     let mut participants: Vec<&PluginDescriptor> = Vec::new();
     for plugin in &plugins {
         if !plugin.frontend {
@@ -507,7 +453,6 @@ pub fn resolve(input: &ResolveInput) -> Resolution {
             None => participants.push(plugin),
         }
     }
-    let taking_part: BTreeSet<&str> = participants.iter().map(|p| p.id.as_str()).collect();
 
     let mut diagnose = |severity, code: &str, plugin: &str, port: Option<&str>, message: String| {
         out.diagnostics.push(Diagnostic {
@@ -740,7 +685,6 @@ pub fn resolve(input: &ResolveInput) -> Resolution {
                                 provider: chosen.plugin.to_string(),
                                 consumer: consumer.id.clone(),
                                 required: !need.optional,
-                                legacy: false,
                             });
                             if need.optional {
                                 out.status.entry(to.clone()).or_insert(PortStatus {
@@ -844,49 +788,10 @@ pub fn resolve(input: &ResolveInput) -> Resolution {
         }
     }
 
-    // --- legacy dependencies ---------------------------------------------------------
-    let mut legacy_skips: BTreeMap<String, (SkipReason, String)> = BTreeMap::new();
-    for plugin in &participants {
-        for (dependency, range) in &plugin.dependencies {
-            match installed.get(dependency.as_str()) {
-                None => {
-                    legacy_skips.entry(plugin.id.clone()).or_insert((
-                        SkipReason::MissingDependency,
-                        format!("dependency \"{dependency}\" is not installed"),
-                    ));
-                }
-                Some(found) if !taking_part.contains(dependency.as_str()) || !found.frontend => {
-                    legacy_skips.entry(plugin.id.clone()).or_insert((
-                        SkipReason::DependencySkipped,
-                        format!("dependency \"{dependency}\" is not being loaded"),
-                    ));
-                }
-                Some(found) if !semver::satisfies(&found.version, range) => {
-                    legacy_skips.entry(plugin.id.clone()).or_insert((
-                        SkipReason::DependencyVersion,
-                        format!(
-                            "needs \"{dependency}\" {range}, installed version is {}",
-                            found.version
-                        ),
-                    ));
-                }
-                Some(_) => out.activation.push(ActivationEdge {
-                    provider: dependency.clone(),
-                    consumer: plugin.id.clone(),
-                    required: true,
-                    legacy: true,
-                }),
-            }
-        }
-    }
-
     // --- skips, and what they take down with them ------------------------------------
     let mut skipped: BTreeMap<String, (SkipReason, String)> = BTreeMap::new();
     for (plugin, detail) in missing {
         skipped.insert(plugin, (SkipReason::MissingService, detail));
-    }
-    for (plugin, why) in legacy_skips {
-        skipped.entry(plugin).or_insert(why);
     }
     loop {
         let mut grew = false;
@@ -895,20 +800,11 @@ pub fn resolve(input: &ResolveInput) -> Resolution {
                 && skipped.contains_key(&edge.provider)
                 && !skipped.contains_key(&edge.consumer)
             {
-                let reason = if edge.legacy {
-                    SkipReason::DependencySkipped
-                } else {
-                    SkipReason::ServiceSkipped
-                };
-                let detail = if edge.legacy {
-                    format!("dependency \"{}\" is not being loaded", edge.provider)
-                } else {
-                    format!(
-                        "\"{}\", which provides a service it requires, does not activate",
-                        edge.provider
-                    )
-                };
-                skipped.insert(edge.consumer.clone(), (reason, detail));
+                let detail = format!(
+                    "\"{}\", which provides a service it requires, does not activate",
+                    edge.provider
+                );
+                skipped.insert(edge.consumer.clone(), (SkipReason::ServiceSkipped, detail));
                 grew = true;
             }
         }
@@ -987,7 +883,7 @@ pub fn resolve(input: &ResolveInput) -> Resolution {
             id.clone(),
             (
                 SkipReason::Cycle,
-                format!("dependency cycle involving {members}"),
+                format!("service cycle involving {members}"),
             ),
         );
         diagnose(

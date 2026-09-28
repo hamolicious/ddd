@@ -44,7 +44,7 @@ impl Harness {
         fs::create_dir_all(root.join("protocols/outline.panel")).ok()?;
         fs::write(
             root.join("manifest.json"),
-            r#"{"id":"acme-outline","version":"1.0.0","kernel":"^1.0","frontend":{"module":"frontend/index.mjs"},
+            r#"{"id":"acme-outline","version":"1.0.0","kernel":"^2.0","frontend":{"module":"frontend/index.mjs"},
                 "provides":{"panel":{"protocol":"acme/outline.panel@1.0.0"}}}"#,
         )
         .ok()?;
@@ -96,7 +96,7 @@ impl Harness {
         writer.start_file("manifest.json", options).unwrap();
         writer
             .write_all(
-                format!(r#"{{"id":"{id}","version":"1.0.0","kernel":"^1.0","frontend":{{"module":"frontend/index.mjs"}}}}"#)
+                format!(r#"{{"id":"{id}","version":"1.0.0","kernel":"^2.0","frontend":{{"module":"frontend/index.mjs"}}}}"#)
                     .as_bytes(),
             )
             .unwrap();

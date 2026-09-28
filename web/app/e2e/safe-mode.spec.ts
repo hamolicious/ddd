@@ -20,7 +20,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { expect, test, type Browser, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Browser, type Page } from "@playwright/test";
 
 import { ADMIN, signIn } from "./helpers.js";
 
@@ -31,6 +31,7 @@ import { ADMIN, signIn } from "./helpers.js";
 const registry =
   process.env["LM_E2E_PLUGINS"] ?? join(process.cwd(), "app", "e2e", ".plugins", "default");
 const brokenModule = join(registry, "extra-task-states", "1.0.0", "frontend", "index.mjs");
+const brokenManifest = join(registry, "extra-task-states", "1.0.0", "manifest.json");
 
 /** A module whose `activate` throws — the SPEC §6.4 failure the loader must contain. */
 const SABOTAGE = `export default function activate() {
@@ -47,9 +48,11 @@ const SABOTAGE = `export default function activate() {
  * no notice strip, no in-place chip and not even the safe-mode links, so the only way out is
  * knowing to type a query string by hand.
  *
- * It contributes both shapes that have to be covered: a `component` (which `shell-ui` wraps
- * in `kernel.ui.boundary`) and an `icon`, which is a `ReactNode` and therefore *cannot* be
- * wrapped as a component — the case that was rendered bare, outside every boundary.
+ * It offers both shapes that have to be covered: a `component` (which `shell-ui` wraps in
+ * `kernel.ui.boundary`) and an `icon`, which is a `ReactNode` and therefore *cannot* be
+ * wrapped as a component — the case that was rendered bare, outside every boundary. Since
+ * `@kernel` 2.0 an item reaches a host only through a declared port, so the sabotage swaps
+ * the manifest too (`withPorts`) and has the server rescan.
  */
 const RENDER_SABOTAGE = `import { createElement } from "react";
 
@@ -58,7 +61,7 @@ const Boom = () => {
 };
 
 export default function activate(kernel) {
-  kernel.extensions.contribute("navbar.item", {
+  kernel.ports.offer("nav", {
     id: "extra-task-states.broken-icon",
     label: "Broken icon",
     side: "end",
@@ -67,25 +70,52 @@ export default function activate(kernel) {
     onSelect: () => undefined,
     icon: createElement(Boom),
   });
-  kernel.extensions.contribute("sidebar.panel", {
+  kernel.ports.offer("panel", {
     id: "extra-task-states.broken-panel",
     title: "Broken panel",
     component: Boom,
   });
-  return {};
 }
 `;
 
+/** The served manifest, with the two provided ports the render sabotage offers on. */
+function withPorts(manifest: string): string {
+  const parsed = JSON.parse(manifest) as { provides?: Record<string, unknown> };
+  parsed.provides = {
+    ...parsed.provides,
+    nav: { protocol: "lm/navbar.item@1.0.0" },
+    panel: { protocol: "lm/sidebar.panel@1.0.0" },
+  };
+  return `${JSON.stringify(parsed, null, 2)}\n`;
+}
+
+/**
+ * Make the server read the plugin's directory again. The registry is cached; disabling and
+ * enabling through the admin API rescans it (and writes two wiring versions, which a fresh
+ * page boots from).
+ */
+async function rescan(request: APIRequestContext, base: string): Promise<void> {
+  const login = await request.post(`${base}/api/auth/login`, { data: ADMIN });
+  expect(login.ok(), `POST /api/auth/login -> ${login.status()}`).toBe(true);
+  for (const action of ["disable", "enable"]) {
+    const response = await request.post(`${base}/api/admin/plugins/extra-task-states/${action}`, { data: {} });
+    expect(response.ok(), `${action} -> ${response.status()} ${await response.text()}`).toBe(true);
+  }
+}
+
 let original: string;
+let originalManifest: string;
 
 test.beforeAll(() => {
   original = readFileSync(brokenModule, "utf8");
+  originalManifest = readFileSync(brokenManifest, "utf8");
 });
 
 test.afterAll(() => {
   // Restoring in `afterAll` rather than at the end of the last test: a failure
   // mid-suite must not leave a sabotaged plugin in the registry for the next run.
   writeFileSync(brokenModule, original);
+  writeFileSync(brokenManifest, originalManifest);
 });
 
 /**
@@ -236,9 +266,12 @@ test("a broken plugin fails alone, and safe mode boots past it", async ({ browse
 test("a plugin that throws while rendering costs a chip, not the application", async ({
   browser,
   baseURL,
+  request,
 }) => {
   const base = baseURL as string;
   writeFileSync(brokenModule, RENDER_SABOTAGE);
+  writeFileSync(brokenManifest, withPorts(originalManifest));
+  await rescan(request, base);
   const { context, page } = await freshPage(browser, base);
   try {
     await signIn(page, ADMIN);
@@ -264,6 +297,8 @@ test("a plugin that throws while rendering costs a chip, not the application", a
   } finally {
     await context.close();
     writeFileSync(brokenModule, original);
+    writeFileSync(brokenManifest, originalManifest);
+    await rescan(request, base);
   }
 });
 

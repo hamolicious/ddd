@@ -107,18 +107,25 @@ export interface ManifestSchemaNode {
   readonly format?: string;
   readonly minimum?: number;
   readonly $defs?: Readonly<Record<string, ManifestSchemaNode>>;
+  /** Fields a manifest may no longer carry, each with the message that says what replaced it. */
+  readonly "x-removed"?: Readonly<Record<string, string>>;
 }
 `;
   return out;
 }
 
-/** Only what the interpreters read: descriptions and `x-*` generator hints stay in the source. */
+/** Only what the interpreters read: descriptions and `x-*` generator hints stay in the source (`x-removed` is read). */
 function stripForRuntime(node) {
   if (Array.isArray(node)) return node.map(stripForRuntime);
   if (typeof node !== "object" || node === null) return node;
   const out = {};
   for (const [key, value] of Object.entries(node)) {
-    if (key === "description" || key === "title" || key.startsWith("x-") || key === "$schema" || key === "$id") continue;
+    if (key === "description" || key === "title" || key === "$schema" || key === "$id") continue;
+    if (key.startsWith("x-") && key !== "x-removed") continue;
+    if (key === "x-removed") {
+      out[key] = value;
+      continue;
+    }
     out[key] = key === "properties" || key === "$defs"
       ? Object.fromEntries(Object.entries(value).map(([k, v]) => [k, stripForRuntime(v)]))
       : stripForRuntime(value);

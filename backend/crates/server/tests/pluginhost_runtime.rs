@@ -149,12 +149,12 @@ impl Harness {
 
 /// A record the way the installer would have written it after an admin approved it.
 fn record(capabilities: PluginCapabilities) -> PluginRecord {
-    record_with(capabilities, BTreeMap::new(), Vec::new())
+    record_with(capabilities, Vec::new(), Vec::new())
 }
 
 fn record_with(
     capabilities: PluginCapabilities,
-    dependencies: BTreeMap<String, String>,
+    calls: Vec<String>,
     routes: Vec<String>,
 ) -> PluginRecord {
     let public_routes = capabilities.public_routes.clone();
@@ -165,8 +165,7 @@ fn record_with(
         manifest: PluginManifest {
             id: "hello-backend".to_string(),
             version: "1.0.0".to_string(),
-            kernel: "^1.0".to_string(),
-            dependencies,
+            kernel: "^2.0".to_string(),
             peer_libraries: BTreeMap::new(),
             frontend: None,
             capabilities: PluginCapabilities {
@@ -180,6 +179,7 @@ fn record_with(
                 cron: vec!["0 6 * * *".to_string()],
                 routes,
                 events: Vec::new(),
+                calls,
             }),
             name: None,
             description: None,
@@ -880,7 +880,7 @@ async fn kv_round_trips_through_mongo_in_the_plugins_own_namespace() {
 // call_plugin
 // ---------------------------------------------------------------------------
 
-/// The dependency graph is what gates `call_plugin`, not a capability (HOST-ABI.md §3.10).
+/// `backend.calls` is what gates `call_plugin`, not a capability (HOST-ABI.md §3.10).
 /// An undeclared callee is `forbidden` even when it is loaded and healthy.
 #[tokio::test]
 async fn call_plugin_refuses_an_undeclared_dependency_and_refuses_reentrancy() {
@@ -888,20 +888,19 @@ async fn call_plugin_refuses_an_undeclared_dependency_and_refuses_reentrancy() {
         return;
     }
     let harness = harness!();
-    // Declares itself as a dependency, which is the only way to reach the reentrancy check
+    // Declares itself as a callee, which is the only way to reach the reentrancy check
     // through a single fixture — and a legitimate thing for a manifest to be wrong about.
-    let mut dependencies = BTreeMap::new();
-    dependencies.insert("hello-backend".to_string(), "^1.0".to_string());
+    let calls = vec!["hello-backend".to_string()];
     harness
         .host
         .activate(
             &harness.state,
-            &record_with(PluginCapabilities::default(), dependencies, Vec::new()),
+            &record_with(PluginCapabilities::default(), calls, Vec::new()),
         )
         .await
         .expect("activates");
 
-    // Not in `dependencies`: forbidden, before anything is looked up.
+    // Not in `backend.calls`: forbidden, before anything is looked up.
     match harness
         .invoke(
             "call",
@@ -911,7 +910,7 @@ async fn call_plugin_refuses_an_undeclared_dependency_and_refuses_reentrancy() {
     {
         Err(CallFailure::Refused(error)) => {
             assert_eq!(error.code, abi::ErrorCode::Forbidden);
-            assert!(error.message.contains("dependencies"));
+            assert!(error.message.contains("backend.calls"));
         }
         other => panic!("expected forbidden, got {other:?}"),
     }

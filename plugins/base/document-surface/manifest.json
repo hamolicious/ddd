@@ -8,7 +8,7 @@
   "x-tailwind": {
     "prefix": "docsurface"
   },
-  "kernel": "^1.0",
+  "kernel": "^2.0",
   "hot": true,
   "consumes": {
     "router": {
@@ -40,19 +40,11 @@
       "order": 20
     }
   },
-  "dependencies": {
-    "commands": "^1.0",
-    "router": "^1.0",
-    "shell-ui": "^1.0"
-  },
   "peerLibraries": {
     "react": "^18.0.0"
   },
   "frontend": {
     "module": "frontend/index.mjs",
     "style": "frontend/style.css"
-  },
-  "x-defines": [
-    "document.mode"
-  ]
+  }
 }

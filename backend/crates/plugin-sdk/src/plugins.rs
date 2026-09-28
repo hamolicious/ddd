@@ -1,6 +1,6 @@
-//! `call_plugin` — calling a declared dependency's `lm_call` export.
+//! `call_plugin` — calling another backend half's `lm_call` export.
 //!
-//! The callee must be in your manifest's `dependencies`; the chain may be three deep; and
+//! The callee must be in your manifest's `backend.calls`; the chain may be three deep; and
 //! a plugin already on the stack cannot be re-entered (SPEC §6.3). All three are the
 //! host's checks, reported as
 //! [`Forbidden`](crate::ErrorCode::Forbidden) /

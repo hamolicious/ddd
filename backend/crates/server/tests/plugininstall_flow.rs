@@ -142,7 +142,7 @@ fn wasm_with_abi_export() -> Vec<u8> {
 /// must not depend on).
 fn manifest(id: &str, version: &str) -> String {
     format!(
-        r#"{{"id":"{id}","version":"{version}","kernel":"^1.0","frontend":{{"module":"frontend/index.mjs"}}}}"#
+        r#"{{"id":"{id}","version":"{version}","kernel":"^2.0","frontend":{{"module":"frontend/index.mjs"}}}}"#
     )
 }
 
@@ -363,7 +363,7 @@ async fn an_approval_may_widen_http_hosts_and_nothing_else() {
 
     // The calendar's shape: it asks for document access and for `http` with **no** hosts,
     // because the operator who enters the feed URL is the one who knows the host.
-    let requested = r#"{"id":"cal","version":"1.0.0","kernel":"^1.0",
+    let requested = r#"{"id":"cal","version":"1.0.0","kernel":"^2.0",
         "capabilities":{"documents":["read","write"],"http":{"hosts":[]}},
         "frontend":{"module":"frontend/index.mjs"}}"#;
     let archive = harness.package("cal", requested, false);
@@ -788,7 +788,8 @@ async fn a_package_for_another_kernel_major_never_reaches_the_filesystem() {
         return;
     };
 
-    let future = r#"{"id":"demo","version":"1.0.0","kernel":"^2.0","frontend":{"module":"frontend/index.mjs"}}"#;
+    // A 1.x package: `@kernel` 2.0 removed what it was written against.
+    let future = r#"{"id":"demo","version":"1.0.0","kernel":"^1.0","frontend":{"module":"frontend/index.mjs"}}"#;
     let archive = harness.package("demo", future, false);
     let error = harness.install(archive).await.expect_err("must refuse");
     assert!(
@@ -820,17 +821,18 @@ async fn a_package_for_another_kernel_major_never_reaches_the_filesystem() {
 
 #[tokio::test]
 #[ignore = "requires MONGO_URI"]
-async fn a_missing_dependency_is_refused_and_rolls_back() {
+async fn a_manifest_with_dependencies_is_refused_and_rolls_back() {
     let Some(harness) = Harness::start("dependency").await else {
         return;
     };
 
-    let needy = r#"{"id":"needy","version":"1.0.0","kernel":"^1.0",
+    // `dependencies` was removed in `@kernel` 2.0: `consumes` ports replace it.
+    let needy = r#"{"id":"needy","version":"1.0.0","kernel":"^2.0",
         "dependencies":{"folders":"^2.0"},
         "frontend":{"module":"frontend/index.mjs"}}"#;
     let archive = harness.package("needy", needy, false);
     let error = harness.install(archive).await.expect_err("must refuse");
-    assert!(matches!(error, InstallError::Dependency(_)), "{error}");
+    assert!(error.to_string().contains("dependencies"), "{error}");
     assert!(!harness.pending("needy", "1.0.0").exists());
 
     harness.cleanup().await;
@@ -843,7 +845,7 @@ async fn a_backend_half_without_the_abi_export_is_refused() {
         return;
     };
 
-    let with_backend = r#"{"id":"demo","version":"1.0.0","kernel":"^1.0",
+    let with_backend = r#"{"id":"demo","version":"1.0.0","kernel":"^2.0",
         "backend":{"module":"backend.wasm"},
         "frontend":{"module":"frontend/index.mjs"}}"#;
 
@@ -1103,7 +1105,7 @@ async fn an_absence_does_not_undo_a_narrowing_or_an_admin_disable() {
 
     let requested = |id: &str| {
         format!(
-            r#"{{"id":"{id}","version":"1.0.0","kernel":"^1.0",
+            r#"{{"id":"{id}","version":"1.0.0","kernel":"^2.0",
             "capabilities":{{"documents":["read","write"]}},
             "frontend":{{"module":"frontend/index.mjs"}}}}"#
         )
@@ -1299,7 +1301,7 @@ async fn a_secret_is_write_only_for_the_admin_and_readable_by_the_plugin() {
         return;
     };
 
-    let schema_json = r#"{"id":"cal","version":"1.0.0","kernel":"^1.0",
+    let schema_json = r#"{"id":"cal","version":"1.0.0","kernel":"^2.0",
         "config":{"feed_url":{"type":"string","required":true},
                   "auth_header":{"type":"string","secret":true}},
         "frontend":{"module":"frontend/index.mjs"}}"#;

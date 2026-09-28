@@ -201,7 +201,7 @@ fn write_plugin(plugins: &Path, id: &str, version: &str) {
         json!({
             "id": id,
             "version": version,
-            "kernel": "^1.0",
+            "kernel": "^2.0",
             "frontend": { "module": "frontend/index.mjs", "style": "frontend/style.css" },
         })
         .to_string(),

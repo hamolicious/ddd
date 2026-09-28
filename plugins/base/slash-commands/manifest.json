@@ -8,7 +8,7 @@
   "x-tailwind": {
     "prefix": "slash"
   },
-  "kernel": "^1.0",
+  "kernel": "^2.0",
   "hot": true,
   "consumes": {
     "surfaces": {
@@ -29,9 +29,5 @@
   "frontend": {
     "module": "frontend/index.mjs",
     "style": "frontend/style.css"
-  },
-  "x-defines": [
-    "slash.command",
-    "text.surface"
-  ]
+  }
 }

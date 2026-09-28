@@ -5,7 +5,7 @@
   "description": "Workspace stats, every frontmatter field and its values, and each note's incoming and outgoing connections — kept current on every edit, for other plugins to read.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
-  "kernel": "^1.0",
+  "kernel": "^2.0",
   "hot": true,
   "provides": {
     "index": {

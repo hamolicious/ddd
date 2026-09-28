@@ -2,14 +2,21 @@
  * lm/workspace-index@1.0.0: service, owned by `indexer`.
  *
  * Indexes over the local projection, kept current on every change: a keystroke on this
- * device or a change arriving from the feed. Nothing is written anywhere; every client
- * builds its own, offline included.
+ * device (once the kernel's local row catches up, about 250 ms later) or a change arriving
+ * from the feed. Nothing is written anywhere; every client builds its own, offline
+ * included.
  *
- * Trashed documents are counted in `stats().documents.trashed` and nowhere else. Every
- * frontmatter field of every live document is indexed, machine-owned ones included, and
- * keys nested in a map are dotted paths (`project.status`). Content stats are for human
- * documents unless `includeMachine`. Every read is synchronous and answers from the
- * current index; before `ready` resolves that is an empty workspace.
+ * Trashed documents are counted in `stats().documents.trashed` and nowhere else: they have
+ * no fields, no words and no connections. Every frontmatter field of every live document
+ * is indexed, machine-owned ones (an `fm.path` starting with `.`) included. Keys nested in
+ * a map are dotted paths (`project.status`), the spelling the filter language uses
+ * (`fm.project.status`), and the parent key is listed too, with kind `map`. To offer only
+ * what a person typed, filter on `machineOnly`.
+ *
+ * Content stats are for human documents unless `includeMachine`, but links from
+ * machine-owned documents always count: a link is a link. Every read is synchronous and
+ * answers from the current index; before `ready` resolves that is an empty workspace, so
+ * await it when an empty answer would be wrong.
  *
  * GENERATED from shape.mjs by web/scripts/gen-protocols.ts. Do not edit.
  */
@@ -136,10 +143,11 @@ export interface WorkspaceIndex {
   readonly ready: Promise<void>;
   /** Goes up by one each time any index changes. */
   readonly version: number;
+  /** Content stats are for human documents unless `includeMachine`; `documents` always counts both. */
   readonly stats: (scope?: IndexScope) => WorkspaceStats;
-  /** Every frontmatter key in use, nested keys included; most-used first. */
+  /** Every frontmatter key in use in any live document, nested keys included; most-used first. */
   readonly fmFields: (scope?: FieldScope) => readonly FmField[];
-  /** The values one key holds, most-used first. */
+  /** The values one key (dotted for a nested one) holds, most-used first. */
   readonly fmValues: (key: string, scope?: FieldScope) => readonly FmValueCount[];
   /** Every live document, by title; machine-owned ones only with `includeMachine`. */
   readonly documents: (scope?: IndexScope) => readonly IndexedDocument[];

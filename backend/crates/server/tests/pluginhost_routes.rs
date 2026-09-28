@@ -112,8 +112,7 @@ impl RouteApp {
             manifest: PluginManifest {
                 id: "hello-backend".to_string(),
                 version: "1.0.0".to_string(),
-                kernel: "^1.0".to_string(),
-                dependencies: BTreeMap::new(),
+                kernel: "^2.0".to_string(),
                 peer_libraries: BTreeMap::new(),
                 frontend: None,
                 capabilities: requested,
@@ -127,6 +126,7 @@ impl RouteApp {
                         .map(|route| (*route).to_string())
                         .collect(),
                     events: Vec::new(),
+                    calls: Vec::new(),
                 }),
                 name: None,
                 description: None,

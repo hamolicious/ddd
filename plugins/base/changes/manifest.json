@@ -8,7 +8,7 @@
   "x-tailwind": {
     "prefix": "chg"
   },
-  "kernel": "^1.0",
+  "kernel": "^2.0",
   "hot": true,
   "consumes": {
     "menu": {
@@ -52,12 +52,6 @@
     "commands": {
       "protocol": "lm/commands.command@1.0.0"
     }
-  },
-  "dependencies": {
-    "context-menu": "^1.0",
-    "markdown": "^1.0",
-    "router": "^1.0",
-    "shell-ui": "^1.0"
   },
   "peerLibraries": {
     "react": "^18.0.0"

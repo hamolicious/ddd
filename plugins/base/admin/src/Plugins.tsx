@@ -696,7 +696,7 @@ function InstalledCard({
                 ["Approved", plugin.approved_at == null ? "—" : formatWhen(plugin.approved_at)],
                 ["Server part", plugin.has_backend ? describeBackend(plugin) : "None; it runs in the browser only"],
                 ["Kernel", <code key="kernel">{plugin.manifest.kernel}</code>],
-                ["Depends on", formatRanges(plugin.manifest.dependencies)],
+                ["Consumes", formatConsumed(plugin.manifest.consumes)],
                 ["Libraries", formatRanges(plugin.manifest.peerLibraries)],
                 [
                   "Capabilities",
@@ -1230,6 +1230,12 @@ export function describeSource(plugin: PluginAdminView): string {
     default:
       return "shipped with the server";
   }
+}
+
+/** `lm/router@^1.0` on any port → `lm/router ^1.0`, each protocol once, sorted. */
+function formatConsumed(ports: Readonly<Record<string, { readonly protocol: string }>> | undefined): string {
+  const protocols = [...new Set(Object.values(ports ?? {}).map((port) => port.protocol.replace("@", " ")))].sort();
+  return protocols.length === 0 ? "none" : protocols.join(", ");
 }
 
 function formatRanges(ranges: Readonly<Record<string, string>> | undefined): string {

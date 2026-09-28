@@ -1,22 +1,14 @@
 /**
  * The ports runtime (PLUGIN-PROTOCOLS §5): services, slots and events addressed by a
- * plugin's own port names, wired by the server's resolution.
+ * plugin's own port names, wired by the server's resolution. Since `@kernel` 2.0 it is the
+ * only way plugins reach each other.
  *
- * One store for every slot item, declared and legacy alike, so a plugin that has moved to
- * ports and one that has not still see each other (the 1.x shims, §5):
- *
- * - an item offered on a **declared** provided port reaches the hosts the resolution seats
- *   it on, in seat order;
- * - an item contributed through the legacy `extensions.contribute(point, …)` lands on an
- *   **implicit** port (`~<point>`) of protocol `lm/<point>`, and joins every host of that
- *   protocol after its wired seats, ordered by its `order` option;
- * - a legacy `definePoint` host sees every item of its protocol, declared or not, ordered
- *   the way the registry always ordered: `order`, then contribution sequence.
- *
- * Services: `serve` stores the API under the provider's port; `use` returns it through a
- * handle limited to the consumer port's `needs`. A legacy provider's `activate()` return
- * value is served on its declared service ports (and on the implicit `~<protocol>` port the
- * resolver gives a legacy owner), so either side can move first.
+ * - An item offered on a provided slot port reaches the hosts the resolution seats it on,
+ *   in seat order. The kernel's own items (`offerAsKernel`) follow the wired seats.
+ * - `serve` stores a service under the provider's port; `use` returns it through a handle
+ *   limited to the consumer port's `needs`.
+ * - `emit` reaches the listeners the resolution wires to the emitting port; a sticky
+ *   protocol hands a new listener the last value at once.
  *
  * The kernel still knows no domain: protocols are data it is handed with the plugin list.
  */
@@ -29,7 +21,6 @@ import {
   satisfies,
   validate,
   type Disposable,
-  type ExtensionPointDefinition,
   type PluginManifest,
   type PortsApi,
   type ProtocolKind,
@@ -41,13 +32,7 @@ import {
   type Unsubscribe,
 } from "@kernel";
 
-/** Implicit port names start with this; a declared port name never contains it. */
-export const IMPLICIT = "~";
-
-/** The protocol a legacy point name speaks: point names carry over as protocol names (§8). */
-export const protocolForPoint = (point: string): string => (point.includes("/") ? point : `lm/${point}`);
-
-/** Default `order` for a legacy contribution that does not ask for one. */
+/** Default seat hint for a provided port without one, and for a kernel item. */
 const DEFAULT_ORDER = 100;
 
 export interface PortsReport {
@@ -66,20 +51,16 @@ export interface PortsConfig {
 
 interface Offer {
   readonly pluginId: string;
-  /** Declared port name, or `~<point>`. */
+  /** The provided port's name; the protocol id for a kernel item. */
   readonly port: string;
   readonly key: string;
   readonly protocol: string;
   readonly value: unknown;
-  /** The seat rank of an implicit offer; a declared offer's port hint. */
+  /** The port's seat hint; a kernel item's rank among the kernel's items. */
   readonly order: number;
   readonly seq: number;
-}
-
-interface LegacyPoint {
-  readonly owner: string;
-  readonly definition: ExtensionPointDefinition<unknown>;
-  readonly protocol: string;
+  /** Offered by the kernel itself: not wired, it follows every host's seats. */
+  readonly kernel: boolean;
 }
 
 interface HostListener {
@@ -109,18 +90,11 @@ const INTROSPECTION = new Set(["then", "toJSON", "$$typeof", "constructor", "asy
 
 export class PortsHost {
   #resolution: Resolution = EMPTY_RESOLUTION;
-  /**
-   * `false` until a resolution arrives. A plugin list from a server (or a cache) older than
-   * wiring has none, and then every host hears every item of its protocol, ordered the way
-   * the registry always did, so nothing disappears for want of seats.
-   */
-  #resolved = false;
   readonly #packages = new Map<string, ProtocolPackage>();
   readonly #byId = new Map<string, ProtocolPackage[]>();
   readonly #manifests = new Map<string, PluginManifest>();
   readonly #offers: Offer[] = [];
   readonly #served = new Map<string, unknown>();
-  readonly #legacy = new Map<string, LegacyPoint>();
   readonly #listeners = new Set<HostListener>();
   readonly #eventListeners = new Map<string, Set<{ readonly fn: EventListener; readonly pluginId: string }>>();
   readonly #last = new Map<string, unknown>();
@@ -136,7 +110,7 @@ export class PortsHost {
   // -------------------------------------------------------------------------
 
   /** The plugin list and the server's resolution, before the first `activate`. */
-  configure(config: PortsConfig | Omit<PortsConfig, "resolution">): void {
+  configure(config: PortsConfig): void {
     this.#packages.clear();
     this.#byId.clear();
     for (const pkg of config.protocols) {
@@ -148,7 +122,7 @@ export class PortsHost {
     }
     this.#manifests.clear();
     for (const manifest of config.manifests) this.#manifests.set(manifest.id, manifest);
-    if ("resolution" in config) this.setResolution(config.resolution);
+    this.setResolution(config.resolution);
   }
 
   get resolution(): Resolution {
@@ -158,7 +132,6 @@ export class PortsHost {
   /** A new resolution (hot apply, §6c): handles are rebuilt and every host re-reads. */
   setResolution(resolution: Resolution): void {
     this.#resolution = resolution;
-    this.#resolved = true;
     this.#handles.clear();
     for (const listener of [...this.#listeners]) this.#deliver(listener);
   }
@@ -241,7 +214,7 @@ export class PortsHost {
     const provided = this.#provided(pluginId, port, "slot");
     const list = (Array.isArray(items) ? items : [items]) as readonly unknown[];
     for (const item of list) this.#check(pluginId, `${pluginId}:${port}`, provided.protocolKey, item);
-    const offers = list.map((value) => this.#store(pluginId, port, provided.protocolId, value, provided.order));
+    const offers = list.map((value) => this.#store(pluginId, port, provided.protocolId, value, provided.order, false));
     return this.#withdrawal(offers, provided.protocolId);
   }
 
@@ -283,193 +256,13 @@ export class PortsHost {
     };
   }
 
-  // -------------------------------------------------------------------------
-  // Legacy entry points (the 1.x shims, §5): `extensions.*` and `services.*`
-  // -------------------------------------------------------------------------
-
-  /**
-   * `extensions.contribute(point, value, { order })`. On the plugin's declared port for the
-   * point's protocol when it has one (the port whose `order` hint matches the value's own,
-   * when several do), else on the implicit `~<point>` port.
-   */
-  contributeLegacy(pluginId: string, point: string, value: unknown, order: number | undefined): Disposable {
-    const protocol = protocolForPoint(point);
-    const declared = this.#declaredPortFor(pluginId, protocol, "provides", value);
-    if (declared) return this.offer(pluginId, declared, value);
-
-    const legacy = this.#legacy.get(point);
-    if (legacy?.definition.shape) {
-      const issues = validate(legacy.definition.shape, value);
-      if (issues.length > 0) {
-        throw new ContractViolationError(
-          `contribution to "${point}" from "${pluginId}" is malformed: ${formatIssues(issues)}`,
-          { point, pluginId },
-        );
-      }
-    }
-    const pkg = this.#newest(protocol);
-    if (pkg && !legacy) this.#check(pluginId, point, `${pkg.id}@${pkg.version}`, value);
-    if (legacy?.definition.key) {
-      const key = safeKey(legacy.definition.key, value);
-      const holder = key === undefined ? undefined : this.#legacyItems(point).find((item) => safeKey(legacy.definition.key!, item.value) === key);
-      if (holder) {
-        this.#report({ pluginId, point, message: `Two plugins claim “${key}”. ${holder.pluginId} is being used.` });
-        return { dispose: () => undefined };
-      }
-    }
-    const offer = this.#store(pluginId, `${IMPLICIT}${point}`, protocol, value, order ?? DEFAULT_ORDER);
-    return this.#withdrawal([offer], protocol);
-  }
-
-  /** `extensions.definePoint(definition)`: a legacy host. Throws on a second owner. */
-  defineLegacy<T>(owner: string, definition: ExtensionPointDefinition<T>): SlotHost<T> {
-    const existing = this.#legacy.get(definition.name);
-    if (existing) {
-      throw new ContractViolationError(
-        `extension point "${definition.name}" is already defined by "${existing.owner}"`,
-        { point: definition.name, owner: existing.owner, attemptedBy: owner },
-      );
-    }
-    const protocol = protocolForPoint(definition.name);
-    this.#legacy.set(definition.name, { owner, definition: definition as ExtensionPointDefinition<unknown>, protocol });
-    // Buffered contributions meet the shape and the key now, exactly as they would have at
-    // `contribute` time: a malformed one is dropped and reported, a duplicate loses to the
-    // earlier one.
-    const claimed = new Map<string, string>();
-    for (const offer of this.#offers.filter((o) => o.port === `${IMPLICIT}${definition.name}`)) {
-      const issues = definition.shape ? validate(definition.shape, offer.value) : [];
-      if (issues.length > 0) {
-        this.#remove(offer);
-        this.#report({
-          pluginId: offer.pluginId,
-          point: definition.name,
-          message: `buffered contribution is malformed and was dropped: ${formatIssues(issues)}`,
-        });
-        continue;
-      }
-      const key = definition.key ? safeKey(definition.key as (value: unknown) => string, offer.value) : undefined;
-      if (key === undefined) continue;
-      const winner = claimed.get(key);
-      if (winner !== undefined) {
-        this.#remove(offer);
-        this.#report({ pluginId: offer.pluginId, point: definition.name, message: `Two plugins claim “${key}”. ${winner} is being used.` });
-        continue;
-      }
-      claimed.set(key, offer.pluginId);
-    }
-    this.#notify(protocol);
-    return this.viewOf<T>(definition.name, owner);
-  }
-
-  /**
-   * What `extensions.get/entries/subscribe(point)` reads for `pluginId`: its own declared
-   * host for the protocol when it has one, else the legacy host's view, else every item of
-   * the protocol.
-   */
-  viewOf<T>(point: string, pluginId: string | undefined): SlotHost<T> {
-    const protocol = protocolForPoint(point);
-    if (pluginId !== undefined) {
-      const declared = this.#declaredPortFor(pluginId, protocol, "consumes");
-      if (declared) return this.collect<T>(pluginId, declared);
-    }
-    const owner = this.#declaredHostOf(protocol);
-    if (!this.#legacy.has(point) && owner) {
-      const [host, port] = owner;
-      const consumed = this.#consumed(host, port, "slot");
-      return this.#host<T>(protocol, () => this.#declaredItems(`${host}:${port}`, consumed), pluginId);
-    }
-    return this.#host<T>(protocol, () => this.#legacyItems(point), pluginId);
-  }
-
-  /** Whether anything hosts `point`: a legacy owner, or a declared port of its protocol. */
-  isHosted(point: string): boolean {
-    return this.#legacy.has(point) || this.#declaredHostOf(protocolForPoint(point)) !== undefined;
-  }
-
-  legacyOwner(point: string): string | undefined {
-    return this.#legacy.get(point)?.owner ?? this.#declaredHostOf(protocolForPoint(point))?.[0];
-  }
-
-  /** Every hosted point name, sorted: legacy owners, and the names of hosted protocols. */
-  hostedPoints(): readonly string[] {
-    const names = new Set(this.#legacy.keys());
-    for (const manifest of this.#manifests.values()) {
-      for (const port of Object.values(manifest.consumes ?? {})) {
-        const [id] = splitProtocolRef(port.protocol);
-        if (this.kindOf(id) === "slot" && id.startsWith("lm/")) names.add(id.slice(3));
-      }
-    }
-    return [...names].sort();
-  }
-
-  /** Legacy contributions nothing hosts yet. */
-  pendingLegacy(): readonly { readonly point: string; readonly pluginId: string; readonly value: unknown; readonly order: number }[] {
-    return this.#offers
-      .filter((offer) => offer.port.startsWith(IMPLICIT))
-      .map((offer) => ({ point: offer.port.slice(IMPLICIT.length), pluginId: offer.pluginId, value: offer.value, order: offer.order }))
-      .filter((offer) => !this.isHosted(offer.point));
-  }
-
-  /**
-   * A legacy provider's `activate()` return value: served on each of its declared service
-   * ports it has not served itself, and on the implicit `~<protocol>` ports the resolver
-   * gave it as a legacy owner.
-   */
-  adoptLegacyApi(pluginId: string, api: unknown): void {
-    if (api === undefined || api === null) return;
-    const manifest = this.#manifests.get(pluginId);
-    for (const [port, provided] of Object.entries(manifest?.provides ?? {})) {
-      const [id] = splitProtocolRef(provided.protocol);
-      if (this.kindOf(id) !== "service" || this.#served.has(`${pluginId}:${port}`)) continue;
-      this.serve(pluginId, port, api);
-    }
-    for (const provider of Object.values(this.#resolution.bindings)) {
-      if (provider.startsWith(`${pluginId}:${IMPLICIT}`) && !this.#served.has(provider)) {
-        this.#served.set(provider, api);
-      }
-    }
-    this.#handles.clear();
-  }
-
-  /** The API a plugin serves, for a legacy `services.require` of it: its first served port. */
-  servedBy(pluginId: string): unknown {
-    for (const [key, api] of this.#served) if (key.startsWith(`${pluginId}:`)) return api;
-    return undefined;
-  }
-
-  /**
-   * `services.require(wanted)` from a plugin that declares ports: the consumed service port
-   * bound to `wanted`, as `use()` returns it. `undefined` when no port of the caller is
-   * bound to that plugin.
-   */
-  legacyUse(pluginId: string, wanted: string): { readonly found: boolean; readonly api?: unknown } {
-    // Without a resolution nothing is bound: the legacy registry answers by plugin id.
-    if (!this.#resolved) return { found: false };
-    const manifest = this.#manifests.get(pluginId);
-    for (const [port, consumed] of Object.entries(manifest?.consumes ?? {})) {
-      const [id] = splitProtocolRef(consumed.protocol);
-      if (this.kindOf(id) !== "service") continue;
-      const provider = this.#binding(pluginId, port);
-      if (provider?.startsWith(`${wanted}:`)) return { found: true, api: this.use(pluginId, port) };
-      // The port exists but is unbound right now (optional, or its provider is off): the
-      // legacy call asked for exactly this plugin, so it is answered as absent.
-      if (provider === undefined && this.#ownerOf(id) === wanted) return { found: true };
-    }
-    return { found: false };
-  }
-
-  /** Withdraw everything a plugin registered: offers, services, listeners, legacy points. */
+  /** Withdraw everything a plugin registered: offers, services, listeners. */
   removePlugin(pluginId: string): void {
     const touched = new Set<string>();
     for (const offer of [...this.#offers]) {
       if (offer.pluginId !== pluginId) continue;
       this.#remove(offer);
       touched.add(offer.protocol);
-    }
-    for (const [point, legacy] of [...this.#legacy]) {
-      if (legacy.owner !== pluginId) continue;
-      this.#legacy.delete(point);
-      touched.add(legacy.protocol);
     }
     for (const key of [...this.#served.keys()]) if (key.startsWith(`${pluginId}:`)) this.#served.delete(key);
     for (const key of [...this.#eventListeners.keys()]) if (key.startsWith(`${pluginId}:`)) this.#eventListeners.delete(key);
@@ -479,7 +272,7 @@ export class PortsHost {
   }
 
   /** How much the store holds, for the leak check (§9 step 6). */
-  stats(): { readonly offers: number; readonly served: number; readonly hostListeners: number; readonly eventListeners: number; readonly legacyPoints: number } {
+  stats(): { readonly offers: number; readonly served: number; readonly hostListeners: number; readonly eventListeners: number } {
     let eventListeners = 0;
     for (const set of this.#eventListeners.values()) eventListeners += set.size;
     return {
@@ -487,13 +280,18 @@ export class PortsHost {
       served: this.#served.size,
       hostListeners: this.#listeners.size,
       eventListeners,
-      legacyPoints: this.#legacy.size,
     };
   }
 
-  /** Items offered by the kernel itself (a settings section only the shell has). */
+  /**
+   * An item offered by the kernel itself (a settings section only the shell has). No plugin
+   * provides it, so no wire seats it: every host of `protocol` lists it after its seats,
+   * checked against the host's needs like any item.
+   */
   offerAsKernel(protocol: string, value: unknown, order = DEFAULT_ORDER): Disposable {
-    const offer = this.#store("kernel", `${IMPLICIT}${protocol.replace(/^lm\//, "")}`, protocol, value, order);
+    const pkg = this.#newest(protocol);
+    if (pkg) this.#check("kernel", protocol, `${pkg.id}@${pkg.version}`, value);
+    const offer = this.#store("kernel", protocol, protocol, value, order, true);
     return this.#withdrawal([offer], protocol);
   }
 
@@ -501,8 +299,8 @@ export class PortsHost {
   // Internals
   // -------------------------------------------------------------------------
 
-  #store(pluginId: string, port: string, protocol: string, value: unknown, order: number): Offer {
-    const offer: Offer = { pluginId, port, key: `${pluginId}:${port}`, protocol, value, order, seq: this.#seq++ };
+  #store(pluginId: string, port: string, protocol: string, value: unknown, order: number, kernel: boolean): Offer {
+    const offer: Offer = { pluginId, port, key: `${pluginId}:${port}`, protocol, value, order, seq: this.#seq++, kernel };
     this.#offers.push(offer);
     this.#notify(protocol);
     return offer;
@@ -529,61 +327,35 @@ export class PortsHost {
     hostKey: string,
     consumed: { readonly protocolId: string; readonly needShape: Shape<unknown> | undefined },
   ): readonly SlotItem<unknown>[] {
-    if (!this.#resolved) {
-      const items = this.#offers
-        .filter((offer) => offer.protocol === consumed.protocolId)
-        .sort((a, b) => a.order - b.order || a.seq - b.seq)
-        .map((offer) => ({ pluginId: offer.pluginId, port: offer.port, value: offer.value }));
-      return this.#dedupe(consumed.protocolId, hostKey, items, undefined);
-    }
     const out: { pluginId: string; port: string; value: unknown }[] = [];
     const byShape = new Set(
       this.#resolution.wires.filter((wire) => wire.to === hostKey && wire.byShape).map((wire) => wire.from),
     );
     for (const seat of this.#resolution.seats[hostKey] ?? []) {
       for (const offer of this.#offers) {
-        if (offer.key !== seat) continue;
+        if (offer.kernel || offer.key !== seat) continue;
         if (byShape.has(seat) && consumed.needShape && !this.#fits(consumed.needShape, offer, hostKey)) continue;
         out.push({ pluginId: offer.pluginId, port: offer.port, value: offer.value });
       }
     }
-    // Legacy contributions to this protocol, after the wired seats.
-    const implicit = this.#offers
-      .filter((offer) => offer.port.startsWith(IMPLICIT) && offer.protocol === consumed.protocolId)
+    // The kernel's own items, after the wired seats.
+    const kernel = this.#offers
+      .filter((offer) => offer.kernel && offer.protocol === consumed.protocolId)
       .sort((a, b) => a.order - b.order || a.seq - b.seq);
-    for (const offer of implicit) {
+    for (const offer of kernel) {
       if (consumed.needShape && !this.#fits(consumed.needShape, offer, hostKey)) continue;
       out.push({ pluginId: offer.pluginId, port: offer.port, value: offer.value });
     }
-    return this.#dedupe(consumed.protocolId, hostKey, out, undefined);
+    return this.#dedupe(consumed.protocolId, hostKey, out);
   }
 
-  #legacyItems(point: string): readonly SlotItem<unknown>[] {
-    const protocol = protocolForPoint(point);
-    const legacy = this.#legacy.get(point);
-    const items = this.#offers
-      .filter((offer) => offer.protocol === protocol)
-      .sort((a, b) => a.order - b.order || a.seq - b.seq)
-      .map((offer) => ({ pluginId: offer.pluginId, port: offer.port, value: offer.value }));
-    return this.#dedupe(protocol, point, items, legacy?.definition.key);
-  }
-
-  #dedupe(
-    protocol: string,
-    where: string,
-    items: readonly SlotItem<unknown>[],
-    keyFn: ((value: unknown) => string) | undefined,
-  ): readonly SlotItem<unknown>[] {
+  #dedupe(protocol: string, where: string, items: readonly SlotItem<unknown>[]): readonly SlotItem<unknown>[] {
     const fields = this.#keyFields(protocol);
-    const keyOf = keyFn
-      ? (value: unknown) => safeKey(keyFn, value)
-      : fields
-        ? (value: unknown) =>
-            typeof value === "object" && value !== null
-              ? fields.map((field) => String((value as Record<string, unknown>)[field])).join("|")
-              : undefined
+    if (!fields) return items;
+    const keyOf = (value: unknown): string | undefined =>
+      typeof value === "object" && value !== null
+        ? fields.map((field) => String((value as Record<string, unknown>)[field])).join("|")
         : undefined;
-    if (!keyOf) return items;
     const seen = new Map<string, string>();
     const out: SlotItem<unknown>[] = [];
     for (const item of items) {
@@ -691,10 +463,6 @@ export class PortsHost {
     return this.#byId.get(protocolId)?.at(-1);
   }
 
-  #ownerOf(protocolId: string): string | undefined {
-    return this.#newest(protocolId)?.owner;
-  }
-
   #protocolIsSticky(protocolId: string): boolean {
     return this.#byId.get(protocolId)?.some((pkg) => pkg.sticky) ?? false;
   }
@@ -712,32 +480,6 @@ export class PortsHost {
 
   #binding(pluginId: string, port: string): string | undefined {
     return this.#resolution.bindings[`${pluginId}:${port}`];
-  }
-
-  #declaredHostOf(protocolId: string): readonly [string, string] | undefined {
-    const owner = this.#ownerOf(protocolId);
-    const hosts: [string, string][] = [];
-    for (const manifest of this.#manifests.values()) {
-      for (const [port, consumed] of Object.entries(manifest.consumes ?? {})) {
-        if (splitProtocolRef(consumed.protocol)[0] === protocolId) hosts.push([manifest.id, port]);
-      }
-    }
-    hosts.sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]));
-    return hosts.find(([id]) => id === owner) ?? hosts[0];
-  }
-
-  #declaredPortFor(
-    pluginId: string,
-    protocolId: string,
-    side: "provides" | "consumes",
-    value?: unknown,
-  ): string | undefined {
-    const ports = Object.entries(this.#manifests.get(pluginId)?.[side] ?? {})
-      .filter(([, port]) => splitProtocolRef(port.protocol)[0] === protocolId)
-      .map(([name, port]) => ({ name, order: (port as { order?: number }).order }));
-    if (ports.length <= 1) return ports[0]?.name;
-    const wanted = (value as { order?: unknown } | null)?.order;
-    return (ports.find((port) => port.order === wanted) ?? ports[0])?.name;
   }
 
   #consumed(
@@ -818,14 +560,6 @@ function limited(api: unknown, allowed: ReadonlySet<string>, open: boolean, plug
       throw new ContractViolationError(`"${pluginId}" wrote "${String(key)}" through its "${port}" port`, { pluginId, port });
     },
   });
-}
-
-function safeKey(key: (value: never) => string, value: unknown): string | undefined {
-  try {
-    return key(value as never);
-  } catch {
-    return undefined;
-  }
 }
 
 function compareVersions(a: string, b: string): number {

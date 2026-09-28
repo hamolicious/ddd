@@ -48,9 +48,10 @@ pub use error::{ErrorCode, HostError};
 /// The host ABI version. Bumped **only** for a breaking change (a removed function, a
 /// renamed or retyped field); additive fields do not move it.
 ///
-/// One `kernel` semver covers the `@kernel` surface and this ABI (SPEC §6.4), so this
-/// number tracks the kernel major: `kernel: "^1.0"` ⇒ `ABI_VERSION == 1`. The install
-/// flow checks the manifest's declared range, and the host independently re-checks the
+/// One `kernel` semver covers the `@kernel` surface and this ABI (SPEC §6.4). `@kernel`
+/// 2.0 removed frontend surface only and left every host function as it was, so the ABI
+/// stays at 1 (PLUGIN-PROTOCOLS §10: backend halves get ports later). The install flow
+/// checks the manifest's declared range, and the host independently re-checks the
 /// module's exported [`names::ABI_VERSION`] — the same belt-and-braces the frontend
 /// loader applies to a stale offline bundle.
 pub const ABI_VERSION: u32 = 1;

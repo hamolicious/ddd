@@ -6,8 +6,8 @@
  * calls immediately before `activate(kernel)`, and the object it returns is the
  * *only* thing a plugin ever touches: every call inside it carries the plugin's id
  * without the plugin supplying one, which is what makes attribution — of
- * contributions, settings, `%%%` sections, service access and log lines — a
- * property of the kernel rather than of plugin good manners.
+ * offers, settings, `%%%` sections, service access and log lines — a property of
+ * the kernel rather than of plugin good manners.
  */
 
 import type { ComponentType, ReactNode } from "react";
@@ -35,8 +35,6 @@ import { EventBus } from "./events.js";
 import { MountPoint } from "./mount.js";
 import { NoticeCenter } from "./notices.js";
 import { PortsHost } from "./ports.js";
-import { ExtensionRegistry, type RegistryReport } from "./registry.js";
-import { ServiceRegistry } from "./services.js";
 import { SessionHost, type SessionHostOptions } from "./session.js";
 import { SettingsHost } from "./settings.js";
 import { SyncHost } from "./sync.js";
@@ -50,7 +48,7 @@ export interface KernelHostOptions {
   readonly core: CoreBindings;
   readonly session: SessionHostOptions;
   readonly bootMode: BootMode;
-  /** A contributed component threw, or a contribution was rejected. */
+  /** An offered component threw, or an offered item was rejected. */
   readonly onPluginProblem?: (problem: PluginProblem) => void;
 }
 
@@ -62,10 +60,8 @@ export interface PluginProblem {
 }
 
 export class KernelHost {
-  /** The slot, service and event store `kernel.ports` and the 1.x shims share (§5). */
+  /** The slot, service and event store behind every plugin's `kernel.ports` (§5). */
   readonly ports: PortsHost;
-  readonly extensions: ExtensionRegistry;
-  readonly services: ServiceRegistry;
   readonly events: EventBus;
   readonly notices = new NoticeCenter();
   readonly theme: ThemeController;
@@ -80,12 +76,7 @@ export class KernelHost {
 
   constructor(private readonly options: KernelHostOptions) {
     const report = (problem: PluginProblem): void => options.onPluginProblem?.(problem);
-    this.ports = new PortsHost((r) => this.extensions.record(r));
-    this.extensions = new ExtensionRegistry(
-      (r: RegistryReport) => report({ pluginId: r.pluginId, point: r.point, message: r.message }),
-      this.ports,
-    );
-    this.services = new ServiceRegistry(this.ports);
+    this.ports = new PortsHost((r) => report({ pluginId: r.pluginId, point: r.point, message: r.message }));
     this.events = new EventBus((type, error) =>
       console.warn(`[events] listener for "${type}" threw`, error),
     );
@@ -134,7 +125,6 @@ export class KernelHost {
   /** The per-plugin `@kernel`. Built once per activation, just before `activate`. */
   forPlugin(manifest: PluginManifest): Kernel {
     const pluginId = manifest.id;
-    this.services.declare(pluginId, Object.keys(manifest.dependencies ?? {}));
     const generation = ++this.#generation;
     this.#live.set(pluginId, generation);
     const track = (dispose: () => void): (() => void) => this.#track(pluginId, generation, dispose);
@@ -175,8 +165,6 @@ export class KernelHost {
           });
         },
       },
-      extensions: this.extensions.forPlugin(pluginId, manifest),
-      services: this.services.forPlugin(pluginId, manifest),
       ports: this.ports.forPlugin(manifest),
       events: {
         ...events,
@@ -252,8 +240,7 @@ export class KernelHost {
     }
     this.#bags.delete(pluginId);
     this.#live.delete(pluginId);
-    this.extensions.removePlugin(pluginId);
-    this.services.remove(pluginId);
+    this.ports.removePlugin(pluginId);
     this.mount.release(pluginId);
     if (typeof document !== "undefined") {
       for (const link of document.querySelectorAll(`link[data-lm-plugin="${CSS.escape(pluginId)}"]`)) link.remove();

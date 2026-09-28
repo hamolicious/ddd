@@ -3,14 +3,15 @@
  * broken plugin is a notice or a blank app:
  *
  * - an `activate()` throw marks the plugin **failed**, withdraws what it registered,
- *   and **skips all transitive dependents** (which are never even imported);
+ *   and **skips everything that requires a service it provides**, transitively, through
+ *   the resolution's activation edges (those are never even imported);
  * - the loader re-validates every manifest itself, so a stale offline client refuses
  *   a plugin its bundle cannot honour instead of failing in pieces;
  * - the outcome is **one** aggregated notice.
  *
  * The host is faked here on purpose: `loadPlugins` touches exactly three things on it
- * (`forPlugin`, `services.publish`, `retract`), the real `KernelHost` needs a DOM and
- * a sync client, and what is under test is the loader's bookkeeping, not the kernel's.
+ * (`forPlugin`, `ports.configure`, `retract`), the real `KernelHost` needs a DOM and a
+ * sync client, and what is under test is the loader's bookkeeping, not the kernel's.
  */
 
 import { describe, expect, it, vi } from "vitest";
@@ -23,25 +24,22 @@ import { failureNotice, loadPlugins, moduleUrl, styleUrl, type LoadReport } from
 interface Recorded {
   readonly host: KernelHost;
   readonly forPlugin: string[];
-  readonly published: [string, unknown][];
   readonly retracted: string[];
 }
 
 /** The members of `KernelHost` the loader uses, and nothing else. */
 function fakeHost(): Recorded {
   const forPlugin: string[] = [];
-  const published: [string, unknown][] = [];
   const retracted: string[] = [];
   const host = {
     forPlugin: (manifest: PluginManifest) => {
       forPlugin.push(manifest.id);
       return { pluginId: manifest.id, manifest } as unknown as Kernel;
     },
-    services: { publish: (id: string, api: unknown) => void published.push([id, api]) },
-    ports: { configure: () => undefined, adoptLegacyApi: () => undefined },
+    ports: { configure: () => undefined },
     retract: (id: string) => void retracted.push(id),
   } as unknown as KernelHost;
-  return { host, forPlugin, published, retracted };
+  return { host, forPlugin, retracted };
 }
 
 function plugin(
@@ -49,7 +47,6 @@ function plugin(
   options: {
     version?: string;
     kernel?: string;
-    dependencies?: Record<string, string>;
     base?: boolean;
     state?: InstalledPlugin["state"];
     style?: string;
@@ -59,8 +56,7 @@ function plugin(
   const manifest: PluginManifest = {
     id,
     version: options.version ?? "1.0.0",
-    kernel: options.kernel ?? "^1.0",
-    ...(options.dependencies ? { dependencies: options.dependencies } : {}),
+    kernel: options.kernel ?? "^2.0",
     frontend: {
       module: "frontend/index.mjs",
       ...(options.style ? { style: options.style } : {}),
@@ -93,10 +89,11 @@ function modules(
   };
 }
 
+/** Without a resolution of its own, a test activates its plugins in the order it lists them. */
 const load = (
   plugins: readonly InstalledPlugin[],
   activations: Readonly<Record<string, (kernel: Kernel) => unknown>>,
-  extra: { baseOnly?: boolean; resolution?: Resolution } = {},
+  extra: { resolution?: Resolution } = {},
 ): Promise<{ report: LoadReport; recorded: Recorded; imported: string[] }> => {
   const recorded = fakeHost();
   const { imported, importModule } = modules(activations);
@@ -105,8 +102,7 @@ const load = (
     plugins,
     kernelVersion: KERNEL_API_VERSION,
     importModule,
-    ...(extra.baseOnly !== undefined ? { baseOnly: extra.baseOnly } : {}),
-    ...(extra.resolution ? { resolution: extra.resolution } : {}),
+    resolution: extra.resolution ?? resolution(plugins.map((p) => p.manifest.id)),
   }).then((report) => ({ report, recorded, imported }));
 };
 
@@ -185,47 +181,41 @@ describe("activating from the server's resolution (PLUGIN-PROTOCOLS §6)", () =>
       },
     );
     expect(report.failed.map((f) => f.pluginId)).toEqual(["provider"]);
-    expect(report.skipped.map((s) => [s.pluginId, s.reason])).toEqual([["consumer", "dependency-skipped"]]);
+    expect(report.skipped.map((s) => [s.pluginId, s.reason])).toEqual([["consumer", "service-skipped"]]);
     expect(report.activated).toEqual(["optional-user"]);
     expect(imported.some((url) => url.includes("/consumer/"))).toBe(false);
   });
 });
 
 describe("the happy path", () => {
-  it("activates in topological order and publishes each returned API", async () => {
+  it("activates in the resolved order, handing each plugin its own kernel", async () => {
     const order: string[] = [];
     const { report, recorded } = await load(
-      [plugin("editor", { dependencies: { "document-surface": "^1.0" } }), plugin("document-surface")],
+      [plugin("editor"), plugin("document-surface")],
       {
-        "document-surface": () => {
-          order.push("document-surface");
-          return { modes: true };
-        },
-        editor: (kernel) => {
-          order.push(kernel.pluginId);
-          return { editor: true };
-        },
+        "document-surface": () => void order.push("document-surface"),
+        editor: (kernel) => void order.push(kernel.pluginId),
       },
+      { resolution: resolution(["document-surface", "editor"], [["document-surface", "editor"]]) },
     );
 
     expect(order).toEqual(["document-surface", "editor"]);
     expect(report.activated).toEqual(["document-surface", "editor"]);
     expect(report.failed).toEqual([]);
-    expect(recorded.published).toEqual([
-      ["document-surface", { modes: true }],
-      ["editor", { editor: true }],
-    ]);
+    expect(recorded.forPlugin).toEqual(["document-surface", "editor"]);
     expect(report.elapsedMs).toBeGreaterThanOrEqual(0);
   });
 
-  it("awaits an async activate before publishing it", async () => {
-    const { recorded } = await load([plugin("slow")], {
+  it("awaits an async activate before starting the next", async () => {
+    const order: string[] = [];
+    await load([plugin("slow"), plugin("next")], {
       slow: async () => {
         await new Promise((resolve) => setTimeout(resolve, 5));
-        return { ready: true };
+        order.push("slow");
       },
+      next: () => void order.push("next"),
     });
-    expect(recorded.published).toEqual([["slow", { ready: true }]]);
+    expect(order).toEqual(["slow", "next"]);
   });
 
   it("reports progress per plugin", async () => {
@@ -236,6 +226,7 @@ describe("the happy path", () => {
       host: recorded.host,
       plugins: [plugin("a"), plugin("b")],
       kernelVersion: KERNEL_API_VERSION,
+      resolution: resolution(["a", "b"]),
       importModule,
       onProgress: (progress) => seen.push(`${progress.pluginId}:${progress.outcome}`),
     });
@@ -244,14 +235,9 @@ describe("the happy path", () => {
 });
 
 describe("an activate() that throws", () => {
-  it("fails the plugin, retracts what it registered, and skips its dependents", async () => {
+  it("fails the plugin, retracts what it registered, and skips what requires it", async () => {
     const { report, recorded, imported } = await load(
-      [
-        plugin("markdown"),
-        plugin("viewer", { dependencies: { markdown: "^1.0" } }),
-        plugin("agenda", { dependencies: { viewer: "^1.0" } }),
-        plugin("unrelated"),
-      ],
+      [plugin("markdown"), plugin("viewer"), plugin("agenda"), plugin("unrelated")],
       {
         markdown: () => {
           throw new Error("remark blew up");
@@ -260,23 +246,31 @@ describe("an activate() that throws", () => {
         agenda: () => ({}),
         unrelated: () => ({ fine: true }),
       },
+      {
+        resolution: resolution(
+          ["markdown", "unrelated", "viewer", "agenda"],
+          [
+            ["markdown", "viewer"],
+            ["viewer", "agenda"],
+          ],
+        ),
+      },
     );
 
     expect(report.failed.map((f) => f.pluginId)).toEqual(["markdown"]);
     expect(report.failed[0]?.error.message).toBe("remark blew up");
     // Everything downstream is skipped, transitively, with the cause named.
     expect(report.skipped.map((s) => `${s.pluginId}:${s.reason}`)).toEqual([
-      "viewer:dependency-skipped",
-      "agenda:dependency-skipped",
+      "viewer:service-skipped",
+      "agenda:service-skipped",
     ]);
-    expect(report.skipped[1]?.detail).toContain('"markdown" failed');
-    // …and never imported: a dependent whose dependency has no API cannot run.
+    expect(report.skipped[1]?.detail).toContain('"markdown", which provides a service it requires, failed');
+    // …and never imported: a plugin whose required service has no provider cannot run.
     expect(imported).toEqual([
       "http://localhost/plugins/markdown/1.0.0/frontend/index.mjs",
       "http://localhost/plugins/unrelated/1.0.0/frontend/index.mjs",
     ]);
     expect(recorded.retracted).toEqual(["markdown"]);
-    expect(recorded.published).toEqual([["unrelated", { fine: true }]]);
     // The rest of the workspace still loads.
     expect(report.activated).toEqual(["unrelated"]);
   });
@@ -287,6 +281,7 @@ describe("an activate() that throws", () => {
       host: recorded.host,
       plugins: [plugin("broken")],
       kernelVersion: KERNEL_API_VERSION,
+      resolution: resolution(["broken"]),
       importModule: () => Promise.resolve({ activate: () => undefined }),
     });
     expect(report.failed[0]?.error.message).toMatch(/default-exported activate/);
@@ -328,6 +323,7 @@ describe("the loader re-checks the manifest itself", () => {
         },
       ],
       kernelVersion: KERNEL_API_VERSION,
+      resolution: resolution(["ok", "Bad Id"]),
       importModule: (url) => {
         imported.push(url);
         return Promise.resolve({ default: () => undefined });
@@ -353,15 +349,10 @@ describe("the loader re-checks the manifest itself", () => {
     expect(imported).toEqual([]);
   });
 
-  it("loads base plugins only in safe mode", async () => {
-    const { report, imported } = await load(
-      [plugin("shell-ui", { base: true }), plugin("third-party", { base: false })],
-      { "shell-ui": () => ({}), "third-party": () => ({}) },
-      { baseOnly: true },
-    );
-    expect(report.activated).toEqual(["shell-ui"]);
-    expect(report.skipped[0]).toMatchObject({ pluginId: "third-party", reason: "disabled" });
-    expect(imported).toHaveLength(1);
+  it("skips a 1.x plugin: @kernel 2.0 removed what it was written against", async () => {
+    const { report, imported } = await load([plugin("old", { kernel: "^1.0" })], { old: () => ({}) });
+    expect(report.skipped[0]).toMatchObject({ pluginId: "old", reason: "kernel-mismatch" });
+    expect(imported).toEqual([]);
   });
 });
 
@@ -389,7 +380,7 @@ describe("the aggregated notice (SPEC §6.4)", () => {
         activated: ["a"],
         failed: [{ pluginId: "b", error: new Error("boom") }],
         skipped: [
-          { pluginId: "c", reason: "dependency-skipped", detail: '"b" failed to activate' },
+          { pluginId: "c", reason: "service-skipped", detail: '"b" failed to activate' },
           { pluginId: "d", reason: "disabled", detail: "safe mode" },
         ],
         elapsedMs: 3,

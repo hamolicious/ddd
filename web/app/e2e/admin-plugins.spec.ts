@@ -32,8 +32,8 @@ test("plugin rows are compact, with icon actions and details on demand", async (
   await toggle.click();
   const details = page.locator("#admin-plugin-details-changes");
   await expect(details).toBeVisible();
-  await expect(details.getByText("Depends on")).toBeVisible();
-  await expect(details.getByText("context-menu ^1.0, markdown ^1.0, router ^1.0, shell-ui ^1.0")).toBeVisible();
+  await expect(details.getByText("Consumes")).toBeVisible();
+  await expect(details.getByText("lm/context-menu ^1.0, lm/markdown-renderer ^1.0, lm/router ^1.0, lm/shell ^1.0")).toBeVisible();
 
   await page.getByRole("button", { name: "Uninstall Changes" }).click();
   const modal = page.getByRole("dialog", { name: "Uninstall Changes?" });

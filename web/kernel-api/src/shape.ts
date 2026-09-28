@@ -41,11 +41,11 @@ export type ShapeJson =
 /**
  * A shape check for values of `T`.
  *
- * `T` is documentation and the type `definePoint` binds — there is deliberately no
- * phantom field carrying it, so a `Shape` built with `s.object({ icon: s.any() })`
- * can still be handed to a point whose type says `icon?: ReactNode`. Validation is a
- * runtime floor (SPEC §6.4: *minimal* shape validation); the compiler's opinion of a
- * contribution comes from the point's own type, not from the validator.
+ * `T` is documentation — there is deliberately no phantom field carrying it, so a
+ * `Shape` built with `s.object({ icon: s.any() })` can still describe a protocol whose
+ * type says `icon?: ReactNode`. Validation is a runtime floor (SPEC §6.4: *minimal*
+ * shape validation); the compiler's opinion of an offered item comes from the
+ * protocol's own `index.d.ts`, not from the validator.
  *
  * The optional members are what the `s.*` builders add; a hand-built shape may omit them.
  */

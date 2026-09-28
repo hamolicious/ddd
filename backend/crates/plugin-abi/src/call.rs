@@ -2,9 +2,8 @@
 //!
 //! Three rules, all enforced by the host and none of them optional:
 //!
-//! 1. **The callee must be a declared dependency** (manifest `dependencies`). The
-//!    dependency graph is resolved at install; calling outside it is
-//!    [`crate::ErrorCode::Forbidden`], not a lookup failure.
+//! 1. **The callee must be declared** (manifest `backend.calls`). Calling a plugin the
+//!    manifest does not name is [`crate::ErrorCode::Forbidden`], not a lookup failure.
 //! 2. **No reentrancy.** A plugin already on the call stack cannot be re-entered —
 //!    Extism instances are not reentrant, and the honest error is better than a
 //!    deadlock or a second instance with half the first one's state.

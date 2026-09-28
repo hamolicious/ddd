@@ -169,8 +169,6 @@ pub enum InstallError {
     // plugin's own code runs, and surfaces as `PluginHostError::AbiMismatch` on the record's
     // `last_error`. An unconstructible variant here only advertised a check that lives
     // somewhere else.
-    #[error("unsatisfied dependency: {0}")]
-    Dependency(String),
     #[error("unsatisfiable peer library: {0}")]
     PeerLibrary(String),
     #[error("{id} {version} is already installed")]
@@ -211,9 +209,9 @@ impl From<InstallError> for crate::error::AppError {
             InstallError::Manifest(message) => {
                 AppError::BadRequest(format!("the manifest is not valid: {message}"))
             }
-            InstallError::KernelIncompatible { .. }
-            | InstallError::Dependency(_)
-            | InstallError::PeerLibrary(_) => AppError::Unprocessable(error.to_string()),
+            InstallError::KernelIncompatible { .. } | InstallError::PeerLibrary(_) => {
+                AppError::Unprocessable(error.to_string())
+            }
             InstallError::AlreadyInstalled { .. } | InstallError::Conflict(_) => {
                 AppError::Conflict(error.to_string())
             }
@@ -1566,8 +1564,8 @@ fn prune_other_versions(config: &crate::config::Config, id: &str, keep: &str) {
 // Validation
 // ---------------------------------------------------------------------------
 
-/// Validate a manifest against this server: id/version shape, kernel range, dependency
-/// graph, peer-library ranges, backend declarations (hooks, cron expressions, routes).
+/// Validate a manifest against this server: id/version shape, kernel range, peer-library
+/// ranges, backend declarations (hooks, cron expressions, routes, callees).
 ///
 /// Returns the warnings that are *not* fatal, so an install can succeed with a note rather
 /// than failing an operator for something cosmetic.
@@ -1614,8 +1612,8 @@ pub fn validate_manifest(
         }
     }
 
-    // 5/6. Routes, capabilities, hooks, cron, events. (Before the graph, because they are
-    //      local to this manifest and their messages are the most actionable.)
+    // 5/6. Routes, capabilities, hooks, cron, events. (Before the peer libraries, because
+    //      they are local to this manifest and their messages are the most actionable.)
     let routes = plugins::route_specs(manifest).map_err(InstallError::Manifest)?;
     manifest
         .capabilities
@@ -1718,8 +1716,10 @@ pub fn validate_manifest(
         }
     }
 
-    // 3/4. The graph and the peer libraries, over the installed set *including* this
-    //      package — resolution has to see what the set will look like, not what it was.
+    // 3/4. The peer libraries, over the installed set *including* this package —
+    //      resolution has to see what the set will look like, not what it was. (Which
+    //      plugins feed which is the wiring's business, resolved per boot, not an install
+    //      gate: a consumer whose provider is missing installs and waits unwired.)
     //
     //      `loaded_manifests`, not `manifests`: the set that resolution is *about* is the set
     //      that will be in one page together, and a disabled or failed plugin is not loaded
@@ -1733,10 +1733,8 @@ pub fn validate_manifest(
         .filter(|installed| installed.id != manifest.id)
         .collect();
     manifests.push(manifest.clone());
-    let resolution = plugins::resolve(&manifests).map_err(|err| match err {
-        plugins::ResolveError::PeerConflict { .. } => InstallError::PeerLibrary(err.to_string()),
-        other => InstallError::Dependency(other.to_string()),
-    })?;
+    let resolution =
+        plugins::resolve(&manifests).map_err(|err| InstallError::PeerLibrary(err.to_string()))?;
     warnings.extend(resolution.warnings.iter().cloned());
 
     // The peer libraries the *runtime bundle* provides. An import map cannot change after

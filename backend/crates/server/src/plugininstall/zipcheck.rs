@@ -608,7 +608,7 @@ mod tests {
         serde_json::from_value(serde_json::json!({
             "id": "demo",
             "version": "1.0.0",
-            "kernel": "^1.0",
+            "kernel": "^2.0",
             "frontend": { "module": "frontend/index.mjs" },
             "backend": backend,
         }))

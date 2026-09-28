@@ -14,12 +14,12 @@ pieces.
 A plugin declares the range it needs:
 
 ```json
-{ "kernel": "^1.0" }
+{ "kernel": "^2.0" }
 ```
 
 **The backend half's contract is `backend/HOST-ABI.md`**, and it is the *same* semver.
 That is the point of "one `kernel` semver covers both": a plugin declaring `"kernel":
-"^1.0"` is declaring both the `@kernel` surface its frontend half compiles against and the
+"^2.0"` is declaring both the `@kernel` surface its frontend half compiles against and the
 host-function set its Wasm half links. This file is the changelog for the frontend half;
 `HOST-ABI.md` is the specification for the backend half, listing every host function, its
 capability gate, the limits, and the five exports a module may define. A module also
@@ -174,6 +174,41 @@ should be written against:
   is expected to reconcile around a human's tombstone rather than re-create it, and never
   to rewrite a document it did not create — the host refuses that outright
   (`rewrite_document` checks `created_by`).
+
+## 2.0.0 — ports only (2026-09-28)
+
+A **major**: the 1.2.0 shims are removed, and with them every way plugins reached each
+other except `kernel.ports`. The plan behind it is `dev-docs/todo/PLUGIN-PROTOCOLS.html`
+(§9 step 8, and §10's "`@kernel` 1.2 during migration, 2.0 at the end").
+
+- **`kernel.extensions` is gone** — `definePoint`, `contribute`, `get`, `entries`,
+  `subscribe`, `isDefined`, `points`, `pending` — and with it the types `ExtensionsApi`,
+  `ExtensionPoint`, `ExtensionPointDefinition`, `Contribution`, `ContributeOptions` and the
+  value `DEFAULT_CONTRIBUTION_ORDER`. A host declares a consumed slot port and reads it
+  with `kernel.ports.collect`; a provider declares a provided port and `offer`s on it.
+- **`kernel.services` is gone** (`require`, `get`, `has`, `list`, and `ServicesApi`). A
+  consumer declares a consumed service port and calls `kernel.ports.use`; a provider
+  `serve`s on a provided one. **`activate()`'s return value is ignored**: it is no longer
+  anybody's API.
+- **The manifest fields `dependencies` and `x-defines` are gone.** Both validators refuse
+  a manifest that carries either, naming `consumes` as the replacement, so a 1.x package
+  cannot be installed by mistake. A backend half that calls another through `call_plugin`
+  lists its callees in the new `backend.calls` (HOST-ABI.md §3.10); that allowlist was
+  `dependencies` before.
+- **The implicit ports are gone.** A plugin that declares no ports provides and consumes
+  nothing: the resolver no longer gives a plugin that owns a service protocol a `~<name>`
+  port, a contribution no longer lands on a `~<point>` port every host hears, and the
+  skip reasons `missing-dependency`, `dependency-version` and `dependency-skipped` (and the
+  `legacy` flag on an activation edge) went with them. Activation is ordered by service
+  wires alone.
+- **The loader activates only from the server's resolution.** A plugin list without one
+  (cached before resolutions existed, or served by a server older than wiring) starts no
+  plugin; the reload prompt says so, and a reload while online fetches a list that has one.
+- **1.x plugins no longer load.** `"kernel": "^1.0"` does not admit 2.0.0: the server
+  refuses such a package at install, and the loader skips one it is still served
+  (`kernel-mismatch`). Every base plugin and example says `"kernel": "^2.0"`.
+
+The host ABI is unchanged and stays at version 1: nothing a backend half links moved.
 
 ## 1.2.0 — protocols and ports (2026-09-28)
 

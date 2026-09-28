@@ -13,8 +13,7 @@
  */
 
 export { KernelHost, type KernelHostOptions, type PluginProblem } from "./host.js";
-export { ExtensionRegistry, type RegistryReport } from "./registry.js";
-export { ServiceRegistry } from "./services.js";
+export { PortsHost, type PortsConfig, type PortsReport } from "./ports.js";
 export { EventBus } from "./events.js";
 export { NoticeCenter } from "./notices.js";
 export {

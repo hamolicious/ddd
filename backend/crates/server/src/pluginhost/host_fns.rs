@@ -27,7 +27,7 @@
 //!
 //! The ungated set is deliberate. KV, config and cron are the "cron-and-KV plugin"
 //! SPEC §6.3 names as the archetype, and requiring a capability for a plugin's *own*
-//! namespace would be theatre. `call_plugin` is gated by the dependency graph instead, and
+//! namespace would be theatre. `call_plugin` is gated by the manifest's `backend.calls` instead, and
 //! `emit_client` reaches only sessions of this workspace's users.
 //!
 //! The check lives in each **body**, never in the registration: all thirteen imports are
@@ -1227,9 +1227,9 @@ pub fn emit_client(
 // call_plugin
 // ---------------------------------------------------------------------------
 
-/// `call_plugin` — invoke a declared dependency's `lm_call`.
+/// `call_plugin` — invoke a declared callee's `lm_call`.
 ///
-/// Three refusals, three codes: not a declared dependency → `forbidden`; already on the
+/// Three refusals, three codes: not in `backend.calls` → `forbidden`; already on the
 /// stack → `reentrancy`; deeper than [`abi::limits::MAX_CALL_DEPTH`] → `limit_exceeded`.
 /// The callee shares this invocation's deadline.
 pub fn call_plugin(
@@ -1239,13 +1239,13 @@ pub fn call_plugin(
     if input.function.is_empty() {
         return Err(invalid("`function` is empty"));
     }
-    // The dependency check comes first: it is the one refusal that is about the *manifest*
+    // The allowlist check comes first: it is the one refusal that is about the *manifest*
     // rather than about this call, so a plugin author should see it before anything else.
-    if !context.plugin.dependencies.contains_key(&input.plugin) {
+    if !context.plugin.calls.contains(&input.plugin) {
         return Err(abi::HostError::new(
             abi::ErrorCode::Forbidden,
             format!(
-                "`{}` is not a declared dependency of `{}`; add it to `dependencies` in the \
+                "`{}` is not a declared callee of `{}`; add it to `backend.calls` in the \
                  manifest",
                 input.plugin, context.plugin.id
             ),

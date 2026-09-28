@@ -1,8 +1,6 @@
 /**
- * `kernel.ports` (PLUGIN-PROTOCOLS §5) and the 1.x shims over it (§9 step 5).
- *
- * The step is done when a plugin on ports and a plugin still on `extensions`/`services`
- * wire to each other in one session, both ways round; the last group pins that.
+ * `kernel.ports` (PLUGIN-PROTOCOLS §5): since `@kernel` 2.0 the only way plugins reach
+ * each other.
  */
 
 import { describe, expect, it, vi } from "vitest";
@@ -15,8 +13,6 @@ import {
 } from "@kernel";
 
 import { PortsHost } from "./ports.js";
-import { ExtensionRegistry } from "./registry.js";
-import { ServiceRegistry } from "./services.js";
 
 const protocols: ProtocolPackage[] = [
   {
@@ -51,10 +47,10 @@ const protocols: ProtocolPackage[] = [
   },
 ];
 
-const manifest = (id: string, ports: Pick<PluginManifest, "provides" | "consumes" | "dependencies"> = {}): PluginManifest => ({
+const manifest = (id: string, ports: Pick<PluginManifest, "provides" | "consumes"> = {}): PluginManifest => ({
   id,
   version: "1.0.0",
-  kernel: "^1.2",
+  kernel: "^2.0",
   frontend: { module: "frontend/index.mjs" },
   ...ports,
 });
@@ -78,15 +74,9 @@ function resolution(parts: Partial<Resolution>): Resolution {
 function setup(manifests: PluginManifest[], parts: Partial<Resolution>) {
   const reports: string[] = [];
   const ports = new PortsHost((report) => reports.push(`${report.pluginId}: ${report.message}`));
-  const extensions = new ExtensionRegistry(undefined, ports);
-  const services = new ServiceRegistry(ports);
   ports.configure({ protocols, manifests, resolution: resolution(parts) });
-  const kernel = (id: string) => {
-    const m = manifests.find((entry) => entry.id === id)!;
-    services.declare(id, Object.keys(m.dependencies ?? {}));
-    return { ports: ports.forPlugin(m), extensions: extensions.forPlugin(id, m), services: services.forPlugin(id, m) };
-  };
-  return { ports, services, kernel, reports };
+  const kernel = (id: string) => ({ ports: ports.forPlugin(manifests.find((entry) => entry.id === id)!) });
+  return { ports, kernel, reports };
 }
 
 const routerApi = () => ({ navigate: vi.fn(), current: () => "/", url: (path: string) => `#${path}`, secret: 1 });
@@ -204,68 +194,44 @@ describe("events", () => {
   });
 });
 
-describe("a plugin on ports and a plugin on 1.x wire to each other (§9 step 5)", () => {
+describe("the kernel's own items and withdrawal", () => {
   const manifests = [
-    // On ports: a host, a provider and a consumer.
     manifest("shell-ui", { consumes: { sidebar: { protocol: "lm/sidebar.panel@^1.0" } } }),
     manifest("folders", { provides: { tree: { protocol: "lm/sidebar.panel@1.0.0", order: 20 } } }),
+    manifest("router", { provides: { router: { protocol: "lm/router@1.0.0" } } }),
     manifest("graph", { consumes: { router: { protocol: "lm/router@^1.0", needs: ["navigate"] } } }),
-    manifest("router-next", { provides: { router: { protocol: "lm/router@1.0.0" } } }),
-    // On 1.x: no ports at all.
-    manifest("legacy-panel"),
-    manifest("legacy-host"),
-    manifest("router"),
-    manifest("legacy-consumer", { dependencies: { "router-next": "^1.0" } }),
   ];
   const parts: Partial<Resolution> = {
     seats: { "shell-ui:sidebar": ["folders:tree"] },
-    // The resolver gives a 1.x owner of a service protocol an implicit port.
-    bindings: { "graph:router": "router:~router" },
+    bindings: { "graph:router": "router:router" },
   };
 
-  it("a 1.x contribution reaches a host on ports, after its wired seats", () => {
-    const { kernel } = setup(manifests, parts);
-    kernel("folders").ports.offer("tree", { id: "tree", title: "Folders" });
-    kernel("legacy-panel").extensions.contribute("sidebar.panel", { id: "legacy", title: "Legacy" });
-    expect(kernel("shell-ui").ports.collect<{ id: string }>("sidebar").get().map((i) => i.id)).toEqual(["tree", "legacy"]);
-  });
-
-  it("an offer on a port reaches a 1.x host", () => {
-    const { kernel } = setup(manifests, parts);
-    const point = kernel("legacy-host").extensions.definePoint<{ id: string }>({ name: "sidebar.panel" });
-    kernel("folders").ports.offer("tree", { id: "tree", title: "Folders" });
-    kernel("legacy-panel").extensions.contribute("sidebar.panel", { id: "legacy", title: "Legacy" }, { order: 5 });
-    expect(point.get().map((i) => i.id)).toEqual(["legacy", "tree"]);
-  });
-
-  it("a consumer on ports uses a 1.x provider's returned API", () => {
+  it("a kernel item follows every host's wired seats, and is checked against the protocol", () => {
     const { ports, kernel } = setup(manifests, parts);
-    const api = routerApi();
-    ports.adoptLegacyApi("router", api);
-    kernel("graph").ports.use<{ navigate(path: string): void }>("router").navigate("/x");
-    expect(api.navigate).toHaveBeenCalledWith("/x");
+    ports.offerAsKernel("lm/sidebar.panel", { id: "device", title: "This device" });
+    kernel("folders").ports.offer("tree", { id: "tree", title: "Folders" });
+    const host = kernel("shell-ui").ports.collect<{ id: string }>("sidebar");
+    expect(host.get().map((i) => i.id)).toEqual(["tree", "device"]);
+    expect(host.entries()[1]).toMatchObject({ pluginId: "kernel" });
+    expect(() => ports.offerAsKernel("lm/sidebar.panel", { id: 1 })).toThrow(ContractViolationError);
   });
 
-  it("a 1.x consumer requires a provider that serves on a port", () => {
+  it("an item offered on no declared port throws: there is no implicit port any more", () => {
     const { kernel } = setup(manifests, parts);
-    const api = routerApi();
-    kernel("router-next").ports.serve("router", api);
-    kernel("legacy-consumer").services.require<{ navigate(path: string): void }>("router-next").navigate("/y");
-    expect(api.navigate).toHaveBeenCalledWith("/y");
+    expect(() => kernel("graph").ports.offer("sidebar", { id: "x", title: "X" })).toThrow(/no provided port "sidebar"/);
   });
 
-  it("a plugin with ports keeps working through its 1.x calls, on its ports and under its needs", () => {
-    const { ports, kernel } = setup(manifests, { ...parts, bindings: { "graph:router": "router-next:router" } });
-    const api = routerApi();
-    kernel("router-next").ports.serve("router", api);
-    const router = kernel("graph").services.require<ReturnType<typeof routerApi>>("router-next");
-    router.navigate("/z");
-    expect(api.navigate).toHaveBeenCalledWith("/z");
-    expect(() => router.current()).toThrow(ContractViolationError);
-    // Its legacy `contribute` lands on its declared port, and so takes the wired seat.
-    kernel("folders").extensions.contribute("sidebar.panel", { id: "tree", title: "Folders" });
-    expect(kernel("shell-ui").ports.collect<{ id: string }>("sidebar").entries()[0]).toMatchObject({ port: "tree" });
+  it("removing a plugin withdraws its items, its services and its listeners", () => {
+    const { ports, kernel } = setup(manifests, parts);
+    kernel("folders").ports.offer("tree", { id: "tree", title: "Folders" });
+    kernel("router").ports.serve("router", routerApi());
+    const seen = vi.fn();
+    kernel("shell-ui").ports.collect("sidebar").subscribe(seen);
     ports.removePlugin("folders");
-    expect(kernel("shell-ui").ports.collect("sidebar").get()).toEqual([]);
+    expect(seen).toHaveBeenLastCalledWith([]);
+    ports.removePlugin("router");
+    expect(() => kernel("graph").ports.use("router")).toThrow(/serves nothing/);
+    ports.removePlugin("shell-ui");
+    expect(ports.stats()).toEqual({ offers: 0, served: 0, hostListeners: 0, eventListeners: 0 });
   });
 });

@@ -3,7 +3,8 @@
  *
  * The renderer for a fenced code block no `lm/markdown.fence` claims: ```rust, ```ts, or a
  * fence with no language. The first seat wins; with none wired, markdown draws its own
- * `<pre>`.
+ * `<pre>`. A fence for the block's language always goes first: this is the default for
+ * code, not an override of fences.
  *
  * GENERATED from shape.mjs by web/scripts/gen-protocols.ts. Do not edit.
  */
@@ -17,7 +18,7 @@ export type ProtocolVersion = "1.0.0";
 
 export interface MarkdownCodeBlockProps {
   readonly code: string;
-  /** The info string's first word, as written (`ts`, `Rust`). */
+  /** The info string's first word, as written (`ts`, `Rust`); absent when there is none. */
   readonly language?: string;
   readonly meta?: string;
   readonly documentId?: DocumentId;

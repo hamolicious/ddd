@@ -61,7 +61,7 @@ impl Harness {
             fs::write(
                 root.join("manifest.json"),
                 format!(
-                    r#"{{"id":"{id}","version":"1.0.0","kernel":"^1.0","frontend":{{"module":"frontend/index.mjs"}}}}"#
+                    r#"{{"id":"{id}","version":"1.0.0","kernel":"^2.0","frontend":{{"module":"frontend/index.mjs"}}}}"#
                 ),
             )
             .ok()?;

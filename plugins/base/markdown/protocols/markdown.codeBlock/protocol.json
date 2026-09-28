@@ -4,7 +4,7 @@
   "kind": "slot",
   "owner": "markdown",
   "types": "index.d.ts",
-  "description": "The renderer for a fenced code block no `lm/markdown.fence` claims: ```rust, ```ts, or a fence with no language. The first seat wins; with none wired, markdown draws its own `<pre>`.",
+  "description": "The renderer for a fenced code block no `lm/markdown.fence` claims: ```rust, ```ts, or a fence with no language. The first seat wins; with none wired, markdown draws its own `<pre>`. A fence for the block's language always goes first: this is the default for code, not an override of fences.",
   "key": "id",
   "shape": {
     "object": {

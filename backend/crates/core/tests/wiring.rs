@@ -140,9 +140,9 @@ fn the_corpus() {
     }
 }
 
-/// The base distribution activates in the order it always has: the resolver over the real
-/// manifests and protocol packages gives the order the loader computed before it existed,
-/// pinned in the corpus (`web/app/src/loader/order.test.ts` pins the loader to the same list).
+/// The base distribution's activation order: the resolver over the real manifests and
+/// protocol packages, ordered by their service wires alone, pinned in the corpus
+/// (`web/app/src/loader/order.test.ts` pins the loader to the same list).
 #[test]
 fn the_base_distribution_keeps_its_order() {
     let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../plugins/base");

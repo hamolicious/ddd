@@ -39,10 +39,9 @@ import type { Kernel, OpenDocument } from "@kernel";
 /*
  * The protocols this plugin offers on its two ports, typed from their packages.
  *
- * `plugins/base/_shared/points.ts` has these same types, and importing them would be
- * *convenient and wrong*: `_shared` is the base distribution's internal file, not part
- * of any contract (SPEC §2 — the kernel knows protocols as data). What a third-party
- * plugin has is each protocol's generated `index.d.ts`, served at
+ * Importing the base plugins' sources for these would be *convenient and wrong*: they are
+ * not part of any contract (SPEC §2 — the kernel knows protocols as data). What a
+ * third-party plugin has is each protocol's generated `index.d.ts`, served at
  * `/protocols/<id>/<version>/index.d.ts` and mapped here as `@protocols/lm/<name>`
  * (`plugins/examples/tsconfig.json`), so this one has exactly that too.
  */

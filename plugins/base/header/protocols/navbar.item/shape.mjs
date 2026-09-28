@@ -20,7 +20,7 @@ person rearrange them on top of that.`,
     order: s.optional(s.number()).describe("Default-seat hint only; the wiring's seat order wins."),
     side: s
       .optional(s.literal("start", "end"))
-      .describe("`start` sits after the sidebar toggle and grows; `end` is pushed right and never shrinks. Default `start`."),
+      .describe("`start` sits after the sidebar toggle and grows, scrolling sideways when full; `end` is pushed right and never shrinks. Default `start`."),
     onSelect: s.optional(s.func().as("() => void")),
     component: s
       .optional(s.component().as("ComponentType<Record<string, never>>"))

@@ -11,8 +11,8 @@
  * import type { Kernel } from "@kernel";
  *
  * export default function activate(kernel: Kernel) {
- *   kernel.extensions.contribute("navbar.item", { id: "hello", label: "Hello" });
- *   return { greet: () => "hi" };            // this plugin's API, for dependents
+ *   kernel.ports.offer("nav", { id: "hello", label: "Hello" });   // a provided slot port
+ *   kernel.ports.serve("greeter", { greet: () => "hi" });         // a provided service port
  * }
  * ```
  *
@@ -98,17 +98,6 @@ export type {
   TextEdit,
   TextRange,
 } from "./documents.js";
-
-export {
-  DEFAULT_CONTRIBUTION_ORDER,
-  type Contribution,
-  type ContributeOptions,
-  type ExtensionPoint,
-  type ExtensionPointDefinition,
-  type ExtensionsApi,
-} from "./extensions.js";
-
-export type { ServicesApi } from "./services.js";
 
 export type { PortsApi, SlotHost, SlotItem } from "./ports.js";
 

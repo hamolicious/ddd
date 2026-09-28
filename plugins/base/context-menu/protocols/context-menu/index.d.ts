@@ -3,9 +3,10 @@
  *
  * Menus, sheets and questions. One menu is open at a time; opening another replaces it.
  * With an `anchor` it is a popover beside that control on a wide screen; on a phone, or
- * with no anchor, it is a bottom sheet. Focus moves in on open, Escape and a click outside
- * close it, and focus returns to whatever opened it. `modal` and `confirm` ask a question
- * instead: a centred dialog (a bottom sheet on a phone) that resolves with the answer.
+ * with no anchor, it is a bottom sheet. Focus moves in on open, Tab stays inside, Escape
+ * and a click outside close it, and focus returns to whatever opened it. `modal` and
+ * `confirm` ask a question instead: always a centred dialog (a bottom sheet on a phone),
+ * never a popover, and they resolve with the answer.
  *
  * GENERATED from shape.mjs by web/scripts/gen-protocols.ts. Do not edit.
  */
@@ -144,7 +145,7 @@ export interface ConfirmRequest {
 export interface ContextMenu {
   readonly open: (menu: MenuRequest) => void;
   readonly openSheet: (sheet: SheetRequest) => void;
-  /** Ask something: resolves with the button and field values, or `undefined` when dismissed. */
+  /** Ask something: resolves with the button and field values, or `undefined` when dismissed (a `dismiss` button, Escape, a click outside, ✕, or another menu opening). Validation runs before a non-dismiss button resolves. */
   readonly modal: (request: ModalRequest) => Promise<ModalResult | undefined>;
   /** "Are you sure?": resolves `true` only when the confirm button is chosen. */
   readonly confirm: (request: ConfirmRequest) => Promise<boolean>;

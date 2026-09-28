@@ -142,9 +142,9 @@ wasm target and no `rustup` to add one).
    the single `kernel.ui.mount` inside its own `activate()`, so **the shell appears while
    the plugins behind it are still arriving** — deliberately, because one slow plugin must
    not hold the whole app behind a boot screen. The consequence is a rule, not a caveat:
-   *every consumer of a registry point has to be live.* A component that reads
-   `extensions.get()` once at first render and never subscribes will be permanently missing
-   whatever landed after it. (This is what `app/e2e/helpers.ts`'s `pluginsActivated()` waits
+   *every host of a slot has to be live.* A component that reads
+   `kernel.ports.collect(port).get()` once at first render and never subscribes will be
+   permanently missing whatever landed after it. (This is what `app/e2e/helpers.ts`'s `pluginsActivated()` waits
    for, and how two such bugs were found.)
 5. **Import map.** In production the server injects it into `index.html` with the response's
    CSP nonce; in `vite dev` there is no server injection, so `app/src/loader/importmap.ts`
@@ -199,8 +199,8 @@ my-plugin/
 {
   "id": "my-plugin",            // must equal the directory name
   "version": "1.0.0",
-  "kernel": "^1.0",             // checked at install *and* re-checked by the loader at boot
-  "dependencies": { "document-surface": "^1.0" },
+  "kernel": "^2.0",             // checked at install *and* re-checked by the loader at boot
+  "provides": { "mode": { "protocol": "lm/document.mode@1.0.0" } },  // your ports (PLUGIN-PROTOCOLS §4)
   "peerLibraries": { "react": "^18.0.0", "yjs": "^13.0.0" },
   "frontend": { "module": "frontend/index.mjs", "style": "frontend/style.css" }
 }
@@ -214,11 +214,11 @@ preference:
   *generated file* rather than at `kernel-api/src`, which is what makes "builds against
   `kernel.d.ts` only" a checked claim — if the generator drops something the examples use,
   that config fails and `web/tsconfig.json` does not.
-- **Never import another plugin's source.** Depend on it in the manifest and ask for its
-  API with `kernel.services.require("<id>")`. That includes `plugins/base/_shared/points.ts`:
-  it is the base distribution's internal file, not part of `@kernel` — the kernel knows
-  point names only as opaque strings (SPEC §2), so a third-party plugin re-declares the
-  payload shape it contributes. `alt-editor` shows the shape of that.
+- **Never import another plugin's source.** Declare a port in the manifest (`consumes` for
+  a service or a slot you host, `provides` for one you serve or offer on) and reach it with
+  `kernel.ports`. Types come from the protocol's own package, `@protocols/lm/<name>`, served
+  at `/protocols/<id>/<version>/index.d.ts` — the kernel knows protocols only as data
+  (SPEC §2). `alt-editor` shows the shape of that.
 - **The blessed runtime layer stays external** (`react`, `react-dom`, `yjs`, `@kernel`, the
   CodeMirror and unified/remark rows). `plugins/base/_shared/vite.plugin-config.mjs` is the
   reference build config and already does this; bundling any of them gives the plugin its

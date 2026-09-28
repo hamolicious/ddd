@@ -6,7 +6,7 @@
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
-  "kernel": "^1.0",
+  "kernel": "^2.0",
   "hot": true,
   "consumes": {
     "header": {
@@ -45,12 +45,5 @@
   "frontend": {
     "module": "frontend/index.mjs",
     "style": "frontend/style.css"
-  },
-  "x-defines": [
-    "altbar.panel",
-    "main.view",
-    "shell.header",
-    "shell.overlay",
-    "sidebar.panel"
-  ]
+  }
 }

@@ -2,7 +2,7 @@
  * The plugin manifest (SPEC §6.2) and the loader's view of an installed plugin.
  *
  * The **server** is the authority: it validates manifests at install, resolves the
- * dependency graph and the `peerLibraries` ranges, and serves the result. The
+ * wiring and the `peerLibraries` ranges, and serves the result. The
  * loader re-validates independently anyway, for one reason given in SPEC §6.4: a
  * stale offline client must hard-skip a plugin built for a kernel it does not
  * implement, rather than activate it and fail in pieces.
@@ -77,7 +77,7 @@ export interface ManifestProblem {
  *
  * The server runs the same interpreter over the same schema (`manifest_schema.rs`), and
  * `schema/fixtures/manifests.json` pins that both report the same fields. This is still the
- * client's own floor rather than a duplicate of the install-time checks (dependency
+ * client's own floor rather than a duplicate of the install-time checks (wiring
  * resolution, capability approval, zip hardening are all server-side): a stale offline
  * client re-checks what it was served (SPEC §6.4).
  */
@@ -114,6 +114,12 @@ function check(raw: ManifestSchemaNode, value: unknown, path: string, problems: 
       for (const [key, entry] of Object.entries(value)) {
         if (entry === undefined) continue;
         const at = join(path, key);
+        // A field a past contract had and a major removed: refused, with what replaced it.
+        const removed = node["x-removed"]?.[key];
+        if (removed !== undefined) {
+          push(at, removed);
+          continue;
+        }
         const property = node.properties?.[key];
         if (property) {
           check(property, entry, at, problems);
@@ -256,8 +262,8 @@ export function parseProtocolRef(text: string): { readonly id: string; readonly 
  * Does `version` satisfy `range`? Supports exactly what manifests use: `*`,
  * `^x.y`, `^x.y.z`, `~x.y.z`, `>=x.y.z`, and an exact `x.y.z`.
  *
- * Deliberately not a semver library — a dependency in the kernel contract is a
- * dependency in every plugin's bundle, and this is 30 lines. The *server* does the
+ * Deliberately not a semver library — a library in the kernel contract is a
+ * library in every plugin's bundle, and this is 30 lines. The *server* does the
  * real resolution at install time (SPEC §6.2); this is the loader's boot-time
  * re-check of one version against one range.
  */
