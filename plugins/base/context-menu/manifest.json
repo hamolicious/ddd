@@ -9,6 +9,7 @@
     "prefix": "ctxmenu"
   },
   "kernel": "^1.0",
+  "hot": true,
   "provides": {
     "menu": {
       "protocol": "lm/context-menu@1.0.0"

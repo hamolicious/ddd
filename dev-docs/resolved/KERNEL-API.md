@@ -215,6 +215,27 @@ no longer drift apart. The plan behind it is `dev-docs/todo/PLUGIN-PROTOCOLS.htm
   every host of the protocol hears, and is served what a provider's `activate()` returned
   or the first service it serves. Either side can move first.
 
+- **Hot-plugging** (PLUGIN-PROTOCOLS §6c). A wiring change applies in place: plugins that
+  go away stop, plugins whose services were rebound restart (with everything that uses
+  them through services), hosts' seats and event listeners update, and new plugins start.
+  The contract that makes it safe:
+  - **The kernel withdraws everything a plugin registered through it**: slot items,
+    services, event and host listeners, `events.on/once/onAny`, `settings.subscribe`,
+    `sync.subscribe`, `session.onAuthRequired`, `documents.subscribe` queries and
+    `documents.open` handles, `ui.notify` notices, `ui.onNotices`, `ui.onColorScheme`,
+    `ui.tokens.apply` layers, its mount and its stylesheet `<link>`. A resource that
+    arrives after its plugin stopped (an async `subscribe` resolving late) is released at
+    once.
+  - **What a plugin built itself** — window listeners, timers, anything outside its mount —
+    is its own `export function deactivate()`'s job, which now runs on every stop, not
+    only in `?safe=bare` teardown.
+  - **`"hot": true` in the manifest is the promise** that the two together leave nothing
+    behind. A change that touches a plugin without it (or needs a library missing from
+    the page's import map) shows the reload prompt instead, and the page keeps running
+    its current version until the user reloads. Every base plugin is `hot`;
+    `app/e2e/hot-plug.spec.ts` unplugs and plugs each back 100 times and checks nothing
+    is left.
+
 ## 1.1.0 — polish pass (2026-09-25)
 
 A **minor**, by this file's own rule: one optional field added, nothing removed and no

@@ -9,6 +9,7 @@
     "prefix": "nativepreview"
   },
   "kernel": "^1.0",
+  "hot": true,
   "provides": {
     "viewers": {
       "protocol": "lm/attachments.viewer@1.0.0"

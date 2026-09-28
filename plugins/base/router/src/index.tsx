@@ -147,8 +147,20 @@ export default function activate(kernel: Kernel): RouterApi {
   // `location.hash` directly (other plugins, the address bar, an external link).
   addEventListener("popstate", resolve);
   addEventListener("hashchange", resolve);
+  teardown = () => {
+    removeEventListener("popstate", resolve);
+    removeEventListener("hashchange", resolve);
+  };
   // A route contributed after the first render must be able to claim the current URL.
   routes.subscribe(() => resolve());
 
   return api;
+}
+
+/** The window listeners `activate` added; the kernel withdraws everything else (§6c). */
+let teardown: (() => void) | undefined;
+
+export function deactivate(): void {
+  teardown?.();
+  teardown = undefined;
 }

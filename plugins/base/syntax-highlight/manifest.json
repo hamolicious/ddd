@@ -9,6 +9,7 @@
     "web-tree-sitter"
   ],
   "kernel": "^1.0",
+  "hot": true,
   "consumes": {
     "languages": {
       "protocol": "lm/syntax.language@^1.0"

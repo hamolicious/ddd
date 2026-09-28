@@ -2,6 +2,7 @@
   "id": "extra-task-states",
   "version": "1.0.0",
   "kernel": "^1.0",
+  "hot": true,
   "dependencies": {
     "markdown": "^1.0"
   },

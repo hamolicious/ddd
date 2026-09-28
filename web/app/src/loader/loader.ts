@@ -47,8 +47,19 @@ export interface LoadOptions {
   readonly protocols?: readonly ProtocolPackage[];
   /** Injectable for tests; production uses a bare dynamic `import()`. */
   readonly importModule?: (url: string) => Promise<unknown>;
+  /**
+   * Where each activated plugin and its module are recorded, so the plugin runtime can
+   * stop and restart them later (hot apply, PLUGIN-PROTOCOLS §6c).
+   */
+  readonly activeModules?: Map<string, ActiveModule>;
   /** Called after each plugin, for a boot progress line. */
   readonly onProgress?: (progress: LoadProgress) => void;
+}
+
+/** An activated plugin and the module it was activated from. */
+export interface ActiveModule {
+  readonly plugin: InstalledPlugin;
+  readonly module: Partial<PluginModule>;
 }
 
 export interface LoadProgress {
@@ -169,6 +180,7 @@ export async function loadPlugins(options: LoadOptions): Promise<LoadReport> {
       // A 1.x provider returns its API: it is served on the service ports it declares,
       // checked against their protocols, so a consumer on ports can use it (§5).
       options.host.ports.adoptLegacyApi(id, api);
+      options.activeModules?.set(id, { plugin, module });
       activated.push(id);
       options.onProgress?.({ pluginId: id, index, total: resolved.order.length, outcome: "activated" });
     } catch (cause) {
@@ -198,7 +210,7 @@ export async function loadPlugins(options: LoadOptions): Promise<LoadReport> {
  * One `<link>` per plugin stylesheet, tagged with the plugin id. Idempotent, so a
  * reload-in-place during development does not stack them.
  */
-function linkStylesheet(plugin: InstalledPlugin): void {
+export function linkStylesheet(plugin: InstalledPlugin): void {
   const href = styleUrl(plugin);
   if (!href || typeof document === "undefined") return;
   const existing = document.querySelector(`link[data-lm-plugin="${plugin.manifest.id}"]`);

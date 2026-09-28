@@ -6,6 +6,7 @@
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
   "kernel": "^1.0",
+  "hot": true,
   "provides": {
     "index": {
       "protocol": "lm/workspace-index@1.0.0"

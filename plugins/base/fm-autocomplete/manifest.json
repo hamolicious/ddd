@@ -9,6 +9,7 @@
     "prefix": "fmac"
   },
   "kernel": "^1.0",
+  "hot": true,
   "consumes": {
     "index": {
       "protocol": "lm/workspace-index@^1.0",

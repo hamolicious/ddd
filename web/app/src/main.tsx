@@ -40,6 +40,7 @@ import { createRoot, type Root } from "react-dom/client";
 import {
   KERNEL_API_VERSION,
   type InstalledPlugin,
+  type LiveWiring,
   type LogoutOptions,
   type ProtocolPackage,
   type ResolvedPluginSet,
@@ -52,7 +53,7 @@ import {
 } from "@kernel/runtime/index.js";
 
 import { AuthGate } from "./boot/AuthGate.js";
-import { OfflineError, installedPlugins, inviteTokenFromHash, logoutRequest, me, resetTokenFromHash } from "./boot/api.js";
+import { OfflineError, installedPlugins, type PluginList, inviteTokenFromHash, logoutRequest, me, resetTokenFromHash } from "./boot/api.js";
 import {
   cachedPlugins,
   cachedProtocols,
@@ -78,10 +79,12 @@ import {
   type ShellUpdateReady,
 } from "./boot/shell.js";
 import { ReloadPrompt, WiringWatch } from "./boot/reload-prompt.js";
+import { installTestHooks } from "./boot/test-hooks.js";
 import { registerServiceWorker } from "./boot/update.js";
 import { trackViewportHeight } from "./boot/viewport.js";
 import { installDevImportMap, missingSpecifiers, pageImportMap } from "./loader/importmap.js";
-import { failureNotice, loadPlugins } from "./loader/loader.js";
+import { failureNotice, loadPlugins, type ActiveModule } from "./loader/loader.js";
+import { PluginRuntime } from "./loader/runtime.js";
 import { BareManager } from "./safe-mode/BareManager.js";
 import { AppFrame } from "./ui/AppFrame.js";
 import { BootFailure, BootScreen, UnsupportedBrowser, supportsImportMaps } from "./ui/BootScreen.js";
@@ -327,7 +330,70 @@ const reloadPrompt = new ReloadPrompt();
  * The wiring version this page runs against the server's. Behind means a reload until
  * clients can rewire in place (PLUGIN-PROTOCOLS §6c).
  */
-const wiringWatch = new WiringWatch(() => reloadPrompt.askForWiring());
+const wiringWatch = new WiringWatch(() => void followWiring());
+
+/** The activated plugin set, once boot is done: what a wiring change is applied to. */
+let pluginRuntime: PluginRuntime | undefined;
+/** How this page booted, for fetching the next plugin set the same way. */
+let bootContext: { readonly bearer: string | undefined; readonly baseOnly: boolean } | undefined;
+/** A reload has been asked for: later versions wait behind it rather than half-applying. */
+let reloadPending = false;
+/** One follow at a time; a version that lands meanwhile is picked up when it finishes. */
+let following: Promise<void> | undefined;
+
+/**
+ * The server's wiring moved past this page's (PLUGIN-PROTOCOLS §6c): fetch the new plugin
+ * set and apply it in place, or ask for a reload when the change needs one. Hot applies
+ * are silent.
+ */
+async function followWiring(): Promise<void> {
+  if (following || reloadPending) return;
+  following = (async () => {
+    const runtime = pluginRuntime;
+    const context = bootContext;
+    if (!runtime || !context) {
+      // No runtime: a boot without a resolution (an older server's list), or `?safe=bare`.
+      reloadPending = true;
+      reloadPrompt.askForWiring();
+      return;
+    }
+    let list: PluginList;
+    try {
+      list = await installedPlugins(context.bearer);
+    } catch {
+      // Offline between the frame and the fetch: the next `welcome` brings it back here.
+      return;
+    }
+    if (!list.wiring || !list.resolved) {
+      reloadPending = true;
+      reloadPrompt.askForWiring();
+      return;
+    }
+    const outcome = await runtime.apply({
+      plugins: list.plugins,
+      wiring: list.wiring,
+      resolution: context.baseOnly ? list.resolved.safe : list.resolved.normal,
+      protocols: list.protocols ?? [],
+    });
+    if (outcome.kind === "reload") {
+      console.info(`[wiring] v${list.wiring.version} needs a reload: ${outcome.reasons.join("; ")}`);
+      reloadPending = true;
+      reloadPrompt.askForWiring();
+      return;
+    }
+    rememberPlugins(list.plugins, list.wiring, list.resolved, list.protocols);
+    console.info(
+      `[wiring] applied v${list.wiring.version} in place: stopped ${outcome.plan.stop.length}, restarted ${outcome.plan.restart.length}, started ${outcome.plan.start.length}`,
+    );
+    if (outcome.failed.length > 0) {
+      reportPluginProblem({ pluginId: outcome.failed.join(", "), point: "wiring", message: "failed to start after a wiring change" });
+    }
+    wiringWatch.setRunning(list.wiring.version);
+  })().finally(() => {
+    following = undefined;
+  });
+  await following;
+}
 
 /**
  * Every plugin problem the kernel detects — a contribution rejected by shape or key
@@ -424,11 +490,11 @@ async function activatePlugins(
     });
   }
 
-  const { plugins, wiringVersion, resolved, protocols } = await installedSet(host, bearer, offlineBoot);
-  wiringWatch.setRunning(wiringVersion);
+  const { plugins, wiringVersion, wiring, resolved, protocols } = await installedSet(host, bearer, offlineBoot);
   // The server resolved the wiring for both boot modes; the loader activates from the one
   // this page is in (PLUGIN-PROTOCOLS §6), and orders by itself only without one.
   const resolution = resolved ? (baseOnly ? resolved.safe : resolved.normal) : undefined;
+  const activeModules = new Map<string, ActiveModule>();
   const report = await loadPlugins({
     host,
     plugins,
@@ -436,7 +502,23 @@ async function activatePlugins(
     baseOnly,
     ...(resolution ? { resolution } : {}),
     ...(protocols ? { protocols } : {}),
+    activeModules,
   });
+
+  // Hot apply needs the server's resolution to diff against; without one (an older
+  // server, or a cache from before wiring) a change asks for a reload instead.
+  if (resolution && wiring) {
+    pluginRuntime = new PluginRuntime({
+      host,
+      current: { plugins, wiring, resolution, protocols: protocols ?? [] },
+      active: activeModules,
+      importMap: () => new Set(Object.keys(pageImportMap()?.imports ?? {})),
+    });
+  }
+  bootContext = { bearer, baseOnly };
+  if (pluginRuntime) installTestHooks(host, pluginRuntime, baseOnly);
+  // Only now: a newer version seen during boot is applied to the finished plugin set.
+  wiringWatch.setRunning(wiringVersion);
 
   console.info(
     `[loader] ${report.activated.length} activated, ${report.failed.length} failed, ${report.skipped.length} skipped in ${report.elapsedMs} ms`,
@@ -465,6 +547,7 @@ async function installedSet(
 ): Promise<{
   readonly plugins: readonly InstalledPlugin[];
   readonly wiringVersion: number;
+  readonly wiring?: LiveWiring;
   readonly resolved?: ResolvedPluginSet;
   readonly protocols?: readonly ProtocolPackage[];
 }> {
@@ -474,6 +557,7 @@ async function installedSet(
     return {
       plugins,
       wiringVersion: wiring?.version ?? 0,
+      ...(wiring ? { wiring } : {}),
       ...(resolved ? { resolved } : {}),
       ...(protocols ? { protocols } : {}),
     };
@@ -484,9 +568,11 @@ async function installedSet(
       console.info(`[loader] offline: activating the ${remembered.length} plugins last seen here`);
       const resolved = cachedResolution();
       const protocols = cachedProtocols();
+      const wiring = cachedWiring();
       return {
         plugins: remembered,
-        wiringVersion: cachedWiring()?.version ?? 0,
+        wiringVersion: wiring?.version ?? 0,
+        ...(wiring ? { wiring } : {}),
         ...(resolved ? { resolved } : {}),
         ...(protocols ? { protocols } : {}),
       };

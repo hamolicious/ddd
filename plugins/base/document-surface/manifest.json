@@ -9,6 +9,7 @@
     "prefix": "docsurface"
   },
   "kernel": "^1.0",
+  "hot": true,
   "consumes": {
     "router": {
       "protocol": "lm/router@^1.0",

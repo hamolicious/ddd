@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "x-tailwind": true,
   "kernel": "^1.0",
+  "hot": true,
   "dependencies": {
     "document-surface": "^1.0"
   },

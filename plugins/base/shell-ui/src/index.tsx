@@ -78,6 +78,7 @@ export default function activate(kernel: Kernel): ShellUiApi {
   });
 
   const state = new ShellState();
+  live = state;
 
   // The one mount (SPEC §6.4). Everything below this line is React reading the
   // registry live: a plugin that contributes a panel or a view later — or fails and
@@ -113,4 +114,12 @@ export default function activate(kernel: Kernel): ShellUiApi {
     toggleAltbar: (open) => state.toggleAltbar(open),
     setMainView: (id, params) => state.setMainView(id, params),
   };
+}
+
+/** The breakpoint listener `activate` started; the kernel withdraws everything else (§6c). */
+let live: ShellState | undefined;
+
+export function deactivate(): void {
+  live?.dispose();
+  live = undefined;
 }

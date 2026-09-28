@@ -118,38 +118,151 @@ export class KernelHost {
     };
   }
 
-  /** The per-plugin `@kernel`. Built once per plugin, just before `activate`. */
+  /**
+   * Everything a plugin subscribed to or opened through its kernel, as disposers, so
+   * `retract` leaves nothing behind (the disposal contract, PLUGIN-PROTOCOLS §6c).
+   */
+  readonly #bags = new Map<string, Set<() => void>>();
+  /**
+   * Which activation of each plugin is live. A resource that arrives for an older one —
+   * a `documents.subscribe` that resolves after the plugin was stopped — is released at
+   * once instead of outliving its owner.
+   */
+  readonly #live = new Map<string, number>();
+  #generation = 0;
+
+  /** The per-plugin `@kernel`. Built once per activation, just before `activate`. */
   forPlugin(manifest: PluginManifest): Kernel {
     const pluginId = manifest.id;
     this.services.declare(pluginId, Object.keys(manifest.dependencies ?? {}));
+    const generation = ++this.#generation;
+    this.#live.set(pluginId, generation);
+    const track = (dispose: () => void): (() => void) => this.#track(pluginId, generation, dispose);
+    const events = this.events.forPlugin(pluginId);
+    const settings = this.settings.api(pluginId);
+    const session = this.session.api(pluginId);
+    const sync = this.sync.api();
+    const documents = this.documents.forPlugin(pluginId);
     return {
       info: this.info,
       pluginId,
       manifest,
-      documents: this.documents.forPlugin(pluginId),
+      documents: {
+        ...documents,
+        splice: documents.splice,
+        subscribe: async (query) => {
+          const subscription = await documents.subscribe(query);
+          const close = track(() => subscription.close());
+          return {
+            get result() {
+              return subscription.result;
+            },
+            onChange: (listener) => track(subscription.onChange(listener)),
+            close,
+          };
+        },
+        open: async (id) => {
+          const open = await documents.open(id);
+          const release = track(() => open.release());
+          return new Proxy(open, {
+            get(target, key) {
+              if (key === "release") return release;
+              if (key === "onAwareness") {
+                return (listener: (payload: Uint8Array) => void) => track(target.onAwareness(listener));
+              }
+              return Reflect.get(target, key, target);
+            },
+          });
+        },
+      },
       extensions: this.extensions.forPlugin(pluginId, manifest),
       services: this.services.forPlugin(pluginId, manifest),
       ports: this.ports.forPlugin(manifest),
-      events: this.events.forPlugin(pluginId),
-      settings: this.settings.api(pluginId),
-      session: this.session.api(pluginId),
-      sync: this.sync.api(),
-      ui: this.#ui(pluginId),
+      events: {
+        ...events,
+        on: (type, listener) => track(events.on(type, listener)),
+        once: (type, listener) => track(events.once(type, listener)),
+        onAny: (listener) => track(events.onAny(listener)),
+      },
+      settings: new Proxy(settings, {
+        get(target, key) {
+          if (key === "subscribe") {
+            return (listener: Parameters<typeof settings.subscribe>[0]) => track(target.subscribe(listener));
+          }
+          return Reflect.get(target, key, target);
+        },
+      }),
+      session: new Proxy(session, {
+        get(target, key) {
+          if (key === "onAuthRequired") return (listener: () => void) => track(target.onAuthRequired(listener));
+          return Reflect.get(target, key, target);
+        },
+      }),
+      sync: new Proxy(sync, {
+        get(target, key) {
+          if (key === "subscribe") {
+            return (listener: Parameters<typeof sync.subscribe>[0]) => track(target.subscribe(listener));
+          }
+          return Reflect.get(target, key, target);
+        },
+      }),
+      ui: this.#ui(pluginId, track),
       capabilities: this.capabilities,
       core: this.core,
       log: logger(pluginId),
     };
   }
 
-  /** Withdraw everything a plugin registered — failure, or `?safe=bare` teardown. */
+  #track(pluginId: string, generation: number, dispose: () => void): () => void {
+    if (this.#live.get(pluginId) !== generation) {
+      dispose();
+      return () => undefined;
+    }
+    const bag = this.#bags.get(pluginId) ?? new Set<() => void>();
+    this.#bags.set(pluginId, bag);
+    let done = false;
+    const run = (): void => {
+      if (done) return;
+      done = true;
+      bag.delete(run);
+      dispose();
+    };
+    bag.add(run);
+    return run;
+  }
+
+  /** How many kernel resources a plugin still holds: the leak check's number. */
+  held(pluginId: string): number {
+    return this.#bags.get(pluginId)?.size ?? 0;
+  }
+
+  /**
+   * Withdraw everything a plugin registered — failure, unplugging, a restart, or
+   * `?safe=bare` teardown: its slot items, services, event and host listeners, every
+   * subscription and open document, its notices and theme layers, its mount, and its
+   * stylesheet. What it built outside the kernel is its own `deactivate()`'s job.
+   */
   retract(pluginId: string): void {
+    for (const dispose of [...(this.#bags.get(pluginId) ?? [])]) {
+      try {
+        dispose();
+      } catch (error) {
+        console.warn(`[kernel] releasing a resource of "${pluginId}" threw`, error);
+      }
+    }
+    this.#bags.delete(pluginId);
+    this.#live.delete(pluginId);
     this.extensions.removePlugin(pluginId);
     this.services.remove(pluginId);
     this.mount.release(pluginId);
+    if (typeof document !== "undefined") {
+      for (const link of document.querySelectorAll(`link[data-lm-plugin="${CSS.escape(pluginId)}"]`)) link.remove();
+    }
   }
 
-  #ui(pluginId: string): UiApi {
+  #ui(pluginId: string, track: (dispose: () => void) => () => void): UiApi {
     const host = this;
+    const tokens = host.theme.api();
     return {
       root: host.options.root,
       mount: (element: ReactNode) => host.mount.mount(pluginId, element),
@@ -162,16 +275,23 @@ export class KernelHost {
             error,
           }),
         ),
-      notify: (notice: Notice) => host.notices.notify({ ...notice, pluginId }),
+      notify: (notice: Notice) => track(host.notices.notify({ ...notice, pluginId })),
       notices: () => host.notices.list(),
-      onNotices: (listener) => host.notices.subscribe(listener),
-      tokens: host.theme.api(),
+      onNotices: (listener) => track(host.notices.subscribe(listener)),
+      tokens: new Proxy(tokens, {
+        get(target, key) {
+          if (key === "apply") {
+            return (...args: Parameters<typeof tokens.apply>) => track(target.apply(...args));
+          }
+          return Reflect.get(target, key, target);
+        },
+      }),
       get colorScheme() {
         return host.theme.scheme;
       },
       colorSchemePreference: () => host.theme.preference(),
       setColorSchemePreference: (preference) => host.theme.setPreference(preference),
-      onColorScheme: (listener) => host.theme.onScheme(listener),
+      onColorScheme: (listener) => track(host.theme.onScheme(listener)),
     };
   }
 }

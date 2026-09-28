@@ -478,6 +478,19 @@ export class PortsHost {
     for (const protocol of touched) this.#notify(protocol);
   }
 
+  /** How much the store holds, for the leak check (§9 step 6). */
+  stats(): { readonly offers: number; readonly served: number; readonly hostListeners: number; readonly eventListeners: number; readonly legacyPoints: number } {
+    let eventListeners = 0;
+    for (const set of this.#eventListeners.values()) eventListeners += set.size;
+    return {
+      offers: this.#offers.length,
+      served: this.#served.size,
+      hostListeners: this.#listeners.size,
+      eventListeners,
+      legacyPoints: this.#legacy.size,
+    };
+  }
+
   /** Items offered by the kernel itself (a settings section only the shell has). */
   offerAsKernel(protocol: string, value: unknown, order = DEFAULT_ORDER): Disposable {
     const offer = this.#store("kernel", `${IMPLICIT}${protocol.replace(/^lm\//, "")}`, protocol, value, order);

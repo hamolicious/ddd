@@ -28,20 +28,18 @@
  * merge with yet, and no existing block to destroy. Every *later* metadata write in this
  * plugin's neighbourhood goes through `kernel.documents.splice`.
  *
- * INTEGRATION (folders): **where an unfiled new document lands arrives as an event.**
- * `folders` owns the "new notes go here" setting and emits `folders:default-location`
- * with `{ path }` at its own activation and on every change; `createDocument` uses the
- * last value it heard whenever the caller named no `path` of its own. That direction is
- * forced: `folders` *depends on* `doc-list`, so `kernel.services.get("folders")` from
- * here is a `ContractViolationError` by design (SPEC §6.4) and declaring the dependency
- * back would be a cycle the loader cannot order. The event bus needs no dependency in
- * either direction.
+ * **Where an unfiled new document lands arrives on the `location` port**, protocol
+ * `lm/folders.default-location` (PLUGIN-PROTOCOLS §6c). `folders` owns the "new notes go
+ * here" setting and emits `{ path }` at its own activation and on every change;
+ * `createDocument` uses the last value it heard whenever the caller named no `path` of
+ * its own. It is an event because `folders` uses this plugin's service, so the reverse
+ * service would be a cycle; events do not order activation.
  *
- * Two properties this rests on, both stated because `kernel.events` gives neither for
- * free (it is fire-and-forget with no replay, SPEC §6.3):
+ * Two properties this rests on:
  *
- * - **The listener is registered in `activate`**, before any plugin that depends on this
- *   one can have activated. `folders`' announcement therefore cannot precede it.
+ * - **The protocol is sticky**: a listener that starts, or restarts after a wiring
+ *   change, hears the current value at once. (On the untyped event bus it did not, and a
+ *   restarted `doc-list` forgot the folder.)
  * - **Root is the floor.** No `folders`, a `folders` that failed to activate, an empty
  *   setting, or a payload that is not a string: the document is created at the root and
  *   is still created. No plugin's opinion about folders may stop the app's most common
@@ -100,17 +98,15 @@ export default function activate(kernel: Kernel): DocListApi {
    * setting, or the workspace root, which is the value until something says otherwise.
    *
    * See this file's header for why it arrives as an event rather than as a service
-   * call. The listener is registered **here, in `activate`**, and that is the whole of
-   * the ordering contract: `folders` depends on this plugin, so its `activate` — and
-   * the announcement at the end of it — cannot run until this line has.
+   * call. The protocol is sticky, so the order the two plugins start in does not matter.
    *
    * Treated as untrusted input, because an event payload is: anything that is not a
    * non-empty string leaves the value at the root rather than putting `undefined` or a
    * number into a `path:` line.
    */
   let defaultLocation = "";
-  kernel.events.on<{ readonly path?: unknown }>("folders:default-location", (event) => {
-    const path = event.payload?.path;
+  kernel.ports.on<{ readonly path?: unknown }>("location", (payload) => {
+    const path = payload?.path;
     defaultLocation = typeof path === "string" ? path.trim() : "";
   });
 

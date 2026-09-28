@@ -166,6 +166,7 @@ export default function activate(kernel: Kernel): DocumentSurfaceApi {
   });
 
   const surface = new Surface(kernel, modes);
+  liveSurface = surface;
   const router = kernel.services.require<RouterService>("router");
 
   kernel.extensions.contribute(POINTS.route, { path: "/doc/:id", view: "document.surface" });
@@ -543,19 +544,28 @@ class Surface {
     return this.#memory;
   }
 
+  /** Write a pending mode memory now: the plugin is stopping (§6c). */
+  flush(): void {
+    if (this.#memoryTimer === undefined) return;
+    clearTimeout(this.#memoryTimer);
+    this.#writeMemory();
+  }
+
   #scheduleMemoryWrite(): void {
     if (this.#memoryTimer !== undefined) clearTimeout(this.#memoryTimer);
-    this.#memoryTimer = setTimeout(() => {
-      this.#memoryTimer = undefined;
-      const value = serializeModeMemory(this.#memoryMap());
-      // A settings write is a CRDT splice into the per-user settings document; it can
-      // fail (offline, not implemented yet) and a mode tab must not surface that.
-      void Promise.resolve()
-        .then(() => this.kernel.settings.set(SETTING_MODE_MEMORY, [...value]))
-        .catch((error: unknown) =>
-          this.kernel.log.debug("could not persist the document mode", error),
-        );
-    }, MEMORY_WRITE_DELAY_MS);
+    this.#memoryTimer = setTimeout(() => this.#writeMemory(), MEMORY_WRITE_DELAY_MS);
+  }
+
+  #writeMemory(): void {
+    this.#memoryTimer = undefined;
+    const value = serializeModeMemory(this.#memoryMap());
+    // A settings write is a CRDT splice into the per-user settings document; it can
+    // fail (offline, not implemented yet) and a mode tab must not surface that.
+    void Promise.resolve()
+      .then(() => this.kernel.settings.set(SETTING_MODE_MEMORY, [...value]))
+      .catch((error: unknown) =>
+        this.kernel.log.debug("could not persist the document mode", error),
+      );
   }
 }
 
@@ -1016,4 +1026,12 @@ function safeDecode(value: string): string {
 /** `CSS.escape` is not in every webview this ships to; ids are `[A-Za-z0-9_-]`-ish. */
 function cssEscape(value: string): string {
   return value.replace(/[^A-Za-z0-9_-]/g, "\\$&");
+}
+
+/** The surface `activate` built, for its pending write; the kernel withdraws everything else (§6c). */
+let liveSurface: { flush(): void } | undefined;
+
+export function deactivate(): void {
+  liveSurface?.flush();
+  liveSurface = undefined;
 }

@@ -106,7 +106,8 @@ const PENDING_MOVE_TTL_MS = 15_000;
 const SETTINGS_DEBOUNCE_MS = 400;
 
 /** The event other plugins can listen to without depending on this one (see below). */
-export const DEFAULT_LOCATION_EVENT = "folders:default-location";
+/** The provided event port that announces the default location (`lm/folders.default-location`). */
+export const DEFAULT_LOCATION_PORT = "location";
 
 export const SETTINGS_KEYS = {
   defaultLocation: "defaultLocation",
@@ -238,29 +239,16 @@ export default function activate(kernel: Kernel): FoldersApi {
   /**
    * Tell everyone where new notes go.
    *
-   * **INTEGRATION (`doc-list`).** `doc-list` creates documents from four places and is a
-   * *dependency* of this plugin, so it cannot call `kernel.services.get("folders")` —
-   * that would be a cycle, and the registry refuses an undeclared id anyway. The event
-   * bus is the way round it with no dependency in either direction: this fires once at
-   * activation (after `doc-list` has already activated and subscribed) and again on every
-   * change, here or on another device. The consumer is six lines:
-   *
-   * ```ts
-   * let defaultPath = "";
-   * kernel.events.on<{ path: string }>("folders:default-location", (event) => {
-   *   defaultPath = event.payload.path;
-   * });
-   * // in createDocument, when the caller named no path of its own:
-   * const path = options?.path ?? defaultPath;
-   * ```
-   *
-   * "New document here" in the tree still passes its own folder, which wins — an explicit
-   * location always beats a default.
+   * Sent on the `location` port (`lm/folders.default-location`, sticky): once at
+   * activation and again on every change, here or on another device. `doc-list` hears it
+   * whenever it starts, so the two may start in either order. "New document here" in the
+   * tree still passes its own folder, which wins: an explicit location always beats a
+   * default.
    */
   const announceDefaultLocation = (): void => {
     const path = readDefaultLocation();
     announced = path;
-    kernel.events.emit(DEFAULT_LOCATION_EVENT, { path });
+    kernel.ports.emit(DEFAULT_LOCATION_PORT, { path });
     for (const listener of [...defaultLocationListeners]) listener(path);
   };
 
@@ -385,16 +373,23 @@ export default function activate(kernel: Kernel): FoldersApi {
   })();
 
   let collapsedTimer: ReturnType<typeof setTimeout> | undefined;
+  const writeCollapsed = (): void => {
+    collapsedTimer = undefined;
+    void writeSetting(SETTINGS_KEYS.collapsedFolders, [...collapsed] as readonly CoreValue[]).catch(
+      (cause: unknown) => kernel.log.warn("could not store the collapsed folders", cause),
+    );
+  };
   const setCollapsed = (next: ReadonlySet<string>): void => {
     collapsed = next;
     publish();
     if (collapsedTimer !== undefined) clearTimeout(collapsedTimer);
-    collapsedTimer = setTimeout(() => {
-      collapsedTimer = undefined;
-      void writeSetting(SETTINGS_KEYS.collapsedFolders, [...collapsed] as readonly CoreValue[]).catch(
-        (cause: unknown) => kernel.log.warn("could not store the collapsed folders", cause),
-      );
-    }, SETTINGS_DEBOUNCE_MS);
+    collapsedTimer = setTimeout(writeCollapsed, SETTINGS_DEBOUNCE_MS);
+  };
+  // Unplugged or restarted mid-debounce: the write happens now rather than never (§6c).
+  flushOnStop = () => {
+    if (collapsedTimer === undefined) return;
+    clearTimeout(collapsedTimer);
+    writeCollapsed();
   };
 
   const setFolderOrder = async (next: readonly string[]): Promise<void> => {
@@ -978,4 +973,12 @@ export default function activate(kernel: Kernel): FoldersApi {
   announceDefaultLocation();
 
   return api;
+}
+
+/** A pending settings write `activate` started; the kernel withdraws everything else (§6c). */
+let flushOnStop: (() => void) | undefined;
+
+export function deactivate(): void {
+  flushOnStop?.();
+  flushOnStop = undefined;
 }

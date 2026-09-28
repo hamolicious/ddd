@@ -73,7 +73,16 @@ export class ShellState {
     };
     this.#layout = { compact, sidebarOpen: !compact, hasSidebar: false, altbarOpen, hasAltbar: false };
     this.#panels = readPanels();
-    media?.addEventListener("change", () => this.#onBreakpoint());
+    media?.addEventListener("change", this.#onChange);
+  }
+
+  readonly #onChange = (): void => this.#onBreakpoint();
+
+  /** Stop listening to the breakpoint: the plugin is being unplugged or restarted. */
+  dispose(): void {
+    this.#media?.removeEventListener("change", this.#onChange);
+    this.#listeners.clear();
+    this.#layoutListeners.clear();
   }
 
   snapshot = (): ShellSnapshot => this.#snapshot;

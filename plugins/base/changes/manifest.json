@@ -9,6 +9,7 @@
     "prefix": "chg"
   },
   "kernel": "^1.0",
+  "hot": true,
   "consumes": {
     "menu": {
       "protocol": "lm/context-menu@^1.0",

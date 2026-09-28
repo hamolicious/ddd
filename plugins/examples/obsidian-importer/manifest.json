@@ -2,6 +2,7 @@
   "id": "obsidian-importer",
   "version": "1.4.2",
   "kernel": "^1.0",
+  "hot": true,
   "dependencies": {
     "attachments": "^1.1.0",
     "commands": "^1.0"

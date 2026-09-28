@@ -7,6 +7,7 @@
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
   "kernel": "^1.0",
+  "hot": true,
   "consumes": {
     "header": {
       "protocol": "lm/shell.header@^1.0",
