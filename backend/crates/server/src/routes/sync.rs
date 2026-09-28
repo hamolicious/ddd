@@ -881,6 +881,52 @@ pub fn publish_plugin_event(
     queued
 }
 
+/// Tell every connected session the wiring moved to `version` (PLUGIN-PROTOCOLS §6c).
+///
+/// ```json
+/// { "t": "wiring.applied", "version": 14, "action": "apply", "at": "2026-09-28T02:30:00Z" }
+/// ```
+///
+/// On the control queue with the same headroom rule as [`publish_plugin_event`], and for the
+/// same reason: a socket that is not keeping up must not be closed over it. Nothing is lost
+/// by a drop — `welcome.wiring_version` carries the live version on every reconnect, and a
+/// client compares it with what it runs. Returns how many sockets it was queued on.
+pub fn publish_wiring_applied(state: &AppState, version: i64, action: &str) -> usize {
+    const WIRING_HEADROOM: usize = CTL_QUEUE_MESSAGES / 2;
+    let frame = serde_json::json!({
+        "t": "wiring.applied",
+        "version": version,
+        "action": action,
+        "at": Timestamp::now().to_rfc3339(),
+    });
+    let json = frame.to_string();
+    let hub = SyncHub::get(state);
+    let targets: Vec<Arc<Outbox>> = {
+        let conns = hub.conns.lock().expect("sync connection registry poisoned");
+        conns
+            .values()
+            .map(|entry| Arc::clone(&entry.outbox))
+            .collect()
+    };
+    let mut queued = 0usize;
+    for outbox in &targets {
+        let accepted = {
+            let mut outbox_state = outbox.lock();
+            if outbox_state.closing.is_some() || outbox_state.ctl.len() >= WIRING_HEADROOM {
+                false
+            } else {
+                outbox_state.ctl.push_back(Message::text(json.clone()));
+                true
+            }
+        };
+        if accepted {
+            outbox.wake.notify_one();
+            queued += 1;
+        }
+    }
+    queued
+}
+
 /// How many sockets currently subscribe to `id`.
 ///
 /// Used by the snapshot-restore route to warn that other users are editing the
@@ -1390,6 +1436,9 @@ fn welcome(state: &AppState, user: &AuthUser) -> serde_json::Value {
             "heartbeat_secs": HEARTBEAT_SECS,
         },
         "core_semantics_version": life_manager_core::CORE_SEMANTICS_VERSION,
+        // PLUGIN-PROTOCOLS §6c: a client that was offline while the wiring changed compares
+        // this with the version it runs, exactly as if `wiring.applied` had reached it.
+        "wiring_version": crate::wiring::current(state).version,
     })
 }
 

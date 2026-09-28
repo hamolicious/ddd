@@ -55,6 +55,7 @@ function makeClient(
     persistence?: MemoryDocPersistence;
     autoReconnect?: boolean;
     authProbe?: () => Promise<"ok" | "unauthenticated" | "unreachable">;
+    onWiringVersion?: (version: number) => void;
   } = {},
 ): Harness {
   MockSocket.reset();
@@ -72,6 +73,7 @@ function makeClient(
     hydrator: { syncTimeoutMs: 100, persistDebounceMs: 0, persistence: options.persistence },
     autoReconnect: options.autoReconnect ?? true,
     ...(options.authProbe ? { authProbe: options.authProbe } : {}),
+    ...(options.onWiringVersion ? { onWiringVersion: options.onWiringVersion } : {}),
     onState: (state) => states.push(state),
     setTimeoutImpl: (run, delay) => {
       scheduled.push({ delay, run });
@@ -140,6 +142,22 @@ describe("handshake", () => {
     // 4409 is terminal: only a reload (or an explicit reconnect) restarts it.
     expect(harness.scheduled).toHaveLength(0);
     expect(harness.client.status).toBe("error");
+  });
+
+  it("reports the wiring version from welcome and from wiring.applied", async () => {
+    const versions: number[] = [];
+    const harness = makeClient({ onWiringVersion: (version) => versions.push(version) });
+    const starting = harness.client.start();
+    const socket = MockSocket.last;
+    socket.open();
+    await starting;
+    socket.deliver(welcome({ wiring_version: 4 }));
+    await settle();
+    socket.deliver({ t: "wiring.applied", version: 5, action: "apply", at: "2026-09-28T02:30:00Z" });
+    await settle();
+
+    expect(versions).toEqual([4, 5]);
+    expect(socket.closedWith).toBeUndefined();
   });
 
   it("ignores control messages of unknown type (forward compatibility)", async () => {

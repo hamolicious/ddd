@@ -922,7 +922,12 @@ async fn disable_plugins_is_the_server_side_half_of_safe_mode() {
     response.expect_status(StatusCode::OK);
     assert_eq!(
         response.json(),
-        json!({ "plugins": [], "problems": [], "disabled": true }),
+        json!({
+            "plugins": [],
+            "problems": [],
+            "disabled": true,
+            "wiring": { "version": 0, "unplugged": [], "bind": {}, "cut": [], "add": [], "order": {} },
+        }),
         "DISABLE_PLUGINS must say *why* the app is bare (SPEC §6.1)"
     );
 

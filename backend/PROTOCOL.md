@@ -134,7 +134,8 @@ receives any other first frame must close with **4400**.
     "inbound_bytes_per_sec": 2097152,
     "heartbeat_secs": 25
   },
-  "core_semantics_version": 1
+  "core_semantics_version": 1,
+  "wiring_version": 13
 }
 ```
 
@@ -142,6 +143,10 @@ receives any other first frame must close with **4400**.
   client whose Wasm core reports a different value must **not** trust its local
   materialization of `content` → `fm`/`title`; it keeps working read-only from the
   server-materialized projection rows and surfaces "reload to update".
+- `wiring_version` is the live plugin wiring version (PLUGIN-PROTOCOLS §6c). A client
+  compares it with the version its activated plugin set was resolved from, exactly as if
+  a `wiring.applied` had reached it, so a client that was offline during a change
+  catches up on reconnect.
 - `floor_seq` is the oldest sequence number the feed can still serve. In M2 it is
   always `0`: the feed is never truncated (§2.2). It exists so ACL filtering (v2)
   and any future compaction have a way to say "resume is impossible, bootstrap".
@@ -680,7 +685,17 @@ Client → server (binary): `SYNC_STEP1`, `SYNC_STEP2`, `UPDATE`, `AWARENESS`,
 `AWARENESS_QUERY`.
 
 Server → client (JSON): `welcome`, `feed.batch`, `feed.reset`, `feed.resync`,
-`doc.subscribed`, `doc.error`, `doc.resync`, `pong`, `error`.
+`doc.subscribed`, `doc.error`, `doc.resync`, `pong`, `error`, `wiring.applied`.
+
+`wiring.applied` goes to every connected session whenever the plugin wiring gets a new
+version (an Apply in the wiring editor, a rollback, or any install, upgrade, uninstall,
+approval, enable, disable or circuit-breaker trip). It is best-effort, like
+`plugin.event`: a socket that is not keeping up drops it, and `welcome.wiring_version`
+recovers it on the next connect.
+
+```json
+{ "t": "wiring.applied", "version": 14, "action": "apply", "at": "2026-09-28T02:30:00Z" }
+```
 Server → client (binary): `SYNC_STEP1`, `SYNC_STEP2`, `UPDATE`, `AWARENESS`.
 
 Generic fatal/non-fatal server notice, for anything that is not document- or

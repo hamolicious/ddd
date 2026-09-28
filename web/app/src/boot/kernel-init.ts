@@ -48,6 +48,8 @@ export interface KernelInitOptions {
   /** Sign-out: warn on unsynced edits, clear local data, reload (SPEC §5.3). */
   readonly logout: (options: LogoutOptions) => Promise<void>;
   readonly onPluginProblem?: (problem: PluginProblem) => void;
+  /** The server's live wiring version, from `welcome` and `wiring.applied`. */
+  readonly onWiringVersion?: (version: number) => void;
   /** Reported once, so the boot screen can say "filters are disabled". */
   readonly onCoreUnavailable?: (error: Error) => void;
 }
@@ -165,6 +167,7 @@ export async function initKernel(options: KernelInitOptions): Promise<KernelRunt
       }
     },
     onConnected: () => void host.documents.afterConnect(),
+    ...(options.onWiringVersion ? { onWiringVersion: options.onWiringVersion } : {}),
     onState: (state) => {
       host.sync.update(state);
       // 4401 is "re-authenticate", and nothing else — local data is untouched

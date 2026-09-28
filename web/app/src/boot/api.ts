@@ -16,7 +16,7 @@
  * here went to a 404 in the shell until this was a function.
  */
 
-import type { InstalledPlugin, SessionUser } from "@kernel";
+import type { InstalledPlugin, LiveWiring, SessionUser } from "@kernel";
 
 import { apiBase } from "./shell.js";
 
@@ -209,9 +209,15 @@ export async function me(token?: string): Promise<SessionUser | undefined> {
 export const logoutRequest = (token?: string): Promise<void> =>
   call<void>("/auth/logout", { method: "POST" }, token);
 
+/** What `GET /api/plugins` answers. `wiring` is absent on servers from before wiring. */
+export interface PluginList {
+  readonly plugins: readonly InstalledPlugin[];
+  readonly wiring?: LiveWiring;
+}
+
 /**
- * The installed frontend plugins, in no particular order — the loader sorts them
- * (`GET /api/plugins`, authenticated; see `backend/CONTRACTS.md` area server-static).
+ * The installed frontend plugins, in no particular order — the loader sorts them — and
+ * the live wiring (`GET /api/plugins`, authenticated; see `backend/CONTRACTS.md` area
+ * server-static).
  */
-export const installedPlugins = (token?: string): Promise<{ plugins: readonly InstalledPlugin[] }> =>
-  call<{ plugins: readonly InstalledPlugin[] }>("/plugins", {}, token);
+export const installedPlugins = (token?: string): Promise<PluginList> => call<PluginList>("/plugins", {}, token);

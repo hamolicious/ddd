@@ -34,6 +34,7 @@ pub mod plugins;
 pub mod routes;
 pub mod state;
 pub mod telemetry;
+pub mod wiring;
 
 /// Crate version, reported by `/readyz`.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

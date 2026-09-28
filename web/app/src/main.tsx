@@ -54,6 +54,7 @@ import { OfflineError, installedPlugins, inviteTokenFromHash, logoutRequest, me,
 import {
   cachedPlugins,
   cachedSession,
+  cachedWiring,
   forgetBootCache,
   forgetSession,
   rememberPlugins,
@@ -72,6 +73,7 @@ import {
   shellToken,
   type ShellUpdateReady,
 } from "./boot/shell.js";
+import { ReloadPrompt, WiringWatch } from "./boot/reload-prompt.js";
 import { registerServiceWorker } from "./boot/update.js";
 import { trackViewportHeight } from "./boot/viewport.js";
 import { installDevImportMap, missingSpecifiers, pageImportMap } from "./loader/importmap.js";
@@ -139,17 +141,11 @@ async function boot(): Promise<void> {
   // installed there would fight the bundle updater for control of what the webview sees —
   // two caches, two update stories, one of them invisible to the revert path. Registration
   // would also just 404, since the local server serves only manifest-listed paths.
-  let applyUpdate: (() => void) | undefined;
+  //
+  // The prompt is the one shared with wiring changes (`reload-prompt.ts`): a user is asked
+  // to reload once, whatever the reasons.
   if (!inShell()) {
-    registerServiceWorker((apply) => {
-      applyUpdate = apply;
-      runtime?.host.notices.notify({
-        id: "kernel:update-available",
-        level: "info",
-        message: "An update is available.",
-        actions: [{ label: "Reload", run: () => apply() }],
-      });
-    });
+    registerServiceWorker((apply) => reloadPrompt.offerUpdate(apply));
   }
 
   // The shell's half of the same story. A staged bundle is never applied to a running
@@ -249,6 +245,7 @@ async function boot(): Promise<void> {
         bootMode: bootModeFor(safeMode),
         logout: (options) => signOut(runtime, bearer, options),
         onPluginProblem: (problem) => reportPluginProblem(problem),
+        onWiringVersion: (version) => wiringWatch.seen(version),
         onCoreUnavailable: (error) => console.warn("[wasm] core unavailable", error.message),
       });
       const host = runtime.host;
@@ -256,16 +253,8 @@ async function boot(): Promise<void> {
       // A problem reported while the kernel was still being built has no notice yet.
       notifyPluginProblems(host);
 
-      // An update that arrived before the kernel existed has no notice yet.
-      if (applyUpdate) {
-        const apply = applyUpdate;
-        host.notices.notify({
-          id: "kernel:update-available",
-          level: "info",
-          message: "An update is available.",
-          actions: [{ label: "Reload", run: () => apply() }],
-        });
-      }
+      // An update that arrived before the kernel existed has no notice yet; this shows it.
+      reloadPrompt.attach((notice) => host.notices.notify(notice));
       if (shellUpdate) notifyShellUpdate(host, shellUpdate);
 
       // Shell-only, and nothing is contributed in a browser: which bridge this device
@@ -326,6 +315,15 @@ function notifyShellUpdate(host: KernelHost, info: ShellUpdateReady): void {
 }
 
 let runtime: KernelRuntime | undefined;
+
+/** The one reload prompt, shared by the service-worker update and wiring changes. */
+const reloadPrompt = new ReloadPrompt();
+
+/**
+ * The wiring version this page runs against the server's. Behind means a reload until
+ * clients can rewire in place (PLUGIN-PROTOCOLS §6c).
+ */
+const wiringWatch = new WiringWatch(() => reloadPrompt.askForWiring());
 
 /**
  * Every plugin problem the kernel detects — a contribution rejected by shape or key
@@ -422,7 +420,8 @@ async function activatePlugins(
     });
   }
 
-  const plugins = await installedSet(host, bearer, offlineBoot);
+  const { plugins, wiringVersion } = await installedSet(host, bearer, offlineBoot);
+  wiringWatch.setRunning(wiringVersion);
   const report = await loadPlugins({
     host,
     plugins,
@@ -454,17 +453,17 @@ async function installedSet(
   host: KernelHost,
   bearer: string | undefined,
   offlineBoot: boolean,
-): Promise<readonly InstalledPlugin[]> {
+): Promise<{ readonly plugins: readonly InstalledPlugin[]; readonly wiringVersion: number }> {
   try {
-    const { plugins } = await installedPlugins(bearer);
-    rememberPlugins(plugins);
-    return plugins;
+    const { plugins, wiring } = await installedPlugins(bearer);
+    rememberPlugins(plugins, wiring);
+    return { plugins, wiringVersion: wiring?.version ?? 0 };
   } catch (error) {
     if (!(error instanceof OfflineError)) throw error;
     const remembered = cachedPlugins();
     if (remembered) {
       console.info(`[loader] offline: activating the ${remembered.length} plugins last seen here`);
-      return remembered;
+      return { plugins: remembered, wiringVersion: cachedWiring()?.version ?? 0 };
     }
     host.notices.notify({
       id: "kernel:plugins-unavailable",
@@ -476,7 +475,7 @@ async function installedSet(
         "Your documents are here, but the interface could not load. Reconnect and reload once.",
       actions: [{ label: "Reload", run: () => location.reload() }],
     });
-    return [];
+    return { plugins: [], wiringVersion: 0 };
   }
 }
 

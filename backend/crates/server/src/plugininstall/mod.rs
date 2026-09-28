@@ -491,6 +491,20 @@ async fn stage_and_record(
     } else {
         refresh_registry(state).await;
     }
+    // One wiring version for the whole install, auto-approval included (PLUGIN-PROTOCOLS
+    // §6: every change is a version).
+    crate::wiring::mirror_plugin_states(
+        state,
+        if replaced.is_some() {
+            "upgrade"
+        } else {
+            "install"
+        },
+        &request.actor,
+        &id,
+        false,
+    )
+    .await;
 
     Ok(InstallOutcome {
         id,
@@ -516,10 +530,12 @@ pub async fn approve(
     capabilities: PluginCapabilities,
     actor: &Actor,
 ) -> Result<PluginRecord, InstallError> {
-    queue::queued(state, &format!("approve {id} {version}"), async || {
+    let record = queue::queued(state, &format!("approve {id} {version}"), async || {
         approve_locked(state, id, version, capabilities, actor).await
     })
-    .await
+    .await?;
+    crate::wiring::mirror_plugin_states(state, "approve", actor, id, false).await;
+    Ok(record)
 }
 
 async fn approve_locked(
@@ -712,6 +728,13 @@ pub async fn disable(
         .await;
     info!(plugin = %id, reason = %reason, "plugin disabled");
     refresh_registry(state).await;
+    // The circuit breaker disables as the system; an admin's switch is a person.
+    let action = if matches!(actor, Actor::System) {
+        "breaker"
+    } else {
+        "disable"
+    };
+    crate::wiring::mirror_plugin_states(state, action, actor, id, false).await;
     Ok(())
 }
 
@@ -748,6 +771,7 @@ pub async fn enable(state: &AppState, id: &str, actor: &Actor) -> Result<(), Ins
         host.reset_breaker(id);
     }
     let _ = activate(state, record).await;
+    crate::wiring::mirror_plugin_states(state, "enable", actor, id, false).await;
     Ok(())
 }
 
@@ -803,6 +827,8 @@ pub async fn uninstall(
             )
             .await;
         info!(plugin = %id, purge, "plugin uninstalled");
+        // Uninstall also forgets the plugin's pins, cut and added wires and seats.
+        crate::wiring::mirror_plugin_states(state, "uninstall", &actor, id, true).await;
 
         if purge {
             let kv = state

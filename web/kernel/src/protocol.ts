@@ -218,6 +218,22 @@ export interface Welcome {
   readonly feed: FeedPosition;
   readonly limits: ConnectionLimits;
   readonly core_semantics_version: number;
+  /**
+   * The live wiring version (PLUGIN-PROTOCOLS §6c). A client that was offline while the
+   * wiring changed compares it with the version it runs. Absent on older servers.
+   */
+  readonly wiring_version?: number;
+}
+
+/**
+ * The plugin wiring moved to `version` (PLUGIN-PROTOCOLS §6c). Sent to every connected
+ * session; a dropped one is recovered from `welcome.wiring_version` on reconnect.
+ */
+export interface WiringApplied {
+  readonly t: "wiring.applied";
+  readonly version: number;
+  readonly action: string;
+  readonly at: Iso8601;
 }
 
 export interface FeedBatch {
@@ -306,7 +322,8 @@ export type ServerControl =
   | DocError
   | DocResync
   | Pong
-  | ServerNotice;
+  | ServerNotice
+  | WiringApplied;
 
 // ---------------------------------------------------------------------------
 // Client → server control messages
@@ -389,6 +406,7 @@ const SERVER_CONTROL_TYPES = new Set<string>([
   "doc.resync",
   "pong",
   "error",
+  "wiring.applied",
 ]);
 
 /** `true` when `value` is a control message this client version understands. */

@@ -119,6 +119,9 @@ pub struct InstalledResponse {
     pub problems: Vec<plugins::PluginProblem>,
     /// `true` when `DISABLE_PLUGINS=1` (SPEC §6.1). The client shows why it is bare.
     pub disabled: bool,
+    /// The live wiring (PLUGIN-PROTOCOLS §6): its version is what a client compares
+    /// `wiring.applied` and `welcome.wiring_version` against.
+    pub wiring: crate::wiring::LiveWiring,
 }
 
 /// Authenticated: the plugin list names what is installed in this workspace, which is
@@ -138,6 +141,7 @@ pub async fn installed(
             Vec::new()
         },
         disabled: state.config.disable_plugins,
+        wiring: crate::wiring::load(&state).await,
     }))
 }
 

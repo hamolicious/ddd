@@ -185,6 +185,8 @@ export {
   type ProvidedPort,
 } from "./manifest.js";
 
+export { EMPTY_WIRING, WIRE_ARROW, type LiveWiring, type WiringOverrides } from "./wiring.js";
+
 export type {
   ActivateFn,
   BootMode,

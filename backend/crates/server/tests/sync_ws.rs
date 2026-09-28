@@ -576,7 +576,10 @@ async fn bootstrap_pages_the_projection_and_pins_safe_seq() {
     let header = &lines[0];
     assert_eq!(header["protocol"], 1);
     assert_eq!(header["total"], 5);
-    assert_eq!(header["core_semantics_version"], 1);
+    assert_eq!(
+        header["core_semantics_version"],
+        life_manager_core::CORE_SEMANTICS_VERSION
+    );
     let pinned_safe_seq = header["safe_seq"].as_i64().unwrap();
     assert!(pinned_safe_seq >= 5, "safe_seq should cover five creates");
 
@@ -755,7 +758,11 @@ async fn welcome_is_the_first_frame_and_announces_the_limits() {
     assert_eq!(welcome["limits"]["max_frame_bytes"], 4 * 1024 * 1024);
     assert_eq!(welcome["limits"]["max_subscriptions"], 32);
     assert_eq!(welcome["limits"]["heartbeat_secs"], 25);
-    assert_eq!(welcome["core_semantics_version"], 1);
+    assert_eq!(
+        welcome["core_semantics_version"],
+        life_manager_core::CORE_SEMANTICS_VERSION
+    );
+    assert_eq!(welcome["wiring_version"], 0);
     assert_no_extended_json(&welcome.to_string());
 
     // The app-level heartbeat answers with the echoed timestamp.

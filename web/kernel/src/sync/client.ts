@@ -59,6 +59,11 @@ export interface SyncClientOptions {
    * offline (queued creates and trashes, then unsent edits in notes that are closed).
    */
   readonly onConnected?: () => void;
+  /**
+   * The server's live wiring version: from every `welcome` (so a client that was offline
+   * catches up) and from every `wiring.applied` (PLUGIN-PROTOCOLS §6c).
+   */
+  readonly onWiringVersion?: (version: number) => void;
   /** Injectable clock for tests: schedules the reconnect attempt. */
   readonly setTimeoutImpl?: (callback: () => void, ms: number) => unknown;
 }
@@ -241,8 +246,12 @@ export class SyncClient {
         this.docs.resubscribeAll();
         await this.feed.start(message);
         this.options.onConnected?.();
+        if (typeof message.wiring_version === "number") this.options.onWiringVersion?.(message.wiring_version);
         return;
       }
+      case "wiring.applied":
+        this.options.onWiringVersion?.(message.version);
+        return;
       case "feed.batch":
         await this.feed.onBatch(message);
         return;
