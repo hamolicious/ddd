@@ -1,0 +1,240 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://life-manager.dev/schema/manifest.schema.json",
+  "title": "PluginManifest",
+  "description": "A plugin's manifest.json (SPEC §6.2). The one source for the Rust and TypeScript manifest types and validators: `node web/scripts/gen-manifest.mjs` writes both, and `--check` fails when either is stale.",
+  "x-kernel-version": "1.1.0",
+  "x-rust-name": "PluginManifest",
+  "x-rust-derive": ["Debug", "Clone", "Default", "PartialEq", "Serialize", "Deserialize"],
+  "x-rust-extra": true,
+  "type": "object",
+  "required": ["id", "version", "kernel"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "plugin-id",
+      "description": "`^[a-z0-9][a-z0-9-]{0,63}$`, also the URL segment under `/plugins/`."
+    },
+    "version": {
+      "type": "string",
+      "format": "semver",
+      "description": "`1.2.3` with an optional prerelease/build tail."
+    },
+    "kernel": {
+      "type": "string",
+      "format": "semver-range",
+      "description": "Semver range against the `@kernel` contract version."
+    },
+    "dependencies": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "format": "semver-range" },
+      "description": "Plugin id → semver range. Resolved server-side at install. Legacy: `consumes` replaces it."
+    },
+    "peerLibraries": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "format": "semver-range" },
+      "description": "Blessed runtime-layer libraries and their ranges (SPEC §6.4)."
+    },
+    "frontend": {
+      "$ref": "#/$defs/PluginFrontend",
+      "description": "The frontend half."
+    },
+    "capabilities": {
+      "$ref": "#/$defs/PluginCapabilities",
+      "x-rust-default": true,
+      "x-rust-skip-if": "PluginCapabilities::is_empty",
+      "description": "The capability set a manifest requests (SPEC §6.2)."
+    },
+    "config": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/PluginConfigField" },
+      "description": "The admin-config schema (SPEC §6.2). Values live in `plugin_config`; this is only their declaration."
+    },
+    "backend": {
+      "$ref": "#/$defs/PluginBackend",
+      "description": "The backend half: module, hooks, cron, routes, event subscriptions."
+    },
+    "provides": {
+      "type": "object",
+      "propertyNames": { "format": "port-name" },
+      "additionalProperties": { "$ref": "#/$defs/ProvidedPort" },
+      "description": "Port name → the protocol this plugin provides there, at the exact version it implements (PLUGIN-PROTOCOLS §4)."
+    },
+    "consumes": {
+      "type": "object",
+      "propertyNames": { "format": "port-name" },
+      "additionalProperties": { "$ref": "#/$defs/ConsumedPort" },
+      "description": "Port name → the protocol this plugin consumes there, as a semver range (PLUGIN-PROTOCOLS §4)."
+    },
+    "hot": {
+      "type": "boolean",
+      "description": "A promise that the kernel's retraction plus this plugin's own `deactivate()` leave nothing behind, so wiring changes that touch it apply without a reload (PLUGIN-PROTOCOLS §6c)."
+    },
+    "name": { "type": "string", "description": "Human metadata; never load-bearing." },
+    "description": { "type": "string", "description": "Human metadata; never load-bearing." },
+    "author": { "type": "string", "description": "Human metadata; never load-bearing." },
+    "license": { "type": "string", "description": "Human metadata; never load-bearing." }
+  },
+  "$defs": {
+    "PluginFrontend": {
+      "type": "object",
+      "x-rust-derive": ["Debug", "Clone", "PartialEq", "Eq", "Serialize", "Deserialize"],
+      "required": ["module"],
+      "properties": {
+        "module": {
+          "type": "string",
+          "format": "relative-path",
+          "description": "Path inside the package, e.g. `frontend/index.mjs`."
+        },
+        "style": {
+          "type": "string",
+          "format": "relative-path",
+          "description": "Linked on activation (SPEC §6.4)."
+        }
+      }
+    },
+    "PluginCapabilities": {
+      "type": "object",
+      "x-rust-derive": ["Debug", "Clone", "Default", "PartialEq", "Eq", "Serialize", "Deserialize"],
+      "properties": {
+        "documents": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["read", "write"] },
+          "description": "Gates the server-side document host functions (SPEC §6.2). Unknown strings are refused rather than read as \"no access\"."
+        },
+        "http": {
+          "$ref": "#/$defs/HttpCapability",
+          "description": "Outbound HTTP, per declared hosts. No wildcards."
+        },
+        "notifications": {
+          "type": "boolean",
+          "description": "Native-bridge notifications (frontend-side, SPEC §7)."
+        },
+        "public-routes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Unauthenticated routes under `/api/plugins/<id>`, shown at install. Each must also appear in `backend.routes`."
+        }
+      }
+    },
+    "HttpCapability": {
+      "type": "object",
+      "x-rust-derive": ["Debug", "Clone", "Default", "PartialEq", "Eq", "Serialize", "Deserialize"],
+      "properties": {
+        "hosts": {
+          "type": "array",
+          "items": { "type": "string" },
+          "x-rust-always": true,
+          "description": "Bare host names, matched exactly."
+        }
+      }
+    },
+    "PluginConfigField": {
+      "type": "object",
+      "x-rust-name": "ConfigField",
+      "x-rust-derive": ["Debug", "Clone", "PartialEq", "Eq", "Serialize", "Deserialize"],
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["string", "number", "boolean", "select"],
+          "x-rust-field": "kind",
+          "x-rust-type": "String",
+          "description": "`string` | `number` | `boolean` | `select`."
+        },
+        "secret": {
+          "type": "boolean",
+          "description": "Write-only in the admin UI, encrypted at rest (SPEC §6.2)."
+        },
+        "label": { "type": "string" },
+        "description": { "type": "string" },
+        "default": {
+          "description": "Shown as the field's placeholder and used when nothing is set. Never applied to a secret."
+        },
+        "required": { "type": "boolean" },
+        "options": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "For `select`."
+        }
+      }
+    },
+    "PluginBackend": {
+      "type": "object",
+      "x-rust-derive": ["Debug", "Clone", "Default", "PartialEq", "Eq", "Serialize", "Deserialize"],
+      "required": ["module"],
+      "properties": {
+        "module": {
+          "type": "string",
+          "format": "relative-path",
+          "description": "Path inside the package, conventionally `backend.wasm`. The only file outside `frontend/**` the installer extracts."
+        },
+        "hooks": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["document.created", "document.changed", "document.deleted"] },
+          "description": "Document hooks (SPEC §6.3)."
+        },
+        "cron": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Five-field UTC cron expressions (SPEC §6.3)."
+        },
+        "routes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "`\"POST /webhook\"`: method and path, space separated."
+        },
+        "events": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Server-bus events delivered to `lm_event`, namespaced (`other-plugin:something`)."
+        }
+      }
+    },
+    "ProvidedPort": {
+      "type": "object",
+      "x-rust-derive": ["Debug", "Clone", "PartialEq", "Serialize", "Deserialize"],
+      "required": ["protocol"],
+      "properties": {
+        "protocol": {
+          "type": "string",
+          "format": "protocol-exact",
+          "description": "`<publisher>/<name>@<version>`: the exact version this port implements, in full."
+        },
+        "order": {
+          "type": "number",
+          "description": "Default-seat hint for slot ports: seats follow it, then plugin id, until someone edits the wiring. Wiring order always wins."
+        },
+        "description": { "type": "string" }
+      }
+    },
+    "ConsumedPort": {
+      "type": "object",
+      "x-rust-derive": ["Debug", "Clone", "PartialEq", "Eq", "Serialize", "Deserialize"],
+      "required": ["protocol"],
+      "properties": {
+        "protocol": {
+          "type": "string",
+          "format": "protocol-range",
+          "description": "`<publisher>/<name>@<range>`, e.g. `lm/router@^1.0`."
+        },
+        "needs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "x-rust-option": true,
+          "description": "The protocol's keys this port uses. The type check asks only for these, and a service handle refuses any other key."
+        },
+        "optional": {
+          "type": "boolean",
+          "description": "A service port that may stay unbound: the plugin still activates and `use()` returns `undefined`."
+        },
+        "seats": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "A slot host that shows exactly one contributor sets `1`."
+        },
+        "description": { "type": "string" }
+      }
+    }
+  }
+}

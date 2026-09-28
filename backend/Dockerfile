@@ -63,6 +63,9 @@ RUN mkdir -p crates/core/src crates/plugin-abi/src crates/server/src \
 
 # 2. Real sources.
 COPY backend/crates ./crates
+# The manifest schema (PLUGIN-PROTOCOLS §9 step 1) is compiled in with `include_str!`,
+# four levels up from `crates/server/src/` — which, under `WORKDIR /build`, is `/schema`.
+COPY schema /schema
 # Touch so cargo notices the real sources are newer than the dummy build.
 RUN find crates -name '*.rs' -exec touch {} + \
     && cargo build --release --locked --bin life-manager \

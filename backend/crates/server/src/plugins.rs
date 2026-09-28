@@ -72,13 +72,17 @@ pub const BASE_PLUGIN_IDS: &[&str] = &[
 /// range is checked against at install (SPEC §6.4: "one `kernel` semver covers both the
 /// `@kernel` surface and the Wasm host ABI. … Server enforces at install").
 ///
-/// **This must equal `KERNEL_API_VERSION` in `web/kernel-api/src/index.ts`.** There is no
-/// build step that can check it: the number lives in a TypeScript file the Rust build never
-/// reads, and the loader independently re-checks each plugin against its *own* bundle
-/// version (SPEC §6.4), so a drift here does not corrupt anything — it makes the server and
-/// the client disagree about which plugins are installable. Changing one without the other
-/// is the bug.
-pub const KERNEL_VERSION: &str = "1.1.0";
+/// Generated, like `KERNEL_API_VERSION` in `web/kernel-api/src/index.ts`, from the one
+/// `x-kernel-version` line in `schema/manifest.schema.json`, so the server and the client
+/// can no longer disagree about which plugins are installable.
+pub const KERNEL_VERSION: &str = crate::manifest_types::KERNEL_VERSION;
+
+/// The manifest's types are generated from `schema/manifest.schema.json`
+/// (`web/scripts/gen-manifest.mjs`); their methods stay here.
+pub use crate::manifest_types::{
+    ConfigField, ConsumedPort, HttpCapability, PluginBackend, PluginCapabilities, PluginFrontend,
+    PluginManifest, ProvidedPort,
+};
 
 /// Hook names a manifest's `backend.hooks` may contain (SPEC §6.3).
 pub const HOOK_NAMES: &[&str] = &["document.created", "document.changed", "document.deleted"];
@@ -168,59 +172,6 @@ fn compare_versions(a: &str, b: &str) -> Ordering {
     triple(a).cmp(&triple(b))
 }
 
-/// The frontend half of a manifest (SPEC §6.2). Unknown fields are kept out of the
-/// way rather than rejected: M4 adds `capabilities` enforcement and `config`, and an
-/// M3 server must not refuse a manifest written for a newer one.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PluginFrontend {
-    pub module: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub style: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PluginManifest {
-    pub id: String,
-    pub version: String,
-    pub kernel: String,
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub dependencies: BTreeMap<String, String>,
-    #[serde(
-        default,
-        rename = "peerLibraries",
-        skip_serializing_if = "BTreeMap::is_empty"
-    )]
-    pub peer_libraries: BTreeMap<String, String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub frontend: Option<PluginFrontend>,
-    /// M4. Typed rather than left in [`PluginManifest::extra`]: the install flow validates
-    /// it, the admin screen renders it, and the host gates on it — three readers is two too
-    /// many for a `serde_json::Value`. Skipped when empty, so an M3 manifest's
-    /// `/api/plugins` representation is byte-identical to what it was.
-    #[serde(default, skip_serializing_if = "PluginCapabilities::is_empty")]
-    pub capabilities: PluginCapabilities,
-    /// M4. The admin-config schema (SPEC §6.2). Values live in `plugin_config`; this is
-    /// only their declaration, and it is safe to serve to any session — a key name is not a
-    /// secret, and the admin UI needs it to draw the form.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub config: BTreeMap<String, ConfigField>,
-    /// M4. The backend half: module, hooks, cron, routes, event subscriptions.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub backend: Option<PluginBackend>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub author: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub license: Option<String>,
-    /// Everything else in the file, passed through untouched (`x-*` keys, and anything a
-    /// newer server understands that this one does not).
-    #[serde(flatten)]
-    pub extra: BTreeMap<String, serde_json::Value>,
-}
-
 impl PluginManifest {
     /// `true` when the package declares a backend half the host should load.
     pub fn has_backend(&self) -> bool {
@@ -243,33 +194,6 @@ impl PluginManifest {
             .map(|(key, _)| key.as_str())
             .collect()
     }
-}
-
-/// The capability set a manifest **requests** (SPEC §6.2), and the shape the approval
-/// record stores as what an admin **granted**.
-///
-/// One type for both, because the approval screen's job is to show the difference and the
-/// diff is only meaningful between like shapes.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PluginCapabilities {
-    /// `["read"]`, `["read", "write"]`, or empty. Unknown strings are refused at install
-    /// rather than ignored — a typo'd `"writes"` must not read as "no write access
-    /// requested".
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub documents: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub http: Option<HttpCapability>,
-    /// Native-bridge notifications (frontend-side, SPEC §7).
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub notifications: bool,
-    /// Route paths served without a session. Each must also appear in
-    /// `backend.routes`; a public route that does not exist is a manifest error.
-    #[serde(
-        default,
-        rename = "public-routes",
-        skip_serializing_if = "Vec::is_empty"
-    )]
-    pub public_routes: Vec<String>,
 }
 
 impl PluginCapabilities {
@@ -418,58 +342,6 @@ fn validate_host(host: &str) -> Result<(), String> {
         return Err(format!("`http.hosts` entry `{host}` is not a host name"));
     }
     Ok(())
-}
-
-/// `http: { hosts: [...] }` — the parameterized capability of SPEC §6.2.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct HttpCapability {
-    #[serde(default)]
-    pub hosts: Vec<String>,
-}
-
-/// One field of the admin-config schema.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ConfigField {
-    /// `string` | `number` | `boolean` | `select`.
-    #[serde(rename = "type")]
-    pub kind: String,
-    /// `true` ⇒ write-only in the UI, encrypted at rest (SPEC §6.2).
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub secret: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub label: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    /// Shown as the field's placeholder and used when nothing is set. **Never** applied to
-    /// a secret.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub default: Option<serde_json::Value>,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub required: bool,
-    /// For `select`.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub options: Vec<String>,
-}
-
-/// The `backend` half of a manifest (SPEC §6.2).
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PluginBackend {
-    /// Path inside the package, conventionally `backend.wasm`. Must be a safe relative
-    /// path and is the **only** file outside `frontend/**` the installer extracts.
-    pub module: String,
-    /// `document.created` / `document.changed` / `document.deleted`.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub hooks: Vec<String>,
-    /// Five-field UTC cron expressions (SPEC §6.3).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub cron: Vec<String>,
-    /// `"POST /webhook"` — method and path, space separated.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub routes: Vec<String>,
-    /// Server-bus events this plugin wants delivered to `lm_event`, namespaced
-    /// (`other-plugin:something`).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub events: Vec<String>,
 }
 
 /// One declared inbound route, parsed.
@@ -1282,8 +1154,17 @@ fn frontend_assets_version(package_dir: &Path, manifest: &PluginManifest) -> Opt
 fn read_manifest(dir: &Path, id: &str, version: &str) -> Result<PluginManifest, String> {
     let path = dir.join("manifest.json");
     let raw = fs::read_to_string(&path).map_err(|err| format!("manifest.json: {err}"))?;
-    let manifest: PluginManifest =
+    let value: serde_json::Value =
         serde_json::from_str(&raw).map_err(|err| format!("manifest.json is invalid: {err}"))?;
+    let problems = crate::manifest_schema::validate_manifest(&value);
+    if !problems.is_empty() {
+        return Err(format!(
+            "manifest.json is invalid: {}",
+            crate::manifest_schema::describe(&problems)
+        ));
+    }
+    let manifest: PluginManifest =
+        serde_json::from_value(value).map_err(|err| format!("manifest.json is invalid: {err}"))?;
 
     // The path is the truth: a manifest claiming another id or version would be served
     // under this URL and loaded under that name, and the loader would then check the

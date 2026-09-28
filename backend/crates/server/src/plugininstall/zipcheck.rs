@@ -164,7 +164,17 @@ pub fn read_manifest(archive: &Path) -> Result<PluginManifest, ZipError> {
         });
     }
 
-    serde_json::from_slice(&raw).map_err(|err| ZipError::BadManifest(err.to_string()))
+    // The schema first, so the error names the field (`frontend.module must be a relative
+    // path …`) rather than serde's line and column; the types second.
+    let value: serde_json::Value =
+        serde_json::from_slice(&raw).map_err(|err| ZipError::BadManifest(err.to_string()))?;
+    let problems = crate::manifest_schema::validate_manifest(&value);
+    if !problems.is_empty() {
+        return Err(ZipError::BadManifest(crate::manifest_schema::describe(
+            &problems,
+        )));
+    }
+    serde_json::from_value(value).map_err(|err| ZipError::BadManifest(err.to_string()))
 }
 
 /// Extract the allowed entries into `staging`, enforcing every cap while streaming.

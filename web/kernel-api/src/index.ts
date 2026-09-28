@@ -21,10 +21,17 @@
  * the changelog.
  */
 
-export const KERNEL_API_VERSION = "1.1.0";
+import { MANIFEST_KERNEL_VERSION } from "./manifest.generated.js";
+
+/**
+ * The contract version, generated from `x-kernel-version` in `schema/manifest.schema.json` —
+ * the same line the server's `KERNEL_VERSION` comes from, so the install check and the boot
+ * check cannot drift apart.
+ */
+export const KERNEL_API_VERSION: string = MANIFEST_KERNEL_VERSION;
 
 /** Major of {@link KERNEL_API_VERSION} — what a manifest's `kernel` range is checked against. */
-export const KERNEL_API_MAJOR = 1;
+export const KERNEL_API_MAJOR = Number.parseInt(KERNEL_API_VERSION, 10);
 
 export type {
   CoreMap,
@@ -155,8 +162,18 @@ export {
 export {
   PLUGIN_ID_PATTERN,
   PLUGIN_VERSION_PATTERN,
+  PORT_NAME_PATTERN,
+  formatProblem,
+  isManifest,
+  isProtocolId,
+  isSafeRelativePath,
+  isSemverRange,
+  isValidVersion,
+  parseProtocolRef,
   satisfies,
   validateManifest,
+  type ConsumedPort,
+  type HttpCapability,
   type InstalledPlugin,
   type ManifestProblem,
   type PluginBackend,
@@ -165,6 +182,7 @@ export {
   type PluginFrontend,
   type PluginManifest,
   type PluginState,
+  type ProvidedPort,
 } from "./manifest.js";
 
 export type {

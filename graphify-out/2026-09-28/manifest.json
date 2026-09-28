@@ -3978,9 +3978,9 @@
     "semantic_hash": ""
   },
   "plugins/base/graph/src/renderer.ts": {
-    "mtime": 1790549103.087251,
-    "seen": 1790549141.8527958,
-    "ast_hash": "12d6e43658f2870df671e2ab70b7f671",
+    "mtime": 1790550068.3557773,
+    "seen": 1790550107.7299588,
+    "ast_hash": "0ccf498de3a1c0ac17c450abddd2df0a",
     "semantic_hash": ""
   },
   "plugins/base/graph/src/settings.ts": {
@@ -4206,15 +4206,15 @@
     "semantic_hash": ""
   },
   "plugins/base/graph/src/renderer.test.ts": {
-    "mtime": 1790549103.1292508,
-    "seen": 1790549141.8527927,
-    "ast_hash": "61757de9e8b9ddbea090bad1b4e3da48",
+    "mtime": 1790550068.3987775,
+    "seen": 1790550107.7299566,
+    "ast_hash": "5c0bcb229c643e820f58398089c5da89",
     "semantic_hash": ""
   },
   "dev-docs/todo/PLUGIN-PROTOCOLS.html": {
-    "mtime": 1790549763.5508194,
-    "seen": 1790549912.3074954,
-    "ast_hash": "215b2a0a221059e1ee4fa45d54fcc20c",
+    "mtime": 1790550062.0591128,
+    "seen": 1790550107.739881,
+    "ast_hash": "bd19a0ef80944ce439bb35849e6dae27",
     "semantic_hash": ""
   },
   "graphify-out/memory/query_20260927_222058_5d14695b_do_it__keep_it_clean.md": {
@@ -4227,6 +4227,12 @@
     "mtime": 1790549440.466353,
     "seen": 1790549912.3076868,
     "ast_hash": "f77e231f871cbbba2231264c6e7c9078",
+    "semantic_hash": ""
+  },
+  "graphify-out/memory/query_20260927_225844_01599b31_blue_are_attachments.md": {
+    "mtime": 1790549924.9872162,
+    "seen": 1790550107.7400146,
+    "ast_hash": "70d36112bf69c277a69e601cad661c9b",
     "semantic_hash": ""
   }
 }

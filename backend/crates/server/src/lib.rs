@@ -26,6 +26,8 @@ pub mod docstore;
 pub mod domain;
 pub mod error;
 pub mod feed;
+pub mod manifest_schema;
+pub mod manifest_types;
 pub mod pluginhost;
 pub mod plugininstall;
 pub mod plugins;
