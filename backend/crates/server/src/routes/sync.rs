@@ -1606,7 +1606,10 @@ impl ConnectionSession {
         match parsed.kind {
             frame::SYNC_STEP1 => self.send_step2(&parsed.id, parsed.payload).await,
             frame::UPDATE => {
-                if !self.apply_update(&parsed.id, parsed.payload, EditTiming::Live).await {
+                if !self
+                    .apply_update(&parsed.id, parsed.payload, EditTiming::Live)
+                    .await
+                {
                     return false;
                 }
             }
@@ -1614,7 +1617,11 @@ impl ConnectionSession {
             // disconnected: offline edits, stamped when they arrive.
             frame::SYNC_STEP2 => {
                 if !self
-                    .apply_update(&parsed.id, parsed.payload, EditTiming::Offline { made_at_ms: None })
+                    .apply_update(
+                        &parsed.id,
+                        parsed.payload,
+                        EditTiming::Offline { made_at_ms: None },
+                    )
                     .await
                 {
                     return false;
@@ -1622,11 +1629,22 @@ impl ConnectionSession {
             }
             frame::HISTORY => {
                 let Some((made_at, update)) = decode_history(parsed.payload) else {
-                    self.doc_error(&parsed.id, "malformed_update", "HISTORY frame too short", false);
+                    self.doc_error(
+                        &parsed.id,
+                        "malformed_update",
+                        "HISTORY frame too short",
+                        false,
+                    );
                     return true;
                 };
                 if !self
-                    .apply_update(&parsed.id, update, EditTiming::Offline { made_at_ms: Some(made_at) })
+                    .apply_update(
+                        &parsed.id,
+                        update,
+                        EditTiming::Offline {
+                            made_at_ms: Some(made_at),
+                        },
+                    )
                     .await
                 {
                     return false;
@@ -1796,7 +1814,13 @@ impl ConnectionSession {
     /// Returns `false` when the socket must close.
     async fn apply_update(&mut self, id: &str, payload: &[u8], timing: EditTiming) -> bool {
         let actor = crate::domain::Actor::User(self.conn.user_id.clone());
-        match self.conn.state.docs.apply_update_as(id, payload, &actor, timing).await {
+        match self
+            .conn
+            .state
+            .docs
+            .apply_update_as(id, payload, &actor, timing)
+            .await
+        {
             Ok(outcome) => {
                 if !outcome.update.is_empty() {
                     // Fan-out carries the *applied* diff, not the client's bytes:
@@ -2823,6 +2847,14 @@ pub fn map_feed_error(error: crate::feed::FeedError) -> AppError {
     }
 }
 
+/// A `HISTORY` payload: when the edit was made (8 bytes, big-endian epoch ms), then the
+/// update. `None` when it is too short to hold the time.
+fn decode_history(payload: &[u8]) -> Option<(i64, &[u8])> {
+    let (time, update) = payload.split_at_checked(8)?;
+    let millis = u64::from_be_bytes(time.try_into().ok()?);
+    Some((i64::try_from(millis).unwrap_or(i64::MAX), update))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3225,12 +3257,4 @@ mod tests {
         assert!(origin_matches_host("http://notes.example.com/", &map));
         assert!(!origin_matches_host("https://evil.example.com", &map));
     }
-}
-
-/// A `HISTORY` payload: when the edit was made (8 bytes, big-endian epoch ms), then the
-/// update. `None` when it is too short to hold the time.
-fn decode_history(payload: &[u8]) -> Option<(i64, &[u8])> {
-    let (time, update) = payload.split_at_checked(8)?;
-    let millis = u64::from_be_bytes(time.try_into().ok()?);
-    Some((i64::try_from(millis).unwrap_or(i64::MAX), update))
 }

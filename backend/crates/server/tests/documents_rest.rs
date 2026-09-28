@@ -560,8 +560,14 @@ async fn a_note_made_offline_is_created_from_the_device_state() {
     };
     let device = yrs::Doc::with_client_id(4242);
     let text = device.get_or_insert_text("content");
-    text.insert(&mut device.transact_mut(), 0, "# Offline\n\nwritten on the train\n");
-    let seed = device.transact().encode_state_as_update_v1(&StateVector::default());
+    text.insert(
+        &mut device.transact_mut(),
+        0,
+        "# Offline\n\nwritten on the train\n",
+    );
+    let seed = device
+        .transact()
+        .encode_state_as_update_v1(&StateVector::default());
     let encoded = base64::engine::general_purpose::STANDARD.encode(&seed);
 
     let id = new_id();
@@ -575,12 +581,20 @@ async fn a_note_made_offline_is_created_from_the_device_state() {
     let before = device.transact().state_vector();
     text.insert(&mut device.transact_mut(), 32, "and on the platform\n");
     let edit = device.transact().encode_state_as_update_v1(&before);
-    app.state.docs.apply_update(&id, &edit, &Actor::System).await.expect("edit");
+    app.state
+        .docs
+        .apply_update(&id, &edit, &Actor::System)
+        .await
+        .expect("edit");
     // …and the create itself arriving twice (a lost response) changes nothing.
     app.post_json("/api/documents", json!({ "id": id, "state": encoded }))
         .await
         .expect_status(StatusCode::CONFLICT);
-    app.state.docs.apply_update(&id, &seed, &Actor::System).await.expect("replay");
+    app.state
+        .docs
+        .apply_update(&id, &seed, &Actor::System)
+        .await
+        .expect("replay");
     assert_eq!(
         app.state.docs.text(&id).await.expect("text"),
         "# Offline\n\nwritten on the train\nand on the platform\n",
@@ -590,11 +604,16 @@ async fn a_note_made_offline_is_created_from_the_device_state() {
     app.post_json("/api/documents", json!({ "state": encoded }))
         .await
         .expect_status(StatusCode::BAD_REQUEST);
-    app.post_json("/api/documents", json!({ "id": new_id(), "state": encoded, "content": "x" }))
-        .await
-        .expect_status(StatusCode::BAD_REQUEST);
+    app.post_json(
+        "/api/documents",
+        json!({ "id": new_id(), "state": encoded, "content": "x" }),
+    )
+    .await
+    .expect_status(StatusCode::BAD_REQUEST);
     let junk = base64::engine::general_purpose::STANDARD.encode([1u8, 2, 3]);
-    let refused = app.post_json("/api/documents", json!({ "id": new_id(), "state": junk })).await;
+    let refused = app
+        .post_json("/api/documents", json!({ "id": new_id(), "state": junk }))
+        .await;
     assert!(refused.status.is_client_error(), "{}", refused.text());
 
     app.cleanup().await;

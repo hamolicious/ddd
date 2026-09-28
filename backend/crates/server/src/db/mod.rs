@@ -15,9 +15,8 @@ use mongodb::{Client, Collection, Database};
 use crate::config::Config;
 use crate::domain::{
     Attachment, AuditEntry, Document, DocumentChange, DocumentCheckpoint, DocumentHistory,
-    DocumentSnapshot,
-    DocumentUpdate, GraveyardEntry, Invite,
-    LoginAttempt, PasswordReset, SchemaMeta, Session, UploadSession, User,
+    DocumentSnapshot, DocumentUpdate, GraveyardEntry, Invite, LoginAttempt, PasswordReset,
+    SchemaMeta, Session, UploadSession, User,
 };
 
 pub const DOCUMENTS: &str = "documents";

@@ -18,9 +18,12 @@ async fn changes_are_recorded_grouped_shown_and_reverted() {
     let id = app.create_document("# Notes\n\nfirst line\n").await;
 
     // Two writes by the signed-in user: one group.
-    app.put_json(&format!("/api/documents/{id}"), json!({ "content": "# Notes\n\nfirst line\nsecond line\n" }))
-        .await
-        .expect_status(StatusCode::OK);
+    app.put_json(
+        &format!("/api/documents/{id}"),
+        json!({ "content": "# Notes\n\nfirst line\nsecond line\n" }),
+    )
+    .await
+    .expect_status(StatusCode::OK);
     app.put_json(
         &format!("/api/documents/{id}"),
         json!({ "content": "# Notes\n\nfirst line, edited\nsecond line\n" }),
@@ -48,21 +51,43 @@ async fn changes_are_recorded_grouped_shown_and_reverted() {
     assert_eq!(groups[1]["changes"], json!(2));
     assert_eq!(groups[1]["by"], json!(app.user_id));
 
-    let (from, to) = (groups[1]["from_seq"].as_i64().unwrap(), groups[1]["to_seq"].as_i64().unwrap());
-    let detail = app.get(&format!("/api/documents/{id}/changes/{from}/{to}")).await;
+    let (from, to) = (
+        groups[1]["from_seq"].as_i64().unwrap(),
+        groups[1]["to_seq"].as_i64().unwrap(),
+    );
+    let detail = app
+        .get(&format!("/api/documents/{id}/changes/{from}/{to}"))
+        .await;
     detail.expect_status(StatusCode::OK);
     let hunks = detail.json()["hunks"].clone();
     assert_eq!(hunks[0]["removed"], json!("first line\n"));
-    assert_eq!(hunks[0]["inserted"], json!("first line, edited\nsecond line\n"));
+    assert_eq!(
+        hunks[0]["inserted"],
+        json!("first line, edited\nsecond line\n")
+    );
 
     // Reverting the user's group keeps the plugin's later line.
-    let reverted = app.post_json(&format!("/api/documents/{id}/changes/{from}/{to}/revert"), json!({})).await;
+    let reverted = app
+        .post_json(
+            &format!("/api/documents/{id}/changes/{from}/{to}/revert"),
+            json!({}),
+        )
+        .await;
     reverted.expect_status(StatusCode::OK);
-    assert_eq!(reverted.json()["content"], json!("# Notes\n\nfirst line\n\nby a plugin\n"));
+    assert_eq!(
+        reverted.json()["content"],
+        json!("# Notes\n\nfirst line\n\nby a plugin\n")
+    );
 
     // The revert is itself a change, marked as one, and can be reverted in turn.
-    let after = app.get(&format!("/api/documents/{id}/changes")).await.json();
-    assert_eq!(after["groups"][0]["reverts"], json!({ "from_seq": from, "to_seq": to }));
+    let after = app
+        .get(&format!("/api/documents/{id}/changes"))
+        .await
+        .json();
+    assert_eq!(
+        after["groups"][0]["reverts"],
+        json!({ "from_seq": from, "to_seq": to })
+    );
 
     app.cleanup().await;
 }
@@ -74,21 +99,45 @@ async fn a_revert_is_refused_when_a_later_change_touched_the_same_text() {
         return;
     };
     let id = app.create_document("a\nb\nc\n").await;
-    app.put_json(&format!("/api/documents/{id}"), json!({ "content": "a\nB\nc\n" }))
-        .await
-        .expect_status(StatusCode::OK);
+    app.put_json(
+        &format!("/api/documents/{id}"),
+        json!({ "content": "a\nB\nc\n" }),
+    )
+    .await
+    .expect_status(StatusCode::OK);
     app.state
         .docs
         .replace_text(&id, "a\nBB\nc\n", &Actor::Plugin("helper".into()))
         .await
         .expect("plugin write");
 
-    let groups = app.get(&format!("/api/documents/{id}/changes")).await.json()["groups"].clone();
-    let (from, to) = (groups[1]["from_seq"].as_i64().unwrap(), groups[1]["to_seq"].as_i64().unwrap());
-    let refused = app.post_json(&format!("/api/documents/{id}/changes/{from}/{to}/revert"), json!({})).await;
+    let groups = app
+        .get(&format!("/api/documents/{id}/changes"))
+        .await
+        .json()["groups"]
+        .clone();
+    let (from, to) = (
+        groups[1]["from_seq"].as_i64().unwrap(),
+        groups[1]["to_seq"].as_i64().unwrap(),
+    );
+    let refused = app
+        .post_json(
+            &format!("/api/documents/{id}/changes/{from}/{to}/revert"),
+            json!({}),
+        )
+        .await;
     refused.expect_status(StatusCode::CONFLICT);
-    assert!(refused.text().contains("plugin helper changed the same text later"), "{}", refused.text());
-    assert_eq!(app.get(&format!("/api/documents/{id}")).await.json()["content"], json!("a\nBB\nc\n"));
+    assert!(
+        refused
+            .text()
+            .contains("plugin helper changed the same text later"),
+        "{}",
+        refused.text()
+    );
+    assert_eq!(
+        app.get(&format!("/api/documents/{id}")).await.json()["content"],
+        json!("a\nBB\nc\n")
+    );
 
     app.cleanup().await;
 }
@@ -137,7 +186,10 @@ async fn checkpoints_rebuild_every_point_in_time() {
         assert_eq!(at.json()["content"], json!(text), "text at seq {seq}");
     }
 
-    let snapshots = app.get(&format!("/api/documents/{id}/snapshots")).await.json();
+    let snapshots = app
+        .get(&format!("/api/documents/{id}/snapshots"))
+        .await
+        .json();
     assert_eq!(snapshots, json!([]), "edits take no automatic snapshots");
 
     app.cleanup().await;
@@ -157,7 +209,11 @@ async fn old_history_squashes_and_can_be_forgotten() {
     let put = |content: &'static str| {
         let uri = format!("/api/documents/{id}");
         let app = &app;
-        async move { app.put_json(&uri, json!({ "content": content })).await.expect_status(StatusCode::OK); }
+        async move {
+            app.put_json(&uri, json!({ "content": content }))
+                .await
+                .expect_status(StatusCode::OK);
+        }
     };
     // Group A (the user, 3 writes), group B (a plugin, 1 write), group C (the user, 2).
     put("one\ntwo\n").await;
@@ -165,18 +221,30 @@ async fn old_history_squashes_and_can_be_forgotten() {
     put("ONE\ntwo\nthree\n").await;
     app.state
         .docs
-        .replace_text(&id, "ONE\ntwo\nthree\nfrom a plugin\n", &Actor::Plugin("helper".into()))
+        .replace_text(
+            &id,
+            "ONE\ntwo\nthree\nfrom a plugin\n",
+            &Actor::Plugin("helper".into()),
+        )
         .await
         .expect("plugin write");
     put("ONE\ntwo\nthree\nfrom a plugin\nfour\n").await;
     put("ONE\n2\nthree\nfrom a plugin\nfour\n").await;
 
-    let before = app.get(&format!("/api/documents/{id}/changes")).await.json();
+    let before = app
+        .get(&format!("/api/documents/{id}/changes"))
+        .await
+        .json();
     let edges: Vec<(i64, i64)> = before["groups"]
         .as_array()
         .unwrap()
         .iter()
-        .map(|group| (group["from_seq"].as_i64().unwrap(), group["to_seq"].as_i64().unwrap()))
+        .map(|group| {
+            (
+                group["from_seq"].as_i64().unwrap(),
+                group["to_seq"].as_i64().unwrap(),
+            )
+        })
         .collect();
     assert_eq!(edges, vec![(6, 7), (5, 5), (2, 4)]);
 
@@ -201,19 +269,40 @@ async fn old_history_squashes_and_can_be_forgotten() {
         .unwrap();
     assert_eq!(raw_left, 0, "squashed raw changes are deleted");
     // Running it again changes nothing.
-    assert_eq!(app.state.docs.squash_history_now().await.expect("squash again"), 0);
+    assert_eq!(
+        app.state
+            .docs
+            .squash_history_now()
+            .await
+            .expect("squash again"),
+        0
+    );
 
-    let after = app.get(&format!("/api/documents/{id}/changes")).await.json();
+    let after = app
+        .get(&format!("/api/documents/{id}/changes"))
+        .await
+        .json();
     let groups = after["groups"].as_array().unwrap();
     assert_eq!(groups.len(), 3);
     assert!(groups.iter().all(|group| group["squashed"] == json!(true)));
     assert_eq!(groups[2]["changes"], json!(3));
 
     // Group edges still rebuild; a point inside a squashed group does not.
-    assert_eq!(text_at(&app, &id, 1).await.json()["content"], json!("one\n"));
-    assert_eq!(text_at(&app, &id, 4).await.json()["content"], json!("ONE\ntwo\nthree\n"));
-    assert_eq!(text_at(&app, &id, 7).await.json()["content"], json!("ONE\n2\nthree\nfrom a plugin\nfour\n"));
-    text_at(&app, &id, 3).await.expect_status(StatusCode::CONFLICT);
+    assert_eq!(
+        text_at(&app, &id, 1).await.json()["content"],
+        json!("one\n")
+    );
+    assert_eq!(
+        text_at(&app, &id, 4).await.json()["content"],
+        json!("ONE\ntwo\nthree\n")
+    );
+    assert_eq!(
+        text_at(&app, &id, 7).await.json()["content"],
+        json!("ONE\n2\nthree\nfrom a plugin\nfour\n")
+    );
+    text_at(&app, &id, 3)
+        .await
+        .expect_status(StatusCode::CONFLICT);
     // Checkpoints only at edges: none inside a squashed group.
     let mut cursor = app
         .state
@@ -227,15 +316,24 @@ async fn old_history_squashes_and_can_be_forgotten() {
         seqs.push(checkpoint.seq);
     }
     for seq in &seqs {
-        assert!(![2, 3, 6].contains(seq), "checkpoint {seq} is inside a squashed group ({seqs:?})");
+        assert!(
+            ![2, 3, 6].contains(seq),
+            "checkpoint {seq} is inside a squashed group ({seqs:?})"
+        );
     }
 
-    let diff = app.get(&format!("/api/documents/{id}/changes/2/4")).await.json();
+    let diff = app
+        .get(&format!("/api/documents/{id}/changes/2/4"))
+        .await
+        .json();
     assert_eq!(diff["changes"], json!(3));
     // The plugin's squashed line reverts; everything else stays.
-    app.post_json(&format!("/api/documents/{id}/changes/5/5/revert"), json!({}))
-        .await
-        .expect_status(StatusCode::OK);
+    app.post_json(
+        &format!("/api/documents/{id}/changes/5/5/revert"),
+        json!({}),
+    )
+    .await
+    .expect_status(StatusCode::OK);
     assert_eq!(
         app.get(&format!("/api/documents/{id}")).await.json()["content"],
         json!("ONE\n2\nthree\nfour\n")
@@ -245,13 +343,29 @@ async fn old_history_squashes_and_can_be_forgotten() {
     app.post_json(&format!("/api/documents/{id}/history/forget"), json!({}))
         .await
         .expect_status(StatusCode::NO_CONTENT);
-    let forgotten = app.get(&format!("/api/documents/{id}/changes")).await.json();
+    let forgotten = app
+        .get(&format!("/api/documents/{id}/changes"))
+        .await
+        .json();
     assert_eq!(forgotten["groups"], json!([]));
-    assert_eq!(app.get(&format!("/api/documents/{id}/snapshots")).await.json(), json!([]));
+    assert_eq!(
+        app.get(&format!("/api/documents/{id}/snapshots"))
+            .await
+            .json(),
+        json!([])
+    );
     put("ONE\n2\nthree\nfour\nfive\n").await;
-    let fresh = app.get(&format!("/api/documents/{id}/changes")).await.json();
-    let (from, to) = (fresh["groups"][0]["from_seq"].as_i64().unwrap(), fresh["groups"][0]["to_seq"].as_i64().unwrap());
-    let diff = app.get(&format!("/api/documents/{id}/changes/{from}/{to}")).await;
+    let fresh = app
+        .get(&format!("/api/documents/{id}/changes"))
+        .await
+        .json();
+    let (from, to) = (
+        fresh["groups"][0]["from_seq"].as_i64().unwrap(),
+        fresh["groups"][0]["to_seq"].as_i64().unwrap(),
+    );
+    let diff = app
+        .get(&format!("/api/documents/{id}/changes/{from}/{to}"))
+        .await;
     diff.expect_status(StatusCode::OK);
     assert_eq!(diff.json()["hunks"][0]["inserted"], json!("five\n"));
 

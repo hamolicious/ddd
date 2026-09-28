@@ -22,8 +22,8 @@
 
 use similar::{DiffOp, TextDiff};
 
-use life_manager_core::splice::TextEdit;
 use life_manager_core::Span;
+use life_manager_core::splice::TextEdit;
 
 /// A pause this long, or another author, starts a new group.
 pub const GROUP_GAP_MS: i64 = 2 * 60 * 1000;
@@ -182,7 +182,9 @@ pub fn apply_forward(before: &str, change: &Change) -> Result<String, Gap> {
 
 /// Replay `changes` (ascending by seq) forward from `text`.
 pub fn replay(text: &str, changes: &[Change]) -> Result<String, Gap> {
-    changes.iter().try_fold(text.to_string(), |text, change| apply_forward(&text, change))
+    changes.iter().try_fold(text.to_string(), |text, change| {
+        apply_forward(&text, change)
+    })
 }
 
 /// Rewind `current` through `changes` (ascending by seq), newest first.
@@ -210,8 +212,16 @@ pub struct Group {
 pub fn group(newest_first: &[Change], gap_ms: i64) -> Vec<Group> {
     let mut groups: Vec<Group> = Vec::new();
     for change in newest_first {
-        let inserted: usize = change.hunks.iter().map(|hunk| hunk.inserted.chars().count()).sum();
-        let removed: usize = change.hunks.iter().map(|hunk| hunk.removed.chars().count()).sum();
+        let inserted: usize = change
+            .hunks
+            .iter()
+            .map(|hunk| hunk.inserted.chars().count())
+            .sum();
+        let removed: usize = change
+            .hunks
+            .iter()
+            .map(|hunk| hunk.removed.chars().count())
+            .sum();
         match groups.last_mut() {
             Some(open) if open.by == change.by && open.started_ms - change.at_ms <= gap_ms => {
                 open.from_seq = change.first_seq;
@@ -240,17 +250,32 @@ pub fn line_hunks(before: &str, after: &str) -> Vec<Hunk> {
     let diff = TextDiff::from_lines(before, after);
     let old: Vec<&str> = diff.iter_old_slices().collect();
     let new: Vec<&str> = diff.iter_new_slices().collect();
-    let offset = |slices: &[&str], index: usize| -> usize { slices[..index].iter().map(|s| s.len()).sum() };
+    let offset =
+        |slices: &[&str], index: usize| -> usize { slices[..index].iter().map(|s| s.len()).sum() };
 
     let mut hunks: Vec<Hunk> = Vec::new();
     for op in diff.ops() {
         let (old_range, new_range) = match *op {
             DiffOp::Equal { .. } => continue,
-            DiffOp::Delete { old_index, old_len, new_index } => (old_index..old_index + old_len, new_index..new_index),
-            DiffOp::Insert { old_index, new_index, new_len } => (old_index..old_index, new_index..new_index + new_len),
-            DiffOp::Replace { old_index, old_len, new_index, new_len } => {
-                (old_index..old_index + old_len, new_index..new_index + new_len)
-            }
+            DiffOp::Delete {
+                old_index,
+                old_len,
+                new_index,
+            } => (old_index..old_index + old_len, new_index..new_index),
+            DiffOp::Insert {
+                old_index,
+                new_index,
+                new_len,
+            } => (old_index..old_index, new_index..new_index + new_len),
+            DiffOp::Replace {
+                old_index,
+                old_len,
+                new_index,
+                new_len,
+            } => (
+                old_index..old_index + old_len,
+                new_index..new_index + new_len,
+            ),
         };
         let hunk = Hunk {
             pos: offset(&old, old_range.start),
@@ -290,7 +315,12 @@ pub enum RevertError {
 /// The edits (byte spans against `current`) that undo a group of changes while keeping
 /// everything after it. `before` and `after` are the text just before and just after the
 /// group (rebuilt from a checkpoint); `later` is every change after it, ascending.
-pub fn revert_edits(current: &str, before: &str, after: &str, later: &[Change]) -> Result<Vec<TextEdit>, RevertError> {
+pub fn revert_edits(
+    current: &str,
+    before: &str,
+    after: &str,
+    later: &[Change],
+) -> Result<Vec<TextEdit>, RevertError> {
     let hunks = line_hunks(before, after);
     if hunks.is_empty() {
         return Err(RevertError::Nothing);
@@ -349,7 +379,10 @@ pub fn revert_edits(current: &str, before: &str, after: &str, later: &[Change]) 
         {
             return Err(RevertError::Gap(Gap { seq: last_seq }));
         }
-        edits.push(TextEdit { range: Span { start, end }, text });
+        edits.push(TextEdit {
+            range: Span { start, end },
+            text,
+        });
     }
     Ok(edits)
 }
@@ -411,13 +444,26 @@ mod tests {
     use super::*;
 
     fn change(seq: i64, at_ms: i64, by: &str, before: &str, after: &str) -> Change {
-        Change { first_seq: seq, seq, at_ms, by: Some(by.to_string()), hunks: diff_hunk(before, after).into_iter().collect() }
+        Change {
+            first_seq: seq,
+            seq,
+            at_ms,
+            by: Some(by.to_string()),
+            hunks: diff_hunk(before, after).into_iter().collect(),
+        }
     }
 
     #[test]
     fn a_diff_hunk_is_the_middle_that_changed() {
         let hunk = diff_hunk("hello world", "hello brave world").unwrap();
-        assert_eq!(hunk, Hunk { pos: 6, removed: String::new(), inserted: "brave ".to_string() });
+        assert_eq!(
+            hunk,
+            Hunk {
+                pos: 6,
+                removed: String::new(),
+                inserted: "brave ".to_string()
+            }
+        );
         assert!(diff_hunk("same", "same").is_none());
         // Never splits a character.
         let hunk = diff_hunk("aé", "aè").unwrap();
@@ -432,11 +478,25 @@ mod tests {
         assert_eq!(
             hunks,
             vec![
-                Hunk { pos: 3, removed: " ".into(), inserted: "x".into() },
-                Hunk { pos: 28, removed: String::new(), inserted: "- [ ] passport\n".into() },
+                Hunk {
+                    pos: 3,
+                    removed: " ".into(),
+                    inserted: "x".into()
+                },
+                Hunk {
+                    pos: 28,
+                    removed: String::new(),
+                    inserted: "- [ ] passport\n".into()
+                },
             ]
         );
-        let change = Change { first_seq: 1, seq: 1, at_ms: 0, by: None, hunks };
+        let change = Change {
+            first_seq: 1,
+            seq: 1,
+            at_ms: 0,
+            by: None,
+            hunks,
+        };
         assert_eq!(invert(new, &change).unwrap(), old);
     }
 
@@ -445,7 +505,9 @@ mod tests {
         // A small deterministic generator: random edits, multi-byte characters included.
         let mut seed: u64 = 0x5eed;
         let mut next = move |bound: usize| {
-            seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             ((seed >> 33) as usize) % bound.max(1)
         };
         let pieces = ["a", "é", "\n", "line\n", "- [ ] x\n", "🙂", " ", "zz"];
@@ -456,31 +518,58 @@ mod tests {
                 let len = edited.chars().count();
                 let at = next(len + 1);
                 let cut = next(4).min(len - at);
-                let byte = |n: usize| edited.char_indices().nth(n).map_or(edited.len(), |(i, _)| i);
+                let byte = |n: usize| {
+                    edited
+                        .char_indices()
+                        .nth(n)
+                        .map_or(edited.len(), |(i, _)| i)
+                };
                 let (from, to) = (byte(at), byte(at + cut));
                 let insert: String = (0..next(3)).map(|_| pieces[next(pieces.len())]).collect();
                 edited.replace_range(from..to, &insert);
             }
-            let change = Change { first_seq: round, seq: round, at_ms: 0, by: None, hunks: hunks_between(&text, &edited) };
-            assert_eq!(invert(&edited, &change).as_deref(), Ok(text.as_str()), "round {round}: {text:?} -> {edited:?}");
+            let change = Change {
+                first_seq: round,
+                seq: round,
+                at_ms: 0,
+                by: None,
+                hunks: hunks_between(&text, &edited),
+            };
+            assert_eq!(
+                invert(&edited, &change).as_deref(),
+                Ok(text.as_str()),
+                "round {round}: {text:?} -> {edited:?}"
+            );
             text = edited;
         }
     }
 
     #[test]
     fn rewinding_undoes_changes_newest_first() {
-        let texts = ["one\n", "one\ntwo\n", "zero\none\ntwo\n", "zero\nONE\ntwo\n"];
-        let changes: Vec<Change> =
-            (0..3).map(|i| change(i as i64 + 1, i as i64, "u", texts[i], texts[i + 1])).collect();
+        let texts = [
+            "one\n",
+            "one\ntwo\n",
+            "zero\none\ntwo\n",
+            "zero\nONE\ntwo\n",
+        ];
+        let changes: Vec<Change> = (0..3)
+            .map(|i| change(i as i64 + 1, i as i64, "u", texts[i], texts[i + 1]))
+            .collect();
         assert_eq!(rewind(texts[3], &changes).unwrap(), texts[0]);
         assert_eq!(rewind(texts[3], &changes[2..]).unwrap(), texts[2]);
     }
 
     #[test]
     fn replaying_forward_matches_the_texts() {
-        let texts = ["one\n", "one\ntwo\n", "zero\none\ntwo\n", "zero\nONE\ntwo\n"];
-        let changes: Vec<Change> =
-            (0..3).map(|i| change(i as i64 + 1, i as i64, "u", texts[i], texts[i + 1])).collect();
+        let texts = [
+            "one\n",
+            "one\ntwo\n",
+            "zero\none\ntwo\n",
+            "zero\nONE\ntwo\n",
+        ];
+        let changes: Vec<Change> = (0..3)
+            .map(|i| change(i as i64 + 1, i as i64, "u", texts[i], texts[i + 1]))
+            .collect();
         assert_eq!(replay(texts[0], &changes).unwrap(), texts[3]);
         assert_eq!(replay(texts[1], &changes[1..2]).unwrap(), texts[2]);
         // Replaying onto the wrong text is a gap, not a guess: change 2 only inserts at
@@ -499,11 +588,23 @@ mod tests {
     fn multi_hunk_changes_invert() {
         let old = "alpha beta gamma";
         let edits = vec![
-            TextEdit { range: Span { start: 11, end: 16 }, text: "GAMMA".into() },
-            TextEdit { range: Span { start: 0, end: 5 }, text: "A".into() },
+            TextEdit {
+                range: Span { start: 11, end: 16 },
+                text: "GAMMA".into(),
+            },
+            TextEdit {
+                range: Span { start: 0, end: 5 },
+                text: "A".into(),
+            },
         ];
         let new = life_manager_core::splice::apply(old, &edits);
-        let change = Change { first_seq: 1, seq: 1, at_ms: 0, by: None, hunks: hunks_from_edits(old, &edits) };
+        let change = Change {
+            first_seq: 1,
+            seq: 1,
+            at_ms: 0,
+            by: None,
+            hunks: hunks_from_edits(old, &edits),
+        };
         assert_eq!(invert(&new, &change).unwrap(), old);
     }
 
@@ -517,7 +618,10 @@ mod tests {
             change(1, 0, "a", "x", "xy"),
         ];
         let groups = group(&newest_first, GROUP_GAP_MS);
-        let spans: Vec<(i64, i64, usize)> = groups.iter().map(|g| (g.from_seq, g.to_seq, g.changes)).collect();
+        let spans: Vec<(i64, i64, usize)> = groups
+            .iter()
+            .map(|g| (g.from_seq, g.to_seq, g.changes))
+            .collect();
         assert_eq!(spans, vec![(5, 5, 1), (3, 4, 2), (1, 2, 2)]);
     }
 
@@ -538,7 +642,14 @@ mod tests {
         let t1 = "a\nB\nc\n";
         let t2 = "a\nBB\nc\n"; // later, same line
         let err = revert_edits(t2, t0, t1, &[change(2, 5, "b", t1, t2)]).unwrap_err();
-        assert_eq!(err, RevertError::Conflict(Conflict { seq: 2, by: Some("b".into()), at_ms: 5 }));
+        assert_eq!(
+            err,
+            RevertError::Conflict(Conflict {
+                seq: 2,
+                by: Some("b".into()),
+                at_ms: 5
+            })
+        );
     }
 
     #[test]
@@ -547,7 +658,10 @@ mod tests {
         let t1 = "keep\nkeep too\n";
         let t2 = "new first\nkeep\nkeep too\n";
         let edits = revert_edits(t2, t0, t1, &[change(2, 1, "b", t1, t2)]).unwrap();
-        assert_eq!(life_manager_core::splice::apply(t2, &edits), "new first\nkeep\ngone\nkeep too\n");
+        assert_eq!(
+            life_manager_core::splice::apply(t2, &edits),
+            "new first\nkeep\ngone\nkeep too\n"
+        );
     }
 
     #[test]

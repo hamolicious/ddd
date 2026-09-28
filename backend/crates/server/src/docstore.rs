@@ -53,10 +53,7 @@ use yrs::{Doc, GetString, OffsetKind, Options, ReadTxn, StateVector, Text, Trans
 use crate::db;
 use crate::domain::{
     Actor, AuditEntry, Document, DocumentChange, DocumentCheckpoint, DocumentHistory, DocumentRow,
-    DocumentSnapshot,
-    DocumentUpdate, Id,
-    StoredHunk, is_valid_id,
-    new_id,
+    DocumentSnapshot, DocumentUpdate, Id, StoredHunk, is_valid_id, new_id,
 };
 use crate::telemetry::names;
 
@@ -474,7 +471,8 @@ pub trait DocStore: Send + Sync + 'static {
         update: &[u8],
         actor: &Actor,
     ) -> Result<WriteOutcome, DocStoreError> {
-        self.apply_update_as(id, update, actor, EditTiming::Live).await
+        self.apply_update_as(id, update, actor, EditTiming::Live)
+            .await
     }
 
     /// [`DocStore::apply_update`], saying when the edit was made: an offline edit
@@ -539,7 +537,11 @@ pub trait DocStore: Send + Sync + 'static {
 
     /// Every unit of history (raw change or squashed group) from `from` on, oldest
     /// first, each as one change ending at its last `seq`.
-    async fn changes_since(&self, id: &str, from: i64) -> Result<Vec<crate::changes::Change>, DocStoreError>;
+    async fn changes_since(
+        &self,
+        id: &str,
+        from: i64,
+    ) -> Result<Vec<crate::changes::Change>, DocStoreError>;
 
     /// Squashed groups, newest first: those ending before `before` when given.
     async fn squashed(
@@ -562,10 +564,20 @@ pub trait DocStore: Send + Sync + 'static {
     async fn text_at(&self, id: &str, seq: i64) -> Result<String, DocStoreError>;
 
     /// Mark the change written at `seq` as the revert of changes `from..=to`.
-    async fn note_revert(&self, id: &str, seq: i64, from: i64, to: i64) -> Result<(), DocStoreError>;
+    async fn note_revert(
+        &self,
+        id: &str,
+        seq: i64,
+        from: i64,
+        to: i64,
+    ) -> Result<(), DocStoreError>;
 
     /// One snapshot of a document, with its text.
-    async fn snapshot_by_id(&self, id: &str, snapshot_id: &str) -> Result<DocumentSnapshot, DocStoreError>;
+    async fn snapshot_by_id(
+        &self,
+        id: &str,
+        snapshot_id: &str,
+    ) -> Result<DocumentSnapshot, DocStoreError>;
 
     /// Restore a snapshot: one CRDT transaction replacing the full text.
     async fn restore_snapshot(
@@ -1076,7 +1088,9 @@ impl MongoDocStoreInner {
         // Live typing is folded into one record per short burst (`dev-docs/resolved/HISTORY.md`):
         // one record per keystroke was ~500 a minute. REST writes, restores, reverts
         // and offline edits are always records of their own.
-        let foldable = matches!(mutation, Mutation::Update(_)) && timing == EditTiming::Live && !hunks.is_empty();
+        let foldable = matches!(mutation, Mutation::Update(_))
+            && timing == EditTiming::Live
+            && !hunks.is_empty();
         let text_before = foldable.then(|| state.text.clone());
 
         state.text = text_after;
@@ -1089,9 +1103,12 @@ impl MongoDocStoreInner {
             let now = now_ms();
             let (made_at, offline) = match timing {
                 EditTiming::Live => (now, false),
-                EditTiming::Offline { made_at_ms } => {
-                    (made_at_ms.unwrap_or(now).clamp(state.last_change_ms.min(now), now), true)
-                }
+                EditTiming::Offline { made_at_ms } => (
+                    made_at_ms
+                        .unwrap_or(now)
+                        .clamp(state.last_change_ms.min(now), now),
+                    true,
+                ),
             };
             // History stays in order even when a live edit and an offline one race.
             let made_at = made_at.max(state.last_change_ms);
@@ -1108,7 +1125,8 @@ impl MongoDocStoreInner {
                 let open = state.open_record.as_ref().expect("checked above");
                 let merged = crate::changes::hunks_between(&open.before, &state.text);
                 let (first_seq, previous) = (open.first_seq, open.seq);
-                self.extend_change(&room.id, previous, first_seq, seq, merged, made_at).await?
+                self.extend_change(&room.id, previous, first_seq, seq, merged, made_at)
+                    .await?
             } else {
                 false
             };
@@ -1117,7 +1135,8 @@ impl MongoDocStoreInner {
                 open.seq = seq;
                 open.last_ms = made_at;
             } else {
-                self.append_change(&room.id, seq, hunks, actor, made_at, offline).await?;
+                self.append_change(&room.id, seq, hunks, actor, made_at, offline)
+                    .await?;
                 state.changes_since_checkpoint += 1;
                 state.open_record = text_before.map(|before| OpenRecord {
                     first_seq: seq,
@@ -1287,11 +1306,17 @@ impl MongoDocStoreInner {
 
     /// The squashed group `seq` falls strictly inside (`from_seq <= seq < to_seq`): a
     /// point whose text no longer exists.
-    async fn squashed_around(&self, id: &str, seq: i64) -> Result<Option<DocumentHistory>, DocStoreError> {
+    async fn squashed_around(
+        &self,
+        id: &str,
+        seq: i64,
+    ) -> Result<Option<DocumentHistory>, DocStoreError> {
         Ok(self
             .collections
             .document_history()
-            .find_one(doc! { "document_id": id, "from_seq": { "$lte": seq }, "to_seq": { "$gt": seq } })
+            .find_one(
+                doc! { "document_id": id, "from_seq": { "$lte": seq }, "to_seq": { "$gt": seq } },
+            )
             .await?)
     }
 
@@ -1314,9 +1339,14 @@ impl MongoDocStoreInner {
         while let Some(group) = cursor.try_next().await? {
             squashed.push(group);
         }
-        let covered = |seq: i64| squashed.iter().any(|group| group.from_seq <= seq && seq <= group.to_seq);
+        let covered = |seq: i64| {
+            squashed
+                .iter()
+                .any(|group| group.from_seq <= seq && seq <= group.to_seq)
+        };
 
-        let mut units: Vec<crate::changes::Change> = squashed.iter().map(DocumentHistory::to_change).collect();
+        let mut units: Vec<crate::changes::Change> =
+            squashed.iter().map(DocumentHistory::to_change).collect();
         let mut cursor = self
             .collections
             .document_changes()
@@ -1348,7 +1378,9 @@ impl MongoDocStoreInner {
         let inside_folded = self
             .collections
             .document_changes()
-            .find_one(doc! { "document_id": id, "first_seq": { "$lte": seq }, "seq": { "$gt": seq } })
+            .find_one(
+                doc! { "document_id": id, "first_seq": { "$lte": seq }, "seq": { "$gt": seq } },
+            )
             .await?
             .is_some();
         if inside_folded || self.squashed_around(id, seq).await?.is_some() {
@@ -1377,7 +1409,10 @@ impl MongoDocStoreInner {
         let ids: Vec<String> = self
             .collections
             .raw(db::DOCUMENT_CHANGES)
-            .distinct("document_id", doc! { "created_at": { "$lt": BsonDateTime::from_millis(cutoff) } })
+            .distinct(
+                "document_id",
+                doc! { "created_at": { "$lt": BsonDateTime::from_millis(cutoff) } },
+            )
             .await?
             .into_iter()
             .filter_map(|value| value.as_str().map(str::to_string))
@@ -1412,12 +1447,17 @@ impl MongoDocStoreInner {
             .sort(doc! { "seq": 1 })
             .await?;
 
-        let newest_first: Vec<crate::changes::Change> = records.iter().rev().map(DocumentChange::to_change).collect();
+        let newest_first: Vec<crate::changes::Change> = records
+            .iter()
+            .rev()
+            .map(DocumentChange::to_change)
+            .collect();
         let mut groups = crate::changes::group(&newest_first, crate::changes::GROUP_GAP_MS);
         groups.reverse();
         if let (Some(open), Some(next)) = (groups.last(), next.as_ref()) {
             let continues = open.by == next.created_by
-                && next.created_at.timestamp_millis() - open.ended_ms <= crate::changes::GROUP_GAP_MS;
+                && next.created_at.timestamp_millis() - open.ended_ms
+                    <= crate::changes::GROUP_GAP_MS;
             if continues {
                 groups.pop();
             }
@@ -1432,11 +1472,13 @@ impl MongoDocStoreInner {
             records.iter().map(|record| (record.seq, record)).collect();
         let mut written = 0;
         for group in &groups {
-            let members: Vec<&DocumentChange> =
-                (group.from_seq..=group.to_seq).filter_map(|seq| by_seq.get(&seq).copied()).collect();
+            let members: Vec<&DocumentChange> = (group.from_seq..=group.to_seq)
+                .filter_map(|seq| by_seq.get(&seq).copied())
+                .collect();
             let before = text.clone();
             for member in &members {
-                text = crate::changes::apply_forward(&text, &member.to_change()).map_err(|_| gap(member.seq))?;
+                text = crate::changes::apply_forward(&text, &member.to_change())
+                    .map_err(|_| gap(member.seq))?;
             }
             let reverts = match members.as_slice() {
                 [only] => only.reverts.clone(),
@@ -1445,7 +1487,11 @@ impl MongoDocStoreInner {
             let offline = members.iter().any(|member| member.offline);
             let hunks = crate::changes::hunks_between(&before, &text)
                 .into_iter()
-                .map(|hunk| StoredHunk { pos: hunk.pos as i64, removed: hunk.removed, inserted: hunk.inserted })
+                .map(|hunk| StoredHunk {
+                    pos: hunk.pos as i64,
+                    removed: hunk.removed,
+                    inserted: hunk.inserted,
+                })
                 .collect::<Vec<_>>();
             let record = DocumentHistory {
                 id: new_id(),
@@ -1461,7 +1507,8 @@ impl MongoDocStoreInner {
                 offline,
             };
             // 1. The squashed record (an upsert: a rerun after a crash rewrites it).
-            let fields = bson::to_document(&record).map_err(|err| DocStoreError::Bson(err.to_string()))?;
+            let fields =
+                bson::to_document(&record).map_err(|err| DocStoreError::Bson(err.to_string()))?;
             let mut fields = fields;
             fields.remove("_id");
             self.collections
@@ -1474,8 +1521,15 @@ impl MongoDocStoreInner {
                 .await?;
             // 2. Checkpoints inside the group describe texts that no longer exist: one at
             //    its end replaces them.
-            let interior = doc! { "document_id": id, "seq": { "$gte": group.from_seq, "$lt": group.to_seq } };
-            if self.collections.document_checkpoints().count_documents(interior.clone()).await? > 0 {
+            let interior =
+                doc! { "document_id": id, "seq": { "$gte": group.from_seq, "$lt": group.to_seq } };
+            if self
+                .collections
+                .document_checkpoints()
+                .count_documents(interior.clone())
+                .await?
+                > 0
+            {
                 let exists = self
                     .collections
                     .document_checkpoints()
@@ -1485,7 +1539,10 @@ impl MongoDocStoreInner {
                 if !exists {
                     self.write_checkpoint(id, group.to_seq, &text).await?;
                 }
-                self.collections.document_checkpoints().delete_many(interior).await?;
+                self.collections
+                    .document_checkpoints()
+                    .delete_many(interior)
+                    .await?;
             }
             // 3. The raw changes it replaces.
             self.collections
@@ -1526,7 +1583,10 @@ impl MongoDocStoreInner {
                 .collect(),
             reverts: None,
         };
-        self.collections.document_changes().insert_one(entry).await?;
+        self.collections
+            .document_changes()
+            .insert_one(entry)
+            .await?;
         Ok(())
     }
 
@@ -1564,7 +1624,12 @@ impl MongoDocStoreInner {
     }
 
     /// The full text at `seq`: where rebuilding any point in time starts from.
-    async fn write_checkpoint(&self, document_id: &str, seq: i64, text: &str) -> Result<(), DocStoreError> {
+    async fn write_checkpoint(
+        &self,
+        document_id: &str,
+        seq: i64,
+        text: &str,
+    ) -> Result<(), DocStoreError> {
         let checkpoint = DocumentCheckpoint {
             id: new_id(),
             document_id: document_id.to_string(),
@@ -1572,7 +1637,10 @@ impl MongoDocStoreInner {
             text: text.to_string(),
             created_at: BsonDateTime::now(),
         };
-        self.collections.document_checkpoints().insert_one(checkpoint).await?;
+        self.collections
+            .document_checkpoints()
+            .insert_one(checkpoint)
+            .await?;
         Ok(())
     }
 
@@ -1837,7 +1905,12 @@ fn row_from_projection(row: BsonDocument) -> Result<DocumentRow, DocStoreError> 
 
 impl MongoDocStore {
     /// The shared tail of both create paths: a new document from a built `Y.Doc`.
-    async fn insert_new(&self, id: Id, doc: Doc, actor: &Actor) -> Result<WriteOutcome, DocStoreError> {
+    async fn insert_new(
+        &self,
+        id: Id,
+        doc: Doc,
+        actor: &Actor,
+    ) -> Result<WriteOutcome, DocStoreError> {
         let inner = &self.inner;
         // The graveyard is consulted by every create path: a long-offline client
         // can never resurrect a purged document (SPEC §3.5 → HTTP 410).
@@ -2010,7 +2083,9 @@ impl DocStore for MongoDocStore {
         text: &str,
         actor: &Actor,
     ) -> Result<WriteOutcome, DocStoreError> {
-        self.inner.mutate(id, Mutation::SetText(text), actor, EditTiming::Live).await
+        self.inner
+            .mutate(id, Mutation::SetText(text), actor, EditTiming::Live)
+            .await
     }
 
     async fn splice(
@@ -2031,7 +2106,9 @@ impl DocStore for MongoDocStore {
         actor: &Actor,
         timing: EditTiming,
     ) -> Result<WriteOutcome, DocStoreError> {
-        self.inner.mutate(id, Mutation::Update(update), actor, timing).await
+        self.inner
+            .mutate(id, Mutation::Update(update), actor, timing)
+            .await
     }
 
     async fn text(&self, id: &str) -> Result<String, DocStoreError> {
@@ -2298,7 +2375,11 @@ impl DocStore for MongoDocStore {
         Ok(changes)
     }
 
-    async fn changes_since(&self, id: &str, from: i64) -> Result<Vec<crate::changes::Change>, DocStoreError> {
+    async fn changes_since(
+        &self,
+        id: &str,
+        from: i64,
+    ) -> Result<Vec<crate::changes::Change>, DocStoreError> {
         if !is_valid_id(id) {
             return Err(DocStoreError::InvalidId(id.to_string()));
         }
@@ -2341,11 +2422,25 @@ impl DocStore for MongoDocStore {
         let room = self.inner.room(id).await?;
         let mut state = room.state.lock().await;
         let collections = &self.inner.collections;
-        collections.document_changes().delete_many(doc! { "document_id": id }).await?;
-        collections.document_history().delete_many(doc! { "document_id": id }).await?;
-        collections.document_checkpoints().delete_many(doc! { "document_id": id }).await?;
-        collections.document_snapshots().delete_many(doc! { "document_id": id }).await?;
-        self.inner.write_checkpoint(id, state.seq, &state.text).await?;
+        collections
+            .document_changes()
+            .delete_many(doc! { "document_id": id })
+            .await?;
+        collections
+            .document_history()
+            .delete_many(doc! { "document_id": id })
+            .await?;
+        collections
+            .document_checkpoints()
+            .delete_many(doc! { "document_id": id })
+            .await?;
+        collections
+            .document_snapshots()
+            .delete_many(doc! { "document_id": id })
+            .await?;
+        self.inner
+            .write_checkpoint(id, state.seq, &state.text)
+            .await?;
         state.changes_since_checkpoint = 0;
         state.open_record = None;
         Ok(())
@@ -2358,7 +2453,13 @@ impl DocStore for MongoDocStore {
         self.inner.text_at(id, seq).await
     }
 
-    async fn note_revert(&self, id: &str, seq: i64, from: i64, to: i64) -> Result<(), DocStoreError> {
+    async fn note_revert(
+        &self,
+        id: &str,
+        seq: i64,
+        from: i64,
+        to: i64,
+    ) -> Result<(), DocStoreError> {
         self.inner
             .collections
             .document_changes()
@@ -2370,7 +2471,11 @@ impl DocStore for MongoDocStore {
         Ok(())
     }
 
-    async fn snapshot_by_id(&self, id: &str, snapshot_id: &str) -> Result<DocumentSnapshot, DocStoreError> {
+    async fn snapshot_by_id(
+        &self,
+        id: &str,
+        snapshot_id: &str,
+    ) -> Result<DocumentSnapshot, DocStoreError> {
         self.inner
             .collections
             .document_snapshots()
@@ -2582,7 +2687,6 @@ fn edit_deltas(
     Ok(splices)
 }
 
-
 fn encode_cursor(offset: usize) -> String {
     B64.encode(format!("o:{offset}"))
 }
@@ -2772,7 +2876,10 @@ mod tests {
         assert_eq!(title_of("# Heading\n\nbody"), "Heading");
         assert_eq!(title_of("\n\nfirst line\n"), "first line");
         assert_eq!(title_of("   \n"), limits::UNTITLED);
-        assert_eq!(title_of("---\ntitle: Shopping\n---\n# Groceries\n"), "Shopping");
+        assert_eq!(
+            title_of("---\ntitle: Shopping\n---\n# Groceries\n"),
+            "Shopping"
+        );
     }
 
     #[test]

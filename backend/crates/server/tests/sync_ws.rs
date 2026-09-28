@@ -1704,16 +1704,36 @@ async fn offline_edits_keep_the_time_they_were_made() {
     };
     // Made a second ago, offline.
     let first = client.insert(6, "offline one\n");
-    socket.send(build_frame(frame::HISTORY, &id, &history(made_earlier, &first))).await.expect("send");
+    socket
+        .send(build_frame(
+            frame::HISTORY,
+            &id,
+            &history(made_earlier, &first),
+        ))
+        .await
+        .expect("send");
     // A clock in the future is pulled back to now.
     let second = client.insert(18, "offline two\n");
-    socket.send(build_frame(frame::HISTORY, &id, &history(now + 86_400_000, &second))).await.expect("send");
+    socket
+        .send(build_frame(
+            frame::HISTORY,
+            &id,
+            &history(now + 86_400_000, &second),
+        ))
+        .await
+        .expect("send");
     // A handshake catch-up: offline, stamped on arrival.
     let third = client.insert(30, "caught up\n");
-    socket.send(build_frame(frame::SYNC_STEP2, &id, &third)).await.expect("send");
+    socket
+        .send(build_frame(frame::SYNC_STEP2, &id, &third))
+        .await
+        .expect("send");
     // A live edit afterwards.
     let fourth = client.insert(40, "live\n");
-    socket.send(build_frame(frame::UPDATE, &id, &fourth)).await.expect("send");
+    socket
+        .send(build_frame(frame::UPDATE, &id, &fourth))
+        .await
+        .expect("send");
 
     // Wait for all four to land.
     let deadline = std::time::Instant::now() + TIMEOUT;
@@ -1736,14 +1756,26 @@ async fn offline_edits_keep_the_time_they_were_made() {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     };
     assert_eq!(changes.len(), 4, "every edit is one change");
-    let at: Vec<i64> = changes.iter().map(|change| change.created_at.timestamp_millis()).collect();
+    let at: Vec<i64> = changes
+        .iter()
+        .map(|change| change.created_at.timestamp_millis())
+        .collect();
     let offline: Vec<bool> = changes.iter().map(|change| change.offline).collect();
 
     assert_eq!(offline, vec![true, true, true, false]);
     assert_eq!(at[0], made_earlier, "the claimed time is kept: {at:?}");
-    assert!(at[1] <= bson::DateTime::now().timestamp_millis(), "never in the future: {at:?}");
-    assert!(at.windows(2).all(|pair| pair[0] <= pair[1]), "history stays in order: {at:?}");
-    assert!(changes[0].received_at.is_some(), "an offline change says when it arrived");
+    assert!(
+        at[1] <= bson::DateTime::now().timestamp_millis(),
+        "never in the future: {at:?}"
+    );
+    assert!(
+        at.windows(2).all(|pair| pair[0] <= pair[1]),
+        "history stays in order: {at:?}"
+    );
+    assert!(
+        changes[0].received_at.is_some(),
+        "an offline change says when it arrived"
+    );
     assert!(changes[3].received_at.is_none());
 
     app.cleanup().await;
@@ -1765,7 +1797,10 @@ async fn an_offline_edit_never_predates_its_document() {
     let update = client.insert(6, "from last year\n");
     let mut payload = ((created - 365 * 86_400_000) as u64).to_be_bytes().to_vec();
     payload.extend_from_slice(&update);
-    socket.send(build_frame(frame::HISTORY, &id, &payload)).await.expect("send");
+    socket
+        .send(build_frame(frame::HISTORY, &id, &payload))
+        .await
+        .expect("send");
 
     let deadline = std::time::Instant::now() + TIMEOUT;
     let change = loop {
@@ -1784,7 +1819,11 @@ async fn an_offline_edit_never_predates_its_document() {
         }
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     };
-    assert!(change.created_at.timestamp_millis() >= created, "{:?} is before {created}", change.created_at);
+    assert!(
+        change.created_at.timestamp_millis() >= created,
+        "{:?} is before {created}",
+        change.created_at
+    );
     app.cleanup().await;
 }
 
@@ -1806,13 +1845,19 @@ async fn live_typing_folds_into_one_record_per_burst() {
     for ch in "hello".chars() {
         let update = client.insert(typed.len() as u32, &ch.to_string());
         typed.push(ch);
-        socket.send(build_frame(frame::UPDATE, &id, &update)).await.expect("send");
+        socket
+            .send(build_frame(frame::UPDATE, &id, &update))
+            .await
+            .expect("send");
     }
     tokio::time::sleep(std::time::Duration::from_millis(2_600)).await;
     for ch in " world".chars() {
         let update = client.insert(typed.len() as u32, &ch.to_string());
         typed.push(ch);
-        socket.send(build_frame(frame::UPDATE, &id, &update)).await.expect("send");
+        socket
+            .send(build_frame(frame::UPDATE, &id, &update))
+            .await
+            .expect("send");
     }
 
     let deadline = std::time::Instant::now() + TIMEOUT;
@@ -1836,7 +1881,10 @@ async fn live_typing_folds_into_one_record_per_burst() {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     };
     // Update 1 is the creation; "hello" is 2..=6, " world" is 7..=12.
-    let ranges: Vec<(i64, i64)> = records.iter().map(|c| (c.first_seq.unwrap_or(c.seq), c.seq)).collect();
+    let ranges: Vec<(i64, i64)> = records
+        .iter()
+        .map(|c| (c.first_seq.unwrap_or(c.seq), c.seq))
+        .collect();
     assert_eq!(ranges, vec![(2, 6), (7, 12)], "one record per burst");
 
     let text = |seq: i64| {
@@ -1846,11 +1894,21 @@ async fn live_typing_folds_into_one_record_per_burst() {
     };
     let (status, body) = text(6).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(serde_json::from_slice::<serde_json::Value>(&body).unwrap()["content"], "hello");
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&body).unwrap()["content"],
+        "hello"
+    );
     let (status, body) = text(12).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(serde_json::from_slice::<serde_json::Value>(&body).unwrap()["content"], "hello world");
-    assert_eq!(text(4).await.0, StatusCode::CONFLICT, "inside a burst is refused");
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&body).unwrap()["content"],
+        "hello world"
+    );
+    assert_eq!(
+        text(4).await.0,
+        StatusCode::CONFLICT,
+        "inside a burst is refused"
+    );
 
     app.cleanup().await;
 }
