@@ -175,6 +175,46 @@ should be written against:
   to rewrite a document it did not create — the host refuses that outright
   (`rewrite_document` checks `created_by`).
 
+## 1.2.0 — protocols and ports (2026-09-28)
+
+A **minor**: every addition below is new surface, nothing is removed, and a plugin built
+against 1.0 or 1.1 loads unchanged. `KERNEL_VERSION` and `KERNEL_API_VERSION` are now
+generated from one line (`x-kernel-version` in `schema/manifest.schema.json`), so they can
+no longer drift apart. The plan behind it is `dev-docs/todo/PLUGIN-PROTOCOLS.html`.
+
+- **`kernel.ports`** (`PortsApi`): services, slots and events through the plugin's own port
+  names, wired by the server's resolution of the live wiring.
+  - `use(port)` returns the service bound to a consumed port, as a handle limited to the
+    port's `needs`. Reading any other member throws `ContractViolationError`, in
+    development and production alike. An optional port with nothing bound is `undefined`.
+  - `serve(port, api)` provides a service; the API is checked against the protocol
+    version's whole shape, at the provider.
+  - `offer(port, items)` contributes to every host wired to a provided slot port, and
+    `collect(port)` is a host's live list **in seat order** (`get`, `entries`, `subscribe`).
+  - `emit(port, payload)` and `on(port, listener)` for events; a sticky protocol hands a
+    new listener the last value at once.
+  - An undeclared port throws, like an undeclared dependency always did.
+- **Manifest fields**: `provides` (port → `<publisher>/<name>@<version>`, with an optional
+  `order` default-seat hint), `consumes` (port → `<publisher>/<name>@<range>`, with
+  `needs`, `optional` and `seats`) and `hot`. The manifest types and both validators are
+  generated from `schema/manifest.schema.json`, and the TypeScript types gained what the
+  server already accepted (`config` `select`/`default`/`options`, `backend.routes`/`events`).
+- **Protocol packages**: `ProtocolPackage`, `ProtocolSource`, `ProtocolKind`; the `s.*`
+  builders gain `promise()`, `toJSON()`, `.as()` and `.describe()`, and `shapeFromJSON`
+  rebuilds a validator from a package's shape. A protocol's types are served at
+  `/protocols/<id>/<version>/index.d.ts`.
+- **Wiring types**: `LiveWiring`, `WiringOverrides`, `Resolution`, `ApplyPlan` and friends,
+  and `kernel.core.resolveWiring`, `planWiring`, `wiringCandidates` and `shapeFits`: the
+  server's resolver through the Wasm core, for the wiring editor.
+- **`kernel.extensions` and `kernel.services` are shims now**, over the same store as
+  `kernel.ports`, and go in 2.0. A plugin that declares a port for a point's protocol
+  (a point name is a protocol name: `navbar.item` is `lm/navbar.item`) has its legacy calls
+  routed onto that port: `contribute` takes the port's wired seat, `definePoint` and `get`
+  read the port's seats, and `services.require` of the bound provider returns the port's
+  `needs`-limited handle. A plugin that declares nothing contributes to an implicit port
+  every host of the protocol hears, and is served what a provider's `activate()` returned
+  or the first service it serves. Either side can move first.
+
 ## 1.1.0 — polish pass (2026-09-25)
 
 A **minor**, by this file's own rule: one optional field added, nothing removed and no

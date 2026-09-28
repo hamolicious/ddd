@@ -3,7 +3,7 @@
  */
 
 /** The `@kernel` contract version (`x-kernel-version`). The server's `KERNEL_VERSION` is generated from the same line. */
-export const MANIFEST_KERNEL_VERSION = "1.1.0";
+export const MANIFEST_KERNEL_VERSION = "1.2.0";
 
 export interface PluginFrontend {
   /** Path inside the package, e.g. `frontend/index.mjs`. */

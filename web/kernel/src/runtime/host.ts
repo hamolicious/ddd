@@ -34,6 +34,7 @@ import { DocumentsHost } from "./documents.js";
 import { EventBus } from "./events.js";
 import { MountPoint } from "./mount.js";
 import { NoticeCenter } from "./notices.js";
+import { PortsHost } from "./ports.js";
 import { ExtensionRegistry, type RegistryReport } from "./registry.js";
 import { ServiceRegistry } from "./services.js";
 import { SessionHost, type SessionHostOptions } from "./session.js";
@@ -61,8 +62,10 @@ export interface PluginProblem {
 }
 
 export class KernelHost {
+  /** The slot, service and event store `kernel.ports` and the 1.x shims share (§5). */
+  readonly ports: PortsHost;
   readonly extensions: ExtensionRegistry;
-  readonly services = new ServiceRegistry();
+  readonly services: ServiceRegistry;
   readonly events: EventBus;
   readonly notices = new NoticeCenter();
   readonly theme: ThemeController;
@@ -77,9 +80,12 @@ export class KernelHost {
 
   constructor(private readonly options: KernelHostOptions) {
     const report = (problem: PluginProblem): void => options.onPluginProblem?.(problem);
-    this.extensions = new ExtensionRegistry((r: RegistryReport) =>
-      report({ pluginId: r.pluginId, point: r.point, message: r.message }),
+    this.ports = new PortsHost((r) => this.extensions.record(r));
+    this.extensions = new ExtensionRegistry(
+      (r: RegistryReport) => report({ pluginId: r.pluginId, point: r.point, message: r.message }),
+      this.ports,
     );
+    this.services = new ServiceRegistry(this.ports);
     this.events = new EventBus((type, error) =>
       console.warn(`[events] listener for "${type}" threw`, error),
     );
@@ -121,8 +127,9 @@ export class KernelHost {
       pluginId,
       manifest,
       documents: this.documents.forPlugin(pluginId),
-      extensions: this.extensions.forPlugin(pluginId),
-      services: this.services.forPlugin(pluginId),
+      extensions: this.extensions.forPlugin(pluginId, manifest),
+      services: this.services.forPlugin(pluginId, manifest),
+      ports: this.ports.forPlugin(manifest),
       events: this.events.forPlugin(pluginId),
       settings: this.settings.api(pluginId),
       session: this.session.api(pluginId),

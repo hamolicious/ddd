@@ -35,7 +35,7 @@
  * 401 — the one case where the server has actually said the session is gone.
  */
 
-import type { InstalledPlugin, LiveWiring, ResolvedPluginSet, SessionUser } from "@kernel";
+import type { InstalledPlugin, LiveWiring, ProtocolPackage, ResolvedPluginSet, SessionUser } from "@kernel";
 
 const SESSION_KEY = "life-manager.boot.session";
 const PLUGINS_KEY = "life-manager.boot.plugins";
@@ -55,6 +55,8 @@ interface PluginsEntry {
   readonly wiring?: LiveWiring;
   /** The server's resolution of that wiring, so an offline boot activates the same way. */
   readonly resolved?: ResolvedPluginSet;
+  /** The protocol registry, for the ports runtime's checks offline. */
+  readonly protocols?: readonly ProtocolPackage[];
 }
 
 function read<T>(key: string): T | undefined {
@@ -102,13 +104,22 @@ export function rememberPlugins(
   plugins: readonly InstalledPlugin[],
   wiring?: LiveWiring,
   resolved?: ResolvedPluginSet,
+  protocols?: readonly ProtocolPackage[],
 ): void {
   write(PLUGINS_KEY, {
     v: CACHE_VERSION,
     plugins,
     ...(wiring ? { wiring } : {}),
     ...(resolved ? { resolved } : {}),
+    ...(protocols ? { protocols } : {}),
   } satisfies PluginsEntry);
+}
+
+/** The protocol registry the remembered plugin set was served with. */
+export function cachedProtocols(): readonly ProtocolPackage[] | undefined {
+  const entry = read<PluginsEntry>(PLUGINS_KEY);
+  if (!entry || entry.v !== CACHE_VERSION) return undefined;
+  return Array.isArray(entry.protocols) ? entry.protocols : undefined;
 }
 
 /**

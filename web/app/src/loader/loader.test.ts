@@ -38,6 +38,7 @@ function fakeHost(): Recorded {
       return { pluginId: manifest.id, manifest } as unknown as Kernel;
     },
     services: { publish: (id: string, api: unknown) => void published.push([id, api]) },
+    ports: { configure: () => undefined, adoptLegacyApi: () => undefined },
     retract: (id: string) => void retracted.push(id),
   } as unknown as KernelHost;
   return { host, forPlugin, published, retracted };

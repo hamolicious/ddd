@@ -1,19 +1,28 @@
 /**
- * The service registry: what each plugin's `activate()` returned, readable by its
- * **declared** dependents and nobody else (SPEC §6.1, §6.4).
+ * The service registry: the 1.x `kernel.services` API, kept as a shim while plugins move
+ * to `kernel.ports` (PLUGIN-PROTOCOLS §5, §9 step 5). It goes in 2.0.
  *
- * The declaration check is the whole point. Without it, plugin A works by accident
- * because plugin B happened to load first, and the day B is replaced or moves in
- * the topological order, A breaks with no explanation. `require` of an undeclared
- * id therefore throws even when the plugin is right there in the map.
+ * A service is still readable only by a **declared** dependent, and `require` of an
+ * undeclared id still throws even when the plugin is right there: without that check,
+ * plugin A works by accident because plugin B happened to load first.
+ *
+ * What changed is where the answer comes from. A plugin that declares a consumed service
+ * port bound to the plugin it asks for gets that port's handle, **limited to the port's
+ * `needs`**, exactly as `kernel.ports.use()` would return it. A plugin that declares
+ * nothing gets what the provider's `activate()` returned, as always, or the first service
+ * a provider that has moved to ports serves.
  */
 
-import { ContractViolationError, type ServicesApi } from "@kernel";
+import { ContractViolationError, type PluginManifest, type ServicesApi } from "@kernel";
+
+import type { PortsHost } from "./ports.js";
 
 export class ServiceRegistry {
   readonly #services = new Map<string, unknown>();
   /** plugin id → its declared dependency ids. */
   readonly #declared = new Map<string, ReadonlySet<string>>();
+
+  constructor(private readonly ports?: PortsHost) {}
 
   declare(pluginId: string, dependencies: readonly string[]): void {
     this.#declared.set(pluginId, new Set(dependencies));
@@ -35,8 +44,11 @@ export class ServiceRegistry {
     return [...this.#services.keys()].sort();
   }
 
-  forPlugin(pluginId: string): ServicesApi {
+  forPlugin(pluginId: string, manifest?: PluginManifest): ServicesApi {
     const declared = () => this.#declared.get(pluginId) ?? new Set<string>();
+    /** Through a declared port bound to `wanted`, when the plugin has one (§5). */
+    const routed = (wanted: string) =>
+      this.ports && manifest ? this.ports.legacyUse(pluginId, wanted) : { found: false as const };
     const check = (wanted: string): void => {
       if (wanted === pluginId || declared().has(wanted)) return;
       throw new ContractViolationError(
@@ -44,24 +56,37 @@ export class ServiceRegistry {
         { pluginId, wanted, declared: [...declared()] },
       );
     };
+    const direct = (wanted: string): unknown => this.#services.get(wanted) ?? this.ports?.servedBy(wanted);
     return {
       require: <T>(wanted: string): T => {
-        check(wanted);
-        if (!this.#services.has(wanted)) {
-          throw new ContractViolationError(
-            `dependency "${wanted}" of "${pluginId}" did not activate`,
-            { pluginId, wanted },
-          );
+        const port = routed(wanted);
+        if (port.found) {
+          if (port.api === undefined) {
+            throw new ContractViolationError(`dependency "${wanted}" of "${pluginId}" is not bound`, { pluginId, wanted });
+          }
+          return port.api as T;
         }
-        return this.#services.get(wanted) as T;
+        check(wanted);
+        const api = direct(wanted);
+        if (api === undefined && !this.#services.has(wanted)) {
+          throw new ContractViolationError(`dependency "${wanted}" of "${pluginId}" did not activate`, {
+            pluginId,
+            wanted,
+          });
+        }
+        return api as T;
       },
       get: <T>(wanted: string): T | undefined => {
+        const port = routed(wanted);
+        if (port.found) return port.api as T | undefined;
         check(wanted);
-        return this.#services.get(wanted) as T | undefined;
+        return direct(wanted) as T | undefined;
       },
       has: (wanted: string) => {
+        const port = routed(wanted);
+        if (port.found) return port.api !== undefined;
         check(wanted);
-        return this.#services.has(wanted);
+        return direct(wanted) !== undefined || this.#services.has(wanted);
       },
       list: () => this.list(),
     };

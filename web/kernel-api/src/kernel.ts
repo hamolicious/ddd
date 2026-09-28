@@ -20,6 +20,7 @@ import type { DocumentsApi } from "./documents.js";
 import type { EventsApi } from "./events.js";
 import type { ExtensionsApi } from "./extensions.js";
 import type { PluginManifest } from "./manifest.js";
+import type { PortsApi } from "./ports.js";
 import type { ServicesApi } from "./services.js";
 import type { SessionApi } from "./session.js";
 import type { SettingsApi } from "./settings.js";
@@ -94,7 +95,14 @@ export interface Kernel {
   readonly manifest: PluginManifest;
 
   readonly documents: DocumentsApi;
+  /**
+   * Services, slots and events through the plugin's own ports (PLUGIN-PROTOCOLS §5). New in
+   * 1.2.0; from 2.0 the only way plugins reach each other.
+   */
+  readonly ports: PortsApi;
+  /** 1.x: kept as a shim over `ports` until 2.0. */
   readonly extensions: ExtensionsApi;
+  /** 1.x: kept as a shim over `ports` until 2.0. */
   readonly services: ServicesApi;
   readonly events: EventsApi;
   readonly settings: SettingsApi;

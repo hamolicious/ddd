@@ -110,6 +110,8 @@ export {
 
 export type { ServicesApi } from "./services.js";
 
+export type { PortsApi, SlotHost, SlotItem } from "./ports.js";
+
 export {
   KERNEL_EVENT_PREFIX,
   KernelEvents,

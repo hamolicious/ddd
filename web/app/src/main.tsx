@@ -41,6 +41,7 @@ import {
   KERNEL_API_VERSION,
   type InstalledPlugin,
   type LogoutOptions,
+  type ProtocolPackage,
   type ResolvedPluginSet,
   type SessionUser,
 } from "@kernel";
@@ -54,6 +55,7 @@ import { AuthGate } from "./boot/AuthGate.js";
 import { OfflineError, installedPlugins, inviteTokenFromHash, logoutRequest, me, resetTokenFromHash } from "./boot/api.js";
 import {
   cachedPlugins,
+  cachedProtocols,
   cachedResolution,
   cachedSession,
   cachedWiring,
@@ -422,7 +424,7 @@ async function activatePlugins(
     });
   }
 
-  const { plugins, wiringVersion, resolved } = await installedSet(host, bearer, offlineBoot);
+  const { plugins, wiringVersion, resolved, protocols } = await installedSet(host, bearer, offlineBoot);
   wiringWatch.setRunning(wiringVersion);
   // The server resolved the wiring for both boot modes; the loader activates from the one
   // this page is in (PLUGIN-PROTOCOLS §6), and orders by itself only without one.
@@ -433,6 +435,7 @@ async function activatePlugins(
     kernelVersion: KERNEL_API_VERSION,
     baseOnly,
     ...(resolution ? { resolution } : {}),
+    ...(protocols ? { protocols } : {}),
   });
 
   console.info(
@@ -463,18 +466,30 @@ async function installedSet(
   readonly plugins: readonly InstalledPlugin[];
   readonly wiringVersion: number;
   readonly resolved?: ResolvedPluginSet;
+  readonly protocols?: readonly ProtocolPackage[];
 }> {
   try {
-    const { plugins, wiring, resolved } = await installedPlugins(bearer);
-    rememberPlugins(plugins, wiring, resolved);
-    return { plugins, wiringVersion: wiring?.version ?? 0, ...(resolved ? { resolved } : {}) };
+    const { plugins, wiring, resolved, protocols } = await installedPlugins(bearer);
+    rememberPlugins(plugins, wiring, resolved, protocols);
+    return {
+      plugins,
+      wiringVersion: wiring?.version ?? 0,
+      ...(resolved ? { resolved } : {}),
+      ...(protocols ? { protocols } : {}),
+    };
   } catch (error) {
     if (!(error instanceof OfflineError)) throw error;
     const remembered = cachedPlugins();
     if (remembered) {
       console.info(`[loader] offline: activating the ${remembered.length} plugins last seen here`);
       const resolved = cachedResolution();
-      return { plugins: remembered, wiringVersion: cachedWiring()?.version ?? 0, ...(resolved ? { resolved } : {}) };
+      const protocols = cachedProtocols();
+      return {
+        plugins: remembered,
+        wiringVersion: cachedWiring()?.version ?? 0,
+        ...(resolved ? { resolved } : {}),
+        ...(protocols ? { protocols } : {}),
+      };
     }
     host.notices.notify({
       id: "kernel:plugins-unavailable",

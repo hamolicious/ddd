@@ -24,6 +24,7 @@ import {
   type InstalledPlugin,
   type Kernel,
   type PluginModule,
+  type ProtocolPackage,
   type Resolution,
 } from "@kernel";
 import type { KernelHost } from "@kernel/runtime/index.js";
@@ -42,6 +43,8 @@ export interface LoadOptions {
    * cached before resolutions existed) the loader orders by `dependencies` itself.
    */
   readonly resolution?: Resolution;
+  /** Every registered protocol, from the plugin list: what the ports runtime checks against. */
+  readonly protocols?: readonly ProtocolPackage[];
   /** Injectable for tests; production uses a bare dynamic `import()`. */
   readonly importModule?: (url: string) => Promise<unknown>;
   /** Called after each plugin, for a boot progress line. */
@@ -135,6 +138,13 @@ export async function loadPlugins(options: LoadOptions): Promise<LoadReport> {
         ...(options.baseOnly !== undefined ? { baseOnly: options.baseOnly } : {}),
       });
   skipped.push(...resolved.skipped);
+  // The ports runtime learns the protocols, every manifest and the wiring before the
+  // first `activate`, so a plugin can `use` and `collect` from its first line (§5).
+  options.host.ports.configure({
+    protocols: options.protocols ?? [],
+    manifests: wellFormed.map((plugin) => plugin.manifest),
+    ...(resolution ? { resolution } : {}),
+  });
   const dependents = (failed: string): Iterable<string> =>
     resolution ? dependentsOf(new Set([failed]), resolution).keys() : transitiveDependents(failed, resolved.order);
 
@@ -156,6 +166,9 @@ export async function loadPlugins(options: LoadOptions): Promise<LoadReport> {
       kernel = options.host.forPlugin(plugin.manifest);
       const api = await module.default(kernel);
       options.host.services.publish(id, api);
+      // A 1.x provider returns its API: it is served on the service ports it declares,
+      // checked against their protocols, so a consumer on ports can use it (§5).
+      options.host.ports.adoptLegacyApi(id, api);
       activated.push(id);
       options.onProgress?.({ pluginId: id, index, total: resolved.order.length, outcome: "activated" });
     } catch (cause) {
