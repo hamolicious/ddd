@@ -99,6 +99,10 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/importmap.json", get(import_map))
         .route("/kernel.d.ts", get(kernel_dts))
+        .route(
+            "/protocols/{publisher}/{name}/{version}/{file}",
+            get(protocol_file),
+        )
         .route("/plugins/{id}/{version}/{*path}", get(plugin_asset))
 }
 
@@ -122,6 +126,9 @@ pub struct InstalledResponse {
     /// The live wiring (PLUGIN-PROTOCOLS §6): its version is what a client compares
     /// `wiring.applied` and `welcome.wiring_version` against.
     pub wiring: crate::wiring::LiveWiring,
+    /// Every registered protocol (PLUGIN-PROTOCOLS §3), including those whose owner is
+    /// gone, so a client can still type-check wires.
+    pub protocols: Vec<life_manager_core::wiring::ProtocolPackage>,
 }
 
 /// Authenticated: the plugin list names what is installed in this workspace, which is
@@ -142,6 +149,11 @@ pub async fn installed(
         },
         disabled: state.config.disable_plugins,
         wiring: crate::wiring::load(&state).await,
+        protocols: crate::protocols::all(&state)
+            .await
+            .into_values()
+            .map(|protocol| protocol.package)
+            .collect(),
     }))
 }
 
@@ -296,6 +308,45 @@ pub async fn kernel_dts(State(state): State<AppState>) -> Response {
         )
             .into_response(),
     }
+}
+
+// ---------------------------------------------------------------------------
+// /protocols/{publisher}/{name}/{version}/{index.d.ts | protocol.json}
+// ---------------------------------------------------------------------------
+
+/// A registered protocol's types or package (PLUGIN-PROTOCOLS §3). Public, like
+/// `/kernel.d.ts`: an outside author compiles against what this server actually has,
+/// without copying files. Served from the registry, so it outlives the owning plugin.
+pub async fn protocol_file(
+    State(state): State<AppState>,
+    AxumPath((publisher, name, version, file)): AxumPath<(String, String, String, String)>,
+) -> Response {
+    let id = format!("{publisher}/{name}");
+    let protocols = crate::protocols::all(&state).await;
+    let Some(protocol) = protocols.get(&format!("{id}@{version}")) else {
+        return not_found();
+    };
+    let (content_type, body) = match file.as_str() {
+        "index.d.ts" => match protocol.types.clone() {
+            Some(types) => ("text/plain; charset=utf-8", types),
+            None => return not_found(),
+        },
+        "protocol.json" => (
+            "application/json",
+            serde_json::to_string_pretty(&protocol.package).unwrap_or_default(),
+        ),
+        _ => return not_found(),
+    };
+    (
+        StatusCode::OK,
+        [
+            (CONTENT_TYPE, HeaderValue::from_static(content_type)),
+            (NOSNIFF, HeaderValue::from_static("nosniff")),
+            (CACHE_CONTROL, HeaderValue::from_static("no-cache")),
+        ],
+        body,
+    )
+        .into_response()
 }
 
 // ---------------------------------------------------------------------------

@@ -5,8 +5,15 @@
   "description": "Viewers for every file type a browser shows by itself: images, PDF, audio, video and plain text.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
-  "x-tailwind": { "prefix": "nativepreview" },
+  "x-tailwind": {
+    "prefix": "nativepreview"
+  },
   "kernel": "^1.0",
+  "provides": {
+    "viewers": {
+      "protocol": "lm/attachments.viewer@1.0.0"
+    }
+  },
   "peerLibraries": {
     "react": "^18.0.0"
   },

@@ -1,0 +1,33 @@
+{
+  "id": "lm/slash.command",
+  "version": "1.0.0",
+  "kind": "slot",
+  "owner": "slash-commands",
+  "types": "index.d.ts",
+  "description": "One entry in the `/` menu. Typing `/att` lists the commands whose title or keywords start with it.",
+  "key": "id",
+  "shape": {
+    "object": {
+      "id": "string",
+      "title": "string",
+      "description": {
+        "optional": "string"
+      },
+      "icon": {
+        "optional": "any"
+      },
+      "keywords": {
+        "optional": {
+          "array": "string"
+        }
+      },
+      "order": {
+        "optional": "number"
+      },
+      "when": {
+        "optional": "func"
+      },
+      "run": "func"
+    }
+  }
+}

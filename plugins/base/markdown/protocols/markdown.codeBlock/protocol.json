@@ -1,0 +1,18 @@
+{
+  "id": "lm/markdown.codeBlock",
+  "version": "1.0.0",
+  "kind": "slot",
+  "owner": "markdown",
+  "types": "index.d.ts",
+  "description": "The renderer for a fenced code block no `lm/markdown.fence` claims: ```rust, ```ts, or a fence with no language. The first seat wins; with none wired, markdown draws its own `<pre>`.",
+  "key": "id",
+  "shape": {
+    "object": {
+      "id": "string",
+      "component": "component",
+      "order": {
+        "optional": "number"
+      }
+    }
+  }
+}

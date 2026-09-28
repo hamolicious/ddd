@@ -7,6 +7,30 @@
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
   "kernel": "^1.0",
+  "consumes": {
+    "viewers": {
+      "protocol": "lm/attachments.viewer@^1.0"
+    }
+  },
+  "provides": {
+    "uploads": {
+      "protocol": "lm/attachments@1.0.0"
+    },
+    "embed": {
+      "protocol": "lm/markdown.attachment@1.0.0"
+    },
+    "paste": {
+      "protocol": "lm/editor.paste@1.0.0"
+    },
+    "attach": {
+      "protocol": "lm/slash.command@1.0.0",
+      "order": 10
+    },
+    "settings": {
+      "protocol": "lm/settings.section@1.0.0",
+      "order": 40
+    }
+  },
   "peerLibraries": {
     "react": "^18.0.0"
   },

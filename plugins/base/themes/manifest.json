@@ -7,6 +7,30 @@
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
   "kernel": "^1.0",
+  "consumes": {
+    "themes": {
+      "protocol": "lm/themes.theme@^1.0"
+    },
+    "settings-shell": {
+      "protocol": "lm/settings-shell@^1.0",
+      "needs": [
+        "open"
+      ],
+      "optional": true
+    }
+  },
+  "provides": {
+    "builtin": {
+      "protocol": "lm/themes.theme@1.0.0"
+    },
+    "commands": {
+      "protocol": "lm/commands.command@1.0.0"
+    },
+    "settings": {
+      "protocol": "lm/settings.section@1.0.0",
+      "order": 10
+    }
+  },
   "dependencies": {
     "commands": "^1.0",
     "settings": "^1.0"

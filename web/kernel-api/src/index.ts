@@ -64,13 +64,17 @@ export {
   number,
   object,
   optional,
+  promise,
   record,
   s,
+  shapeFromJSON,
   string,
   union,
   validate,
+  type BuiltShape,
   type Shape,
   type ShapeIssue,
+  type ShapeJson,
 } from "./shape.js";
 
 export type {
@@ -184,6 +188,13 @@ export {
   type PluginState,
   type ProvidedPort,
 } from "./manifest.js";
+
+export {
+  protocolKey,
+  type ProtocolKind,
+  type ProtocolPackage,
+  type ProtocolSource,
+} from "./protocols.js";
 
 export { EMPTY_WIRING, WIRE_ARROW, type LiveWiring, type WiringOverrides } from "./wiring.js";
 

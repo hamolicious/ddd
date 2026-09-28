@@ -7,6 +7,12 @@
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
   "kernel": "^1.0",
+  "provides": {
+    "pill": {
+      "protocol": "lm/navbar.item@1.0.0",
+      "order": 1000
+    }
+  },
   "peerLibraries": {
     "react": "^18.0.0"
   },

@@ -1,0 +1,22 @@
+{
+  "id": "lm/markdown.taskState",
+  "version": "1.0.0",
+  "kind": "slot",
+  "owner": "markdown",
+  "types": "index.d.ts",
+  "description": "A task marker. `[ ]` and `[x]` are markdown's own; a plugin may add `[/]`, `[-]`, `[?]`. Marker meaning comes from the client, so a client without the providing plugin renders the marker as literal text. States appear in the state menu in seat order.",
+  "key": "marker",
+  "shape": {
+    "object": {
+      "marker": "string",
+      "label": "string",
+      "icon": "any",
+      "order": {
+        "optional": "number"
+      },
+      "done": {
+        "optional": "boolean"
+      }
+    }
+  }
+}

@@ -5,8 +5,23 @@
   "description": "Type / in any editor for a menu of actions other plugins offer.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
-  "x-tailwind": { "prefix": "slash" },
+  "x-tailwind": {
+    "prefix": "slash"
+  },
   "kernel": "^1.0",
+  "consumes": {
+    "surfaces": {
+      "protocol": "lm/text.surface@^1.0"
+    },
+    "commands": {
+      "protocol": "lm/slash.command@^1.0"
+    }
+  },
+  "provides": {
+    "menu": {
+      "protocol": "lm/shell.overlay@1.0.0"
+    }
+  },
   "peerLibraries": {
     "react": "^18.0.0"
   },

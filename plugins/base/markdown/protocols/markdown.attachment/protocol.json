@@ -1,0 +1,18 @@
+{
+  "id": "lm/markdown.attachment",
+  "version": "1.0.0",
+  "kind": "slot",
+  "owner": "markdown",
+  "types": "index.d.ts",
+  "description": "What an embedded file (`![name](attachment://<ulid>)`) renders as. The first seat wins; with none wired, markdown draws its own inline image or chip. Also what the viewer shows for a wrapper document, with `placement: \"page\"`.",
+  "key": "id",
+  "shape": {
+    "object": {
+      "id": "string",
+      "component": "component",
+      "order": {
+        "optional": "number"
+      }
+    }
+  }
+}

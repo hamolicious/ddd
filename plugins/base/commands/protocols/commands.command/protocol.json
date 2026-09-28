@@ -1,0 +1,25 @@
+{
+  "id": "lm/commands.command",
+  "version": "1.0.0",
+  "kind": "slot",
+  "owner": "commands",
+  "types": "index.d.ts",
+  "description": "A command: one id, one title, one function. The palette lists them; keybindings run them. Two providers claiming one id: the lower seat wins and the other is reported.",
+  "key": "id",
+  "shape": {
+    "object": {
+      "id": "string",
+      "title": "string",
+      "run": "func",
+      "category": {
+        "optional": "string"
+      },
+      "icon": {
+        "optional": "any"
+      },
+      "when": {
+        "optional": "func"
+      }
+    }
+  }
+}

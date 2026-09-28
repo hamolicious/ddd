@@ -5,8 +5,28 @@
   "description": "While you type a frontmatter value, suggests the values that key already has across the workspace.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
-  "x-tailwind": { "prefix": "fmac" },
+  "x-tailwind": {
+    "prefix": "fmac"
+  },
   "kernel": "^1.0",
+  "consumes": {
+    "index": {
+      "protocol": "lm/workspace-index@^1.0",
+      "needs": [
+        "fmFields",
+        "fmValues",
+        "subscribe"
+      ]
+    },
+    "surfaces": {
+      "protocol": "lm/text.surface@^1.0"
+    }
+  },
+  "provides": {
+    "popup": {
+      "protocol": "lm/shell.overlay@1.0.0"
+    }
+  },
   "dependencies": {
     "indexer": "^1.0"
   },

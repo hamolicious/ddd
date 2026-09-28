@@ -7,6 +7,20 @@
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
   "kernel": "^1.0",
+  "consumes": {
+    "items": {
+      "protocol": "lm/navbar.item@^1.0"
+    }
+  },
+  "provides": {
+    "bar": {
+      "protocol": "lm/shell.header@1.0.0"
+    },
+    "settings": {
+      "protocol": "lm/settings.section@1.0.0",
+      "order": 150
+    }
+  },
   "peerLibraries": {
     "react": "^18.0.0"
   },

@@ -7,6 +7,54 @@
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
   "kernel": "^1.0",
+  "consumes": {
+    "router": {
+      "protocol": "lm/router@^1.0",
+      "needs": [
+        "navigate",
+        "current",
+        "onChange"
+      ]
+    },
+    "menu": {
+      "protocol": "lm/context-menu@^1.0",
+      "needs": [
+        "open",
+        "close"
+      ]
+    },
+    "search": {
+      "protocol": "lm/search.provider@^1.0"
+    },
+    "location": {
+      "protocol": "lm/folders.default-location@^1.0"
+    }
+  },
+  "provides": {
+    "local": {
+      "protocol": "lm/search.provider@1.0.0",
+      "order": 0
+    },
+    "browser": {
+      "protocol": "lm/document-browser@1.0.0"
+    },
+    "list": {
+      "protocol": "lm/sidebar.panel@1.0.0",
+      "order": 10
+    },
+    "route": {
+      "protocol": "lm/router.route@1.0.0"
+    },
+    "views": {
+      "protocol": "lm/main.view@1.0.0"
+    },
+    "commands": {
+      "protocol": "lm/commands.command@1.0.0"
+    },
+    "keys": {
+      "protocol": "lm/keybindings.default@1.0.0"
+    }
+  },
   "dependencies": {
     "commands": "^1.0",
     "context-menu": "^1.0",

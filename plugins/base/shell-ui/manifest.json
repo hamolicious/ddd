@@ -7,6 +7,37 @@
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
   "kernel": "^1.0",
+  "consumes": {
+    "header": {
+      "protocol": "lm/shell.header@^1.0",
+      "seats": 1
+    },
+    "overlays": {
+      "protocol": "lm/shell.overlay@^1.0"
+    },
+    "sidebar": {
+      "protocol": "lm/sidebar.panel@^1.0"
+    },
+    "altbar": {
+      "protocol": "lm/altbar.panel@^1.0"
+    },
+    "views": {
+      "protocol": "lm/main.view@^1.0"
+    }
+  },
+  "provides": {
+    "shell": {
+      "protocol": "lm/shell@1.0.0"
+    },
+    "sidebar-toggle": {
+      "protocol": "lm/navbar.item@1.0.0",
+      "order": 0
+    },
+    "altbar-toggle": {
+      "protocol": "lm/navbar.item@1.0.0",
+      "order": 2000
+    }
+  },
   "peerLibraries": {
     "react": "^18.0.0"
   },

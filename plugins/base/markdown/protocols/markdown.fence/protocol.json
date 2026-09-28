@@ -1,0 +1,15 @@
+{
+  "id": "lm/markdown.fence",
+  "version": "1.0.0",
+  "kind": "slot",
+  "owner": "markdown",
+  "types": "index.d.ts",
+  "description": "A renderer for a fenced code block of one language (```mermaid, ```chart).",
+  "key": "language",
+  "shape": {
+    "object": {
+      "language": "string",
+      "component": "component"
+    }
+  }
+}

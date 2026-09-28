@@ -7,6 +7,25 @@
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
   "kernel": "^1.0",
+  "consumes": {
+    "shell": {
+      "protocol": "lm/shell@^1.0",
+      "needs": [
+        "setMainView"
+      ]
+    },
+    "routes": {
+      "protocol": "lm/router.route@^1.0"
+    }
+  },
+  "provides": {
+    "router": {
+      "protocol": "lm/router@1.0.0"
+    },
+    "not-found": {
+      "protocol": "lm/main.view@1.0.0"
+    }
+  },
   "dependencies": {
     "shell-ui": "^1.0"
   },

@@ -283,7 +283,16 @@ run = [
 [tasks.web-check]
 description = "Typecheck and unit-test the web tree: kernel contract, kernel runtime, PWA loader, base plugins"
 dir = "web"
-run = ["npm install --no-audit --no-fund", "npm run typecheck", "npm run test"]
+# The generated files first (PLUGIN-PROTOCOLS §9 steps 1 and 3): the manifest types from
+# `schema/manifest.schema.json`, and every protocol package from its `shape.mjs`. Stale
+# output fails here, naming the file, before anything is compiled against it. Then the
+# protocol declarations with `skipLibCheck` off, which the main typecheck cannot do.
+run = [
+  "npm install --no-audit --no-fund",
+  "npm run check:generated",
+  "npm run typecheck",
+  "npm run test",
+]
 
 [tasks.shell-test]
 description = "M5: the Flutter shell gate — format, analyze and unit-test app/"

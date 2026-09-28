@@ -1,0 +1,18 @@
+{
+  "id": "lm/markdown.component",
+  "version": "1.0.0",
+  "kind": "slot",
+  "owner": "markdown",
+  "types": "index.d.ts",
+  "description": "Override the React component for one mdast node type (`link`, `heading`, `table`).",
+  "key": "node",
+  "shape": {
+    "object": {
+      "node": "string",
+      "component": "component",
+      "order": {
+        "optional": "number"
+      }
+    }
+  }
+}

@@ -7,6 +7,46 @@
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
   "kernel": "^1.0",
+  "consumes": {
+    "router": {
+      "protocol": "lm/router@^1.0",
+      "needs": [
+        "navigate",
+        "current",
+        "onChange",
+        "href",
+        "url"
+      ]
+    },
+    "menu": {
+      "protocol": "lm/context-menu@^1.0",
+      "needs": [
+        "open",
+        "openSheet",
+        "modal",
+        "confirm"
+      ]
+    }
+  },
+  "provides": {
+    "route": {
+      "protocol": "lm/router.route@1.0.0"
+    },
+    "view": {
+      "protocol": "lm/main.view@1.0.0"
+    },
+    "settings": {
+      "protocol": "lm/settings.section@1.0.0",
+      "order": 900
+    },
+    "nav": {
+      "protocol": "lm/navbar.item@1.0.0",
+      "order": 90
+    },
+    "commands": {
+      "protocol": "lm/commands.command@1.0.0"
+    }
+  },
   "dependencies": {
     "commands": "^1.0",
     "context-menu": "^1.0",

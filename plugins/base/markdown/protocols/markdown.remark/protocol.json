@@ -1,0 +1,21 @@
+{
+  "id": "lm/markdown.remark",
+  "version": "1.0.0",
+  "kind": "slot",
+  "owner": "markdown",
+  "types": "index.d.ts",
+  "description": "A raw remark/unified plugin: the escalated path. It can change the meaning of the whole document, so it is the last resort, not the first. Plugins run in seat order.",
+  "key": "id",
+  "shape": {
+    "object": {
+      "id": "string",
+      "plugin": "any",
+      "options": {
+        "optional": "any"
+      },
+      "order": {
+        "optional": "number"
+      }
+    }
+  }
+}

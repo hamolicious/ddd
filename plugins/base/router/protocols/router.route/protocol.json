@@ -1,0 +1,18 @@
+{
+  "id": "lm/router.route",
+  "version": "1.0.0",
+  "kind": "slot",
+  "owner": "router",
+  "types": "index.d.ts",
+  "description": "One route. `path` is a pattern with `:name` segments (`/doc/:id`); matches are passed to the view as `params`. Hash-based, so the app works from `file://` in the shell with no server rewrites. The more specific pattern matches first; seat order only breaks ties.",
+  "key": "path",
+  "shape": {
+    "object": {
+      "path": "string",
+      "view": "string",
+      "order": {
+        "optional": "number"
+      }
+    }
+  }
+}

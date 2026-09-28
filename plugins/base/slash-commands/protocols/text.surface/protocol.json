@@ -1,0 +1,28 @@
+{
+  "id": "lm/text.surface",
+  "version": "1.0.0",
+  "kind": "slot",
+  "owner": "slash-commands",
+  "types": "index.d.ts",
+  "description": "An editor, as anything that works at the caret sees it: the `/` menu, frontmatter autocomplete. Editor-neutral on purpose: CodeMirror and a plain textarea both provide one while mounted and withdraw it on unmount. One provider can feed several hosts.",
+  "key": "id",
+  "shape": {
+    "object": {
+      "id": "string",
+      "documentId": "string",
+      "element": "any",
+      "hasFocus": "func",
+      "focus": "func",
+      "textBeforeCaret": "func",
+      "caretRect": "func",
+      "takeBeforeCaret": "func",
+      "subscribe": "func",
+      "documentBeforeCaret": {
+        "optional": "func"
+      },
+      "replaceBeforeCaret": {
+        "optional": "func"
+      }
+    }
+  }
+}

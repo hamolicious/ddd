@@ -314,6 +314,13 @@ async fn install_locked(
         }
     };
 
+    // The package's protocols and ports (PLUGIN-PROTOCOLS §3, §4): a claimed namespace, an
+    // `id@version` that means something else here, or a `needs` key the protocol lacks.
+    if let Err(message) = crate::protocols::check_install(state, &manifest, &extracted.dir).await {
+        let _ = fs::remove_dir_all(&work);
+        return Err(InstallError::Manifest(message));
+    }
+
     let outcome = stage_and_record(
         state,
         request,
@@ -1428,7 +1435,11 @@ pub async fn refresh_registry(state: &AppState) -> Arc<plugins::Registry> {
             Vec::new()
         }
     };
-    plugins::reload_with_records(&state.config, &records)
+    let registry = plugins::reload_with_records(&state.config, &records);
+    // Every scan that can change what is served also takes its protocols into the
+    // registry, which keeps them after their owner is gone (PLUGIN-PROTOCOLS §3).
+    crate::protocols::register_served(state).await;
+    registry
 }
 
 // ---------------------------------------------------------------------------

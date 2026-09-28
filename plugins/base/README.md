@@ -134,6 +134,31 @@ document experience stacks `viewer`/`editor` as peer *modes* on
 `folders` is the one browse plugin built on top of another (`doc-list`). Replacing any
 node means satisfying its incoming arrows — nothing else.
 
+## Protocols and ports
+
+Every contract between base plugins is a **protocol package** inside the plugin that owns
+it (`dev-docs/todo/PLUGIN-PROTOCOLS.html` §3): `header/protocols/navbar.item/`,
+`indexer/protocols/workspace-index/`, and so on, 35 in all (8 services, 26 slots, 1 event).
+Each package has one hand-written file, `shape.mjs`; `protocol.json`, `index.d.ts` and
+`README.md` are generated from it:
+
+```
+cd web && npm run generate          # after editing a shape.mjs or schema/manifest.schema.json
+cd web && npm run check:generated   # what `mise run web-check` runs: fails on stale output
+```
+
+A plugin compiles against a protocol with `import type { NavbarItem } from
+"@protocols/lm/navbar.item"`, never against another plugin's sources. The build copies the
+generated files into `dist/<id>/<version>/protocols/`, the installer admits exactly those,
+and the server registers them when it scans the served plugins, keeps them after their
+owner is gone, and serves each one's types at `/protocols/<id>/<version>/index.d.ts`.
+
+Each manifest names its **ports**: `provides` (a protocol at the exact version it
+implements, with an optional `order` hint for default seats) and `consumes` (a range, with
+`needs` listing the members it reads, `optional` for a service it can live without, and
+`seats: 1` for a host that shows one contributor). Port names are local to the plugin and
+never change once published, because wiring refers to them.
+
 ## Machine-owned documents
 
 `doc-list`, `folders` and `search` leave out any document whose `fm.path` starts with

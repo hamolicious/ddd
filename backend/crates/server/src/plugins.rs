@@ -160,7 +160,7 @@ pub fn is_valid_version(version: &str) -> bool {
 }
 
 /// Order two versions by their numeric triple; anything unparseable sorts lowest.
-fn compare_versions(a: &str, b: &str) -> Ordering {
+pub fn compare_versions(a: &str, b: &str) -> Ordering {
     let triple = |v: &str| -> [u64; 3] {
         let core = v.split(['-', '+']).next().unwrap_or_default();
         let mut out = [0u64; 3];
@@ -918,6 +918,8 @@ pub struct PluginProblem {
 pub struct Registry {
     plugins: Vec<InstalledPlugin>,
     problems: Vec<PluginProblem>,
+    /// The protocol packages the served plugins ship, by `id@version` (PLUGIN-PROTOCOLS §3).
+    protocols: BTreeMap<String, crate::protocols::RegisteredProtocol>,
     /// The directory that was scanned. `None` on the default (empty) registry, which is
     /// what `DISABLE_PLUGINS=1` returns — and what makes every asset route 404.
     root: Option<PathBuf>,
@@ -930,6 +932,11 @@ impl Registry {
 
     pub fn problems(&self) -> &[PluginProblem] {
         &self.problems
+    }
+
+    /// The protocol packages the served plugins ship, by `id@version`.
+    pub fn protocols(&self) -> &BTreeMap<String, crate::protocols::RegisteredProtocol> {
+        &self.protocols
     }
 
     pub fn root(&self) -> Option<&Path> {
@@ -1119,6 +1126,20 @@ pub fn scan(dir: &Path) -> Registry {
             }
         }
     }
+
+    let served: Vec<(String, bool, PathBuf)> = best
+        .iter()
+        .map(|(id, (version, _))| {
+            (
+                id.clone(),
+                BASE_PLUGIN_IDS.contains(&id.as_str()),
+                dir.join(id).join(version),
+            )
+        })
+        .collect();
+    let (protocols, protocol_problems) = crate::protocols::from_scan(&served);
+    registry.protocols = protocols;
+    registry.problems.extend(protocol_problems);
 
     for (id, (version, manifest)) in best {
         let assets_version = frontend_assets_version(&dir.join(&id).join(&version), &manifest);

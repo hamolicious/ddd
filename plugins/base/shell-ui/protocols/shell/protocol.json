@@ -1,0 +1,21 @@
+{
+  "id": "lm/shell",
+  "version": "1.0.0",
+  "kind": "service",
+  "owner": "shell-ui",
+  "types": "index.d.ts",
+  "description": "The app's layout: the breakpoint, the sidebar and altbar, and which main view is showing. A header or toolbar drives the shell through it; the router tells it what to show.",
+  "shape": {
+    "object": {
+      "isCompact": "func",
+      "onLayoutChange": "func",
+      "layout": "func",
+      "subscribeLayout": "func",
+      "sidebarId": "string",
+      "toggleSidebar": "func",
+      "altbarId": "string",
+      "toggleAltbar": "func",
+      "setMainView": "func"
+    }
+  }
+}

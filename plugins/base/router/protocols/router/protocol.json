@@ -1,0 +1,21 @@
+{
+  "id": "lm/router",
+  "version": "1.0.0",
+  "kind": "service",
+  "owner": "router",
+  "types": "index.d.ts",
+  "description": "URL to view, hash-based. Navigate, read the current path and query, build paths from patterns, and render in-app links. Consumers name the members they use in `needs`: most need only `navigate`.",
+  "shape": {
+    "object": {
+      "navigate": "func",
+      "current": "func",
+      "query": "func",
+      "match": "func",
+      "onChange": "func",
+      "href": "func",
+      "url": "func",
+      "documentPath": "func",
+      "Link": "component"
+    }
+  }
+}

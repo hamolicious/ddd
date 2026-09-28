@@ -1,0 +1,24 @@
+{
+  "id": "lm/themes.theme",
+  "version": "1.0.0",
+  "kind": "slot",
+  "owner": "themes",
+  "types": "index.d.ts",
+  "description": "A theme: token overrides on top of the kernel defaults. `themes` overrides the palette, it does not own it, so a theme need only name the tokens it changes and everything else stays legible.",
+  "key": "id",
+  "shape": {
+    "object": {
+      "id": "string",
+      "name": "string",
+      "scheme": {
+        "literal": [
+          "light",
+          "dark"
+        ]
+      },
+      "tokens": {
+        "record": "string"
+      }
+    }
+  }
+}

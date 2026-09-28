@@ -16,7 +16,7 @@
  * here went to a 404 in the shell until this was a function.
  */
 
-import type { InstalledPlugin, LiveWiring, SessionUser } from "@kernel";
+import type { InstalledPlugin, LiveWiring, ProtocolPackage, SessionUser } from "@kernel";
 
 import { apiBase } from "./shell.js";
 
@@ -213,6 +213,8 @@ export const logoutRequest = (token?: string): Promise<void> =>
 export interface PluginList {
   readonly plugins: readonly InstalledPlugin[];
   readonly wiring?: LiveWiring;
+  /** Every registered protocol, owners gone included (PLUGIN-PROTOCOLS §3). */
+  readonly protocols?: readonly ProtocolPackage[];
 }
 
 /**

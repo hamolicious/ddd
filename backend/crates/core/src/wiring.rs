@@ -96,6 +96,241 @@ pub fn wire(from: &str, to: &str) -> String {
     format!("{from}{WIRE_ARROW}{to}")
 }
 
+// ---------------------------------------------------------------------------
+// Protocols and shapes (PLUGIN-PROTOCOLS §3, §6b)
+// ---------------------------------------------------------------------------
+
+/// `service`: one provider per consumer port. `slot`: many contributors feed a host port in
+/// seat order. `event`: a typed message stream, many to many.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ProtocolKind {
+    Service,
+    Slot,
+    Event,
+}
+
+/// A shape in the `s.*` vocabulary, as plain JSON: `"string"`, `{ "object": { … } }`, …
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Shape {
+    /// `string`, `number`, `boolean`, `func`, `promise`, `component`, `any`.
+    Primitive(String),
+    Literal {
+        literal: Vec<serde_json::Value>,
+    },
+    Union {
+        union: Vec<Shape>,
+    },
+    Array {
+        array: Box<Shape>,
+    },
+    Record {
+        record: Box<Shape>,
+    },
+    Object {
+        object: BTreeMap<String, Shape>,
+    },
+    Optional {
+        optional: Box<Shape>,
+    },
+}
+
+/// A slot's duplicate rule: one field, or several joined with `|`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ProtocolKey {
+    One(String),
+    Many(Vec<String>),
+}
+
+impl ProtocolKey {
+    pub fn fields(&self) -> Vec<&str> {
+        match self {
+            ProtocolKey::One(field) => vec![field.as_str()],
+            ProtocolKey::Many(fields) => fields.iter().map(String::as_str).collect(),
+        }
+    }
+}
+
+/// `protocol.json`: generated from the package's `shape.mjs`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ProtocolPackage {
+    pub id: String,
+    pub version: String,
+    pub kind: ProtocolKind,
+    /// The plugin that ships it.
+    pub owner: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub types: Option<String>,
+    pub shape: Shape,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<ProtocolKey>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub sticky: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+impl ProtocolPackage {
+    /// `lm/router@1.0.0`.
+    pub fn key(&self) -> String {
+        format!("{}@{}", self.id, self.version)
+    }
+}
+
+impl Shape {
+    fn describe(&self) -> String {
+        match self {
+            Shape::Primitive(name) => name.clone(),
+            Shape::Literal { literal } => literal
+                .iter()
+                .map(serde_json::Value::to_string)
+                .collect::<Vec<_>>()
+                .join(" | "),
+            Shape::Union { union } => union
+                .iter()
+                .map(Shape::describe)
+                .collect::<Vec<_>>()
+                .join(" | "),
+            Shape::Array { array } => format!("{}[]", array.describe()),
+            Shape::Record { record } => format!("Record<{}>", record.describe()),
+            Shape::Object { .. } => "{ … }".to_string(),
+            Shape::Optional { optional } => format!("{}?", optional.describe()),
+        }
+    }
+
+    /// The fields of an object shape; empty for anything else.
+    pub fn fields(&self) -> Option<&BTreeMap<String, Shape>> {
+        match self {
+            Shape::Object { object } => Some(object),
+            _ => None,
+        }
+    }
+
+    /// The same shape cut down to `needs`: what a consumer port actually asks for. Keys the
+    /// shape does not have are dropped here; install refuses them (§4).
+    pub fn narrowed(&self, needs: Option<&[String]>) -> Shape {
+        match (self, needs) {
+            (Shape::Object { object }, Some(needs)) => Shape::Object {
+                object: object
+                    .iter()
+                    .filter(|(key, _)| needs.iter().any(|need| need == *key))
+                    .map(|(key, shape)| (key.clone(), shape.clone()))
+                    .collect(),
+            },
+            _ => self.clone(),
+        }
+    }
+}
+
+/// Every reason offering `provided` where `needed` is required fails (§6b). Empty means it
+/// fits: extra keys are fine, a missing required key is not, and an optional key may be
+/// absent but must match when present.
+pub fn fits(provided: &Shape, needed: &Shape) -> Vec<String> {
+    let mut problems = Vec::new();
+    fits_at(provided, needed, "", &mut problems);
+    problems
+}
+
+fn fits_at(provided: &Shape, needed: &Shape, path: &str, out: &mut Vec<String>) {
+    let at = if path.is_empty() {
+        "value".to_string()
+    } else {
+        format!("`{path}`")
+    };
+    match needed {
+        Shape::Primitive(name) if name == "any" => {}
+        Shape::Object { object: needs } => {
+            let Shape::Object { object: offers } = provided else {
+                out.push(format!("{at} is {}, needs an object", provided.describe()));
+                return;
+            };
+            for (key, need) in needs {
+                let key_path = if path.is_empty() {
+                    key.clone()
+                } else {
+                    format!("{path}.{key}")
+                };
+                let (need, required) = match need {
+                    Shape::Optional { optional } => (optional.as_ref(), false),
+                    other => (other, true),
+                };
+                match offers.get(key) {
+                    None if required => out.push(format!("missing required `{key_path}`")),
+                    None => {}
+                    Some(Shape::Optional { .. }) if required => {
+                        out.push(format!("`{key_path}` may be absent, but is required"));
+                    }
+                    Some(Shape::Optional { optional }) => fits_at(optional, need, &key_path, out),
+                    Some(offer) => fits_at(offer, need, &key_path, out),
+                }
+            }
+        }
+        Shape::Literal { literal: allowed } => {
+            let ok = matches!(provided, Shape::Literal { literal } if literal.iter().all(|value| allowed.contains(value)));
+            if !ok {
+                out.push(format!(
+                    "{at} is {}, needs {}",
+                    provided.describe(),
+                    needed.describe()
+                ));
+            }
+        }
+        Shape::Array { array: item } => match provided {
+            Shape::Array { array } => fits_at(array, item, &format!("{path}[]"), out),
+            _ => out.push(format!(
+                "{at} is {}, needs {}",
+                provided.describe(),
+                needed.describe()
+            )),
+        },
+        Shape::Record { record: item } => match provided {
+            Shape::Record { record } => fits_at(record, item, &format!("{path}{{}}"), out),
+            _ => out.push(format!(
+                "{at} is {}, needs {}",
+                provided.describe(),
+                needed.describe()
+            )),
+        },
+        Shape::Union { union: members } => {
+            // A provided union fits when each of its members fits some needed member; a
+            // plain provided shape fits when it fits any member.
+            let options: Vec<&Shape> = match provided {
+                Shape::Union { union } => union.iter().collect(),
+                other => vec![other],
+            };
+            let ok = options
+                .iter()
+                .all(|option| members.iter().any(|member| fits(option, member).is_empty()));
+            if !ok {
+                out.push(format!(
+                    "{at} is {}, needs {}",
+                    provided.describe(),
+                    needed.describe()
+                ));
+            }
+        }
+        Shape::Optional { optional } => fits_at(provided, optional, path, out),
+        Shape::Primitive(name) => {
+            let ok = match provided {
+                Shape::Primitive(offer) => offer == name,
+                // A literal of strings is a string, and so on.
+                Shape::Literal { literal } => literal.iter().all(|value| match name.as_str() {
+                    "string" => value.is_string(),
+                    "number" => value.is_number(),
+                    "boolean" => value.is_boolean(),
+                    _ => false,
+                }),
+                _ => false,
+            };
+            if !ok {
+                out.push(format!("{at} is {}, needs {name}", provided.describe()));
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -138,6 +373,112 @@ mod tests {
                 vec!["folders:tree".to_string()]
             )])
         );
+    }
+
+    fn shape(json: &str) -> Shape {
+        serde_json::from_str(json).expect("a shape")
+    }
+
+    /// The type-check table of PLUGIN-PROTOCOLS §6b, row by row.
+    #[test]
+    fn the_type_check_table() {
+        let fits_ = |offer: &str, need: &str| fits(&shape(offer), &shape(need));
+        // Extra keys are ignored.
+        assert!(
+            fits_(
+                r#"{"object":{"id":"string","title":"string","icon":"any"}}"#,
+                r#"{"object":{"id":"string","title":"string"}}"#
+            )
+            .is_empty()
+        );
+        // A missing required key is refused.
+        assert_eq!(
+            fits_(
+                r#"{"object":{"id":"string","query":"func"}}"#,
+                r#"{"object":{"id":"string","search":"func"}}"#
+            ),
+            vec!["missing required `search`".to_string()]
+        );
+        // A mistyped key is refused.
+        assert_eq!(
+            fits_(
+                r#"{"object":{"id":"number"}}"#,
+                r#"{"object":{"id":"string"}}"#
+            ),
+            vec!["`id` is number, needs string".to_string()]
+        );
+        // An optional key may be absent...
+        assert!(
+            fits_(
+                r#"{"object":{}}"#,
+                r#"{"object":{"title":{"optional":"string"}}}"#
+            )
+            .is_empty()
+        );
+        // ...but if it is there, its type must match.
+        assert_eq!(
+            fits_(
+                r#"{"object":{"title":"number"}}"#,
+                r#"{"object":{"title":{"optional":"string"}}}"#
+            )
+            .len(),
+            1
+        );
+        // The provider may not leave out a key the consumer requires.
+        assert_eq!(
+            fits_(
+                r#"{"object":{"label":{"optional":"string"}}}"#,
+                r#"{"object":{"label":"string"}}"#
+            ),
+            vec!["`label` may be absent, but is required".to_string()]
+        );
+        // Literals must be a subset; a literal of strings is a string.
+        assert!(
+            fits_(
+                r#"{"literal":["light"]}"#,
+                r#"{"literal":["light","dark"]}"#
+            )
+            .is_empty()
+        );
+        assert!(!fits_(r#""string""#, r#"{"literal":["light","dark"]}"#).is_empty());
+        assert!(fits_(r#"{"literal":["light"]}"#, r#""string""#).is_empty());
+        // Arrays, records and nested objects, recursively.
+        assert!(fits_(r#"{"array":"string"}"#, r#"{"array":"string"}"#).is_empty());
+        assert_eq!(
+            fits_(r#"{"record":"number"}"#, r#"{"record":"string"}"#),
+            vec!["`{}` is number, needs string".to_string()]
+        );
+        assert_eq!(
+            fits_(
+                r#"{"object":{"a":{"object":{"b":"number"}}}}"#,
+                r#"{"object":{"a":{"object":{"b":"string"}}}}"#
+            ),
+            vec!["`a.b` is number, needs string".to_string()]
+        );
+        // Functions: presence and kind only.
+        assert!(fits_(r#""func""#, r#""func""#).is_empty());
+        // `any` accepts everything.
+        assert!(fits_(r#"{"object":{}}"#, r#""any""#).is_empty());
+    }
+
+    #[test]
+    fn needs_narrow_a_shape() {
+        let full = shape(r#"{"object":{"navigate":"func","query":"func","url":"func"}}"#);
+        let narrowed = full.narrowed(Some(&["navigate".to_string(), "nope".to_string()]));
+        assert_eq!(narrowed, shape(r#"{"object":{"navigate":"func"}}"#));
+        assert_eq!(full.narrowed(None), full);
+    }
+
+    #[test]
+    fn a_protocol_package_parses() {
+        let pkg: ProtocolPackage = serde_json::from_str(
+            r#"{ "id": "lm/keybindings.default", "version": "1.0.0", "kind": "slot", "owner": "commands",
+                 "key": ["keys", "command"], "shape": { "object": { "keys": "string", "command": "string" } } }"#,
+        )
+        .unwrap();
+        assert_eq!(pkg.key(), "lm/keybindings.default@1.0.0");
+        assert_eq!(pkg.key.unwrap().fields(), vec!["keys", "command"]);
+        assert_eq!(pkg.kind, ProtocolKind::Slot);
     }
 
     #[test]

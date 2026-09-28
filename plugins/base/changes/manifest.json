@@ -5,8 +5,53 @@
   "description": "The open document's history in the side panel: every change and snapshot, to view, revert or restore.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
-  "x-tailwind": { "prefix": "chg" },
+  "x-tailwind": {
+    "prefix": "chg"
+  },
   "kernel": "^1.0",
+  "consumes": {
+    "menu": {
+      "protocol": "lm/context-menu@^1.0",
+      "needs": [
+        "confirm"
+      ]
+    },
+    "shell": {
+      "protocol": "lm/shell@^1.0",
+      "needs": [
+        "layout",
+        "toggleAltbar"
+      ]
+    },
+    "markdown": {
+      "protocol": "lm/markdown-renderer@^1.0",
+      "needs": [
+        "render",
+        "bodyOf"
+      ]
+    },
+    "router": {
+      "protocol": "lm/router@^1.0",
+      "needs": [
+        "navigate"
+      ]
+    }
+  },
+  "provides": {
+    "panel": {
+      "protocol": "lm/altbar.panel@1.0.0",
+      "order": 100
+    },
+    "route": {
+      "protocol": "lm/router.route@1.0.0"
+    },
+    "views": {
+      "protocol": "lm/main.view@1.0.0"
+    },
+    "commands": {
+      "protocol": "lm/commands.command@1.0.0"
+    }
+  },
   "dependencies": {
     "context-menu": "^1.0",
     "markdown": "^1.0",

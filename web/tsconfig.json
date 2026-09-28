@@ -40,6 +40,10 @@
       /* Kernel internals: the M2 substrate plus the M3 runtime. Not a plugin
          specifier; `web/` code only. */
       "@kernel/*": ["kernel/src/*"],
+      /* Protocol packages (PLUGIN-PROTOCOLS §3), by id: `@protocols/lm/navbar.item`.
+         Type-only: each resolves to a generated `index.d.ts` inside the owning plugin
+         (through `plugins/base/_protocols`), and a plugin imports it with `import type`. */
+      "@protocols/*": ["../plugins/base/_protocols/*"],
       /* `plugins/base/**` is outside `web/`, so ordinary node resolution walks *up*
          from there and never reaches `web/node_modules`. These entries point the
          blessed runtime layer (SPEC §6.4) at this project's copies — at `@types/*`

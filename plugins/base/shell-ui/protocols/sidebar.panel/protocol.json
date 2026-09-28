@@ -1,0 +1,25 @@
+{
+  "id": "lm/sidebar.panel",
+  "version": "1.0.0",
+  "kind": "slot",
+  "owner": "shell-ui",
+  "types": "index.d.ts",
+  "description": "A panel in the sidebar (folders, the document list, an outline). Collapsible. Panels appear top to bottom in seat order.",
+  "key": "id",
+  "shape": {
+    "object": {
+      "id": "string",
+      "title": "string",
+      "component": "component",
+      "icon": {
+        "optional": "any"
+      },
+      "order": {
+        "optional": "number"
+      },
+      "defaultOpen": {
+        "optional": "boolean"
+      }
+    }
+  }
+}

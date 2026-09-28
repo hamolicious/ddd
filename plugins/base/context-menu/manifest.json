@@ -5,8 +5,18 @@
   "description": "One menu and sheet service for every plugin: anchored popovers on a wide screen, bottom sheets on a phone.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
-  "x-tailwind": { "prefix": "ctxmenu" },
+  "x-tailwind": {
+    "prefix": "ctxmenu"
+  },
   "kernel": "^1.0",
+  "provides": {
+    "menu": {
+      "protocol": "lm/context-menu@1.0.0"
+    },
+    "sheet": {
+      "protocol": "lm/shell.overlay@1.0.0"
+    }
+  },
   "peerLibraries": {
     "react": "^18.0.0",
     "react-dom": "^18.0.0"

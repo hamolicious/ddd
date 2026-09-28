@@ -7,6 +7,28 @@
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
   "kernel": "^1.0",
+  "consumes": {
+    "markdown": {
+      "protocol": "lm/markdown-renderer@^1.0",
+      "needs": [
+        "render",
+        "bodyOf",
+        "renderAttachment"
+      ]
+    }
+  },
+  "provides": {
+    "mode": {
+      "protocol": "lm/document.mode@1.0.0",
+      "order": 0
+    },
+    "view": {
+      "protocol": "lm/main.view@1.0.0"
+    },
+    "route": {
+      "protocol": "lm/router.route@1.0.0"
+    }
+  },
   "dependencies": {
     "document-surface": "^1.0",
     "markdown": "^1.0"

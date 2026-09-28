@@ -1,0 +1,20 @@
+{
+  "id": "lm/workspace-index",
+  "version": "1.0.0",
+  "kind": "service",
+  "owner": "indexer",
+  "types": "index.d.ts",
+  "description": "Indexes over the local projection, kept current on every change: a keystroke on this device or a change arriving from the feed. Nothing is written anywhere; every client builds its own, offline included.",
+  "shape": {
+    "object": {
+      "ready": "promise",
+      "version": "number",
+      "stats": "func",
+      "fmFields": "func",
+      "fmValues": "func",
+      "documents": "func",
+      "connections": "func",
+      "subscribe": "func"
+    }
+  }
+}

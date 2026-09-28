@@ -9,6 +9,26 @@
     "web-tree-sitter"
   ],
   "kernel": "^1.0",
+  "consumes": {
+    "languages": {
+      "protocol": "lm/syntax.language@^1.0"
+    }
+  },
+  "provides": {
+    "builtin": {
+      "protocol": "lm/syntax.language@1.0.0"
+    },
+    "code": {
+      "protocol": "lm/markdown.codeBlock@1.0.0"
+    },
+    "decorate": {
+      "protocol": "lm/editor.extension@1.0.0"
+    },
+    "settings": {
+      "protocol": "lm/settings.section@1.0.0",
+      "order": 46
+    }
+  },
   "peerLibraries": {
     "@codemirror/state": "^6.0.0",
     "@codemirror/view": "^6.0.0",

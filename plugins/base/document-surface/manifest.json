@@ -5,8 +5,42 @@
   "description": "Owns the document route and the mode registry.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
-  "x-tailwind": { "prefix": "docsurface" },
+  "x-tailwind": {
+    "prefix": "docsurface"
+  },
   "kernel": "^1.0",
+  "consumes": {
+    "router": {
+      "protocol": "lm/router@^1.0",
+      "needs": [
+        "navigate",
+        "current",
+        "onChange",
+        "href"
+      ]
+    },
+    "modes": {
+      "protocol": "lm/document.mode@^1.0"
+    }
+  },
+  "provides": {
+    "view": {
+      "protocol": "lm/main.view@1.0.0"
+    },
+    "route": {
+      "protocol": "lm/router.route@1.0.0"
+    },
+    "commands": {
+      "protocol": "lm/commands.command@1.0.0"
+    },
+    "keys": {
+      "protocol": "lm/keybindings.default@1.0.0"
+    },
+    "settings": {
+      "protocol": "lm/settings.section@1.0.0",
+      "order": 20
+    }
+  },
   "dependencies": {
     "commands": "^1.0",
     "router": "^1.0",

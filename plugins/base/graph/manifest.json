@@ -5,8 +5,60 @@
   "description": "Every note and the links between them as a live, force-directed graph — the whole workspace, or the neighbourhood of the open note in the side panel.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
-  "x-tailwind": { "prefix": "graph" },
+  "x-tailwind": {
+    "prefix": "graph"
+  },
   "kernel": "^1.0",
+  "consumes": {
+    "index": {
+      "protocol": "lm/workspace-index@^1.0",
+      "needs": [
+        "ready",
+        "version",
+        "documents",
+        "connections",
+        "subscribe"
+      ]
+    },
+    "router": {
+      "protocol": "lm/router@^1.0",
+      "needs": [
+        "navigate",
+        "current",
+        "query",
+        "onChange"
+      ]
+    },
+    "shell": {
+      "protocol": "lm/shell@^1.0",
+      "needs": [
+        "layout",
+        "toggleAltbar"
+      ]
+    }
+  },
+  "provides": {
+    "route": {
+      "protocol": "lm/router.route@1.0.0"
+    },
+    "view": {
+      "protocol": "lm/main.view@1.0.0"
+    },
+    "panel": {
+      "protocol": "lm/altbar.panel@1.0.0",
+      "order": 50
+    },
+    "nav": {
+      "protocol": "lm/navbar.item@1.0.0",
+      "order": 80
+    },
+    "commands": {
+      "protocol": "lm/commands.command@1.0.0"
+    },
+    "keys": {
+      "protocol": "lm/keybindings.default@1.0.0"
+    }
+  },
   "dependencies": {
     "commands": "^1.0",
     "indexer": "^1.0",

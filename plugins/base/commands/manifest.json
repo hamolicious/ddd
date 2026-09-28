@@ -7,6 +7,29 @@
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
   "kernel": "^1.0",
+  "consumes": {
+    "commands": {
+      "protocol": "lm/commands.command@^1.0"
+    },
+    "keys": {
+      "protocol": "lm/keybindings.default@^1.0"
+    }
+  },
+  "provides": {
+    "own": {
+      "protocol": "lm/commands.command@1.0.0"
+    },
+    "own-keys": {
+      "protocol": "lm/keybindings.default@1.0.0"
+    },
+    "palette": {
+      "protocol": "lm/shell.overlay@1.0.0"
+    },
+    "settings": {
+      "protocol": "lm/settings.section@1.0.0",
+      "order": 200
+    }
+  },
   "dependencies": {
     "shell-ui": "^1.0"
   },

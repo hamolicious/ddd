@@ -30,7 +30,7 @@
  * with `{ root, outDir, resolveFrom }` and writes whatever it needs under `frontend/`.
  */
 
-import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -196,6 +196,19 @@ export function pluginConfig({ root, outDir, entry, tailwind, resolveFrom = root
               copyFileSync(source, target);
             } else {
               this.warn(`manifest declares ${stylePath} but ${source} does not exist`);
+            }
+          }
+          // Protocol packages the plugin owns (PLUGIN-PROTOCOLS §3): the generated files, not
+          // the `shape.mjs` source. The zip allowlist admits exactly these.
+          const protocols = join(root, "protocols");
+          if (existsSync(protocols)) {
+            for (const name of readdirSync(protocols)) {
+              for (const file of ["protocol.json", "index.d.ts", "README.md", "conformance.mjs"]) {
+                const source = join(protocols, name, file);
+                if (!existsSync(source)) continue;
+                mkdirSync(join(out, "protocols", name), { recursive: true });
+                copyFileSync(source, join(out, "protocols", name, file));
+              }
             }
           }
           const step = join(root, "build.mjs");

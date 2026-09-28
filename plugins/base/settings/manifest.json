@@ -7,6 +7,43 @@
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
   "kernel": "^1.0",
+  "consumes": {
+    "sections": {
+      "protocol": "lm/settings.section@^1.0"
+    },
+    "router": {
+      "protocol": "lm/router@^1.0",
+      "needs": [
+        "navigate",
+        "url"
+      ]
+    }
+  },
+  "provides": {
+    "account": {
+      "protocol": "lm/settings.section@1.0.0",
+      "order": 0
+    },
+    "shell": {
+      "protocol": "lm/settings-shell@1.0.0"
+    },
+    "route": {
+      "protocol": "lm/router.route@1.0.0"
+    },
+    "view": {
+      "protocol": "lm/main.view@1.0.0"
+    },
+    "commands": {
+      "protocol": "lm/commands.command@1.0.0"
+    },
+    "keys": {
+      "protocol": "lm/keybindings.default@1.0.0"
+    },
+    "gear": {
+      "protocol": "lm/navbar.item@1.0.0",
+      "order": 90
+    }
+  },
   "dependencies": {
     "commands": "^1.0",
     "router": "^1.0",

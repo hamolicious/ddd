@@ -1,0 +1,25 @@
+{
+  "id": "lm/markdown.directive",
+  "version": "1.0.0",
+  "kind": "slot",
+  "owner": "markdown",
+  "types": "index.d.ts",
+  "description": "A directive: `:::name` (container), `::name` (leaf), `:name[text]{attrs}` (inline). Directives and fences are the blessed syntaxes: named, collision-free, and they degrade to literal text when the plugin is absent.",
+  "key": [
+    "kind",
+    "name"
+  ],
+  "shape": {
+    "object": {
+      "name": "string",
+      "kind": {
+        "literal": [
+          "container",
+          "leaf",
+          "text"
+        ]
+      },
+      "component": "component"
+    }
+  }
+}
