@@ -15,7 +15,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import type { KeyboardEvent as ReactKeyboardEvent, ReactElement, ReactNode } from "react";
 import { createPortal } from "react-dom";
 
-import type { MenuItem, MenuRequest, ModalRequest, ModalResult, SheetRequest } from "../../_shared/context-menu-api.js";
+import type { MenuItem, MenuRequest, ModalRequest, ModalResult, SheetRequest } from "@protocols/lm/context-menu";
 import { useCompact } from "../../_shared/compact.js";
 
 import { ModalForm } from "./Modal.js";

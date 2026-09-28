@@ -19,17 +19,8 @@
  */
 
 import type { Kernel } from "@kernel";
-
-/** Declared locally — `_shared/points.ts` belongs to the base distribution, not to `@kernel`. */
-const TASK_STATE_POINT = "markdown.taskState";
-
-interface TaskState {
-  readonly marker: string;
-  readonly label: string;
-  readonly icon: unknown;
-  readonly order?: number;
-  readonly done?: boolean;
-}
+/** The protocol's type, from the generated declaration the server serves under `/protocols/`. */
+import type { MarkdownTaskState } from "@protocols/lm/markdown.taskState";
 
 /**
  * `done` is the interesting field. "In progress" and "Question" are **not** done, so
@@ -37,14 +28,15 @@ interface TaskState {
  * but because `done` answers "should this still be chased", which is the question
  * every task count is really asking.
  */
-const STATES: readonly TaskState[] = [
+const STATES: readonly MarkdownTaskState[] = [
   { marker: "/", label: "In progress", icon: "◐", order: 15 },
   { marker: "-", label: "Dropped", icon: "⊘", order: 30, done: true },
   { marker: "?", label: "Question", icon: "?", order: 40 },
 ];
 
 export default function activate(kernel: Kernel): { readonly markers: readonly string[] } {
-  for (const state of STATES) kernel.extensions.contribute(TASK_STATE_POINT, state);
+  // One port, three markers: they stay together, in this order, on `markdown`'s host.
+  kernel.ports.offer<MarkdownTaskState>("states", STATES);
   kernel.log.info(`extra-task-states: added ${STATES.length} markers`);
   return { markers: STATES.map((state) => state.marker) };
 }

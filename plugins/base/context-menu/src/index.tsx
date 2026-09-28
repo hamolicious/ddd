@@ -4,9 +4,10 @@
  * A plugin calls `open` with a list of actions (optionally in titled sections, with
  * choice items marked `checked`) or `openSheet` with a body it draws itself, and this
  * plugin shows it: a popover beside the anchor on a wide screen, a bottom sheet on a
- * phone. It renders from `shell-ui`'s `shell.overlay` spot, so no plugin needs a React
+ * phone. It renders from an `lm/shell.overlay` seat, so no plugin needs a React
  * presence of its own to show a menu. `modal` and `confirm` ask a question in the same
- * frame and resolve with the answer. The contract is `_shared/context-menu-api.ts`.
+ * frame and resolve with the answer. The contract is the `lm/context-menu` protocol,
+ * served on the `menu` port.
  *
  * - `Menu.tsx` — the popover / sheet, focus handling and the action list.
  * - `Modal.tsx` — a modal's fields, buttons and validation; `confirm` as a modal.
@@ -16,15 +17,15 @@ import { useSyncExternalStore, type ReactNode } from "react";
 
 import type { Kernel } from "@kernel";
 
-import type { ContextMenuApi, ModalRequest, ModalResult } from "../../_shared/context-menu-api.js";
-import { POINTS, type ShellOverlay } from "../../_shared/points.js";
+import type { ContextMenu, ModalRequest, ModalResult } from "@protocols/lm/context-menu";
+import type { ShellOverlay } from "@protocols/lm/shell.overlay";
 
 import { MenuHost, type Open } from "./Menu.js";
 import { confirmModal } from "./Modal.js";
 
-export type { ContextMenuApi } from "../../_shared/context-menu-api.js";
+export type { ContextMenu as ContextMenuApi } from "@protocols/lm/context-menu";
 
-export default function activate(kernel: Kernel): ContextMenuApi {
+export default function activate(kernel: Kernel): ContextMenu {
   let current: Open | undefined;
   const listeners = new Set<() => void>();
   const set = (next: Open | undefined): void => {
@@ -45,7 +46,7 @@ export default function activate(kernel: Kernel): ContextMenuApi {
     const open = useSyncExternalStore(subscribe, snapshot, snapshot);
     return <MenuHost open={open} close={close} />;
   };
-  kernel.extensions.contribute<ShellOverlay>(POINTS.shellOverlay, {
+  kernel.ports.offer<ShellOverlay>("sheet", {
     id: "context-menu",
     component: Host,
   });
@@ -62,11 +63,13 @@ export default function activate(kernel: Kernel): ContextMenuApi {
       set({ kind: "modal", request: { ...request, onClose: () => settle(undefined) }, settle });
     });
 
-  return {
+  const api: ContextMenu = {
     open: (request) => set({ kind: "menu", request }),
     openSheet: (request) => set({ kind: "sheet", request }),
     modal,
     confirm: async (request) => (await modal(confirmModal(request)))?.button === "confirm",
     close,
   };
+  kernel.ports.serve("menu", api);
+  return api;
 }

@@ -8,7 +8,7 @@
 
 import { Fragment, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 
-import type { MarkdownCodeBlockProps } from "../../_shared/points.js";
+import type { MarkdownCodeBlockProps } from "@protocols/lm/markdown.codeBlock";
 
 import type { Span } from "./engine.js";
 import type { SyntaxApi } from "./index.js";

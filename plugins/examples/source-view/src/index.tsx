@@ -17,14 +17,11 @@
 import type { ReactElement } from "react";
 
 import type { Kernel } from "@kernel";
-
-const DOCUMENT_MODE_POINT = "document.mode";
-
-/** Declared locally, like every third-party plugin must (see `alt-editor`). */
-interface DocumentModeProps {
-  readonly id: string;
-  readonly row: { readonly content: string; readonly title: string };
-}
+/*
+ * The protocol's types, as a third party gets them: the generated `index.d.ts` the server
+ * serves at `/protocols/lm/document.mode/1.0.0/index.d.ts` (see `alt-editor`).
+ */
+import type { DocumentMode, DocumentModeProps } from "@protocols/lm/document.mode";
 
 /** A frontmatter block at the top, or a `%%%` fence opening a machine section anywhere. */
 export function hasHiddenParts(content: string): boolean {
@@ -32,7 +29,8 @@ export function hasHiddenParts(content: string): boolean {
 }
 
 export default function activate(kernel: Kernel): void {
-  kernel.extensions.contribute(DOCUMENT_MODE_POINT, {
+  // On the `mode` port: the manifest wires it to `document-surface`'s host.
+  kernel.ports.offer<DocumentMode>("mode", {
     id: "source",
     label: "Source",
     order: 30,
@@ -41,7 +39,8 @@ export default function activate(kernel: Kernel): void {
         <path d="M8 7l-5 5 5 5M16 7l5 5-5 5" />
       </svg>
     ),
-    when: (row: { readonly content: string }) => hasHiddenParts(row.content),
+    // `content` is optional on a row the projection has not materialized yet: no text, no mode.
+    when: (row) => hasHiddenParts(row.content ?? ""),
     component: Source,
   });
 }

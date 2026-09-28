@@ -20,7 +20,7 @@ import {
   type Unsubscribe,
 } from "@kernel";
 
-import type { Theme } from "../../_shared/points.js";
+import type { Theme } from "@protocols/lm/themes.theme";
 
 import { NO_SELECTION, ThemeApplier, preview, themeFor } from "./apply.js";
 

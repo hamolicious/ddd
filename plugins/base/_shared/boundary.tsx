@@ -17,7 +17,7 @@
 
 import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 
-import type { Contribution, Kernel } from "@kernel";
+import type { Contribution, Kernel, SlotHost, SlotItem } from "@kernel";
 
 /**
  * Live contributions to `point`, with attribution. `subscribe` fires immediately,
@@ -34,6 +34,17 @@ export function usePointEntries<T>(kernel: Kernel, point: string): readonly Cont
       }),
     [kernel, point],
   );
+  return entries;
+}
+
+/**
+ * A slot host's live items (`kernel.ports.collect`), with attribution and in seat order.
+ * `host` should be created once (in `activate`) and passed down: a fresh handle per
+ * render would re-subscribe every time.
+ */
+export function useSlotEntries<T>(host: SlotHost<T>): readonly SlotItem<T>[] {
+  const [entries, setEntries] = useState<readonly SlotItem<T>[]>(() => host.entries());
+  useEffect(() => host.subscribe(() => setEntries(host.entries())), [host]);
   return entries;
 }
 

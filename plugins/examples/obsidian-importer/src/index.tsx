@@ -1,30 +1,13 @@
 /** Import the Markdown documents in an Obsidian vault ZIP through public kernel APIs only. */
 
 import type { Kernel } from "@kernel";
+import type { Command } from "@protocols/lm/commands.command";
+import type { NavbarItem } from "@protocols/lm/navbar.item";
 
 import { importVault } from "./import.js";
 import { readVaultArchive } from "./zip.js";
 
-const COMMAND_POINT = "commands.command";
-const NAVBAR_POINT = "navbar.item";
 const NOTICE_ID = "obsidian-importer.status";
-
-interface Command {
-  readonly id: string;
-  readonly title: string;
-  readonly category?: string;
-  readonly run: () => void | Promise<void>;
-  readonly when?: () => boolean;
-}
-
-interface NavbarItem {
-  readonly id: string;
-  readonly label: string;
-  readonly icon?: string;
-  readonly side?: "start" | "end";
-  readonly order?: number;
-  readonly onSelect: () => void;
-}
 
 export default function activate(kernel: Kernel): void {
   let running = false;
@@ -79,14 +62,14 @@ export default function activate(kernel: Kernel): void {
     }
   };
 
-  kernel.extensions.contribute<Command>(COMMAND_POINT, {
+  kernel.ports.offer<Command>("command", {
     id: "obsidian-importer.import",
     title: "Import an Obsidian vault",
     category: "Import",
     run,
     when: () => !running && kernel.capabilities.has("filesystem"),
   });
-  kernel.extensions.contribute<NavbarItem>(NAVBAR_POINT, {
+  kernel.ports.offer<NavbarItem>("nav", {
     id: "obsidian-importer.import",
     label: "Import Obsidian vault",
     icon: "⇩",

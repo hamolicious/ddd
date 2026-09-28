@@ -1,7 +1,7 @@
 /**
  * The search query lives in the URL.
  *
- * `router.route` patterns match `:name` *path* segments (`_shared/points.ts`), so a
+ * `lm/router.route` patterns match `:name` *path* segments (`router/protocols/router.route`), so a
  * query string is not something the router hands back — and a search that cannot be
  * linked to, or that loses the query on reload or on "back" from a result, is a worse
  * answer than parsing five characters here. `#/?q=milk` is the canonical spelling;

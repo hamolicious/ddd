@@ -1,12 +1,12 @@
 /**
  * `document-surface` — owns the document route and the **mode registry** (SPEC §6.5).
  *
- * `viewer` and `editor` are symmetric contributions to `document.mode`: this plugin has
- * no built-in favourite and no special case for either. That is what makes M3's
+ * `viewer` and `editor` are symmetric offers on `document.mode`: this plugin has no
+ * built-in favourite and no special case for either. That is what makes M3's
  * acceptance test possible — "the built-in editor replaced by a separately-authored
- * editor plugin" is a different contribution to this point and nothing else. Nothing in
+ * editor plugin" is a different offer wired to this host and nothing else. Nothing in
  * this file spells `viewer`, `editor`, `read` or `edit` except {@link DEFAULT_MODE_ID},
- * which is a *fallback preference* and degrades to the lowest-`order` mode registered.
+ * which is a *fallback preference* and degrades to the first seated mode.
  *
  * The surface owns the three things a mode must not each re-implement:
  *
@@ -28,10 +28,10 @@
 import type {
   DocumentId,
   DocumentRow,
-  ExtensionPoint,
   Kernel,
   OpenDocument,
   QuerySubscription,
+  SlotHost,
   Unsubscribe,
 } from "@kernel";
 import {
@@ -44,14 +44,13 @@ import {
   type ReactNode,
 } from "react";
 
-import {
-  POINTS,
-  documentModeShape,
-  type Command,
-  type DocumentMode,
-  type DocumentModeProps,
-  type SettingsSection,
-} from "../../_shared/points.js";
+import type { Command } from "@protocols/lm/commands.command";
+import type { DocumentMode, DocumentModeProps } from "@protocols/lm/document.mode";
+import type { KeybindingDefault } from "@protocols/lm/keybindings.default";
+import type { MainView } from "@protocols/lm/main.view";
+import type { Router } from "@protocols/lm/router";
+import type { Route } from "@protocols/lm/router.route";
+import type { SettingsSection } from "@protocols/lm/settings.section";
 import { lineFromPath } from "./line.js";
 import { SaveState } from "./SaveState.js";
 import { DefaultModeSection } from "./SettingsSection.js";
@@ -62,20 +61,13 @@ import {
   rememberMode,
   resolveModeId,
   serializeModeMemory,
-  sortModes,
   visibleModes,
 } from "./modes.js";
 
 export { LINE_PARAM, lineFromPath } from "./line.js";
 
-/**
- * The router, as much of it as this plugin uses. `document-surface` declares the
- * dependency in its manifest, so `services.require` resolves.
- */
-interface RouterService {
-  onChange(listener: (path: string) => void): Unsubscribe;
-  current(): string;
-}
+/** The `router` port: as much of `lm/router` as this plugin's manifest `needs`. */
+type RouterService = Pick<Router, "current" | "onChange">;
 
 export interface DocumentSurfaceApi {
   /** The document currently on screen, if any. */
@@ -120,7 +112,7 @@ interface Snapshot {
    * that `getSnapshot()` returns a value which is `Object.is`-different whenever the
    * store has changed. Notifying listeners while handing back the same object makes
    * React skip the render — which is precisely the case the mode registry needs to
-   * work: `visible()` is derived from the *extension point*, not from this snapshot,
+   * work: `visible()` is derived from the *host*, not from this snapshot,
    * so a mode contributed after the last render (a plugin that activates late, or is
    * installed while a document is open) would never appear as a tab and an
    * uninstalled `editor` would never fall back to reading, despite the subscription
@@ -141,12 +133,9 @@ const byId = (id: DocumentId): Record<string, unknown> => ({
 });
 
 export default function activate(kernel: Kernel): DocumentSurfaceApi {
-  const modes = kernel.extensions.definePoint<DocumentMode>({
-    name: POINTS.documentMode,
-    shape: documentModeShape,
-    key: (mode) => mode.id,
-    description: "How a document is displayed.",
-  });
+  // The host: every mode wired in, in seat order (PLUGIN-PROTOCOLS §6a). That order is
+  // the order of the switch, so nothing here sorts.
+  const modes = kernel.ports.collect<DocumentMode>("modes");
 
   kernel.settings.defineSchema({
     [SETTING_DEFAULT_MODE]: {
@@ -167,10 +156,10 @@ export default function activate(kernel: Kernel): DocumentSurfaceApi {
 
   const surface = new Surface(kernel, modes);
   liveSurface = surface;
-  const router = kernel.services.require<RouterService>("router");
+  const router = kernel.ports.use<RouterService>("router");
 
-  kernel.extensions.contribute(POINTS.route, { path: "/doc/:id", view: "document.surface" });
-  kernel.extensions.contribute(POINTS.mainView, {
+  kernel.ports.offer<Route>("route", { path: "/doc/:id", view: "document.surface" });
+  kernel.ports.offer<MainView>("view", {
     id: "document.surface",
     title: "Document",
     component: (props: { readonly params?: Readonly<Record<string, string>> }) => (
@@ -181,12 +170,12 @@ export default function activate(kernel: Kernel): DocumentSurfaceApi {
   /**
    * "Open documents in" — the screen for the setting declared above.
    *
-   * Contributed without depending on `settings`: a contribution to a point nobody has
-   * defined yet buffers until somebody does (SPEC §6.4), and the point name is an
-   * opaque string to the kernel. A `dependencies` entry would buy nothing and would
-   * make read/edit mode disappear the day a workspace replaces the settings shell.
+   * Offered on the `settings` port without depending on `settings`: an offer reaches
+   * whichever host the wiring seats it on, and the protocol is an opaque name to the
+   * kernel. A hard dependency would buy nothing and would make read/edit mode
+   * disappear the day a workspace replaces the settings shell.
    */
-  kernel.extensions.contribute<SettingsSection>(POINTS.settingsSection, {
+  kernel.ports.offer<SettingsSection>("settings", {
     id: "documents",
     title: "Documents",
     order: 20,
@@ -194,11 +183,8 @@ export default function activate(kernel: Kernel): DocumentSurfaceApi {
     component: () => (
       <DefaultModeSection
         kernel={kernel}
-        // Sorted: `ExtensionPoint.get()` answers in contribution order, which is the
-        // loader's topological order and therefore alphabetical-ish by plugin id —
-        // "Edit, Read" rather than the "Read, Edit" every mode switcher in the app
-        // shows. `order` is the contract for how modes are presented (SPEC §6.5).
-        modes={() => sortModes(modes.get())}
+        // Seat order: the same order every mode switcher in the app shows.
+        modes={() => modes.get()}
         onModesChange={(listener) => modes.subscribe(() => listener())}
         // Not the raw stored value: `resolveModeId` is the same precedence the surface
         // opens a document with, so the select shows the mode that would actually be
@@ -211,7 +197,7 @@ export default function activate(kernel: Kernel): DocumentSurfaceApi {
     ),
   });
 
-  kernel.extensions.contribute<Command>(POINTS.command, {
+  kernel.ports.offer<Command>("commands", {
     id: "document.nextMode",
     title: "Switch document mode",
     category: "Document",
@@ -221,11 +207,11 @@ export default function activate(kernel: Kernel): DocumentSurfaceApi {
       if (next) void api.setMode(next);
     },
   });
-  kernel.extensions.contribute(POINTS.keybinding, { command: "document.nextMode", keys: "Mod+E" });
+  kernel.ports.offer<KeybindingDefault>("keys", { command: "document.nextMode", keys: "Mod+E" });
 
-  // One command per registered mode, so the palette can jump straight to a mode and a
-  // user can bind a key to it. Modes arrive over the lifetime of the boot (and can be
-  // withdrawn when a plugin fails), so this tracks the point rather than reading it
+  // One command per wired mode, so the palette can jump straight to a mode and a user
+  // can bind a key to it. Modes arrive over the lifetime of the boot (and can be
+  // withdrawn when a plugin fails), so this tracks the host rather than reading it
   // once — `subscribe` fires immediately and on every change.
   const modeCommands = new Map<string, { dispose(): void }>();
   modes.subscribe((values) => {
@@ -235,7 +221,7 @@ export default function activate(kernel: Kernel): DocumentSurfaceApi {
       if (modeCommands.has(mode.id)) continue;
       modeCommands.set(
         mode.id,
-        kernel.extensions.contribute<Command>(POINTS.command, {
+        kernel.ports.offer<Command>("commands", {
           id: `document.mode.${mode.id}`,
           title: `Show document as: ${mode.label}`,
           category: "Document",
@@ -303,10 +289,10 @@ class Surface {
 
   constructor(
     readonly kernel: Kernel,
-    private readonly point: ExtensionPoint<DocumentMode>,
+    private readonly point: SlotHost<DocumentMode>,
   ) {
-    // A mode contributed (or withdrawn) after the document is on screen can change
-    // which mode should be active — an uninstalled editor must fall back to reading.
+    // A mode offered (or withdrawn) after the document is on screen can change which
+    // mode should be active — an uninstalled editor must fall back to reading.
     this.point.subscribe(() => {
       if (this.#snapshot.documentId === undefined) return;
       // Re-resolved from scratch unless the user picked the current mode. On a reload
@@ -329,9 +315,9 @@ class Surface {
   }
 
   /**
-   * Which plugin contributed a mode. Attribution comes from the registry, never from
-   * the contribution's own `id` — `read` is a mode id, not a plugin id, and an error
-   * boundary that named the wrong plugin would send the reader to the wrong admin row.
+   * Which plugin offered a mode. Attribution comes from the host, never from the
+   * item's own `id` — `read` is a mode id, not a plugin id, and an error boundary
+   * that named the wrong plugin would send the reader to the wrong admin row.
    */
   ownerOf(mode: DocumentMode): string | undefined {
     return this.point.entries().find((entry) => entry.value === mode)?.pluginId;
@@ -589,7 +575,7 @@ function boundaryFor(
   const existing = wrapped.get(mode.component);
   if (existing) return existing;
   const component = kernel.ui.boundary(mode.component, {
-    point: POINTS.documentMode,
+    point: "document.mode",
     ...(pluginId === undefined ? {} : { pluginId }),
   });
   wrapped.set(mode.component, component);
@@ -616,7 +602,7 @@ function iconBoundaryFor(
   const existing = wrappedIcons.get(key);
   if (existing) return existing;
   const component = kernel.ui.boundary(IconSlot, {
-    point: `${POINTS.documentMode}#icon`,
+    point: "document.mode#icon",
     ...(pluginId === undefined ? {} : { pluginId }),
   });
   wrappedIcons.set(key, component);

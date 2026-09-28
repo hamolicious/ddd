@@ -3,22 +3,22 @@
  *
  * The pipeline suites call `renderTree` directly, which is the right level for "does this
  * markdown become that tree". What they cannot show is the half SPEC §6.6 is actually
- * about — that the **registry** drives the parser. A marker becomes a checkbox because a
- * `markdown.taskState` contribution arrived, and the only way to prove that end to end is
- * to contribute one the way another plugin would and re-render.
+ * about — that the **hosts** drive the parser. A marker becomes a checkbox because a
+ * `markdown.taskState` item arrived on the `tasks` port, and the only way to prove that
+ * end to end is to offer one the way another plugin would and re-render.
  *
- * The fake kernel below implements exactly the registry semantics
- * `kernel/src/runtime/registry.test.ts` pins — buffering, first-key-wins, live
- * subscriptions, `entries()` with attribution — and nothing else. It is ~80 lines because
- * that is genuinely all of `@kernel` this plugin touches.
+ * The fake kernel below implements exactly the `kernel.ports` semantics
+ * `kernel/src/runtime/ports.test.ts` pins — seat order (here: the order offered),
+ * first-key-wins, live subscriptions, `entries()` with attribution — and nothing else.
+ * It is ~80 lines because that is genuinely all of `@kernel` this plugin touches.
  */
 
 import { describe, expect, it, vi } from "vitest";
 import { isValidElement, type ReactNode } from "react";
 
-import type { Contribution, Kernel } from "@kernel";
-
-import { POINTS, type Command, type MarkdownTaskState } from "../../_shared/points.js";
+import type { Kernel, SlotItem } from "@kernel";
+import type { Command } from "@protocols/lm/commands.command";
+import type { MarkdownTaskState } from "@protocols/lm/markdown.taskState";
 
 import activate, { type MarkdownApi } from "./index.js";
 
@@ -26,71 +26,99 @@ import activate, { type MarkdownApi } from "./index.js";
 // the fake kernel
 // ---------------------------------------------------------------------------
 
+/** This plugin's ports, as its manifest declares them: port name → protocol. */
+const PORTS: Readonly<Record<string, string>> = {
+  directives: "lm/markdown.directive",
+  fences: "lm/markdown.fence",
+  code: "lm/markdown.codeBlock",
+  remark: "lm/markdown.remark",
+  components: "lm/markdown.component",
+  tasks: "lm/markdown.taskState",
+  attachments: "lm/markdown.attachment",
+  "task-states": "lm/markdown.taskState",
+  settings: "lm/settings.section",
+  commands: "lm/commands.command",
+};
+
+/** The protocols' duplicate keys (`protocol.json` `key`). */
+const KEYS: Readonly<Record<string, (value: unknown) => string>> = {
+  "lm/markdown.directive": (v) => `${(v as { kind: string }).kind}:${(v as { name: string }).name}`,
+  "lm/markdown.fence": (v) => (v as { language: string }).language,
+  "lm/markdown.taskState": (v) => (v as { marker: string }).marker,
+};
+
 interface FakeKernel {
   readonly kernel: Kernel;
-  /** Contribute as some other plugin would. */
-  contribute<T>(point: string, value: T, pluginId?: string, order?: number): void;
-  values<T>(point: string): readonly T[];
-  readonly defined: string[];
+  /** Offer on a protocol as some other plugin would; it takes the next seat. */
+  offer<T>(protocol: string, value: T, pluginId?: string): void;
+  values<T>(protocol: string): readonly T[];
+  readonly collected: string[];
+  readonly served: Map<string, unknown>;
   readonly created: string[];
   readonly notices: string[];
 }
 
 function fakeKernel(attachmentName = "Scan 1.pdf"): FakeKernel {
-  const entries = new Map<string, Contribution<unknown>[]>();
+  const seats = new Map<string, SlotItem<unknown>[]>();
   const listeners = new Map<string, Set<(values: readonly unknown[]) => void>>();
-  const keys = new Map<string, (value: unknown) => string>();
-  const defined: string[] = [];
+  const collected: string[] = [];
+  const served = new Map<string, unknown>();
   const created: string[] = [];
   const notices: string[] = [];
 
-  const ordered = (point: string): Contribution<unknown>[] =>
-    [...(entries.get(point) ?? [])].sort((a, b) => a.order - b.order);
-  const values = (point: string): readonly unknown[] => ordered(point).map((entry) => entry.value);
-  const announce = (point: string): void => {
-    for (const listener of listeners.get(point) ?? []) listener(values(point));
+  const items = (protocol: string): readonly SlotItem<unknown>[] => seats.get(protocol) ?? [];
+  const values = (protocol: string): readonly unknown[] => items(protocol).map((item) => item.value);
+  const announce = (protocol: string): void => {
+    for (const listener of listeners.get(protocol) ?? []) listener(values(protocol));
   };
 
-  const add = (point: string, value: unknown, pluginId: string, order: number): void => {
-    const key = keys.get(point);
-    if (key) {
-      // First registration wins, as the real registry does.
-      const identity = key(value);
-      if (ordered(point).some((entry) => key(entry.value) === identity)) return;
-    }
-    const list = entries.get(point) ?? [];
-    list.push({ point, pluginId, value, order });
-    entries.set(point, list);
-    announce(point);
+  const seat = (protocol: string, port: string, value: unknown, pluginId: string): void => {
+    const key = KEYS[protocol];
+    // The earlier seat keeps a duplicate key, as the real host does.
+    if (key && items(protocol).some((item) => key(item.value) === key(value))) return;
+    const list = seats.get(protocol) ?? [];
+    list.push({ pluginId, port, value });
+    seats.set(protocol, list);
+    announce(protocol);
+  };
+  const protocolOf = (port: string): string => {
+    const protocol = PORTS[port];
+    if (!protocol) throw new Error(`"markdown" has no port "${port}"`);
+    return protocol;
   };
 
   const kernel = {
     pluginId: "markdown",
     log: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
-    extensions: {
-      definePoint: <T,>(definition: { name: string; key?: (value: T) => string }) => {
-        defined.push(definition.name);
-        if (definition.key) keys.set(definition.name, definition.key as (value: unknown) => string);
+    ports: {
+      collect: <T,>(port: string) => {
+        const protocol = protocolOf(port);
+        collected.push(port);
         return {
-          name: definition.name,
-          get: () => values(definition.name) as readonly T[],
-          entries: () => ordered(definition.name) as readonly Contribution<T>[],
+          get: () => values(protocol) as readonly T[],
+          entries: () => items(protocol) as readonly SlotItem<T>[],
           subscribe: (listener: (next: readonly T[]) => void) => {
-            const set = listeners.get(definition.name) ?? new Set();
+            const set = listeners.get(protocol) ?? new Set();
             set.add(listener as (next: readonly unknown[]) => void);
-            listeners.set(definition.name, set);
-            listener(values(definition.name) as readonly T[]);
+            listeners.set(protocol, set);
+            listener(values(protocol) as readonly T[]);
             return () => set.delete(listener as (next: readonly unknown[]) => void);
           },
         };
       },
-      contribute: <T,>(point: string, value: T, options?: { order?: number }) => {
-        add(point, value, "markdown", options?.order ?? 100);
+      offer: <T,>(port: string, offered: T | readonly T[]) => {
+        const protocol = protocolOf(port);
+        for (const value of Array.isArray(offered) ? offered : [offered]) seat(protocol, port, value, "markdown");
         return { dispose: () => {} };
       },
-      get: (point: string) => values(point),
+      serve: <T,>(port: string, api: T) => {
+        served.set(port, api);
+        return { dispose: () => {} };
+      },
+      // `router` is optional and unbound here.
+      use: () => undefined,
+      bound: () => false,
     },
-    services: { get: () => undefined },
     ui: {
       // The real one wraps in an error boundary; identity keeps the tree readable here.
       boundary: <P,>(component: P) => component,
@@ -115,9 +143,10 @@ function fakeKernel(attachmentName = "Scan 1.pdf"): FakeKernel {
 
   return {
     kernel,
-    contribute: (point, value, pluginId = "some-plugin", order = 100) => add(point, value, pluginId, order),
-    values: <T,>(point: string) => values(point) as readonly T[],
-    defined,
+    offer: (protocol, value, pluginId = "some-plugin") => seat(protocol, `~${protocol}`, value, pluginId),
+    values: <T,>(protocol: string) => values(protocol) as readonly T[],
+    collected,
+    served,
     created,
     notices,
   };
@@ -134,21 +163,19 @@ function hasComponent(node: ReactNode, name: string): boolean {
 // ---------------------------------------------------------------------------
 
 describe("activate", () => {
-  it("defines the seven markdown.* points", () => {
+  it("collects the seven markdown.* ports", () => {
     const host = fakeKernel();
     activate(host.kernel);
-    expect(host.defined).toEqual([
-      POINTS.markdownDirective,
-      POINTS.markdownFence,
-      POINTS.markdownCodeBlock,
-      POINTS.markdownRemark,
-      POINTS.markdownComponent,
-      POINTS.markdownTaskState,
-      POINTS.markdownAttachment,
-    ]);
+    expect(host.collected).toEqual(["directives", "fences", "code", "remark", "components", "tasks", "attachments"]);
   });
 
-  it("ships [ ] and [x] as default taskState contributions (SPEC §6.6)", () => {
+  it("serves the renderer on its `renderer` port, and returns it too", () => {
+    const host = fakeKernel();
+    const api = activate(host.kernel);
+    expect(host.served.get("renderer")).toBe(api);
+  });
+
+  it("ships [ ] and [x] as default taskState offers (SPEC §6.6)", () => {
     const host = fakeKernel();
     const api = activate(host.kernel);
     expect(api.taskStates().map((state) => state.marker)).toEqual([" ", "x"]);
@@ -158,7 +185,7 @@ describe("activate", () => {
   it("registers the promote-to-document command, disabled until something is focused", () => {
     const host = fakeKernel();
     activate(host.kernel);
-    const command = host.values<Command>(POINTS.command).find((c) => c.id === "markdown.promoteToDocument");
+    const command = host.values<Command>("lm/commands.command").find((c) => c.id === "markdown.promoteToDocument");
     expect(command).toBeDefined();
     // A palette entry that can only fail is worse than no entry (SPEC §6.5's command point
     // filters on `when`).
@@ -166,7 +193,7 @@ describe("activate", () => {
   });
 });
 
-describe("the registry drives the parser", () => {
+describe("the hosts drive the parser", () => {
   const TEXT = "- [/] partial";
 
   it("renders an unregistered marker literally", () => {
@@ -175,39 +202,58 @@ describe("the registry drives the parser", () => {
     expect(hasComponent(api.render(TEXT), "TaskCheckbox")).toBe(false);
   });
 
-  it("renders it as a checkbox once a plugin contributes the marker", () => {
+  it("renders it as a checkbox once a plugin offers the marker", () => {
     const host = fakeKernel();
     const api = activate(host.kernel);
-    host.contribute<MarkdownTaskState>(POINTS.markdownTaskState, {
+    host.offer<MarkdownTaskState>("lm/markdown.taskState", {
       marker: "/",
       label: "In progress",
       icon: "◐",
       order: 5,
     });
     expect(hasComponent(api.render(TEXT), "TaskCheckbox")).toBe(true);
-    // And it takes its place in the menu order the contribution asked for.
-    expect(api.taskStates().map((state) => state.marker)).toEqual([" ", "/", "x"]);
   });
 
-  it("renders a contributed directive, and the same text literally without it", () => {
+  it("lists task states in seat order, not by `order` (PLUGIN-PROTOCOLS §6a)", () => {
+    const host = fakeKernel();
+    const api = activate(host.kernel);
+    // `order: 5` would once have put this between the built-ins; the host no longer
+    // sorts, so a later seat is a later menu entry until the wiring moves it.
+    host.offer<MarkdownTaskState>("lm/markdown.taskState", { marker: "/", label: "In progress", icon: "◐", order: 5 });
+    expect(api.taskStates().map((state) => state.marker)).toEqual([" ", "x", "/"]);
+  });
+
+  it("takes the first seated code-block renderer, whatever its `order`", () => {
+    const host = fakeKernel();
+    const api = activate(host.kernel);
+    const First = (): ReactNode => null;
+    const Second = (): ReactNode => null;
+    host.offer("lm/markdown.codeBlock", { id: "first", component: First, order: 100 }, "plugin-a");
+    host.offer("lm/markdown.codeBlock", { id: "second", component: Second, order: 0 }, "plugin-b");
+    const tree = api.render("```ts\nlet x = 1;\n```");
+    expect(hasComponent(tree, "First")).toBe(true);
+    expect(hasComponent(tree, "Second")).toBe(false);
+  });
+
+  it("renders an offered directive, and the same text literally without it", () => {
     const host = fakeKernel();
     const api = activate(host.kernel);
     const Note = (): ReactNode => null;
     expect(hasComponent(api.render(":::note\nhi\n:::"), "Note")).toBe(false);
-    host.contribute(POINTS.markdownDirective, { name: "note", kind: "container", component: Note });
+    host.offer("lm/markdown.directive", { name: "note", kind: "container", component: Note });
     expect(hasComponent(api.render(":::note\nhi\n:::"), "Note")).toBe(true);
   });
 
-  it("announces contribution changes so cached renders can be refreshed", () => {
+  it("announces port changes so cached renders can be refreshed", () => {
     const host = fakeKernel();
     const api = activate(host.kernel);
     const listener = vi.fn();
     const off = api.onChange(listener);
-    host.contribute(POINTS.markdownFence, { language: "mermaid", component: (): ReactNode => null });
+    host.offer("lm/markdown.fence", { language: "mermaid", component: (): ReactNode => null });
     expect(listener).toHaveBeenCalled();
     off();
     listener.mockClear();
-    host.contribute(POINTS.markdownFence, { language: "chart", component: (): ReactNode => null });
+    host.offer("lm/markdown.fence", { language: "chart", component: (): ReactNode => null });
     expect(listener).not.toHaveBeenCalled();
   });
 });

@@ -1,9 +1,9 @@
 /**
- * Showing a file: the `markdown.attachment` renderer this plugin contributes.
+ * Showing a file: the `markdown.attachment` renderer this plugin offers.
  *
- * It finds the file's extension from its metadata, asks the `attachments.viewer`
- * registry who shows that type (the user's pick in Settings → Attachments, else the
- * lowest `order`), fetches the bytes once, and hands them over. With no viewer for the
+ * It finds the file's extension from its metadata, asks the `viewers` host who shows
+ * that type (the user's pick in Settings → Attachments, else the first seat the wiring
+ * gave it), fetches the bytes once, and hands them over. With no viewer for the
  * type, or no bytes (offline and never fetched), it draws what `markdown` would have:
  * the `fallback`.
  *
@@ -19,15 +19,12 @@
  */
 
 import { OFFLINE_COPY_HEADER } from "../../_shared/offline-copy.js";
-import type { ExtensionPoint, Kernel, SettingsValue } from "@kernel";
+import type { Kernel, SettingsValue, SlotHost } from "@kernel";
 import { useEffect, useState, useSyncExternalStore, type ComponentType, type ReactNode } from "react";
 
-import {
-  POINTS,
-  type AttachmentViewer,
-  type AttachmentViewerProps,
-  type MarkdownAttachmentProps,
-} from "../../_shared/points.js";
+import type { AttachmentViewer, AttachmentViewerProps } from "@protocols/lm/attachments.viewer";
+import type { MarkdownAttachmentProps } from "@protocols/lm/markdown.attachment";
+
 import { extensionOf, viewKey } from "./kinds.js";
 import { onQueueChange, transfers, waiting, waitingToken, type TransferState, type WaitingUpload } from "./queue.js";
 
@@ -52,21 +49,22 @@ export interface Viewers {
   subscribe(listener: () => void): () => void;
 }
 
+/**
+ * The viewers wired to the `viewers` host, by extension. `host` is already in seat order,
+ * so the first viewer claiming an extension is the default for it; nothing is sorted here.
+ */
 export function createViewers(
   kernel: Kernel,
-  point: ExtensionPoint<AttachmentViewer>,
+  host: SlotHost<AttachmentViewer>,
   read: (key: string) => SettingsValue | undefined,
 ): Viewers {
-  const claiming = (extension: string) =>
-    [...point.entries()]
-      .filter((entry) => entry.value.extensions.includes(extension))
-      .sort((a, b) => (a.value.order ?? 100) - (b.value.order ?? 100));
+  const claiming = (extension: string) => host.entries().filter((entry) => entry.value.extensions.includes(extension));
 
   const listeners = new Set<() => void>();
   const notify = (): void => {
     for (const listener of [...listeners]) listener();
   };
-  point.subscribe(notify);
+  host.subscribe(notify);
   try {
     kernel.settings.subscribe(notify);
   } catch {
@@ -81,7 +79,7 @@ export function createViewers(
       const entry = entries.find((candidate) => candidate.value.id === chosen) ?? entries[0];
       return entry ? { viewer: entry.value, pluginId: entry.pluginId } : undefined;
     },
-    extensions: () => [...new Set(point.get().flatMap((viewer) => viewer.extensions))].sort(),
+    extensions: () => [...new Set(host.get().flatMap((viewer) => viewer.extensions))].sort(),
     subscribe: (listener) => {
       listeners.add(listener);
       return () => {
@@ -126,7 +124,7 @@ export function createAttachmentView(kernel: Kernel, viewers: Viewers): Componen
   const guard = (viewer: AttachmentViewer, pluginId: string): ComponentType<AttachmentViewerProps> => {
     let component = bounded.get(viewer.component);
     if (!component) {
-      component = kernel.ui.boundary(viewer.component, { point: POINTS.attachmentViewer, pluginId });
+      component = kernel.ui.boundary(viewer.component, { point: "attachments.viewer", pluginId });
       bounded.set(viewer.component, component);
     }
     return component;

@@ -3,6 +3,23 @@
   "version": "1.4.2",
   "kernel": "^1.0",
   "hot": true,
+  "consumes": {
+    "attachments": {
+      "protocol": "lm/attachments@^1.0",
+      "needs": [
+        "upload"
+      ]
+    }
+  },
+  "provides": {
+    "command": {
+      "protocol": "lm/commands.command@1.0.0"
+    },
+    "nav": {
+      "protocol": "lm/navbar.item@1.0.0",
+      "order": 85
+    }
+  },
   "dependencies": {
     "attachments": "^1.1.0",
     "commands": "^1.0"

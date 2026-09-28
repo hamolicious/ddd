@@ -26,7 +26,7 @@
 import type { Kernel, Unsubscribe } from "@kernel";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
-import type { DocumentMode } from "../../_shared/points.js";
+import type { DocumentMode } from "@protocols/lm/document.mode";
 
 export interface DefaultModeSectionProps {
   readonly kernel: Kernel;

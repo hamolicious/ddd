@@ -1,4 +1,5 @@
 import type { CoreMap, Kernel, TextEdit } from "@kernel";
+import type { Attachments } from "@protocols/lm/attachments";
 
 import {
   aliasesOf,
@@ -32,20 +33,8 @@ interface ImportedDocument {
   readonly attachmentId?: string;
 }
 
-interface AttachmentsApi {
-  upload(blob: Blob, name: string, options?: AttachmentUploadOptions): Promise<AttachmentUploadResponse>;
-}
-
-interface AttachmentUploadOptions {
-  readonly uploadId?: string;
-  readonly signal?: AbortSignal;
-  readonly onSession?: (uploadId: string) => void | Promise<void>;
-  readonly onProgress?: (sent: number) => void;
-}
-
-interface AttachmentUploadResponse {
-  readonly attachment: UploadedAttachment;
-}
+/** What this plugin reads through its `attachments` port: the manifest's `needs`. */
+type AttachmentsApi = Pick<Attachments, "upload">;
 
 export async function importVault(
   kernel: Kernel,
@@ -83,7 +72,8 @@ export async function importVault(
     onProgress(finished, totalWork);
   }
 
-  const attachmentService = kernel.services.require<AttachmentsApi>("attachments");
+  // The `lm/attachments` service the wiring bound to this plugin's `attachments` port.
+  const attachmentService = kernel.ports.use<AttachmentsApi>("attachments");
   for (const attachment of archive.attachments) {
     const prior = existing.get(attachment.path);
     if (prior?.attachmentId) {

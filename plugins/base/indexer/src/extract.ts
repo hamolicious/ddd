@@ -15,8 +15,8 @@
  */
 
 import type { CoreMap, CoreValue, DocumentId, DocumentRow } from "@kernel";
+import type { ConnectionKind } from "@protocols/lm/workspace-index";
 
-import type { ConnectionKind } from "../../_shared/indexer-api.js";
 import { isMachinePath } from "../../_shared/machine-docs.js";
 import { bodyOf } from "../../_shared/regions.js";
 

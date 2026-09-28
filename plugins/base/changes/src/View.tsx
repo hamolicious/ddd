@@ -10,9 +10,10 @@
 
 import { OfflineCopyNote } from "../../_shared/offline-copy.js";
 import { changesOfflineCopy } from "./offline.js";
-import { useEffect, useState, type ReactElement, type ReactNode } from "react";
+import { useEffect, useState, type ReactElement } from "react";
 
-import type { ConfirmRequest } from "../../_shared/context-menu-api.js";
+import type { ConfirmRequest } from "@protocols/lm/context-menu";
+import type { MarkdownRenderer } from "@protocols/lm/markdown-renderer";
 
 import {
   describeReason,
@@ -22,11 +23,8 @@ import {
 } from "./api.js";
 import { DetachedBanner } from "./Banner.js";
 
-/** The `markdown` plugin's API, structurally — plugins never import each other. */
-export interface MarkdownApi {
-  render(text: string, options?: { readonly documentId?: string }): ReactNode;
-  bodyOf(text: string): string;
-}
+/** What these pages read through the `markdown` port: the manifest's `needs`. */
+export type MarkdownApi = Pick<MarkdownRenderer, "render" | "bodyOf">;
 
 export const READER_CLASSES =
   "chg:mx-auto chg:w-full chg:min-w-0 chg:max-w-[72ch] chg:break-words chg:px-4 chg:py-6 chg:text-base chg:leading-[1.65] chg:compact:py-4 chg:compact:leading-[1.7] chg:[&>:first-child]:mt-0 chg:[&_h1]:mb-2 chg:[&_h1]:mt-6 chg:[&_h1]:text-2xl chg:[&_h1]:leading-tight chg:compact:[&_h1]:text-xl chg:[&_h2]:mb-2 chg:[&_h2]:mt-6 chg:[&_h2]:text-xl chg:[&_h2]:leading-tight chg:compact:[&_h2]:text-lg chg:[&_h3]:mb-2 chg:[&_h3]:mt-6 chg:[&_h3]:text-lg chg:[&_h3]:leading-tight chg:compact:[&_h3]:text-base chg:[&_h4]:mb-2 chg:[&_h4]:mt-6 chg:[&_h4]:leading-tight chg:[&_p]:mb-3 chg:[&_p]:mt-0 chg:[&_ul]:mb-3 chg:[&_ol]:mb-3 chg:[&_blockquote]:mb-3 chg:[&_blockquote]:border-l-[3px] chg:[&_blockquote]:border-border-strong chg:[&_blockquote]:pl-3 chg:[&_blockquote]:text-text-muted chg:[&_pre]:mb-3 chg:[&_pre]:max-w-full chg:[&_pre]:overflow-x-auto chg:[&_pre]:rounded chg:[&_pre]:border chg:[&_pre]:border-border chg:[&_pre]:bg-bg-subtle chg:[&_pre]:p-2 chg:[&_table]:mb-3 chg:[&_table]:block chg:[&_table]:max-w-full chg:[&_table]:overflow-x-auto chg:[&_table]:border-collapse chg:[&_a]:break-words chg:[&_a]:text-link chg:[&_code]:break-words chg:[&_code]:rounded-[3px] chg:[&_code]:bg-bg-subtle chg:[&_code]:px-[0.3em] chg:[&_code]:py-[0.1em] chg:[&_code]:font-mono chg:[&_code]:text-[0.9em] chg:[&_pre_code]:bg-transparent chg:[&_pre_code]:p-0 chg:[&_img]:h-auto chg:[&_img]:max-w-full chg:[&_img]:rounded chg:[&_th]:border chg:[&_th]:border-border chg:[&_th]:px-2 chg:[&_th]:py-1 chg:[&_th]:text-left chg:[&_td]:border chg:[&_td]:border-border chg:[&_td]:px-2 chg:[&_td]:py-1 chg:[&_td]:text-left chg:[&_hr]:border-0 chg:[&_hr]:border-t chg:[&_hr]:border-border";

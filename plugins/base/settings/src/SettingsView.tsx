@@ -3,7 +3,7 @@
  *
  * Three things it does deliberately.
  *
- * **It owns no settings.** Every section is a `settings.section` contribution rendered
+ * **It owns no settings.** Every section is an `lm/settings.section` item rendered
  * through `kernel.ui.boundary` (SPEC §6.4), so a plugin whose settings UI throws loses
  * its own panel and nothing else.
  *
@@ -27,39 +27,27 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
-import type { Contribution, Kernel } from "@kernel";
-
-import { POINTS, type SettingsSection } from "../../_shared/points.js";
+import type { Kernel, SlotHost, SlotItem } from "@kernel";
+import type { Router } from "@protocols/lm/router";
+import type { SettingsSection } from "@protocols/lm/settings.section";
 
 import { groupByBase, useBasePluginIds } from "./groups.js";
 
-/**
- * The part of `router`'s API this plugin uses. Declared structurally rather than
- * imported: plugins interact through the registry only (SPEC §6.1), and importing
- * another plugin's source would bundle a second copy of it.
- */
-export interface RouterService {
-  navigate(path: string, options?: { readonly replace?: boolean }): void;
-  url(path: string): string;
-}
+/** The part of the `router` port this plugin reads (the manifest's `needs`). */
+export type RouterService = Pick<Router, "navigate" | "url">;
 
 export interface SettingsViewProps {
   readonly kernel: Kernel;
   readonly router: RouterService;
+  /** The `sections` host (`lm/settings.section`), already in seat order. */
+  readonly sections: SlotHost<SettingsSection>;
   readonly params?: Readonly<Record<string, string>>;
 }
 
-export function SettingsView({ kernel, router, params }: SettingsViewProps): ReactNode {
-  const [sections, setSections] = useState<readonly Contribution<SettingsSection>[]>(() =>
-    kernel.extensions.entries<SettingsSection>(POINTS.settingsSection),
-  );
-  useEffect(
-    () =>
-      kernel.extensions.subscribe(POINTS.settingsSection, () => {
-        setSections(kernel.extensions.entries<SettingsSection>(POINTS.settingsSection));
-      }),
-    [kernel],
-  );
+export function SettingsView({ kernel, router, sections: host, params }: SettingsViewProps): ReactNode {
+  // Seat order is the order shown; there is nothing to sort here (PLUGIN-PROTOCOLS §6a).
+  const [sections, setSections] = useState<readonly SlotItem<SettingsSection>[]>(() => host.entries());
+  useEffect(() => host.subscribe(() => setSections(host.entries())), [host]);
 
   const groups = groupByBase(sections, useBasePluginIds(kernel));
   const requested = params?.["section"];
@@ -71,7 +59,7 @@ export function SettingsView({ kernel, router, params }: SettingsViewProps): Rea
     groups.base[0] ??
     groups.extensions[0];
 
-  const list = (entries: readonly Contribution<SettingsSection>[], label: string): ReactNode => (
+  const list = (entries: readonly SlotItem<SettingsSection>[], label: string): ReactNode => (
     <ul className="settings:m-0 settings:list-none settings:p-0 settings:compact:grid settings:compact:gap-1" aria-label={label}>
       {entries.map((entry) => (
         <li key={entry.value.id}>
@@ -146,7 +134,7 @@ function Section({
   entry,
 }: {
   readonly kernel: Kernel;
-  readonly entry: Contribution<SettingsSection>;
+  readonly entry: SlotItem<SettingsSection>;
 }): ReactNode {
   const section = entry.value;
   // Memoized per contribution: a new wrapper on every render is a different component
@@ -155,7 +143,7 @@ function Section({
   const Rendered = useMemo(
     () =>
       kernel.ui.boundary(section.component, {
-        point: POINTS.settingsSection,
+        point: "lm/settings.section",
         pluginId: entry.pluginId,
       }),
     [kernel, section.component, entry.pluginId],

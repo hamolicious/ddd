@@ -22,7 +22,8 @@
 
 import type { Kernel, NoticeAction } from "@kernel";
 
-import type { EditorInsertion } from "../../_shared/points.js";
+import type { EditorInsertion } from "@protocols/lm/editor.paste";
+
 import { reference } from "./kinds.js";
 import { QUEUE_LIMIT_BYTES, transfers, waiting, type TransferState, type WaitingUpload } from "./queue.js";
 import { Throughput, discardUpload, formatBytes, formatTimeLeft, sendInChunks, statusOf } from "./uploader.js";
@@ -65,6 +66,11 @@ export interface Uploads {
   restore(): Promise<void>;
   /** A connection is back: try every offline file now. */
   reconnected(): void;
+  /**
+   * The plugin is stopping: every timer cleared, every transfer aborted and let go of.
+   * What was kept on this device stays kept, and `restore` picks it up next time.
+   */
+  dispose(): void;
 }
 
 export function createUploads(kernel: Kernel): Uploads {
@@ -375,6 +381,17 @@ export function createUploads(kernel: Kernel): Uploads {
 
     reconnected() {
       for (const item of items.values()) wake(item);
+    },
+
+    dispose() {
+      for (const item of [...items.values()]) {
+        clearTimeout(item.retry);
+        clearTimeout(item.redraw);
+        items.delete(item.entry.token);
+        item.controller?.abort();
+        transfers.end(item.entry.token);
+        item.dismiss?.();
+      }
     },
   };
 }

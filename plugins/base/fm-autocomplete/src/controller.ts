@@ -15,9 +15,13 @@
 
 import type { Kernel } from "@kernel";
 
-import type { IndexerApi } from "../../_shared/indexer-api.js";
-import { POINTS, type TextSurface } from "../../_shared/points.js";
+import type { TextSurface } from "@protocols/lm/text.surface";
+import type { WorkspaceIndex } from "@protocols/lm/workspace-index";
+
 import { suggest, type Suggestion } from "./suggest.js";
+
+/** What the menu reads through the `index` port: the manifest's `needs`. */
+export type IndexSource = Pick<WorkspaceIndex, "fmFields" | "fmValues" | "subscribe">;
 
 export interface MenuState {
   readonly surface: TextSurface;
@@ -34,9 +38,11 @@ export interface MenuController {
   subscribe(listener: () => void): () => void;
   choose(index: number): void;
   select(index: number): void;
+  /** Stop watching every surface and take the key listeners off their elements. */
+  dispose(): void;
 }
 
-export function createController(kernel: Kernel, indexer: IndexerApi): MenuController {
+export function createController(kernel: Kernel, indexer: IndexSource): MenuController {
   let current: MenuState | undefined;
   /** Escape was pressed on this text: stay shut until it changes. */
   let dismissed: { surface: string; before: string } | undefined;
@@ -111,7 +117,8 @@ export function createController(kernel: Kernel, indexer: IndexerApi): MenuContr
 
   /** Surfaces being watched, and how to stop. Surfaces come and go with editors. */
   const attached = new Map<TextSurface, () => void>();
-  kernel.extensions.subscribe<TextSurface>(POINTS.textSurface, (all) => {
+  // The `surfaces` host: every `text.surface` wired to this plugin, in seat order.
+  const unwatch = kernel.ports.collect<TextSurface>("surfaces").subscribe((all) => {
     for (const [surface, detach] of [...attached]) {
       if (all.includes(surface)) continue;
       detach();
@@ -132,7 +139,7 @@ export function createController(kernel: Kernel, indexer: IndexerApi): MenuContr
 
   // The values change under an open menu when another note is edited, or this one's row
   // catches up with what was just typed.
-  indexer.subscribe(() => {
+  const unfollow = indexer.subscribe(() => {
     if (current) evaluate(current.surface);
   });
 
@@ -147,6 +154,13 @@ export function createController(kernel: Kernel, indexer: IndexerApi): MenuContr
     choose,
     select: (index) => {
       if (current && index >= 0 && index < current.items.length) set({ ...current, selected: index });
+    },
+    dispose: () => {
+      unwatch();
+      unfollow();
+      for (const detach of attached.values()) detach();
+      attached.clear();
+      set(undefined);
     },
   };
 }

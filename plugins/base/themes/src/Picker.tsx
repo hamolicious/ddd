@@ -1,5 +1,5 @@
 /**
- * The picker: one `settings.section` with the appearance control and a theme list per
+ * The picker: one `lm/settings.section` item with the appearance control and a theme list per
  * scheme.
  *
  * It is two radio groups and a swatch, and the only thing worth explaining is the
@@ -14,27 +14,26 @@
 
 import { useEffect, useId, useState, type ReactNode } from "react";
 
-import type { ColorScheme, Kernel } from "@kernel";
-
-import { POINTS, type Theme } from "../../_shared/points.js";
+import type { ColorScheme, Kernel, SlotHost } from "@kernel";
+import type { Theme } from "@protocols/lm/themes.theme";
 
 import type { ThemesController } from "./controller.js";
 
 export interface ThemePickerProps {
   readonly kernel: Kernel;
+  /** The `themes` host (`lm/themes.theme`): every installed theme, in seat order. */
+  readonly themes: SlotHost<Theme>;
   readonly controller: ThemesController;
 }
 
-export function ThemePicker({ kernel, controller }: ThemePickerProps): ReactNode {
-  const [themes, setThemes] = useState<readonly Theme[]>(() =>
-    kernel.extensions.get<Theme>(POINTS.theme),
-  );
+export function ThemePicker({ kernel, themes: host, controller }: ThemePickerProps): ReactNode {
+  const [themes, setThemes] = useState<readonly Theme[]>(() => host.get());
   const [appearance, setAppearance] = useState(() => controller.appearance());
   const [scheme, setScheme] = useState<ColorScheme>(() => kernel.ui.colorScheme);
   const [revision, setRevision] = useState(0);
   const group = useId();
 
-  useEffect(() => kernel.extensions.subscribe<Theme>(POINTS.theme, setThemes), [kernel]);
+  useEffect(() => host.subscribe(setThemes), [host]);
   // Re-read the *preference*, not just the resolved scheme.
   //
   // `appearance` is local state so the radio responds to a click without waiting for a

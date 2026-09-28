@@ -1,14 +1,14 @@
 /**
  * The top bar: two seats that other plugins fill, and nothing of its own.
  *
- * Everything in the bar is a `navbar.item` contribution placed in a seat by its `side`:
+ * Everything in the bar is an `lm/navbar.item` offer placed in a seat by its `side`:
  * **`start`** (left; grows, scrolls sideways when full) or **`end`** (pushed right; never
- * shrinks). `order` sorts within a seat, and the user's arrangement in Settings → Top bar
- * overrides both (`layout.ts`). The ☰ (`shell-ui`), Settings, Admin, the notice bell
- * (`notices`) and the sync pill (`sync-status`) all arrive this way; the header knows
- * none of them.
+ * shrinks). Within a seat the wiring's seat order stands, and the user's arrangement in
+ * Settings → Top bar overrides both (`layout.ts`). The ☰ (`shell-ui`), Settings, Admin,
+ * the notice bell (`notices`) and the sync pill (`sync-status`) all arrive this way; the
+ * header knows none of them.
  *
- * It is one `shell.header` contribution, so it owns the whole row — the `<header>`
+ * It is one `lm/shell.header` offer, so it owns the whole row — the `<header>`
  * landmark and the `<nav aria-label="Main">` inside it. One row at every width, with the
  * padding spent down to the safe-area insets on a phone: every pixel of chrome is a
  * pixel off the document.
@@ -16,23 +16,29 @@
 
 import type { ReactNode } from "react";
 
-import type { Contribution, Kernel } from "@kernel";
+import type { Kernel, SlotHost, SlotItem } from "@kernel";
 
-import { BoundedIcon, bounded, usePointEntries } from "../../_shared/boundary.js";
-import { POINTS, type NavbarItem } from "../../_shared/points.js";
+import type { NavbarItem } from "@protocols/lm/navbar.item";
+
+import { BoundedIcon, bounded, useSlotEntries } from "../../_shared/boundary.js";
 
 import type { ArrangementStore } from "./arrangement.js";
 import { useArrangement } from "./hooks.js";
 import { arrange } from "./layout.js";
 
+/** What the error boundary names a failed item by. */
+const PROTOCOL = "lm/navbar.item";
+
 export function Header({
   kernel,
+  items: host,
   store,
 }: {
   readonly kernel: Kernel;
+  readonly items: SlotHost<NavbarItem>;
   readonly store: ArrangementStore;
 }): ReactNode {
-  const items = usePointEntries<NavbarItem>(kernel, POINTS.navbarItem);
+  const items = useSlotEntries(host);
   const arrangement = useArrangement(store);
   const shown = items.filter((entry) => !arrangement.hidden.includes(entry.value.id));
   const seats = arrange(shown, (entry) => entry.value, arrangement);
@@ -60,11 +66,11 @@ function NavItem({
   entry,
 }: {
   readonly kernel: Kernel;
-  readonly entry: Contribution<NavbarItem>;
+  readonly entry: SlotItem<NavbarItem>;
 }): ReactNode {
   const item = entry.value;
   if (item.component) {
-    const Rendered = bounded(kernel, item.component, POINTS.navbarItem, entry.pluginId);
+    const Rendered = bounded(kernel, item.component, PROTOCOL, entry.pluginId);
     return (
       // A plugin's own widget sizes itself; `data-kind` tells it from a button the header
       // renders, which wants its whole label or nothing.
@@ -83,7 +89,7 @@ function NavItem({
             <BoundedIcon
               kernel={kernel}
               node={item.icon}
-              point={POINTS.navbarItem}
+              point={PROTOCOL}
               pluginId={entry.pluginId}
               className="header-nav-icon"
             />

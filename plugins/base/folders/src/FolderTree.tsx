@@ -68,7 +68,7 @@ import {
   reparentTarget,
   type PathRow,
 } from "./path.js";
-import type { ConfirmRequest, ContextMenuApi, MenuItem } from "../../_shared/context-menu-api.js";
+import type { ConfirmRequest, ContextMenu, MenuItem } from "@protocols/lm/context-menu";
 
 import { MovePicker } from "./MovePicker.js";
 import { placeAmong, pruneOrder, withSiblings } from "./order.js";
@@ -149,8 +149,8 @@ export type TreeTarget =
     };
 
 export interface FolderTreeProps {
-  /** `context-menu`'s service: every sheet this tree opens goes through it. */
-  readonly menu: ContextMenuApi;
+  /** The `menu` port (`lm/context-menu`): every sheet this tree opens goes through it. */
+  readonly menu: Pick<ContextMenu, "open" | "openSheet" | "confirm" | "close">;
   readonly rows: readonly PathRow[];
   readonly loading: boolean;
   readonly error?: string;

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { DocumentRow } from "@kernel";
 
-import type { DocumentMode } from "../../_shared/points.js";
+import type { DocumentMode } from "@protocols/lm/document.mode";
 import {
   DEFAULT_MODE_ID,
   MODE_MEMORY_CAP,
@@ -11,7 +11,6 @@ import {
   rememberMode,
   resolveModeId,
   serializeModeMemory,
-  sortModes,
   visibleModes,
 } from "./modes.js";
 
@@ -41,25 +40,19 @@ const row = (overrides: Partial<DocumentRow> = {}): DocumentRow => ({
   ...overrides,
 });
 
-describe("sortModes", () => {
-  it("orders by `order` ascending and defaults a missing one to 100", () => {
-    const sorted = sortModes([mode("late", { order: 500 }), mode("plain"), mode("early", { order: 0 })]);
-    expect(sorted.map((entry) => entry.id)).toEqual(["early", "plain", "late"]);
-  });
-
-  it("does not mutate its input", () => {
-    const input = [mode("b", { order: 2 }), mode("a", { order: 1 })];
-    sortModes(input);
-    expect(input.map((entry) => entry.id)).toEqual(["b", "a"]);
-  });
-});
-
 describe("visibleModes", () => {
   it("keeps modes without a `when`", () => {
     expect(visibleModes([mode("read"), mode("edit")], row()).map((entry) => entry.id)).toEqual([
       "read",
       "edit",
     ]);
+  });
+
+  it("keeps the host's seat order and ignores `order` (PLUGIN-PROTOCOLS §6a)", () => {
+    // `order` is only the default-seat hint a manifest carries; the wiring decides the
+    // seats, and the switch shows exactly what `collect()` hands over.
+    const seated = [mode("late", { order: 500 }), mode("plain"), mode("early", { order: 0 })];
+    expect(visibleModes(seated, row()).map((entry) => entry.id)).toEqual(["late", "plain", "early"]);
   });
 
   it("hides a mode whose `when` returns false", () => {
@@ -110,9 +103,10 @@ describe("resolveModeId", () => {
     expect(resolveModeId(undefined, undefined, visible)).toBe(DEFAULT_MODE_ID);
   });
 
-  it("falls back to the lowest-order visible mode when `read` is not registered", () => {
+  it("falls back to the first seated visible mode when `read` is not wired in", () => {
+    // `write` has the lower `order` hint, but the seat order is what counts.
     const replaced = [mode("preview", { order: 5 }), mode("write", { order: 1 })];
-    expect(resolveModeId("read", "read", replaced)).toBe("write");
+    expect(resolveModeId("read", "read", replaced)).toBe("preview");
   });
 
   it("is undefined when nothing at all is registered", () => {

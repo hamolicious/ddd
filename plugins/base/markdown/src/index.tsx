@@ -1,5 +1,5 @@
 /**
- * `markdown` — the unified/remark → React pipeline and the five points over it
+ * `markdown` — the unified/remark → React pipeline and the seven slot ports over it
  * (SPEC §6.6).
  *
  * What this plugin is responsible for, in the order of how easily each one goes wrong:
@@ -15,8 +15,8 @@
  * - **Directives and fences are the blessed syntaxes**: they degrade to literal text
  *   when the contributing plugin is absent, which is why they are preferred over
  *   `markdown.remark` — a raw remark plugin can change the meaning of a document.
- * - **Task states come from the registry**, `[ ]` and `[x]` being default
- *   contributions. Shipped interaction (replaceable): left-click toggles non-off → off
+ * - **Task states come from the `tasks` port**, `[ ]` and `[x]` being this plugin's own
+ *   offers on it. Shipped interaction (replaceable): left-click toggles non-off → off
  *   and off → on; right-click, or long-press on touch, opens the state menu.
  *
  * The implementation is split so each of those is one file: `schemes.ts` is the
@@ -25,84 +25,41 @@
  * holds the single write path. This file is the wiring and the public API.
  */
 
-import { type Kernel, type Unsubscribe } from "@kernel";
+import type { Kernel } from "@kernel";
+import type { Command } from "@protocols/lm/commands.command";
+import type { MarkdownRenderer } from "@protocols/lm/markdown-renderer";
+import type { MarkdownAttachment, MarkdownAttachmentProps } from "@protocols/lm/markdown.attachment";
+import type { MarkdownCodeBlock, MarkdownCodeBlockProps } from "@protocols/lm/markdown.codeBlock";
+import type { MarkdownComponent } from "@protocols/lm/markdown.component";
+import type { MarkdownDirective, MarkdownDirectiveProps } from "@protocols/lm/markdown.directive";
+import type { MarkdownFence, MarkdownFenceProps } from "@protocols/lm/markdown.fence";
+import type { MarkdownRemark } from "@protocols/lm/markdown.remark";
+import type { MarkdownTaskState } from "@protocols/lm/markdown.taskState";
+import type { SettingsSection } from "@protocols/lm/settings.section";
 import type { ComponentType, ReactNode } from "react";
-
-import {
-  POINTS,
-  markdownAttachmentShape,
-  markdownComponentShape,
-  markdownDirectiveShape,
-  markdownFenceShape,
-  markdownCodeBlockShape,
-  markdownRemarkShape,
-  markdownTaskStateShape,
-  type Command,
-  type SettingsSection,
-  type MarkdownAttachment,
-  type MarkdownAttachmentProps,
-  type MarkdownComponent,
-  type MarkdownDirective,
-  type MarkdownDirectiveProps,
-  type MarkdownFence,
-  type MarkdownCodeBlock,
-  type MarkdownCodeBlockProps,
-  type MarkdownFenceProps,
-  type MarkdownRemark,
-  type MarkdownTaskState,
-} from "../../_shared/points.js";
 
 import { type EmbedChain } from "./doc-embed.js";
 import { clampEmbedDepth, DEFAULT_EMBED_DEPTH, EMBED_DEPTH_KEY, MarkdownSettings } from "./MarkdownSettings.js";
 import { ProcessorCache } from "./processor.js";
-import { bodyOf, regionsOf, type DocumentRegions } from "../../_shared/regions.js";
+import { bodyOf, regionsOf } from "../../_shared/regions.js";
 import { renderTree, type RenderRegistries } from "./render.js";
 import { createRuntime } from "./runtime.js";
 import { buildTaskRegistry, scanTasks } from "./tasks.js";
 
-export interface MarkdownApi {
-  /**
-   * Render a document's body to React. `documentId` scopes `doc://` resolution.
-   *
-   * `offset` is the absolute offset of `text[0]` within the document, and only matters
-   * for task checkboxes: it is what a click's text splice is measured from. Omit it and
-   * `text` is taken to be this document's **body**, resolved against the document's
-   * *current* text at click time — which is what `viewer` does
-   * (`render(bodyOf(row.content))`) and is the correct default, because the body's start
-   * can move between render and click.
-   */
-  render(
-    text: string,
-    options?: { readonly documentId?: string; readonly offset?: number },
-  ): ReactNode;
-  /** Strip the frontmatter block and the `%%%` sections — what read mode shows. */
-  bodyOf(text: string): string;
-  /** Offsets of the three regions of one document text (SPEC §3.1). */
-  regions(text: string): DocumentRegions;
-  /** The task states currently registered, in menu order. */
-  taskStates(): readonly MarkdownTaskState[];
-  /**
-   * An attachment as the winning `markdown.attachment` renderer draws it, or `undefined`
-   * when none is contributed (the caller then draws its own). `fallback` is shown when
-   * the renderer has nothing for this file.
-   */
-  renderAttachment(
-    attachmentId: string,
-    options: {
-      readonly placement: "inline" | "page";
-      readonly alt?: string;
-      readonly fallback: ReactNode;
-    },
-  ): ReactNode | undefined;
-  /** Turn an embedded `attachment://` into a wrapper document (SPEC §3.6). */
-  promoteToDocument(attachmentId: string, options?: { readonly path?: string }): Promise<string>;
-  /**
-   * Fires when a `markdown.*` contribution changes, so a caller that cached a
-   * `render()` result can re-render. Without it, installing a plugin that adds a
-   * directive would leave every open document rendering the old tree until navigation.
-   */
-  onChange(listener: () => void): Unsubscribe;
-}
+/**
+ * What this plugin serves on its `renderer` port: `lm/markdown-renderer`. The members are
+ * documented in the protocol package; two notes that belong with the implementation:
+ *
+ * - `render`'s `offset` is the absolute offset of `text[0]` within the document, and only
+ *   matters for task checkboxes: it is what a click's text splice is measured from. Omit
+ *   it and `text` is taken to be this document's **body**, resolved against the document's
+ *   *current* text at click time — which is what `viewer` does (`render(bodyOf(row.content))`)
+ *   and is the correct default, because the body's start can move between render and click.
+ * - `onChange` fires when a `markdown.*` offer changes, so a caller that cached a `render()`
+ *   result can re-render. Without it, installing a plugin that adds a directive would leave
+ *   every open document rendering the old tree until navigation.
+ */
+export type MarkdownApi = MarkdownRenderer;
 
 /**
  * The live runtime, for {@link deactivate}.
@@ -116,64 +73,22 @@ export interface MarkdownApi {
 let liveRuntime: { dispose(): void } | undefined;
 
 export default function activate(kernel: Kernel): MarkdownApi {
-  const directives = kernel.extensions.definePoint<MarkdownDirective>({
-    name: POINTS.markdownDirective,
-    shape: markdownDirectiveShape,
-    key: (directive) => `${directive.kind}:${directive.name}`,
-    description: "A `:::name` / `::name` / `:name[…]` directive renderer.",
-  });
-  const fences = kernel.extensions.definePoint<MarkdownFence>({
-    name: POINTS.markdownFence,
-    shape: markdownFenceShape,
-    key: (fence) => fence.language,
-    description: "A renderer for fenced code of one language.",
-  });
-  const codeBlocks = kernel.extensions.definePoint<MarkdownCodeBlock>({
-    name: POINTS.markdownCodeBlock,
-    shape: markdownCodeBlockShape,
-    key: (renderer) => renderer.id,
-    description: "What fenced code no `markdown.fence` claims renders as; the lowest order wins.",
-  });
-  const remarkPlugins = kernel.extensions.definePoint<MarkdownRemark>({
-    name: POINTS.markdownRemark,
-    shape: markdownRemarkShape,
-    key: (plugin) => plugin.id,
-    description: "A raw unified/remark plugin — the escalated path.",
-  });
-  const components = kernel.extensions.definePoint<MarkdownComponent>({
-    name: POINTS.markdownComponent,
-    shape: markdownComponentShape,
-    key: (override) => override.node,
-    description: "Override the React component for one mdast node type.",
-  });
-  const taskStates = kernel.extensions.definePoint<MarkdownTaskState>({
-    name: POINTS.markdownTaskState,
-    shape: markdownTaskStateShape,
-    key: (state) => state.marker,
-    description: "A task marker: icon, label, menu order, and whether it counts as done.",
-  });
-  const attachmentRenderers = kernel.extensions.definePoint<MarkdownAttachment>({
-    name: POINTS.markdownAttachment,
-    shape: markdownAttachmentShape,
-    key: (renderer) => renderer.id,
-    description: "What an embedded attachment:// renders as; the lowest order wins.",
-  });
+  // The seven hosts. Shapes and duplicate keys come from the protocol packages; every
+  // list is in seat order, which is the order the wiring editor shows.
+  const directives = kernel.ports.collect<MarkdownDirective>("directives");
+  const fences = kernel.ports.collect<MarkdownFence>("fences");
+  const codeBlocks = kernel.ports.collect<MarkdownCodeBlock>("code");
+  const remarkPlugins = kernel.ports.collect<MarkdownRemark>("remark");
+  const components = kernel.ports.collect<MarkdownComponent>("components");
+  const taskStates = kernel.ports.collect<MarkdownTaskState>("tasks");
+  const attachmentRenderers = kernel.ports.collect<MarkdownAttachment>("attachments");
 
-  // The two built-in states (SPEC §6.6: "default `taskState` contributions").
-  kernel.extensions.contribute<MarkdownTaskState>(POINTS.markdownTaskState, {
-    marker: " ",
-    label: "To do",
-    icon: "☐",
-    order: 0,
-    done: false,
-  });
-  kernel.extensions.contribute<MarkdownTaskState>(POINTS.markdownTaskState, {
-    marker: "x",
-    label: "Done",
-    icon: "☑",
-    order: 10,
-    done: true,
-  });
+  // The two built-in states (SPEC §6.6: "default `taskState` contributions"), offered on
+  // this plugin's own `task-states` port and seated first by its `order` hint.
+  kernel.ports.offer<MarkdownTaskState>("task-states", [
+    { marker: " ", label: "To do", icon: "☐", order: 0, done: false },
+    { marker: "x", label: "Done", icon: "☑", order: 10, done: true },
+  ]);
 
   const runtime = createRuntime(kernel);
   liveRuntime = runtime;
@@ -206,8 +121,8 @@ export default function activate(kernel: Kernel): MarkdownApi {
     renderRevision += 1;
     announce();
   });
-  for (const point of [directives, fences, codeBlocks, components, taskStates, attachmentRenderers]) {
-    point.subscribe(() => {
+  for (const host of [directives, fences, codeBlocks, components, taskStates, attachmentRenderers]) {
+    host.subscribe(() => {
       renderRevision += 1;
       announce();
     });
@@ -220,9 +135,9 @@ export default function activate(kernel: Kernel): MarkdownApi {
   /**
    * Resolve the registries, wrapping every contributed component in the kernel's error
    * boundary (SPEC §6.4: "every contribution is wrapped in an error boundary"). The
-   * attribution comes from `entries()` — the registry records which plugin contributed
-   * what, so a thrown render says "plugin X failed" with the right X, which is the whole
-   * value of the boundary.
+   * attribution comes from `entries()` — the host records which plugin offered what, so a
+   * thrown render says "plugin X failed" with the right X, which is the whole value of
+   * the boundary.
    */
   const currentRegistries = (): RenderRegistries => {
     if (registries && registriesRevision === renderRevision) return registries;
@@ -234,7 +149,7 @@ export default function activate(kernel: Kernel): MarkdownApi {
       directiveMap.set(
         key,
         kernel.ui.boundary(entry.value.component, {
-          point: POINTS.markdownDirective,
+          point: "markdown.directive",
           pluginId: entry.pluginId,
         }),
       );
@@ -246,7 +161,7 @@ export default function activate(kernel: Kernel): MarkdownApi {
       fenceMap.set(
         entry.value.language,
         kernel.ui.boundary(entry.value.component, {
-          point: POINTS.markdownFence,
+          point: "markdown.fence",
           pluginId: entry.pluginId,
         }),
       );
@@ -258,29 +173,25 @@ export default function activate(kernel: Kernel): MarkdownApi {
       overrideMap.set(
         entry.value.node,
         kernel.ui.boundary(entry.value.component, {
-          point: POINTS.markdownComponent,
+          point: "markdown.component",
           pluginId: entry.pluginId,
         }),
       );
     }
 
-    // The lowest `order` wins; a tie goes to whichever activated first.
-    const winner = [...attachmentRenderers.entries()].sort(
-      (a, b) => (a.value.order ?? 100) - (b.value.order ?? 100),
-    )[0];
+    // The first seat wins (PLUGIN-PROTOCOLS §6a): the wiring decides, not an `order`.
+    const winner = attachmentRenderers.entries()[0];
     const attachment: ComponentType<MarkdownAttachmentProps> | undefined = winner
       ? kernel.ui.boundary(winner.value.component, {
-          point: POINTS.markdownAttachment,
+          point: "markdown.attachment",
           pluginId: winner.pluginId,
         })
       : undefined;
 
-    const codeWinner = [...codeBlocks.entries()].sort(
-      (a, b) => (a.value.order ?? 100) - (b.value.order ?? 100),
-    )[0];
+    const codeWinner = codeBlocks.entries()[0];
     const codeBlock: ComponentType<MarkdownCodeBlockProps> | undefined = codeWinner
       ? kernel.ui.boundary(codeWinner.value.component, {
-          point: POINTS.markdownCodeBlock,
+          point: "markdown.codeBlock",
           pluginId: codeWinner.pluginId,
         })
       : undefined;
@@ -324,7 +235,7 @@ export default function activate(kernel: Kernel): MarkdownApi {
     }
   };
 
-  kernel.extensions.contribute<SettingsSection>(POINTS.settingsSection, {
+  kernel.ports.offer<SettingsSection>("settings", {
     id: "markdown",
     title: "Markdown",
     order: 45,
@@ -409,7 +320,7 @@ export default function activate(kernel: Kernel): MarkdownApi {
     },
   };
 
-  kernel.extensions.contribute<Command>(POINTS.command, {
+  kernel.ports.offer<Command>("commands", {
     id: "markdown.promoteToDocument",
     title: "Promote attachment to document",
     category: "Markdown",
@@ -452,6 +363,7 @@ export default function activate(kernel: Kernel): MarkdownApi {
     },
   });
 
+  kernel.ports.serve("renderer", api);
   return api;
 }
 

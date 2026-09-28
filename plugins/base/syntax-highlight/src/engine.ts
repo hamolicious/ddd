@@ -16,7 +16,7 @@
 
 import type { Language, Parser, Query } from "web-tree-sitter";
 
-import type { SyntaxLanguage } from "../../_shared/points.js";
+import type { SyntaxLanguage } from "@protocols/lm/syntax.language";
 
 import { captureClass } from "./captures.js";
 

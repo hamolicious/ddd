@@ -12,7 +12,7 @@ import type { ReactElement } from "react";
 
 import type { DocumentId } from "@kernel";
 
-import type { IndexerApi } from "../../_shared/indexer-api.js";
+import type { WorkspaceIndex } from "@protocols/lm/workspace-index";
 
 import { Controls, LocalControls } from "./Controls.js";
 import { buildGraph, neighbourhood, shapeKey, type Graph } from "./model.js";
@@ -21,7 +21,8 @@ import { displayOf, filterOf, forcesOf, type SettingsStore } from "./settings.js
 import { Simulation, type SimNode } from "./simulation.js";
 
 export interface GraphViewProps {
-  readonly indexer: IndexerApi;
+  /** The `index` port: `ready`, `version`, `documents`, `connections` and `subscribe`. */
+  readonly indexer: Pick<WorkspaceIndex, "ready" | "version" | "documents" | "connections" | "subscribe">;
   readonly store: SettingsStore;
   readonly open: (id: DocumentId, newTab: boolean) => void;
   /** The local graph: this note and what is within `localDepth` links of it. */

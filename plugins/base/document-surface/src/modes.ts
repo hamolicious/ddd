@@ -7,16 +7,19 @@
  * reload — are exactly the rules that are easiest to get wrong and hardest to notice,
  * because a wrong answer still renders *something*.
  *
- * `viewer` and `editor` are symmetric contributions (SPEC §6.5): nothing below names
- * either of them. {@link DEFAULT_MODE_ID} is a *fallback* string, used only when no
- * preference exists and `read` happens to be registered — if it is not, the
- * lowest-`order` visible mode wins, which is how a workspace that replaced both base
- * modes still opens a document.
+ * `viewer` and `editor` are symmetric offers (SPEC §6.5): nothing below names either
+ * of them. {@link DEFAULT_MODE_ID} is a *fallback* string, used only when no preference
+ * exists and `read` happens to be wired in — if it is not, the first seated visible
+ * mode wins, which is how a workspace that replaced both base modes still opens a
+ * document.
+ *
+ * Modes arrive **in seat order** (PLUGIN-PROTOCOLS §6a) and nothing here sorts them: the
+ * `order` field on a mode is only the default-seat hint its manifest carries.
  */
 
 import type { DocumentRow } from "@kernel";
 
-import type { DocumentMode } from "../../_shared/points.js";
+import type { DocumentMode } from "@protocols/lm/document.mode";
 
 /** The mode a fresh client prefers when nothing else says otherwise. */
 export const DEFAULT_MODE_ID = "read";
@@ -29,17 +32,8 @@ export const DEFAULT_MODE_ID = "read";
  */
 export const MODE_MEMORY_CAP = 100;
 
-/** `order` ascending; contributions without one sort as 100 (the registry default). */
-export function byOrder(a: { readonly order?: number }, b: { readonly order?: number }): number {
-  return (a.order ?? 100) - (b.order ?? 100);
-}
-
-export function sortModes(modes: readonly DocumentMode[]): readonly DocumentMode[] {
-  return [...modes].sort(byOrder);
-}
-
 /**
- * The modes that may show this document, in order.
+ * The modes that may show this document, in seat order.
  *
  * A `when` predicate that **throws** hides its mode and reports it. Fail-closed is
  * the right direction here: a contribution whose own guard crashes cannot be trusted
@@ -51,7 +45,7 @@ export function visibleModes(
   row: DocumentRow | undefined,
   onError?: (mode: DocumentMode, error: unknown) => void,
 ): readonly DocumentMode[] {
-  return sortModes(modes).filter((mode) => {
+  return modes.filter((mode) => {
     if (!mode.when) return true;
     if (!row) return true;
     try {
@@ -68,7 +62,7 @@ export function visibleModes(
  * is actually registered and visible.
  *
  * Precedence: the document's remembered mode → the user's default → `read` →
- * the lowest-`order` visible mode. Every step is skipped when the named mode is not
+ * the first seated visible mode. Every step is skipped when the named mode is not
  * visible, so an uninstalled `editor` degrades to reading rather than a blank pane.
  */
 export function resolveModeId(
@@ -81,12 +75,11 @@ export function resolveModeId(
   if (has(remembered)) return remembered;
   if (has(preferred)) return preferred;
   if (has(DEFAULT_MODE_ID)) return DEFAULT_MODE_ID;
-  // Sorted defensively: the surface passes `visibleModes()` output, but "the
-  // lowest-`order` mode" must not quietly mean "whichever registered first".
-  return sortModes(visible)[0]?.id;
+  // The first seat: `visible` is in the host's order, which the wiring decides.
+  return visible[0]?.id;
 }
 
-/** The next mode in `order`, wrapping. `undefined` when nothing is registered. */
+/** The next mode in seat order, wrapping. `undefined` when nothing is wired in. */
 export function nextModeId(
   visible: readonly DocumentMode[],
   current: string | undefined,

@@ -8,8 +8,8 @@
  * trusted: each result set is converted to `1/(rank+1)` before merging, and a document
  * found by two providers keeps its best rank and records both attributions.
  *
- * The provider `order` (SPEC §6.5: the local index is 0) breaks ties, which is what
- * makes the offline-correct provider the one whose opinion wins by default.
+ * The provider's seat (SPEC §6.5: the local index is seated first by default) breaks
+ * ties, which is what makes the offline-correct provider the one whose opinion wins.
  */
 
 import type { SearchHit } from "@kernel";
@@ -18,6 +18,7 @@ import type { SearchHit } from "@kernel";
 export interface ProviderResult {
   readonly providerId: string;
   readonly label: string;
+  /** The provider's seat on the `search` port, 0 first: the tie-breaker. */
   readonly order: number;
   readonly hits: readonly SearchHit[];
   /** Set when the provider threw. The UI shows it per provider, never as a dead page. */
@@ -36,7 +37,7 @@ export interface MergedHit {
 /**
  * Merge, de-duplicate by document id, and sort best-first.
  *
- * Deterministic: equal scores break on the winning provider's `order`, then on id, so
+ * Deterministic: equal scores break on the winning provider's seat, then on id, so
  * the same query over the same data always lists the same way.
  */
 export function mergeHits(results: readonly ProviderResult[], limit?: number): readonly MergedHit[] {

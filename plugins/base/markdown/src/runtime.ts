@@ -12,6 +12,7 @@
 
 import { embedReplace, embedToggle, type EmbedLocation } from "./embed-toggle.js";
 import type { Kernel } from "@kernel";
+import type { Router } from "@protocols/lm/router";
 
 import { regionsOf } from "../../_shared/regions.js";
 import { resolveMarkerOffset, type TaskLocation, type TaskScan } from "./tasks.js";
@@ -101,11 +102,8 @@ export interface EmbedSite {
 
 export type EmbedToggleRequest = EmbedSite;
 
-/** `kernel.services.get("router")` — the slice of it this plugin uses. */
-interface RouterLike {
-  navigate(path: string, options?: { readonly replace?: boolean }): void;
-  href(pattern: string, params?: Readonly<Record<string, string>>): string;
-}
+/** The `router` port — optional, so `use()` answers `undefined` with nothing wired to it. */
+type RouterLike = Pick<Router, "navigate" | "href">;
 
 /**
  * Inline types a browser may render from a blob URL.
@@ -140,7 +138,7 @@ export function isInlineImage(mime: string): boolean {
  *   distinct attachments the user actually looked at.
  */
 export function createRuntime(kernel: Kernel): MarkdownRuntime & { dispose(): void } {
-  const router = kernel.services.get<RouterLike>("router");
+  const router = kernel.ports.use<RouterLike | undefined>("router");
   const metaCache = new Map<string, Promise<AttachmentMeta | null>>();
   const blobCache = new Map<string, Promise<AttachmentBlob | null>>();
   const objectUrls: string[] = [];

@@ -29,7 +29,7 @@
  * GFM's node has no record of where the marker was.
  */
 
-import type { MarkdownTaskState } from "../../_shared/points.js";
+import type { MarkdownTaskState } from "@protocols/lm/markdown.taskState";
 
 import { spanOf, walk, type MdNode } from "./mdast.js";
 
@@ -49,7 +49,8 @@ export interface TaskRegistry {
 }
 
 /**
- * Build the lookup from the point's current contributions.
+ * Build the lookup from the `tasks` port's current items, **in seat order** — that is
+ * the menu order (PLUGIN-PROTOCOLS §6a: hosts do not sort).
  *
  * `off`/`on` are resolved rather than hard-coded, because `markdown.taskState` is
  * replaceable like everything else (SPEC §6.1) and a workspace that replaced the
@@ -66,14 +67,12 @@ export interface TaskRegistry {
  */
 export function buildTaskRegistry(contributions: readonly MarkdownTaskState[]): TaskRegistry {
   const seen = new Map<string, MarkdownTaskState>();
-  // The registry's own de-duplication: the point's `key` is the marker and the registry
-  // already enforces first-wins, so this only guards a caller passing a raw array.
+  // The host's own de-duplication: the protocol's key is the marker and the host already
+  // enforces first-wins, so this only guards a caller passing a raw array.
   for (const state of contributions) {
     if (!seen.has(state.marker)) seen.set(state.marker, state);
   }
-  const states = [...seen.values()].sort(
-    (a, b) => (a.order ?? 100) - (b.order ?? 100) || a.marker.localeCompare(b.marker),
-  );
+  const states = [...seen.values()];
   const off = seen.get(" ") ?? states.find((state) => state.done !== true);
   const on = states.find((state) => state.done === true) ?? states.find((state) => state !== off);
   return { states, byMarker: seen, off, on };

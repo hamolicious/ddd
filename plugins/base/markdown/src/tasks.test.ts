@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { MarkdownTaskState } from "../../_shared/points.js";
+import type { MarkdownTaskState } from "@protocols/lm/markdown.taskState";
 
 import { buildProcessor } from "./processor.js";
 import { buildTaskRegistry, markerAt, resolveMarkerOffset, scanTasks, toggleMarker } from "./tasks.js";
@@ -15,14 +15,11 @@ const processor = buildProcessor([]);
 const scan = (text: string, registry = BUILTINS) => scanTasks(processor.parse(text), text, registry);
 
 describe("buildTaskRegistry", () => {
-  it("orders states by `order`, then by marker", () => {
-    const registry = buildTaskRegistry([DONE, DROPPED, TODO, PARTIAL]);
-    expect(registry.states.map((state) => state.marker)).toEqual([" ", "/", "x", "-"]);
-  });
-
-  it("defaults a missing order to 100, after the built-ins", () => {
-    const registry = buildTaskRegistry([DONE, { marker: "?", label: "Unclear", icon: "?" }, TODO]);
-    expect(registry.states.map((state) => state.marker)).toEqual([" ", "x", "?"]);
+  it("keeps the host's seat order and ignores `order` (PLUGIN-PROTOCOLS §6a)", () => {
+    // `order` is only the default-seat hint the manifest carries; the wiring's seat
+    // order is what `collect()` hands over, and the menu shows exactly that.
+    const registry = buildTaskRegistry([DONE, DROPPED, TODO, PARTIAL, { marker: "?", label: "Unclear", icon: "?" }]);
+    expect(registry.states.map((state) => state.marker)).toEqual(["x", "-", " ", "/", "?"]);
   });
 
   it("resolves off and on from the registry, not from hard-coded markers", () => {

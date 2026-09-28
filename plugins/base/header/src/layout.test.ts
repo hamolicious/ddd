@@ -15,20 +15,31 @@ const ids = (seats: Record<"start" | "end", Placeable[]>) => ({
 });
 const same = (item: Placeable): Placeable => item;
 
+// In seat order, as the host hands them over: the bell before the sync pill.
 const items: Placeable[] = [
-  { id: "settings", side: "end", order: 90 },
-  { id: "sync", side: "end", order: 1000 },
-  { id: "bell", side: "end", order: 900 },
-  { id: "admin", side: "end", order: 90 },
+  { id: "settings", side: "end" },
+  { id: "admin", side: "end" },
+  { id: "bell", side: "end" },
+  { id: "sync", side: "end" },
   { id: "custom" },
 ];
 
 describe("arrange", () => {
-  it("falls back to each item's side and order, keeping registration order on ties", () => {
+  it("falls back to each item's side, keeping seat order within it", () => {
     expect(ids(arrange(items, same, EMPTY_ARRANGEMENT))).toEqual({
       start: ["custom"],
       end: ["settings", "admin", "bell", "sync"],
     });
+  });
+
+  it("does not reorder unarranged items by any hint of their own", () => {
+    // The wiring seated `late` before `early`; a stale `order` on the item is no longer
+    // read (PLUGIN-PROTOCOLS §6a: hosts stop sorting).
+    const hinted = [
+      { id: "late", side: "end", order: 900 },
+      { id: "early", side: "end", order: 1 },
+    ] as const;
+    expect(ids(arrange(hinted, same, EMPTY_ARRANGEMENT)).end).toEqual(["late", "early"]);
   });
 
   it("puts arranged items first, in the stored order, across seats", () => {

@@ -7,10 +7,17 @@ They are built with the same tooling and land in the same layout, so the server 
 tell them apart from a base plugin — which is the point. What separates them is the
 contract they compile against: `tsconfig.json` here maps `@kernel` to
 **`web/kernel-api/dist/kernel.d.ts`**, the single generated file served at `/kernel.d.ts`,
-rather than to `kernel-api/src`. A plugin author outside this repository has exactly that
-file and nothing else, so these plugins have exactly that too. If the generator ever drops
-a type they need, this config fails and `web/tsconfig.json` does not — the claim "written
-against the published contract" is checked rather than asserted.
+rather than to `kernel-api/src`, and `@protocols/lm/<name>` to the generated `index.d.ts`
+of each protocol package, the file served at `/protocols/<id>/<version>/index.d.ts`. A
+plugin author outside this repository has exactly those files and nothing else, so these
+plugins have exactly that too. If the generator ever drops a type they need, this config
+fails and `web/tsconfig.json` does not — the claim "written against the published contract"
+is checked rather than asserted.
+
+Each one names its ports in its manifest (`provides`/`consumes`, PLUGIN-PROTOCOLS §4) and
+reaches them through `kernel.ports`: `alt-editor` offers a `document.mode` and, per mounted
+editor, a `text.surface`; `source-view` a mode; `extra-task-states` its markers;
+`obsidian-importer` a command and a top-bar item, and consumes the `lm/attachments` service.
 
 | Plugin | Why it exists |
 |---|---|

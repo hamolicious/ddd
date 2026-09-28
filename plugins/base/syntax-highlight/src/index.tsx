@@ -2,12 +2,12 @@
  * `syntax-highlight` — fenced code, highlighted with tree-sitter grammars the user
  * installs when they want them.
  *
- * - Defines `syntax.language`, and contributes its own catalog to it (`languages.json`,
- *   built into `frontend/languages/` by `build.mjs`). Another plugin can add a language
- *   the same way.
- * - Contributes the `markdown.codeBlock` renderer, which replaces markdown's plain `<pre>`
- *   for every fence no `markdown.fence` claims; and an `editor.extension`, which colours
- *   the same blocks while editing (SPEC §6.6: a syntax contributor pairs the two).
+ * - Hosts `syntax.language` on its `languages` port, and offers its own catalog on
+ *   `builtin` (`languages.json`, built into `frontend/languages/` by `build.mjs`). Another
+ *   plugin can offer a language the same way.
+ * - Offers the `markdown.codeBlock` renderer, which replaces markdown's plain `<pre>` for
+ *   every fence no `markdown.fence` claims; and an `editor.extension`, which colours the
+ *   same blocks while editing (SPEC §6.6: a syntax contributor pairs the two).
  * - Which languages are installed is a per-user setting; the bytes are fetched once per
  *   device and kept by the service worker.
  *
@@ -16,15 +16,11 @@
  */
 
 import type { Kernel } from "@kernel";
+import type { EditorExtension } from "@protocols/lm/editor.extension";
+import type { MarkdownCodeBlock } from "@protocols/lm/markdown.codeBlock";
+import type { SettingsSection } from "@protocols/lm/settings.section";
+import type { SyntaxLanguage } from "@protocols/lm/syntax.language";
 
-import {
-  POINTS,
-  syntaxLanguageShape,
-  type EditorExtension,
-  type MarkdownCodeBlock,
-  type SettingsSection,
-  type SyntaxLanguage,
-} from "../../_shared/points.js";
 import catalog from "../languages.json";
 
 import { codeBlockFor } from "./CodeBlock.js";
@@ -76,22 +72,20 @@ interface CatalogEntry {
 const base = import.meta.url;
 
 export default function activate(kernel: Kernel): SyntaxApi {
-  const point = kernel.extensions.definePoint<SyntaxLanguage>({
-    name: POINTS.syntaxLanguage,
-    shape: syntaxLanguageShape,
-    key: (language) => language.id,
-    description: "A tree-sitter grammar fenced code can be highlighted with.",
-  });
+  // The host: every language wired in, in seat order.
+  const point = kernel.ports.collect<SyntaxLanguage>("languages");
 
-  for (const entry of catalog.languages as readonly CatalogEntry[]) {
-    kernel.extensions.contribute<SyntaxLanguage>(POINTS.syntaxLanguage, {
+  // The shipped catalog, offered together on `builtin` so it stays one block of seats.
+  kernel.ports.offer<SyntaxLanguage>(
+    "builtin",
+    (catalog.languages as readonly CatalogEntry[]).map((entry) => ({
       id: entry.id,
       name: entry.name,
       aliases: entry.aliases,
       wasmUrl: new URL(`languages/${entry.id}/grammar.wasm`, base).href,
       highlightsUrl: new URL(`languages/${entry.id}/highlights.scm`, base).href,
-    });
-  }
+    })),
+  );
 
   const custom = createCustom(kernel);
   const engine = createEngine({
@@ -99,7 +93,7 @@ export default function activate(kernel: Kernel): SyntaxApi {
   });
   const installed = createInstalled(kernel);
 
-  // Uploaded languages are contributions like any other, kept in step with the setting.
+  // Uploaded languages are offers like any other, kept in step with the setting.
   const customContributions = new Map<string, { readonly key: string; dispose(): void }>();
   const syncCustom = (): void => {
     const current = new Map(custom.list().map((language) => [language.id, language]));
@@ -112,7 +106,7 @@ export default function activate(kernel: Kernel): SyntaxApi {
     }
     for (const [id, language] of current) {
       if (customContributions.has(id)) continue;
-      const disposable = kernel.extensions.contribute<SyntaxLanguage>(POINTS.syntaxLanguage, {
+      const disposable = kernel.ports.offer<SyntaxLanguage>("builtin", {
         id,
         name: language.name,
         aliases: language.aliases,
@@ -218,17 +212,17 @@ export default function activate(kernel: Kernel): SyntaxApi {
     revision: () => revision,
   };
 
-  kernel.extensions.contribute<MarkdownCodeBlock>(POINTS.markdownCodeBlock, {
+  kernel.ports.offer<MarkdownCodeBlock>("code", {
     id: "syntax-highlight",
     component: codeBlockFor(api),
   });
 
-  kernel.extensions.contribute<EditorExtension>(POINTS.editorExtension, {
+  kernel.ports.offer<EditorExtension>("decorate", {
     id: "syntax-highlight",
     extension: editorExtension(api),
   });
 
-  kernel.extensions.contribute<SettingsSection>(POINTS.settingsSection, {
+  kernel.ports.offer<SettingsSection>("settings", {
     id: "syntax-highlight",
     title: "Code languages",
     order: 46,

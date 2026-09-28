@@ -55,7 +55,7 @@ describe("Obsidian attachment wrappers", () => {
     }));
     const importingKernel = {
       ...kernel,
-      services: { require: () => ({ upload }) },
+      ports: { use: () => ({ upload }) },
       documents: {
         ...kernel.documents,
         query: async ({ offset }: { readonly offset: number }) => ({
@@ -131,7 +131,7 @@ describe("Obsidian attachment wrappers", () => {
     const importingKernel = {
       ...kernel,
       core: { parseDocument: () => ({ fm: {} }) },
-      services: { require: () => ({ upload: vi.fn() }) },
+      ports: { use: () => ({ upload: vi.fn() }) },
       documents: {
         ...kernel.documents,
         query: async ({ offset }: { readonly offset: number }) => ({

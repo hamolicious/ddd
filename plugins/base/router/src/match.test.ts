@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { Route } from "../../_shared/points.js";
+import type { Route } from "@protocols/lm/router.route";
 
 import {
   buildPath,
@@ -120,18 +120,21 @@ describe("matchRoutes", () => {
     expect(matchRoutes([], "/")).toBeUndefined();
   });
 
-  it("breaks a tie between equally specific patterns with `order`", () => {
+  it("breaks a tie between equally specific patterns by seat order, not `order`", () => {
+    // `routes` arrives in seat order; a route's own `order` is the default-seat hint
+    // the wiring already consumed, and reading it here would let a stale hint override
+    // the wiring editor.
     const tie: readonly Route[] = [
-      route("/x/:a", "late", 200),
-      route("/x/:a", "early", 10),
+      route("/x/:a", "first", 200),
+      route("/x/:a", "second", 10),
     ];
-    expect(matchRoutes(tie, "/x/1")?.view).toBe("early");
-  });
-
-  it("falls back to registration order when `order` is equal too", () => {
-    const tie: readonly Route[] = [route("/x/:a", "first"), route("/x/:a", "second")];
     expect(matchRoutes(tie, "/x/1")?.view).toBe("first");
     expect(compareSpecificity(tie[0]!, tie[1]!)).toBe(0);
+  });
+
+  it("still lets specificity beat seat order", () => {
+    const routes: readonly Route[] = [route("/x/:a", "generic"), route("/x/1", "exact")];
+    expect(matchRoutes(routes, "/x/1")?.view).toBe("exact");
   });
 
   it("matches the root", () => {

@@ -1,6 +1,7 @@
 /**
- * `indexer` — indexes over the local projection, for other plugins to read
- * (`_shared/indexer-api.ts` is the service it returns).
+ * `indexer` — indexes over the local projection, for other plugins to read. The service
+ * is served on the `index` port, protocol `lm/workspace-index` (its package lives in
+ * `protocols/workspace-index/`).
  *
  * - `extract.ts` — what one document contributes: fields, connections, words, tasks.
  * - `workspace-index.ts` — the indexes, re-extracting only what changed.
@@ -10,17 +11,17 @@
  * feed delivers, online or off. Nothing is written — each client indexes for itself — so
  * nothing lands in a document's history and there is no server write cap to stay under.
  *
- * No UI and no dependencies: a plugin that wants the indexes declares
- * `"indexer": "^1.0"` and calls `kernel.services.require<IndexerApi>("indexer")`.
+ * No UI and no dependencies: a plugin that wants the indexes consumes
+ * `lm/workspace-index` on a port of its own and reads it with `kernel.ports.use`.
  */
 
 import type { DocumentQueryResult, Kernel } from "@kernel";
 
-import type { IndexerApi } from "../../_shared/indexer-api.js";
+import type { WorkspaceIndex as WorkspaceIndexService } from "@protocols/lm/workspace-index";
 
 import { WorkspaceIndex } from "./workspace-index.js";
 
-export default function activate(kernel: Kernel): IndexerApi {
+export default function activate(kernel: Kernel): WorkspaceIndexService {
   const index = new WorkspaceIndex();
   const listeners = new Set<() => void>();
 
@@ -42,7 +43,7 @@ export default function activate(kernel: Kernel): IndexerApi {
   // A caller that never awaits `ready` must not turn a failed build into an unhandled rejection.
   ready.catch((error: unknown) => kernel.log.error("the workspace could not be indexed", error));
 
-  return {
+  const api: WorkspaceIndexService = {
     ready,
     get version() {
       return index.version;
@@ -59,4 +60,6 @@ export default function activate(kernel: Kernel): IndexerApi {
       };
     },
   };
+  kernel.ports.serve("index", api);
+  return api;
 }

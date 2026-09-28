@@ -5,8 +5,8 @@
  * It lives outside React because two of the three are driven from *outside* the
  * React tree — the router calls `setMainView` during its own activation, and
  * `matchMedia` fires whenever the window crosses the breakpoint — and because
- * `ShellUiApi` has to answer `isCompact()` synchronously for dependents that are
- * not components at all.
+ * `lm/shell` has to answer `isCompact()` synchronously for consumers that are not
+ * components at all.
  *
  * `snapshot()` returns a cached immutable object so `useSyncExternalStore` can use
  * it directly: a fresh object per call would re-render forever.
@@ -15,7 +15,7 @@
 import type { Unsubscribe } from "@kernel";
 
 import { COMPACT_MEDIA_QUERY } from "../../_shared/compact.js";
-import type { ShellLayout } from "../../_shared/shell-api.js";
+import type { ShellLayout } from "@protocols/lm/shell";
 
 /**
  * SPEC §6.5's mobile breakpoint: drawer sidebar, single pane.

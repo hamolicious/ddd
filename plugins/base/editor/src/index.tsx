@@ -4,7 +4,7 @@
  *
  * The binding is the point of this plugin, and it is also the reason the runtime layer
  * pins CodeMirror: `yCollab` needs the *same* `@codemirror/state` instance as every
- * contributed `editor.extension`, or extensions silently do nothing (SPEC §6.4, risk 6).
+ * `editor.extension` wired in, or extensions silently do nothing (SPEC §6.4, risk 6).
  *
  * Three requirements that are easy to miss and expensive to retrofit:
  *
@@ -61,19 +61,11 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import * as Y from "yjs";
 
-import {
-  POINTS,
-  editorExtensionShape,
-  editorPasteShape,
-  type Command,
-  type DocumentMode,
-  type DocumentModeProps,
-  type EditorExtension,
-  type EditorInsertion,
-  type EditorPaste,
-  type EditorPasteEvent,
-  type TextSurface,
-} from "../../_shared/points.js";
+import type { Command } from "@protocols/lm/commands.command";
+import type { DocumentMode, DocumentModeProps } from "@protocols/lm/document.mode";
+import type { EditorExtension } from "@protocols/lm/editor.extension";
+import type { EditorInsertion, EditorPaste, EditorPasteEvent } from "@protocols/lm/editor.paste";
+import type { TextSurface } from "@protocols/lm/text.surface";
 import { markAt, trackInsertion } from "../../_shared/text-mark.js";
 import { markdownSyntax } from "./markdown-language.js";
 import {
@@ -234,22 +226,13 @@ const refold = StateField.define<DecorationSet>({
 });
 
 export default function activate(kernel: Kernel): EditorApi {
-  const extensions = kernel.extensions.definePoint<EditorExtension>({
-    name: POINTS.editorExtension,
-    shape: editorExtensionShape,
-    key: (entry) => entry.id,
-    description: "A CodeMirror 6 extension, from the shared @codemirror/state instance.",
-  });
-
-  const pastes = kernel.extensions.definePoint<EditorPaste>({
-    name: POINTS.editorPaste,
-    shape: editorPasteShape,
-    key: (entry) => entry.id,
-    description: "A paste / drop handler: takes files or text before CodeMirror does.",
-  });
+  // The two hosts, in seat order (PLUGIN-PROTOCOLS §6a): the wiring says who goes first,
+  // so nothing here sorts.
+  const extensions = kernel.ports.collect<EditorExtension>("extensions");
+  const pastes = kernel.ports.collect<EditorPaste>("paste");
 
   /**
-   * Offer a paste or a drop to each `editor.paste` handler in `order`; the first to say
+   * Offer a paste or a drop to each `editor.paste` handler in seat order; the first to say
    * `true` has it. A handler that throws is reported and skipped, never allowed to lose
    * it: the next one, or CodeMirror, still gets it.
    *
@@ -265,7 +248,7 @@ export default function activate(kernel: Kernel): EditorApi {
     data: DataTransfer,
     start: { from: number; to: number },
   ): boolean => {
-    const handlers = [...pastes.get()].sort((a, b) => (a.order ?? 100) - (b.order ?? 100));
+    const handlers = pastes.get();
     if (handlers.length === 0) return false;
 
     let open = true;
@@ -337,10 +320,10 @@ export default function activate(kernel: Kernel): EditorApi {
   /** The view currently on screen. One document surface ⇒ at most one editor. */
   let live: EditorView | undefined;
 
-  /** Contributed extensions, in `order`. A throwing contribution costs only itself. */
+  /** The extensions wired in, in seat order. A throwing one costs only itself. */
   const contributedExtensions = (): readonly Extension[] => {
     const collected: Extension[] = [];
-    for (const entry of [...extensions.get()].sort((a, b) => (a.order ?? 100) - (b.order ?? 100))) {
+    for (const entry of extensions.get()) {
       try {
         collected.push(entry.extension);
       } catch (error) {
@@ -510,18 +493,18 @@ export default function activate(kernel: Kernel): EditorApi {
           parent,
         });
 
-        // A plugin that contributes an extension after boot (or whose plugin failed and
-        // was retracted) must not need a reload to take effect.
+        // A plugin that offers an extension after boot (or whose plugin failed and was
+        // withdrawn) must not need a reload to take effect.
         offPoint = extensions.subscribe(() => {
           view?.dispatch({ effects: extensionsCompartment.reconfigure(contributedExtensions()) });
         });
 
-        // The caret, for the slash menu and anything else that works there. Contributed
-        // per mounted editor and withdrawn on unmount.
+        // The caret, for the slash menu and anything else that works there. Offered on
+        // the `surface` port per mounted editor and withdrawn on unmount.
         const bound = view;
         const text = open.text;
         const head = (): number => bound.state.selection.main.head;
-        surface = kernel.extensions.contribute<TextSurface>(POINTS.textSurface, {
+        surface = kernel.ports.offer<TextSurface>("surface", {
           id: `editor:${id}:${String((surfaceCount += 1))}`,
           documentId: id,
           element: bound.dom,
@@ -639,7 +622,7 @@ export default function activate(kernel: Kernel): EditorApi {
     );
   };
 
-  kernel.extensions.contribute<DocumentMode>(POINTS.documentMode, {
+  kernel.ports.offer<DocumentMode>("mode", {
     id: "edit",
     label: "Edit",
     order: 10,
@@ -653,27 +636,29 @@ export default function activate(kernel: Kernel): EditorApi {
     component: Edit,
   });
 
-  kernel.extensions.contribute<Command>(POINTS.command, {
-    id: "editor.focus",
-    title: "Focus the editor",
-    category: "Document",
-    when: () => live !== undefined,
-    run: () => api.focus(),
-  });
-  kernel.extensions.contribute<Command>(POINTS.command, {
-    id: "editor.unfoldMachineSections",
-    title: "Show machine sections",
-    category: "Document",
-    when: () => live !== undefined,
-    run: () => api.setMachineSectionsFolded(false),
-  });
-  kernel.extensions.contribute<Command>(POINTS.command, {
-    id: "editor.foldMachineSections",
-    title: "Collapse machine sections",
-    category: "Document",
-    when: () => live !== undefined,
-    run: () => api.setMachineSectionsFolded(true),
-  });
+  kernel.ports.offer<Command>("commands", [
+    {
+      id: "editor.focus",
+      title: "Focus the editor",
+      category: "Document",
+      when: () => live !== undefined,
+      run: () => api.focus(),
+    },
+    {
+      id: "editor.unfoldMachineSections",
+      title: "Show machine sections",
+      category: "Document",
+      when: () => live !== undefined,
+      run: () => api.setMachineSectionsFolded(false),
+    },
+    {
+      id: "editor.foldMachineSections",
+      title: "Collapse machine sections",
+      category: "Document",
+      when: () => live !== undefined,
+      run: () => api.setMachineSectionsFolded(true),
+    },
+  ]);
 
   const api: EditorApi = {
     focus: () => live?.focus(),

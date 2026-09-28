@@ -3,6 +3,15 @@
   "version": "1.0.0",
   "x-tailwind": true,
   "kernel": "^1.0",
+  "provides": {
+    "mode": {
+      "protocol": "lm/document.mode@1.0.0",
+      "order": 20
+    },
+    "surface": {
+      "protocol": "lm/text.surface@1.0.0"
+    }
+  },
   "dependencies": {
     "document-surface": "^1.0"
   },

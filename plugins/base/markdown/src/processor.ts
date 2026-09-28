@@ -32,7 +32,7 @@ import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
 import remarkDirective from "remark-directive";
 
-import type { MarkdownRemark } from "../../_shared/points.js";
+import type { MarkdownRemark } from "@protocols/lm/markdown.remark";
 
 import type { MdNode } from "./mdast.js";
 
@@ -41,9 +41,9 @@ import type { MdNode } from "./mdast.js";
  *
  * unified's generics re-type the processor on every `use()`, which cannot be expressed
  * by a `let` accumulating plugins in a loop. The contributed plugins are `unknown` at the
- * point type anyway (`MarkdownRemark.plugin` is deliberately loose so the extension point
- * does not pin unified's types into `_shared/points.ts`), so the chain is built through
- * this minimal structural type.
+ * protocol anyway (`MarkdownRemark.plugin` is deliberately loose so `lm/markdown.remark`
+ * does not pin unified's types), so the chain is built through this minimal structural
+ * type.
  */
 interface Pipeline {
   use(plugin: unknown, options?: unknown): Pipeline;
@@ -59,8 +59,8 @@ export interface MarkdownProcessor {
 export function buildProcessor(plugins: readonly MarkdownRemark[]): MarkdownProcessor {
   let pipeline = unified().use(remarkParse).use(remarkGfm).use(remarkDirective) as unknown as Pipeline;
 
-  const ordered = [...plugins].sort((a, b) => (a.order ?? 100) - (b.order ?? 100));
-  for (const contribution of ordered) {
+  // In seat order, as the host hands them over (PLUGIN-PROTOCOLS §6a).
+  for (const contribution of plugins) {
     // A contribution that is not a usable `Pluggable` throws here, at boot, naming the
     // plugin — not three documents later with an empty pane.
     pipeline = contribution.options === undefined

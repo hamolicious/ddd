@@ -11,7 +11,7 @@
  * *sequence* is chords separated by spaces (`g d`) — Vim-style prefixes, which is
  * why the resolver has to keep a pending prefix rather than matching one event.
  *
- * **`Mod` is the portable modifier** (SPEC §6.5 / `_shared/points.ts`): Cmd on Apple
+ * **`Mod` is the portable modifier** (SPEC §6.5 / the `lm/keybindings.default` protocol): Cmd on Apple
  * platforms, Ctrl everywhere else. A contribution spelling `Ctrl+K` gets literal
  * Ctrl on a Mac, which is almost never what the author meant — so `Mod` is what the
  * base distribution contributes, and `normalizeChord` keeps both spellings distinct

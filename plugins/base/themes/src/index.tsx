@@ -8,17 +8,21 @@
  * `themes` plugin failed still renders legibly (SPEC §6.4 error containment plus the
  * §6.5 note about where token defaults live).
  *
- * A theme therefore only names what it changes. Two are contributed here — one per
- * scheme — which is what proves the point: every value they do not mention is still
- * the kernel's, and a third-party theme is the same four fields.
+ * A theme therefore only names what it changes. Two are offered here — one per scheme,
+ * on the `builtin` port, to this plugin's own `themes` host (`lm/themes.theme`, the
+ * protocol package in `protocols/themes.theme/`) — which is what proves the point:
+ * every value they do not mention is still the kernel's, and a third-party theme is
+ * the same four fields on a port of its own.
  *
  * `apply.ts` holds the application logic (and its tests), `controller.ts` the selection
  * state, `Picker.tsx` the settings section.
  */
 
 import { type Kernel, type Unsubscribe } from "@kernel";
-
-import { POINTS, themeShape, type Command, type SettingsSection, type Theme } from "../../_shared/points.js";
+import type { Command } from "@protocols/lm/commands.command";
+import type { SettingsSection } from "@protocols/lm/settings.section";
+import type { SettingsShell } from "@protocols/lm/settings-shell";
+import type { Theme } from "@protocols/lm/themes.theme";
 
 import { ThemePicker } from "./Picker.js";
 import { ThemesController } from "./controller.js";
@@ -32,12 +36,9 @@ export interface ThemesApi {
 }
 
 export default function activate(kernel: Kernel): ThemesApi {
-  const themes = kernel.extensions.definePoint<Theme>({
-    name: POINTS.theme,
-    shape: themeShape,
-    key: (theme) => theme.id,
-    description: "Token overrides on top of the kernel's default palette.",
-  });
+  // The host: every theme wired to the port, in seat order. The shape and the duplicate
+  // key (`id`) come from the protocol package.
+  const themes = kernel.ports.collect<Theme>("themes");
 
   kernel.settings.defineSchema({
     theme: { type: "string", label: "Light theme", description: "Theme id, or empty for the kernel default." },
@@ -52,39 +53,41 @@ export default function activate(kernel: Kernel): ThemesApi {
 
   // Examples, and the minimum a picker needs to be worth opening. Both name a handful
   // of tokens and inherit the rest — including every contrast-checked text pair.
-  kernel.extensions.contribute<Theme>(POINTS.theme, {
-    id: "warm",
-    name: "Warm",
-    scheme: "light",
-    tokens: {
-      "--lm-bg": "#fdfaf5",
-      "--lm-bg-subtle": "#f4eee4",
-      "--lm-bg-raised": "#fffdfa",
-      "--lm-border": "#e4d9c8",
-      "--lm-accent": "#9a5b16",
-      "--lm-accent-subtle": "#f6e9d8",
-      "--lm-link": "#9a5b16",
-      "--lm-selection": "#f0dcc0",
+  kernel.ports.offer<Theme>("builtin", [
+    {
+      id: "warm",
+      name: "Warm",
+      scheme: "light",
+      tokens: {
+        "--lm-bg": "#fdfaf5",
+        "--lm-bg-subtle": "#f4eee4",
+        "--lm-bg-raised": "#fffdfa",
+        "--lm-border": "#e4d9c8",
+        "--lm-accent": "#9a5b16",
+        "--lm-accent-subtle": "#f6e9d8",
+        "--lm-link": "#9a5b16",
+        "--lm-selection": "#f0dcc0",
+      },
     },
-  });
-  kernel.extensions.contribute<Theme>(POINTS.theme, {
-    id: "midnight",
-    name: "Midnight",
-    scheme: "dark",
-    tokens: {
-      "--lm-bg": "#0d1117",
-      "--lm-bg-subtle": "#11161d",
-      "--lm-bg-raised": "#161b22",
-      "--lm-border": "#232a33",
-      "--lm-border-strong": "#38404b",
-      "--lm-accent": "#7aa2f7",
-      "--lm-accent-text": "#0b1020",
-      "--lm-accent-subtle": "#17233d",
-      "--lm-link": "#7aa2f7",
-      "--lm-focus-ring": "#7aa2f7",
-      "--lm-selection": "#243354",
+    {
+      id: "midnight",
+      name: "Midnight",
+      scheme: "dark",
+      tokens: {
+        "--lm-bg": "#0d1117",
+        "--lm-bg-subtle": "#11161d",
+        "--lm-bg-raised": "#161b22",
+        "--lm-border": "#232a33",
+        "--lm-border-strong": "#38404b",
+        "--lm-accent": "#7aa2f7",
+        "--lm-accent-text": "#0b1020",
+        "--lm-accent-subtle": "#17233d",
+        "--lm-link": "#7aa2f7",
+        "--lm-focus-ring": "#7aa2f7",
+        "--lm-selection": "#243354",
+      },
     },
-  });
+  ]);
 
   const controller = new ThemesController(kernel, () => themes.get());
   controller.adoptStoredAppearance();
@@ -107,30 +110,33 @@ export default function activate(kernel: Kernel): ThemesApi {
     }
   });
 
-  kernel.extensions.contribute<SettingsSection>(POINTS.settingsSection, {
+  kernel.ports.offer<SettingsSection>("settings", {
     id: "themes",
     title: "Appearance",
     order: 10,
     description: "Light and dark appearance, and the theme used for each.",
-    component: () => <ThemePicker kernel={kernel} controller={controller} />,
+    component: () => <ThemePicker kernel={kernel} themes={themes} controller={controller} />,
   });
 
-  kernel.extensions.contribute<Command>(POINTS.command, {
-    id: "themes.toggleAppearance",
-    title: "Toggle light / dark appearance",
-    category: "Appearance",
-    run: () => controller.setAppearance(kernel.ui.colorScheme === "dark" ? "light" : "dark"),
-  });
-
-  kernel.extensions.contribute<Command>(POINTS.command, {
-    id: "themes.open",
-    title: "Change theme",
-    category: "Appearance",
-    run: () => {
-      const settings = kernel.services.get<{ open(sectionId?: string): void }>("settings");
-      settings?.open("themes");
+  kernel.ports.offer<Command>("commands", [
+    {
+      id: "themes.toggleAppearance",
+      title: "Toggle light / dark appearance",
+      category: "Appearance",
+      run: () => controller.setAppearance(kernel.ui.colorScheme === "dark" ? "light" : "dark"),
     },
-  });
+    {
+      id: "themes.open",
+      title: "Change theme",
+      category: "Appearance",
+      run: () => {
+        // Optional port: `undefined` while nothing is bound to it, and read at run time
+        // rather than at activation so a rewiring in between is honoured.
+        const shell = kernel.ports.use<Pick<SettingsShell, "open"> | undefined>("settings-shell");
+        shell?.open("themes");
+      },
+    },
+  ]);
 
   return {
     list: () => themes.get(),

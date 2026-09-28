@@ -5,10 +5,10 @@
  *
  * The rules that matter:
  *
- * - **Per-user keybindings win.** Plugins contribute *suggested defaults*
- *   (`keybindings.default`); the user's configuration — a `kernel.settings` value on
+ * - **Per-user keybindings win.** Plugins offer *suggested defaults*
+ *   (`lm/keybindings.default`); the user's configuration — a `kernel.settings` value on
  *   this plugin — overrides them.
- * - **First registration wins on a conflict, and conflicts are listed.** Two plugins
+ * - **The lower seat wins on a conflict, and conflicts are listed.** Two plugins
  *   claiming `Mod+K` is not resolved silently; the settings section shows both so the
  *   user can rebind one.
  * - **`Mod` is the portable modifier**: Cmd on Apple platforms, Ctrl elsewhere. A
@@ -25,9 +25,9 @@
  * pending-prefix state with a timeout — the only stateful part, and it resets on any
  * key that continues nothing.
  *
- * **The palette renders as a `shell.overlay`.** `shell-ui` owns the single
+ * **The palette renders as an `lm/shell.overlay`.** `shell-ui` owns the single
  * `kernel.ui.mount` (SPEC §6.4), so a plugin needing a persistent React presence
- * contributes an always-mounted overlay. There is no button in the top bar: Mod+K (or
+ * offers an always-mounted overlay. There is no button in the top bar: Mod+K (or
  * whatever it is rebound to) is the way in.
  *
  * **Settings may be unavailable.** `kernel.settings` is document-backed (SPEC §6.4), so a
@@ -60,15 +60,11 @@ import {
   parseChord,
 } from "./keys.js";
 import { Palette } from "./Palette.js";
-import {
-  POINTS,
-  commandShape,
-  keybindingDefaultShape,
-  type Command,
-  type KeybindingDefault,
-  type ShellOverlay,
-  type SettingsSection,
-} from "../../_shared/points.js";
+
+import type { Command } from "@protocols/lm/commands.command";
+import type { KeybindingDefault } from "@protocols/lm/keybindings.default";
+import type { SettingsSection } from "@protocols/lm/settings.section";
+import type { ShellOverlay } from "@protocols/lm/shell.overlay";
 
 /** How long a sequence prefix (the `g` of `g d`) stays pending. */
 const SEQUENCE_TIMEOUT_MS = 1_500;
@@ -98,18 +94,10 @@ export interface CommandsApi {
 }
 
 export default function activate(kernel: Kernel): CommandsApi {
-  const commands = kernel.extensions.definePoint<Command>({
-    name: POINTS.command,
-    shape: commandShape,
-    key: (command) => command.id,
-    description: "A command: an id, a title, and a function to run.",
-  });
-  const keybindings = kernel.extensions.definePoint<KeybindingDefault>({
-    name: POINTS.keybinding,
-    shape: keybindingDefaultShape,
-    key: (binding) => `${binding.keys}|${binding.command}`,
-    description: "A suggested default keybinding. The user's configuration wins.",
-  });
+  // Both hosts hand their items over in seat order, which is what "first wins" means
+  // below; the protocol packages carry the shapes and the duplicate keys.
+  const commands = kernel.ports.collect<Command>("commands");
+  const keybindings = kernel.ports.collect<KeybindingDefault>("keys");
 
   // ---------------------------------------------------------------------------
   // Settings, guarded (see the module header)
@@ -261,30 +249,32 @@ export default function activate(kernel: Kernel): CommandsApi {
   });
 
   // ---------------------------------------------------------------------------
-  // Contributions
+  // Offers
   // ---------------------------------------------------------------------------
 
-  // The palette's own command, so it appears in the palette and can be rebound.
-  kernel.extensions.contribute<Command>(POINTS.command, {
-    id: "commands.openPalette",
-    title: "Show all commands",
-    category: "Commands",
-    run: () => api.openPalette(),
-  });
-  kernel.extensions.contribute<KeybindingDefault>(POINTS.keybinding, {
+  // The palette's own commands, so they appear in the palette and can be rebound.
+  kernel.ports.offer<Command>("own", [
+    {
+      id: "commands.openPalette",
+      title: "Show all commands",
+      category: "Commands",
+      run: () => api.openPalette(),
+    },
+    {
+      id: "commands.keybindings",
+      title: "Edit keybindings",
+      category: "Commands",
+      run: () => {
+        location.hash = "/settings";
+      },
+    },
+  ]);
+  kernel.ports.offer<KeybindingDefault>("own-keys", {
     command: "commands.openPalette",
     keys: "Mod+K",
   });
-  kernel.extensions.contribute<Command>(POINTS.command, {
-    id: "commands.keybindings",
-    title: "Edit keybindings",
-    category: "Commands",
-    run: () => {
-      location.hash = "/settings";
-    },
-  });
 
-  /** Re-render on any registry/override change. */
+  /** Re-render on any host/override change. */
   const useBindings = (): ResolvedBindings => {
     const [, setRevision] = useState(0);
     useEffect(() => {
@@ -326,12 +316,12 @@ export default function activate(kernel: Kernel): CommandsApi {
     );
   };
 
-  kernel.extensions.contribute<ShellOverlay>(POINTS.shellOverlay, {
+  kernel.ports.offer<ShellOverlay>("palette", {
     id: "commands.palette",
     component: PaletteHost,
   });
 
-  kernel.extensions.contribute<SettingsSection>(POINTS.settingsSection, {
+  kernel.ports.offer<SettingsSection>("settings", {
     id: "commands.keybindings",
     title: "Keybindings",
     order: 200,
@@ -408,7 +398,7 @@ export default function activate(kernel: Kernel): CommandsApi {
 
 /**
  * Symmetry with `activate` (SPEC §6.4): activation is reload-only, so this runs only on
- * teardown (`?safe=bare`). It removes the global chord listener — the contributions
+ * teardown (`?safe=bare`). It removes the global chord listener — the offers
  * themselves are withdrawn by the kernel, not by this plugin.
  */
 export function deactivate(): void {

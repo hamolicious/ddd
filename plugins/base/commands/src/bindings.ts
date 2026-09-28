@@ -8,10 +8,10 @@
  * 1. **Per-user configuration wins.** A plugin contributes a *suggestion*; the user's
  *    settings document is the truth. An override to the empty string means "unbound" —
  *    the user actively took the binding away, which is different from never setting one.
- * 2. **First registration wins between plugins**, where "first" is the order the
- *    registry hands contributions over (`order` ascending, then activation order). The
- *    loser is *not* silently dropped: it lands in {@link ResolvedBindings.conflicts} so
- *    the settings section can show both and let the user pick.
+ * 2. **The lower seat wins between plugins**, where "lower" is the order the host hands
+ *    offers over: the wiring's seat order (PLUGIN-PROTOCOLS §6a). The loser is *not*
+ *    silently dropped: it lands in {@link ResolvedBindings.conflicts} so the settings
+ *    section can show both and let the user pick.
  * 3. **One binding, one command.** A chord that two commands claim runs the winner
  *    only. The alternative — running both — is how you delete a document by pressing
  *    the palette shortcut.
@@ -23,7 +23,7 @@
  */
 
 import { normalizeKeys } from "./keys.js";
-import type { KeybindingDefault } from "../../_shared/points.js";
+import type { KeybindingDefault } from "@protocols/lm/keybindings.default";
 
 /** Two or more claims on one chord. `winner` is the one that is actually bound. */
 export interface BindingConflict {
@@ -92,8 +92,8 @@ function collectPrefixes(keys: string, into: Set<string>): void {
 /**
  * Resolve the effective bindings.
  *
- * `defaults` must arrive in registry order — that ordering *is* rule 2, and sorting
- * it here would make "first registration wins" mean something else.
+ * `defaults` must arrive in seat order — that ordering *is* rule 2, and sorting it
+ * here would make "the lower seat wins" mean something else.
  */
 export function resolveBindings(
   defaults: readonly KeybindingDefault[],

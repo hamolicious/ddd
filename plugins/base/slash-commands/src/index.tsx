@@ -1,49 +1,48 @@
 /**
  * `slash-commands` — type `/` in any editor for a menu of actions.
  *
- * Two points, both defined here:
+ * Two protocols, both owned here (`protocols/`), each hosted on a port of this plugin:
  *
- * - **`text.surface`**: an editor, editor-neutral. `editor` (CodeMirror) and `alt-editor`
- *   (a textarea) each contribute one while mounted. That is the whole coupling: this
- *   plugin never imports an editor, and an editor without a surface simply has no menu.
- * - **`slash.command`**: an entry in the menu. `attachments` contributes `/attach`.
+ * - **`lm/text.surface`** on `surfaces`: an editor, editor-neutral. `editor` (CodeMirror)
+ *   and `alt-editor` (a textarea) each offer one while mounted. That is the whole
+ *   coupling: this plugin never imports an editor, and an editor without a surface simply
+ *   has no menu.
+ * - **`lm/slash.command`** on `commands`: an entry in the menu. `attachments` offers `/attach`.
  *
  * The menu is drawn from `shell-ui`'s overlay spot (`Menu.tsx`) and driven by
- * `controller.ts`. No dependencies: every point it uses buffers contributions until it
- * exists.
+ * `controller.ts`. It consumes no service: what reaches each host is what the wiring
+ * seats there.
  */
 
 import type { Kernel } from "@kernel";
 
-import {
-  POINTS,
-  slashCommandShape,
-  textSurfaceShape,
-  type ShellOverlay,
-  type SlashCommand,
-  type TextSurface,
-} from "../../_shared/points.js";
-import { createController } from "./controller.js";
+import type { ShellOverlay } from "@protocols/lm/shell.overlay";
+import type { SlashCommand } from "@protocols/lm/slash.command";
+import type { TextSurface } from "@protocols/lm/text.surface";
+
+import { createController, type SlashController } from "./controller.js";
 import { SlashMenu } from "./Menu.js";
 
+/** The controller of the running activation, for `deactivate` to detach. */
+let liveController: SlashController | undefined;
+
 export default function activate(kernel: Kernel): void {
-  const surfaces = kernel.extensions.definePoint<TextSurface>({
-    name: POINTS.textSurface,
-    shape: textSurfaceShape,
-    key: (surface) => surface.id,
-    description: "A mounted editor, editor-neutral: caret, text before it, and a way to insert there.",
-  });
-  const commands = kernel.extensions.definePoint<SlashCommand>({
-    name: POINTS.slashCommand,
-    shape: slashCommandShape,
-    key: (command) => command.id,
-    description: "An entry in the / menu.",
-  });
+  // Both hosts: what is wired to `surfaces` and `commands`, in seat order. The shapes and
+  // the duplicate-`id` rule come from the protocol packages this plugin owns.
+  const surfaces = kernel.ports.collect<TextSurface>("surfaces");
+  const commands = kernel.ports.collect<SlashCommand>("commands");
 
   const controller = createController(kernel, surfaces, commands);
+  liveController = controller;
 
-  kernel.extensions.contribute<ShellOverlay>(POINTS.shellOverlay, {
+  kernel.ports.offer<ShellOverlay>("menu", {
     id: "slash-commands.menu",
     component: () => <SlashMenu controller={controller} />,
   });
+}
+
+/** What the kernel does not withdraw: the key listeners on each surface's element. */
+export function deactivate(): void {
+  liveController?.dispose();
+  liveController = undefined;
 }

@@ -18,7 +18,7 @@
 
 import { useState, type ReactNode } from "react";
 
-import type { MarkdownTaskState } from "../../_shared/points.js";
+import type { MarkdownTaskState } from "@protocols/lm/markdown.taskState";
 
 import { PopupMenu, useLongPress, type MenuItem } from "./menu.js";
 import type { MarkdownRuntime } from "./runtime.js";

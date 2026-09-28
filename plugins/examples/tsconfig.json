@@ -36,6 +36,11 @@
     "baseUrl": ".",
     "paths": {
       "@kernel": ["../../web/kernel-api/dist/kernel.d.ts"],
+      /* Protocol packages (PLUGIN-PROTOCOLS §3), type-only. A third party downloads each
+         one's generated `index.d.ts` from `/protocols/<id>/<version>/index.d.ts`; the
+         re-exports under `plugins/base/_protocols` are those same generated files, one
+         per protocol id, so the mapping is the same one `web/tsconfig.json` uses. */
+      "@protocols/*": ["../base/_protocols/*"],
       /* The runtime layer, type-only: at runtime each one is an import-map singleton
          the server resolves, exactly as it is for a base plugin. */
       "react": ["../../web/node_modules/@types/react"],

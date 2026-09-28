@@ -1,13 +1,13 @@
 /** Which language an info string means: by id, then by alias, case-insensitively. */
 
-import type { SyntaxLanguage } from "../../_shared/points.js";
+import type { SyntaxLanguage } from "@protocols/lm/syntax.language";
 
 export interface LanguageIndex {
   resolve(infoString: string | undefined): SyntaxLanguage | undefined;
   readonly languages: readonly SyntaxLanguage[];
 }
 
-/** The first contribution of an id or an alias wins, as with every keyed point. */
+/** The first seat of an id or an alias wins, as with every keyed protocol. */
 export function indexLanguages(languages: readonly SyntaxLanguage[]): LanguageIndex {
   const byName = new Map<string, SyntaxLanguage>();
   for (const language of languages) {

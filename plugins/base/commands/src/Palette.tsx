@@ -28,7 +28,7 @@ import { createPortal } from "react-dom";
 import { useCompact, useVisibleViewport } from "../../_shared/compact.js";
 import { formatKeys } from "./keys.js";
 import { rankMatches } from "./match.js";
-import type { Command } from "../../_shared/points.js";
+import type { Command } from "@protocols/lm/commands.command";
 
 export interface PaletteProps {
   readonly commands: readonly Command[];

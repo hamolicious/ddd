@@ -3,6 +3,11 @@
   "version": "1.0.0",
   "kernel": "^1.0",
   "hot": true,
+  "provides": {
+    "states": {
+      "protocol": "lm/markdown.taskState@1.0.0"
+    }
+  },
   "dependencies": {
     "markdown": "^1.0"
   },

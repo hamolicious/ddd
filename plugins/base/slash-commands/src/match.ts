@@ -2,7 +2,7 @@
  * What the `/` menu shows for what was typed. Pure, so it is tested without an editor.
  */
 
-import type { SlashCommand } from "../../_shared/points.js";
+import type { SlashCommand } from "@protocols/lm/slash.command";
 
 /**
  * The query when the caret sits right after `/word`: the slash at the start of the line
@@ -13,7 +13,10 @@ export function slashQuery(beforeCaret: string): string | undefined {
   return /(?:^|\s)\/([\p{L}\p{N}_-]{0,32})$/u.exec(beforeCaret)?.[1];
 }
 
-/** Best first: title starts with it, then a keyword does, then either contains it. */
+/**
+ * Best first: title starts with it, then a keyword does, then either contains it. Within
+ * a rank, `commands` keeps its order: the host's seat order, which the wiring decides.
+ */
 export function matchCommands(
   commands: readonly SlashCommand[],
   query: string,
@@ -40,13 +43,9 @@ export function matchCommands(
             : -1;
     if (rank >= 0) scored.push({ command, rank });
   }
+  // A stable sort: equal ranks stay in seat order.
   return scored
-    .sort(
-      (a, b) =>
-        a.rank - b.rank ||
-        (a.command.order ?? 100) - (b.command.order ?? 100) ||
-        a.command.title.localeCompare(b.command.title),
-    )
+    .sort((a, b) => a.rank - b.rank)
     .slice(0, limit)
     .map((entry) => entry.command);
 }

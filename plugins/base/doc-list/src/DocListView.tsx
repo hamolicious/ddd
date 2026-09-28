@@ -32,8 +32,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactElement, RefObject } from "react";
 
 import type { DocumentQuery, DocumentRow, DocumentsApi, FilterJson } from "@kernel";
-
-import type { ContextMenuApi } from "../../_shared/context-menu-api.js";
+import type { ContextMenu } from "@protocols/lm/context-menu";
 
 import { FilterBar } from "./FilterBar.js";
 import {
@@ -56,8 +55,8 @@ export interface DocListViewProps {
   readonly onOpen: (id: string, line?: number) => void;
   readonly onCreate: () => void;
   readonly onDelete: (id: string) => Promise<void>;
-  /** `context-menu`'s service: the sort menu and each row's ⋯ menu. */
-  readonly menu: ContextMenuApi;
+  /** The `menu` port (`lm/context-menu`): the sort menu and each row's ⋯ menu. */
+  readonly menu: Pick<ContextMenu, "open">;
   /** Reports the ids currently rendered, so `DocListApi.visible()` is not a guess. */
   readonly onRendered?: (ids: readonly string[]) => void;
   /** The search providers (`search/providers.ts`). */

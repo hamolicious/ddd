@@ -1,14 +1,14 @@
 /**
  * `native-preview` — viewers for every file type a browser can show by itself.
  *
- * Five `attachments.viewer` contributions, each a plain element around the object URL
- * `attachments` hands over: `<img>`, `<video>`, `<audio>`, an `<iframe>` for PDF (the
- * browser's own PDF viewer) and a `<pre>` for plain text. Nothing is decoded or parsed
- * here, so what shows is whatever the browser supports: a codec it lacks gets the
- * "cannot play" message, not a broken player.
+ * Five viewers offered on the `viewers` port (`lm/attachments.viewer`), each a plain
+ * element around the object URL `attachments` hands over: `<img>`, `<video>`, `<audio>`,
+ * an `<iframe>` for PDF (the browser's own PDF viewer) and a `<pre>` for plain text.
+ * Nothing is decoded or parsed here, so what shows is whatever the browser supports: a
+ * codec it lacks gets the "cannot play" message, not a broken player.
  *
- * All at the default `order`, so any plugin that registers a viewer for one of these
- * types with a lower `order` takes it over, and the user can switch back per type.
+ * Which viewer shows a type is the wiring's seat order on the host: a plugin seated
+ * before this one takes the types it claims over, and the user can switch back per type.
  *
  * **SVG is not here** (SPEC §3.6: a stored-XSS vector), and neither is HTML: those are
  * files a browser would *run*, not preview.
@@ -23,7 +23,7 @@
 import type { Kernel } from "@kernel";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
-import { POINTS, type AttachmentViewer, type AttachmentViewerProps } from "../../_shared/points.js";
+import type { AttachmentViewer, AttachmentViewerProps } from "@protocols/lm/attachments.viewer";
 
 /** Beyond this, a text file shows its start and says so. */
 const MAX_TEXT_BYTES = 256 * 1024;
@@ -171,7 +171,6 @@ const VIEWERS: readonly AttachmentViewer[] = [
 ];
 
 export default function activate(kernel: Kernel): void {
-  for (const viewer of VIEWERS) {
-    kernel.extensions.contribute<AttachmentViewer>(POINTS.attachmentViewer, viewer);
-  }
+  // One port, five viewers: they stay together, in this order, on every host wired to it.
+  kernel.ports.offer<AttachmentViewer>("viewers", VIEWERS);
 }

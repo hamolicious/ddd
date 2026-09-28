@@ -111,6 +111,8 @@ export interface SettingsStore {
   /** Every key back to its default. */
   reset(): void;
   subscribe(listener: () => void): () => void;
+  /** Write every value still waiting on its timer, now: the plugin is stopping. */
+  flush(): void;
 }
 
 const WRITE_DELAY_MS = 500;
@@ -133,17 +135,16 @@ export function createSettingsStore(kernel: Kernel): SettingsStore {
     }
   });
 
+  const save = (key: keyof GraphSettings): void => {
+    pending.delete(key);
+    const value = current[key];
+    const write = value === DEFAULT_SETTINGS[key] ? kernel.settings.remove(key) : kernel.settings.set(key, value);
+    write.catch((error: unknown) => kernel.log.warn(`graph: could not save ${key}`, error));
+  };
+
   const write = (key: keyof GraphSettings): void => {
     clearTimeout(pending.get(key));
-    pending.set(
-      key,
-      setTimeout(() => {
-        pending.delete(key);
-        const value = current[key];
-        const write = value === DEFAULT_SETTINGS[key] ? kernel.settings.remove(key) : kernel.settings.set(key, value);
-        write.catch((error: unknown) => kernel.log.warn(`graph: could not save ${key}`, error));
-      }, WRITE_DELAY_MS),
-    );
+    pending.set(key, setTimeout(() => save(key), WRITE_DELAY_MS));
   };
 
   return {
@@ -168,6 +169,12 @@ export function createSettingsStore(kernel: Kernel): SettingsStore {
       return () => {
         listeners.delete(listener);
       };
+    },
+    flush() {
+      for (const [key, timer] of [...pending]) {
+        clearTimeout(timer);
+        save(key);
+      }
     },
   };
 }

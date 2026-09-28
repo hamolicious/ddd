@@ -13,7 +13,7 @@ import { OfflineCopyNote } from "../../_shared/offline-copy.js";
 import { changesOfflineCopy } from "./offline.js";
 import { useEffect, useState, type ReactElement } from "react";
 
-import type { ConfirmRequest } from "../../_shared/context-menu-api.js";
+import type { ConfirmRequest } from "@protocols/lm/context-menu";
 
 import { formatRange, type ChangeDetail, type SnapshotsClient } from "./api.js";
 import { DetachedBanner } from "./Banner.js";

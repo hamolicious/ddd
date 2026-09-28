@@ -1,12 +1,13 @@
 /**
- * `header` — the top bar, contributed to `shell-ui`'s `shell.header` spot.
+ * `header` — the top bar, offered to `shell-ui`'s `shell.header` seat.
  *
- * It draws nothing of its own and exposes two **seats** through the `navbar.item`
- * point: `side: "start"` and `side: "end"`, sorted by `order`. Everything in them is
- * another plugin's (`shell-ui`'s ☰, Settings, Admin, `notices`' bell, `sync-status`'
- * pill), and none of them learns which plugin draws the bar. Replacing the bar means
- * contributing a `shell.header` with a lower `order` — and, if the replacement keeps
- * `navbar.item`, disabling this plugin so the point has one owner.
+ * It draws nothing of its own and exposes two **seats** through its `items` port
+ * (`lm/navbar.item`): `side: "start"` and `side: "end"`, in the wiring's seat order.
+ * Everything in them is another plugin's (`shell-ui`'s ☰, Settings, Admin, `notices`'
+ * bell, `sync-status`' pill), and none of them learns which plugin draws the bar.
+ * Replacing the bar means wiring another `lm/shell.header` into `shell-ui`'s single
+ * header seat — and, if the replacement hosts `lm/navbar.item` too, rewiring the items
+ * to it.
  *
  * What lives where:
  *
@@ -18,38 +19,31 @@
 
 import type { Kernel } from "@kernel";
 
-import {
-  POINTS,
-  navbarItemShape,
-  type NavbarItem,
-  type SettingsSection,
-  type ShellHeader,
-} from "../../_shared/points.js";
+import type { NavbarItem } from "@protocols/lm/navbar.item";
+import type { SettingsSection } from "@protocols/lm/settings.section";
+import type { ShellHeader } from "@protocols/lm/shell.header";
 
 import { createArrangementStore } from "./arrangement.js";
 import { BarSettings } from "./BarSettings.js";
 import { Header } from "./Header.js";
 
 export default function activate(kernel: Kernel): void {
-  kernel.extensions.definePoint<NavbarItem>({
-    name: POINTS.navbarItem,
-    shape: navbarItemShape,
-    key: (item) => item.id,
-    description: "An item in the top bar.",
-  });
+  // The items host, in seat order: the workspace default that Settings → Top bar lets
+  // each person rearrange on top of (PLUGIN-PROTOCOLS §6a).
+  const items = kernel.ports.collect<NavbarItem>("items");
 
   const store = createArrangementStore(kernel);
 
-  kernel.extensions.contribute<ShellHeader>(POINTS.shellHeader, {
+  kernel.ports.offer<ShellHeader>("bar", {
     id: "header",
-    component: () => <Header kernel={kernel} store={store} />,
+    component: () => <Header kernel={kernel} items={items} store={store} />,
   });
 
-  kernel.extensions.contribute<SettingsSection>(POINTS.settingsSection, {
+  kernel.ports.offer<SettingsSection>("settings", {
     id: "header.bar",
     title: "Top bar",
     description: "Reorder the items in the top bar.",
     order: 150,
-    component: () => <BarSettings kernel={kernel} store={store} />,
+    component: () => <BarSettings items={items} store={store} />,
   });
 }

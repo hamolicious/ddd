@@ -20,8 +20,7 @@
     "menu": {
       "protocol": "lm/context-menu@^1.0",
       "needs": [
-        "open",
-        "close"
+        "open"
       ]
     },
     "search": {
@@ -35,6 +34,10 @@
     "local": {
       "protocol": "lm/search.provider@1.0.0",
       "order": 0
+    },
+    "server": {
+      "protocol": "lm/search.provider@1.0.0",
+      "order": 10
     },
     "browser": {
       "protocol": "lm/document-browser@1.0.0"

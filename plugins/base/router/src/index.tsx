@@ -13,20 +13,25 @@
  * same navigation minus the ability to replace.
  *
  * The router does not render views: it resolves a URL to a `main.view` id plus params
- * and tells `shell-ui`. That separation is what lets a command open a view without
- * touching the URL, and a URL open a view without a command.
+ * and tells the shell through its `shell` port (`lm/shell`, `setMainView` only). That
+ * separation is what lets a command open a view without touching the URL, and a URL
+ * open a view without a command.
+ *
+ * Routes arrive on the `routes` host in seat order; the most specific pattern wins and
+ * seat order only breaks ties (`match.ts`).
  */
 
-import type { ReactNode } from "react";
+import type { Kernel } from "@kernel";
 
-import { type Kernel, type Unsubscribe } from "@kernel";
+import type { MainView } from "@protocols/lm/main.view";
+import type { Router, RouteMatch } from "@protocols/lm/router";
+import type { Route } from "@protocols/lm/router.route";
+import type { Shell } from "@protocols/lm/shell";
 
-import { POINTS, routeShape, type MainView, type Route } from "../../_shared/points.js";
+import { createLink } from "./Link.js";
+import { buildPath, fullPath, matchRoutes, pathQuery } from "./match.js";
 
-import { createLink, type LinkProps } from "./Link.js";
-import { buildPath, fullPath, matchRoutes, pathQuery, type RouteMatch } from "./match.js";
-
-/** The view the router selects when nothing matches. Contributed below. */
+/** The view the router selects when nothing matches. Offered below. */
 export const NOT_FOUND_VIEW = "router.notFound";
 
 /**
@@ -36,37 +41,15 @@ export const NOT_FOUND_VIEW = "router.notFound";
  */
 export const DOCUMENT_ROUTE = "/doc/:id";
 
-export interface RouterApi {
-  /** Navigate, pushing history. `path` is the pattern's concrete form: `/doc/01J…`. */
-  navigate(path: string, options?: { readonly replace?: boolean }): void;
-  /** The current path and query string, without the leading `#`. */
-  current(): string;
-  /** The current path's query string, parsed (`#/search?q=cake`). */
-  query(): URLSearchParams;
-  /** Resolve a path against the registered routes. */
-  match(path: string): { readonly view: string; readonly params: Readonly<Record<string, string>> } | undefined;
-  onChange(listener: (path: string) => void): Unsubscribe;
-  /** Build a path from a pattern and params — never hand-concatenate one. */
-  href(pattern: string, params?: Readonly<Record<string, string>>): string;
-  /** The `<a href>` form of a concrete path (`/doc/x` → `#/doc/x`). */
-  url(path: string): string;
-  /** The canonical path for one document. */
-  documentPath(id: string): string;
-  /** An anchor that navigates in-app and marks itself `aria-current="page"`. */
-  readonly Link: (props: LinkProps) => ReactNode;
-}
+/** The service this plugin serves on its `router` port: `lm/router`. */
+export type RouterApi = Router;
 
 export default function activate(kernel: Kernel): RouterApi {
-  const routes = kernel.extensions.definePoint<Route>({
-    name: POINTS.route,
-    shape: routeShape,
-    key: (route) => route.path,
-    description: "A URL pattern (`/doc/:id`) mapped to a `main.view` id.",
-  });
+  const routes = kernel.ports.collect<Route>("routes");
 
-  const shell = kernel.services.require<{
-    setMainView(id: string, params?: Readonly<Record<string, string>>): void;
-  }>("shell-ui");
+  // Limited to `setMainView` by the port's `needs`: the router tells the shell what to
+  // show and asks it nothing else.
+  const shell = kernel.ports.use<Pick<Shell, "setMainView">>("shell");
 
   const listeners = new Set<(path: string) => void>();
   let applied: string | undefined;
@@ -110,8 +93,8 @@ export default function activate(kernel: Kernel): RouterApi {
     navigate,
     current,
     query: () => new URLSearchParams(pathQuery(location.hash)),
-    match: (path) => {
-      const found: RouteMatch | undefined = matchRoutes(routes.get(), path);
+    match: (path): RouteMatch | undefined => {
+      const found = matchRoutes(routes.get(), path);
       return found ? { view: found.view, params: found.params } : undefined;
     },
     onChange: (listener) => {
@@ -124,9 +107,9 @@ export default function activate(kernel: Kernel): RouterApi {
     Link: createLink({ current, onChange: (l) => api.onChange(l), navigate, url }),
   };
 
-  // Where the router puts a URL nobody claimed. It is a contributed `main.view` like
-  // any other, so a workspace that wants a prettier 404 replaces it by id.
-  kernel.extensions.contribute<MainView>(POINTS.mainView, {
+  // Where the router puts a URL nobody claimed. It is an offered `main.view` like any
+  // other, so a workspace that wants a prettier 404 replaces it by id.
+  kernel.ports.offer<MainView>("not-found", {
     id: NOT_FOUND_VIEW,
     title: "Not found",
     component: ({ params }) => (
@@ -151,9 +134,10 @@ export default function activate(kernel: Kernel): RouterApi {
     removeEventListener("popstate", resolve);
     removeEventListener("hashchange", resolve);
   };
-  // A route contributed after the first render must be able to claim the current URL.
+  // A route wired in after the first render must be able to claim the current URL.
   routes.subscribe(() => resolve());
 
+  kernel.ports.serve("router", api);
   return api;
 }
 

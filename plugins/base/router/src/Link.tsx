@@ -13,20 +13,9 @@
 
 import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 
-import { fullPath } from "./match.js";
+import type { LinkProps } from "@protocols/lm/router";
 
-export interface LinkProps {
-  /** A concrete path (`/doc/01J…`), not a pattern. Build it with `router.href`. */
-  readonly to: string;
-  readonly children?: ReactNode;
-  readonly className?: string;
-  readonly title?: string;
-  /** Replace the current history entry instead of pushing one. */
-  readonly replace?: boolean;
-  /** Set `aria-current="page"` when `to` is the current path. Default `true`. */
-  readonly current?: boolean;
-  readonly onNavigate?: () => void;
-}
+import { fullPath } from "./match.js";
 
 export interface LinkRouter {
   current(): string;

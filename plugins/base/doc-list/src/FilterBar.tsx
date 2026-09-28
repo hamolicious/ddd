@@ -38,7 +38,7 @@
 import { useId, useState } from "react";
 import type { ReactElement, RefObject } from "react";
 
-import type { ContextMenuApi } from "../../_shared/context-menu-api.js";
+import type { ContextMenu } from "@protocols/lm/context-menu";
 
 import { useCompact } from "../../_shared/compact.js";
 import {
@@ -62,8 +62,8 @@ export interface FilterBarProps {
   readonly sortField: string;
   readonly sortDirection: "asc" | "desc";
   readonly onSortChange: (field: string, direction: "asc" | "desc") => void;
-  /** `context-menu`'s service, for the sort field menu. */
-  readonly menu: ContextMenuApi;
+  /** The `menu` port (`lm/context-menu`), for the sort field menu. */
+  readonly menu: Pick<ContextMenu, "open">;
   /** The search bar's text. Empty ⇒ the plain list. */
   readonly query: string;
   readonly onQueryChange: (query: string) => void;
@@ -394,7 +394,7 @@ function SortControls({
   readonly field: string;
   readonly direction: "asc" | "desc";
   readonly onChange: (field: string, direction: "asc" | "desc") => void;
-  readonly menu: ContextMenuApi;
+  readonly menu: Pick<ContextMenu, "open">;
   /** A search is on, so "Best match" is a sort. */
   readonly searching: boolean;
 }): ReactElement {

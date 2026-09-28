@@ -15,27 +15,18 @@
 
 import type { Kernel } from "@kernel";
 
-import type { IndexerApi } from "../../_shared/indexer-api.js";
-import {
-  POINTS,
-  type AltbarPanel,
-  type Command,
-  type KeybindingDefault,
-  type MainView,
-  type NavbarItem,
-  type Route,
-  type ShownView,
-} from "../../_shared/points.js";
-import type { ShellUiApi } from "../../_shared/shell-api.js";
+import type { AltbarPanel, ShownView } from "@protocols/lm/altbar.panel";
+import type { Command } from "@protocols/lm/commands.command";
+import type { KeybindingDefault } from "@protocols/lm/keybindings.default";
+import type { MainView } from "@protocols/lm/main.view";
+import type { NavbarItem } from "@protocols/lm/navbar.item";
+import type { Router } from "@protocols/lm/router";
+import type { Route } from "@protocols/lm/router.route";
+import type { Shell } from "@protocols/lm/shell";
+import type { WorkspaceIndex } from "@protocols/lm/workspace-index";
 
 import { GraphView } from "./GraphView.js";
-import { createSettingsStore, settingsSchema } from "./settings.js";
-
-interface RouterService {
-  navigate(path: string): void;
-  /** The current path's query string, parsed. */
-  query(): URLSearchParams;
-}
+import { createSettingsStore, settingsSchema, type SettingsStore } from "./settings.js";
 
 const VIEW = "graph.main";
 /** `document-surface`'s view: `#/doc/<id>`. */
@@ -50,13 +41,20 @@ const ICON = (
   </svg>
 );
 
+/** The settings store of the running activation, for `deactivate` to flush. */
+let liveStore: SettingsStore | undefined;
+
 export default function activate(kernel: Kernel): void {
-  const indexer = kernel.services.require<IndexerApi>("indexer");
-  const router = kernel.services.require<RouterService>("router");
-  const shell = kernel.services.require<ShellUiApi>("shell-ui");
+  // Each handle is limited to its port's `needs` in the manifest: the index's `ready`,
+  // `version`, `documents`, `connections` and `subscribe`; the router's `navigate` and
+  // `query`; the shell's `layout` and `toggleAltbar`.
+  const indexer = kernel.ports.use<WorkspaceIndex>("index");
+  const router = kernel.ports.use<Router>("router");
+  const shell = kernel.ports.use<Shell>("shell");
 
   kernel.settings.defineSchema(settingsSchema());
   const store = createSettingsStore(kernel);
+  liveStore = store;
 
   const openGraph = (): void => router.navigate("/graph");
   const open = (id: string, newTab: boolean): void => {
@@ -65,8 +63,8 @@ export default function activate(kernel: Kernel): void {
     else router.navigate(path);
   };
 
-  kernel.extensions.contribute<Route>(POINTS.route, { path: "/graph", view: VIEW });
-  kernel.extensions.contribute<MainView>(POINTS.mainView, {
+  kernel.ports.offer<Route>("route", { path: "/graph", view: VIEW });
+  kernel.ports.offer<MainView>("view", {
     id: VIEW,
     title: "Graph",
     // `?focus=<id>`: opened from a note's local graph, it zooms in to that note.
@@ -75,7 +73,7 @@ export default function activate(kernel: Kernel): void {
     ),
   });
 
-  kernel.extensions.contribute<AltbarPanel>(POINTS.altbarPanel, {
+  kernel.ports.offer<AltbarPanel>("panel", {
     id: "graph.local",
     title: "Graph",
     icon: ICON,
@@ -94,7 +92,7 @@ export default function activate(kernel: Kernel): void {
     ),
   });
 
-  kernel.extensions.contribute<NavbarItem>(POINTS.navbarItem, {
+  kernel.ports.offer<NavbarItem>("nav", {
     id: "graph.open",
     label: "Graph",
     icon: ICON,
@@ -103,18 +101,26 @@ export default function activate(kernel: Kernel): void {
     onSelect: openGraph,
   });
 
-  kernel.extensions.contribute<Command>(POINTS.command, {
-    id: "graph.open",
-    title: "Open graph view",
-    category: "Graph",
-    run: openGraph,
-  });
-  kernel.extensions.contribute<KeybindingDefault>(POINTS.keybinding, { command: "graph.open", keys: "Mod+G" });
-  kernel.extensions.contribute<Command>(POINTS.command, {
-    id: "graph.local",
-    title: "Show this note's local graph",
-    category: "Graph",
-    when: () => shell.layout().hasAltbar,
-    run: () => shell.toggleAltbar(true),
-  });
+  kernel.ports.offer<Command>("commands", [
+    {
+      id: "graph.open",
+      title: "Open graph view",
+      category: "Graph",
+      run: openGraph,
+    },
+    {
+      id: "graph.local",
+      title: "Show this note's local graph",
+      category: "Graph",
+      when: () => shell.layout().hasAltbar,
+      run: () => shell.toggleAltbar(true),
+    },
+  ]);
+  kernel.ports.offer<KeybindingDefault>("keys", { command: "graph.open", keys: "Mod+G" });
+}
+
+/** What the kernel does not withdraw: the settings writes still waiting on their timers. */
+export function deactivate(): void {
+  liveStore?.flush();
+  liveStore = undefined;
 }

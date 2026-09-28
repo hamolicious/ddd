@@ -24,21 +24,19 @@ import { offlineCopies } from "../../_shared/offline-copy.js";
 import { changesOfflineCopy } from "./offline.js";
 import type { Kernel } from "@kernel";
 
-import type { ContextMenuApi } from "../../_shared/context-menu-api.js";
-import {
-  POINTS,
-  type AltbarPanel,
-  type Command,
-  type MainView,
-  type Route,
-  type ShownView,
-} from "../../_shared/points.js";
-import type { ShellUiApi } from "../../_shared/shell-api.js";
+import type { AltbarPanel, ShownView } from "@protocols/lm/altbar.panel";
+import type { Command } from "@protocols/lm/commands.command";
+import type { ContextMenu } from "@protocols/lm/context-menu";
+import type { MainView } from "@protocols/lm/main.view";
+import type { MarkdownRenderer } from "@protocols/lm/markdown-renderer";
+import type { Router } from "@protocols/lm/router";
+import type { Route } from "@protocols/lm/router.route";
+import type { Shell } from "@protocols/lm/shell";
 
 import { createSnapshotsClient } from "./api.js";
 import { ChangeView } from "./ChangeView.js";
 import { ChangesPanel, type Viewing } from "./Panel.js";
-import { SnapshotView, type MarkdownApi } from "./View.js";
+import { SnapshotView } from "./View.js";
 
 /** `document-surface`'s view: `#/doc/<id>`. */
 const DOCUMENT_VIEW = "document.surface";
@@ -60,19 +58,17 @@ const viewingOf = (view: ShownView): Viewing | undefined => {
   return undefined;
 };
 
-interface RouterService {
-  navigate(path: string): void;
-}
-
 export default function activate(kernel: Kernel): void {
-  const menu = kernel.services.require<ContextMenuApi>("context-menu");
-  const shell = kernel.services.require<ShellUiApi>("shell-ui");
-  const markdown = kernel.services.require<MarkdownApi>("markdown");
-  const router = kernel.services.require<RouterService>("router");
+  // Each handle is limited to its port's `needs` in the manifest: `confirm`; `layout` and
+  // `toggleAltbar`; `render` and `bodyOf`; `navigate`.
+  const menu = kernel.ports.use<ContextMenu>("menu");
+  const shell = kernel.ports.use<Shell>("shell");
+  const markdown = kernel.ports.use<MarkdownRenderer>("markdown");
+  const router = kernel.ports.use<Router>("router");
   // Offline, the panel and views show what they last loaded, marked (dev-docs/resolved/SYNC-DECISIONS.md §9).
   const client = createSnapshotsClient(offlineCopies((path, init) => kernel.session.fetch(path, init), changesOfflineCopy));
 
-  kernel.extensions.contribute<AltbarPanel>(POINTS.altbarPanel, {
+  kernel.ports.offer<AltbarPanel>("panel", {
     id: "changes",
     title: "Changes",
     order: 100,
@@ -90,8 +86,12 @@ export default function activate(kernel: Kernel): void {
     ),
   });
 
-  kernel.extensions.contribute<Route>(POINTS.route, { path: "/doc/:id/snapshot/:snapshot", view: SNAPSHOT_VIEW });
-  kernel.extensions.contribute<MainView>(POINTS.mainView, {
+  kernel.ports.offer<Route>("route", [
+    { path: "/doc/:id/snapshot/:snapshot", view: SNAPSHOT_VIEW },
+    { path: "/doc/:id/change/:from/:to", view: CHANGE_VIEW },
+  ]);
+
+  const snapshotView: MainView = {
     id: SNAPSHOT_VIEW,
     title: "Snapshot",
     component: ({ params }) => (
@@ -104,10 +104,8 @@ export default function activate(kernel: Kernel): void {
         navigate={(path) => router.navigate(path)}
       />
     ),
-  });
-
-  kernel.extensions.contribute<Route>(POINTS.route, { path: "/doc/:id/change/:from/:to", view: CHANGE_VIEW });
-  kernel.extensions.contribute<MainView>(POINTS.mainView, {
+  };
+  const changeView: MainView = {
     id: CHANGE_VIEW,
     title: "Change",
     component: ({ params }) => (
@@ -122,9 +120,10 @@ export default function activate(kernel: Kernel): void {
         navigate={(path) => router.navigate(path)}
       />
     ),
-  });
+  };
+  kernel.ports.offer<MainView>("views", [snapshotView, changeView]);
 
-  kernel.extensions.contribute<Command>(POINTS.command, {
+  kernel.ports.offer<Command>("commands", {
     id: "changes.show",
     title: "Show this document's changes",
     category: "Document",

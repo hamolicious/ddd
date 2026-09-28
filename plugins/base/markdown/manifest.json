@@ -13,10 +13,7 @@
       "protocol": "lm/router@^1.0",
       "needs": [
         "navigate",
-        "current",
-        "onChange",
-        "href",
-        "url"
+        "href"
       ],
       "optional": true
     },

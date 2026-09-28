@@ -7,16 +7,16 @@
 
 import type { Kernel } from "@kernel";
 
-import { POINTS, type NavbarItem } from "../../_shared/points.js";
+import type { NavbarItem } from "@protocols/lm/navbar.item";
 
 import { SyncIndicator } from "./SyncIndicator.js";
 
 export default function activate(kernel: Kernel): void {
-  kernel.extensions.contribute<NavbarItem>(POINTS.navbarItem, {
+  kernel.ports.offer<NavbarItem>("pill", {
     id: "sync-status.pill",
     label: "Sync status",
     side: "end",
-    // Last in the bar, after the notice bell.
+    // Default-seat hint: last in the bar, after the notice bell.
     order: 1000,
     component: () => <SyncIndicator kernel={kernel} />,
   });

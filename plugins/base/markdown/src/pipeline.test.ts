@@ -17,13 +17,11 @@
 import { describe, expect, it } from "vitest";
 import { createElement, isValidElement, type ReactNode } from "react";
 
-import type {
-  MarkdownAttachmentProps,
-  MarkdownCodeBlockProps,
-  MarkdownDirectiveProps,
-  MarkdownFenceProps,
-  MarkdownTaskState,
-} from "../../_shared/points.js";
+import type { MarkdownAttachmentProps } from "@protocols/lm/markdown.attachment";
+import type { MarkdownCodeBlockProps } from "@protocols/lm/markdown.codeBlock";
+import type { MarkdownDirectiveProps } from "@protocols/lm/markdown.directive";
+import type { MarkdownFenceProps } from "@protocols/lm/markdown.fence";
+import type { MarkdownTaskState } from "@protocols/lm/markdown.taskState";
 
 import { buildProcessor } from "./processor.js";
 import { renderTree, type RenderOptions, type RenderRegistries } from "./render.js";

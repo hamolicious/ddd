@@ -13,7 +13,7 @@
 
 import type { DocumentId } from "@kernel";
 
-import type { ConnectionKind, IndexerApi } from "../../_shared/indexer-api.js";
+import type { ConnectionKind, WorkspaceIndex } from "@protocols/lm/workspace-index";
 
 export interface GraphNode {
   readonly id: DocumentId;
@@ -57,7 +57,7 @@ export const DEFAULT_FILTER: GraphFilter = {
 };
 
 /** The two things the model reads from the indexer. */
-export type GraphSource = Pick<IndexerApi, "documents" | "connections">;
+export type GraphSource = Pick<WorkspaceIndex, "documents" | "connections">;
 
 export function buildGraph(source: GraphSource, filter: GraphFilter = DEFAULT_FILTER): Graph {
   const documents = source.documents();

@@ -19,7 +19,7 @@
 
 import type { ThemeTokens, ThemeTokensApi, Unsubscribe } from "@kernel";
 
-import type { Theme } from "../../_shared/points.js";
+import type { Theme } from "@protocols/lm/themes.theme";
 
 /** Which theme is chosen for each scheme. `undefined` ⇒ the kernel defaults. */
 export interface ThemeSelection {

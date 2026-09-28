@@ -36,29 +36,19 @@ import * as Y from "yjs";
 
 import type { Kernel, OpenDocument } from "@kernel";
 
-/**
- * The shapes this plugin contributes to, declared locally.
+/*
+ * The protocols this plugin offers on its two ports, typed from their packages.
  *
  * `plugins/base/_shared/points.ts` has these same types, and importing them would be
  * *convenient and wrong*: `_shared` is the base distribution's internal file, not part
- * of the kernel contract (SPEC §2 — the kernel knows point names as opaque strings).
- * A third-party plugin has only the point's documented name and payload, so this one
- * has only that too. Re-declaring is the honest cost of the microkernel boundary.
+ * of any contract (SPEC §2 — the kernel knows protocols as data). What a third-party
+ * plugin has is each protocol's generated `index.d.ts`, served at
+ * `/protocols/<id>/<version>/index.d.ts` and mapped here as `@protocols/lm/<name>`
+ * (`plugins/examples/tsconfig.json`), so this one has exactly that too.
  */
-const DOCUMENT_MODE_POINT = "document.mode";
-/** `slash-commands`' point: this editor, as the `/` menu sees it. */
-const TEXT_SURFACE_POINT = "text.surface";
-
-interface Insertion {
-  replace(text: string): boolean;
-  remove(): boolean;
-}
-
-interface DocumentModeProps {
-  readonly id: string;
-  readonly row: { readonly content: string; readonly title: string; readonly deleted: boolean };
-  readonly open?: OpenDocument;
-}
+import type { DocumentMode, DocumentModeProps } from "@protocols/lm/document.mode";
+import type { EditorInsertion } from "@protocols/lm/editor.paste";
+import type { TextMark, TextSurface } from "@protocols/lm/text.surface";
 
 export interface AltEditorApi {
   /** The mode id this plugin claims. Exported so a test does not hard-code a string. */
@@ -69,16 +59,16 @@ export interface AltEditorApi {
 const MODE_ID = "edit";
 
 export default function activate(kernel: Kernel): AltEditorApi {
-  // `document-surface` is a declared dependency, so the point exists by now; the
-  // contribution would buffer even if it did not (SPEC §6.4).
-  kernel.extensions.contribute(DOCUMENT_MODE_POINT, {
+  // On the `mode` port: the wiring seats it on `document-surface`'s host of
+  // `lm/document.mode`, beside (or instead of) `editor`'s mode of the same id.
+  kernel.ports.offer<DocumentMode>("mode", {
     id: MODE_ID,
     label: "Edit (plain)",
     order: 20,
     component: (props: DocumentModeProps) => <PlainEditor kernel={kernel} {...props} />,
   });
 
-  kernel.log.info("alt-editor: contributed the plain-text `edit` mode");
+  kernel.log.info("alt-editor: offered the plain-text `edit` mode");
 
   return { modeId: MODE_ID };
 }
@@ -139,7 +129,9 @@ function PlainEditor({
     for (const name of events) element.addEventListener(name, notify);
     const lineStart = (): number => element.value.lastIndexOf("\n", element.selectionStart - 1) + 1;
 
-    const surface = kernel.extensions.contribute(TEXT_SURFACE_POINT, {
+    // On the `surface` port (`lm/text.surface`), for the `/` menu and autocomplete,
+    // withdrawn when the editor unmounts.
+    const surface = kernel.ports.offer<TextSurface>("surface", {
       id: `alt-editor:${open.id}:${String((surfaceCount += 1))}`,
       documentId: open.id,
       element,
@@ -269,9 +261,9 @@ function caretRect(element: HTMLTextAreaElement): { left: number; top: number; b
  * A spot in the text to insert at later, and each insert followed so it can be replaced
  * (an upload's placeholder). Yjs relative positions, so edits elsewhere cannot move it.
  */
-function markAt(text: Y.Text, index: number): { insert(content: string): Insertion } {
+function markAt(text: Y.Text, index: number): TextMark {
   let spot = Y.createRelativePositionFromTypeIndex(text, index, -1);
-  const settled: Insertion = { replace: () => false, remove: () => false };
+  const settled: EditorInsertion = { replace: () => false, remove: () => false };
   return {
     insert: (content) => {
       const doc = text.doc;

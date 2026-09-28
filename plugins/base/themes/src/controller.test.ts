@@ -27,7 +27,7 @@ import {
   type Unsubscribe,
 } from "@kernel";
 
-import type { Theme } from "../../_shared/points.js";
+import type { Theme } from "@protocols/lm/themes.theme";
 
 import { ThemesController } from "./controller.js";
 

@@ -9,7 +9,7 @@
 import { describe, expect, it } from "vitest";
 
 import { parseOverrides, resolveBindings, serializeOverrides } from "./bindings.js";
-import type { KeybindingDefault } from "../../_shared/points.js";
+import type { KeybindingDefault } from "@protocols/lm/keybindings.default";
 
 const defaults = (...entries: readonly [string, string][]): readonly KeybindingDefault[] =>
   entries.map(([command, keys]) => ({ command, keys }));

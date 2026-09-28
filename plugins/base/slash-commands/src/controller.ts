@@ -11,9 +11,11 @@
  * spot, still inside the key press or tap, so a command may open a file picker.
  */
 
-import type { ExtensionPoint, Kernel } from "@kernel";
+import type { Kernel, SlotHost } from "@kernel";
 
-import type { SlashCommand, TextSurface } from "../../_shared/points.js";
+import type { SlashCommand } from "@protocols/lm/slash.command";
+import type { TextSurface } from "@protocols/lm/text.surface";
+
 import { matchCommands, slashQuery } from "./match.js";
 
 export interface MenuState {
@@ -30,12 +32,14 @@ export interface SlashController {
   choose(index: number): void;
   select(index: number): void;
   close(): void;
+  /** Stop watching every surface and take the key listeners off their elements. */
+  dispose(): void;
 }
 
 export function createController(
   kernel: Kernel,
-  surfaces: ExtensionPoint<TextSurface>,
-  commands: ExtensionPoint<SlashCommand>,
+  surfaces: SlotHost<TextSurface>,
+  commands: SlotHost<SlashCommand>,
 ): SlashController {
   let current: MenuState | undefined;
   /** Escape was pressed on this text: stay shut until it changes. */
@@ -116,7 +120,7 @@ export function createController(
 
   /** Surfaces being watched, and how to stop. Surfaces come and go with editors. */
   const attached = new Map<TextSurface, () => void>();
-  surfaces.subscribe((all) => {
+  const unwatch = surfaces.subscribe((all) => {
     for (const [surface, detach] of [...attached]) {
       if (all.includes(surface)) continue;
       detach();
@@ -148,5 +152,11 @@ export function createController(
       if (current && index >= 0 && index < current.items.length) set({ ...current, selected: index });
     },
     close: () => set(undefined),
+    dispose: () => {
+      unwatch();
+      for (const detach of attached.values()) detach();
+      attached.clear();
+      set(undefined);
+    },
   };
 }

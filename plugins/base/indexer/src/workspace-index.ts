@@ -14,8 +14,6 @@
  */
 
 import type { CoreValue, DocumentId, DocumentRow } from "@kernel";
-
-import { inferKind, type PropertyKind } from "../../_shared/fm-display.js";
 import type {
   Connection,
   FieldScope,
@@ -27,7 +25,9 @@ import type {
   OutgoingConnection,
   TargetState,
   WorkspaceStats,
-} from "../../_shared/indexer-api.js";
+} from "@protocols/lm/workspace-index";
+
+import { inferKind, type PropertyKind } from "../../_shared/fm-display.js";
 
 import { extract, fingerprint, type Extracted } from "./extract.js";
 

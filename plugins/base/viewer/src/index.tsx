@@ -1,7 +1,7 @@
 /**
  * `viewer` — read mode (SPEC §6.5).
  *
- * One contribution to `document.mode`, and three responsibilities inside it:
+ * One offer on its `mode` port (`lm/document.mode`), and three responsibilities inside it:
  *
  * - **Hide the machine regions.** The frontmatter block and the `%%%` sections are part
  *   of the text (SPEC §3.1) and must not be rendered as prose. Reading mode shows the
@@ -36,13 +36,10 @@ import { OFFLINE_COPY_HEADER, OfflineCopyNote, OfflineCopyState, offlineCopies }
 import type { Kernel } from "@kernel";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
-import {
-  POINTS,
-  type DocumentMode,
-  type DocumentModeProps,
-  type MainView,
-  type Route,
-} from "../../_shared/points.js";
+import type { DocumentMode, DocumentModeProps } from "@protocols/lm/document.mode";
+import type { MainView } from "@protocols/lm/main.view";
+import type { MarkdownRenderer } from "@protocols/lm/markdown-renderer";
+import type { Route } from "@protocols/lm/router.route";
 import { FmHeader } from "./FmHeader.js";
 import {
   formatBytes,
@@ -52,16 +49,11 @@ import {
   type PreviewKind,
 } from "./wrapper.js";
 
-/** The `markdown` plugin's API, structurally — plugins never import each other (SPEC §6.1). */
-interface MarkdownApi {
-  render(text: string, options?: { readonly documentId?: string }): ReactNode;
-  bodyOf(text: string): string;
-  /** Newer `markdown` only; `undefined` result ⇒ nobody renders attachments, draw our own. */
-  renderAttachment?(
-    attachmentId: string,
-    options: { readonly placement: "inline" | "page"; readonly alt?: string; readonly fallback: ReactNode },
-  ): ReactNode | undefined;
-}
+/**
+ * The `markdown` port: whatever the wiring bound to `lm/markdown-renderer`, limited to the
+ * members this plugin's manifest `needs` — plugins never import each other (SPEC §6.1).
+ */
+type MarkdownApi = Pick<MarkdownRenderer, "render" | "bodyOf" | "renderAttachment">;
 
 interface AttachmentMeta {
   readonly id?: string;
@@ -78,7 +70,7 @@ const MAX_INLINE_TEXT_BYTES = 256 * 1024;
 const READER_CLASSES = "viewer:mx-auto viewer:w-full viewer:min-w-0 viewer:max-w-[72ch] viewer:break-words viewer:px-4 viewer:py-6 viewer:text-base viewer:leading-[1.65] viewer:compact:py-4 viewer:compact:leading-[1.7] viewer:[&>:first-child]:mt-0 viewer:[&_h1]:mb-2 viewer:[&_h1]:mt-6 viewer:[&_h1]:text-2xl viewer:[&_h1]:leading-tight viewer:compact:[&_h1]:text-xl viewer:[&_h2]:mb-2 viewer:[&_h2]:mt-6 viewer:[&_h2]:text-xl viewer:[&_h2]:leading-tight viewer:compact:[&_h2]:text-lg viewer:[&_h3]:mb-2 viewer:[&_h3]:mt-6 viewer:[&_h3]:text-lg viewer:[&_h3]:leading-tight viewer:compact:[&_h3]:text-base viewer:[&_h4]:mb-2 viewer:[&_h4]:mt-6 viewer:[&_h4]:leading-tight viewer:[&_p]:mb-3 viewer:[&_p]:mt-0 viewer:[&_ul]:mb-3 viewer:[&_ol]:mb-3 viewer:[&_blockquote]:mb-3 viewer:[&_blockquote]:border-l-[3px] viewer:[&_blockquote]:border-border-strong viewer:[&_blockquote]:pl-3 viewer:[&_blockquote]:text-text-muted viewer:[&_pre]:mb-3 viewer:[&_pre]:max-w-full viewer:[&_pre]:overflow-x-auto viewer:[&_pre]:rounded viewer:[&_pre]:border viewer:[&_pre]:border-border viewer:[&_pre]:bg-bg-subtle viewer:[&_pre]:p-2 viewer:[&_table]:mb-3 viewer:[&_table]:block viewer:[&_table]:max-w-full viewer:[&_table]:overflow-x-auto viewer:[&_table]:border-collapse viewer:[&_a]:break-words viewer:[&_a]:text-link viewer:[&_code]:break-words viewer:[&_code]:rounded-[3px] viewer:[&_code]:bg-bg-subtle viewer:[&_code]:px-[0.3em] viewer:[&_code]:py-[0.1em] viewer:[&_code]:font-mono viewer:[&_code]:text-[0.9em] viewer:[&_pre_code]:bg-transparent viewer:[&_pre_code]:p-0 viewer:[&_img]:h-auto viewer:[&_img]:max-w-full viewer:[&_img]:rounded viewer:[&_th]:border viewer:[&_th]:border-border viewer:[&_th]:px-2 viewer:[&_th]:py-1 viewer:[&_th]:text-left viewer:[&_td]:border viewer:[&_td]:border-border viewer:[&_td]:px-2 viewer:[&_td]:py-1 viewer:[&_td]:text-left viewer:[&_hr]:border-0 viewer:[&_hr]:border-t viewer:[&_hr]:border-border";
 
 export default function activate(kernel: Kernel): void {
-  const markdown = kernel.services.require<MarkdownApi>("markdown");
+  const markdown = kernel.ports.use<MarkdownApi>("markdown");
 
   const Read = ({ id, row }: DocumentModeProps): ReactNode => {
     const text = row.content;
@@ -111,7 +103,7 @@ export default function activate(kernel: Kernel): void {
     );
   };
 
-  kernel.extensions.contribute<DocumentMode>(POINTS.documentMode, {
+  kernel.ports.offer<DocumentMode>("mode", {
     id: "read",
     label: "Read",
     order: 0,
@@ -137,8 +129,8 @@ export default function activate(kernel: Kernel): void {
     }
     return <AttachmentPreview key={id} kernel={kernel} markdown={markdown} reference={{ id, embedded: true }} title="File" />;
   };
-  kernel.extensions.contribute<Route>(POINTS.route, { path: "/file/:id", view: "viewer.file" });
-  kernel.extensions.contribute<MainView>(POINTS.mainView, { id: "viewer.file", title: "File", component: File });
+  kernel.ports.offer<Route>("route", { path: "/file/:id", view: "viewer.file" });
+  kernel.ports.offer<MainView>("view", { id: "viewer.file", title: "File", component: File });
 }
 
 /**
@@ -204,7 +196,7 @@ function AttachmentPreview({
   // plugin's own preview is what it falls back to, and what shows without one.
   let body: ReactNode = own;
   try {
-    body = markdown.renderAttachment?.(reference.id, { placement: "page", alt: name, fallback: own }) ?? own;
+    body = markdown.renderAttachment(reference.id, { placement: "page", alt: name, fallback: own }) ?? own;
   } catch (error) {
     kernel.log.error("markdown.renderAttachment threw; showing the built-in preview", error);
   }

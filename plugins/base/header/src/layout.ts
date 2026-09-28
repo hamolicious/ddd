@@ -1,13 +1,15 @@
 /**
- * Where each `navbar.item` goes: the user's arrangement first, the item's own hints
+ * Where each `navbar.item` goes: the user's arrangement first, the wiring's seat order
  * second.
  *
  * The arrangement is two lists of item ids, one per seat, stored in the user's settings
  * (flat lists, because settings values are YAML scalars one key per line). An id listed
  * in a seat goes there in that position, whatever `side` the item asked for. An item
  * listed nowhere — a plugin installed after the user last arranged the bar — keeps its
- * own `side`, and is placed after the arranged items of that seat by its `order`. Ids
- * of items that no longer exist are simply skipped, so uninstalling a plugin needs no
+ * own `side`, and is placed after the arranged items of that seat in the order it
+ * arrived, which is the host's seat order (PLUGIN-PROTOCOLS §6a): the personal
+ * arrangement starts from the workspace default and never feeds back into it. Ids of
+ * items that no longer exist are simply skipped, so uninstalling a plugin needs no
  * cleanup. A third list, `hidden`, names items the user took out of the bar; they keep
  * their place, so showing one again puts it back where it was.
  */
@@ -27,7 +29,6 @@ export const EMPTY_ARRANGEMENT: Arrangement = { start: [], end: [], hidden: [] }
 export interface Placeable {
   readonly id: string;
   readonly side?: Seat;
-  readonly order?: number;
 }
 
 export function arrange<T>(
@@ -43,24 +44,20 @@ export function arrange<T>(
   }
 
   const ranked: Record<Seat, { entry: T; index: number }[]> = { start: [], end: [] };
-  const unranked: Record<Seat, { entry: T; order: number; position: number }[]> = {
-    start: [],
-    end: [],
-  };
-  entries.forEach((entry, position) => {
+  // Unranked items keep the order they arrived in: `entries` is seat order already.
+  const unranked: Record<Seat, T[]> = { start: [], end: [] };
+  for (const entry of entries) {
     const value = valueOf(entry);
     const place = listed.get(value.id);
     if (place) ranked[place.seat].push({ entry, index: place.index });
-    else unranked[value.side ?? "start"].push({ entry, order: value.order ?? 100, position });
-  });
+    else unranked[value.side ?? "start"].push(entry);
+  }
 
   const result: Record<Seat, T[]> = { start: [], end: [] };
   for (const seat of SEATS) {
     result[seat] = [
       ...ranked[seat].sort((a, b) => a.index - b.index).map((item) => item.entry),
-      ...unranked[seat]
-        .sort((a, b) => a.order - b.order || a.position - b.position)
-        .map((item) => item.entry),
+      ...unranked[seat],
     ];
   }
   return result;

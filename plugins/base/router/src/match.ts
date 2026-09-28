@@ -12,20 +12,18 @@
  * - **A trailing `*` captures the rest** into `params.rest`, and is the lowest-
  *   priority form there is — it exists so a catch-all route is possible without
  *   making every other route negotiate with it.
- * - **Most specific wins, `order` breaks ties.** Specificity is the count of literal
+ * - **Most specific wins, seat order breaks ties.** Specificity is the count of literal
  *   segments, because that is what "`/settings/theme` beats `/settings/:section`"
- *   means; `order` then decides between genuinely equivalent patterns, and
- *   registration sequence decides after that (the registry already hands entries over
- *   in `order`-then-sequence, so ties are stable across reloads).
+ *   means; between genuinely equivalent patterns the position in `routes` decides,
+ *   and the host hands routes over in the wiring's seat order (PLUGIN-PROTOCOLS
+ *   §6a), so ties are stable across reloads and editable in the wiring. A route's
+ *   own `order` field is the default-seat hint and is not read here.
  * - **Literal segments compare exactly**, case included. Case-insensitive matching
  *   would make `/Doc/x` and `/doc/x` the same URL and two different cache entries in
  *   every layer above.
  */
 
-import type { Route } from "../../_shared/points.js";
-
-/** Default `order` for a route that does not ask for one. */
-export const DEFAULT_ROUTE_ORDER = 100;
+import type { Route } from "@protocols/lm/router.route";
 
 export interface RouteMatch {
   /** The `main.view` id to render. */
@@ -95,8 +93,8 @@ export function matchPath(
 }
 
 /**
- * The best match among `routes`, or `undefined`. `routes` arrives in the registry's
- * order, which is the final tiebreaker — so this is a stable sort, not a scan.
+ * The best match among `routes`, or `undefined`. `routes` arrives in seat order, which
+ * is the final tiebreaker — so this is a stable sort, not a scan.
  */
 export function matchRoutes(
   routes: readonly Route[],
@@ -117,14 +115,16 @@ export function matchRoutes(
   return { view: best.route.view, params: best.params, pattern: best.route.path };
 }
 
-/** Negative ⇒ `a` wins. Exported because the ordering is a documented promise. */
+/**
+ * Negative ⇒ `a` wins; `0` ⇒ equally specific, and the caller's order (seat order)
+ * decides. Exported because the ordering is a documented promise.
+ */
 export function compareSpecificity(a: Route, b: Route): number {
   const left = shape(a.path);
   const right = shape(b.path);
   if (left.wildcard !== right.wildcard) return left.wildcard ? 1 : -1;
   if (left.literals !== right.literals) return right.literals - left.literals;
-  if (left.params !== right.params) return left.params - right.params;
-  return (a.order ?? DEFAULT_ROUTE_ORDER) - (b.order ?? DEFAULT_ROUTE_ORDER);
+  return left.params - right.params;
 }
 
 /** Fill a pattern's `:name` slots. The only sanctioned way to build a path. */

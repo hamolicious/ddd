@@ -2,11 +2,11 @@
  * `doc-list` — browse, search, sort, filter, create, and the **Trash view** (SPEC §6.5).
  *
  * **Search lives here** (it was its own plugin with its own results page). The list
- * page's search bar runs every `search.provider` — this plugin defines the point and
- * contributes the local index and the server's — and the list becomes the ranked
- * results (`search/`, `DocListView`). The text is the URL's `?q=`, so a search survives
- * reload and "back" from a result, and the old `#/search?q=` address opens the same
- * list. "Search documents" (Ctrl+Space by default) opens the list and focuses the bar.
+ * page's search bar runs every provider seated on the `search` port (protocol
+ * `lm/search.provider`, owned by this plugin), which offers the local index and the
+ * server's itself, and the list becomes the ranked results (`search/`, `DocListView`).
+ * The text is the URL's `?q=`, so a search survives reload and "back" from a result,
+ * and the old `#/search?q=` address opens the same list. "Search documents" (Ctrl+Space by default) opens the list and focuses the bar.
  *
  * Everything it shows comes from `kernel.documents.subscribe`, which is a *live* local
  * query: the list updates as the feed arrives, offline included, with no polling and no
@@ -50,48 +50,34 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactElement } from "react";
 
 import type { Kernel } from "@kernel";
+import type { Command } from "@protocols/lm/commands.command";
+import type { ContextMenu } from "@protocols/lm/context-menu";
+import type { DocumentBrowser } from "@protocols/lm/document-browser";
+import type { KeybindingDefault } from "@protocols/lm/keybindings.default";
+import type { MainView } from "@protocols/lm/main.view";
+import type { Router } from "@protocols/lm/router";
+import type { Route } from "@protocols/lm/router.route";
+import type { SidebarPanel } from "@protocols/lm/sidebar.panel";
 
 import { DocListView, TrashView } from "./DocListView.js";
 import { documentPath, listPath, queryParam } from "./search/hash.js";
 import { searchEngine } from "./search/providers.js";
 import { ViewsPanel } from "./ViewsPanel.js";
 import { yamlScalar } from "./yaml.js";
-import type { ContextMenuApi } from "../../_shared/context-menu-api.js";
-import {
-  POINTS,
-  type Command,
-  type KeybindingDefault,
-  type MainView,
-  type Route,
-  type SidebarPanel,
-} from "../../_shared/points.js";
 
-export interface DocListApi {
-  /**
-   * Create an empty document and navigate to it. `path` seeds `fm.path`.
-   *
-   * Rejects when the server cannot be reached (creation is REST, SPEC §5.1). A caller
-   * that has nowhere to show that should use {@link DocListApi.newDocument} instead.
-   */
-  createDocument(options?: { readonly path?: string; readonly title?: string }): Promise<string>;
-  /**
-   * The same thing, for UI entry points: never rejects, and reports a failure as a
-   * notice with a retry action.
-   */
-  newDocument(options?: { readonly path?: string; readonly title?: string }): void;
-  /** The id list currently shown, for "select all" style commands. */
-  visible(): readonly string[];
-}
-
-interface RouterService {
-  navigate(path: string, options?: { readonly replace?: boolean }): void;
-  onChange(listener: (path: string) => void): () => void;
-  current(): string;
-}
+/**
+ * What this plugin serves on its `browser` port: `lm/document-browser`, the protocol
+ * package in `protocols/document-browser/`. `createDocument` rejects when the server
+ * cannot be reached (creation is REST, SPEC §5.1); a caller with nowhere to show that
+ * uses `newDocument`, which never rejects and reports a failure as a notice with a
+ * retry action.
+ */
+export type DocListApi = DocumentBrowser;
 
 export default function activate(kernel: Kernel): DocListApi {
-  const router = kernel.services.require<RouterService>("router");
-  const menu = kernel.services.require<ContextMenuApi>("context-menu");
+  // Each handle is limited to the port's `needs` in the manifest: exactly what is read here.
+  const router = kernel.ports.use<Pick<Router, "navigate" | "current" | "onChange">>("router");
+  const menu = kernel.ports.use<Pick<ContextMenu, "open">>("menu");
 
   /**
    * Where an unfiled new document goes — the folder `folders` keeps as a per-user
@@ -235,22 +221,20 @@ export default function activate(kernel: Kernel): DocListApi {
     );
   };
 
-  kernel.extensions.contribute<Route>(POINTS.route, { path: "/", view: "doc-list.all", order: 900 });
-  kernel.extensions.contribute<Route>(POINTS.route, { path: "/search", view: "doc-list.all" });
-  kernel.extensions.contribute<Route>(POINTS.route, { path: "/trash", view: "doc-list.trash" });
+  // `/` is the catch-all. The router ranks routes by specificity and breaks ties by seat
+  // order (PLUGIN-PROTOCOLS §6a); `order` here is only the protocol's default-seat hint.
+  kernel.ports.offer<Route>("route", [
+    { path: "/", view: "doc-list.all", order: 900 },
+    { path: "/search", view: "doc-list.all" },
+    { path: "/trash", view: "doc-list.trash" },
+  ]);
 
-  kernel.extensions.contribute<MainView>(POINTS.mainView, {
-    id: "doc-list.all",
-    title: "Documents",
-    component: ListHost,
-  });
-  kernel.extensions.contribute<MainView>(POINTS.mainView, {
-    id: "doc-list.trash",
-    title: "Trash",
-    component: TrashHost,
-  });
+  kernel.ports.offer<MainView>("views", [
+    { id: "doc-list.all", title: "Documents", component: ListHost },
+    { id: "doc-list.trash", title: "Trash", component: TrashHost },
+  ]);
 
-  kernel.extensions.contribute<SidebarPanel>(POINTS.sidebarPanel, {
+  kernel.ports.offer<SidebarPanel>("list", {
     id: "doc-list.views",
     title: "Views",
     order: 10,
@@ -258,7 +242,7 @@ export default function activate(kernel: Kernel): DocListApi {
     component: PanelHost,
   });
 
-  for (const command of [
+  kernel.ports.offer<Command>("commands", [
     {
       id: "doc-list.new",
       title: "New document",
@@ -283,18 +267,12 @@ export default function activate(kernel: Kernel): DocListApi {
       category: "Documents",
       run: () => router.navigate("/trash"),
     },
-  ] satisfies Command[]) {
-    kernel.extensions.contribute<Command>(POINTS.command, command);
-  }
-  kernel.extensions.contribute<KeybindingDefault>(POINTS.keybinding, {
-    command: "doc-list.new",
-    keys: "Mod+N",
-  });
-  // Literal Ctrl, not Mod: Cmd+Space is the Mac's own search.
-  kernel.extensions.contribute<KeybindingDefault>(POINTS.keybinding, {
-    command: "doc-list.search",
-    keys: "Ctrl+Space",
-  });
+  ]);
+  kernel.ports.offer<KeybindingDefault>("keys", [
+    { command: "doc-list.new", keys: "Mod+N" },
+    // Literal Ctrl, not Mod: Cmd+Space is the Mac's own search.
+    { command: "doc-list.search", keys: "Ctrl+Space" },
+  ]);
 
   // ---------------------------------------------------------------------------
   // API
@@ -321,5 +299,6 @@ export default function activate(kernel: Kernel): DocListApi {
     visible: () => visible,
   };
 
+  kernel.ports.serve("browser", api);
   return api;
 }

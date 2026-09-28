@@ -25,9 +25,7 @@
       "protocol": "lm/router@^1.0",
       "needs": [
         "navigate",
-        "current",
-        "query",
-        "onChange"
+        "query"
       ]
     },
     "shell": {

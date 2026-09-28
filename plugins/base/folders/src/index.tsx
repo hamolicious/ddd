@@ -48,8 +48,15 @@ import { useEffect, useState } from "react";
 import type { ReactElement } from "react";
 
 import type { CoreValue, DocumentRow, Kernel, SettingsValue, Unsubscribe } from "@kernel";
+import type { Command } from "@protocols/lm/commands.command";
+import type { ContextMenu } from "@protocols/lm/context-menu";
+import type { DocumentBrowser } from "@protocols/lm/document-browser";
+import type { MainView } from "@protocols/lm/main.view";
+import type { Router } from "@protocols/lm/router";
+import type { Route } from "@protocols/lm/router.route";
+import type { SettingsSection } from "@protocols/lm/settings.section";
+import type { SidebarPanel } from "@protocols/lm/sidebar.panel";
 
-import type { ContextMenuApi } from "../../_shared/context-menu-api.js";
 import {
   EXCLUDE_MACHINE_DOCUMENTS,
   isMachineDocument,
@@ -73,14 +80,6 @@ import { FolderTree, type TreeRequest } from "./FolderTree.js";
 import { documentsUnder, planFolderMove } from "./moves.js";
 import { buildTree, isRecursiveRename, normalizePath, parentOf, type PathRow } from "./path.js";
 import { settledMoves, withPendingPaths } from "./pending.js";
-import {
-  POINTS,
-  type Command,
-  type MainView,
-  type Route,
-  type SettingsSection,
-  type SidebarPanel,
-} from "../../_shared/points.js";
 
 /** A workspace bigger than this needs paging in the tree; say so rather than truncate quietly. */
 const TREE_ROW_LIMIT = 20_000;
@@ -105,8 +104,10 @@ const PENDING_MOVE_TTL_MS = 15_000;
 /** Collapsing a folder is a settings splice; a burst of clicks should not be a burst of them. */
 const SETTINGS_DEBOUNCE_MS = 400;
 
-/** The event other plugins can listen to without depending on this one (see below). */
-/** The provided event port that announces the default location (`lm/folders.default-location`). */
+/**
+ * The provided event port that announces the default location (`lm/folders.default-location`):
+ * what other plugins can hear without depending on this one (see `announceDefaultLocation`).
+ */
 export const DEFAULT_LOCATION_PORT = "location";
 
 export const SETTINGS_KEYS = {
@@ -150,18 +151,6 @@ export interface FoldersApi {
   onDefaultLocationChange(listener: (path: string) => void): Unsubscribe;
 }
 
-interface DocListService {
-  createDocument(options?: { readonly path?: string; readonly title?: string }): Promise<string>;
-  /** Creates and reports its own failures (offline, above all). */
-  newDocument(options?: { readonly path?: string; readonly title?: string }): void;
-}
-
-interface RouterService {
-  navigate(path: string, options?: { readonly replace?: boolean }): void;
-  onChange(listener: (path: string) => void): () => void;
-  current(): string;
-}
-
 /** `#/folder?path=home/lists` — a query string, because `:name` matches one segment. */
 const folderPath = (folder: string): string => {
   const path = normalizePath(folder);
@@ -183,9 +172,12 @@ const documentFromRoute = (route: string): string | undefined => {
 };
 
 export default function activate(kernel: Kernel): FoldersApi {
-  const docs = kernel.services.require<DocListService>("doc-list");
-  const router = kernel.services.require<RouterService>("router");
-  const menu = kernel.services.require<ContextMenuApi>("context-menu");
+  // Each handle is limited to the port's `needs` in the manifest: exactly what is read
+  // here and in `FolderTree`. `newDocument` rather than `createDocument`: it reports its
+  // own failures (offline, above all).
+  const docs = kernel.ports.use<Pick<DocumentBrowser, "newDocument">>("browser");
+  const router = kernel.ports.use<Pick<Router, "navigate" | "current" | "onChange">>("router");
+  const menu = kernel.ports.use<Pick<ContextMenu, "open" | "openSheet" | "confirm" | "close">>("menu");
 
   kernel.settings.defineSchema({
     [SETTINGS_KEYS.defaultLocation]: {
@@ -781,7 +773,7 @@ export default function activate(kernel: Kernel): FoldersApi {
     );
   };
 
-  kernel.extensions.contribute<SidebarPanel>(POINTS.sidebarPanel, {
+  kernel.ports.offer<SidebarPanel>("tree", {
     id: "folders.tree",
     title: "Folders",
     order: 20,
@@ -789,14 +781,14 @@ export default function activate(kernel: Kernel): FoldersApi {
     component: TreeHost,
   });
 
-  kernel.extensions.contribute<Route>(POINTS.route, { path: "/folder", view: "folders.contents" });
-  kernel.extensions.contribute<MainView>(POINTS.mainView, {
+  kernel.ports.offer<Route>("route", { path: "/folder", view: "folders.contents" });
+  kernel.ports.offer<MainView>("view", {
     id: "folders.contents",
     title: "Folder",
     component: ContentsHost,
   });
 
-  kernel.extensions.contribute<SettingsSection>(POINTS.settingsSection, {
+  kernel.ports.offer<SettingsSection>("settings", {
     id: "folders",
     title: "Folders",
     order: 30,
@@ -804,7 +796,7 @@ export default function activate(kernel: Kernel): FoldersApi {
     component: SettingsHost,
   });
 
-  for (const command of [
+  kernel.ports.offer<Command>("commands", [
     {
       id: "folders.newFolder",
       title: "New folder",
@@ -934,9 +926,7 @@ export default function activate(kernel: Kernel): FoldersApi {
       category: "Folders",
       run: () => router.navigate(folderPath("")),
     },
-  ] satisfies Command[]) {
-    kernel.extensions.contribute<Command>(POINTS.command, command);
-  }
+  ]);
 
   // ---------------------------------------------------------------------------
   // API
@@ -968,8 +958,8 @@ export default function activate(kernel: Kernel): FoldersApi {
     },
   };
 
-  // Announce once, now that everything is wired: `doc-list` activated before this plugin
-  // (it is a dependency), so anything listening is already listening.
+  // Announce once, now that everything is wired. The protocol is sticky, so a listener
+  // that starts later (or restarts after a wiring change) hears this value anyway.
   announceDefaultLocation();
 
   return api;

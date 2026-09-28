@@ -2,7 +2,7 @@
  * The layout: a header spot, sidebar, one main region, and the altbar opposite the
  * sidebar. Everything inside them belongs
  * to another plugin, which is what makes this shell replaceable — a different shell
- * defines the same three points and nothing else has to change (SPEC §6.1).
+ * hosts the same protocols and nothing else has to change (SPEC §6.1).
  *
  * The properties that are requirements rather than styling:
  *
@@ -18,22 +18,21 @@
  * - **A view id the shell cannot resolve is a message, not an empty pane.** The
  *   router can legitimately select a view before the plugin that provides it has
  *   activated, and `main.view` is live, so the resolution has to happen at render.
+ * - **Nothing here sorts.** Every host list arrives in seat order (PLUGIN-PROTOCOLS
+ *   §6a), and the header port has one seat, so its list is the header or nothing.
  */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
-import type { Contribution, Kernel } from "@kernel";
+import type { Kernel, SlotHost, SlotItem } from "@kernel";
 
-import { BoundedIcon, bounded, usePointEntries } from "../../_shared/boundary.js";
-import {
-  POINTS,
-  type AltbarPanel,
-  type MainView,
-  type ShellHeader,
-  type ShellOverlay,
-  type ShownView,
-  type SidebarPanel,
-} from "../../_shared/points.js";
+import type { AltbarPanel, ShownView } from "@protocols/lm/altbar.panel";
+import type { MainView } from "@protocols/lm/main.view";
+import type { ShellHeader } from "@protocols/lm/shell.header";
+import type { ShellOverlay } from "@protocols/lm/shell.overlay";
+import type { SidebarPanel } from "@protocols/lm/sidebar.panel";
+
+import { BoundedIcon, bounded, useSlotEntries } from "../../_shared/boundary.js";
 
 import { useShell } from "./hooks.js";
 import {
@@ -54,18 +53,37 @@ export const ALTBAR_ID = "shell-altbar";
 
 const NO_VIEW: ShownView = { id: "", params: {} };
 
+/** The protocol each host speaks: what the error boundary names a failed item by. */
+const PROTOCOL = {
+  header: "lm/shell.header",
+  overlay: "lm/shell.overlay",
+  sidebar: "lm/sidebar.panel",
+  altbar: "lm/altbar.panel",
+  view: "lm/main.view",
+} as const;
+
+/** The shell's five hosts (`kernel.ports.collect`), created once in `activate`. */
+export interface ShellHosts {
+  readonly headers: SlotHost<ShellHeader>;
+  readonly overlays: SlotHost<ShellOverlay>;
+  readonly panels: SlotHost<SidebarPanel>;
+  readonly altbar: SlotHost<AltbarPanel>;
+  readonly views: SlotHost<MainView>;
+}
+
 export interface ShellProps {
   readonly kernel: Kernel;
   readonly state: ShellState;
+  readonly hosts: ShellHosts;
 }
 
-export function Shell({ kernel, state }: ShellProps): ReactNode {
+export function Shell({ kernel, state, hosts }: ShellProps): ReactNode {
   const shell = useShell(state);
-  const views = usePointEntries<MainView>(kernel, POINTS.mainView);
-  const panels = usePointEntries<SidebarPanel>(kernel, POINTS.sidebarPanel);
-  const altbarEntries = usePointEntries<AltbarPanel>(kernel, POINTS.altbarPanel);
-  const headers = usePointEntries<ShellHeader>(kernel, POINTS.shellHeader);
-  const overlays = usePointEntries<ShellOverlay>(kernel, POINTS.shellOverlay);
+  const views = useSlotEntries(hosts.views);
+  const panels = useSlotEntries(hosts.panels);
+  const altbarEntries = useSlotEntries(hosts.altbar);
+  const headers = useSlotEntries(hosts.headers);
+  const overlays = useSlotEntries(hosts.overlays);
 
   const main = useRef<HTMLElement>(null);
   const sidebar = useRef<HTMLElement>(null);
@@ -77,9 +95,8 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
   const altDrawer = shell.compact && shell.altbarOpen;
   const hasSidebar = panels.length > 0;
   const shown: ShownView = shell.view ?? NO_VIEW;
-  const altPanels = altbarEntries
-    .filter((entry) => accepts(kernel, entry, shown))
-    .sort((a, b) => (a.value.order ?? 100) - (b.value.order ?? 100));
+  // Seat order, as the host hands it over; only `when` thins the list.
+  const altPanels = altbarEntries.filter((entry) => accepts(kernel, entry, shown));
   const hasAltbar = altPanels.length > 0;
 
   useEffect(() => state.setHasSidebar(hasSidebar), [state, hasSidebar]);
@@ -118,7 +135,8 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
     return () => document.removeEventListener("keydown", onKey);
   }, [anyDrawer, drawer, closeDrawer]);
 
-  const header = pickHeader(headers);
+  // A `seats: 1` port: the wiring benches every header but one.
+  const header = headers[0];
 
   return (
     <div className="shell-root shellui:flex shellui:h-full shellui:min-h-0 shellui:flex-col shellui:font-sans shellui:text-text" data-compact={shell.compact ? "" : undefined}>
@@ -215,7 +233,7 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
 }
 
 /** A panel's `when` is another plugin's code: a throw hides that panel, nothing else. */
-function accepts(kernel: Kernel, entry: Contribution<AltbarPanel>, view: ShownView): boolean {
+function accepts(kernel: Kernel, entry: SlotItem<AltbarPanel>, view: ShownView): boolean {
   try {
     return entry.value.when?.(view) ?? true;
   } catch (error) {
@@ -315,25 +333,14 @@ function ResizeHandle({ label, size }: { readonly label: string; readonly size: 
   );
 }
 
-/** The lowest `order` wins (default 100); a tie keeps registration order. */
-function pickHeader(
-  entries: readonly Contribution<ShellHeader>[],
-): Contribution<ShellHeader> | undefined {
-  let best: Contribution<ShellHeader> | undefined;
-  for (const entry of entries) {
-    if (!best || (entry.value.order ?? 100) < (best.value.order ?? 100)) best = entry;
-  }
-  return best;
-}
-
 function OverlaySlot({
   kernel,
   entry,
 }: {
   readonly kernel: Kernel;
-  readonly entry: Contribution<ShellOverlay>;
+  readonly entry: SlotItem<ShellOverlay>;
 }): ReactNode {
-  const Rendered = bounded(kernel, entry.value.component, POINTS.shellOverlay, entry.pluginId);
+  const Rendered = bounded(kernel, entry.value.component, PROTOCOL.overlay, entry.pluginId);
   return <Rendered />;
 }
 
@@ -342,9 +349,9 @@ function HeaderSlot({
   entry,
 }: {
   readonly kernel: Kernel;
-  readonly entry: Contribution<ShellHeader>;
+  readonly entry: SlotItem<ShellHeader>;
 }): ReactNode {
-  const Rendered = bounded(kernel, entry.value.component, POINTS.shellHeader, entry.pluginId);
+  const Rendered = bounded(kernel, entry.value.component, PROTOCOL.header, entry.pluginId);
   return <Rendered />;
 }
 
@@ -354,17 +361,17 @@ function Panel({
   state,
 }: {
   readonly kernel: Kernel;
-  readonly entry: Contribution<SidebarPanel>;
+  readonly entry: SlotItem<SidebarPanel>;
   readonly state: ShellState;
 }): ReactNode {
   const panel = entry.value;
   const open = state.panelOpen(panel.id, panel.defaultOpen ?? true);
-  const Rendered = bounded(kernel, panel.component, POINTS.sidebarPanel, entry.pluginId);
+  const Rendered = bounded(kernel, panel.component, PROTOCOL.sidebar, entry.pluginId);
   return (
     <PanelFrame
       kernel={kernel}
       pluginId={entry.pluginId}
-      point={POINTS.sidebarPanel}
+      point={PROTOCOL.sidebar}
       title={panel.title}
       icon={panel.icon}
       bodyId={`shell-panel-${panel.id}`}
@@ -430,7 +437,7 @@ function AltPanel({
   view,
 }: {
   readonly kernel: Kernel;
-  readonly entry: Contribution<AltbarPanel>;
+  readonly entry: SlotItem<AltbarPanel>;
   readonly state: ShellState;
   readonly view: ShownView;
 }): ReactNode {
@@ -438,12 +445,12 @@ function AltPanel({
   // A key of its own, so a sidebar panel and an altbar panel may share an id.
   const key = `altbar:${panel.id}`;
   const open = state.panelOpen(key, panel.defaultOpen ?? true);
-  const Rendered = bounded(kernel, panel.component, POINTS.altbarPanel, entry.pluginId);
+  const Rendered = bounded(kernel, panel.component, PROTOCOL.altbar, entry.pluginId);
   return (
     <PanelFrame
       kernel={kernel}
       pluginId={entry.pluginId}
-      point={POINTS.altbarPanel}
+      point={PROTOCOL.altbar}
       title={panel.title}
       icon={panel.icon}
       bodyId={`shell-altbar-panel-${panel.id}`}
@@ -461,10 +468,10 @@ function ActiveView({
   view,
 }: {
   readonly kernel: Kernel;
-  readonly entry: Contribution<MainView>;
+  readonly entry: SlotItem<MainView>;
   readonly view: ViewSelection | undefined;
 }): ReactNode {
-  const Rendered = bounded(kernel, entry.value.component, POINTS.mainView, entry.pluginId);
+  const Rendered = bounded(kernel, entry.value.component, PROTOCOL.view, entry.pluginId);
   return <Rendered params={view?.params ?? {}} />;
 }
 

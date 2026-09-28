@@ -30,13 +30,10 @@
 import type { DocumentRow } from "@kernel";
 import { createElement, Fragment, type ComponentType, type ReactNode } from "react";
 
-import type {
-  MarkdownAttachmentProps,
-  MarkdownCodeBlockProps,
-  MarkdownDirective,
-  MarkdownDirectiveProps,
-  MarkdownFenceProps,
-} from "../../_shared/points.js";
+import type { MarkdownAttachmentProps } from "@protocols/lm/markdown.attachment";
+import type { MarkdownCodeBlockProps } from "@protocols/lm/markdown.codeBlock";
+import type { MarkdownDirective, MarkdownDirectiveProps } from "@protocols/lm/markdown.directive";
+import type { MarkdownFenceProps } from "@protocols/lm/markdown.fence";
 
 import { AttachmentActions, AttachmentChip, AttachmentImage, DocLink, type EmbedToggle } from "./links.js";
 import { DocEmbed, mayEmbed, type EmbedChain } from "./doc-embed.js";
