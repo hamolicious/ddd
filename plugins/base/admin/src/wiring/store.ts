@@ -449,6 +449,28 @@ export class EditorStore {
     }
   }
 
+  /**
+   * A consumed service's `bind` entry, set directly: `undefined` removes it (automatic),
+   * `null` binds to nothing (an optional port), a port key pins that provider. A pin must
+   * be a same-protocol candidate that fits (§6b: services never wire by shape).
+   */
+  bind(port: string, to: string | null | undefined): void {
+    const s = this.#state;
+    if (s.readOnly) return this.notice("read-only", true);
+    if (typeof to === "string") {
+      if (Draft.isUnplugged(s.draft, nodeOfPort(to))) return this.notice(`${nodeOfPort(to)} is unplugged`, true);
+      const candidate = this.candidates(port, "in").find((c) => c.port === to);
+      if (!candidate || !candidate.ok || !candidate.same) {
+        return this.notice(`does not fit ${port}${candidate?.reasons.length ? `: ${candidate.reasons.slice(0, 2).join("; ")}` : ""}`, true);
+      }
+    }
+    const bind = { ...s.draft.bind };
+    if (to === undefined) delete bind[port];
+    else bind[port] = to;
+    this.#setDraft({ ...s.draft, bind });
+    this.notice(to === undefined ? `${port}: automatic` : to === null ? `${port}: none` : `${port} now uses ${nodeOfPort(to)}`);
+  }
+
   /** The resolver's own pick for a service port with no pin, and whether there was a choice. */
   #autoChoice(port: string): { readonly port: string | undefined; readonly several: boolean } {
     const s = this.#state;

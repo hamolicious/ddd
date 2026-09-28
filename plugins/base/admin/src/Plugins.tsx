@@ -33,7 +33,7 @@
  * The server authorizes every route underneath; hiding a button here is a courtesy.
  */
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactElement, ReactNode } from "react";
 
 import type { InstalledPlugin, PluginCapabilities } from "@kernel";
@@ -57,6 +57,8 @@ import { useAsync, useConfirm, useModal, useMutation, useWiringEditor } from "./
 import { CheckIcon, ChevronIcon, PlayIcon, PowerIcon, TrashIcon, UploadIcon } from "./icons.js";
 import { adminOfflineCopy } from "./offline.js";
 import { PluginConfigForm } from "./PluginConfig.js";
+import { ConnectionsPanel, PluginsDraftBar } from "./wiring/Connections.js";
+import type { EditorStore } from "./wiring/store.js";
 import { useOfflineCopy } from "../../_shared/offline-copy.js";
 
 export function PluginsSection({
@@ -80,6 +82,22 @@ export function PluginsSection({
     () => (list.data?.plugins ?? []).filter((plugin) => plugin.state !== "pending"),
     [list.data],
   );
+
+  // The Wiring tab's store: the Connections panels and the draft bar edit its draft. It
+  // loads with the tab, and again whenever the list does, since enabling or disabling a
+  // plugin writes a wiring version. A version applied from the draft bar reloads the list.
+  const editor = useWiringEditor();
+  const shared = editor.shared;
+  const liveVersion = useLiveVersion(shared?.store);
+  const seenVersion = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    if (list.data !== undefined) void shared?.store.load();
+  }, [shared, list.data]);
+  useEffect(() => {
+    const previous = seenVersion.current;
+    seenVersion.current = liveVersion;
+    if (previous !== undefined && liveVersion !== undefined && liveVersion !== previous) list.reload();
+  }, [liveVersion, list.reload]);
 
   return (
     <AdminSectionFrame id="plugins" title="Plugins" embedded={embedded}>
@@ -169,9 +187,11 @@ export function PluginsSection({
             </ul>
           )}
 
+          {shared !== undefined && <PluginsDraftBar shared={shared} onOpen={() => editor.open()} />}
+
           {/* Keyed on the list's data: disabling a plugin above writes a wiring version
               (unplug is disable), so the card reloads with the list. */}
-          <WiringCard key={list.data.plugins.map((plugin) => `${plugin.id}:${plugin.state}`).join(",")} client={client} onApplied={() => list.reload()} />
+          <WiringCard key={`${liveVersion ?? ""}|${list.data.plugins.map((plugin) => `${plugin.id}:${plugin.state}`).join(",")}`} client={client} onApplied={() => list.reload()} />
 
           <HostSummary list={list.data} />
 
@@ -195,6 +215,13 @@ export function PluginsSection({
       )}
     </AdminSectionFrame>
   );
+}
+
+/** The shared wiring store's live version, once it has loaded. */
+function useLiveVersion(store: EditorStore | undefined): number | undefined {
+  const subscribe = useCallback((listener: () => void): (() => void) => store?.subscribe(listener) ?? (() => {}), [store]);
+  const read = (): number | undefined => (store?.state.phase === "ready" ? store.state.live.version : undefined);
+  return useSyncExternalStore(subscribe, read, read);
 }
 
 /** The accent fill for the one button a card is for (Approve). */
@@ -578,6 +605,7 @@ function InstalledCard({
   const enabled = plugin.state === "enabled";
   const toggleLabel = enabled ? "Disable" : plugin.breaker.open ? "Re-enable and clear the breaker" : "Enable";
   const detailsId = `admin-plugin-details-${plugin.id}`;
+  const shared = useWiringEditor().shared;
 
   return (
     <li className="admin-plugin admin:flex admin:flex-col admin:gap-2">
@@ -746,6 +774,8 @@ function InstalledCard({
                 <PluginConfigForm client={client} plugin={plugin} />
               </DetailSection>
             )}
+
+            {shared !== undefined && <ConnectionsPanel shared={shared} plugin={plugin.id} />}
 
             <DetailSection title="Recent host events">
               <PluginLogs client={client} plugin={plugin} />

@@ -105,10 +105,11 @@ export default function activate(kernel: Kernel): AdminApi {
     modal: (request) => menu.modal(request),
     openSheet: (request) => menu.openSheet(request),
   };
+  const editor = createWiringEditor({ kernel, router, shell, menu, viewId: VIEW });
   const wiringEditor: WiringEditorLink = {
     open: () => router.navigate(WIRING_PATH),
+    shared: editor.shared,
   };
-  const editor = createWiringEditor({ kernel, router, shell, menu, viewId: VIEW });
   teardown = () => editor.dispose();
   // Offline, each tab shows what it last loaded, marked (dev-docs/resolved/SYNC-DECISIONS.md §9).
   const client = createAdminClient(offlineCopies((path, init) => kernel.session.fetch(path, init), adminOfflineCopy));

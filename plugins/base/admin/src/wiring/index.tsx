@@ -28,6 +28,7 @@ import type { Router } from "@protocols/lm/router";
 import type { Shell } from "@protocols/lm/shell";
 
 import { OfflineCopyState, offlineCopies } from "../../../_shared/offline-copy.js";
+import type { SharedWiring } from "../hooks.js";
 
 import { createWiringClient } from "./api.js";
 import type { ChangeSummary } from "./changes.js";
@@ -64,6 +65,8 @@ export interface WiringEditor {
   /** The inspector, in the altbar while the Wiring tab is showing. */
   readonly panel: AltbarPanel;
   readonly commands: readonly Command[];
+  /** The one store, and the actions with their confirms, for the plugin list's Connections. */
+  readonly shared: SharedWiring;
   /** Everything the editor built itself; the kernel withdraws the offers. */
   dispose(): void;
 }
@@ -185,6 +188,7 @@ export function createWiringEditor({ kernel, router, shell, menu, viewId }: Wiri
     Section,
     panel,
     commands,
+    shared: { store, connect, apply },
     dispose: () => {
       unsubscribeSync();
       window.removeEventListener("focus", onFocus);

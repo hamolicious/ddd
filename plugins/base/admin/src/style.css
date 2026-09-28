@@ -5,7 +5,8 @@
  * Everything else in admin is prefixed utilities.
  */
 
-.wiring-view {
+.wiring-view,
+.wiring-connections {
   --wiring-service: var(--lm-link);
   --wiring-slot: var(--lm-success);
   --wiring-event: var(--lm-warning);
