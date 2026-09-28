@@ -39,6 +39,7 @@ import {
   ProtocolIndex,
   buildGraph,
   dependantCounts,
+  focusSet,
   hotPlugins,
   nodeOfPort,
   overridesOf,
@@ -99,6 +100,8 @@ export interface EditorState {
   readonly selection: Selection;
   readonly kinds: Kinds;
   readonly protocolFilter: string;
+  /** Focus mode: the plugin whose neighbourhood alone is drawn. View state only. */
+  readonly focused: string | undefined;
   readonly geometry: Readonly<Record<string, NodeGeometry>>;
   readonly columns: readonly Column[];
   readonly positions: Readonly<Record<string, Point>>;
@@ -170,6 +173,7 @@ export class EditorStore {
       selection: undefined,
       kinds: { service: true, slot: true, event: true },
       protocolFilter: "",
+      focused: undefined,
       geometry: {},
       columns: [],
       positions: {},
@@ -198,6 +202,8 @@ export class EditorStore {
 
   #set(patch: Partial<EditorState>): void {
     const next = { ...this.#state, ...patch };
+    // A focused plugin that leaves the draft, or is unplugged in it, ends focus mode.
+    if (next.focused && (!next.graph.byId.has(next.focused) || Draft.isUnplugged(next.draft, next.focused))) next.focused = undefined;
     next.readOnly = next.offline ? "offline" : !next.core ? "core" : !next.routes ? "routes" : undefined;
     this.#state = next;
     for (const listener of [...this.#listeners]) listener();
@@ -307,6 +313,7 @@ export class EditorStore {
         core,
         routes,
         liveMoved,
+        ...(first ? { focused: undefined } : {}),
       });
       this.#writeStored();
       this.#relayout(first || previous.live.version !== live.version);
@@ -636,14 +643,36 @@ export class EditorStore {
     this.#set({ view: zoomAt(this.#state.view, factor, px, py) });
   }
 
+  /** Fit the nodes on screen: all of them, or the focused neighbourhood. */
   fit(width: number, height: number): void {
-    const heights = Object.fromEntries(Object.entries(this.#state.geometry).map(([id, g]) => [id, g.height]));
-    this.#set({ view: fit(this.#state.positions, heights, width, height) });
+    const s = this.#state;
+    const shown = this.focusSet();
+    const heights = Object.fromEntries(Object.entries(s.geometry).map(([id, g]) => [id, g.height]));
+    const positions = shown ? Object.fromEntries(Object.entries(s.positions).filter(([id]) => shown.has(id))) : s.positions;
+    this.#set({ view: fit(positions, heights, width, height) });
   }
 
-  /** Columns from scratch: load, Apply and Tidy. */
+  /** Focus mode on `id`, fitted to the canvas; positions stay as the full layout has them. */
+  focusOn(id: string, width: number, height: number): void {
+    const s = this.#state;
+    if (!s.graph.byId.has(id) || Draft.isUnplugged(s.draft, id)) return;
+    this.#set({ focused: id });
+    this.fit(width, height);
+  }
+
+  unfocus(): void {
+    if (this.#state.focused) this.#set({ focused: undefined });
+  }
+
+  /** The nodes focus mode draws, with the kind and protocol filters on top; `undefined` when not focused. */
+  focusSet(): ReadonlySet<string> | undefined {
+    const s = this.#state;
+    return s.focused ? focusSet(s.focused, s.graph.wires, s.kinds, s.protocolFilter) : undefined;
+  }
+
+  /** Columns from scratch: load, Apply and Tidy. Tidy also leaves focus mode. */
   tidy(): void {
-    this.#set({ handPlaced: false });
+    this.#set({ handPlaced: false, focused: undefined });
     this.#relayout(true);
   }
 

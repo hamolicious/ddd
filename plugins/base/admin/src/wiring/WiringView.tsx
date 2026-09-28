@@ -30,7 +30,7 @@ export function WiringView({ store, isAdmin, compact, onSelect, onConnect, onApp
   const state = useEditor(store);
   const root = useRef<HTMLDivElement>(null);
 
-  // Delete cuts the selected wire; Escape clears the selection. Scoped to the view.
+  // Delete cuts the selected wire; Escape clears the selection, or else leaves focus mode. Scoped to the view.
   useEffect(() => {
     const element = root.current;
     if (!element) return undefined;
@@ -41,7 +41,10 @@ export function WiringView({ store, isAdmin, compact, onSelect, onConnect, onApp
       if ((event.key === "Delete" || event.key === "Backspace") && selection?.kind === "wire") {
         event.preventDefault();
         store.cutWire(selection.key);
-      } else if (event.key === "Escape") onSelect(undefined);
+      } else if (event.key === "Escape") {
+        if (selection) onSelect(undefined);
+        else store.unfocus();
+      }
     };
     element.addEventListener("keydown", onKey);
     return () => element.removeEventListener("keydown", onKey);
@@ -63,6 +66,7 @@ export function WiringView({ store, isAdmin, compact, onSelect, onConnect, onApp
     return element ? [element.clientWidth, element.clientHeight] : [800, 600];
   };
   const kinds = state.kinds;
+  const focusCount = state.focused ? (store.focusSet()?.size ?? 1) - 1 : 0;
   const changes = state.summary?.rows.length ?? 0;
 
   return (
@@ -115,6 +119,13 @@ export function WiringView({ store, isAdmin, compact, onSelect, onConnect, onApp
             ↺
           </button>
         </span>
+        {state.focused && (
+          <button type="button" className="wiring-focus admin:cursor-pointer admin:border-0 admin:bg-transparent admin:p-0" title="Leave focus" aria-label={`Leave focus on ${state.focused}`} onClick={() => store.unfocus()}>
+            <Pill tone="fit">
+              Focus: {state.focused} · {focusCount} neighbour{focusCount === 1 ? "" : "s"} ✕
+            </Pill>
+          </button>
+        )}
         <span className="admin:ml-auto admin:inline-flex admin:flex-wrap admin:items-center admin:gap-1">
           {state.phase === "loading" && <Pill tone="muted">loading</Pill>}
           {state.phase === "error" && (

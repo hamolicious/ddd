@@ -249,6 +249,28 @@ export function dependantCounts(nodes: readonly Node[], wires: readonly Wire[]):
   return Object.fromEntries([...by].map(([id, set]) => [id, set.size]));
 }
 
+/** Which kinds of wire the chips show. */
+export type KindFilter = Readonly<Record<ProtocolKind, boolean>>;
+
+/** A wire passes the kind chips and the protocol filter. */
+export const wireShown = (wire: Pick<Wire, "kind" | "protocol" | "offerProtocol">, kinds: KindFilter, protocolFilter: string): boolean =>
+  kinds[wire.kind] && (!protocolFilter || wire.protocol === protocolFilter || wire.offerProtocol === protocolFilter);
+
+/** Every node with at least one wire to or from `nodeId`, in either direction; never `nodeId` itself. */
+export function neighboursOf(nodeId: string, wires: readonly Pick<Wire, "fromNode" | "toNode">[]): ReadonlySet<string> {
+  const out = new Set<string>();
+  for (const wire of wires) {
+    if (wire.fromNode === nodeId && wire.toNode !== nodeId) out.add(wire.toNode);
+    else if (wire.toNode === nodeId && wire.fromNode !== nodeId) out.add(wire.fromNode);
+  }
+  return out;
+}
+
+/** Focus mode: the focused node and its neighbours over the wires the filters show. */
+export function focusSet(nodeId: string, wires: readonly Wire[], kinds: KindFilter, protocolFilter: string): ReadonlySet<string> {
+  return new Set([nodeId, ...neighboursOf(nodeId, wires.filter((wire) => wireShown(wire, kinds, protocolFilter)))]);
+}
+
 function compareVersions(a: string, b: string): number {
   const parts = (v: string) => (v.split(/[-+]/)[0] ?? "").split(".").map((n) => Number.parseInt(n, 10) || 0);
   const [x, y] = [parts(a), parts(b)];

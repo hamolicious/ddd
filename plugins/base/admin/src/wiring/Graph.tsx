@@ -5,7 +5,8 @@
  *
  * Gestures: drag from a port dot to wire (compatible dots light up, the rest fade and say
  * why); click a wire to select it; the power button unplugs; drag a title to move a box;
- * drag the background to pan; wheel to zoom. The draft is drawn over the live wiring: new
+ * drag the background to pan; wheel to zoom. Double-click a title for focus mode (that
+ * plugin and its neighbours alone), the background to leave it. The draft is drawn over the live wiring: new
  * wires bold, removed ones as red ghosts.
  */
 
@@ -14,7 +15,7 @@ import type { PointerEvent as ReactPointerEvent, ReactElement } from "react";
 
 import { useEditor } from "./hooks.js";
 import { NODE_W, SEAT_R, along, curve, outward, portPoint, seatPoint, type NodeGeometry, type Point, type PortGeometry } from "./layout.js";
-import { shortProtocol, type Port, type Wire } from "./model.js";
+import { shortProtocol, wireShown, type Port, type Wire } from "./model.js";
 import type { EditorStore, Selection } from "./store.js";
 
 interface GraphProps {
@@ -50,8 +51,13 @@ export function Graph({ store, onSelect, onConnect }: GraphProps): ReactElement 
   const [temp, setTemp] = useState<{ readonly dir: "in" | "out"; readonly key: string; readonly cur: Point; readonly bad: boolean } | undefined>();
   const [hoverNode, setHoverNode] = useState<string | undefined>();
   const [compat, setCompat] = useState<Compat | undefined>();
-  const { graph, liveGraph, geometry, positions, view, selection, kinds, protocolFilter, dirty, readOnly } = state;
+  const { graph, liveGraph, geometry, positions, view, selection, kinds, protocolFilter, focused, dirty, readOnly } = state;
   const counts = useMemo(() => store.counts(), [store, graph]);
+  // Focus mode: the nodes drawn; `undefined` draws them all.
+  const shown = useMemo(() => store.focusSet(), [store, graph, kinds, protocolFilter, focused]);
+  const drawn = (id: string): boolean => !shown || shown.has(id);
+  /** What the last press landed on, for a double-click: pointer capture retargets the click to the canvas. */
+  const lastDown = useRef<{ readonly head?: string } | undefined>(undefined);
 
   const toWorld = useCallback(
     (cx: number, cy: number): Point => {
@@ -111,6 +117,14 @@ export function Graph({ store, onSelect, onConnect }: GraphProps): ReactElement 
     if (event.button !== 0) return;
     const target = event.target as HTMLElement;
     const plug = target.closest("[data-plug]") as HTMLElement | null;
+    const pressed = target.closest("[data-node]") as HTMLElement | null;
+    lastDown.current = plug
+      ? undefined
+      : target.closest("[data-head]") && pressed
+        ? { head: pressed.dataset["node"] ?? "" }
+        : !pressed && !target.closest("[data-wire]")
+          ? {}
+          : undefined;
     if (plug) {
       event.preventDefault();
       store.togglePlug(plug.dataset["plug"] ?? "");
@@ -196,6 +210,17 @@ export function Graph({ store, onSelect, onConnect }: GraphProps): ReactElement 
     if (d.type === "pan" && !d.moved) onSelect(undefined);
   };
 
+  // Double-click a title: focus on that plugin. Double-click the background: leave focus.
+  const onDoubleClick = (): void => {
+    const down = lastDown.current;
+    if (!down) return;
+    if (down.head === undefined) return store.unfocus();
+    const element = canvas.current;
+    store.focusOn(down.head, element?.clientWidth ?? 800, element?.clientHeight ?? 600);
+    // Escape leaves focus mode; its listener is on the view, so the view takes keyboard focus.
+    element?.closest<HTMLElement>(".wiring-view")?.focus({ preventScroll: true });
+  };
+
   const onPointerCancel = (): void => {
     drag.current = undefined;
     setTemp(undefined);
@@ -209,8 +234,7 @@ export function Graph({ store, onSelect, onConnect }: GraphProps): ReactElement 
   const focus = selection?.kind === "node" ? selection.id : !selection ? hoverNode : undefined;
   const selectedPort = selection?.kind === "port" ? store.port(selection.key) : undefined;
   const selectedWire = selection?.kind === "wire" ? selection.key : undefined;
-  const visible = (wire: Wire): boolean =>
-    kinds[wire.kind] && (!protocolFilter || wire.protocol === protocolFilter || wire.offerProtocol === protocolFilter);
+  const visible = (wire: Wire): boolean => wireShown(wire, kinds, protocolFilter);
   const throughPort = (wire: Wire): boolean =>
     !!selectedPort && (selectedPort.dir === "in" ? wire.to === selectedPort.key : wire.from === selectedPort.key);
 
@@ -235,7 +259,7 @@ export function Graph({ store, onSelect, onConnect }: GraphProps): ReactElement 
 
   const ghosts = dirty
     ? liveGraph.wires
-        .filter((wire) => visible(wire) && !draftKeys.has(wire.key))
+        .filter((wire) => visible(wire) && drawn(wire.fromNode) && drawn(wire.toNode) && !draftKeys.has(wire.key))
         .map((wire) => {
           const ends = endsOf(wire);
           return ends ? <path key={`gone:${wire.key}`} className={`wiring-w ${wire.kind} gone`} d={curve(...ends)} /> : null;
@@ -245,7 +269,7 @@ export function Graph({ store, onSelect, onConnect }: GraphProps): ReactElement 
   const wires: ReactElement[] = [];
   const labels: ReactElement[] = [];
   for (const wire of graph.wires) {
-    if (!visible(wire)) continue;
+    if (!visible(wire) || !drawn(wire.fromNode) || !drawn(wire.toNode)) continue;
     const ends = endsOf(wire);
     if (!ends) continue;
     const [a, b, sa, sb] = ends;
@@ -279,7 +303,7 @@ export function Graph({ store, onSelect, onConnect }: GraphProps): ReactElement 
     for (const node of graph.nodes) {
       const g = geometry[node.id];
       const at = positions[node.id];
-      if (!g || !at) continue;
+      if (!g || !at || !drawn(node.id)) continue;
       for (const pg of g.left) {
         const port = pg.port;
         if (port.kind !== "slot" || port.dir !== "in" || (protocolFilter && port.protocol !== protocolFilter)) continue;
@@ -318,6 +342,7 @@ export function Graph({ store, onSelect, onConnect }: GraphProps): ReactElement 
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}
       onPointerCancel={onPointerCancel}
+      onDoubleClick={onDoubleClick}
       onPointerLeave={() => hoverNode && setHoverNode(undefined)}
     >
       <div className="wiring-world" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}>
@@ -326,6 +351,7 @@ export function Graph({ store, onSelect, onConnect }: GraphProps): ReactElement 
           {wires}
         </svg>
         {!state.handPlaced &&
+          !shown &&
           state.columns.map((column, index) => {
             const x = positions[column.ids[0] ?? ""]?.x ?? 0;
             return (
@@ -337,7 +363,7 @@ export function Graph({ store, onSelect, onConnect }: GraphProps): ReactElement 
         {graph.nodes.map((node) => {
           const g = geometry[node.id];
           const at = positions[node.id];
-          if (!g || !at) return null;
+          if (!g || !at || !drawn(node.id)) return null;
           const nodeState = store.nodeState(node.id);
           const protoHit = !protocolFilter || node.ports.some((port) => port.protocol === protocolFilter);
           const cls = [

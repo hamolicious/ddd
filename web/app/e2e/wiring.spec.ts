@@ -141,3 +141,31 @@ test("an admin unplugs and reorders at #/admin/wiring, and an open page follows 
   await page.getByRole("button", { name: "History" }).click();
   await expect(page.locator(".wiring-history li").first()).toContainText(`v${v4}`);
 });
+
+test("double-clicking a title focuses the graph on that plugin and its neighbours; Escape leaves", async ({ page, request, baseURL }) => {
+  const bootstrap = await request.get(`${baseURL}/api/auth/bootstrap`);
+  if (bootstrap.ok() && ((await bootstrap.json()) as { needs_first_user?: boolean }).needs_first_user) {
+    await request.post(`${baseURL}/api/auth/register`, { data: ADMIN });
+  }
+  await signIn(page, ADMIN);
+  await page.goto("/#/admin/wiring");
+  const graph = page.getByRole("application", { name: "Wiring graph" });
+  await expect(graph).toBeVisible();
+  await expect(page.locator(".wiring-toolbar .wiring-pill.live")).toBeVisible({ timeout: 30_000 });
+  const box = (id: string): Locator => graph.locator(`[data-node="${id}"]`);
+  await expect(box("themes")).toBeVisible();
+
+  await box("indexer").locator(".wiring-nm").dblclick();
+  const pill = page.locator(".wiring-toolbar .wiring-focus");
+  await expect(pill).toContainText("Focus: indexer");
+  await expect(box("indexer")).toBeVisible();
+  await expect(box("graph")).toBeVisible();
+  await expect(box("fm-autocomplete")).toBeVisible();
+  await expect(box("themes")).toHaveCount(0);
+
+  // A node double-click also selects it; the first Escape clears that, the second leaves focus.
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await expect(pill).toHaveCount(0);
+  await expect(box("themes")).toBeVisible();
+});
