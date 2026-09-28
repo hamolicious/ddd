@@ -18,12 +18,16 @@
 #
 #   DOMAIN=notes.example.com ACME_EMAIL=you@example.com \
 #     APP_ORIGIN=https://notes.example.com COOKIE_SECURE=true \
-#     TRUST_PROXY_HEADERS=true SERVER_PORT=127.0.0.1:8080 \
+#     TRUST_PROXY_HEADERS=true BIND_HOST=127.0.0.1 \
 #     docker compose --profile caddy up -d --build
 #
-# `SERVER_PORT=127.0.0.1:8080` there is not decoration: `TRUST_PROXY_HEADERS=true` lets a
+# `BIND_HOST=127.0.0.1` there is not decoration: `TRUST_PROXY_HEADERS=true` lets a
 # request pick its own client IP, so it is only safe while the proxy is the *only* route
 # in. See `deploy/Caddyfile`.
+#
+# The port is defined once: `PORT` (default 8080) is where the server listens inside the
+# container, the host port it is published on, what the healthcheck and the caddy
+# upstream talk to, and the port of the loopback origins the server allows by itself.
 
 name: life-manager
 
@@ -70,19 +74,17 @@ services:
     environment:
       MONGO_URI: mongodb://mongo:27017
       MONGO_DATABASE: ${MONGO_DATABASE:-life_manager}
-      # The port the server listens on inside the container. `SERVER_PORT` is the host
-      # side of the mapping below; this is the container side, and the healthcheck and
-      # the caddy upstream follow it. Change it only when something else in the
-      # container network already owns 8080.
-      BIND_ADDR: 0.0.0.0:${BACKEND_PORT:-8080}
+      BIND_ADDR: 0.0.0.0:${PORT:-8080}
       # Required, >= 32 bytes, no default (SPEC §5.2). Rotating it logs everyone out.
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required and must be at least 32 bytes}
       MAX_ATTACHMENT_BYTES: ${MAX_ATTACHMENT_BYTES:-104857600}
-      # Origin allowlist: CORS *and* the mandatory WebSocket origin check. Since M3 the
-      # server serves the PWA itself, so its own origin must be in here or the page loads
-      # and the socket is refused with 403 before it authenticates (PROTOCOL.md §1.2).
-      # Behind the caddy profile this becomes https://${DOMAIN}.
-      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:${SERVER_PORT:-8080}}
+      # Origin allowlist: CORS *and* the mandatory WebSocket origin check. The server
+      # allows its own http://localhost:${PORT} and http://127.0.0.1:${PORT} by itself,
+      # plus http://<host>:${PORT} for every host in APP_ORIGIN_HOSTS (a LAN address the
+      # phone opens). Anything else — behind the caddy profile, https://${DOMAIN} — is
+      # listed in full here (PROTOCOL.md §1.2).
+      APP_ORIGIN: ${APP_ORIGIN:-}
+      APP_ORIGIN_HOSTS: ${APP_ORIGIN_HOSTS:-}
 
       # ---- M3: the static surface (SPEC §6.4, §8) ----
       # The image bakes all three (see `backend/Dockerfile`); these only need overriding
@@ -105,8 +107,9 @@ services:
       RUST_LOG: ${RUST_LOG:-info,life_manager_server=debug}
       # Must stay below stop_grace_period (SPEC §8: exit within 30 s).
       SHUTDOWN_GRACE_SECS: ${SHUTDOWN_GRACE_SECS:-30}
+    # BIND_HOST narrows where the host publishes it (127.0.0.1 behind the caddy profile).
     ports:
-      - "${SERVER_PORT:-8080}:${BACKEND_PORT:-8080}"
+      - "${BIND_HOST:-0.0.0.0}:${PORT:-8080}:${PORT:-8080}"
     healthcheck:
       # Liveness (never touches Mongo). `bash` rather than CMD-SHELL's dash:
       # /dev/tcp is a bash feature, and the image ships no curl.
@@ -114,7 +117,7 @@ services:
         - CMD
         - bash
         - -c
-        - 'exec 3<>/dev/tcp/127.0.0.1/${BACKEND_PORT:-8080} && printf "GET /healthz HTTP/1.0\r\nHost: localhost\r\n\r\n" >&3 && grep -q "200 OK" <&3'
+        - 'exec 3<>/dev/tcp/127.0.0.1/${PORT:-8080} && printf "GET /healthz HTTP/1.0\r\nHost: localhost\r\n\r\n" >&3 && grep -q "200 OK" <&3'
       interval: 15s
       timeout: 5s
       retries: 5
@@ -144,7 +147,7 @@ services:
       # Optional: an address for ACME expiry notices.
       ACME_EMAIL: ${ACME_EMAIL:-}
       # Where the server listens (see the server's BIND_ADDR); the Caddyfile proxies to it.
-      BACKEND_PORT: ${BACKEND_PORT:-8080}
+      PORT: ${PORT:-8080}
     ports:
       - "80:80"
       - "443:443"

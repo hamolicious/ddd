@@ -59,8 +59,11 @@ pub struct Config {
     /// `MAX_DOCUMENT_BYTES`, default 1 MiB (SPEC §3.5); clamped to the shared
     /// core's hard cap.
     pub max_document_bytes: usize,
-    /// `APP_ORIGIN` — comma-separated allowlist. Required by the WS upgrade in
-    /// M2; used for CORS in M1. Empty = same-origin only.
+    /// `APP_ORIGIN` — comma-separated allowlist, used for CORS and the WebSocket
+    /// upgrade — plus what the server derives for itself: `http://localhost:<port>` and
+    /// `http://127.0.0.1:<port>` for its own `BIND_ADDR` port, and the same for every
+    /// host in `APP_ORIGIN_HOSTS`. The port is therefore defined once, in `BIND_ADDR`,
+    /// and a moved port does not have to be repeated here.
     pub app_origins: Vec<String>,
     /// `PUBLIC_URL` — the **single** origin clients reach this server at, e.g.
     /// `https://notes.example.com`. Optional; `None` is the default and changes
@@ -268,7 +271,12 @@ impl Config {
             });
         }
 
-        let app_origins = parse_origins("APP_ORIGIN")?;
+        let mut app_origins = parse_origins("APP_ORIGIN")?;
+        for origin in derived_origins(bind_addr.port(), var("APP_ORIGIN_HOSTS").as_deref()) {
+            if !app_origins.iter().any(|o| o.eq_ignore_ascii_case(&origin)) {
+                app_origins.push(origin);
+            }
+        }
 
         // Validated by exactly the same parser as `APP_ORIGIN`, then required to be one
         // value: a `PUBLIC_URL` with a path, a trailing junk segment or two entries would
@@ -426,11 +434,10 @@ impl Config {
 
     /// `true` when `origin` is allowed to talk to this server.
     ///
-    /// Exact, case-insensitive match against `APP_ORIGIN`. No wildcards and no
-    /// suffix matching: the allowlist gates CORS today and the WebSocket upgrade
-    /// in M2 (SPEC §4.3), where a sloppy match is a cross-origin hole. An empty
-    /// allowlist allows nothing — same-origin requests carry no `Origin` the
-    /// server has to approve.
+    /// Exact, case-insensitive match against the allowlist (`APP_ORIGIN` plus the
+    /// server's own loopback origins, see [`Config::app_origins`]). No wildcards and no
+    /// suffix matching: the allowlist gates CORS and the WebSocket upgrade (SPEC §4.3),
+    /// where a sloppy match is a cross-origin hole.
     pub fn origin_allowed(&self, origin: &str) -> bool {
         let origin = origin.trim_end_matches('/');
         self.app_origins
@@ -634,6 +641,30 @@ pub fn ws_origin(origin: &str) -> Option<String> {
     }
 }
 
+/// The origins this server is its own page at: `http://localhost:<port>` and
+/// `http://127.0.0.1:<port>` on its listen port, plus one `http://<host>:<port>` per
+/// comma-separated host in `hosts` (`APP_ORIGIN_HOSTS`: a LAN address the phone opens,
+/// for example). Plain http only, because the server is TLS-unaware; anything behind
+/// a proxy is named in full in `APP_ORIGIN`.
+///
+/// Safe to allow without being asked: a page at the server's own loopback origin *is*
+/// the app, and a page on any other port (or any other host) is a different origin.
+fn derived_origins(port: u16, hosts: Option<&str>) -> Vec<String> {
+    let extra = hosts
+        .unwrap_or_default()
+        .split(',')
+        .map(str::trim)
+        .filter(|host| !host.is_empty());
+    let mut origins = Vec::new();
+    for host in ["localhost", "127.0.0.1"].into_iter().chain(extra) {
+        let origin = format!("http://{host}:{port}");
+        if !origins.contains(&origin) {
+            origins.push(origin);
+        }
+    }
+    origins
+}
+
 /// Parse `APP_ORIGIN` — comma separated, each entry `scheme://host[:port]` with
 /// no path and no trailing slash (that is what a browser sends in `Origin`).
 fn parse_origins(key: &'static str) -> Result<Vec<String>, ConfigError> {
@@ -744,6 +775,25 @@ mod tests {
             plugin_http_allow_cidrs: Vec::new(),
             plugin_enable_cron: true,
         }
+    }
+
+    #[test]
+    fn the_server_allows_its_own_loopback_origins_and_the_listed_hosts() {
+        assert_eq!(
+            derived_origins(8081, None),
+            vec!["http://localhost:8081", "http://127.0.0.1:8081"]
+        );
+        // Hosts are trimmed, empties skipped, duplicates dropped; the port is the
+        // server's own, so it is defined once.
+        assert_eq!(
+            derived_origins(8080, Some(" 192.168.0.69, ,localhost,notes.lan ")),
+            vec![
+                "http://localhost:8080",
+                "http://127.0.0.1:8080",
+                "http://192.168.0.69:8080",
+                "http://notes.lan:8080",
+            ]
+        );
     }
 
     #[test]

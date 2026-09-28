@@ -105,7 +105,7 @@ dir = "backend"
 # this task runs in `backend/` — so unset they would resolve to `backend/plugins/…` and
 # silently find nothing, which looks exactly like "the plugins failed to load".
 #
-# `WEB_DIST_DIR` makes http://localhost:8080 serve the last `mise run web-build` output,
+# `WEB_DIST_DIR` makes http://localhost:$PORT serve the last `mise run web-build` output,
 # import map and all. `mise run app` is still the live-reloading way to work on the app
 # (Vite on :5174, proxying /api, /plugins, /importmap.json and the socket here) — what
 # this adds is the *production* path on the same machine: one origin, the real CSP, the
@@ -114,6 +114,7 @@ dir = "backend"
 run = [
   "docker compose -f ../docker-compose.yaml up -d --wait mongo",
   """
+  BIND_ADDR="0.0.0.0:${PORT:-8080}" \
   WEB_DIST_DIR="${WEB_DIST_DIR:-../web/app/dist}" \
   PLUGINS_DIR="${PLUGINS_DIR:-../plugins/base/dist}" \
   KERNEL_DTS_PATH="${KERNEL_DTS_PATH:-../web/kernel-api/dist/kernel.d.ts}" \
@@ -123,10 +124,12 @@ run = [
 
 
 [tasks.dev-hot]
-description = "Hot reload ON :8080 — Vite serves the app there (LAN-exposed) and proxies /api, /plugins and the socket to the Rust server on :8081"
+description = "Hot reload ON :$PORT (8080) — Vite serves the app there (LAN-exposed) and proxies /api, /plugins and the socket to the Rust server on PORT+1"
 dir = "web"
-# One URL for every device: the PC, the phone's browser (http://<this-machine's-LAN-ip>:8080),
-# and an adb-reversed phone all get live-reloading source. The Rust server hides on :8081.
+# One URL for every device: the PC, the phone's browser (http://<this-machine's-LAN-ip>:$PORT),
+# and an adb-reversed phone all get live-reloading source. The Rust server hides on PORT+1.
+# The page's origin is Vite's, not the server's, so the server is told to allow it (and
+# every APP_ORIGIN_HOSTS host) on $PORT explicitly; its own loopback origins it derives.
 # The shell APP still serves its own downloaded bundle — it never hot reloads; use the
 # phone's Chrome against this port when iterating.
 run = [
@@ -137,9 +140,14 @@ run = [
   set -euo pipefail
   cleanup() { [ -n "${SERVER_PID:-}" ] && kill "$SERVER_PID" 2>/dev/null || true; }
   trap cleanup EXIT INT TERM
+  PORT="${PORT:-8080}"
+  SERVER_PORT=$((PORT + 1))
+  ORIGINS="http://localhost:$PORT,http://127.0.0.1:$PORT"
+  for host in ${APP_ORIGIN_HOSTS//,/ }; do ORIGINS="$ORIGINS,http://$host:$PORT"; done
   (
     cd ../backend
-    BIND_ADDR=127.0.0.1:8081 \
+    BIND_ADDR="127.0.0.1:$SERVER_PORT" \
+    APP_ORIGIN="$ORIGINS,${APP_ORIGIN:-}" \
     WEB_DIST_DIR="${WEB_DIST_DIR:-../web/app/dist}" \
     PLUGINS_DIR="${PLUGINS_DIR:-../plugins/base/dist}" \
     KERNEL_DTS_PATH="${KERNEL_DTS_PATH:-../web/kernel-api/dist/kernel.d.ts}" \
@@ -148,10 +156,10 @@ run = [
   SERVER_PID=$!
   # Wait for the API before Vite starts proxying at it.
   for _ in $(seq 1 120); do
-    curl -sf -o /dev/null http://127.0.0.1:8081/healthz && break
+    curl -sf -o /dev/null "http://127.0.0.1:$SERVER_PORT/healthz" && break
     sleep 1
   done
-  LM_SERVER=http://127.0.0.1:8081 npm run dev:app -- --port 8080 --host --strictPort
+  LM_SERVER="http://127.0.0.1:$SERVER_PORT" npm run dev:app -- --port "$PORT" --host --strictPort
   """,
 ]
 
@@ -447,9 +455,10 @@ if [ "$COUNT" -gt 1 ] && [ -z "${ANDROID_SERIAL:-}" ]; then
   echo "either: adb disconnect <the duplicate>   or: ANDROID_SERIAL=<serial> mise run shell-install"
   exit 1
 fi
-"$ADB" reverse tcp:8080 tcp:8080
+PORT="${PORT:-8080}"
+"$ADB" reverse "tcp:$PORT" "tcp:$PORT"
 "$ADB" install -r "$APK"
-echo "installed. server URL on the phone: http://127.0.0.1:8080"
+echo "installed. server URL on the phone: http://127.0.0.1:$PORT"
 if [ "${1:-}" = "--logs" ]; then
   "$ADB" logcat -c
   exec "$ADB" logcat -s flutter:V

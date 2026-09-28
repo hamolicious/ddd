@@ -46,7 +46,7 @@ docker compose up --build -d
 docker compose logs -f server
 ```
 
-Compose publishes the server on `SERVER_PORT` (8080) and mongo on
+Compose publishes the server on `PORT` (8080) and mongo on
 `127.0.0.1:MONGO_PORT`. Mongo has **no authentication** — it is loopback-only on
 purpose. Do not move that binding to `0.0.0.0`.
 
@@ -98,9 +98,10 @@ boot failure, not a warning.** A value that is set but empty counts as unset.
 
 | Variable | Default | Notes |
 |---|---|---|
-| `BIND_ADDR` | `0.0.0.0:8080` | Listen address. |
+| `BIND_ADDR` | `0.0.0.0:8080` | Listen address. Under compose and the mise tasks its port is `PORT`, the one place the port is defined. |
 | `MONGO_DATABASE` | `life_manager` | Database name inside the URI's server. |
-| `APP_ORIGIN` | *(empty)* | Comma-separated origin allowlist for CORS (M1) and the WebSocket upgrade (M2). Exact matches only: `scheme://host[:port]`, no path, no trailing slash, no wildcards. Empty allows nothing. **Add `http://127.0.0.1:41847` if anyone uses the Android shell** — see "The Android shell" below. |
+| `APP_ORIGIN` | *(empty)* | Comma-separated origin allowlist for CORS and the WebSocket upgrade. Exact matches only: `scheme://host[:port]`, no path, no trailing slash, no wildcards. The server's own `http://localhost:<port>` and `http://127.0.0.1:<port>` (the `BIND_ADDR` port) are always allowed, so they need not be listed. **Add `http://127.0.0.1:41847` if anyone uses the Android shell** — see "The Android shell" below. |
+| `APP_ORIGIN_HOSTS` | *(empty)* | Comma-separated hosts allowed as `http://<host>:<BIND_ADDR port>`, e.g. a LAN address a phone opens. Follows the port when it moves. |
 | `PUBLIC_URL` | *(empty)* | The single origin clients reach this server at, e.g. `https://lm.example.com`. Same syntax as one `APP_ORIGIN` entry — `scheme://host[:port]`, no path, no trailing slash — but a different question: `APP_ORIGIN` is *who may talk to me*, this is *what URL am I reached at*, which a TLS-unaware server behind an ingress cannot work out for itself. Optional, and unset changes nothing. Setting it narrows the Content-Security-Policy published in the Android shell's bundle manifest (`index_csp`) from scheme-wide `connect-src 'self' https: http: wss: ws:` to `connect-src 'self' <PUBLIC_URL> <the same host as wss://>` — see "The Android shell" below. |
 | `COOKIE_SECURE` | `true` | Set `false` only for plain-http local development. |
 | `TRUST_PROXY_HEADERS` | `false` | Where the client IP comes from — the input to the per-IP login backoff (SPEC §5.2) and to `ip` on every session row and audit entry (SPEC §5.4). `false`: the connection's peer address; `X-Forwarded-For` / `X-Real-IP` are ignored. `true`: the **rightmost** `X-Forwarded-For` hop, which is the one a single trusted proxy appended. **Set `true` only when a reverse proxy is the only route to the server** — otherwise a client picks its own rate-limit bucket and stamps its own origin on the audit log. Compose publishes the port directly, so it stays `false` there; behind the Kubernetes ingress of SPEC §8, set it to `true`. |
@@ -249,7 +250,7 @@ Two further consequences worth knowing:
 
 ### Compose-only
 
-`SERVER_PORT` (host port for the server, default 8080) and `MONGO_PORT` (host
+`PORT` (the server's port, inside the container and on the host, default 8080) and `MONGO_PORT` (host
 loopback port for mongo, default 27017) are read by `docker-compose.yaml`, not by
 the server.
 
