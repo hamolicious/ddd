@@ -23,8 +23,8 @@ export interface WiringViewProps {
   readonly onInspect: () => void;
 }
 
-const BTN = "wiring:tap-h wiring:inline-flex wiring:cursor-pointer wiring:items-center wiring:justify-center wiring:gap-1 wiring:rounded wiring:border wiring:border-border wiring:bg-bg-raised wiring:px-2 wiring:py-0.5 wiring:text-xs wiring:text-text wiring:hover:border-border-strong wiring:disabled:cursor-default wiring:disabled:opacity-50";
-const CHIP = "wiring-chip wiring:tap-h wiring:inline-flex wiring:cursor-pointer wiring:items-center wiring:gap-1 wiring:rounded-full wiring:border wiring:border-border wiring:bg-transparent wiring:px-2 wiring:py-0 wiring:text-xs wiring:text-text-muted wiring:aria-pressed:border-border-strong wiring:aria-pressed:text-text";
+const BTN = "admin:tap-h admin:inline-flex admin:cursor-pointer admin:items-center admin:justify-center admin:gap-1 admin:rounded admin:border admin:border-border admin:bg-bg-raised admin:px-2 admin:py-0.5 admin:text-xs admin:text-text admin:hover:border-border-strong admin:disabled:cursor-default admin:disabled:opacity-50";
+const CHIP = "wiring-chip admin:tap-h admin:inline-flex admin:cursor-pointer admin:items-center admin:gap-1 admin:rounded-full admin:border admin:border-border admin:bg-transparent admin:px-2 admin:py-0 admin:text-xs admin:text-text-muted admin:aria-pressed:border-border-strong admin:aria-pressed:text-text";
 
 export function WiringView({ store, isAdmin, compact, onSelect, onConnect, onApply, onInspect }: WiringViewProps): ReactElement {
   const state = useEditor(store);
@@ -49,11 +49,11 @@ export function WiringView({ store, isAdmin, compact, onSelect, onConnect, onApp
 
   if (!isAdmin) {
     return (
-      <section className="wiring:flex wiring:flex-col wiring:gap-3 wiring:p-4 wiring:font-sans wiring:text-text" aria-labelledby="wiring-heading">
-        <h2 id="wiring-heading" className="wiring:m-0">
+      <section className="admin:flex admin:flex-col admin:gap-3 admin:p-4 admin:font-sans admin:text-text" aria-labelledby="wiring-heading">
+        <h2 id="wiring-heading" className="admin:m-0">
           Wiring
         </h2>
-        <p className="wiring:m-0 wiring:text-sm wiring:text-text-muted">You are not an administrator. Ask one to promote your account.</p>
+        <p className="admin:m-0 admin:text-sm admin:text-text-muted">You are not an administrator. Ask one to promote your account.</p>
       </section>
     );
   }
@@ -66,9 +66,9 @@ export function WiringView({ store, isAdmin, compact, onSelect, onConnect, onApp
   const changes = state.summary?.rows.length ?? 0;
 
   return (
-    <div ref={root} className="wiring-view wiring:flex wiring:h-full wiring:w-full wiring:flex-col wiring:bg-bg wiring:font-sans wiring:text-text" tabIndex={-1}>
-      <div className="wiring-toolbar wiring:flex wiring:flex-wrap wiring:items-center wiring:gap-1.5 wiring:border-b wiring:border-border wiring:px-2 wiring:py-1" role="toolbar" aria-label="Wiring controls">
-        <span className="wiring:inline-flex wiring:gap-1" role="group" aria-label="Show">
+    <div ref={root} className="wiring-view admin:flex admin:h-full admin:w-full admin:flex-col admin:bg-bg admin:font-sans admin:text-text" tabIndex={-1}>
+      <div className="wiring-toolbar admin:flex admin:flex-wrap admin:items-center admin:gap-1.5 admin:border-b admin:border-border admin:px-2 admin:py-1" role="toolbar" aria-label="Wiring controls">
+        <span className="admin:inline-flex admin:gap-1" role="group" aria-label="Show">
           {(["service", "slot", "event"] as const).map((kind) => (
             <button key={kind} type="button" className={CHIP} aria-pressed={kinds[kind]} onClick={() => store.setKinds({ ...kinds, [kind]: !kinds[kind] })}>
               <span className={`wiring-pd ${kind}`} aria-hidden="true" />
@@ -77,7 +77,7 @@ export function WiringView({ store, isAdmin, compact, onSelect, onConnect, onApp
           ))}
         </span>
         <select
-          className="wiring:tap-h wiring:max-w-[12rem] wiring:rounded wiring:border wiring:border-border wiring:bg-bg wiring:px-1 wiring:text-xs wiring:text-text"
+          className="admin:tap-h admin:max-w-[12rem] admin:rounded admin:border admin:border-border admin:bg-bg admin:px-1 admin:text-xs admin:text-text"
           aria-label="Protocol"
           value={state.protocolFilter}
           onChange={(event) => store.setProtocolFilter(event.target.value)}
@@ -89,7 +89,7 @@ export function WiringView({ store, isAdmin, compact, onSelect, onConnect, onApp
             </option>
           ))}
         </select>
-        <span className="wiring:inline-flex wiring:gap-1">
+        <span className="admin:inline-flex admin:gap-1">
           <button type="button" className={BTN} title="Fit" aria-label="Fit" onClick={() => store.fit(...canvasSize())}>
             ⤢
           </button>
@@ -115,7 +115,7 @@ export function WiringView({ store, isAdmin, compact, onSelect, onConnect, onApp
             ↺
           </button>
         </span>
-        <span className="wiring:ml-auto wiring:inline-flex wiring:flex-wrap wiring:items-center wiring:gap-1">
+        <span className="admin:ml-auto admin:inline-flex admin:flex-wrap admin:items-center admin:gap-1">
           {state.phase === "loading" && <Pill tone="muted">loading</Pill>}
           {state.phase === "error" && (
             <Pill tone="err" title={state.error}>
@@ -150,9 +150,9 @@ export function WiringView({ store, isAdmin, compact, onSelect, onConnect, onApp
           )}
         </span>
       </div>
-      <div className="wiring:relative wiring:min-h-0 wiring:flex-1">
+      <div className="admin:relative admin:min-h-0 admin:flex-1">
         {state.phase === "error" && !state.graph.nodes.length ? (
-          <p role="alert" className="wiring:m-4 wiring:text-sm wiring:text-danger">
+          <p role="alert" className="admin:m-4 admin:text-sm admin:text-danger">
             {state.error}
           </p>
         ) : (
@@ -179,7 +179,7 @@ export function WiringView({ store, isAdmin, compact, onSelect, onConnect, onApp
         </div>
       </div>
       {state.dirty && (
-        <div className="wiring-draftbar wiring:flex wiring:flex-wrap wiring:items-center wiring:gap-2 wiring:border-t wiring:border-border wiring:px-2 wiring:py-1" role="region" aria-label="Draft">
+        <div className="wiring-draftbar admin:flex admin:flex-wrap admin:items-center admin:gap-2 admin:border-t admin:border-border admin:px-2 admin:py-1" role="region" aria-label="Draft">
           <Pill tone="draft">draft</Pill>
           <Pill tone="warn">{changes} change{changes === 1 ? "" : "s"}</Pill>
           <Pill tone="muted">on v{state.live.version}</Pill>
@@ -191,11 +191,11 @@ export function WiringView({ store, isAdmin, compact, onSelect, onConnect, onApp
               reload · {state.summary.cold.length}
             </Pill>
           )}
-          <span className="wiring:ml-auto wiring:inline-flex wiring:gap-2">
+          <span className="admin:ml-auto admin:inline-flex admin:gap-2">
             <button type="button" className={BTN} disabled={state.busy} onClick={() => store.discard()}>
               Discard
             </button>
-            <button type="button" className={`${BTN} wiring:border-accent wiring:bg-accent wiring:text-accent-text`} disabled={state.busy || !!state.readOnly} onClick={onApply}>
+            <button type="button" className={`${BTN} admin:border-accent admin:bg-accent admin:text-accent-text`} disabled={state.busy || !!state.readOnly} onClick={onApply}>
               Apply
             </button>
           </span>

@@ -27,13 +27,13 @@ export interface InspectorProps {
   readonly compact?: boolean;
 }
 
-const BTN = "wiring:tap-h wiring:inline-flex wiring:cursor-pointer wiring:items-center wiring:justify-center wiring:gap-1 wiring:rounded wiring:border wiring:border-border wiring:bg-bg-raised wiring:px-2 wiring:py-0.5 wiring:text-xs wiring:text-text wiring:hover:border-border-strong wiring:disabled:cursor-default wiring:disabled:opacity-50";
-const SM = `${BTN} wiring:min-h-0 wiring:px-1.5 wiring:py-0 wiring:text-[0.7rem] wiring:touch:min-h-[var(--lm-tap-target)]`;
-const DANGER = "wiring:border-danger wiring:text-danger";
-const PRIMARY = "wiring:border-accent wiring:bg-accent wiring:text-accent-text";
-const LINK = "wiring:cursor-pointer wiring:border-0 wiring:bg-transparent wiring:p-0 wiring:text-left wiring:font-mono wiring:text-[0.72rem] wiring:text-link wiring:underline-offset-2 wiring:hover:underline";
-const CAP = "wiring:mb-0.5 wiring:text-[0.62rem] wiring:font-semibold wiring:uppercase wiring:tracking-wide wiring:text-text-muted";
-const MONO = "wiring:font-mono wiring:text-[0.7rem] wiring:text-text-muted";
+const BTN = "admin:tap-h admin:inline-flex admin:cursor-pointer admin:items-center admin:justify-center admin:gap-1 admin:rounded admin:border admin:border-border admin:bg-bg-raised admin:px-2 admin:py-0.5 admin:text-xs admin:text-text admin:hover:border-border-strong admin:disabled:cursor-default admin:disabled:opacity-50";
+const SM = `${BTN} admin:min-h-0 admin:px-1.5 admin:py-0 admin:text-[0.7rem] admin:touch:min-h-[var(--lm-tap-target)]`;
+const DANGER = "admin:border-danger admin:text-danger";
+const PRIMARY = "admin:border-accent admin:bg-accent admin:text-accent-text";
+const LINK = "admin:cursor-pointer admin:border-0 admin:bg-transparent admin:p-0 admin:text-left admin:font-mono admin:text-[0.72rem] admin:text-link admin:underline-offset-2 admin:hover:underline";
+const CAP = "admin:mb-0.5 admin:text-[0.62rem] admin:font-semibold admin:uppercase admin:tracking-wide admin:text-text-muted";
+const MONO = "admin:font-mono admin:text-[0.7rem] admin:text-text-muted";
 
 export function Pill({ tone, children, title }: { readonly tone: string; readonly children: ReactNode; readonly title?: string }): ReactElement {
   return (
@@ -47,7 +47,7 @@ export function Inspector({ store, onSelect, onConnect, onApply, compact }: Insp
   const state = useEditor(store);
   const { selection } = state;
   return (
-    <div className="wiring-inspector wiring:flex wiring:flex-col wiring:gap-3 wiring:font-sans wiring:text-sm wiring:text-text">
+    <div className="wiring-inspector admin:flex admin:flex-col admin:gap-3 admin:font-sans admin:text-sm admin:text-text">
       {selection?.kind === "wire" && <WireCard store={store} wireKey={selection.key} onSelect={onSelect} />}
       {selection?.kind === "port" && <PortCard store={store} portKey={selection.key} onSelect={onSelect} onConnect={onConnect} />}
       {selection?.kind === "node" && <NodeCard store={store} id={selection.id} onSelect={onSelect} />}
@@ -60,14 +60,14 @@ export function Inspector({ store, onSelect, onConnect, onApply, compact }: Insp
         <HistoryList store={store} />
       </Section>
       <Section title="wiring.json" count={state.dirty ? `draft · v${state.live.version + 1}` : `live · v${state.live.version}`} open={false}>
-        <pre className="wiring:m-0 wiring:max-h-64 wiring:overflow-auto wiring:rounded wiring:bg-bg-subtle wiring:p-2 wiring:font-mono wiring:text-[0.68rem] wiring:leading-snug">{store.wiringJson()}</pre>
+        <pre className="admin:m-0 admin:max-h-64 admin:overflow-auto admin:rounded admin:bg-bg-subtle admin:p-2 admin:font-mono admin:text-[0.68rem] admin:leading-snug">{store.wiringJson()}</pre>
       </Section>
       <Section title="Activation" count={state.resolution.order.length} open={false}>
-        <ol className="wiring:m-0 wiring:flex wiring:flex-wrap wiring:gap-1 wiring:p-0">
+        <ol className="admin:m-0 admin:flex admin:flex-wrap admin:gap-1 admin:p-0">
           {state.resolution.order.map((id, i) => (
-            <li key={id} className="wiring:list-none">
+            <li key={id} className="admin:list-none">
               <button type="button" className={LINK} onClick={() => onSelect({ kind: "node", id })}>
-                <b className="wiring:mr-0.5 wiring:text-text-muted">{i + 1}</b>
+                <b className="admin:mr-0.5 admin:text-text-muted">{i + 1}</b>
                 {id}
               </button>
             </li>
@@ -98,17 +98,17 @@ export function Section({
 }): ReactElement {
   const [open, setOpen] = useState(initially);
   return (
-    <section className="wiring:border-t wiring:border-border wiring:pt-2">
-      <h4 className="wiring:m-0 wiring:flex wiring:items-center wiring:gap-2 wiring:text-sm wiring:font-semibold">
-        <button type="button" className={`${LINK} wiring:font-sans wiring:text-sm wiring:text-text wiring:no-underline`} aria-expanded={open} onClick={() => setOpen(!open)}>
-          <span aria-hidden="true" className="wiring:mr-1 wiring:inline-block wiring:w-3 wiring:text-text-muted">
+    <section className="admin:border-t admin:border-border admin:pt-2">
+      <h4 className="admin:m-0 admin:flex admin:items-center admin:gap-2 admin:text-sm admin:font-semibold">
+        <button type="button" className={`${LINK} admin:font-sans admin:text-sm admin:text-text admin:no-underline`} aria-expanded={open} onClick={() => setOpen(!open)}>
+          <span aria-hidden="true" className="admin:mr-1 admin:inline-block admin:w-3 admin:text-text-muted">
             {open ? "▾" : "▸"}
           </span>
           {title}
         </button>
         {count !== undefined && <Pill tone={tone}>{count}</Pill>}
       </h4>
-      {open && <div className="wiring:mt-1.5 wiring:flex wiring:flex-col wiring:gap-1.5">{children}</div>}
+      {open && <div className="admin:mt-1.5 admin:flex admin:flex-col admin:gap-1.5">{children}</div>}
     </section>
   );
 }
@@ -145,15 +145,15 @@ function NodeCard({ store, id, onSelect }: { readonly store: EditorStore; readon
   const outs = node.ports.filter((port) => port.dir === "out");
   return (
     <section>
-      <h4 className="wiring:m-0 wiring:flex wiring:flex-wrap wiring:items-center wiring:gap-2 wiring:text-sm wiring:font-semibold">
-        <span className="wiring:font-mono">{id}</span>
+      <h4 className="admin:m-0 admin:flex admin:flex-wrap admin:items-center admin:gap-2 admin:text-sm admin:font-semibold">
+        <span className="admin:font-mono">{id}</span>
         <Pill tone={tone} title={skipped ? `${skipped.reason}: ${skipped.detail}` : undefined}>
           {nodeState === "active" ? "activates" : nodeState}
         </Pill>
         <Pill tone="muted">v{node.version}</Pill>
         {!node.hot && <Pill tone="warn" title="not hot-pluggable: applying reloads clients">cold</Pill>}
       </h4>
-      <div className="wiring:mt-1.5 wiring:flex wiring:flex-wrap wiring:items-center wiring:gap-2">
+      <div className="admin:mt-1.5 admin:flex admin:flex-wrap admin:items-center admin:gap-2">
         <button
           type="button"
           className={`${BTN} ${nodeState === "unplugged" ? "" : DANGER}`}
@@ -170,7 +170,7 @@ function NodeCard({ store, id, onSelect }: { readonly store: EditorStore; readon
         )}
       </div>
       {also.length > 0 && (
-        <div className="wiring:mt-1 wiring:flex wiring:flex-wrap wiring:gap-1">
+        <div className="admin:mt-1 admin:flex admin:flex-wrap admin:gap-1">
           {also.map((other) => (
             <NodeLink key={other} id={other} onSelect={onSelect} />
           ))}
@@ -197,12 +197,12 @@ function NodeCard({ store, id, onSelect }: { readonly store: EditorStore; readon
                   <td>
                     {wires.length
                       ? wires.map((wire) => (
-                          <span key={wire.key} className="wiring:block">
-                            {wire.kind === "slot" && <span className={`${MONO} wiring:mr-1`}>{wire.bench ? "–" : wire.seat}</span>}
+                          <span key={wire.key} className="admin:block">
+                            {wire.kind === "slot" && <span className={`${MONO} admin:mr-1`}>{wire.bench ? "–" : wire.seat}</span>}
                             <NodeLink id={wire.fromNode} onSelect={onSelect} />
                           </span>
                         ))
-                      : <span className="wiring:text-text-muted">{port.optional ? "none · optional" : "none"}</span>}
+                      : <span className="admin:text-text-muted">{port.optional ? "none · optional" : "none"}</span>}
                   </td>
                 </tr>
               );
@@ -231,11 +231,11 @@ function NodeCard({ store, id, onSelect }: { readonly store: EditorStore; readon
                   <td>
                     {wires.length
                       ? wires.map((wire) => (
-                          <span key={wire.key} className="wiring:block">
+                          <span key={wire.key} className="admin:block">
                             <NodeLink id={wire.toNode} onSelect={onSelect} />
                           </span>
                         ))
-                      : <span className="wiring:text-text-muted">nobody</span>}
+                      : <span className="admin:text-text-muted">nobody</span>}
                   </td>
                 </tr>
               );
@@ -269,13 +269,13 @@ function TypeTable({ store, offer, need }: { readonly store: EditorStore; readon
           const has = offers.get(field.key);
           return (
             <tr key={field.key}>
-              <td className="wiring:font-mono">{field.key}</td>
-              <td className="wiring:font-mono">
+              <td className="admin:font-mono">{field.key}</td>
+              <td className="admin:font-mono">
                 {field.type}
                 {field.optional ? "?" : ""}
               </td>
-              <td className="wiring:font-mono">{has ? `${has.type}${has.optional ? "?" : ""}` : "—"}</td>
-              <td className={problems.length ? "wiring:text-danger" : "wiring:text-success"} title={problems.join("; ")}>
+              <td className="admin:font-mono">{has ? `${has.type}${has.optional ? "?" : ""}` : "—"}</td>
+              <td className={problems.length ? "admin:text-danger" : "admin:text-success"} title={problems.join("; ")}>
                 {problems.length ? "✗" : "✓"}
               </td>
             </tr>
@@ -294,23 +294,23 @@ function WireCard({ store, wireKey, onSelect }: { readonly store: EditorStore; r
   const to = store.port(wire.to);
   return (
     <section>
-      <h4 className="wiring:m-0 wiring:flex wiring:flex-wrap wiring:items-center wiring:gap-2 wiring:text-sm wiring:font-semibold">
+      <h4 className="admin:m-0 admin:flex admin:flex-wrap admin:items-center admin:gap-2 admin:text-sm admin:font-semibold">
         Wire
         <Pill tone={wire.kind}>{wire.kind}</Pill>
         {wire.byShape && <Pill tone="fit" title="wired by shape: the two ports do not share a protocol">by shape</Pill>}
         {wire.bench && <Pill tone="warn">bench</Pill>}
         {wire.kind === "slot" && !wire.bench && <Pill tone="muted">seat {wire.seat} / {state.graph.seatCount[wire.to] ?? 0}</Pill>}
       </h4>
-      <div className="wiring:mt-1 wiring:flex wiring:flex-wrap wiring:items-center wiring:gap-1">
+      <div className="admin:mt-1 admin:flex admin:flex-wrap admin:items-center admin:gap-1">
         <PortLink port={wire.from} onSelect={onSelect} /> → <PortLink port={wire.to} onSelect={onSelect} />
       </div>
-      <div className={`${MONO} wiring:mt-0.5`}>
+      <div className={`${MONO} admin:mt-0.5`}>
         {wire.offerProtocol}
         {from?.version ? `@${from.version}` : ""} → {wire.protocol}
         {to?.version ? `@${to.version}` : ""}
       </div>
       {from && to && <TypeTable store={store} offer={state.protocols.offerShape(from)} need={state.protocols.needShape(to)} />}
-      <div className="wiring:mt-1.5">
+      <div className="admin:mt-1.5">
         <button type="button" className={`${BTN} ${DANGER}`} disabled={!!state.readOnly} onClick={() => store.cutWire(wire.key)}>
           Cut wire
         </button>
@@ -339,9 +339,9 @@ function CandidateList({
       weight: candidate.auto ? 0 : candidate.ok ? 1 : 2,
     }))
     .sort((a, b) => a.weight - b.weight || a.candidate.port.localeCompare(b.candidate.port));
-  if (items.length === 0) return <span className="wiring:text-xs wiring:text-text-muted">{state.core ? "none" : "no core"}</span>;
+  if (items.length === 0) return <span className="admin:text-xs admin:text-text-muted">{state.core ? "none" : "no core"}</span>;
   return (
-    <ul className="wiring:m-0 wiring:flex wiring:list-none wiring:flex-col wiring:gap-1 wiring:p-0">
+    <ul className="admin:m-0 admin:flex admin:list-none admin:flex-col admin:gap-1 admin:p-0">
       {items.slice(0, 14).map(({ candidate, wired }) => {
         const other = store.port(candidate.port);
         const reason = !candidate.ok
@@ -352,7 +352,7 @@ function CandidateList({
               : `${other?.protocol ?? "?"}; fits by shape`
             : "";
         return (
-          <li key={candidate.port} className="wiring:flex wiring:flex-wrap wiring:items-center wiring:gap-1.5">
+          <li key={candidate.port} className="admin:flex admin:flex-wrap admin:items-center admin:gap-1.5">
             <span className={`wiring-mark ${candidate.auto ? "ok" : candidate.ok ? "fit" : "bad"}`} title={candidate.auto ? "same protocol, fits" : candidate.ok ? "fits by shape" : "does not fit"}>
               {candidate.auto ? "✓" : candidate.ok ? "◇" : "✗"}
             </span>
@@ -371,7 +371,7 @@ function CandidateList({
               </button>
             ) : null}
             {reason && (
-              <span className={`${MONO} wiring:basis-full`} title={candidate.reasons.join("; ")}>
+              <span className={`${MONO} admin:basis-full`} title={candidate.reasons.join("; ")}>
                 {reason}
               </span>
             )}
@@ -403,8 +403,8 @@ function PortCard({
   const edited = port.dir === "in" && port.kind === "slot" && state.draft.order[port.key] !== undefined;
   return (
     <section>
-      <h4 className="wiring:m-0 wiring:flex wiring:flex-wrap wiring:items-center wiring:gap-2 wiring:text-sm wiring:font-semibold">
-        <span className="wiring:font-mono">
+      <h4 className="admin:m-0 admin:flex admin:flex-wrap admin:items-center admin:gap-2 admin:text-sm admin:font-semibold">
+        <span className="admin:font-mono">
           {port.plugin} · {port.name}
         </span>
         <Pill tone={port.kind}>{port.kind === "slot" && port.dir === "in" ? (port.seats === 1 ? "1 seat" : "multi-seat") : port.kind}</Pill>
@@ -414,23 +414,23 @@ function PortCard({
           </Pill>
         )}
       </h4>
-      <div className={`${MONO} wiring:mt-0.5`} title={portTitle(port)}>
+      <div className={`${MONO} admin:mt-0.5`} title={portTitle(port)}>
         {port.dir === "in" ? "consumes" : "provides"} {port.protocol}
         {port.version ? `@${port.version}` : ""}
         {port.optional ? " · optional" : ""}
       </div>
-      <div className="wiring:mt-1.5">
+      <div className="admin:mt-1.5">
         <div className={CAP}>{port.dir === "out" ? "wired to" : port.kind === "slot" ? "seats" : port.kind === "service" ? "bound to" : "listening to"}</div>
         {wires.length === 0 ? (
-          <span className="wiring:text-xs wiring:text-text-muted">{port.dir === "in" && port.kind === "service" && !port.optional ? "nothing · will not activate" : "nothing"}</span>
+          <span className="admin:text-xs admin:text-text-muted">{port.dir === "in" && port.kind === "service" && !port.optional ? "nothing · will not activate" : "nothing"}</span>
         ) : port.dir === "in" && port.kind === "slot" ? (
-          <ol className="wiring:m-0 wiring:flex wiring:list-none wiring:flex-col wiring:gap-1 wiring:p-0">
+          <ol className="admin:m-0 admin:flex admin:list-none admin:flex-col admin:gap-1 admin:p-0">
             {wires.map((wire, i) => (
-              <li key={wire.key} className={`wiring:flex wiring:flex-wrap wiring:items-center wiring:gap-1.5${wire.bench ? " wiring:opacity-60" : ""}`}>
+              <li key={wire.key} className={`admin:flex admin:flex-wrap admin:items-center admin:gap-1.5${wire.bench ? " admin:opacity-60" : ""}`}>
                 <span className="wiring-no">{wire.bench ? "–" : wire.seat}</span>
                 <NodeLink id={wire.fromNode} onSelect={onSelect} />
                 {wire.byShape && <Pill tone="fit">by shape</Pill>}
-                <span className="wiring:ml-auto wiring:flex wiring:gap-1">
+                <span className="admin:ml-auto admin:flex admin:gap-1">
                   {!wire.bench && (
                     <>
                       <button type="button" className={SM} aria-label={`Move ${wire.fromNode} up`} disabled={!!state.readOnly || i === 0} onClick={() => store.moveSeat(port.key, wire.from, -1)}>
@@ -455,13 +455,13 @@ function PortCard({
             ))}
           </ol>
         ) : (
-          <ul className="wiring:m-0 wiring:flex wiring:list-none wiring:flex-col wiring:gap-1 wiring:p-0">
+          <ul className="admin:m-0 admin:flex admin:list-none admin:flex-col admin:gap-1 admin:p-0">
             {wires.map((wire) => (
-              <li key={wire.key} className="wiring:flex wiring:flex-wrap wiring:items-center wiring:gap-1.5">
+              <li key={wire.key} className="admin:flex admin:flex-wrap admin:items-center admin:gap-1.5">
                 <span className="wiring-mark ok">●</span>
                 {port.dir === "in" ? <NodeLink id={wire.fromNode} onSelect={onSelect} /> : <PortLink port={wire.to} onSelect={onSelect} />}
                 {wire.kind === "slot" && port.dir === "out" && <Pill tone="muted">seat {wire.bench ? "–" : wire.seat}</Pill>}
-                <button type="button" className={`${SM} ${DANGER} wiring:ml-auto`} aria-label={`Cut ${wire.key}`} disabled={!!state.readOnly} onClick={() => store.cutWire(wire.key)}>
+                <button type="button" className={`${SM} ${DANGER} admin:ml-auto`} aria-label={`Cut ${wire.key}`} disabled={!!state.readOnly} onClick={() => store.cutWire(wire.key)}>
                   Cut
                 </button>
               </li>
@@ -469,7 +469,7 @@ function PortCard({
           </ul>
         )}
         {edited && (
-          <div className="wiring:mt-1 wiring:flex wiring:items-center wiring:gap-2">
+          <div className="admin:mt-1 admin:flex admin:items-center admin:gap-2">
             <Pill tone="warn" title="seat order set by hand, stored in `order`">
               order
             </Pill>
@@ -480,9 +480,9 @@ function PortCard({
         )}
       </div>
       {fields.length > 0 && (
-        <div className="wiring:mt-1.5">
+        <div className="admin:mt-1.5">
           <div className={CAP}>{port.dir === "in" ? `needs${port.needs ? " · slice" : ""}` : "offers"}</div>
-          <div className="wiring:flex wiring:flex-wrap wiring:gap-1">
+          <div className="admin:flex admin:flex-wrap admin:gap-1">
             {fields.map((field) => (
               <code key={field.key} className="wiring-code">
                 {field.key}
@@ -492,7 +492,7 @@ function PortCard({
           </div>
         </div>
       )}
-      <div className="wiring:mt-1.5">
+      <div className="admin:mt-1.5">
         <div className={CAP}>could connect</div>
         <CandidateList store={store} port={port} onSelect={onSelect} onConnect={onConnect} />
       </div>
@@ -505,8 +505,8 @@ function LiveMovedCard({ store }: { readonly store: EditorStore }): ReactElement
   const moved = state.liveMoved;
   if (!moved) return null;
   return (
-    <section className="wiring:rounded wiring:border wiring:border-warning wiring:p-2">
-      <h4 className="wiring:m-0 wiring:flex wiring:items-center wiring:gap-2 wiring:text-sm wiring:font-semibold">
+    <section className="admin:rounded admin:border admin:border-warning admin:p-2">
+      <h4 className="admin:m-0 admin:flex admin:items-center admin:gap-2 admin:text-sm admin:font-semibold">
         Live moved
         <Pill tone="warn">
           v{moved.from} → v{moved.to}
@@ -518,7 +518,7 @@ function LiveMovedCard({ store }: { readonly store: EditorStore }): ReactElement
         )}
       </h4>
       {moved.changed.length > 0 && (
-        <ul className="wiring:m-0 wiring:mt-1 wiring:flex wiring:list-none wiring:flex-col wiring:gap-0.5 wiring:p-0">
+        <ul className="admin:m-0 admin:mt-1 admin:flex admin:list-none admin:flex-col admin:gap-0.5 admin:p-0">
           {moved.changed.map((line) => (
             <li key={line} className={MONO}>
               {line}
@@ -544,8 +544,8 @@ export function ChangesCard({
   const state = useEditor(store);
   const summary = state.summary;
   return (
-    <section className="wiring-changes wiring:rounded wiring:border wiring:border-border wiring:p-2">
-      <h4 className="wiring:m-0 wiring:flex wiring:flex-wrap wiring:items-center wiring:gap-2 wiring:text-sm wiring:font-semibold">
+    <section className="wiring-changes admin:rounded admin:border admin:border-border admin:p-2">
+      <h4 className="admin:m-0 admin:flex admin:flex-wrap admin:items-center admin:gap-2 admin:text-sm admin:font-semibold">
         Changes
         <Pill tone="warn">{summary?.rows.length ?? 0}</Pill>
         <Pill tone="muted" title="the live version this draft started from">
@@ -565,9 +565,9 @@ export function ChangesCard({
       </h4>
       {summary && (
         <>
-          <ul className="wiring:m-0 wiring:mt-1 wiring:flex wiring:list-none wiring:flex-col wiring:gap-0.5 wiring:p-0">
+          <ul className="admin:m-0 admin:mt-1 admin:flex admin:list-none admin:flex-col admin:gap-0.5 admin:p-0">
             {summary.rows.map((row, i) => (
-              <li key={`${row.text}:${i}`} className="wiring:flex wiring:items-start wiring:gap-1.5">
+              <li key={`${row.text}:${i}`} className="admin:flex admin:items-start admin:gap-1.5">
                 <span className={`wiring-op ${row.op}`}>{row.op === "add" ? "+" : row.op === "del" ? "−" : "~"}</span>
                 {row.node ? (
                   <NodeLink id={row.node} onSelect={onSelect} />
@@ -581,7 +581,7 @@ export function ChangesCard({
             ))}
           </ul>
           {summary.alsoStops.length > 0 && (
-            <div className="wiring:mt-1 wiring:flex wiring:flex-wrap wiring:items-center wiring:gap-1">
+            <div className="admin:mt-1 admin:flex admin:flex-wrap admin:items-center admin:gap-1">
               <Pill tone="err">also stops</Pill>
               {summary.alsoStops.map((id) => (
                 <NodeLink key={id} id={id} onSelect={onSelect} />
@@ -589,15 +589,15 @@ export function ChangesCard({
             </div>
           )}
           {summary.alsoStarts.length > 0 && (
-            <div className="wiring:mt-1 wiring:flex wiring:flex-wrap wiring:items-center wiring:gap-1">
+            <div className="admin:mt-1 admin:flex admin:flex-wrap admin:items-center admin:gap-1">
               <Pill tone="ok">also starts</Pill>
               {summary.alsoStarts.map((id) => (
                 <NodeLink key={id} id={id} onSelect={onSelect} />
               ))}
             </div>
           )}
-          <div className={`${CAP} wiring:mt-1.5`}>apply plan</div>
-          <ol className="wiring:m-0 wiring:flex wiring:flex-col wiring:gap-0.5 wiring:pl-4">
+          <div className={`${CAP} admin:mt-1.5`}>apply plan</div>
+          <ol className="admin:m-0 admin:flex admin:flex-col admin:gap-0.5 admin:pl-4">
             <li className={MONO}>save v{state.live.version + 1} · wiring.applied</li>
             {summary.steps.map((step) => (
               <li key={step} className={MONO}>
@@ -609,7 +609,7 @@ export function ChangesCard({
         </>
       )}
       {!compact && (
-        <div className="wiring:mt-2 wiring:flex wiring:gap-2">
+        <div className="admin:mt-2 admin:flex admin:gap-2">
           <button type="button" className={BTN} disabled={state.busy} onClick={() => store.discard()}>
             Discard
           </button>
@@ -627,11 +627,11 @@ function DiagnosticsList({ store, onSelect }: { readonly store: EditorStore; rea
   const diagnostics = state.resolution.diagnostics;
   if (diagnostics.length === 0) return <Pill tone="ok">ok</Pill>;
   return (
-    <ul className="wiring:m-0 wiring:flex wiring:list-none wiring:flex-col wiring:gap-1 wiring:p-0">
+    <ul className="admin:m-0 admin:flex admin:list-none admin:flex-col admin:gap-1 admin:p-0">
       {diagnostics.map((d, i) => (
-        <li key={`${d.plugin}:${d.code}:${i}`} className="wiring:flex wiring:items-start wiring:gap-1.5">
+        <li key={`${d.plugin}:${d.code}:${i}`} className="admin:flex admin:items-start admin:gap-1.5">
           <Pill tone={d.severity === "error" ? "err" : "warn"}>{d.severity === "error" ? "error" : "warn"}</Pill>
-          <button type="button" className={`${LINK} wiring:font-sans wiring:text-xs wiring:text-text`} title={d.code} onClick={() => onSelect(d.port ? { kind: "port", key: d.port } : { kind: "node", id: d.plugin })}>
+          <button type="button" className={`${LINK} admin:font-sans admin:text-xs admin:text-text`} title={d.code} onClick={() => onSelect(d.port ? { kind: "port", key: d.port } : { kind: "node", id: d.plugin })}>
             {d.message}
           </button>
         </li>
@@ -642,18 +642,18 @@ function DiagnosticsList({ store, onSelect }: { readonly store: EditorStore; rea
 
 function HistoryList({ store }: { readonly store: EditorStore }): ReactElement {
   const state = useEditor(store);
-  if (state.history.length === 0) return <span className="wiring:text-xs wiring:text-text-muted">{state.routes ? "none" : "no wiring routes"}</span>;
+  if (state.history.length === 0) return <span className="admin:text-xs admin:text-text-muted">{state.routes ? "none" : "no wiring routes"}</span>;
   return (
-    <ol className="wiring-history wiring:m-0 wiring:flex wiring:list-none wiring:flex-col wiring:gap-1 wiring:p-0">
+    <ol className="wiring-history admin:m-0 admin:flex admin:list-none admin:flex-col admin:gap-1 admin:p-0">
       {state.history.map((entry) => (
-        <li key={entry.version} className="wiring:flex wiring:flex-wrap wiring:items-center wiring:gap-1.5">
+        <li key={entry.version} className="admin:flex admin:flex-wrap admin:items-center admin:gap-1.5">
           <Pill tone={entry.version === state.live.version ? "ok" : "muted"}>v{entry.version}</Pill>
-          <span className="wiring:text-xs">{entry.action}</span>
+          <span className="admin:text-xs">{entry.action}</span>
           <span className={MONO} title={entry.subject ? `${entry.actor ?? ""} · ${entry.subject}` : (entry.actor ?? "")}>
             {entry.actor ?? "—"}
             {entry.subject ? ` · ${entry.subject}` : ""}
           </span>
-          <span className={`${MONO} wiring:ml-auto`}>{formatWhen(entry.at)}</span>
+          <span className={`${MONO} admin:ml-auto`}>{formatWhen(entry.at)}</span>
           {entry.version !== state.live.version && (
             <button type="button" className={SM} disabled={!!state.readOnly} aria-label={`Load v${entry.version} as a draft`} onClick={() => void store.loadVersion(entry.version)}>
               Load

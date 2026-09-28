@@ -1,7 +1,8 @@
 /**
  * The wiring editor (PLUGIN-PROTOCOLS §9 step 7, "done when"): an admin unplugs a plugin
- * and reorders two sidebar seats at `#/wiring`, applies, and a second page that was
- * already open follows each change in place, without a reload. Then everything goes back.
+ * and reorders two sidebar seats in admin's Wiring tab (`#/admin/wiring`), applies, and a
+ * second page that was already open follows each change in place, without a reload. Then
+ * everything goes back.
  *
  * The second page's plugin set is read through `window.__lmTest` (`boot/test-hooks.ts`,
  * on when `localStorage["lm:test-hooks"]` is `"1"`), and its screen through the DOM: the
@@ -53,7 +54,7 @@ async function applyDraft(page: Page): Promise<number> {
 const seatButton = (page: Page, plugin: string, direction: "up" | "down"): Locator =>
   page.getByRole("button", { name: `Move ${plugin} ${direction}` });
 
-test("an admin unplugs and reorders at #/wiring, and an open page follows without a reload", async ({ page, request, baseURL }) => {
+test("an admin unplugs and reorders at #/admin/wiring, and an open page follows without a reload", async ({ page, request, baseURL }) => {
   test.setTimeout(180_000);
   page.on("dialog", (dialog) => {
     void dialog.dismiss();
@@ -86,8 +87,9 @@ test("an admin unplugs and reorders at #/wiring, and an open page follows withou
   const reloads: string[] = [];
   second.on("load", () => reloads.push(second.url()));
 
-  // The editor.
-  await page.goto("/#/wiring");
+  // The editor: admin's Wiring tab.
+  await page.goto("/#/admin/wiring");
+  await expect(page.getByRole("tab", { name: "Wiring" })).toHaveAttribute("aria-selected", "true");
   const graph = page.getByRole("application", { name: "Wiring graph" });
   await expect(graph).toBeVisible();
   await expect(page.locator(".wiring-toolbar .wiring-pill.live")).toBeVisible({ timeout: 30_000 });

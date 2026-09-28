@@ -2,7 +2,7 @@
   "id": "admin",
   "version": "1.0.0",
   "name": "Admin",
-  "description": "Users, invites, audit log, orphan files, and the plugin list.",
+  "description": "Users, invites, audit log, orphan files, the plugin list, and the wiring editor.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
@@ -15,9 +15,16 @@
         "navigate",
         "current",
         "onChange",
-        "match",
         "href",
         "url"
+      ]
+    },
+    "shell": {
+      "protocol": "lm/shell@^1.0",
+      "needs": [
+        "layout",
+        "subscribeLayout",
+        "toggleAltbar"
       ]
     },
     "menu": {
@@ -26,7 +33,8 @@
         "open",
         "openSheet",
         "modal",
-        "confirm"
+        "confirm",
+        "close"
       ]
     }
   },
@@ -36,6 +44,10 @@
     },
     "view": {
       "protocol": "lm/main.view@1.0.0"
+    },
+    "panel": {
+      "protocol": "lm/altbar.panel@1.0.0",
+      "order": 60
     },
     "settings": {
       "protocol": "lm/settings.section@1.0.0",

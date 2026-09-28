@@ -40,10 +40,11 @@ import {
  * `snapshots` moved out of `admin` into a plugin of its own, since renamed `changes`;
  * `welcome` replaced the server's own first-run seeding; `indexer` and `fm-autocomplete`
  * were added, and then `graph`; then `syntax-highlight`; on 2026-09-28 the `wiring`
- * editor (PLUGIN-PROTOCOLS §7). The base distribution and `BASE_PLUGIN_IDS` — what
- * `?safe=1` boots — are the same twenty-six. `safe-mode.spec.ts` is what pins that.
+ * editor (PLUGIN-PROTOCOLS §7) was added as a plugin and, the same day, folded into
+ * `admin` as its Wiring tab. The base distribution and `BASE_PLUGIN_IDS` — what
+ * `?safe=1` boots — are the same twenty-five. `safe-mode.spec.ts` is what pins that.
  */
-const EXPECTED_PLUGINS = 27;
+const EXPECTED_PLUGINS = 26;
 
 /**
  * `--lm-bg` as the `midnight` theme paints it (`plugins/base/themes/src/index.tsx`).

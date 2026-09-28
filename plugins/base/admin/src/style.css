@@ -1,7 +1,8 @@
 /*
- * The graph itself: boxes, ports, wires and seats. Utilities cannot reach SVG paths or
- * the geometry `layout.ts` fixes (row heights, the title row), so those live here, in the
- * app's tokens. Everything else on the screen is prefixed utilities.
+ * The wiring editor's graph (`wiring/`): boxes, ports, wires and seats. Utilities cannot
+ * reach SVG paths or the geometry `wiring/layout.ts` fixes (row heights, the title row),
+ * so those live here, in the app's tokens, under the graph's own `.wiring-*` names.
+ * Everything else in admin is prefixed utilities.
  */
 
 .wiring-view {

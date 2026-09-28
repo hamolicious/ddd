@@ -2838,9 +2838,9 @@
     "semantic_hash": ""
   },
   "docker-compose.yaml": {
-    "mtime": 1790590752.0819855,
-    "seen": 1790591237.0587778,
-    "ast_hash": "7c70ba3f5d014c279d7bd77c237fc671",
+    "mtime": 1790593254.8662965,
+    "seen": 1790594241.4872034,
+    "ast_hash": "6938e27f4888aebed396754717964e7a",
     "semantic_hash": ""
   },
   "plugins/base/README.md": {
@@ -5430,9 +5430,9 @@
     "semantic_hash": ""
   },
   "plugins/base/wiring/manifest.json": {
-    "mtime": 1790590468.5361567,
-    "seen": 1790590494.4611943,
-    "ast_hash": "a160642baea38b96013e3a58d1029a76",
+    "mtime": 1790594211.4590957,
+    "seen": 1790594241.4571085,
+    "ast_hash": "e10725e8d6203794034def22d36a565f",
     "semantic_hash": ""
   },
   "plugins/base/wiring/src/Graph.tsx": {
@@ -5490,9 +5490,9 @@
     "semantic_hash": ""
   },
   "plugins/base/wiring/src/index.tsx": {
-    "mtime": 1790588624.8825288,
-    "seen": 1790590494.4612164,
-    "ast_hash": "83edc00a288a368bfdb2e653790691b5",
+    "mtime": 1790594211.458508,
+    "seen": 1790594241.45746,
+    "ast_hash": "47598812693b16f23542edd4e9c59d56",
     "semantic_hash": ""
   },
   "plugins/base/wiring/src/layout.test.ts": {

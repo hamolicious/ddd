@@ -106,18 +106,12 @@ export const useConfirm = (): Dialogs["confirm"] => useContext(DialogsContext).c
 export const useModal = (): Dialogs["modal"] => useContext(DialogsContext).modal;
 export const useSheet = (): Dialogs["openSheet"] => useContext(DialogsContext).openSheet;
 
-/**
- * The way to the graph editor (`#/wiring`), which belongs to the `wiring` plugin: this
- * plugin only asks the router whether the route exists and navigates to it. Asked at
- * render time, because the editor can be plugged in or out while this screen is open.
- */
+/** The way from the Wiring card to the graph editor, the Wiring tab (`#/admin/wiring`). */
 export interface WiringEditorLink {
-  available(): boolean;
   open(): void;
 }
 
 export const WiringEditorContext = createContext<WiringEditorLink>({
-  available: () => false,
   open: () => {},
 });
 

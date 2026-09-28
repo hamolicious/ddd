@@ -1,6 +1,7 @@
 /**
- * `wiring` — the wiring editor (PLUGIN-PROTOCOLS §7): every plugin's ports and the wires
- * between them, drafts, Apply, history and rollback, at `#/wiring`.
+ * The wiring editor (PLUGIN-PROTOCOLS §7): every plugin's ports and the wires between
+ * them, drafts, Apply, history and rollback. It is the admin plugin's Wiring tab,
+ * `#/admin/wiring`; `../index.tsx` offers what this builds.
  *
  * - `model.ts` — nodes, ports and wires from the plugin list and a resolution.
  * - `draft.ts` — the edits: connect, cut, seats, plug, and rebasing onto a newer live.
@@ -9,11 +10,8 @@
  * - `store.ts` — the state: live, draft, resolutions, plan, selection, storage.
  * - `Graph.tsx`, `Inspector.tsx`, `WiringView.tsx` — the screen.
  *
- * Written against `kernel.ports` alone: it names its own ports (`router`, `shell`, `menu`
- * in; `route`, `view`, `panel`, `commands` out) and the server's resolver wires
- * them. It has no kernel privilege; everything goes through the admin-only wiring routes,
- * and the plugin hides its entry points for non-admins as a courtesy (the route exists
- * for everyone so a direct link says "not an administrator" rather than 404).
+ * Everything goes through the admin-only wiring routes; the server authorizes, and the
+ * tab is hidden from nobody (a non-admin sees "not an administrator").
  *
  * Previews run locally through the Wasm core; without it, and offline, the editor is
  * read-only. A draft lives in this browser, and in `localStorage` so a reload keeps it.
@@ -26,12 +24,10 @@ import type { Kernel } from "@kernel";
 import type { AltbarPanel } from "@protocols/lm/altbar.panel";
 import type { Command } from "@protocols/lm/commands.command";
 import type { ContextMenu } from "@protocols/lm/context-menu";
-import type { MainView } from "@protocols/lm/main.view";
 import type { Router } from "@protocols/lm/router";
-import type { Route } from "@protocols/lm/router.route";
 import type { Shell } from "@protocols/lm/shell";
 
-import { OfflineCopyState, offlineCopies } from "../../_shared/offline-copy.js";
+import { OfflineCopyState, offlineCopies } from "../../../_shared/offline-copy.js";
 
 import { createWiringClient } from "./api.js";
 import type { ChangeSummary } from "./changes.js";
@@ -39,7 +35,9 @@ import { Inspector } from "./Inspector.js";
 import { EditorStore, type Selection } from "./store.js";
 import { WiringView } from "./WiringView.js";
 
-export const VIEW = "wiring.main";
+/** The admin section the editor is, and its path. */
+export const WIRING_SECTION = "wiring";
+export const WIRING_PATH = `/admin/${WIRING_SECTION}`;
 
 const ICON = (
   <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true">
@@ -50,13 +48,27 @@ const ICON = (
   </svg>
 );
 
-/** What `activate` leaves behind for `deactivate` to undo. */
-let teardown: (() => void) | undefined;
+export interface WiringEditorOptions {
+  readonly kernel: Kernel;
+  readonly router: Pick<Router, "navigate" | "current">;
+  readonly shell: Pick<Shell, "layout" | "subscribeLayout" | "toggleAltbar">;
+  readonly menu: Pick<ContextMenu, "confirm" | "openSheet" | "close">;
+  /** The `main.view` id the section renders in, for the panel's `when`. */
+  readonly viewId: string;
+}
 
-export default function activate(kernel: Kernel): void {
-  const router = kernel.ports.use<Pick<Router, "navigate" | "current" | "onChange">>("router");
-  const shell = kernel.ports.use<Pick<Shell, "layout" | "subscribeLayout" | "toggleAltbar">>("shell");
-  const menu = kernel.ports.use<Pick<ContextMenu, "confirm" | "modal" | "openSheet" | "close">>("menu");
+/** What admin offers for the editor, and how to take it down. */
+export interface WiringEditor {
+  /** The section's body: the toolbar, the graph and the draft bar. */
+  readonly Section: () => ReactElement;
+  /** The inspector, in the altbar while the Wiring tab is showing. */
+  readonly panel: AltbarPanel;
+  readonly commands: readonly Command[];
+  /** Everything the editor built itself; the kernel withdraws the offers. */
+  dispose(): void;
+}
+
+export function createWiringEditor({ kernel, router, shell, menu, viewId }: WiringEditorOptions): WiringEditor {
   const admin = kernel.session.isAdmin();
 
   const copies = new OfflineCopyState();
@@ -86,6 +98,7 @@ export default function activate(kernel: Kernel): void {
 
   let sheetOpen = false;
   const isCompact = (): boolean => shell.layout().compact;
+  const onWiringTab = (): boolean => router.current().split("?")[0] === WIRING_PATH;
 
   const openSheet = (): void => {
     if (sheetOpen) return;
@@ -111,7 +124,7 @@ export default function activate(kernel: Kernel): void {
       menu.confirm({
         title: "Wire by shape?",
         description: (
-          <span className="wiring:font-mono wiring:text-xs">
+          <span className="admin:font-mono admin:text-xs">
             {offerProtocol} → {needProtocol}
           </span>
         ),
@@ -125,7 +138,7 @@ export default function activate(kernel: Kernel): void {
       menu.confirm({
         title: summary.stopsEditor ? "This draft stops the wiring editor" : `This draft adds ${summary.addedErrors} error${summary.addedErrors === 1 ? "" : "s"}`,
         description: (
-          <span className="wiring:text-xs">
+          <span className="admin:text-xs">
             {summary.stopsEditor && summary.addedErrors > 0 ? `+${summary.addedErrors} errors · ` : ""}
             Way back: <code>#/admin/plugins</code> · <code>?safe=bare</code>
           </span>
@@ -136,11 +149,9 @@ export default function activate(kernel: Kernel): void {
     );
   };
 
-  // ---- what the plugin offers ----
+  // ---- what admin offers for it ----
 
-  kernel.ports.offer<Route>("route", { path: "/wiring", view: VIEW });
-
-  const Host = (): ReactElement => {
+  const Section = (): ReactElement => {
     const layout = useSyncExternalStore(shell.subscribeLayout, shell.layout, shell.layout);
     useEffect(() => {
       void store.load();
@@ -149,39 +160,36 @@ export default function activate(kernel: Kernel): void {
       <WiringView store={store} isAdmin={admin} compact={layout.compact} onSelect={select} onConnect={connect} onApply={apply} onInspect={openSheet} />
     );
   };
-  kernel.ports.offer<MainView>("view", { id: VIEW, title: "Wiring", component: Host });
 
-  if (admin) {
-    kernel.ports.offer<AltbarPanel>("panel", {
-      id: "wiring.inspector",
-      title: "Inspector",
-      icon: ICON,
-      order: 60,
-      when: (view) => view.id === VIEW,
-      component: () => <Inspector store={store} onSelect={select} onConnect={connect} onApply={apply} />,
-    });
-    kernel.ports.offer<Command>("commands", [
-      { id: "wiring.open", title: "Open the wiring editor", category: "Wiring", run: () => router.navigate("/wiring") },
-      {
-        id: "wiring.inspect",
-        title: "Show the wiring inspector",
-        category: "Wiring",
-        when: () => router.current().split("?")[0] === "/wiring",
-        run: () => (isCompact() ? openSheet() : shell.toggleAltbar(true)),
-      },
-    ]);
-  }
-
-  teardown = () => {
-    unsubscribeSync();
-    window.removeEventListener("focus", onFocus);
-    if (sheetOpen) menu.close();
-    store.dispose();
+  const panel: AltbarPanel = {
+    id: "admin.wiring.inspector",
+    title: "Inspector",
+    icon: ICON,
+    order: 60,
+    when: (view) => view.id === viewId && view.params["section"] === WIRING_SECTION,
+    component: () => <Inspector store={store} onSelect={select} onConnect={connect} onApply={apply} />,
   };
-}
 
-/** Everything `activate` built itself; the kernel withdraws the offers (`"hot": true`). */
-export function deactivate(): void {
-  teardown?.();
-  teardown = undefined;
+  const commands: readonly Command[] = [
+    { id: "admin.wiring.open", title: "Open the wiring editor", category: "Wiring", run: () => router.navigate(WIRING_PATH) },
+    {
+      id: "admin.wiring.inspect",
+      title: "Show the wiring inspector",
+      category: "Wiring",
+      when: onWiringTab,
+      run: () => (isCompact() ? openSheet() : shell.toggleAltbar(true)),
+    },
+  ];
+
+  return {
+    Section,
+    panel,
+    commands,
+    dispose: () => {
+      unsubscribeSync();
+      window.removeEventListener("focus", onFocus);
+      if (sheetOpen) menu.close();
+      store.dispose();
+    },
+  };
 }

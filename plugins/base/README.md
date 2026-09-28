@@ -1,6 +1,6 @@
 # `plugins/base/` — the base distribution
 
-The visible app. Twenty-six plugins that happen to ship with the server and are
+The visible app. Twenty-five plugins that happen to ship with the server and are
 [installed like any other](../SPEC.md#62-package-manifest-capabilities) — individually
 replaceable, individually removable, and holding no privilege the kernel does not give
 every plugin.
@@ -46,12 +46,11 @@ dist/<id>/<version>/              build output = the installed layout the server
 | `syntax-highlight` | fenced code highlighted with tree-sitter, in read mode and the editor; users install catalog languages as needed, or upload their own grammar + `highlights.scm` | `syntax.language` |
 | `editor` | edit mode (CodeMirror 6 + `y-codemirror.next`) | `editor.extension`, `editor.paste` |
 | `settings` | the settings shell | `settings.section` |
-| `admin` | users, invites, audit, orphans, plugins | — |
+| `admin` | users, invites, audit, orphans, plugins, and the wiring editor as its Wiring tab (`#/admin/wiring`): every plugin's ports and wires, drafts over the live wiring, Apply, history and rollback through the admin-only wiring routes | — |
 | `welcome` | fills a new, empty workspace with a short tour: one note per base feature | — |
 | `indexer` | workspace stats, every frontmatter field and its values, each note's incoming and outgoing connections — rebuilt locally on every edit, read through its service | — |
 | `fm-autocomplete` | while typing frontmatter in an editor, suggests the keys in use and then the typed key's values, from `indexer` | — |
 | `graph` | every note and its links as a live force-directed graph: the whole workspace at `#/graph`, the open note's neighbourhood in the altbar; built from `indexer`'s documents and outgoing connections | — |
-| `wiring` | the wiring editor at `#/wiring`: every plugin's ports and wires, drafts over the live wiring, Apply, history and rollback through the admin-only wiring routes; the first plugin written against `kernel.ports` alone | — |
 
 That is the whole table. `calendar` and `agenda` — M4's proof plugins, which shipped here
 and were never in `BASE_PLUGIN_IDS` — were **removed** on 2026-09-24 at the owner's
@@ -98,9 +97,8 @@ flowchart TD
     folders --> router & context-menu
     graph --> router & shell-ui
     settings --> router
-    admin --> router & context-menu
+    admin --> router & shell-ui & context-menu
     changes --> markdown & router & shell-ui & context-menu
-    wiring --> router & shell-ui & context-menu
 ```
 
 `attachments`, `commands`, `editor`, `header`, `native-preview`, `notices`,
@@ -130,7 +128,7 @@ uses; the document experience stacks `viewer` and `editor` as peer *modes* offer
 serves the workspace index that `graph` and `fm-autocomplete` read; and `folders` is the
 one browse plugin built on another (`doc-list`). Replacing any node means serving the
 protocols on its incoming arrows — which plugin does is a wiring decision, made in the
-`wiring` editor, not in the consumer.
+wiring editor (the admin plugin's Wiring tab), not in the consumer.
 
 ## Protocols and ports
 

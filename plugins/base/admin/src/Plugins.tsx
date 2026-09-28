@@ -992,11 +992,9 @@ function WiringCard({
                 <span className="admin-badge">{live.unplugged.length} unplugged</span>
               )}
             </p>
-            {editor.available() && (
-              <button type="button" onClick={() => editor.open()}>
-                Open the graph editor
-              </button>
-            )}
+            <button type="button" onClick={() => editor.open()}>
+              Open the graph editor
+            </button>
           </div>
           <p className="admin-note">
             Rolling back applies an older version as a new one; every version is kept.

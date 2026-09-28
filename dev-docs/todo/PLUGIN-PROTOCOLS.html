@@ -353,7 +353,7 @@ ol.seats li.bench { opacity: .6; }
 <div class="wrap">
 
 <header class="top">
-  <div class="eyebrow"><span>dev-docs/todo</span><span>Status: implemented, steps 1 to 8 done (2026-09-28)</span><span>2026-09-27</span><span>Supersedes P1–P2 of PLUGIN-ARCHITECTURE-REVIEW</span></div>
+  <div class="eyebrow"><span>dev-docs/todo</span><span>Status: implemented, steps 1 to 8 done (2026-09-28); the editor folded into <code>admin</code> (2026-09-28)</span><span>2026-09-27</span><span>Supersedes P1–P2 of PLUGIN-ARCHITECTURE-REVIEW</span></div>
   <h1>Plugin Protocols &amp; Wiring</h1>
   <p class="lede">Today a plugin reaches another plugin <strong>by its id</strong>, and the shape of what passes between them lives in a file third parties are told to copy. This plan makes every exchange a <strong>named, versioned protocol</strong>, declares each one as a <strong>port</strong> in the manifest, and turns who-feeds-whom into <strong>wiring you can see and edit</strong> in a graph.</p>
   <nav class="toc" aria-label="Sections">
@@ -872,7 +872,7 @@ ol.seats li.bench { opacity: .6; }
     <div class="q"><h3>The layout holds still while you edit</h3><p class="rec">Columns by dependants are recomputed on load, Apply and Tidy only. Rows still grow for seats, and the boxes below move down.</p></div>
     <div class="q"><h3>Read-only offline</h3><p class="rec">When the client is offline, the editor shows the cached live wiring and nothing else: no editing, no drafts, no Apply, no rollback. The controls come back when <code>sync</code> reports the server again.</p></div>
     <div class="q"><h3>The way back is the bare manager</h3><p class="rec">Nothing is pinned. <code>?safe=bare</code> gets an admin-only write path to plug plugins back in and roll back.</p></div>
-    <div class="q"><h3>The editor is its own plugin, in the app's UI</h3><p class="rec"><code>wiring</code>, not part of <code>admin</code>. The app's tokens and components, no explanatory prose on screen, a full-width graph on desktop and a full-screen graph with a bottom-sheet inspector on phones.</p></div>
+    <div class="q"><h3>The editor is its own plugin, in the app's UI</h3><p class="rec"><code>wiring</code>, not part of <code>admin</code>. The app's tokens and components, no explanatory prose on screen, a full-width graph on desktop and a full-screen graph with a bottom-sheet inspector on phones.</p><p>On 2026-09-28, at the user's request, the editor was folded into <code>admin</code> as its Wiring tab (<code>#/admin/wiring</code>); the <code>wiring</code> plugin no longer exists.</p></div>
     <div class="q"><h3>A reload fallback asks the user</h3><p class="rec">Hot applies are silent. A client that needs a reload shows a banner and keeps running its current version until that user chooses to reload. Later versions that can be hot-applied wait behind the banner. The reload goes straight to the newest version.</p></div>
     <div class="q"><h3>Drafts live in the editor</h3><p class="rec">Apply sends the base version and the server refuses a mismatch; the editor rebases and shows the difference. History and rollback stay on the server.</p></div>
     <div class="q"><h3><code>@kernel</code> 1.2 during migration, 2.0 at the end</h3><p class="rec"><code>kernel.ports</code> ships as a minor so ported and unported plugins coexist. The last step deletes the old paths and bumps to 2.0.0; 1.x plugins then stop loading.</p></div>

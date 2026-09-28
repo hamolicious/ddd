@@ -311,7 +311,7 @@ export function Graph({ store, onSelect, onConnect }: GraphProps): ReactElement 
   return (
     <div
       ref={canvas}
-      className={`wiring-canvas wiring:relative wiring:h-full wiring:w-full wiring:overflow-hidden wiring:touch-none wiring:select-none${drag.current?.type === "pan" ? " panning" : ""}`}
+      className={`wiring-canvas admin:relative admin:h-full admin:w-full admin:overflow-hidden admin:touch-none admin:select-none${drag.current?.type === "pan" ? " panning" : ""}`}
       role="application"
       aria-label="Wiring graph"
       onPointerDown={onPointerDown}

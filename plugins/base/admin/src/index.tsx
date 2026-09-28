@@ -25,6 +25,10 @@
  * gathered behind tabs on the `/admin` route. Both, deliberately: settings is where a user
  * looks for "the place with the knobs", and a URL per section is what someone pastes into a
  * chat when they need a colleague to look at an audit entry.
+ *
+ * **The wiring editor** (PLUGIN-PROTOCOLS §7, `wiring/`) is the one exception: the Wiring
+ * tab, `#/admin/wiring`, and not a settings section, because the graph needs the whole
+ * view. Its inspector is an altbar panel on a wide screen and a bottom sheet on a phone.
  */
 
 import { offlineCopies } from "../../_shared/offline-copy.js";
@@ -41,24 +45,29 @@ import type { NavbarItem } from "@protocols/lm/navbar.item";
 import type { Router } from "@protocols/lm/router";
 import type { Route } from "@protocols/lm/router.route";
 import type { SettingsSection } from "@protocols/lm/settings.section";
+import type { AltbarPanel } from "@protocols/lm/altbar.panel";
+import type { Shell } from "@protocols/lm/shell";
 
-import { AdminSectionBody, AdminView, ADMIN_SECTIONS, isAdminSection, type AdminSectionId } from "./AdminView.js";
+import { AdminSectionBody, AdminView, SETTINGS_SECTIONS, isAdminSection, type AdminSectionId, type SettingsSectionId } from "./AdminView.js";
 import { createAdminClient } from "./api.js";
 import { DialogsContext, WiringEditorContext, type Dialogs, type WiringEditorLink } from "./hooks.js";
+import { createWiringEditor, WIRING_PATH } from "./wiring/index.js";
 
 export interface AdminApi {
   open(section?: AdminSectionId): void;
   isAdmin(): boolean;
 }
 
-/**
- * The graph editor's route. It belongs to the `wiring` plugin; this plugin only offers a
- * way there when the route is wired (PLUGIN-PROTOCOLS §7).
- */
-const WIRING_EDITOR_PATH = "/wiring";
+const VIEW = "admin.main";
 
-/** Titles for the contributed settings sections, in the order they should appear. */
-const SETTINGS_TITLES: Readonly<Record<AdminSectionId, { title: string; description: string }>> = {
+/** What `activate` leaves behind for `deactivate` to undo. */
+let teardown: (() => void) | undefined;
+
+/**
+ * Titles for the contributed settings sections, in the order they should appear. The
+ * Wiring tab has none: the graph needs the whole view.
+ */
+const SETTINGS_TITLES: Readonly<Record<SettingsSectionId, { title: string; description: string }>> = {
   users: {
     title: "Users",
     description: "Accounts, admin rights, and password reset links.",
@@ -90,15 +99,17 @@ export default function activate(kernel: Kernel): AdminApi {
   // Every member read through either handle is in the port's `needs`.
   const router = kernel.ports.use<Router>("router");
   const menu = kernel.ports.use<ContextMenu>("menu");
+  const shell = kernel.ports.use<Pick<Shell, "layout" | "subscribeLayout" | "toggleAltbar">>("shell");
   const dialogs: Dialogs = {
     confirm: (request) => menu.confirm(request),
     modal: (request) => menu.modal(request),
     openSheet: (request) => menu.openSheet(request),
   };
   const wiringEditor: WiringEditorLink = {
-    available: () => router.match(WIRING_EDITOR_PATH) !== undefined,
-    open: () => router.navigate(WIRING_EDITOR_PATH),
+    open: () => router.navigate(WIRING_PATH),
   };
+  const editor = createWiringEditor({ kernel, router, shell, menu, viewId: VIEW });
+  teardown = () => editor.dispose();
   // Offline, each tab shows what it last loaded, marked (dev-docs/resolved/SYNC-DECISIONS.md §9).
   const client = createAdminClient(offlineCopies((path, init) => kernel.session.fetch(path, init), adminOfflineCopy));
   const admin = kernel.session.isAdmin();
@@ -114,8 +125,8 @@ export default function activate(kernel: Kernel): AdminApi {
   // Routes exist for everyone — a direct link should show "not an administrator"
   // rather than a dead URL — but the view itself checks.
   kernel.ports.offer<Route>("route", [
-    { path: "/admin", view: "admin.main" },
-    { path: "/admin/:section", view: "admin.main" },
+    { path: "/admin", view: VIEW },
+    { path: "/admin/:section", view: VIEW },
   ]);
 
   const AdminHost = (): ReactElement => {
@@ -130,6 +141,7 @@ export default function activate(kernel: Kernel): AdminApi {
             selfId={selfId}
             section={section}
             onSelectSection={(next) => router.navigate(`/admin/${next}`)}
+            wiring={editor.Section}
           />
         </WiringEditorContext.Provider>
       </DialogsContext.Provider>
@@ -137,7 +149,7 @@ export default function activate(kernel: Kernel): AdminApi {
   };
 
   kernel.ports.offer<MainView>("view", {
-    id: "admin.main",
+    id: VIEW,
     title: "Administration",
     component: AdminHost,
   });
@@ -146,7 +158,7 @@ export default function activate(kernel: Kernel): AdminApi {
     // One settings section per admin area, each rendering the same component the tab does.
     // Offered together, so they keep this order inside the seat the manifest's
     // `provides.settings.order` hint (or the wiring) gives the plugin.
-    const sections = ADMIN_SECTIONS.map((id): SettingsSection => {
+    const sections = SETTINGS_SECTIONS.map((id): SettingsSection => {
       const meta = SETTINGS_TITLES[id];
       // `embedded`: the settings shell draws the `<h2>` and the description above this,
       // so the section must not draw its own heading a second line below them.
@@ -224,7 +236,10 @@ export default function activate(kernel: Kernel): AdminApi {
         category: "Admin",
         run: () => api.open("workspace"),
       },
+      ...editor.commands,
     ]);
+
+    kernel.ports.offer<AltbarPanel>("panel", editor.panel);
   }
 
   const api: AdminApi = {
@@ -233,4 +248,10 @@ export default function activate(kernel: Kernel): AdminApi {
   };
 
   return api;
+}
+
+/** Everything `activate` built itself; the kernel withdraws the offers (`"hot": true`). */
+export function deactivate(): void {
+  teardown?.();
+  teardown = undefined;
 }

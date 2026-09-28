@@ -13,7 +13,7 @@
  * **The write path is admin-only, and it is the way back** (PLUGIN-PROTOCOLS §7, §10): a
  * plugin that is disabled or unplugged gets a *Plug in* button, and the wiring history
  * offers *Roll back* to any earlier version. Both go through the same server routes the
- * `admin` and `wiring` plugins use, so the server's admin check is the control here too;
+ * `admin` plugin's Plugins and Wiring tabs use, so the server's admin check is the control here too;
  * a non-admin sees the read-only list and is told who can act. Nothing is pinned: a
  * rollback is an ordinary apply with an older version's overrides, and the server refuses
  * it (409) when live has moved on in between.
