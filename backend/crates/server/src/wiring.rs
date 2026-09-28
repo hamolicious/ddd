@@ -254,6 +254,21 @@ fn writer() -> &'static tokio::sync::Mutex<()> {
 /// Refused with [`WiringError::Conflict`] when `base` is given and is not the live
 /// version: a draft prepared against N is not applied on top of N+1 (§6c).
 pub async fn commit(state: &AppState, commit: Commit<'_>) -> Result<LiveWiring, WiringError> {
+    let action = commit.action;
+    let applied = commit_quietly(state, commit).await?;
+    publish(state, &applied, action);
+    Ok(applied)
+}
+
+/// [`commit`] without the broadcast: the version is written, audited and cached, and the
+/// caller sends the frame with [`publish`] once everything that goes with the version is
+/// in place. The wiring apply route moves the plugin records first, because a client
+/// answers the frame by fetching the plugin list, and a list that still shows a plugged
+/// plugin as `disabled` makes it plan "start nothing".
+pub async fn commit_quietly(
+    state: &AppState,
+    commit: Commit<'_>,
+) -> Result<LiveWiring, WiringError> {
     let _guard = writer().lock().await;
     let live = match newest(state).await? {
         Some(record) => record.version,
@@ -307,14 +322,13 @@ pub async fn commit(state: &AppState, commit: Commit<'_>) -> Result<LiveWiring, 
             }),
         )
         .await;
-    let sockets = crate::routes::sync::publish_wiring_applied(state, next, commit.action);
-    info!(
-        version = next,
-        action = commit.action,
-        sockets,
-        "wiring applied"
-    );
     Ok(applied)
+}
+
+/// Send `wiring.applied` for a version written with [`commit_quietly`].
+pub fn publish(state: &AppState, live: &LiveWiring, action: &str) {
+    let sockets = crate::routes::sync::publish_wiring_applied(state, live.version, action);
+    info!(version = live.version, action, sockets, "wiring applied");
 }
 
 fn is_duplicate_key(err: &mongodb::error::Error) -> bool {

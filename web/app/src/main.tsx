@@ -282,7 +282,8 @@ async function boot(): Promise<void> {
 
       if (safeMode === "bare") {
         // No plugins at all: the kernel's own manager takes the mount (SPEC §6.1).
-        host.mount.mount("kernel", <BareManager {...(bearer ? { token: bearer } : {})} />);
+        // The user decides whether the manager's write path shows (admin only, §7).
+        host.mount.mount("kernel", <BareManager user={signedIn} {...(bearer ? { token: bearer } : {})} />);
         // `?safe=bare` *is* a successful boot: the workspace is open and the built-in
         // manager is on screen. Reverting a bundle that got this far would throw away the
         // one screen from which a broken plugin can be disabled (`app/BRIDGE.md` §7).

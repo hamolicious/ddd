@@ -1,11 +1,13 @@
 {
-  "id": "admin",
+  "id": "wiring",
   "version": "1.0.0",
-  "name": "Admin",
-  "description": "Users, invites, audit log, orphan files, and the plugin list.",
+  "name": "Wiring",
+  "description": "The wiring editor: every plugin's ports and the wires between them, drafts, Apply, history and rollback (PLUGIN-PROTOCOLS §7).",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
-  "x-tailwind": true,
+  "x-tailwind": {
+    "prefix": "wiring"
+  },
   "kernel": "^1.0",
   "hot": true,
   "consumes": {
@@ -14,19 +16,24 @@
       "needs": [
         "navigate",
         "current",
-        "onChange",
-        "match",
-        "href",
-        "url"
+        "onChange"
+      ]
+    },
+    "shell": {
+      "protocol": "lm/shell@^1.0",
+      "needs": [
+        "layout",
+        "subscribeLayout",
+        "toggleAltbar"
       ]
     },
     "menu": {
       "protocol": "lm/context-menu@^1.0",
       "needs": [
-        "open",
-        "openSheet",
+        "confirm",
         "modal",
-        "confirm"
+        "openSheet",
+        "close"
       ]
     }
   },
@@ -37,24 +44,17 @@
     "view": {
       "protocol": "lm/main.view@1.0.0"
     },
-    "settings": {
-      "protocol": "lm/settings.section@1.0.0",
-      "order": 900
-    },
-    "nav": {
-      "protocol": "lm/navbar.item@1.0.0",
-      "order": 90
+    "panel": {
+      "protocol": "lm/altbar.panel@1.0.0",
+      "order": 60
     },
     "commands": {
       "protocol": "lm/commands.command@1.0.0"
+    },
+    "nav": {
+      "protocol": "lm/navbar.item@1.0.0",
+      "order": 95
     }
-  },
-  "dependencies": {
-    "commands": "^1.0",
-    "context-menu": "^1.0",
-    "router": "^1.0",
-    "settings": "^1.0",
-    "shell-ui": "^1.0"
   },
   "peerLibraries": {
     "react": "^18.0.0"

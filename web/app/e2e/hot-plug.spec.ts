@@ -41,7 +41,20 @@ test("unplugging and plugging back every base plugin leaves nothing behind", asy
   await loaded;
   await expect.poll(() => page.evaluate(() => "__lmTest" in globalThis)).toBe(true);
 
-  const before = await resources(page);
+  // Plugins open some of their subscriptions asynchronously (a `documents.subscribe`
+  // resolving after activation), and on a populated workspace that takes longer than the
+  // activation itself. The baseline is the settled state: the same counts three reads in a
+  // row, half a second apart, so a late subscription is not mistaken for a leak.
+  let before = await resources(page);
+  for (let stable = 0; stable < 3; ) {
+    await page.waitForTimeout(500);
+    const now = await resources(page);
+    if (JSON.stringify(now) === JSON.stringify(before)) stable += 1;
+    else {
+      before = now;
+      stable = 0;
+    }
+  }
   expect(before.active.length).toBeGreaterThan(20);
   expect(before.mountHolder).toBe("shell-ui");
 

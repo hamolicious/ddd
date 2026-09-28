@@ -710,6 +710,30 @@ pub async fn disable(
     reason: &str,
     actor: &Actor,
 ) -> Result<(), InstallError> {
+    disable_record(state, id, reason, actor).await?;
+    // The circuit breaker disables as the system; an admin's switch is a person.
+    let action = if matches!(actor, Actor::System) {
+        "breaker"
+    } else {
+        "disable"
+    };
+    crate::wiring::mirror_plugin_states(state, action, actor, id, false).await;
+    Ok(())
+}
+
+/// The record half of [`disable`]: the backend half stopped, the record moved to
+/// `disabled`, the audit entry written, the registry refreshed — and **no wiring version**.
+///
+/// For a caller that is already writing one: a wiring Apply that unplugs a plugin
+/// (`routes/wiring.rs`) has committed its version before it moves the records, and a
+/// second version saying the same thing would only be noise in the history. Everything
+/// else goes through [`disable`].
+pub async fn disable_record(
+    state: &AppState,
+    id: &str,
+    reason: &str,
+    actor: &Actor,
+) -> Result<(), InstallError> {
     let mut record = require_record(state, id).await?;
     if record.state == PluginState::Pending {
         return Err(InstallError::Conflict(format!(
@@ -735,18 +759,20 @@ pub async fn disable(
         .await;
     info!(plugin = %id, reason = %reason, "plugin disabled");
     refresh_registry(state).await;
-    // The circuit breaker disables as the system; an admin's switch is a person.
-    let action = if matches!(actor, Actor::System) {
-        "breaker"
-    } else {
-        "disable"
-    };
-    crate::wiring::mirror_plugin_states(state, action, actor, id, false).await;
     Ok(())
 }
 
 /// Re-enable a disabled plugin and clear its breaker.
 pub async fn enable(state: &AppState, id: &str, actor: &Actor) -> Result<(), InstallError> {
+    enable_record(state, id, actor).await?;
+    crate::wiring::mirror_plugin_states(state, "enable", actor, id, false).await;
+    Ok(())
+}
+
+/// The record half of [`enable`]: the record moved to `enabled`, its breaker cleared, its
+/// backend half activated, the audit entry written — and **no wiring version**, for the
+/// same reason as [`disable_record`].
+pub async fn enable_record(state: &AppState, id: &str, actor: &Actor) -> Result<(), InstallError> {
     let mut record = require_record(state, id).await?;
     if record.state == PluginState::Pending {
         return Err(InstallError::Conflict(format!(
@@ -778,7 +804,6 @@ pub async fn enable(state: &AppState, id: &str, actor: &Actor) -> Result<(), Ins
         host.reset_breaker(id);
     }
     let _ = activate(state, record).await;
-    crate::wiring::mirror_plugin_states(state, "enable", actor, id, false).await;
     Ok(())
 }
 

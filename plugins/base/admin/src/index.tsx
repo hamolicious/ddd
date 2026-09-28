@@ -34,29 +34,28 @@ import type { ReactElement } from "react";
 
 import type { Kernel } from "@kernel";
 
+import type { Command } from "@protocols/lm/commands.command";
+import type { ContextMenu } from "@protocols/lm/context-menu";
+import type { MainView } from "@protocols/lm/main.view";
+import type { NavbarItem } from "@protocols/lm/navbar.item";
+import type { Router } from "@protocols/lm/router";
+import type { Route } from "@protocols/lm/router.route";
+import type { SettingsSection } from "@protocols/lm/settings.section";
+
 import { AdminSectionBody, AdminView, ADMIN_SECTIONS, isAdminSection, type AdminSectionId } from "./AdminView.js";
 import { createAdminClient } from "./api.js";
-import { DialogsContext, type Dialogs } from "./hooks.js";
-import type { ContextMenuApi } from "../../_shared/context-menu-api.js";
-import {
-  POINTS,
-  type Command,
-  type MainView,
-  type NavbarItem,
-  type Route,
-  type SettingsSection,
-} from "../../_shared/points.js";
+import { DialogsContext, WiringEditorContext, type Dialogs, type WiringEditorLink } from "./hooks.js";
 
 export interface AdminApi {
   open(section?: AdminSectionId): void;
   isAdmin(): boolean;
 }
 
-interface RouterService {
-  navigate(path: string, options?: { readonly replace?: boolean }): void;
-  onChange(listener: (path: string) => void): () => void;
-  current(): string;
-}
+/**
+ * The graph editor's route. It belongs to the `wiring` plugin; this plugin only offers a
+ * way there when the route is wired (PLUGIN-PROTOCOLS §7).
+ */
+const WIRING_EDITOR_PATH = "/wiring";
 
 /** Titles for the contributed settings sections, in the order they should appear. */
 const SETTINGS_TITLES: Readonly<Record<AdminSectionId, { title: string; description: string }>> = {
@@ -87,12 +86,18 @@ const SETTINGS_TITLES: Readonly<Record<AdminSectionId, { title: string; descript
 };
 
 export default function activate(kernel: Kernel): AdminApi {
-  const router = kernel.services.require<RouterService>("router");
-  const menu = kernel.services.require<ContextMenuApi>("context-menu");
+  // The plugin's own ports (`consumes` in the manifest); which plugin answers is wiring.
+  // Every member read through either handle is in the port's `needs`.
+  const router = kernel.ports.use<Router>("router");
+  const menu = kernel.ports.use<ContextMenu>("menu");
   const dialogs: Dialogs = {
     confirm: (request) => menu.confirm(request),
     modal: (request) => menu.modal(request),
     openSheet: (request) => menu.openSheet(request),
+  };
+  const wiringEditor: WiringEditorLink = {
+    available: () => router.match(WIRING_EDITOR_PATH) !== undefined,
+    open: () => router.navigate(WIRING_EDITOR_PATH),
   };
   // Offline, each tab shows what it last loaded, marked (dev-docs/resolved/SYNC-DECISIONS.md §9).
   const client = createAdminClient(offlineCopies((path, init) => kernel.session.fetch(path, init), adminOfflineCopy));
@@ -108,26 +113,30 @@ export default function activate(kernel: Kernel): AdminApi {
 
   // Routes exist for everyone — a direct link should show "not an administrator"
   // rather than a dead URL — but the view itself checks.
-  kernel.extensions.contribute<Route>(POINTS.route, { path: "/admin", view: "admin.main" });
-  kernel.extensions.contribute<Route>(POINTS.route, { path: "/admin/:section", view: "admin.main" });
+  kernel.ports.offer<Route>("route", [
+    { path: "/admin", view: "admin.main" },
+    { path: "/admin/:section", view: "admin.main" },
+  ]);
 
   const AdminHost = (): ReactElement => {
     const [section, setSection] = useState(() => sectionFromRoute(router.current()));
     useEffect(() => router.onChange((route) => setSection(sectionFromRoute(route))), []);
     return (
       <DialogsContext.Provider value={dialogs}>
-        <AdminView
-          client={client}
-          isAdmin={admin}
-          selfId={selfId}
-          section={section}
-          onSelectSection={(next) => router.navigate(`/admin/${next}`)}
-        />
+        <WiringEditorContext.Provider value={wiringEditor}>
+          <AdminView
+            client={client}
+            isAdmin={admin}
+            selfId={selfId}
+            section={section}
+            onSelectSection={(next) => router.navigate(`/admin/${next}`)}
+          />
+        </WiringEditorContext.Provider>
       </DialogsContext.Provider>
     );
   };
 
-  kernel.extensions.contribute<MainView>(POINTS.mainView, {
+  kernel.ports.offer<MainView>("view", {
     id: "admin.main",
     title: "Administration",
     component: AdminHost,
@@ -135,33 +144,37 @@ export default function activate(kernel: Kernel): AdminApi {
 
   if (admin) {
     // One settings section per admin area, each rendering the same component the tab does.
-    ADMIN_SECTIONS.forEach((id, index) => {
+    // Offered together, so they keep this order inside the seat the manifest's
+    // `provides.settings.order` hint (or the wiring) gives the plugin.
+    const sections = ADMIN_SECTIONS.map((id): SettingsSection => {
       const meta = SETTINGS_TITLES[id];
       // `embedded`: the settings shell draws the `<h2>` and the description above this,
       // so the section must not draw its own heading a second line below them.
       const Section = (): ReactElement => (
         <DialogsContext.Provider value={dialogs}>
-          <AdminSectionBody
-            section={id}
-            client={client}
-            selfId={selfId}
-            embedded
-          />
+          <WiringEditorContext.Provider value={wiringEditor}>
+            <AdminSectionBody
+              section={id}
+              client={client}
+              selfId={selfId}
+              embedded
+            />
+          </WiringEditorContext.Provider>
         </DialogsContext.Provider>
       );
-      kernel.extensions.contribute<SettingsSection>(POINTS.settingsSection, {
+      return {
         id: `admin.${id}`,
         // The title alone. "Administration — " on all seven was the main reason the
         // settings section list was 1 860 px wide, and it duplicated the `<h2>` that
         // renders directly beneath it.
         title: meta.title,
         description: meta.description,
-        order: 900 + index,
         component: Section,
-      });
+      };
     });
+    kernel.ports.offer<SettingsSection>("settings", sections);
 
-    kernel.extensions.contribute<NavbarItem>(POINTS.navbarItem, {
+    kernel.ports.offer<NavbarItem>("nav", {
       id: "admin.link",
       label: "Admin",
       // The icon is what lets `shell-ui` collapse this to a tap target at its mobile
@@ -170,11 +183,10 @@ export default function activate(kernel: Kernel): AdminApi {
       // and was part of why the navbar ran past the viewport.
       icon: "🛡",
       side: "end",
-      order: 90,
       onSelect: () => api.open(),
     });
 
-    for (const command of [
+    kernel.ports.offer<Command>("commands", [
       { id: "admin.open", title: "Open administration", category: "Admin", run: () => api.open() },
       {
         id: "admin.users",
@@ -212,9 +224,7 @@ export default function activate(kernel: Kernel): AdminApi {
         category: "Admin",
         run: () => api.open("workspace"),
       },
-    ] satisfies Command[]) {
-      kernel.extensions.contribute<Command>(POINTS.command, command);
-    }
+    ]);
   }
 
   const api: AdminApi = {

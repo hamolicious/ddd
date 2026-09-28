@@ -366,6 +366,47 @@ summary {
   color: var(--lm-text-muted);
 }
 
+/* The admin-only write path (PLUGIN-PROTOCOLS §7): Plug in, Roll back. Plain buttons in
+   kernel tokens, because there is no plugin UI on this screen to borrow one from. */
+.lm-bare button {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--lm-tap-target);
+  padding: 0 calc(var(--lm-space) * 1.5);
+  border: 1px solid var(--lm-border);
+  border-radius: var(--lm-radius);
+  background: var(--lm-bg-subtle);
+  color: var(--lm-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.lm-bare button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.lm-bare td button {
+  margin-inline-start: calc(var(--lm-space) * 0.75);
+}
+
+.lm-bare-wiring {
+  margin-top: calc(var(--lm-space) * 3);
+}
+
+.lm-bare-wiring h2 {
+  font-size: 1.15em;
+}
+
+.lm-bare .lm-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  clip-path: inset(50%);
+  overflow: hidden;
+}
+
 /* ---- "This device" (shell-only settings section) ------------------------ */
 
 /*
@@ -466,6 +507,15 @@ summary {
   .lm-bare-table td::before {
     content: attr(data-label) ": ";
     color: var(--lm-text-muted);
+  }
+
+  /* A cell that is only a button has no label to prefix. */
+  .lm-bare-table td.lm-bare-actions::before {
+    content: none;
+  }
+
+  .lm-bare-table td.lm-bare-actions:empty {
+    display: none;
   }
 
   .lm-shell-facts {

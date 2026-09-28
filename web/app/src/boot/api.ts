@@ -16,7 +16,14 @@
  * here went to a 404 in the shell until this was a function.
  */
 
-import type { InstalledPlugin, LiveWiring, ProtocolPackage, ResolvedPluginSet, SessionUser } from "@kernel";
+import type {
+  InstalledPlugin,
+  LiveWiring,
+  ProtocolPackage,
+  ResolvedPluginSet,
+  SessionUser,
+  WiringOverrides,
+} from "@kernel";
 
 import { apiBase } from "./shell.js";
 
@@ -225,3 +232,48 @@ export interface PluginList {
  * server-static).
  */
 export const installedPlugins = (token?: string): Promise<PluginList> => call<PluginList>("/plugins", {}, token);
+
+// ---------------------------------------------------------------------------
+// The bare manager's write path (PLUGIN-PROTOCOLS §7): admin-only, no kernel needed
+// ---------------------------------------------------------------------------
+
+/** One entry of the wiring history (`GET /api/wiring`). `at` is RFC 3339. */
+export interface WiringVersionInfo {
+  readonly version: number;
+  readonly action: string;
+  readonly actor?: string;
+  readonly subject?: string;
+  readonly at: string;
+}
+
+export interface WiringHistory {
+  readonly live: LiveWiring;
+  /** Newest first. */
+  readonly history: readonly WiringVersionInfo[];
+}
+
+export interface WiringVersionRecord extends WiringVersionInfo {
+  readonly wiring: WiringOverrides;
+}
+
+export interface WiringApplyBody {
+  /** The live version the caller saw; the server answers 409 when it has moved on. */
+  readonly base: number;
+  readonly wiring: WiringOverrides;
+  readonly action: "apply" | "rollback";
+}
+
+/** The live wiring and every kept version, admin only. */
+export const wiringHistory = (token?: string): Promise<WiringHistory> => call<WiringHistory>("/wiring", {}, token);
+
+/** One kept version with its overrides: what a rollback applies again. */
+export const wiringVersion = (version: number, token?: string): Promise<WiringVersionRecord> =>
+  call<WiringVersionRecord>(`/wiring/versions/${encodeURIComponent(String(version))}`, {}, token);
+
+/** Commit overrides as the next version. Rejects with an `ApiError` of status 409 on a stale base. */
+export const applyWiring = (body: WiringApplyBody, token?: string): Promise<{ readonly live: LiveWiring }> =>
+  call<{ readonly live: LiveWiring }>("/wiring/apply", { method: "POST", body: JSON.stringify(body) }, token);
+
+/** Plug a plugin back in: `POST /api/admin/plugins/{id}/enable`, which also updates the wiring. */
+export const enablePlugin = (id: string, token?: string): Promise<void> =>
+  call<void>(`/admin/plugins/${encodeURIComponent(id)}/enable`, { method: "POST" }, token);

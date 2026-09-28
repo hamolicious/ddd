@@ -266,3 +266,69 @@ test("a plugin that throws while rendering costs a chip, not the application", a
     writeFileSync(brokenModule, original);
   }
 });
+
+/**
+ * The way back is the bare manager (PLUGIN-PROTOCOLS §7, §10). A plugin an admin — or a
+ * bad apply — switched off is plugged back in from `?safe=bare`, the one screen no plugin
+ * can break, and a normal boot afterwards has it enabled again.
+ */
+test("an admin plugs a disabled plugin back in from the bare manager", async ({
+  browser,
+  baseURL,
+  request,
+}) => {
+  const base = baseURL as string;
+  // The module is whole again; this test is about state, not code.
+  writeFileSync(brokenModule, original);
+
+  // --- 0. Disable it through the admin API, with a session of the request's own. -----
+  const login = await request.post(`${base}/api/auth/login`, { data: ADMIN });
+  expect(login.ok(), `POST /api/auth/login -> ${login.status()}`).toBe(true);
+  const disabled = await request.post(`${base}/api/admin/plugins/extra-task-states/disable`, {
+    data: {},
+  });
+  expect(disabled.ok(), `disable -> ${disabled.status()} ${await disabled.text()}`).toBe(true);
+
+  // --- 1. `?safe=bare` as the admin: the row would not load, and offers Plug in. -------
+  {
+    const { context, page } = await freshPage(browser, base);
+    try {
+      await page.goto("/?safe=bare");
+      await page.locator("#email").fill(ADMIN.email);
+      await page.locator("#password").fill(ADMIN.password);
+      await page.locator("form.lm-auth-form button[type=submit]").click();
+      await expect(page.locator(".lm-bare")).toBeVisible({ timeout: 30_000 });
+
+      const row = page
+        .locator(".lm-bare-table tr")
+        .filter({ has: page.getByRole("rowheader", { name: "extra-task-states", exact: true }) });
+      await expect(row).toBeVisible();
+      await expect(row.locator("td").last()).toContainText("no —");
+
+      // The write path is on screen: the wiring history with a live version, and the
+      // footer names that version beside the kernel contract.
+      await expect(page.getByRole("heading", { name: "Wiring" })).toBeVisible();
+      await expect(page.getByText(/^Live version/)).toBeVisible();
+      await expect(page.locator(".lm-bare footer")).toContainText("wiring version");
+
+      await row.getByRole("button", { name: "Plug in extra-task-states" }).click();
+      // The list refetches: it would load now, and there is nothing left to plug in.
+      await expect(row.locator("td").last()).toHaveText("yes");
+      await expect(row.getByRole("button", { name: /Plug in/ })).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+  }
+
+  // --- 2. A normal boot in a fresh context: enabled again. --------------------------
+  {
+    const { context, page } = await freshPage(browser, base);
+    try {
+      await signIn(page, ADMIN);
+      await page.goto("/#/admin/plugins");
+      await expect(page.getByRole("button", { name: "Disable Extra task states" })).toBeVisible();
+    } finally {
+      await context.close();
+    }
+  }
+});

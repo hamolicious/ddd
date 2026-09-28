@@ -43,16 +43,21 @@ import {
   formatBytes,
   formatWhen,
   hostPolicyNote,
+  isStaleBase,
   parseHostList,
   type AdminClient,
   type PluginAdminList,
   type PluginAdminView,
   type PluginCronState,
+  type WiringHistory,
+  type WiringVersionInfo,
 } from "./api.js";
 import { AdminSectionFrame } from "./AdminView.js";
-import { useAsync, useConfirm, useModal, useMutation } from "./hooks.js";
+import { useAsync, useConfirm, useModal, useMutation, useWiringEditor } from "./hooks.js";
 import { CheckIcon, ChevronIcon, PlayIcon, PowerIcon, TrashIcon, UploadIcon } from "./icons.js";
+import { adminOfflineCopy } from "./offline.js";
 import { PluginConfigForm } from "./PluginConfig.js";
+import { useOfflineCopy } from "../../_shared/offline-copy.js";
 
 export function PluginsSection({
   client,
@@ -163,6 +168,10 @@ export function PluginsSection({
               ))}
             </ul>
           )}
+
+          {/* Keyed on the list's data: disabling a plugin above writes a wiring version
+              (unplug is disable), so the card reloads with the list. */}
+          <WiringCard key={list.data.plugins.map((plugin) => `${plugin.id}:${plugin.state}`).join(",")} client={client} onApplied={() => list.reload()} />
 
           <HostSummary list={list.data} />
 
@@ -900,6 +909,161 @@ function PluginLogs({
         </li>
       ))}
     </ul>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Wiring: the live version, its history, and rollback (PLUGIN-PROTOCOLS §6c, §7)
+// ---------------------------------------------------------------------------
+
+/**
+ * The way back without the graph. Every applied wiring version is kept on the server;
+ * rolling back re-applies an older one **as a new version**, through the same apply
+ * route the editor uses, with the live version as its base. A stale base is a 409, and
+ * the answer to that is to show the newer live version, not to overwrite it.
+ *
+ * Offline the card shows the last loaded copy (the section's note says so) and the
+ * actions are off: the server is the only place a version can be written.
+ */
+function WiringCard({
+  client,
+  onApplied,
+}: {
+  readonly client: AdminClient;
+  /** A rollback can plug plugins back in, so the list above reloads too. */
+  readonly onApplied: () => void;
+}): ReactElement {
+  const wiring = useAsync<WiringHistory>(() => client.wiring(), []);
+  const confirm = useConfirm();
+  const editor = useWiringEditor();
+  const offline = useOfflineCopy(adminOfflineCopy) !== undefined;
+  const [notice, setNotice] = useState<string | undefined>(undefined);
+  const mutate = useMutation(() => {
+    wiring.reload();
+    onApplied();
+  });
+  const live = wiring.data?.live;
+  const busy = mutate.busy !== undefined;
+
+  const rollBack = (entry: WiringVersionInfo, anchor: HTMLElement): void => {
+    if (live === undefined) return;
+    const base = live.version;
+    void confirm({
+      title: `Roll back to wiring version ${entry.version}?`,
+      description: `Version ${base} is live. Version ${entry.version} is applied again as version ${base + 1}; nothing is deleted.`,
+      confirmLabel: "Roll back",
+      anchor,
+    }).then((ok) => {
+      if (!ok) return;
+      setNotice(undefined);
+      mutate.run(`rollback-${entry.version}`, async () => {
+        const record = await client.wiringVersion(entry.version);
+        try {
+          await client.applyWiring({ base, wiring: record.wiring, action: "rollback" });
+        } catch (error) {
+          if (!isStaleBase(error)) throw error;
+          // Someone applied a version in between. The reload shows it; say why nothing moved.
+          const latest = await client.wiring();
+          setNotice(
+            `The live wiring moved on to version ${latest.live.version} in the meantime; nothing was changed. Choose again from the current list.`,
+          );
+        }
+      });
+    });
+  };
+
+  return (
+    <section className="admin-wiring admin:flex admin:flex-col admin:gap-2" aria-labelledby="admin-wiring-heading">
+      <h4 id="admin-wiring-heading">Wiring</h4>
+
+      {wiring.error !== undefined && (
+        <p className="admin-error" role="alert">
+          The wiring could not be read: {wiring.error}
+        </p>
+      )}
+      {wiring.loading && <p role="status">Loading wiring…</p>}
+
+      {wiring.data !== undefined && live !== undefined && (
+        <>
+          <div className="admin:flex admin:flex-wrap admin:items-center admin:gap-2">
+            <p className="admin-plugin-head admin:m-0">
+              <strong>Live version {live.version}</strong>
+              {live.unplugged.length > 0 && (
+                <span className="admin-badge">{live.unplugged.length} unplugged</span>
+              )}
+            </p>
+            {editor.available() && (
+              <button type="button" onClick={() => editor.open()}>
+                Open the graph editor
+              </button>
+            )}
+          </div>
+          <p className="admin-note">
+            Rolling back applies an older version as a new one; every version is kept.
+          </p>
+
+          {wiring.data.history.length === 0 ? (
+            <p className="admin-empty">No versions recorded yet.</p>
+          ) : (
+            <div className="admin-table-scroll">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Version</th>
+                    <th scope="col">Action</th>
+                    <th scope="col">By</th>
+                    <th scope="col">When</th>
+                    <th scope="col">
+                      <span className="admin:sr-only">Actions</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {wiring.data.history.map((entry) => (
+                    <tr key={entry.version} data-wiring-version={entry.version}>
+                      <th scope="row">
+                        {entry.version}
+                        {entry.version === live.version && <span className="admin-badge">live</span>}
+                      </th>
+                      <td data-label="Action">
+                        <code>{entry.action}</code>
+                        {entry.subject !== undefined && <> {entry.subject}</>}
+                      </td>
+                      <td data-label="By">{entry.actor ?? "—"}</td>
+                      <td data-label="When">{formatWhen(entry.at)}</td>
+                      <td className="admin-actions">
+                        {entry.version !== live.version && (
+                          <button
+                            type="button"
+                            aria-label={`Roll back to version ${entry.version}`}
+                            title={offline ? "Not while offline" : `Apply version ${entry.version} again`}
+                            disabled={offline || busy}
+                            onClick={(event) => rollBack(entry, event.currentTarget)}
+                          >
+                            Roll back
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {mutate.error !== undefined && (
+            <p className="admin-error" role="alert">
+              {mutate.error}
+            </p>
+          )}
+          {notice !== undefined && (
+            <p className="admin-note" role="status">
+              {notice}
+            </p>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 

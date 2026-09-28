@@ -52,6 +52,7 @@ dist/<id>/<version>/              build output = the installed layout the server
 | `indexer` | workspace stats, every frontmatter field and its values, each note's incoming and outgoing connections — rebuilt locally on every edit, read through its service | — |
 | `fm-autocomplete` | while typing frontmatter in an editor, suggests the keys in use and then the typed key's values, from `indexer` | — |
 | `graph` | every note and its links as a live force-directed graph: the whole workspace at `#/graph`, the open note's neighbourhood in the altbar; built from `indexer`'s documents and outgoing connections | — |
+| `wiring` | the wiring editor at `#/wiring`: every plugin's ports and wires, drafts over the live wiring, Apply, history and rollback through the admin-only wiring routes; the first plugin written against `kernel.ports` alone | — |
 
 That is the whole table. `calendar` and `agenda` — M4's proof plugins, which shipped here
 and were never in `BASE_PLUGIN_IDS` — were **removed** on 2026-09-24 at the owner's

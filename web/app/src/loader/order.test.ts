@@ -172,6 +172,13 @@ describe("the base distribution's order (PLUGIN-PROTOCOLS §9 step 4)", () => {
     };
     const result = resolveOrder(plugins, { kernelVersion: KERNEL_API_VERSION });
     expect(result.skipped).toEqual([]);
-    expect(result.order.map((p) => p.manifest.id)).toEqual(corpus.base_order);
+    // A plugin written against `kernel.ports` alone (`wiring`, PLUGIN-PROTOCOLS §9 step 7)
+    // declares no `dependencies`, so the legacy loader cannot place it: the resolver's
+    // order is the only one it has. It is left out of the comparison on both sides.
+    const legacy = (id: string): boolean => {
+      const manifest = plugins.find((p) => p.manifest.id === id)?.manifest as { dependencies?: unknown; consumes?: unknown } | undefined;
+      return manifest?.dependencies !== undefined || manifest?.consumes === undefined;
+    };
+    expect(result.order.map((p) => p.manifest.id).filter(legacy)).toEqual(corpus.base_order.filter(legacy));
   });
 });

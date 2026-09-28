@@ -1773,3 +1773,25 @@ mise run plugins        # frontend halves (unchanged)
 
 `mise run check` deliberately does **not** cover `crates/plugin-sdk` or `plugins/**` — both
 are wasm32-only. `plugin-check` is their gate, and both must pass before reporting done.
+
+## Area: http-routes (PLUGIN-PROTOCOLS step 7: the wiring routes)
+
+`routes/wiring.rs`, nested at `/api/wiring` by `routes/mod.rs`. Admin-only like
+`/api/admin/*` (a non-admin gets 403, an anonymous caller 401), inside the `/api` body
+limit. `LiveWiring` is `{ version, unplugged, bind, cut, add, order }` (flat), as
+`wiring.json` is written.
+
+| Route | Body | Response | Notes |
+|---|---|---|---|
+| `GET /api/wiring` | — | `{ live: LiveWiring, history: [{ version, action, actor?, subject?, at }…] }` | history newest first; `?limit=` default 50, max 200; `at` is RFC 3339 |
+| `GET /api/wiring/versions/{v}` | — | `{ version, wiring, action, actor?, subject?, at }` | 404 when there is no such version |
+| `POST /api/wiring/apply` | `{ base, wiring, action: "apply" \| "rollback" }` | `{ live: LiveWiring }` | writes `base + 1`; **409** when `base` is not the live version (nothing changes); any other `action` is 400 |
+
+**Unplug is disable.** An apply whose `unplugged` lists an installed, switched-on plugin
+moves that plugin's record to `disabled` (reason `admin`); one whose `unplugged` no longer
+lists a `disabled` plugin moves it to `enabled`, breaker cleared, backend half activated.
+These are `plugininstall::disable_record` / `enable_record` — the record halves of
+`disable` / `enable`, without the wiring version those write, because the apply *is* the
+version. The version is committed first, then the records; the audit entry
+(`wiring.apply` / `wiring.rollback`) is the store's, and every socket hears
+`wiring.applied` once.

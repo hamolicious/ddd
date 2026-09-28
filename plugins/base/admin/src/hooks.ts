@@ -13,7 +13,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 
-import type { ConfirmRequest, ModalRequest, ModalResult, SheetRequest } from "../../_shared/context-menu-api.js";
+import type { ConfirmRequest, ModalRequest, ModalResult, SheetRequest } from "@protocols/lm/context-menu";
 
 export interface AsyncState<T> {
   readonly data: T | undefined;
@@ -105,3 +105,20 @@ export const DialogsContext = createContext<Dialogs>({
 export const useConfirm = (): Dialogs["confirm"] => useContext(DialogsContext).confirm;
 export const useModal = (): Dialogs["modal"] => useContext(DialogsContext).modal;
 export const useSheet = (): Dialogs["openSheet"] => useContext(DialogsContext).openSheet;
+
+/**
+ * The way to the graph editor (`#/wiring`), which belongs to the `wiring` plugin: this
+ * plugin only asks the router whether the route exists and navigates to it. Asked at
+ * render time, because the editor can be plugged in or out while this screen is open.
+ */
+export interface WiringEditorLink {
+  available(): boolean;
+  open(): void;
+}
+
+export const WiringEditorContext = createContext<WiringEditorLink>({
+  available: () => false,
+  open: () => {},
+});
+
+export const useWiringEditor = (): WiringEditorLink => useContext(WiringEditorContext);
