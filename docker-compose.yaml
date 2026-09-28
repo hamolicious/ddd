@@ -49,7 +49,8 @@ services:
       - mongo-data:/data/db
       - mongo-config:/data/configdb
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      test:
+        ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -74,6 +75,7 @@ services:
     environment:
       MONGO_URI: mongodb://mongo:27017
       MONGO_DATABASE: ${MONGO_DATABASE:-life_manager}
+      PORT: 8081
       BIND_ADDR: 0.0.0.0:${PORT:-8080}
       # Required, >= 32 bytes, no default (SPEC §5.2). Rotating it logs everyone out.
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required and must be at least 32 bytes}

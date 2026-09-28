@@ -10,7 +10,7 @@
  * - `Graph.tsx`, `Inspector.tsx`, `WiringView.tsx` — the screen.
  *
  * Written against `kernel.ports` alone: it names its own ports (`router`, `shell`, `menu`
- * in; `route`, `view`, `panel`, `commands`, `nav` out) and the server's resolver wires
+ * in; `route`, `view`, `panel`, `commands` out) and the server's resolver wires
  * them. It has no kernel privilege; everything goes through the admin-only wiring routes,
  * and the plugin hides its entry points for non-admins as a courtesy (the route exists
  * for everyone so a direct link says "not an administrator" rather than 404).
@@ -27,7 +27,6 @@ import type { AltbarPanel } from "@protocols/lm/altbar.panel";
 import type { Command } from "@protocols/lm/commands.command";
 import type { ContextMenu } from "@protocols/lm/context-menu";
 import type { MainView } from "@protocols/lm/main.view";
-import type { NavbarItem } from "@protocols/lm/navbar.item";
 import type { Router } from "@protocols/lm/router";
 import type { Route } from "@protocols/lm/router.route";
 import type { Shell } from "@protocols/lm/shell";
@@ -160,14 +159,6 @@ export default function activate(kernel: Kernel): void {
       order: 60,
       when: (view) => view.id === VIEW,
       component: () => <Inspector store={store} onSelect={select} onConnect={connect} onApply={apply} />,
-    });
-    kernel.ports.offer<NavbarItem>("nav", {
-      id: "wiring.open",
-      label: "Wiring",
-      icon: ICON,
-      side: "end",
-      order: 95,
-      onSelect: () => router.navigate("/wiring"),
     });
     kernel.ports.offer<Command>("commands", [
       { id: "wiring.open", title: "Open the wiring editor", category: "Wiring", run: () => router.navigate("/wiring") },

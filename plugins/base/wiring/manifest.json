@@ -50,10 +50,6 @@
     },
     "commands": {
       "protocol": "lm/commands.command@1.0.0"
-    },
-    "nav": {
-      "protocol": "lm/navbar.item@1.0.0",
-      "order": 95
     }
   },
   "peerLibraries": {
