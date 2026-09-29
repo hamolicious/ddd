@@ -150,13 +150,16 @@ linux-desktop:
   script:
     - cd desktop
     - cargo tauri build
-    - mkdir -p ../dist
-    - cp target/release/bundle/deb/*.deb target/release/bundle/appimage/*.AppImage ../dist/
     - cd ..
     # Publish both files to public-artifacts/cli's generic package registry, as one version:
-    # tauri.conf.json's version plus the commit, like the APK's.
+    # tauri.conf.json's version plus the commit, like the APK's. Renamed on the way out:
+    # Tauri names them after productName (`Life Manager_0.1.0_amd64.deb`), and a space is not
+    # something a package file name or its URL can carry.
     - |
       version="$(sed -n 's/^ *"version": *"\([^"]*\)".*/\1/p' desktop/tauri.conf.json | head -1)-${CI_COMMIT_SHORT_SHA}"
+      mkdir -p dist
+      cp desktop/target/release/bundle/deb/*.deb "dist/life-manager-desktop_${version}_amd64.deb"
+      cp desktop/target/release/bundle/appimage/*.AppImage "dist/life-manager-desktop_${version}_amd64.AppImage"
       for file in dist/*; do
         curl --fail-with-body --location \
           --header "PRIVATE-TOKEN: $PACKAGES_DEPLOY_TOKEN" \
