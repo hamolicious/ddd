@@ -22,6 +22,16 @@ workflow:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_TAG
 
+# The template's before_script, with a wait for dind in front. The runner starts a job when
+# the build container is ready, not the `docker` service, so the first daemon call can die
+# with `Cannot connect to the Docker daemon at tcp://localhost:2375` (pipeline 2945's
+# publish-image). Same fix as hamolicious-projects/cock.
+before_script:
+  - |
+    for _ in $(seq 1 60); do docker info >/dev/null 2>&1 && break; sleep 2; done
+    docker info >/dev/null 2>&1 || { echo "dind never came up on $DOCKER_HOST" >&2; exit 1; }
+  - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" -u "$CI_REGISTRY_USER" --password-stdin
+
 build:
   script:
     - docker build -f backend/Dockerfile -t $DEV_IMAGE .
