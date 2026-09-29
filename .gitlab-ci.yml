@@ -1,0 +1,32 @@
+# CI. For now it does one thing: build the server image and publish it to
+# registry.slayhouse.net/public-artifacts/image/life-manager-server.
+#
+# The shared homelab template does the work: `build` pushes to this project's registry,
+# `publish-image` retags that into public-artifacts with the group's IMAGES_DEPLOY_TOKEN.
+# Two things differ from the template, and they are the only overrides below:
+#
+#   * `build` — the Dockerfile is `backend/Dockerfile` with the repo root as context
+#     (see the header of `docker-compose.yaml`), not `./Dockerfile`.
+#   * `publish-image` — runs on every push to master and on tags, instead of on
+#     `[publish]` / by hand.
+include:
+  - project: "gitlab-artifacts/ci"
+    file: "/homelab.gitlab-ci.yml"
+
+variables:
+  PUBLISHED_IMAGE: "life-manager-server"
+
+# No merge request pipelines yet, so nothing to guard against duplicates.
+workflow:
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+build:
+  script:
+    - docker build -f backend/Dockerfile -t $DEV_IMAGE .
+    - docker push $DEV_IMAGE
+
+publish-image:
+  rules:
+    - when: on_success
