@@ -2,7 +2,8 @@ import type { ReactElement } from "react";
 
 import type { Icons } from "@protocols/lm/icons";
 
-import { ConditionsEditor, type NoteLookup } from "../../_shared/conditions-editor.js";
+import { ConditionsEditor } from "../../_shared/conditions-editor.js";
+import type { NoteSource } from "../../_shared/note-picker.js";
 import type { Suggestions } from "../../_shared/conditions-index.js";
 import { newClauseId } from "../../_shared/conditions.js";
 
@@ -14,7 +15,7 @@ export interface RulesProps {
   /** For each rule's preview: what a field it leaves unset shows. */
   readonly defaults: FolderStyle;
   readonly icons: Pick<Icons, "Icon" | "Picker"> | undefined;
-  readonly notes: NoteLookup;
+  readonly notes: NoteSource;
   /** Properties and values to offer, from the indexer. */
   readonly suggestions?: Suggestions;
   /** Opens the colour and icon editor for `rule` beside `anchor`. */

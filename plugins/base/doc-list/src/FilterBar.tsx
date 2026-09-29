@@ -43,7 +43,8 @@ import type { ContextMenu } from "@protocols/lm/context-menu";
 
 import { useCompact } from "../../_shared/compact.js";
 import type { ConditionContext } from "../../_shared/conditions.js";
-import { ConditionsEditor, type NoteLookup } from "../../_shared/conditions-editor.js";
+import { ConditionsEditor } from "../../_shared/conditions-editor.js";
+import type { NoteSource } from "../../_shared/note-picker.js";
 import type { Suggestions } from "../../_shared/conditions-index.js";
 import {
   SORT_OPTIONS,
@@ -69,7 +70,7 @@ export interface FilterBarProps {
   /** Present while there are results to act on: opens the actions menu beside `anchor`. */
   readonly onActions?: (anchor: HTMLElement) => void;
   /** Finds notes for "is inside note" / "contains note"; without it they are not offered. */
-  readonly notes?: NoteLookup;
+  readonly notes?: NoteSource;
   /** Properties and values to offer, from the indexer. */
   readonly suggestions?: Suggestions;
   /** The children "is inside note" resolves against, for the JSON shown. */

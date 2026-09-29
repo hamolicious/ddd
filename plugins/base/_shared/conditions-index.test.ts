@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { FmField } from "@protocols/lm/workspace-index";
 
-import { indexNoteLookup, indexSuggestions, inferKind, type ConditionIndex } from "./conditions-index.js";
+import { indexNoteSource, indexSuggestions, inferKind, type ConditionIndex } from "./conditions-index.js";
 
 const field = (key: string, kinds: FmField["kinds"], over: Partial<FmField> = {}): FmField => ({
   key,
@@ -46,6 +46,7 @@ describe("indexSuggestions", () => {
       { id: "2", title: "Homework", folder: "School", machine: false },
     ],
     subscribe: () => () => {},
+    version: 1,
   };
   const suggestions = indexSuggestions(index);
 
@@ -64,13 +65,15 @@ describe("indexSuggestions", () => {
     expect(suggestions.values("title")).toEqual([]);
   });
 
-  it("finds notes by title, any case, with their folder", async () => {
-    const notes = indexNoteLookup(index);
-    expect(await notes.search("WORK")).toEqual([
-      { id: "1", title: "Work" },
-      { id: "2", title: "Homework — School" },
+  it("lists every note for the picker, with its folder and, when given, its look", () => {
+    const source = indexNoteSource(index, { look: (id) => (id === "1" ? { background: "#000000" } : undefined), onChange: () => () => {} });
+    expect(source.notes()).toEqual([
+      { id: "1", title: "Work", folder: "" },
+      { id: "2", title: "Homework", folder: "School" },
     ]);
-    expect(await notes.title("2")).toBe("Homework");
-    expect(await notes.title("nope")).toBeUndefined();
+    // The same answer while the index has not moved, so a memo keyed on it holds.
+    expect(source.notes()).toBe(source.notes());
+    expect(source.look?.("1")).toEqual({ background: "#000000" });
   });
+
 });

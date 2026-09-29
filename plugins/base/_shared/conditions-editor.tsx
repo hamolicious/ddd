@@ -18,7 +18,8 @@
  * | `-clause`, `-clause-invalid` | one row, and one that produces nothing |
  * | `-clause-note` | why it produces nothing |
  * | `-icon-button` | the remove button |
- * | `-note-results` | the notes found for "is inside" / "contains note" / a document value |
+ * | `-note-option` | a note in the picker (`note-picker.tsx`) |
+ * | `-note-chosen`, `-note-folder` | the chosen note, and the notes above it |
  *
  * **Suggestions come from the indexer** when the host has it (`conditions-index.ts`): the
  * property box offers every frontmatter key in use, the value box the values that key
@@ -29,9 +30,7 @@
  */
 
 import { useEffect, useId, useReducer, useState } from "react";
-import type { CSSProperties, ReactElement, ReactNode } from "react";
-
-import type { DocumentsApi } from "@kernel";
+import type { ReactElement, ReactNode } from "react";
 
 import {
   FIELD_OPTIONS,
@@ -47,20 +46,15 @@ import {
   type ValueKind,
 } from "./conditions.js";
 import type { Suggestions } from "./conditions-index.js";
-import { withoutMachineDocuments } from "./machine-docs.js";
-
-/** How the editor finds notes for the tree operators. Without it they are not offered. */
-export interface NoteLookup {
-  readonly search: (text: string) => Promise<readonly { readonly id: string; readonly title: string }[]>;
-  readonly title: (id: string) => Promise<string | undefined>;
-}
+import { NoteName, NotePicker, useNotes, type NoteSource } from "./note-picker.js";
 
 export interface ConditionsEditorProps {
   readonly value: Conditions;
   readonly onChange: (value: Conditions) => void;
   /** The start of every class name here; see the table above. */
   readonly classPrefix: string;
-  readonly notes?: NoteLookup;
+  /** The notes "is inside note", "contains note" and a document value choose from; without it those are not offered. */
+  readonly notes?: NoteSource;
   /** Properties and values to offer; without them, the fixed {@link FIELD_OPTIONS}. */
   readonly suggestions?: Suggestions;
   /** More buttons, after "Add condition". */
@@ -117,17 +111,6 @@ function fitToField(clause: FilterClause, option: FieldOption | undefined): Part
   return change;
 }
 
-const SR_ONLY: CSSProperties = {
-  position: "absolute",
-  width: 1,
-  height: 1,
-  margin: -1,
-  padding: 0,
-  overflow: "hidden",
-  clipPath: "inset(50%)",
-  whiteSpace: "nowrap",
-  border: 0,
-};
 
 export function ConditionsEditor({
   value,
@@ -181,8 +164,9 @@ export function ConditionsEditor({
                 <li key={clause.id} className={`${p}-clause${problems.has(clause.id) ? ` ${p}-clause-invalid` : ""}`}>
                   {!tree && (
                     <label className={`${p}-field`}>
-                      <span style={SR_ONLY}>Field</span>
                       <input
+
+                        aria-label="Field"
                         list={fieldList}
                         value={clause.field}
                         placeholder="Property name"
@@ -196,8 +180,9 @@ export function ConditionsEditor({
                   )}
 
                   <label className={`${p}-field`}>
-                    <span style={SR_ONLY}>Operator</span>
                     <select
+
+                      aria-label="Operator"
                       value={clause.op}
                       onChange={(event) => {
                         const op = event.target.value as ClauseOp;
@@ -226,8 +211,9 @@ export function ConditionsEditor({
                   {!tree && !valueless && (
                     <>
                       <label className={`${p}-field`}>
-                        <span style={SR_ONLY}>Value type</span>
                         <select
+
+                          aria-label="Value type"
                           value={clause.kind}
                           onChange={(event) => patch(clause.id, { kind: event.target.value as ValueKind })}
                         >
@@ -247,8 +233,9 @@ export function ConditionsEditor({
                         />
                       ) : (
                       <label className={`${p}-field ${p}-grow`}>
-                        <span style={SR_ONLY}>Value</span>
                         <input
+
+                          aria-label="Value"
                           list={`${fieldList}-${clause.id}`}
                           value={clause.value}
                           placeholder={
@@ -337,7 +324,7 @@ export function ConditionsEditor({
   );
 }
 
-/** A note, chosen by title and stored by id. */
+/** A note: the picker until one is chosen, then the note as the tree draws it. */
 function NoteField({
   classPrefix: p,
   notes,
@@ -345,75 +332,35 @@ function NoteField({
   onChange,
 }: {
   readonly classPrefix: string;
-  readonly notes: NoteLookup;
+  readonly notes: NoteSource;
   readonly value: string;
   readonly onChange: (id: string) => void;
 }): ReactElement {
-  const [title, setTitle] = useState<string | undefined>();
-  const [query, setQuery] = useState("");
-  const [found, setFound] = useState<readonly { readonly id: string; readonly title: string }[]>([]);
-
-  useEffect(() => {
-    let live = true;
-    setTitle(undefined);
-    if (value !== "") void notes.title(value).then((next) => live && setTitle(next ?? value));
-    return () => {
-      live = false;
-    };
-  }, [notes, value]);
-
-  useEffect(() => {
-    let live = true;
-    if (query.trim() === "") setFound([]);
-    else void notes.search(query.trim()).then((next) => live && setFound(next));
-    return () => {
-      live = false;
-    };
-  }, [notes, query]);
-
-  if (value !== "") {
+  const byId = useNotes(notes);
+  const [picking, setPicking] = useState(false);
+  if (value === "" || picking) {
     return (
       <span className={`${p}-field ${p}-grow`}>
-        <button type="button" title="Choose another note" onClick={() => onChange("")}>
-          {title ?? "…"} ✕
-        </button>
+        <NotePicker
+          source={notes}
+          classPrefix={p}
+          autoFocus={picking}
+          onChoose={(id) => {
+            setPicking(false);
+            onChange(id);
+          }}
+        />
       </span>
     );
   }
+  const note = byId.get(value);
   return (
-    <label className={`${p}-field ${p}-grow`}>
-      <span style={SR_ONLY}>Note</span>
-      <input value={query} placeholder="Find a note" onChange={(event) => setQuery(event.target.value)} />
-      {found.length > 0 && (
-        <span className={`${p}-note-results`}>
-          {found.map((note) => (
-            <button
-              key={note.id}
-              type="button"
-              onClick={() => {
-                setQuery("");
-                onChange(note.id);
-              }}
-            >
-              {note.title || "Untitled"}
-            </button>
-          ))}
-        </span>
-      )}
-    </label>
+    <span className={`${p}-field ${p}-grow`}>
+      <button type="button" title="Choose another note" className={`${p}-note-chosen`} onClick={() => setPicking(true)}>
+        {/* Not known on this device, or the index is still building: say so, not the id. */}
+        <NoteName title={note?.title ?? "Unknown note"} look={notes.look?.(value)} />
+        {note !== undefined && note.folder !== "" && <span className={`${p}-note-folder`}> {note.folder}</span>}
+      </button>
+    </span>
   );
-}
-
-/** A {@link NoteLookup} over `kernel.documents`: titles containing the text, machine documents left out. */
-export function noteLookup(documents: Pick<DocumentsApi, "query" | "get">): NoteLookup {
-  return {
-    search: async (text) =>
-      (
-        await documents.query({
-          filter: withoutMachineDocuments({ text: { field: "title", mode: "contains", value: text } }),
-          limit: 8,
-        })
-      ).rows.map((row) => ({ id: row.id, title: row.title })),
-    title: async (id) => (await documents.get(id))?.title || undefined,
-  };
 }

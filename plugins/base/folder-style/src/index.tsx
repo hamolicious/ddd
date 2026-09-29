@@ -36,9 +36,9 @@ import type { FolderMenuItem } from "@protocols/lm/folders.menu-item";
 import type { Icons } from "@protocols/lm/icons";
 import type { SettingsSection } from "@protocols/lm/settings.section";
 
-import { noteLookup, type NoteLookup } from "../../_shared/conditions-editor.js";
+import { documentsNoteSource, type NoteSource } from "../../_shared/note-picker.js";
 import {
-  indexNoteLookup,
+  indexNoteSource,
   indexSuggestions,
   type ConditionIndex,
   type Suggestions,
@@ -195,26 +195,25 @@ export default function activate(kernel: Kernel): void {
     kernel.log.warn("folder look changes on other devices will not be followed", cause);
   }
 
-  kernel.ports.offer<FolderDecoration>("look", {
-    id: "folder-style",
-    decorate: (id) => {
-      const style = resolveStyle(styles.get().get(id), defaults.get(), matcher.matched(id));
-      if (style === undefined) return undefined;
-      const set = style.icon !== undefined ? icons() : undefined;
-      return {
-        ...(style.background !== undefined
-          ? { background: style.background, color: textOn(style.background) }
-          : {}),
-        ...(set !== undefined && style.icon !== undefined ? { icon: <set.Icon name={style.icon} /> } : {}),
-      };
-    },
-    onChange: (listener) => {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-  });
+  const decorate: FolderDecoration["decorate"] = (id) => {
+    const style = resolveStyle(styles.get().get(id), defaults.get(), matcher.matched(id));
+    if (style === undefined) return undefined;
+    const set = style.icon !== undefined ? icons() : undefined;
+    return {
+      ...(style.background !== undefined
+        ? { background: style.background, color: textOn(style.background) }
+        : {}),
+      ...(set !== undefined && style.icon !== undefined ? { icon: <set.Icon name={style.icon} /> } : {}),
+    };
+  };
+  const onLookChange = (listener: () => void): (() => void) => {
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  };
+
+  kernel.ports.offer<FolderDecoration>("look", { id: "folder-style", decorate, onChange: onLookChange });
 
   kernel.ports.offer<FolderMenuItem>("edit", {
     id: "folder-style.edit",
@@ -252,14 +251,15 @@ export default function activate(kernel: Kernel): void {
   // Rewirable while running, like `icons`: the section asks on each render.
   const index = (): ConditionIndex | undefined =>
     kernel.ports.bound("index") ? kernel.ports.use<ConditionIndex>("index") : undefined;
-  const fallbackNotes = noteLookup(kernel.documents);
-  let lookups: { index: ConditionIndex | undefined; notes: NoteLookup; suggestions: Suggestions | undefined } | undefined;
+  // The picker draws notes as the tree does; this plugin is what dresses them there.
+  const fallbackNotes: NoteSource = { ...documentsNoteSource(kernel.documents), look: decorate };
+  let lookups: { index: ConditionIndex | undefined; notes: NoteSource; suggestions: Suggestions | undefined } | undefined;
   /** One lookup per wired index, so the editor's subscription is not renewed every render. */
   const lookupsFor = (current: ConditionIndex | undefined) => {
     if (lookups?.index !== current || lookups === undefined) {
       lookups = {
         index: current,
-        notes: current !== undefined ? indexNoteLookup(current) : fallbackNotes,
+        notes: current !== undefined ? indexNoteSource(current, { look: decorate, onChange: onLookChange }) : fallbackNotes,
         suggestions: current !== undefined ? indexSuggestions(current) : undefined,
       };
     }

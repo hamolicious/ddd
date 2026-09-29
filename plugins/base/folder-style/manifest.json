@@ -29,7 +29,8 @@
         "fmFields",
         "fmValues",
         "documents",
-        "subscribe"
+        "subscribe",
+        "version"
       ],
       "optional": true
     }

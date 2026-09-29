@@ -43,8 +43,8 @@ import type { ContextMenu } from "@protocols/lm/context-menu";
 import { useVirtualList } from "../../_shared/virtual-list.js";
 import { treeToWatch } from "../../_shared/conditions.js";
 import { useConditionContext } from "../../_shared/conditions-children.js";
-import { noteLookup } from "../../_shared/conditions-editor.js";
-import { indexNoteLookup, indexSuggestions, type ConditionIndex } from "../../_shared/conditions-index.js";
+import { indexNoteSource, indexSuggestions, type ConditionIndex } from "../../_shared/conditions-index.js";
+import { documentsNoteSource } from "../../_shared/note-picker.js";
 
 import { FilterBar } from "./FilterBar.js";
 import {
@@ -135,7 +135,12 @@ export function DocListView({
   // machine-owned documents unless the draft asks for them (`_shared/machine-docs.ts`).
   // "Is inside note" is built from that note's children, watched live.
   const context = useConditionContext(documents, treeToWatch(draft));
-  const notes = useMemo(() => (index !== undefined ? indexNoteLookup(index) : noteLookup(documents)), [documents, index]);
+  // No colours or icons here: those come from `folders`, which already depends on this
+  // plugin (`lm/document-browser`), so asking it back would make a cycle.
+  const notes = useMemo(
+    () => (index !== undefined ? indexNoteSource(index) : documentsNoteSource(documents)),
+    [documents, index],
+  );
   const suggestions = useMemo(() => (index !== undefined ? indexSuggestions(index) : undefined), [index]);
   const filter = buildFilter(draft, context);
   const effective = buildEffectiveFilter(draft, context);

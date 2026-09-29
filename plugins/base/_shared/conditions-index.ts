@@ -10,10 +10,10 @@ import type { Unsubscribe } from "@kernel";
 import type { FmField, PropertyKind, WorkspaceIndex } from "@protocols/lm/workspace-index";
 
 import { DOC_PREFIX, FIELD_OPTIONS, type FieldOption, type ValueKind } from "./conditions.js";
-import type { NoteLookup } from "./conditions-editor.js";
+import type { NoteLook, NoteSource, PickableNote } from "./note-picker.js";
 
 /** The index as the conditions read it: a host's manifest `needs` these. */
-export type ConditionIndex = Pick<WorkspaceIndex, "fmFields" | "fmValues" | "documents" | "subscribe">;
+export type ConditionIndex = Pick<WorkspaceIndex, "fmFields" | "fmValues" | "documents" | "subscribe" | "version">;
 
 export interface Suggestions {
   /** The fixed roots, then every frontmatter key a person wrote, most-used first. */
@@ -104,17 +104,34 @@ export function indexSuggestions(index: ConditionIndex): Suggestions {
   };
 }
 
-/** Notes by title from the index: offline, and no query per keystroke. */
-export function indexNoteLookup(index: Pick<ConditionIndex, "documents">): NoteLookup {
+/**
+ * Every note for the picker, from the index: offline, synchronous, live. `looks` dresses
+ * them as the tree does, and its changes are announced with the index's.
+ */
+export function indexNoteSource(
+  index: Pick<ConditionIndex, "documents" | "subscribe" | "version">,
+  looks?: { readonly look: (id: string) => NoteLook | undefined; readonly onChange: (listener: () => void) => Unsubscribe },
+): NoteSource {
+  // Rebuilt only when the index moves, so the picker's memo holds between changes.
+  let cached: { readonly version: number; readonly notes: readonly PickableNote[] } | undefined;
   return {
-    search: async (text) => {
-      const needle = text.toLowerCase();
-      return index
-        .documents()
-        .filter((note) => note.title.toLowerCase().includes(needle))
-        .slice(0, 8)
-        .map((note) => ({ id: note.id, title: note.folder !== "" ? `${note.title} — ${note.folder}` : note.title }));
+    notes: () => {
+      if (cached?.version !== index.version) {
+        cached = {
+          version: index.version,
+          notes: index.documents().map((note) => ({ id: note.id, title: note.title, folder: note.folder })),
+        };
+      }
+      return cached.notes;
     },
-    title: async (id) => index.documents().find((note) => note.id === id)?.title,
+    subscribe: (listener) => {
+      const offIndex = index.subscribe(listener);
+      const offLooks = looks?.onChange(listener);
+      return () => {
+        offIndex();
+        offLooks?.();
+      };
+    },
+    ...(looks !== undefined ? { look: looks.look } : {}),
   };
 }
