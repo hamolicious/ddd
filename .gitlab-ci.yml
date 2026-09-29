@@ -4,13 +4,16 @@
 #     registry.slayhouse.net/public-artifacts/image/life-manager-server and deployed to the
 #     homelab on every push to master and on tags.
 #   * The Android APK and the Linux desktop shell: manual jobs, in every pipeline. Press play;
-#     the result is the job's artifacts.
+#     the result is the job's artifacts; the APK is also published to
+#     gitlab.slayhouse.net/public-artifacts/android, the desktop shell to
+#     gitlab.slayhouse.net/public-artifacts/cli (Deploy → Package registry on each).
 #
 # The shared homelab template does the server work: `build` pushes to this project's
 # registry, `publish-image` retags that into public-artifacts with the group's
 # IMAGES_DEPLOY_TOKEN, `deploy-image` bumps the tag in homelab/k8. What differs from it:
 #
-#   * `build` — the Dockerfile is `backend/Dockerfile` with the repo root as context
+#   * `build` is replaced by `server-image`, so the pipeline says which build it is next to
+#     the shell jobs. Its Dockerfile is `backend/Dockerfile` with the repo root as context
 #     (see the header of `docker-compose.yaml`), not `./Dockerfile`.
 #   * `publish-image` / `deploy-image` — run automatically, but only for master and tags.
 #     A pipeline started by hand ("Run pipeline") on another branch builds the image and
@@ -49,12 +52,20 @@ before_script:
   - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   - if: $CI_COMMIT_TAG
 
+# An included job cannot be renamed or removed, only switched off.
 build:
+  rules:
+    - when: never
+
+server-image:
+  stage: build
   script:
     - docker build -f backend/Dockerfile -t $DEV_IMAGE .
     - docker push $DEV_IMAGE
 
 publish-image:
+  needs: [server-image]
+  dependencies: [server-image]
   rules: *ships
 
 deploy-image:
@@ -105,7 +116,17 @@ android-apk:
     - cd app
     - flutter pub get
     - flutter build apk --release
-    - mv build/app/outputs/flutter-apk/app-release.apk "../life-manager-${CI_COMMIT_SHORT_SHA}.apk"
+    - cd ..
+    - mv app/build/app/outputs/flutter-apk/app-release.apk "life-manager-${CI_COMMIT_SHORT_SHA}.apk"
+    # Publish to public-artifacts/android's generic package registry, the way the template's
+    # bin-package does for public-artifacts/cli. Version is pubspec's (without the +build)
+    # plus the commit, so every press is its own version and says what it was built from.
+    - |
+      version="$(sed -n 's/^version: *\([^+]*\).*/\1/p' app/pubspec.yaml)-${CI_COMMIT_SHORT_SHA}"
+      curl --fail-with-body --location \
+        --header "PRIVATE-TOKEN: $PACKAGES_DEPLOY_TOKEN" \
+        --upload-file "life-manager-${CI_COMMIT_SHORT_SHA}.apk" \
+        "${CI_API_V4_URL}/projects/public-artifacts%2Fandroid/packages/generic/life-manager/${version}/life-manager-${CI_COMMIT_SHORT_SHA}.apk"
   artifacts:
     name: "life-manager-apk-$CI_COMMIT_SHORT_SHA"
     paths:
@@ -131,6 +152,17 @@ linux-desktop:
     - cargo tauri build
     - mkdir -p ../dist
     - cp target/release/bundle/deb/*.deb target/release/bundle/appimage/*.AppImage ../dist/
+    - cd ..
+    # Publish both files to public-artifacts/cli's generic package registry, as one version:
+    # tauri.conf.json's version plus the commit, like the APK's.
+    - |
+      version="$(sed -n 's/^ *"version": *"\([^"]*\)".*/\1/p' desktop/tauri.conf.json | head -1)-${CI_COMMIT_SHORT_SHA}"
+      for file in dist/*; do
+        curl --fail-with-body --location \
+          --header "PRIVATE-TOKEN: $PACKAGES_DEPLOY_TOKEN" \
+          --upload-file "$file" \
+          "${CI_API_V4_URL}/projects/public-artifacts%2Fcli/packages/generic/life-manager-desktop/${version}/$(basename "$file")"
+      done
   artifacts:
     name: "life-manager-desktop-$CI_COMMIT_SHORT_SHA"
     paths:
