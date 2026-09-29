@@ -8,13 +8,18 @@
 #   * `build` — the Dockerfile is `backend/Dockerfile` with the repo root as context
 #     (see the header of `docker-compose.yaml`), not `./Dockerfile`.
 #   * `publish-image` — runs on every push to master and on tags, instead of on
-#     `[publish]` / by hand.
+#     `[publish]` / by hand. `deploy-image` follows it (see DEPLOY_HOMELAB).
 include:
   - project: "gitlab-artifacts/ci"
     file: "/homelab.gitlab-ci.yml"
 
 variables:
   PUBLISHED_IMAGE: "life-manager-server"
+  # After publishing, the template's `deploy-image` rewrites the image of the `life-manager`
+  # container in homelab/k8's gitops/manifests/life-manager/deployment.yaml and argo rolls it.
+  DEPLOY_HOMELAB: "true"
+  GITOPS_TARGET_MANIFEST: "life-manager"
+  GITOPS_TARGET_CONTAINER: "life-manager"
 
 # No merge request pipelines yet, so nothing to guard against duplicates.
 workflow:
