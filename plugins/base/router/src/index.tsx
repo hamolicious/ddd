@@ -61,7 +61,7 @@ export default function activate(kernel: Kernel): RouterApi {
    * Resolve the current URL, tell the shell, and notify subscribers once.
    *
    * The dedupe key is the path **and** query: a view addressed by a query
-   * (`#/folder?path=home/lists`) matches the same route for every folder, so comparing
+   * (`#/search?q=groceries`) matches the same route for every query, so comparing
    * paths alone would navigate the shell and tell nobody.
    */
   const resolve = (): void => {

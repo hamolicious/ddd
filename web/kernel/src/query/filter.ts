@@ -15,13 +15,13 @@ import { filterRow, type CoreBindings, type FilterJson } from "../wasm/index.js"
 
 export type SortDirection = "asc" | "desc";
 
-/** One sort key: a dotted projection path (`title`, `fm.path`, `updated_at`). */
+/** One sort key: a dotted projection path (`title`, `fm.date`, `updated_at`). */
 export interface SortKey {
   readonly field: string;
   readonly direction: SortDirection;
 }
 
-/** `"fm.path"`, `"-updated_at"`, `"title:desc"` — the same spellings REST accepts. */
+/** `"fm.date"`, `"-updated_at"`, `"title:desc"` — the same spellings REST accepts. */
 export function parseSortKey(input: string): SortKey {
   if (input.startsWith("-")) return { field: input.slice(1), direction: "desc" };
   const [field, direction] = input.split(":", 2);

@@ -1,6 +1,6 @@
 {
   "id": "attachments",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "name": "Attachments",
   "description": "Uploads files pasted into the editor, and shows embedded files with a viewer per file type.",
   "author": "Life Manager base distribution",
@@ -11,11 +11,18 @@
   "consumes": {
     "viewers": {
       "protocol": "lm/attachments.viewer@^1.0"
+    },
+    "folders": {
+      "protocol": "lm/folders@^1.1",
+      "needs": [
+        "fileNew"
+      ],
+      "optional": true
     }
   },
   "provides": {
     "uploads": {
-      "protocol": "lm/attachments@1.0.0"
+      "protocol": "lm/attachments@2.0.0"
     },
     "embed": {
       "protocol": "lm/markdown.attachment@1.0.0"

@@ -52,7 +52,7 @@
       "order": 80
     },
     "commands": {
-      "protocol": "lm/commands.command@1.0.0"
+      "protocol": "lm/commands.command@2.0.0"
     },
     "keys": {
       "protocol": "lm/keybindings.default@1.0.0"

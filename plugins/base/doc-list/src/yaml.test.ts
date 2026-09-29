@@ -44,8 +44,8 @@ describe("yamlScalar", () => {
   });
 
   it("never lets a value become a second frontmatter line", () => {
-    // The injection this closes: `fm.path` is read out of a document any workspace user
-    // can write, and "new document here" writes it back. A single-quoted scalar has no
+    // The injection this closes: a value can come from a document any workspace user
+    // can write, and creating a document writes it back. A single-quoted scalar has no
     // newline escape, so quoting alone produced an unterminated quote plus an injected
     // `title:` line the creating user never typed.
     expect(yamlScalar("home\ntitle: owned")).toBe('"home\\ntitle: owned"');

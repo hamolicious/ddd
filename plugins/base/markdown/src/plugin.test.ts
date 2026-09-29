@@ -301,10 +301,17 @@ describe("promoteToDocument (SPEC §3.6)", () => {
     expect(host.created[0]?.split("\n")[1]).toBe(`title: ${expected}`);
   });
 
-  it("records fm.path when the file was promoted into a folder", async () => {
+  it("files the new document where \"Files go to\" says, through `folders`", async () => {
     const host = fakeKernel();
-    const api = activate(host.kernel);
-    await api.promoteToDocument("01JATTACHMENT00000000000000", { path: "home/scans" });
-    expect(host.created[0]).toContain("path: home/scans");
+    const filed: [string, string][] = [];
+    const ports = host.kernel.ports as unknown as { bound: (port: string) => boolean; use: (port: string) => unknown };
+    ports.bound = (port) => port === "folders";
+    ports.use = (port) =>
+      port === "folders"
+        ? { fileNew: async (id: string, kind: string) => void filed.push([id, kind]) }
+        : undefined;
+    const id = await activate(host.kernel).promoteToDocument("01JATTACHMENT00000000000000");
+    expect(filed).toEqual([[id, "file"]]);
+    expect(host.created[0]).not.toMatch(/^path:/m);
   });
 });

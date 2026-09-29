@@ -22,8 +22,14 @@
  * client that has not synced it yet, is not shown: the list is what this device holds.
  * Each result carries the line that matched, and opening it opens at that line.
  *
- * **Both are paged** (`pagination.ts`): a page of rows, then "Load N more", which also
- * loads by itself as it scrolls near. The count under the list is always the real total.
+ * **Results can be acted on together.** While a search or a filter narrows the list,
+ * the toolbar's Actions button hands every loaded row's id to `onActions` — never the
+ * whole unfiltered workspace, which is one careless tap from "trash everything".
+ *
+ * **Both are paged** (`pagination.ts`): a page of rows, and the next one loads by itself
+ * as the end scrolls near — no button, no "Loading…" at the bottom. The count under the list is always the real total.
+ * The document list is also virtual (`_shared/virtual-list.ts`): however many pages are
+ * loaded, only the rows on screen are in the DOM.
  * "Loading…" replaces the list only while it has nothing to show; a page on its way
  * keeps the rows already there.
  */
@@ -33,6 +39,12 @@ import type { ReactElement, RefObject } from "react";
 
 import type { DocumentQuery, DocumentRow, DocumentsApi, FilterJson } from "@kernel";
 import type { ContextMenu } from "@protocols/lm/context-menu";
+
+import { useVirtualList } from "../../_shared/virtual-list.js";
+import { treeToWatch } from "../../_shared/conditions.js";
+import { useConditionContext } from "../../_shared/conditions-children.js";
+import { noteLookup } from "../../_shared/conditions-editor.js";
+import { indexNoteLookup, indexSuggestions, type ConditionIndex } from "../../_shared/conditions-index.js";
 
 import { FilterBar } from "./FilterBar.js";
 import {
@@ -44,20 +56,25 @@ import {
   type FilterDraft,
 } from "./filter.js";
 import { LoadMore } from "./LoadMore.js";
-import { PAGE_SIZE, limitFor, nextPageSize, showingText, usePages } from "./pagination.js";
+import { limitFor, showingText, usePages } from "./pagination.js";
 import { snippetFor, splitHighlights, type Snippet } from "./search/merge.js";
 import { useSearch, type SearchEngine } from "./search/useSearch.js";
 import { useLiveQuery } from "./useLiveQuery.js";
 
 export interface DocListViewProps {
   readonly documents: DocumentsApi;
+  /** The indexer, for the filter's suggestions and note picker; optional. */
+  readonly index?: ConditionIndex | undefined;
   /** Open a document; `line` deep-links a search result to the line that matched. */
   readonly onOpen: (id: string, line?: number) => void;
   readonly onCreate: () => void;
   readonly onDelete: (id: string) => Promise<void>;
   /** The `menu` port (`lm/context-menu`): the sort menu and each row's ⋯ menu. */
   readonly menu: Pick<ContextMenu, "open">;
-  /** Reports the ids currently rendered, so `DocListApi.visible()` is not a guess. */
+  /**
+   * Reports the ids the list holds, so `DocListApi.visible()` is not a guess: every
+   * loaded row, including those scrolled out of the DOM by the virtual list.
+   */
   readonly onRendered?: (ids: readonly string[]) => void;
   /** The search providers (`search/providers.ts`). */
   readonly search: SearchEngine;
@@ -66,10 +83,13 @@ export interface DocListViewProps {
   readonly onQueryChange: (query: string) => void;
   /** The search field, for the "Search documents" command. */
   readonly searchInput?: RefObject<HTMLInputElement>;
+  /** The Actions menu for the listed results: every loaded row's id, and the button. */
+  readonly onActions?: (ids: readonly string[], anchor: HTMLElement) => void;
 }
 
 export function DocListView({
   documents,
+  index,
   menu,
   onOpen,
   onCreate,
@@ -79,6 +99,7 @@ export function DocListView({
   query: text,
   onQueryChange,
   searchInput,
+  onActions,
 }: DocListViewProps): ReactElement {
   const trimmed = text.trim();
   const searching = trimmed !== "";
@@ -112,8 +133,12 @@ export function DocListView({
   // Two filters, and the difference matters. `filter` is what the *user* asked for and
   // decides which empty state to show; `effective` is what the query runs, and hides
   // machine-owned documents unless the draft asks for them (`_shared/machine-docs.ts`).
-  const filter = buildFilter(draft);
-  const effective = buildEffectiveFilter(draft);
+  // "Is inside note" is built from that note's children, watched live.
+  const context = useConditionContext(documents, treeToWatch(draft));
+  const notes = useMemo(() => (index !== undefined ? indexNoteLookup(index) : noteLookup(documents)), [documents, index]);
+  const suggestions = useMemo(() => (index !== undefined ? indexSuggestions(index) : undefined), [index]);
+  const filter = buildFilter(draft, context);
+  const effective = buildEffectiveFilter(draft, context);
   const [pages, more] = usePages(JSON.stringify([effective, sortField, sortDirection, trimmed]));
   const found = useSearch(search, trimmed, { limit: limitFor(pages) });
   const ids = found.hits.map((hit) => hit.id);
@@ -146,6 +171,12 @@ export function DocListView({
   // More results may exist when the providers filled the page they were asked for.
   const moreResults = searching && found.hits.length >= limitFor(pages);
   const rendered = state.rows.map((row) => row.id).join(",");
+  const virtual = useVirtualList({
+    count: state.rows.length,
+    keyOf: (index) => state.rows[index]?.id ?? String(index),
+    // Title and meta; a search result's snippet is measured when it is drawn.
+    estimate: searching ? 84 : 52,
+  });
 
   useEffect(() => {
     onRendered?.(rendered === "" ? [] : rendered.split(","));
@@ -171,6 +202,12 @@ export function DocListView({
         query={text}
         onQueryChange={onQueryChange}
         {...(searchInput ? { searchInput } : {})}
+        notes={notes}
+        {...(suggestions !== undefined ? { suggestions } : {})}
+        context={context}
+        {...(onActions && (searching || filter !== undefined) && state.rows.length > 0
+          ? { onActions: (anchor: HTMLElement) => onActions(state.rows.map((row) => row.id), anchor) }
+          : {})}
       />
 
       {partial && (
@@ -204,11 +241,15 @@ export function DocListView({
         )
       ) : (
         <>
-          <ul className="doclist-items doclist:m-0 doclist:flex doclist:list-none doclist:flex-col doclist:p-0">
-            {state.rows.map((row) => {
+          <ul
+            ref={virtual.listRef}
+            className="doclist-items doclist:m-0 doclist:flex doclist:list-none doclist:flex-col doclist:p-0"
+            style={{ paddingTop: virtual.before, paddingBottom: virtual.after }}
+          >
+            {state.rows.slice(virtual.first, virtual.end).map((row, offset) => {
               const snippet = searching ? snippetFor(row.content, terms.get(row.id) ?? []) : undefined;
               return (
-              <li key={row.id} className={`doclist-item doclist:grid doclist:grid-cols-[minmax(0,1fr)_auto] ${snippet ? "doclist:grid-rows-[auto_auto_auto]" : "doclist:grid-rows-2"} doclist:items-center doclist:gap-x-2 doclist:border-b doclist:border-border doclist:py-0.5 doclist:compact:py-1`}>
+              <li key={row.id} data-virtual-index={virtual.first + offset} className={`doclist-item doclist:grid doclist:grid-cols-[minmax(0,1fr)_auto] ${snippet ? "doclist:grid-rows-[auto_auto_auto]" : "doclist:grid-rows-2"} doclist:items-center doclist:gap-x-2 doclist:border-b doclist:border-border doclist:py-0.5 doclist:compact:py-1`}>
                 <button
                   type="button"
                   className="doclist-open doclist:col-start-1 doclist:row-start-1 doclist:flex doclist:min-h-[calc(var(--lm-tap-target)/2)] doclist:min-w-0 doclist:items-center doclist:overflow-hidden doclist:text-ellipsis doclist:whitespace-nowrap doclist:border-0! doclist:bg-transparent! doclist:p-0! doclist:text-left doclist:text-lg doclist:text-link doclist:compact:min-h-[var(--lm-tap-target)]"
@@ -272,11 +313,7 @@ export function DocListView({
             })}
           </ul>
           {(searching ? moreResults : state.rows.length < state.total) && (
-            <LoadMore
-              count={searching ? PAGE_SIZE : nextPageSize(state.rows.length, state.total)}
-              busy={state.loading || pending}
-              onMore={more}
-            />
+            <LoadMore busy={state.loading || pending} onMore={more} />
           )}
           <p className="doclist-status doclist:m-0 doclist:text-sm doclist:text-text-muted" role="status" aria-live="polite">
             {searching
@@ -402,7 +439,7 @@ export function TrashView({
             ))}
           </ul>
           {rows.length < state.total && (
-            <LoadMore count={nextPageSize(rows.length, state.total)} busy={state.loading} onMore={more} />
+            <LoadMore busy={state.loading} onMore={more} />
           )}
           <p className="doclist-status doclist:m-0 doclist:text-sm doclist:text-text-muted" role="status" aria-live="polite">
             {rows.length < state.total
@@ -439,10 +476,8 @@ function EmptyState({
 }
 
 function Meta({ row }: { readonly row: DocumentRow }): ReactElement {
-  const path = typeof row.fm["path"] === "string" ? row.fm["path"] : undefined;
   return (
     <p className="doclist-meta doclist:col-start-1 doclist:row-start-2 doclist:mb-1 doclist:mt-0 doclist:flex doclist:min-w-0 doclist:flex-nowrap doclist:gap-2 doclist:overflow-hidden doclist:whitespace-nowrap doclist:text-sm doclist:text-text-muted doclist:[&>*]:shrink-0">
-      {path && <span className="doclist-path doclist:min-w-[3ch] doclist:shrink doclist:overflow-hidden doclist:text-ellipsis doclist:font-mono">{path}</span>}
       <span>updated {formatWhen(row.updated_at)}</span>
       {row.fm_parse_error && (
         <span className="doclist-warning doclist:text-warning" title="Some frontmatter lines could not be parsed">

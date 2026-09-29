@@ -213,8 +213,9 @@ export class WorkspaceIndex {
       all: this.#stats(live, counts, connected),
     };
 
+    const folderOf = folderTitles(live);
     const documents = live
-      .map(({ id, title, folder, machine }) => ({ id, title, folder, machine }))
+      .map(({ id, title, machine }) => ({ id, title, folder: folderOf(id), machine }))
       .sort((a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
 
     this.#derived = { fields, tallies, incoming, stats, documents };
@@ -229,7 +230,6 @@ export class WorkspaceIndex {
     const tasks = { open: 0, done: 0, other: 0 };
     const connections = { total: 0, broken: 0, toTrash: 0 };
     const attachments = new Set<string>();
-    const folders = new Set<string>();
     let words = 0;
     let characters = 0;
     let orphans = 0;
@@ -249,7 +249,6 @@ export class WorkspaceIndex {
         else if (state === "trashed") connections.toTrash += 1;
       }
       for (const id of data.attachments) attachments.add(id);
-      for (const folder of ancestors(data.folder)) folders.add(folder);
       if (!connected.has(data.id)) orphans += 1;
       if (data.fmParseError) fmParseErrors += 1;
       if (lastUpdated === null || data.updatedAt > lastUpdated) lastUpdated = data.updatedAt;
@@ -263,7 +262,7 @@ export class WorkspaceIndex {
       connections,
       orphans,
       attachments: attachments.size,
-      folders: folders.size,
+      folders: docs.filter((data) => data.children.some((child) => this.#stateOf(child) === "live")).length,
       fmParseErrors,
       lastUpdated,
     };
@@ -293,9 +292,26 @@ function lastSegment(key: string): string {
   return key.slice(key.lastIndexOf(".") + 1);
 }
 
-/** `a/b/c` → `a`, `a/b`, `a/b/c`; `""` has none. */
-function ancestors(folder: string): string[] {
-  if (folder === "") return [];
-  const segments = folder.split("/");
-  return segments.map((_, index) => segments.slice(0, index + 1).join("/"));
+/**
+ * Each note's place in the folder tree, as the titles above it joined by " / " (`""` at
+ * the root). The tree's own rules, in brief (`folders/src/hierarchy.ts`): the listing
+ * note with the smallest id is the parent, and a loop is walked only once.
+ */
+function folderTitles(live: readonly Extracted[]): (id: DocumentId) => string {
+  const titles = new Map(live.map((data) => [data.id, data.title]));
+  const parentOf = new Map<DocumentId, DocumentId>();
+  for (const data of [...live].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))) {
+    for (const child of data.children) {
+      if (child !== data.id && titles.has(child) && !parentOf.has(child)) parentOf.set(child, data.id);
+    }
+  }
+  return (id) => {
+    const path: string[] = [];
+    const seen = new Set([id]);
+    for (let parent = parentOf.get(id); parent !== undefined && !seen.has(parent); parent = parentOf.get(parent)) {
+      seen.add(parent);
+      path.unshift(titles.get(parent) ?? "");
+    }
+    return path.join(" / ");
+  };
 }

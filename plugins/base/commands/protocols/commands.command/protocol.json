@@ -1,6 +1,6 @@
 {
   "id": "lm/commands.command",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "kind": "slot",
   "owner": "commands",
   "types": "index.d.ts",
@@ -15,7 +15,14 @@
         "optional": "string"
       },
       "icon": {
-        "optional": "any"
+        "optional": "string"
+      },
+      "takes": {
+        "optional": {
+          "literal": [
+            "documents"
+          ]
+        }
       },
       "when": {
         "optional": "func"

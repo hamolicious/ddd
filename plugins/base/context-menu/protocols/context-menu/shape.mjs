@@ -3,7 +3,7 @@ import { s } from "@kernel";
 /** @type {import("@kernel").ProtocolSource} */
 export default {
   id: "lm/context-menu",
-  version: "1.0.0",
+  version: "1.1.0",
   kind: "service",
   name: "ContextMenu",
   description: `
@@ -20,6 +20,8 @@ export interface MenuItem {
   readonly label: string;
   /** A second, quieter line under the label. */
   readonly hint?: string;
+  /** Drawn before the label, in the label's colour. Since 1.1.0. */
+  readonly icon?: ReactNode;
   /** Drawn in the danger colour: deleting, trashing. */
   readonly danger?: boolean;
   /** Present on choice items: \`true\` marks the current choice. */

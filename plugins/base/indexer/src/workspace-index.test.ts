@@ -7,12 +7,17 @@ const A = row("A", "# A\n[to b](doc://B) [to gone](doc://Z) [to trash](doc://T)\
   title: "A",
   tags: ["x", "y", "x"],
   status: "open",
-  path: "work/notes",
 });
 const B = row("B", "# B\nnothing out", { title: "B", status: "done", project: { phase: 2 } });
-const C = row("C", "![](doc://B)", { title: "C", parent: "doc://A", status: "open", path: "work" });
+// C is a folder holding A (and a child that does not exist).
+const C = row(
+  "C",
+  "![](doc://B)",
+  { title: "C", parent: "doc://A", status: "open" },
+  { plugins: { folders: { children: ["A", "GONE"] } } },
+);
 const T = row("T", "[to a](doc://A)", { title: "T" }, { deleted: true });
-const S = row("S", "settings", { path: ".settings", theme: "dark" });
+const S = row("S", "settings", { machine: true, theme: "dark" });
 const LONE = row("L", "alone", { title: "Lone" });
 
 function build() {
@@ -22,11 +27,11 @@ function build() {
 }
 
 describe("WorkspaceIndex — documents", () => {
-  it("lists live human documents by title, with their folder", () => {
+  it("lists live human documents by title, with the titles above them", () => {
     expect(build().documents()).toEqual([
-      { id: "A", title: "A", folder: "work/notes", machine: false },
+      { id: "A", title: "A", folder: "C", machine: false },
       { id: "B", title: "B", folder: "", machine: false },
-      { id: "C", title: "C", folder: "work", machine: false },
+      { id: "C", title: "C", folder: "", machine: false },
       { id: "L", title: "Lone", folder: "", machine: false },
     ]);
   });
@@ -80,7 +85,7 @@ describe("WorkspaceIndex — frontmatter", () => {
     const fields = build().fmFields();
     const byKey = Object.fromEntries(fields.map((field) => [field.key, field]));
     expect(Object.keys(byKey).sort()).toEqual(
-      ["parent", "path", "project", "project.phase", "status", "tags", "theme", "title"].sort(),
+      ["machine", "parent", "project", "project.phase", "status", "tags", "theme", "title"].sort(),
     );
     expect(byKey.status).toEqual({ key: "status", count: 3, machineOnly: false, kinds: { string: 3 } });
     expect(byKey.theme?.machineOnly).toBe(true);
@@ -129,7 +134,7 @@ describe("WorkspaceIndex — stats", () => {
       connections: { total: 5, broken: 1, toTrash: 1 },
       orphans: 1,
       attachments: 0,
-      folders: 2,
+      folders: 1,
       fmParseErrors: 0,
       lastUpdated: "2026-09-01T00:00:00Z",
     });

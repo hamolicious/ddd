@@ -8,7 +8,7 @@ feed. Nothing is written anywhere; every client builds its own, offline included
 
 Trashed documents are counted in `stats().documents.trashed` and nowhere else: they have no
 fields, no words and no connections. Every frontmatter field of every live document is
-indexed, machine-owned ones (an `fm.path` starting with `.`) included. Keys nested in a map
+indexed, machine-owned ones (`machine: true`) included. Keys nested in a map
 are dotted paths (`project.status`), the spelling the filter language uses
 (`fm.project.status`), and the parent key is listed too, with kind `map`. To offer only what
 a person typed, filter on `machineOnly`.

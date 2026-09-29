@@ -172,10 +172,11 @@ test.describe("the folder tree", () => {
    * them unreachable, and would still pass a visibility test.
    */
   test("puts the active row's actions in the tab order", async ({ page, request, baseURL }) => {
+    const child = await createDocument(request, baseURL as string, "---\ntitle: Folder keyboard child\n---\n\nbody\n");
     await createDocument(
       request,
       baseURL as string,
-      "---\ntitle: Folder keyboard fixture\npath: sweep-folder\n---\n\nbody\n",
+      `---\ntitle: Folder keyboard fixture\n---\n\nbody\n\n%%% folders\nchildren:\n  - ${child}\n%%%\n`,
     );
 
     await signIn(page, ADMIN);
@@ -187,15 +188,11 @@ test.describe("the folder tree", () => {
     await tree.focus();
     const active = tree.locator(".folders-node-active");
     await expect(active).toHaveCount(1);
-    const folder = await active.locator(".folders-name").innerText();
 
-    // Folder operations now live behind one modest ellipsis menu. The old + and
-    // pencil controls were deliberately removed, but the active row's menu must
-    // remain keyboard reachable.
+    // A row's operations live behind one modest ellipsis menu, which must remain
+    // keyboard reachable on the active row.
     await page.keyboard.press("Tab");
-    await expect(
-      page.getByRole("button", { name: new RegExp(`actions for .*${folder}`, "i") }).first(),
-    ).toBeFocused();
+    await expect(active.getByRole("button", { name: "Note actions" })).toBeFocused();
 
     // And a row that is not active stays out of the way — one tab stop per tree, plus
     // the row the user is standing on, is the whole contract.

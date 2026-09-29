@@ -143,19 +143,7 @@ export function spliceSection(
       .filter((edit) => !isRemoval(edit))
       .map((edit) => `${edit.key}: ${toYamlInline(edit.value as FmValue)}\n`)
       .join("");
-    const fenced = `%%% ${pluginId}\n${body}%%%\n`;
-    if (parsed.runSpan !== undefined) {
-      const at = parsed.runSpan.end;
-      return [{ range: { start: at, end: at }, text: fenced }];
-    }
-    let separator = "";
-    if (text.length > 0) {
-      if (!text.endsWith("\n")) separator = "\n\n";
-      else if (!text.endsWith("\n\n")) separator = "\n";
-    }
-    return [
-      { range: { start: text.length, end: text.length }, text: `${separator}${fenced}` },
-    ];
+    return [newSection(text, parsed, pluginId, body)];
   }
 
   const out: TextEdit[] = [];
@@ -179,6 +167,286 @@ export function spliceSection(
     out.push({ range: { start: at, end: at }, text: appended });
   }
   return sortEdits(out);
+}
+
+/** `splice::new_section` — a new `%%% pluginId` section at the end of the run. */
+function newSection(text: string, parsed: ParsedSections, pluginId: string, body: string): TextEdit {
+  const fenced = `%%% ${pluginId}\n${body}%%%\n`;
+  if (parsed.runSpan !== undefined) {
+    const at = parsed.runSpan.end;
+    return { range: { start: at, end: at }, text: fenced };
+  }
+  let separator = "";
+  if (text.length > 0) {
+    if (!text.endsWith("\n")) separator = "\n\n";
+    else if (!text.endsWith("\n\n")) separator = "\n";
+  }
+  return { range: { start: text.length, end: text.length }, text: `${separator}${fenced}` };
+}
+
+// ---------------------------------------------------------------------------
+// List actions (core::splice::{frontmatter_list, section_list})
+// ---------------------------------------------------------------------------
+
+/** `splice::ListAction`. */
+export type ListActionInput =
+  | { readonly action: "push"; readonly value: FmValue }
+  | { readonly action: "insert"; readonly index: number; readonly value: FmValue }
+  | { readonly action: "remove"; readonly value: FmValue }
+  | { readonly action: "pop" };
+
+/** `splice::ListEdit`. `popped` is `undefined` when nothing was popped. */
+export interface ListEdit {
+  readonly edits: TextEdit[];
+  readonly popped?: FmValue;
+}
+
+const DEFAULT_INDENT = "  ";
+
+/** `core::splice::frontmatter_list`. */
+export function frontmatterList(text: string, key: string, action: ListActionInput): ListEdit {
+  guard(text);
+  requireKey(key);
+  requireItem(action);
+  const block = findBlock(text);
+  if (block === undefined) {
+    const item = createdItem(action);
+    if (item === undefined) return { edits: [] };
+    let created = `---\n${key}:\n${itemLine(DEFAULT_INDENT, item.value)}---\n`;
+    if (text.length > 0 && !text.startsWith("\n")) created += "\n";
+    return { edits: [{ range: { start: 0, end: 0 }, text: created }] };
+  }
+  return regionList(text, block.inner, key, action);
+}
+
+/** `core::splice::section_list`. */
+export function sectionList(
+  text: string,
+  pluginId: string,
+  key: string,
+  action: ListActionInput,
+): ListEdit {
+  guard(text);
+  requireKey(pluginId);
+  requireKey(key);
+  requireItem(action);
+  const parsed = parseSections(text);
+  const section = lastSection(parsed, pluginId);
+  if (section === undefined) {
+    const item = createdItem(action);
+    if (item === undefined) return { edits: [] };
+    const body = `${key}:\n${itemLine(DEFAULT_INDENT, item.value)}`;
+    return { edits: [newSection(text, parsed, pluginId, body)] };
+  }
+  return regionList(text, section.bodySpan, key, action);
+}
+
+function createdItem(action: ListActionInput): { readonly value: FmValue } | undefined {
+  return action.action === "push" || action.action === "insert" ? { value: action.value } : undefined;
+}
+
+function requireItem(action: ListActionInput): void {
+  if (action.action === "pop") return;
+  const value = action.value;
+  if (value !== null && typeof value === "object") {
+    throw new SpliceError("splice target not found: list items must be scalars");
+  }
+}
+
+interface Occurrence {
+  readonly span: Span;
+  readonly header: Span;
+  readonly block: readonly ListItem[] | undefined;
+  /** `undefined` for a block occurrence or an inline value that does not parse. */
+  readonly inline: FmValue | undefined;
+}
+
+interface ListItem {
+  readonly line: Span;
+  readonly indent: string;
+  readonly value: FmValue | undefined;
+}
+
+function occurrences(text: string, region: Span, key: string): Occurrence[] {
+  const lines = splitLines(text.slice(region.start, region.end));
+  const at = (offset: number): number => region.start + offset;
+  const out: Occurrence[] = [];
+  for (const [index, line] of lines.entries()) {
+    if (lineKey(line.content) !== key) continue;
+    const header: Span = { start: at(line.start), end: at(line.fullEnd) };
+    const split = splitKey(line.content.trim());
+    if (split !== undefined && split[1].trim().length === 0) {
+      const items: ListItem[] = [];
+      let end = line.fullEnd;
+      const first = lines[index + 1];
+      const indent = first ? blockItemIndent(first.content) : undefined;
+      if (indent !== undefined) {
+        for (const item of lines.slice(index + 1)) {
+          if (blockItemIndent(item.content) !== indent) break;
+          const rest = item.content.slice(indent);
+          const raw = rest === "-" ? "" : rest.slice(2);
+          items.push({
+            line: { start: at(item.start), end: at(item.fullEnd) },
+            indent: item.content.slice(0, indent),
+            value: parseValue(raw, 2),
+          });
+          end = item.fullEnd;
+        }
+      }
+      out.push({ span: { start: at(line.start), end: at(end) }, header, block: items, inline: undefined });
+    } else {
+      const inline = split === undefined ? undefined : parseValue(split[1], 1);
+      out.push({ span: header, header, block: undefined, inline });
+    }
+  }
+  return out;
+}
+
+function inlineItems(value: FmValue | undefined): FmValue[] {
+  if (value === undefined || value === null) return [];
+  if (Array.isArray(value)) return [...(value as readonly FmValue[])];
+  return [value];
+}
+
+function itemLine(indent: string, value: FmValue): string {
+  return `${indent}- ${toYamlInline(value)}\n`;
+}
+
+/** `Value`'s `PartialEq`, over the JS value model. */
+function sameValue(left: FmValue | undefined, right: FmValue | undefined): boolean {
+  if (left === right) return true;
+  if (left === null || right === null || left === undefined || right === undefined) return false;
+  if (typeof left !== "object" || typeof right !== "object") return false;
+  if (Array.isArray(left) !== Array.isArray(right)) return false;
+  if (Array.isArray(left)) {
+    const a = left as readonly FmValue[];
+    const b = right as readonly FmValue[];
+    return a.length === b.length && a.every((item, i) => sameValue(item, b[i]));
+  }
+  const a = left as Record<string, FmValue>;
+  const b = right as Record<string, FmValue>;
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every((k) => k in b && sameValue(a[k], b[k]));
+}
+
+const includesValue = (list: readonly FmValue[], value: FmValue): boolean =>
+  list.some((item) => sameValue(item, value));
+
+/** `splice::region_list`. */
+function regionList(text: string, region: Span, key: string, action: ListActionInput): ListEdit {
+  const found = occurrences(text, region, key);
+  const last = found.pop();
+  if (last === undefined) {
+    const item = createdItem(action);
+    if (item === undefined) return { edits: [] };
+    return {
+      edits: [{ range: { start: region.end, end: region.end }, text: `${key}:\n${itemLine(DEFAULT_INDENT, item.value)}` }],
+    };
+  }
+
+  const edits: TextEdit[] = [];
+  const folded: FmValue[] = [];
+  for (const earlier of found) {
+    edits.push({ range: earlier.span, text: "" });
+    if (earlier.block !== undefined) {
+      for (const item of earlier.block) if (item.value !== undefined) folded.push(item.value);
+    } else {
+      folded.push(...inlineItems(earlier.inline));
+    }
+  }
+
+  const popped =
+    last.block !== undefined
+      ? blockList(edits, last, last.block, folded, action)
+      : rewriteList(edits, key, last, folded, action);
+  return popped === undefined ? { edits: sortEdits(edits) } : { edits: sortEdits(edits), popped };
+}
+
+/** `splice::block_list` — line inserts and deletes only. */
+function blockList(
+  edits: TextEdit[],
+  last: Occurrence,
+  items: readonly ListItem[],
+  folded: readonly FmValue[],
+  action: ListActionInput,
+): FmValue | undefined {
+  const indent = items[0]?.indent ?? DEFAULT_INDENT;
+  const tail = items.length > 0 ? (items[items.length - 1] as ListItem).line.end : last.header.end;
+
+  const present = items.flatMap((item) => (item.value === undefined ? [] : [item.value]));
+  const appended: FmValue[] = [];
+  for (const value of folded) {
+    if (!includesValue(present, value) && !includesValue(appended, value)) appended.push(value);
+  }
+
+  let popped: FmValue | undefined;
+  switch (action.action) {
+    case "push":
+      appended.push(action.value);
+      break;
+    case "insert": {
+      const item = items[action.index];
+      if (item !== undefined) {
+        edits.push({ range: { start: item.line.start, end: item.line.start }, text: itemLine(indent, action.value) });
+      } else appended.push(action.value);
+      break;
+    }
+    case "remove":
+      for (const item of items) {
+        if (item.value !== undefined && sameValue(item.value, action.value)) edits.push({ range: item.line, text: "" });
+      }
+      break;
+    case "pop": {
+      const item = items[items.length - 1];
+      if (item !== undefined) {
+        popped = item.value;
+        edits.push({ range: item.line, text: "" });
+      }
+      break;
+    }
+  }
+
+  if (appended.length > 0) {
+    edits.push({
+      range: { start: tail, end: tail },
+      text: appended.map((value) => itemLine(indent, value)).join(""),
+    });
+  }
+  return popped;
+}
+
+/** `splice::rewrite_list` — an inline value rewritten into block form. */
+function rewriteList(
+  edits: TextEdit[],
+  key: string,
+  last: Occurrence,
+  folded: readonly FmValue[],
+  action: ListActionInput,
+): FmValue | undefined {
+  const before = inlineItems(last.inline);
+  const items = [...before];
+  for (const value of folded) if (!includesValue(items, value)) items.push(value);
+  let popped: FmValue | undefined;
+  switch (action.action) {
+    case "push":
+      items.push(action.value);
+      break;
+    case "insert":
+      items.splice(Math.min(action.index, items.length), 0, action.value);
+      break;
+    case "remove":
+      for (let i = items.length - 1; i >= 0; i -= 1) if (sameValue(items[i], action.value)) items.splice(i, 1);
+      break;
+    case "pop":
+      popped = items.pop();
+      break;
+  }
+  if (sameValue(items, before) && edits.length === 0) return popped;
+  edits.push({
+    range: last.header,
+    text: `${key}:\n${items.map((item) => itemLine(DEFAULT_INDENT, item)).join("")}`,
+  });
+  return popped;
 }
 
 /** `core::splice::remove_section` — every copy of the plugin's section. */
@@ -509,18 +777,23 @@ export function lastSection(
   return undefined;
 }
 
-/** `sections::key_line_spans` — every line defining `key` inside `section`. */
+/**
+ * `sections::key_line_spans` — every line defining `key` inside `section`. A key
+ * holding a block sequence spans its item lines too.
+ */
 export function keyLineSpans(
   text: string,
   section: MachineSectionSpans,
   key: string,
 ): Span[] {
   const body = text.slice(section.bodySpan.start, section.bodySpan.end);
-  return splitLines(body)
-    .filter((line) => lineKey(line.content) === key)
-    .map((line) => ({
+  const lines = splitLines(body);
+  return lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => lineKey(line.content) === key)
+    .map(({ line, index }) => ({
       start: section.bodySpan.start + line.start,
-      end: section.bodySpan.start + line.fullEnd,
+      end: section.bodySpan.start + (expandedValueEnd(lines, index)?.fullEnd ?? line.fullEnd),
     }));
 }
 
@@ -592,6 +865,87 @@ function quoteDouble(s: string): string {
     } else out += c;
   }
   return `${out}"`;
+}
+
+/**
+ * `value::parse_value` — a scalar, flow sequence or flow mapping; `undefined` where
+ * Rust rejects (the line would be dropped). Used by the list splices to read items.
+ *
+ * PARITY: the string-length and depth caps are not re-checked here; a value over
+ * them is one the parser already dropped, and a list splice then treats it as an
+ * item it cannot match, exactly as an unparseable item.
+ */
+export function parseValue(raw: string, depth: number): FmValue | undefined {
+  if (depth > 5) return undefined;
+  const s = stripComment(raw.trim()).trim();
+  if (s.startsWith("[")) {
+    if (!s.endsWith("]")) return undefined;
+    const parts = splitFlow(s.slice(1, -1));
+    if (parts === undefined || parts.length > 1000) return undefined;
+    const out: FmValue[] = [];
+    for (const part of parts) {
+      const value = parseValue(part, depth + 1);
+      if (value === undefined) return undefined;
+      out.push(value);
+    }
+    return out;
+  }
+  if (s.startsWith("{")) {
+    if (!s.endsWith("}")) return undefined;
+    const parts = splitFlow(s.slice(1, -1));
+    if (parts === undefined || parts.length > 1000) return undefined;
+    const map: Record<string, FmValue> = {};
+    for (const part of parts) {
+      const split = splitKey(part);
+      if (split === undefined) return undefined;
+      const key = unquoteKey(split[0]);
+      if (!isValidKey(key)) return undefined;
+      const value = parseValue(split[1], depth + 1);
+      if (value === undefined) return undefined;
+      map[key] = value;
+    }
+    return map;
+  }
+  if ("&*!|>?".includes(s[0] ?? " ") || s === "---" || s === "...") return undefined;
+  if (s.startsWith('"') && doubleQuoted(s) === undefined) return undefined;
+  if (s.startsWith("'") && singleQuoted(s) === undefined) return undefined;
+  if (s.endsWith("]") || s.endsWith("}")) return undefined;
+  return parseScalar(s);
+}
+
+/** `value::split_flow` — top-level commas, nesting and quotes honoured. */
+function splitFlow(inner: string): string[] | undefined {
+  const parts: string[] = [];
+  if (inner.trim().length === 0) return parts;
+  let depth = 0;
+  let quote: string | undefined;
+  let start = 0;
+  let i = 0;
+  while (i < inner.length) {
+    const c = inner[i] as string;
+    if (quote !== undefined) {
+      if (quote === '"' && c === "\\") {
+        i += 2;
+        continue;
+      }
+      if (c === quote) quote = undefined;
+    } else if (c === '"' || c === "'") {
+      quote = c;
+    } else if (c === "[" || c === "{") {
+      depth += 1;
+    } else if (c === "]" || c === "}") {
+      depth -= 1;
+      if (depth < 0) return undefined;
+    } else if (c === "," && depth === 0) {
+      parts.push(inner.slice(start, i));
+      start = i + 1;
+    }
+    i += 1;
+  }
+  if (quote !== undefined || depth !== 0) return undefined;
+  const tail = inner.slice(start);
+  if (tail.trim().length > 0 || parts.length === 0) parts.push(tail);
+  return parts;
 }
 
 /**

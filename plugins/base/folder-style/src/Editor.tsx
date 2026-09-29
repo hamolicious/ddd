@@ -2,7 +2,7 @@ import { useState, type ReactElement } from "react";
 
 import type { Icons } from "@protocols/lm/icons";
 
-import { normalizeColor, textOn, type FolderStyle } from "./styles.js";
+import { normalizeColor, resolveStyle, textOn, type FolderStyle } from "./styles.js";
 
 /** A starting point, not a limit: the colour field takes any hex. */
 const SWATCHES = [
@@ -24,20 +24,22 @@ const LEGEND_CLASSES =
   "folderstyle:mb-1 folderstyle:p-0 folderstyle:text-[0.9em] folderstyle:text-text-muted";
 
 export interface EditorProps {
-  readonly path: string;
+  /** The note's title, for the preview. */
+  readonly name: string;
   readonly initial: FolderStyle | undefined;
   /** Applied at once, so the tree behind the sheet shows it; `undefined` clears that field. */
   readonly onChange: (change: { background?: string | undefined; icon?: string | undefined }) => void;
   /** `undefined` when no icon set is wired: the sheet is then background only. */
   readonly icons: Pick<Icons, "Icon" | "Picker"> | undefined;
+  /** What an unset field shows instead, in the preview: the defaults, for a note. */
+  readonly fallback?: FolderStyle;
 }
 
 /** Every change applies as it is made; the sheet closes the usual ways (Escape, outside). */
-export function Editor({ path, initial, onChange, icons }: EditorProps): ReactElement {
+export function Editor({ name, initial, onChange, icons, fallback = {} }: EditorProps): ReactElement {
   const [background, setBackground] = useState(initial?.background);
   const [icon, setIcon] = useState(initial?.icon);
   const [draft, setDraft] = useState(initial?.background ?? "");
-  const name = path.split("/").pop() ?? path;
 
   const chooseBackground = (next: string | undefined): void => {
     setBackground(next);
@@ -49,17 +51,18 @@ export function Editor({ path, initial, onChange, icons }: EditorProps): ReactEl
     onChange({ icon: next });
   };
   const draftColor = normalizeColor(draft);
+  const shown = resolveStyle({ ...(background !== undefined ? { background } : {}), ...(icon !== undefined ? { icon } : {}) }, fallback);
 
   return (
     <div className="folder-style-editor folderstyle:flex folderstyle:flex-col folderstyle:gap-3">
       {/* The row as the tree will draw it. */}
       <p className="folderstyle:m-0">
         <span
-          className={`folder-style-preview folderstyle:inline-flex folderstyle:items-center folderstyle:gap-1 folderstyle:leading-[1.4] folderstyle:font-medium ${background !== undefined ? "folderstyle:rounded folderstyle:px-1.5" : ""}`}
-          style={background !== undefined ? { background, color: textOn(background) } : undefined}
+          className={`folder-style-preview folderstyle:inline-flex folderstyle:items-center folderstyle:gap-1 folderstyle:leading-[1.4] folderstyle:font-medium ${shown?.background !== undefined ? "folderstyle:rounded folderstyle:px-1.5" : ""}`}
+          style={shown?.background !== undefined ? { background: shown.background, color: textOn(shown.background) } : undefined}
         >
-          {icons !== undefined && icon !== undefined && (
-            <icons.Icon name={icon} size="1.05em" className="folderstyle:block folderstyle:shrink-0" />
+          {icons !== undefined && shown?.icon !== undefined && (
+            <icons.Icon name={shown.icon} size="1.05em" className="folderstyle:block folderstyle:shrink-0" />
           )}
           <span>{name}</span>
         </span>
@@ -86,7 +89,7 @@ export function Editor({ path, initial, onChange, icons }: EditorProps): ReactEl
             type="color"
             aria-label="Pick any color"
             className="folderstyle:tap-h folderstyle:w-[2.75rem] folderstyle:cursor-pointer folderstyle:rounded folderstyle:border folderstyle:border-border-strong folderstyle:bg-bg-raised folderstyle:p-0.5"
-            value={background ?? "#868e96"}
+            value={background ?? fallback.background ?? "#868e96"}
             onChange={(event) => chooseBackground(normalizeColor(event.target.value))}
           />
           <input
@@ -107,7 +110,7 @@ export function Editor({ path, initial, onChange, icons }: EditorProps): ReactEl
           />
           {background !== undefined && (
             <button type="button" className={BUTTON_CLASSES} onClick={() => chooseBackground(undefined)}>
-              No background
+              {fallback.background !== undefined ? "Use default" : "No background"}
             </button>
           )}
         </div>

@@ -13,7 +13,7 @@
 //!
 //! | Method | Path | Behaviour |
 //! |---|---|---|
-//! | POST | `/api/attachments` | streamed multipart upload; `?wrapper=true&path=…` also creates the wrapper document |
+//! | POST | `/api/attachments` | streamed multipart upload; `?wrapper=true` also creates the wrapper document |
 //! | GET | `/api/attachments/:id` | the bytes, safe-serving headers |
 //! | GET | `/api/attachments/:id/meta` | metadata only |
 //! | PUT | `/api/attachments/:id` | replace bytes, `If-Match: <revision>` (`*` forces) |
@@ -88,9 +88,6 @@ const OTHER_FIELDS_BUDGET: u64 = 64 * 1024;
 
 /// Longest accepted stored filename.
 const MAX_FILENAME_BYTES: usize = 200;
-
-/// Longest accepted `fm.path` for a wrapper document.
-const MAX_WRAPPER_PATH_BYTES: usize = 512;
 
 /// Fallback name when the client sends none (or an unusable one).
 const FALLBACK_FILENAME: &str = "upload.bin";
@@ -171,14 +168,12 @@ pub struct UploadResponse {
     pub document_id: Option<Id>,
 }
 
-/// Upload query string. `wrapper=true` creates the wrapper document; `path` puts
-/// it in a folder (`fm.path`).
+/// Upload query string. `wrapper=true` creates the wrapper document; where it is
+/// filed is the client's business (the folder tree lists it in a folder note).
 #[derive(Debug, Default, Deserialize)]
 pub struct UploadParams {
     #[serde(default)]
     pub wrapper: bool,
-    #[serde(default)]
-    pub path: Option<String>,
 }
 
 /// One flagged orphan (a blob no materialized document references).
@@ -208,27 +203,14 @@ pub async fn upload(
     Query(params): Query<UploadParams>,
     multipart: Multipart,
 ) -> AppResult<Response> {
-    let wrapper_path = wrapper_path(params.path.as_deref())?;
     let blob = store_upload(&state, multipart, upload_limit(&state)).await?;
-    let (view, document_id) =
-        record_upload(&state, &user, blob, params.wrapper, wrapper_path.as_deref()).await?;
+    let (view, document_id) = record_upload(&state, &user, blob, params.wrapper).await?;
     Ok(created(view, document_id))
 }
 
 /// `MAX_ATTACHMENT_BYTES` as a byte budget: no cap is a budget nothing reaches.
 fn upload_limit(state: &AppState) -> u64 {
     state.config().attachment_limit().unwrap_or(u64::MAX)
-}
-
-/// The `path` a wrapper document goes in, validated and normalized.
-pub(crate) fn wrapper_path(raw: Option<&str>) -> AppResult<Option<String>> {
-    match raw {
-        Some(raw) if raw.len() > MAX_WRAPPER_PATH_BYTES => Err(AppError::bad_request(format!(
-            "path is limited to {MAX_WRAPPER_PATH_BYTES} bytes"
-        ))),
-        Some(raw) => Ok(normalize_folder_path(raw)),
-        None => Ok(None),
-    }
 }
 
 /// Give stored bytes their `attachments` row, and the wrapper document when asked
@@ -238,7 +220,6 @@ pub(crate) async fn record_upload(
     user: &AuthUser,
     blob: StoredBlob,
     wrapper: bool,
-    wrapper_path: Option<&str>,
 ) -> AppResult<(AttachmentView, Option<Id>)> {
     let actor = user.actor();
     let now = BsonDateTime::now();
@@ -273,7 +254,7 @@ pub(crate) async fn record_upload(
     let view = AttachmentView::from(attachment);
 
     let document_id = if wrapper {
-        let text = wrapper_document_text(&view, wrapper_path);
+        let text = wrapper_document_text(&view);
         let outcome = state
             .docs
             .create(None, &text, &actor)
@@ -619,15 +600,10 @@ pub fn is_inline_safe(mime: &str) -> bool {
 }
 
 /// The wrapper-document text for a standalone upload (SPEC §3.6).
-pub fn wrapper_document_text(attachment: &AttachmentView, path: Option<&str>) -> String {
+pub fn wrapper_document_text(attachment: &AttachmentView) -> String {
     let mut out = String::from("---\ntitle: ");
     out.push_str(&yaml_scalar(&attachment.name));
     out.push('\n');
-    if let Some(path) = path {
-        out.push_str("path: ");
-        out.push_str(&yaml_scalar(path));
-        out.push('\n');
-    }
     out.push_str("attachment: ");
     out.push_str(&attachment.id);
     out.push_str("\n---\n\n");
@@ -723,32 +699,6 @@ pub fn sanitize_filename(raw: Option<&str>) -> String {
     truncate_bytes(cleaned, MAX_FILENAME_BYTES).to_string()
 }
 
-/// `fm.path` normalization (SPEC §6.5): `/` segments, `.`/`..`/empty stripped,
-/// case preserved. `None` when nothing is left.
-///
-/// Control characters are dropped per segment: a newline or a CR in a folder name
-/// is never legitimate, and the quoting in [`yaml_scalar`] should not be the only
-/// thing standing between a query parameter and the frontmatter block.
-pub fn normalize_folder_path(raw: &str) -> Option<String> {
-    let segments: Vec<String> = raw
-        .split('/')
-        .map(|segment| {
-            segment
-                .chars()
-                .filter(|c| !c.is_control())
-                .collect::<String>()
-                .trim()
-                .to_string()
-        })
-        .filter(|segment| !segment.is_empty() && segment != "." && segment != "..")
-        .collect();
-    if segments.is_empty() {
-        None
-    } else {
-        Some(segments.join("/"))
-    }
-}
-
 /// Read the replace precondition: `Some(revision)` to check, `None` for `*`
 /// (the client's explicit "overwrite" choice). Missing header → 428.
 pub fn parse_if_match(headers: &HeaderMap) -> AppResult<Option<u32>> {
@@ -804,10 +754,9 @@ fn percent_encode(input: &str) -> String {
 /// Quote a frontmatter scalar when it cannot be written bare.
 ///
 /// Delegated to the shared core rather than reimplemented here. The local version
-/// double-quoted without escaping control characters, so a `path` (or a filename)
-/// containing a newline was written out with that newline **literal**: a
-/// `?path=x%0A---%0Atitle:%20Hijacked` upload closed the frontmatter block early
-/// and injected its own keys into the wrapper document the server generates.
+/// double-quoted without escaping control characters, so a filename containing a
+/// newline was written out with that newline **literal**, closing the frontmatter
+/// block early and injecting its own keys into the wrapper document.
 /// [`life_manager_core::value::Value::to_yaml_inline`] is the same serializer the
 /// `%%%` line splices use, and it escapes `\n`, `\r`, `\t` and every other control
 /// character.
@@ -1145,59 +1094,19 @@ mod tests {
         assert!(sanitize_filename(Some(&"x".repeat(500))).len() <= MAX_FILENAME_BYTES);
     }
 
+    /// A filename reaches the frontmatter of a server-generated document: it must
+    /// not be able to close the block or add keys.
     #[test]
-    fn folder_paths_are_normalized() {
-        assert_eq!(
-            normalize_folder_path("home//lists/"),
-            Some("home/lists".to_string())
-        );
-        assert_eq!(
-            normalize_folder_path("../home/./lists"),
-            Some("home/lists".to_string())
-        );
-        assert_eq!(normalize_folder_path("   "), None);
-        assert_eq!(normalize_folder_path("/"), None);
-        // A newline in a folder name is never legitimate.
-        assert_eq!(
-            normalize_folder_path("home\n---\ntitle: x"),
-            Some("home---title: x".to_string())
-        );
-        assert_eq!(normalize_folder_path("\n\r\t"), None);
-    }
-
-    /// The `path` query parameter reaches the frontmatter of a server-generated
-    /// document: it must not be able to close the block or add keys.
-    #[test]
-    fn wrapper_frontmatter_survives_a_hostile_path_and_filename() {
+    fn wrapper_frontmatter_survives_a_hostile_filename() {
         use life_manager_core::document::parse_document;
 
-        let path = "x\n---\ntitle: Hijacked\nevil: 1";
-        let text = wrapper_document_text(&view("photo.png", "image/png"), Some(path));
-
-        let parsed = parse_document(&text);
-        assert!(
-            !parsed.fm_parse_error,
-            "the generated frontmatter must parse cleanly: {text}"
-        );
-        assert_eq!(
-            parsed.fm.get("title").and_then(|v| v.as_str()),
-            Some("photo.png"),
-            "the injected title must not win: {text}"
-        );
-        assert!(
-            !parsed.fm.contains_key("evil"),
-            "an injected key reached `fm`: {text}"
-        );
-        assert!(
-            parsed.fm.contains_key("attachment"),
-            "the attachment key was lost: {text}"
-        );
-        // One `---` to open, one to close, and nothing in between broke out.
+        let text = wrapper_document_text(&view("photo.png", "image/png"));
+        assert!(text.starts_with("---\n"), "{text}");
         assert_eq!(text.matches("\n---\n").count(), 1, "{text}");
 
-        // Same for a filename carrying control characters (sanitized upstream,
-        // but the serializer is what must be safe).
-        let hostile = wrapper_document_text(&view("a\n---\nevil: 1", "text/plain"), None);
+        // A filename carrying control characters is sanitized upstream, but the
+        // serializer is what must be safe.
+        let hostile = wrapper_document_text(&view("a\n---\nevil: 1", "text/plain"));
         let parsed = parse_document(&hostile);
         assert!(!parsed.fm.contains_key("evil"), "{hostile}");
         assert!(!parsed.fm_parse_error, "{hostile}");
@@ -1205,18 +1114,17 @@ mod tests {
 
     #[test]
     fn wrapper_document_embeds_the_reference() {
-        let text =
-            wrapper_document_text(&view("holiday: photo.png", "image/png"), Some("trips/2026"));
+        let text = wrapper_document_text(&view("holiday: photo.png", "image/png"));
         assert!(text.starts_with("---\n"), "{text}");
         assert!(text.contains("title: \"holiday: photo.png\""), "{text}");
-        assert!(text.contains("path: trips/2026"), "{text}");
+        assert!(!text.contains("path:"), "{text}");
         assert!(
             text.contains("![holiday: photo.png](attachment://01J0000000000000000000000A)"),
             "{text}"
         );
 
         // Non-images embed as a link, not an image.
-        let doc = wrapper_document_text(&view("report.pdf", "application/pdf"), None);
+        let doc = wrapper_document_text(&view("report.pdf", "application/pdf"));
         assert!(doc.contains("\n[report.pdf](attachment://"), "{doc}");
         assert!(!doc.contains("path:"), "{doc}");
     }

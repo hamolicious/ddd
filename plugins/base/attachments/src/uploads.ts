@@ -133,9 +133,7 @@ export function createUploads(kernel: Kernel): Uploads {
     try {
       const row = await kernel.documents.get(item.entry.documentId);
       if (!row) return;
-      const title = row.title.trim() || "Untitled";
-      const folder = typeof row.fm.path === "string" && row.fm.path.trim() ? row.fm.path.trim() : undefined;
-      item.location = folder ? `“${title}” in ${folder}` : `“${title}”`;
+      item.location = `“${row.title.trim() || "Untitled"}”`;
       if (items.get(item.entry.token) === item) publish(item);
     } catch {
       // No title to show: the notice still names the file.

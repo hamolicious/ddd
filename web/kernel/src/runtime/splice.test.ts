@@ -21,12 +21,15 @@ import type { CoreBindings } from "../wasm/index.js";
 
 import {
   applyEdits,
+  frontmatterList,
   isValidKey,
   removeFrontmatterKey,
   removeSection,
+  sectionList,
   setFrontmatterValue,
   spliceSection,
   toYamlInline,
+  type ListActionInput,
   type SectionKeyEdit,
 } from "./splice.js";
 import type { FmValue, TextEdit } from "@kernel";
@@ -42,7 +45,14 @@ type CorpusOp =
   | { readonly kind: "set_fm"; readonly key: string; readonly value: FmValue }
   | { readonly kind: "remove_fm"; readonly key: string }
   | { readonly kind: "splice_section"; readonly plugin: string; readonly edits: readonly CorpusEdit[] }
-  | { readonly kind: "remove_section"; readonly plugin: string };
+  | { readonly kind: "remove_section"; readonly plugin: string }
+  | { readonly kind: "fm_list"; readonly key: string; readonly action: ListActionInput }
+  | {
+      readonly kind: "section_list";
+      readonly plugin: string;
+      readonly key: string;
+      readonly action: ListActionInput;
+    };
 
 interface CorpusCase {
   readonly name: string;
@@ -51,6 +61,10 @@ interface CorpusCase {
   readonly expect: string;
   readonly edits?: number;
   readonly replaced?: readonly string[];
+  /** What a list action popped; `null` for nothing. */
+  readonly popped?: FmValue;
+  /** The list as the parser reads it afterwards. */
+  readonly list?: FmValue;
 }
 
 interface Corpus {
@@ -69,7 +83,25 @@ const sectionEdits = (edits: readonly CorpusEdit[]): SectionKeyEdit[] =>
   edits.map((edit) => (edit.remove === true ? { key: edit.key } : { key: edit.key, value: edit.value }));
 
 function run(op: CorpusOp, text: string): TextEdit[] {
+  return runWithPopped(op, text).edits;
+}
+
+function runWithPopped(op: CorpusOp, text: string): { edits: TextEdit[]; popped?: FmValue } {
   switch (op.kind) {
+    case "fm_list":
+      return frontmatterList(text, op.key, op.action);
+    case "section_list":
+      return sectionList(text, op.plugin, op.key, op.action);
+    default:
+      return { edits: runPlain(op, text) };
+  }
+}
+
+function runPlain(op: CorpusOp, text: string): TextEdit[] {
+  switch (op.kind) {
+    case "fm_list":
+    case "section_list":
+      throw new Error("list ops go through runWithPopped");
     case "set_fm":
       return setFrontmatterValue(text, op.key, op.value);
     case "remove_fm":
@@ -88,7 +120,8 @@ describe("core::splice conformance corpus", () => {
 
   for (const testCase of corpus.cases) {
     it(testCase.name, () => {
-      const edits = run(testCase.op, testCase.text);
+      const { edits, popped } = runWithPopped(testCase.op, testCase.text);
+      if (testCase.popped !== undefined) expect(popped ?? null).toEqual(testCase.popped);
       if (testCase.edits !== undefined) expect(edits).toHaveLength(testCase.edits);
       if (testCase.replaced !== undefined) {
         expect(edits.map((edit) => testCase.text.slice(edit.range.start, edit.range.end))).toEqual(
@@ -274,6 +307,50 @@ describe.skipIf(!coreArtifactExists())("spliced text as the Rust parser reads it
     const text = "---\na: 1\nb: 2\na: 3\n---\n";
     const after = core.parseDocument(applyEdits(text, removeFrontmatterKey(text, "a"))).fm;
     expect(after).toEqual({ b: 2 });
+  });
+
+  it("reads every corpus list the way the case says", () => {
+    for (const testCase of corpus.cases) {
+      if (testCase.list === undefined) continue;
+      const op = testCase.op as Extract<CorpusOp, { kind: "fm_list" | "section_list" }>;
+      const parsed = core.parseDocument(testCase.expect);
+      const actual = op.kind === "section_list" ? (parsed.plugins[op.plugin] as Record<string, FmValue>)[op.key] : parsed.fm[op.key];
+      expect(actual, testCase.name).toEqual(testCase.list);
+    }
+  });
+
+  it("merges concurrent list actions from two replicas", () => {
+    const base = "# Folder\n\n%%% folders\nchildren:\n  - 01A\n  - 01B\n%%%\n";
+    const children = (doc: Y.Doc): FmValue =>
+      (core.parseDocument(doc.getText("t").toString()).plugins["folders"] as Record<string, FmValue>)["children"] as FmValue;
+    const replay = (doc: Y.Doc, edits: readonly TextEdit[]): void => {
+      const text = doc.getText("t");
+      doc.transact(() => {
+        for (const edit of edits) {
+          text.delete(edit.range.start, edit.range.end - edit.range.start);
+          text.insert(edit.range.start, edit.text);
+        }
+      });
+    };
+    const scenarios: readonly [ListActionInput, ListActionInput, readonly FmValue[]][] = [
+      [{ action: "push", value: "01X" }, { action: "push", value: "01Y" }, ["01A", "01B", "01X", "01Y"]],
+      [{ action: "remove", value: "01A" }, { action: "push", value: "01Y" }, ["01B", "01Y"]],
+      [{ action: "remove", value: "01B" }, { action: "remove", value: "01B" }, ["01A"]],
+      [{ action: "insert", index: 0, value: "01X" }, { action: "remove", value: "01A" }, ["01X", "01B"]],
+    ];
+    for (const [left, right, expected] of scenarios) {
+      const a = new Y.Doc({ gc: false });
+      a.getText("t").insert(0, base);
+      const b = new Y.Doc({ gc: false });
+      Y.applyUpdate(b, Y.encodeStateAsUpdate(a));
+      replay(a, sectionList(a.getText("t").toString(), "folders", "children", left).edits);
+      replay(b, sectionList(b.getText("t").toString(), "folders", "children", right).edits);
+      Y.applyUpdate(a, Y.encodeStateAsUpdate(b));
+      Y.applyUpdate(b, Y.encodeStateAsUpdate(a));
+      expect(a.getText("t").toString()).toBe(b.getText("t").toString());
+      const merged = children(a) as readonly FmValue[];
+      expect([...merged].sort(), JSON.stringify([left, right])).toEqual([...expected].sort());
+    }
   });
 
   it("materializes section keys into `plugins`, and only its own", () => {

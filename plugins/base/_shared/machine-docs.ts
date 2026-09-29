@@ -3,26 +3,20 @@
  *
  * # The problem
  *
- * The kernel stores each user's settings as a **document** (SPEC §6.4) with
- * `fm.path: .settings`. That is the right design — sync, offline reads, CRDT merging,
- * snapshots, Trash and the admin export all come for free because a settings document
- * is just a document — and it has one visible consequence nobody chose: a workspace of
- * eleven notes read "12 documents", and the folder tree grew a `.settings` folder
- * containing one file per user, sitting above `home` in alphabetical order. The count
- * was wrong for the only question a person asks it ("how many notes do I have?"), and
- * the folder was a thing you could open, drag documents into, and rename.
+ * The kernel stores each user's settings as a **document** (SPEC §6.4). That is the
+ * right design — sync, offline reads, CRDT merging, snapshots, Trash and the admin
+ * export all come for free because a settings document is just a document — and it has
+ * one visible consequence nobody chose: a workspace of eleven notes read "12 documents",
+ * and the settings documents showed up in the tree and in search next to people's notes.
  *
  * # The rule
  *
- * **A document whose `fm.path` begins with `.` is machine-owned**, and is left out of
- * the default document list, the folder tree and search results.
+ * **A document with `machine: true` in its frontmatter is machine-owned**, and is left
+ * out of the default document list, the folder tree and search results.
  *
- * The dotfile convention rather than a hard-coded `.settings`, for two reasons. It is
- * already the spelling the kernel picked, and it is the one convention every user of a
- * file manager already knows — nobody has to be told what `.settings` means. And it
- * generalises without a registry: a plugin that wants its own machine-owned documents
- * files them under a dotted path and is hidden by the same rule, with no list of
- * special paths for anyone to keep up to date.
+ * One flag rather than a list of special documents: a plugin that wants its own
+ * machine-owned documents writes the same line and is hidden by the same rule, with no
+ * registry for anyone to keep up to date.
  *
  * # What it is *not*
  *
@@ -34,47 +28,34 @@
  * the local index holds, or what `kernel.documents` answers — the kernel knows one
  * domain model and "machine-owned" is not part of it (SPEC §2). This is a convention
  * three *plugins* share, which is exactly the layer it belongs in.
- *
- * **Not the folder tree's `.`-stripping.** `folders` drops `.` and `..` as path
- * *segments* (they are label characters, not a filesystem); `.settings` is a perfectly
- * ordinary segment that survives that rule and has to be excluded on purpose.
  */
 
 import type { FilterJson } from "@kernel";
 
-/** A `fm.path` starting with this is machine-owned. */
-export const MACHINE_PATH_PREFIX = ".";
+/** The frontmatter key that marks a machine-owned document. */
+export const MACHINE_KEY = "machine";
 
 /**
- * Is this the `fm.path` of a machine-owned document?
+ * Is this the `fm` of a machine-owned document?
  *
- * Tested against the **raw stored value**, not a normalized one, so that it agrees
- * exactly with {@link EXCLUDE_MACHINE_DOCUMENTS} — the filter DSL compares the stored
- * string and cannot trim. A non-string `fm.path` (a number, a list, a missing key) is
- * not machine-owned: the workspace is shared and a plugin cannot assume a human typed
- * what it expected.
+ * Exactly `true`, so it agrees with {@link EXCLUDE_MACHINE_DOCUMENTS} — the filter DSL
+ * compares types strictly, and `machine: yes` is a human's string, not the flag.
  */
-export function isMachinePath(raw: unknown): boolean {
-  return typeof raw === "string" && raw.startsWith(MACHINE_PATH_PREFIX);
-}
-
-/** The same question about a projection row. */
 export function isMachineDocument(row: { readonly fm: Readonly<Record<string, unknown>> }): boolean {
-  return isMachinePath(row.fm["path"]);
+  return row.fm[MACHINE_KEY] === true;
 }
 
 /**
  * The DSL clause that keeps machine-owned documents out of a query.
  *
- * `not(text starts_with)` rather than a comparison against `.settings`, and the
- * `missing`-field behaviour is the load-bearing half: the core's `text_match` answers
+ * The `missing`-field behaviour is the load-bearing half: the core's comparison answers
  * `Ok(false)` for a field that is not there (`filter/evaluator.rs`), so `not` of it is
- * **true** — a document with no `fm.path` at all, which is most of them, stays in the
+ * **true** — a document with no `machine` key, which is nearly all of them, stays in the
  * results. A clause that errored on a missing field would negate to an error and
  * silently empty the list.
  */
 export const EXCLUDE_MACHINE_DOCUMENTS: FilterJson = {
-  not: { text: { field: "fm.path", mode: "starts_with", value: MACHINE_PATH_PREFIX } },
+  not: { cmp: { field: `fm.${MACHINE_KEY}`, op: "eq", value: { bool: true } } },
 };
 
 /**

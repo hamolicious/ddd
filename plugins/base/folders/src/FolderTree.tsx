@@ -1,49 +1,41 @@
 /**
  * The file tree, in the sidebar.
  *
- * **Folders and documents in one tree.** A document with no `fm.path` is a row at root
- * next to the top-level folders — the owner's words, *"notes with no folder just sit in
- * root"* — and a document inside a folder is a leaf under it. The model is
- * `tree.ts`; this file draws it and owns the gestures.
+ * **Every row is a note.** A note that lists children (`hierarchy.ts`) has a chevron and
+ * is a folder; one that lists none is a leaf. Clicking a row opens the note; the chevron
+ * opens and closes it. The model is `tree.ts`; this file draws it and owns the gestures.
  *
- * **Every move is still one splice.** Dropping a document on a folder is one
- * `setFrontmatterValue` on its `path` key; dropping it on Root is one
- * `removeFrontmatterKey`; dropping a *folder* somewhere is one splice per document
- * inside it, run through a bounded pool with a progress row (SPEC §3.3, §6.5). There are
- * no folder records to keep in step, which is why a half-finished folder move is
- * recoverable by simply doing it again: re-planning reads the live projection, and the
- * documents that already moved are not in the second plan.
+ * **Every move is a list splice.** Dropping a note on another files it last under that
+ * one; dropping it on the top or bottom edge of a row puts it before or after that row,
+ * under the same parent; dropping it on the root takes it out of every list. The writes
+ * are `index.tsx`'s (one `sectionList` action per note touched), so two devices moving
+ * notes into the same folder at once both land.
  *
  * **Three ways to do everything, because one of them is a mouse gesture.** Dragging is
  * a mouse and pen gesture, so every drag has a keyboard and a touch equivalent that ends
- * in the same call: the row's ⋯ button, a long-press, a right-click, or `M` on the active
- * row opens a `context-menu` with Move / Rename / Delete in it. This is
- * `POLISH-BACKLOG.md` §3 — "a document can only be moved by dragging" — closed from the
- * folders side.
+ * in the same call: the row's ⋯ button (not on a phone), a long-press, a right-click, or
+ * `M` on the active row opens a `context-menu` with Move / Rename / Delete in it.
  *
  * **A drag lifts the row.** The tree's own drags are pointer-driven, not HTML5: the
  * browser draws an HTML5 drag as a translucent ghost that no style can make solid, and a
  * row should look picked up — an opaque, shadowed, slightly tilted copy under the
- * pointer, with a faded slot where it came from. Dropping a folder on the top or bottom
- * edge of another folder puts it before or after that one (the user's order, `order.ts`,
- * joining that folder's parent if it has to); on the middle, inside it. HTML5 drops are
- * still accepted, for rows other plugins make draggable (`doc-list`).
+ * pointer, with a faded slot where it came from. HTML5 drops are still accepted, for rows
+ * other plugins make draggable (`doc-list`): their payload is a plain `text/plain` id.
  *
  * **Keyboard-operable, as a real tree.** `role="tree"` with one tab stop and
- * `aria-activedescendant`: Arrow keys move and expand, `Home`/`End` jump, `Enter` opens
- * (a folder filters the list to it, a document opens it), `Shift+→`/`Shift+←` expand or
- * collapse a folder and everything inside it, `F2` renames, `M` moves,
- * `Delete` deletes the active folder or document. The active row's actions are the one thing Tab may enter.
+ * `aria-activedescendant`: Arrow keys move and expand, `Home`/`End` jump, `Enter` opens,
+ * `Shift+→`/`Shift+←` expand or collapse a note and everything inside it, `F2` renames,
+ * `M` moves, `Delete` deletes. The active row's actions are the one thing Tab may enter.
  *
- * **No `window.prompt` anywhere.** Renaming is an inline field in the row it renames;
- * `POLISH-BACKLOG.md` §4 has the three reasons, of which the first is that the Flutter
- * shell pins no `onJsPrompt` handler, so on a phone the old rename button may have done
- * nothing at all.
+ * **Virtual, in a box of its own.** Only the rows on screen are in the DOM
+ * (`_shared/virtual-list.ts`), so a tree of thousands of notes costs what a screenful
+ * does, and every child of every note is drawn — no "N more" row. The tree scrolls inside
+ * the Folders panel, in a box that ends at the bottom of the sidebar. Anything that moves the active
+ * row — a key, the open note, a rename — scrolls it into view, which is also what draws
+ * it, so `aria-activedescendant` never points at a row that is not there.
  *
- * The HTML5 payload a document row from elsewhere sets is a plain `text/plain` document
- * id, deliberately: `doc-list` rows and anything else that wants to be draggable into a
- * folder only has to set that, with no shared type and no import between plugins.
- * `application/x-lm-folder` is still read, for a folder dragged from an older build.
+ * **No `window.prompt` anywhere.** Renaming is an inline field in the row it renames: the
+ * Flutter shell pins no `onJsPrompt` handler, so on a phone a prompt may do nothing.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -56,30 +48,19 @@ import type {
   ReactElement,
 } from "react";
 
-import { documentsUnder, planDocumentMove } from "./moves.js";
-import {
-  isRecursiveRename,
-  isWithin,
-  nameOf,
-  joinPath,
-  normalizePath,
-  parentOf,
-  renameTarget,
-  reparentTarget,
-  type PathRow,
-} from "./path.js";
 import type { ConfirmRequest, ContextMenu, MenuItem } from "@protocols/lm/context-menu";
 
+import { useFitToScreen, useVirtualList } from "../../_shared/virtual-list.js";
+
+import { ancestorsOf, isWithin, type Hierarchy } from "./hierarchy.js";
 import { MovePicker } from "./MovePicker.js";
-import { placeAmong, pruneOrder, withSiblings } from "./order.js";
-import { ancestorsOf, buildFileTree, type TreeRow } from "./tree.js";
+import { placeAmong, pruneOrder } from "./order.js";
+import { buildFileTree, type NoteTreeRow, type TreeRow } from "./tree.js";
 
-/** The drag type a draggable document row should set. */
+/** The drag type a draggable note row elsewhere should set: the note's id. */
 export const DOCUMENT_DRAG_TYPE = "text/plain";
-/** Set only by this plugin: a folder being dragged, by path. */
-export const FOLDER_DRAG_TYPE = "application/x-lm-folder";
 
-/** How long a collapsed folder must be hovered during a drag before it opens. */
+/** How long a collapsed note must be hovered during a drag before it opens. */
 const AUTO_EXPAND_MS = 650;
 /** How long a touch must rest on a row before the sheet opens. */
 const LONG_PRESS_MS = 500;
@@ -87,13 +68,15 @@ const LONG_PRESS_MS = 500;
 const LONG_PRESS_SLOP = 12;
 /** A mouse press that travels this far is a drag, not a click. */
 const DRAG_THRESHOLD = 5;
-/** The top and bottom share of a folder row that mean "before" / "after" rather than "into". */
+/** The least the tree's scroll box shrinks to when the sidebar is crowded, in pixels. */
+const MIN_TREE_HEIGHT = 160;
+/** The top and bottom share of a row that mean "before" / "after" rather than "into". */
 const EDGE = 0.3;
 
-/** Where a drag would land. `target` is the folder row a before/after is relative to. */
+/** Where a drag would land. `target` is the row a before/after is relative to. */
 type Drop =
-  | { readonly mode: "into"; readonly folder: string }
-  | { readonly mode: "before" | "after"; readonly folder: string; readonly target: string };
+  | { readonly mode: "into"; readonly parent: string }
+  | { readonly mode: "before" | "after"; readonly parent: string; readonly target: string };
 
 /** The row being carried: what it is, and where to draw it. */
 interface Lift {
@@ -115,9 +98,6 @@ const TWISTY_CLASSES =
   "folders-twisty folders:box-border folders:flex folders:w-[1.25rem] folders:min-h-[1.375rem]! folders:shrink-0 folders:cursor-pointer folders:items-center folders:justify-center folders:border-0! folders:bg-transparent! folders:p-0! folders:text-text-muted folders:compact:w-[var(--lm-tap-target)] folders:compact:ml-[calc(1.5rem-var(--lm-tap-target))] folders:compact:justify-end folders:compact:pr-[0.45rem]! folders:compact:min-h-[var(--lm-tap-target)]! folders:touch:w-[var(--lm-tap-target)] folders:touch:ml-[calc(1.5rem-var(--lm-tap-target))] folders:touch:justify-end folders:touch:pr-[0.45rem]! folders:touch:min-h-[var(--lm-tap-target)]!";
 const ROW_LABEL_CLASSES =
   "folders:min-w-0 folders:flex-1 folders:cursor-pointer folders:overflow-hidden folders:text-ellipsis folders:whitespace-nowrap folders:border-0! folders:bg-transparent! folders:p-0! folders:text-left folders:font-sans folders:text-inherit";
-// The app gives every <button> a tap-target height; on a pointer screen that made a
-// folder row (its name is a button) half again as tall as a document row (a span).
-const LABEL_BUTTON_CLASSES = `${ROW_LABEL_CLASSES} folders:min-h-0! folders:compact:min-h-[var(--lm-tap-target)]! folders:touch:min-h-[var(--lm-tap-target)]!`;
 const ACTIONS_CLASSES =
   "folders-actions folders:invisible folders:flex folders:shrink-0 folders:gap-0.5 folders:group-hover:visible folders:group-focus-within:visible folders:compact:visible folders:[&>button]:box-border folders:[&>button]:min-h-[1.375rem] folders:[&>button]:min-w-[1.375rem] folders:[&>button]:cursor-pointer folders:[&>button]:rounded folders:[&>button]:border folders:[&>button]:border-transparent folders:[&>button]:bg-transparent folders:[&>button]:p-0 folders:[&>button]:text-text-muted folders:hover:[&>button]:border-border folders:hover:[&>button]:text-text folders:compact:[&>button]:min-h-[var(--lm-tap-target)] folders:compact:[&>button]:min-w-[var(--lm-tap-target)] folders:touch:visible folders:touch:[&>button]:min-h-[var(--lm-tap-target)] folders:touch:[&>button]:min-w-[var(--lm-tap-target)]";
 
@@ -127,88 +107,59 @@ export interface MoveProgress {
 
 /** An action asked for from outside the panel (a command, a keybinding). */
 export type TreeRequest =
-  | { readonly kind: "create-folder"; readonly parent: string }
-  | { readonly kind: "rename-folder"; readonly path: string }
-  | { readonly kind: "delete-folder"; readonly path: string }
-  /** Expand or collapse a folder and every folder inside it; `""` is the whole tree. */
-  | { readonly kind: "fold"; readonly path: string; readonly expanded: boolean }
-  | {
-      readonly kind: "delete-document";
-      readonly target: Extract<TreeTarget, { kind: "document" }>;
-    }
+  /** Expand or collapse a note and every note inside it; `""` is the whole tree. */
+  | { readonly kind: "fold"; readonly id: string; readonly expanded: boolean }
+  | { readonly kind: "rename"; readonly target: TreeTarget }
+  | { readonly kind: "delete"; readonly target: TreeTarget }
   | { readonly kind: "move"; readonly target: TreeTarget };
 
 /** What a sheet, a drag or a key is acting on. */
-export type TreeTarget =
-  | { readonly kind: "folder"; readonly path: string }
-  | {
-      readonly kind: "document";
-      readonly id: string;
-      readonly title: string;
-      readonly path: string;
-    };
+export interface TreeTarget {
+  readonly id: string;
+  readonly title: string;
+}
 
 export interface FolderTreeProps {
   /** The `menu` port (`lm/context-menu`): every sheet this tree opens goes through it. */
   readonly menu: Pick<ContextMenu, "open" | "openSheet" | "confirm" | "close">;
-  readonly rows: readonly PathRow[];
+  readonly hierarchy: Hierarchy;
   readonly loading: boolean;
   readonly error?: string;
-  /** Folders that exist only in this user's settings, having never held a document. */
-  readonly emptyFolders: readonly string[];
-  /** Collapsed folder paths; persisted by the caller (per user, through settings). */
+  /** Collapsed note ids; persisted by the caller (per user, through settings). */
   readonly collapsed: ReadonlySet<string>;
   readonly onCollapsedChange: (next: ReadonlySet<string>) => void;
-  /** The user's folder order (`order.ts`), and how to store a new one. */
-  readonly order: readonly string[];
-  readonly onReorder: (next: readonly string[]) => Promise<void>;
+  /** The user's order for root notes (`order.ts`), and how to store a new one. */
+  readonly rootOrder: readonly string[];
+  readonly onRootOrder: (next: readonly string[]) => Promise<void>;
   /**
-   * Commands arriving from outside the panel — the palette's "New folder", "Move this
-   * document to a folder…", and the keybindings on them. Subscribing rather than
-   * prop-drilling one flag per action keeps the panel the only place that knows what a
-   * folder dialog looks like, and it works with the drawer shut: the sheet is a portal
-   * into `document.body`, so `shell-ui` hiding the sidebar does not hide it.
+   * Commands arriving from outside the panel — the palette's "Move this note…" and the
+   * keybindings on it. Subscribing rather than prop-drilling one flag per action keeps
+   * the panel the only place that knows what a dialog looks like, and it works with the
+   * drawer shut: the sheet is a portal into `document.body`.
    */
   readonly requests?: (listener: (request: TreeRequest) => void) => () => void;
-  /** Move one document (one `fm.path` splice; `""` removes the key). */
-  readonly onMoveDocument: (
-    documentId: string,
-    folder: string,
-  ) => Promise<void>;
-  /** Move or rename a folder: one splice per document inside it, with progress. */
-  readonly onMoveFolder: (
-    from: string,
-    to: string,
-    options?: MoveProgress,
-  ) => Promise<number>;
-  /** Remember a folder that holds nothing yet. */
-  readonly onCreateFolder: (path: string) => Promise<void>;
-  /** `parent` moves the contents up one level; `trash` tombstones them (SPEC §3.5). */
-  readonly onDeleteFolder: (
-    path: string,
-    mode: "parent" | "trash",
-    options?: MoveProgress,
-  ) => Promise<number>;
-  /** Tombstone one document (SPEC §3.5): restorable from Trash. */
-  readonly onDeleteDocument: (documentId: string) => Promise<void>;
-  readonly onNewDocumentHere: (folder: string) => void;
-  /** Show the documents in a folder (`""` = the root view). */
-  readonly onSelectFolder: (folder: string) => void;
-  readonly onOpenDocument: (documentId: string) => void;
+  /** File `id` under `parent` (`""`: the root), before `before` or last. */
+  readonly onMove: (id: string, parent: string, before?: string) => Promise<void>;
+  readonly onRename: (id: string, title: string) => Promise<void>;
+  /** `parent` moves its children up a level; `trash` sends them to Trash with it. */
+  readonly onDelete: (id: string, mode: "parent" | "trash", options?: MoveProgress) => Promise<number>;
+  /** A new note, filed last under `parent`. */
+  readonly onNewNoteInside: (parent: string) => void;
+  readonly onOpen: (id: string) => void;
   /**
-   * The document open in the main view, however it was opened — a link, the graph, the
-   * palette. The tree expands its folders, makes it the active row and scrolls it into
-   * view, once each time it changes.
+   * The note open in the main view, however it was opened — a link, the graph, the
+   * palette. The tree expands the notes above it, makes it the active row and scrolls it
+   * into view, once each time it changes.
    */
   readonly openDocument?: string;
-  /** Another plugin's colour and icon for a folder row (`lm/folders.decoration`). */
-  readonly look?: (path: string) => FolderRowLook | undefined;
-  /** Other plugins' entries for a folder's menu (`lm/folders.menu-item`), before "Delete folder". */
-  readonly extraActions?: (path: string, anchor?: HTMLElement) => readonly MenuItem[];
+  /** Another plugin's colour and icon for a row (`lm/folders.decoration`). */
+  readonly look?: (id: string) => FolderRowLook | undefined;
+  /** Other plugins' entries for a row's menu (`lm/folders.menu-item`), before "Delete". */
+  readonly extraActions?: (id: string, anchor?: HTMLElement) => readonly MenuItem[];
 }
 
 /**
- * How a folder row is dressed: `icon` is drawn before the name, both in `color`, on a pill
+ * How a row is dressed: `icon` is drawn before the name, both in `color`, on a pill
  * of `background`.
  */
 export interface FolderRowLook {
@@ -220,126 +171,132 @@ export interface FolderRowLook {
 type SheetState =
   | { readonly kind: "actions"; readonly target: TreeTarget; readonly anchor?: HTMLElement }
   | { readonly kind: "move"; readonly target: TreeTarget }
-  | {
-      readonly kind: "delete";
-      readonly path: string;
-      readonly documents: number;
-    }
+  | { readonly kind: "delete"; readonly target: TreeTarget; readonly inside: number }
   /** The "are you sure?" every delete ends in, whatever was chosen before it. */
   | { readonly kind: "confirm"; readonly action: DeleteAction };
 
-type DeleteAction =
-  | {
-      readonly kind: "folder";
-      readonly path: string;
-      readonly mode: "parent" | "trash";
-      readonly documents: number;
-    }
-  | { readonly kind: "document"; readonly id: string; readonly title: string };
-
-type EditState =
-  | { readonly kind: "rename"; readonly path: string }
-  | { readonly kind: "create"; readonly parent: string };
+interface DeleteAction {
+  readonly target: TreeTarget;
+  readonly mode: "parent" | "trash";
+  /** Notes anywhere below it. */
+  readonly inside: number;
+  /** Where "parent" moves them, as a title; `undefined` for the root. */
+  readonly parentTitle?: string;
+}
 
 const messageOf = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
 
-const labelOf = (target: TreeTarget): string =>
-  target.kind === "folder" ? target.path : target.title;
-
 export function FolderTree({
   menu,
-  rows,
+  hierarchy,
   loading,
   error,
-  emptyFolders,
   collapsed,
   onCollapsedChange,
-  order,
-  onReorder,
+  rootOrder,
+  onRootOrder,
   requests,
-  onMoveDocument,
-  onMoveFolder,
-  onCreateFolder,
-  onDeleteFolder,
-  onDeleteDocument,
-  onNewDocumentHere,
-  onSelectFolder,
-  onOpenDocument,
+  onMove,
+  onRename,
+  onDelete,
+  onNewNoteInside,
+  onOpen,
   openDocument,
   look,
   extraActions,
 }: FolderTreeProps): ReactElement {
+  /*
+   * Notes opened only to reveal the open document. Shown open, never stored: opening a
+   * note is not a change, and writing `collapsedFolders` for it made every open inside a
+   * closed folder a settings write — a "Saving 1 change…" on a note nobody had touched.
+   * The first expand or collapse the user makes stores what is on screen and clears it.
+   */
+  const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set());
+  const shown = useMemo(
+    () => (opened.size === 0 ? collapsed : new Set([...collapsed].filter((id) => !opened.has(id)))),
+    [collapsed, opened],
+  );
+  const changeCollapsed = useCallback(
+    (next: ReadonlySet<string>) => {
+      setOpened(new Set());
+      onCollapsedChange(next);
+    },
+    [onCollapsedChange],
+  );
   const tree = useMemo(
-    () =>
-      buildFileTree(rows, {
-        extraFolders: emptyFolders,
-        collapsed,
-        order,
-        ...(openDocument !== undefined ? { reveal: openDocument } : {}),
-      }),
-    [collapsed, emptyFolders, openDocument, order, rows],
+    () => buildFileTree(hierarchy, { collapsed: shown, rootOrder }),
+    [shown, hierarchy, rootOrder],
   );
   const visible = tree.rows;
+  const virtual = useVirtualList({
+    count: visible.length,
+    keyOf: (index) => visible[index]?.key ?? String(index),
+    estimate: 24,
+  });
+  const scrollToRow = virtual.scrollToIndex;
+  // The tree scrolls in a box of its own, ending at the bottom of the sidebar, so the
+  // panels around it stay put while it scrolls.
+  const [scrollBox, setScrollBox] = useState<HTMLDivElement | null>(null);
+  const boxHeight = useFitToScreen(scrollBox, MIN_TREE_HEIGHT);
 
   const [active, setActive] = useState<string | undefined>(undefined);
   const [drop, setDrop] = useState<Drop | undefined>(undefined);
   const [lift, setLift] = useState<Lift | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | undefined>(undefined);
-  const [progress, setProgress] = useState<
-    { done: number; total: number } | undefined
-  >(undefined);
-  const [retry, setRetry] = useState<{ run: () => void } | undefined>(
-    undefined,
-  );
-  const [edit, setEdit] = useState<EditState | undefined>(undefined);
+  const [progress, setProgress] = useState<{ done: number; total: number } | undefined>(undefined);
+  const [retry, setRetry] = useState<{ run: () => void } | undefined>(undefined);
+  const [renaming, setRenaming] = useState<string | undefined>(undefined);
   const [sheet, setSheet] = useState<SheetState | undefined>(undefined);
 
-  const dragSource = useRef<TreeTarget | undefined>(undefined);
-  const autoExpand = useRef<
-    { path: string; timer: ReturnType<typeof setTimeout> } | undefined
-  >(undefined);
-  const longPress = useRef<
-    { timer: ReturnType<typeof setTimeout>; x: number; y: number } | undefined
-  >(undefined);
+  const autoExpand = useRef<{ id: string; timer: ReturnType<typeof setTimeout> } | undefined>(undefined);
+  const longPress = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | undefined>(
+    undefined,
+  );
   /** A long-press already acted; the click that follows it must not act again. */
   const pressHandled = useRef(false);
 
-  // Reveal the open document: once per document, as soon as its row has arrived (on a cold
-  // start the tree can be drawn before the projection has it).
+  const titleOf = useCallback((id: string): string => hierarchy.notes.get(id)?.title ?? "Untitled", [hierarchy]);
+  const parentOf = useCallback((id: string): string => hierarchy.parentOf.get(id) ?? "", [hierarchy]);
+
+  // Reveal the open note: once per note, as soon as its row has arrived (on a cold start
+  // the tree can be drawn before the projection has it).
   const revealed = useRef<string | undefined>(undefined);
   const scrollPending = useRef(false);
   useEffect(() => {
     if (openDocument === undefined || revealed.current === openDocument) return;
-    const row = rows.find((candidate) => candidate.id === openDocument);
-    if (!row) return;
+    if (!hierarchy.notes.has(openDocument)) return;
     revealed.current = openDocument;
-    const folder = normalizePath(row.fm["path"]);
-    const closed = folder === "" ? [] : [...ancestorsOf(folder), folder].filter((path) => collapsed.has(path));
-    if (closed.length > 0) {
-      const next = new Set(collapsed);
-      for (const path of closed) next.delete(path);
-      onCollapsedChange(next);
-    }
-    setActive(`d:${openDocument}`);
+    const closed = ancestorsOf(hierarchy, openDocument).filter((id) => shown.has(id));
+    if (closed.length > 0) setOpened((previous) => new Set([...previous, ...closed]));
+    setActive(`n:${openDocument}`);
     scrollPending.current = true;
-  }, [collapsed, onCollapsedChange, openDocument, rows]);
+  }, [shown, hierarchy, openDocument]);
 
-  const treeElement = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!scrollPending.current || active !== `d:${openDocument}`) return;
-    const element = treeElement.current?.querySelector('[role="treeitem"][aria-selected="true"]');
-    if (!element) return;
+    if (!scrollPending.current || active !== `n:${openDocument}`) return;
+    const index = visible.findIndex((row) => row.key === active);
+    if (index < 0) return;
     scrollPending.current = false;
-    element.scrollIntoView({ block: "nearest" });
+    scrollToRow(index);
   });
 
-  // An active row that just disappeared (its folder collapsed, its document moved) would
-  // leave `aria-activedescendant` pointing at nothing.
+  // A rename can start on a row scrolled out of the DOM (the palette, a keybinding): the
+  // field is in the row, so the row has to be drawn.
   useEffect(() => {
-    // …except the open document on its way in: its folders are opening this same moment.
-    if (scrollPending.current && active === `d:${openDocument}`) return;
+    if (renaming === undefined) return;
+    const index = visible.findIndex((row) => row.key === `n:${renaming}`);
+    if (index >= 0) scrollToRow(index);
+    // Once per rename, not again as the rows around it change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [renaming]);
+
+  // An active row that just disappeared (its parent collapsed, it moved) would leave
+  // `aria-activedescendant` pointing at nothing.
+  useEffect(() => {
+    // …except the open note on its way in: its ancestors are opening this same moment.
+    if (scrollPending.current && active === `n:${openDocument}`) return;
     if (active !== undefined && !visible.some((row) => row.key === active)) {
       setActive(visible[0]?.key);
     }
@@ -358,42 +315,46 @@ export function FolderTree({
   // ---------------------------------------------------------------------------
 
   const setExpanded = useCallback(
-    (path: string, next: boolean) => {
-      const updated = new Set(collapsed);
-      if (next) updated.delete(path);
-      else updated.add(path);
-      onCollapsedChange(updated);
+    (id: string, next: boolean) => {
+      const updated = new Set(shown);
+      if (next) updated.delete(id);
+      else updated.add(id);
+      changeCollapsed(updated);
     },
-    [collapsed, onCollapsedChange],
+    [shown, changeCollapsed],
   );
 
   /**
-   * Expand or collapse `path` and every folder below it (`""`: all of them). Collapsing
-   * the descendants too is the point: opening the folder again later shows them folded.
+   * Expand or collapse `id` and every note below it (`""`: all of them). Collapsing the
+   * descendants too is the point: opening the note again later shows them folded.
    */
   const setExpandedDeep = useCallback(
-    (path: string, next: boolean) => {
-      const root = normalizePath(path);
-      const updated = new Set(collapsed);
-      for (const folder of tree.folders) {
-        if (root !== "" && folder !== root && !folder.startsWith(`${root}/`)) continue;
-        if (next) updated.delete(folder);
-        else updated.add(folder);
+    (id: string, next: boolean) => {
+      const updated = new Set(shown);
+      const stack = id === "" ? [...(tree.siblings.get("") ?? [])] : [id];
+      while (stack.length > 0) {
+        const current = stack.pop() as string;
+        const children = hierarchy.childrenOf.get(current);
+        if (children === undefined) continue;
+        if (next) updated.delete(current);
+        else updated.add(current);
+        stack.push(...children);
       }
-      onCollapsedChange(updated);
+      changeCollapsed(updated);
     },
-    [collapsed, onCollapsedChange, tree.folders],
+    [shown, hierarchy, changeCollapsed, tree.siblings],
   );
 
-  /** Open everything between root and `path`, so a folder just created or moved shows. */
-  const revealFolder = useCallback(
-    (path: string) => {
-      const updated = new Set(collapsed);
-      for (const ancestor of ancestorsOf(path)) updated.delete(ancestor);
-      updated.delete(normalizePath(path));
-      onCollapsedChange(updated);
+  /** Open everything above `id`, and `id` itself, so a note just moved there shows. */
+  const reveal = useCallback(
+    (id: string) => {
+      if (id === "") return;
+      const updated = new Set(shown);
+      for (const ancestor of ancestorsOf(hierarchy, id)) updated.delete(ancestor);
+      updated.delete(id);
+      changeCollapsed(updated);
     },
-    [collapsed, onCollapsedChange],
+    [shown, hierarchy, changeCollapsed],
   );
 
   // ---------------------------------------------------------------------------
@@ -402,133 +363,90 @@ export function FolderTree({
 
   /**
    * One place where a write becomes busy/progress/problem, and where a failure keeps
-   * the thing it failed at so it can be run again. Every move in this plugin is a set of
-   * independent splices, so "try again" is honest: it re-plans against the live
-   * projection and writes only what is still in the old place.
+   * the thing it failed at so it can be run again. A retry re-plans against the live
+   * lists, so it writes only what did not land.
    */
-  const run: (operation: () => Promise<unknown>) => void = useCallback(
-    (operation) => {
-      setBusy(true);
-      setProblem(undefined);
-      setProgress(undefined);
-      setRetry(undefined);
-      void operation()
-        .catch((cause: unknown) => {
-          setProblem(messageOf(cause));
-          setRetry({ run: () => run(operation) });
-        })
-        .finally(() => {
-          setBusy(false);
-          setProgress(undefined);
-        });
-    },
-    [],
-  );
+  const run: (operation: () => Promise<unknown>) => void = useCallback((operation) => {
+    setBusy(true);
+    setProblem(undefined);
+    setProgress(undefined);
+    setRetry(undefined);
+    void operation()
+      .catch((cause: unknown) => {
+        setProblem(messageOf(cause));
+        setRetry({ run: () => run(operation) });
+      })
+      .finally(() => {
+        setBusy(false);
+        setProgress(undefined);
+      });
+  }, []);
 
   const onProgress = useCallback((done: number, total: number) => {
     setProgress(total > 1 ? { done, total } : undefined);
   }, []);
 
-  const moveDocument = useCallback(
-    (documentId: string, folder: string) => {
-      if (documentId === "") return;
-      const current = rows.find((row) => row.id === documentId)?.fm["path"];
-      // Dropping a document back where it already is writes nothing: a splice that
-      // stores the same value is still a CRDT transaction and a sync round trip, and it
-      // would show up in the document's history as an edit nobody made.
-      const next = planDocumentMove(current, folder);
-      if (next === undefined) return;
-      run(() => onMoveDocument(documentId, next));
-    },
-    [onMoveDocument, rows, run],
-  );
-
-  const moveFolder = useCallback(
-    (from: string, to: string) => {
-      const source = normalizePath(from);
-      const target = normalizePath(to);
-      if (source === "" || source === target) return;
-      if (isRecursiveRename(source, target)) {
-        setProblem(`“${source}” cannot go inside itself.`);
+  /** Into `parent` (last), or next to `target` under `parent`. */
+  const place = useCallback(
+    (id: string, where: Drop) => {
+      if (id === "") return;
+      if (where.parent !== "" && isWithin(hierarchy, where.parent, id)) {
+        setProblem(`“${titleOf(id)}” cannot go inside itself.`);
         return;
       }
-      run(async () => {
-        await onMoveFolder(source, target, { onProgress });
-        revealFolder(target);
-      });
-    },
-    [onMoveFolder, onProgress, revealFolder, run],
-  );
-
-  const moveTarget = useCallback(
-    (target: TreeTarget, folder: string) => {
-      if (target.kind === "document") moveDocument(target.id, folder);
-      else moveFolder(target.path, reparentTarget(target.path, folder));
-    },
-    [moveDocument, moveFolder],
-  );
-
-  const commitEdit = useCallback(
-    (state: EditState, raw: string) => {
-      setEdit(undefined);
-      const name = raw.trim();
-      if (name === "") return;
-      if (state.kind === "create") {
-        const path = joinPath(state.parent, name);
-        if (path === "") return;
+      if (where.mode === "into") {
+        if (parentOf(id) === where.parent && where.parent !== "") return;
         run(async () => {
-          await onCreateFolder(path);
-          revealFolder(path);
-          setActive(`f:${path}`);
+          await onMove(id, where.parent);
+          reveal(where.parent);
         });
         return;
       }
-      const target = renameTarget(state.path, name);
-      if (target === "" || target === state.path) return;
-      moveFolder(state.path, target);
-    },
-    [moveFolder, onCreateFolder, revealFolder, run],
-  );
-
-  const deleteFolder = useCallback(
-    (path: string, mode: "parent" | "trash") => {
-      setSheet(undefined);
-      run(() => onDeleteFolder(path, mode, { onProgress }));
-    },
-    [onDeleteFolder, onProgress, run],
-  );
-
-  const deleteDocument = useCallback(
-    (id: string) => {
-      setSheet(undefined);
-      run(() => onDeleteDocument(id));
-    },
-    [onDeleteDocument, run],
-  );
-
-  /**
-   * A folder with documents in it first asks where they go; every delete then ends in a
-   * confirm. An empty folder skips the first question — there is nothing to place.
-   */
-  const startDelete = useCallback(
-    (path: string) => {
-      const documents = documentsUnder(rows, path).length;
-      if (documents === 0) {
-        setSheet({ kind: "confirm", action: { kind: "folder", path, mode: "parent", documents } });
+      const siblings = tree.siblings.get(where.parent) ?? [];
+      if (where.parent === "") {
+        // The root has no note to hold a list: its order is this user's setting.
+        const placed = placeAmong(siblings, id, where.target, where.mode);
+        const stored = pruneOrder(placed, new Set([...(tree.siblings.get("") ?? []), id]));
+        run(async () => {
+          await onRootOrder(stored);
+          if (parentOf(id) !== "") await onMove(id, "");
+        });
         return;
       }
-      setSheet({ kind: "delete", path, documents });
+      const rest = siblings.filter((sibling) => sibling !== id);
+      const at = rest.indexOf(where.target) + (where.mode === "after" ? 1 : 0);
+      const before = rest[at];
+      run(() => onMove(id, where.parent, before));
     },
-    [rows],
+    [hierarchy, onMove, onRootOrder, parentOf, reveal, run, titleOf, tree.siblings],
   );
 
-  const startDeleteDocument = useCallback(
-    (target: Extract<TreeTarget, { kind: "document" }>) =>
-      setSheet({
-        kind: "confirm",
-        action: { kind: "document", id: target.id, title: target.title },
-      }),
-    [],
+  const commitRename = useCallback(
+    (id: string, raw: string) => {
+      setRenaming(undefined);
+      const title = raw.trim();
+      if (title === "" || title === titleOf(id)) return;
+      run(() => onRename(id, title));
+    },
+    [onRename, run, titleOf],
+  );
+
+  /** A note with notes inside first asks where they go; every delete ends in a confirm. */
+  const startDelete = useCallback(
+    (target: TreeTarget) => {
+      const inside = hierarchy.childrenOf.get(target.id)?.length ?? 0;
+      if (inside === 0) {
+        setSheet({ kind: "confirm", action: { target, mode: "trash", inside: 0 } });
+        return;
+      }
+      setSheet({ kind: "delete", target, inside });
+    },
+    [hierarchy],
+  );
+
+  const targetOf = useCallback(
+    (id: string): TreeTarget => ({ id, title: titleOf(id) }),
+    [titleOf],
   );
 
   // A command, a keybinding, or anything else outside this panel.
@@ -536,21 +454,15 @@ export function FolderTree({
     if (!requests) return undefined;
     return requests((request) => {
       switch (request.kind) {
-        case "create-folder":
-          if (request.parent !== "") revealFolder(request.parent);
-          setEdit({ kind: "create", parent: normalizePath(request.parent) });
-          return;
-        case "rename-folder":
-          setEdit({ kind: "rename", path: normalizePath(request.path) });
-          return;
-        case "delete-folder":
-          startDelete(request.path);
-          return;
         case "fold":
-          setExpandedDeep(request.path, request.expanded);
+          setExpandedDeep(request.id, request.expanded);
           return;
-        case "delete-document":
-          startDeleteDocument(request.target);
+        case "rename":
+          reveal(parentOf(request.target.id));
+          setRenaming(request.target.id);
+          return;
+        case "delete":
+          startDelete(request.target);
           return;
         case "move":
           setSheet({ kind: "move", target: request.target });
@@ -558,7 +470,7 @@ export function FolderTree({
         default:
       }
     });
-  }, [requests, revealFolder, setExpandedDeep, startDelete, startDeleteDocument]);
+  }, [parentOf, requests, reveal, setExpandedDeep, startDelete]);
 
   // ---------------------------------------------------------------------------
   // Drag and drop
@@ -570,136 +482,92 @@ export function FolderTree({
   }, []);
 
   // Whether a drag from this tree is in flight — it gates the sticky root drop strip,
-  // which has to be *rendered* state, not just the `dragSource` ref.
+  // which has to be *rendered* state.
   const [dragging, setDragging] = useState(false);
 
   const endDrag = useCallback(() => {
-    dragSource.current = undefined;
     setDragging(false);
     setDrop(undefined);
     setLift(undefined);
     cancelAutoExpand();
   }, [cancelAutoExpand]);
 
-  /** A folder may not be dropped into itself, into anything it contains, or where it is. */
-  const intoAllowed = useCallback((folder: string, source: TreeTarget | undefined): boolean => {
-    if (source?.kind !== "folder") return true;
-    return !isWithin(normalizePath(folder), source.path) && parentOf(source.path) !== folder;
-  }, []);
-
   /**
-   * Auto-expand: a drag that rests on a closed folder is a user trying to get inside it,
+   * Auto-expand: a drag that rests on a closed note is a user trying to get inside it,
    * and on a phone-sized panel there is no second hand to click with.
    */
-  const hoverFolder = useCallback(
-    (folder: string | undefined, expandable: boolean) => {
-      if (folder !== undefined && folder !== "" && expandable && collapsed.has(folder)) {
-        if (autoExpand.current?.path === folder) return;
+  const hoverNote = useCallback(
+    (id: string | undefined) => {
+      if (id !== undefined && id !== "" && shown.has(id) && hierarchy.childrenOf.has(id)) {
+        if (autoExpand.current?.id === id) return;
         cancelAutoExpand();
         autoExpand.current = {
-          path: folder,
+          id,
           timer: setTimeout(() => {
             autoExpand.current = undefined;
-            setExpanded(folder, true);
+            setExpanded(id, true);
           }, AUTO_EXPAND_MS),
         };
       } else {
         cancelAutoExpand();
       }
     },
-    [cancelAutoExpand, collapsed, setExpanded],
+    [cancelAutoExpand, shown, hierarchy, setExpanded],
   );
 
-  /** Put `path` before or after the folder `target`, joining `target`'s parent if need be. */
-  const reorderFolder = useCallback(
-    (path: string, target: string, where: "before" | "after") => {
-      const parent = parentOf(target);
-      const next = parentOf(path) === parent ? path : reparentTarget(path, parent);
-      const placed = placeAmong(tree.children.get(parent) ?? [], next, target, where);
-      const stored = pruneOrder(
-        withSiblings(order, placed, [path]),
-        new Set([...tree.folders, next]),
-      );
-      run(async () => {
-        await onReorder(stored);
-        if (next !== path) {
-          await onMoveFolder(path, next, { onProgress });
-          revealFolder(next);
-        }
-      });
-    },
-    [onMoveFolder, onProgress, onReorder, order, revealFolder, run, tree],
-  );
-
-  // --- The tree's own drags: pointer events, a lifted copy under the pointer --------
-
-  /** What lies under the pointer, as a drop. `undefined` where nothing may land. */
+  /** What lies under the pointer, as a drop for `source`. `undefined` where it may not land. */
   const dropAt = useCallback(
-    (x: number, y: number, source: TreeTarget): Drop | undefined => {
-      const element = document
-        .elementFromPoint(x, y)
-        ?.closest<HTMLElement>("[data-drop-kind]");
+    (x: number, y: number, source: string): Drop | undefined => {
+      const element = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-drop-kind]");
       if (!element) return undefined;
       const kind = element.dataset["dropKind"];
-      const path = element.dataset["dropPath"] ?? "";
-      if (kind === "folder" && source.kind === "folder" && path !== source.path) {
-        const box = element.getBoundingClientRect();
-        const share = (y - box.top) / Math.max(1, box.height);
-        const where = share < EDGE ? "before" : share > 1 - EDGE ? "after" : undefined;
-        // Next to a folder is inside its parent, which may not be the dragged folder's own
-        // subtree either.
-        if (where && !isWithin(parentOf(path), source.path)) {
-          return { mode: where, folder: parentOf(path), target: path };
-        }
+      if (kind === "root") return { mode: "into", parent: "" };
+      const id = element.dataset["dropId"] ?? "";
+      if (id === source) return undefined;
+      const box = element.getBoundingClientRect();
+      const share = (y - box.top) / Math.max(1, box.height);
+      const where = share < EDGE ? "before" : share > 1 - EDGE ? "after" : undefined;
+      if (where) {
+        const parent = parentOf(id);
+        return parent === "" || !isWithin(hierarchy, parent, source)
+          ? { mode: where, parent, target: id }
+          : undefined;
       }
-      const folder = kind === "root" ? "" : path;
-      return intoAllowed(folder, source) ? { mode: "into", folder } : undefined;
+      return isWithin(hierarchy, id, source) ? undefined : { mode: "into", parent: id };
     },
-    [intoAllowed],
+    [hierarchy, parentOf],
   );
 
   /** Read by the window listeners of a drag in flight, so they never act on stale state. */
-  const latest = useRef({ dropAt, hoverFolder, moveTarget, reorderFolder, visible });
-  latest.current = { dropAt, hoverFolder, moveTarget, reorderFolder, visible };
+  const latest = useRef({ dropAt, hoverNote, place });
+  latest.current = { dropAt, hoverNote, place };
 
   const liftStart = useCallback(
     (event: ReactPointerEvent<HTMLElement>, target: TreeTarget) => {
       if (event.pointerType === "touch" || event.button !== 0) return;
       // The row's own controls keep their clicks; a field being typed in is not a handle.
-      if ((event.target as HTMLElement).closest(".folders-actions, .folders-twisty, input")) {
-        return;
-      }
+      if ((event.target as HTMLElement).closest(".folders-actions, .folders-twisty, input")) return;
       const box = event.currentTarget.getBoundingClientRect();
       const start = { x: event.clientX, y: event.clientY };
       let lifted = false;
       let last: Drop | undefined;
 
-      const place = (x: number, y: number): void => {
+      const at = (x: number, y: number): void => {
         setLift({ target, x, y, dx: start.x - box.left, dy: start.y - box.top, width: box.width });
-        last = latest.current.dropAt(x, y, target);
+        last = latest.current.dropAt(x, y, target.id);
         setDrop(last);
-        const row =
-          last?.mode === "into"
-            ? latest.current.visible.find((entry) => entry.kind === "folder" && entry.path === last?.folder)
-            : undefined;
-        latest.current.hoverFolder(
-          last?.mode === "into" ? last.folder : undefined,
-          row?.kind === "folder" && row.expandable,
-        );
+        latest.current.hoverNote(last?.mode === "into" ? last.parent : undefined);
       };
       const onMove = (moveEvent: PointerEvent): void => {
         if (!lifted) {
-          if (Math.hypot(moveEvent.clientX - start.x, moveEvent.clientY - start.y) < DRAG_THRESHOLD) {
-            return;
-          }
+          if (Math.hypot(moveEvent.clientX - start.x, moveEvent.clientY - start.y) < DRAG_THRESHOLD) return;
           lifted = true;
-          dragSource.current = target;
           setDragging(true);
           document.body.style.setProperty("user-select", "none");
           document.body.style.setProperty("cursor", "grabbing");
           window.getSelection()?.removeAllRanges();
         }
-        place(moveEvent.clientX, moveEvent.clientY);
+        at(moveEvent.clientX, moveEvent.clientY);
       };
       const finish = (landed: boolean): void => {
         window.removeEventListener("pointermove", onMove);
@@ -718,14 +586,10 @@ export function FolderTree({
         window.addEventListener("click", swallow, { capture: true, once: true });
         setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 0);
         endDrag();
-        if (!landed || !last) return;
-        if (last.mode === "into") latest.current.moveTarget(target, last.folder);
-        else if (target.kind === "folder") {
-          latest.current.reorderFolder(target.path, last.target, last.mode);
-        }
+        if (landed && last) latest.current.place(target.id, last);
       };
       const onUp = (upEvent: PointerEvent): void => {
-        if (lifted) last = latest.current.dropAt(upEvent.clientX, upEvent.clientY, target);
+        if (lifted) last = latest.current.dropAt(upEvent.clientX, upEvent.clientY, target.id);
         finish(true);
       };
       const onCancel = (): void => finish(false);
@@ -745,46 +609,40 @@ export function FolderTree({
 
   // --- HTML5 drops, from rows other plugins make draggable (`doc-list`) -------------
 
-  const dragOverFolder = useCallback(
-    (event: ReactDragEvent, folder: string, expandable: boolean) => {
+  const dragOver = useCallback(
+    (event: ReactDragEvent, parent: string) => {
       event.preventDefault();
       event.stopPropagation();
       event.dataTransfer.dropEffect = "move";
-      setDrop({ mode: "into", folder });
-      hoverFolder(folder, expandable);
+      setDrop({ mode: "into", parent });
+      hoverNote(parent);
     },
-    [hoverFolder],
+    [hoverNote],
   );
 
-  const dropOnFolder = useCallback(
-    (event: ReactDragEvent, folder: string) => {
+  const dropInto = useCallback(
+    (event: ReactDragEvent, parent: string) => {
       event.preventDefault();
       event.stopPropagation();
-      const target = normalizePath(folder);
       endDrag();
-      const draggedFolder = normalizePath(event.dataTransfer.getData(FOLDER_DRAG_TYPE));
-      if (draggedFolder !== "") {
-        moveFolder(draggedFolder, reparentTarget(draggedFolder, target));
-        return;
-      }
-      moveDocument(event.dataTransfer.getData(DOCUMENT_DRAG_TYPE).trim(), target);
+      place(event.dataTransfer.getData(DOCUMENT_DRAG_TYPE).trim(), { mode: "into", parent });
     },
-    [endDrag, moveDocument, moveFolder],
+    [endDrag, place],
   );
 
-  const leaveFolder = useCallback((folder: string) => {
-    setDrop((current) => (current?.mode === "into" && current.folder === folder ? undefined : current));
+  const leave = useCallback((parent: string) => {
+    setDrop((current) => (current?.mode === "into" && current.parent === parent ? undefined : current));
   }, []);
 
-  /** The folder an "into" drop is outlining, if any. */
-  const intoFolder = drop?.mode === "into" ? drop.folder : undefined;
+  /** The note an "into" drop is outlining, if any (`""`: the root). */
+  const intoNote = drop?.mode === "into" ? drop.parent : undefined;
 
   // ---------------------------------------------------------------------------
   // Long press → the sheet
   // ---------------------------------------------------------------------------
 
   const openActions = useCallback((target: TreeTarget, anchor?: HTMLElement) => {
-    setActive(target.kind === "folder" ? `f:${target.path}` : `d:${target.id}`);
+    setActive(`n:${target.id}`);
     setSheet({ kind: "actions", target, ...(anchor ? { anchor } : {}) });
   }, []);
 
@@ -816,10 +674,7 @@ export function FolderTree({
     (event: ReactPointerEvent) => {
       const press = longPress.current;
       if (!press) return;
-      if (
-        Math.abs(event.clientX - press.x) > LONG_PRESS_SLOP ||
-        Math.abs(event.clientY - press.y) > LONG_PRESS_SLOP
-      ) {
+      if (Math.abs(event.clientX - press.x) > LONG_PRESS_SLOP || Math.abs(event.clientY - press.y) > LONG_PRESS_SLOP) {
         cancelLongPress();
       }
     },
@@ -837,359 +692,177 @@ export function FolderTree({
   // Keyboard
   // ---------------------------------------------------------------------------
 
-  const targetOf = useCallback(
-    (row: TreeRow | undefined): TreeTarget | undefined => {
-      if (row?.kind === "folder") return { kind: "folder", path: row.path };
-      if (row?.kind === "document")
-        return {
-          kind: "document",
-          id: row.id,
-          title: row.title,
-          path: row.path,
-        };
-      return undefined;
-    },
-    [],
-  );
-
   const onKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
-      if (visible.length === 0 || edit !== undefined) return;
+      if (visible.length === 0 || renaming !== undefined) return;
       const index = visible.findIndex((row) => row.key === active);
-      const row = index >= 0 ? visible[index] : undefined;
-      const move = (next: number): void => {
+      const row: TreeRow | undefined = index >= 0 ? visible[index] : undefined;
+      const note = row?.kind === "note" ? row : undefined;
+      const go = (next: number): void => {
         event.preventDefault();
-        setActive(
-          visible[Math.max(0, Math.min(visible.length - 1, next))]?.key,
-        );
+        const at = Math.max(0, Math.min(visible.length - 1, next));
+        setActive(visible[at]?.key);
+        scrollToRow(at);
       };
 
       switch (event.key) {
         case "ArrowDown":
-          move(index + 1);
+          go(index + 1);
           return;
         case "ArrowUp":
-          move(index < 0 ? 0 : index - 1);
+          go(index < 0 ? 0 : index - 1);
           return;
         case "Home":
-          move(0);
+          go(0);
           return;
         case "End":
-          move(visible.length - 1);
+          go(visible.length - 1);
           return;
         case "ArrowRight":
-          if (event.shiftKey && row?.kind === "folder" && row.expandable) {
+          if (event.shiftKey && note?.expandable) {
             event.preventDefault();
-            setExpandedDeep(row.path, true);
-          } else if (row?.kind === "folder" && row.expandable && !row.expanded) {
+            setExpandedDeep(note.id, true);
+          } else if (note?.expandable && !note.expanded) {
             event.preventDefault();
-            setExpanded(row.path, true);
-          } else if (row?.kind === "folder" && row.expandable) {
-            move(index + 1);
+            setExpanded(note.id, true);
+          } else if (note?.expandable) {
+            go(index + 1);
           }
           return;
         case "ArrowLeft": {
           if (!row) return;
           event.preventDefault();
-          if (event.shiftKey && row.kind === "folder" && row.expandable) {
-            setExpandedDeep(row.path, false);
+          if (event.shiftKey && note?.expandable) {
+            setExpandedDeep(note.id, false);
             return;
           }
-          if (row.kind === "folder" && row.expandable && row.expanded) {
-            setExpanded(row.path, false);
+          if (note?.expandable && note.expanded) {
+            setExpanded(note.id, false);
             return;
           }
-          const parent = row.kind === "folder" ? parentOf(row.path) : row.path;
-          if (parent !== "") setActive(`f:${parent}`);
+          const parent = visible.findIndex((other) => other.key === `n:${row.parent}`);
+          if (parent >= 0) go(parent);
           return;
         }
         case "Enter":
-          if (row?.kind === "folder") {
+          if (note) {
             event.preventDefault();
-            onSelectFolder(row.path);
-          } else if (row?.kind === "document") {
-            event.preventDefault();
-            onOpenDocument(row.id);
-          } else if (row?.kind === "more") {
-            event.preventDefault();
-            onSelectFolder(row.path);
+            onOpen(note.id);
           }
           return;
         case "F2":
-          if (row?.kind === "folder") {
+          if (note) {
             event.preventDefault();
-            setEdit({ kind: "rename", path: row.path });
+            setRenaming(note.id);
           }
           return;
-        case "Delete": {
-          const target = targetOf(row);
-          if (target?.kind === "folder") {
+        case "Delete":
+          if (note) {
             event.preventDefault();
-            startDelete(target.path);
-          } else if (target?.kind === "document") {
-            event.preventDefault();
-            startDeleteDocument(target);
+            startDelete(targetOf(note.id));
           }
           return;
-        }
         case "m":
-        case "M": {
-          // The keyboard half of a drag. Named in the hint, because a shortcut nobody
-          // is told about is the same as no shortcut.
-          const target = targetOf(row);
-          if (target) {
+        case "M":
+          // The keyboard half of a drag. Named in the hint, because a shortcut nobody is
+          // told about is the same as no shortcut.
+          if (note) {
             event.preventDefault();
-            setSheet({ kind: "move", target });
+            setSheet({ kind: "move", target: targetOf(note.id) });
           }
           return;
-        }
         default:
       }
     },
-    [
-      active,
-      edit,
-      onOpenDocument,
-      onSelectFolder,
-      setExpanded,
-      setExpandedDeep,
-      startDelete,
-      startDeleteDocument,
-      targetOf,
-      visible,
-    ],
+    [active, onOpen, renaming, setExpanded, setExpandedDeep, startDelete, targetOf, scrollToRow, visible],
   );
 
   // ---------------------------------------------------------------------------
   // Rows
   // ---------------------------------------------------------------------------
 
-  const editField = (
-    state: EditState,
-    initial: string,
-    label: string,
-  ): ReactElement => (
-    <input
-      className="folders-rename folders:tap-h folders:min-w-0 folders:flex-1 folders:rounded folders:border folders:border-accent folders:bg-bg-raised folders:px-1 folders:font-sans folders:text-text"
-      type="text"
-      autoFocus
-      defaultValue={initial}
-      aria-label={label}
-      onKeyDown={(event) => {
-        // The tree's own key handling would read this as navigation.
-        event.stopPropagation();
-        if (event.key === "Enter") commitEdit(state, event.currentTarget.value);
-        else if (event.key === "Escape") setEdit(undefined);
-      }}
-      /*
-       * Blur neither commits nor cancels, deliberately: a rename can splice hundreds of
-       * documents, and a stray click elsewhere is not consent to start that. The ✓ and ✕
-       * next to the field are the two answers, and Enter and Escape are the same two.
-       */
-    />
-  );
-
-  const editControls = (state: EditState): ReactElement => (
-    <span className={`${ACTIONS_CLASSES} folders-actions-edit folders:visible`}>
-      <button
-        type="button"
-        aria-label="Save"
-        title="Save"
-        onClick={(event) => {
-          const field = event.currentTarget
-            .closest(".folders-node")
-            ?.querySelector<HTMLInputElement>(".folders-rename");
-          commitEdit(state, field?.value ?? "");
+  const renameField = (row: NoteTreeRow): ReactElement => (
+    <>
+      <input
+        className="folders-rename folders:tap-h folders:min-w-0 folders:flex-1 folders:rounded folders:border folders:border-accent folders:bg-bg-raised folders:px-1 folders:font-sans folders:text-text"
+        type="text"
+        autoFocus
+        defaultValue={row.title}
+        aria-label={`Rename ${row.title}`}
+        onKeyDown={(event) => {
+          // The tree's own key handling would read this as navigation.
+          event.stopPropagation();
+          if (event.key === "Enter") commitRename(row.id, event.currentTarget.value);
+          else if (event.key === "Escape") setRenaming(undefined);
         }}
-      >
-        ✓
-      </button>
-      <button
-        type="button"
-        aria-label="Cancel"
-        title="Cancel"
-        onClick={() => setEdit(undefined)}
-      >
-        ✕
-      </button>
-    </span>
+      />
+      <span className={`${ACTIONS_CLASSES} folders-actions-edit folders:visible`}>
+        <button
+          type="button"
+          aria-label="Save"
+          title="Save"
+          onClick={(event) => {
+            const field = event.currentTarget.closest(".folders-node")?.querySelector<HTMLInputElement>(".folders-rename");
+            commitRename(row.id, field?.value ?? "");
+          }}
+        >
+          ✓
+        </button>
+        <button type="button" aria-label="Cancel" title="Cancel" onClick={() => setRenaming(undefined)}>
+          ✕
+        </button>
+      </span>
+    </>
   );
 
-  const creatingRow = (parent: string, depth: number): ReactElement => (
-    <div
-      key={`new:${parent}`}
-      className={`${NODE_CLASSES} folders-node-editing`}
-      style={{ "--folders-depth": depth } as CSSProperties}
-    >
-      <span className={TWISTY_CLASSES} aria-hidden="true" />
-      {editField(
-        { kind: "create", parent },
-        "",
-        parent === "" ? "New folder name" : `New folder in ${parent}`,
-      )}
-      {editControls({ kind: "create", parent })}
-    </div>
-  );
-
-  const rowElements: ReactElement[] = [];
-  if (edit?.kind === "create" && edit.parent === "")
-    rowElements.push(creatingRow("", 0));
-
-  visible.forEach((row, index) => {
-    const id = `folders-row-${index}`;
-    const isActive = row.key === active;
+  const rowElements: ReactElement[] = visible.slice(virtual.first, virtual.end).map((row, offset) => {
+    const index = virtual.first + offset;
     const common = {
-      id,
+      id: `folders-row-${index}`,
+      "data-virtual-index": index,
       role: "treeitem" as const,
       "aria-level": row.depth + 1,
-      "aria-selected": isActive,
+      "aria-selected": row.key === active,
       style: { "--folders-depth": row.depth } as CSSProperties,
     };
+    const isActive = row.key === active;
 
-    if (row.kind === "more") {
-      rowElements.push(
-        <div
-          key={row.key}
-          {...common}
-          className={`${NODE_CLASSES} folders-node-more ${isActive ? " folders-node-active folders:bg-accent-subtle" : ""}`}
-          // "…and 37 more" is inside its folder; a drop on it goes there.
-          data-drop-kind="document"
-          data-drop-path={row.path}
-          onMouseDown={() => setActive(row.key)}
-        >
-          <span className={TWISTY_CLASSES} aria-hidden="true" />
-          <button
-            type="button"
-            className={`folders-more ${LABEL_BUTTON_CLASSES} folders:text-[0.9em] folders:text-text-muted`}
-            tabIndex={-1}
-            onClick={() => onSelectFolder(row.path)}
-          >
-            {row.hidden} more…
-          </button>
-        </div>,
-      );
-      return;
-    }
-
-    if (row.kind === "document") {
-      const target: TreeTarget = {
-        kind: "document",
-        id: row.id,
-        title: row.title,
-        path: row.path,
-      };
-      rowElements.push(
-        <div
-          key={row.key}
-          {...common}
-          className={[
-            NODE_CLASSES,
-            "folders-node-leaf folders:cursor-pointer",
-            isActive ? "folders-node-active folders:bg-accent-subtle" : "",
-            lift?.target.kind === "document" && lift.target.id === row.id ? "folders-node-lifted folders:bg-bg-subtle folders:[&>*]:opacity-40" : "",
-          ]
-            .filter(Boolean)
-            .join(" ")}
-          title={row.title}
-          // A drop on a document means "put this next to that one" — its folder.
-          data-drop-kind="document"
-          data-drop-path={row.path}
-          onDragOver={(event) => dragOverFolder(event, row.path, false)}
-          onDragLeave={() => leaveFolder(row.path)}
-          onDrop={(event) => dropOnFolder(event, row.path)}
-          onMouseDown={() => setActive(row.key)}
-          onPointerDown={(event) => {
-            pressStart(event, target);
-            liftStart(event, target);
-          }}
-          onPointerMove={pressMove}
-          onPointerUp={cancelLongPress}
-          onPointerCancel={cancelLongPress}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            openActions(target);
-          }}
-          onClick={() => {
-            if (consumePress()) return;
-            setActive(row.key);
-            onOpenDocument(row.id);
-          }}
-        >
-          <span className={TWISTY_CLASSES} aria-hidden="true" />
-          <span
-            className={`folders-leaf-name ${ROW_LABEL_CLASSES} folders:text-link`}
-          >
-            {row.title}
-          </span>
-          <span
-            className={`${ACTIONS_CLASSES}${isActive ? " folders:visible" : ""}`}
-          >
-            <button
-              type="button"
-              tabIndex={isActive ? 0 : -1}
-              /*
-               * "Document actions", not "Actions for <title>".
-               *
-               * The row this button sits in is a `treeitem` whose accessible name is
-               * already the document's title, so assistive technology reads the two
-               * together and nothing is lost — while a label that *contained* the title
-               * would make every "the row called X" query in the workspace ambiguous
-               * between this button and `doc-list`'s row of the same name. One title,
-               * two controls that answer to it, is a trap for anything that drives this
-               * app by accessible name.
-               */
-              aria-label="Document actions"
-              title={`Move or delete ${row.title}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                openActions(target, event.currentTarget);
-              }}
-            >
-              ⋯
-            </button>
-          </span>
-        </div>,
-      );
-      return;
-    }
-
-    const target: TreeTarget = { kind: "folder", path: row.path };
-    const renaming = edit?.kind === "rename" && edit.path === row.path;
-    const dressed = look?.(row.path);
-    rowElements.push(
+    const target: TreeTarget = { id: row.id, title: row.title };
+    const editing = renaming === row.id;
+    const dressed = look?.(row.id);
+    return (
       <div
         key={row.key}
         {...common}
         {...(row.expandable ? { "aria-expanded": row.expanded } : {})}
         className={[
           NODE_CLASSES,
+          "folders:cursor-pointer",
           isActive ? "folders-node-active folders:bg-accent-subtle" : "",
-          row.path === intoFolder
+          row.id === intoNote
             ? "folders-node-drop folders:outline-2 folders:outline-dashed folders:outline-accent folders:outline-offset-[-2px]"
             : "",
-          drop?.mode === "before" && drop.target === row.path
+          drop?.mode === "before" && drop.target === row.id
             ? "folders-node-before folders:shadow-[inset_0_2px_0_0_var(--lm-accent)]"
             : "",
-          drop?.mode === "after" && drop.target === row.path
+          drop?.mode === "after" && drop.target === row.id
             ? "folders-node-after folders:shadow-[inset_0_-2px_0_0_var(--lm-accent)]"
             : "",
-          lift?.target.kind === "folder" && lift.target.path === row.path ? "folders-node-lifted folders:bg-bg-subtle folders:[&>*]:opacity-40" : "",
-          row.tracked
-            ? "folders-node-empty folders:italic folders:text-text-muted"
-            : "",
-          renaming ? "folders-node-editing" : "",
+          lift?.target.id === row.id ? "folders-node-lifted folders:bg-bg-subtle folders:[&>*]:opacity-40" : "",
+          editing ? "folders-node-editing" : "",
         ]
           .filter(Boolean)
           .join(" ")}
-        data-drop-kind="folder"
-        data-drop-path={row.path}
-        onDragOver={(event) => dragOverFolder(event, row.path, row.expandable)}
-        onDragLeave={() => leaveFolder(row.path)}
-        onDrop={(event) => dropOnFolder(event, row.path)}
+        title={row.title}
+        data-drop-kind="note"
+        data-drop-id={row.id}
+        onDragOver={(event) => dragOver(event, row.id)}
+        onDragLeave={() => leave(row.id)}
+        onDrop={(event) => dropInto(event, row.id)}
         onMouseDown={() => setActive(row.key)}
         onPointerDown={(event) => {
           pressStart(event, target);
-          if (!renaming) liftStart(event, target);
+          if (!editing) liftStart(event, target);
         }}
         onPointerMove={pressMove}
         onPointerUp={cancelLongPress}
@@ -1198,34 +871,24 @@ export function FolderTree({
           event.preventDefault();
           openActions(target);
         }}
-        /*
-         * The row itself has no action, and consumes the click anyway.
-         *
-         * `pressHandled` is set by the long-press timer and cleared by `consumePress`,
-         * which only the *document* row and the folder *name* hang off. A long press on
-         * the blank part of a folder row — right of the name, left of the actions — is
-         * a real gesture (it opens the sheet) whose click has nothing to land on, so the
-         * flag was left standing on a path where nothing was going to take it down.
-         * Every touch `pressStart` also resets it, which is why this is a latent edge
-         * rather than a swallowed tap today; making the row's own click consume its own
-         * press is what stops it depending on that.
-         */
-        onClick={() => void consumePress()}
+        onClick={() => {
+          if (consumePress() || editing) return;
+          setActive(row.key);
+          onOpen(row.id);
+        }}
       >
         {row.expandable ? (
           <button
             type="button"
             className={TWISTY_CLASSES}
             tabIndex={-1}
-            aria-label={
-              row.expanded ? `Collapse ${row.name}` : `Expand ${row.name}`
-            }
-            title="Alt-click to include every folder inside"
+            aria-label={row.expanded ? `Collapse ${row.title}` : `Expand ${row.title}`}
+            title="Alt-click to include every note inside"
             onClick={(event) => {
               event.stopPropagation();
-              // Alt (Option) or Shift: the folder and everything under it, as in VS Code.
-              if (event.altKey || event.shiftKey) setExpandedDeep(row.path, !row.expanded);
-              else setExpanded(row.path, !row.expanded);
+              // Alt (Option) or Shift: the note and everything under it, as in VS Code.
+              if (event.altKey || event.shiftKey) setExpandedDeep(row.id, !row.expanded);
+              else setExpanded(row.id, !row.expanded);
             }}
           >
             {row.expanded ? "▾" : "▸"}
@@ -1234,76 +897,52 @@ export function FolderTree({
           <span className={TWISTY_CLASSES} aria-hidden="true" />
         )}
 
-        {renaming ? (
-          /*
-           * "Rename or move", because it is both: the field holds the folder's *name*,
-           * and a name with a `/` in it is a path, so typing `archive/2026` moves the
-           * folder there. Same words as the button that opens it.
-           */
-          editField(
-            { kind: "rename", path: row.path },
-            row.name,
-            `Rename or move ${row.path}`,
-          )
+        {editing ? (
+          renameField(row)
         ) : (
-          <button
-            type="button"
-            className={`folders-name ${LABEL_BUTTON_CLASSES}`}
-            tabIndex={-1}
-            onClick={() => {
-              if (consumePress()) return;
-              onSelectFolder(row.path);
-            }}
-          >
-            {dressed === undefined ? row.name : <Dressed look={dressed} name={row.name} />}
-          </button>
+          <>
+            <span className={`folders-name ${ROW_LABEL_CLASSES}`}>
+              {dressed === undefined ? row.title : <Dressed look={dressed} name={row.title} />}
+            </span>
+            {row.expandable && (
+              <span
+                className="folders-count folders:shrink-0 folders:text-[0.8em] folders:tabular-nums folders:text-text-muted"
+                aria-label={`${row.descendants} notes inside`}
+              >
+                {row.descendants}
+              </span>
+            )}
+            {/*
+             * The row actions are the one part of this tree that Tab may enter: the tree
+             * is a roving-tabindex widget, so only the *active* row's buttons become a
+             * tab stop — the row that shows its buttons is the row whose buttons Tab
+             * reaches.
+             *
+             * "Note actions", not "Actions for <title>": the row is a `treeitem` whose
+             * accessible name is already the title, and a label that contained it would
+             * make every "the row called X" query ambiguous with `doc-list`'s row.
+             *
+             * Not on a phone: there the long-press opens the same menu, and the row's
+             * width is worth more to the title than to a button.
+             */}
+            <span className={`${ACTIONS_CLASSES} folders:compact:hidden ${isActive ? "folders:visible" : ""}`}>
+              <button
+                type="button"
+                tabIndex={isActive ? 0 : -1}
+                aria-label="Note actions"
+                title={`Move, rename or delete ${row.title}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  openActions(target, event.currentTarget);
+                }}
+              >
+                ⋯
+              </button>
+            </span>
+          </>
         )}
-
-        {!renaming && (
-          <span
-            className="folders-count folders:shrink-0 folders:text-[0.8em] folders:tabular-nums folders:text-text-muted"
-            aria-label={`${row.documents} documents`}
-          >
-            {row.documents}
-          </span>
-        )}
-
-        {renaming ? (
-          editControls({ kind: "rename", path: row.path })
-        ) : (
-          /*
-           * The row actions are the one part of this tree that Tab may enter.
-           *
-           * The tree itself is a roving-tabindex widget — the container holds the only
-           * tab stop and arrows move the active row — which leaves these buttons
-           * unreachable by key unless the *active* row's become a tab stop. That keeps
-           * exactly one tab stop per tree plus the actions of the row the user is
-           * standing on, and it follows the visible affordance: the row that shows its
-           * buttons is the row whose buttons Tab reaches.
-           */
-          <span
-            className={`${ACTIONS_CLASSES}${isActive ? " folders:visible" : ""}`}
-          >
-            <button
-              type="button"
-              tabIndex={isActive ? 0 : -1}
-              aria-label={`Actions for ${row.path}`}
-              title="Move, new folder, delete"
-              onClick={(event) => {
-                event.stopPropagation();
-                openActions(target, event.currentTarget);
-              }}
-            >
-              ⋯
-            </button>
-          </span>
-        )}
-      </div>,
+      </div>
     );
-
-    if (edit?.kind === "create" && edit.parent === row.path) {
-      rowElements.push(creatingRow(row.path, row.depth + 1));
-    }
   });
 
   // ---------------------------------------------------------------------------
@@ -1333,17 +972,15 @@ export function FolderTree({
     if (sheet.kind === "move") {
       const target = sheet.target;
       menu.openSheet({
-        title: `Move ${labelOf(target)} to…`,
+        title: `Move ${target.title} to…`,
         onClose,
         render: () => (
           <MovePicker
-            folders={tree.folders}
-            subject={labelOf(target)}
-            currentFolder={target.kind === "folder" ? parentOf(target.path) : target.path}
-            {...(target.kind === "folder" ? { excludeSubtree: target.path } : {})}
-            onChoose={(folder) => {
+            hierarchy={hierarchy}
+            subjects={[target]}
+            onChoose={(parent) => {
               setSheet(undefined);
-              moveTarget(target, folder);
+              place(target.id, { mode: "into", parent });
             }}
           />
         ),
@@ -1352,39 +989,37 @@ export function FolderTree({
     }
 
     if (sheet.kind === "delete") {
-      const parent = parentOf(sheet.path);
+      const { target, inside } = sheet;
+      const parent = parentOf(target.id);
+      const parentTitle = parent === "" ? undefined : titleOf(parent);
+      const everything = [target.id];
+      for (let i = 0; i < everything.length; i += 1) {
+        everything.push(...(hierarchy.childrenOf.get(everything[i] as string) ?? []));
+      }
       menu.open({
-        title: `Delete ${sheet.path}?`,
-        description: (
-          <>
-            A folder is only a <code>path:</code> line, so its {sheet.documents} document
-            {sheet.documents === 1 ? "" : "s"} have to go somewhere.
-          </>
-        ),
+        title: `Delete ${target.title}?`,
+        description: `It has ${inside} note${inside === 1 ? "" : "s"} inside.`,
         onClose,
         sections: [
           {
             items: [
               {
                 id: "parent",
-                label: parent === "" ? "Move them to Root" : `Move them to ${parent}`,
-                hint: "One path splice per document; nothing is deleted.",
+                label: parentTitle === undefined ? "Keep them, at the root" : `Keep them, in ${parentTitle}`,
+                hint: "Only this note goes to Trash.",
                 run: () =>
                   setSheet({
                     kind: "confirm",
-                    action: { kind: "folder", path: sheet.path, mode: "parent", documents: sheet.documents },
+                    action: { target, mode: "parent", inside, ...(parentTitle !== undefined ? { parentTitle } : {}) },
                   }),
               },
               {
                 id: "trash",
-                label: "Move them to Trash",
-                hint: "Restorable for 30 days, like any deleted document.",
+                label: "Delete them too",
+                hint: "Restorable from Trash for 30 days.",
                 danger: true,
                 run: () =>
-                  setSheet({
-                    kind: "confirm",
-                    action: { kind: "folder", path: sheet.path, mode: "trash", documents: sheet.documents },
-                  }),
+                  setSheet({ kind: "confirm", action: { target, mode: "trash", inside: everything.length - 1 } }),
               },
             ],
           },
@@ -1400,8 +1035,7 @@ export function FolderTree({
         if (!live) return;
         setSheet(undefined);
         if (!confirmed) return;
-        if (action.kind === "document") deleteDocument(action.id);
-        else deleteFolder(action.path, action.mode);
+        run(() => onDelete(action.target.id, action.mode, { onProgress }));
       });
       return () => {
         live = false;
@@ -1409,65 +1043,28 @@ export function FolderTree({
     }
 
     const target = sheet.target;
-    const items: MenuItem[] =
-      target.kind === "folder"
+    const expandable = hierarchy.childrenOf.has(target.id);
+    const items: MenuItem[] = [
+      { id: "open", label: "Open", run: () => onOpen(target.id) },
+      { id: "new-note", label: "New note inside", run: () => onNewNoteInside(target.id) },
+      ...(expandable
         ? [
-            { id: "open", label: "Show this folder", run: () => onSelectFolder(target.path) },
-            {
-              id: "new-document",
-              label: "New document here",
-              run: () => onNewDocumentHere(target.path),
-            },
-            {
-              id: "new-folder",
-              label: "New folder inside",
-              run: () => {
-                revealFolder(target.path);
-                setEdit({ kind: "create", parent: target.path });
-              },
-            },
-            {
-              id: "expand-all",
-              label: "Expand all inside",
-              run: () => setExpandedDeep(target.path, true),
-            },
-            {
-              id: "collapse-all",
-              label: "Collapse all inside",
-              run: () => setExpandedDeep(target.path, false),
-            },
-            {
-              id: "rename",
-              label: "Rename",
-              run: () => setEdit({ kind: "rename", path: target.path }),
-            },
-            { id: "move", label: "Move to…", run: () => setSheet({ kind: "move", target }) },
-            ...(extraActions?.(target.path, sheet.anchor) ?? []),
-            {
-              id: "delete",
-              label: "Delete folder",
-              danger: true,
-              run: () => startDelete(target.path),
-            },
+            { id: "expand-all", label: "Expand all inside", run: () => setExpandedDeep(target.id, true) },
+            { id: "collapse-all", label: "Collapse all inside", run: () => setExpandedDeep(target.id, false) },
           ]
-        : [
-            { id: "open", label: "Open", run: () => onOpenDocument(target.id) },
-            {
-              id: "move",
-              label: "Move to…",
-              hint: target.path === "" ? "Currently at root" : `Currently in ${target.path}`,
-              run: () => setSheet({ kind: "move", target }),
-            },
-            {
-              id: "delete",
-              label: "Delete",
-              hint: "Restorable from Trash for 30 days.",
-              danger: true,
-              run: () => startDeleteDocument(target),
-            },
-          ];
+        : []),
+      { id: "rename", label: "Rename", run: () => setRenaming(target.id) },
+      {
+        id: "move",
+        label: "Move to…",
+        hint: parentOf(target.id) === "" ? "Now at the root" : `Now in ${titleOf(parentOf(target.id))}`,
+        run: () => setSheet({ kind: "move", target }),
+      },
+      ...(extraActions?.(target.id, sheet.anchor) ?? []),
+      { id: "delete", label: "Delete", danger: true, run: () => startDelete(target) },
+    ];
     menu.open({
-      title: labelOf(target),
+      title: target.title,
       ...(sheet.anchor ? { anchor: sheet.anchor } : {}),
       onClose,
       sections: [{ items }],
@@ -1482,7 +1079,7 @@ export function FolderTree({
         className="folders-empty folders:m-0 folders:flex folders:flex-col folders:gap-1 folders:text-[0.85em] folders:text-text-muted"
         role="status"
       >
-        Loading folders…
+        Loading notes…
       </p>
     );
   }
@@ -1519,61 +1116,65 @@ export function FolderTree({
           className="folders-progress folders:m-0 folders:rounded folders:border folders:border-border folders:p-1.5 folders:text-[0.9em] folders:text-text-muted"
           role="status"
         >
-          Moving documents… {progress.done} of {progress.total}
+          Deleting notes… {progress.done} of {progress.total}
         </p>
       )}
 
-      {visible.length === 0 && edit === undefined ? (
+      {visible.length === 0 ? (
         <div className="folders-empty folders:m-0 folders:flex folders:flex-col folders:gap-1 folders:text-[0.85em] folders:text-text-muted">
-          <p>No documents yet.</p>
+          <p>No notes yet.</p>
         </div>
       ) : (
         <div
-          className={`folders-tree folders:flex folders:min-h-[calc(var(--lm-tap-target)*1.5)] folders:flex-col folders:pb-3 folders:[--folders-indent:calc(var(--lm-space)*1.5)] folders:[--folders-indent-cap:6] folders:focus-visible:outline-2 folders:focus-visible:outline-offset-[-2px] folders:focus-visible:outline-focus folders:compact:[--folders-indent:calc(var(--lm-space)*0.75)] folders:compact:[--folders-indent-cap:4] ${intoFolder === "" ? " folders-tree-root-drop folders:rounded folders:outline-2 folders:outline-dashed folders:outline-accent folders:outline-offset-[-2px]" : ""}`}
-          ref={treeElement}
-          role="tree"
-          // Blank space in the tree is root, the way it is in every file manager.
-          data-drop-kind="root"
-          aria-label="Folders"
-          aria-busy={busy}
-          tabIndex={0}
-          onKeyDown={onKeyDown}
-          onFocus={() => {
-            if (active === undefined) setActive(visible[0]?.key);
-          }}
-          // A drop on the tree's own background is a drop on root — the way dropping
-          // into blank space works in every file manager. `currentTarget` only: a drop
-          // a row *refused* (a folder onto its own descendant) must not fall through to
-          // root and move it somewhere nobody asked for.
-          onDragOver={(event) => {
-            if (event.target === event.currentTarget)
-              dragOverFolder(event, "", false);
-          }}
-          onDrop={(event) => {
-            if (event.target === event.currentTarget) dropOnFolder(event, "");
-          }}
-          {...(active !== undefined
-            ? {
-                "aria-activedescendant": `folders-row-${visible.findIndex((row) => row.key === active)}`,
-              }
-            : {})}
+          ref={setScrollBox}
+          className="folders-scroll folders:overflow-y-auto folders:overscroll-contain"
+          style={boxHeight === undefined ? undefined : { maxHeight: boxHeight }}
         >
-          {rowElements}
-          {dragging ? (
-            // Only while dragging, and pinned to the bottom of whatever part of the
-            // tree is on screen: the "move to root" target is reachable no matter how
-            // tall the tree has grown (a document leaves its folder; a folder becomes
-            // top-level).
-            <div
-              className={`folders-root-dropzone folders:sticky folders:bottom-0 folders:z-[1] folders:mt-0.5 folders:rounded folders:border folders:border-dashed folders:border-border-strong folders:bg-bg-raised folders:p-1.5 folders:text-center folders:text-[0.85rem] folders:text-text-muted ${intoFolder === "" ? " folders-node-drop folders:outline-2 folders:outline-dashed folders:outline-accent folders:outline-offset-[-2px]" : ""}`}
-              onDragOver={(event) => dragOverFolder(event, "", false)}
-              data-drop-kind="root"
-              onDragLeave={() => leaveFolder("")}
-              onDrop={(event) => dropOnFolder(event, "")}
-            >
-              Drop here to move to root
-            </div>
-          ) : null}
+          <div
+            className={`folders-tree folders:flex folders:min-h-[calc(var(--lm-tap-target)*1.5)] folders:flex-col folders:[--folders-indent:calc(var(--lm-space)*1.5)] folders:[--folders-indent-cap:6] folders:focus-visible:outline-2 folders:focus-visible:outline-offset-[-2px] folders:focus-visible:outline-focus folders:compact:[--folders-indent:calc(var(--lm-space)*0.75)] folders:compact:[--folders-indent-cap:4] ${intoNote === "" ? " folders-tree-root-drop folders:rounded folders:outline-2 folders:outline-dashed folders:outline-accent folders:outline-offset-[-2px]" : ""}`}
+            ref={virtual.listRef}
+            // The rows not drawn, and the room under the last one (`pb-3`, which an
+            // inline padding would otherwise replace).
+            style={{ paddingTop: virtual.before, paddingBottom: `calc(${virtual.after}px + 0.75rem)` }}
+            role="tree"
+            // Blank space in the tree is the root, the way it is in every file manager.
+            data-drop-kind="root"
+            aria-label="Folders"
+            aria-busy={busy}
+            tabIndex={0}
+            onKeyDown={onKeyDown}
+            onFocus={() => {
+              if (active === undefined) setActive(visible[0]?.key);
+            }}
+            // `currentTarget` only: a drop a row *refused* (a note onto its own
+            // descendant) must not fall through to the root and move it somewhere nobody
+            // asked for.
+            onDragOver={(event) => {
+              if (event.target === event.currentTarget) dragOver(event, "");
+            }}
+            onDrop={(event) => {
+              if (event.target === event.currentTarget) dropInto(event, "");
+            }}
+            {...(active !== undefined
+              ? { "aria-activedescendant": `folders-row-${visible.findIndex((row) => row.key === active)}` }
+              : {})}
+          >
+            {rowElements}
+            {dragging ? (
+              // Only while dragging, and pinned to the bottom of whatever part of the tree
+              // is on screen: the "move to the root" target is reachable however tall the
+              // tree has grown.
+              <div
+                className={`folders-root-dropzone folders:sticky folders:bottom-0 folders:z-[1] folders:mt-0.5 folders:rounded folders:border folders:border-dashed folders:border-border-strong folders:bg-bg-raised folders:p-1.5 folders:text-center folders:text-[0.85rem] folders:text-text-muted ${intoNote === "" ? " folders-node-drop folders:outline-2 folders:outline-dashed folders:outline-accent folders:outline-offset-[-2px]" : ""}`}
+                onDragOver={(event) => dragOver(event, "")}
+                data-drop-kind="root"
+                onDragLeave={() => leave("")}
+                onDrop={(event) => dropInto(event, "")}
+              >
+                Drop here to move to the root
+              </div>
+            ) : null}
+          </div>
         </div>
       )}
       {lift ? <Lifted lift={lift} /> : null}
@@ -1581,52 +1182,39 @@ export function FolderTree({
   );
 }
 
-const plural = (count: number): string => `${count} document${count === 1 ? "" : "s"}`;
+const plural = (count: number): string => `${count} note${count === 1 ? "" : "s"}`;
 
 /** The last question before a delete goes through. */
 function confirmRequest(action: DeleteAction): ConfirmRequest {
-  if (action.kind === "document") {
+  const title = action.target.title;
+  if (action.inside === 0) {
     return {
-      title: `Delete “${action.title}”?`,
+      title: `Delete “${title}”?`,
       description: "It goes to Trash, where it can be restored for 30 days.",
       confirmLabel: "Move to Trash",
       danger: true,
     };
   }
-  if (action.documents === 0) {
-    return {
-      title: `Delete “${action.path}”?`,
-      description: "The folder is empty; nothing else changes.",
-      confirmLabel: "Delete folder",
-      danger: true,
-    };
-  }
   if (action.mode === "trash") {
     return {
-      title: `Delete “${action.path}” and its ${plural(action.documents)}?`,
+      title: `Delete “${title}” and the ${plural(action.inside)} inside it?`,
       description: "They go to Trash, where they can be restored for 30 days.",
       confirmLabel: "Move to Trash",
       danger: true,
     };
   }
-  const parent = parentOf(action.path);
   return {
-    title: `Delete “${action.path}”?`,
-    description: `Its ${plural(action.documents)} move to ${parent === "" ? "Root" : parent}.`,
-    confirmLabel: "Delete folder",
+    title: `Delete “${title}”?`,
+    description: `The ${plural(action.inside)} inside it move to ${action.parentTitle ?? "the root"}.`,
+    confirmLabel: "Move to Trash",
     danger: true,
   };
 }
 
 /**
- * The row being carried: opaque, raised and a little tilted, under the pointer where it
- * was grabbed. A portal, because the sidebar's `container-type` would otherwise make it
- * the containing block of anything `position: fixed` inside it.
- */
-/**
- * A decorated folder name: the icon and the name side by side, centred on one line, on a
- * pill when there is a background. One flex box for both is what keeps the icon level
- * with the text, whatever the font's line height.
+ * A decorated name: the icon and the name side by side, centred on one line, on a pill
+ * when there is a background. One flex box for both is what keeps the icon level with
+ * the text, whatever the font's line height.
  */
 function Dressed({ look, name }: { readonly look: FolderRowLook; readonly name: string }): ReactElement {
   const pill = look.background !== undefined;
@@ -1644,8 +1232,12 @@ function Dressed({ look, name }: { readonly look: FolderRowLook; readonly name: 
   );
 }
 
+/**
+ * The row being carried: opaque, raised and a little tilted, under the pointer where it
+ * was grabbed. A portal, because the sidebar's `container-type` would otherwise make it
+ * the containing block of anything `position: fixed` inside it.
+ */
 function Lifted({ lift }: { readonly lift: Lift }): ReactElement {
-  const label = lift.target.kind === "folder" ? nameOf(lift.target.path) : lift.target.title;
   return createPortal(
     <div
       className="folders-lifted folders:pointer-events-none folders:fixed folders:z-[1000] folders:flex folders:min-h-[calc(var(--lm-tap-target)/2)] folders:items-center folders:gap-1.5 folders:overflow-hidden folders:rounded folders:border folders:border-border-strong folders:bg-bg-raised folders:px-2 folders:font-sans folders:text-text folders:shadow-2"
@@ -1657,11 +1249,8 @@ function Lifted({ lift }: { readonly lift: Lift }): ReactElement {
       }}
       aria-hidden="true"
     >
-      <span className="folders:shrink-0 folders:text-text-muted">
-        {lift.target.kind === "folder" ? "▸" : "·"}
-      </span>
       <span className="folders:min-w-0 folders:flex-1 folders:overflow-hidden folders:text-ellipsis folders:whitespace-nowrap">
-        {label}
+        {lift.target.title}
       </span>
     </div>,
     document.body,

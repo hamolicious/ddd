@@ -138,6 +138,18 @@ describe("a plugin's section is its own", () => {
     expect(open.text.toString()).toBe("body\n\n%%% b\ny: 2\n%%%\n");
   });
 
+  it("pushes, removes and pops list items in the plugin's own section", async () => {
+    const open = new FakeOpen("doc1", "body\n");
+    const splice = host(open).forPlugin("folders").splice;
+    await splice.sectionList(open, "children", { action: "push", value: "01A" });
+    await splice.sectionList(open, "children", { action: "push", value: "01B" });
+    await splice.sectionList(open, "children", { action: "insert", index: 0, value: "01C" });
+    expect(open.text.toString()).toBe("body\n\n%%% folders\nchildren:\n  - 01C\n  - 01A\n  - 01B\n%%%\n");
+    await splice.sectionList(open, "children", { action: "remove", value: "01A" });
+    expect(await splice.sectionList(open, "children", { action: "pop" })).toBe("01B");
+    expect(open.text.toString()).toBe("body\n\n%%% folders\nchildren:\n  - 01C\n%%%\n");
+  });
+
   it("removes a key's line when the edit says `remove`", async () => {
     const open = new FakeOpen("doc1", "%%% a\nx: 1\ny: 2\n%%%\n");
     await host(open)

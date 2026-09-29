@@ -21,7 +21,7 @@ export interface GraphNode {
   readonly folder: string;
   /** No such document on this device: a link points at it and nothing more. */
   readonly missing: boolean;
-  /** Links to and from it, in the filtered graph. */
+  /** Links to and from it, in the filtered graph — the whole of it, even in a local graph that shows fewer. */
   readonly degree: number;
 }
 
@@ -126,7 +126,8 @@ export function buildGraph(source: GraphSource, filter: GraphFilter = DEFAULT_FI
 /**
  * The part of `graph` within `depth` links of `center`, following links both ways — the
  * local graph. `center` is always in it, even with no links and even when a filter would
- * have hidden it.
+ * have hidden it. Each node keeps its degree from `graph`: a note at the edge of the
+ * neighbourhood is drawn as big as it is, not as big as the part of it that is shown.
  */
 export function neighbourhood(graph: Graph, center: DocumentId, depth: number, source?: GraphSource): Graph {
   const adjacent = new Map<DocumentId, DocumentId[]>();
@@ -155,14 +156,7 @@ export function neighbourhood(graph: Graph, center: DocumentId, depth: number, s
   }
 
   const links = graph.links.filter((link) => reached.has(link.source) && reached.has(link.target));
-  const degree = new Map<DocumentId, number>();
-  for (const link of links) {
-    degree.set(link.source, (degree.get(link.source) ?? 0) + 1);
-    degree.set(link.target, (degree.get(link.target) ?? 0) + 1);
-  }
-  const nodes = graph.nodes
-    .filter((node) => reached.has(node.id))
-    .map((node) => ({ ...node, degree: degree.get(node.id) ?? 0 }));
+  const nodes = graph.nodes.filter((node) => reached.has(node.id));
   if (!nodes.some((node) => node.id === center)) {
     const document = source?.documents().find((candidate) => candidate.id === center);
     nodes.push({ id: center, title: document?.title ?? center, folder: document?.folder ?? "", missing: false, degree: 0 });
@@ -179,5 +173,5 @@ export function shapeKey(graph: Graph): string {
 
 /** The top-level folder, which is what "colour by folder" groups on. */
 export function groupOf(node: GraphNode): string {
-  return node.folder.split("/")[0] ?? "";
+  return node.folder.split(" / ")[0] ?? "";
 }

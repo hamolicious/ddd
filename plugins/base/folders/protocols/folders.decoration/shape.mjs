@@ -3,15 +3,16 @@ import { s } from "@kernel";
 /** @type {import("@kernel").ProtocolSource} */
 export default {
   id: "lm/folders.decoration",
-  version: "1.0.0",
+  version: "2.0.0",
   kind: "slot",
   name: "FolderDecoration",
   key: "id",
   description: `
-Dresses folder rows in the tree: a background, a text colour, an icon, in any combination.
-The icon and the name are drawn together in a pill that takes \`background\`. The tree asks
-\`decorate\` for every folder it draws and redraws when \`onChange\` fires. With several
-providers, each field comes from the first one in seat order that sets it.`,
+Dresses note rows in the folder tree: a background, a text colour, an icon, in any
+combination. The icon and the name are drawn together in a pill that takes \`background\`.
+The tree asks \`decorate\` for every note it draws, by id, and redraws when \`onChange\`
+fires. With several providers, each field comes from the first one in seat order that sets
+it.`,
   imports: `import type { ReactNode } from "react";
 import type { Unsubscribe } from "@kernel";`,
   declarations: `
@@ -27,8 +28,8 @@ export interface FolderLook {
     id: s.string(),
     decorate: s
       .func()
-      .as("(path: string) => FolderLook | undefined")
-      .describe("Called on every render of every folder row: answer from memory, never await."),
+      .as("(id: string) => FolderLook | undefined")
+      .describe("Called on every render of every row, with the note's id: answer from memory, never await."),
     onChange: s
       .func()
       .as("(listener: () => void) => Unsubscribe")

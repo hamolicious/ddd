@@ -22,7 +22,7 @@ const kernel = {
 } as unknown as Kernel;
 
 describe("Obsidian attachment wrappers", () => {
-  it("keeps the vault path and durable source identity", () => {
+  it("keeps the durable source identity", () => {
     const text = prepareAttachmentDocument(kernel, "My Vault", "Assets/photo.png", {
       id: "01JATTACHMENT00000000000000",
       name: "photo.png",
@@ -30,7 +30,7 @@ describe("Obsidian attachment wrappers", () => {
     });
 
     expect(text).toContain("title: photo.png\n");
-    expect(text).toContain("path: Assets\n");
+    expect(text).not.toMatch(/^path:/m);
     expect(text).toContain("attachment: 01JATTACHMENT00000000000000\n");
     expect(text).toContain("![photo.png](attachment://01JATTACHMENT00000000000000)\n");
     expect(text).toContain("source_kind: attachment\n");
@@ -55,7 +55,7 @@ describe("Obsidian attachment wrappers", () => {
     }));
     const importingKernel = {
       ...kernel,
-      ports: { use: () => ({ upload }) },
+      ports: { bound: () => false, use: () => ({ upload }) },
       documents: {
         ...kernel.documents,
         query: async ({ offset }: { readonly offset: number }) => ({
@@ -131,7 +131,7 @@ describe("Obsidian attachment wrappers", () => {
     const importingKernel = {
       ...kernel,
       core: { parseDocument: () => ({ fm: {} }) },
-      ports: { use: () => ({ upload: vi.fn() }) },
+      ports: { bound: () => false, use: () => ({ upload: vi.fn() }) },
       documents: {
         ...kernel.documents,
         query: async ({ offset }: { readonly offset: number }) => ({
@@ -175,5 +175,51 @@ describe("Obsidian attachment wrappers", () => {
       failed: [],
     });
     expect(noteText).toBe("![photo.png](doc://01JWRAPPER0000000000000000)\n");
+  });
+});
+
+describe("Obsidian folders", () => {
+  it("files each new document under the note for its vault folder", async () => {
+    const created: string[] = [];
+    const ensurePath = vi.fn(async (titles: readonly string[]) => `folder:${titles.join("/")}`);
+    const file = vi.fn(async () => undefined);
+    const importingKernel = {
+      ...kernel,
+      core: { parseDocument: () => ({ fm: {} }) },
+      ports: {
+        bound: (port: string) => port === "folders",
+        use: (port: string) => (port === "folders" ? { ensurePath, file } : { upload: vi.fn() }),
+      },
+      documents: {
+        ...kernel.documents,
+        query: async () => ({ rows: [], total: 0 }),
+        create: async ({ id }: { readonly id: string }) => {
+          created.push(id);
+          return id;
+        },
+        open: async () => ({ text: { toString: () => "" }, release: vi.fn() }),
+        splice: { ...kernel.documents.splice, apply: vi.fn() },
+      },
+      log: { error: vi.fn(), warn: vi.fn() },
+    } as unknown as Kernel;
+    const archive = {
+      notes: [
+        { path: "Notes/Daily/Today.md", text: "today\n" },
+        { path: "Notes/Daily/Yesterday.md", text: "yesterday\n" },
+        { path: "Loose.md", text: "loose\n" },
+      ],
+      attachments: [],
+      skippedFiles: 0,
+    };
+
+    await importVault(importingKernel, "Vault", archive, () => undefined);
+
+    // One folder chain per vault folder, however many notes are in it.
+    expect(ensurePath).toHaveBeenCalledTimes(1);
+    expect(ensurePath).toHaveBeenCalledWith(["Notes", "Daily"]);
+    expect(file.mock.calls).toEqual([
+      [created[0], "folder:Notes/Daily"],
+      [created[1], "folder:Notes/Daily"],
+    ]);
   });
 });

@@ -1,102 +1,80 @@
 /**
- * `folders` — a real file tree over `fm.path` (SPEC §6.5).
+ * `folders` — a file tree where every folder is a note (SPEC §6.5).
  *
- * There are no folder objects. A "folder" is a prefix of the `fm.path` values that exist
- * in the projection, derived on the fly — which is why moving a document is a
- * *frontmatter splice* and nothing else, why renaming a folder is a splice per document
- * inside it, and why there is no rename transaction, no folder table, and nothing to
- * migrate. **Every write in this plugin is one `kernel.documents.splice` call** (SPEC
- * §3.3). If a folder move is interrupted, half the documents moved: recoverable, visible,
- * and vastly preferable to a second source of truth about where a document lives. The
- * tree's "Try again" re-plans against the live projection, so the retry writes only what
- * is still in the old place.
+ * A note's children are listed in its own `%%% folders` section, under `children`, one id
+ * per line. Any note can hold children; the parent of a note is whichever note lists it,
+ * and a note nobody lists sits at the root. `hierarchy.ts` reads the lists and repairs
+ * what they can say that a tree cannot (two parents, a loop); `tree.ts` turns that into
+ * rows.
  *
- * Path normalization is fixed by SPEC §6.5 and implemented exactly, in `path.ts`, with a
- * test per clause: `/` segments, `.`/`..`/empty segments **stripped** (not resolved),
- * **case-sensitive**, duplicate names allowed (documents are id-addressed, so two
- * `home/lists` differing in case are two folders and that is intended).
+ * **Every write is a list action on one note** (`kernel.documents.splice.sectionList`):
+ * filing a note pushes or inserts one line into its new parent and removes one line from
+ * its old one. Line-sized writes are what let two devices file notes into the same
+ * folder at once and keep both — a whole-list rewrite would keep only the later one. A
+ * move touches two notes and is not atomic across them; the new parent is written first,
+ * so an interruption leaves the note in two lists (drawn once, repaired by its next move)
+ * rather than in none.
  *
- * ## The one thing that is not derived
- *
- * A folder nobody has filed anything into has nowhere to live — that is what "there are
- * no folder objects" costs. So "New folder" writes the path into **this plugin's
- * per-user settings** (`kernel.settings`, SPEC §6.4) and stops counting it the moment a
- * document lands inside: from then on `fm.path` is the truth, and a second record of the
- * same fact could only ever disagree with it. `empty-folders.ts` is that bookkeeping, and
- * every function in it exists to make the list shrink.
- *
- * The stored line catches up at the **next write** rather than the instant the document
- * moves, because "the instant the document moves" is a subscription callback that fires
- * on every client at once — see `pruneEmptyFolders` for what that cost when it did write
- * there. Nothing visible depends on the difference: the tree merges tracked folders with
- * the folders `fm.path` implies, so a stale entry is a folder that now exists anyway.
+ * Only this plugin writes its section, so other plugins file notes through the `folders`
+ * service (`lm/folders`): the Obsidian importer, and anything else that makes notes in
+ * bulk. A note created through `doc-list` is announced on `lm/document-browser.created`
+ * and filed here — under the `parent` its creator asked for, or the default location.
  *
  * ## Per-user state, all of it in settings
  *
  * | Key | What it is |
  * |---|---|
- * | `defaultLocation` | Where "New document" files a note. Rendered as a picker in Settings. |
- * | `emptyFolders` | Folders created but not yet used. Dropped as soon as a document lands. |
- * | `collapsedFolders` | The folders this user closed. The negative is stored so an untouched tree is open. |
- * | `folderOrder` | The user's own order for folders, set by dragging (`order.ts`). Unlisted folders sort by name. |
+ * | `defaultLocation` | The note new notes are filed in; `""` for the root. |
+ * | `fileLocation` | The note new file documents (attachment wrappers) are filed in; `""` for the root. |
+ * | `collapsedFolders` | The notes this user closed. The negative is stored so an untouched tree is open. |
+ * | `rootOrder` | This user's order for the notes at the root, set by dragging (`order.ts`). |
  *
  * Settings are per user and, as SPEC §6.4 states plainly, readable by other users of the
- * shared workspace. Folder names are not secrets and nothing else is kept here.
+ * shared workspace. Note ids are not secrets and nothing else is kept here.
  */
 
 import { useEffect, useState } from "react";
 import type { ReactElement } from "react";
 
-import type { CoreValue, DocumentRow, Kernel, SettingsValue, Unsubscribe } from "@kernel";
+import type { CoreValue, DocumentRow, Kernel, SettingsValue } from "@kernel";
 import type { Command } from "@protocols/lm/commands.command";
 import type { ContextMenu, MenuItem } from "@protocols/lm/context-menu";
 import type { DocumentBrowser } from "@protocols/lm/document-browser";
+import type { DocumentCreated } from "@protocols/lm/document-browser.created";
+import type { Folders } from "@protocols/lm/folders";
 import type { FolderDecoration, FolderLook } from "@protocols/lm/folders.decoration";
 import type { FolderMenuItem } from "@protocols/lm/folders.menu-item";
-import type { FolderMoved } from "@protocols/lm/folders.moved";
-import type { MainView } from "@protocols/lm/main.view";
 import type { Router } from "@protocols/lm/router";
-import type { Route } from "@protocols/lm/router.route";
 import type { SettingsSection } from "@protocols/lm/settings.section";
 import type { SidebarPanel } from "@protocols/lm/sidebar.panel";
 
 import { BoundedIcon, useSlotEntries } from "../../_shared/boundary.js";
-import {
-  EXCLUDE_MACHINE_DOCUMENTS,
-  isMachineDocument,
-  isMachinePath,
-} from "../../_shared/machine-docs.js";
+import { EXCLUDE_MACHINE_DOCUMENTS, isMachineDocument } from "../../_shared/machine-docs.js";
 
 import { DefaultLocation } from "./DefaultLocation.js";
-import { renameInOrder } from "./order.js";
+import { FolderTree, type FolderRowLook, type MoveProgress, type TreeRequest } from "./FolderTree.js";
+import { MovePicker } from "./MovePicker.js";
 import {
-  EMPTY_FOLDERS_KEY,
-  mergeTracked,
-  pruneTracked,
-  readTracked,
-  renameTracked,
-  sameTracked,
-  withFolder,
-  withoutFolder,
-} from "./empty-folders.js";
-import { FolderContents } from "./FolderContents.js";
-import { FolderTree, type FolderRowLook, type TreeRequest } from "./FolderTree.js";
-import { documentsUnder, planFolderMove } from "./moves.js";
-import { buildTree, isRecursiveRename, normalizePath, parentOf, type PathRow } from "./path.js";
-import { settledMoves, withPendingPaths } from "./pending.js";
+  CHILDREN_KEY,
+  buildHierarchy,
+  planMove,
+  readChildren,
+  titlePath,
+  type Hierarchy,
+  type ListWrite,
+  type NoteRow,
+} from "./hierarchy.js";
+import { settledMoves, withPendingMoves, type PendingPlace } from "./pending.js";
+import { compareText } from "./tree.js";
 
 /** A workspace bigger than this needs paging in the tree; say so rather than truncate quietly. */
 const TREE_ROW_LIMIT = 20_000;
 
 /**
- * How many documents a folder move splices at once.
- *
- * Small on purpose: every splice hydrates a document and waits for a sync round trip, so
- * serial is slow (hundreds of sequential round trips for one rename) while unbounded is
- * worse — the in-memory replica LRU holds ~20 documents and the persisted set 50 (SPEC
- * §4.1), so a wide fan-out evicts the user's editable working set to move metadata.
+ * How many notes a delete sends to Trash at once. Small on purpose: each is a request,
+ * and a wide fan-out competes with the user's own edits for the connection.
  */
-const MOVE_CONCURRENCY = 6;
+const DELETE_CONCURRENCY = 6;
 
 /**
  * How long a move is drawn ahead of the projection. The echo normally takes about a
@@ -105,127 +83,74 @@ const MOVE_CONCURRENCY = 6;
  */
 const PENDING_MOVE_TTL_MS = 15_000;
 
-/** Collapsing a folder is a settings splice; a burst of clicks should not be a burst of them. */
+/** Collapsing a note is a settings splice; a burst of clicks should not be a burst of them. */
 const SETTINGS_DEBOUNCE_MS = 400;
-
-/**
- * The provided event port that announces the default location (`lm/folders.default-location`):
- * what other plugins can hear without depending on this one (see `announceDefaultLocation`).
- */
-export const DEFAULT_LOCATION_PORT = "location";
-
-/** The provided event port that announces renames and deletes (`lm/folders.moved`). */
-export const MOVED_PORT = "moved";
 
 export const SETTINGS_KEYS = {
   defaultLocation: "defaultLocation",
-  emptyFolders: EMPTY_FOLDERS_KEY,
+  fileLocation: "fileLocation",
   collapsedFolders: "collapsedFolders",
-  folderOrder: "folderOrder",
+  rootOrder: "rootOrder",
 } as const;
 
-export interface MoveOptions {
-  /** Called after each document, including the ones that failed. */
-  readonly onProgress?: (done: number, total: number) => void;
-}
-
-export interface FoldersApi {
-  /** Normalize a raw `fm.path` value the way the tree does. */
-  normalize(path: string): string;
-  /** Every folder path in the workspace, sorted, with document counts. */
-  tree(): Promise<readonly { readonly path: string; readonly documents: number }[]>;
-  /** Move one document: a single `fm.path` splice (SPEC §3.3). */
-  move(documentId: string, path: string): Promise<void>;
-  /**
-   * Move every document under `from` to `to` — a rename, a re-parent and a "move the
-   * contents out" are all this one operation. One splice per document, run through a
-   * small pool; `onProgress` fires after each one so a caller can show how far it got.
-   */
-  renameFolder(from: string, to: string, options?: MoveOptions): Promise<number>;
-  /** Remember an empty folder until a document lands in it. */
-  createFolder(path: string): Promise<void>;
-  /** `parent` moves the contents up a level; `trash` tombstones them (SPEC §3.5). */
-  deleteFolder(path: string, mode: "parent" | "trash", options?: MoveOptions): Promise<number>;
-  /** The folder currently shown, or `undefined` when another view is. */
-  current(): string | undefined;
-  /**
-   * Where a new document should be filed when the caller has no folder of its own —
-   * the "New notes go to" setting, `""` for root.
-   */
-  defaultLocation(): string;
-  setDefaultLocation(path: string): Promise<void>;
-  /** Fires when {@link defaultLocation} changes, here or on another device. */
-  onDefaultLocationChange(listener: (path: string) => void): Unsubscribe;
-}
-
-/** `#/folder?path=home/lists` — a query string, because `:name` matches one segment. */
-const folderPath = (folder: string): string => {
-  const path = normalizePath(folder);
-  return path === "" ? "/folder?path=" : `/folder?path=${encodeURIComponent(path)}`;
-};
-
-const folderFromHash = (hash: string): string => {
-  const route = hash.replace(/^#/, "");
-  const index = route.indexOf("?");
-  if (index === -1) return "";
-  return normalizePath(new URLSearchParams(route.slice(index + 1)).get("path") ?? "");
-};
-
-/** `#/doc/<id>` → the id, for the commands that act on the document on screen. */
+/** `#/doc/<id>` → the id, for the commands that act on the note on screen. */
 const documentFromRoute = (route: string): string | undefined => {
   const [path] = route.split("?");
   const match = /^\/doc\/([^/]+)$/.exec(path ?? "");
   return match?.[1];
 };
 
-export default function activate(kernel: Kernel): FoldersApi {
-  // Each handle is limited to the port's `needs` in the manifest: exactly what is read
-  // here and in `FolderTree`. `newDocument` rather than `createDocument`: it reports its
-  // own failures (offline, above all).
+/** A settings list of ids, cleaned: strings only, de-duplicated, order kept. */
+const readIds = (value: unknown): readonly string[] => {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  for (const entry of value as readonly unknown[]) {
+    if (typeof entry === "string" && entry !== "" && !out.includes(entry)) out.push(entry);
+  }
+  return out;
+};
+
+const sameIds = (left: readonly string[], right: readonly string[]): boolean =>
+  left.length === right.length && left.every((entry, index) => entry === right[index]);
+
+export default function activate(kernel: Kernel): void {
+  // Each handle is limited to the port's `needs` in the manifest. `newDocument` rather
+  // than `createDocument`: it reports its own failures (offline, above all).
   const docs = kernel.ports.use<Pick<DocumentBrowser, "newDocument">>("browser");
   const router = kernel.ports.use<Pick<Router, "navigate" | "current" | "onChange">>("router");
   const menu = kernel.ports.use<Pick<ContextMenu, "open" | "openSheet" | "confirm" | "close">>("menu");
-  // Other plugins' colours and icons for folder rows, and their entries in a folder's menu.
+  // Other plugins' colours and icons for rows, and their entries in a row's menu.
   const decorations = kernel.ports.collect<FolderDecoration>("decorations");
   const actions = kernel.ports.collect<FolderMenuItem>("actions");
 
   kernel.settings.defineSchema({
-    [SETTINGS_KEYS.defaultLocation]: {
-      type: "string",
-      label: "New notes go to",
-      description: "The folder a new document is filed in. Empty means the root.",
-      default: "",
-    },
-    // Bookkeeping, not preferences: both are rendered by the tree rather than by a
-    // settings row, and they are declared here for their defaults (the runtime lays
-    // declared defaults under the stored values) and so a reader of the settings
-    // document knows what wrote these lines.
-    [SETTINGS_KEYS.emptyFolders]: { type: "list", default: [] },
+    // Rendered by this plugin's own section (a note picker), declared for its default.
+    [SETTINGS_KEYS.defaultLocation]: { type: "string", default: "" },
+    [SETTINGS_KEYS.fileLocation]: { type: "string", default: "" },
+    // Bookkeeping, not preferences: rendered by the tree, declared for their defaults and
+    // so a reader of the settings document knows what wrote these lines.
     [SETTINGS_KEYS.collapsedFolders]: { type: "list", default: [] },
-    [SETTINGS_KEYS.folderOrder]: { type: "list", default: [] },
+    [SETTINGS_KEYS.rootOrder]: { type: "list", default: [] },
   });
 
   // ---------------------------------------------------------------------------
-  // Live state: one subscription, shared by the tree, the settings section and the API
+  // Live state: one subscription, shared by the tree, the settings section and the service
   // ---------------------------------------------------------------------------
 
   const listeners = new Set<() => void>();
   /** What the projection says — `rows` is this with the moves in flight applied. */
-  let projected: readonly PathRow[] = [];
-  let rows: readonly PathRow[] = [];
+  let projected: readonly NoteRow[] = [];
+  let hierarchy: Hierarchy = buildHierarchy([]);
   /** Moves written and not yet echoed by the projection (`pending.ts`). */
-  const pendingPaths = new Map<string, string>();
+  const pendingMoves = new Map<string, PendingPlace>();
   const derive = (): void => {
-    for (const id of settledMoves(projected, pendingPaths)) pendingPaths.delete(id);
-    rows = withPendingPaths(projected, pendingPaths);
+    for (const id of settledMoves(projected, pendingMoves)) pendingMoves.delete(id);
+    hierarchy = buildHierarchy(withPendingMoves(projected, pendingMoves));
   };
   let loading = true;
   let loadError: string | undefined;
-  let emptyFolders = readTracked(kernel.settings.get(SETTINGS_KEYS.emptyFolders));
-  let collapsed: ReadonlySet<string> = new Set(
-    readTracked(kernel.settings.get(SETTINGS_KEYS.collapsedFolders)),
-  );
-  let folderOrder = readTracked(kernel.settings.get(SETTINGS_KEYS.folderOrder));
+  let collapsed: ReadonlySet<string> = new Set(readIds(kernel.settings.get(SETTINGS_KEYS.collapsedFolders)));
+  let rootOrder = readIds(kernel.settings.get(SETTINGS_KEYS.rootOrder));
   /** A local order write in flight; adopting the stored value meanwhile would undo it. */
   let orderWriting = 0;
 
@@ -233,61 +158,17 @@ export default function activate(kernel: Kernel): FoldersApi {
     for (const listener of [...listeners]) listener();
   };
 
-  const readDefaultLocation = (): string =>
-    normalizePath(kernel.settings.get<string>(SETTINGS_KEYS.defaultLocation) ?? "");
-  let announced = readDefaultLocation();
-  const defaultLocationListeners = new Set<(path: string) => void>();
-
-  /**
-   * Tell everyone where new notes go.
-   *
-   * Sent on the `location` port (`lm/folders.default-location`, sticky): once at
-   * activation and again on every change, here or on another device. `doc-list` hears it
-   * whenever it starts, so the two may start in either order. "New document here" in the
-   * tree still passes its own folder, which wins: an explicit location always beats a
-   * default.
-   */
-  const announceDefaultLocation = (): void => {
-    const path = readDefaultLocation();
-    announced = path;
-    kernel.ports.emit(DEFAULT_LOCATION_PORT, { path });
-    for (const listener of [...defaultLocationListeners]) listener(path);
+  /** Where new documents of a kind go: a note id, or `""` for the root. */
+  const locationFor = (kind: "note" | "file"): string => {
+    const stored = kernel.settings.get<string>(kind === "file" ? SETTINGS_KEYS.fileLocation : SETTINGS_KEYS.defaultLocation);
+    return typeof stored === "string" ? stored.trim() : "";
   };
 
   /**
-   * A tracked folder a document has moved into is not "empty" any more — so it stops
-   * being one *here*, and the stored list catches up at the next write.
-   *
-   * **Nothing is written from this path, deliberately, and it is not laziness.** This
-   * runs from inside a `documents.subscribe` callback, which fires on every change to
-   * every document in the workspace — on **every connected client at once**. A write
-   * here would mean N clients splicing the same settings line in response to one drop,
-   * for a value that changes nothing anyone can see: the tree merges tracked folders
-   * with the folders `fm.path` implies, so a stale entry is invisible the moment its
-   * folder exists on its own. Consolidating at the next real write is the same rule the
-   * kernel's own settings host uses for duplicate keys, and the list still only shrinks.
-   *
-   * There is a second, sharper reason not to write from here, found the hard way: the
-   * write is itself a document splice, so it re-enters the query engine that is
-   * mid-notification. In that state the splice **resolved and then vanished** — the
-   * settings document on the server never got it, and every later settings write in the
-   * session was lost with it. That is a kernel-level fault (see the summary for the
-   * repro); this path is also the only place in the base distribution that provoked it.
-   */
-  const pruneEmptyFolders = (): void => {
-    const pruned = pruneTracked(emptyFolders, rows);
-    if (sameTracked(emptyFolders, pruned)) return;
-    emptyFolders = pruned;
-  };
-
-  /**
-   * Every settings write this plugin makes, one at a time.
-   *
-   * `kernel.settings.set` is a line splice into a document that has to be found (or
-   * created) first, and this plugin writes three keys from four places — a drop can
-   * land at the same moment the user is changing a preference. Queueing is cheap (a
-   * settings write is on no hot path) and it means this plugin can never be the cause
-   * of two writes racing for the same section.
+   * Every settings write this plugin makes, one at a time. `kernel.settings.set` is a
+   * line splice into a document that has to be found (or created) first, and this plugin
+   * writes three keys from several places; queueing means it can never be the cause of
+   * two writes racing for the same section.
    */
   let settingsWrites: Promise<unknown> = Promise.resolve();
   const writeSetting = (key: string, value: SettingsValue): Promise<void> => {
@@ -299,70 +180,24 @@ export default function activate(kernel: Kernel): FoldersApi {
     return write;
   };
 
-  /**
-   * Empty-folder entries this device has written and not yet read back.
-   *
-   * The whole list is one settings key, so two devices creating a folder at the same
-   * moment write `emptyFolders:` concurrently and the host keeps one line (SPEC §3.3,
-   * last occurrence wins) — silently dropping the folder made on the losing device.
-   * An entry stays in this set from the write that added it until a *stored* value
-   * contains it; while it is in the set, a stored list that lacks it is a lost race and
-   * is merged rather than adopted (`mergeTracked`). After it has round-tripped once the
-   * entry is the shared list's to remove, which is what keeps a deliberate delete on
-   * another device deleted instead of resurrecting it.
-   */
-  const unconfirmed = new Set<string>();
-
-  /** Store the empty-folder list, pruned — this is the "next write" that consolidates. */
-  const writeTracked = async (next: readonly string[]): Promise<void> => {
-    const pruned = pruneTracked(next, rows);
-    const stored = readTracked(kernel.settings.get(EMPTY_FOLDERS_KEY));
-    for (const entry of pruned) if (!stored.includes(entry)) unconfirmed.add(entry);
-    // An entry this write drops (deleted, renamed away, or filled) is no longer ours to
-    // defend — otherwise "delete an empty folder" would re-add it on the next merge.
-    for (const entry of [...unconfirmed]) if (!pruned.includes(entry)) unconfirmed.delete(entry);
-    emptyFolders = pruned;
-    try {
-      await writeSetting(EMPTY_FOLDERS_KEY, [...pruned] as readonly CoreValue[]);
-    } catch (cause) {
-      // Losing the note of an empty folder is a cosmetic failure — the folders that hold
-      // documents are unaffected — so it is logged rather than raised over the tree.
-      kernel.log.warn("could not store the empty-folder list", cause);
-    }
-  };
-
   void (async () => {
     try {
-      // One live query for the whole tree. `subscribe` re-runs only when a change can
-      // alter the result (SPEC §4.2), so this is one subscription, not one per folder.
-      //
-      // **Machine-owned documents are excluded here rather than in the tree widget**
-      // (`_shared/machine-docs.ts`), so every consumer of `rows` inherits it: the
-      // counts, the root rows, *and* the rename walk. A folder rename splices `fm.path`
-      // on every row it matches, and the kernel's settings documents are machine-owned
-      // (SPEC §3.3): a tree that listed `.settings` would offer a rename on it and
-      // rewrite frontmatter the kernel authors.
-      //
-      // **This protects what the tree draws, and nothing else.** Two entry points reach
-      // the write path with ids that never came from here — the `folders.moveDocument`
-      // command (a URL) and a drop (`text/plain` off a `DataTransfer` any plugin may
-      // have filled in) — so the write path carries its own check; see
-      // `refuseMachineWrite`. Reading this exclusion as a guarantee about writes is
-      // exactly the mistake that moved a settings document out of `.settings`.
-      //
-      // No toggle here, deliberately. A hidden folder in a tree is a control that looks
-      // like every other folder and behaves differently; `doc-list`'s "show machine
-      // documents" is where the escape hatch belongs, because a list can hold a mixed set
-      // without implying that a dotted folder is yours to reorganise.
+      // One live query for the whole tree. **Machine-owned documents are excluded here**
+      // (`_shared/machine-docs.ts`), so the tree never offers to move, rename or file into
+      // one. That protects what the tree draws; the write path checks again
+      // (`refuseMachine`), because ids also arrive from URLs and other plugins' drags.
       const subscription = await kernel.documents.subscribe({
         filter: EXCLUDE_MACHINE_DOCUMENTS,
         limit: TREE_ROW_LIMIT,
       });
       const take = (result: { rows: readonly DocumentRow[] }): void => {
-        projected = result.rows.map((row) => ({ id: row.id, title: row.title, fm: row.fm }));
+        projected = result.rows.map((row) => ({
+          id: row.id,
+          title: row.title || "Untitled",
+          children: readChildren(row.plugins),
+        }));
         derive();
         loading = false;
-        pruneEmptyFolders();
         publish();
       };
       take(subscription.result);
@@ -378,7 +213,7 @@ export default function activate(kernel: Kernel): FoldersApi {
   const writeCollapsed = (): void => {
     collapsedTimer = undefined;
     void writeSetting(SETTINGS_KEYS.collapsedFolders, [...collapsed] as readonly CoreValue[]).catch(
-      (cause: unknown) => kernel.log.warn("could not store the collapsed folders", cause),
+      (cause: unknown) => kernel.log.warn("could not store the collapsed notes", cause),
     );
   };
   const setCollapsed = (next: ReadonlySet<string>): void => {
@@ -394,46 +229,27 @@ export default function activate(kernel: Kernel): FoldersApi {
     writeCollapsed();
   };
 
-  const setFolderOrder = async (next: readonly string[]): Promise<void> => {
-    folderOrder = next;
+  const setRootOrder = async (next: readonly string[]): Promise<void> => {
+    if (sameIds(rootOrder, next)) return;
+    rootOrder = next;
     publish();
     orderWriting += 1;
     try {
-      await writeSetting(SETTINGS_KEYS.folderOrder, [...next] as readonly CoreValue[]);
+      await writeSetting(SETTINGS_KEYS.rootOrder, [...next] as readonly CoreValue[]);
     } finally {
       orderWriting -= 1;
     }
   };
 
   // Settings change under us: another tab, another device, or our own write coming back
-  // through sync. Guarded, because a throw from `activate` skips every dependent
-  // (SPEC §6.4) and this is a convenience, not the feature.
+  // through sync. Guarded, because this is a convenience, not the feature.
   try {
     kernel.settings.subscribe(() => {
-      const stored = readTracked(kernel.settings.get(SETTINGS_KEYS.emptyFolders));
-      for (const entry of [...unconfirmed]) if (stored.includes(entry)) unconfirmed.delete(entry);
-      // A stored list missing something this device wrote is a lost same-key race, not
-      // an instruction. Merge it back, show the union immediately, and push it out so
-      // the other device converges on the union rather than on its own half.
-      //
-      // Only when something was actually lost. Re-deriving and re-writing on every
-      // settings change would put every connected client into the same splice at once,
-      // which is the cost `pruneEmptyFolders` exists to avoid.
-      const lost = [...unconfirmed].filter((entry) => !stored.includes(entry));
-      const merged = lost.length === 0 ? stored : pruneTracked(mergeTracked(stored, lost), rows);
-      emptyFolders = merged;
-      if (lost.length > 0 && !sameTracked(stored, merged)) {
-        // Never from inside the callback: a settings write is a document splice, and
-        // this plugin has already paid once for re-entering a notification (see
-        // `pruneEmptyFolders`). One turn of the event loop costs nothing here.
-        setTimeout(() => void writeTracked(merged), 0);
-      }
       // A pending local write would be clobbered by adopting the remote value mid-flight.
       if (collapsedTimer === undefined) {
-        collapsed = new Set(readTracked(kernel.settings.get(SETTINGS_KEYS.collapsedFolders)));
+        collapsed = new Set(readIds(kernel.settings.get(SETTINGS_KEYS.collapsedFolders)));
       }
-      if (orderWriting === 0) folderOrder = readTracked(kernel.settings.get(SETTINGS_KEYS.folderOrder));
-      if (readDefaultLocation() !== announced) announceDefaultLocation();
+      if (orderWriting === 0) rootOrder = readIds(kernel.settings.get(SETTINGS_KEYS.rootOrder));
       publish();
     });
   } catch (cause) {
@@ -441,12 +257,11 @@ export default function activate(kernel: Kernel): FoldersApi {
   }
 
   const useStore = (): {
-    rows: readonly PathRow[];
+    hierarchy: Hierarchy;
     loading: boolean;
     error?: string;
-    emptyFolders: readonly string[];
     collapsed: ReadonlySet<string>;
-    folderOrder: readonly string[];
+    rootOrder: readonly string[];
   } => {
     const [, setRevision] = useState(0);
     useEffect(() => {
@@ -457,271 +272,236 @@ export default function activate(kernel: Kernel): FoldersApi {
       };
     }, []);
     return {
-      rows,
+      hierarchy,
       loading,
-      emptyFolders,
       collapsed,
-      folderOrder,
+      rootOrder,
       ...(loadError !== undefined ? { error: loadError } : {}),
     };
   };
 
   // ---------------------------------------------------------------------------
-  // Writes — all of them one splice per document
+  // Writes
   // ---------------------------------------------------------------------------
 
   /**
-   * Run `work` over `items` through a bounded pool, reporting progress and collecting
-   * failures rather than abandoning the rest at the first one.
-   *
-   * A move is a set of *independent* splices: one document failing (offline, a conflict,
-   * a document deleted under us) says nothing about the next, and the user has to be told
-   * how far it got — which is also what makes running it again the whole recovery story.
+   * **The write-path half of `_shared/machine-docs.ts`.** The tree never draws a
+   * machine-owned document, but ids reach the write path from elsewhere too — the
+   * "Move this note" command takes its id from the URL, a drop reads `text/plain` off a
+   * `DataTransfer` any plugin may have filled, and the service takes whatever it is given.
+   * Filing the kernel's settings document under a note would put app data in a person's
+   * tree, and writing a `%%% folders` section into one would edit text the kernel owns.
    */
-  const pool = async <T,>(
-    items: readonly T[],
-    work: (item: T) => Promise<void>,
-    options?: MoveOptions,
-  ): Promise<{ done: number; failures: readonly string[] }> => {
-    let done = 0;
-    let succeeded = 0;
-    const failures: string[] = [];
-    options?.onProgress?.(0, items.length);
-
-    let cursor = 0;
-    const workers = Array.from(
-      { length: Math.min(MOVE_CONCURRENCY, items.length) },
-      async (): Promise<void> => {
-        for (;;) {
-          const item = items[cursor++];
-          if (item === undefined) return;
-          try {
-            await work(item);
-            succeeded += 1;
-          } catch (cause) {
-            failures.push(cause instanceof Error ? cause.message : String(cause));
-          } finally {
-            done += 1;
-            options?.onProgress?.(done, items.length);
-          }
-        }
-      },
-    );
-    await Promise.all(workers);
-    return { done: succeeded, failures };
-  };
-
-  /**
-   * **The write-path half of `_shared/machine-docs.ts`, and the only place it holds.**
-   *
-   * Excluding machine-owned documents from the tree's `rows` protects what the tree
-   * *draws*. It does not protect what this plugin *writes*, and those are two different
-   * sets: `rows` is the only place the exclusion was applied, while `setPath` is reached
-   * from entry points that never consult `rows` at all — the `folders.moveDocument`
-   * command takes its id from the URL (`#/doc/<any id>`), and a drop reads
-   * `text/plain` off a `DataTransfer` that any draggable row in any plugin may have
-   * filled in (`doc-list` marks every row draggable and its filter bar has a "show
-   * machine documents" toggle).
-   *
-   * Handed the kernel's per-user settings document, the old code spliced `fm.path` on
-   * it exactly as it would on a note — moving it out of `.settings`, where
-   * `settingsFilter()` (`kernel/src/runtime/settings.ts`) is looking for it. Every
-   * stored setting for that user then reads as its schema default, with the only
-   * recovery being to hand-edit `path` back in edit mode. So the check lives here,
-   * where the write is, and it is made against the document's **stored** `fm.path`
-   * rather than against tree membership: a document past {@link TREE_ROW_LIMIT} is
-   * absent from `rows` and is still perfectly movable.
-   *
-   * Refusal is a thrown `Error`, which is what every caller already renders — the
-   * tree's problem row with a "Try again", or the command's own notice.
-   */
-  /**
-   * The destination half, synchronous so a folder move can refuse before it splices
-   * anything. `normalizePath` strips `.` and `..` as *segments* but `.settings` is an
-   * ordinary one (see `machine-docs.ts`), so an inline rename typing `.hidden` would
-   * otherwise file real notes where three plugins have agreed not to look.
-   */
-  const refuseMachineFolder = (path: string): void => {
-    if (!isMachinePath(path)) return;
-    throw new Error(
-      `“${path}” is a machine-owned folder. Names starting with “.” belong to plugins, ` +
-        `so a document filed there would vanish from the tree, the list and search.`,
-    );
-  };
-
-  const refuseMachineWrite = async (documentId: string, path: string): Promise<void> => {
-    refuseMachineFolder(path);
-    const row = await kernel.documents.get(documentId);
-    // Only a *positive* answer refuses. A row the projection has never heard of cannot
-    // be spliced anyway (the splice opens it and fails), and guessing "machine-owned"
-    // from an absent row would block the one case worth allowing.
+  const refuseMachine = async (id: string): Promise<void> => {
+    if (id === "") return;
+    const row = await kernel.documents.get(id);
+    // Only a *positive* answer refuses: a note too new for the projection is movable.
     if (row !== undefined && isMachineDocument(row)) {
-      throw new Error(
-        "That document is maintained by the app, not by you, and cannot be moved into a folder.",
-      );
+      throw new Error("That document is maintained by the app, not by you, and cannot be filed in a folder.");
     }
   };
 
-  const setPath = async (documentId: string, path: string): Promise<void> => {
-    await refuseMachineWrite(documentId, path);
+  const write = (step: ListWrite): Promise<unknown> =>
+    kernel.documents.splice.sectionList(
+      step.note,
+      CHILDREN_KEY,
+      step.action === "insert"
+        ? { action: "insert", index: step.index, value: step.id }
+        : { action: step.action, value: step.id },
+    );
+
+  /** Put `id` under `parent` (`""`: the root), before `before` or last. */
+  const file = async (id: string, parent: string, before?: string): Promise<void> => {
+    await refuseMachine(id);
+    await refuseMachine(parent);
+    const writes = planMove(hierarchy, id, parent, before);
+    if (writes.length === 0) return;
     // Drawn where it is going from now, not a feed round trip from now (`pending.ts`).
-    pendingPaths.set(documentId, path);
-    rows = withPendingPaths(projected, pendingPaths);
+    const place: PendingPlace = before === undefined ? { parent } : { parent, before };
+    pendingMoves.set(id, place);
+    derive();
     publish();
     try {
-      // The whole feature, in one call: no re-serialization of the frontmatter block.
-      if (path === "") await kernel.documents.splice.removeFrontmatterKey(documentId, "path");
-      else await kernel.documents.splice.setFrontmatterValue(documentId, "path", path);
+      for (const step of writes) await write(step);
       // A move the projection never echoes must not be drawn forever: that would hide
-      // exactly the lost write this tree once suffered from. After the grace period
-      // the projection is the truth again, whatever it says.
+      // exactly the lost write it exists to paper over. After the grace period the
+      // projection is the truth again, whatever it says.
       setTimeout(() => {
-        if (pendingPaths.get(documentId) !== path) return;
-        pendingPaths.delete(documentId);
+        if (pendingMoves.get(id) !== place) return;
+        pendingMoves.delete(id);
         derive();
         publish();
       }, PENDING_MOVE_TTL_MS);
     } catch (cause) {
       // Only if this is still the move on record: a later one owns the entry now.
-      if (pendingPaths.get(documentId) === path) pendingPaths.delete(documentId);
+      if (pendingMoves.get(id) === place) pendingMoves.delete(id);
       derive();
       publish();
       throw cause;
     }
   };
 
-  const move = async (documentId: string, path: string): Promise<void> => {
-    await setPath(documentId, normalizePath(path));
-  };
-
-  /** Tombstone one document; if it is the one on screen, show the folder it was in. */
-  const deleteDocument = async (documentId: string): Promise<void> => {
-    const folder = normalizePath(rows.find((row) => row.id === documentId)?.fm["path"]);
-    await kernel.documents.delete(documentId);
-    if (documentFromRoute(router.current()) === documentId) router.navigate(folderPath(folder));
-  };
-
-  const failed = (moved: number, failures: readonly string[]): Error =>
-    new Error(
-      `moved ${moved} document${moved === 1 ? "" : "s"}; ${failures.length} failed: ${failures[0] ?? ""}`,
-    );
-
-  /** Tell whoever keeps something per folder path that a folder moved or went away. */
-  const announceMoved = (payload: FolderMoved): void => {
-    kernel.ports.emit(MOVED_PORT, payload);
-  };
-
-  const renameFolder = async (
-    from: string,
-    to: string,
-    options?: MoveOptions,
-  ): Promise<number> => {
-    const moved = await moveFolder(from, to, options);
-    const source = normalizePath(from);
-    const target = normalizePath(to);
-    if (source !== target) announceMoved({ from: source, to: target });
-    return moved;
+  const rename = async (id: string, title: string): Promise<void> => {
+    await refuseMachine(id);
+    await kernel.documents.splice.setFrontmatterValue(id, "title", title);
   };
 
   /**
-   * `renameFolder` without the announcement: deleting a folder "to its parent" is this
-   * same move, and must be announced as a delete, not as a rename onto the parent.
+   * Send a note to Trash. `parent`: its children move up into its place first (spliced
+   * into its parent's list where it was, or to the root), and its own list is cleared so
+   * restoring it later does not claim them back. `trash`: its whole subtree goes, and
+   * every list is left as it is, so restoring them from Trash puts them back in place.
    */
-  const moveFolder = async (
-    from: string,
-    to: string,
-    options?: MoveOptions,
-  ): Promise<number> => {
-    const source = normalizePath(from);
-    const target = normalizePath(to);
-    if (source === "") throw new Error("the root cannot be renamed");
-    // Before the plan, not per document: a rename into a dotted folder is refused once
-    // rather than N times with half the folder already moved.
-    refuseMachineFolder(target);
-    if (isRecursiveRename(source, target)) {
-      throw new Error(`Cannot move “${source}” into itself.`);
-    }
+  const remove = async (id: string, mode: "parent" | "trash", options?: MoveProgress): Promise<number> => {
+    await refuseMachine(id);
+    const children = hierarchy.childrenOf.get(id) ?? [];
+    const parent = hierarchy.parentOf.get(id) ?? "";
 
-    // The documents that actually move, decided before any write, so there is a total to
-    // report progress against and a plan to re-compute if this has to be run again.
-    const plan = planFolderMove(rows, source, target);
-    const { done, failures } = await pool(plan, (entry) => setPath(entry.id, entry.next), options);
-
-    // An empty folder that was only ever a settings line moves the same way — and a
-    // folder that held documents may *also* have tracked descendants that hold none.
-    const tracked = renameTracked(emptyFolders, source, target);
-    if (!sameTracked(emptyFolders, tracked)) {
-      emptyFolders = tracked;
-      await writeTracked(tracked);
-    }
-    // Its place in the user's order goes with it.
-    const reordered = renameInOrder(folderOrder, source, target);
-    if (!sameTracked(folderOrder, reordered)) await setFolderOrder(reordered);
-
-    if (failures.length > 0) throw failed(done, failures);
-    return done;
-  };
-
-  const createFolder = async (path: string): Promise<void> => {
-    const target = normalizePath(path);
-    if (target === "") throw new Error("a folder needs a name");
-    refuseMachineFolder(target);
-    // A folder that already holds documents exists on its own; tracking it would be a
-    // second record of the same fact, and `pruneTracked` would drop it again anyway.
-    if (documentsUnder(rows, target).length > 0) return;
-    const tracked = withFolder(emptyFolders, target);
-    if (sameTracked(emptyFolders, tracked)) return;
-    emptyFolders = tracked;
-    await writeTracked(tracked);
-    publish();
-  };
-
-  const deleteFolder = async (
-    path: string,
-    mode: "parent" | "trash",
-    options?: MoveOptions,
-  ): Promise<number> => {
-    const target = normalizePath(path);
-    if (target === "") throw new Error("the root cannot be deleted");
-
-    // An empty folder is *only* a settings line, so deleting it is only that line going
-    // away — no splices, and nothing to ask the user about. Handled before the two real
-    // modes because "move the contents to the parent" would otherwise re-file the entry
-    // under the parent rather than removing it: a folder deleted by name would come back
-    // one level up, which is exactly the kind of ghost the empty-folder list exists to
-    // avoid.
-    const contents = documentsUnder(rows, target);
-    if (contents.length === 0) {
-      await forget(target);
-      announceMoved({ from: target });
-      return 0;
-    }
-
-    let moved = 0;
-    if (mode === "trash") {
-      const ids = contents;
-      const { done, failures } = await pool(ids, (id) => kernel.documents.delete(id), options);
-      moved = done;
-      if (failures.length > 0) {
-        await forget(target);
-        throw failed(done, failures);
+    let doomed = [id];
+    if (mode === "parent") {
+      if (parent !== "") {
+        const raw = hierarchy.notes.get(parent)?.children ?? [];
+        const at = raw.indexOf(id);
+        // Before `id`, in order: each insert lands where `id` was, pushing it along.
+        for (const [offset, child] of children.entries()) {
+          await write({ note: parent, action: "insert", id: child, index: at + offset });
+        }
       }
+      if (children.length > 0) {
+        await kernel.documents.splice.spliceSection(id, [{ key: CHILDREN_KEY, value: null, remove: true }]);
+      }
+      if (parent !== "") await write({ note: parent, action: "remove", id });
     } else {
-      moved = await moveFolder(target, parentOf(target), options);
+      for (let index = 0; index < doomed.length; index += 1) {
+        doomed.push(...(hierarchy.childrenOf.get(doomed[index] as string) ?? []));
+      }
+      doomed = [...doomed.slice(1).reverse(), id];
     }
-    await forget(target);
-    announceMoved(mode === "trash" ? { from: target } : { from: target, contentsTo: parentOf(target) });
-    return moved;
+
+    // Through a small pool: one failure says nothing about the next, and the tree reports
+    // how far it got so "Try again" can finish the rest.
+    let done = 0;
+    const failures: string[] = [];
+    options?.onProgress?.(0, doomed.length);
+    let cursor = 0;
+    await Promise.all(
+      Array.from({ length: Math.min(DELETE_CONCURRENCY, doomed.length) }, async () => {
+        for (;;) {
+          const next = doomed[cursor++];
+          if (next === undefined) return;
+          try {
+            await kernel.documents.delete(next);
+          } catch (cause) {
+            failures.push(cause instanceof Error ? cause.message : String(cause));
+          }
+          done += 1;
+          options?.onProgress?.(done, doomed.length);
+        }
+      }),
+    );
+    if (failures.length > 0) {
+      throw new Error(`deleted ${done - failures.length} of ${doomed.length}; ${failures.length} failed: ${failures[0] ?? ""}`);
+    }
+    // The note on screen went to Trash: show the one it was in, or the list.
+    const open = documentFromRoute(router.current());
+    if (open !== undefined && doomed.includes(open)) router.navigate(parent === "" ? "/" : `/doc/${parent}`);
+    return doomed.length;
   };
 
-  /** Drop a folder and its descendants from the empty-folder list. */
-  const forget = async (path: string): Promise<void> => {
-    const tracked = withoutFolder(emptyFolders, path);
-    if (sameTracked(emptyFolders, tracked)) return;
-    emptyFolders = tracked;
-    await writeTracked(tracked);
-    publish();
+  // ---------------------------------------------------------------------------
+  // The service (`lm/folders`) and notes made elsewhere
+  // ---------------------------------------------------------------------------
+
+  /** Notes `ensurePath` made this session, before the projection has them: `parent \0 title`. */
+  const made = new Map<string, Promise<string>>();
+
+  /** A note titled `title`, with nothing else in it, created without opening it. */
+  const createNote = async (title: string): Promise<string> => {
+    const front = kernel.documents.splice.planFrontmatterValue("", "title", title)[0]?.text ?? "";
+    return kernel.documents.create({ text: `${front}\n# ${title.replaceAll("\n", " ")}\n` });
   };
+
+  const ensurePath = async (titles: readonly string[]): Promise<string> => {
+    let parent = "";
+    for (const raw of titles) {
+      const title = raw.trim();
+      if (title === "") continue;
+      const siblings = parent === "" ? hierarchy.roots : (hierarchy.childrenOf.get(parent) ?? []);
+      const existing = [...siblings]
+        .sort()
+        .find((id) => hierarchy.notes.get(id)?.title === title);
+      if (existing !== undefined) {
+        parent = existing;
+        continue;
+      }
+      const key = `${parent}\u0000${title}`;
+      let next = made.get(key);
+      if (next === undefined) {
+        const under = parent;
+        next = (async () => {
+          const id = await createNote(title);
+          if (under !== "") await file(id, under);
+          return id;
+        })();
+        made.set(key, next);
+        next.catch(() => made.delete(key));
+      }
+      parent = await next;
+    }
+    return parent;
+  };
+
+  // Looks change when a decoration says so, or when decorations come and go.
+  const lookListeners = new Set<() => void>();
+  const announceLook = (): void => {
+    for (const listener of [...lookListeners]) listener();
+  };
+  let lookStops: (() => void)[] = [];
+  const followLooks = (): void => {
+    for (const stop of lookStops) stop();
+    lookStops = decorations.entries().map(({ value }) => {
+      try {
+        return value.onChange(announceLook);
+      } catch (cause) {
+        kernel.log.warn(`folder decoration ${value.id} cannot be followed`, cause);
+        return () => undefined;
+      }
+    });
+  };
+  followLooks();
+  decorations.subscribe(() => {
+    followLooks();
+    announceLook();
+  });
+
+  kernel.ports.serve<Folders>("folders", {
+    parentOf: (id) => (hierarchy.notes.has(id) ? (hierarchy.parentOf.get(id) ?? "") : undefined),
+    file: async (id, parent, index) => {
+      const before = index === undefined ? undefined : (hierarchy.childrenOf.get(parent) ?? [])[index];
+      await file(id, parent, before);
+    },
+    fileNew: async (id, kind) => {
+      const parent = locationFor(kind);
+      if (parent !== "") await file(id, parent);
+    },
+    ensurePath,
+    look: (id) => lookOf(decorations.entries())(id),
+    onLookChange: (listener) => {
+      lookListeners.add(listener);
+      return () => {
+        lookListeners.delete(listener);
+      };
+    },
+  });
+
+  // A note `doc-list` just made: under the parent its creator named, or the default.
+  kernel.ports.on<DocumentCreated>("created", (event) => {
+    const parent = typeof event.parent === "string" ? event.parent : locationFor("note");
+    if (parent === "") return;
+    void file(event.id, parent).catch((cause: unknown) => {
+      kernel.log.warn(`could not file the new note ${event.id}`, cause);
+    });
+  });
 
   // ---------------------------------------------------------------------------
   // Requests from outside the panel (commands, keybindings)
@@ -730,8 +510,8 @@ export default function activate(kernel: Kernel): FoldersApi {
   const requestListeners = new Set<(request: TreeRequest) => void>();
   const request = (next: TreeRequest): void => {
     if (requestListeners.size === 0) {
-      // The panel is the only thing that knows what a folder dialog looks like. If no
-      // shell is drawing it, say so rather than failing silently.
+      // The panel is the only thing that knows what a dialog looks like. If no shell is
+      // drawing it, say so rather than failing silently.
       kernel.ui.notify({
         id: "folders.no-panel",
         level: "warning",
@@ -742,16 +522,32 @@ export default function activate(kernel: Kernel): FoldersApi {
     for (const listener of [...requestListeners]) listener(next);
   };
 
+  /** The note on screen, as a request target — refused, with a notice, for app data. */
+  const onScreen = async (then: (target: { id: string; title: string }) => void): Promise<void> => {
+    const id = documentFromRoute(router.current());
+    if (id === undefined) return;
+    const stored = await kernel.documents.get(id);
+    if (stored !== undefined && isMachineDocument(stored)) {
+      kernel.ui.notify({
+        id: "folders.machine-document",
+        level: "warning",
+        message: "This document is maintained by the app and is not part of the folder tree.",
+      });
+      return;
+    }
+    then({ id, title: hierarchy.notes.get(id)?.title ?? stored?.title ?? "this note" });
+  };
+
   // ---------------------------------------------------------------------------
   // Contributions
   // ---------------------------------------------------------------------------
 
   /**
    * The decorations, read for one render. `decorate` is another plugin's code on the
-   * tree's hottest path, so a throw costs that folder its look and nothing else.
+   * tree's hottest path, so a throw costs that row its look and nothing else.
    */
   const lookOf = (entries: ReturnType<typeof decorations.entries>) =>
-    (path: string): FolderRowLook | undefined => {
+    (id: string): FolderRowLook | undefined => {
       let background: string | undefined;
       let color: string | undefined;
       let icon: ReactElement | undefined;
@@ -759,9 +555,9 @@ export default function activate(kernel: Kernel): FoldersApi {
         if (background !== undefined && color !== undefined && icon !== undefined) break;
         let look: FolderLook | undefined;
         try {
-          look = value.decorate(path);
+          look = value.decorate(id);
         } catch (cause) {
-          kernel.log.warn(`folder decoration ${value.id} failed for ${path}`, cause);
+          kernel.log.warn(`folder decoration ${value.id} failed for ${id}`, cause);
           continue;
         }
         if (background === undefined && typeof look?.background === "string" && look.background !== "") {
@@ -810,12 +606,12 @@ export default function activate(kernel: Kernel): FoldersApi {
     return entries;
   };
 
-  /** Other plugins' entries for a folder's menu, in seat order. */
+  /** Other plugins' entries for a row's menu, in seat order. */
   const extraActionsOf = (entries: ReturnType<typeof actions.entries>) =>
-    (path: string, anchor?: HTMLElement): MenuItem[] =>
+    (id: string, anchor?: HTMLElement): MenuItem[] =>
       entries.flatMap(({ value }) => {
         try {
-          if (value.when !== undefined && !value.when(path)) return [];
+          if (value.when !== undefined && !value.when(id)) return [];
         } catch (cause) {
           kernel.log.warn(`folder menu item ${value.id} failed its check`, cause);
           return [];
@@ -827,7 +623,7 @@ export default function activate(kernel: Kernel): FoldersApi {
             ...(value.hint !== undefined ? { hint: value.hint } : {}),
             run: () => {
               try {
-                value.run(path, anchor);
+                value.run(id, anchor);
               } catch (cause) {
                 kernel.log.warn(`folder menu item ${value.id} failed`, cause);
               }
@@ -840,34 +636,30 @@ export default function activate(kernel: Kernel): FoldersApi {
     const live = useStore();
     const look = lookOf(useDecorations());
     const extraActions = extraActionsOf(useSlotEntries(actions));
-    // The open document, whatever opened it: the tree reveals it.
+    // The open note, whatever opened it: the tree reveals it.
     const [openDocument, setOpenDocument] = useState(() => documentFromRoute(router.current()));
     useEffect(() => router.onChange((route) => setOpenDocument(documentFromRoute(route))), []);
     return (
       <FolderTree
         menu={menu}
-        rows={live.rows}
+        hierarchy={live.hierarchy}
         loading={live.loading}
         {...(live.error !== undefined ? { error: live.error } : {})}
-        emptyFolders={live.emptyFolders}
         collapsed={live.collapsed}
         onCollapsedChange={setCollapsed}
-        order={live.folderOrder}
-        onReorder={setFolderOrder}
+        rootOrder={live.rootOrder}
+        onRootOrder={setRootOrder}
         requests={(listener) => {
           requestListeners.add(listener);
           return () => {
             requestListeners.delete(listener);
           };
         }}
-        onMoveDocument={move}
-        onMoveFolder={renameFolder}
-        onCreateFolder={createFolder}
-        onDeleteFolder={deleteFolder}
-        onDeleteDocument={deleteDocument}
-        onNewDocumentHere={(folder) => docs.newDocument({ path: folder })}
-        onSelectFolder={(folder) => router.navigate(folderPath(folder))}
-        onOpenDocument={(id) => router.navigate(`/doc/${id}`)}
+        onMove={file}
+        onRename={rename}
+        onDelete={remove}
+        onNewNoteInside={(parent) => docs.newDocument({ parent })}
+        onOpen={(id) => router.navigate(`/doc/${id}`)}
         {...(openDocument !== undefined ? { openDocument } : {})}
         look={look}
         extraActions={extraActions}
@@ -875,28 +667,32 @@ export default function activate(kernel: Kernel): FoldersApi {
     );
   };
 
-  const ContentsHost = (): ReactElement => {
-    const [folder, setFolder] = useState(() => folderFromHash(location.hash));
-    useEffect(() => router.onChange(() => setFolder(folderFromHash(location.hash))), []);
-    return (
-      <FolderContents
-        documents={kernel.documents}
-        folder={folder}
-        onOpen={(id) => router.navigate(`/doc/${id}`)}
-        onNewDocumentHere={(target) => docs.newDocument({ path: target })}
-      />
-    );
-  };
-
   const SettingsHost = (): ReactElement => {
     const live = useStore();
+    const notes = [...live.hierarchy.notes.keys()]
+      .map((id) => ({ id, path: titlePath(live.hierarchy, id) }))
+      .sort((left, right) => compareText(left.path.join(" / "), right.path.join(" / ")));
+    const store = (key: string) => async (next: string) => {
+      await writeSetting(key, next);
+      publish();
+    };
     return (
-      <DefaultLocation
-        folders={buildTree(live.rows).flat.map((node) => node.path)}
-        extraFolders={live.emptyFolders}
-        value={readDefaultLocation()}
-        onChange={(next) => api.setDefaultLocation(next)}
-      />
+      <div className="folders:flex folders:flex-col folders:gap-6">
+        <DefaultLocation
+          label="New notes go to"
+          hint="A new note is filed inside this one. “New note inside” on a note in the tree still files it there."
+          notes={notes}
+          value={locationFor("note")}
+          onChange={store(SETTINGS_KEYS.defaultLocation)}
+        />
+        <DefaultLocation
+          label="Files go to"
+          hint="The note a file added to the workspace is filed inside: an upload, or an attachment turned into a document."
+          notes={notes}
+          value={locationFor("file")}
+          onChange={store(SETTINGS_KEYS.fileLocation)}
+        />
+      </div>
     );
   };
 
@@ -908,188 +704,123 @@ export default function activate(kernel: Kernel): FoldersApi {
     component: TreeHost,
   });
 
-  kernel.ports.offer<Route>("route", { path: "/folder", view: "folders.contents" });
-  kernel.ports.offer<MainView>("view", {
-    id: "folders.contents",
-    title: "Folder",
-    component: ContentsHost,
-  });
-
   kernel.ports.offer<SettingsSection>("settings", {
     id: "folders",
     title: "Folders",
     order: 30,
-    description: "Where a new document is filed when nothing else says.",
+    description: "Where new notes and files are filed when nothing else says.",
     component: SettingsHost,
   });
 
+  const onDocument = (): boolean => documentFromRoute(router.current()) !== undefined;
+
+  /**
+   * Many notes into one, for the document list's Actions button: the same picker as a
+   * single move, in its own sheet — the tree need not be on screen. One at a time, so two
+   * moves never race to splice the same list.
+   */
+  const moveMany = (argument: unknown): void => {
+    const ids = (Array.isArray(argument) ? argument : []).filter(
+      (id): id is string => typeof id === "string" && hierarchy.notes.has(id),
+    );
+    if (ids.length === 0) return;
+    const subjects = ids.map((id) => ({ id, title: hierarchy.notes.get(id)?.title ?? id }));
+    menu.openSheet({
+      title: ids.length === 1 ? `Move ${subjects[0]?.title ?? "it"} to…` : `Move ${ids.length.toLocaleString()} notes to…`,
+      render: (close) => (
+        <MovePicker
+          hierarchy={hierarchy}
+          subjects={subjects}
+          onChoose={(parent) => {
+            close();
+            void (async () => {
+              let failed = 0;
+              for (const id of ids) {
+                try {
+                  await file(id, parent);
+                } catch (cause) {
+                  failed += 1;
+                  kernel.log.warn(`could not move ${id}`, cause);
+                }
+              }
+              if (failed > 0) {
+                kernel.ui.notify({
+                  id: "folders.move-failed",
+                  level: "error",
+                  message: `${failed.toLocaleString()} of ${ids.length.toLocaleString()} notes could not be moved.`,
+                });
+              }
+            })();
+          }}
+        />
+      ),
+    });
+  };
+
   kernel.ports.offer<Command>("commands", [
     {
-      id: "folders.newFolder",
-      title: "New folder",
+      id: "folders.newNoteInside",
+      title: "New note inside this note",
       category: "Folders",
-      run: () => request({ kind: "create-folder", parent: api.current() ?? "" }),
-    },
-    {
-      id: "folders.newDocumentHere",
-      title: "New document in this folder",
-      category: "Folders",
-      run: () => docs.newDocument({ path: api.current() ?? readDefaultLocation() }),
+      icon: "folder-plus",
+      when: onDocument,
+      run: () => {
+        const id = documentFromRoute(router.current());
+        if (id !== undefined) docs.newDocument({ parent: id });
+      },
     },
     {
       id: "folders.expandAll",
       title: "Expand all folders",
       category: "Folders",
-      run: () => request({ kind: "fold", path: "", expanded: true }),
+      icon: "fold-down",
+      run: () => request({ kind: "fold", id: "", expanded: true }),
     },
     {
       id: "folders.collapseAll",
       title: "Collapse all folders",
       category: "Folders",
-      run: () => request({ kind: "fold", path: "", expanded: false }),
-    },
-    {
-      id: "folders.renameFolder",
-      title: "Rename this folder",
-      category: "Folders",
-      when: () => (api.current() ?? "") !== "",
-      run: () => request({ kind: "rename-folder", path: api.current() ?? "" }),
-    },
-    {
-      id: "folders.moveFolder",
-      title: "Move this folder",
-      category: "Folders",
-      when: () => (api.current() ?? "") !== "",
-      run: () =>
-        request({ kind: "move", target: { kind: "folder", path: api.current() ?? "" } }),
-    },
-    {
-      id: "folders.deleteFolder",
-      title: "Delete this folder",
-      category: "Folders",
-      when: () => (api.current() ?? "") !== "",
-      run: () => request({ kind: "delete-folder", path: api.current() ?? "" }),
+      icon: "fold-up",
+      run: () => request({ kind: "fold", id: "", expanded: false }),
     },
     {
       /*
-       * The keyboard-and-touch answer to "a document can only be moved by dragging"
-       * (`POLISH-BACKLOG.md` §3). It reads the document id out of the route rather than
-       * asking `document-surface` for it: `folders` does not depend on the document
-       * surface and has no business knowing that modes exist — a URL is a URL.
+       * The keyboard-and-touch answer to "a note can only be moved by dragging". It reads
+       * the note id out of the route rather than asking `document-surface` for it:
+       * `folders` has no business knowing that modes exist — a URL is a URL.
        */
       id: "folders.moveDocument",
-      title: "Move this document to a folder",
+      title: "Move this note to a folder",
       category: "Folders",
-      when: () => documentFromRoute(router.current()) !== undefined,
-      run: () => {
-        const id = documentFromRoute(router.current());
-        if (id === undefined) return;
-        /*
-         * The route says "a document", not "a document of yours". `#/doc/<id>` reaches
-         * the kernel's own per-user settings document as readily as a note, and a move
-         * sheet opened over one would offer a splice that `setPath` now refuses — so it
-         * is refused *here* instead, where there is still something to say about it.
-         * `documents.get` rather than `rows`, for the reason given at `refuseMachineWrite`.
-         */
-        void (async () => {
-          const stored = await kernel.documents.get(id);
-          if (stored !== undefined && isMachineDocument(stored)) {
-            kernel.ui.notify({
-              id: "folders.machine-document",
-              level: "warning",
-              message:
-                "This document is maintained by the app and is not filed in a folder you own.",
-            });
-            return;
-          }
-          const row = rows.find((candidate) => candidate.id === id);
-          request({
-            kind: "move",
-            target: {
-              kind: "document",
-              id,
-              title: row?.title ?? stored?.title ?? "this document",
-              path: normalizePath(row?.fm["path"] ?? stored?.fm["path"]),
-            },
-          });
-        })();
-      },
+      icon: "folder-symlink",
+      when: onDocument,
+      run: () => void onScreen((target) => request({ kind: "move", target })),
+    },
+    {
+      id: "folders.renameDocument",
+      title: "Rename this note",
+      category: "Folders",
+      icon: "cursor-text",
+      when: onDocument,
+      run: () => void onScreen((target) => request({ kind: "rename", target })),
     },
     {
       id: "folders.deleteDocument",
-      title: "Delete this document",
+      title: "Delete this note",
       category: "Folders",
-      when: () => documentFromRoute(router.current()) !== undefined,
-      run: () => {
-        const id = documentFromRoute(router.current());
-        if (id === undefined) return;
-        // Same refusal as the move above: the route can name an app-maintained document.
-        void (async () => {
-          const stored = await kernel.documents.get(id);
-          if (stored !== undefined && isMachineDocument(stored)) {
-            kernel.ui.notify({
-              id: "folders.machine-document",
-              level: "warning",
-              message: "This document is maintained by the app and cannot be deleted.",
-            });
-            return;
-          }
-          const row = rows.find((candidate) => candidate.id === id);
-          request({
-            kind: "delete-document",
-            target: {
-              kind: "document",
-              id,
-              title: row?.title ?? stored?.title ?? "this document",
-              path: normalizePath(row?.fm["path"] ?? stored?.fm["path"]),
-            },
-          });
-        })();
-      },
+      icon: "trash",
+      when: onDocument,
+      run: () => void onScreen((target) => request({ kind: "delete", target })),
     },
     {
-      id: "folders.showUnfiled",
-      title: "Show the documents at the root",
+      id: "folders.moveDocuments",
+      title: "Move to folder…",
       category: "Folders",
-      run: () => router.navigate(folderPath("")),
+      icon: "folder-symlink",
+      takes: "documents",
+      run: moveMany,
     },
   ]);
-
-  // ---------------------------------------------------------------------------
-  // API
-  // ---------------------------------------------------------------------------
-
-  const api: FoldersApi = {
-    normalize: (path) => normalizePath(path),
-    tree: async () =>
-      buildTree(rows).flat.map((node) => ({ path: node.path, documents: node.documents })),
-    move,
-    renameFolder,
-    createFolder,
-    deleteFolder,
-    current: () => {
-      const route = router.current();
-      return route.split("?")[0] === "/folder" ? folderFromHash(route) : undefined;
-    },
-    defaultLocation: readDefaultLocation,
-    setDefaultLocation: async (path) => {
-      await writeSetting(SETTINGS_KEYS.defaultLocation, normalizePath(path));
-      announceDefaultLocation();
-      publish();
-    },
-    onDefaultLocationChange: (listener) => {
-      defaultLocationListeners.add(listener);
-      return () => {
-        defaultLocationListeners.delete(listener);
-      };
-    },
-  };
-
-  // Announce once, now that everything is wired. The protocol is sticky, so a listener
-  // that starts later (or restarts after a wiring change) hears this value anyway.
-  announceDefaultLocation();
-
-  return api;
 }
 
 /** A pending settings write `activate` started; the kernel withdraws everything else (§6c). */

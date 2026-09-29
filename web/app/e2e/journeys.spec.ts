@@ -32,7 +32,7 @@ import {
 /**
  * What `plugins/base/dist` holds, plus the one example plugin the suite installs.
  *
- * The 27 of SPEC §6.5's table plus `extra-task-states`. M4's two proof plugins
+ * The 28 of SPEC §6.5's table plus `extra-task-states`. M4's two proof plugins
  * (`calendar`, `agenda`) were removed on 2026-09-24; on 2026-09-26 `header` was split
  * out of `shell-ui`, `notices` and `sync-status` out of `header`, `context-menu` out of
  * `folders`, and `properties` was removed; `search` was folded into `doc-list`;
@@ -41,11 +41,11 @@ import {
  * `welcome` replaced the server's own first-run seeding; `indexer` and `fm-autocomplete`
  * were added, and then `graph`; then `syntax-highlight`; on 2026-09-28 the `wiring`
  * editor (PLUGIN-PROTOCOLS §7) was added as a plugin and, the same day, folded into
- * `admin` as its Wiring tab; then `icons` and `folder-style`. The base distribution and
- * `BASE_PLUGIN_IDS` — what `?safe=1` boots — are the same twenty-seven.
+ * `admin` as its Wiring tab; then `icons` and `folder-style`; then `emoji`. The base
+ * distribution and `BASE_PLUGIN_IDS` — what `?safe=1` boots — are the same twenty-eight.
  * `safe-mode.spec.ts` is what pins that.
  */
-const EXPECTED_PLUGINS = 28;
+const EXPECTED_PLUGINS = 29;
 
 /**
  * `--lm-bg` as the `midnight` theme paints it (`plugins/base/themes/src/index.tsx`).
@@ -99,7 +99,7 @@ test("registering the first user boots the whole plugin distribution", async ({
     "Writing in markdown",
     "Tasks and lists",
     "Properties",
-    "Folders come from frontmatter",
+    "Folders are notes",
     "Embedding notes",
     "Files and images",
     "Finding things",
@@ -110,6 +110,10 @@ test("registering the first user boots the whole plugin distribution", async ({
     await expect(main.getByRole("button", { name: title, exact: true })).toBeVisible();
   }
   await expect(docRows(page).first()).toBeVisible();
+  // …filed inside its first note, through `folders`' service.
+  await expect(
+    page.getByRole("tree", { name: "Folders" }).locator('[role="treeitem"][aria-level="2"]').filter({ hasText: "Folders are notes" }),
+  ).toBeVisible();
 
   // Contributions from across the distribution are on screen, which is the real
   // assertion "every plugin activated" is standing in for: the bar is `header`'s, the
@@ -221,21 +225,21 @@ test("clicking a task toggles it and the state menu sets a plugin-contributed ma
 });
 
 // ---------------------------------------------------------------------------
-// 4. Folders: the tree comes from fm.path, and a move is a splice
+// 4. Folders: a folder is a note, and a move is two list lines
 // ---------------------------------------------------------------------------
 
-test("dragging a document between folders splices fm.path and leaves the rest of the block alone", async ({
+test("dragging a document from the list onto a folder note files it there, and never writes the document", async ({
   page,
   request,
   baseURL,
 }) => {
   // The fixture is written by hand so the assertion can be exact. A comment, an
   // unusual key order and a blank line inside the block are the three things a
-  // parse→re-serialize→replace round trip destroys and a splice keeps (SPEC §3.3).
+  // parse→re-serialize→replace round trip destroys (SPEC §3.3) — and a move must not
+  // touch the moved document at all: only its old and new parents' lists change.
   const original = [
     "---",
     "# where this note lives — keep this comment",
-    "path: journeys/from",
     "title: Moves by splice",
     "",
     "tags: [alpha, beta]",
@@ -250,7 +254,13 @@ test("dragging a document between folders splices fm.path and leaves the rest of
     "%%%",
     "",
   ].join("\n");
-  const id = await createDocument(request, baseURL as string, original);
+  const base = baseURL as string;
+  const id = await createDocument(request, base, original);
+  const folder = (title: string, children: readonly string[]): string =>
+    `---\ntitle: ${title}\n---\n\n# ${title}\n\n%%% folders\nchildren:\n${children.map((child) => `  - ${child}\n`).join("")}%%%\n`;
+  const from = await createDocument(request, base, folder("journeys-from", [id]));
+  const other = await createDocument(request, base, "---\ntitle: Already there\n---\n\nx\n");
+  const to = await createDocument(request, base, folder("journeys-to", [other]));
 
   await signIn(page);
   await page.goto("/");
@@ -258,34 +268,22 @@ test("dragging a document between folders splices fm.path and leaves the rest of
 
   const tree = page.getByRole("tree", { name: /folders/i });
   await expect(tree).toBeVisible();
-  // `folders` builds the tree from `fm.path`, implied ancestors included.
-  await expect(tree.getByRole("button", { name: "from", exact: true })).toBeVisible();
+  const target = tree.locator(".folders-node").filter({ has: page.locator(".folders-name", { hasText: /^journeys-to$/ }) });
+  await expect(target).toBeVisible();
 
-  // A second folder to drop into. Created by moving nothing — just a second document
-  // whose path names it, which is all a folder is.
-  const otherId = await createDocument(
-    request,
-    baseURL as string,
-    ["---", "title: Already there", "path: journeys/to", "---", "", "x", ""].join("\n"),
-  );
-  await expect(tree.getByRole("button", { name: "to", exact: true })).toBeVisible();
-
+  // `doc-list`'s row, dragged the HTML5 way: its payload is the document id.
   const row = page.getByRole("button", { name: "Moves by splice", exact: true });
   await expect(row).toBeVisible();
-  await row.dragTo(tree.getByRole("button", { name: "to", exact: true }));
-
+  await row.dragTo(target);
   await waitSynced(page);
 
-  await expect
-    .poll(async () => await rawText(request, baseURL as string, id), { timeout: 15_000 })
-    .toContain("path: journeys/to");
-
-  const moved = await rawText(request, baseURL as string, id);
-  // The splice replaced exactly one value span. Everything else is byte-identical.
-  expect(moved).toBe(original.replace("path: journeys/from", "path: journeys/to"));
-  expect(moved).toContain("# where this note lives — keep this comment");
-  expect(moved).toContain("%%% reminders");
-  expect(otherId).toBeTruthy();
+  const children = async (folderId: string): Promise<string[]> =>
+    [...(await rawText(request, base, folderId)).matchAll(/^ {2}- (\S+)$/gm)].map((match) => match[1] as string);
+  // The new parent is written first, then the old one: both are polled.
+  await expect.poll(() => children(to), { timeout: 15_000 }).toEqual([other, id]);
+  await expect.poll(() => children(from), { timeout: 15_000 }).toEqual([]);
+  // The document itself is byte-identical.
+  expect(await rawText(request, base, id)).toBe(original);
 });
 
 // ---------------------------------------------------------------------------

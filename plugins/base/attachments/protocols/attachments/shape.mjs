@@ -3,7 +3,7 @@ import { s } from "@kernel";
 /** @type {import("@kernel").ProtocolSource} */
 export default {
   id: "lm/attachments",
-  version: "1.0.0",
+  version: "2.0.0",
   kind: "service",
   name: "Attachments",
   description: "Uploading files through the server's resumable chunk protocol.",
@@ -12,10 +12,11 @@ export interface UploadOptions {
   /** Resume an upload this client started before. */
   readonly uploadId?: string;
   readonly signal?: AbortSignal;
-  /** Also create a wrapper document for the file. */
+  /**
+   * Also create a wrapper document for the file. It is filed where the folder tree's
+   * "Files go to" says, when \`folders\` is wired.
+   */
   readonly wrapper?: boolean;
-  /** The wrapper document's \`fm.path\`. */
-  readonly path?: string;
   readonly onSession?: (uploadId: string) => void | Promise<void>;
   readonly onProgress?: (sent: number) => void;
 }

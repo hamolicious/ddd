@@ -9,7 +9,8 @@
  *   document already has above the caret. Choosing one writes `status: `, which is
  *   exactly where the value suggestions start.
  * - **Values.** Typing `status: o` offers the values `status` already holds across the
- *   workspace (`fmValues`), most-used first.
+ *   workspace (`fmValues`), most-used first. A `doc://` value is shown by the note's
+ *   title, with its folder, and matched by that title as well as by the link itself.
  *
  * It answers only on a line that is inside the frontmatter block — the document opens
  * with `---` and no closing `---` comes before the caret's line — and only for a
@@ -34,7 +35,12 @@ import type { FmField, FmValueCount } from "@protocols/lm/workspace-index";
 export interface FieldIndex {
   fmFields(): readonly FmField[];
   fmValues(key: string): readonly FmValueCount[];
+  /** The note a `doc://` value points at, when it is known. */
+  noteOf?(id: string): { readonly title: string; readonly folder: string } | undefined;
 }
+
+/** `doc://<id>`, the whole value: the id. */
+const DOC_LINK = /^doc:\/\/([A-Za-z0-9_-]+)$/;
 
 export interface Suggestion {
   /** What the menu shows. */
@@ -67,7 +73,7 @@ export function suggest(
   if (!inFrontmatter(documentBeforeCaret)) return undefined;
   const text = lineBeforeCaret.replace(/\r$/, "");
   if (KEY_PREFIX.test(text)) return suggestKeys(text, documentBeforeCaret, index.fmFields());
-  return suggestValues(text, (key) => index.fmValues(key));
+  return suggestValues(text, (key) => index.fmValues(key), (id) => index.noteOf?.(id));
 }
 
 function suggestKeys(typed: string, documentBeforeCaret: string, fields: readonly FmField[]): Suggestions | undefined {
@@ -104,7 +110,11 @@ function keysAbove(documentBeforeCaret: string): Set<string> {
   return keys;
 }
 
-function suggestValues(text: string, valuesOf: (key: string) => readonly FmValueCount[]): Suggestions | undefined {
+function suggestValues(
+  text: string,
+  valuesOf: (key: string) => readonly FmValueCount[],
+  noteOf: (id: string) => { readonly title: string; readonly folder: string } | undefined,
+): Suggestions | undefined {
   const line = KEY_LINE.exec(text);
   const key = line?.[1];
   const rest = line?.[2];
@@ -119,13 +129,18 @@ function suggestValues(text: string, valuesOf: (key: string) => readonly FmValue
   );
   if (candidates.some((entry) => String(entry.value) === unquote(typed.partial))) return undefined;
 
-  const ranked: { entry: (typeof candidates)[number]; rank: number }[] = [];
+  const ranked: { entry: (typeof candidates)[number]; rank: number; note?: { title: string; folder: string } }[] = [];
   for (const entry of candidates) {
     const text = String(entry.value);
     if (typed.taken.has(text)) continue;
-    const lower = text.toLowerCase();
-    const rank = lower.startsWith(needle) ? 0 : lower.includes(needle) ? 1 : -1;
-    if (rank >= 0) ranked.push({ entry, rank });
+    const linked = typeof entry.value === "string" ? DOC_LINK.exec(entry.value)?.[1] : undefined;
+    const note = linked === undefined ? undefined : noteOf(linked);
+    const rankOf = (candidate: string): number => {
+      const lower = candidate.toLowerCase();
+      return lower.startsWith(needle) ? 0 : lower.includes(needle) ? 1 : -1;
+    };
+    const ranks = [rankOf(text), ...(note ? [rankOf(note.title)] : [])].filter((rank) => rank >= 0);
+    if (ranks.length > 0) ranked.push({ entry, rank: Math.min(...ranks), ...(note ? { note } : {}) });
   }
   if (ranked.length === 0) return undefined;
 
@@ -133,11 +148,14 @@ function suggestValues(text: string, valuesOf: (key: string) => readonly FmValue
   const items: Suggestion[] = ranked
     .sort((a, b) => a.rank - b.rank)
     .slice(0, MAX_SUGGESTIONS)
-    .map(({ entry }) => ({
-      label: String(entry.value),
-      detail: entry.count === 1 ? "1 note" : `${entry.count} notes`,
-      insert: yamlScalar(entry.value),
-    }));
+    .map(({ entry, note }) => {
+      const used = entry.count === 1 ? "1 note" : `${entry.count} notes`;
+      return {
+        label: note ? note.title || "Untitled" : String(entry.value),
+        detail: note?.folder ? `${note.folder} · ${used}` : used,
+        insert: yamlScalar(entry.value),
+      };
+    });
   return { replace: typed.partial.length, items };
 }
 

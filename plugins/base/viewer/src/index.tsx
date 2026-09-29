@@ -53,7 +53,7 @@ import {
  * The `markdown` port: whatever the wiring bound to `lm/markdown-renderer`, limited to the
  * members this plugin's manifest `needs` — plugins never import each other (SPEC §6.1).
  */
-type MarkdownApi = Pick<MarkdownRenderer, "render" | "bodyOf" | "renderAttachment">;
+type MarkdownApi = Pick<MarkdownRenderer, "render" | "bodyOf" | "renderAttachment" | "renderDocLink">;
 
 interface AttachmentMeta {
   readonly id?: string;
@@ -97,7 +97,7 @@ export default function activate(kernel: Kernel): void {
       // measure and one set of gutters, and `.viewer-body` keeps its own `max-width`
       // and auto margins so nothing about the reading column moves.
       <div className="viewer:w-full viewer:min-w-0 viewer:font-sans viewer:text-text">
-        <FmHeader fm={row.fm} fmParseError={row.fm_parse_error} />
+        <FmHeader fm={row.fm} fmParseError={row.fm_parse_error} renderDocLink={markdown.renderDocLink} />
         <article className={READER_CLASSES}>{markdown.render(body ?? "", { documentId: id })}</article>
       </div>
     );

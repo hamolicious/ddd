@@ -1,0 +1,30 @@
+[package]
+name = "life-manager-desktop"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.90"
+description = "Linux desktop shell for Life Manager: the server's PWA in a WebKitGTK window"
+
+# Standalone on purpose, not a member of `backend/`'s workspace: WebKitGTK is a system
+# dependency the server and its CI have no business needing.
+[workspace]
+
+[build-dependencies]
+tauri-build = { version = "2.7", features = [] }
+
+[dependencies]
+# 2.12 for `on_new_window` on the builder (the workspace-export link opens `_blank`).
+tauri = { version = "2.12", features = [] }
+tauri-plugin-opener = "2.6"
+# xdg-portal (the default) and not `gtk3`: rfd's GTK backend runs its own GTK loop,
+# and GTK is single-threaded — Tauri already owns it on the main thread.
+rfd = "0.17"
+serde = { version = "1", features = ["derive"] }
+toml = "0.9"
+url = "2"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"

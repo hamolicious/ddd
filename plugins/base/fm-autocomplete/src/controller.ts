@@ -21,7 +21,7 @@ import type { WorkspaceIndex } from "@protocols/lm/workspace-index";
 import { suggest, type Suggestion } from "./suggest.js";
 
 /** What the menu reads through the `index` port: the manifest's `needs`. */
-export type IndexSource = Pick<WorkspaceIndex, "fmFields" | "fmValues" | "subscribe">;
+export type IndexSource = Pick<WorkspaceIndex, "fmFields" | "fmValues" | "documents" | "subscribe">;
 
 export interface MenuState {
   readonly surface: TextSurface;
@@ -47,6 +47,12 @@ export function createController(kernel: Kernel, indexer: IndexSource): MenuCont
   /** Escape was pressed on this text: stay shut until it changes. */
   let dismissed: { surface: string; before: string } | undefined;
   const listeners = new Set<() => void>();
+  /** Notes by id, for `doc://` values; rebuilt on first use after the index moves. */
+  let notes: Map<string, { title: string; folder: string }> | undefined;
+  const noteOf = (id: string): { title: string; folder: string } | undefined => {
+    notes ??= new Map(indexer.documents().map((note) => [note.id, { title: note.title, folder: note.folder }]));
+    return notes.get(id);
+  };
 
   const set = (next: MenuState | undefined): void => {
     if (next === current) return;
@@ -64,6 +70,7 @@ export function createController(kernel: Kernel, indexer: IndexSource): MenuCont
     const found = dismissed ? undefined : suggest(before, surface.documentBeforeCaret(), {
           fmFields: () => indexer.fmFields({ exclude: surface.documentId }),
           fmValues: (key) => indexer.fmValues(key, { exclude: surface.documentId }),
+          noteOf,
         });
     const rect = found ? surface.caretRect() : null;
     if (!found || !rect) {
@@ -140,6 +147,7 @@ export function createController(kernel: Kernel, indexer: IndexSource): MenuCont
   // The values change under an open menu when another note is edited, or this one's row
   // catches up with what was just typed.
   const unfollow = indexer.subscribe(() => {
+    notes = undefined;
     if (current) evaluate(current.surface);
   });
 

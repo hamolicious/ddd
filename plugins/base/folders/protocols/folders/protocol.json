@@ -1,0 +1,18 @@
+{
+  "id": "lm/folders",
+  "version": "1.2.0",
+  "kind": "service",
+  "owner": "folders",
+  "types": "index.d.ts",
+  "description": "Where a note sits in the folder tree. A folder is a note: its children are listed in its own `%%% folders` section, which only `folders` writes, so other plugins file notes through this service. A note has at most one parent; `\"\"` is the root.",
+  "shape": {
+    "object": {
+      "parentOf": "func",
+      "file": "func",
+      "fileNew": "func",
+      "look": "func",
+      "onLookChange": "func",
+      "ensurePath": "func"
+    }
+  }
+}

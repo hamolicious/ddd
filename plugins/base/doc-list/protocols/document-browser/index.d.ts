@@ -1,5 +1,5 @@
 /**
- * lm/document-browser@1.0.0: service, owned by `doc-list`.
+ * lm/document-browser@2.0.0: service, owned by `doc-list`.
  *
  * Creating documents from anywhere in the app, and the list of ids currently shown.
  *
@@ -8,11 +8,14 @@
 
 /** The protocol this package describes. */
 export type ProtocolId = "lm/document-browser";
-export type ProtocolVersion = "1.0.0";
+export type ProtocolVersion = "2.0.0";
 
 export interface NewDocumentOptions {
-  /** Seeds `fm.path`. */
-  readonly path?: string;
+  /**
+   * Where the new document belongs, as a hint for whoever files documents (`folders`
+   * files it under this note). Passed through on `lm/document-browser.created`.
+   */
+  readonly parent?: string;
   readonly title?: string;
 }
 

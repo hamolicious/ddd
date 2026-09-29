@@ -337,6 +337,17 @@ describe("markdown.directive", () => {
     expect(render("an :abbr[HTML] thing")).toContain('<span className="md-literal" title="no renderer for :abbr">');
   });
 
+  it("only reads a text directive at the start of a word", () => {
+    // `18:00` and `a:emoji` are prose, not directives.
+    expect(render("Time: 18:00 - 20:30")).not.toContain("md-literal");
+    expect(render("a:emoji here", { directives: { "text:emoji": Note } })).not.toContain("Note");
+    expect(render("Time: 18:00")).toContain('"Time: 18:00"');
+    expect(render("a :emoji here", { directives: { "text:emoji": Note } })).toContain("Note");
+    expect(render("(:emoji)", { directives: { "text:emoji": Note } })).toContain("Note");
+    // `:x` right after a closing shortcode colon is glued too.
+    expect(render(":tada:x", { directives: { "text:x": Note } })).not.toContain("Note");
+  });
+
   it("does not let a container renderer claim a text directive of the same name", () => {
     expect(render("an :note[x] thing", { directives: { "container:note": Note } })).toContain("md-literal");
   });

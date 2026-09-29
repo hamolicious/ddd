@@ -10,11 +10,12 @@
   "hot": true,
   "consumes": {
     "markdown": {
-      "protocol": "lm/markdown-renderer@^1.0",
+      "protocol": "lm/markdown-renderer@^2.1",
       "needs": [
         "render",
         "bodyOf",
-        "renderAttachment"
+        "renderAttachment",
+        "renderDocLink"
       ]
     }
   },

@@ -14,7 +14,7 @@ use life_manager_core::document::{Span, normalize_input, parse_document};
 use life_manager_core::filter::ast::{Filter, SortKey};
 use life_manager_core::filter::evaluator::{Row, compare_rows, evaluate};
 use life_manager_core::filter::mongo;
-use life_manager_core::splice::{self, SectionLineEdit, TextEdit};
+use life_manager_core::splice::{self, ListAction, SectionLineEdit, TextEdit};
 use life_manager_core::value::{Map, Value, map_to_bson};
 
 // ---------------------------------------------------------------------------
@@ -321,7 +321,14 @@ fn splice_corpus() {
     for case in corpus["cases"].as_array().expect("cases array") {
         let name = case["name"].as_str().expect("name");
         let text = case["text"].as_str().expect("text");
-        let edits = apply_op(text, &case["op"]).unwrap_or_else(|e| panic!("{name}: {e}"));
+        let (edits, popped) = apply_op(text, &case["op"]).unwrap_or_else(|e| panic!("{name}: {e}"));
+        if let Some(expected) = case.get("popped") {
+            assert_eq!(
+                popped.map(|value| value.to_json()),
+                Some(expected.clone()).filter(|value| !value.is_null()),
+                "{name}: popped"
+            );
+        }
 
         if let Some(expected) = case["edits"].as_u64() {
             assert_eq!(edits.len() as u64, expected, "{name}: edit count");
@@ -353,6 +360,21 @@ fn splice_corpus() {
 
         // Re-parsing the result never surprises the parser.
         let parsed = parse_document(&out);
+        if let Some(expected) = case.get("list") {
+            let key = case["op"]["key"].as_str().expect("key");
+            let actual = match case["op"].get("plugin").and_then(|p| p.as_str()) {
+                Some(plugin) => match parsed.plugins.get(plugin) {
+                    Some(Value::Map(section)) => section.get(key).cloned(),
+                    _ => None,
+                },
+                None => parsed.fm.get(key).cloned(),
+            };
+            assert_eq!(
+                actual.map(|value| value.to_json()),
+                Some(expected.clone()),
+                "{name}: parsed list"
+            );
+        }
         assert_eq!(
             parsed,
             parse_document(&parsed_text(&out)),
@@ -373,8 +395,29 @@ fn parsed_text(text: &str) -> String {
     normalize_input(text).into_owned()
 }
 
-fn apply_op(text: &str, op: &serde_json::Value) -> Result<Vec<TextEdit>, String> {
+fn apply_op(text: &str, op: &serde_json::Value) -> Result<(Vec<TextEdit>, Option<Value>), String> {
     let kind = op["kind"].as_str().expect("op kind");
+    let list = |op: &serde_json::Value| -> ListAction {
+        serde_json::from_value(op["action"].clone()).expect("list action")
+    };
+    match kind {
+        "fm_list" => {
+            return splice::frontmatter_list(text, op["key"].as_str().expect("key"), &list(op))
+                .map(|edit| (edit.edits, edit.popped))
+                .map_err(|e| e.to_string());
+        }
+        "section_list" => {
+            return splice::section_list(
+                text,
+                op["plugin"].as_str().expect("plugin"),
+                op["key"].as_str().expect("key"),
+                &list(op),
+            )
+            .map(|edit| (edit.edits, edit.popped))
+            .map_err(|e| e.to_string());
+        }
+        _ => {}
+    }
     let result = match kind {
         "set_fm" => splice::set_frontmatter_value(
             text,
@@ -400,7 +443,7 @@ fn apply_op(text: &str, op: &serde_json::Value) -> Result<Vec<TextEdit>, String>
         "remove_section" => splice::remove_section(text, op["plugin"].as_str().expect("plugin")),
         other => panic!("unknown splice op {other}"),
     };
-    result.map_err(|e| e.to_string())
+    result.map(|edits| (edits, None)).map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------

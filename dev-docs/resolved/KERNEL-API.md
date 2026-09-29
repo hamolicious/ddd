@@ -175,6 +175,27 @@ should be written against:
   to rewrite a document it did not create — the host refuses that outright
   (`rewrite_document` checks `created_by`).
 
+## 2.1.0 — list splices (2026-09-28)
+
+A **minor**: new methods on `kernel.documents.splice`, nothing removed.
+
+- **`frontmatterList(target, key, action)` / `sectionList(target, key, action)`**, with
+  the pure `planFrontmatterList` / `planSectionList`. `action` is a `ListAction`:
+  `push`, `insert` (before `index`; past the end appends), `remove` (every copy of the
+  value) or `pop` (resolves with the item it took). Items are scalars.
+- **Lists are written one item per line** (`key:` then `  - item` lines), so every
+  action is one line insert or delete and concurrent actions from two devices merge in
+  the text CRDT instead of one overwriting the other. A key still holding a flow list or
+  a scalar is rewritten into that form by its first list action.
+- **`%%%` sections now parse block sequences** the way frontmatter already did (core
+  semantics version 3). `spliceSection` writing or removing such a key takes its item
+  lines with it.
+- **Settings documents are marked `machine: true`** instead of `path: .settings`, and
+  `kernel.settings` finds a user's document by `settings-owner` alone.
+  `SETTINGS_DOC_PATH` stays exported and is deprecated; nothing reads it.
+
+The host ABI is unchanged.
+
 ## 2.0.0 — ports only (2026-09-28)
 
 A **major**: the 1.2.0 shims are removed, and with them every way plugins reached each

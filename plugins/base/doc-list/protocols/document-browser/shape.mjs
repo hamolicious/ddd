@@ -3,14 +3,17 @@ import { s } from "@kernel";
 /** @type {import("@kernel").ProtocolSource} */
 export default {
   id: "lm/document-browser",
-  version: "1.0.0",
+  version: "2.0.0",
   kind: "service",
   name: "DocumentBrowser",
   description: "Creating documents from anywhere in the app, and the list of ids currently shown.",
   declarations: `
 export interface NewDocumentOptions {
-  /** Seeds \`fm.path\`. */
-  readonly path?: string;
+  /**
+   * Where the new document belongs, as a hint for whoever files documents (\`folders\`
+   * files it under this note). Passed through on \`lm/document-browser.created\`.
+   */
+  readonly parent?: string;
   readonly title?: string;
 }`,
   shape: s.object({

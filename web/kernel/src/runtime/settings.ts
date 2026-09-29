@@ -9,15 +9,13 @@
  * ```markdown
  * ---
  * title: Settings — alice@example.com
- * path: .settings
+ * machine: true
  * settings-owner: 01J8ZUSER0000000000000000
  * ---
  * ```
  *
- * `fm.path` is {@link SETTINGS_DOC_PATH} so `folders` files it out of the way, and
- * **`fm.settings-owner` is the user id** — the key the kernel matches on. A path
- * alone would not do: the workspace is shared, so every user's settings document
- * sits in the same folder, and `folders` is a plugin that may be replaced or absent.
+ `machine: true` is the flag the browsing plugins hide machine-owned documents by,
+ * and **`fm.settings-owner` is the user id** — the only key the kernel matches on.
  *
  * The document is **machine-owned** (SPEC §3.3): the kernel authors its frontmatter
  * and body. Each plugin owns exactly one `%%% <plugin-id>` section inside it, written
@@ -41,7 +39,7 @@
  *
  * The document is in the projection like any other, so `get`/`all` answer from a
  * cache this host keeps. {@link SettingsHost.start} opens one live local query
- * (`fm.path` + `fm.settings-owner`) before any plugin activates and re-derives the
+ * (`fm.settings-owner`) before any plugin activates and re-derives the
  * cache from it — which is also how a change another device made shows up here.
  *
  * ## Whose document is it — matching, and why `created_by` is part of it
@@ -87,7 +85,6 @@
 
 import {
   ContractViolationError,
-  SETTINGS_DOC_PATH,
   type DocumentRow,
   type FilterJson,
   type QuerySubscription,
@@ -129,12 +126,7 @@ type SettingsEdit = SectionLineEdit & { readonly value: SettingsValue | null };
 
 /** The local query that finds this user's settings document(s). */
 export function settingsFilter(userId: string): FilterJson {
-  return {
-    and: [
-      { cmp: { field: "fm.path", op: "eq", value: { str: SETTINGS_DOC_PATH } } },
-      { cmp: { field: `fm.${SETTINGS_OWNER_KEY}`, op: "eq", value: { str: userId } } },
-    ],
-  };
+  return { cmp: { field: `fm.${SETTINGS_OWNER_KEY}`, op: "eq", value: { str: userId } } };
 }
 
 export class SettingsHost {
@@ -456,7 +448,7 @@ export class SettingsHost {
     return [
       "---",
       `title: Settings — ${label}`,
-      `path: ${SETTINGS_DOC_PATH}`,
+      "machine: true",
       `${SETTINGS_OWNER_KEY}: ${this.options.userId}`,
       "---",
       "",

@@ -2,10 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   contrast,
-  followMove,
   normalizeColor,
+  parseDefaults,
+  parseRules,
   parseStyles,
+  resolveStyle,
+  sameRules,
   sameStyles,
+  serializeRules,
   serializeStyles,
   textOn,
   withStyle,
@@ -52,45 +56,12 @@ describe("withStyle", () => {
   });
 });
 
-describe("followMove", () => {
-  const before = styles({
-    work: { background: "#e03131" },
-    "work/clients": { icon: "users" },
-    workshop: { icon: "tools" },
-    home: { icon: "home" },
-  });
-
-  it("carries a renamed folder's look and its subfolders', and nothing that merely shares a prefix", () => {
-    expect(object(followMove(before, { from: "work", to: "archive/work" }))).toEqual({
-      "archive/work": { background: "#e03131" },
-      "archive/work/clients": { icon: "users" },
-      workshop: { icon: "tools" },
-      home: { icon: "home" },
-    });
-  });
-
-  it("drops a deleted folder's look and moves its subfolders' to where its contents went", () => {
-    expect(object(followMove(before, { from: "work", contentsTo: "" }))).toEqual({
-      clients: { icon: "users" },
-      workshop: { icon: "tools" },
-      home: { icon: "home" },
-    });
-  });
-
-  it("drops the whole subtree when the contents went to the Trash", () => {
-    expect(object(followMove(before, { from: "work" }))).toEqual({
-      workshop: { icon: "tools" },
-      home: { icon: "home" },
-    });
-  });
-
-  it("lets the moved look replace the one already at the destination", () => {
-    const after = followMove(styles({ a: { icon: "star" }, b: { icon: "home" } }), { from: "a", to: "b" });
-    expect(object(after)).toEqual({ b: { icon: "star" } });
-  });
-
-  it("changes nothing when nothing was under the folder", () => {
-    expect(sameStyles(followMove(before, { from: "elsewhere", to: "x" }), before)).toBe(true);
+describe("sameStyles", () => {
+  it("compares every note's look", () => {
+    const before = styles({ a: { icon: "star" }, b: { background: "#aaaaaa" } });
+    expect(sameStyles(before, styles({ b: { background: "#aaaaaa" }, a: { icon: "star" } }))).toBe(true);
+    expect(sameStyles(before, styles({ a: { icon: "star" } }))).toBe(false);
+    expect(sameStyles(before, styles({ a: { icon: "home" }, b: { background: "#aaaaaa" } }))).toBe(false);
   });
 });
 
@@ -106,5 +77,81 @@ describe("contrast / textOn", () => {
     for (const light of ["#ffffff", "#f59f00", "#2f9e44", "#868e96"]) expect(textOn(light)).toBe("#000000");
     // A close call is still a call: 4.65 against black, 4.51 against white.
     expect(textOn("#e03131")).toBe("#000000");
+  });
+});
+
+describe("parseDefaults / resolveStyle", () => {
+  it("reads the two settings, dropping what does not parse", () => {
+    expect(parseDefaults("#ABC", "folder")).toEqual({ background: "#aabbcc", icon: "folder" });
+    expect(parseDefaults("", "")).toEqual({});
+    expect(parseDefaults("red", "Not An Icon")).toEqual({});
+    expect(parseDefaults(undefined, null)).toEqual({});
+  });
+
+  it("fills each field a note leaves unset from the defaults", () => {
+    const defaults = { background: "#868e96", icon: "note" };
+    expect(resolveStyle(undefined, defaults)).toEqual(defaults);
+    expect(resolveStyle({ icon: "briefcase" }, defaults)).toEqual({ background: "#868e96", icon: "briefcase" });
+    expect(resolveStyle({ background: "#e03131", icon: "star" }, defaults)).toEqual({ background: "#e03131", icon: "star" });
+  });
+
+  it("is nothing when neither the note nor the defaults say anything", () => {
+    expect(resolveStyle(undefined, {})).toBeUndefined();
+    expect(resolveStyle({ icon: "star" }, {})).toEqual({ icon: "star" });
+  });
+});
+
+describe("rules", () => {
+  const line = JSON.stringify({
+    when: { combine: "or", clauses: [{ field: "fm.tags", op: "contains", value: "work", kind: "str" }] },
+    background: "#E03131",
+    icon: "briefcase",
+  });
+
+  it("round-trips, row ids aside", () => {
+    const rules = parseRules([line]);
+    expect(rules).toHaveLength(1);
+    expect(rules[0]?.when.combine).toBe("or");
+    expect(rules[0]?.style).toEqual({ background: "#e03131", icon: "briefcase" });
+    expect(serializeRules(rules)).toEqual([
+      JSON.stringify({
+        when: { combine: "or", clauses: [{ field: "fm.tags", op: "contains", value: "work", kind: "str" }] },
+        background: "#e03131",
+        icon: "briefcase",
+      }),
+    ]);
+    expect(sameRules(rules, parseRules([line]))).toBe(true);
+  });
+
+  it("keeps a nested \"is inside\"", () => {
+    const deep = JSON.stringify({ when: { combine: "and", clauses: [{ field: "", op: "child_of", value: "x", kind: "str", deep: true }] } });
+    const rules = parseRules([deep]);
+    expect(rules[0]?.when.clauses[0]?.deep).toBe(true);
+    expect(serializeRules(rules)).toEqual([deep]);
+  });
+
+  it("drops lines and clauses that do not parse", () => {
+    const rules = parseRules([
+      "not json",
+      42,
+      JSON.stringify({ background: "#fff" }),
+      JSON.stringify({ when: { clauses: [{ field: "x", op: "explode", value: "", kind: "str" }, { field: "fm.a", op: "exists", value: "", kind: "str", negate: true }] } }),
+    ]);
+    expect(rules).toHaveLength(1);
+    expect(rules[0]?.when.combine).toBe("and");
+    expect(rules[0]?.when.clauses.map((clause) => [clause.op, clause.negate])).toEqual([["exists", true]]);
+    expect(rules[0]?.style).toEqual({});
+  });
+
+  it("never overrides the note's own look: own, then the first matching rule, then the default", () => {
+    const defaults = { background: "#868e96", icon: "note" };
+    const matched = [{ icon: "star" }, { background: "#e03131", icon: "flag" }];
+    expect(resolveStyle(undefined, defaults, matched)).toEqual({ background: "#e03131", icon: "star" });
+    expect(resolveStyle({ icon: "mine" }, defaults, matched)).toEqual({ background: "#e03131", icon: "mine" });
+    expect(resolveStyle({ background: "#000000", icon: "mine" }, defaults, matched)).toEqual({
+      background: "#000000",
+      icon: "mine",
+    });
+    expect(resolveStyle(undefined, defaults, [{}])).toEqual(defaults);
   });
 });

@@ -1,8 +1,8 @@
 {
   "id": "folders",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "name": "Folders",
-  "description": "A drag-and-drop file tree over fm.path; every move is a frontmatter splice.",
+  "description": "A drag-and-drop tree of notes: a note's children are listed in its own section.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
@@ -10,7 +10,7 @@
   "hot": true,
   "consumes": {
     "browser": {
-      "protocol": "lm/document-browser@^1.0",
+      "protocol": "lm/document-browser@^2.0",
       "needs": [
         "newDocument"
       ]
@@ -33,10 +33,13 @@
       ]
     },
     "decorations": {
-      "protocol": "lm/folders.decoration@^1.0"
+      "protocol": "lm/folders.decoration@^2.0"
     },
     "actions": {
-      "protocol": "lm/folders.menu-item@^1.0"
+      "protocol": "lm/folders.menu-item@^2.0"
+    },
+    "created": {
+      "protocol": "lm/document-browser.created@^1.0"
     }
   },
   "provides": {
@@ -44,24 +47,15 @@
       "protocol": "lm/sidebar.panel@1.0.0",
       "order": 20
     },
-    "route": {
-      "protocol": "lm/router.route@1.0.0"
-    },
-    "view": {
-      "protocol": "lm/main.view@1.0.0"
-    },
     "settings": {
       "protocol": "lm/settings.section@1.0.0",
       "order": 30
     },
     "commands": {
-      "protocol": "lm/commands.command@1.0.0"
+      "protocol": "lm/commands.command@2.0.0"
     },
-    "location": {
-      "protocol": "lm/folders.default-location@1.0.0"
-    },
-    "moved": {
-      "protocol": "lm/folders.moved@1.0.0"
+    "folders": {
+      "protocol": "lm/folders@1.2.0"
     }
   },
   "peerLibraries": {

@@ -447,6 +447,497 @@
       },
       "expect": "---\ntitle: A\ndate: 2026-09-23\n---\n",
       "edits": 1
+    },
+    {
+      "name": "list-push-creates-the-block",
+      "text": "body\n",
+      "op": {
+        "kind": "fm_list",
+        "key": "tags",
+        "action": {
+          "action": "push",
+          "value": "a"
+        }
+      },
+      "expect": "---\ntags:\n  - a\n---\n\nbody\n",
+      "list": [
+        "a"
+      ]
+    },
+    {
+      "name": "list-push-creates-the-key",
+      "text": "---\ntitle: T\n---\n",
+      "op": {
+        "kind": "fm_list",
+        "key": "tags",
+        "action": {
+          "action": "push",
+          "value": "a"
+        }
+      },
+      "expect": "---\ntitle: T\ntags:\n  - a\n---\n",
+      "list": [
+        "a"
+      ],
+      "edits": 1
+    },
+    {
+      "name": "list-push-appends-one-line",
+      "text": "---\ntags:\n  - a\n  - b\ntitle: T\n---\n",
+      "op": {
+        "kind": "fm_list",
+        "key": "tags",
+        "action": {
+          "action": "push",
+          "value": "c"
+        }
+      },
+      "expect": "---\ntags:\n  - a\n  - b\n  - c\ntitle: T\n---\n",
+      "list": [
+        "a",
+        "b",
+        "c"
+      ],
+      "edits": 1
+    },
+    {
+      "name": "list-push-keeps-hand-indentation",
+      "text": "---\ntags:\n    - a\n---\n",
+      "op": {
+        "kind": "fm_list",
+        "key": "tags",
+        "action": {
+          "action": "push",
+          "value": "b"
+        }
+      },
+      "expect": "---\ntags:\n    - a\n    - b\n---\n",
+      "list": [
+        "a",
+        "b"
+      ]
+    },
+    {
+      "name": "list-push-onto-empty-key",
+      "text": "---\ntags:\n---\n",
+      "op": {
+        "kind": "fm_list",
+        "key": "tags",
+        "action": {
+          "action": "push",
+          "value": "a"
+        }
+      },
+      "expect": "---\ntags:\n  - a\n---\n",
+      "list": [
+        "a"
+      ],
+      "edits": 1
+    },
+    {
+      "name": "list-insert-before-an-item",
+      "text": "---\ntags:\n  - a\n  - c\n---\n",
+      "op": {
+        "kind": "fm_list",
+        "key": "tags",
+        "action": {
+          "action": "insert",
+          "index": 1,
+          "value": "b"
+        }
+      },
+      "expect": "---\ntags:\n  - a\n  - b\n  - c\n---\n",
+      "list": [
+        "a",
+        "b",
+        "c"
+      ],
+      "edits": 1
+    },
+    {
+      "name": "list-insert-at-zero",
+      "text": "---\ntags:\n  - b\n---\n",
+      "op": {
+        "kind": "fm_list",
+        "key": "tags",
+        "action": {
+          "action": "insert",
+          "index": 0,
+          "value": "a"
+        }
+      },
+      "expect": "---\ntags:\n  - a\n  - b\n---\n",
+      "list": [
+        "a",
+        "b"
+      ]
+    },
+    {
+      "name": "list-insert-past-the-end-appends",
+      "text": "---\ntags:\n  - a\n---\n",
+      "op": {
+        "kind": "fm_list",
+        "key": "tags",
+        "action": {
+          "action": "insert",
+          "index": 9,
+          "value": "b"
+        }
+      },
+      "expect": "---\ntags:\n  - a\n  - b\n---\n",
+      "list": [
+        "a",
+        "b"
+      ]
+    },
+    {
+      "name": "list-remove-deletes-every-copy",
+      "text": "---\ntags:\n  - a\n  - b\n  - a\n---\n",
+      "op": {
+        "kind": "fm_list",
+        "key": "tags",
+        "action": {
+          "action": "remove",
+          "value": "a"
+        }
+      },
+      "expect": "---\ntags:\n  - b\n---\n",
+      "list": [
+        "b"
+      ],
+      "edits": 2
+    },
+    {
+      "name": "list-remove-missing-is-a-no-op",
+      "text": "---\ntags:\n  - a\n---\n",
+      "op": {
+        "kind": "fm_list",
+        "key": "tags",
+        "action": {
+          "action": "remove",
+          "value": "z"
+        }
+      },
+      "expect": "---\ntags:\n  - a\n---\n",
+      "list": [
+        "a"
+      ],
+      "edits": 0
+    },
+    {
+      "name": "list-remove-last-leaves-the-key",
+      "text": "---\ntags:\n  - a\n---\n",
+      "op": {
+        "kind": "fm_list",
+        "key": "tags",
+        "action": {
+          "action": "remove",
+          "value": "a"
+        }
+      },
+      "expect": "---\ntags:\n---\n",
+      "edits": 1
+    },
+    {
+      "name": "list-pop-takes-the-last",
+      "text": "---\ntags:\n  - a\n  - b\n---\n",
+      "op": {
+        "kind": "fm_list",
+        "key": "tags",
+        "action": {
+          "action": "pop"
+        }
+      },
+      "expect": "---\ntags:\n  - a\n---\n",
+      "list": [
+        "a"
+      ],
+      "popped": "b",
+      "edits": 1
+    },
+    {
+      "name": "list-pop-on-missing-key",
+      "text": "---\ntitle: T\n---\n",
+      "op": {
+        "kind": "fm_list",
+        "key": "tags",
+        "action": {
+          "action": "pop"
+        }
+      },
+      "expect": "---\ntitle: T\n---\n",
+      "edits": 0
+    },
+    {
+      "name": "list-remove-on-missing-block",
+      "text": "body\n",
+      "op": {
+        "kind": "fm_list",
+        "key": "tags",
+        "action": {
+          "action": "remove",
+          "value": "a"
+        }
+      },
+      "expect": "body\n",
+      "edits": 0
+    },
+    {
+      "name": "list-flow-list-becomes-block",
+      "text": "---\ntags: [a, b]\n---\n",
+      "op": {
+        "kind": "fm_list",
+        "key": "tags",
+        "action": {
+          "action": "push",
+          "value": "c"
+        }
+      },
+      "expect": "---\ntags:\n  - a\n  - b\n  - c\n---\n",
+      "list": [
+        "a",
+        "b",
+        "c"
+      ]
+    },
+    {
+      "name": "list-scalar-becomes-block",
+      "text": "---\ntags: a\n---\n",
+      "op": {
+        "kind": "fm_list",
+        "key": "tags",
+        "action": {
+          "action": "push",
+          "value": "b"
+        }
+      },
+      "expect": "---\ntags:\n  - a\n  - b\n---\n",
+      "list": [
+        "a",
+        "b"
+      ]
+    },
+    {
+      "name": "list-flow-remove-missing-no-rewrite",
+      "text": "---\ntags: [a]\n---\n",
+      "op": {
+        "kind": "fm_list",
+        "key": "tags",
+        "action": {
+          "action": "remove",
+          "value": "z"
+        }
+      },
+      "expect": "---\ntags: [a]\n---\n",
+      "list": [
+        "a"
+      ],
+      "edits": 0
+    },
+    {
+      "name": "list-duplicate-keys-are-folded",
+      "text": "---\ntags:\n  - a\ntitle: T\ntags:\n  - b\n---\n",
+      "op": {
+        "kind": "fm_list",
+        "key": "tags",
+        "action": {
+          "action": "push",
+          "value": "c"
+        }
+      },
+      "expect": "---\ntitle: T\ntags:\n  - b\n  - a\n  - c\n---\n",
+      "list": [
+        "b",
+        "a",
+        "c"
+      ]
+    },
+    {
+      "name": "list-quotes-number-like-strings",
+      "text": "---\ntags:\n  - a\n---\n",
+      "op": {
+        "kind": "fm_list",
+        "key": "tags",
+        "action": {
+          "action": "push",
+          "value": "123"
+        }
+      },
+      "expect": "---\ntags:\n  - a\n  - \"123\"\n---\n",
+      "list": [
+        "a",
+        "123"
+      ]
+    },
+    {
+      "name": "section-list-creates-section",
+      "text": "# Note\n",
+      "op": {
+        "kind": "section_list",
+        "plugin": "folders",
+        "key": "children",
+        "action": {
+          "action": "push",
+          "value": "01A"
+        }
+      },
+      "expect": "# Note\n\n%%% folders\nchildren:\n  - 01A\n%%%\n",
+      "list": [
+        "01A"
+      ]
+    },
+    {
+      "name": "section-list-joins-the-run",
+      "text": "body\n\n%%% other\nx: 1\n%%%\n",
+      "op": {
+        "kind": "section_list",
+        "plugin": "folders",
+        "key": "children",
+        "action": {
+          "action": "push",
+          "value": "01A"
+        }
+      },
+      "expect": "body\n\n%%% other\nx: 1\n%%%\n%%% folders\nchildren:\n  - 01A\n%%%\n",
+      "list": [
+        "01A"
+      ]
+    },
+    {
+      "name": "section-list-creates-the-key",
+      "text": "body\n\n%%% folders\nv: 1\n%%%\n",
+      "op": {
+        "kind": "section_list",
+        "plugin": "folders",
+        "key": "children",
+        "action": {
+          "action": "push",
+          "value": "01A"
+        }
+      },
+      "expect": "body\n\n%%% folders\nv: 1\nchildren:\n  - 01A\n%%%\n",
+      "list": [
+        "01A"
+      ]
+    },
+    {
+      "name": "section-list-push",
+      "text": "body\n\n%%% folders\nchildren:\n  - 01A\nv: 1\n%%%\n",
+      "op": {
+        "kind": "section_list",
+        "plugin": "folders",
+        "key": "children",
+        "action": {
+          "action": "push",
+          "value": "01B"
+        }
+      },
+      "expect": "body\n\n%%% folders\nchildren:\n  - 01A\n  - 01B\nv: 1\n%%%\n",
+      "list": [
+        "01A",
+        "01B"
+      ],
+      "edits": 1
+    },
+    {
+      "name": "section-list-remove",
+      "text": "body\n\n%%% folders\nchildren:\n  - 01A\n  - 01B\n%%%\n",
+      "op": {
+        "kind": "section_list",
+        "plugin": "folders",
+        "key": "children",
+        "action": {
+          "action": "remove",
+          "value": "01A"
+        }
+      },
+      "expect": "body\n\n%%% folders\nchildren:\n  - 01B\n%%%\n",
+      "list": [
+        "01B"
+      ],
+      "edits": 1
+    },
+    {
+      "name": "section-list-pop",
+      "text": "body\n\n%%% folders\nchildren:\n  - 01A\n  - 01B\n%%%\n",
+      "op": {
+        "kind": "section_list",
+        "plugin": "folders",
+        "key": "children",
+        "action": {
+          "action": "pop"
+        }
+      },
+      "expect": "body\n\n%%% folders\nchildren:\n  - 01A\n%%%\n",
+      "list": [
+        "01A"
+      ],
+      "popped": "01B"
+    },
+    {
+      "name": "section-list-insert",
+      "text": "body\n\n%%% folders\nchildren:\n  - 01A\n  - 01C\n%%%\n",
+      "op": {
+        "kind": "section_list",
+        "plugin": "folders",
+        "key": "children",
+        "action": {
+          "action": "insert",
+          "index": 1,
+          "value": "01B"
+        }
+      },
+      "expect": "body\n\n%%% folders\nchildren:\n  - 01A\n  - 01B\n  - 01C\n%%%\n",
+      "list": [
+        "01A",
+        "01B",
+        "01C"
+      ]
+    },
+    {
+      "name": "section-list-remove-on-missing-section",
+      "text": "body\n",
+      "op": {
+        "kind": "section_list",
+        "plugin": "folders",
+        "key": "children",
+        "action": {
+          "action": "remove",
+          "value": "01A"
+        }
+      },
+      "expect": "body\n",
+      "edits": 0
+    },
+    {
+      "name": "section-set-replaces-block-items",
+      "text": "%%% a\nk:\n  - 1\n  - 2\nz: 0\n%%%\n",
+      "op": {
+        "kind": "splice_section",
+        "plugin": "a",
+        "edits": [
+          {
+            "key": "k",
+            "value": 5
+          }
+        ]
+      },
+      "expect": "%%% a\nk: 5\nz: 0\n%%%\n"
+    },
+    {
+      "name": "section-remove-takes-block-items",
+      "text": "%%% a\nk:\n  - 1\nz: 0\n%%%\n",
+      "op": {
+        "kind": "splice_section",
+        "plugin": "a",
+        "edits": [
+          {
+            "key": "k",
+            "remove": true
+          }
+        ]
+      },
+      "expect": "%%% a\nz: 0\n%%%\n"
     }
   ],
   "rejected": [
@@ -485,6 +976,30 @@
             "value": 1
           }
         ]
+      }
+    },
+    {
+      "name": "list-item-must-be-scalar",
+      "op": {
+        "kind": "fm_list",
+        "key": "tags",
+        "action": {
+          "action": "push",
+          "value": [
+            1
+          ]
+        }
+      }
+    },
+    {
+      "name": "section-list-invalid-plugin",
+      "op": {
+        "kind": "section_list",
+        "plugin": "bad id",
+        "key": "k",
+        "action": {
+          "action": "pop"
+        }
       }
     }
   ]

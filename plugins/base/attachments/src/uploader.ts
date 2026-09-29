@@ -41,8 +41,6 @@ export interface SendOptions {
   readonly signal: AbortSignal;
   /** Ask the server to create the ordinary document that represents this file. */
   readonly wrapper?: boolean;
-  /** `fm.path` for that wrapper document. Ignored when `wrapper` is false. */
-  readonly path?: string;
   /** A new upload was opened on the server: keep its id, so a later attempt resumes it. */
   readonly onSession: (uploadId: string) => void | Promise<void>;
   /** The server has `sent` bytes. */
@@ -61,7 +59,7 @@ export async function sendInChunks(fetch: Fetch, blob: Blob, name: string, optio
     const session = await call<Session>("/uploads", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name, size: blob.size, wrapper: options.wrapper ?? false, path: options.path }),
+      body: JSON.stringify({ name, size: blob.size, wrapper: options.wrapper ?? false }),
     });
     await options.onSession(session.id);
     return session;
@@ -136,7 +134,6 @@ export interface UploadOptions {
   readonly uploadId?: string;
   readonly signal?: AbortSignal;
   readonly wrapper?: boolean;
-  readonly path?: string;
   readonly onSession?: (uploadId: string) => void | Promise<void>;
   readonly onProgress?: (sent: number) => void;
 }
@@ -149,7 +146,6 @@ export function createAttachmentsApi(fetch: Fetch): AttachmentsApi {
         uploadId: options.uploadId,
         signal: options.signal ?? new AbortController().signal,
         wrapper: options.wrapper,
-        path: options.path,
         onSession: options.onSession ?? (() => undefined),
         onProgress: options.onProgress ?? (() => undefined),
       }),

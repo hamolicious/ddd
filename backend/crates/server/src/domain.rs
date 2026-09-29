@@ -704,11 +704,9 @@ pub struct UploadSession {
     pub gridfs_id: bson::Bson,
     /// The first bytes, kept for MIME sniffing at completion.
     pub head: Binary,
-    /// Create a wrapper document on completion, in folder `path`.
+    /// Create a wrapper document on completion. Clients file it themselves.
     #[serde(default)]
     pub wrapper: bool,
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub path: Option<String>,
     /// Set once completed.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub attachment_id: Option<Id>,

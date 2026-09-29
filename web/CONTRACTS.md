@@ -706,8 +706,8 @@ nothing checking that automatically.
 ## New shared file: `plugins/base/_shared/machine-docs.ts`
 
 Owned by nobody before; used by `doc-list`, `folders` and `search`, which is exactly why
-it is in `_shared` rather than triplicated. It carries one rule — **a document whose
-`fm.path` starts with `.` is machine-owned** — as a predicate and as a DSL clause, so the
+it is in `_shared` rather than triplicated. It carries one rule — **a document marked
+`machine: true` is machine-owned** (a leading-`.` `fm.path` until kernel 2.1) — as a predicate and as a DSL clause, so the
 three plugins cannot drift about what they are hiding.
 
 It is a *convention three plugins share*, not a kernel concept: the kernel knows one

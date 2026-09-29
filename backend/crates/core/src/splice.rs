@@ -13,8 +13,8 @@ use serde::{Deserialize, Serialize};
 use crate::document::Span;
 use crate::error::CoreError;
 use crate::limits::{MAX_DOCUMENT_BYTES, is_valid_key};
-use crate::value::Value;
-use crate::{frontmatter, sections};
+use crate::value::{Value, parse_value};
+use crate::{frontmatter, sections, yaml};
 
 /// One replace-range-with-text edit against the document text.
 /// Offsets are UTF-8 byte offsets into the text the edit was computed from;
@@ -135,27 +135,7 @@ pub fn splice_section(
                     .map(|value| format!("{}: {}\n", edit.key, value.to_yaml_inline()))
             })
             .collect();
-        let fenced = format!("%%% {plugin_id}\n{body}%%%\n");
-        return Ok(match parsed.run_span {
-            Some(run) => vec![TextEdit {
-                range: Span::new(run.end, run.end),
-                text: fenced,
-            }],
-            None => {
-                let mut separator = String::new();
-                if !text.is_empty() {
-                    if !text.ends_with('\n') {
-                        separator.push_str("\n\n");
-                    } else if !text.ends_with("\n\n") {
-                        separator.push('\n');
-                    }
-                }
-                vec![TextEdit {
-                    range: Span::new(text.len(), text.len()),
-                    text: format!("{separator}{fenced}"),
-                }]
-            }
-        });
+        return Ok(vec![new_section(text, &parsed, plugin_id, &body)]);
     };
 
     let mut out: Vec<TextEdit> = Vec::new();
@@ -194,6 +174,386 @@ pub fn splice_section(
     }
     sort_edits(&mut out);
     Ok(out)
+}
+
+/// One change to a list value (frontmatter key or section key).
+///
+/// Lists are written as **block sequences**, one `  - item` line per item, so each
+/// action is a line insert or a line delete. Two replicas pushing at once insert two
+/// separate lines; two removing the same item delete the same span. The text CRDT
+/// merges both, where a rewritten `[a, b]` line would lose one side.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub enum ListAction {
+    /// Append an item.
+    Push { value: Value },
+    /// Insert before the item at `index`; past the end appends.
+    Insert { index: usize, value: Value },
+    /// Delete every item equal to `value`. A missing item is not an error.
+    Remove { value: Value },
+    /// Delete the last item.
+    Pop,
+}
+
+/// The edits a [`ListAction`] makes, and the item [`ListAction::Pop`] took off.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ListEdit {
+    pub edits: Vec<TextEdit>,
+    pub popped: Option<Value>,
+}
+
+/// Apply a [`ListAction`] to a top-level frontmatter key.
+///
+/// A key already in block form is edited one item line at a time. A key holding a
+/// flow list or a scalar is first rewritten into block form (a one-time whole-value
+/// replace — the only step that does not merge line by line). A missing key is
+/// created by push/insert; remove/pop on it are no-ops.
+pub fn frontmatter_list(text: &str, key: &str, action: &ListAction) -> Result<ListEdit, CoreError> {
+    guard(text)?;
+    require_key(key)?;
+    require_item(action)?;
+
+    let Some((_, inner)) = frontmatter::find_block(text) else {
+        let Some(item) = created_item(action) else {
+            return Ok(ListEdit::default());
+        };
+        let mut block = format!(
+            "---\n{key}:\n{DEFAULT_INDENT}- {}\n---\n",
+            item.to_yaml_inline()
+        );
+        if !text.is_empty() && !text.starts_with('\n') {
+            block.push('\n');
+        }
+        return Ok(ListEdit {
+            edits: vec![TextEdit {
+                range: Span::new(0, 0),
+                text: block,
+            }],
+            popped: None,
+        });
+    };
+
+    Ok(region_list(text, inner, key, action))
+}
+
+/// Apply a [`ListAction`] to a key in `plugin_id`'s `%%%` section, creating the
+/// section when push/insert needs one. Same rules as [`frontmatter_list`].
+pub fn section_list(
+    text: &str,
+    plugin_id: &str,
+    key: &str,
+    action: &ListAction,
+) -> Result<ListEdit, CoreError> {
+    guard(text)?;
+    require_key(plugin_id)?;
+    require_key(key)?;
+    require_item(action)?;
+
+    let parsed = sections::parse(text);
+    let Some(section) = parsed.get(plugin_id) else {
+        let Some(item) = created_item(action) else {
+            return Ok(ListEdit::default());
+        };
+        let body = format!("{key}:\n{}", item_line(DEFAULT_INDENT, item));
+        return Ok(ListEdit {
+            edits: vec![new_section(text, &parsed, plugin_id, &body)],
+            popped: None,
+        });
+    };
+
+    Ok(region_list(text, section.body_span, key, action))
+}
+
+/// Indentation for items of a list that has none yet.
+const DEFAULT_INDENT: &str = "  ";
+
+/// The item a push/insert would create a missing list with.
+fn created_item(action: &ListAction) -> Option<&Value> {
+    match action {
+        ListAction::Push { value } | ListAction::Insert { value, .. } => Some(value),
+        ListAction::Remove { .. } | ListAction::Pop => None,
+    }
+}
+
+/// Items are scalars: a nested item could not be written as one line.
+fn require_item(action: &ListAction) -> Result<(), CoreError> {
+    match action {
+        ListAction::Push { value }
+        | ListAction::Insert { value, .. }
+        | ListAction::Remove { value } => match value {
+            Value::List(_) | Value::Map(_) => Err(CoreError::SpliceTargetMissing(
+                "list items must be scalars".to_string(),
+            )),
+            _ => Ok(()),
+        },
+        ListAction::Pop => Ok(()),
+    }
+}
+
+/// One occurrence of the key inside a region: its header line, and its item lines
+/// when it is already in block form.
+struct Occurrence {
+    /// Absolute span of the header line plus every item line.
+    span: Span,
+    /// Absolute span of the header line alone.
+    header: Span,
+    /// `Some` when the header has nothing after the colon (`key:`).
+    block: Option<Vec<Item>>,
+    /// The inline value, when the header carries one.
+    inline: Option<Value>,
+}
+
+/// One block-sequence item. Every item line has a terminator: a region (the
+/// frontmatter's inner span, a section's body) always ends before its closing fence.
+struct Item {
+    /// Absolute span of the whole line, terminator included.
+    line: Span,
+    indent: String,
+    value: Option<Value>,
+}
+
+fn occurrences(text: &str, region: Span, key: &str) -> Vec<Occurrence> {
+    let body = region.slice(text);
+    let lines = yaml::lines(body);
+    let at = |offset: usize| region.start + offset;
+    let mut out = Vec::new();
+    for (index, line) in lines.iter().enumerate() {
+        if yaml::line_key(line.content).as_deref() != Some(key) {
+            continue;
+        }
+        let header = Span::new(at(line.start), at(line.full_end));
+        if yaml::empty_value_key(line.content).is_some() {
+            let mut items = Vec::new();
+            let mut end = line.full_end;
+            if let Some(first) = lines.get(index + 1)
+                && let Some((indent, _)) = yaml::block_item(first.content)
+            {
+                for item in &lines[index + 1..] {
+                    let Some((item_indent, raw)) = yaml::block_item(item.content) else {
+                        break;
+                    };
+                    if item_indent != indent {
+                        break;
+                    }
+                    items.push(Item {
+                        line: Span::new(at(item.start), at(item.full_end)),
+                        indent: item.content[..indent].to_string(),
+                        value: parse_value(raw, 2).ok(),
+                    });
+                    end = item.full_end;
+                }
+            }
+            out.push(Occurrence {
+                span: Span::new(at(line.start), at(end)),
+                header,
+                block: Some(items),
+                inline: None,
+            });
+        } else {
+            let inline = match yaml::parse_line(line.content) {
+                yaml::LineOutcome::Pair { value, .. } => Some(value),
+                _ => None,
+            };
+            out.push(Occurrence {
+                span: header,
+                header,
+                block: None,
+                inline,
+            });
+        }
+    }
+    out
+}
+
+/// The values a non-block occurrence holds, as list items.
+fn inline_items(value: Option<&Value>) -> Vec<Value> {
+    match value {
+        None | Some(Value::Null) => Vec::new(),
+        Some(Value::List(items)) => items.clone(),
+        Some(other) => vec![other.clone()],
+    }
+}
+
+fn item_line(indent: &str, value: &Value) -> String {
+    format!("{indent}- {}\n", value.to_yaml_inline())
+}
+
+/// `action` against the last occurrence of `key` inside `region` (frontmatter
+/// inner span or section body span).
+///
+/// Earlier occurrences (two replicas each creating the list at once) are folded
+/// into the last one: their lines go, and their items that the last one lacks are
+/// appended. That is "the next write cleans up" (SPEC §3.3) without losing an item.
+fn region_list(text: &str, region: Span, key: &str, action: &ListAction) -> ListEdit {
+    let mut found = occurrences(text, region, key);
+    let Some(last) = found.pop() else {
+        let Some(item) = created_item(action) else {
+            return ListEdit::default();
+        };
+        return ListEdit {
+            edits: vec![TextEdit {
+                range: Span::new(region.end, region.end),
+                text: format!("{key}:\n{}", item_line(DEFAULT_INDENT, item)),
+            }],
+            popped: None,
+        };
+    };
+
+    let mut edits: Vec<TextEdit> = Vec::new();
+    let mut folded: Vec<Value> = Vec::new();
+    for earlier in &found {
+        edits.push(TextEdit {
+            range: earlier.span,
+            text: String::new(),
+        });
+        let values: Vec<Value> = match &earlier.block {
+            Some(items) => items.iter().filter_map(|item| item.value.clone()).collect(),
+            None => inline_items(earlier.inline.as_ref()),
+        };
+        folded.extend(values);
+    }
+
+    let popped = match &last.block {
+        Some(items) => block_list(&mut edits, &last, items, folded, action),
+        None => rewrite_list(&mut edits, key, &last, folded, action),
+    };
+    sort_edits(&mut edits);
+    ListEdit { edits, popped }
+}
+
+/// A list already in block form: line inserts and deletes only.
+fn block_list(
+    edits: &mut Vec<TextEdit>,
+    last: &Occurrence,
+    items: &[Item],
+    folded: Vec<Value>,
+    action: &ListAction,
+) -> Option<Value> {
+    let indent = items
+        .first()
+        .map_or(DEFAULT_INDENT.to_string(), |item| item.indent.clone());
+    // Where appended lines go: after the last item, or after the header.
+    let tail = items.last().map_or(last.header.end, |item| item.line.end);
+
+    let present: Vec<&Value> = items
+        .iter()
+        .filter_map(|item| item.value.as_ref())
+        .collect();
+    let mut appended: Vec<Value> = Vec::new();
+    for value in folded {
+        if !present.contains(&&value) && !appended.contains(&value) {
+            appended.push(value);
+        }
+    }
+
+    let mut popped = None;
+    match action {
+        ListAction::Push { value } => appended.push(value.clone()),
+        ListAction::Insert { index, value } => match items.get(*index) {
+            Some(item) => edits.push(TextEdit {
+                range: Span::new(item.line.start, item.line.start),
+                text: item_line(&indent, value),
+            }),
+            None => appended.push(value.clone()),
+        },
+        ListAction::Remove { value } => {
+            for item in items {
+                if item.value.as_ref() == Some(value) {
+                    edits.push(TextEdit {
+                        range: item.line,
+                        text: String::new(),
+                    });
+                }
+            }
+        }
+        ListAction::Pop => {
+            if let Some(item) = items.last() {
+                popped = item.value.clone();
+                edits.push(TextEdit {
+                    range: item.line,
+                    text: String::new(),
+                });
+            }
+        }
+    }
+
+    if !appended.is_empty() {
+        // After the last item's line — which a pop or remove may be deleting: the
+        // insert sits at that deletion's end, so the two edits stay disjoint.
+        edits.push(TextEdit {
+            range: Span::new(tail, tail),
+            text: appended
+                .iter()
+                .map(|value| item_line(&indent, value))
+                .collect(),
+        });
+    }
+    popped
+}
+
+/// A key holding an inline value (flow list or scalar): rewrite it into block form
+/// with the action already applied. No change → no edit.
+fn rewrite_list(
+    edits: &mut Vec<TextEdit>,
+    key: &str,
+    last: &Occurrence,
+    folded: Vec<Value>,
+    action: &ListAction,
+) -> Option<Value> {
+    let before = inline_items(last.inline.as_ref());
+    let mut items = before.clone();
+    for value in folded {
+        if !items.contains(&value) {
+            items.push(value);
+        }
+    }
+    let mut popped = None;
+    match action {
+        ListAction::Push { value } => items.push(value.clone()),
+        ListAction::Insert { index, value } => {
+            items.insert((*index).min(items.len()), value.clone())
+        }
+        ListAction::Remove { value } => items.retain(|item| item != value),
+        ListAction::Pop => popped = items.pop(),
+    }
+    if items == before && edits.is_empty() {
+        return popped;
+    }
+    let mut block = format!("{key}:\n");
+    for item in &items {
+        block.push_str(&item_line(DEFAULT_INDENT, item));
+    }
+    edits.push(TextEdit {
+        range: last.header,
+        text: block,
+    });
+    popped
+}
+
+/// The edit that adds a new `%%% plugin_id` section holding `body` to the end of
+/// the trailing run, creating the run when the document has none.
+fn new_section(text: &str, parsed: &sections::Sections, plugin_id: &str, body: &str) -> TextEdit {
+    let fenced = format!("%%% {plugin_id}\n{body}%%%\n");
+    match parsed.run_span {
+        Some(run) => TextEdit {
+            range: Span::new(run.end, run.end),
+            text: fenced,
+        },
+        None => {
+            let mut separator = String::new();
+            if !text.is_empty() {
+                if !text.ends_with('\n') {
+                    separator.push_str("\n\n");
+                } else if !text.ends_with("\n\n") {
+                    separator.push('\n');
+                }
+            }
+            TextEdit {
+                range: Span::new(text.len(), text.len()),
+                text: format!("{separator}{fenced}"),
+            }
+        }
+    }
 }
 
 /// Remove a plugin's whole `%%%` section (uninstall-with-purge path). Every

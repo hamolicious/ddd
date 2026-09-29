@@ -7,7 +7,7 @@
 //!
 //! | Method | Path | Behaviour |
 //! |---|---|---|
-//! | POST | `/api/uploads` | `{name, size, wrapper?, path?}` → a session: `{id, size, offset, chunk_size}` |
+//! | POST | `/api/uploads` | `{name, size, wrapper?}` → a session: `{id, size, offset, chunk_size}` |
 //! | GET | `/api/uploads/:id` | the session, so a client can resume from `offset` |
 //! | PATCH | `/api/uploads/:id?offset=n` | the next chunk, raw bytes; `offset` must be where the server is (else 409) |
 //! | POST | `/api/uploads/:id/complete` | once `offset == size`: the attachment, answered as `POST /api/attachments` does |
@@ -51,7 +51,7 @@ use crate::db::{GRIDFS_CHUNK_BYTES, GRIDFS_CHUNKS, GRIDFS_FILES};
 use crate::domain::{AttachmentView, Id, UploadSession, is_valid_id, new_id};
 use crate::error::{AppError, AppResult};
 use crate::routes::attachments::{
-    StoredBlob, created, record_upload, sanitize_filename, sniff_mime, wrapper_path,
+    StoredBlob, created, record_upload, sanitize_filename, sniff_mime,
 };
 use crate::state::AppState;
 use crate::telemetry::names;
@@ -87,8 +87,6 @@ pub struct CreateUpload {
     /// `POST /api/attachments`.
     #[serde(default)]
     pub wrapper: bool,
-    #[serde(default)]
-    pub path: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -144,8 +142,6 @@ pub async fn create(
             limit,
         });
     }
-    let path = wrapper_path(body.path.as_deref())?;
-
     let now = BsonDateTime::now();
     let session = UploadSession {
         id: new_id(),
@@ -156,7 +152,6 @@ pub async fn create(
         gridfs_id: Bson::ObjectId(ObjectId::new()),
         head: binary(Vec::new()),
         wrapper: body.wrapper,
-        path,
         attachment_id: None,
         document_id: None,
         created_at: now,
@@ -337,14 +332,7 @@ pub async fn complete(
         size: session.size,
         sha256,
     };
-    let (view, document_id) = record_upload(
-        &state,
-        &user,
-        blob,
-        session.wrapper,
-        session.path.as_deref(),
-    )
-    .await?;
+    let (view, document_id) = record_upload(&state, &user, blob, session.wrapper).await?;
 
     let mut set = doc! {
         "attachment_id": &view.id,

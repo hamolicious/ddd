@@ -1,6 +1,6 @@
 {
   "id": "markdown",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "name": "Markdown",
   "description": "The unified/remark to React pipeline, and the extension points over it.",
   "author": "Life Manager base distribution",
@@ -37,11 +37,20 @@
     },
     "components": {
       "protocol": "lm/markdown.component@^1.0"
+    },
+    "folders": {
+      "protocol": "lm/folders@^1.2",
+      "needs": [
+        "fileNew",
+        "look",
+        "onLookChange"
+      ],
+      "optional": true
     }
   },
   "provides": {
     "renderer": {
-      "protocol": "lm/markdown-renderer@1.0.0"
+      "protocol": "lm/markdown-renderer@2.1.0"
     },
     "task-states": {
       "protocol": "lm/markdown.taskState@1.0.0",
@@ -52,7 +61,7 @@
       "order": 45
     },
     "commands": {
-      "protocol": "lm/commands.command@1.0.0"
+      "protocol": "lm/commands.command@2.0.0"
     }
   },
   "peerLibraries": {

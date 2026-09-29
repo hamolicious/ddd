@@ -1,6 +1,6 @@
 # `plugins/base/` — the base distribution
 
-The visible app. Twenty-seven plugins that happen to ship with the server and are
+The visible app. Twenty-eight plugins that happen to ship with the server and are
 [installed like any other](../SPEC.md#62-package-manifest-capabilities) — individually
 replaceable, individually removable, and holding no privilege the kernel does not give
 every plugin.
@@ -32,11 +32,11 @@ dist/<id>/<version>/              build output = the installed layout the server
 | `notices` | the notice bell, in the header's `end` seat | — |
 | `sync-status` | the sync pill, in the header's `end` seat | — |
 | `router` | URL ↔ view (hash-based) | `router.route` |
-| `commands` | command registry, palette, keybindings | `commands.command`, `keybindings.default` |
+| `commands` | command registry, palette, keybindings; draws each command's `icon` name through `lm/icons`; serves `lm/commands` so other plugins can list and run commands | `commands`, `commands.command`, `keybindings.default` |
 | `themes` | theme registry + picker; overrides kernel tokens | `themes.theme` |
-| `doc-list` | browse/search/sort/filter, new document, Trash; local index is the default search provider | `search.provider` |
-| `folders` | drag-and-drop file tree over `fm.path`; every move is a splice; hosts other plugins' colours and icons for folder rows and entries in a folder's menu, and announces renames and deletes on `lm/folders.moved` | `folders.decoration`, `folders.menu-item` |
-| `folder-style` | a background and an icon for any folder, from "Color and icon…" in its menu, with black or white text by contrast; per-user, in settings; follows the folder through renames and deletes | — |
+| `doc-list` | browse/search/sort/filter (conditions shared with `folder-style` from `_shared/conditions.ts`, including "is inside note", "contains note", "list contains any of" and document values; properties and values suggested by the indexer when wired), new document, Trash; local index is the default search provider; an Actions button runs every command that `takes: "documents"` on the results listed | `search.provider` |
+| `folders` | drag-and-drop tree of notes: a folder is a note, its children listed in its own `%%% folders` section, and every move is a list splice; serves `lm/folders` so other plugins can file notes; hosts other plugins' colours and icons for rows and entries in a row's menu | `folders`, `folders.decoration`, `folders.menu-item` |
+| `folder-style` | a background and an icon for any note in the tree, from "Color and icon…" in its menu, with black or white text by contrast; defaults and rules (the same conditions as the document list's filters) for the rest, in Settings — a note's own look always wins; per-user, in settings, by note id | — |
 | `icons` | the Tabler icon set, packed at build time from a pinned npm tarball (`tabler.json`, `build.mjs`) and fetched a shard at a time; serves `lm/icons`: `Icon`, `Picker`, search | — |
 | `markdown` | the unified/remark → React pipeline | `markdown.directive/fence/codeBlock/remark/component/taskState/attachment` |
 | `attachments` | paste-to-upload in the editor; shows embedded files through a viewer per file type; serves its resumable upload service (`lm/attachments`) | `attachments.viewer` |
@@ -53,6 +53,7 @@ dist/<id>/<version>/              build output = the installed layout the server
 | `indexer` | workspace stats, every frontmatter field and its values, each note's incoming and outgoing connections — rebuilt locally on every edit, read through its service | — |
 | `fm-autocomplete` | while typing frontmatter in an editor, suggests the keys in use and then the typed key's values, from `indexer` | — |
 | `graph` | every note and its links as a live force-directed graph: the whole workspace at `#/graph`, the open note's neighbourhood in the altbar; built from `indexer`'s documents and outgoing connections | — |
+| `emoji` | `:tada:` reads as 🎉 (GitHub's gemoji set, packed at build time from a pinned npm tarball); typing `:ta` in an editor suggests shortcodes | — |
 
 That is the whole table. `calendar` and `agenda` — M4's proof plugins, which shipped here
 and were never in `BASE_PLUGIN_IDS` — were **removed** on 2026-09-24 at the owner's
@@ -103,9 +104,11 @@ flowchart TD
     changes --> markdown & router & shell-ui & context-menu
     folder-style --> context-menu
     folder-style -.-> icons
+    commands -.-> icons
+    doc-list -.-> commands & icons
 ```
 
-`attachments`, `commands`, `editor`, `header`, `icons`, `native-preview`, `notices`,
+`attachments`, `editor`, `header`, `native-preview`, `notices`,
 `slash-commands`, `sync-status`, `syntax-highlight` and `welcome` are not drawn because
 they use no service: everything they do goes through **slots**, which never order
 activation. A slot is many-to-one — providers offer items on a provided port, a host
@@ -120,13 +123,14 @@ put items in the bar without either side naming the other; `commands` hosts ever
 decoration on `editor.extension` and a section on `settings.section`. Turning any one of
 them off costs its own feature and nothing downstream.
 
-The one message that points the other way is an **event**: `folders` tells `doc-list`
-where unfiled documents go on `lm/folders.default-location`, a sticky event, because
-`folders` already uses `doc-list`'s `lm/document-browser` and a service the other way
-round would be a cycle. `folders` also announces renames and deletes on
-`lm/folders.moved`, which is how `folder-style` keeps a folder's look with the folder;
-the look itself reaches the tree through the `folders.decoration` slot, and the "Color and
-icon…" entry through `folders.menu-item`, so `folders` never learns the plugin exists.
+The one message that points the other way is an **event**: `doc-list` announces every
+document it creates on `lm/document-browser.created`, with the caller's `parent` hint, and
+`folders` files it — under that parent, or its "new notes go to" note. An event because
+`folders` already uses `doc-list`'s `lm/document-browser`, and a service the other way
+round would be a cycle. A row's look reaches the tree through the `folders.decoration`
+slot and the "Color and icon…" entry through `folders.menu-item`, both keyed by note id,
+so `folders` never learns `folder-style` exists. `welcome` and the `obsidian-importer`
+example file their notes through `folders`' `lm/folders` service, optionally.
 
 Reading it bottom-up: `shell-ui` owns the frame everyone renders into and serves the
 layout (`lm/shell`); `router` turns URLs into views and is the service almost everything
@@ -166,9 +170,9 @@ the kernel no `extensions` or `services`.
 
 ## Machine-owned documents
 
-`doc-list`, `folders` and `search` leave out any document whose `fm.path` starts with
-`.` — the kernel's per-user settings documents (SPEC §6.4) are the ones that exist
-today. The rule, the predicate and the DSL clause live in one place,
+`doc-list`, `folders` and `search` leave out any document marked `machine: true` in its
+frontmatter — the kernel's per-user settings documents (SPEC §6.4) are the main ones.
+The rule, the predicate and the DSL clause live in one place,
 `_shared/machine-docs.ts`, precisely so the three cannot drift about what they are
 hiding: a sidebar counting twelve above a list of eleven is the bug this replaced.
 
@@ -177,25 +181,20 @@ domain model — a document is text — and "machine-owned" is not part of it (S
 Nothing changes about what the server returns, what the local index holds or what
 `kernel.documents` answers, every one of these documents stays readable, editable and
 linkable, and `doc-list`'s filter bar and `search`'s results page each carry a toggle
-that brings them back. A plugin that wants machine-owned documents of its own gets the
-same treatment by filing them under a dotted path — there is no list of special paths
-for anyone to keep up to date.
+that brings them back. A plugin that wants machine-owned documents of its own writes the
+same line — there is no list of special documents for anyone to keep up to date.
 
-`folders` has no toggle, deliberately: a hidden folder in a tree is a row that looks
-like every other folder and behaves differently, and a rename there would splice
-`fm.path` on documents the kernel authors.
+`folders` has no toggle, deliberately: a hidden note in a tree is a row that looks like
+every other and behaves differently.
 
 **Hiding is a read rule; the write needs its own.** Filtering a query protects what a
 view *draws* and nothing else, and `folders` reaches its write path from places that
-never ran the query: the `folders.moveDocument` command takes an id out of the URL, and
-a drop reads `text/plain` off a `DataTransfer` any plugin may have filled in. Aimed at
-the kernel's per-user settings document that wrote `fm.path` on it and moved it out of
-`.settings`, where the settings host's own query is looking — leaving every stored
-setting reading as its schema default. So `folders` checks the document's *stored*
-`fm.path` at the splice (`refuseMachineWrite`), and refuses a dotted **destination** too,
-because `.hidden` typed into an inline folder rename is the same hole from the other
-side. Anyone adding a write here inherits that obligation; `EXCLUDE_MACHINE_DOCUMENTS` on
-a subscription is not it.
+never ran the query: the "Move this note" command takes an id out of the URL, a drop
+reads `text/plain` off a `DataTransfer` any plugin may have filled in, and the
+`lm/folders` service files whatever it is given. So `folders` checks the document's
+*stored* frontmatter before every write (`refuseMachine`), for the note being filed and
+for the note it is filed into. Anyone adding a write here inherits that obligation;
+`EXCLUDE_MACHINE_DOCUMENTS` on a subscription is not it.
 
 ## The shared files, and why each is not a protocol
 
@@ -221,29 +220,26 @@ in the protocol packages, never here.
 
 ## The folder tree
 
-`folders` renders folders *and* documents as one `role="tree"`: a document with no
-`fm.path` is a row at the root, beside the top-level folders, because that is where it
-is. Dragging a document onto a folder is one `setFrontmatterValue`; onto **Root** it is
-one `removeFrontmatterKey`; dragging a *folder* is one splice per document inside it,
-planned first (`src/moves.ts`) so the move has a total to show progress against and can
-be re-planned against the live projection after a partial failure. A folder is only a
-prefix, so dropping `a/notes` into `b` when `b/notes` exists **merges** them — there is
-no record to collide.
+A folder is a note. Its children are listed, in order, in its own `%%% folders` section
+under `children`, one id per line; any note can hold children, and one nobody lists is a
+row at the root. `folders` draws them as one `role="tree"` (`src/hierarchy.ts` reads the
+lists, `src/tree.ts` turns them into rows).
 
-Two things `fm.path` alone cannot express, both held in this plugin's own per-user
-settings: a folder that holds no document yet (`emptyFolders`, dropped the moment one
-lands in it) and which folders the user has **collapsed** (stored as the negative, so an
-untouched tree is open). `emptyFolders` is a whole list under one settings key, so two
-devices creating a folder at the same moment write it concurrently and the host keeps one
-line (SPEC §3.3, last occurrence wins) — which silently lost the folder made on the
-losing device. A write is therefore **merged, not adopted**: entries this device wrote and
-has not yet read back are folded into the stored list (`mergeTracked`), and an entry stops
-being defended the first time a stored value contains it, so a folder deleted later on
-another device stays deleted. A stale entry costs nothing (the tree draws it from
-`fm.path` anyway); a dropped one is a folder the user made and cannot see. Everything reachable by drag is reachable without one — a
-long-press, a right-click, the row's `⋯`, or `M` opens a portalled sheet with Move to…,
-New document/folder here, Rename and Delete — because HTML5 drag and drop does not fire
-from touch.
+**Every move is a list splice** (`kernel.documents.splice.sectionList`): one line pushed
+or inserted into the new parent, one removed from the old; the moved note is not written
+at all. Line-sized writes are what let two devices file notes into one folder at once and
+keep both. The new parent is written first, so an interrupted move leaves the note in two
+lists — drawn once, under the parent with the smaller id, and repaired by its next move —
+rather than in none. A loop (a note listed under its own descendant) is cut at its
+smallest id so nothing disappears.
+
+Per user, in settings: which notes are **collapsed** (stored as the negative, so an
+untouched tree is open), the order of the notes at the root (`rootOrder`; every other
+level's order is its parent's list), and where new notes and new file documents are
+filed ("New notes go to", "Files go to"). Everything reachable by drag is reachable
+without one — a long-press, a right-click, the row's `⋯`, or `M` opens a portalled sheet
+with Move to…, New note inside, Rename and Delete — because HTML5 drag and drop does not
+fire from touch.
 
 ## Building
 

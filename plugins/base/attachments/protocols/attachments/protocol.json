@@ -1,6 +1,6 @@
 {
   "id": "lm/attachments",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "kind": "service",
   "owner": "attachments",
   "types": "index.d.ts",

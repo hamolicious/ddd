@@ -346,6 +346,16 @@ fi
 flutter build apk "${@:---debug}"
 '''
 
+[tasks.desktop-run]
+description = "Linux desktop shell (Tauri, `desktop/`) against the local server on :$PORT — needs webkit2gtk-4.1"
+dir = "desktop"
+run = 'cargo run -- --server "${LM_SERVER_URL:-http://localhost:${PORT:-8080}}"'
+
+[tasks.desktop-bundle]
+description = "Build the Linux desktop shell's .deb and AppImage — needs `cargo install tauri-cli --version ^2`"
+dir = "desktop"
+run = "cargo tauri build"
+
 [tasks.harness]
 description = "Convergence harness against a running server (SPEC §9 M2)"
 dir = "web"

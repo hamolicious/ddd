@@ -12,6 +12,7 @@
 
 import { embedReplace, embedToggle, type EmbedLocation } from "./embed-toggle.js";
 import type { Kernel } from "@kernel";
+import type { Folders, NoteLook } from "@protocols/lm/folders";
 import type { Router } from "@protocols/lm/router";
 
 import { regionsOf } from "../../_shared/regions.js";
@@ -68,6 +69,10 @@ export interface MarkdownRuntime {
   openDocument(id: string, fragment?: string | null): void;
   /** The target's title from the local projection — offline-correct (SPEC §4.1). */
   titleOf(id: string): Promise<string | undefined>;
+  /** The note's colour and icon from `folders`, when it is wired. */
+  lookOf(id: string): NoteLook | undefined;
+  /** Fires when any {@link lookOf} answer may have changed. */
+  onLookChange(listener: () => void): () => void;
   /** Attachment metadata over the authenticated session. */
   attachmentMeta(id: string): Promise<AttachmentMeta | null>;
   /** The attachment's bytes as an object URL, or `null` when unavailable. */
@@ -85,7 +90,7 @@ export interface MarkdownRuntime {
    */
   promoteEmbed(attachmentId: string, site?: EmbedSite): Promise<string>;
   /** SPEC §3.6: create the wrapper document for an embedded attachment. */
-  promote(attachmentId: string, options?: { readonly path?: string }): Promise<string>;
+  promote(attachmentId: string): Promise<string>;
   /** The one checkbox write path: a validated single-character text splice. */
   writeTaskMarker(request: TaskWriteRequest): Promise<void>;
   /** Flip an embedded attachment between preview and link: add or remove its `!`. */
@@ -220,6 +225,20 @@ export function createRuntime(kernel: Kernel): MarkdownRuntime & { dispose(): vo
       return row?.title;
     },
 
+    lookOf: (id) => {
+      if (!kernel.ports.bound("folders")) return undefined;
+      try {
+        return kernel.ports.use<Pick<Folders, "look">>("folders").look(id);
+      } catch {
+        return undefined;
+      }
+    },
+
+    onLookChange: (listener) => {
+      if (!kernel.ports.bound("folders")) return () => undefined;
+      return kernel.ports.use<Pick<Folders, "onLookChange">>("folders").onLookChange(listener);
+    },
+
     attachmentMeta: (id) => {
       const existing = metaCache.get(id);
       if (existing) return existing;
@@ -272,13 +291,19 @@ export function createRuntime(kernel: Kernel): MarkdownRuntime & { dispose(): vo
       return created;
     },
 
-    promote: async (attachmentId, options) => {
+    promote: async (attachmentId) => {
       const meta = await runtime.attachmentMeta(attachmentId);
       const title = meta?.name ?? attachmentId;
-      const lines = ["---", `title: ${yamlScalar(title)}`];
-      if (options?.path) lines.push(`path: ${yamlScalar(options.path)}`);
-      lines.push("---", "", `![${title.replace(/[[\]]/g, "")}](attachment://${attachmentId})`, "");
-      return kernel.documents.create({ text: lines.join("\n") });
+      const lines = ["---", `title: ${yamlScalar(title)}`, "---", "", `![${title.replace(/[[\]]/g, "")}](attachment://${attachmentId})`, ""];
+      const id = await kernel.documents.create({ text: lines.join("\n") });
+      // Filed where "Files go to" says, through `folders` (optional: unwired, it stays at the root).
+      if (kernel.ports.bound("folders")) {
+        await kernel.ports
+          .use<Pick<Folders, "fileNew">>("folders")
+          .fileNew(id, "file")
+          .catch((cause: unknown) => kernel.log.warn("could not file the promoted document", cause));
+      }
+      return id;
     },
 
     writeTaskMarker: async ({ documentId, offset, expected, ordinal, next, rescan }) => {
@@ -341,10 +366,10 @@ function yamlScalar(value: string): string {
   const needsQuotes =
     control || /^["'\s>|@`%&*!{}[\],#?:-]|[:#]\s|\s$|^$|^(?:true|false|null|~|-?\d)/i.test(value);
   if (!needsQuotes) return value;
-  // Control characters are escaped, never emitted raw: `options.path` comes from an
-  // `fm.path` value any workspace user can write, and a raw newline inside a quoted
-  // scalar is not a quoted scalar — it is an injected second frontmatter line
-  // (`core::value::quote_double` is the rule both sides follow).
+  // Control characters are escaped, never emitted raw: a filename comes from whoever
+  // uploaded it, and a raw newline inside a quoted scalar is not a quoted scalar — it is
+  // an injected second frontmatter line (`core::value::quote_double` is the rule both
+  // sides follow).
   let out = '"';
   for (const character of value) {
     const code = character.codePointAt(0) as number;

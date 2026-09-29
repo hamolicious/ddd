@@ -1,6 +1,6 @@
 # lm/attachments
 
-`1.0.0` · service · owned by `attachments`
+`2.0.0` · service · owned by `attachments`
 
 Uploading files through the server's resumable chunk protocol.
 

@@ -26,7 +26,7 @@ const LOGIN_ATTEMPT_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 /// The complete index list. Add here, never elsewhere.
 ///
 /// Required coverage:
-/// - `documents`: `title`, `updated_at`, `deleted_at`, `fm.path`, `fm.date`, a
+/// - `documents`: `title`, `updated_at`, `deleted_at`, `fm.date`, a
 ///   wildcard index over the `fm` subtree (the filter DSL queries arbitrary
 ///   `fm.*` paths), text index over `title` + `content` (server-side search
 ///   provider).
@@ -85,22 +85,16 @@ pub fn all() -> Vec<IndexSpec> {
         ),
         index(
             super::DOCUMENTS,
-            "documents_fm_path",
-            doc! { "fm.path": 1 },
-            None,
-        ),
-        index(
-            super::DOCUMENTS,
             "documents_fm_date",
             doc! { "fm.date": 1 },
             None,
         ),
         // The filter DSL compiles to queries over *arbitrary* `fm.*` paths
-        // (SPEC §4.2), so the two named frontmatter indexes above cannot be the
-        // whole story: a wildcard index over the `fm` subtree is what keeps
-        // `filter={"field":"fm.status",…}` off a collection scan. `fm.path` and
-        // `fm.date` stay as dedicated indexes because they also serve sorts,
-        // which a wildcard index cannot.
+        // (SPEC §4.2), so the named frontmatter index above cannot be the whole
+        // story: a wildcard index over the `fm` subtree is what keeps
+        // `filter={"field":"fm.status",…}` off a collection scan (and serves
+        // `fm.machine`). `fm.date` stays a dedicated index because it also serves
+        // sorts, which a wildcard index cannot.
         index(
             super::DOCUMENTS,
             "documents_fm_wildcard",

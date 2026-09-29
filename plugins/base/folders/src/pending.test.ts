@@ -1,48 +1,48 @@
-/**
- * The moves drawn ahead of the projection: the tree shows where a document is going
- * the moment it is dropped, and hands back to the projection as soon as it agrees.
- */
-
 import { describe, expect, it } from "vitest";
 
-import { settledMoves, withPendingPaths } from "./pending.js";
-import type { PathRow } from "./path.js";
+import type { NoteRow } from "./hierarchy.js";
+import { settledMoves, withPendingMoves, type PendingPlace } from "./pending.js";
 
-const row = (id: string, path?: string): PathRow => ({
-  id,
-  title: id,
-  fm: path === undefined ? { title: id } : { title: id, path },
-});
+const note = (id: string, children: readonly string[] = []): NoteRow => ({ id, title: id, children });
 
-describe("withPendingPaths", () => {
-  it("draws a moved document in its new folder before the projection has it", () => {
-    const rows = [row("doc", "a"), row("other", "a")];
-    expect(withPendingPaths(rows, new Map([["doc", "b"]]))).toEqual([row("doc", "b"), row("other", "a")]);
+describe("withPendingMoves", () => {
+  const rows = [note("p", ["a", "b"]), note("q"), note("a"), note("b")];
+
+  it("draws a note where it was asked to go", () => {
+    const next = withPendingMoves(rows, new Map<string, PendingPlace>([["a", { parent: "q" }]]));
+    expect(next.find((row) => row.id === "p")?.children).toEqual(["b"]);
+    expect(next.find((row) => row.id === "q")?.children).toEqual(["a"]);
   });
 
-  it("draws a move to root as a document with no path key at all", () => {
-    expect(withPendingPaths([row("doc", "a")], new Map([["doc", ""]]))).toEqual([row("doc")]);
+  it("places it before a sibling", () => {
+    const next = withPendingMoves(rows, new Map([["b", { parent: "p", before: "a" }]]));
+    expect(next.find((row) => row.id === "p")?.children).toEqual(["b", "a"]);
   });
 
-  it("returns the projection untouched when nothing is in flight", () => {
-    const rows = [row("doc", "a")];
-    expect(withPendingPaths(rows, new Map())).toBe(rows);
+  it("takes it out of every list for the root", () => {
+    const next = withPendingMoves(rows, new Map([["a", { parent: "" }]]));
+    expect(next.find((row) => row.id === "p")?.children).toEqual(["b"]);
+  });
+
+  it("returns the rows untouched when nothing is pending", () => {
+    expect(withPendingMoves(rows, new Map())).toBe(rows);
   });
 });
 
 describe("settledMoves", () => {
-  it("settles a move once the projection says the same thing", () => {
-    const pending = new Map([["doc", "b"]]);
-    expect(settledMoves([row("doc", "a")], pending)).toEqual([]);
-    expect(settledMoves([row("doc", "b")], pending)).toEqual(["doc"]);
-    expect(settledMoves([row("doc", "/b/")], pending)).toEqual(["doc"]);
+  it("settles once the projection shows the same parent", () => {
+    const pending = new Map([["a", { parent: "q" }]]);
+    expect(settledMoves([note("p", ["a"]), note("q"), note("a")], pending)).toEqual([]);
+    expect(settledMoves([note("p"), note("q", ["a"]), note("a")], pending)).toEqual(["a"]);
   });
 
-  it("settles a move to root once the path key is gone", () => {
-    expect(settledMoves([row("doc")], new Map([["doc", ""]]))).toEqual(["doc"]);
+  it("waits for the order too when a sibling was named", () => {
+    const pending = new Map([["b", { parent: "p", before: "a" }]]);
+    expect(settledMoves([note("p", ["a", "b"]), note("a"), note("b")], pending)).toEqual([]);
+    expect(settledMoves([note("p", ["b", "a"]), note("a"), note("b")], pending)).toEqual(["b"]);
   });
 
-  it("gives up on a document the projection no longer has", () => {
-    expect(settledMoves([], new Map([["doc", "b"]]))).toEqual(["doc"]);
+  it("drops a move whose note is gone", () => {
+    expect(settledMoves([note("p")], new Map([["a", { parent: "p" }]]))).toEqual(["a"]);
   });
 });

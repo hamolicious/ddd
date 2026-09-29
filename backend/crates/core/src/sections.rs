@@ -230,16 +230,23 @@ pub fn key_line_span(text: &str, section: &MachineSection, key: &str) -> Option<
     key_line_spans(text, section, key).pop()
 }
 
-/// Every line span defining `key` inside `section`, in document order.
+/// Every line span defining `key` inside `section`, in document order. A key
+/// holding a block sequence spans its item lines too, so rewriting or removing
+/// it never strands an item.
 pub(crate) fn key_line_spans(text: &str, section: &MachineSection, key: &str) -> Vec<Span> {
     let body = section.body_span.slice(text);
-    yaml::lines(body)
-        .into_iter()
-        .filter(|line| yaml::line_key(line.content).as_deref() == Some(key))
-        .map(|line| {
+    let body_lines = yaml::lines(body);
+    body_lines
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| yaml::line_key(line.content).as_deref() == Some(key))
+        .map(|(index, line)| {
+            let end = yaml::expanded_value_end(&body_lines, index)
+                .map(|last| last.full_end)
+                .unwrap_or(line.full_end);
             Span::new(
                 section.body_span.start + line.start,
-                section.body_span.start + line.full_end,
+                section.body_span.start + end,
             )
         })
         .collect()

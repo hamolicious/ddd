@@ -1,6 +1,7 @@
 /**
  * `welcome` — fills a new, empty workspace with a short tour (`content.ts`): one note per
- * base feature, under the `welcome` folder, all deletable.
+ * base feature, all deletable, filed inside the first one through the `folders` service
+ * when it is wired (the tour still works as linked notes when it is not).
  *
  * **Once per workspace.** After the first complete sync, if the hidden marker note is
  * missing: an empty workspace gets the tour, a workspace that already has notes gets
@@ -16,6 +17,7 @@
  */
 
 import type { Kernel } from "@kernel";
+import type { Folders } from "@protocols/lm/folders";
 
 import { withoutMachineDocuments } from "../../_shared/machine-docs.js";
 
@@ -41,18 +43,28 @@ async function seed(kernel: Kernel): Promise<void> {
     includeDeleted: true,
   });
   if (existing.total === 0) {
-    for (const note of TOUR) await createOnce(kernel, note.id, note.text);
+    const folders = kernel.ports.bound("folders") ? kernel.ports.use<Pick<Folders, "file">>("folders") : undefined;
+    for (const note of TOUR) {
+      // Filed only when this device made it: a note another device seeded is filed there.
+      const made = await createOnce(kernel, note.id, note.text);
+      if (made && note.parent !== undefined) {
+        await folders?.file(note.id, note.parent).catch((error: unknown) => {
+          kernel.log.warn(`could not file the tour note ${note.id}`, error);
+        });
+      }
+    }
   }
   await createOnce(kernel, MARKER_ID, MARKER_TEXT);
 }
 
-/** Create, treating "already exists" and "deleted for good" as done. */
-async function createOnce(kernel: Kernel, id: string, text: string): Promise<void> {
+/** Create, treating "already exists" and "deleted for good" as done. `true` when this call made it. */
+async function createOnce(kernel: Kernel, id: string, text: string): Promise<boolean> {
   try {
     await kernel.documents.create({ id, text });
+    return true;
   } catch (error) {
     const status = (error as { status?: number }).status;
-    if (status === 409 || status === 410) return;
+    if (status === 409 || status === 410) return false;
     throw error;
   }
 }

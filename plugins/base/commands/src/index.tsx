@@ -30,6 +30,14 @@
  * offers an always-mounted overlay. There is no button in the top bar: Mod+K (or
  * whatever it is rebound to) is the way in.
  *
+ * **A command that `takes` documents is not the palette's.** It needs ids to act on, and
+ * neither the palette nor a keystroke has any; the document list's Actions button runs
+ * it, through the `lm/commands` service this plugin serves. The palette, the keybindings
+ * table and the dispatcher all leave it out.
+ *
+ * **Icons are names, drawn through `lm/icons`** when something serves it. Without it the
+ * palette simply has no icons.
+ *
  * **Settings may be unavailable.** `kernel.settings` is document-backed (SPEC §6.4), so a
  * replaced kernel or a future contract can throw from it. Letting that escape
  * `activate()` would take this plugin *and every dependent* down (SPEC §6.4's failure
@@ -62,6 +70,8 @@ import {
 import { Palette } from "./Palette.js";
 
 import type { Command } from "@protocols/lm/commands.command";
+import type { Commands } from "@protocols/lm/commands";
+import type { Icons } from "@protocols/lm/icons";
 import type { KeybindingDefault } from "@protocols/lm/keybindings.default";
 import type { SettingsSection } from "@protocols/lm/settings.section";
 import type { ShellOverlay } from "@protocols/lm/shell.overlay";
@@ -98,6 +108,13 @@ export default function activate(kernel: Kernel): CommandsApi {
   // below; the protocol packages carry the shapes and the duplicate keys.
   const commands = kernel.ports.collect<Command>("commands");
   const keybindings = kernel.ports.collect<KeybindingDefault>("keys");
+  const icons = (): Pick<Icons, "Icon"> | undefined =>
+    kernel.ports.bound("icons") ? kernel.ports.use<Pick<Icons, "Icon">>("icons") : undefined;
+
+  /** What the palette and keys can run: everything that needs no documents handed to it. */
+  const runnable = (): readonly Command[] => api.list().filter((command) => command.takes === undefined);
+  const takesArgument = (id: string): boolean =>
+    commands.get().some((command) => command.id === id && command.takes !== undefined);
 
   // ---------------------------------------------------------------------------
   // Settings, guarded (see the module header)
@@ -224,7 +241,7 @@ export default function activate(kernel: Kernel): CommandsApi {
     const literal = apple ? undefined : candidate.replace(/\bMod\+/g, "Ctrl+");
     const commandId =
       resolved.byKeys.get(candidate) ?? (literal !== undefined ? resolved.byKeys.get(literal) : undefined);
-    if (commandId !== undefined) {
+    if (commandId !== undefined && !takesArgument(commandId)) {
       clearPending();
       event.preventDefault();
       void api.run(commandId).catch((cause: unknown) => {
@@ -258,12 +275,14 @@ export default function activate(kernel: Kernel): CommandsApi {
       id: "commands.openPalette",
       title: "Show all commands",
       category: "Commands",
+      icon: "command",
       run: () => api.openPalette(),
     },
     {
       id: "commands.keybindings",
       title: "Edit keybindings",
       category: "Commands",
+      icon: "keyboard",
       run: () => {
         location.hash = "/settings";
       },
@@ -291,12 +310,14 @@ export default function activate(kernel: Kernel): CommandsApi {
     const bindings = useBindings();
     const [open, setOpen] = useState(paletteOpen);
     useEffect(() => api.onPaletteToggle(setOpen), []);
+    const Icon = icons()?.Icon;
 
     return (
       <>
         {open && (
           <Palette
-            commands={api.list()}
+            commands={runnable()}
+            {...(Icon ? { renderIcon: (name: string) => <Icon name={name} /> } : {})}
             bindingFor={(id) => bindings.byCommand.get(id)}
             initialQuery={paletteQuery}
             conflictCount={bindings.conflicts.length}
@@ -327,7 +348,7 @@ export default function activate(kernel: Kernel): CommandsApi {
     order: 200,
     description: "Change any command's shortcut.",
     component: createKeybindingsSection({
-      commands: () => api.list(),
+      commands: runnable,
       bindings: () => resolved,
       subscribe: (listener) => {
         changeListeners.add(listener);
@@ -393,6 +414,7 @@ export default function activate(kernel: Kernel): CommandsApi {
     },
   };
 
+  kernel.ports.serve<Commands>("api", api);
   return api;
 }
 

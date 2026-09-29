@@ -1,5 +1,5 @@
 /**
- * The tour: one short note per base feature, all under the `welcome` folder.
+ * The tour: one short note per base feature, all inside the first one, "Welcome".
  *
  * Plain markdown, readable without any plugin, and user-facing: what to try, not how it
  * works. Ids are fixed (valid ULIDs), so seeding twice can never duplicate a note, and
@@ -28,6 +28,8 @@ export const IDS = {
 export interface TourNote {
   readonly id: string;
   readonly text: string;
+  /** The note it is filed inside, in the folder tree. */
+  readonly parent?: string;
 }
 
 const link = (title: string, target: string): string => `[${title}](doc://${target})`;
@@ -37,7 +39,6 @@ export const TOUR: readonly TourNote[] = [
     id: IDS.welcome,
     text: `---
 title: Welcome to Life Manager
-path: welcome
 tags: [tour]
 ---
 
@@ -50,7 +51,7 @@ them.
 - ${link("Writing in markdown", IDS.writing)}
 - ${link("Tasks and lists", IDS.tasks)}
 - ${link("Properties", IDS.properties)}
-- ${link("Folders come from frontmatter", IDS.folders)}
+- ${link("Folders are notes", IDS.folders)}
 - ${link("Embedding notes", IDS.embeds)}
 - ${link("Files and images", IDS.files)}
 - ${link("Finding things", IDS.finding)}
@@ -64,9 +65,9 @@ phone).
   },
   {
     id: IDS.writing,
+    parent: IDS.welcome,
     text: `---
 title: Writing in markdown
-path: welcome
 tags: [tour]
 ---
 
@@ -108,9 +109,9 @@ A line like the one above separates sections.
   },
   {
     id: IDS.tasks,
+    parent: IDS.welcome,
     text: `---
 title: Tasks and lists
-path: welcome
 tags: [tour]
 ---
 
@@ -127,9 +128,9 @@ Ticking works in **Read** mode too: the note changes, and every device sees it.
   },
   {
     id: IDS.properties,
+    parent: IDS.welcome,
     text: `---
 title: Properties
-path: welcome
 tags: [tour, example]
 status: in progress
 priority: 2
@@ -144,7 +145,6 @@ The block at the top of a note (between the \`---\` lines, in **Edit**) holds it
 properties. **Read** shows them as the table above this text.
 
 - \`title\` names the note
-- \`path\` puts it in a folder
 - \`tags\`, dates, numbers, yes/no and lists all work
 
 Filter and sort the note list by any of them.
@@ -152,26 +152,27 @@ Filter and sort the note list by any of them.
   },
   {
     id: IDS.folders,
+    parent: IDS.welcome,
     text: `---
-title: Folders come from frontmatter
-path: welcome/examples
+title: Folders are notes
 tags: [tour]
 ---
 
-# Folders come from frontmatter
+# Folders are notes
 
-This note is in **welcome › examples** because its \`path\` says \`welcome/examples\`.
+This note sits inside **Welcome to Life Manager** in the sidebar: any note can hold other
+notes, and one that does is a folder.
 
-- Drag a note onto a folder in the sidebar to move it
-- A folder's ⋯ menu renames, moves or deletes it
-- Moving a note changes one line of its text, nothing else
+- Drag a note onto another in the sidebar to put it inside
+- Drag it onto the top or bottom edge of a note to put it next to that one
+- A note's ⋯ menu moves, renames or deletes it
 `,
   },
   {
     id: IDS.embeds,
+    parent: IDS.welcome,
     text: `---
 title: Embedding notes
-path: welcome
 tags: [tour]
 ---
 
@@ -188,9 +189,9 @@ Settings → Markdown sets how many levels deep embeds go.
   },
   {
     id: IDS.files,
+    parent: IDS.welcome,
     text: `---
 title: Files and images
-path: welcome
 tags: [tour]
 ---
 
@@ -208,9 +209,9 @@ Admin → Orphan files lists files no note uses any more.
   },
   {
     id: IDS.finding,
+    parent: IDS.welcome,
     text: `---
 title: Finding things
-path: welcome
 tags: [tour]
 ---
 
@@ -224,9 +225,9 @@ tags: [tour]
   },
   {
     id: IDS.history,
+    parent: IDS.welcome,
     text: `---
 title: History and changes
-path: welcome
 tags: [tour]
 ---
 
@@ -244,9 +245,9 @@ Try it: edit this line, then look at the side panel.
   },
   {
     id: IDS.keyboard,
+    parent: IDS.welcome,
     text: `---
 title: Keyboard and commands
-path: welcome
 tags: [tour]
 ---
 
@@ -261,9 +262,9 @@ tags: [tour]
   },
   {
     id: IDS.directives,
+    parent: IDS.welcome,
     text: `---
 title: Directives and machine sections
-path: welcome/examples
 tags: [tour]
 ---
 
@@ -287,10 +288,10 @@ seeded: true
   },
 ];
 
-/** Hidden (a dotted path): its existence means the tour was offered. */
+/** Hidden (machine-owned): its existence means the tour was offered. */
 export const MARKER_TEXT = `---
 title: Welcome tour
-path: .welcome
+machine: true
 ---
 
 The welcome plugin offered its tour here once; this note keeps it from doing so again.

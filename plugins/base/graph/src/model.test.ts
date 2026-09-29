@@ -8,13 +8,14 @@ import { buildGraph, DEFAULT_FILTER, neighbourhood, shapeKey } from "./model.js"
 function source() {
   const index = new WorkspaceIndex();
   index.sync([
-    row("A", "[b](doc://B) [b again](doc://B) ![c](doc://C) [gone](doc://Z) [trash](doc://T)", { title: "Alpha", path: "work/x" }),
-    row("B", "[a](doc://A)", { title: "Beta", path: "work" }),
+    row("A", "[b](doc://B) [b again](doc://B) ![c](doc://C) [gone](doc://Z) [trash](doc://T)", { title: "Alpha" }),
+    row("B", "[a](doc://A)", { title: "Beta" }, { plugins: { folders: { children: ["A"] } } }),
     row("C", "[d](doc://D)", { title: "Gamma", parent: "doc://A" }),
-    row("D", "end", { title: "Delta", path: "home" }),
-    row("L", "alone", { title: "Lone" }),
+    row("D", "end", { title: "Delta" }),
+    // A folder holding Beta (and so Alpha): no links, so an orphan in the graph.
+    row("L", "alone", { title: "Work" }, { plugins: { folders: { children: ["B"] } } }),
     row("T", "[a](doc://A)", { title: "Trashed" }, { deleted: true }),
-    row("S", "[a](doc://A)", { path: ".settings" }),
+    row("S", "[a](doc://A)", { machine: true }),
   ]);
   return index;
 }
@@ -55,7 +56,7 @@ describe("buildGraph", () => {
 
   it("searches titles and folders, keeping only links between matches", () => {
     const graph = buildGraph(source(), { ...DEFAULT_FILTER, search: "WORK" });
-    expect(ids(graph)).toEqual(["A", "B"]);
+    expect(ids(graph)).toEqual(["A", "B", "L"]);
     expect(pairs(graph)).toEqual(["A>B", "B>A"]);
   });
 });
@@ -68,14 +69,14 @@ describe("neighbourhood", () => {
     expect(pairs(neighbourhood(whole, "D", 2))).toEqual(["A>C", "C>A", "C>D"]);
   });
 
-  it("recounts degree inside the neighbourhood", () => {
-    expect(neighbourhood(buildGraph(source()), "D", 1).nodes.find((node) => node.id === "C")?.degree).toBe(1);
+  it("keeps each node's whole-graph degree inside the neighbourhood", () => {
+    expect(neighbourhood(buildGraph(source()), "D", 1).nodes.find((node) => node.id === "C")?.degree).toBe(3);
   });
 
   it("keeps the centre when a filter hid it", () => {
     const hidden = buildGraph(source(), { ...DEFAULT_FILTER, showOrphans: false });
     expect(neighbourhood(hidden, "L", 1, source()).nodes).toEqual([
-      { id: "L", title: "Lone", folder: "", missing: false, degree: 0 },
+      { id: "L", title: "Work", folder: "", missing: false, degree: 0 },
     ]);
   });
 });

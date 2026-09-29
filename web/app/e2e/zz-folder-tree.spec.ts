@@ -2,20 +2,15 @@
  * The folder tree as a file manager — verified against what the **server** ends up
  * holding, not against what the panel says it did.
  *
- * The owner's ask was "folder plugin should render as actual filetree, letting me drag
- * and drop files between folders, rearrange folders, add and delete folders" and "notes
- * with no folder just sit in root". Every one of those verbs is a write, and in this
- * product a metadata write has a shape as well as a result: **one line splice per
- * document** (SPEC §3.3). A move that produced the right `fm.path` by parsing the block
- * and writing it back would look identical in the tree and would have destroyed the
- * user's comments, key order and blank lines on the way. So each test below reads the
- * raw text over REST and byte-compares it against the fixture it started from — the same
- * standard `journeys.spec.ts` holds a *document* drag to, extended to the four writes
- * that drag never covered: a folder move, a drop on Root, a folder delete, and the
- * pointer-free path a phone has to use instead.
+ * A folder is a note: its children are listed in its own `%%% folders` section, one id
+ * per line. So every verb here is a write with a shape as well as a result: a move is one
+ * line added to the new parent's list and one line removed from the old one, and the note
+ * being moved is **not written at all**. Each test reads the raw text over REST and checks
+ * both halves — the lists say the right thing, and every other byte (a comment, the key
+ * order, another plugin's section) is where it was.
  *
  * Named `zz-` so it runs last. The suite shares one workspace and one account
- * (`playwright.app.config.ts`), and this file adds a dozen documents to it; several
+ * (`playwright.app.config.ts`), and this file adds a few dozen notes to it; several
  * earlier specs assert on workspace-wide counts, so arriving before them would make this
  * file's setup their flake.
  */
@@ -34,19 +29,18 @@ import {
 } from "./helpers.js";
 
 /**
- * A fixture document, written by hand so the splice assertion can be exact.
- *
- * The comment, the key order (`path` before `title`) and the blank line inside the block
- * are the three things a parse→re-serialize→replace round trip destroys and a splice
- * keeps. The `%%%` section is the fourth: it belongs to another plugin and nothing here
- * may touch it.
+ * A fixture note, written by hand so the byte-for-byte assertions can be exact: a
+ * comment, a blank line inside the block and another plugin's section are what a
+ * careless rewrite would lose. `children` makes it a folder.
  */
-function fixture(title: string, path: string | undefined): string {
-  const front = ["---", "# a comment only a splice survives"];
-  if (path !== undefined) front.push(`path: ${path}`);
-  front.push(`title: ${title}`, "", "tags: [alpha, beta]", "---");
-  return [
-    ...front,
+function fixture(title: string, children: readonly string[] = []): string {
+  const lines = [
+    "---",
+    "# a comment only a splice survives",
+    `title: ${title}`,
+    "",
+    "tags: [alpha, beta]",
+    "---",
     "",
     `# ${title}`,
     "",
@@ -55,11 +49,18 @@ function fixture(title: string, path: string | undefined): string {
     "%%% sweep-demo",
     "source-uid: keep-me@example.com",
     "%%%",
-    "",
-  ].join("\n");
+  ];
+  if (children.length > 0) lines.push("%%% folders", "children:", ...children.map((id) => `  - ${id}`), "%%%");
+  return `${lines.join("\n")}\n`;
 }
 
-/** A unique prefix per test: one workspace, and a folder name is global to it. */
+/** The ids a note's `%%% folders` section lists, in order. */
+function childrenIn(text: string): string[] {
+  const section = /%%% folders\n([\s\S]*?)%%%/.exec(text)?.[1] ?? "";
+  return [...section.matchAll(/^ {2}- (\S+)$/gm)].map((match) => match[1] as string);
+}
+
+/** A unique title per test: one workspace, and titles are what the tree shows. */
 function unique(tag: string): string {
   return `${tag}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -68,67 +69,43 @@ function tree(page: Page): Locator {
   return page.getByRole("tree", { name: "Folders" });
 }
 
-/** A folder row's own button, by its leaf name. */
-function folderRow(page: Page, name: string): Locator {
-  return tree(page).getByRole("button", { name, exact: true });
-}
+const exact = (title: string): RegExp => new RegExp(`^${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`);
 
 /**
- * The `treeitem` a folder's name button sits in — the row, not the label.
- *
- * `has:` is given a **page-rooted** locator deliberately: Playwright re-roots it at each
- * candidate row, and a locator chained off `tree(page)` would instead be looked for
- * starting at the tree and match nothing inside a row.
+ * The row for a note, by its exact title. `has:` is given a **page-rooted** locator:
+ * Playwright re-roots it at each candidate row.
  */
-function folderNode(page: Page, name: string): Locator {
-  return page
-    .locator(".folders-node")
-    .filter({ has: page.getByRole("button", { name, exact: true }) })
+function row(page: Page, title: string): Locator {
+  return tree(page)
+    .locator('[role="treeitem"]')
+    .filter({ has: page.locator(".folders-name", { hasText: exact(title) }) })
     .first();
 }
 
-/**
- * Drag one element onto another with real pointer events.
- *
- * Not `locator.dragTo`: that moves the mouse to the target in two jumps, and Chromium's
- * HTML5 drag machinery needs a `dragover` on the destination shortly *before* the drop
- * for the drop to be accepted at all. In a tree of a dozen rows the two-jump version
- * landed the pointer on the right row with no intervening `dragover` often enough to be
- * a coin flip — a test that failed with the document still in its old folder and nothing
- * to say about why. The intermediate moves are what make the gesture the one a hand
- * makes.
- */
-async function dragOnto(
-  page: Page,
-  source: Locator,
-  target: Locator,
-  position?: { x: number; y: number },
-): Promise<void> {
-  await source.hover();
-  await page.mouse.down();
-  // Twice, and through `hover()` rather than `mouse.move`: the first pass is what starts
-  // the drag (Chromium needs a move *after* the button goes down before it will treat
-  // the gesture as one), the second is the `dragover` on the destination that a drop is
-  // only accepted after. `hover()` re-resolves the element each time, so a tree that
-  // scrolls or re-renders mid-drag still gets the pointer put on the right row.
-  await target.hover(position ? { position } : {});
-  await target.hover(position ? { position } : {});
-  // A destination that accepted the drag outlines itself (`.folders-node-drop`, set in
-  // `dragover`). Waiting for that waits for the browser to have accepted the gesture,
-  // and fails *here* — "nothing accepted the drag" — rather than three assertions later
-  // as a document that did not move.
-  await expect(page.locator(".folders-node-drop, .folders-tree-root-drop").first()).toBeVisible({
-    timeout: 5_000,
-  });
-  await page.mouse.up();
+/** Open a row's ⋯ menu (hover-gated, so the pointer goes into the row first). */
+async function actions(page: Page, title: string): Promise<Locator> {
+  await row(page, title).hover();
+  await row(page, title).getByRole("button", { name: "Note actions" }).click();
+  const sheet = page.getByRole("dialog");
+  await expect(sheet).toBeVisible();
+  return sheet;
 }
 
 /**
- * Open the sidebar and wait for the tree to have finished its first query.
- *
- * `folders` renders "Loading folders…" until the projection answers, and a test that
- * queried a row inside that window would be testing its own timing.
+ * Drag one row onto another with real pointer events: the tree's own drags are pointer
+ * driven (a lifted copy under the pointer), so this is a press, two moves and a release.
+ * `position` picks the part of the row: its top or bottom edge means "next to it".
  */
+async function drag(page: Page, source: Locator, target: Locator, position?: { x: number; y: number }): Promise<void> {
+  await source.hover();
+  await page.mouse.down();
+  await target.hover(position ? { position } : {});
+  await target.hover(position ? { position } : {});
+  await expect(page.locator(".folders-lifted")).toBeVisible({ timeout: 5_000 });
+  await page.mouse.up();
+}
+
+/** Open the sidebar and wait for the tree to have finished its first query. */
 async function openTree(page: Page): Promise<Locator> {
   await page.goto("/");
   await showSidebar(page);
@@ -137,14 +114,7 @@ async function openTree(page: Page): Promise<Locator> {
   return panel;
 }
 
-/**
- * Fail the test if anything opens a native dialog.
- *
- * POLISH-BACKLOG §4: folder rename used to be `window.prompt`, which is untested inside
- * the Flutter shell (no `onJsPrompt` handler is registered) and may simply do nothing
- * there. Playwright auto-dismisses dialogs, so a regression would *not* fail on its own —
- * it would look like a rename that silently did nothing.
- */
+/** Fail the test if anything opens a native dialog: rename is inline, never a prompt. */
 function refuseNativeDialogs(page: Page): void {
   page.on("dialog", (dialog) => {
     void dialog.dismiss();
@@ -152,218 +122,169 @@ function refuseNativeDialogs(page: Page): void {
   });
 }
 
-/** Poll the stored text until the splice lands, then return it. */
-async function settled(
+/** Poll a note's list until it says `expected`, then return the whole text. */
+async function listed(
   request: APIRequestContext,
   baseURL: string,
   id: string,
-  contains: string,
+  expected: readonly string[],
 ): Promise<string> {
-  await expect
-    .poll(async () => await rawText(request, baseURL, id), { timeout: 20_000 })
-    .toContain(contains);
+  await expect.poll(async () => childrenIn(await rawText(request, baseURL, id)), { timeout: 20_000 }).toEqual(expected);
   return await rawText(request, baseURL, id);
 }
 
 // ---------------------------------------------------------------------------
-// Rearranging folders
+// Moving notes
 // ---------------------------------------------------------------------------
 
-test("a folder dragged onto another's top edge goes before it, lifted, and stays there", async ({
+test("a note dragged onto another's top edge goes before it, and only the parent's list changes", async ({
   page,
   request,
   baseURL,
 }) => {
   const base = baseURL as string;
-  const parent = unique("order");
-  // Named so that by name they sort first, second, third.
-  const [first, second, third] = ["a", "b", "c"].map((letter) => unique(`${letter}-order`)) as [
-    string,
-    string,
-    string,
-  ];
-  const ids = await Promise.all(
-    [first, second, third].map((child) =>
-      createDocument(request, base, fixture(`In ${child}`, `${parent}/${child}`)),
-    ),
-  );
+  const [first, second, third] = ["a", "b", "c"].map((letter) => unique(`${letter}-order`)) as [string, string, string];
+  const ids = await Promise.all([first, second, third].map((title) => createDocument(request, base, fixture(title))));
+  const parentTitle = unique("order");
+  const parent = await createDocument(request, base, fixture(parentTitle, ids));
+  const texts = await Promise.all(ids.map((id) => rawText(request, base, id)));
   const order = async (): Promise<string[]> =>
-    (await tree(page).locator(".folders-node .folders-name").allTextContents()).filter((name) =>
-      [first, second, third].includes(name),
-    );
+    (await tree(page).locator(".folders-name").allTextContents()).filter((name) => [first, second, third].includes(name));
 
   await signIn(page, ADMIN);
   await openTree(page);
-  await expect(folderRow(page, third)).toBeVisible();
+  await expect(row(page, third)).toBeVisible();
   expect(await order()).toEqual([first, second, third]);
 
-  // Pick `third` up and carry it to the top edge of `first`.
-  const target = folderNode(page, first);
-  await folderNode(page, third).hover();
+  // Pick `third` up and carry it to the top edge of `first`: a line, not an outline.
+  const target = row(page, first);
+  await row(page, third).hover();
   await page.mouse.down();
   await target.hover({ position: { x: 40, y: 2 } });
   await target.hover({ position: { x: 40, y: 2 } });
-
-  // Lifted, not a translucent ghost: an opaque copy under the pointer, and a line
-  // (not an outline) on the row it will go before.
   const lifted = page.locator(".folders-lifted");
   await expect(lifted).toBeVisible();
   await expect(lifted).toContainText(third);
   expect(await lifted.evaluate((element) => getComputedStyle(element).opacity)).toBe("1");
   await expect(page.locator(".folders-node-before")).toHaveCount(1);
   await expect(page.locator(".folders-node-drop")).toHaveCount(0);
-
   await page.mouse.up();
   await expect(lifted).toHaveCount(0);
   await expect.poll(order).toEqual([third, first, second]);
-
-  // A reorder is the user's order, not a move: no document was written to.
-  for (const [index, child] of [first, second, third].entries()) {
-    expect(await rawText(request, base, ids[index] as string)).toContain(`path: ${parent}/${child}`);
-  }
-
-  // And it is stored: a reload draws the same order.
   await waitSynced(page);
+
+  const [a, b, c] = ids as [string, string, string];
+  expect(await listed(request, base, parent, [c, a, b])).toBe(fixture(parentTitle, [c, a, b]));
+  // The notes themselves were not written to.
+  for (const [index, id] of ids.entries()) expect(await rawText(request, base, id)).toBe(texts[index]);
+
+  // And a reload draws the same order.
   await page.reload();
   await showSidebar(page);
-  await expect(folderRow(page, third)).toBeVisible();
   await expect.poll(order).toEqual([third, first, second]);
 });
 
-test("dragging a folder into another re-prefixes every document inside it, one splice each", async ({
+test("dragging a note into another files it last there, with everything under it", async ({
   page,
   request,
   baseURL,
 }) => {
   const base = baseURL as string;
-  const a = unique("alpha");
-  const b = unique("beta");
-
-  // Two levels inside the folder being moved, so the assertion covers a document filed
-  // *below* the folder as well as one directly in it — the case where a naive
-  // implementation re-prefixes the direct children and orphans the rest.
-  const direct = await createDocument(request, base, fixture("Direct child", a));
-  const deep = await createDocument(request, base, fixture("Deep child", `${a}/deep`));
-  // A document in the destination that must not move: a folder move writes only to the
-  // documents whose path actually changes (`planFolderMove` omits the rest), and a
-  // splice that rewrites the same value is still a CRDT transaction.
-  const bystander = await createDocument(request, base, fixture("Already in beta", b));
-  const before = await rawText(request, base, bystander);
+  const deepTitle = unique("deep");
+  const deep = await createDocument(request, base, fixture(deepTitle));
+  const movingTitle = unique("alpha");
+  const moving = await createDocument(request, base, fixture(movingTitle, [deep]));
+  const bystander = await createDocument(request, base, fixture(unique("already-there")));
+  const destTitle = unique("beta");
+  const dest = await createDocument(request, base, fixture(destTitle, [bystander]));
+  const before = { moving: await rawText(request, base, moving), bystander: await rawText(request, base, bystander) };
 
   await signIn(page, ADMIN);
   refuseNativeDialogs(page);
   await openTree(page);
-
-  await expect(folderRow(page, a)).toBeVisible();
-  await expect(folderRow(page, b)).toBeVisible();
-  await dragOnto(page, folderNode(page, a), folderNode(page, b));
+  await expect(row(page, movingTitle)).toBeVisible();
+  await drag(page, row(page, movingTitle), row(page, destTitle));
   await waitSynced(page);
 
-  // The whole subtree moved, prefix intact.
-  expect(await settled(request, base, direct, `path: ${b}/${a}`)).toBe(
-    fixture("Direct child", a).replace(`path: ${a}`, `path: ${b}/${a}`),
-  );
-  expect(await settled(request, base, deep, `path: ${b}/${a}/deep`)).toBe(
-    fixture("Deep child", `${a}/deep`).replace(`path: ${a}/deep`, `path: ${b}/${a}/deep`),
-  );
-
-  // Byte-for-byte, including the comment and the machine section.
-  const moved = await rawText(request, base, direct);
-  expect(moved).toContain("# a comment only a splice survives");
-  expect(moved).toContain("%%% sweep-demo");
-  expect(moved).toContain("source-uid: keep-me@example.com");
-
-  // And the document that was already there was not written to at all.
-  expect(await rawText(request, base, bystander)).toBe(before);
-
-  // The tree reflects it without a reload: `alpha` is now a child of `beta`.
-  await expect(folderRow(page, b)).toBeVisible();
-  await expect(folderRow(page, a)).toBeVisible();
+  // One line added to the destination, after what was there; nothing else in it moved.
+  expect(await listed(request, base, dest, [bystander, moving])).toBe(fixture(destTitle, [bystander, moving]));
+  // The moved note and its own list are untouched, so its child came along.
+  expect(await rawText(request, base, moving)).toBe(before.moving);
+  expect(await rawText(request, base, bystander)).toBe(before.bystander);
+  await expect(row(page, movingTitle)).toHaveAttribute("aria-level", "2");
+  await expect(row(page, deepTitle)).toHaveAttribute("aria-level", "3");
 });
 
-test("dropping a document on Root removes the path line and leaves the rest byte-identical", async ({
+test("dropping a note on the root takes it out of its parent's list, and nothing else", async ({
   page,
   request,
   baseURL,
 }) => {
   const base = baseURL as string;
-  const folder = unique("filed");
-  const original = fixture("Going to root", folder);
-  const id = await createDocument(request, base, original);
+  const title = unique("Going to root");
+  const id = await createDocument(request, base, fixture(title));
+  const stays = await createDocument(request, base, fixture(unique("stays")));
+  const folderTitle = unique("filed");
+  const folder = await createDocument(request, base, fixture(folderTitle, [id, stays]));
+  const original = await rawText(request, base, id);
 
   await signIn(page, ADMIN);
   refuseNativeDialogs(page);
   await openTree(page);
-  await expect(folderRow(page, folder)).toBeVisible();
-
-  // The document's row in the tree itself, not `doc-list`'s: the ask is about the tree
-  // behaving like a file manager, and the row has to be the thing you can pick up.
-  const leaf = page.locator(".folders-node-leaf", { hasText: "Going to root" }).first();
+  const leaf = row(page, title);
   await expect(leaf).toBeVisible();
-  // Root has no button any more. While a drag is in flight the tree renders a sticky
-  // "move to root" strip pinned to the bottom of its on-screen slice, so the target is
-  // reachable however tall the tree has grown. The strip only exists after `dragstart`,
-  // which Chromium fires on the first move *after* the button goes down — hence the
-  // small wiggle before the strip can be hovered.
-  const leafBox = await leaf.boundingBox();
-  if (!leafBox) throw new Error("the leaf has no box");
+
+  // While a drag is in flight the tree pins a "move to the root" strip to the bottom of
+  // its on-screen slice, so the target is reachable however tall the tree has grown.
+  const box = await leaf.boundingBox();
+  if (!box) throw new Error("the row has no box");
   await leaf.hover();
   await page.mouse.down();
-  await page.mouse.move(leafBox.x + leafBox.width / 2 + 6, leafBox.y + leafBox.height / 2 + 6);
+  await page.mouse.move(box.x + box.width / 2 + 6, box.y + box.height / 2 + 6);
   const strip = page.locator(".folders-root-dropzone");
   await expect(strip).toBeVisible({ timeout: 5_000 });
   await strip.hover();
-  await strip.hover(); // the dragover a drop is only accepted after
-  await expect(page.locator(".folders-node-drop").first()).toBeVisible({ timeout: 5_000 });
+  await strip.hover();
   await page.mouse.up();
   await waitSynced(page);
 
-  await expect
-    .poll(async () => await rawText(request, base, id), { timeout: 20_000 })
-    .not.toContain("path:");
-
-  // `removeFrontmatterKey`, not "set it to empty": the line is gone, and every other
-  // line — the comment above where it used to be included — is where it was.
-  const rooted = await rawText(request, base, id);
-  expect(rooted).toBe(original.replace(`path: ${folder}\n`, ""));
-  expect(rooted).toContain("# a comment only a splice survives");
-  expect(rooted).toContain("tags: [alpha, beta]");
-  expect(rooted).toContain("%%% sweep-demo");
+  expect(await listed(request, base, folder, [stays])).toBe(fixture(folderTitle, [stays]));
+  expect(await rawText(request, base, id)).toBe(original);
+  await expect(row(page, title)).toHaveAttribute("aria-level", "1");
 });
 
-test("a document with no folder is a row at the root of the tree", async ({
+test("a note nobody lists is a row at the root, and clicking any row opens it", async ({
   page,
   request,
   baseURL,
 }) => {
   const base = baseURL as string;
   const title = unique("Unfiled note");
-  await createDocument(request, base, fixture(title, undefined));
-  // A folder, so "at root" means something: the pathless document has to be a sibling of
-  // the top-level folders, not a row that only looks right in an empty tree.
-  const folder = unique("somewhere");
-  await createDocument(request, base, fixture("Filed away", folder));
+  await createDocument(request, base, fixture(title));
+  const childTitle = unique("inside");
+  const child = await createDocument(request, base, fixture(childTitle));
+  const folderTitle = unique("somewhere");
+  const folder = await createDocument(request, base, fixture(folderTitle, [child]));
 
   await signIn(page, ADMIN);
   await openTree(page);
+  await expect(row(page, title)).toHaveAttribute("aria-level", "1");
+  await expect(row(page, folderTitle)).toHaveAttribute("aria-level", "1");
+  await expect(row(page, childTitle)).toHaveAttribute("aria-level", "2");
 
-  const row = page.locator(".folders-node-leaf", { hasText: title }).first();
-  await expect(row).toBeVisible();
-  // `aria-level` 1 is the tree's own statement that this row is at the top level, and
-  // it is what a screen reader announces. The same level as the folders beside it.
-  await expect(row).toHaveAttribute("aria-level", "1");
-  await expect(folderNode(page, folder)).toHaveAttribute("aria-level", "1");
-
-  // Clicking it opens the document — a leaf in a file tree is a file.
-  await row.click();
-  await expect(page).toHaveURL(/#\/doc\//);
+  // A folder is a note: clicking it opens it; the chevron is what folds it.
+  await row(page, folderTitle).click();
+  await expect(page).toHaveURL(new RegExp(`#/doc/${folder}`));
+  await expect(row(page, childTitle)).toBeVisible();
+  await tree(page).getByRole("button", { name: `Collapse ${folderTitle}` }).click();
+  await expect(row(page, childTitle)).toHaveCount(0);
 });
 
 // ---------------------------------------------------------------------------
-// Adding, renaming and deleting folders
+// Renaming, creating and deleting
 // ---------------------------------------------------------------------------
 
-test("a folder can be created empty, filled, renamed inline and survives a reload", async ({
+test("a note is renamed inline, and a new note made inside it is listed there", async ({
   page,
   request,
   baseURL,
@@ -371,258 +292,192 @@ test("a folder can be created empty, filled, renamed inline and survives a reloa
   const base = baseURL as string;
   const name = unique("fresh");
   const renamed = `${name}-renamed`;
+  const id = await createDocument(request, base, fixture(name));
 
   await signIn(page, ADMIN);
   refuseNativeDialogs(page);
   await openTree(page);
+  await expect(row(page, name)).toBeVisible();
 
-  // Created with no document in it at all — the thing `fm.path` alone cannot express,
-  // and the reason this plugin keeps a list of empty folders in its own settings.
-  // The toolbar is gone; the palette command is the create path now.
-  await runCommand(page, "New folder");
-  const field = page.getByRole("textbox", { name: "New folder name" });
+  await (await actions(page, name)).getByRole("menuitem", { name: /^Rename/ }).click();
+  const field = page.getByRole("textbox", { name: `Rename ${name}` });
   await expect(field).toBeVisible();
-  await field.fill(name);
+  await field.fill(renamed);
   await field.press("Enter");
-  await expect(folderRow(page, name)).toBeVisible();
-
-  // It is still there after a reload: an empty folder that lived only in React state
-  // would pass every assertion up to this line.
+  await expect(row(page, renamed)).toBeVisible();
   await waitSynced(page);
-  await page.reload();
-  await showSidebar(page);
-  await expect(folderRow(page, name)).toBeVisible();
+  // One value splice: the title line, and nothing else.
+  await expect.poll(async () => await rawText(request, base, id), { timeout: 20_000 }).toContain(`title: ${renamed}`);
+  expect(await rawText(request, base, id)).toBe(fixture(name).replace(`title: ${name}`, `title: ${renamed}`));
 
-  // Rename, inline. No `window.prompt` (POLISH-BACKLOG §4) — `refuseNativeDialogs`
-  // above is what makes that a checked claim rather than a description.
-  // Folder operations live behind the row's ⋯ menu, which is hover-gated (hidden until
-  // `:hover`/`:focus-within`/active), so the pointer has to be in the row first.
-  await folderRow(page, name).hover();
-  await page.getByRole("button", { name: `Actions for ${name}` }).click();
-  await page.getByRole("dialog").getByRole("menuitem", { name: /^Rename/ }).click();
-  const rename = page.getByRole("textbox", { name: `Rename or move ${name}` });
-  await expect(rename).toBeVisible();
-  await rename.fill(renamed);
-  await rename.press("Enter");
-  await expect(folderRow(page, renamed)).toBeVisible();
-
-  // Put a document in it through the row's own menu, and the folder stops being empty
-  // bookkeeping and becomes a `path:` line like any other.
-  await folderRow(page, renamed).hover();
-  await page.getByRole("button", { name: `Actions for ${renamed}` }).click();
-  await page.getByRole("dialog").getByRole("menuitem", { name: /^New document here/ }).click();
+  await (await actions(page, renamed)).getByRole("menuitem", { name: /^New note inside/ }).click();
   await expect(page).toHaveURL(/#\/doc\//);
-  const id = /#\/doc\/([^?]+)/.exec(page.url())?.[1] ?? "";
-  expect(id, "the folder's menu created a document").toBeTruthy();
+  const created = /#\/doc\/([^?]+)/.exec(page.url())?.[1] ?? "";
+  expect(created).not.toBe(id);
   await waitSynced(page);
+  await listed(request, base, id, [created]);
 
-  // The created text names the folder the button belongs to — an explicit path, which
-  // is also the case that must win over the "new notes go to" default.
-  const created = await settled(request, base, id, `path: ${renamed}`);
-  expect(created).toContain(`path: ${renamed}`);
-
-  // And after a reload the folder is still there, now held up by the document rather
-  // than by the settings entry that has been dropped.
   await page.reload();
   await showSidebar(page);
-  await expect(folderRow(page, renamed)).toBeVisible();
+  await expect(row(page, renamed)).toBeVisible();
 });
 
-test("deleting a folder moves its documents to the parent, by splice", async ({
+test("deleting a note can keep what is inside it, in its place in the parent", async ({
   page,
   request,
   baseURL,
 }) => {
   const base = baseURL as string;
-  const parent = unique("keep");
-  const doomed = `${parent}/${unique("doomed")}`;
-  const leaf = doomed.slice(doomed.indexOf("/") + 1);
-  const original = fixture("Rehomed", doomed);
-  const id = await createDocument(request, base, original);
+  const leafTitle = unique("rehomed");
+  const leaf = await createDocument(request, base, fixture(leafTitle));
+  const doomedTitle = unique("doomed");
+  const doomed = await createDocument(request, base, fixture(doomedTitle, [leaf]));
+  const before = await createDocument(request, base, fixture(unique("before")));
+  const after = await createDocument(request, base, fixture(unique("after")));
+  const parentTitle = unique("keep");
+  const parent = await createDocument(request, base, fixture(parentTitle, [before, doomed, after]));
+  const leafText = await rawText(request, base, leaf);
 
   await signIn(page, ADMIN);
   refuseNativeDialogs(page);
   await openTree(page);
-  await expect(folderRow(page, leaf)).toBeVisible();
+  await expect(row(page, doomedTitle)).toBeVisible();
 
-  await folderRow(page, leaf).hover();
-  await page.getByRole("button", { name: `Actions for ${doomed}` }).click();
-  const sheet = page.getByRole("dialog");
-  await expect(sheet).toBeVisible();
-  await sheet.getByRole("menuitem", { name: "Delete folder" }).click();
-
-  // The choice the user is offered, in the words the plugin offers it in: the documents
-  // have to go somewhere, because a folder is only a `path:` line.
-  const confirm = page.getByRole("dialog");
-  await expect(confirm).toBeVisible();
-  await confirm.getByRole("menuitem", { name: `Move them to ${parent}` }).click();
-  // Then the "are you sure?", which says where they are going.
-  await expect(page.getByRole("dialog")).toContainText(`move to ${parent}`);
-  await page.getByRole("dialog").getByRole("button", { name: "Delete folder" }).click();
-  await waitSynced(page);
-
-  // One splice: the path is the parent's, the rest of the file is untouched.
-  const rehomed = await settled(request, base, id, `path: ${parent}\n`);
-  expect(rehomed).toBe(original.replace(`path: ${doomed}`, `path: ${parent}`));
-  expect(rehomed).toContain("# a comment only a splice survives");
-
-  // The folder is gone from the tree; the parent is not.
-  await expect(folderRow(page, leaf)).toHaveCount(0);
-  await expect(folderRow(page, parent)).toBeVisible();
-});
-
-test("deleting a folder can send its documents to Trash instead", async ({
-  page,
-  request,
-  baseURL,
-}) => {
-  const base = baseURL as string;
-  const folder = unique("trashed");
-  const title = unique("Doomed note");
-  const id = await createDocument(request, base, fixture(title, folder));
-
-  await signIn(page, ADMIN);
-  refuseNativeDialogs(page);
-  await openTree(page);
-  await expect(folderRow(page, folder)).toBeVisible();
-
-  await folderRow(page, folder).hover();
-  await page.getByRole("button", { name: `Actions for ${folder}` }).click();
-  await page.getByRole("dialog").getByRole("menuitem", { name: "Delete folder" }).click();
-  await page.getByRole("dialog").getByRole("menuitem", { name: "Move them to Trash" }).click();
+  await (await actions(page, doomedTitle)).getByRole("menuitem", { name: "Delete" }).click();
+  await page.getByRole("dialog").getByRole("menuitem", { name: `Keep them, in ${parentTitle}` }).click();
+  await expect(page.getByRole("dialog")).toContainText(`move to ${parentTitle}`);
   await page.getByRole("dialog").getByRole("button", { name: "Move to Trash" }).click();
   await waitSynced(page);
 
-  // A tombstone, not a purge (SPEC §3.5 — the id stays forever, and `GET
-  // /api/documents/:id` still answers 200 for it). What changes is where it is: out of
-  // the tree and the list, into Trash, restorable — which is the promise the sheet's
-  // hint makes, so it is the thing to check.
-  await expect(folderRow(page, folder)).toHaveCount(0);
-  await expect(page.locator(".folders-node-leaf", { hasText: title })).toHaveCount(0);
+  // The child took the deleted note's place; the note itself is in Trash with no list.
+  await listed(request, base, parent, [before, leaf, after]);
+  expect(childrenIn(await rawText(request, base, doomed))).toEqual([]);
+  expect(await rawText(request, base, leaf)).toBe(leafText);
+  await expect(row(page, doomedTitle)).toHaveCount(0);
+  await expect(row(page, leafTitle)).toHaveAttribute("aria-level", "2");
+});
 
+test("deleting a note can send everything inside it to Trash too, restorable in place", async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const base = baseURL as string;
+  const childTitle = unique("Doomed child");
+  const child = await createDocument(request, base, fixture(childTitle));
+  const folderTitle = unique("trashed");
+  const folder = await createDocument(request, base, fixture(folderTitle, [child]));
+  const folderText = await rawText(request, base, folder);
+
+  await signIn(page, ADMIN);
+  refuseNativeDialogs(page);
+  await openTree(page);
+  await expect(row(page, childTitle)).toBeVisible();
+
+  await (await actions(page, folderTitle)).getByRole("menuitem", { name: "Delete" }).click();
+  await page.getByRole("dialog").getByRole("menuitem", { name: "Delete them too" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Move to Trash" }).click();
+  await waitSynced(page);
+  await expect(row(page, folderTitle)).toHaveCount(0);
+  await expect(row(page, childTitle)).toHaveCount(0);
+
+  // Lists are left as they were, so restoring puts the child back inside its folder.
+  expect(await rawText(request, base, folder)).toBe(folderText);
   await page.goto("/#/trash");
-  const trashed = page.locator(".doclist-item").filter({ hasText: title });
-  await expect(trashed).toHaveCount(1);
-  await trashed.getByRole("button", { name: /restore/i }).click();
-  await expect(trashed).toHaveCount(0);
-
-  // Restored with its `path` intact: "move them to Trash" deleted documents, it did not
-  // also rewrite them, so the folder comes back with the document that made it.
-  await expect
-    .poll(async () => await rawText(request, base, id), { timeout: 20_000 })
-    .toContain(`path: ${folder}`);
-  expect(await rawText(request, base, id)).toBe(fixture(title, folder));
+  for (const title of [folderTitle, childTitle]) {
+    const trashed = page.locator(".doclist-item").filter({ hasText: title });
+    await expect(trashed).toHaveCount(1);
+    await trashed.getByRole("button", { name: /restore/i }).click();
+    await expect(trashed).toHaveCount(0);
+  }
+  await openTree(page);
+  await expect(row(page, childTitle)).toHaveAttribute("aria-level", "2");
 });
 
-test("a document can be deleted from the tree, after a confirm", async ({
-  page,
-  request,
-  baseURL,
-}) => {
+test("a note with nothing inside is deleted after a confirm", async ({ page, request, baseURL }) => {
   const base = baseURL as string;
-  const folder = unique("binned");
   const title = unique("Unwanted note");
-  await createDocument(request, base, fixture(title, folder));
+  await createDocument(request, base, fixture(title));
 
   await signIn(page, ADMIN);
   refuseNativeDialogs(page);
   await openTree(page);
-  const leaf = page.locator(".folders-node-leaf", { hasText: title }).first();
-  await expect(leaf).toBeVisible();
+  await expect(row(page, title)).toBeVisible();
 
-  await leaf.hover();
-  await leaf.getByRole("button", { name: "Document actions" }).click();
-  await page.getByRole("dialog").getByRole("menuitem", { name: "Delete" }).click();
-
-  // Cancel first: nothing happens.
+  await (await actions(page, title)).getByRole("menuitem", { name: "Delete" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
-  await expect(leaf).toBeVisible();
+  await expect(row(page, title)).toBeVisible();
 
-  await leaf.hover();
-  await leaf.getByRole("button", { name: "Document actions" }).click();
-  await page.getByRole("dialog").getByRole("menuitem", { name: "Delete" }).click();
+  await (await actions(page, title)).getByRole("menuitem", { name: "Delete" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Move to Trash" }).click();
   await waitSynced(page);
-
-  await expect(page.locator(".folders-node-leaf", { hasText: title })).toHaveCount(0);
+  await expect(row(page, title)).toHaveCount(0);
   await page.goto("/#/trash");
   await expect(page.locator(".doclist-item").filter({ hasText: title })).toHaveCount(1);
 });
 
-test("a folder folds and unfolds recursively: alt-click, the menu, and Shift+arrows", async ({
+test("a note folds and unfolds recursively: alt-click, the menu, and Shift+arrows", async ({
   page,
   request,
   baseURL,
 }) => {
   const base = baseURL as string;
+  const low = unique("low");
+  const mid = unique("mid");
   const top = unique("deep");
-  await createDocument(request, base, fixture("Deep leaf", `${top}/mid/low`));
+  const lowId = await createDocument(request, base, fixture(low));
+  const midId = await createDocument(request, base, fixture(mid, [lowId]));
+  await createDocument(request, base, fixture(top, [midId]));
 
   await signIn(page, ADMIN);
   await openTree(page);
   const panel = tree(page);
-  await expect(folderRow(page, top)).toBeVisible();
+  await expect(row(page, low)).toBeVisible();
 
-  // Collapse all inside, then open only the top: its descendants stay folded.
-  await folderRow(page, top).hover();
-  await page.getByRole("button", { name: `Actions for ${top}` }).click();
-  await page.getByRole("dialog").getByRole("menuitem", { name: "Collapse all inside" }).click();
-  await expect(folderRow(page, "mid")).toHaveCount(0);
+  await (await actions(page, top)).getByRole("menuitem", { name: "Collapse all inside" }).click();
+  await expect(row(page, mid)).toHaveCount(0);
   await panel.getByRole("button", { name: `Expand ${top}` }).click();
-  await expect(folderRow(page, "mid")).toBeVisible();
-  await expect(folderRow(page, "low")).toHaveCount(0);
+  await expect(row(page, mid)).toBeVisible();
+  await expect(row(page, low)).toHaveCount(0);
 
-  // Alt-click on the twisty opens the whole subtree.
   await panel.getByRole("button", { name: `Collapse ${top}` }).click();
   await panel.getByRole("button", { name: `Expand ${top}` }).click({ modifiers: ["Alt"] });
-  await expect(folderRow(page, "low")).toBeVisible();
+  await expect(row(page, low)).toBeVisible();
 
-  // And Shift+ArrowLeft on the active row folds it all again.
-  await folderRow(page, top).click();
+  await row(page, top).click();
   await panel.focus();
   await page.keyboard.press("Shift+ArrowLeft");
-  await expect(folderRow(page, "mid")).toHaveCount(0);
+  await expect(row(page, mid)).toHaveCount(0);
   await page.keyboard.press("ArrowRight");
-  await expect(folderRow(page, "mid")).toBeVisible();
-  await expect(folderRow(page, "low")).toHaveCount(0);
+  await expect(row(page, mid)).toBeVisible();
+  await expect(row(page, low)).toHaveCount(0);
 });
 
 // ---------------------------------------------------------------------------
-// Where a new document lands — two plugins that cannot call each other
+// Where a new note lands — two plugins that cannot call each other
 // ---------------------------------------------------------------------------
 
-test('"New notes go to" decides where an unfiled document is created', async ({
-  page,
-  request,
-  baseURL,
-}) => {
+test('"New notes go to" decides where a new note is filed', async ({ page, request, baseURL }) => {
   const base = baseURL as string;
-  const home = unique("inbox");
-  await createDocument(request, base, fixture("Makes the folder exist", home));
+  const homeTitle = unique("inbox");
+  const home = await createDocument(request, base, fixture(homeTitle));
 
   await signIn(page, ADMIN);
   refuseNativeDialogs(page);
 
-  // The seam under test is a `kernel.events` message, not a service call: `folders`
-  // depends on `doc-list`, so the arrow a service call needs points the wrong way and
-  // the reverse edge would be a cycle the loader cannot order. An event bus needs no
-  // dependency in either direction — and gives no replay and no ordering guarantee,
-  // which is why "does the listener hear it?" is worth an end-to-end test rather than a
-  // unit test on either side.
+  // `doc-list` announces the note it made; `folders` hears it and files it.
   await page.goto("/#/settings/folders");
   const picker = page.getByLabel("New notes go to");
   await expect(picker).toBeVisible();
   await picker.selectOption(home);
 
-  // No reload between setting it and using it: the announcement is live.
   await runCommand(page, "New document");
   await expect(page).toHaveURL(/#\/doc\//);
   const filed = /#\/doc\/([^?]+)/.exec(page.url())?.[1] ?? "";
   await waitSynced(page);
-  expect(await settled(request, base, filed, `path: ${home}`)).toContain(`path: ${home}`);
+  await listed(request, base, home, [filed]);
 
-  // Back to root, and the `path:` line is not written at all — an empty setting is the
-  // absence of a key, not `path: ""`.
+  // Back to the root: the next note is in nobody's list.
   await page.goto("/#/settings/folders");
   await page.getByLabel("New notes go to").selectOption("");
   await runCommand(page, "New document");
@@ -630,188 +485,144 @@ test('"New notes go to" decides where an unfiled document is created', async ({
   const unfiled = /#\/doc\/([^?]+)/.exec(page.url())?.[1] ?? "";
   expect(unfiled).not.toBe(filed);
   await waitSynced(page);
-  await expect
-    .poll(async () => await rawText(request, base, unfiled), { timeout: 20_000 })
-    .toContain("title:");
-  expect(await rawText(request, base, unfiled)).not.toContain("path:");
+  await openTree(page);
+  await expect(tree(page).locator('[role="treeitem"][aria-level="1"]').filter({ hasText: "Untitled" }).first()).toBeVisible();
+  expect(childrenIn(await rawText(request, base, home))).toEqual([filed]);
 });
 
 // ---------------------------------------------------------------------------
 // The phone: the same moves, with no drag to make them with
 // ---------------------------------------------------------------------------
 
-test("at 390 px a document is moved through the sheet, and the panel holds the page", async ({
+test("at 390 px a note is moved through the sheet, and the panel holds the page", async ({
   page,
   request,
   baseURL,
 }) => {
   const base = baseURL as string;
-  const from = unique("phone-from");
-  const to = unique("phone-to");
-  const original = fixture("Moved by touch", from);
-  const id = await createDocument(request, base, original);
-  await createDocument(request, base, fixture("Lives in the destination", to));
+  const title = unique("Moved by touch");
+  const id = await createDocument(request, base, fixture(title));
+  const fromTitle = unique("phone-from");
+  const from = await createDocument(request, base, fixture(fromTitle, [id]));
+  const toTitle = unique("phone-to");
+  const to = await createDocument(request, base, fixture(toTitle));
 
   await page.setViewportSize({ width: 390, height: 844 });
   await signIn(page, ADMIN);
   refuseNativeDialogs(page);
   await openTree(page);
-  await expect(folderRow(page, from)).toBeVisible();
+  await expect(row(page, title)).toBeVisible();
 
-  // HTML5 drag and drop does not fire from touch, which is POLISH-BACKLOG §3 in one
-  // sentence: on a phone the tree used to have no move affordance at all.
-  const leaf = page.locator(".folders-node-leaf", { hasText: "Moved by touch" }).first();
-  await expect(leaf).toBeVisible();
-  await leaf.hover();
-  await leaf.getByRole("button", { name: "Document actions" }).click();
-
-  const sheet = page.getByRole("dialog");
-  await expect(sheet).toBeVisible();
-  // Scoped to the sheet: `doc-list`'s row action is "Move to Trash", and an unscoped
-  // "Move to…" query matches both.
-  await sheet.getByRole("menuitem", { name: "Move to…" }).click();
-
+  // Scoped to the sheet: `doc-list`'s row action is "Move to Trash".
+  await (await actions(page, title)).getByRole("menuitem", { name: "Move to…" }).click();
   const picker = page.getByRole("dialog");
-  await picker.getByRole("textbox", { name: "Filter folders" }).fill(to);
-  await picker.getByRole("button", { name: to }).first().click();
+  await picker.getByRole("textbox", { name: "Filter notes" }).fill(toTitle);
+  await picker.getByRole("button", { name: toTitle }).first().click();
   await waitSynced(page);
 
-  expect(await settled(request, base, id, `path: ${to}`)).toBe(
-    original.replace(`path: ${from}`, `path: ${to}`),
-  );
+  await listed(request, base, to, [id]);
+  await listed(request, base, from, []);
 
   // The sheet is portalled out of the sidebar on purpose — `shell-ui` declares
-  // `container-type: inline-size` there, which traps a `position: fixed` panel — so the
-  // zero-overflow net has to be re-run with one open.
-  await leaf.hover();
-  await leaf.getByRole("button", { name: "Document actions" }).click();
-  await expect(page.getByRole("dialog")).toBeVisible();
+  // `container-type: inline-size` there, which traps a `position: fixed` panel.
+  await actions(page, title);
   const overflow = await page.evaluate(() => ({
     scrollWidth: document.documentElement.scrollWidth,
     clientWidth: document.documentElement.clientWidth,
   }));
-  expect(overflow.scrollWidth, "the move sheet scrolls the page sideways").toBeLessThanOrEqual(
-    overflow.clientWidth,
-  );
-
-  // And the sheet's own controls are tappable at that width (SPEC §6.5's 44 px).
-  const small = await page.evaluate(() => {
-    return [...document.querySelectorAll<HTMLElement>(".context-menu button")]
+  expect(overflow.scrollWidth, "the move sheet scrolls the page sideways").toBeLessThanOrEqual(overflow.clientWidth);
+  const small = await page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>(".context-menu button")]
       .map((element) => element.getBoundingClientRect())
       .filter((box) => box.width > 0 && box.height > 0)
-      .filter((box) => box.height < 44 || box.width < 44).length;
-  });
+      .filter((box) => box.height < 44 || box.width < 44).length,
+  );
   expect(small, "a sheet control is under 44 px").toBe(0);
 });
 
-test("refuses to file a machine-owned document into a folder", async ({
-  page,
-  request,
-  baseURL,
-}) => {
+test("refuses to file a machine-owned document into a folder", async ({ page, request, baseURL }) => {
   const base = baseURL as string;
-  const to = unique("machine-dest");
-  // A dotted path is what makes a document machine-owned (`_shared/machine-docs.ts`).
-  // A probe rather than the *real* settings document, because the failure this pins is
-  // that the real one was movable: reproducing it against the live one would wipe this
+  // `machine: true` is what makes a document machine-owned (`_shared/machine-docs.ts`). A
+  // probe rather than the *real* settings document, so a regression cannot wipe this
   // account's stored preferences for every spec that runs after.
-  const original = fixture("Not yours to move", ".probe-machine");
+  const original = "---\ntitle: Not yours to move\nmachine: true\n---\n\nprobe\n";
   const id = await createDocument(request, base, original);
-  await createDocument(request, base, fixture("A real destination", to));
+  const destTitle = unique("machine-dest");
+  await createDocument(request, base, fixture(destTitle));
 
   await signIn(page, ADMIN);
   await openTree(page);
-  await expect(folderRow(page, to)).toBeVisible();
-  // It is not in the tree at all — the exclusion the browsing plugins share.
-  await expect(tree(page).getByRole("button", { name: ".probe-machine" })).toHaveCount(0);
+  await expect(row(page, destTitle)).toBeVisible();
+  await expect(row(page, "Not yours to move")).toHaveCount(0);
 
-  // The route reaches it anyway, and this is the entry point that used to splice it:
-  // the command reads the id out of the URL, which never went through the tree's rows.
+  // The route reaches it anyway: the command reads the id out of the URL.
   await openDocument(page, id);
-  await runCommand(page, "Move this document to a folder");
-
-  // No picker, and a notice instead. (`getByRole("dialog")` is the sheet; the palette
-  // has already closed by the time `runCommand` returns.)
+  await runCommand(page, "Move this note to a folder");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByText(/maintained by the app/i).first()).toBeVisible();
-
-  // And the document is byte-identical: `fm.path` still names the machine folder, so a
-  // kernel settings document filed the same way stays where its query is looking.
   await waitSynced(page);
   expect(await rawText(request, base, id)).toBe(original);
-  expect(await rawText(request, base, id)).toContain("path: .probe-machine");
 });
 
 // ---------------------------------------------------------------------------
-// The same document, moved again and again
+// The same note, moved again and again
 // ---------------------------------------------------------------------------
 
 /**
- * Every move of a document the client has held before must reach the server.
- *
- * The bug this pins lost every second move of the same document, by drag and by menu
- * alike, with nothing on screen to say so. A move opens the document, splices it and
- * releases it; the server's `doc.subscribed` for that open routinely arrived *after*
- * the release's `doc.unsubscribe`, the client believed it, and the next move's `UPDATE`
- * went out with no `doc.subscribe` in front of it — which the server drops. The tests
- * above only ever move a document once, so they could not see it.
+ * Every move of a note the client has held before must reach the server. The bug this
+ * pins lost every second move of the same document: a move's `UPDATE` went out after an
+ * unsubscribe the server had not seen yet. Moves now write the parents, so the hops run
+ * between two parents that are both held open by the tree's own writes.
  */
-test("a document moved back and forth lands every move, by drag and by menu", async ({
-  page,
-  request,
-  baseURL,
-}) => {
+test("a note moved back and forth lands every move, by drag and by menu", async ({ page, request, baseURL }) => {
   const base = baseURL as string;
-  const a = unique("hop-a");
-  const b = unique("hop-b");
   const title = unique("Hops between folders");
-  const original = fixture(title, a);
-  const id = await createDocument(request, base, original);
-  // Anchors, so neither folder disappears when the document leaves it.
-  await createDocument(request, base, fixture("Stays in a", a));
-  await createDocument(request, base, fixture("Stays in b", b));
+  const id = await createDocument(request, base, fixture(title));
+  const anchorA = await createDocument(request, base, fixture(unique("stays in a")));
+  const anchorB = await createDocument(request, base, fixture(unique("stays in b")));
+  const aTitle = unique("hop-a");
+  const a = await createDocument(request, base, fixture(aTitle, [anchorA, id]));
+  const bTitle = unique("hop-b");
+  const b = await createDocument(request, base, fixture(bTitle, [anchorB]));
+  const original = await rawText(request, base, id);
 
   await signIn(page, ADMIN);
   refuseNativeDialogs(page);
-  // Hydrated once before any move, the way a document the user has been reading is.
   await openDocument(page, id);
   await openTree(page);
-  await expect(folderRow(page, a)).toBeVisible();
-  await expect(folderRow(page, b)).toBeVisible();
+  await expect(row(page, title)).toBeVisible();
 
-  const leaf = page.locator(".folders-node-leaf", { hasText: title }).first();
-  const byDrag = async (to: string): Promise<void> => {
-    await dragOnto(page, leaf, folderNode(page, to));
+  const byDrag = async (toTitle: string): Promise<void> => {
+    await drag(page, row(page, title), row(page, toTitle));
   };
-  const byMenu = async (to: string): Promise<void> => {
-    await leaf.hover();
-    await leaf.getByRole("button", { name: "Document actions" }).click();
-    await page.getByRole("dialog").getByRole("menuitem", { name: "Move to…" }).click();
+  const byMenu = async (toTitle: string): Promise<void> => {
+    await (await actions(page, title)).getByRole("menuitem", { name: "Move to…" }).click();
     const picker = page.getByRole("dialog");
-    await picker.getByRole("textbox", { name: "Filter folders" }).fill(to);
-    await picker.getByRole("button", { name: to }).first().click();
+    await picker.getByRole("textbox", { name: "Filter notes" }).fill(toTitle);
+    await picker.getByRole("button", { name: toTitle }).first().click();
   };
 
   const hops: Array<[string, (to: string) => Promise<void>]> = [
-    [b, byDrag],
-    [a, byDrag],
-    [b, byDrag],
-    [a, byMenu],
-    [b, byMenu],
-    [a, byMenu],
+    [bTitle, byDrag],
+    [aTitle, byDrag],
+    [bTitle, byDrag],
+    [aTitle, byMenu],
+    [bTitle, byMenu],
+    [aTitle, byMenu],
   ];
   for (const [index, [to, how]] of hops.entries()) {
     await how(to);
     await waitSynced(page);
-    const stored = await settled(request, base, id, `path: ${to}\n`);
-    expect(stored, `move ${index + 1} (to ${to})`).toBe(
-      original.replace(`path: ${a}`, `path: ${to}`),
-    );
-    await expect(leaf).toBeVisible();
+    const [into, outOf, anchorInto, anchorOut] = to === aTitle ? [a, b, anchorA, anchorB] : [b, a, anchorB, anchorA];
+    // The new parent is written first, then the old one: poll both.
+    await listed(request, base, into, [anchorInto, id]);
+    await listed(request, base, outOf, [anchorOut]);
+    await expect(row(page, title)).toBeVisible();
   }
+  expect(await rawText(request, base, id)).toBe(original);
 });
 
-test("a folder takes a background and an icon from its menu, keeps them on reload and through a rename", async ({
+test("a note takes a background and an icon from its menu, keeps them on reload and through a rename", async ({
   page,
   request,
   baseURL,
@@ -819,22 +630,20 @@ test("a folder takes a background and an icon from its menu, keeps them on reloa
   const base = baseURL as string;
   const name = unique("dressed");
   const renamed = `${name}-renamed`;
-  await createDocument(request, base, fixture(unique("inside"), name));
+  const child = await createDocument(request, base, fixture(unique("inside")));
+  await createDocument(request, base, fixture(name, [child]));
 
   await signIn(page, ADMIN);
   refuseNativeDialogs(page);
   await openTree(page);
-  await expect(folderRow(page, name)).toBeVisible();
+  await expect(row(page, name)).toBeVisible();
 
   // `folder-style`'s entry, which `folders` lists without knowing who offered it.
-  await folderRow(page, name).hover();
-  await page.getByRole("button", { name: `Actions for ${name}` }).click();
-  await page.getByRole("dialog").getByRole("menuitem", { name: "Color and icon…" }).click();
+  await (await actions(page, name)).getByRole("menuitem", { name: "Color and icon…" }).click();
   const sheet = page.getByRole("dialog");
   await sheet.getByRole("button", { name: "#1971c2" }).click();
 
-  // With nothing typed the grid holds every icon, but draws only the rows in view, and
-  // scrolling reaches the last one.
+  // With nothing typed the grid holds every icon, but draws only the rows in view.
   const grid = sheet.getByRole("listbox", { name: "Icons" });
   await expect(sheet.getByRole("status").filter({ hasText: /^[\d,]+ icons$/ })).toBeVisible();
   const total = Number((await grid.getByRole("option").first().getAttribute("aria-setsize")) ?? "0");
@@ -847,36 +656,25 @@ test("a folder takes a background and an icon from its menu, keeps them on reloa
 
   await sheet.getByRole("searchbox", { name: "Search icons" }).fill("rocket");
   await sheet.getByRole("option", { name: "rocket", exact: true }).click();
-  await page.screenshot({ path: process.env["LM_SHOT_DIR"] ? `${process.env["LM_SHOT_DIR"]}/sheet.png` : undefined });
-  // No "Done": every change is already applied. Closing the sheet writes it at once.
   await page.keyboard.press("Escape");
   await expect(sheet).toHaveCount(0);
 
-  const dressed = async (folder: string): Promise<void> => {
-    // The pill takes the background, and the text on it is whichever of black and white
-    // reads better: white, on this blue.
-    const pill = folderNode(page, folder).locator(".folders-dressed");
+  const dressed = async (title: string): Promise<void> => {
+    const pill = row(page, title).locator(".folders-dressed");
     await expect(pill).toHaveCSS("background-color", "rgb(25, 113, 194)");
     await expect(pill).toHaveCSS("color", "rgb(255, 255, 255)");
-    // The icon is drawn once its shard of the Tabler set has arrived.
     await expect(pill.locator(".folders-icon svg path").first()).toBeAttached();
   };
   await dressed(name);
-  if (process.env["LM_SHOT_DIR"]) {
-    await folderNode(page, name).screenshot({ path: `${process.env["LM_SHOT_DIR"]}/row.png` });
-  }
 
-  // Stored per user, so it is still there after a reload.
   await waitSynced(page);
   await page.reload();
   await showSidebar(page);
   await dressed(name);
 
-  // And a rename carries it along (`lm/folders.moved`).
-  await folderRow(page, name).hover();
-  await page.getByRole("button", { name: `Actions for ${name}` }).click();
-  await page.getByRole("dialog").getByRole("menuitem", { name: /^Rename/ }).click();
-  const rename = page.getByRole("textbox", { name: `Rename or move ${name}` });
+  // Looks are kept by note id, so a rename keeps it with nothing to follow.
+  await (await actions(page, name)).getByRole("menuitem", { name: /^Rename/ }).click();
+  const rename = page.getByRole("textbox", { name: `Rename ${name}` });
   await rename.fill(renamed);
   await rename.press("Enter");
   await dressed(renamed);

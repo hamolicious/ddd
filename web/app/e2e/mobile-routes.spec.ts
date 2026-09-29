@@ -61,7 +61,6 @@ test.use({ ...devices["Pixel 7"], viewport: PHONE });
 const HOSTILE = [
   "---",
   "title: Wide content",
-  "path: sweep",
   "---",
   "",
   "# Wide content",
@@ -200,8 +199,6 @@ test.describe("every route at 390 px", () => {
       "/trash",
       "/search",
       "/search?q=wide",
-      "/folder?path=",
-      "/folder?path=sweep",
       `/doc/${id}`,
       // A route no plugin claims, and a document id nothing resolves. The not-found
       // view renders the id it could not find, which is the longest string on it.

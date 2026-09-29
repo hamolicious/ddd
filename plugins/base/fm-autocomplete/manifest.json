@@ -16,6 +16,7 @@
       "needs": [
         "fmFields",
         "fmValues",
+        "documents",
         "subscribe"
       ]
     },

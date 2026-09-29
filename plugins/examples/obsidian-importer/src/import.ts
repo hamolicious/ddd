@@ -1,5 +1,6 @@
 import type { CoreMap, Kernel, TextEdit } from "@kernel";
 import type { Attachments } from "@protocols/lm/attachments";
+import type { Folders } from "@protocols/lm/folders";
 
 import {
   aliasesOf,
@@ -36,6 +37,36 @@ interface ImportedDocument {
 /** What this plugin reads through its `attachments` port: the manifest's `needs`. */
 type AttachmentsApi = Pick<Attachments, "upload">;
 
+/** What it reads through its optional `folders` port. */
+type FoldersApi = Pick<Folders, "ensurePath" | "file">;
+
+/**
+ * Files each new document under the note for its vault folder — `Notes/Daily/Today.md`
+ * goes inside "Daily", inside "Notes" — through `lm/folders`, which creates the folder
+ * notes the first time a folder is seen. Without that port bound, documents land at the
+ * root. A document that cannot be filed is still imported, so it is logged, not failed.
+ */
+function vaultFiler(kernel: Kernel): (id: string, vaultPath: string) => Promise<void> {
+  if (!kernel.ports.bound("folders")) return async () => undefined;
+  const folders = kernel.ports.use<FoldersApi>("folders");
+  const parents = new Map<string, Promise<string>>();
+  return async (id, vaultPath) => {
+    const directory = dirname(vaultPath);
+    if (directory === "") return;
+    let parent = parents.get(directory);
+    if (parent === undefined) {
+      parent = folders.ensurePath(directory.split("/"));
+      parents.set(directory, parent);
+      parent.catch(() => parents.delete(directory));
+    }
+    try {
+      await folders.file(id, await parent);
+    } catch (cause) {
+      kernel.log.warn(`could not file ${vaultPath} in its folder`, cause);
+    }
+  };
+}
+
 export async function importVault(
   kernel: Kernel,
   archiveName: string,
@@ -53,6 +84,7 @@ export async function importVault(
   let resolvedWikilinks = 0;
   let unresolvedWikilinks = 0;
   const totalWork = archive.notes.length * 2 + archive.attachments.length;
+  const fileInFolder = vaultFiler(kernel);
 
   for (const note of archive.notes) {
     if (existing.has(note.path)) {
@@ -63,6 +95,7 @@ export async function importVault(
         await kernel.documents.create({ id, text: prepareDocument(kernel, archiveName, note) });
         documents.set(note.path, { id, deleted: false });
         imported += 1;
+        await fileInFolder(id, note.path);
       } catch (cause) {
         kernel.log.error(`could not import ${note.path}`, cause);
         failed.push(note.path);
@@ -85,6 +118,7 @@ export async function importVault(
         const uploaded = await importAttachment(kernel, attachmentService, archiveName, attachment);
         documents.set(attachment.path, uploaded);
         attachmentsImported += 1;
+        await fileInFolder(uploaded.id, attachment.path);
       } catch (cause) {
         kernel.log.error(`could not import attachment ${attachment.path}`, cause);
         failed.push(attachment.path);
@@ -141,18 +175,13 @@ export async function importVault(
 }
 
 export function prepareDocument(kernel: Kernel, archiveName: string, note: VaultNote): string {
-  const slash = note.path.lastIndexOf("/");
-  const directory = slash < 0 ? "" : note.path.slice(0, slash);
-  const filename = slash < 0 ? note.path : note.path.slice(slash + 1);
+  const filename = basename(note.path);
   const title = filename.replace(/\.md$/i, "");
   let text = note.text;
   const parsed = kernel.core.parseDocument(text);
 
   if (typeof parsed.fm["title"] !== "string") {
     text = applyEdits(text, kernel.documents.splice.planFrontmatterValue(text, "title", title));
-  }
-  if (directory !== "") {
-    text = applyEdits(text, kernel.documents.splice.planFrontmatterValue(text, "path", directory));
   }
   text = applyEdits(
     text,
@@ -213,7 +242,6 @@ export function prepareAttachmentDocument(
   path: string,
   attachment: UploadedAttachment,
 ): string {
-  const directory = dirname(path);
   const filename = attachment.name || basename(path);
   const label = filename
     .replace(/[\r\n]/g, "")
@@ -223,9 +251,6 @@ export function prepareAttachmentDocument(
   const preview = attachment.mime.startsWith("image/") ? "!" : "";
   let text = `${preview}[${label}](attachment://${attachment.id})\n`;
   text = applyEdits(text, kernel.documents.splice.planFrontmatterValue(text, "title", filename));
-  if (directory !== "") {
-    text = applyEdits(text, kernel.documents.splice.planFrontmatterValue(text, "path", directory));
-  }
   text = applyEdits(text, kernel.documents.splice.planFrontmatterValue(text, "attachment", attachment.id));
   text = applyEdits(
     text,

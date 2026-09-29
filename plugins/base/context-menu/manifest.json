@@ -1,6 +1,6 @@
 {
   "id": "context-menu",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "Context menu",
   "description": "One menu and sheet service for every plugin: anchored popovers on a wide screen, bottom sheets on a phone.",
   "author": "Life Manager base distribution",
@@ -12,7 +12,7 @@
   "hot": true,
   "provides": {
     "menu": {
-      "protocol": "lm/context-menu@1.0.0"
+      "protocol": "lm/context-menu@1.1.0"
     },
     "sheet": {
       "protocol": "lm/shell.overlay@1.0.0"

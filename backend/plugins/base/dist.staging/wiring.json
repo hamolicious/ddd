@@ -1,8 +1,6 @@
 {
-  "version": 0,
-  "unplugged": [
-    "obsidian-importer"
-  ],
+  "version": 12,
+  "unplugged": [],
   "bind": {},
   "cut": [],
   "add": [],

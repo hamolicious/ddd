@@ -57,7 +57,7 @@ export function pathQuery(raw: string): string {
  *
  * The query is part of the address even though it plays no part in matching: a
  * `:name` segment cannot hold a `/`, so a view addressed by something path-shaped
- * (`#/folder?path=home/lists`) has to carry it in the query, and such a view has to be
+ * (`#/search?q=home/lists`) has to carry it in the query, and such a view has to be
  * told when *only* the query changed.
  */
 export function fullPath(raw: string): string {

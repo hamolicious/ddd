@@ -22,7 +22,11 @@
 
 import type { CoreValue, Unsubscribe } from "./types.js";
 
-/** `fm.path` of the per-user settings documents. One document per user. */
+/**
+ * `fm.path` the per-user settings documents were written with before kernel 2.1.
+ * @deprecated Settings documents now carry `machine: true` and are found by
+ * `settings-owner` alone; nothing reads this. Kept so 2.0 plugins still compile.
+ */
 export const SETTINGS_DOC_PATH = ".settings";
 
 /** What a settings value may be (SPEC §3.3: YAML, one key per line). */

@@ -201,12 +201,13 @@ pub(crate) struct BlockParse {
     pub had_error: bool,
 }
 
-/// Parse the body of a frontmatter block or a `%%%` section.
+/// Parse the body of a `%%%` section, including top-level indented block
+/// sequences (one item per line, so list splices merge line by line).
 ///
 /// `first_line` is the 1-based document line number of `inner`'s first line so
 /// diagnostics carry document coordinates. `max_keys` is the applicable cap.
 pub(crate) fn parse_block_lines(inner: &str, first_line: u32, max_keys: usize) -> BlockParse {
-    parse_lines(inner, first_line, max_keys, false)
+    parse_lines(inner, first_line, max_keys, true)
 }
 
 /// Parse frontmatter, including top-level indented block sequences.
@@ -289,7 +290,7 @@ fn parse_lines(
 /// A valid top-level key whose value is physically empty (`key:`). Comments after
 /// the colon are intentionally not continuation syntax: preserving them while a
 /// multi-line value is replaced would be ambiguous.
-fn empty_value_key(content: &str) -> Option<String> {
+pub(crate) fn empty_value_key(content: &str) -> Option<String> {
     if content.starts_with([' ', '\t']) {
         return None;
     }
@@ -302,6 +303,7 @@ fn empty_value_key(content: &str) -> Option<String> {
 }
 
 /// Collect consecutive indented `- value` lines after an empty top-level key.
+/// Shared with the list splices, which need each item's line as well as its value.
 /// Returns `(parsed items, physical lines consumed, diagnostics)`.
 fn block_sequence(
     source: &[Line<'_>],
@@ -349,7 +351,7 @@ fn block_sequence(
 /// An indented block-sequence item. Indentationless YAML sequences stay unsupported:
 /// requiring indentation keeps a stray top-level `- item` from attaching to the key
 /// above it after a mid-edit deletion.
-fn block_item(content: &str) -> Option<(usize, &str)> {
+pub(crate) fn block_item(content: &str) -> Option<(usize, &str)> {
     let indent = content.len() - content.trim_start_matches([' ', '\t']).len();
     if indent == 0 {
         return None;
@@ -473,12 +475,19 @@ mod tests {
     }
 
     #[test]
-    fn machine_block_sequences_and_indentation_are_dropped() {
-        let parsed = parse_block_lines("tags:\n  - a\n  - b\nok: 1\n", 1, 200);
-        assert!(parsed.had_error);
-        assert_eq!(parsed.map.get("tags"), Some(&Value::Null));
+    fn machine_block_sequences_are_materialized() {
+        let parsed = parse_block_lines("tags:\n  - a\n  - b\nok: 1\n  stray: 2\n", 1, 200);
+        assert_eq!(
+            parsed.map.get("tags"),
+            Some(&Value::List(vec![
+                Value::Str("a".into()),
+                Value::Str("b".into())
+            ]))
+        );
         assert_eq!(parsed.map.get("ok"), Some(&Value::Int(1)));
-        assert_eq!(parsed.diagnostics.len(), 2);
+        // Indentation outside a sequence is still dropped.
+        assert!(parsed.had_error);
+        assert_eq!(parsed.diagnostics.len(), 1);
     }
 
     #[test]

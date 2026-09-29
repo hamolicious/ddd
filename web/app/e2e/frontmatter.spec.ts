@@ -329,7 +329,7 @@ async function storedSurfaceSettings(
   const body = (await response.json()) as {
     documents?: { fm?: Record<string, unknown>; content?: string }[];
   };
-  const settings = (body.documents ?? []).find((row) => row.fm?.["path"] === ".settings");
+  const settings = (body.documents ?? []).find((row) => typeof row.fm?.["settings-owner"] === "string");
   return /%%% document-surface\n([\s\S]*?)\n%%%/.exec(settings?.content ?? "")?.[1] ?? "";
 }
 

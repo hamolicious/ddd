@@ -28,36 +28,36 @@
  * merge with yet, and no existing block to destroy. Every *later* metadata write in this
  * plugin's neighbourhood goes through `kernel.documents.splice`.
  *
- * **Where an unfiled new document lands arrives on the `location` port**, protocol
- * `lm/folders.default-location` (PLUGIN-PROTOCOLS §6c). `folders` owns the "new notes go
- * here" setting and emits `{ path }` at its own activation and on every change;
- * `createDocument` uses the last value it heard whenever the caller named no `path` of
- * its own. It is an event because `folders` uses this plugin's service, so the reverse
- * service would be a cycle; events do not order activation.
+ * **Acting on results is commands.** The toolbar's Actions button lists every command
+ * that `takes: "documents"` (`lm/commands.command`) and runs the chosen one, through the
+ * `lm/commands` service, with the ids of the results listed. This plugin's own is "Move
+ * to Trash"; `folders` offers "Move to folder…". No `commands` plugin: no button.
  *
- * Two properties this rests on:
- *
- * - **The protocol is sticky**: a listener that starts, or restarts after a wiring
- *   change, hears the current value at once. (On the untyped event bus it did not, and a
- *   restarted `doc-list` forgot the folder.)
- * - **Root is the floor.** No `folders`, a `folders` that failed to activate, an empty
- *   setting, or a payload that is not a string: the document is created at the root and
- *   is still created. No plugin's opinion about folders may stop the app's most common
- *   action.
+ * **Where a new document is filed is not this plugin's business.** `createDocument`
+ * takes an opaque `parent` hint and announces every document it created on the `created`
+ * port (`lm/document-browser.created`), hint included; `folders` listens and files it —
+ * under the hint, or wherever its "new notes go to" setting says. An event rather than a
+ * service because `folders` uses this plugin's service, and the reverse would be a cycle.
+ * No `folders`, or one that failed to activate: the document is still created, at the
+ * root. No plugin's opinion about folders may stop the app's most common action.
  */
 
 import { useEffect, useRef, useState } from "react";
 import type { ReactElement } from "react";
 
 import type { Kernel } from "@kernel";
+import type { Commands } from "@protocols/lm/commands";
 import type { Command } from "@protocols/lm/commands.command";
 import type { ContextMenu } from "@protocols/lm/context-menu";
 import type { DocumentBrowser } from "@protocols/lm/document-browser";
+import type { Icons } from "@protocols/lm/icons";
 import type { KeybindingDefault } from "@protocols/lm/keybindings.default";
 import type { MainView } from "@protocols/lm/main.view";
 import type { Router } from "@protocols/lm/router";
 import type { Route } from "@protocols/lm/router.route";
 import type { SidebarPanel } from "@protocols/lm/sidebar.panel";
+
+import type { ConditionIndex } from "../../_shared/conditions-index.js";
 
 import { DocListView, TrashView } from "./DocListView.js";
 import { documentPath, listPath, queryParam } from "./search/hash.js";
@@ -77,24 +77,14 @@ export type DocListApi = DocumentBrowser;
 export default function activate(kernel: Kernel): DocListApi {
   // Each handle is limited to the port's `needs` in the manifest: exactly what is read here.
   const router = kernel.ports.use<Pick<Router, "navigate" | "current" | "onChange">>("router");
-  const menu = kernel.ports.use<Pick<ContextMenu, "open">>("menu");
-
-  /**
-   * Where an unfiled new document goes — the folder `folders` keeps as a per-user
-   * setting, or the workspace root, which is the value until something says otherwise.
-   *
-   * See this file's header for why it arrives as an event rather than as a service
-   * call. The protocol is sticky, so the order the two plugins start in does not matter.
-   *
-   * Treated as untrusted input, because an event payload is: anything that is not a
-   * non-empty string leaves the value at the root rather than putting `undefined` or a
-   * number into a `path:` line.
-   */
-  let defaultLocation = "";
-  kernel.ports.on<{ readonly path?: unknown }>("location", (payload) => {
-    const path = payload?.path;
-    defaultLocation = typeof path === "string" ? path.trim() : "";
-  });
+  const menu = kernel.ports.use<Pick<ContextMenu, "open" | "confirm">>("menu");
+  const registry = (): Pick<Commands, "list" | "run"> | undefined =>
+    kernel.ports.bound("registry") ? kernel.ports.use<Pick<Commands, "list" | "run">>("registry") : undefined;
+  const icons = (): Pick<Icons, "Icon"> | undefined =>
+    kernel.ports.bound("icons") ? kernel.ports.use<Pick<Icons, "Icon">>("icons") : undefined;
+  // Suggestions for the filter's properties and values; the filter works without them.
+  const index = (): ConditionIndex | undefined =>
+    kernel.ports.bound("index") ? kernel.ports.use<ConditionIndex>("index") : undefined;
 
   /** Ids the list last rendered, for `visible()`. */
   let visible: readonly string[] = [];
@@ -125,7 +115,7 @@ export default function activate(kernel: Kernel): DocListApi {
    * the console. Every entry point goes through this instead, so a failure is a notice
    * with a retry, the way the delete and restore paths already surface theirs.
    */
-  const create = (options?: { readonly path?: string; readonly title?: string }): void => {
+  const create = (options?: { readonly parent?: string; readonly title?: string }): void => {
     void api.createDocument(options).catch((cause: unknown) => {
       const message = cause instanceof Error ? cause.message : String(cause);
       kernel.log.error("could not create a document", cause);
@@ -136,6 +126,62 @@ export default function activate(kernel: Kernel): DocListApi {
         actions: [{ label: "Try again", run: () => create(options) }],
       });
     });
+  };
+
+  /** The Actions menu: every command that takes documents, run with the results' ids. */
+  const openActions = (ids: readonly string[], anchor: HTMLElement): void => {
+    const commands = registry();
+    const Icon = icons()?.Icon;
+    const available = (commands?.list() ?? []).filter((command) => command.takes === "documents");
+    menu.open({
+      title: `${ids.length.toLocaleString()} document${ids.length === 1 ? "" : "s"}`,
+      anchor,
+      sections: [
+        {
+          items:
+            available.length === 0
+              ? [{ id: "none", label: "No actions available", disabled: true, run: () => undefined }]
+              : available.map((command) => ({
+                  id: command.id,
+                  label: command.title,
+                  ...(Icon && command.icon !== undefined ? { icon: <Icon name={command.icon} /> } : {}),
+                  run: () => {
+                    void commands?.run(command.id, ids).catch((cause: unknown) => {
+                      kernel.log.error(`command "${command.id}" failed`, cause);
+                      kernel.ui.notify({
+                        id: "doc-list.action-failed",
+                        level: "error",
+                        message: `${command.title} failed: ${cause instanceof Error ? cause.message : String(cause)}`,
+                      });
+                    });
+                  },
+                })),
+        },
+      ],
+    });
+  };
+
+  /** "Move to Trash" for many documents at once, after asking. */
+  const trashAll = async (argument: unknown): Promise<void> => {
+    const ids = Array.isArray(argument) ? argument.filter((id): id is string => typeof id === "string") : [];
+    if (ids.length === 0) return;
+    const many = ids.length === 1 ? "this document" : `these ${ids.length.toLocaleString()} documents`;
+    const sure = await menu.confirm({
+      title: `Move ${many} to Trash?`,
+      description: "They can be restored from Trash for 30 days.",
+      confirmLabel: "Move to Trash",
+      danger: true,
+    });
+    if (!sure) return;
+    const results = await Promise.allSettled(ids.map((id) => kernel.documents.delete(id)));
+    const failed = results.filter((result) => result.status === "rejected").length;
+    if (failed > 0) {
+      kernel.ui.notify({
+        id: "doc-list.trash-failed",
+        level: "error",
+        message: `${failed.toLocaleString()} of ${ids.length.toLocaleString()} documents could not be moved to Trash.`,
+      });
+    }
   };
 
   // ---------------------------------------------------------------------------
@@ -181,6 +227,7 @@ export default function activate(kernel: Kernel): DocListApi {
     return (
       <DocListView
         documents={kernel.documents}
+        index={index()}
         menu={menu}
         onOpen={open}
         onCreate={() => create()}
@@ -196,6 +243,7 @@ export default function activate(kernel: Kernel): DocListApi {
           router.navigate(listPath(next), { replace: true });
         }}
         searchInput={input}
+        {...(registry() ? { onActions: openActions } : {})}
       />
     );
   };
@@ -247,25 +295,37 @@ export default function activate(kernel: Kernel): DocListApi {
       id: "doc-list.new",
       title: "New document",
       category: "Documents",
+      icon: "file-plus",
       run: () => create(),
     },
     {
       id: "doc-list.all",
       title: "Show all documents",
       category: "Documents",
+      icon: "files",
       run: () => router.navigate("/"),
     },
     {
       id: "doc-list.search",
       title: "Search documents",
       category: "Documents",
+      icon: "search",
       run: openSearch,
     },
     {
       id: "doc-list.openTrash",
       title: "Open Trash",
       category: "Documents",
+      icon: "trash-x",
       run: () => router.navigate("/trash"),
+    },
+    {
+      id: "doc-list.trashDocuments",
+      title: "Move to Trash",
+      category: "Documents",
+      icon: "trash",
+      takes: "documents",
+      run: trashAll,
     },
   ]);
   kernel.ports.offer<KeybindingDefault>("keys", [
@@ -284,14 +344,10 @@ export default function activate(kernel: Kernel): DocListApi {
       // spliced afterwards: at creation there is no concurrent writer to merge with, and
       // this is the one moment when authoring the whole text is correct (SPEC §3.3).
       const title = options?.title ?? "Untitled";
-      // An explicit path always wins: a folder's "+" button knows where it is, and no
-      // default may overrule a caller that said so. Only an *unfiled* document asks
-      // where unfiled documents go, and the answer is the root until told otherwise.
-      const path = options?.path ?? defaultLocation;
-      const front = ["---", `title: ${yamlScalar(title)}`];
-      if (path) front.push(`path: ${yamlScalar(path)}`);
-      front.push("---", "", `# ${title}`, "");
-      const id = await kernel.documents.create({ text: front.join("\n") });
+      const text = ["---", `title: ${yamlScalar(title)}`, "---", "", `# ${title}`, ""].join("\n");
+      const id = await kernel.documents.create({ text });
+      // Filing is whoever listens: `folders` puts it under `parent`, or its default.
+      kernel.ports.emit("created", options?.parent !== undefined ? { id, parent: options.parent } : { id });
       router.navigate(`/doc/${id}`);
       return id;
     },

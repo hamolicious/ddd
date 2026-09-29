@@ -91,6 +91,8 @@ export type {
   QuerySubscription,
   SearchHit,
   SearchOptions,
+  ListAction,
+  ListPlan,
   SectionLineEdit,
   SortDirection,
   SortKey,

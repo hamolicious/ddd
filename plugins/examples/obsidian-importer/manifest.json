@@ -1,19 +1,27 @@
 {
   "id": "obsidian-importer",
-  "version": "1.4.2",
+  "version": "1.5.0",
   "kernel": "^2.0",
   "hot": true,
   "consumes": {
     "attachments": {
-      "protocol": "lm/attachments@^1.0",
+      "protocol": "lm/attachments@^2.0",
       "needs": [
         "upload"
       ]
+    },
+    "folders": {
+      "protocol": "lm/folders@^1.0",
+      "needs": [
+        "ensurePath",
+        "file"
+      ],
+      "optional": true
     }
   },
   "provides": {
     "command": {
-      "protocol": "lm/commands.command@1.0.0"
+      "protocol": "lm/commands.command@2.0.0"
     },
     "nav": {
       "protocol": "lm/navbar.item@1.0.0",
@@ -24,7 +32,7 @@
     "module": "frontend/index.mjs"
   },
   "name": "Obsidian importer",
-  "description": "Imports notes and attachments from an Obsidian vault ZIP, preserving paths and resolving links.",
+  "description": "Imports notes and attachments from an Obsidian vault ZIP, preserving folders and resolving links.",
   "author": "Life Manager examples",
   "license": "MIT OR Apache-2.0"
 }

@@ -512,8 +512,8 @@ Hard requirements:
   mismatch → 409; identical `sha256` auto-resolves. Deletion is explicit; orphans
   are only flagged.
 - Standalone upload with `wrapper=true` creates a **wrapper document** (SPEC
-  §3.6): `fm.title` from the filename, `fm.path` when given, body embedding
-  `attachment://<ulid>`.
+  §3.6): `fm.title` from the filename, body embedding `attachment://<ulid>`; the
+  client files it in a folder.
 - Admin: invites 7-day / single-use / non-admin only; last admin cannot be
   demoted or deleted; deleting a user revokes sessions and keeps attribution;
   `GET /api/admin/export` streams a zip of every document as plain markdown.

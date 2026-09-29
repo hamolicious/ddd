@@ -1,5 +1,5 @@
 /**
- * lm/markdown-renderer@1.0.0: service, owned by `markdown`.
+ * lm/markdown-renderer@2.1.0: service, owned by `markdown`.
  *
  * The unified/remark to React pipeline: render a document's body, and the pieces around
  * it.
@@ -13,7 +13,7 @@ import type { MarkdownTaskState } from "@protocols/lm/markdown.taskState";
 
 /** The protocol this package describes. */
 export type ProtocolId = "lm/markdown-renderer";
-export type ProtocolVersion = "1.0.0";
+export type ProtocolVersion = "2.1.0";
 
 export interface TextSpan {
   readonly start: number;
@@ -46,8 +46,10 @@ export interface MarkdownRenderer {
   readonly taskStates: () => readonly MarkdownTaskState[];
   /** An attachment as the winning renderer draws it, or `undefined` when none is wired. */
   readonly renderAttachment: (attachmentId: string, options: RenderAttachmentOptions) => ReactNode | undefined;
-  /** Turn an embedded `attachment://` into a wrapper document. */
-  readonly promoteToDocument: (attachmentId: string, options?: { readonly path?: string }) => Promise<string>;
+  /** Turn an embedded `attachment://` into a wrapper document, filed where "Files go to" says when `folders` is wired. */
+  readonly promoteToDocument: (attachmentId: string) => Promise<string>;
+  /** A link to a document as the body draws `[](doc://…)`: its live title, colour and icon; a click opens it. Since 2.1.0. */
+  readonly renderDocLink: (documentId: string) => ReactNode;
   /** Fires when a markdown contribution changes, so a cached render can re-render. */
   readonly onChange: (listener: () => void) => Unsubscribe;
 }

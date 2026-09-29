@@ -22,6 +22,8 @@ import {
   type DocumentSpliceApi,
   type DocumentsApi,
   type FmValue,
+  type ListAction,
+  type ListPlan,
   type OpenDocument,
   type QuerySubscription,
   type SearchHit,
@@ -40,8 +42,10 @@ import { OfflineCopies } from "./offline-copies.js";
 import { LocalRows, Outbox, isTransient } from "./outbox.js";
 import { mintUlid } from "./ulid.js";
 import {
+  frontmatterList,
   removeFrontmatterKey,
   removeSection,
+  sectionList,
   setFrontmatterValue,
   spliceSection,
   type SectionKeyEdit,
@@ -154,6 +158,34 @@ export class SpliceHost implements DocumentSpliceApi {
 
   removeSection(target: SpliceTarget): Promise<void> {
     return this.#write(target, (text) => removeSection(text, this.pluginId));
+  }
+
+  async frontmatterList(target: SpliceTarget, key: string, action: ListAction): Promise<FmValue | undefined> {
+    let popped: FmValue | undefined;
+    await this.#write(target, (text) => {
+      const plan = frontmatterList(text, key, action);
+      popped = plan.popped;
+      return plan.edits;
+    });
+    return popped;
+  }
+
+  async sectionList(target: SpliceTarget, key: string, action: ListAction): Promise<FmValue | undefined> {
+    let popped: FmValue | undefined;
+    await this.#write(target, (text) => {
+      const plan = sectionList(text, this.pluginId, key, action);
+      popped = plan.popped;
+      return plan.edits;
+    });
+    return popped;
+  }
+
+  planFrontmatterList(text: string, key: string, action: ListAction): ListPlan {
+    return frontmatterList(text, key, action);
+  }
+
+  planSectionList(text: string, key: string, action: ListAction): ListPlan {
+    return sectionList(text, this.pluginId, key, action);
   }
 
   /**

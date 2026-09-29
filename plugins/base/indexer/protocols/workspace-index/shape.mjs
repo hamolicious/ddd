@@ -13,7 +13,7 @@ feed. Nothing is written anywhere; every client builds its own, offline included
 
 Trashed documents are counted in \`stats().documents.trashed\` and nowhere else: they have no
 fields, no words and no connections. Every frontmatter field of every live document is
-indexed, machine-owned ones (an \`fm.path\` starting with \`.\`) included. Keys nested in a map
+indexed, machine-owned ones (\`machine: true\`) included. Keys nested in a map
 are dotted paths (\`project.status\`), the spelling the filter language uses
 (\`fm.project.status\`), and the parent key is listed too, with kind \`map\`. To offer only what
 a person typed, filter on \`machineOnly\`.
@@ -65,7 +65,7 @@ export interface NoteConnections {
 export interface IndexedDocument {
   readonly id: DocumentId;
   readonly title: string;
-  /** \`fm.path\`, \`""\` at the root. */
+  /** The titles of the notes above it in the folder tree, joined by \` / \`; \`""\` at the root. */
   readonly folder: string;
   /** Machine-owned (\`_shared/machine-docs.ts\`). */
   readonly machine: boolean;
@@ -114,7 +114,7 @@ export interface WorkspaceStats {
   readonly orphans: number;
   /** Distinct \`attachment://\` ids referenced. */
   readonly attachments: number;
-  /** Distinct folders, parents included (\`a/b\` counts \`a\` and \`a/b\`). */
+  /** Notes that hold at least one other note in the folder tree. */
   readonly folders: number;
   /** Documents whose frontmatter did not fully parse (SPEC §3.4). */
   readonly fmParseErrors: number;

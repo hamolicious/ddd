@@ -18,11 +18,12 @@
  *   or the reverse. That claim was doubted once (`web/MOBILE-AUDIT.md`, Q5) and is now
  *   pinned by `filter.test.ts` rather than argued.
  *
- * **One toolbar: the search bar, then three icons.** Search runs the providers
+ * **One toolbar: the search bar, then the icons.** Search runs the providers
  * (`search/`) and turns the list into ranked results; sort opens a `context-menu` of
  * fields ("Best match" joins them while a search is on), direction flips the order, and
  * the funnel unfolds every filter — "Show machine documents" included — with a badge
- * counting those applied. While the filters are open the funnel stays lit in the accent
+ * counting those applied. While there are results, a fourth icon opens the actions
+ * that run on all of them (`onActions`). While the filters are open the funnel stays lit in the accent
  * colour, so the button that folds them away is the obvious one.
  *
  * **On a phone the card docks to the bottom of the screen**, where a thumb is, and so
@@ -41,19 +42,15 @@ import type { ReactElement, RefObject } from "react";
 import type { ContextMenu } from "@protocols/lm/context-menu";
 
 import { useCompact } from "../../_shared/compact.js";
+import type { ConditionContext } from "../../_shared/conditions.js";
+import { ConditionsEditor, type NoteLookup } from "../../_shared/conditions-editor.js";
+import type { Suggestions } from "../../_shared/conditions-index.js";
 import {
-  FIELD_OPTIONS,
   SORT_OPTIONS,
-  VALUELESS_OPS,
   RELEVANCE,
   appliedCount,
   buildEffectiveFilter,
-  clauseProblem,
-  describeClause,
-  type ClauseOp,
-  type FilterClause,
   type FilterDraft,
-  type ValueKind,
 } from "./filter.js";
 
 export interface FilterBarProps {
@@ -69,36 +66,15 @@ export interface FilterBarProps {
   readonly onQueryChange: (query: string) => void;
   /** The search field, so the "Search documents" command can focus it. */
   readonly searchInput?: RefObject<HTMLInputElement>;
+  /** Present while there are results to act on: opens the actions menu beside `anchor`. */
+  readonly onActions?: (anchor: HTMLElement) => void;
+  /** Finds notes for "is inside note" / "contains note"; without it they are not offered. */
+  readonly notes?: NoteLookup;
+  /** Properties and values to offer, from the indexer. */
+  readonly suggestions?: Suggestions;
+  /** The children "is inside note" resolves against, for the JSON shown. */
+  readonly context?: ConditionContext;
 }
-
-const OP_LABELS: readonly { readonly op: ClauseOp; readonly label: string }[] = [
-  { op: "eq", label: "is" },
-  { op: "ne", label: "is not" },
-  { op: "text_contains", label: "contains text" },
-  { op: "text_starts_with", label: "starts with" },
-  { op: "text_ends_with", label: "ends with" },
-  { op: "gt", label: "is after / greater than" },
-  { op: "gte", label: "is at least" },
-  { op: "lt", label: "is before / less than" },
-  { op: "lte", label: "is at most" },
-  { op: "contains", label: "list contains" },
-  { op: "any", label: "any item is" },
-  { op: "every", label: "every item is" },
-  { op: "exists", label: "exists" },
-  { op: "missing", label: "is missing" },
-  { op: "is_null", label: "is null" },
-];
-
-const KIND_LABELS: readonly { readonly kind: ValueKind; readonly label: string }[] = [
-  { kind: "str", label: "text" },
-  { kind: "int", label: "whole number" },
-  { kind: "float", label: "number" },
-  { kind: "bool", label: "true/false" },
-  { kind: "date", label: "date" },
-  { kind: "null", label: "null" },
-];
-
-let clauseCounter = 0;
 
 export function FilterBar({
   draft,
@@ -110,18 +86,15 @@ export function FilterBar({
   query,
   onQueryChange,
   searchInput,
+  onActions,
+  notes,
+  suggestions,
+  context,
 }: FilterBarProps): ReactElement {
-  // Row id → why it produces no clause. One computation, used both to mark the row and
-  // to say what is wrong with it, so the mark and the query cannot disagree.
-  const problems = new Map(
-    draft.clauses
-      .map((clause) => [clause.id, clauseProblem(clause)] as const)
-      .filter((entry): entry is readonly [string, string] => entry[1] !== undefined),
-  );
   // The *effective* filter — what the list actually runs, machine-document exclusion
   // included. Showing the user's clauses alone would make the disclosure a half-truth
   // about the query, which is the one thing this control is for.
-  const filter = buildEffectiveFilter(draft);
+  const filter = buildEffectiveFilter(draft, context);
 
   const compact = useCompact();
   const panelId = useId();
@@ -130,13 +103,6 @@ export function FilterBar({
   const [focused, setFocused] = useState(false);
   const tucked = compact && focused;
   const applied = appliedCount(draft);
-
-  const patch = (id: string, change: Partial<FilterClause>): void => {
-    onDraftChange({
-      ...draft,
-      clauses: draft.clauses.map((clause) => (clause.id === id ? { ...clause, ...change } : clause)),
-    });
-  };
 
   return (
     <>
@@ -149,7 +115,7 @@ export function FilterBar({
         onClick={() => setExpanded(false)}
       />
     )}
-    <div className="doclist-controls doclist:flex doclist:flex-col doclist:compact:sticky doclist:compact:bottom-0 doclist:compact:z-10 doclist:compact:order-last doclist:compact:mt-auto doclist:compact:-mx-2 doclist:compact:-mb-2 doclist:compact:flex-col-reverse doclist:compact:rounded-none doclist:compact:border-x-0 doclist:compact:border-b-0 doclist:compact:border-border-strong doclist:compact:pb-[calc(0.5rem+var(--lm-safe-bottom))] doclist:compact:shadow-2 doclist:gap-2 doclist:rounded doclist:border doclist:border-border doclist:bg-bg-subtle doclist:p-2 doclist:[&_.doclist-checkbox]:tap-h doclist:[&_.doclist-checkbox]:inline-flex doclist:[&_.doclist-checkbox]:cursor-pointer doclist:[&_.doclist-checkbox]:items-center doclist:[&_.doclist-checkbox]:gap-1 doclist:[&_.doclist-checkbox]:whitespace-nowrap doclist:[&_.doclist-clause]:flex doclist:[&_.doclist-clause]:flex-wrap doclist:[&_.doclist-clause]:items-end doclist:[&_.doclist-clause]:gap-1.5 doclist:[&_.doclist-clause]:rounded doclist:[&_.doclist-clause]:border doclist:[&_.doclist-clause]:border-transparent doclist:[&_.doclist-clause]:p-1 doclist:[&_.doclist-clause-invalid]:border-warning doclist:[&_.doclist-field]:flex doclist:[&_.doclist-field]:flex-col doclist:[&_.doclist-field]:gap-0.5 doclist:[&_.doclist-field]:text-sm doclist:[&_.doclist-field]:text-text-muted doclist:[&_.doclist-field_input]:tap-h doclist:[&_.doclist-field_input]:rounded doclist:[&_.doclist-field_input]:border doclist:[&_.doclist-field_input]:border-border doclist:[&_.doclist-field_input]:bg-bg doclist:[&_.doclist-field_input]:px-2 doclist:[&_.doclist-field_input]:text-base doclist:[&_.doclist-field_input]:text-text doclist:[&_.doclist-field_select]:tap-h doclist:[&_.doclist-field_select]:rounded doclist:[&_.doclist-field_select]:border doclist:[&_.doclist-field_select]:border-border doclist:[&_.doclist-field_select]:bg-bg doclist:[&_.doclist-field_select]:px-2 doclist:[&_.doclist-field_select]:text-base doclist:[&_.doclist-field_select]:text-text doclist:[&_.doclist-grow]:flex-[1_1_12rem] doclist:compact:[&_.doclist-grow]:basis-full doclist:[&_.doclist-row]:flex doclist:[&_.doclist-row]:flex-wrap doclist:[&_.doclist-row]:items-end doclist:[&_.doclist-row]:gap-2 doclist:[&_.doclist-sort]:compact:flex-[1_1_8rem] doclist:compact:[&_.doclist-sort_select]:w-full">
+    <div className="doclist-controls doclist:flex doclist:flex-col doclist:compact:sticky doclist:compact:bottom-0 doclist:compact:z-10 doclist:compact:order-last doclist:compact:mt-auto doclist:compact:-mx-2 doclist:compact:-mb-2 doclist:compact:flex-col-reverse doclist:compact:rounded-none doclist:compact:border-x-0 doclist:compact:border-b-0 doclist:compact:border-border-strong doclist:compact:pb-[calc(0.5rem+var(--lm-safe-bottom))] doclist:compact:shadow-2 doclist:gap-2 doclist:rounded doclist:border doclist:border-border doclist:bg-bg-subtle doclist:p-2 doclist:[&_.doclist-checkbox]:tap-h doclist:[&_.doclist-checkbox]:inline-flex doclist:[&_.doclist-checkbox]:cursor-pointer doclist:[&_.doclist-checkbox]:items-center doclist:[&_.doclist-checkbox]:gap-1 doclist:[&_.doclist-checkbox]:whitespace-nowrap doclist:[&_.doclist-clause]:flex doclist:[&_.doclist-clause]:flex-wrap doclist:[&_.doclist-clause]:items-end doclist:[&_.doclist-clause]:gap-1.5 doclist:[&_.doclist-clause]:rounded doclist:[&_.doclist-clause]:border doclist:[&_.doclist-clause]:border-transparent doclist:[&_.doclist-clause]:p-1 doclist:[&_.doclist-clause-invalid]:border-warning doclist:[&_.doclist-field]:flex doclist:[&_.doclist-field]:flex-col doclist:[&_.doclist-field]:gap-0.5 doclist:[&_.doclist-field]:text-sm doclist:[&_.doclist-field]:text-text-muted doclist:[&_.doclist-field_input]:tap-h doclist:[&_.doclist-field_input]:rounded doclist:[&_.doclist-field_input]:border doclist:[&_.doclist-field_input]:border-border doclist:[&_.doclist-field_input]:bg-bg doclist:[&_.doclist-field_input]:px-2 doclist:[&_.doclist-field_input]:text-base doclist:[&_.doclist-field_input]:text-text doclist:[&_.doclist-field_select]:tap-h doclist:[&_.doclist-field_select]:rounded doclist:[&_.doclist-field_select]:border doclist:[&_.doclist-field_select]:border-border doclist:[&_.doclist-field_select]:bg-bg doclist:[&_.doclist-field_select]:px-2 doclist:[&_.doclist-field_select]:text-base doclist:[&_.doclist-field_select]:text-text doclist:[&_.doclist-grow]:flex-[1_1_12rem] doclist:compact:[&_.doclist-grow]:basis-full doclist:[&_.doclist-row]:flex doclist:[&_.doclist-row]:flex-wrap doclist:[&_.doclist-row]:items-end doclist:[&_.doclist-row]:gap-2 doclist:[&_.doclist-clauses]:m-0 doclist:[&_.doclist-clauses]:flex doclist:[&_.doclist-clauses]:list-none doclist:[&_.doclist-clauses]:flex-col doclist:[&_.doclist-clauses]:gap-2 doclist:[&_.doclist-clauses]:p-0 doclist:[&_.doclist-clause-note]:m-0 doclist:[&_.doclist-clause-note]:flex-[1_1_100%] doclist:[&_.doclist-clause-note]:text-sm doclist:[&_.doclist-clause-note]:text-warning doclist:[&_.doclist-icon-button]:min-w-[var(--lm-tap-target)] doclist:[&_.doclist-note-results]:flex doclist:[&_.doclist-note-results]:flex-wrap doclist:[&_.doclist-note-results]:gap-1 doclist:[&_.doclist-sort]:compact:flex-[1_1_8rem] doclist:compact:[&_.doclist-sort_select]:w-full">
       <div className="doclist-toolbar doclist:flex doclist:items-center">
         <SearchField
           query={query}
@@ -158,7 +124,7 @@ export function FilterBar({
           onFocusChange={setFocused}
         />
         <div
-          className={`doclist-toolbar-icons doclist:flex doclist:shrink-0 doclist:gap-2 doclist:overflow-hidden doclist:-my-0.5 doclist:py-0.5 doclist:transition-[max-width,margin,padding,opacity] doclist:duration-200 doclist:ease-out doclist:motion-reduce:transition-none ${tucked ? "doclist:ml-0 doclist:max-w-0 doclist:px-0 doclist:opacity-0" : "doclist:ml-1 doclist:max-w-[12rem] doclist:px-0.5 doclist:opacity-100"}`}
+          className={`doclist-toolbar-icons doclist:flex doclist:shrink-0 doclist:gap-2 doclist:overflow-hidden doclist:-my-0.5 doclist:py-0.5 doclist:transition-[max-width,margin,padding,opacity] doclist:duration-200 doclist:ease-out doclist:motion-reduce:transition-none ${tucked ? "doclist:ml-0 doclist:max-w-0 doclist:px-0 doclist:opacity-0" : "doclist:ml-1 doclist:max-w-[16rem] doclist:px-0.5 doclist:opacity-100"}`}
           // Tucked away under a focused search on a phone: out of the tab order and the
           // accessibility tree too, not just out of sight.
           {...(tucked ? { inert: "" } : {})}
@@ -192,6 +158,21 @@ export function FilterBar({
             </span>
           )}
         </button>
+
+        {onActions && (
+          <button
+            type="button"
+            className={`doclist-actions ${ICON_BUTTON}`}
+            aria-haspopup="menu"
+            aria-label="Actions for these results"
+            title="Actions"
+            onClick={(event) => onActions(event.currentTarget)}
+          >
+            <svg aria-hidden="true" viewBox="0 0 24 24" className="doclist:size-[1.15em]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M13 3v7h6l-8 11v-7H5z" />
+            </svg>
+          </button>
+        )}
         </div>
       </div>
 
@@ -210,162 +191,31 @@ export function FilterBar({
         </label>
       </div>
 
-      {draft.clauses.length > 0 && (
-        <>
-          <div className="doclist-row">
-            <label className="doclist-field">
-              <span>Match</span>
-              <select
-                value={draft.combine}
-                onChange={(event) =>
-                  onDraftChange({ ...draft, combine: event.target.value === "or" ? "or" : "and" })
-                }
-              >
-                <option value="and">all conditions</option>
-                <option value="or">any condition</option>
-              </select>
-            </label>
-          </div>
-
-          <ul className="doclist-clauses doclist:m-0 doclist:flex doclist:list-none doclist:flex-col doclist:gap-2 doclist:p-0">
-            {draft.clauses.map((clause) => {
-              const valueless = VALUELESS_OPS.includes(clause.op);
-              return (
-                <li
-                  key={clause.id}
-                  className={`doclist-clause ${problems.has(clause.id) ? " doclist-clause-invalid" : ""}`}
-                >
-                  <label className="doclist-field">
-                    <span className="doclist:sr-only">Field</span>
-                    <input
-                      list="doclist-fields"
-                      value={clause.field}
-                      placeholder="Property name"
-                      onChange={(event) => patch(clause.id, { field: event.target.value })}
-                    />
-                  </label>
-
-                  <label className="doclist-field">
-                    <span className="doclist:sr-only">Operator</span>
-                    <select
-                      value={clause.op}
-                      onChange={(event) => patch(clause.id, { op: event.target.value as ClauseOp })}
-                    >
-                      {OP_LABELS.map((entry) => (
-                        <option key={entry.op} value={entry.op}>
-                          {entry.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  {!valueless && (
-                    <>
-                      <label className="doclist-field">
-                        <span className="doclist:sr-only">Value type</span>
-                        <select
-                          value={clause.kind}
-                          onChange={(event) =>
-                            patch(clause.id, { kind: event.target.value as ValueKind })
-                          }
-                        >
-                          {KIND_LABELS.map((entry) => (
-                            <option key={entry.kind} value={entry.kind}>
-                              {entry.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="doclist-field doclist-grow">
-                        <span className="doclist:sr-only">Value</span>
-                        <input
-                          value={clause.value}
-                          placeholder={clause.kind === "date" ? "2026-09-23" : "Value"}
-                          onChange={(event) => patch(clause.id, { value: event.target.value })}
-                        />
-                      </label>
-                    </>
-                  )}
-
-                  <label className="doclist-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={clause.negate === true}
-                      onChange={(event) => patch(clause.id, { negate: event.target.checked })}
-                    />
-                    <span>not</span>
-                  </label>
-
-                  <button
-                    type="button"
-                    className="doclist-icon-button doclist:min-w-[var(--lm-tap-target)]"
-                    aria-label={`Remove condition: ${describeClause(clause)}`}
-                    onClick={() =>
-                      onDraftChange({
-                        ...draft,
-                        clauses: draft.clauses.filter((entry) => entry.id !== clause.id),
-                      })
-                    }
-                  >
-                    ✕
-                  </button>
-
-                  {problems.has(clause.id) && (
-                    // The reason, not a label. "Incomplete" was shown over a row whose
-                    // boxes were all full — a text operator against a date value, say —
-                    // and told the reader to finish typing something already typed.
-                    <p className="doclist-clause-note doclist:m-0 doclist:flex-[1_1_100%] doclist:text-sm doclist:text-warning">
-                      Not applied. {problems.get(clause.id)}
-                    </p>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </>
-      )}
-
-      <datalist id="doclist-fields">
-        {FIELD_OPTIONS.map((option) => (
-          <option key={option.field} value={option.field}>
-            {option.label}
-          </option>
-        ))}
-      </datalist>
-
-      <div className="doclist-row">
-        <button
-          type="button"
-          onClick={() => {
-            clauseCounter += 1;
-            onDraftChange({
-              ...draft,
-              clauses: [
-                ...draft.clauses,
-                { id: `clause-${clauseCounter}`, field: "fm.status", op: "eq", value: "", kind: "str" },
-              ],
-            });
-          }}
-        >
-          Add condition
-        </button>
-        {(draft.clauses.length > 0 || draft.includeMachine === true) && (
-          <button
-            type="button"
-            // Every filter, "Show machine documents" included: it is one of them.
-            onClick={() =>
-              onDraftChange({
-                ...draft,
-                combine: "and",
-                clauses: [],
-                includeMachine: false,
-              })
-            }
-          >
-            Clear
-          </button>
-        )}
-      </div>
+      <ConditionsEditor
+        value={draft}
+        onChange={(conditions) => onDraftChange({ ...draft, ...conditions })}
+        classPrefix="doclist"
+        {...(notes !== undefined ? { notes } : {})}
+        {...(suggestions !== undefined ? { suggestions } : {})}
+        actions={
+          (draft.clauses.length > 0 || draft.includeMachine === true) && (
+            <button
+              type="button"
+              // Every filter, "Show machine documents" included: it is one of them.
+              onClick={() =>
+                onDraftChange({
+                  ...draft,
+                  combine: "and",
+                  clauses: [],
+                  includeMachine: false,
+                })
+              }
+            >
+              Clear
+            </button>
+          )
+        }
+      />
 
       {filter !== undefined && (
         <details className="doclist-json doclist:text-sm doclist:text-text-muted doclist:[&>summary]:flex doclist:[&>summary]:min-h-[var(--lm-tap-target)] doclist:[&>summary]:cursor-pointer doclist:[&>summary]:items-center doclist:[&>pre]:mt-1 doclist:[&>pre]:overflow-x-auto doclist:[&>pre]:rounded doclist:[&>pre]:bg-bg doclist:[&>pre]:p-2 doclist:[&>pre]:font-mono">

@@ -224,6 +224,11 @@ function MenuSections({
                       {item.checked ? "✓" : ""}
                     </span>
                   )}
+                  {item.icon === undefined ? null : (
+                    <span aria-hidden="true" className="ctxmenu:flex ctxmenu:w-4 ctxmenu:shrink-0 ctxmenu:justify-center">
+                      {item.icon}
+                    </span>
+                  )}
                   <span className="ctxmenu:flex ctxmenu:min-w-0 ctxmenu:flex-col">
                     <span>{item.label}</span>
                     {item.hint ? <small className="ctxmenu:text-text-muted">{item.hint}</small> : null}

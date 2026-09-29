@@ -80,7 +80,7 @@ import {
 } from "./boot/shell.js";
 import { ReloadPrompt, WiringWatch } from "./boot/reload-prompt.js";
 import { installTestHooks } from "./boot/test-hooks.js";
-import { registerServiceWorker } from "./boot/update.js";
+import { registerServiceWorker, type UpdateFlow } from "./boot/update.js";
 import { trackViewportHeight } from "./boot/viewport.js";
 import { installDevImportMap, missingSpecifiers, pageImportMap } from "./loader/importmap.js";
 import { failureNotice, loadPlugins, type ActiveModule } from "./loader/loader.js";
@@ -152,7 +152,7 @@ async function boot(): Promise<void> {
   // The prompt is the one shared with wiring changes (`reload-prompt.ts`): a user is asked
   // to reload once, whatever the reasons.
   if (!inShell()) {
-    registerServiceWorker((apply) => reloadPrompt.offerUpdate(apply));
+    updates = registerServiceWorker((apply) => reloadPrompt.offerUpdate(apply));
   }
 
   // The shell's half of the same story. A staged bundle is never applied to a running
@@ -257,6 +257,15 @@ async function boot(): Promise<void> {
       });
       const host = runtime.host;
 
+      // The socket coming back is usually the server coming back — often on a new build —
+      // so that is when to look for a new worker (`update.ts`).
+      let wasConnected = false;
+      host.sync.api().subscribe((state) => {
+        const connected = state.status === "syncing" || state.status === "synced";
+        if (connected && !wasConnected) updates?.check();
+        wasConnected = connected;
+      });
+
       // A problem reported while the kernel was still being built has no notice yet.
       notifyPluginProblems(host);
 
@@ -323,6 +332,8 @@ function notifyShellUpdate(host: KernelHost, info: ShellUpdateReady): void {
 }
 
 let runtime: KernelRuntime | undefined;
+/** The service-worker update flow, when there is one (not in the shell, not in dev). */
+let updates: UpdateFlow | undefined;
 
 /** The one reload prompt, shared by the service-worker update and wiring changes. */
 const reloadPrompt = new ReloadPrompt();

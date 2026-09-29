@@ -8,7 +8,7 @@
  *   store "projection"          keyPath "id"
  *     index "seq"               on "seq"          (feed order, watermark repair)
  *     index "deleted"           on "deleted"     (Trash view)
- *     index "path"              on "fm.path"     (folders, M3)
+ *     index "path"              on "fm.path"     (unused since folders became notes; kept to avoid a schema upgrade)
  *     index "updated_at"        on "updated_at"  (doc-list default sort)
  *   store "meta"                keyPath "key"    — the SyncCheckpoint lives here
  *   store "docs"                keyPath "id"     — persisted Y.Doc updates for

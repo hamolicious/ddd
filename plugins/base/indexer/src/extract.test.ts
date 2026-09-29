@@ -74,9 +74,12 @@ describe("extract — content", () => {
     expect(data.attachments).toEqual([f1, f2]);
   });
 
-  it("normalizes the folder and spots machine-owned documents", () => {
-    expect(extract(row("X", "", { path: " a//b/./ " })).folder).toBe("a/b");
-    expect(extract(row("X", "", { path: ".settings" })).machine).toBe(true);
+  it("reads the folder tree's children and spots machine-owned documents", () => {
+    const folder = row("X", "", {}, { plugins: { folders: { children: ["A", "B", "A", 3] } } });
+    expect(extract(folder).children).toEqual(["A", "B"]);
+    expect(extract(row("X", "")).children).toEqual([]);
+    expect(extract(row("X", "", { machine: true })).machine).toBe(true);
+    expect(extract(row("X", "", { path: ".settings" })).machine).toBe(false);
   });
 });
 

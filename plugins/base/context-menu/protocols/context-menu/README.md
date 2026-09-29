@@ -1,6 +1,6 @@
 # lm/context-menu
 
-`1.0.0` · service · owned by `context-menu`
+`1.1.0` · service · owned by `context-menu`
 
 Menus, sheets and questions. One menu is open at a time; opening another replaces it. With an
 `anchor` it is a popover beside that control on a wide screen; on a phone, or with no anchor,

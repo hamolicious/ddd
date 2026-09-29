@@ -195,7 +195,7 @@ describe.skipIf(!coreArtifactExists())("per-user settings documents", () => {
     expect(id).toBeDefined();
     const text = workspace.text(id as string);
     const parsed = core.parseDocument(text);
-    expect(parsed.fm["path"]).toBe(".settings");
+    expect(parsed.fm["machine"]).toBe(true);
     expect(parsed.fm[SETTINGS_OWNER_KEY]).toBe(USER);
     expect(parsed.plugins["themes"]).toEqual({ theme: "solarized" });
     // Machine-owned, but a human can read it: the body says what it is.
@@ -273,7 +273,7 @@ describe.skipIf(!coreArtifactExists())("per-user settings documents", () => {
   it("ignores another user's settings document", async () => {
     await workspace.seed(
       "01J8ZOTHER000000000000000",
-      `---\npath: .settings\n${SETTINGS_OWNER_KEY}: ${OTHER_USER}\n---\n\n%%% themes\ntheme: not-mine\n%%%\n`,
+      `---\nmachine: true\n${SETTINGS_OWNER_KEY}: ${OTHER_USER}\n---\n\n%%% themes\ntheme: not-mine\n%%%\n`,
     );
     await settle();
     expect(host.documentId).toBeUndefined();
@@ -284,7 +284,7 @@ describe.skipIf(!coreArtifactExists())("per-user settings documents", () => {
     const first = "01J8ZDUPE000000000000000A";
     const second = "01J8ZDUPE000000000000000B";
     const doc = (theme: string, extra: string): string =>
-      `---\npath: .settings\n${SETTINGS_OWNER_KEY}: ${USER}\n---\n\n%%% themes\ntheme: ${theme}\n${extra}\n%%%\n`;
+      `---\nmachine: true\n${SETTINGS_OWNER_KEY}: ${USER}\n---\n\n%%% themes\ntheme: ${theme}\n${extra}\n%%%\n`;
     await workspace.seed(first, doc("first", "density: cosy"));
     await workspace.seed(second, doc("second", "extra: yes"));
     await settle();
@@ -318,11 +318,11 @@ describe.skipIf(!coreArtifactExists())("per-user settings documents", () => {
     const planted = "01J8ZPLANTED0000000000000";
     await workspace.seed(
       mine,
-      `---\npath: .settings\n${SETTINGS_OWNER_KEY}: ${USER}\n---\n\n%%% themes\ntheme: mine\n%%%\n`,
+      `---\nmachine: true\n${SETTINGS_OWNER_KEY}: ${USER}\n---\n\n%%% themes\ntheme: mine\n%%%\n`,
     );
     await workspace.seed(
       planted,
-      `---\npath: .settings\n${SETTINGS_OWNER_KEY}: ${USER}\n---\n\n%%% themes\ntheme: planted\n%%%\n`,
+      `---\nmachine: true\n${SETTINGS_OWNER_KEY}: ${USER}\n---\n\n%%% themes\ntheme: planted\n%%%\n`,
       OTHER_USER,
     );
     await settle();
@@ -343,7 +343,7 @@ describe.skipIf(!coreArtifactExists())("per-user settings documents", () => {
     const id = "01J8ZDEEP000000000000000A";
     await workspace.seed(
       id,
-      `---\npath: .settings\n${SETTINGS_OWNER_KEY}: ${USER}\n---\n\n%%% themes\ntheme: nord\nnested: {a: 1}\n%%%\n`,
+      `---\nmachine: true\n${SETTINGS_OWNER_KEY}: ${USER}\n---\n\n%%% themes\ntheme: nord\nnested: {a: 1}\n%%%\n`,
     );
     await settle();
     expect(themes.all()).toEqual({ theme: "nord" });

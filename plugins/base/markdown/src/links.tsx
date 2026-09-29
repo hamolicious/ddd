@@ -25,6 +25,8 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { PopupMenu, type MenuItem } from "./menu.js";
+import type { NoteLook } from "@protocols/lm/folders";
+
 import { isInlineImage, type AttachmentMeta, type EmbedSite, type MarkdownRuntime } from "./runtime.js";
 
 /** Load a value once per key, without tearing when the component unmounts mid-flight. */
@@ -83,6 +85,7 @@ export interface DocLinkProps {
 export function DocLink({ id, label, fragment, runtime }: DocLinkProps): ReactNode {
   const load = useCallback((key: string) => runtime.titleOf(key), [runtime]);
   const { value: title, done } = useResolved(id, load);
+  const look = useLook(id, runtime);
   const hasLabel = label !== undefined && label !== null && label !== "";
 
   if (done && title === undefined && !hasLabel) {
@@ -93,9 +96,18 @@ export function DocLink({ id, label, fragment, runtime }: DocLinkProps): ReactNo
     );
   }
 
+  const text = hasLabel ? label : (title ?? id);
+  // Dressed as the folder tree dresses the note: its colour and icon, and on a
+  // background a pill, so a link reads as the same note wherever it appears.
+  const dressed = look !== undefined;
   return (
     <a
-      className="markdown:decoration-dotted"
+      className={
+        dressed
+          ? `markdown:inline-flex markdown:max-w-full markdown:items-baseline markdown:gap-1 markdown:align-baseline markdown:no-underline markdown:hover:underline ${look.background ? "markdown:rounded-full markdown:px-1.5" : ""}`
+          : "markdown:decoration-dotted"
+      }
+      style={dressed ? { ...(look.color ? { color: look.color } : {}), ...(look.background ? { background: look.background } : {}) } : undefined}
       href={`doc://${id}${fragment ? `#${fragment}` : ""}`}
       title={title ?? id}
       onClick={(event) => {
@@ -103,9 +115,22 @@ export function DocLink({ id, label, fragment, runtime }: DocLinkProps): ReactNo
         runtime.openDocument(id, fragment);
       }}
     >
-      {hasLabel ? label : (title ?? id)}
+      {look?.icon !== undefined && (
+        <span aria-hidden="true" className="markdown:inline-flex markdown:self-center markdown:[&_svg]:size-[1em]">
+          {look.icon}
+        </span>
+      )}
+      {dressed ? <span className="markdown:min-w-0 markdown:truncate">{text}</span> : text}
     </a>
   );
+}
+
+/** The note's look from `folders`, following its changes. */
+function useLook(id: string, runtime: MarkdownRuntime): NoteLook | undefined {
+  const [, setRevision] = useState(0);
+  useEffect(() => runtime.onLookChange(() => setRevision((value) => value + 1)), [runtime]);
+  const look = runtime.lookOf(id);
+  return look && (look.background || look.color || look.icon !== undefined) ? look : undefined;
 }
 
 // ---------------------------------------------------------------------------

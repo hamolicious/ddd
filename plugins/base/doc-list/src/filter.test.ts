@@ -15,7 +15,6 @@ import {
   buildClause,
   buildEffectiveFilter,
   buildFilter,
-  buildLiteral,
   buildSort,
   clauseProblem,
   invalidClauses,
@@ -34,117 +33,6 @@ const clause = (over: Partial<FilterClause> = {}): FilterClause => ({
   value: "open",
   kind: "str",
   ...over,
-});
-
-describe("buildLiteral", () => {
-  it("emits the tagged forms the wire format defines", () => {
-    expect(buildLiteral("str", "open")).toEqual({ str: "open" });
-    expect(buildLiteral("int", "3")).toEqual({ int: 3 });
-    expect(buildLiteral("float", "1.5")).toEqual({ float: 1.5 });
-    expect(buildLiteral("bool", "TRUE")).toEqual({ bool: true });
-    expect(buildLiteral("date", "2026-01-01")).toEqual({ date: "2026-01-01" });
-    // `null` is the one bare string in the grammar.
-    expect(buildLiteral("null", "")).toBe("null");
-  });
-
-  it("refuses a value that is not of the chosen family", () => {
-    expect(buildLiteral("int", "1.5")).toBeUndefined();
-    expect(buildLiteral("int", "")).toBeUndefined();
-    expect(buildLiteral("bool", "yes")).toBeUndefined();
-    expect(buildLiteral("str", "   ")).toBeUndefined();
-  });
-
-  it("refuses a date the core would refuse, so a half-typed one is no clause", () => {
-    expect(buildLiteral("date", "2026-0")).toBeUndefined();
-    expect(buildLiteral("date", "2026-02-30")).toBeUndefined();
-    expect(buildLiteral("date", "2026-13-01")).toBeUndefined();
-    expect(buildLiteral("date", "2026-02-29")).toBeUndefined(); // 2026 is not a leap year
-    expect(buildLiteral("date", "2028-02-29")).toEqual({ date: "2028-02-29" });
-    expect(buildLiteral("date", "2026-09-23T10:00:00Z")).toEqual({ date: "2026-09-23T10:00:00Z" });
-  });
-});
-
-describe("isFieldPathShaped", () => {
-  it("accepts the fixed roots as single segments and the dynamic roots as two or more", () => {
-    expect(isFieldPathShaped("title")).toBe(true);
-    expect(isFieldPathShaped("updated_at")).toBe(true);
-    expect(isFieldPathShaped("fm.status")).toBe(true);
-    expect(isFieldPathShaped("plugins.calendar.uid")).toBe(true);
-  });
-
-  it("rejects what the core's path parser rejects", () => {
-    expect(isFieldPathShaped("fm")).toBe(false); // needs a key
-    expect(isFieldPathShaped("title.sub")).toBe(false); // fixed roots take one segment
-    expect(isFieldPathShaped("unknown")).toBe(false);
-    expect(isFieldPathShaped("fm.a.b.c.d.e.f.g")).toBe(false); // 7 segments max
-    expect(isFieldPathShaped("fm.$where")).toBe(false); // cannot inject operator syntax
-    expect(isFieldPathShaped("")).toBe(false);
-  });
-});
-
-describe("buildClause", () => {
-  it("builds a scalar comparison", () => {
-    expect(buildClause(clause())).toEqual({
-      cmp: { field: "fm.status", op: "eq", value: { str: "open" } },
-    });
-  });
-
-  it("wraps a negated clause in not", () => {
-    expect(buildClause(clause({ negate: true }))).toEqual({
-      not: { cmp: { field: "fm.status", op: "eq", value: { str: "open" } } },
-    });
-  });
-
-  it("uses the explicit list operators — there is no implicit array matching", () => {
-    expect(buildClause(clause({ field: "fm.tags", op: "contains", value: "work" }))).toEqual({
-      contains: { field: "fm.tags", value: { str: "work" } },
-    });
-    expect(buildClause(clause({ field: "fm.tags", op: "any", value: "work" }))).toEqual({
-      any: { field: "fm.tags", op: "eq", value: { str: "work" } },
-    });
-    expect(buildClause(clause({ field: "fm.tags", op: "every", value: "work" }))).toEqual({
-      every: { field: "fm.tags", op: "eq", value: { str: "work" } },
-    });
-  });
-
-  it("keeps missing, exists and is_null as three different questions", () => {
-    expect(buildClause(clause({ op: "missing", value: "" }))).toEqual({
-      missing: { field: "fm.status" },
-    });
-    expect(buildClause(clause({ op: "exists", value: "" }))).toEqual({
-      exists: { field: "fm.status" },
-    });
-    expect(buildClause(clause({ op: "is_null", value: "" }))).toEqual({
-      is_null: { field: "fm.status" },
-    });
-  });
-
-  it("builds the three text modes", () => {
-    expect(buildClause(clause({ field: "title", op: "text_contains", value: "milk" }))).toEqual({
-      text: { field: "title", mode: "contains", value: "milk" },
-    });
-    expect(buildClause(clause({ field: "title", op: "text_starts_with", value: "a" }))).toEqual({
-      text: { field: "title", mode: "starts_with", value: "a" },
-    });
-    expect(buildClause(clause({ field: "title", op: "text_ends_with", value: "z" }))).toEqual({
-      text: { field: "title", mode: "ends_with", value: "z" },
-    });
-  });
-
-  it("refuses combinations both engines refuse", () => {
-    // `text` against a non-string column.
-    expect(buildClause(clause({ op: "text_contains", kind: "int", value: "3" }))).toBeUndefined();
-    // An ordering operator against a bool or null literal.
-    expect(buildClause(clause({ op: "gt", kind: "bool", value: "true" }))).toBeUndefined();
-    expect(buildClause(clause({ op: "lt", kind: "null", value: "" }))).toBeUndefined();
-    // An unparseable field path.
-    expect(buildClause(clause({ field: "nope" }))).toBeUndefined();
-  });
-
-  it("produces nothing for an incomplete row", () => {
-    expect(buildClause(clause({ value: "" }))).toBeUndefined();
-    expect(buildClause(clause({ kind: "date", value: "2026" }))).toBeUndefined();
-  });
 });
 
 describe("buildFilter", () => {
@@ -314,7 +202,7 @@ describe("an unusable clause contributes nothing to the query (MOBILE-AUDIT Q5)"
       "Text matching needs the text value type.",
     );
     expect(clauseProblem(clause({ op: "lt", kind: "bool", value: "true" }))).toBe(
-      "Before and after do not apply to true/false or null.",
+      "Before and after do not apply to true/false, null or a document.",
     );
   });
 });

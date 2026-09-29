@@ -30,7 +30,7 @@ export type FilterJson = { readonly [key: string]: unknown };
 
 export type SortDirection = "asc" | "desc";
 
-/** One sort key: a dotted projection path (`title`, `fm.path`, `updated_at`). */
+/** One sort key: a dotted projection path (`title`, `fm.date`, `updated_at`). */
 export interface SortKey {
   readonly field: string;
   readonly direction: SortDirection;
@@ -161,6 +161,25 @@ export interface SectionLineEdit {
   readonly remove?: boolean;
 }
 
+/**
+ * One change to a list value. Lists are written one item per line (a YAML block
+ * sequence), so every action is a line insert or a line delete: two devices pushing
+ * to the same list at once both land, and removing an item twice removes it once.
+ * Items are scalars.
+ */
+export type ListAction =
+  | { readonly action: "push"; readonly value: FmValue }
+  | { readonly action: "insert"; readonly index: number; readonly value: FmValue }
+  /** Every copy of `value` goes. A missing item is not an error. */
+  | { readonly action: "remove"; readonly value: FmValue }
+  | { readonly action: "pop" };
+
+/** The edits a {@link ListAction} makes, and what `pop` took off. */
+export interface ListPlan {
+  readonly edits: readonly TextEdit[];
+  readonly popped?: FmValue;
+}
+
 /** Anything a splice can be aimed at: an id, or an already-open document. */
 export type SpliceTarget = DocumentId | OpenDocument;
 
@@ -188,6 +207,15 @@ export interface DocumentSpliceApi {
   spliceSection(target: SpliceTarget, edits: readonly SectionLineEdit[]): Promise<void>;
   /** Remove the calling plugin's whole `%%%` section (uninstall/cleanup). */
   removeSection(target: SpliceTarget): Promise<void>;
+  /**
+   * Push, insert, remove or pop one item of a frontmatter list. A key holding a flow
+   * list (`[a, b]`) or a scalar is rewritten into one-item-per-line form on the first
+   * action; from then on each action touches one line. Resolves with what `pop` took off.
+   * @since 2.1.0
+   */
+  frontmatterList(target: SpliceTarget, key: string, action: ListAction): Promise<FmValue | undefined>;
+  /** {@link frontmatterList} for a key in the calling plugin's own `%%%` section. @since 2.1.0 */
+  sectionList(target: SpliceTarget, key: string, action: ListAction): Promise<FmValue | undefined>;
 
   /**
    * The edits that `setFrontmatterValue` would apply, against a text you already
@@ -197,6 +225,10 @@ export interface DocumentSpliceApi {
   planFrontmatterValue(text: string, key: string, value: FmValue | null): readonly TextEdit[];
   /** The edits `spliceSection` would apply. Pure. */
   planSection(text: string, edits: readonly SectionLineEdit[]): readonly TextEdit[];
+  /** What `frontmatterList` would do. Pure. @since 2.1.0 */
+  planFrontmatterList(text: string, key: string, action: ListAction): ListPlan;
+  /** What `sectionList` would do. Pure. @since 2.1.0 */
+  planSectionList(text: string, key: string, action: ListAction): ListPlan;
   /**
    * Apply edits to an open document in one transaction, highest offset first.
    * `origin` is passed to the `Y.Doc` transaction so an editor can recognise its

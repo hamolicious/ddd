@@ -40,6 +40,7 @@ import type { ComponentType, ReactNode } from "react";
 
 import { type EmbedChain } from "./doc-embed.js";
 import { clampEmbedDepth, DEFAULT_EMBED_DEPTH, EMBED_DEPTH_KEY, MarkdownSettings } from "./MarkdownSettings.js";
+import { DocLink } from "./links.js";
 import { ProcessorCache } from "./processor.js";
 import { bodyOf, regionsOf } from "../../_shared/regions.js";
 import { renderTree, type RenderRegistries } from "./render.js";
@@ -298,6 +299,8 @@ export default function activate(kernel: Kernel): MarkdownApi {
 
     taskStates: () => currentRegistries().tasks.states,
 
+    renderDocLink: (documentId) => <DocLink id={documentId} runtime={runtime} />,
+
     renderAttachment: (attachmentId, options) => {
       const Renderer = currentRegistries().attachment;
       if (!Renderer) return undefined;
@@ -312,7 +315,7 @@ export default function activate(kernel: Kernel): MarkdownApi {
       );
     },
 
-    promoteToDocument: (attachmentId, options) => runtime.promote(attachmentId, options),
+    promoteToDocument: (attachmentId) => runtime.promote(attachmentId),
 
     onChange: (listener) => {
       listeners.add(listener);

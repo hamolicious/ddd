@@ -1,6 +1,6 @@
 {
   "id": "doc-list",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "name": "Document list",
   "description": "Browse, search, sort and filter documents; new document; the Trash view.",
   "author": "Life Manager base distribution",
@@ -20,14 +20,37 @@
     "menu": {
       "protocol": "lm/context-menu@^1.0",
       "needs": [
-        "open"
+        "open",
+        "confirm"
       ]
     },
     "search": {
       "protocol": "lm/search.provider@^1.0"
     },
-    "location": {
-      "protocol": "lm/folders.default-location@^1.0"
+    "registry": {
+      "protocol": "lm/commands@^1.0",
+      "needs": [
+        "list",
+        "run"
+      ],
+      "optional": true
+    },
+    "icons": {
+      "protocol": "lm/icons@^1.0",
+      "needs": [
+        "Icon"
+      ],
+      "optional": true
+    },
+    "index": {
+      "protocol": "lm/workspace-index@^1.0",
+      "needs": [
+        "fmFields",
+        "fmValues",
+        "documents",
+        "subscribe"
+      ],
+      "optional": true
     }
   },
   "provides": {
@@ -40,7 +63,7 @@
       "order": 10
     },
     "browser": {
-      "protocol": "lm/document-browser@1.0.0"
+      "protocol": "lm/document-browser@2.0.0"
     },
     "list": {
       "protocol": "lm/sidebar.panel@1.0.0",
@@ -53,10 +76,13 @@
       "protocol": "lm/main.view@1.0.0"
     },
     "commands": {
-      "protocol": "lm/commands.command@1.0.0"
+      "protocol": "lm/commands.command@2.0.0"
     },
     "keys": {
       "protocol": "lm/keybindings.default@1.0.0"
+    },
+    "created": {
+      "protocol": "lm/document-browser.created@1.0.0"
     }
   },
   "peerLibraries": {

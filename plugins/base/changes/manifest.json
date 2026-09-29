@@ -25,7 +25,7 @@
       ]
     },
     "markdown": {
-      "protocol": "lm/markdown-renderer@^1.0",
+      "protocol": "lm/markdown-renderer@^2.0",
       "needs": [
         "render",
         "bodyOf"
@@ -50,7 +50,7 @@
       "protocol": "lm/main.view@1.0.0"
     },
     "commands": {
-      "protocol": "lm/commands.command@1.0.0"
+      "protocol": "lm/commands.command@2.0.0"
     }
   },
   "peerLibraries": {

@@ -22,7 +22,7 @@
  */
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactElement } from "react";
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactElement, ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { useCompact, useVisibleViewport } from "../../_shared/compact.js";
@@ -35,6 +35,8 @@ export interface PaletteProps {
   readonly bindingFor: (commandId: string) => string | undefined;
   readonly onRun: (command: Command) => void;
   readonly onClose: () => void;
+  /** Draws a command's `icon` by name; without it no icons are drawn. */
+  readonly renderIcon?: (name: string) => ReactNode;
   readonly initialQuery?: string;
   /** Shown above the list when a binding is ambiguous (SPEC §6.5: conflicts are listed). */
   readonly conflictCount?: number;
@@ -46,6 +48,7 @@ export function Palette({
   bindingFor,
   onRun,
   onClose,
+  renderIcon,
   initialQuery = "",
   conflictCount = 0,
   onShowConflicts,
@@ -218,7 +221,12 @@ export function Palette({
                   run(command);
                 }}
               >
-                {command.icon !== undefined && <span className="commands:shrink-0 commands:text-text-muted">{command.icon}</span>}
+                {renderIcon && (
+                  // Every row keeps the slot, so titles line up whether or not they have an icon.
+                  <span aria-hidden="true" className="commands:flex commands:w-4 commands:shrink-0 commands:justify-center commands:text-text-muted">
+                    {command.icon !== undefined && renderIcon(command.icon)}
+                  </span>
+                )}
                 <span className="commands:min-w-0 commands:flex-1 commands:truncate">
                   {command.category && <span className="cmd-category commands:mr-0.5 commands:text-text-muted commands:after:content-['_›_']">{command.category}</span>}
                   {command.title}

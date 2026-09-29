@@ -272,7 +272,7 @@ const uploaded = (name: string): RegExp => new RegExp(`\\[${name.replace(".", "\
 
 test("an upload shows its progress, where it goes and the time left, and carries on after a dropped chunk", async ({ page, request, baseURL }) => {
   await signIn(page, ADMIN);
-  const id = await createDocument(request, baseURL!, "---\ntitle: Tax return\npath: money/2026\n---\n\nThe scan:\n\n");
+  const id = await createDocument(request, baseURL!, "---\ntitle: Tax return\n---\n\nThe scan:\n\n");
   await openDocument(page, id);
   await edit(page);
   const sent = chunksSent(page);
@@ -285,7 +285,7 @@ test("an upload shows its progress, where it goes and the time left, and carries
   // not open the panel over the editor by itself; the bell carries a bar instead.
   await expect(page.getByRole("group", { name: "Notices" })).toBeHidden();
   const notice = (await notices(page)).locator("li", { hasText: "scan.bin" });
-  await expect(notice).toContainText("Uploading scan.bin to “Tax return” in money/2026");
+  await expect(notice).toContainText("Uploading scan.bin to “Tax return”");
   const bar = notice.getByRole("progressbar");
   await expect(bar).toHaveAttribute("aria-valuenow", "44");
   await expect(bar).toContainText(/4\.2 MB of 9\.4 MB · (.* left|working out time left…)/);

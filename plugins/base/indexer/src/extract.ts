@@ -17,7 +17,7 @@
 import type { CoreMap, CoreValue, DocumentId, DocumentRow } from "@kernel";
 import type { ConnectionKind } from "@protocols/lm/workspace-index";
 
-import { isMachinePath } from "../../_shared/machine-docs.js";
+import { isMachineDocument } from "../../_shared/machine-docs.js";
 import { bodyOf } from "../../_shared/regions.js";
 
 export interface Reference {
@@ -32,8 +32,8 @@ export interface Extracted {
   readonly title: string;
   readonly deleted: boolean;
   readonly machine: boolean;
-  /** `fm.path`, normalized; `""` when unfiled. */
-  readonly folder: string;
+  /** The ids its `%%% folders` section lists as children (the folder tree's own format). */
+  readonly children: readonly DocumentId[];
   /** Every frontmatter key, nested ones dotted (`flattenFm`); empty in Trash. */
   readonly fields: ReadonlyArray<readonly [string, CoreValue]>;
   readonly fmParseError: boolean;
@@ -56,13 +56,13 @@ export function fingerprint(row: DocumentRow): string {
 }
 
 export function extract(row: DocumentRow): Extracted {
-  const machine = isMachinePath(row.fm.path);
+  const machine = isMachineDocument(row);
   const base = {
     id: row.id,
     title: row.title,
     deleted: row.deleted,
     machine,
-    folder: normalizeFolder(row.fm.path),
+    children: readChildren(row.plugins),
     fmParseError: row.fm_parse_error,
     updatedAt: row.updated_at,
   };
@@ -225,12 +225,15 @@ class ReferenceSet {
   }
 }
 
-/** `folders/src/path.ts`' `normalizePath`: trimmed segments, empty / `.` / `..` dropped. */
-function normalizeFolder(raw: unknown): string {
-  if (typeof raw !== "string") return "";
-  return raw
-    .split("/")
-    .map((segment) => segment.trim())
-    .filter((segment) => segment.length > 0 && segment !== "." && segment !== "..")
-    .join("/");
+/** `folders/src/hierarchy.ts`' `readChildren`: `plugins.folders.children`, strings only, once each. */
+function readChildren(plugins: DocumentRow["plugins"]): readonly DocumentId[] {
+  const section = plugins["folders"];
+  if (section === null || typeof section !== "object" || Array.isArray(section)) return [];
+  const raw = (section as Record<string, CoreValue>)["children"];
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const entry of raw as readonly CoreValue[]) {
+    if (typeof entry === "string" && entry.trim() !== "" && !out.includes(entry.trim())) out.push(entry.trim());
+  }
+  return out;
 }

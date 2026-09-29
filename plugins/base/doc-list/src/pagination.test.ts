@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { PAGE_SIZE, limitFor, nextPageSize, remaining, showingText } from "./pagination.js";
+import { PAGE_SIZE, limitFor, remaining, showingText } from "./pagination.js";
 
 describe("paging the list", () => {
   it("grows the limit a page at a time, never below one page", () => {
@@ -9,10 +9,8 @@ describe("paging the list", () => {
     expect(limitFor(0)).toBe(PAGE_SIZE);
   });
 
-  it("brings a full page, or what is left", () => {
-    expect(nextPageSize(50, 1_000_000)).toBe(PAGE_SIZE);
-    expect(nextPageSize(50, 62)).toBe(12);
-    expect(nextPageSize(62, 62)).toBe(0);
+  it("counts what is left, never below none", () => {
+    expect(remaining(50, 62)).toBe(12);
     expect(remaining(70, 62)).toBe(0);
   });
 

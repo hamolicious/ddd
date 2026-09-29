@@ -29,6 +29,10 @@
  * two columns; the key column is a fixed width, so a long key wraps instead of starving
  * the values.
  *
+ * **A `doc://` value is a link to that note**, alone or in a list: its title, its colour
+ * and icon from the folder tree, and a click opens it — drawn by `markdown`, the same
+ * link the body draws, so the two cannot disagree.
+ *
  * `fm_parse_error` gets a small inline warning rather than silence, for the reason the
  * flag exists: a dropped line means the header below it is *incomplete*, and a reader
  * comparing it against the raw text needs to know which of the two is lying.
@@ -44,9 +48,16 @@ export interface FmHeaderProps {
   readonly fm?: Readonly<Record<string, CoreValue>>;
   /** SPEC §3.4: at least one frontmatter line could not be read and was dropped. */
   readonly fmParseError?: boolean;
+  /** A `doc://` value as a link to its note (`markdown`'s `renderDocLink`). */
+  readonly renderDocLink?: (documentId: string) => ReactNode;
 }
 
-export function FmHeader({ fm, fmParseError }: FmHeaderProps): ReactNode {
+/** `doc://<id>`, the whole value: the id, or `undefined` for anything else. */
+function docLinkId(value: string): string | undefined {
+  return /^doc:\/\/([A-Za-z0-9_-]+)$/.exec(value.trim())?.[1];
+}
+
+export function FmHeader({ fm, fmParseError, renderDocLink }: FmHeaderProps): ReactNode {
   const rows = useMemo(() => fmDisplayRows(fm), [fm]);
 
   // Nothing to say, and nothing wrong: no header. The `fm_parse_error` case is
@@ -60,7 +71,7 @@ export function FmHeader({ fm, fmParseError }: FmHeaderProps): ReactNode {
         <table className="viewer-properties-list viewer:mb-2 viewer:w-full viewer:table-fixed viewer:border-collapse viewer:border-0 viewer:text-sm">
           <tbody>
             {rows.map((row) => (
-              <PropertyRow key={row.key} row={row} />
+              <PropertyRow key={row.key} row={row} renderDocLink={renderDocLink} />
             ))}
           </tbody>
         </table>
@@ -78,14 +89,19 @@ export function FmHeader({ fm, fmParseError }: FmHeaderProps): ReactNode {
   );
 }
 
-function PropertyRow({ row }: { readonly row: FmDisplayRow }): ReactNode {
+interface RowProps {
+  readonly row: FmDisplayRow;
+  readonly renderDocLink?: ((documentId: string) => ReactNode) | undefined;
+}
+
+function PropertyRow({ row, renderDocLink }: RowProps): ReactNode {
   return (
     <tr className="viewer-property" data-kind={row.kind}>
       <th scope="row" className="viewer-property-key viewer:w-[9rem] viewer:compact:w-[7rem] viewer:border-0 viewer:py-0.5 viewer:pl-0 viewer:pr-3 viewer:text-left viewer:align-top viewer:font-medium viewer:break-words viewer:text-text-muted">
         {row.key}
       </th>
       <td className="viewer-property-value viewer:border-0 viewer:p-0 viewer:py-0.5 viewer:align-top viewer:break-words viewer:text-text">
-        <PropertyValue row={row} />
+        <PropertyValue row={row} renderDocLink={renderDocLink} />
       </td>
     </tr>
   );
@@ -99,21 +115,35 @@ function PropertyRow({ row }: { readonly row: FmDisplayRow }): ReactNode {
  * or a `Yes` actually says in the file can hover or inspect, and a test can assert on
  * the stored form without pinning the test runner's locale.
  */
-function PropertyValue({ row }: { readonly row: FmDisplayRow }): ReactNode {
+function PropertyValue({ row, renderDocLink }: RowProps): ReactNode {
+  const linked = (value: string): ReactNode => {
+    const id = renderDocLink ? docLinkId(value) : undefined;
+    return id !== undefined && renderDocLink ? renderDocLink(id) : undefined;
+  };
+
   if (row.items !== undefined) {
     if (row.items.length === 0) return <EmptyValue />;
     return (
       <span className="viewer-property-chips viewer:flex viewer:flex-wrap viewer:gap-1">
-        {row.items.map((item, index) => (
+        {row.items.map((item, index) =>
+          linked(item) !== undefined ? (
+            <span className="viewer-property-link viewer:inline-flex viewer:max-w-full viewer:items-center viewer:py-px" key={`${item}-${index}`}>
+              {linked(item)}
+            </span>
+          ) : (
           <span className="viewer-property-chip viewer:inline-block viewer:max-w-full viewer:break-words viewer:rounded-full viewer:border viewer:border-border viewer:bg-bg-subtle viewer:px-1.5 viewer:py-px viewer:text-[0.85em]" key={`${item}-${index}`}>
             {item}
           </span>
-        ))}
+          ),
+        )}
       </span>
     );
   }
 
   if (row.empty) return <EmptyValue />;
+
+  const link = row.kind === "string" ? linked(row.raw) : undefined;
+  if (link !== undefined) return <span className="viewer-property-link">{link}</span>;
 
   if (row.kind === "date") {
     return (

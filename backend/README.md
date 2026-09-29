@@ -244,7 +244,7 @@ Binaries live in GridFS, outside the CRDT, referenced from document text as
 
 | Method | Path | Behavior |
 |---|---|---|
-| `POST` | `/` | Streamed multipart. `?wrapper=true` also creates the **wrapper document** (title from the filename, `?path=` → `fm.path`, body embedding the reference) so folders, search, Trash and links apply to files with no special cases. `wrapper=false` is the paste-into-a-document path. |
+| `POST` | `/` | Streamed multipart. `?wrapper=true` also creates the **wrapper document** (title from the filename, body embedding the reference; the client files it in a folder) so folders, search, Trash and links apply to files with no special cases. `wrapper=false` is the paste-into-a-document path. |
 | `GET` | `/{id}` | Streams the blob. `nosniff` always, `Content-Disposition: attachment` except a closed allowlist of safe inline types — SVG and HTML are **never** inline. `ETag` is the sha256. |
 | `GET` | `/{id}/meta` | Metadata only. |
 | `PUT` | `/{id}` | Replace. `If-Match: <revision>` required (**428** without it); mismatch → **409**; an identical sha256 auto-resolves to `{"unchanged": true}`. |

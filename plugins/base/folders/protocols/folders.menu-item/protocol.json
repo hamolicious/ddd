@@ -1,10 +1,10 @@
 {
   "id": "lm/folders.menu-item",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "kind": "slot",
   "owner": "folders",
   "types": "index.d.ts",
-  "description": "An entry in a folder's actions menu (the ⋯ button, right-click, long press), listed after the tree's own entries and before \"Delete folder\", in seat order. `run` is called once the menu has closed, so it may open a menu or sheet of its own.",
+  "description": "An entry in a note's actions menu in the folder tree (the ⋯ button, right-click, long press), listed after the tree's own entries and before \"Delete\", in seat order. `run` is called once the menu has closed, so it may open a menu or sheet of its own.",
   "key": "id",
   "shape": {
     "object": {

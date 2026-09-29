@@ -2,9 +2,9 @@
 /**
  * Fill a running workspace with randomly connected notes, for looking at the graph view.
  *
- * Every run makes a **new top-level folder** (`graph-seed-<timestamp>`), so runs never
- * collide and each shows in its own colour with "colour by folder". Inside it, notes are
- * wired so the graph has some structure:
+ * Every run makes a **new top-level folder note** (`graph-seed-<timestamp>`) holding one
+ * note per cluster, so runs never collide and each shows in its own colour with "colour by
+ * folder". Inside it, notes are wired so the graph has some structure:
  *
  * - most links go to notes that already have many (a few hubs emerge, like a real vault);
  * - notes come in loose clusters that link mostly among themselves;
@@ -101,8 +101,15 @@ for (const [index, note] of notes.entries()) {
   if (random() < 0.02) note.missing = ulid();
 }
 
+// The folder notes: one for the run, one per cluster inside it (`folders`' own format:
+// a `%%% folders` section listing the children).
+const clusterNotes = Array.from({ length: clusterCount }, (_, index) => ({ id: ulid(), title: `cluster-${index + 1}` }));
+const folderNote = { id: ulid(), title: folder };
+const folderText = (title, children) =>
+  `---\ntitle: ${title}\n---\n\n# ${title}\n\n%%% folders\nchildren:\n${children.map((child) => `  - ${child.id}\n`).join("")}%%%\n`;
+
 function text(note) {
-  const lines = ["---", `title: ${note.title}`, `path: ${folder}/cluster-${note.cluster + 1}`];
+  const lines = ["---", `title: ${note.title}`];
   if (note.parent) lines.push(`parent: doc://${note.parent.id}`);
   lines.push("---", "", `Seeded note ${note.title}.`, "");
   for (const target of note.links) lines.push(`- See [${target.title}](doc://${target.id})`);
@@ -119,27 +126,35 @@ const token = await signIn();
 let done = 0;
 let failed = 0;
 const started = Date.now();
-const queue = [...notes];
+const queue = [
+  { id: folderNote.id, title: folderNote.title, content: folderText(folderNote.title, clusterNotes) },
+  ...clusterNotes.map((cluster, index) => ({
+    id: cluster.id,
+    title: cluster.title,
+    content: folderText(cluster.title, notes.filter((note) => note.cluster === index)),
+  })),
+  ...notes,
+];
 await Promise.all(
   Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
     for (let note = queue.shift(); note; note = queue.shift()) {
       const response = await fetch(`${baseUrl}/api/documents`, {
         method: "POST",
         headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-        body: JSON.stringify({ id: note.id, content: text(note) }),
+        body: JSON.stringify({ id: note.id, content: note.content ?? text(note) }),
       });
       if (response.ok) done += 1;
       else {
         failed += 1;
         console.error(`\n${note.title}: ${response.status} ${await response.text()}`);
       }
-      if (process.stderr.isTTY) process.stderr.write(`\r${done}/${count} created`);
+      if (process.stderr.isTTY) process.stderr.write(`\r${done}/${count + clusterCount + 1} created`);
     }
   }),
 );
 
 const links = notes.reduce((sum, note) => sum + note.links.length + note.embeds.length + (note.parent ? 1 : 0), 0);
-process.stderr.write(`${process.stderr.isTTY ? "\r" : ""}${done}/${count} created in ${((Date.now() - started) / 1000).toFixed(1)} s\n`);
+process.stderr.write(`${process.stderr.isTTY ? "\r" : ""}${done}/${count + clusterCount + 1} created in ${((Date.now() - started) / 1000).toFixed(1)} s\n`);
 console.log(`folder: ${folder}  (${clusterCount} clusters, ~${links} connections)`);
 if (failed > 0) {
   console.error(`${failed} failed`);

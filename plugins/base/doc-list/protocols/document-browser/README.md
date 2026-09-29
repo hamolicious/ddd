@@ -1,6 +1,6 @@
 # lm/document-browser
 
-`1.0.0` · service · owned by `doc-list`
+`2.0.0` · service · owned by `doc-list`
 
 Creating documents from anywhere in the app, and the list of ids currently shown.
 

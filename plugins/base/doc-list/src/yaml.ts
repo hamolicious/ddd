@@ -17,9 +17,9 @@
  * **Except for control characters, where single quotes cannot help.** A single-quoted
  * scalar has no escapes at all, so a value containing a newline is not a quoted scalar —
  * it is one line with an unterminated quote followed by *another frontmatter line*. Since
- * `fm.path` comes from a document any workspace user can write (SPEC §2), that is an
- * injection: `path: "home\ntitle: owned"` in one document put a `title:` line the user
- * never typed into the next document created in that "folder". Those values are
+ * a value written here can come from a document any workspace user can write (SPEC §2),
+ * that is an injection: a value of `"home\ntitle: owned"` puts a line the user never
+ * typed into the document being created. Those values are
  * double-quoted with escapes instead — the same rule as the kernel's splice serializer
  * (`core::value::to_yaml_inline`), which is the authority both sides follow.
  */

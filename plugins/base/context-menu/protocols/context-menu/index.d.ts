@@ -1,5 +1,5 @@
 /**
- * lm/context-menu@1.0.0: service, owned by `context-menu`.
+ * lm/context-menu@1.1.0: service, owned by `context-menu`.
  *
  * Menus, sheets and questions. One menu is open at a time; opening another replaces it.
  * With an `anchor` it is a popover beside that control on a wide screen; on a phone, or
@@ -15,13 +15,15 @@ import type { ReactNode } from "react";
 
 /** The protocol this package describes. */
 export type ProtocolId = "lm/context-menu";
-export type ProtocolVersion = "1.0.0";
+export type ProtocolVersion = "1.1.0";
 
 export interface MenuItem {
   readonly id: string;
   readonly label: string;
   /** A second, quieter line under the label. */
   readonly hint?: string;
+  /** Drawn before the label, in the label's colour. Since 1.1.0. */
+  readonly icon?: ReactNode;
   /** Drawn in the danger colour: deleting, trashing. */
   readonly danger?: boolean;
   /** Present on choice items: `true` marks the current choice. */

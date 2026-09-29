@@ -28,11 +28,6 @@ export function remaining(shown: number, total: number): number {
   return Math.max(0, total - shown);
 }
 
-/** How many the next page brings: a full page, or what is left. */
-export function nextPageSize(shown: number, total: number): number {
-  return Math.min(PAGE_SIZE, remaining(shown, total));
-}
-
 /** "Showing 50 of 1,234": the total is always the real one, never a page's. */
 export function showingText(shown: number, total: number): string {
   const format = (n: number): string => n.toLocaleString();

@@ -3,10 +3,9 @@
  * unit test can reach.
  *
  * **Machine-owned documents are hidden by default.** The kernel stores each user's
- * settings as a document with `fm.path: .settings` (SPEC §6.4), which is the right
- * design and had one visible consequence nobody chose: the sidebar counted it, the
- * document list listed it, and the folder tree grew a `.settings` folder you could
- * drag notes into. The rule and its DSL clause are unit-tested against the real Wasm
+ * settings as a document marked `machine: true` (SPEC §6.4), which is the right design
+ * and had one visible consequence nobody chose: the sidebar counted it, the document
+ * list listed it, and the folder tree showed it as a note you could drag others into. The rule and its DSL clause are unit-tested against the real Wasm
  * evaluator (`plugins/base/_shared/machine-docs.test.ts`); what is only testable here
  * is that **three plugins agree** — the list, the sidebar count and the tree — and that
  * the toggle really brings the document back rather than merely existing.
@@ -25,11 +24,11 @@ import { expect, test } from "@playwright/test";
 
 import { createDocument, docRows, showSidebar, signIn, waitSynced } from "./helpers.js";
 
-/** A document filed the way the kernel files its settings documents. */
+/** A document marked the way the kernel marks its settings documents. */
 const MACHINE_DOC = [
   "---",
   "title: Machine owned thing",
-  "path: .settings",
+  "machine: true",
   "---",
   "",
   "machine data lives here",
@@ -56,7 +55,7 @@ test("a machine-owned document is out of the list, the count and the tree — un
   const ordinary = await createDocument(
     request,
     base,
-    ["---", "title: An ordinary note", "path: home", "---", "", "body", ""].join("\n"),
+    ["---", "title: An ordinary note", "---", "", "body", ""].join("\n"),
   );
 
   await signIn(page);
@@ -73,11 +72,11 @@ test("a machine-owned document is out of the list, the count and the tree — un
   const listed = await docRows(page).count();
   await expect(allDocuments.locator(".doclist-count")).toHaveText(String(listed));
 
-  // And the folder tree has no `.settings` folder to drag anything into. `home` is
-  // there, so this is "the tree is built and lacks it", not "the tree is empty".
+  // And the folder tree does not show it either. The ordinary note is there, so this is
+  // "the tree is built and lacks it", not "the tree is empty".
   const tree = page.getByRole("tree", { name: /folders/i });
-  await expect(tree.getByRole("treeitem", { name: /home/ })).toBeVisible();
-  await expect(tree.getByRole("treeitem", { name: /\.settings/ })).toHaveCount(0);
+  await expect(tree.getByRole("treeitem", { name: /An ordinary note/ }).first()).toBeVisible();
+  await expect(tree.getByRole("treeitem", { name: /Machine owned thing/ })).toHaveCount(0);
 
   // The toggle is a view default, not access control: asking brings it back.
   await page.getByRole("button", { name: /^Filters/ }).click();
@@ -102,7 +101,7 @@ test("Ctrl+Space searches the list, which keeps its filters and its sort", async
   await createDocument(
     request,
     base,
-    `---\ntitle: Quibble machine\npath: .settings\n---\n\nalso ${needle}\n`,
+    `---\ntitle: Quibble machine\nmachine: true\n---\n\nalso ${needle}\n`,
   );
 
   await signIn(page);

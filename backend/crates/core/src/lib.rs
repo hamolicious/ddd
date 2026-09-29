@@ -45,4 +45,4 @@ pub use value::{Map, Value};
 
 /// Version of the shared-core semantics. Bumped when parsing or evaluation
 /// output changes in a way that invalidates materialized data.
-pub const CORE_SEMANTICS_VERSION: u32 = 2;
+pub const CORE_SEMANTICS_VERSION: u32 = 3;

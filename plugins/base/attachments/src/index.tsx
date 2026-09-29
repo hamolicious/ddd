@@ -46,6 +46,7 @@
 import type { Kernel, SettingsValue } from "@kernel";
 
 import type { Attachments } from "@protocols/lm/attachments";
+import type { Folders } from "@protocols/lm/folders";
 import type { AttachmentViewer } from "@protocols/lm/attachments.viewer";
 import type { EditorInsertion, EditorPaste } from "@protocols/lm/editor.paste";
 import type { MarkdownAttachment } from "@protocols/lm/markdown.attachment";
@@ -178,7 +179,21 @@ export default function activate(kernel: Kernel): Attachments {
   });
 
   // The `lm/attachments` service, on the `uploads` port; returned too, for the loader.
-  const api = createAttachmentsApi(kernel.session.fetch.bind(kernel.session));
+  // A wrapper document the server made is filed where "Files go to" says — through
+  // `folders`, which owns that setting, when it is wired.
+  const sender = createAttachmentsApi(kernel.session.fetch.bind(kernel.session));
+  const api: Attachments = {
+    upload: async (blob, name, options) => {
+      const response = await sender.upload(blob, name, options);
+      if (response.document_id !== undefined && kernel.ports.bound("folders")) {
+        await kernel.ports
+          .use<Pick<Folders, "fileNew">>("folders")
+          .fileNew(response.document_id, "file")
+          .catch((cause: unknown) => kernel.log.warn("could not file the new file document", cause));
+      }
+      return response;
+    },
+  };
   kernel.ports.serve<Attachments>("uploads", api);
   return api;
 }

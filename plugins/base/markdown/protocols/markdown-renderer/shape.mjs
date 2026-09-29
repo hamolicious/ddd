@@ -3,7 +3,7 @@ import { s } from "@kernel";
 /** @type {import("@kernel").ProtocolSource} */
 export default {
   id: "lm/markdown-renderer",
-  version: "1.0.0",
+  version: "2.1.0",
   kind: "service",
   name: "MarkdownRenderer",
   description: "The unified/remark to React pipeline: render a document's body, and the pieces around it.",
@@ -47,8 +47,12 @@ export interface RenderAttachmentOptions {
       .describe("An attachment as the winning renderer draws it, or `undefined` when none is wired."),
     promoteToDocument: s
       .func()
-      .as("(attachmentId: string, options?: { readonly path?: string }) => Promise<string>")
-      .describe("Turn an embedded `attachment://` into a wrapper document."),
+      .as("(attachmentId: string) => Promise<string>")
+      .describe("Turn an embedded `attachment://` into a wrapper document, filed where \"Files go to\" says when `folders` is wired."),
+    renderDocLink: s
+      .func()
+      .as("(documentId: string) => ReactNode")
+      .describe("A link to a document as the body draws `[](doc://…)`: its live title, colour and icon; a click opens it. Since 2.1.0."),
     onChange: s
       .func()
       .as("(listener: () => void) => Unsubscribe")

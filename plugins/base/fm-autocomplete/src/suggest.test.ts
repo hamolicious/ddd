@@ -125,3 +125,35 @@ describe("yamlScalar", () => {
     expect(yamlScalar(value)).toBe(expected);
   });
 });
+
+describe("suggest — note links", () => {
+  const notes: Record<string, { title: string; folder: string }> = {
+    "01AAA": { title: "Driving", folder: "Hubs" },
+    "01BBB": { title: "Dev env", folder: "" },
+  };
+  const linked = {
+    fmFields: () => FIELDS,
+    fmValues: (key: string): readonly FmValueCount[] =>
+      key === "hubs"
+        ? [
+            { value: "doc://01AAA", count: 3 },
+            { value: "doc://01BBB", count: 1 },
+            { value: "doc://01ZZZ", count: 1 },
+          ]
+        : [],
+    noteOf: (id: string) => notes[id],
+  };
+  const hubs = (doc: string) => suggest(doc.slice(doc.lastIndexOf("\n") + 1), doc, linked);
+
+  it("shows a doc:// value by its note's title and folder, and inserts the link", () => {
+    const items = hubs('---\nhubs: ["doc://01CCC", "')?.items;
+    expect(items?.[0]).toEqual({ label: "Driving", detail: "Hubs · 3 notes", insert: JSON.stringify("doc://01AAA") });
+    expect(items?.[1]).toMatchObject({ label: "Dev env", detail: "1 note" });
+    // A note this device does not know stays as its link.
+    expect(items?.[2]).toMatchObject({ label: "doc://01ZZZ" });
+  });
+
+  it("matches by title", () => {
+    expect(hubs('---\nhubs: ["dev')?.items.map((item) => item.label)).toEqual(["Dev env"]);
+  });
+});
