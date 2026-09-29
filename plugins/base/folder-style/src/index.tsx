@@ -301,14 +301,14 @@ export default function activate(kernel: Kernel): void {
           icons={icons()}
           notes={notes}
           {...(suggestions !== undefined ? { suggestions } : {})}
-          openLook={(rule, anchor) =>
+          openLook={(rule, label, anchor) =>
             menu.openSheet({
-              title: "Color and icon",
+              title: `Color and icon: ${label}`,
               anchor,
               onClose: rules.flush,
               render: (): ReactElement => (
                 <Editor
-                  name="Matching notes"
+                  name={label}
                   initial={rule.style}
                   fallback={defaults.get()}
                   icons={icons()}

@@ -7,7 +7,7 @@ import type { NoteSource } from "../../_shared/note-picker.js";
 import type { Suggestions } from "../../_shared/conditions-index.js";
 import { newClauseId } from "../../_shared/conditions.js";
 
-import { newRuleId, resolveStyle, textOn, type FolderStyle, type Rule } from "./styles.js";
+import { newRuleId, resolveStyle, ruleLabel, textOn, type FolderStyle, type Rule } from "./styles.js";
 
 export interface RulesProps {
   readonly rules: readonly Rule[];
@@ -18,8 +18,8 @@ export interface RulesProps {
   readonly notes: NoteSource;
   /** Properties and values to offer, from the indexer. */
   readonly suggestions?: Suggestions;
-  /** Opens the colour and icon editor for `rule` beside `anchor`. */
-  readonly openLook: (rule: Rule, anchor: HTMLElement) => void;
+  /** Opens the colour and icon editor for `rule`, called `label`, beside `anchor`. */
+  readonly openLook: (rule: Rule, label: string, anchor: HTMLElement) => void;
 }
 
 const BUTTON =
@@ -68,6 +68,7 @@ export function Rules({ rules, onChange, defaults, icons, notes, suggestions, op
       <ol className="folderstyle:m-0 folderstyle:flex folderstyle:list-none folderstyle:flex-col folderstyle:gap-2 folderstyle:p-0">
         {rules.map((rule, index) => {
           const shown = resolveStyle(rule.style, defaults);
+          const label = ruleLabel(rule, index);
           return (
             <li
               key={rule.id}
@@ -78,7 +79,7 @@ export function Rules({ rules, onChange, defaults, icons, notes, suggestions, op
                   type="button"
                   className={BUTTON}
                   title="Color and icon"
-                  onClick={(event) => openLook(rule, event.currentTarget)}
+                  onClick={(event) => openLook(rule, label, event.currentTarget)}
                 >
                   <span
                     className={`folderstyle:inline-flex folderstyle:items-center folderstyle:gap-1 ${shown?.background !== undefined ? "folderstyle:rounded folderstyle:px-1.5" : ""}`}
@@ -89,10 +90,17 @@ export function Rules({ rules, onChange, defaults, icons, notes, suggestions, op
                     }
                   >
                     {icons !== undefined && shown?.icon !== undefined && <icons.Icon name={shown.icon} size="1.05em" />}
-                    <span>Rule {index + 1}</span>
+                    <span>{label}</span>
                   </span>
                 </button>
-                <span className="folderstyle:flex-1" />
+                <input
+                  type="text"
+                  aria-label={`Name of ${label}`}
+                  placeholder={`Rule ${index + 1}`}
+                  value={rule.name ?? ""}
+                  className="folderstyle:tap-h folderstyle:min-w-0 folderstyle:flex-1 folderstyle:rounded folderstyle:border folderstyle:border-border folderstyle:bg-bg folderstyle:px-2 folderstyle:text-base folderstyle:text-text"
+                  onChange={(event) => replace(rule.id, { name: event.target.value })}
+                />
                 <button type="button" className={BUTTON} aria-label="Move up" disabled={index === 0} onClick={() => move(index, -1)}>
                   ↑
                 </button>
@@ -108,7 +116,7 @@ export function Rules({ rules, onChange, defaults, icons, notes, suggestions, op
                 <button
                   type="button"
                   className={BUTTON}
-                  aria-label={`Remove rule ${index + 1}`}
+                  aria-label={`Remove ${label}`}
                   onClick={() => onChange(rules.filter((each) => each.id !== rule.id))}
                 >
                   ✕

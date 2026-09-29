@@ -7,6 +7,7 @@ import {
   parseRules,
   parseStyles,
   resolveStyle,
+  ruleLabel,
   sameRules,
   sameStyles,
   serializeRules,
@@ -128,6 +129,18 @@ describe("rules", () => {
     const rules = parseRules([deep]);
     expect(rules[0]?.when.clauses[0]?.deep).toBe(true);
     expect(serializeRules(rules)).toEqual([deep]);
+  });
+
+  it("keeps a name, trimmed, and labels an unnamed rule by its place", () => {
+    const named = JSON.stringify({ name: "  Work  ", when: { combine: "and", clauses: [] } });
+    const rules = parseRules([named, JSON.stringify({ name: " ", when: { combine: "and", clauses: [] } })]);
+    expect(rules.map((rule, index) => ruleLabel(rule, index))).toEqual(["Work", "Rule 2"]);
+    expect(serializeRules(rules)).toEqual([
+      JSON.stringify({ name: "Work", when: { combine: "and", clauses: [] } }),
+      JSON.stringify({ when: { combine: "and", clauses: [] } }),
+    ]);
+    // A name being typed, trailing space and all, is the stored one.
+    expect(sameRules([{ ...rules[0]!, name: "Work " }], [rules[0]!])).toBe(true);
   });
 
   it("drops lines and clauses that do not parse", () => {

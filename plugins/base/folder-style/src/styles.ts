@@ -12,7 +12,8 @@
  * The defaults are two more settings, `defaultBackground` and `defaultIcon`.
  *
  * Rules are a third, `rules`: one JSON line each, conditions and a look —
- * `{"when":{"combine":"and","clauses":[…]},"background":"#e03131","icon":"star"}`.
+ * `{"name":"Work","when":{"combine":"and","clauses":[…]},"background":"#e03131","icon":"star"}`,
+ * `name` left out when there is none.
  *
  * **What a note shows, field by field** (`resolveStyle`): its own, else the first rule it
  * matches that sets the field, else the default. A colour or icon set on the note itself
@@ -98,6 +99,13 @@ export interface Rule {
   readonly id: string;
   readonly when: Conditions;
   readonly style: FolderStyle;
+  /** As typed; stored trimmed, and left out when empty. */
+  readonly name?: string;
+}
+
+/** What a rule is called on screen: its name, else its place in the list. */
+export function ruleLabel(rule: Rule, index: number): string {
+  return rule.name?.trim() || `Rule ${index + 1}`;
 }
 
 let ruleCounter = 0;
@@ -147,6 +155,7 @@ export function parseRules(value: unknown): readonly Rule[] {
         clauses: clauses.filter((clause): clause is FilterClause => clause !== undefined),
       },
       style: parseDefaults(raw.background, raw.icon),
+      ...(typeof raw.name === "string" && raw.name.trim() !== "" ? { name: raw.name.trim() } : {}),
     });
   }
   return rules;
@@ -155,6 +164,7 @@ export function parseRules(value: unknown): readonly Rule[] {
 export function serializeRules(rules: readonly Rule[]): string[] {
   return rules.map((rule) =>
     JSON.stringify({
+      ...(rule.name !== undefined && rule.name.trim() !== "" ? { name: rule.name.trim() } : {}),
       when: {
         combine: rule.when.combine,
         clauses: rule.when.clauses.map(({ field, op, value, kind, deep, negate }) => ({
