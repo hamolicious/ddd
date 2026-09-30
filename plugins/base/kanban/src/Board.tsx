@@ -42,6 +42,12 @@
  * Enter makes the card and leaves the field open for the next, Escape (or leaving it
  * empty) closes it. The new card shows at once, faded, until the note it made arrives.
  *
+ * **No column is taller than the screen.** The board ends at the bottom of its scrolling
+ * ancestor (`useFitToScreen`), never shorter than half a screen, and each column's cards
+ * scroll in a box of their own, a virtual list (`useVirtualList`): only the cards on
+ * screen are in the page, the rest is padding. A drag reads the cards drawn, each of which
+ * knows its slot among the column's. With swimlanes the board itself scrolls its lanes.
+ *
  * **A filter bar above the board** (`FilterBar.tsx`), one pill per property the cards
  * show (the board's settings), narrows the board to the cards holding the chosen value —
  * on this screen only, nothing is saved. A card added while a filter is on is born with its value, so it
@@ -54,7 +60,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import type { ComponentType, PointerEvent as ReactPointerEvent, ReactElement } from "react";
+import type { ComponentType, PointerEvent as ReactPointerEvent, ReactElement, ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import type { DocumentRow, Kernel } from "@kernel";
@@ -65,6 +71,7 @@ import type { SavedViewProps } from "../../_shared/saved-view-mode.js";
 
 import { NoteLabel, lookOf, lookStyle, useLookChanges, type Looks } from "../../_shared/note-look.js";
 import { LONG_PRESS_MS, target as mark } from "../../_shared/target.js";
+import { useFitToScreen, useVirtualList } from "../../_shared/virtual-list.js";
 
 import { boards, type BoardHandle } from "./actions.js";
 import { excerpt, fieldText, type CardItem } from "./card.js";
@@ -107,6 +114,12 @@ const DRAG_THRESHOLD = 5;
 /** How long a finger must rest on a card before it lifts. */
 /** A touch that travels this far before a long press was a scroll. */
 const LONG_PRESS_SLOP = 10;
+/** A card's height before any is measured: a one-line title and its spacing. */
+const CARD_ESTIMATE = 42;
+/** A column is never shorter than this, so a crowded page scrolls rather than squeezing it. */
+const COLUMN_MIN = 320;
+/** What a swimlane's header and the gap between lanes take from a column's height. */
+const LANE_CHROME = 56;
 /** How close to an edge, in pixels, the board starts scrolling on its own, and how fast. */
 const EDGE = 48;
 const SPEED = 14;
@@ -156,6 +169,8 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect }: Boa
     const [lift, setLift] = useState<Lift | undefined>(undefined);
     const [error, setError] = useState<string | undefined>(undefined);
     const [board, setBoard] = useState<HTMLDivElement | null>(null);
+    /** The board's height that ends at the bottom of the screen. */
+    const fit = useFitToScreen(board, COLUMN_MIN);
     /** The column whose title field is open, by key (`null`: the "No …" column). */
     const [adding, setAdding] = useState<string | undefined>(undefined);
     /** Cards made here and not yet in the results: shown faded where they will appear. */
@@ -486,10 +501,13 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect }: Boa
         const at = others.findIndex((card) => (rank.get(card.id) ?? 0) > mine);
         return { over: Number(index), slot: at === -1 ? others.length : at };
       }
+      // The cards drawn (a virtual list: those near the viewport), each knowing its slot.
       const top = list.getBoundingClientRect().top - list.scrollTop;
-      const cards = [...list.querySelectorAll<HTMLElement>(":scope > [data-card]")];
-      const at = cards.findIndex((card) => top + card.offsetTop + card.offsetHeight / 2 > y);
-      return { over: Number(index), slot: at === -1 ? cards.length : at };
+      const cards = [...list.querySelectorAll<HTMLElement>("[data-card]")];
+      const hit = cards.find((card) => top + card.offsetTop + card.offsetHeight / 2 > y);
+      const last = cards[cards.length - 1];
+      const slot = hit ? Number(hit.dataset["slot"]) : last ? Number(last.dataset["slot"]) + 1 : 0;
+      return { over: Number(index), slot };
     };
 
     const startDrag = (event: ReactPointerEvent<HTMLElement>, row: DocumentRow, from: Column, fromIndex: number): void => {
@@ -621,8 +639,9 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect }: Boa
       // page — and the gap stands where it will go.
       const cards = lift ? column.cards.filter((card) => card.id !== lift.row.id) : column.cards;
       const gapAt = gapColumn === index ? gapSlot : undefined;
-      let shown = 0;
       const color = column.def?.color;
+      // No taller than the screen: the board's fit, less a lane's header when laned.
+      const capped = fit === undefined ? undefined : laned ? Math.max(COLUMN_MIN, fit - LANE_CHROME) : fit;
       if (column.def?.collapsed === true) {
         return (
           <section
@@ -653,9 +672,9 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect }: Boa
           {...mark("kanban/column", String(index), { label: placeOf(column) })}
           aria-label={`${placeOf(column)}, ${cards.length} card${cards.length === 1 ? "" : "s"}`}
           className={`kanban-column kanban:flex kanban:w-64 kanban:shrink-0 kanban:flex-col kanban:gap-2 kanban:rounded-lg kanban:border kanban:p-2 kanban:transition-colors kanban:duration-150 kanban:compact:w-[80vw] ${color ? "kanban:border-t-4" : ""} ${hot ? "kanban:border-accent kanban:bg-accent-subtle" : "kanban:border-border kanban:bg-bg-subtle"}`}
-          style={color ? { borderTopColor: color } : undefined}
+          style={{ ...(color ? { borderTopColor: color } : {}), ...(capped === undefined ? {} : { maxHeight: capped }) }}
         >
-          <h3 className="kanban:m-0 kanban:flex kanban:items-center kanban:gap-1.5 kanban:text-sm kanban:font-semibold">
+          <h3 className="kanban:m-0 kanban:flex kanban:shrink-0 kanban:items-center kanban:gap-1.5 kanban:text-sm kanban:font-semibold">
             {column.key !== undefined && (
               <button
                 type="button"
@@ -728,47 +747,26 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect }: Boa
               +
             </button>
           </h3>
-          <ul
-            data-kanban-list
-            className="kanban:relative kanban:m-0 kanban:flex kanban:max-h-[70vh] kanban:min-h-10 kanban:list-none kanban:flex-col kanban:gap-1.5 kanban:overflow-y-auto kanban:p-0"
-          >
-            {column.cards.map((row) => {
-              const carried = lift?.row.id === row.id;
-              const at = carried ? -1 : shown++;
-              return (
-                <CardSlot
-                  key={row.id}
-                  row={row}
-                  look={lookOf(dress, row.id)}
-                  items={settings.card}
-                  carried={carried}
-                  gapBefore={!carried && gapAt === at ? lift?.height : undefined}
-                  draggable={movable(row, settings.group)}
-                  onPointerDown={(event) => startDrag(event, row, column, index)}
-                  onClick={onClick(row)}
-                />
-              );
-            })}
-            {gapAt === cards.length && lift && <Gap height={lift.height} />}
+          <ColumnList column={column} lift={lift} gapAt={gapAt} dress={dress} items={settings.card} group={settings.group} onPointerDown={(event, row) => startDrag(event, row, column, index)} onClick={onClick}>
             {pending
               .filter((card) => card.key === cellOf(column))
               .map((card) => (
-                <li key={`pending-${String(card.token)}`} aria-busy="true" className="kanban:shrink-0 kanban:opacity-60 kanban:transition-opacity kanban:duration-200 kanban:starting:opacity-0">
+                <div key={`pending-${String(card.token)}`} aria-busy="true" className="kanban:shrink-0 kanban:pb-1.5 kanban:opacity-60 kanban:transition-opacity kanban:duration-200 kanban:starting:opacity-0">
                   <span className="kanban:flex kanban:w-full kanban:min-w-0 kanban:items-center kanban:truncate kanban:rounded kanban:border kanban:border-dashed kanban:border-border kanban:bg-bg-raised kanban:px-2 kanban:py-1.5 kanban:text-sm">
                     {card.title}
                   </span>
-                </li>
+                </div>
               ))}
             {adding === cellOf(column) && (
-              <li className="kanban:shrink-0">
+              <div className="kanban:shrink-0 kanban:pb-1.5">
                 <CardInput
                   label={`New card in ${placeOf(column)}`}
                   onSubmit={(title) => submit(column, title)}
                   onClose={() => setAdding(undefined)}
                 />
-              </li>
+              </div>
             )}
-          </ul>
+          </ColumnList>
         </section>
       );
     };
@@ -831,7 +829,8 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect }: Boa
         <div
           ref={setBoard}
           {...mark("kanban/board", "")}
-          className={`kanban-board kanban:flex kanban:min-w-0 kanban:items-start kanban:overflow-x-auto kanban:overscroll-x-contain kanban:pb-1 ${laned ? "kanban:flex-col kanban:gap-4" : "kanban:gap-3"}`}
+          className={`kanban-board kanban:flex kanban:min-w-0 kanban:items-start kanban:overflow-x-auto kanban:overscroll-x-contain kanban:pb-1 ${laned ? "kanban:flex-col kanban:gap-4 kanban:overflow-y-auto kanban:overscroll-y-contain" : "kanban:gap-3"}`}
+          style={laned && fit !== undefined ? { maxHeight: fit } : undefined}
         >
           {laned ? lanes.map((lane, at) => renderLane(lane, starts[at] ?? 0)) : columns.map(renderColumn)}
           {!laned && addColumn}
@@ -894,12 +893,12 @@ function CardInput({
   );
 }
 
-/** Where a carried card will land: a dashed slot its height. */
+/** Where a carried card will land: a dashed slot its height, spaced below like a card's row. */
 function Gap({ height }: { readonly height: number }): ReactElement {
   return (
     <li
       aria-hidden="true"
-      className="kanban:shrink-0 kanban:rounded kanban:border kanban:border-dashed kanban:border-accent kanban:bg-bg/40"
+      className="kanban:mb-1.5 kanban:shrink-0 kanban:rounded kanban:border kanban:border-dashed kanban:border-accent kanban:bg-bg/40"
       style={{ height }}
     />
   );
@@ -941,7 +940,77 @@ function CardBody({ row, items, look }: { readonly row: DocumentRow; readonly it
   );
 }
 
+/**
+ * A column's cards in a box that scrolls, as a virtual list: only the cards near the
+ * viewport are drawn, each a row knowing its index among the column's cards and its slot
+ * among them without the carried one (what a drop is placed by). The gap stands before
+ * the card at its slot, or after the last when the whole column is drawn; `children`
+ * (cards on their way, the title field) follow the list.
+ */
+function ColumnList({
+  column,
+  lift,
+  gapAt,
+  dress,
+  items,
+  group,
+  onPointerDown,
+  onClick,
+  children,
+}: {
+  readonly column: Column;
+  readonly lift: Lift | undefined;
+  readonly gapAt: number | undefined;
+  readonly dress: Looks | undefined;
+  readonly items: readonly CardItem[];
+  readonly group: string;
+  readonly onPointerDown: (event: ReactPointerEvent<HTMLElement>, row: DocumentRow) => void;
+  readonly onClick: (row: DocumentRow) => () => void;
+  readonly children?: ReactNode;
+}): ReactElement {
+  const cards = column.cards;
+  const virtual = useVirtualList({
+    count: cards.length,
+    keyOf: (at) => cards[at]?.id ?? String(at),
+    estimate: CARD_ESTIMATE,
+    // The box is the viewport, wherever the page has scrolled it.
+    clipToWindow: false,
+  });
+  const carriedAt = lift ? cards.findIndex((card) => card.id === lift.row.id) : -1;
+  const others = carriedAt === -1 ? cards.length : cards.length - 1;
+  return (
+    <div data-kanban-list className="kanban:relative kanban:min-h-10 kanban:min-w-0 kanban:overflow-y-auto kanban:overscroll-y-contain">
+      <ul ref={virtual.listRef} className="kanban:m-0 kanban:flex kanban:list-none kanban:flex-col kanban:p-0" style={{ paddingTop: virtual.before, paddingBottom: virtual.after }}>
+        {cards.slice(virtual.first, virtual.end).map((row, offset) => {
+          const at = virtual.first + offset;
+          const carried = at === carriedAt;
+          const slot = carriedAt !== -1 && carriedAt < at ? at - 1 : at;
+          return (
+            <CardSlot
+              key={row.id}
+              index={at}
+              slot={slot}
+              row={row}
+              look={lookOf(dress, row.id)}
+              items={items}
+              carried={carried}
+              gapBefore={!carried && gapAt === slot ? lift?.height : undefined}
+              draggable={movable(row, group)}
+              onPointerDown={(event) => onPointerDown(event, row)}
+              onClick={onClick(row)}
+            />
+          );
+        })}
+        {gapAt === others && lift && virtual.end === cards.length && <Gap height={lift.height} />}
+      </ul>
+      {children}
+    </div>
+  );
+}
+
 function CardSlot({
+  index,
+  slot,
   row,
   look,
   items,
@@ -951,6 +1020,9 @@ function CardSlot({
   onPointerDown,
   onClick,
 }: {
+  /** Its place among the column's cards, and among them without the carried one. */
+  readonly index: number;
+  readonly slot: number;
   readonly row: DocumentRow;
   readonly look: NoteLook | undefined;
   readonly items: readonly CardItem[];
@@ -964,7 +1036,11 @@ function CardSlot({
   return (
     <>
       {gapBefore !== undefined && <Gap height={gapBefore} />}
-      <li {...(carried ? { hidden: true } : { "data-card": "", "data-flip-id": row.id })} className="kanban:shrink-0 kanban:transition-opacity kanban:duration-200 kanban:starting:opacity-0">
+      <li
+        data-virtual-index={index}
+        {...(carried ? { hidden: true } : { "data-card": "", "data-slot": slot, "data-flip-id": row.id })}
+        className="kanban:shrink-0 kanban:pb-1.5 kanban:transition-opacity kanban:duration-200 kanban:starting:opacity-0"
+      >
         <button
           type="button"
           className={`kanban-card kanban:flex kanban:w-full kanban:min-w-0 kanban:touch-manipulation kanban:items-stretch kanban:rounded kanban:border kanban:border-border kanban:px-2! kanban:py-1.5! kanban:text-left kanban:text-sm kanban:shadow-1 kanban:transition-opacity kanban:duration-150 ${look?.background ? "" : "kanban:bg-bg-raised!"} ${draggable ? "kanban:cursor-grab" : ""}`}
