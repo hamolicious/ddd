@@ -42,9 +42,9 @@
  * Enter makes the card and leaves the field open for the next, Escape (or leaving it
  * empty) closes it. The new card shows at once, faded, until the note it made arrives.
  *
- * **A filter bar above the board**, one select per property the cards show (the board's
+ * **A filter bar above the board**, one pill per property the cards show (the board's
  * settings), narrows the board to the cards holding the chosen value — on this screen
- * only, nothing is saved. A card added while a filter is on is born with its value, so it
+ * only, nothing is saved. A pill with a value chosen wears the accent. A card added while a filter is on is born with its value, so it
  * stays in view.
  *
  * **Swimlanes**, when the board's settings name a field for them, stack the board in rows,
@@ -126,8 +126,6 @@ export interface BoardDeps {
   /** A new card titled `title` at the bottom of `column`, born in it and with the filter's values (`create.ts`). */
   readonly addCard: (spec: SearchSpec, settings: KanbanOptions, column: Column, title: string, queued: number, filters: Filters) => Promise<string>;
 }
-
-const SELECT = "kanban:tap-h kanban:min-w-0 kanban:max-w-[12rem] kanban:rounded kanban:border kanban:border-border kanban:bg-bg kanban:px-2 kanban:text-sm kanban:text-text";
 
 /** The card being carried, and where. */
 interface Lift {
@@ -817,20 +815,31 @@ export function createBoard({ kernel, looks, menu, addCard }: BoardDeps) {
           </p>
         )}
         {fields.length > 0 && (
-          <div className="kanban-filters kanban:flex kanban:flex-wrap kanban:items-center kanban:gap-2 kanban:text-sm">
+          <div className="kanban-filters kanban:flex kanban:flex-wrap kanban:items-center kanban:gap-1.5 kanban:text-xs" role="group" aria-label="Filter the board">
+            <svg aria-hidden="true" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="kanban:shrink-0 kanban:text-text-muted">
+              <path d="M4 5h16l-6 7v5l-4 2v-7z" />
+            </svg>
             {fields.map((field) => {
               const name = field.slice("fm.".length);
               const choices = filterChoices(results.rows, field);
               const current = filters.get(field);
+              const active = current !== undefined;
               // What was chosen stays offered while it is chosen, even once no card holds it.
-              const offered = current !== undefined && !choices.some((choice) => String(choice) === String(current)) ? [current, ...choices] : choices;
+              const offered = active && !choices.some((choice) => String(choice) === String(current)) ? [current, ...choices] : choices;
               return (
-                <label key={field} className="kanban:inline-flex kanban:items-center kanban:gap-1 kanban:text-text-muted">
-                  <span>{name}</span>
+                <label
+                  key={field}
+                  className={`kanban-filter kanban:relative kanban:inline-flex kanban:h-7 kanban:cursor-pointer kanban:items-center kanban:gap-1 kanban:rounded-full kanban:border kanban:pl-2.5 kanban:pr-1.5 kanban:shadow-1 kanban:transition-colors kanban:duration-150 kanban:compact:h-9 ${
+                    active
+                      ? "kanban:border-accent kanban:bg-accent-subtle kanban:text-text"
+                      : "kanban:border-border kanban:bg-bg-raised kanban:text-text-muted kanban:hover:border-border-strong kanban:hover:text-text"
+                  }`}
+                >
+                  <span className="kanban:text-[0.65rem] kanban:font-medium kanban:uppercase kanban:tracking-wide kanban:opacity-70">{name}</span>
                   <select
                     aria-label={`Filter by ${name}`}
-                    className={`${SELECT} ${current === undefined ? "" : "kanban:border-accent kanban:text-text"}`}
-                    value={current === undefined ? "" : String(current)}
+                    className="kanban:min-h-0! kanban:cursor-pointer kanban:appearance-none kanban:border-0! kanban:bg-transparent! kanban:p-0! kanban:pr-3.5! kanban:font-sans kanban:text-xs kanban:font-semibold kanban:text-inherit kanban:focus-visible:outline-none kanban:[&_option]:bg-bg kanban:[&_option]:font-normal kanban:[&_option]:text-text"
+                    value={active ? String(current) : ""}
                     onChange={(event) => filter(field, offered.find((choice) => String(choice) === event.target.value))}
                   >
                     <option value="">Any</option>
@@ -840,16 +849,19 @@ export function createBoard({ kernel, looks, menu, addCard }: BoardDeps) {
                       </option>
                     ))}
                   </select>
+                  <span aria-hidden="true" className="kanban:pointer-events-none kanban:absolute kanban:right-2 kanban:text-[0.6rem] kanban:opacity-60">
+                    ▾
+                  </span>
                 </label>
               );
             })}
             {filters.size > 0 && (
               <button
                 type="button"
-                className="kanban:tap-h kanban:min-h-0! kanban:border-0! kanban:bg-transparent! kanban:px-1! kanban:text-sm kanban:text-text-muted kanban:hover:text-text"
+                className="kanban:inline-flex kanban:h-7 kanban:min-h-0! kanban:items-center kanban:gap-1 kanban:rounded-full! kanban:border! kanban:border-transparent! kanban:bg-transparent! kanban:px-2! kanban:py-0! kanban:text-xs kanban:text-text-muted kanban:transition-colors kanban:duration-150 kanban:hover:border-border! kanban:hover:bg-bg-raised! kanban:hover:text-text kanban:compact:h-9"
                 onClick={() => setChosen(new Map())}
               >
-                Clear
+                <span aria-hidden="true">×</span> Clear
               </button>
             )}
           </div>
