@@ -29,6 +29,9 @@ variables:
   DEPLOY_HOMELAB: "true"
   GITOPS_TARGET_MANIFEST: "life-manager"
   GITOPS_TARGET_CONTAINER: "life-manager"
+  # Bump with ci/android-builder.Dockerfile.
+  ANDROID_BUILDER_TAG: "flutter-3.47.5-ndk-28.2.13676358"
+  ANDROID_BUILDER_IMAGE: "$CI_REGISTRY_IMAGE/android-builder:$ANDROID_BUILDER_TAG"
 
 # master, tags, and "Run pipeline" from the UI on any branch (for the manual jobs). No merge
 # request or branch-push pipelines yet.
@@ -88,30 +91,34 @@ deploy-image:
   # A manual job is optional; this keeps an unpressed one from holding the pipeline open.
   allow_failure: true
 
+# The image `android-apk` runs in: Flutter, the NDK and the extra platforms preinstalled
+# (see ci/android-builder.Dockerfile for why). Built on master when its Dockerfile changes;
+# ANDROID_BUILDER_TAG names it, so bump that with the Dockerfile.
+android-builder:
+  stage: build
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - ci/android-builder.Dockerfile
+  script:
+    - docker build -f ci/android-builder.Dockerfile -t "$ANDROID_BUILDER_IMAGE" ci
+    - docker push "$ANDROID_BUILDER_IMAGE"
+
 # The Flutter shell (`app/`). The same build `mise run shell-apk` does, as release rather
 # than debug: smaller and faster on the phone. Release is still signed with the debug key
 # (see app/android/app/build.gradle.kts) until there is a real keystore, so it installs
 # over an existing debug build.
-#
-# android-sdk:36 already carries what app/README.md § "Building the APK" installs by hand:
-# platform 36, build-tools 36.0.0 and JDK 21 (the pin in mise.toml, and the reason there is
-# no stock Flutter image here). Flutter itself is not in it, and is pinned: 3.47.5 is what
-# pubspec.lock was solved against, and no ghcr.io/cirruslabs/flutter image carries it.
 android-apk:
   extends: .manual-shell
-  image: ghcr.io/cirruslabs/android-sdk:36
-  variables:
-    FLUTTER_VERSION: "3.47.5"
-    FLUTTER_SHA256: "2132e990f236f8d22e7c6314b29a191a95b10d7cbcfec9b4e2e303d996652cbb"
-  before_script:
-    - apt-get update && apt-get install -y --no-install-recommends curl git unzip xz-utils
-    - curl -fsSLo /tmp/flutter.tar.xz "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz"
-    - echo "$FLUTTER_SHA256  /tmp/flutter.tar.xz" | sha256sum -c -
-    - tar -xJf /tmp/flutter.tar.xz -C /opt && rm /tmp/flutter.tar.xz
-    # The tarball is a git checkout owned by someone else; flutter shells out to git on it.
-    - git config --global --add safe.directory '*'
-    - export PATH="/opt/flutter/bin:$PATH"
-    - flutter config --no-analytics
+  image: $ANDROID_BUILDER_IMAGE
+  # Waits for a fresh builder image when this pipeline is building one; otherwise runs on
+  # the one already in the registry.
+  needs:
+    - job: android-builder
+      optional: true
+  # A cold Gradle still downloads its dependencies; the default hour is not much headroom.
+  timeout: 2h
+  before_script: []
   script:
     - cd app
     - flutter pub get
