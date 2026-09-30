@@ -118,7 +118,8 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
 
     return (
       <section
-        className="search-page search:flex search:flex-col search:gap-3 search:p-4 search:font-sans search:text-text search:compact:min-h-full search:compact:p-2 search:[&_:focus-visible]:outline-2 search:[&_:focus-visible]:outline-offset-1 search:[&_:focus-visible]:outline-focus search:[&_button]:tap-h search:[&_button]:cursor-pointer search:[&_button]:rounded search:[&_button]:border search:[&_button]:border-border search:[&_button]:bg-bg-subtle search:[&_button]:px-2 search:[&_button]:text-inherit search:disabled:[&_button]:cursor-default search:disabled:[&_button]:opacity-55"
+        // Embedded, the note around it already frames it: no padding of its own.
+        className={`search-page search:flex search:flex-col search:font-sans search:text-text ${controls === "hidden" ? "search:gap-2" : "search:gap-3 search:p-4 search:compact:min-h-full search:compact:p-2"} search:[&_:focus-visible]:outline-2 search:[&_:focus-visible]:outline-offset-1 search:[&_:focus-visible]:outline-focus search:[&_button]:tap-h search:[&_button]:cursor-pointer search:[&_button]:rounded search:[&_button]:border search:[&_button]:border-border search:[&_button]:bg-bg-subtle search:[&_button]:px-2 search:[&_button]:text-inherit search:disabled:[&_button]:cursor-default search:disabled:[&_button]:opacity-55`}
         {...(heading !== undefined ? { "aria-label": heading } : { "aria-label": "Search results" })}
       >
         {heading !== undefined && (
@@ -193,9 +194,12 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
         ) : (
           <>
             {renderView(viewProps)}
-            <p className="search-status search:m-0 search:text-sm search:text-text-muted" role="status" aria-live="polite">
-              {statusText(results.rows.length, results.total, results.hasMore, text)}
-            </p>
+            {/* Embedded, the count is noise unless it says the view is cut short. */}
+            {(controls !== "hidden" || results.hasMore) && (
+              <p className="search-status search:m-0 search:text-sm search:text-text-muted" role="status" aria-live="polite">
+                {statusText(results.rows.length, results.total, results.hasMore, text)}
+              </p>
+            )}
           </>
         )}
       </section>

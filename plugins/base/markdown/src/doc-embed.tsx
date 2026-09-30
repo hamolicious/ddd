@@ -23,6 +23,8 @@
 import type { DocumentRow, Kernel } from "@kernel";
 import { useEffect, useState, type ReactNode } from "react";
 
+import { target } from "../../_shared/target.js";
+
 import { DocLink } from "./links.js";
 import type { MarkdownRuntime } from "./runtime.js";
 
@@ -106,10 +108,11 @@ export function DocEmbed({ id, runtime, renderBody }: DocEmbedProps): ReactNode 
 
   return (
     <div
-      className="md-embed markdown:my-3 markdown:min-w-0 markdown:rounded-lg markdown:border markdown:border-border markdown:bg-bg-subtle markdown:px-3 markdown:py-2"
+      className="md-embed markdown:my-3 markdown:min-w-0 markdown:rounded-lg markdown:border markdown:border-border markdown:bg-bg-subtle markdown:p-2"
       data-embed={id}
     >
-      <div className="markdown:mb-1 markdown:text-sm markdown:text-text-muted">
+      {/* The embedded note's own menu, on its name: the body below holds other notes' rows. */}
+      <div className="markdown:mb-1 markdown:text-sm markdown:text-text-muted" {...target("lm/document", id)}>
         <DocLink id={id} runtime={runtime} />
       </div>
       {row === undefined ? (
