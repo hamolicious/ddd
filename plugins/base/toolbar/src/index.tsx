@@ -35,6 +35,8 @@ import { AltbarToggle, SidebarToggle } from "./Toggles.js";
 
 export type { Bar, NavbarItem, Placement, Side, ToolbarItem } from "./api.js";
 
+type IconsModule = typeof import("plugin:icons");
+
 /** Put an item (or several) in the toolbar. Returns the function that takes it out again. */
 export const addItem: (items: ToolbarItem | readonly ToolbarItem[]) => () => void = itemRegistry.add;
 
@@ -54,14 +56,6 @@ export default function activate(kernel: Kernel): void {
       order: 0,
       component: SidebarToggle,
     },
-    {
-      id: "settings.open",
-      label: "Settings",
-      icon: "⚙",
-      side: "end",
-      order: 90,
-      onSelect: () => openSettings(),
-    },
     // Rightmost, mirroring the ☰: each button sits on the side of the column it opens.
     {
       id: "shell-ui.altbar-toggle",
@@ -71,6 +65,21 @@ export default function activate(kernel: Kernel): void {
       component: AltbarToggle,
     },
   ]);
+  // The gear is `icons`' when that plugin is installed (an optional dependency, already
+  // active by now when present), a plain glyph otherwise.
+  void kernel.plugins
+    .optional<IconsModule>("icons")
+    .catch(() => undefined)
+    .then((icons) =>
+      addItem({
+        id: "settings.open",
+        label: "Settings",
+        icon: icons ? <icons.Icon name="settings" /> : "⚙",
+        side: "end",
+        order: 90,
+        onSelect: () => openSettings(),
+      }),
+    );
 
   addSection({
     id: "toolbar.layout",

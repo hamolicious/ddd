@@ -97,6 +97,8 @@ const SETTINGS_TITLES: Readonly<Record<SettingsSectionId, { title: string; descr
   },
 };
 
+type IconsModule = typeof import("plugin:icons");
+
 export default function activate(kernel: Kernel): void {
   kernelRef = kernel;
   const dialogs: Dialogs = { confirm, modal, openSheet };
@@ -166,18 +168,25 @@ export default function activate(kernel: Kernel): void {
     });
     addSection(sections);
 
-    addItem({
-      id: "admin.link",
-      label: "Admin",
-      // The icon is what lets `shell-ui` collapse this to a tap target at its mobile
-      // breakpoint (it hides a label that *has* an icon beside it, keeping the label
-      // for screen readers). Without one this item spelled "Admin" in full on a phone
-      // and was part of why the navbar ran past the viewport.
-      icon: "🛡",
-      side: "end",
-      order: 90,
-      onSelect: () => open(),
-    });
+    // The icon is `icons`' shield when that plugin is installed (an optional dependency,
+    // already active by now when present), a plain glyph otherwise.
+    void kernel.plugins
+      .optional<IconsModule>("icons")
+      .catch(() => undefined)
+      .then((icons) =>
+        addItem({
+          id: "admin.link",
+          label: "Admin",
+          // The icon is what lets the toolbar collapse this to a tap target on a phone
+          // (it hides a label that *has* an icon beside it, keeping the label for screen
+          // readers). Without one this item spelled "Admin" in full on a phone and was
+          // part of why the navbar ran past the viewport.
+          icon: icons ? <icons.Icon name="shield" /> : "🛡",
+          side: "end",
+          order: 90,
+          onSelect: () => open(),
+        }),
+      );
 
     addCommand([
       { id: "admin.open", title: "Open administration", category: "Admin", run: () => open() },

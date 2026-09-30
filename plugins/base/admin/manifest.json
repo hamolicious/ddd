@@ -1,6 +1,6 @@
 {
   "id": "admin",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "name": "Admin",
   "description": "Users, invites, audit log, orphan files, and the plugin list with each plugin's dependencies.",
   "author": "Life Manager base distribution",
@@ -14,6 +14,9 @@
     "settings": "^2.0",
     "toolbar": "^1.0",
     "commands": "^3.0"
+  },
+  "optionalDependencies": {
+    "icons": "^2.0"
   },
   "peerLibraries": {
     "react": "^18.0.0"
