@@ -21,7 +21,7 @@ import type { Kernel } from "@kernel";
 import { addCommand } from "plugin:commands";
 import { notifyCreated } from "plugin:doc-events";
 import { addMode } from "plugin:document-surface";
-import { SavedSearch, encode } from "plugin:search";
+import { FmValueSelect, SavedSearch, encode } from "plugin:search";
 import type { SearchSpec } from "plugin:search";
 
 import type { Looks } from "../../_shared/note-look.js";
@@ -97,7 +97,7 @@ export default function activate(kernel: Kernel): void {
     return id;
   };
 
-  const Board = createBoard({ kernel, looks, menu, addCard });
+  const Board = createBoard({ kernel, looks, menu, addCard, fmValueSelect: FmValueSelect });
   offerSavedView(
     kernel,
     {
