@@ -213,6 +213,8 @@ export default function activate(kernel: Kernel): void {
     .optional<SearchModule>("search")
     .then((module) => {
       search = module;
+      // Search's note picker draws notes as the tree does.
+      if (module) stops.push(module.setNoteLooks({ look, onLookChange }));
     })
     .catch((cause: unknown) => kernel.log.warn("search unavailable; no “New search” in the menus", cause));
   /** A new saved search, filed under `parent` (`""` is the root) and opened. */

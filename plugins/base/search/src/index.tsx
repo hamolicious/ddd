@@ -14,7 +14,9 @@
  *   `SavedSearch` is the shell for one; each view plugin's document mode claims the
  *   saved searches whose `type` names it and draws itself inside it.
  * - **Components** (`components/`): the pieces other plugins build with — `NoteSelect`,
- *   a box that searches notes and picks one.
+ *   a box that searches notes and picks one, drawing each as the folder tree does
+ *   (`setNoteLooks`, which `folders` calls: it cannot be a dependency of this plugin,
+ *   since `folders` optionally depends on this one).
  *
  * Everything is a named export of this module (`plugin:search`). `parse`, `encode`,
  * `savedSearchOf` and `addProvider` work at any time; the rest needs this plugin active.
@@ -22,7 +24,7 @@
 
 import type { ComponentType, ReactElement } from "react";
 
-import type { DocumentRow, Kernel } from "@kernel";
+import type { DocumentRow, Kernel, Unsubscribe } from "@kernel";
 import { open as openMenu } from "plugin:context-menu";
 import { notifyCreated } from "plugin:doc-events";
 import * as indexer from "plugin:indexer";
@@ -41,7 +43,7 @@ import {
   type SearchShellProps,
   type SearchSpec,
 } from "./api.js";
-import { createNoteSelect } from "./components/NoteSelect.js";
+import { createNoteSelect, type NoteLooks } from "./components/NoteSelect.js";
 import { searchEngine } from "./providers.js";
 import { resolveSearch, useResults as useResultsWith } from "./results.js";
 import { SAVED_SEARCH_KEY, savedSearchNoteText, savedSearchOf as savedSearchOfRow, savedSearchTitle } from "./saved.js";
@@ -49,6 +51,7 @@ import { createSavedSearch } from "./SavedSearch.js";
 import { createSearchShell } from "./SearchShell.js";
 import { documentPath, encodeSpec, parseSpec } from "./spec.js";
 
+export type { NoteLooks } from "./components/NoteSelect.js";
 export type {
   NoteSelectProps,
   ResolveOptions,
@@ -79,6 +82,23 @@ type IconsModule = typeof import("plugin:icons");
 
 /** Add a search provider (or several). Returns the function that takes it out again. */
 export const addProvider: (items: SearchProvider | readonly SearchProvider[]) => () => void = providerRegistry.add;
+
+let noteLooks: NoteLooks | undefined;
+const looksListeners = new Set<() => void>();
+
+/**
+ * How `NoteSelect` dresses notes: `folders`' `look` and `onLookChange`. Returns the function
+ * that takes them away again. Since 4.5.0.
+ */
+export function setNoteLooks(looks: NoteLooks): () => void {
+  noteLooks = looks;
+  for (const listener of [...looksListeners]) listener();
+  return () => {
+    if (noteLooks !== looks) return;
+    noteLooks = undefined;
+    for (const listener of [...looksListeners]) listener();
+  };
+}
 
 /** A search from its query string; junk parts are dropped. */
 export function parse(value: string): SearchSpec {
@@ -204,7 +224,17 @@ export default function activate(kernel: Kernel): void {
     });
   };
 
-  const NoteSelect = createNoteSelect({ documents: kernel.documents, engine });
+  const NoteSelect = createNoteSelect({
+    documents: kernel.documents,
+    index: indexer,
+    looks: () => noteLooks,
+    onLooksSet: (listener): Unsubscribe => {
+      looksListeners.add(listener);
+      return () => {
+        looksListeners.delete(listener);
+      };
+    },
+  });
 
   const Shell = createSearchShell({
     kernel,

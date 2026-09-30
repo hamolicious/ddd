@@ -1,33 +1,69 @@
 /**
- * `NoteSelect` — picking one note: a text box that searches as you type, and a list of
- * matches under it. The value is the chosen note's id.
+ * `NoteSelect` — picking one note: a text box, and under it every note, last updated
+ * first, narrowed by what is typed. The value is the chosen note's id.
  *
- * It is a search like any other (`useResults`, no filter): with no text the list is the
- * notes last updated, with text it is the providers' best matches. Arrow keys move through
- * the list, Enter picks, Escape closes it.
+ * Each note is drawn as the folder tree draws it — its colour and icon (`setNoteLooks`,
+ * which `folders` calls), its title, the notes above it — in a virtual list
+ * (`_shared/virtual-list.ts`), so a workspace of thousands costs a screenful. The notes are
+ * one live query, held only while the list is open.
  *
- * Unfocused, the box shows the chosen note's title; focused, it is the search text. With
- * `emptyLabel`, "no note" is a choice too: first in the list, and chosen as `""`.
+ * Arrow keys move through the list, Enter picks, Escape closes it. Unfocused, the box
+ * shows the chosen note's title; focused, it is the text. With `emptyLabel`, "no note" is
+ * a choice too: first in the list, and chosen as `""`.
  */
 
-import { useEffect, useId, useState } from "react";
-import type { ComponentType, ReactElement } from "react";
+import { useEffect, useId, useMemo, useState, useSyncExternalStore } from "react";
+import type { CSSProperties, ComponentType, ReactElement } from "react";
 
-import type { DocumentsApi } from "@kernel";
+import type { DocumentQuery, DocumentsApi, Unsubscribe } from "@kernel";
+import type { WorkspaceIndex } from "plugin:indexer";
 import type { NoteSelectProps } from "../api.js";
 
-import { useResults } from "../results.js";
-import { EMPTY_SPEC } from "../spec.js";
-import type { SearchEngine } from "../useSearch.js";
+import { withoutMachineDocuments } from "../../../_shared/machine-docs.js";
+import { NoteName, type NoteLook } from "../../../_shared/note-picker.js";
+import { useLiveQuery } from "../../../_shared/useLiveQuery.js";
+import { useVirtualList } from "../../../_shared/virtual-list.js";
+
+/** How notes are dressed: `folders`' `look` and `onLookChange`. */
+export interface NoteLooks {
+  readonly look: (id: string) => NoteLook | undefined;
+  readonly onLookChange: (listener: () => void) => Unsubscribe;
+}
 
 export interface NoteSelectDeps {
   readonly documents: DocumentsApi;
-  readonly engine: SearchEngine;
+  /** Where each note sits in the tree. */
+  readonly index: Pick<WorkspaceIndex, "documents" | "subscribe" | "version">;
+  /** The looks in force, when a plugin has set them. */
+  readonly looks: () => NoteLooks | undefined;
+  /** Fires when `looks` is set or cleared. */
+  readonly onLooksSet: (listener: () => void) => Unsubscribe;
 }
 
-const PAGE_SIZE = 8;
+interface Option {
+  readonly id: string;
+  readonly title: string;
+  readonly folder: string;
+}
 
-export function createNoteSelect({ documents, engine }: NoteSelectDeps): ComponentType<NoteSelectProps> {
+const EVERY_NOTE: DocumentQuery = {
+  filter: withoutMachineDocuments(),
+  sort: [{ field: "updated_at", direction: "desc" }],
+};
+
+/** A row, before it is measured: the tap target. */
+const ROW_ESTIMATE = 44;
+
+const MUTED: CSSProperties = {
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  fontSize: "0.85em",
+  color: "var(--lm-text-muted)",
+};
+
+export function createNoteSelect({ documents, index, looks, onLooksSet }: NoteSelectDeps): ComponentType<NoteSelectProps> {
   /** The chosen note's title, kept up to date as the id changes. */
   function useTitle(id: string | undefined): string {
     const [title, setTitle] = useState("");
@@ -48,6 +84,112 @@ export function createNoteSelect({ documents, engine }: NoteSelectDeps): Compone
     return title;
   }
 
+  /** Each note's place in the tree, by id; live with the index. */
+  function useFolders(): ReadonlyMap<string, string> {
+    const version = useSyncExternalStore(index.subscribe, () => index.version);
+    // `version` is the dependency that says `documents()` moved.
+    return useMemo(() => new Map(index.documents().map((note) => [note.id, note.folder])), [version]);
+  }
+
+  /** The looks in force; re-renders when they are set, or any note's look changes. */
+  function useLooks(): NoteLooks | undefined {
+    const [, bump] = useState(0);
+    useEffect(() => onLooksSet(() => bump((count) => count + 1)), []);
+    const current = looks();
+    useEffect(() => current?.onLookChange(() => bump((count) => count + 1)), [current]);
+    return current;
+  }
+
+  /** The open list: every note, last updated first, narrowed by `query`. */
+  function OptionList({
+    id,
+    query,
+    emptyLabel,
+    active,
+    setActive,
+    choose,
+    label,
+    onOptions,
+    scrollTo,
+  }: {
+    readonly id: string;
+    readonly query: string;
+    readonly emptyLabel: string | undefined;
+    readonly active: number;
+    readonly setActive: (index: number) => void;
+    readonly choose: (id: string) => void;
+    readonly label: string;
+    readonly onOptions: (options: readonly Option[]) => void;
+    readonly scrollTo: { current: ((index: number) => void) | undefined };
+  }): ReactElement {
+    const live = useLiveQuery(documents, EVERY_NOTE);
+    const folders = useFolders();
+    const dressed = useLooks();
+
+    const options = useMemo(() => {
+      const needle = query.trim().toLowerCase();
+      const all: Option[] = live.rows.map((row) => ({ id: row.id, title: row.title, folder: folders.get(row.id) ?? "" }));
+      const matching =
+        needle === ""
+          ? all
+          : all.filter((note) => note.title.toLowerCase().includes(needle) || note.folder.toLowerCase().includes(needle));
+      return emptyLabel !== undefined && needle === "" ? [{ id: "", title: emptyLabel, folder: "" }, ...matching] : matching;
+    }, [live.rows, folders, query, emptyLabel]);
+    useEffect(() => onOptions(options), [options]);
+
+    const virtual = useVirtualList({
+      count: options.length,
+      keyOf: (at) => options[at]?.id ?? String(at),
+      estimate: ROW_ESTIMATE,
+      clipToWindow: false,
+    });
+    scrollTo.current = virtual.scrollToIndex;
+
+    return (
+      <div className="search:absolute search:inset-x-0 search:top-full search:z-20 search:mt-1 search:max-h-64 search:overflow-y-auto search:overscroll-contain search:rounded search:border search:border-border search:bg-bg-raised search:p-1 search:shadow-2">
+        {options.length === 0 ? (
+          <p className="search:m-0 search:px-2 search:py-1.5 search:text-sm search:text-text-muted">
+            {live.loading ? "Loading…" : "No note matches."}
+          </p>
+        ) : (
+          <ul
+            ref={virtual.listRef}
+            id={id}
+            role="listbox"
+            aria-label={label}
+            className="search:m-0 search:list-none search:p-0"
+            style={{ paddingTop: virtual.before, paddingBottom: virtual.after }}
+          >
+            {options.slice(virtual.first, virtual.end).map((note, offset) => {
+              const at = virtual.first + offset;
+              return (
+                <li
+                  key={note.id}
+                  id={`${id}-${at}`}
+                  data-virtual-index={at}
+                  role="option"
+                  aria-selected={at === active}
+                  className="search:tap-h search:flex search:min-w-0 search:cursor-pointer search:items-center search:gap-2 search:rounded search:px-2 search:aria-selected:bg-accent-subtle"
+                  // Before the input's blur closes the list.
+                  onMouseDown={(event) => event.preventDefault()}
+                  onMouseEnter={() => setActive(at)}
+                  onClick={() => choose(note.id)}
+                >
+                  {note.id === "" ? (
+                    <span className="search:text-text-muted">{note.title}</span>
+                  ) : (
+                    <NoteName title={note.title} look={dressed?.look(note.id)} />
+                  )}
+                  {note.folder !== "" && <span style={MUTED}>{note.folder}</span>}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    );
+  }
+
   return function NoteSelect({
     value,
     onChange,
@@ -61,12 +203,8 @@ export function createNoteSelect({ documents, engine }: NoteSelectDeps): Compone
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState("");
     const [active, setActive] = useState(0);
-
-    const results = useResults(documents, engine, { ...EMPTY_SPEC, query }, { pageSize: PAGE_SIZE });
-    const found = open ? results.rows.slice(0, PAGE_SIZE) : [];
-    // "No note" is offered until the text narrows the list.
-    const rows: readonly { readonly id: string; readonly title: string }[] =
-      emptyLabel !== undefined && open && query.trim() === "" ? [{ id: "", title: emptyLabel }, ...found] : found;
+    const [options, setOptions] = useState<readonly Option[]>([]);
+    const [scrollTo] = useState<{ current: ((index: number) => void) | undefined }>(() => ({ current: undefined }));
     const shown = value === "" && emptyLabel !== undefined ? emptyLabel : title;
 
     const choose = (id: string): void => {
@@ -80,6 +218,12 @@ export function createNoteSelect({ documents, engine }: NoteSelectDeps): Compone
       setQuery("");
     };
 
+    const move = (to: number): void => {
+      const next = Math.max(0, Math.min(to, options.length - 1));
+      setActive(next);
+      scrollTo.current?.(next);
+    };
+
     return (
       <div className="search-note-select search:relative search:min-w-0">
         <input
@@ -89,7 +233,7 @@ export function createNoteSelect({ documents, engine }: NoteSelectDeps): Compone
           aria-expanded={open}
           aria-controls={listId}
           aria-autocomplete="list"
-          {...(open && rows[active] ? { "aria-activedescendant": `${listId}-${active}` } : {})}
+          {...(open && options[active] ? { "aria-activedescendant": `${listId}-${active}` } : {})}
           placeholder={placeholder}
           value={open ? query : shown}
           spellCheck={false}
@@ -105,20 +249,21 @@ export function createNoteSelect({ documents, engine }: NoteSelectDeps): Compone
             setQuery(event.target.value);
             setActive(0);
             setOpen(true);
+            scrollTo.current?.(0);
           }}
           onKeyDown={(event) => {
             if (event.key === "ArrowDown") {
               event.preventDefault();
               setOpen(true);
-              setActive((index) => Math.min(index + 1, Math.max(rows.length - 1, 0)));
+              move(active + 1);
             } else if (event.key === "ArrowUp") {
               event.preventDefault();
-              setActive((index) => Math.max(index - 1, 0));
+              move(active - 1);
             } else if (event.key === "Enter") {
-              const row = rows[active];
-              if (row) {
+              const option = options[active];
+              if (open && option) {
                 event.preventDefault();
-                choose(row.id);
+                choose(option.id);
               }
             } else if (event.key === "Escape" && open) {
               event.preventDefault();
@@ -128,34 +273,17 @@ export function createNoteSelect({ documents, engine }: NoteSelectDeps): Compone
           }}
         />
         {open && (
-          <ul
+          <OptionList
             id={listId}
-            role="listbox"
-            aria-label={label}
-            className="search:absolute search:inset-x-0 search:top-full search:z-20 search:m-0 search:mt-1 search:max-h-64 search:list-none search:overflow-y-auto search:overscroll-contain search:rounded search:border search:border-border search:bg-bg-raised search:p-1 search:shadow-2"
-          >
-            {rows.length === 0 ? (
-              <li className="search:px-2 search:py-1.5 search:text-sm search:text-text-muted">
-                {results.loading ? "Searching…" : "No note matches."}
-              </li>
-            ) : (
-              rows.map((row, index) => (
-                <li
-                  key={row.id}
-                  id={`${listId}-${index}`}
-                  role="option"
-                  aria-selected={index === active}
-                  className="search:tap-h search:flex search:cursor-pointer search:items-center search:rounded search:px-2 search:aria-selected:bg-accent-subtle search:aria-selected:text-accent"
-                  // Before the input's blur closes the list.
-                  onMouseDown={(event) => event.preventDefault()}
-                  onMouseEnter={() => setActive(index)}
-                  onClick={() => choose(row.id)}
-                >
-                  <span className="search:truncate">{row.title || "Untitled"}</span>
-                </li>
-              ))
-            )}
-          </ul>
+            query={query}
+            emptyLabel={emptyLabel}
+            active={active}
+            setActive={setActive}
+            choose={choose}
+            label={label}
+            onOptions={setOptions}
+            scrollTo={scrollTo}
+          />
         )}
       </div>
     );
