@@ -24,7 +24,9 @@ import type { FmKeySelectProps, FmValueSelectProps } from "../api.js";
 import { DOC_PREFIX } from "../../../_shared/conditions.js";
 
 import { Combobox, type ComboboxOptions } from "./Combobox.js";
-import { NoteRow, type KnownNote, type NoteHooks } from "./notes.js";
+import { NoteName } from "../../../_shared/note-picker.js";
+
+import { type KnownNote, type NoteHooks } from "./notes.js";
 
 export type FmIndex = Pick<WorkspaceIndex, "fmFields" | "fmValues" | "subscribe" | "version">;
 
@@ -32,8 +34,8 @@ interface Option {
   readonly value: string;
   /** Shown instead of `value`: a built-in field's name. */
   readonly label?: string;
-  /** Muted, after it: how many notes, what kind. */
-  readonly detail: string;
+  /** Muted, after it, most wanted first — how many notes, then what kind — each hidden before the one ahead of it when the row is narrow. */
+  readonly extras: readonly string[];
   /** Notes holding it. */
   readonly count?: number;
   /** The note it links, when it is a `doc://` link. */
@@ -69,16 +71,30 @@ export function lastItem(text: string): { readonly before: string; readonly item
   return { before: text.slice(0, comma + 1 + lead), item: rest.trimStart() };
 }
 
+/**
+ * One option: its name, then its extras. The row is one line that wraps with the wrapped
+ * part clipped, so when it is narrow the extras drop off from the last, and the name stays
+ * (cut short with "…" only when it alone is too long).
+ */
 function Row({ option, notes }: { readonly option: Option; readonly notes: NoteHooks }): ReactElement {
   return (
-    <>
-      {option.note !== undefined ? (
-        <NoteRow title={option.note.title} folder={option.note.folder} look={notes.look(option.note.id)} />
-      ) : (
-        <span className="search:min-w-0 search:truncate">{option.label ?? option.value}</span>
-      )}
-      <span className="search:ml-auto search:shrink-0 search:text-sm search:text-text-muted">{option.detail}</span>
-    </>
+    <span className="search:flex search:h-[1.5em] search:min-w-0 search:flex-1 search:flex-wrap search:items-center search:gap-x-2 search:overflow-hidden search:leading-[1.5em]">
+      <span className="search:min-w-0 search:max-w-full search:truncate">
+        {option.note !== undefined ? (
+          <NoteName title={option.note.title} look={notes.look(option.note.id)} />
+        ) : (
+          (option.label ?? option.value)
+        )}
+      </span>
+      {option.extras.map((extra, at) => (
+        <span
+          key={at}
+          className={`${at === 0 ? "search:ml-auto " : ""}search:whitespace-nowrap search:text-sm search:text-text-muted`}
+        >
+          {extra}
+        </span>
+      ))}
+    </span>
   );
 }
 
@@ -95,14 +111,14 @@ export function createFmSelects(
     const version = useVersion();
     const options = useMemo(() => {
       const needle = text.trim().toLowerCase();
-      const fixed: Option[] = (builtIn ?? []).map((field) => ({ value: field.key, label: field.label, detail: "built in" }));
+      const fixed: Option[] = (builtIn ?? []).map((field) => ({ value: field.key, label: field.label, extras: ["built in"] }));
       const keys: Option[] = index
         .fmFields()
         .filter((field) => !field.machineOnly && commonest(field.kinds) !== "map")
         .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key))
         .map((field) => {
           const kind = commonest(field.kinds);
-          return { value: field.key, detail: kind === undefined ? notesCount(field.count) : `${kind} · ${notesCount(field.count)}` };
+          return { value: field.key, extras: kind === undefined ? [notesCount(field.count)] : [notesCount(field.count), kind] };
         });
       const all = [...fixed, ...keys];
       return needle === ""
@@ -130,7 +146,8 @@ export function createFmSelects(
           const note = id === undefined ? undefined : known.get(id);
           return {
             value,
-            detail: notesCount(entry.count),
+            // A linked note's place in the tree matters less than how many hold it.
+            extras: note !== undefined && note.folder !== "" ? [notesCount(entry.count), note.folder] : [notesCount(entry.count)],
             count: entry.count,
             // A link to a note this device does not know stays the link.
             ...(id !== undefined && note !== undefined ? { note: { id, ...note } } : {}),
