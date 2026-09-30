@@ -122,6 +122,12 @@ android-apk:
     # Both inside the project directory, because only paths under it can be cached: Gradle's
     # dependency and wrapper downloads, and pub's packages. Everything else Gradle needs is
     # already in the image.
+    # Gradle, the Kotlin daemon and Dart's frontend server take ~4GB between them. At the
+    # runner's default 4Gi limit the container thrashed -- memory pinned at the limit, CPU
+    # near idle -- and pipeline 2951's run spent two hours at it. The runner allows up to 8Gi
+    # (homelab/k8 gitlab-runner values); nibbles has ~15Gi, so this is about what it can spare.
+    KUBERNETES_MEMORY_REQUEST: "6Gi"
+    KUBERNETES_MEMORY_LIMIT: "7Gi"
     GRADLE_USER_HOME: "$CI_PROJECT_DIR/.cache/gradle"
     PUB_CACHE: "$CI_PROJECT_DIR/.cache/pub"
   cache:
