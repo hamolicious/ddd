@@ -13,6 +13,8 @@
  * - **Saved searches** (`saved.ts`): a note whose `saved-search` frontmatter holds a spec.
  *   `SavedSearch` is the shell for one; each view plugin's document mode claims the
  *   saved searches whose `type` names it and draws itself inside it.
+ * - **Components** (`components/`): the pieces other plugins build with — `NoteSelect`,
+ *   a box that searches notes and picks one.
  *
  * Everything is a named export of this module (`plugin:search`). `parse`, `encode`,
  * `savedSearchOf` and `addProvider` work at any time; the rest needs this plugin active.
@@ -29,6 +31,7 @@ import type { ConditionIndex } from "../../_shared/conditions-index.js";
 
 import {
   providerRegistry,
+  type NoteSelectProps,
   type ResolveOptions,
   type ResultsOptions,
   type SavedSearchProps,
@@ -38,6 +41,7 @@ import {
   type SearchShellProps,
   type SearchSpec,
 } from "./api.js";
+import { createNoteSelect } from "./components/NoteSelect.js";
 import { searchEngine } from "./providers.js";
 import { resolveSearch, useResults as useResultsWith } from "./results.js";
 import { SAVED_SEARCH_KEY, savedSearchNoteText, savedSearchOf as savedSearchOfRow, savedSearchTitle } from "./saved.js";
@@ -46,6 +50,7 @@ import { createSearchShell } from "./SearchShell.js";
 import { documentPath, encodeSpec, parseSpec } from "./spec.js";
 
 export type {
+  NoteSelectProps,
   ResolveOptions,
   ResultsOptions,
   SavedSearchProps,
@@ -100,6 +105,7 @@ interface Active {
   readonly save: (spec: SearchSpec, options?: SaveSearchOptions) => Promise<string>;
   readonly SearchShell: ComponentType<SearchShellProps>;
   readonly SavedSearch: ComponentType<SavedSearchProps>;
+  readonly NoteSelect: ComponentType<NoteSelectProps>;
 }
 
 let active: Active | undefined;
@@ -134,6 +140,12 @@ export function SearchShell(props: SearchShellProps): ReactElement {
 export function SavedSearch(props: SavedSearchProps): ReactElement {
   const Saved = need().SavedSearch;
   return <Saved {...props} />;
+}
+
+/** A box that searches notes and picks one; the value is the note's id. */
+export function NoteSelect(props: NoteSelectProps): ReactElement {
+  const Select = need().NoteSelect;
+  return <Select {...props} />;
 }
 
 export default function activate(kernel: Kernel): void {
@@ -227,6 +239,7 @@ export default function activate(kernel: Kernel): void {
     save: saveSearch,
     SearchShell: Shell,
     SavedSearch: createSavedSearch({ SearchShell: Shell, open, update }),
+    NoteSelect: createNoteSelect({ documents: kernel.documents, engine }),
   };
 }
 

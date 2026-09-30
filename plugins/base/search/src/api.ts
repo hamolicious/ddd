@@ -167,6 +167,17 @@ export interface SavedSearchProps extends SearchRender {
   readonly embedded?: boolean;
 }
 
+/** One note, picked by searching for it. */
+export interface NoteSelectProps {
+  /** The chosen note's id; none when absent. */
+  readonly value?: string;
+  readonly onChange: (id: string) => void;
+  readonly placeholder?: string;
+  /** The accessible name of the box; "Note" by default. */
+  readonly label?: string;
+  readonly autoFocus?: boolean;
+}
+
 export interface ResultsOptions {
   /** Rows per page; 50 by default. */
   readonly pageSize?: number;
@@ -209,4 +220,6 @@ export interface Search {
   readonly SearchShell: ComponentType<SearchShellProps>;
   /** A saved-search note on screen: the shell, with "Update saved search" when the search was changed. */
   readonly SavedSearch: ComponentType<SavedSearchProps>;
+  /** A box that searches notes and picks one. */
+  readonly NoteSelect: ComponentType<NoteSelectProps>;
 }
