@@ -24,7 +24,7 @@ import type { ComponentType, ReactElement } from "react";
 
 import type { Kernel } from "@kernel";
 import type { ContextMenu } from "plugin:context-menu";
-import type { NoteSelectProps, SearchField, SearchShellProps, SearchSort, SearchSpec, SearchViewProps } from "./api.js";
+import type { FmKeySelectProps, FmValueSelectProps, NoteSelectProps, SearchField, SearchShellProps, SearchSort, SearchSpec, SearchViewProps } from "./api.js";
 
 import { indexNoteSource, indexSuggestions, type ConditionIndex } from "../../_shared/conditions-index.js";
 import { useConditionContext } from "../../_shared/conditions-children.js";
@@ -47,6 +47,9 @@ export interface SearchShellDeps {
   readonly actions: () => ((ids: readonly string[], anchor: HTMLElement) => void) | undefined;
   /** Picks the note for "is inside note" and the like. */
   readonly NoteSelect: ComponentType<NoteSelectProps>;
+  /** The property box, and the value box, of a condition. */
+  readonly FmKeySelect: ComponentType<FmKeySelectProps>;
+  readonly FmValueSelect: ComponentType<FmValueSelectProps>;
 }
 
 export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchShellProps> {
@@ -158,6 +161,8 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
             {...(searchInput ? { searchInput } : {})}
             notes={notes}
             NoteSelect={deps.NoteSelect}
+            FmKeySelect={deps.FmKeySelect}
+            FmValueSelect={deps.FmValueSelect}
             {...(suggestions !== undefined ? { suggestions } : {})}
             context={context}
             {...(onSave ? { onSave } : {})}

@@ -17,8 +17,8 @@
  *
  * Icons come from the `icons` plugin (Tabler), an optional dependency: without it folders
  * still take a colour, and a stored icon name waits, unused, until `icons` is enabled.
- * A rule's note is picked with `search`'s `NoteSelect`, also optional: without it, with the
- * shared note picker.
+ * A rule's note, property and value are picked with `search`'s `NoteSelect`, `FmKeySelect`
+ * and `FmValueSelect`, also optional: without it, with the shared editor's own boxes.
  *
  * ## Per-user, in settings
  *
@@ -37,7 +37,7 @@ import type { Icons } from "plugin:icons";
 import * as indexer from "plugin:indexer";
 import { addSection } from "plugin:settings";
 
-import type { NoteSelectLike } from "../../_shared/conditions-editor.js";
+import type { FmKeySelectLike, FmValueSelectLike, NoteSelectLike } from "../../_shared/conditions-editor.js";
 import type { NoteSource } from "../../_shared/note-picker.js";
 import {
   indexNoteSource,
@@ -92,7 +92,13 @@ export default function activate(kernel: Kernel): void {
   // Optional: loaded once; until it arrives (or without it) looks have no icon.
   let iconSet: Pick<Icons, "Icon" | "Picker"> | undefined;
   const icons = (): Pick<Icons, "Icon" | "Picker"> | undefined => iconSet;
-  let NoteSelect: ComponentType<NoteSelectLike> | undefined;
+  let pickers:
+    | {
+        readonly NoteSelect: ComponentType<NoteSelectLike>;
+        readonly FmKeySelect: ComponentType<FmKeySelectLike>;
+        readonly FmValueSelect: ComponentType<FmValueSelectLike>;
+      }
+    | undefined;
 
   kernel.settings.defineSchema({
     // Rendered by the folder tree rather than by a settings row: declared for its default
@@ -195,7 +201,7 @@ export default function activate(kernel: Kernel): void {
     .optional<typeof import("plugin:search")>("search")
     .then((module) => {
       if (module === undefined) return;
-      NoteSelect = module.NoteSelect;
+      pickers = { NoteSelect: module.NoteSelect, FmKeySelect: module.FmKeySelect, FmValueSelect: module.FmValueSelect };
       publish();
     })
     .catch((cause: unknown) => kernel.log.warn("search unavailable; rules pick notes from a list", cause));
@@ -310,7 +316,7 @@ export default function activate(kernel: Kernel): void {
           defaults={defaults.get()}
           icons={icons()}
           notes={notes}
-          {...(NoteSelect !== undefined ? { NoteSelect } : {})}
+          {...(pickers ?? {})}
           suggestions={suggestions}
           openLook={(rule, label, anchor) =>
             openSheet({

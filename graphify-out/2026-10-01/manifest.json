@@ -1332,9 +1332,9 @@
     "semantic_hash": "c8bfe0552a3bb4065767cc546117e2a6"
   },
   "plugins/base/folders/manifest.json": {
-    "mtime": 1790809939.13097,
-    "seen": 1790809973.212076,
-    "ast_hash": "8720a5ac4895d42ac462e69ee1bec3b0",
+    "mtime": 1790810332.2824104,
+    "seen": 1790810364.9622407,
+    "ast_hash": "a8364046c820596d8f5ac5df252e2277",
     "semantic_hash": ""
   },
   "plugins/base/folders/src/DefaultLocation.tsx": {
@@ -1350,9 +1350,9 @@
     "semantic_hash": ""
   },
   "plugins/base/folders/src/index.tsx": {
-    "mtime": 1790809939.1308315,
-    "seen": 1790809973.212265,
-    "ast_hash": "d9a312fd4eacee3c4e456de436694dc0",
+    "mtime": 1790810332.281881,
+    "seen": 1790810364.9624236,
+    "ast_hash": "9673a396b1ef97290c3c02b73f85403f",
     "semantic_hash": ""
   },
   "plugins/base/folders/src/tree.test.ts": {
@@ -4650,9 +4650,9 @@
     "semantic_hash": ""
   },
   "plugins/base/search/manifest.json": {
-    "mtime": 1790809931.464268,
-    "seen": 1790809973.2155046,
-    "ast_hash": "a163a1887c0431b0879ee52e172b19e6",
+    "mtime": 1790810332.2806911,
+    "seen": 1790810364.9652607,
+    "ast_hash": "9140af52846147d12a7482fa0cc43e6f",
     "semantic_hash": ""
   },
   "plugins/base/search/src/FilterBar.tsx": {
@@ -5298,9 +5298,9 @@
     "semantic_hash": ""
   },
   "plugins/base/search/src/api.ts": {
-    "mtime": 1790809002.253527,
-    "seen": 1790809082.1393294,
-    "ast_hash": "3e7d394fb9a9ec39416d80c42deebbc0",
+    "mtime": 1790810332.2774706,
+    "seen": 1790810364.96535,
+    "ast_hash": "4b669af8fd8b35aa2d21c4c2695a826e",
     "semantic_hash": ""
   },
   "plugins/base/slash-commands/src/api.ts": {
@@ -5442,9 +5442,9 @@
     "semantic_hash": ""
   },
   "plugins/base/search/src/components/NoteSelect.tsx": {
-    "mtime": 1790809919.3492172,
-    "seen": 1790809973.2156289,
-    "ast_hash": "01883baf4cf6a469fa3ccf159d01b934",
+    "mtime": 1790810332.277355,
+    "seen": 1790810364.9653509,
+    "ast_hash": "8c88428f88a2148ace9553a79f27db58",
     "semantic_hash": ""
   },
   "plugins/base/kanban/src/lanes.test.ts": {
@@ -5457,6 +5457,18 @@
     "mtime": 1790810007.3246808,
     "seen": 1790810257.001524,
     "ast_hash": "8383752c9712118854745642faf15ed5",
+    "semantic_hash": ""
+  },
+  "plugins/base/search/src/components/proximity.test.ts": {
+    "mtime": 1790810312.84556,
+    "seen": 1790810364.9653523,
+    "ast_hash": "434a85627a0af7f59fd64c8e10dcc33f",
+    "semantic_hash": ""
+  },
+  "plugins/base/search/src/components/proximity.ts": {
+    "mtime": 1790810312.8205602,
+    "seen": 1790810364.9653533,
+    "ast_hash": "53cf3ca08b1e768b3df96c372ecb896b",
     "semantic_hash": ""
   }
 }

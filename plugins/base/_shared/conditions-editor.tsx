@@ -32,7 +32,8 @@
  * | `-note-chosen`, `-note-folder` | the chosen note, and the notes above it |
  *
  * **A note value is chosen with `NoteSelect`** when the host passes one (`search`'s), and
- * with the picker here otherwise.
+ * with the picker here otherwise. Likewise the property box is `FmKeySelect` and the value
+ * box `FmValueSelect` when passed, and an input over a `<datalist>` otherwise.
  *
  * **Suggestions come from the indexer** when the host has it (`conditions-index.ts`): the
  * property box offers every frontmatter key in use, the value box the values that key
@@ -73,6 +74,10 @@ export interface ConditionsEditorProps {
   readonly notes?: NoteSource;
   /** Picks a note value: `search`'s `NoteSelect`. Without it, the picker in `note-picker.tsx`. */
   readonly NoteSelect?: ComponentType<NoteSelectLike>;
+  /** The property box: `search`'s `FmKeySelect`. */
+  readonly FmKeySelect?: ComponentType<FmKeySelectLike>;
+  /** The value box: `search`'s `FmValueSelect`. */
+  readonly FmValueSelect?: ComponentType<FmValueSelectLike>;
   /** Properties and values to offer; without them, the fixed {@link FIELD_OPTIONS}. */
   readonly suggestions?: Suggestions;
   /** More buttons, after "Add condition". */
@@ -84,6 +89,30 @@ export interface NoteSelectLike {
   readonly value?: string;
   readonly onChange: (id: string) => void;
   readonly label?: string;
+}
+
+/** What this editor needs of `search`'s `FmKeySelect`. */
+export interface FmKeySelectLike {
+  readonly value: string;
+  readonly onChange: (key: string) => void;
+  readonly builtIn?: readonly { readonly key: string; readonly label: string }[];
+  readonly placeholder?: string;
+  readonly label?: string;
+}
+
+/** What this editor needs of `search`'s `FmValueSelect`. */
+export interface FmValueSelectLike {
+  readonly fmKey: string;
+  readonly value: string;
+  readonly onChange: (value: string) => void;
+  readonly multiple?: boolean;
+  readonly placeholder?: string;
+  readonly label?: string;
+}
+
+/** The property box's text for a field path: a frontmatter key without its `fm.`. */
+function keyOfField(field: string): string {
+  return field.startsWith("fm.") ? field.slice(3) : field;
 }
 
 interface OpEntry {
@@ -203,6 +232,8 @@ export function ConditionsEditor({
   classPrefix: p,
   notes,
   NoteSelect,
+  FmKeySelect,
+  FmValueSelect,
   suggestions,
   actions,
 }: ConditionsEditorProps): ReactElement {
@@ -211,6 +242,13 @@ export function ConditionsEditor({
   const [, refresh] = useReducer((count: number) => count + 1, 0);
   useEffect(() => suggestions?.subscribe(refresh), [suggestions]);
   const fields = suggestions?.fields() ?? FIELD_OPTIONS;
+  // The fields that are not frontmatter, which the property box lists first by name.
+  const builtIn = fields
+    .filter((option) => !option.field.startsWith("fm."))
+    .map((option) => ({ key: option.field, label: option.label }));
+  /** A field path from the property box's text: a built-in's name, or a frontmatter key. */
+  const fieldOfKey = (key: string): string =>
+    key === "" || builtIn.some((option) => option.key === key.trim()) ? key : `fm.${key}`;
   const problems = new Map(
     value.clauses
       .map((clause) => [clause.id, clauseProblem(clause)] as const)
@@ -287,7 +325,19 @@ export function ConditionsEditor({
                     </select>
                   </label>
 
-                  {!tree && (
+                  {!tree && FmKeySelect !== undefined ? (
+                    <span className={`${p}-field`}>
+                      <FmKeySelect
+                        value={keyOfField(clause.field)}
+                        builtIn={builtIn}
+                        onChange={(key) => {
+                          const field = fieldOfKey(key);
+                          const known = fields.find((option) => option.field === field.trim());
+                          patch(clause.id, { field, ...fitToField(clause, known) });
+                        }}
+                      />
+                    </span>
+                  ) : !tree && (
                     <label className={`${p}-field`}>
                       <input
                         aria-label="Property"
@@ -334,19 +384,23 @@ export function ConditionsEditor({
                         <option value="false">false</option>
                       </select>
                     </label>
+                  ) : FmValueSelect !== undefined ? (
+                    <span className={`${p}-field ${p}-grow`}>
+                      <FmValueSelect
+                        fmKey={clause.field.startsWith("fm.") ? clause.field.slice(3) : ""}
+                        value={clause.value}
+                        multiple={clause.op === "contains_any"}
+                        placeholder={valuePlaceholder(clause)}
+                        onChange={(next) => patch(clause.id, { value: next })}
+                      />
+                    </span>
                   ) : (
                     <label className={`${p}-field ${p}-grow`}>
                       <input
                         aria-label="Value"
                         list={`${fieldList}-${clause.id}`}
                         value={clause.value}
-                        placeholder={
-                          clause.op === "contains_any"
-                            ? "work, home"
-                            : clause.kind === "date"
-                              ? "2026-09-23"
-                              : "Value"
-                        }
+                        placeholder={valuePlaceholder(clause)}
                         onChange={(event) => patch(clause.id, { value: event.target.value })}
                       />
                       <datalist id={`${fieldList}-${clause.id}`}>
@@ -424,6 +478,11 @@ export function ConditionsEditor({
       </div>
     </>
   );
+}
+
+/** An example of what the value box takes. */
+function valuePlaceholder(clause: FilterClause): string {
+  return clause.op === "contains_any" ? "work, home" : clause.kind === "date" ? "2026-09-23" : "Value";
 }
 
 /** A note: the picker until one is chosen, then the note as the tree draws it. */

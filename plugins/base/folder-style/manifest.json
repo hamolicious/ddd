@@ -1,6 +1,6 @@
 {
   "id": "folder-style",
-  "version": "4.1.0",
+  "version": "4.2.0",
   "name": "Folder colors and icons",
   "description": "Give any note in the folder tree a color and an icon, from its menu, with defaults for the rest in Settings.",
   "author": "Life Manager base distribution",
@@ -15,7 +15,7 @@
   },
   "optionalDependencies": {
     "icons": "^2.0",
-    "search": "^4.3"
+    "search": "^4.7"
   },
   "peerLibraries": {
     "react": "^18.0.0"

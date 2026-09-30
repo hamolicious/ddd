@@ -14,7 +14,8 @@
  *   `SavedSearch` is the shell for one; each view plugin's document mode claims the
  *   saved searches whose `type` names it and draws itself inside it.
  * - **Components** (`components/`): the pieces other plugins build with — `NoteSelect`,
- *   a box that searches notes and picks one, drawing each as the folder tree does
+ *   `FmKeySelect` and `FmValueSelect`, boxes that pick a note, a frontmatter key and one of
+ *   its values. `NoteSelect` draws each note as the folder tree does
  *   (`setNoteLooks`, which `folders` calls: it cannot be a dependency of this plugin,
  *   since `folders` optionally depends on this one).
  *
@@ -33,6 +34,8 @@ import type { ConditionIndex } from "../../_shared/conditions-index.js";
 
 import {
   providerRegistry,
+  type FmKeySelectProps,
+  type FmValueSelectProps,
   type NoteSelectProps,
   type ResolveOptions,
   type ResultsOptions,
@@ -43,6 +46,7 @@ import {
   type SearchShellProps,
   type SearchSpec,
 } from "./api.js";
+import { createFmSelects } from "./components/FmSelect.js";
 import { createNoteSelect, type NoteLooks } from "./components/NoteSelect.js";
 import { searchEngine } from "./providers.js";
 import { resolveSearch, useResults as useResultsWith } from "./results.js";
@@ -53,6 +57,8 @@ import { documentPath, encodeSpec, parseSpec } from "./spec.js";
 
 export type { NoteLooks } from "./components/NoteSelect.js";
 export type {
+  FmKeySelectProps,
+  FmValueSelectProps,
   NoteSelectProps,
   ResolveOptions,
   ResultsOptions,
@@ -126,6 +132,8 @@ interface Active {
   readonly SearchShell: ComponentType<SearchShellProps>;
   readonly SavedSearch: ComponentType<SavedSearchProps>;
   readonly NoteSelect: ComponentType<NoteSelectProps>;
+  readonly FmKeySelect: ComponentType<FmKeySelectProps>;
+  readonly FmValueSelect: ComponentType<FmValueSelectProps>;
 }
 
 let active: Active | undefined;
@@ -165,6 +173,18 @@ export function SavedSearch(props: SavedSearchProps): ReactElement {
 /** A box that searches notes and picks one; the value is the note's id. */
 export function NoteSelect(props: NoteSelectProps): ReactElement {
   const Select = need().NoteSelect;
+  return <Select {...props} />;
+}
+
+/** A frontmatter key, typed or picked from the keys in use. */
+export function FmKeySelect(props: FmKeySelectProps): ReactElement {
+  const Select = need().FmKeySelect;
+  return <Select {...props} />;
+}
+
+/** A value of one frontmatter key, typed or picked from the values it holds. */
+export function FmValueSelect(props: FmValueSelectProps): ReactElement {
+  const Select = need().FmValueSelect;
   return <Select {...props} />;
 }
 
@@ -236,6 +256,8 @@ export default function activate(kernel: Kernel): void {
     },
   });
 
+  const { FmKeySelect, FmValueSelect } = createFmSelects(indexer);
+
   const Shell = createSearchShell({
     kernel,
     engine,
@@ -243,6 +265,8 @@ export default function activate(kernel: Kernel): void {
     index,
     actions: () => (commands ? openActions : undefined),
     NoteSelect,
+    FmKeySelect,
+    FmValueSelect,
   });
 
   /** A new note holding the search, filed like any new document, then opened. */
@@ -273,6 +297,8 @@ export default function activate(kernel: Kernel): void {
     SearchShell: Shell,
     SavedSearch: createSavedSearch({ SearchShell: Shell, open, update }),
     NoteSelect,
+    FmKeySelect,
+    FmValueSelect,
   };
 }
 

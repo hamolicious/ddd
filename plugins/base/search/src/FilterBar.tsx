@@ -45,7 +45,7 @@ import type { ContextMenu } from "plugin:context-menu";
 
 import { useCompact } from "../../_shared/compact.js";
 import type { ConditionContext } from "../../_shared/conditions.js";
-import { ConditionsEditor, type NoteSelectLike } from "../../_shared/conditions-editor.js";
+import { ConditionsEditor, type FmKeySelectLike, type FmValueSelectLike, type NoteSelectLike } from "../../_shared/conditions-editor.js";
 import type { NoteSource } from "../../_shared/note-picker.js";
 import type { Suggestions } from "../../_shared/conditions-index.js";
 import {
@@ -84,6 +84,9 @@ export interface FilterBarProps {
   readonly notes?: NoteSource;
   /** Picks the note for those. */
   readonly NoteSelect?: ComponentType<NoteSelectLike>;
+  /** Picks a condition's property, and its value. */
+  readonly FmKeySelect?: ComponentType<FmKeySelectLike>;
+  readonly FmValueSelect?: ComponentType<FmValueSelectLike>;
   /** Properties and values to offer, from the indexer. */
   readonly suggestions?: Suggestions;
   /** The children "is inside note" resolves against, for the JSON shown. */
@@ -107,6 +110,8 @@ export function FilterBar({
   saveLabel = "Save search",
   notes,
   NoteSelect,
+  FmKeySelect,
+  FmValueSelect,
   suggestions,
   context,
 }: FilterBarProps): ReactElement {
@@ -265,6 +270,8 @@ export function FilterBar({
         classPrefix="search"
         {...(notes !== undefined ? { notes } : {})}
         {...(NoteSelect !== undefined ? { NoteSelect } : {})}
+        {...(FmKeySelect !== undefined ? { FmKeySelect } : {})}
+        {...(FmValueSelect !== undefined ? { FmValueSelect } : {})}
         {...(suggestions !== undefined ? { suggestions } : {})}
         actions={
           (draft.clauses.length > 0 || draft.includeMachine === true) && (

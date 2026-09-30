@@ -185,6 +185,35 @@ export interface NoteSelectProps {
   readonly cwd?: string;
 }
 
+/** A frontmatter key, typed or picked from the keys in use. Since 4.7.0. */
+export interface FmKeySelectProps {
+  /** The key, as typed so far: `status`, `project.phase`. */
+  readonly value: string;
+  /** Every keystroke, and a pick. */
+  readonly onChange: (key: string) => void;
+  /** Fields that are not frontmatter, listed first under their names: `title`, `updated_at`. */
+  readonly builtIn?: readonly { readonly key: string; readonly label: string }[];
+  readonly placeholder?: string;
+  /** The accessible name of the box; "Property" by default. */
+  readonly label?: string;
+  readonly autoFocus?: boolean;
+}
+
+/** A value of one frontmatter key, typed or picked from the values it holds. Since 4.7.0. */
+export interface FmValueSelectProps {
+  /** Whose values to suggest; none while it is `""`. */
+  readonly fmKey: string;
+  readonly value: string;
+  /** Every keystroke, and a pick. */
+  readonly onChange: (value: string) => void;
+  /** A comma-separated list: suggest for, and replace, the last item. */
+  readonly multiple?: boolean;
+  readonly placeholder?: string;
+  /** The accessible name of the box; "Value" by default. */
+  readonly label?: string;
+  readonly autoFocus?: boolean;
+}
+
 export interface ResultsOptions {
   /** Rows per page; 50 by default. */
   readonly pageSize?: number;
@@ -229,4 +258,8 @@ export interface Search {
   readonly SavedSearch: ComponentType<SavedSearchProps>;
   /** A box that searches notes and picks one. */
   readonly NoteSelect: ComponentType<NoteSelectProps>;
+  /** A frontmatter key, typed or picked from the keys in use. */
+  readonly FmKeySelect: ComponentType<FmKeySelectProps>;
+  /** A value of one frontmatter key, typed or picked from the values it holds. */
+  readonly FmValueSelect: ComponentType<FmValueSelectProps>;
 }

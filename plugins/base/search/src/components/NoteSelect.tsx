@@ -3,20 +3,18 @@
  * first, narrowed by what is typed. The value is the chosen note's id.
  *
  * Each note is drawn as the folder tree draws it — its colour and icon (`setNoteLooks`,
- * which `folders` calls), its title, the notes above it — in a virtual list
- * (`_shared/virtual-list.ts`), so a workspace of thousands costs a screenful. The notes are
- * one live query, held only while the list is open.
+ * which `folders` calls), its title, the notes above it — in `Combobox`'s virtual list. The
+ * notes are one live query, held only while the list is open.
  *
  * With `cwd`, the notes nearest it in the tree come first (`proximity.ts`), last updated
  * first among equals. That needs the tree, from `folders` as well; without it, `cwd` is
  * ignored.
  *
- * Arrow keys move through the list, Enter picks, Escape closes it. Unfocused, the box
- * shows the chosen note's title; focused, it is the text. With `emptyLabel`, "no note" is
- * a choice too: first in the list, and chosen as `""`.
+ * Unfocused, the box shows the chosen note's title; focused, it is the text. With
+ * `emptyLabel`, "no note" is a choice too: first in the list, and chosen as `""`.
  */
 
-import { useEffect, useId, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import type { CSSProperties, ComponentType, ReactElement } from "react";
 
 import type { DocumentQuery, DocumentsApi, Unsubscribe } from "@kernel";
@@ -26,8 +24,8 @@ import type { NoteSelectProps } from "../api.js";
 import { withoutMachineDocuments } from "../../../_shared/machine-docs.js";
 import { NoteName, type NoteLook } from "../../../_shared/note-picker.js";
 import { useLiveQuery } from "../../../_shared/useLiveQuery.js";
-import { useVirtualList } from "../../../_shared/virtual-list.js";
 
+import { Combobox, type ComboboxOptions } from "./Combobox.js";
 import { byProximity, type ParentOf } from "./proximity.js";
 
 /** How notes are dressed, and where they sit: `folders`' functions of the same names. */
@@ -60,9 +58,6 @@ const EVERY_NOTE: DocumentQuery = {
   filter: withoutMachineDocuments(),
   sort: [{ field: "updated_at", direction: "desc" }],
 };
-
-/** A row, before it is measured: the tap target. */
-const ROW_ESTIMATE = 44;
 
 const MUTED: CSSProperties = {
   minWidth: 0,
@@ -118,34 +113,11 @@ export function createNoteSelect({ documents, index, looks, onLooksSet }: NoteSe
     return { current, version };
   }
 
-  /** The open list: every note, last updated first, narrowed by `query`. */
-  function OptionList({
-    id,
-    query,
-    cwd,
-    emptyLabel,
-    active,
-    setActive,
-    choose,
-    label,
-    onOptions,
-    scrollTo,
-  }: {
-    readonly id: string;
-    readonly query: string;
-    readonly cwd: string | undefined;
-    readonly emptyLabel: string | undefined;
-    readonly active: number;
-    readonly setActive: (index: number) => void;
-    readonly choose: (id: string) => void;
-    readonly label: string;
-    readonly onOptions: (options: readonly Option[]) => void;
-    readonly scrollTo: { current: ((index: number) => void) | undefined };
-  }): ReactElement {
+  /** Every note, last updated first (nearest `cwd` first, with it), narrowed by `query`. */
+  function useNoteOptions(query: string, cwd: string | undefined, emptyLabel: string | undefined): ComboboxOptions<Option> {
     const live = useLiveQuery(documents, EVERY_NOTE);
     const folders = useFolders();
-    const { current: dressed, version: dressedVersion } = useLooks();
-
+    const { current: dressed, version } = useLooks();
     const options = useMemo(() => {
       const needle = query.trim().toLowerCase();
       const all: Option[] = live.rows.map((row) => ({ id: row.id, title: row.title, folder: folders.get(row.id) ?? "" }));
@@ -157,60 +129,8 @@ export function createNoteSelect({ documents, index, looks, onLooksSet }: NoteSe
       // The live query is last updated first, and ties keep that order.
       const sorted = cwd !== undefined && parentOf !== undefined ? byProximity(matching, parentOf, cwd) : matching;
       return emptyLabel !== undefined && needle === "" ? [{ id: "", title: emptyLabel, folder: "" }, ...sorted] : sorted;
-    }, [live.rows, folders, query, cwd, emptyLabel, dressed, dressedVersion]);
-    useEffect(() => onOptions(options), [options]);
-
-    const virtual = useVirtualList({
-      count: options.length,
-      keyOf: (at) => options[at]?.id ?? String(at),
-      estimate: ROW_ESTIMATE,
-      clipToWindow: false,
-    });
-    scrollTo.current = virtual.scrollToIndex;
-
-    return (
-      <div className="search:absolute search:inset-x-0 search:top-full search:z-20 search:mt-1 search:max-h-64 search:overflow-y-auto search:overscroll-contain search:rounded search:border search:border-border search:bg-bg-raised search:p-1 search:shadow-2">
-        {options.length === 0 ? (
-          <p className="search:m-0 search:px-2 search:py-1.5 search:text-sm search:text-text-muted">
-            {live.loading ? "Loading…" : "No note matches."}
-          </p>
-        ) : (
-          <ul
-            ref={virtual.listRef}
-            id={id}
-            role="listbox"
-            aria-label={label}
-            className="search:m-0 search:list-none search:p-0"
-            style={{ paddingTop: virtual.before, paddingBottom: virtual.after }}
-          >
-            {options.slice(virtual.first, virtual.end).map((note, offset) => {
-              const at = virtual.first + offset;
-              return (
-                <li
-                  key={note.id}
-                  id={`${id}-${at}`}
-                  data-virtual-index={at}
-                  role="option"
-                  aria-selected={at === active}
-                  className="search:tap-h search:flex search:min-w-0 search:cursor-pointer search:items-center search:gap-2 search:rounded search:px-2 search:aria-selected:bg-accent-subtle"
-                  // Before the input's blur closes the list.
-                  onMouseDown={(event) => event.preventDefault()}
-                  onMouseEnter={() => setActive(at)}
-                  onClick={() => choose(note.id)}
-                >
-                  {note.id === "" ? (
-                    <span className="search:text-text-muted">{note.title}</span>
-                  ) : (
-                    <NoteName title={note.title} look={dressed?.look(note.id)} />
-                  )}
-                  {note.folder !== "" && <span style={MUTED}>{note.folder}</span>}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
-    );
+    }, [live.rows, folders, query, cwd, emptyLabel, dressed, version]);
+    return { options, loading: live.loading };
   }
 
   return function NoteSelect({
@@ -222,95 +142,40 @@ export function createNoteSelect({ documents, index, looks, onLooksSet }: NoteSe
     emptyLabel,
     cwd,
   }: NoteSelectProps): ReactElement {
-    const listId = useId();
     const title = useTitle(value);
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState("");
-    const [active, setActive] = useState(0);
-    const [options, setOptions] = useState<readonly Option[]>([]);
-    const [scrollTo] = useState<{ current: ((index: number) => void) | undefined }>(() => ({ current: undefined }));
     const shown = value === "" && emptyLabel !== undefined ? emptyLabel : title;
-
-    const choose = (id: string): void => {
-      onChange(id);
-      setOpen(false);
-      setQuery("");
-    };
-
-    const close = (): void => {
-      setOpen(false);
-      setQuery("");
-    };
-
-    const move = (to: number): void => {
-      const next = Math.max(0, Math.min(to, options.length - 1));
-      setActive(next);
-      scrollTo.current?.(next);
-    };
+    // Drawn only in the open list, where `useNoteOptions` has subscribed to the looks.
+    const look = (id: string): NoteLook | undefined => looks()?.look(id);
 
     return (
-      <div className="search-note-select search:relative search:min-w-0">
-        <input
-          type="text"
-          role="combobox"
-          aria-label={label}
-          aria-expanded={open}
-          aria-controls={listId}
-          aria-autocomplete="list"
-          {...(open && options[active] ? { "aria-activedescendant": `${listId}-${active}` } : {})}
-          placeholder={placeholder}
-          value={open ? query : shown}
-          spellCheck={false}
-          autoComplete="off"
-          autoFocus={autoFocus}
-          className="search:tap-h search:w-full search:min-w-0 search:rounded search:border search:border-border search:bg-bg search:px-2 search:text-base search:text-text"
-          onFocus={() => {
-            setOpen(true);
-            setActive(0);
-          }}
-          onBlur={close}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            setActive(0);
-            setOpen(true);
-            scrollTo.current?.(0);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "ArrowDown") {
-              event.preventDefault();
-              setOpen(true);
-              move(active + 1);
-            } else if (event.key === "ArrowUp") {
-              event.preventDefault();
-              move(active - 1);
-            } else if (event.key === "Enter") {
-              const option = options[active];
-              if (open && option) {
-                event.preventDefault();
-                choose(option.id);
-              }
-            } else if (event.key === "Escape" && open) {
-              event.preventDefault();
-              close();
-              event.currentTarget.blur();
-            }
-          }}
-        />
-        {open && (
-          <OptionList
-            id={listId}
-            query={query}
-            cwd={cwd}
-            emptyLabel={emptyLabel}
-            active={active}
-            setActive={setActive}
-            choose={choose}
-            label={label}
-            onOptions={setOptions}
-            scrollTo={scrollTo}
-          />
+      <Combobox<Option>
+        label={label}
+        placeholder={placeholder}
+        autoFocus={autoFocus}
+        text={open ? query : shown}
+        onText={setQuery}
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) setQuery("");
+        }}
+        useOptions={() => useNoteOptions(query, cwd, emptyLabel)}
+        keyOf={(note) => note.id}
+        renderOption={(note) => (
+          <>
+            {note.id === "" ? (
+              <span className="search:text-text-muted">{note.title}</span>
+            ) : (
+              <NoteName title={note.title} look={look(note.id)} />
+            )}
+            {note.folder !== "" && <span style={MUTED}>{note.folder}</span>}
+          </>
         )}
-      </div>
+        onPick={(note) => onChange(note.id)}
+        empty="No note matches."
+      />
     );
   };
 }
