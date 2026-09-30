@@ -176,7 +176,20 @@ fn main() {
             let win_handle = handle.clone();
             let win_origin = server.clone();
 
-            WebviewWindowBuilder::new(app, "main", WebviewUrl::External(server.clone()))
+            let mut window =
+                WebviewWindowBuilder::new(app, "main", WebviewUrl::External(server.clone()));
+            // A debug build (`mise run desktop-run`) links the system WebKitGTK, while the
+            // AppImage bundles its own, usually older, one. Sharing one data directory let
+            // the newer WebKit rewrite IndexedDB in a metadata format the older cannot read,
+            // and the installed app then died at boot with "Unable to establish IDB database
+            // file". WebKit upgrades these files but never downgrades them, so a dev build
+            // keeps its own webview data (cookies, IndexedDB, service worker) apart.
+            if cfg!(debug_assertions) {
+                window =
+                    window.data_directory(app.path().app_local_data_dir()?.join("dev-webview"));
+            }
+
+            window
                 .title("Life Manager")
                 .inner_size(1280.0, 860.0)
                 .min_inner_size(480.0, 480.0)

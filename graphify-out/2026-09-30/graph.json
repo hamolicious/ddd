@@ -28790,7 +28790,7 @@
       "file_type": "code",
       "norm_label": "confirmrequest()",
       "source_file": "plugins/base/folders/src/FolderTree.tsx",
-      "source_location": "L1097"
+      "source_location": "L1099"
     },
     {
       "id": "plugins_base_folders_src_foldertree_dressed",
@@ -28802,7 +28802,7 @@
       "file_type": "code",
       "norm_label": "dressed()",
       "source_file": "plugins/base/folders/src/FolderTree.tsx",
-      "source_location": "L1128"
+      "source_location": "L1130"
     },
     {
       "id": "plugins_base_folders_src_foldertree_foldertree",
@@ -28826,7 +28826,7 @@
       "file_type": "code",
       "norm_label": "lifted()",
       "source_file": "plugins/base/folders/src/FolderTree.tsx",
-      "source_location": "L1149"
+      "source_location": "L1151"
     },
     {
       "id": "plugins_base_folders_src_foldertree_messageof",
@@ -28850,7 +28850,7 @@
       "file_type": "code",
       "norm_label": "plural()",
       "source_file": "plugins/base/folders/src/FolderTree.tsx",
-      "source_location": "L1094"
+      "source_location": "L1096"
     },
     {
       "id": "plugins_base_folders_src_order_placeamong",
@@ -37070,7 +37070,7 @@
       "file_type": "code",
       "norm_label": "contentheight()",
       "source_file": "plugins/base/_shared/virtual-list.ts",
-      "source_location": "L314"
+      "source_location": "L331"
     },
     {
       "id": "plugins_base_shared_virtual_list_fitheight",
@@ -37082,7 +37082,7 @@
       "file_type": "code",
       "norm_label": "fitheight()",
       "source_file": "plugins/base/_shared/virtual-list.ts",
-      "source_location": "L306"
+      "source_location": "L323"
     },
     {
       "id": "plugins_base_shared_virtual_list_layoutrows",
@@ -37154,7 +37154,7 @@
       "file_type": "code",
       "norm_label": "usefittoscreen()",
       "source_file": "plugins/base/_shared/virtual-list.ts",
-      "source_location": "L330"
+      "source_location": "L347"
     },
     {
       "id": "plugins_base_shared_virtual_list_usevirtuallist",
@@ -177343,7 +177343,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/folders/src/FolderTree.tsx",
-      "source_location": "L1109",
+      "source_location": "L1111",
       "weight": 1.0
     },
     {
@@ -177403,7 +177403,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/folders/src/FolderTree.tsx",
-      "source_location": "L362",
+      "source_location": "L364",
       "weight": 1.0
     },
     {
@@ -177415,7 +177415,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/folders/src/FolderTree.tsx",
-      "source_location": "L379",
+      "source_location": "L381",
       "weight": 1.0
     },
     {
@@ -177427,7 +177427,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/folders/src/FolderTree.tsx",
-      "source_location": "L394",
+      "source_location": "L396",
       "weight": 1.0
     },
     {
@@ -177439,7 +177439,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/folders/src/FolderTree.tsx",
-      "source_location": "L395",
+      "source_location": "L397",
       "weight": 1.0
     },
     {
@@ -177451,7 +177451,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/folders/src/FolderTree.tsx",
-      "source_location": "L799",
+      "source_location": "L801",
       "weight": 1.0
     },
     {
@@ -177463,7 +177463,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/folders/src/FolderTree.tsx",
-      "source_location": "L964",
+      "source_location": "L966",
       "weight": 1.0
     },
     {
@@ -185743,7 +185743,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/_shared/virtual-list.ts",
-      "source_location": "L334",
+      "source_location": "L351",
       "weight": 1.0
     },
     {
@@ -185755,7 +185755,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/_shared/virtual-list.ts",
-      "source_location": "L337",
+      "source_location": "L354",
       "weight": 1.0
     },
     {
@@ -185767,31 +185767,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/_shared/virtual-list.ts",
-      "source_location": "L337",
-      "weight": 1.0
-    },
-    {
-      "source": "plugins_base_shared_virtual_list_usevirtuallist",
-      "target": "plugins_base_shared_virtual_list_layoutrows",
-      "relation": "calls",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "context": "call",
-      "source_file": "plugins/base/_shared/virtual-list.ts",
-      "source_location": "L172",
-      "weight": 1.0
-    },
-    {
-      "source": "plugins_base_shared_virtual_list_usevirtuallist",
-      "target": "plugins_base_shared_virtual_list_viewportof",
-      "relation": "calls",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "context": "call",
-      "source_file": "plugins/base/_shared/virtual-list.ts",
-      "source_location": "L185",
+      "source_location": "L354",
       "weight": 1.0
     },
     {
@@ -185803,7 +185779,31 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/_shared/virtual-list.ts",
-      "source_location": "L193",
+      "source_location": "L174",
+      "weight": 1.0
+    },
+    {
+      "source": "plugins_base_shared_virtual_list_usevirtuallist",
+      "target": "plugins_base_shared_virtual_list_layoutrows",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "plugins/base/_shared/virtual-list.ts",
+      "source_location": "L188",
+      "weight": 1.0
+    },
+    {
+      "source": "plugins_base_shared_virtual_list_usevirtuallist",
+      "target": "plugins_base_shared_virtual_list_viewportof",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "plugins/base/_shared/virtual-list.ts",
+      "source_location": "L201",
       "weight": 1.0
     },
     {
@@ -185815,7 +185815,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/_shared/virtual-list.ts",
-      "source_location": "L270",
+      "source_location": "L286",
       "weight": 1.0
     },
     {
@@ -185827,7 +185827,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/_shared/virtual-list.ts",
-      "source_location": "L270",
+      "source_location": "L286",
       "weight": 1.0
     },
     {
@@ -382781,7 +382781,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/folders/src/FolderTree.tsx",
-      "source_location": "L1094",
+      "source_location": "L1096",
       "weight": 1.0
     },
     {
@@ -382792,7 +382792,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/folders/src/FolderTree.tsx",
-      "source_location": "L1097",
+      "source_location": "L1099",
       "weight": 1.0
     },
     {
@@ -382803,7 +382803,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/folders/src/FolderTree.tsx",
-      "source_location": "L1128",
+      "source_location": "L1130",
       "weight": 1.0
     },
     {
@@ -382814,7 +382814,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/folders/src/FolderTree.tsx",
-      "source_location": "L1149",
+      "source_location": "L1151",
       "weight": 1.0
     },
     {
@@ -394925,18 +394925,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/_shared/virtual-list.ts",
-      "source_location": "L306",
-      "weight": 1.0
-    },
-    {
-      "source": "plugins_base_shared_virtual_list",
-      "target": "plugins_base_shared_virtual_list_contentheight",
-      "relation": "contains",
-      "_origin": "ast",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "plugins/base/_shared/virtual-list.ts",
-      "source_location": "L314",
+      "source_location": "L323",
       "weight": 1.0
     },
     {
@@ -394952,13 +394941,24 @@
     },
     {
       "source": "plugins_base_shared_virtual_list",
+      "target": "plugins_base_shared_virtual_list_contentheight",
+      "relation": "contains",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "plugins/base/_shared/virtual-list.ts",
+      "source_location": "L331",
+      "weight": 1.0
+    },
+    {
+      "source": "plugins_base_shared_virtual_list",
       "target": "plugins_base_shared_virtual_list_usefittoscreen",
       "relation": "contains",
       "_origin": "ast",
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/_shared/virtual-list.ts",
-      "source_location": "L330",
+      "source_location": "L347",
       "weight": 1.0
     },
     {

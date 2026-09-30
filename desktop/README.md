@@ -39,3 +39,9 @@ mise run desktop-run          # against the local server on :$PORT
 cargo install tauri-cli --version '^2'
 mise run desktop-bundle       # .deb + AppImage under target/release/bundle/
 ```
+
+A debug build keeps its webview data (cookies, IndexedDB, service worker) in
+`~/.local/share/app.life-manager.desktop/dev-webview/`, apart from the installed app's. The
+debug build links the system WebKitGTK and the AppImage bundles its own; WebKit upgrades
+IndexedDB files to its own format but never downgrades them, so a shared directory left the
+AppImage failing at boot with "Unable to establish IDB database file".

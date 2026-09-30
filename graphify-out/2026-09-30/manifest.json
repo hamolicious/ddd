@@ -1344,9 +1344,9 @@
     "semantic_hash": ""
   },
   "plugins/base/folders/src/FolderTree.tsx": {
-    "mtime": 1790724201.4606903,
-    "seen": 1790727220.2612052,
-    "ast_hash": "fea28c315dbaca14ecda619779cd59a0",
+    "mtime": 1790731870.0834734,
+    "seen": 1790732518.3248248,
+    "ast_hash": "d5af2b0664490ef931a0fd7d89aaf0ba",
     "semantic_hash": ""
   },
   "plugins/base/folders/src/index.tsx": {
@@ -1716,9 +1716,9 @@
     "semantic_hash": ""
   },
   "web/app/e2e/journeys.spec.ts": {
-    "mtime": 1790728065.100676,
-    "seen": 1790729424.1765823,
-    "ast_hash": "a59cfe7a8c9cc8bb95ddc1e4d2ea3be9",
+    "mtime": 1790731075.6508663,
+    "seen": 1790732518.3327777,
+    "ast_hash": "fd2b6c9185daa0a282c8a7dc8dd1c52b",
     "semantic_hash": ""
   },
   "web/app/e2e/list-alignment.spec.ts": {
@@ -4260,9 +4260,9 @@
     "semantic_hash": ""
   },
   "plugins/base/_shared/virtual-list.ts": {
-    "mtime": 1790722717.133818,
-    "seen": 1790723152.0546834,
-    "ast_hash": "cf63d925ab2eadda306c49ad93d5aa00",
+    "mtime": 1790731859.2812297,
+    "seen": 1790732518.3210251,
+    "ast_hash": "def0fa11901385fd67c6ffb87cc8f427",
     "semantic_hash": ""
   },
   "web/.vitest/json/output.json": {

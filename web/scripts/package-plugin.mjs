@@ -21,7 +21,10 @@
  * install then fails naming a file the author did not know was in their package.
  *
  * Usage:
- *   node web/scripts/package-plugin.mjs <id> [version] [--out <dir>]
+ *   node web/scripts/package-plugin.mjs <id> [version] [--out <dir>] [--examples]
+ *
+ * `--examples` packages from `plugins/examples/dist` (what `build-examples.mjs` writes)
+ * instead of `plugins/base/dist`.
  *
  * Writes `<out>/<id>-<version>.zip` (default out: `dist-packages/`) and prints the path.
  */
@@ -34,9 +37,9 @@ import { fileURLToPath } from "node:url";
 
 const web = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repo = resolve(web, "..");
-const distRoot = join(repo, "plugins", "base", "dist");
-
 const argv = process.argv.slice(2);
+const distRoot = join(repo, "plugins", argv.includes("--examples") ? "examples" : "base", "dist");
+
 const outFlag = argv.indexOf("--out");
 const outDir = outFlag === -1 ? join(repo, "dist-packages") : resolve(argv[outFlag + 1]);
 const positional = argv.filter((arg, index) => {
@@ -47,7 +50,7 @@ const positional = argv.filter((arg, index) => {
 
 const [id, versionArg] = positional;
 if (!id) {
-  console.error("usage: node web/scripts/package-plugin.mjs <id> [version] [--out <dir>]");
+  console.error("usage: node web/scripts/package-plugin.mjs <id> [version] [--out <dir>] [--examples]");
   process.exit(2);
 }
 

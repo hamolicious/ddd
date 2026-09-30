@@ -1,7 +1,7 @@
 # Graph Report - life-manager  (2026-09-30)
 
 ## Corpus Check
-- 849 files · ~948,646 words
+- 849 files · ~948,834 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 83 file(s) not represented in the graph (top: (none) 16, .toml 13, .xml 10)
 
@@ -2311,9 +2311,9 @@ _Questions this graph is uniquely positioned to answer:_
 - **Why does `String` connect `String` to `routes/documents.rs`, `routes/changes.rs`, `Diagnostic`, `sync_ws.rs`, `docstore.rs`, `attachments.rs`, `pluginhost/cron.rs`, `telemetry.rs`, `Response`, `zipcheck.rs`, `AppState`, `plugininstall/config.rs`, `MongoDocStoreInner`, `routes/statics.rs`, `pluginhost/hooks.rs`, `PluginPool`, `ApiResponse`, `domain.rs`, `DocStoreError`, `Date`, `feed.rs`, `plugin_api.rs`, `ast.rs`, `tests/statics.rs`, `pluginhost_runtime.rs`, `shell_bundle.rs`, `routes/uploads.rs`, `rate_limit.rs`, `load.rs`, `plugininstall_flow.rs`, `bootstrap`, `src/changes.rs`, `super`, `evaluator.rs`, `.lock`, `admin.rs`, `wasm.rs`, `pluginhost_routes.rs`, `CircuitBreaker`, `pluginhost/limits.rs`, `pluginhost/mod.rs`, `migrations.rs`, `pluginhost_http.rs`, `splice.rs`, `value.rs`, `ConnectionSession`, `queue.rs`, `document.rs`, `manifest_schema.rs`, `sections.rs`, `host_fns.rs`, `convergence.rs`, `shape.rs`, `HookQueue`, `HostError`, `write_envelope`, `conformance.rs`, `.from_env`, `server/tests/common/mod.rs`, `plugininstall_zip.rs`, `new.rs`, `auth/mod.rs`, `serve`, `yaml.rs`, `folder.rs`, `Registry`, `serialize`, `fs`, `Option`, `invite.rs`, `PluginManifest`, `mongo.rs`, `plugin-abi/src/http.rs`, `pluginhost_smoke.rs`, `call_value`, `http`, `title.rs`, `Server`, `Origin`, `audit.rs`, `Config`, `repo.rs`, `server/src/main.rs`, `.new`, `CheckResult`, `plugin-sdk/src/log.rs`, `plugin-abi/src/lib.rs`, `split_batches`, `InstalledPlugin`, `Harness`, `server/src/plugins.rs`, `ConfigGetOutput`, `plugin-abi/src/documents.rs`?**
   _High betweenness centrality (0.194) - this node is a cross-community bridge._
 - **Why does `react` connect `react` to `main.tsx`, `fm-autocomplete/src/controller.ts`, `graph/src/settings.ts`, `note-picker.tsx`, `Theme`, `document-surface/src/index.tsx`, `kernel-api/src/index.ts`, `search/src/index.tsx`, `columns.ts`, `icons/src/index.tsx`, `SyntaxApi`, `ShellState`, `wikilinks/src/controller.ts`, `fm-display.ts`, `Plugins.tsx`, `render.tsx`, `alt-editor/src/index.tsx`, `context-menu/src/Menu.tsx`, `editor/src/index.tsx`, `doc-list/src/index.tsx`, `doc-embed.tsx`, `Palette.tsx`, `ref_plugin_shell_ui`, `markdown/src/index.tsx`, `viewer/src/index.tsx`, `importmap.ts`, `DocListView.tsx`, `Shell.tsx`, `saved-view-mode.tsx`, `attachments/src/index.tsx`, `DocumentMode`, `MarkdownRuntime`, `conditions.ts`, `ui.ts`, `import.test.ts`, `FolderTree.tsx`, `hierarchy.ts`, `shell-ui/src/index.tsx`, `Panel.tsx`, `results.ts`, `admin/src/index.tsx`, `context-menu/src/index.tsx`, `router/src/index.tsx`, `timeline/src/layout.ts`, `tasks.ts`, `pipeline.test.ts`, `package.json`, `emoji/src/controller.ts`, `ref_kernel`, `runtime.ts`, `folder-style/src/index.tsx`, `GraphView.tsx`, `virtual-list.ts`, `KeybindingsSection.tsx`, `commands/src/index.tsx`, `custom.ts`, `view.tsx`, `kanban/src/layout.ts`, `folders/src/index.tsx`, `field-select.tsx`, `admin/src/api.ts`, `Users.tsx`, `offline-copy.tsx`, `fields.ts`, `kinds.ts`, `slash-commands/src/index.tsx`, `kanban/src/index.tsx`, `BarSettings.tsx`?**
-  _High betweenness centrality (0.146) - this node is a cross-community bridge._
+  _High betweenness centrality (0.149) - this node is a cross-community bridge._
 - **Why does `Display` connect `GraphView.tsx` to `graph/src/settings.ts`, `shape.rs`, `Date`, `ast.rs`, `HostError`?**
-  _High betweenness centrality (0.144) - this node is a cross-community bridge._
+  _High betweenness centrality (0.143) - this node is a cross-community bridge._
 - **What connects `note`, `bundle_version`, `min_bridge_version` to the rest of the system?**
   _2962 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `folder.ts` be split into smaller, more focused modules?**
