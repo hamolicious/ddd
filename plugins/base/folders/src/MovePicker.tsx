@@ -6,10 +6,15 @@
  * a long-press, a right-click or the `M` key opens this inside a `context-menu` sheet,
  * and the picker is an ordinary list of buttons. It also moves many notes at once, for
  * the "Move to folder…" command the document list's Actions button runs.
+ *
+ * With `search` enabled the list is its `NoteSelect`, inline: notes drawn as the tree draws
+ * them, nearest the current folder first.
  */
 
-import { useMemo, useState } from "react";
-import type { ReactElement } from "react";
+import { useCallback, useMemo, useState } from "react";
+import type { ComponentType, ReactElement } from "react";
+
+import type { NoteSelectProps } from "plugin:search";
 
 import { isWithin, titlePath, type Hierarchy } from "./hierarchy.js";
 import { compareText } from "./tree.js";
@@ -20,6 +25,8 @@ export interface MovePickerProps {
   readonly subjects: readonly { readonly id: string; readonly title: string }[];
   /** The note to file under; `""` is the root. */
   readonly onChoose: (parent: string) => void;
+  /** `search`'s note picker, when it is enabled. */
+  readonly NoteSelect?: ComponentType<NoteSelectProps>;
 }
 
 /**
@@ -27,7 +34,7 @@ export interface MovePickerProps {
  * it. The root is always the first option and is never filtered away — "take this out of
  * every folder" is the one destination nobody can type the name of.
  */
-export function MovePicker({ hierarchy, subjects, onChoose }: MovePickerProps): ReactElement {
+export function MovePicker({ hierarchy, subjects, onChoose, NoteSelect }: MovePickerProps): ReactElement {
   const [query, setQuery] = useState("");
   // Marked only when every subject is already there.
   const parents = new Set(subjects.map((subject) => hierarchy.parentOf.get(subject.id) ?? ""));
@@ -44,10 +51,31 @@ export function MovePicker({ hierarchy, subjects, onChoose }: MovePickerProps): 
     [hierarchy, ids],
   );
 
+  // None of them, nor anything inside one, can be the destination.
+  const exclude = useCallback(
+    (id: string): boolean => subjects.some((subject) => isWithin(hierarchy, id, subject.id)),
+    [hierarchy, ids],
+  );
+
   const options = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return needle === "" ? all : all.filter((option) => option.path.join(" / ").toLowerCase().includes(needle));
   }, [all, query]);
+
+  if (NoteSelect !== undefined) {
+    return (
+      <NoteSelect
+        inline
+        autoFocus
+        label="Move to"
+        placeholder="Filter notes…"
+        emptyLabel="Root"
+        cwd={current ?? ""}
+        exclude={exclude}
+        onChange={onChoose}
+      />
+    );
+  }
 
   const buttonClasses =
     "folders:tap-h folders:flex folders:w-full folders:flex-col folders:items-start folders:rounded folders:border folders:border-transparent folders:bg-transparent folders:px-2 folders:py-1 folders:text-left folders:hover:border-border folders:hover:bg-bg-subtle folders:aria-current:bg-accent-subtle";

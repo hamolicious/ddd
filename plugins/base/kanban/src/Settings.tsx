@@ -11,7 +11,10 @@
  * something. Every property in the list is also a filter above the board (`Board.tsx`).
  */
 
+import { useState } from "react";
 import type { ReactElement } from "react";
+
+import { FmKeySelect } from "plugin:search";
 
 import type { ViewSettingsProps } from "../../_shared/saved-view-mode.js";
 
@@ -41,18 +44,14 @@ export function KanbanSettings({ options, onOptionsChange, fields }: ViewSetting
     setCard(next);
   };
   const present = new Set(card.map(itemKey));
-  const addable = [
-    ...(present.has("content") ? [] : [{ key: "content", label: "Text (the note's words)" }]),
-    ...fields
-      .filter((field) => /^fm\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/.test(field.field) && !present.has(field.field))
-      .map((field) => ({ key: field.field, label: field.field.slice("fm.".length) })),
-  ];
+  const [adding, setAdding] = useState("");
 
   return (
     <div className="kanban-settings kanban:flex kanban:flex-col kanban:gap-3">
     <div className="kanban:flex kanban:flex-wrap kanban:items-start kanban:gap-3">
       <div className="kanban:flex kanban:flex-col kanban:gap-0.5">
         <FieldSelect
+          KeySelect={FmKeySelect}
           className={FIELD}
           label="Columns from"
           value={settings.group}
@@ -65,6 +64,7 @@ export function KanbanSettings({ options, onOptionsChange, fields }: ViewSetting
       </div>
       <div className="kanban:flex kanban:flex-col kanban:gap-0.5">
         <FieldSelect
+          KeySelect={FmKeySelect}
           className={FIELD}
           label="Swimlanes by"
           value={settings.lanes}
@@ -133,26 +133,21 @@ export function KanbanSettings({ options, onOptionsChange, fields }: ViewSetting
           );
         })}
       </ol>
-      {addable.length > 0 && (
-        <label className={`${FIELD} kanban:max-w-[16rem]`}>
-          <span className="kanban:sr-only">Add to cards</span>
-          <select
-            value=""
-            onChange={(event) => {
-              const key = event.target.value;
-              if (key === "") return;
-              setCard([...card, key === "content" ? { kind: "content" } : { kind: "field", field: key }]);
-            }}
-          >
-            <option value="">Add to cards…</option>
-            {addable.map((choice) => (
-              <option key={choice.key} value={choice.key}>
-                {choice.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
+      <div className={`${FIELD} kanban:max-w-[16rem]`}>
+        <span className="kanban:sr-only">Add to cards</span>
+        <FmKeySelect
+          value={adding}
+          label="Add to cards"
+          placeholder="Add to cards…"
+          builtIn={present.has("content") ? [] : [{ key: "content", label: "Text (the note's words)" }]}
+          onChange={setAdding}
+          onPick={(key) => {
+            setAdding("");
+            const item: CardItem = key === "content" ? { kind: "content" } : { kind: "field", field: `fm.${key}` };
+            if (!present.has(itemKey(item))) setCard([...card, item]);
+          }}
+        />
+      </div>
     </fieldset>
     </div>
   );

@@ -95,6 +95,7 @@ export interface NoteSelectLike {
 export interface FmKeySelectLike {
   readonly value: string;
   readonly onChange: (key: string) => void;
+  readonly onPick?: (key: string) => void;
   readonly builtIn?: readonly { readonly key: string; readonly label: string }[];
   readonly placeholder?: string;
   readonly label?: string;

@@ -10,6 +10,9 @@
  * first among equals. That needs the tree, from `folders` as well; without it, `cwd` is
  * ignored.
  *
+ * `exclude` leaves notes out (what is being moved, and what is inside it). `inline` keeps
+ * the list open under the box, for a sheet that is the picker.
+ *
  * Unfocused, the box shows the chosen note's title; focused, it is the text. With
  * `emptyLabel`, "no note" is a choice too: first in the list, and chosen as `""`.
  */
@@ -68,13 +71,20 @@ export function createNoteSelect({ documents, notes }: NoteSelectDeps): Componen
   }
 
   /** Every note, last updated first (nearest `cwd` first, with it), narrowed by `query`. */
-  function useNoteOptions(query: string, cwd: string | undefined, emptyLabel: string | undefined): ComboboxOptions<Option> {
+  function useNoteOptions(
+    query: string,
+    cwd: string | undefined,
+    emptyLabel: string | undefined,
+    exclude: ((id: string) => boolean) | undefined,
+  ): ComboboxOptions<Option> {
     const live = useLiveQuery(documents, EVERY_NOTE);
     const known = notes.useKnownNotes();
     const { current: dressed, version } = notes.useLooks();
     const options = useMemo(() => {
       const needle = query.trim().toLowerCase();
-      const all: Option[] = live.rows.map((row) => ({ id: row.id, title: row.title, folder: known.get(row.id)?.folder ?? "" }));
+      const all: Option[] = live.rows
+        .filter((row) => exclude === undefined || !exclude(row.id))
+        .map((row) => ({ id: row.id, title: row.title, folder: known.get(row.id)?.folder ?? "" }));
       const matching =
         needle === ""
           ? all
@@ -83,7 +93,7 @@ export function createNoteSelect({ documents, notes }: NoteSelectDeps): Componen
       // The live query is last updated first, and ties keep that order.
       const sorted = cwd !== undefined && parentOf !== undefined ? byProximity(matching, parentOf, cwd) : matching;
       return emptyLabel !== undefined && needle === "" ? [{ id: "", title: emptyLabel, folder: "" }, ...sorted] : sorted;
-    }, [live.rows, known, query, cwd, emptyLabel, dressed, version]);
+    }, [live.rows, known, query, cwd, emptyLabel, exclude, dressed, version]);
     return { options, loading: live.loading };
   }
 
@@ -95,6 +105,8 @@ export function createNoteSelect({ documents, notes }: NoteSelectDeps): Componen
     autoFocus = false,
     emptyLabel,
     cwd,
+    exclude,
+    inline = false,
   }: NoteSelectProps): ReactElement {
     const title = useTitle(value);
     const [open, setOpen] = useState(false);
@@ -106,14 +118,15 @@ export function createNoteSelect({ documents, notes }: NoteSelectDeps): Componen
         label={label}
         placeholder={placeholder}
         autoFocus={autoFocus}
-        text={open ? query : shown}
+        text={open || inline ? query : shown}
+        inline={inline}
         onText={setQuery}
         open={open}
         onOpenChange={(next) => {
           setOpen(next);
           if (!next) setQuery("");
         }}
-        useOptions={() => useNoteOptions(query, cwd, emptyLabel)}
+        useOptions={() => useNoteOptions(query, cwd, emptyLabel, exclude)}
         keyOf={(note) => note.id}
         renderOption={(note) => (
           // Drawn only in the open list, where `useNoteOptions` has subscribed to the looks.

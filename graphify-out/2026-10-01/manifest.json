@@ -4650,9 +4650,9 @@
     "semantic_hash": ""
   },
   "plugins/base/search/manifest.json": {
-    "mtime": 1790810701.907398,
-    "seen": 1790810784.7848454,
-    "ast_hash": "5906be740418a05e4ebed195e091e570",
+    "mtime": 1790811536.432856,
+    "seen": 1790811565.102818,
+    "ast_hash": "68191709e047826c6ea83217f5681b4d",
     "semantic_hash": ""
   },
   "plugins/base/search/src/FilterBar.tsx": {
@@ -4674,9 +4674,9 @@
     "semantic_hash": ""
   },
   "plugins/base/search/src/index.tsx": {
-    "mtime": 1790810701.9040706,
-    "seen": 1790810784.7850163,
-    "ast_hash": "de4fbcb4b044c0a563bd7db53dbfd433",
+    "mtime": 1790811536.4289966,
+    "seen": 1790811565.1031098,
+    "ast_hash": "8b4abfcc529d7fff5610d3ded50864db",
     "semantic_hash": ""
   },
   "plugins/base/search/src/merge.test.ts": {
@@ -5442,9 +5442,9 @@
     "semantic_hash": ""
   },
   "plugins/base/search/src/components/NoteSelect.tsx": {
-    "mtime": 1790810649.2221575,
-    "seen": 1790810784.7848837,
-    "ast_hash": "cb746c379cfb96f005e4f4c086120b85",
+    "mtime": 1790811511.296365,
+    "seen": 1790811565.1029801,
+    "ast_hash": "011ead846368c845a60af226bafb7183",
     "semantic_hash": ""
   },
   "plugins/base/kanban/src/lanes.test.ts": {
@@ -5478,21 +5478,27 @@
     "semantic_hash": ""
   },
   "plugins/base/search/src/components/FmSelect.test.ts": {
-    "mtime": 1790810752.4363685,
-    "seen": 1790810784.7848816,
-    "ast_hash": "0a9101be5ee5f4cd2027cac6c0caf31d",
+    "mtime": 1790811536.4351869,
+    "seen": 1790811565.1029778,
+    "ast_hash": "6a0d9d34ddb5ca6aa7be18ee67518ecf",
     "semantic_hash": ""
   },
   "plugins/base/search/src/components/FmSelect.tsx": {
-    "mtime": 1790810752.435857,
-    "seen": 1790810784.7848825,
-    "ast_hash": "78987a126c046470477dd125288c9561",
+    "mtime": 1790811527.2740521,
+    "seen": 1790811565.1029792,
+    "ast_hash": "45173072bb6941eacb99562d00388010",
     "semantic_hash": ""
   },
   "plugins/base/kanban/src/FilterBar.tsx": {
     "mtime": 1790811267.691752,
     "seen": 1790811352.7878728,
     "ast_hash": "23069a4ddec0fb4cffc927fe1af93e40",
+    "semantic_hash": ""
+  },
+  "plugins/base/search/src/components/notes.tsx": {
+    "mtime": 1790811501.064944,
+    "seen": 1790811565.1029813,
+    "ast_hash": "8ac543e96af9091c30d7d9832a842e2c",
     "semantic_hash": ""
   }
 }

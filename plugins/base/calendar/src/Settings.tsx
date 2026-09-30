@@ -2,6 +2,8 @@
 
 import type { ReactElement } from "react";
 
+import { FmKeySelect } from "plugin:search";
+
 import type { ViewSettingsProps } from "../../_shared/saved-view-mode.js";
 
 import { FieldSelect } from "../../_shared/field-select.js";
@@ -15,6 +17,7 @@ export function CalendarSettings({ options, onOptionsChange, fields }: ViewSetti
   return (
     <div className="calendar-settings calendar:flex calendar:flex-wrap calendar:gap-3">
       <FieldSelect
+        KeySelect={FmKeySelect}
         className={FIELD}
         label="Date from"
         value={settings.date}
@@ -23,6 +26,7 @@ export function CalendarSettings({ options, onOptionsChange, fields }: ViewSetti
         dates
       />
       <FieldSelect
+        KeySelect={FmKeySelect}
         className={FIELD}
         label="Ends on"
         value={settings.end}

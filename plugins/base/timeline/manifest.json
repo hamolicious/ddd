@@ -1,6 +1,6 @@
 {
   "id": "timeline",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "name": "Timeline",
   "description": "Shows a saved search along a time axis, placed by whichever fields you choose. New timelines from the command palette or the folder tree.",
   "author": "Life Manager base distribution",
@@ -14,7 +14,7 @@
     "context-menu": "^2.0",
     "doc-events": "^1.0",
     "document-surface": "^2.0",
-    "search": "^4.0"
+    "search": "^4.9"
   },
   "optionalDependencies": {
     "router": "^2.0"

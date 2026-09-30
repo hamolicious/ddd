@@ -2,6 +2,8 @@
 
 import type { ReactElement } from "react";
 
+import { FmKeySelect } from "plugin:search";
+
 import type { ViewSettingsProps } from "../../_shared/saved-view-mode.js";
 
 import { FieldSelect } from "../../_shared/field-select.js";
@@ -15,9 +17,9 @@ export function TimelineSettings({ options, onOptionsChange, fields }: ViewSetti
   const set = (patch: Partial<typeof settings>): void => onOptionsChange(withTimeline({ ...settings, ...patch }, options));
   return (
     <div className="timeline-settings timeline:flex timeline:flex-wrap timeline:gap-3">
-      <FieldSelect className={FIELD} label="Starts on" value={settings.start} onChange={(start) => set({ start })} fields={fields} dates />
-      <FieldSelect className={FIELD} label="Ends on" value={settings.end} onChange={(end) => set({ end })} fields={fields} dates none="No end (a point)" />
-      <FieldSelect className={FIELD} label="Lanes by" value={settings.group} onChange={(group) => set({ group })} fields={fields} none="One lane" />
+      <FieldSelect KeySelect={FmKeySelect} className={FIELD} label="Starts on" value={settings.start} onChange={(start) => set({ start })} fields={fields} dates />
+      <FieldSelect KeySelect={FmKeySelect} className={FIELD} label="Ends on" value={settings.end} onChange={(end) => set({ end })} fields={fields} dates none="No end (a point)" />
+      <FieldSelect KeySelect={FmKeySelect} className={FIELD} label="Lanes by" value={settings.group} onChange={(group) => set({ group })} fields={fields} none="One lane" />
       <label className={FIELD}>
         <span>Scale</span>
         <select value={settings.scale} onChange={(event) => set({ scale: event.target.value as Scale })}>

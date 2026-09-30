@@ -36,6 +36,12 @@ export interface ComboboxProps<T> {
   readonly onPick: (option: T) => void;
   /** When nothing matches; "Nothing matches." by default. */
   readonly empty?: string;
+  /**
+   * The list always open, under the box in the page's flow rather than over what follows:
+   * for a sheet or a panel that is itself the picker. Escape is left to the host (to close
+   * the sheet).
+   */
+  readonly inline?: boolean;
 }
 
 /** A row, before it is measured: the tap target. */
@@ -54,8 +60,10 @@ export function Combobox<T>({
   renderOption,
   onPick,
   empty = "Nothing matches.",
+  inline = false,
 }: ComboboxProps<T>): ReactElement {
   const listId = useId();
+  const shown = inline || open;
   const [active, setActive] = useState(0);
   const [options, setOptions] = useState<readonly T[]>([]);
   const [scrollTo] = useState<{ current: ((index: number) => void) | undefined }>(() => ({ current: undefined }));
@@ -77,10 +85,10 @@ export function Combobox<T>({
         type="text"
         role="combobox"
         aria-label={label}
-        aria-expanded={open}
+        aria-expanded={shown}
         aria-controls={listId}
         aria-autocomplete="list"
-        {...(open && options[active] !== undefined ? { "aria-activedescendant": `${listId}-${active}` } : {})}
+        {...(shown && options[active] !== undefined ? { "aria-activedescendant": `${listId}-${active}` } : {})}
         placeholder={placeholder}
         value={text}
         spellCheck={false}
@@ -91,7 +99,9 @@ export function Combobox<T>({
           onOpenChange(true);
           setActive(0);
         }}
-        onBlur={() => onOpenChange(false)}
+        onBlur={() => {
+          if (!inline) onOpenChange(false);
+        }}
         onChange={(event) => {
           onText(event.target.value);
           onOpenChange(true);
@@ -108,19 +118,20 @@ export function Combobox<T>({
             move(active - 1);
           } else if (event.key === "Enter") {
             const option = options[active];
-            if (open && option !== undefined) {
+            if (shown && option !== undefined) {
               event.preventDefault();
               pick(option);
             }
-          } else if (event.key === "Escape" && open) {
+          } else if (event.key === "Escape" && open && !inline) {
             event.preventDefault();
             onOpenChange(false);
             event.currentTarget.blur();
           }
         }}
       />
-      {open && (
+      {shown && (
         <OptionList
+          inline={inline}
           id={listId}
           label={label}
           useOptions={useOptions}
@@ -139,6 +150,7 @@ export function Combobox<T>({
 }
 
 function OptionList<T>({
+  inline,
   id,
   label,
   useOptions,
@@ -151,6 +163,7 @@ function OptionList<T>({
   onOptions,
   scrollTo,
 }: {
+  readonly inline: boolean;
   readonly id: string;
   readonly label: string;
   readonly useOptions: () => ComboboxOptions<T>;
@@ -178,7 +191,9 @@ function OptionList<T>({
   scrollTo.current = virtual.scrollToIndex;
 
   return (
-    <div className="search:absolute search:inset-x-0 search:top-full search:z-20 search:mt-1 search:max-h-64 search:overflow-y-auto search:overscroll-contain search:rounded search:border search:border-border search:bg-bg-raised search:p-1 search:shadow-2">
+    <div
+      className={`${inline ? "search:max-h-[50dvh] search:sm:max-h-[22rem]" : "search:absolute search:inset-x-0 search:top-full search:z-20 search:max-h-64 search:shadow-2"} search:mt-1 search:overflow-y-auto search:overscroll-contain search:rounded search:border search:border-border search:bg-bg-raised search:p-1`}
+    >
       {options.length === 0 ? (
         <p className="search:m-0 search:px-2 search:py-1.5 search:text-sm search:text-text-muted">
           {loading ? "Loading…" : empty}

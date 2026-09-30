@@ -807,6 +807,7 @@ export default function activate(kernel: Kernel): void {
         <MovePicker
           hierarchy={hierarchy}
           subjects={subjects}
+          {...(search ? { NoteSelect: search.NoteSelect } : {})}
           onChoose={(parent) => {
             close();
             void (async () => {

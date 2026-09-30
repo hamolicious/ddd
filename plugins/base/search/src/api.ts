@@ -183,6 +183,10 @@ export interface NoteSelectProps {
    * then the last updated. `""` is the root. Since 4.6.0.
    */
   readonly cwd?: string;
+  /** Leave these notes out: what is being moved, and what is inside it. Since 4.9.0. Keep it stable (memoized): a new function each render redoes the list. */
+  readonly exclude?: (id: string) => boolean;
+  /** The list always open under the box, in the page's flow: a sheet that is the picker. Since 4.9.0. */
+  readonly inline?: boolean;
 }
 
 /** A frontmatter key, typed or picked from the keys in use. Since 4.7.0. */
@@ -191,6 +195,8 @@ export interface FmKeySelectProps {
   readonly value: string;
   /** Every keystroke, and a pick. */
   readonly onChange: (key: string) => void;
+  /** A key chosen from the list, after its `onChange`: for a host that acts on a choice, not on typing. Since 4.9.0. */
+  readonly onPick?: (key: string) => void;
   /** Fields that are not frontmatter, listed first under their names: `title`, `updated_at`. */
   readonly builtIn?: readonly { readonly key: string; readonly label: string }[];
   readonly placeholder?: string;
@@ -206,6 +212,8 @@ export interface FmValueSelectProps {
   readonly value: string;
   /** Every keystroke, and a pick. */
   readonly onChange: (value: string) => void;
+  /** The whole value after a pick from the list, after its `onChange`. Since 4.9.0. */
+  readonly onPick?: (value: string) => void;
   /** A comma-separated list: suggest for, and replace, the last item. */
   readonly multiple?: boolean;
   readonly placeholder?: string;

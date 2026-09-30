@@ -151,6 +151,7 @@ export function createFmSelects(
   function FmKeySelect({
     value,
     onChange,
+    onPick,
     builtIn,
     placeholder = "Property name",
     label = "Property",
@@ -169,7 +170,10 @@ export function createFmSelects(
         useOptions={() => useKeyOptions(value, builtIn)}
         keyOf={(option) => `${option.label === undefined ? "fm" : "built-in"}:${option.value}`}
         renderOption={(option) => <Row option={option} notes={notes} />}
-        onPick={(option) => onChange(option.value)}
+        onPick={(option) => {
+          onChange(option.value);
+          onPick?.(option.value);
+        }}
         empty="No property in use matches."
       />
     );
@@ -179,6 +183,7 @@ export function createFmSelects(
     fmKey,
     value,
     onChange,
+    onPick,
     multiple = false,
     placeholder = "Value",
     label = "Value",
@@ -201,7 +206,11 @@ export function createFmSelects(
         useOptions={() => useValueOptions(fmKey, item)}
         keyOf={(option) => option.value}
         renderOption={(option) => <Row option={option} notes={notes} />}
-        onPick={(option) => onChange(`${before}${option.value}`)}
+        onPick={(option) => {
+          const next = `${before}${option.value}`;
+          onChange(next);
+          onPick?.(next);
+        }}
         empty={fmKey.trim() === "" ? "Choose a property first." : "No value in use matches."}
       />
     );

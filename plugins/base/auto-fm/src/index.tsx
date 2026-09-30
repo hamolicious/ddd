@@ -8,9 +8,10 @@
  * so it works offline like any other edit.
  */
 
-import { useEffect, useState, useSyncExternalStore, type ReactElement } from "react";
+import { useEffect, useState, useSyncExternalStore, type ComponentType, type ReactElement } from "react";
 
 import type { CoreValue, Kernel, SettingsValue } from "@kernel";
+import type { FmKeySelectProps, FmValueSelectProps, NoteSelectProps } from "plugin:search";
 
 import * as indexer from "plugin:indexer";
 import { addSection } from "plugin:settings";
@@ -78,6 +79,24 @@ export default function activate(kernel: Kernel): void {
     version += 1;
     for (const listener of [...listeners]) listener();
   };
+
+  // Optional: `search`'s pickers for the property, its value and the conditions; without
+  // it, inputs that suggest from a list.
+  let pickers:
+    | {
+        readonly NoteSelect: ComponentType<NoteSelectProps>;
+        readonly FmKeySelect: ComponentType<FmKeySelectProps>;
+        readonly FmValueSelect: ComponentType<FmValueSelectProps>;
+      }
+    | undefined;
+  void kernel.plugins
+    .optional<typeof import("plugin:search")>("search")
+    .then((module) => {
+      if (module === undefined) return;
+      pickers = { NoteSelect: module.NoteSelect, FmKeySelect: module.FmKeySelect, FmValueSelect: module.FmValueSelect };
+      publish();
+    })
+    .catch((cause: unknown) => kernel.log.warn("search unavailable; properties are typed with suggestions", cause));
   const subscribe = (listener: () => void): (() => void) => {
     listeners.add(listener);
     return () => {
@@ -187,35 +206,60 @@ export default function activate(kernel: Kernel): void {
                 className="autofm:flex autofm:flex-col autofm:gap-2 autofm:rounded autofm:border autofm:border-border autofm:p-2"
               >
                 <div className="autofm:flex autofm:flex-wrap autofm:items-center autofm:gap-1">
-                  <input
-                    aria-label="Property"
-                    placeholder="property"
-                    list={`autofm-keys-${field.id}`}
-                    value={field.key}
-                    className={`${INPUT} autofm:w-36 ${badKey ? "autofm:border-warning" : ""}`}
-                    onChange={(event) => replace(field.id, { key: event.target.value })}
-                  />
-                  <datalist id={`autofm-keys-${field.id}`}>
-                    {(suggestions?.fields() ?? [])
-                      .filter((option) => option.field.startsWith("fm."))
-                      .map((option) => (
-                        <option key={option.field} value={option.field.slice(3)} />
-                      ))}
-                  </datalist>
+                  {pickers ? (
+                    <span className={`autofm:w-36 autofm:min-w-0 ${badKey ? "autofm:[&_input]:border-warning" : ""}`}>
+                      <pickers.FmKeySelect
+                        value={field.key}
+                        placeholder="property"
+                        onChange={(key) => replace(field.id, { key })}
+                      />
+                    </span>
+                  ) : (
+                    <>
+                      <input
+                        aria-label="Property"
+                        placeholder="property"
+                        list={`autofm-keys-${field.id}`}
+                        value={field.key}
+                        className={`${INPUT} autofm:w-36 ${badKey ? "autofm:border-warning" : ""}`}
+                        onChange={(event) => replace(field.id, { key: event.target.value })}
+                      />
+                      <datalist id={`autofm-keys-${field.id}`}>
+                        {(suggestions?.fields() ?? [])
+                          .filter((option) => option.field.startsWith("fm."))
+                          .map((option) => (
+                            <option key={option.field} value={option.field.slice(3)} />
+                          ))}
+                      </datalist>
+                    </>
+                  )}
                   <span className="autofm:text-text-muted">:</span>
-                  <input
-                    aria-label="Value"
-                    placeholder="value"
-                    list={`autofm-values-${field.id}`}
-                    value={field.value}
-                    className={`${INPUT} autofm:flex-1 autofm:basis-32`}
-                    onChange={(event) => replace(field.id, { value: event.target.value })}
-                  />
-                  <datalist id={`autofm-values-${field.id}`}>
-                    {(suggestions?.values(`fm.${field.key.trim()}`) ?? []).map((value) => (
-                      <option key={value} value={value} />
-                    ))}
-                  </datalist>
+                  {pickers ? (
+                    <span className="autofm:min-w-0 autofm:flex-1 autofm:basis-32">
+                      <pickers.FmValueSelect
+                        fmKey={field.key.trim()}
+                        value={field.value}
+                        placeholder="value"
+                        onChange={(value) => replace(field.id, { value })}
+                      />
+                    </span>
+                  ) : (
+                    <>
+                      <input
+                        aria-label="Value"
+                        placeholder="value"
+                        list={`autofm-values-${field.id}`}
+                        value={field.value}
+                        className={`${INPUT} autofm:flex-1 autofm:basis-32`}
+                        onChange={(event) => replace(field.id, { value: event.target.value })}
+                      />
+                      <datalist id={`autofm-values-${field.id}`}>
+                        {(suggestions?.values(`fm.${field.key.trim()}`) ?? []).map((value) => (
+                          <option key={value} value={value} />
+                        ))}
+                      </datalist>
+                    </>
+                  )}
                   <select
                     aria-label="Added to"
                     value={field.on}
@@ -254,6 +298,7 @@ export default function activate(kernel: Kernel): void {
                       onChange={(when) => replace(field.id, { when })}
                       classPrefix="autofm"
                       notes={notes}
+                      {...(pickers ?? {})}
                       {...(suggestions !== undefined ? { suggestions } : {})}
                     />
                   </div>

@@ -2,14 +2,15 @@
  * The table's settings, in the search's View panel: how many rows it shows at a time, and which
  * columns follow the title. The chosen columns are chips, in order, each movable and
  * removable; one field adds another, suggesting the fixed columns and every property in
- * use (a `<datalist>`, as the filter's property field has it) and taking any other key
- * typed.
+ * use (`search`'s `FmKeySelect`, as the filter's property field has it) and taking any
+ * other key typed.
  */
 
-import { useId, useState } from "react";
+import { useState } from "react";
 import type { ReactElement } from "react";
 
-import type { FieldOption } from "../../_shared/conditions.js";
+import { FmKeySelect } from "plugin:search";
+
 import type { ViewSettingsProps } from "../../_shared/saved-view-mode.js";
 
 import {
@@ -26,18 +27,15 @@ import {
 export function TableSettingsPanel({ options: viewOptions, onOptionsChange, fields }: ViewSettingsProps): ReactElement {
   const table = tableFromOptions(viewOptions);
   const onChange = (next: TableSettings): void => onOptionsChange(tableOptions(next, viewOptions));
-  const options: readonly FieldOption[] = [
-    ...FIXED_COLUMNS,
-    ...fields
-      .filter((field) => field.field.startsWith("fm."))
-      .map((field): FieldOption => ({ field: field.field, label: field.label, kind: "str", sortable: true })),
-  ];
-  const listId = useId();
   const [typed, setTyped] = useState("");
-  const offered = options.filter((option) => !table.columns.includes(option.field));
-  /** What was typed, as a column: a label picked from the list, or a property key. */
+  // The fixed columns not shown yet; the property box lists every key in use itself.
+  const builtIn = FIXED_COLUMNS.filter((column) => !table.columns.includes(column.field)).map((column) => ({
+    key: column.field,
+    label: column.label,
+  }));
+  /** What was typed, as a column: a fixed one by its field or its name, or a property key. */
   const typedColumn =
-    offered.find((option) => optionName(option) === typed.trim())?.field ?? columnForKey(typed);
+    builtIn.find((column) => column.key === typed.trim() || column.label === typed.trim())?.key ?? columnForKey(typed);
   const setColumns = (columns: readonly string[]): void => onChange({ ...table, columns });
   const move = (index: number, delta: number): void => {
     const next = [...table.columns];
@@ -71,22 +69,23 @@ export function TableSettingsPanel({ options: viewOptions, onOptionsChange, fiel
             setTyped("");
           }}
         >
-          <label className="search-field search-grow">
+          <div className="search-field search-grow">
             <span>Add a column</span>
-            <input
+            <FmKeySelect
               value={typed}
-              list={listId}
+              builtIn={builtIn}
+              label="Add a column"
               placeholder="Property, e.g. status"
-              spellCheck={false}
-              autoComplete="off"
-              onChange={(event) => setTyped(event.target.value)}
+              onChange={setTyped}
+              onPick={(key) => {
+                // Picked from the list: added at once, no "Add" needed.
+                const column = builtIn.some((choice) => choice.key === key) ? key : columnForKey(key);
+                if (column === undefined || table.columns.includes(column)) return;
+                setColumns([...table.columns, column]);
+                setTyped("");
+              }}
             />
-          </label>
-          <datalist id={listId}>
-            {offered.map((option) => (
-              <option key={option.field} value={optionName(option)} />
-            ))}
-          </datalist>
+          </div>
           <button type="submit" disabled={!typedColumn || table.columns.includes(typedColumn)}>
             Add
           </button>
@@ -124,9 +123,4 @@ export function TableSettingsPanel({ options: viewOptions, onOptionsChange, fiel
       </ul>
     </div>
   );
-}
-
-/** How a column is named in the add field: the label for a fixed one, the key otherwise. */
-function optionName(option: FieldOption): string {
-  return option.field.startsWith("fm.") ? columnLabel(option.field) : option.label;
 }
