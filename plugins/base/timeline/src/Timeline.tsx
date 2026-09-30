@@ -24,7 +24,7 @@ import { layoutItems, shiftAnchor, timelineOptions, windowClauses, windowFor, ty
 /** Notes fetched for one window. */
 const PAGE = 500;
 /** A column's least width, so labels stay legible; the box scrolls beyond that. */
-const UNIT_PX = { day: 56, week: 72, month: 80 } as const;
+const UNIT_PX = { day: 56, week: 72, month: 80, quarter: 80 } as const;
 const ROW_PX = 28;
 
 export function createTimeline(search: () => Pick<Search, "useResults">) {

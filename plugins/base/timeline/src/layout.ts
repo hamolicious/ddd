@@ -8,8 +8,9 @@
  *   is missing or earlier, it is a point. With a `group` field the notes split into
  *   lanes by its value; a list value puts the note in each of its lanes, and notes without
  *   one share a lane at the bottom.
- * - **The window is the scale's.** Days show two weeks, weeks twelve, months a year —
- *   always starting on a boundary, so a column is a day, a week or a month.
+ * - **The window is the scale's.** Days show two weeks, weeks twelve, months a year,
+ *   quarters three — always starting on a boundary, so a column is a day, a week, a month
+ *   or a quarter.
  * - **Rows are packed.** In a lane, a note takes the first row where it does not overlap
  *   what is already there, with room kept after a point for its label.
  */
@@ -27,11 +28,12 @@ import {
   startOfWeek,
 } from "../../_shared/dates.js";
 
-export type Scale = "day" | "week" | "month";
+export type Scale = "day" | "week" | "month" | "quarter";
 export const SCALES: readonly { readonly id: Scale; readonly label: string }[] = [
   { id: "day", label: "Days" },
   { id: "week", label: "Weeks" },
   { id: "month", label: "Months" },
+  { id: "quarter", label: "Quarters" },
 ];
 
 export interface TimelineOptions {
@@ -87,6 +89,16 @@ export function windowFor(anchor: Date, scale: Scale): TimeWindow {
     }
     return { from, to: addMonths(from, 12), units };
   }
+  if (scale === "quarter") {
+    const month = startOfMonth(anchor);
+    const from = addMonths(month, -(month.getMonth() % 3) - 6);
+    for (let index = 0; index < 12; index += 1) {
+      const start = addMonths(from, index * 3);
+      const quarter = `Q${start.getMonth() / 3 + 1}`;
+      units.push({ start, label: start.getMonth() === 0 || index === 0 ? `${quarter} ${start.getFullYear()}` : quarter });
+    }
+    return { from, to: addMonths(from, 36), units };
+  }
   const step = scale === "day" ? 1 : 7;
   const count = scale === "day" ? 14 : 12;
   const from = addDays(startOfWeek(anchor), scale === "day" ? 0 : -14);
@@ -106,6 +118,7 @@ export function windowFor(anchor: Date, scale: Scale): TimeWindow {
 /** Where ‹ and › move the anchor: about a third of a window. */
 export function shiftAnchor(anchor: Date, scale: Scale, by: number): Date {
   if (scale === "month") return addMonths(anchor, 3 * by);
+  if (scale === "quarter") return addMonths(anchor, 12 * by);
   return addDays(anchor, (scale === "day" ? 7 : 28) * by);
 }
 

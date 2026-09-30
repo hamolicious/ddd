@@ -1,7 +1,7 @@
 # Graph Report - life-manager  (2026-09-30)
 
 ## Corpus Check
-- 851 files · ~954,052 words
+- 851 files · ~954,385 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 83 file(s) not represented in the graph (top: (none) 16, .toml 13, .xml 10)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `ace872c3`
+- Built from commit: `de6a4686`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -2291,9 +2291,9 @@ _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `String` connect `String` to `routes/documents.rs`, `routes/changes.rs`, `PluginHost`, `sync_ws.rs`, `docstore.rs`, `attachments.rs`, `pluginhost/cron.rs`, `telemetry.rs`, `Response`, `zipcheck.rs`, `AppState`, `plugininstall/config.rs`, `MongoDocStore`, `routes/statics.rs`, `ActivePlugin`, `ChangeFeed`, `PluginPool`, `HookQueue`, `ApiResponse`, `domain.rs`, `DocStoreError`, `Date`, `plugin_api.rs`, `ast.rs`, `tests/statics.rs`, `pluginhost_runtime.rs`, `shell_bundle.rs`, `routes/uploads.rs`, `rate_limit.rs`, `load.rs`, `plugininstall_flow.rs`, `src/changes.rs`, `evaluator.rs`, `SyncHub`, `http`, `watcher.rs`, `wasm.rs`, `pluginhost_routes.rs`, `CircuitBreaker`, `pluginhost/limits.rs`, `server/src/config.rs`, `migrations.rs`, `pluginhost_http.rs`, `splice.rs`, `value.rs`, `ConnectionSession`, `document.rs`, `manifest_schema.rs`, `sections.rs`, `HostError`, `convergence.rs`, `super`, `write_envelope`, `conformance.rs`, `server/tests/common/mod.rs`, `plugininstall_zip.rs`, `new.rs`, `auth/mod.rs`, `.lock`, `yaml.rs`, `folder.rs`, `Registry`, `serialize`, `fs`, `call_value`, `.new`, `PluginManifest`, `mongo.rs`, `invite.rs`, `plugin-abi/src/http.rs`, `pluginhost_smoke.rs`, `host_fns.rs`, `title.rs`, `Server`, `plugin-abi/src/events.rs`, `audit.rs`, `bootstrap`, `repo.rs`, `server/src/main.rs`, `.new`, `health.rs`, `tests/uploads.rs`, `Option`, `split_batches`, `InstalledPlugin`, `call.rs`, `server/src/plugins.rs`, `Diagnostic`, `ConfigGetOutput`, `plugin-abi/src/documents.rs`?**
   _High betweenness centrality (0.202) - this node is a cross-community bridge._
-- **Why does `react` connect `react` to `themes/src/controller.ts`, `fm-autocomplete/src/controller.ts`, `note-picker.tsx`, `spec.ts`, `Controls.tsx`, `watcher.ts`, `field-select.tsx`, `document-surface/src/index.tsx`, `kernel-api/src/index.ts`, `search/src/index.tsx`, `columns.ts`, `icons/src/index.tsx`, `wikilinks/src/index.tsx`, `ShellState`, `fm-display.ts`, `settings/src/index.tsx`, `Plugins.tsx`, `ui.ts`, `render.tsx`, `alt-editor/src/index.tsx`, `pipeline.test.ts`, `editor/src/index.tsx`, `tasks.ts`, `doc-embed.tsx`, `markdown/src/index.tsx`, `viewer/src/index.tsx`, `KeybindingsSection.tsx`, `Shell.tsx`, `saved-view-mode.tsx`, `attachments/src/index.tsx`, `DocumentMode`, `runtime.ts`, `conditions.ts`, `host.ts`, `obsidian-importer/src/index.tsx`, `FolderTree.tsx`, `hierarchy.ts`, `doc-list/src/index.tsx`, `shell-ui/src/index.tsx`, `Panel.tsx`, `icons/src/Picker.tsx`, `main.tsx`, `admin/src/index.tsx`, `context-menu/src/index.tsx`, `DocListView.tsx`, `router/src/index.tsx`, `SyntaxApi`, `timeline/src/layout.ts`, `toolbar/src/layout.ts`, `package.json`, `emoji/src/index.tsx`, `note-look.tsx`, `offline-copy.tsx`, `folder-style/src/index.tsx`, `graph/src/settings.ts`, `ColumnEditor.tsx`, `virtual-list.ts`, `Palette.tsx`, `commands/src/index.tsx`, `custom.ts`, `view.tsx`, `ref_kernel`, `kanban/src/layout.ts`, `folders/src/index.tsx`, `admin/src/api.ts`, `Users.tsx`, `MarkdownRuntime`, `fields.ts`, `kinds.ts`, `slash-commands/src/index.tsx`, `table/src/index.tsx`, `results.ts`?**
-  _High betweenness centrality (0.144) - this node is a cross-community bridge._
 - **Why does `Display` connect `ast.rs` to `renderer.ts`, `super`, `Date`, `HostError`, `graph/src/settings.ts`?**
+  _High betweenness centrality (0.144) - this node is a cross-community bridge._
+- **Why does `react` connect `react` to `themes/src/controller.ts`, `fm-autocomplete/src/controller.ts`, `note-picker.tsx`, `spec.ts`, `Controls.tsx`, `watcher.ts`, `field-select.tsx`, `document-surface/src/index.tsx`, `kernel-api/src/index.ts`, `search/src/index.tsx`, `columns.ts`, `icons/src/index.tsx`, `wikilinks/src/index.tsx`, `ShellState`, `fm-display.ts`, `settings/src/index.tsx`, `Plugins.tsx`, `ui.ts`, `render.tsx`, `alt-editor/src/index.tsx`, `pipeline.test.ts`, `editor/src/index.tsx`, `tasks.ts`, `doc-embed.tsx`, `markdown/src/index.tsx`, `viewer/src/index.tsx`, `KeybindingsSection.tsx`, `Shell.tsx`, `saved-view-mode.tsx`, `attachments/src/index.tsx`, `DocumentMode`, `runtime.ts`, `conditions.ts`, `host.ts`, `obsidian-importer/src/index.tsx`, `FolderTree.tsx`, `hierarchy.ts`, `doc-list/src/index.tsx`, `shell-ui/src/index.tsx`, `Panel.tsx`, `icons/src/Picker.tsx`, `main.tsx`, `admin/src/index.tsx`, `context-menu/src/index.tsx`, `DocListView.tsx`, `router/src/index.tsx`, `SyntaxApi`, `timeline/src/layout.ts`, `toolbar/src/layout.ts`, `package.json`, `emoji/src/index.tsx`, `note-look.tsx`, `offline-copy.tsx`, `folder-style/src/index.tsx`, `graph/src/settings.ts`, `ColumnEditor.tsx`, `virtual-list.ts`, `Palette.tsx`, `commands/src/index.tsx`, `custom.ts`, `view.tsx`, `ref_kernel`, `kanban/src/layout.ts`, `folders/src/index.tsx`, `admin/src/api.ts`, `Users.tsx`, `MarkdownRuntime`, `fields.ts`, `kinds.ts`, `slash-commands/src/index.tsx`, `table/src/index.tsx`, `results.ts`?**
   _High betweenness centrality (0.141) - this node is a cross-community bridge._
 - **What connects `note`, `bundle_version`, `min_bridge_version` to the rest of the system?**
   _2971 weakly-connected nodes found - possible documentation gaps or missing edges._

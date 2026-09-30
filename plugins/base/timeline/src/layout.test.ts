@@ -28,6 +28,10 @@ describe("the timeline", () => {
     expect(windowFor(anchor, "day").units).toHaveLength(14);
     expect(isoDay(windowFor(anchor, "week").from)).toBe("2026-09-14");
     expect(isoDay(windowFor(anchor, "month").from)).toBe("2026-07-01");
+    const quarters = windowFor(anchor, "quarter");
+    expect(isoDay(quarters.from)).toBe("2026-01-01");
+    expect(isoDay(quarters.to)).toBe("2029-01-01");
+    expect(quarters.units.slice(0, 5).map((unit) => unit.label)).toEqual(["Q1 2026", "Q2", "Q3", "Q4", "Q1 2027"]);
   });
 
   it("draws a bar to the end field's day, inclusive, and a point without one", () => {

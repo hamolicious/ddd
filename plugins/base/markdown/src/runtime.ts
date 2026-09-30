@@ -97,8 +97,11 @@ export interface MarkdownRuntime {
   promoteEmbed(attachmentId: string, site?: EmbedSite): Promise<string>;
   /** SPEC §3.6: create the wrapper document for an embedded attachment. */
   promote(attachmentId: string): Promise<string>;
-  /** The one checkbox write path: a validated single-character text splice. */
-  writeTaskMarker(request: TaskWriteRequest): Promise<void>;
+  /**
+   * The one checkbox write path: a validated single-character text splice. Resolves `true`
+   * once spliced, `false` when the marker could not be found (the user is told).
+   */
+  writeTaskMarker(request: TaskWriteRequest): Promise<boolean>;
   /** Flip an embedded attachment between preview and link: add or remove its `!`. */
   toggleEmbed(request: EmbedToggleRequest): Promise<void>;
   /**
@@ -372,7 +375,7 @@ export function createRuntime(
               "The document changed while you were reading, so nothing was ticked.",
             detail: "Reopen it and try again.",
           });
-          return;
+          return false;
         }
         // SPEC §3.3: a minimal text splice, one character wide, through the kernel helper
         // — never a re-serialize of the list, and never a whole-line replacement.
@@ -381,6 +384,7 @@ export function createRuntime(
           [{ range: { start: at, end: at + 1 }, text: next }],
           TASK_SPLICE_ORIGIN,
         );
+        return true;
       } finally {
         open.release();
       }
