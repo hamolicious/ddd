@@ -176,13 +176,14 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
           </p>
         )}
 
+        <div className={`search-results search:relative search:flex search:flex-col ${controls === "hidden" ? "search:gap-2" : "search:gap-3"}`}>
+        <Busy on={results.loading} label={searching ? "Searching" : "Loading"} />
         {results.rows.length === 0 && showsEmpty === true ? (
           // A view whose frame means something with nothing in it: a board's columns.
           renderView(viewProps)
         ) : results.loading && results.rows.length === 0 ? (
-          <p className="search-empty search:m-0 search:py-6 search:text-text-muted" role="status">
-            {searching ? "Searching…" : "Loading…"}
-          </p>
+          // The first answer is on its way: room for it, and the spinner says why.
+          <div className="search-empty search:min-h-16" />
         ) : results.rows.length === 0 ? (
           <p className="search-empty search:m-0 search:py-6 search:text-text-muted">
             {searching
@@ -202,9 +203,32 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
             )}
           </>
         )}
+        </div>
       </section>
     );
   };
+}
+
+/**
+ * A spinner at the top right of the results while they load. It fades in only after a
+ * moment, so a search that answers at once never flashes it, and fades out when done.
+ * Absolutely placed, so it never moves anything; the live region carries the words.
+ */
+function Busy({ on, label }: { readonly on: boolean; readonly label: string }): ReactElement {
+  return (
+    <div
+      className="search-busy search:pointer-events-none search:absolute search:right-2 search:top-[3px] search:z-10 search:flex search:size-5 search:items-center search:justify-center search:rounded-full search:bg-bg-raised search:opacity-0 search:shadow-1 search:transition-opacity search:duration-200 search:data-[on]:opacity-100 search:data-[on]:delay-150"
+      data-on={on ? "" : undefined}
+      role="status"
+      aria-live="polite"
+    >
+      <span className="search:sr-only">{on ? `${label}…` : ""}</span>
+      <span
+        aria-hidden="true"
+        className="search:block search:size-3.5 search:animate-spin search:rounded-full search:border-2 search:border-border search:border-t-accent search:motion-reduce:animate-none"
+      />
+    </div>
+  );
 }
 
 /** The line under the results: the real total when it is known, else what was found. */

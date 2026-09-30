@@ -13,19 +13,23 @@
  * mount point that is not its to take. The overlay is therefore a sibling of the app,
  * which is also what makes it survive a shell that re-renders underneath it.
  *
- * **On a phone it is a sheet measured against the *visual* viewport.** Android's soft
- * keyboard does not shrink the layout viewport, so `position: fixed; inset: 0` covers the
- * area behind the keyboard: the input survived (it is at the top) and the last options
- * were unreachable underneath it. `visualViewport` is what reports the visible box, and
- * it moves on scroll as well as on resize — the two custom properties below are that
- * measurement, with `dvh` in the stylesheet as the fallback for a browser without the API.
+ * **On a phone it is a sheet as tall as the visible screen.** Android's soft keyboard
+ * does not shrink the layout viewport, so `position: fixed; inset: 0` covers the area
+ * behind the keyboard and the last options were unreachable underneath it. The height is
+ * the app's `--lm-viewport-height` (`web/app/src/boot/viewport.ts`), which the app frame
+ * is sized from too — CSS, not React state: re-rendering the sheet on every viewport
+ * event while the keyboard moved it made it flicker. For the same reason the active row
+ * is kept in view by scrolling the list alone, never `scrollIntoView`, which pans the
+ * visual viewport as well.
+ *
+ * **Back closes it** (`_shared/back.ts`): on a phone the back button is the way out.
  */
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactElement, ReactNode } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactElement, ReactNode } from "react";
 import { createPortal } from "react-dom";
 
-import { useCompact, useVisibleViewport } from "../../_shared/compact.js";
+import { useBackToClose } from "../../_shared/back.js";
 import { formatKeys } from "./keys.js";
 import { rankMatches } from "./match.js";
 import type { Command } from "./api.js";
@@ -60,6 +64,9 @@ export function Palette({
   const restoreTo = useRef<Element | null>(null);
   const baseId = useId();
 
+  const leave = useBackToClose(onClose);
+  const close = useCallback(() => leave(onClose), [leave, onClose]);
+
   const results = useMemo(() => rankMatches(query, commands), [query, commands]);
   const clamped = results.length === 0 ? 0 : Math.min(active, results.length - 1);
 
@@ -79,11 +86,11 @@ export function Palette({
     const onEscape = (event: KeyboardEvent): void => {
       if (event.key !== "Escape") return;
       event.preventDefault();
-      onClose();
+      close();
     };
     document.addEventListener("keydown", onEscape);
     return () => document.removeEventListener("keydown", onEscape);
-  }, [onClose]);
+  }, [close]);
 
   useEffect(() => {
     setActive(0);
@@ -93,16 +100,22 @@ export function Palette({
   useEffect(() => {
     const list = listRef.current;
     const option = list?.querySelector<HTMLElement>('[aria-selected="true"]');
-    option?.scrollIntoView({ block: "nearest" });
+    if (!list || !option) return;
+    if (option.offsetTop < list.scrollTop) list.scrollTop = option.offsetTop;
+    else if (option.offsetTop + option.offsetHeight > list.scrollTop + list.clientHeight) {
+      list.scrollTop = option.offsetTop + option.offsetHeight - list.clientHeight;
+    }
   }, [clamped, results.length]);
 
   const run = useCallback(
     (command: Command | undefined) => {
       if (!command) return;
-      onClose();
-      onRun(command);
+      leave(() => {
+        onClose();
+        onRun(command);
+      });
     },
-    [onClose, onRun],
+    [leave, onClose, onRun],
   );
 
   const onKeyDown = useCallback(
@@ -138,36 +151,23 @@ export function Palette({
         default:
       }
     },
-    [clamped, onClose, results, run],
+    [clamped, results, run],
   );
 
   const listboxId = `${baseId}-list`;
   const activeId = results.length > 0 ? `${baseId}-option-${clamped}` : undefined;
 
-  // Measured only where it is used: on a wide screen the palette is a centred dialog
-  // with a `max-height` and there is nothing for a viewport listener to do.
-  const compact = useCompact();
-  const visible = useVisibleViewport(compact);
-  const sheet: CSSProperties | undefined =
-    compact && visible
-      ? ({
-          "--cmd-sheet-top": `${visible.top}px`,
-          "--cmd-sheet-height": `${visible.height}px`,
-        } as CSSProperties)
-      : undefined;
-
   return createPortal(
     <div
       className="cmd-overlay commands:fixed commands:inset-0 commands:z-[1000] commands:flex commands:items-start commands:justify-center commands:bg-bg-overlay commands:px-2 commands:pb-2 commands:pt-12 commands:compact:p-0"
-      {...(sheet ? { style: sheet } : {})}
       // A click on the backdrop dismisses; a click inside must not.
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (event.target === event.currentTarget) close();
       }}
       onKeyDown={onKeyDown}
     >
       <div
-        className="cmd-palette commands:flex commands:max-h-[min(70vh,36rem)] commands:w-full commands:max-w-[42rem] commands:flex-col commands:overflow-hidden commands:rounded-lg commands:border commands:border-border commands:bg-bg-raised commands:font-sans commands:text-text commands:shadow-2 commands:focus-within:[&_:focus-visible]:outline-2 commands:focus-within:[&_:focus-visible]:outline-offset-[-2px] commands:focus-within:[&_:focus-visible]:outline-focus commands:compact:fixed commands:compact:inset-x-0 commands:compact:top-[var(--cmd-sheet-top,0px)] commands:compact:h-[var(--cmd-sheet-height,100dvh)] commands:compact:max-h-none commands:compact:max-w-none commands:compact:rounded-none commands:compact:border-0 commands:compact:pb-[env(safe-area-inset-bottom,0px)]"
+        className="cmd-palette commands:flex commands:max-h-[min(70vh,36rem)] commands:w-full commands:max-w-[42rem] commands:flex-col commands:overflow-hidden commands:rounded-lg commands:border commands:border-border commands:bg-bg-raised commands:font-sans commands:text-text commands:shadow-2 commands:focus-within:[&_:focus-visible]:outline-2 commands:focus-within:[&_:focus-visible]:outline-offset-[-2px] commands:focus-within:[&_:focus-visible]:outline-focus commands:compact:fixed commands:compact:inset-x-0 commands:compact:top-0 commands:compact:h-[var(--lm-viewport-height,100dvh)] commands:compact:max-h-none commands:compact:max-w-none commands:compact:rounded-none commands:compact:border-0 commands:compact:pb-[env(safe-area-inset-bottom,0px)]"
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
@@ -204,7 +204,7 @@ export function Palette({
           </p>
         )}
 
-        <ul className="cmd-list commands:m-0 commands:flex-1 commands:list-none commands:overflow-y-auto commands:overscroll-contain commands:px-0 commands:py-1" id={listboxId} role="listbox" ref={listRef} aria-label="Commands">
+        <ul className="cmd-list commands:relative commands:m-0 commands:min-h-0 commands:flex-1 commands:list-none commands:overflow-y-auto commands:overscroll-contain commands:px-0 commands:py-1" id={listboxId} role="listbox" ref={listRef} aria-label="Commands">
           {results.map((result, index) => {
             const command = result.item;
             const keys = bindingFor(command.id);

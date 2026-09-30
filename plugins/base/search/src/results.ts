@@ -16,9 +16,14 @@
  *
  * **"Best match"** is not a field: the rows are put back in the providers' rank order
  * after the query, which sorts on `updated_at` so the page it returns is stable.
+ *
+ * **Changing the search keeps the last answer on screen until the new one is in.** A new
+ * text has no hits for a moment, so its query briefly matches nothing; handing that over
+ * would swap the view for an empty state and back, shifting everything under it. While
+ * `loading`, the rows, total and `hasMore` are the last settled ones instead.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { DocumentQuery, DocumentRow, DocumentsApi, FilterJson } from "@kernel";
 import type { SearchClause, SearchResults, SearchSpec } from "./api.js";
@@ -94,12 +99,18 @@ export function useResults(
   // The providers have not answered this text yet (typing, or the debounce).
   const pending = searching && (found.running || found.settled !== text);
   const hasMore = searching ? found.hits.length >= limit : live.rows.length < live.total;
+  const loading = live.loading || pending;
+
+  const now = { rows, total: searching ? undefined : live.total, hasMore };
+  const settled = useRef<typeof now | undefined>(undefined);
+  if (!loading) settled.current = now;
+  const shown = loading && settled.current ? settled.current : now;
 
   return {
-    rows,
-    ...(searching ? {} : { total: live.total }),
-    hasMore,
-    loading: live.loading || pending,
+    rows: shown.rows,
+    ...(shown.total !== undefined ? { total: shown.total } : {}),
+    hasMore: shown.hasMore,
+    loading,
     partial: searching && found.results.some((result) => result.error !== undefined),
     ...(live.error !== undefined ? { error: live.error } : {}),
     more,

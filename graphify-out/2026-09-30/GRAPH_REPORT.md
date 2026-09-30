@@ -1,12 +1,12 @@
 # Graph Report - life-manager  (2026-09-30)
 
 ## Corpus Check
-- 851 files · ~955,723 words
+- 851 files · ~955,748 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 83 file(s) not represented in the graph (top: (none) 16, .toml 13, .xml 10)
 
 ## Summary
-- 12244 nodes · 27155 edges · 640 communities (404 shown, 236 thin omitted)
+- 12244 nodes · 27158 edges · 640 communities (404 shown, 236 thin omitted)
 - Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 485 edges (avg confidence: 0.84)
 - Token cost: 0 input · 0 output
 

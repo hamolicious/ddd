@@ -58,38 +58,3 @@ export function useTouchOnly(): boolean {
   }, []);
   return touch;
 }
-
-/** The part of the window the user can actually see, in CSS pixels. */
-export interface VisibleViewport {
-  /** Distance from the top of the layout viewport to the top of the visible one. */
-  readonly top: number;
-  readonly height: number;
-}
-
-/**
- * Track `window.visualViewport`.
- *
- * The soft keyboard on Android does **not** shrink the layout viewport, so
- * `position: fixed; inset: 0` covers the area behind the keyboard and the bottom of any
- * full-screen sheet is unreachable. `visualViewport` is the only API that reports what
- * is on screen, and it moves on `resize` *and* on `scroll` (the visual viewport pans
- * over the layout one when a focused input is scrolled into view).
- *
- * Returns `undefined` where the API does not exist; callers fall back to their CSS.
- */
-export function useVisibleViewport(enabled = true): VisibleViewport | undefined {
-  const [viewport, setViewport] = useState<VisibleViewport | undefined>(undefined);
-  useEffect(() => {
-    const visual = globalThis.visualViewport;
-    if (!enabled || !visual) return undefined;
-    const read = (): void => setViewport({ top: visual.offsetTop, height: visual.height });
-    read();
-    visual.addEventListener("resize", read);
-    visual.addEventListener("scroll", read);
-    return () => {
-      visual.removeEventListener("resize", read);
-      visual.removeEventListener("scroll", read);
-    };
-  }, [enabled]);
-  return viewport;
-}

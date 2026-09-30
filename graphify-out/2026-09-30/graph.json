@@ -8541,7 +8541,7 @@
       "file_type": "code",
       "norm_label": "docembedprops",
       "source_file": "plugins/base/markdown/src/doc-embed.tsx",
-      "source_location": "L81"
+      "source_location": "L83"
     },
     {
       "id": "plugins_base_markdown_src_doc_embed_embedchain",
@@ -8554,7 +8554,7 @@
       "file_type": "code",
       "norm_label": "embedchain",
       "source_file": "plugins/base/markdown/src/doc-embed.tsx",
-      "source_location": "L30"
+      "source_location": "L32"
     },
     {
       "id": "plugins_base_syntax_highlight_src_installed_installed",
@@ -37242,7 +37242,7 @@
       "file_type": "code",
       "norm_label": "body()",
       "source_file": "plugins/base/markdown/src/doc-embed.tsx",
-      "source_location": "L88"
+      "source_location": "L90"
     },
     {
       "id": "plugins_base_markdown_src_doc_embed_byid",
@@ -37254,7 +37254,7 @@
       "file_type": "code",
       "norm_label": "byid()",
       "source_file": "plugins/base/markdown/src/doc-embed.tsx",
-      "source_location": "L43"
+      "source_location": "L45"
     },
     {
       "id": "plugins_base_markdown_src_doc_embed_docembed",
@@ -37266,7 +37266,7 @@
       "file_type": "code",
       "norm_label": "docembed()",
       "source_file": "plugins/base/markdown/src/doc-embed.tsx",
-      "source_location": "L102"
+      "source_location": "L104"
     },
     {
       "id": "plugins_base_markdown_src_doc_embed_mayembed",
@@ -37278,7 +37278,7 @@
       "file_type": "code",
       "norm_label": "mayembed()",
       "source_file": "plugins/base/markdown/src/doc-embed.tsx",
-      "source_location": "L38"
+      "source_location": "L40"
     },
     {
       "id": "plugins_base_markdown_src_doc_embed_userow",
@@ -37290,7 +37290,7 @@
       "file_type": "code",
       "norm_label": "userow()",
       "source_file": "plugins/base/markdown/src/doc-embed.tsx",
-      "source_location": "L48"
+      "source_location": "L50"
     },
     {
       "id": "plugins_base_syntax_highlight_src_installed_createinstalled",
@@ -110365,7 +110365,7 @@
       "file_type": "code",
       "norm_label": "root_chain",
       "source_file": "plugins/base/markdown/src/doc-embed.tsx",
-      "source_location": "L35"
+      "source_location": "L37"
     },
     {
       "id": "plugins_base_doc_events_manifest",
@@ -182851,7 +182851,19 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/markdown/src/doc-embed.tsx",
-      "source_location": "L103",
+      "source_location": "L105",
+      "weight": 1.0
+    },
+    {
+      "source": "plugins_base_markdown_src_doc_embed_docembed",
+      "target": "plugins_base_shared_target_target",
+      "relation": "calls",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "call",
+      "source_file": "plugins/base/markdown/src/doc-embed.tsx",
+      "source_location": "L115",
       "weight": 1.0
     },
     {
@@ -182863,7 +182875,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/markdown/src/doc-embed.tsx",
-      "source_location": "L55",
+      "source_location": "L57",
       "weight": 1.0
     },
     {
@@ -219157,7 +219169,7 @@
       "confidence_score": 1.0,
       "context": "field",
       "source_file": "plugins/base/markdown/src/doc-embed.tsx",
-      "source_location": "L83",
+      "source_location": "L85",
       "weight": 1.0
     },
     {
@@ -251453,6 +251465,18 @@
     },
     {
       "source": "plugins_base_markdown_src_doc_embed",
+      "target": "plugins_base_shared_target_target",
+      "relation": "imports",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "source_file": "plugins/base/markdown/src/doc-embed.tsx",
+      "source_location": "L26",
+      "weight": 1.0
+    },
+    {
+      "source": "plugins_base_markdown_src_doc_embed",
       "target": "plugins_base_markdown_src_runtime_markdownruntime",
       "relation": "imports",
       "_origin": "ast",
@@ -251460,7 +251484,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "plugins/base/markdown/src/doc-embed.tsx",
-      "source_location": "L27",
+      "source_location": "L29",
       "weight": 1.0
     },
     {
@@ -289813,7 +289837,7 @@
     },
     {
       "source": "plugins_base_markdown_src_doc_embed",
-      "target": "ref_links_js",
+      "target": "plugins_base_shared_target",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -289825,6 +289849,18 @@
     },
     {
       "source": "plugins_base_markdown_src_doc_embed",
+      "target": "ref_links_js",
+      "relation": "imports_from",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "source_file": "plugins/base/markdown/src/doc-embed.tsx",
+      "source_location": "L28",
+      "weight": 1.0
+    },
+    {
+      "source": "plugins_base_markdown_src_doc_embed",
       "target": "plugins_base_markdown_src_runtime",
       "relation": "imports_from",
       "_origin": "ast",
@@ -289832,7 +289868,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "plugins/base/markdown/src/doc-embed.tsx",
-      "source_location": "L27",
+      "source_location": "L29",
       "type_only": true,
       "weight": 1.0
     },
@@ -389849,7 +389885,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/markdown/src/doc-embed.tsx",
-      "source_location": "L102",
+      "source_location": "L104",
       "weight": 1.0
     },
     {
@@ -389860,7 +389896,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/markdown/src/doc-embed.tsx",
-      "source_location": "L30",
+      "source_location": "L32",
       "weight": 1.0
     },
     {
@@ -389871,7 +389907,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/markdown/src/doc-embed.tsx",
-      "source_location": "L35",
+      "source_location": "L37",
       "weight": 1.0
     },
     {
@@ -389882,7 +389918,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/markdown/src/doc-embed.tsx",
-      "source_location": "L38",
+      "source_location": "L40",
       "weight": 1.0
     },
     {
@@ -389893,7 +389929,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/markdown/src/doc-embed.tsx",
-      "source_location": "L43",
+      "source_location": "L45",
       "weight": 1.0
     },
     {
@@ -389904,7 +389940,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/markdown/src/doc-embed.tsx",
-      "source_location": "L48",
+      "source_location": "L50",
       "weight": 1.0
     },
     {
@@ -389915,7 +389951,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/markdown/src/doc-embed.tsx",
-      "source_location": "L81",
+      "source_location": "L83",
       "weight": 1.0
     },
     {
@@ -389926,7 +389962,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/markdown/src/doc-embed.tsx",
-      "source_location": "L88",
+      "source_location": "L90",
       "weight": 1.0
     },
     {
