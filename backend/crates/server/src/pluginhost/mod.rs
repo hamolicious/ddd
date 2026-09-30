@@ -53,7 +53,7 @@ pub mod host_fns;
 pub mod limits;
 pub mod pool;
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
@@ -86,8 +86,13 @@ pub struct ActivePlugin {
     pub version: String,
     /// **Approved**, not requested (SPEC §6.2): the admin's decision is what gates.
     pub capabilities: abi::Capabilities,
-    /// `backend.calls` — the allowlist for `call_plugin`.
-    pub calls: BTreeSet<String>,
+    /// `dependencies` and `optionalDependencies`, merged (id → range): the plugins this
+    /// one may `call_plugin`, and the versions it accepts.
+    pub deps: BTreeMap<String, String>,
+    /// `provides`, parsed: the id and version this plugin also answers to, as a callee.
+    pub provides: Option<(String, String)>,
+    /// `backend.exports`: the functions other plugins may call, with their shapes parsed.
+    pub callable: BTreeMap<String, CallableExport>,
     pub hooks: Vec<abi::hooks::HookKind>,
     pub cron: Vec<String>,
     pub routes: Vec<RouteSpec>,
@@ -113,6 +118,32 @@ pub struct ActivePlugin {
     /// Exports the module actually has, so a hook is never scheduled for a plugin that
     /// cannot receive it.
     pub exports: Vec<String>,
+}
+
+/// One `backend.exports` entry, ready to check values against.
+#[derive(Debug, Clone, Default)]
+pub struct CallableExport {
+    /// What the payload must fit. `None`: anything.
+    pub input: Option<life_manager_core::shape::Shape>,
+    /// What the returned value must fit. `None`: anything.
+    pub output: Option<life_manager_core::shape::Shape>,
+}
+
+impl CallableExport {
+    /// Parse a manifest entry. A shape this build does not understand accepts anything,
+    /// as `shapeFromJSON` does on the web side.
+    pub fn from_manifest(export: &crate::plugins::BackendExport) -> Self {
+        let parse = |json: &Option<Value>| {
+            json.as_ref().map(|json| {
+                serde_json::from_value(json.clone())
+                    .unwrap_or_else(|_| life_manager_core::shape::Shape::Unknown(json.clone()))
+            })
+        };
+        CallableExport {
+            input: parse(&export.input),
+            output: parse(&export.output),
+        }
+    }
 }
 
 impl ActivePlugin {
@@ -699,7 +730,24 @@ impl PluginHost {
             id: record.id.clone(),
             version: record.version.clone(),
             capabilities,
-            calls: backend.calls.iter().cloned().collect(),
+            deps: record
+                .manifest
+                .optional_dependencies
+                .iter()
+                .chain(record.manifest.dependencies.iter())
+                .map(|(id, range)| (id.clone(), range.clone()))
+                .collect(),
+            provides: record
+                .manifest
+                .provides
+                .as_deref()
+                .and_then(crate::manifest_schema::parse_plugin_ref)
+                .map(|(id, version)| (id.to_string(), version.to_string())),
+            callable: backend
+                .exports
+                .iter()
+                .map(|(name, export)| (name.clone(), CallableExport::from_manifest(export)))
+                .collect(),
             hooks,
             cron: backend.cron.clone(),
             routes,

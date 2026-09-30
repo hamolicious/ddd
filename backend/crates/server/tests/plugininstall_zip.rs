@@ -34,7 +34,7 @@ fn manifest_json(backend: bool) -> String {
         ""
     };
     format!(
-        r#"{{"id":"demo","version":"1.0.0","kernel":"^2.0","frontend":{{"module":"frontend/index.mjs"}}{backend}}}"#
+        r#"{{"id":"demo","version":"1.0.0","kernel":"^3.0","frontend":{{"module":"frontend/index.mjs"}}{backend}}}"#
     )
 }
 

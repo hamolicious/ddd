@@ -15,7 +15,7 @@
 import type { Unsubscribe } from "@kernel";
 
 import { COMPACT_MEDIA_QUERY } from "../../_shared/compact.js";
-import type { ShellLayout } from "@protocols/lm/shell";
+import type { ShellLayout } from "./api.js";
 
 /**
  * SPEC §6.5's mobile breakpoint: drawer sidebar, single pane.

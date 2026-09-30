@@ -1,6 +1,6 @@
 {
   "id": "graph",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "name": "Graph view",
   "description": "Every note and the links between them as a live, force-directed graph — the whole workspace, or the neighbourhood of the open note in the side panel.",
   "author": "Life Manager base distribution",
@@ -8,55 +8,13 @@
   "x-tailwind": {
     "prefix": "graph"
   },
-  "kernel": "^2.0",
-  "hot": true,
-  "consumes": {
-    "index": {
-      "protocol": "lm/workspace-index@^1.0",
-      "needs": [
-        "ready",
-        "version",
-        "documents",
-        "connections",
-        "subscribe"
-      ]
-    },
-    "router": {
-      "protocol": "lm/router@^1.0",
-      "needs": [
-        "navigate",
-        "query"
-      ]
-    },
-    "shell": {
-      "protocol": "lm/shell@^1.0",
-      "needs": [
-        "layout",
-        "toggleAltbar"
-      ]
-    }
-  },
-  "provides": {
-    "route": {
-      "protocol": "lm/router.route@1.0.0"
-    },
-    "view": {
-      "protocol": "lm/main.view@1.0.0"
-    },
-    "panel": {
-      "protocol": "lm/altbar.panel@1.0.0",
-      "order": 50
-    },
-    "nav": {
-      "protocol": "lm/navbar.item@1.0.0",
-      "order": 80
-    },
-    "commands": {
-      "protocol": "lm/commands.command@2.0.0"
-    },
-    "keys": {
-      "protocol": "lm/keybindings.default@1.0.0"
-    }
+  "kernel": "^3.0",
+  "dependencies": {
+    "indexer": "^2.0",
+    "router": "^2.0",
+    "shell-ui": "^3.0",
+    "header": "^2.0",
+    "commands": "^3.0"
   },
   "peerLibraries": {
     "react": "^18.0.0"

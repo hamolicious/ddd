@@ -1,13 +1,18 @@
 //! `call_plugin` — one backend plugin calling another (SPEC §6.3).
 //!
-//! Three rules, all enforced by the host and none of them optional:
+//! Four rules, all enforced by the host and none of them optional:
 //!
-//! 1. **The callee must be declared** (manifest `backend.calls`). Calling a plugin the
-//!    manifest does not name is [`crate::ErrorCode::Forbidden`], not a lookup failure.
-//! 2. **No reentrancy.** A plugin already on the call stack cannot be re-entered —
+//! 1. **The callee must be a dependency** (manifest `dependencies` or
+//!    `optionalDependencies`, `@kernel` 3.0), at a version inside the declared range, and
+//!    **the function must be exported** (the callee's `backend.exports`). Either refusal is
+//!    [`crate::ErrorCode::Forbidden`], not a lookup failure.
+//! 2. **Shapes are checked.** The export's `input` shape before the call
+//!    ([`crate::ErrorCode::InvalidArgument`]) and its `output` shape after
+//!    ([`crate::ErrorCode::Internal`]: the callee broke its own contract).
+//! 3. **No reentrancy.** A plugin already on the call stack cannot be re-entered —
 //!    Extism instances are not reentrant, and the honest error is better than a
 //!    deadlock or a second instance with half the first one's state.
-//! 3. **Depth ≤ 3.** The whole chain also shares *one* deadline: a three-deep call
+//! 4. **Depth ≤ 3.** The whole chain also shares *one* deadline: a three-deep call
 //!    tree does not get 15 seconds (see `backend/HOST-ABI.md`, Limits).
 
 use serde::{Deserialize, Serialize};
@@ -15,10 +20,10 @@ use serde_json::Value;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CallPluginInput {
-    /// The callee's plugin id.
+    /// The callee's plugin id — or an id it `provides`.
     pub plugin: String,
-    /// The function name as the callee's `lm_call` dispatcher understands it — *not* a
-    /// Wasm export name. Every invoked call lands on the single `lm_call` export
+    /// The function name as the callee's `lm_call` dispatcher understands it, and as its
+    /// `backend.exports` lists it — *not* a Wasm export name. Every invoked call lands on the single `lm_call` export
     /// (`crate::names::CALL`), which is what keeps the export surface fixed.
     pub function: String,
     #[serde(default)]

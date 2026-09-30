@@ -24,7 +24,7 @@ describe("normalizeKeys", () => {
     expect(normalizeKeys("  CTRL + Shift + p ")).toBe("Ctrl+Shift+P");
   });
 
-  it("keeps the documented spellings of `lm/keybindings.default` stable", () => {
+  it("keeps the documented spellings of `addKeybinding` stable", () => {
     expect(normalizeKeys("Mod+K")).toBe("Mod+K");
     expect(normalizeKeys("Mod+Shift+F")).toBe("Mod+Shift+F");
     expect(normalizeKeys("Shift+Alt+F")).toBe("Shift+Alt+F");

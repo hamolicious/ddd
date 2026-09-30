@@ -390,14 +390,6 @@ summary {
   margin-inline-start: calc(var(--lm-space) * 0.75);
 }
 
-.lm-bare-wiring {
-  margin-top: calc(var(--lm-space) * 3);
-}
-
-.lm-bare-wiring h2 {
-  font-size: 1.15em;
-}
-
 .lm-bare .lm-sr-only {
   position: absolute;
   width: 1px;

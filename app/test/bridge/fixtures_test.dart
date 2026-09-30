@@ -39,6 +39,7 @@ import 'package:crypto/crypto.dart';
 import 'package:life_manager_shell/bridge/auth.dart';
 import 'package:life_manager_shell/bridge/bridge.dart';
 import 'package:life_manager_shell/bridge/filesystem.dart';
+import 'package:life_manager_shell/bridge/folder.dart';
 import 'package:life_manager_shell/bridge/notifications.dart';
 import 'package:life_manager_shell/bundle/manifest.dart';
 import 'package:life_manager_shell/shell/webview_host.dart';
@@ -82,6 +83,7 @@ ShellBridge _fullyRegisteredBridge() {
   auth.registerOn(bridge);
   FilesystemCapability(config: config, auth: auth).registerOn(bridge);
   NotificationsCapability().registerOn(bridge);
+  FolderCapability().registerOn(bridge);
   // `boot.*` lives in `main.dart` rather than in a capability class — it is the shell's own
   // pair, not a feature — so it is spelled out here the way `main.dart` spells it.
   bridge.register('boot', 'ok', (Map<String, Object?> _) async => null);
@@ -389,6 +391,21 @@ void main() {
       // The one member that is not routed through `define` is guarded by hand; an
       // unguarded assignment would put a method on the page that answers nothing.
       expect(js, contains("if (has('notifications.permission'))"));
+    });
+  });
+
+  group('window_shell.json pins the folder-changed signal', () {
+    final Map<String, Object?> folderChanged =
+        _read('window_shell.json')['folderChanged']! as Map<String, Object?>;
+
+    test('the event name and the script are the fixture\'s', () {
+      expect(kFolderChangedEvent, folderChanged['event']);
+      expect(
+        folderChangedScript(
+          (folderChanged['scriptPaths']! as List<Object?>).cast<String>(),
+        ),
+        folderChanged['script'],
+      );
     });
   });
 

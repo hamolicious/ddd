@@ -25,7 +25,7 @@ import type {
   OutgoingConnection,
   TargetState,
   WorkspaceStats,
-} from "@protocols/lm/workspace-index";
+} from "./api.js";
 
 import { inferKind, type PropertyKind } from "../../_shared/fm-display.js";
 

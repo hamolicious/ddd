@@ -9,17 +9,17 @@
  *
  * `viewer` and `editor` are symmetric offers (SPEC §6.5): nothing below names either
  * of them. {@link DEFAULT_MODE_ID} is a *fallback* string, used only when no preference
- * exists and `read` happens to be wired in — if it is not, the first seated visible
+ * exists and `read` happens to be installed — if it is not, the first visible
  * mode wins, which is how a workspace that replaced both base modes still opens a
  * document.
  *
- * Modes arrive **in seat order** (PLUGIN-PROTOCOLS §6a) and nothing here sorts them: the
- * `order` field on a mode is only the default-seat hint its manifest carries.
+ * Modes arrive **already in order**: the registry sorts by each mode's `order`, and
+ * nothing here sorts them again.
  */
 
 import type { DocumentRow } from "@kernel";
 
-import type { DocumentMode } from "@protocols/lm/document.mode";
+import type { DocumentMode } from "./api.js";
 
 /** The mode a fresh client prefers when nothing else says otherwise. */
 export const DEFAULT_MODE_ID = "read";
@@ -58,21 +58,49 @@ export function visibleModes(
 }
 
 /**
- * Which mode to show, given the user's per-document choice, their default, and what
- * is actually registered and visible.
+ * The first visible mode, in seat order, whose `prefer` claims this document.
  *
- * Precedence: the document's remembered mode → the user's default → `read` →
- * the first seated visible mode. Every step is skipped when the named mode is not
- * visible, so an uninstalled `editor` degrades to reading rather than a blank pane.
+ * A `prefer` that throws claims nothing and is reported — the same fail-closed rule as
+ * `when`, and cheaper here: losing a claim only means the user's default applies.
+ */
+export function claimedModeId(
+  visible: readonly DocumentMode[],
+  row: DocumentRow | undefined,
+  onError?: (mode: DocumentMode, error: unknown) => void,
+): string | undefined {
+  if (!row) return undefined;
+  return visible.find((mode) => {
+    if (!mode.prefer) return false;
+    try {
+      return mode.prefer(row) === true;
+    } catch (error) {
+      onError?.(mode, error);
+      return false;
+    }
+  })?.id;
+}
+
+/**
+ * Which mode to show, given the user's per-document choice, a mode's claim on the
+ * document, the user's default, and what is actually registered and visible.
+ *
+ * Precedence: the document's remembered mode → the mode that claims it (`prefer`) →
+ * the user's default → `read` → the first seated visible mode. The remembered mode
+ * outranks the claim because it is the user's own choice for *this* document; the
+ * claim outranks the default because the default is a guess about every document.
+ * Every step is skipped when the named mode is not visible, so an uninstalled
+ * `editor` degrades to reading rather than a blank pane.
  */
 export function resolveModeId(
   remembered: string | undefined,
   preferred: string | undefined,
   visible: readonly DocumentMode[],
+  claimed?: string,
 ): string | undefined {
   const has = (id: string | undefined): boolean =>
     id !== undefined && visible.some((mode) => mode.id === id);
   if (has(remembered)) return remembered;
+  if (has(claimed)) return claimed;
   if (has(preferred)) return preferred;
   if (has(DEFAULT_MODE_ID)) return DEFAULT_MODE_ID;
   // The first seat: `visible` is in the host's order, which the wiring decides.

@@ -32,7 +32,7 @@ import {
 /**
  * What `plugins/base/dist` holds, plus the one example plugin the suite installs.
  *
- * The 28 of SPEC §6.5's table plus `extra-task-states`. M4's two proof plugins
+ * The 29 of SPEC §6.5's table plus `extra-task-states`. M4's two proof plugins
  * (`calendar`, `agenda`) were removed on 2026-09-24; on 2026-09-26 `header` was split
  * out of `shell-ui`, `notices` and `sync-status` out of `header`, `context-menu` out of
  * `folders`, and `properties` was removed; `search` was folded into `doc-list`;
@@ -41,11 +41,13 @@ import {
  * `welcome` replaced the server's own first-run seeding; `indexer` and `fm-autocomplete`
  * were added, and then `graph`; then `syntax-highlight`; on 2026-09-28 the `wiring`
  * editor (PLUGIN-PROTOCOLS §7) was added as a plugin and, the same day, folded into
- * `admin` as its Wiring tab; then `icons` and `folder-style`; then `emoji`. The base
- * distribution and `BASE_PLUGIN_IDS` — what `?safe=1` boots — are the same twenty-eight.
- * `safe-mode.spec.ts` is what pins that.
+ * `admin` as its Wiring tab; then `icons` and `folder-style`; then `emoji`; then `auto-fm`;
+ * on 2026-09-29 `search`'s views became `table`, `kanban`, `calendar` and `timeline`, and
+ * kernel 3.0 removed the wiring and added `doc-events`; `local-folder` is base too. The
+ * base distribution and `BASE_PLUGIN_IDS` — what `?safe=1` boots — are the same
+ * thirty-seven. `safe-mode.spec.ts` is what pins that.
  */
-const EXPECTED_PLUGINS = 29;
+const EXPECTED_PLUGINS = 38;
 
 /**
  * `--lm-bg` as the `midnight` theme paints it (`plugins/base/themes/src/index.tsx`).
@@ -93,6 +95,10 @@ test("registering the first user boots the whole plugin distribution", async ({
   // showing them", and any sidebar plugin that links the same documents by title is
   // another plugin's business — an unscoped lookup matches two buttons and fails on
   // strict mode, which is how `agenda` (since removed) broke this once already.
+  //
+  // The list is a table ten rows tall; `t.rows` is its height, so all of them fit at once
+  // however many documents the specs before this one made.
+  await page.goto("/#/?t.rows=200");
   const main = page.locator("#shell-main");
   for (const title of [
     "Welcome to Life Manager",
@@ -110,7 +116,9 @@ test("registering the first user boots the whole plugin distribution", async ({
     await expect(main.getByRole("button", { name: title, exact: true })).toBeVisible();
   }
   await expect(docRows(page).first()).toBeVisible();
-  // …filed inside its first note, through `folders`' service.
+  // …filed inside its first note, through `folders`' service. Opened, so the tree (which
+  // draws only the rows on screen) reveals it wherever it sorts.
+  await main.getByRole("button", { name: "Folders are notes", exact: true }).click();
   await expect(
     page.getByRole("tree", { name: "Folders" }).locator('[role="treeitem"][aria-level="2"]').filter({ hasText: "Folders are notes" }),
   ).toBeVisible();
@@ -211,10 +219,10 @@ test("clicking a task toggles it and the state menu sets a plugin-contributed ma
   // recognised by no markdown parser, only by the task-state registry (SPEC §6.6).
   // Right-click (the shipped interaction, replaceable) opens the state menu.
   await checkboxes.nth(1).click({ button: "right" });
-  const menu = page.getByRole("menu");
+  const menu = page.getByRole("dialog", { name: "Task state" });
   await expect(menu).toBeVisible();
-  await expect(menu.getByRole("menuitem", { name: /in progress/i })).toBeVisible();
-  await menu.getByRole("menuitem", { name: /in progress/i }).click();
+  await expect(menu.getByRole("menuitemradio", { name: /in progress/i })).toBeVisible();
+  await menu.getByRole("menuitemradio", { name: /in progress/i }).click();
 
   // The status may still say "saved" from the first write: wait for the server's text.
   await expect.poll(() => rawText(request, baseURL as string, id)).toContain("- [/] second");
@@ -476,6 +484,8 @@ test("an admin invite lets a second user register", async ({ page, browser, base
     );
     // A second real session in the same shared workspace (SPEC §2).
     await expect(other.getByRole("banner")).toBeVisible();
+    // Searched for: it is the oldest document, long off the list's first page.
+    await other.getByRole("searchbox", { name: "Search documents" }).fill("Welcome to Life Manager");
     await expect(other.getByRole("button", { name: "Welcome to Life Manager", exact: true })).toBeVisible();
   } finally {
     await second.close();

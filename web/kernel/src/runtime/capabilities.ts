@@ -16,7 +16,8 @@
  * a joke, and a shape mismatch must degrade rather than throw.
  */
 
-import { bridgeVersionOf, readShellBridge, shellUrl } from "./shell-bridge.js";
+import { bridgeOwnsSession, bridgeVersionOf, readShellBridge, shellUrl, type ShellFolder } from "./shell-bridge.js";
+import { BrowserFolder, ShellFolderCapability, UnavailableFolder, fromBase64, toBase64 } from "./folder.js";
 import {
   CapabilityUnavailableError,
   SUPPORTED_BRIDGE_VERSION,
@@ -25,6 +26,7 @@ import {
   type CapabilitySupport,
   type FileExport,
   type FilesystemCapability,
+  type FolderCapability,
   type NotificationPermissionState,
   type NotificationRequest,
   type NotificationsCapability,
@@ -45,6 +47,7 @@ export interface ShellBridge {
   readonly bridgeVersion?: number;
   readonly filesystem?: unknown;
   readonly notifications?: unknown;
+  readonly folder?: unknown;
   /**
    * The server origin (`app/BRIDGE.md` §6). Read here for one reason: the browser
    * fallback for {@link FilesystemCapability.exportWorkspace} is a link to
@@ -157,7 +160,10 @@ class BrowserFilesystem implements FilesystemCapability {
     // tab whose cookie can authenticate it perfectly well. A shell of *any* major does
     // suppress it, including one this bundle refuses to call: its session is a bearer
     // token in the keystore, and no navigation can carry an `Authorization` header.
-    if (this.support !== "unavailable" && bridgeVersionOf(readShellBridge()) === undefined) {
+    //
+    // A cookie shell (`session: "cookie"`, the Linux desktop shell) is served by the
+    // server itself and authenticates exactly like a tab, so it keeps the link.
+    if (this.support !== "unavailable" && !bridgeOwnsSession(readShellBridge())) {
       this.exportWorkspace = (): Promise<void> => this.#downloadWorkspace();
     }
   }
@@ -456,26 +462,11 @@ function instantOf(entry: { at?: unknown; atIso?: unknown }): number | undefined
   return Number.isNaN(parsed) ? undefined : parsed;
 }
 
-/** Base64 without `Buffer`: the bridge is JSON-only, so bytes travel as text. */
-function toBase64(bytes: Uint8Array): string {
-  let binary = "";
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  }
-  return btoa(binary);
-}
-
-function fromBase64(data: string): Uint8Array {
-  const binary = atob(data);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-  return bytes;
-}
-
 export class CapabilitiesHost implements CapabilitiesApi {
   readonly bridgeVersion: number | undefined;
   readonly filesystem: FilesystemCapability;
   readonly notifications: NotificationsCapability;
+  readonly folder: FolderCapability;
 
   constructor(bridge: ShellBridge | undefined = detectBridge()) {
     this.bridgeVersion = bridge?.version;
@@ -489,6 +480,12 @@ export class CapabilitiesHost implements CapabilitiesApi {
     this.notifications = isObject(bridge?.notifications)
       ? new ShellNotifications(bridge.notifications as ShellNotificationsBridge, browserNotifications)
       : browserNotifications;
+    // Not per method like the others: a folder that can list but not write is a trap for
+    // a sync plugin, so the shell's folder is used whole or not at all.
+    this.folder =
+      ShellFolderCapability.from(isObject(bridge?.folder) ? (bridge.folder as ShellFolder) : undefined) ??
+      BrowserFolder.create() ??
+      new UnavailableFolder();
   }
 
   has(name: CapabilityName): boolean {
@@ -496,7 +493,14 @@ export class CapabilitiesHost implements CapabilitiesApi {
   }
 
   support(name: CapabilityName): CapabilitySupport {
-    return name === "filesystem" ? this.filesystem.support : this.notifications.support;
+    switch (name) {
+      case "filesystem":
+        return this.filesystem.support;
+      case "notifications":
+        return this.notifications.support;
+      case "folder":
+        return this.folder.support;
+    }
   }
 
   async storage(): Promise<StorageReport> {

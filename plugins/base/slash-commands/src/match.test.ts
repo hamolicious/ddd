@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { SlashCommand } from "@protocols/lm/slash.command";
+import type { SlashCommand } from "./api.js";
 
 import { matchCommands, slashQuery } from "./match.js";
 
@@ -27,15 +27,15 @@ describe("slashQuery", () => {
 });
 
 describe("matchCommands", () => {
-  // In seat order, as the host hands them over. `Date` carries an `order` hint that used
-  // to put it first; the wiring's seat order decides now, and this function leaves it be.
+  // In the order the registry hands them over. `Date` carries an `order` hint: sorting by
+  // it is the registry's job, and this function leaves the given order be.
   const all = [
     command("Attach file", { keywords: ["upload"] }),
     command("Insert table"),
     command("Date", { keywords: ["today"], order: 10 }),
   ];
 
-  it("lists everything in seat order with nothing typed, ignoring the order hint", () => {
+  it("lists everything in the given order with nothing typed, ignoring the order hint", () => {
     expect(matchCommands(all, "", "d").map((c) => c.title)).toEqual(["Attach file", "Insert table", "Date"]);
   });
 
@@ -46,7 +46,7 @@ describe("matchCommands", () => {
     expect(matchCommands(all, "able", "d").map((c) => c.title)).toEqual(["Insert table"]);
   });
 
-  it("keeps seat order within a rank rather than sorting by title", () => {
+  it("keeps the given order within a rank rather than sorting by title", () => {
     const seated = [command("Zebra task"), command("Alpha task"), command("Task list", { keywords: ["task"] })];
     expect(matchCommands(seated, "task", "d").map((c) => c.title)).toEqual(["Zebra task", "Alpha task", "Task list"]);
   });

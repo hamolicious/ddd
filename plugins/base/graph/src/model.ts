@@ -13,7 +13,7 @@
 
 import type { DocumentId } from "@kernel";
 
-import type { ConnectionKind, WorkspaceIndex } from "@protocols/lm/workspace-index";
+import type { ConnectionKind, WorkspaceIndex } from "plugin:indexer";
 
 export interface GraphNode {
   readonly id: DocumentId;

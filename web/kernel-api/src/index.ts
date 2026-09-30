@@ -9,10 +9,12 @@
  *
  * ```ts
  * import type { Kernel } from "@kernel";
+ * import { addItem } from "plugin:header";          // a dependency's exports
+ *
+ * export function greet(): string { return "hi"; }   // what dependents import
  *
  * export default function activate(kernel: Kernel) {
- *   kernel.ports.offer("nav", { id: "hello", label: "Hello" });   // a provided slot port
- *   kernel.ports.serve("greeter", { greet: () => "hi" });         // a provided service port
+ *   addItem({ id: "hello.nav", side: "end", component: Hello });
  * }
  * ```
  *
@@ -101,7 +103,13 @@ export type {
   TextRange,
 } from "./documents.js";
 
-export type { PortsApi, SlotHost, SlotItem } from "./ports.js";
+export {
+  checked,
+  createRegistry,
+  type Registry,
+  type RegistryEntry,
+  type RegistryOptions,
+} from "./registry.js";
 
 export {
   KERNEL_EVENT_PREFIX,
@@ -148,6 +156,10 @@ export {
   type CapabilitySupport,
   type FileExport,
   type FilesystemCapability,
+  type FolderCapability,
+  type FolderEntry,
+  type FolderState,
+  type FolderStatus,
   type NotificationPermissionState,
   type NotificationRequest,
   type NotificationsCapability,
@@ -159,17 +171,15 @@ export {
 export {
   PLUGIN_ID_PATTERN,
   PLUGIN_VERSION_PATTERN,
-  PORT_NAME_PATTERN,
   formatProblem,
   isManifest,
-  isProtocolId,
   isSafeRelativePath,
   isSemverRange,
   isValidVersion,
-  parseProtocolRef,
+  parsePluginRef,
   satisfies,
   validateManifest,
-  type ConsumedPort,
+  type BackendExport,
   type HttpCapability,
   type InstalledPlugin,
   type ManifestProblem,
@@ -177,36 +187,10 @@ export {
   type PluginCapabilities,
   type PluginConfigField,
   type PluginFrontend,
+  type PluginLoad,
   type PluginManifest,
   type PluginState,
-  type ProvidedPort,
 } from "./manifest.js";
-
-export {
-  protocolKey,
-  type ProtocolKind,
-  type ProtocolPackage,
-  type ProtocolSource,
-} from "./protocols.js";
-
-export {
-  EMPTY_WIRING,
-  WIRE_ARROW,
-  splitPortKey,
-  splitProtocolRef,
-  type ApplyPlan,
-  type LiveWiring,
-  type PortCandidate,
-  type Resolution,
-  type ResolvedPluginSet,
-  type ResolvedWire,
-  type SkipReason,
-  type WiringChange,
-  type WiringDiagnostic,
-  type WiringInput,
-  type WiringOverrides,
-  type WiringPlugin,
-} from "./wiring.js";
 
 export type {
   ActivateFn,
@@ -215,6 +199,8 @@ export type {
   DeactivateFn,
   Kernel,
   KernelInfo,
+  LoadedPlugin,
   ParsedText,
   PluginModule,
+  PluginsApi,
 } from "./kernel.js";

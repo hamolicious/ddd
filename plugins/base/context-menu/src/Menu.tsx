@@ -5,23 +5,52 @@
  * it the containing block for `position: fixed` descendants: a menu rendered in place
  * would be clipped inside a 288 px column.
  *
- * **Popover or sheet.** With an anchor on a wide screen it sits under the anchor,
- * right-aligned to it and kept on screen; otherwise it is a bottom sheet on a phone and
- * a centred dialog above that. Either way the backdrop takes the click that closes it,
- * so a click outside never also lands on whatever is underneath.
+ * **Popover or sheet.** On a wide screen every menu and sheet is a popover: under its
+ * anchor, right-aligned to it; with no anchor (a keyboard shortcut, a command), at the
+ * pointer's last press, or under the focused control, or near the top of the screen. It
+ * is kept on screen and flips above when there is no room below. On a phone it is a
+ * bottom sheet. A modal is a question, not a menu: a centred dialog. Either way the
+ * backdrop takes the click that closes it, so a click outside never also lands on
+ * whatever is underneath.
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, ReactElement, ReactNode } from "react";
 import { createPortal } from "react-dom";
 
-import type { MenuItem, MenuRequest, ModalRequest, ModalResult, SheetRequest } from "@protocols/lm/context-menu";
+import type { MenuItem, MenuRequest, ModalRequest, ModalResult, SheetRequest } from "./api.js";
 import { useCompact } from "../../_shared/compact.js";
 
 import { ModalForm } from "./Modal.js";
 
 const FOCUSABLE = 'button:not([disabled]), input, select, textarea, [href], [tabindex]:not([tabindex="-1"])';
 const GAP = 4;
+/** How long a pointer press still says where a menu opened from it belongs. */
+const POINT_FRESH_MS = 1500;
+
+/** The last pointer press, for a menu opened with no anchor. */
+let lastPoint: { readonly x: number; readonly y: number; readonly at: number } | undefined;
+if (typeof document !== "undefined") {
+  const remember = (event: MouseEvent): void => {
+    lastPoint = { x: event.clientX, y: event.clientY, at: Date.now() };
+  };
+  document.addEventListener("pointerdown", remember, true);
+  document.addEventListener("contextmenu", remember, true);
+}
+
+/** A box to place an unanchored popover against: the fresh pointer press, the focused control, or the top middle. */
+function fallbackBox(): { readonly top: number; readonly bottom: number; readonly left: number; readonly right: number } {
+  if (lastPoint && Date.now() - lastPoint.at < POINT_FRESH_MS) {
+    return { top: lastPoint.y, bottom: lastPoint.y, left: lastPoint.x, right: lastPoint.x };
+  }
+  const focused = document.activeElement;
+  if (focused instanceof HTMLElement && focused !== document.body) {
+    const box = focused.getBoundingClientRect();
+    if (box.width > 0 || box.height > 0) return { top: box.top, bottom: box.bottom, left: box.left, right: box.left };
+  }
+  const middle = innerWidth / 2;
+  return { top: innerHeight * 0.15, bottom: innerHeight * 0.15, left: middle, right: middle };
+}
 
 export type Open =
   | { readonly kind: "menu"; readonly request: MenuRequest }
@@ -60,16 +89,27 @@ function Panel({ open, close }: { readonly open: Open; readonly close: () => voi
   const panel = useRef<HTMLDivElement | null>(null);
   const { anchor, title, description } = open.request;
   // A modal is a question, not a menu: always centred, the anchor only takes focus back.
-  const popover = open.kind !== "modal" && !compact && anchor instanceof HTMLElement && anchor.isConnected;
+  const popover = open.kind !== "modal" && !compact;
+  const anchored = anchor instanceof HTMLElement && anchor.isConnected;
   const [position, setPosition] = useState<{ top: number; left: number } | undefined>(undefined);
+  // Where an unanchored popover opened: fixed at open, so it does not chase the pointer.
+  const [fallback] = useState(fallbackBox);
 
   useLayoutEffect(() => {
-    if (!popover || !anchor || !panel.current) return;
+    if (!popover || !panel.current) return;
     const place = (): void => {
-      const box = anchor.getBoundingClientRect();
+      const box = anchored && anchor ? anchor.getBoundingClientRect() : undefined;
       const own = panel.current?.getBoundingClientRect();
       const width = own?.width ?? 0;
       const height = own?.height ?? 0;
+      if (!box) {
+        // At the point, opening rightwards and down; kept on screen.
+        const left = Math.max(GAP, Math.min(fallback.left, innerWidth - width - GAP));
+        const below = fallback.bottom + GAP;
+        const top = below + height > innerHeight - GAP ? Math.max(GAP, fallback.top - height - GAP) : below;
+        setPosition({ top, left });
+        return;
+      }
       const left = Math.max(GAP, Math.min(box.right - width, innerWidth - width - GAP));
       const below = box.bottom + GAP;
       const top = below + height > innerHeight - GAP ? Math.max(GAP, box.top - height - GAP) : below;
@@ -85,9 +125,13 @@ function Panel({ open, close }: { readonly open: Open; readonly close: () => voi
       removeEventListener("resize", place);
       growth.disconnect();
     };
-  }, [anchor, popover]);
+  }, [anchor, anchored, popover, fallback]);
 
+  // Focus moves in once the panel is shown: a popover is `visibility: hidden` until it is
+  // placed, and a hidden control cannot take focus.
+  const shown = !popover || position !== undefined;
   useEffect(() => {
+    if (!shown) return undefined;
     const restore = anchor ?? document.activeElement;
     const target =
       panel.current?.querySelector<HTMLElement>("[data-autofocus]") ??
@@ -97,7 +141,7 @@ function Panel({ open, close }: { readonly open: Open; readonly close: () => voi
     return () => {
       if (restore instanceof HTMLElement && restore.isConnected) restore.focus();
     };
-  }, [anchor]);
+  }, [anchor, shown]);
 
   // Escape closes wherever focus is, like the palette.
   useEffect(() => {
@@ -141,15 +185,21 @@ function Panel({ open, close }: { readonly open: Open; readonly close: () => voi
       open.request.render(close)
     );
 
+  // A sheet draws its own body (a picker, a form), so it gets more room than a list of items.
+  const width = open.kind === "sheet" ? "ctxmenu:max-w-[min(30rem,calc(100vw-1rem))]" : "ctxmenu:max-w-[min(22rem,calc(100vw-1rem))]";
   const panelClasses = popover
-    ? "context-menu ctxmenu:fixed ctxmenu:flex ctxmenu:max-h-[min(70vh,32rem)] ctxmenu:min-w-[14rem] ctxmenu:max-w-[min(22rem,calc(100vw-1rem))] ctxmenu:flex-col ctxmenu:gap-1 ctxmenu:overflow-y-auto ctxmenu:rounded-lg ctxmenu:border ctxmenu:border-border ctxmenu:bg-bg-raised ctxmenu:p-1 ctxmenu:font-sans ctxmenu:text-text ctxmenu:shadow-2"
+    ? `context-menu ctxmenu:fixed ctxmenu:flex ctxmenu:max-h-[min(70vh,32rem)] ctxmenu:min-w-[14rem] ctxmenu:flex-col ctxmenu:gap-1 ctxmenu:overflow-y-auto ctxmenu:rounded-lg ctxmenu:border ctxmenu:border-border ctxmenu:bg-bg-raised ctxmenu:p-1 ctxmenu:font-sans ctxmenu:text-text ctxmenu:shadow-2 ${width}`
     : "context-menu ctxmenu:flex ctxmenu:max-h-[85dvh] ctxmenu:w-full ctxmenu:flex-col ctxmenu:gap-3 ctxmenu:overflow-y-auto ctxmenu:rounded-t-lg ctxmenu:border ctxmenu:border-b-0 ctxmenu:border-border ctxmenu:bg-bg-raised ctxmenu:p-4 ctxmenu:pb-[calc(var(--lm-space)*1.5+env(safe-area-inset-bottom,0px))] ctxmenu:font-sans ctxmenu:text-text ctxmenu:shadow-2 ctxmenu:sm:max-h-[40rem] ctxmenu:sm:max-w-[30rem] ctxmenu:sm:rounded-lg ctxmenu:sm:border-b ctxmenu:sm:pb-4";
 
   return createPortal(
     <div
       className={`ctxmenu:fixed ctxmenu:inset-0 ctxmenu:z-[1000] ${popover ? "" : "ctxmenu:flex ctxmenu:items-end ctxmenu:justify-center ctxmenu:bg-bg-overlay ctxmenu:sm:items-center ctxmenu:sm:p-8"}`}
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) close();
+        if (event.target !== event.currentTarget) return;
+        // The press closes the menu and nothing else: no focus moves to what is underneath,
+        // so focus goes back where the menu was opened from.
+        event.preventDefault();
+        close();
       }}
       onKeyDown={onKeyDown}
     >
@@ -167,7 +217,12 @@ function Panel({ open, close }: { readonly open: Open; readonly close: () => voi
             : undefined
         }
       >
-        {popover ? null : (
+        {popover ? (
+          // A sheet's body is the caller's: its title says what it is for.
+          open.kind === "sheet" ? (
+            <p className="ctxmenu:m-0 ctxmenu:px-2 ctxmenu:pt-1 ctxmenu:text-sm ctxmenu:font-semibold ctxmenu:text-text-muted">{title}</p>
+          ) : null
+        ) : (
           <header className="ctxmenu:flex ctxmenu:items-center ctxmenu:gap-3">
             <h2 className="ctxmenu:m-0 ctxmenu:min-w-0 ctxmenu:flex-1 ctxmenu:break-words ctxmenu:text-lg">{title}</h2>
             <button

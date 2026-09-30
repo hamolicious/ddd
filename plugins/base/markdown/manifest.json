@@ -1,68 +1,21 @@
 {
   "id": "markdown",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "name": "Markdown",
   "description": "The unified/remark to React pipeline, and the extension points over it.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
-  "kernel": "^2.0",
-  "hot": true,
-  "consumes": {
-    "router": {
-      "protocol": "lm/router@^1.0",
-      "needs": [
-        "navigate",
-        "href"
-      ],
-      "optional": true
-    },
-    "attachments": {
-      "protocol": "lm/markdown.attachment@^1.0"
-    },
-    "code": {
-      "protocol": "lm/markdown.codeBlock@^1.0"
-    },
-    "tasks": {
-      "protocol": "lm/markdown.taskState@^1.0"
-    },
-    "directives": {
-      "protocol": "lm/markdown.directive@^1.0"
-    },
-    "fences": {
-      "protocol": "lm/markdown.fence@^1.0"
-    },
-    "remark": {
-      "protocol": "lm/markdown.remark@^1.0"
-    },
-    "components": {
-      "protocol": "lm/markdown.component@^1.0"
-    },
-    "folders": {
-      "protocol": "lm/folders@^1.2",
-      "needs": [
-        "fileNew",
-        "look",
-        "onLookChange"
-      ],
-      "optional": true
-    }
+  "kernel": "^3.0",
+  "dependencies": {
+    "commands": "^3.0",
+    "settings": "^2.0"
   },
-  "provides": {
-    "renderer": {
-      "protocol": "lm/markdown-renderer@2.1.0"
-    },
-    "task-states": {
-      "protocol": "lm/markdown.taskState@1.0.0",
-      "order": 0
-    },
-    "settings": {
-      "protocol": "lm/settings.section@1.0.0",
-      "order": 45
-    },
-    "commands": {
-      "protocol": "lm/commands.command@2.0.0"
-    }
+  "optionalDependencies": {
+    "context-menu": "^2.0",
+    "document-surface": "^2.0",
+    "folders": "^4.0",
+    "router": "^2.0"
   },
   "peerLibraries": {
     "react": "^18.0.0",

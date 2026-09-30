@@ -21,7 +21,6 @@ import {
   hostPolicyNote,
   formatWhen,
   isBareHost,
-  isStaleBase,
   normalizeConfigValues,
   parseHostList,
   type PluginConfigSchema,
@@ -207,48 +206,6 @@ describe("the plugin management client", () => {
     expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({ note: "misbehaving" });
     expect(JSON.parse(String(calls[1]?.init?.body))).toEqual({});
     expect(calls[2]?.path).toBe("/admin/plugins/calendar/enable");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Wiring versions: the rollback path (PLUGIN-PROTOCOLS §6c)
-// ---------------------------------------------------------------------------
-
-describe("the wiring client", () => {
-  const overrides = { unplugged: ["calendar"], bind: {}, cut: [], add: [], order: {} };
-
-  it("reads the live wiring and its history from the wiring namespace, not admin", async () => {
-    const { calls, client } = recorder({ live: { version: 3, ...overrides }, history: [] });
-    const result = await client.wiring();
-    expect(calls[0]?.path).toBe("/wiring");
-    expect(calls[0]?.init).toBeUndefined();
-    expect(result.live.version).toBe(3);
-  });
-
-  it("addresses one kept version by number", async () => {
-    const { calls, client } = recorder({ version: 2, wiring: overrides, action: "apply", at: "" });
-    await client.wiringVersion(2);
-    expect(calls[0]?.path).toBe("/wiring/versions/2");
-  });
-
-  it("applies with the base it saw, the overrides and the action, as JSON", async () => {
-    const { calls, client } = recorder({ live: { version: 4, ...overrides } });
-    await client.applyWiring({ base: 3, wiring: overrides, action: "rollback" });
-    expect(calls[0]?.path).toBe("/wiring/apply");
-    expect(calls[0]?.init?.method).toBe("POST");
-    expect(new Headers(calls[0]?.init?.headers).get("content-type")).toBe("application/json");
-    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
-      base: 3,
-      wiring: overrides,
-      action: "rollback",
-    });
-  });
-
-  it("recognises a stale base by the status the session fetch attaches", () => {
-    expect(isStaleBase(Object.assign(new Error("stale"), { status: 409 }))).toBe(true);
-    expect(isStaleBase(Object.assign(new Error("forbidden"), { status: 403 }))).toBe(false);
-    expect(isStaleBase(new Error("no status"))).toBe(false);
-    expect(isStaleBase(undefined)).toBe(false);
   });
 });
 

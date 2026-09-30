@@ -10,85 +10,15 @@
  * every device, the history's times, and what the screen said in between.
  */
 
-import { expect, test, type BrowserContext, type Page, type WebSocketRoute } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 import { ADMIN, createDocument, openDocument, rawText, signIn, waitSynced } from "./helpers.js";
+import { network, typeAfter, typeAtEnd, workerInControl } from "./network.js";
 
 // Offline boot is the service worker's job, and the suite blocks workers by default
 // (`playwright.app.config.ts`, to keep plugin builds fresh between tests).
 test.use({ serviceWorkers: "allow" });
 test.setTimeout(150_000);
-
-/** Both halves of the wire, cut and restored together. */
-async function network(page: Page, context: BrowserContext) {
-  let refuse = false;
-  const live = new Set<WebSocketRoute>();
-  await page.routeWebSocket(/\/api\/sync/, (ws) => {
-    if (refuse) {
-      void ws.close({ code: 1006 }).catch(() => undefined);
-      return;
-    }
-    live.add(ws);
-    ws.connectToServer();
-  });
-  return {
-    /** Cut the wire; resolves once the app says so, and returns how long that took. */
-    async offline(): Promise<number> {
-      refuse = true;
-      const cut = Date.now();
-      await context.setOffline(true);
-      for (const ws of live) await ws.close({ code: 1006 }).catch(() => undefined);
-      live.clear();
-      await expect(page.getByRole("button", { name: "Offline. Reconnect" })).toBeVisible({ timeout: 60_000 });
-      const noticed = Date.now() - cut;
-      console.log(`[offline] the app showed offline after ${noticed} ms`);
-      return noticed;
-    },
-    /** Let the wire back without waiting for the app to say it is synced. */
-    async release(): Promise<void> {
-      refuse = false;
-      await context.setOffline(false);
-    },
-    async online(): Promise<void> {
-      refuse = false;
-      await context.setOffline(false);
-      const reconnect = page.getByRole("button", { name: "Offline. Reconnect" });
-      // The app often reconnects on its own first; the button is then gone.
-      if (await reconnect.isVisible()) await reconnect.click({ timeout: 2_000 }).catch(() => undefined);
-      await waitSynced(page);
-    },
-  };
-}
-
-/** Wait until the service worker controls the page: only then can it start offline. */
-async function workerInControl(page: Page): Promise<void> {
-  await page.evaluate(() => navigator.serviceWorker.ready);
-  if (!(await page.evaluate(() => Boolean(navigator.serviceWorker.controller)))) {
-    await page.reload();
-    await waitSynced(page);
-  }
-  await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
-}
-
-/** Put the caret at the end of the note in Edit mode and type. */
-async function typeAtEnd(page: Page, text: string): Promise<void> {
-  const edit = page.getByRole("tab", { name: /^Edit/ });
-  if ((await edit.getAttribute("aria-selected")) !== "true") await edit.click();
-  const editor = page.locator(".cm-content");
-  await expect(editor).toBeVisible();
-  await editor.click();
-  await page.keyboard.press("ControlOrMeta+End");
-  await page.keyboard.type(text);
-}
-
-/** Put the caret at the very start of the body line matching `after` and type. */
-async function typeAfter(page: Page, after: string, text: string): Promise<void> {
-  const edit = page.getByRole("tab", { name: /^Edit/ });
-  if ((await edit.getAttribute("aria-selected")) !== "true") await edit.click();
-  await page.locator(".cm-line", { hasText: after }).first().click();
-  await page.keyboard.press("End");
-  await page.keyboard.type(text);
-}
 
 async function changes(page: Page, id: string) {
   return page.evaluate(async (doc) => {
@@ -530,8 +460,10 @@ test("trash, restore and any note's edits, offline: shown at once, sent on recon
   await net.offline();
 
   // Move to Trash: gone from the list at once.
+  // A note the folder tree knows: `folders`' Delete, which asks first.
   await page.getByRole("button", { name: `Actions for ${trashTitle}` }).first().click();
-  await page.getByRole("menuitem", { name: "Move to Trash" }).click();
+  await page.getByRole("menuitem", { name: "Delete" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Move to Trash" }).click();
   await expect(page.getByRole("button", { name: trashTitle, exact: true })).toHaveCount(0);
   await expect(page.locator("#shell-main").getByRole("alert")).toHaveCount(0);
 

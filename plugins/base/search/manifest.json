@@ -1,0 +1,29 @@
+{
+  "id": "search",
+  "version": "4.0.0",
+  "name": "Search",
+  "description": "Searching the workspace: providers, saved searches, and the search controls every view shows.",
+  "author": "Life Manager base distribution",
+  "license": "MIT OR Apache-2.0",
+  "x-tailwind": {
+    "prefix": "search"
+  },
+  "kernel": "^3.0",
+  "dependencies": {
+    "context-menu": "^2.0",
+    "doc-events": "^1.0",
+    "indexer": "^2.0"
+  },
+  "optionalDependencies": {
+    "commands": "^3.0",
+    "icons": "^2.0",
+    "router": "^2.0"
+  },
+  "peerLibraries": {
+    "react": "^18.0.0"
+  },
+  "frontend": {
+    "module": "frontend/index.mjs",
+    "style": "frontend/style.css"
+  }
+}

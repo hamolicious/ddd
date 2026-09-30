@@ -15,7 +15,7 @@ const ids = (seats: Record<"start" | "end", Placeable[]>) => ({
 });
 const same = (item: Placeable): Placeable => item;
 
-// In seat order, as the host hands them over: the bell before the sync pill.
+// In registry order, as the header hands them over: the bell before the sync pill.
 const items: Placeable[] = [
   { id: "settings", side: "end" },
   { id: "admin", side: "end" },
@@ -25,7 +25,7 @@ const items: Placeable[] = [
 ];
 
 describe("arrange", () => {
-  it("falls back to each item's side, keeping seat order within it", () => {
+  it("falls back to each item's side, keeping the given order within it", () => {
     expect(ids(arrange(items, same, EMPTY_ARRANGEMENT))).toEqual({
       start: ["custom"],
       end: ["settings", "admin", "bell", "sync"],
@@ -33,8 +33,8 @@ describe("arrange", () => {
   });
 
   it("does not reorder unarranged items by any hint of their own", () => {
-    // The wiring seated `late` before `early`; a stale `order` on the item is no longer
-    // read (PLUGIN-PROTOCOLS §6a: hosts stop sorting).
+    // The registry already sorted by `order`; `arrange` keeps whatever order it is
+    // handed rather than sorting a second time.
     const hinted = [
       { id: "late", side: "end", order: 900 },
       { id: "early", side: "end", order: 1 },

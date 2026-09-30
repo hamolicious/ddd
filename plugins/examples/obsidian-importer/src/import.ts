@@ -1,6 +1,6 @@
 import type { CoreMap, Kernel, TextEdit } from "@kernel";
-import type { Attachments } from "@protocols/lm/attachments";
-import type { Folders } from "@protocols/lm/folders";
+import type { upload } from "plugin:attachments";
+import type { Folders } from "plugin:folders";
 
 import {
   aliasesOf,
@@ -34,21 +34,29 @@ interface ImportedDocument {
   readonly attachmentId?: string;
 }
 
-/** What this plugin reads through its `attachments` port: the manifest's `needs`. */
-type AttachmentsApi = Pick<Attachments, "upload">;
+/** What the import uses of `attachments` (a dependency). */
+export interface AttachmentsApi {
+  readonly upload: typeof upload;
+}
 
-/** What it reads through its optional `folders` port. */
-type FoldersApi = Pick<Folders, "ensurePath" | "file">;
+/** What it uses of `folders` (optional). */
+export type FoldersApi = Pick<Folders, "ensurePath" | "file">;
+
+/** The other plugins the import calls, passed in by `activate` (and by the tests). */
+export interface ImportServices {
+  readonly attachments: AttachmentsApi;
+  /** Absent when `folders` is not installed: documents then land at the root. */
+  readonly folders?: FoldersApi;
+}
 
 /**
  * Files each new document under the note for its vault folder — `Notes/Daily/Today.md`
- * goes inside "Daily", inside "Notes" — through `lm/folders`, which creates the folder
- * notes the first time a folder is seen. Without that port bound, documents land at the
+ * goes inside "Daily", inside "Notes" — through `folders`, which creates the folder
+ * notes the first time a folder is seen. Without `folders`, documents land at the
  * root. A document that cannot be filed is still imported, so it is logged, not failed.
  */
-function vaultFiler(kernel: Kernel): (id: string, vaultPath: string) => Promise<void> {
-  if (!kernel.ports.bound("folders")) return async () => undefined;
-  const folders = kernel.ports.use<FoldersApi>("folders");
+function vaultFiler(kernel: Kernel, folders: FoldersApi | undefined): (id: string, vaultPath: string) => Promise<void> {
+  if (!folders) return async () => undefined;
   const parents = new Map<string, Promise<string>>();
   return async (id, vaultPath) => {
     const directory = dirname(vaultPath);
@@ -69,6 +77,7 @@ function vaultFiler(kernel: Kernel): (id: string, vaultPath: string) => Promise<
 
 export async function importVault(
   kernel: Kernel,
+  services: ImportServices,
   archiveName: string,
   archive: VaultArchive,
   onProgress: (finished: number, total: number) => void,
@@ -84,7 +93,7 @@ export async function importVault(
   let resolvedWikilinks = 0;
   let unresolvedWikilinks = 0;
   const totalWork = archive.notes.length * 2 + archive.attachments.length;
-  const fileInFolder = vaultFiler(kernel);
+  const fileInFolder = vaultFiler(kernel, services.folders);
 
   for (const note of archive.notes) {
     if (existing.has(note.path)) {
@@ -105,8 +114,7 @@ export async function importVault(
     onProgress(finished, totalWork);
   }
 
-  // The `lm/attachments` service the wiring bound to this plugin's `attachments` port.
-  const attachmentService = kernel.ports.use<AttachmentsApi>("attachments");
+  const attachmentService = services.attachments;
   for (const attachment of archive.attachments) {
     const prior = existing.get(attachment.path);
     if (prior?.attachmentId) {

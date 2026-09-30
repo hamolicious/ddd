@@ -24,7 +24,7 @@ A plugin is installed **once, on the server**, and every client falls in step: t
 ├─────────────────────────────────────────────────┤
 │ React PWA (works standalone in any browser)     │
 │  microkernel: projection store, doc sync,       │
-│  plugin loader, extension registry, event bus   │
+│  plugin loader (dependency order), event bus    │
 │  + shared Rust core compiled to Wasm            │
 │  + default plugin distribution                  │
 ├─────────────────────────────────────────────────┤
@@ -41,7 +41,7 @@ A plugin is installed **once, on the server**, and every client falls in step: t
 
 Key properties:
 
-- **Microkernel:** the kernel API is small, versioned, and the only public contract. All UI and features are plugins; the built-in ones are replaceable by design.
+- **Microkernel:** the kernel API is small, versioned, and the only contract the kernel owns; plugins build on it and on each other's declared exports. All UI and features are plugins; the built-in ones are replaceable by design.
 - **Universal plugins:** one package = backend Wasm module + frontend React ES module, installed server-side; no client rebuilds.
 - **Offline-first:** every document readable, searchable and editable offline; creates, trash and restore queue until reconnect; merges via CRDT.
 - **Shared workspace:** all authenticated users see — and can edit or delete — every document. This is an explicit v1 decision; destructive/administrative actions are recorded in an audit log (§5.4). ACLs are v2, and the sync design (§4) deliberately keeps them possible.
@@ -229,8 +229,8 @@ Any user can edit or delete any document — stated, intended, v1. `audit_log` r
 ### 6.1 Principles
 
 - Plugins are first-order citizens; the base distribution is installed like any other plugins and individually replaceable.
-- Plugins reach each other through ports speaking versioned protocols (`provides`/`consumes`, `dev-docs/todo/PLUGIN-PROTOCOLS.html`); the server resolves the wiring and the frontend activates in its order, providers before the consumers of their services.
-- Interaction only through the kernel registry — never direct imports or direct Wasm linking.
+- A plugin's API is its **named exports**: other plugins import them as `plugin:<id>` and declare the dependency, by id and semver range, in the manifest. The dependency graph is the load order — a plugin activates after everything it depends on — and must be acyclic; the contributor depends on the host, never the other way round.
+- Interaction only through `@kernel` and other plugins' declared exports — never another plugin's source files, and never direct Wasm linking (backend halves call each other through the host's `call_plugin`, §6.3).
 - **Trust model, stated plainly:** installing a plugin runs its frontend code unsandboxed in every user's session — full DOM, workspace, and credentials. `capabilities` gate *server host functions* and *native bridge calls* only. The install UI says exactly this. Frontend isolation is v2 research. Recovery: **safe mode** — `?safe=1` boots base plugins only, `?safe=bare` boots a minimal built-in plugin manager; `DISABLE_PLUGINS=1` server-side.
 
 ### 6.2 Package, manifest, capabilities
@@ -249,8 +249,9 @@ my-plugin-1.2.0.zip
 {
   "id": "my-plugin",
   "version": "1.2.0",
-  "kernel": "^2.0",
-  "consumes": { "router": { "protocol": "lm/router@^1.0", "needs": ["navigate"] } },
+  "kernel": "^3.0",
+  "dependencies": { "router": "^2.0", "settings": "^2.0" },
+  "optionalDependencies": { "folders": "^4.0" },
   "peerLibraries": { "@codemirror/view": "^6" },
   "capabilities": {
     "documents": ["read", "write"],
@@ -259,11 +260,15 @@ my-plugin-1.2.0.zip
     "public-routes": ["/webhook"]
   },
   "config": { "feed_url": { "type": "string" }, "api_key": { "type": "string", "secret": true } },
-  "backend": { "module": "backend.wasm", "hooks": ["document.changed"], "cron": ["0 6 * * *"] },
+  "backend": {
+    "module": "backend.wasm", "hooks": ["document.changed"], "cron": ["0 6 * * *"],
+    "exports": { "refresh": { "input": { "object": { "force": "boolean" } }, "output": "number" } }
+  },
   "frontend": { "module": "frontend/index.mjs" }
 }
 ```
 
+- **Dependencies are checked at install and at load.** `dependencies` must be present, enabled, in range and activate cleanly, or the plugin is skipped (transitively, with the reasons listed in admin); the server refuses an install whose required dependencies are not met. `optionalDependencies` order the load but never block it. `provides: "<id>@<version>"` declares a stand-in for another plugin at that API version: dependents' ranges are checked against it, `plugin:<id>` resolves to whichever of the two is enabled, and enabling one disables the other. `backend.exports` lists the functions other backend halves may call, with their input/output shapes.
 - **Capabilities are parameterized and enforced.** `http` requires declared hosts; loopback/link-local/RFC1918/metadata destinations blocked by default (admin-configurable allowlist), resolve-then-pin, 10 s timeout, 10 MB response cap. `documents:read`/`write` gate the document host functions — a cron-and-KV plugin can't silently read the workspace. Undeclared host functions are linked as **erroring stubs** (so optional use is possible; instantiation never fails on imports).
 - **Install approval — both paths:** admin upload and directory drop both land as *pending* in admin, showing the full capability list; activation is an explicit admin click. Zip handling hardened: manifest validated first; reject absolute paths/`..`/symlinks/entries outside `frontend/**` + declared wasm; caps on uncompressed size (50 MB), entry count, per-entry size; extract to temp, atomic rename; watcher waits for a stable file. Installs are serialized through a Mongo-locked queue; partial installs roll back.
 - **Admin config & secrets:** manifest-declared `config` schema → admin-only UI → `plugin_config`, readable by the backend half; `secret: true` values are write-only in UI and encrypted at rest (`CONFIG_KEY`, falling back to a key derived from `SESSION_SECRET`).
@@ -273,7 +278,7 @@ my-plugin-1.2.0.zip
 
 Their genuine niche: **cron while nobody's looking, outbound HTTP with secrets, inbound webhooks** — and authoring machine-owned documents. Not a mirror of the client.
 
-- **Host functions** (capability-gated): `get_document`, `query_documents` (the DSL), `create_document(text)`, `splice_section(id, plugin_id, yaml_line_edits)` (the only in-document write primitive — line splices into the caller's own `%%%` section), `rewrite_document(id, text)` (machine-owned docs only — creator-plugin check), `kv_get/set`, `config_get`, `emit`, `emit_client(event, payload, user_id?)` (per-user targeting supported; ephemeral, no offline replay), `call_plugin` (callee must be listed in the manifest's `backend.calls`; no reentrancy; depth ≤ 3), `http_request` (per declared hosts).
+- **Host functions** (capability-gated): `get_document`, `query_documents` (the DSL), `create_document(text)`, `splice_section(id, plugin_id, yaml_line_edits)` (the only in-document write primitive — line splices into the caller's own `%%%` section), `rewrite_document(id, text)` (machine-owned docs only — creator-plugin check), `kv_get/set`, `config_get`, `emit`, `emit_client(event, payload, user_id?)` (per-user targeting supported; ephemeral, no offline replay), `call_plugin` (callee must be in the caller's `dependencies`/`optionalDependencies` at a matching range and the function in its `backend.exports`; input and output are validated against the declared shapes; no reentrancy; depth ≤ 3), `http_request` (per declared hosts).
 - **Resource limits:** per-call wall clock 5 s (cron 60 s), memory 128 MB, epoch-based interruption; instances pooled (Extism calls are non-reentrant); circuit breaker disables a plugin after 5 consecutive failures/timeouts, surfaced in admin with manual re-enable. Hot unload waits on in-flight calls (refcount).
 - **Hooks:** `document.created/changed/deleted` — at-most-once, fire-and-forget, no retry (failures logged/counted); debounced 2 s per doc; payload carries `origin` (user or plugin id) and is **never delivered to the plugin that caused the change**; per-plugin-per-doc write cap (10/min) as a loop backstop; ordering per-document only.
 - **Cron:** UTC; missed runs skipped; `last_run` persisted; no overlapping executions.
@@ -281,56 +286,65 @@ Their genuine niche: **cron while nobody's looking, outbound HTTP with secrets, 
 ### 6.4 Frontend plugins (React ES modules)
 
 - **Blessed runtime layer:** the kernel's contract includes a versioned set of shared singletons served via one server-computed import map — `react`, `react/jsx-runtime`, `react-dom`, `react-dom/client`, `yjs`, `@kernel`, plus the extension-point-coupled libraries `@codemirror/state`, `@codemirror/view`, `@lezer/*`, and the `unified`/`remark` set. Plugins declare `peerLibraries` ranges; the server resolves all installed plugins' ranges to single versions at install (import maps can't change post-load). Honest consequence, stated: replacing the `editor` row means another *CodeMirror-based* editor; swapping the runtime layer itself is a kernel-major event.
-- `activate(kernel)` default export; return value registered as the plugin's API for dependents. `deactivate` is defined for symmetry but activation remains **reload-only** (plugins load once at boot, topo order; changes prompt "reload to activate"). Backend halves still hot-load.
-- **Every contribution is wrapped in an error boundary** (in-place "plugin X failed"); an `activate()` throw marks the plugin failed and **skips every plugin that requires a service it provides**, transitively; one aggregated notice links to admin.
+- `activate(kernel)` default export, optional `deactivate()`; everything else `src/index.tsx` exports is the plugin's API, imported by dependents as `plugin:<id>` (the server's import map resolves it to the enabled plugin's module; each build ships the exports' types as `frontend/index.d.ts`, `declare module "plugin:<id>"`). A static `plugin:` import must be a declared dependency; an optional dependency is reached only through `kernel.plugins.optional(id)`. Hosts keep a `createRegistry` at module scope and export its `add` (`addItem(item) → remover`), so dependents contribute from their own `activate`. Activation is **reload-only**: plugins load once per page, dependencies first; any install, update, enable or disable broadcasts `plugins.changed` and every client reloads. Backend halves still hot-load.
+- **Every contribution is wrapped in an error boundary** (in-place "plugin X failed", attributed to the plugin that added the item); an `activate()` throw marks the plugin failed, withdraws its items from every registry and **skips every plugin that requires it**, transitively; one aggregated notice links to admin.
 - **CSS:** per-plugin class prefix convention + `style.css` linked on activation; no shadow DOM in v1. The reference build config can compile that stylesheet with Tailwind (utilities only, no preflight, unlayered, mapped onto kernel tokens, and every class under a per-plugin Tailwind prefix such as `folders:flex` so separately compiled stylesheets never re-declare each other's utilities) as an author option, not a kernel concept: the output remains an ordinary stylesheet and the kernel, loader and server do not distinguish it.
 - **Types are the contract:** `web/kernel` publishes `@life-manager/kernel` types (also served at `/kernel.d.ts`); a reference Vite config lives in `plugins/base/*`. `dev-docs/resolved/KERNEL-API.md` is the changelog. One `kernel` semver covers both the `@kernel` surface and the Wasm host ABI; removals/signature changes = major. Server enforces at install; the loader independently re-checks each plugin at boot against its own bundle version and hard-skips mismatches (protects stale offline clients).
-- **`@kernel` surface:** `documents` (projection queries + live subscriptions, open→hydrated `Y.Doc`, create/delete, the **splice helpers** for fm values and `%%%` sections), `ports` (services, slots and events through the plugin's own port names, wired by the server's resolution; items and services are checked against their protocol's shape, rejecting loudly; a service handle is limited to the port's `needs`), `events`, `settings` (per-user, stored as per-user settings documents — synced/offline for free; **visible to other users in the shared pool**, documented), `capabilities` (feature-detect + bridge), `session`, `sync` (observable status: `offline/connecting/syncing/synced/auth-required/error` + pending count), `ui` (mount point + **kernel-shipped default light/dark token values**).
+- **`@kernel` surface:** `documents` (projection queries + live subscriptions, open→hydrated `Y.Doc`, create/delete, the **splice helpers** for fm values and `%%%` sections), `plugins` (`active(id)`, `optional(id)` — the module of a declared optional dependency or `undefined` — and `list()`), `createRegistry` (keyed, ordered contributions with `add`/`get`/`entries`/`subscribe` and per-plugin attribution; an optional `shape` checks each item), `checked(shape, impl)` (opt-in validation of an exported function's arguments and result), `events`, `settings` (per-user, stored as per-user settings documents — synced/offline for free; **visible to other users in the shared pool**, documented), `capabilities` (feature-detect + bridge), `session`, `sync` (observable status: `offline/connecting/syncing/synced/auth-required/error` + pending count), `ui` (mount point + **kernel-shipped default light/dark token values**).
 - Kernel calls `navigator.storage.persist()` at first login; warns visibly if denied or if quota nears (`estimate()`).
 
 ### 6.5 Base distribution
 
-| Plugin | Responsibility | Defines |
+| Plugin | Responsibility | Exports (`plugin:<id>`) |
 |---|---|---|
-| `shell-ui` | Layout skeleton; **mobile breakpoint** (drawer sidebar, single pane, 44 px targets); a spot for the top bar; the altbar (panels about the current view, opposite the sidebar, toggled from the top bar); always-mounted overlays | `shell.header`, `shell.overlay`, `sidebar.panel`, `altbar.panel`, `main.view` |
-| `header` | The top bar in `shell.header`: `start`/`end` seats other plugins fill (the sidebar ☰ is `shell-ui`'s); per-user order and visibility in Settings → Top bar | `navbar.item` |
-| `context-menu` | One menu / sheet / modal service for every plugin: anchored popover on a wide screen, bottom sheet on a phone; `modal` (fields and buttons) and `confirm` ("are you sure?") resolve with the answer | — |
+| `shell-ui` | Layout skeleton; **mobile breakpoint** (drawer sidebar, single pane, 44 px targets); a spot for the top bar; the altbar (panels about the current view, opposite the sidebar, toggled from the top bar); always-mounted overlays | `addView`, `addOverlay`, `addSidebarPanel`, `addAltbarPanel`, `setHeader`, layout |
+| `header` | The top bar, set as `shell-ui`'s header: `start`/`end` seats other plugins fill with `addItem` (the ☰, altbar toggle and settings gear are its own); per-user order and visibility in Settings → Top bar | `addItem` |
+| `context-menu` | One menu / sheet / modal service for every plugin: anchored popover on a wide screen, bottom sheet on a phone; `modal` (fields and buttons) and `confirm` ("are you sure?") resolve with the answer. Owns every context menu: components mark elements with a target type (`owner/item-type`, e.g. `lm/document`), plugins add actions per type, and a right-click, long press or the menu key opens one menu merged from the marked elements under it, innermost first | `addAction`, `open`, `modal`, `confirm` |
 | `notices` | The notice bell in the header's `end` seat: plugin failures, update prompts, other kernel notices | — |
 | `sync-status` | The sync pill in the header's `end` seat: status dot, unsynced count, retry / sign-in | — |
-| `router` | URL ↔ view | `router.route` |
-| `commands` | Command registry + palette (Ctrl+K) **+ keybindings** (per-user config; plugin-suggested defaults; first registration wins on conflict, conflicts listed) | `commands.command`, `keybindings.default` |
-| `themes` | Theme registry + picker; **overrides** kernel default tokens | `themes.theme` |
-| `doc-list` | Browse/sort/filter and **search** (the list, ranked; **default provider = the local index**, server provider as fallback/integration); "new document"; **Trash view** (restore, 30 d) | `search.provider` |
-| `folders` | Tree of notes: a folder is a note, its children listed (ids, in order, one per line) in its own `%%% folders` section; any note can hold children, a note has one parent, and one nobody lists is at the root; move = list splices on the old and new parent (the note itself is not written); "new note inside"; serves `lm/folders` for other plugins to file notes; hosts other plugins' colours/icons and menu entries for rows | `folders`, `folders.decoration`, `folders.menu-item` |
+| `router` | URL ↔ view | `addRoute`, `navigate`, `Link`, `href` |
+| `commands` | Command registry + palette (Ctrl+K) **+ keybindings** (per-user config; plugin-suggested defaults; first registration wins on conflict, conflicts listed) | `addCommand`, `addKeybinding`, `run`, `openPalette` |
+| `themes` | Theme registry + picker; **overrides** kernel default tokens | `addTheme` |
+| `doc-list` | The all-documents page (a search shown as a `table`, in the URL); "new document"; **Trash view** (restore, 30 d) | `createDocument`, `newDocument` |
+| `search` | Search for every view: providers (**default = the local index**, server as fallback/integration), a search as one query string (text, filter, sort), live resolution, and the controls every view is drawn under (`SearchShell`, and `SavedSearch` for **saved-search notes**) | `addProvider`, `useResults`, `SearchShell`, `SavedSearch` |
+| `calendar` | A saved search as a month calendar (`type: calendar`): a note is placed by the date field it is set to (`created_at`, `fm.date`, …), optionally across to an end field | — |
+| `kanban` | A saved search as a board (`type: kanban`): columns are the values of a field of your choosing, in an order you set; moving a card sets that field on the note, and its place in the column as a `rank` in the card's own `%%% kanban` section; a column's **+** adds a card already in it; "New board" makes one note that searches its own children: the board, its tickets inside it | — |
+| `timeline` | A saved search along a time axis (`type: timeline`): start and optional end fields (bars or points), optional lanes by a field, days/weeks/months | — |
+| `table` | A saved search as a table (`type: table`, or no type): the title and the columns you choose, a set number of rows at a time; also the all-documents page's table (`TablePage`) | `TablePage`, `save` |
+| `folders` | Tree of notes: a folder is a note, its children listed (ids, in order, one per line) in its own `%%% folders` section; any note can hold children, a note has one parent, and one nobody lists is at the root; move = list splices on the old and new parent (the note itself is not written); "new note inside"; other plugins file notes through its exports; hosts other plugins' colours/icons for rows (`addDecoration`) | `addDecoration`, `file`, `parentOf`, `childrenOf` |
+| `local-folder` | Every note as a Markdown file in a folder on this device, kept in step both ways while the app runs: folders are directories, a folder note is `Dir/Dir.md`, attachments are their bytes; edits merge line by line, a clash keeps both copies; state in `.life-manager/` inside the folder; Settings → Local folder | — |
 | `folder-style` | A background (any hex) and an icon for any note in the tree, set from its menu; the name and icon on it are black or white, whichever has the higher WCAG contrast; per-user, kept in settings by note id | — |
-| `icons` | The Tabler icon set (MIT), packed into the plugin at build time from a pinned npm tarball and fetched a shard at a time; serves `lm/icons`: draw one by name, search, a picker that scrolls through every icon (virtual) | — |
-| `markdown` | Parse/render pipeline (§6.6); resolves `attachment://` (embeds through the winning `markdown.attachment` renderer, else its own image / chip) and **`doc://<ulid>`** (renders target title, navigates; `![](doc://…)` embeds the target's body, nested to a per-user depth, default 4, cycles become links); "promote to document" command on embedded attachments (§3.6) | `markdown.*` |
-| `attachments` | Files pasted, dropped or `/attach`ed into the editor are uploaded in resumable chunks (a notice per file: progress bar, destination, time left, Pause/Cancel/Open) and embedded as a preview or a link, chosen per file extension; shows embeds through a viewer per extension (user's pick when several claim one) | `attachments.viewer` |
-| `slash-commands` | Type `/` in any editor for a menu of actions; editors publish an editor-neutral `text.surface` (caret, text before it, insert there) while mounted | `text.surface`, `slash.command` |
+| `auto-fm` | Frontmatter properties added for the user: a per-user list of `key: value` (with `{{date}}`/`{{time}}`/`{{now}}`), each for new notes or also edited ones, optionally limited by conditions; written through `setFrontmatterValue` on this device's own changes only, and never over a key the note already has | — |
+| `icons` | The Tabler icon set (MIT), packed into the plugin at build time from a pinned npm tarball and fetched a shard at a time: draw one by name, search, a picker that scrolls through every icon (virtual) | `Icon`, `Picker`, `search`, `has` |
+| `markdown` | Parse/render pipeline (§6.6); resolves `attachment://` (embeds through the winning attachment renderer, else its own image / chip) and **`doc://<ulid>`** (renders target title, navigates; `![](doc://…)` embeds the target's body, nested to a per-user depth, default 4, cycles become links); "promote to document" command on embedded attachments (§3.6) | `addDirective`, `addFence`, `addCodeBlockRenderer`, `addRemarkPlugin`, `addComponent`, `addTaskState`, `addAttachmentRenderer`, `render` |
+| `attachments` | Files pasted, dropped or `/attach`ed into the editor are uploaded in resumable chunks (a notice per file: progress bar, destination, time left, Pause/Cancel/Open) and embedded as a preview or a link, chosen per file extension; shows embeds through a viewer per extension (user's pick when several claim one) | `addViewer`, `upload` |
+| `slash-commands` | Type `/` in any editor for a menu of actions; editors publish an editor-neutral text surface (`plugin:editor`'s `addSurface`: caret, text before it, insert there) while mounted | `addSlashCommand` |
 | `native-preview` | Viewers for what a browser shows by itself: images, PDF, audio, video, plain text (never SVG or HTML) | — |
-| `document-surface` | Owns the document route + **mode registry**; `viewer`/`editor` are symmetric contributions | `document.mode` |
-| `viewer` | Read mode (hides fm block + `%%%` sections); the file page `#/file/<id>` | contributes `read` |
+| `document-surface` | Owns the document route + **mode registry**; `viewer`/`editor` are symmetric contributions (`addMode`) | `addMode` |
+| `viewer` | Read mode (hides fm block + `%%%` sections); the file page `#/file/<id>` | — (adds the `read` mode) |
 | `welcome` | First run: fills an empty workspace with a short tour, one note per base feature | — |
-| `indexer` | Indexes the local projection on every change, offline included: workspace stats, every frontmatter field (nested keys dotted) with its values, and each document's outgoing and incoming `doc://` connections (links, embeds, frontmatter references). Writes nothing; other plugins read it through its service | — |
-| `fm-autocomplete` | While frontmatter is typed in any editor with a `text.surface`, suggests the keys in use across the workspace, then the typed key's existing values (most-used first), from `indexer` | — |
-| `emoji` | `:shortcode:` → emoji in read mode (a `markdown.remark` plugin over GitHub's gemoji set), and suggests shortcodes while `:name` is typed in any editor with a `text.surface` | — |
+| `indexer` | Indexes the local projection on every change, offline included: workspace stats, every frontmatter field (nested keys dotted) with its values, and each document's outgoing and incoming `doc://` connections (links, embeds, frontmatter references). Writes nothing; other plugins read it through its exports | `fmFields`, `fmValues`, `documents`, `connections`, `subscribe` |
+| `doc-events` | "A note was just made": views that make notes call `notifyCreated` (with a parent hint), `folders` files it from `onCreated`; a leaf with no dependencies, so neither side depends on the other | `notifyCreated`, `onCreated` |
+| `fm-autocomplete` | While frontmatter is typed in any editor with a text surface, suggests the keys in use across the workspace, then the typed key's existing values (most-used first), from `indexer` | — |
+| `emoji` | `:shortcode:` → emoji in read mode (a remark plugin added to `markdown`, over GitHub's gemoji set), and suggests shortcodes while `:name` is typed in any editor with a text surface | — |
+| `wikilinks` | `[[` in any editor with a text surface suggests notes and writes `[](doc://<id>)`; `![[` writes the embed `![](doc://<id>)`. An editor extension shows each `doc://` link's live title above it | — |
 | `graph` | Every note and its links as a live force-directed graph (zoom, pan, drag, hover to highlight a note's neighbours, click to open; filters, groups by folder, display and force settings): the whole workspace at `#/graph`, the open note's neighbourhood in the altbar. Built from `indexer`'s documents and outgoing connections | — |
 | `changes` | The open document's history in the altbar: every change (grouped by author and pause) and snapshot; view any of them read only, revert a change, restore a snapshot | — |
-| `syntax-highlight` | Fenced code highlighted with tree-sitter grammars, in read mode (`markdown.codeBlock`) and while editing (`editor.extension`). A pinned catalog of grammars ships in the package; each user installs the languages they want (a per-user setting, from Settings → Code languages or a button on the block), and each device fetches one the first time it needs it. Users can also upload their own grammar (`.wasm`) and `highlights.scm`: checked in the browser, then stored as attachments | `syntax.language` |
-| `editor` | Edit mode — CodeMirror 6 + `y-codemirror.next`; collapses machine sections; paste / drop handlers take them before CodeMirror; publishes a `text.surface`; **must be usable with the Android soft keyboard (M5 acceptance)** | `editor.extension`, `editor.paste` |
-| `settings` | Settings shell | `settings.section` |
-| `admin` | Users, invites, pending installs + capability approval, plugin config, audit log, orphans | — |
+| `syntax-highlight` | Fenced code highlighted with tree-sitter grammars, in read mode (`markdown`'s `addCodeBlockRenderer`) and while editing (`editor`'s `addExtension`). A pinned catalog of grammars ships in the package; each user installs the languages they want (a per-user setting, from Settings → Code languages or a button on the block), and each device fetches one the first time it needs it. Users can also upload their own grammar (`.wasm`) and `highlights.scm`: checked in the browser, then stored as attachments | `addLanguage` |
+| `editor` | Edit mode — CodeMirror 6 + `y-codemirror.next`; collapses machine sections; paste / drop handlers take them before CodeMirror; publishes a text surface; **must be usable with the Android soft keyboard (M5 acceptance)** | `addExtension`, `addPasteHandler`, `addSurface` |
+| `settings` | Settings shell | `addSection`, `open` |
+| `admin` | Users, invites, pending installs + capability approval, plugin config and dependencies, audit log, orphans | `open` |
 
 First run: the `welcome` plugin fills an empty workspace with a deletable tour, one note per base feature (fixed ids, once per workspace, never on a workspace that already has notes); empty states written for doc-list (search included)/folders/Trash.
 
 ### 6.6 Extensible markdown
 
-The `markdown` plugin owns the unified/remark → React pipeline and exposes: `markdown.directive` (`:::name` / `:name[…]`), `markdown.fence` (per-language renderers), `markdown.codeBlock` (the renderer for fenced code no fence claims; lowest `order` wins, else a plain `<pre>`), `markdown.remark` (raw plugins — the escalated path), `markdown.component` (AST node overrides), `markdown.taskState` (marker → `{icon, label, menu order, done?}`).
+The `markdown` plugin owns the unified/remark → React pipeline and exports a registration function for each extension: `addDirective` (`:::name` / `:name[…]`), `addFence` (per-language renderers), `addCodeBlockRenderer` (the renderer for fenced code no fence claims; lowest `order` wins, else a plain `<pre>`), `addRemarkPlugin` (raw plugins — the escalated path), `addComponent` (AST node overrides), `addTaskState` (marker → `{icon, label, menu order, done?}`), `addAttachmentRenderer`. Each returns the function that removes it again.
 
 - Directives + fences are the blessed syntaxes: named, collision-free, degrade to literal text when the plugin is absent.
-- Built-in task states (`[ ]`, `[x]`) are default `taskState` contributions. Shipped interaction (rendering plugin's decision, replaceable): left-click toggles non-off → off, off → on; right-click / **long-press on touch** opens the state menu.
+- Built-in task states (`[ ]`, `[x]`) are default `addTaskState` contributions. Shipped interaction (rendering plugin's decision, replaceable): left-click toggles non-off → off, off → on; right-click / **long-press on touch** opens the state menu.
 - Accepted & documented: marker semantics come from the client registry, so a client without a plugin sees its markers as literal text — task counts can differ between differently-equipped clients (moot while base = everyone, relevant if registries ever diverge).
-- Syntax contributors should pair a renderer contribution with a matching `editor.extension`.
+- Syntax contributors should pair a renderer contribution with a matching editor extension (`plugin:editor`'s `addExtension`).
 
 ## 7. Flutter Shell (v1: minimal, Android)
 
@@ -342,7 +356,8 @@ Flutter is a **conscious choice** (owner's stack) — acknowledged cost: a fourt
 - **Capability bridge** (`window.shell`, versioned): v1 = `filesystem` (export/import), `notifications` (**scheduled local notifications** — these fire with the app closed). Browser fallback/degradation mandatory for every capability.
 - Webview storage backed by a native data directory (not evictable web storage). Plugins never contain Dart.
 - **Notification scope, stated:** v1 reminders = foreground (browser) + scheduled local (shell). Server push / device registration / Web Push is v2 — plugin authors are told exactly this.
-- **Linux desktop (`desktop/`)** is not a Flutter target (no Linux webview): a bridge-less Tauri window on the server URL. No `window.shell`, so the page runs as a browser tab (cookie, service worker); file export/pick go through the browser fallbacks, surfaced as native GTK dialogs.
+- **Linux desktop (`desktop/`)** is not a Flutter target (no Linux webview): a Tauri window on the server URL. Its `window.shell` says `session: "cookie"` and carries only `folder`, so the page otherwise runs as a browser tab (cookie, service worker); file export/pick go through the browser fallbacks, surfaced as native GTK dialogs.
+- **The notes folder** (`folder` capability, `app/BRIDGE.md` §4.5): both shells ask once for a folder and the `local-folder` plugin keeps every note in it as a Markdown file (folders as directories, attachments as their bytes), both ways, while the app runs. A real, watched path in both shells (all-files access on Android); the File System Access API in Chromium browsers, offered in Settings only.
 
 ## 8. Repo, Deployment, Operations
 

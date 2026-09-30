@@ -222,7 +222,7 @@ test.describe("the document experience at 390px", () => {
     await expect(box).toBeVisible();
     await tapTargets(page.locator(".md-task-box"), "task checkbox");
 
-    // A real long press: `useLongPress` only listens to touch and pen, and only fires
+    // A real long press: `context-menu`'s only listens to touch and pen, and only fires
     // after 500 ms without the finger moving more than 10 px.
     const target = await box.boundingBox();
     expect(target).not.toBeNull();
@@ -230,7 +230,8 @@ test.describe("the document experience at 390px", () => {
     const y = (target?.y ?? 0) + (target?.height ?? 0) / 2;
     await longPress(page, x, y);
 
-    const menu = page.getByRole("menu", { name: /task state/i });
+    // `context-menu`'s: on a phone, a bottom sheet.
+    const menu = page.getByRole("dialog", { name: /task state/i });
     await expect(menu).toBeVisible();
 
     const menuBox = await menu.boundingBox();
@@ -239,10 +240,10 @@ test.describe("the document experience at 390px", () => {
       (menuBox?.x ?? 0) + (menuBox?.width ?? 0),
       "the state menu runs past the right edge",
     ).toBeLessThanOrEqual(PHONE.width);
-    await tapTargets(page.getByRole("menuitem"), "state menu item");
+    await tapTargets(menu.getByRole("menuitemradio"), "state menu item");
 
     // The menu is the interaction, not just a box: choosing a state writes it.
-    await page.getByRole("menuitem", { name: /^done$/i }).click();
+    await menu.getByRole("menuitemradio", { name: /^done$/i }).click();
     await expect(page.getByRole("checkbox", { name: /done/i }).first()).toBeVisible();
 
     await noDocumentOverflow(page);
@@ -267,7 +268,7 @@ test.describe("the document experience at 360px", () => {
   });
 });
 
-/** Press and hold long enough for `useLongPress` (500 ms), without moving. */
+/** Press and hold long enough for a long press (500 ms), without moving. */
 async function longPress(page: Page, x: number, y: number): Promise<void> {
   await page.evaluate(
     ({ x: px, y: py }) => {

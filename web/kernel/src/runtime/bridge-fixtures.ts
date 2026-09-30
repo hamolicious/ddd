@@ -101,6 +101,8 @@ export interface ShellDetectionCase {
   readonly bridgeVersion?: number;
   /** `null` means "must be ignored"; a string means "must be exactly this". */
   readonly serverBaseUrl?: string | null;
+  /** Whether the shell, rather than the page's cookie, holds the session. */
+  readonly ownsSession?: boolean;
 }
 
 export interface WindowShellFixture {
@@ -133,6 +135,14 @@ export interface WindowShellFixture {
     /** Exactly what the shell evaluates, for `scriptVersion`. */
     readonly script: string;
     readonly scriptVersion: string;
+  };
+  /** "Files in the chosen folder changed" (`app/BRIDGE.md` §4.5) — a dispatch, like `updateReady`. */
+  readonly folderChanged: {
+    readonly note?: string;
+    readonly event: string;
+    readonly detailKey: string;
+    readonly script: string;
+    readonly scriptPaths: readonly string[];
   };
   readonly detection: readonly ShellDetectionCase[];
 }

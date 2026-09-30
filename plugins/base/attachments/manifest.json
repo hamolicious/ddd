@@ -1,43 +1,20 @@
 {
   "id": "attachments",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "name": "Attachments",
   "description": "Uploads files pasted into the editor, and shows embedded files with a viewer per file type.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
-  "kernel": "^2.0",
-  "hot": true,
-  "consumes": {
-    "viewers": {
-      "protocol": "lm/attachments.viewer@^1.0"
-    },
-    "folders": {
-      "protocol": "lm/folders@^1.1",
-      "needs": [
-        "fileNew"
-      ],
-      "optional": true
-    }
+  "kernel": "^3.0",
+  "dependencies": {
+    "editor": "^2.0",
+    "markdown": "^3.0",
+    "settings": "^2.0",
+    "slash-commands": "^2.0"
   },
-  "provides": {
-    "uploads": {
-      "protocol": "lm/attachments@2.0.0"
-    },
-    "embed": {
-      "protocol": "lm/markdown.attachment@1.0.0"
-    },
-    "paste": {
-      "protocol": "lm/editor.paste@1.0.0"
-    },
-    "attach": {
-      "protocol": "lm/slash.command@1.0.0",
-      "order": 10
-    },
-    "settings": {
-      "protocol": "lm/settings.section@1.0.0",
-      "order": 40
-    }
+  "optionalDependencies": {
+    "folders": "^4.0"
   },
   "peerLibraries": {
     "react": "^18.0.0"

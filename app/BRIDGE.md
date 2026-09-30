@@ -35,9 +35,10 @@ per-plugin bridge surface, and no way for a plugin to add one.
 
 ## 1. Scope
 
-v1 is exactly SPEC §7: `filesystem` (export/import) and `notifications` (scheduled local —
+v1 is SPEC §7: `filesystem` (export/import) and `notifications` (scheduled local —
 the ones that fire with the app closed), plus the two things the shell needs for itself,
-`auth` and `boot`.
+`auth` and `boot`. `folder` (§4.5, the notes folder) was added later as new methods, which
+§8 allows without a version bump; the Linux desktop shell carries it too.
 
 **Not in v1, and plugin authors are told so:** server push, device registration, Web Push,
 background sync, camera, contacts, geolocation, biometrics. Those are v2 conversations
@@ -110,9 +111,20 @@ before the bundle runs. It defines `window.shell` with:
   bootFailed(reason): Promise<void>,
   auth: { getToken?, setToken?, clearToken? },
   filesystem: { export?, pick?, exportWorkspace?, importFile? },
+  folder: { current?, choose?, forget?, list?, read?, write?, move?, remove? },
   notifications: { permission?, request?, notify?, schedule?, cancel?, scheduled?, list? },
+  session?: "cookie",      // only a cookie shell sets it; see below
 }
 ```
+
+**Who holds the session.** The Flutter shell serves the page from a loopback origin, so the
+session is a bearer token it keeps; the page reads `bearerToken`, skips the service worker
+(the bundle updater is the offline cache) and resolves `/api` against `serverBaseUrl`. The
+**Linux desktop shell** (`desktop/`) loads the page from the server's own origin instead, and
+says so with `session: "cookie"`: the page then behaves exactly like a browser tab — cookie
+login, service worker, the workspace-export link — and only uses the native capabilities the
+bridge carries (today, `folder`). `web/app/src/boot/shell.ts` `shellOwnsSession()` is the one
+test; `inShell()` still answers "is there a native shell at all".
 
 Both `version` and `bridgeVersion` are present and equal: `version` is what the committed
 kernel reads (`web/kernel/src/runtime/capabilities.ts`, frozen in M3), `bridgeVersion` is the
@@ -242,6 +254,43 @@ kernel calls, `list` is what this document names it.
 kernel is up and the first plugin has activated** — not on `DOMContentLoaded`, which a broken
 bundle also reaches. `bootFailed(reason)` is optional politeness; the shell's watchdog covers
 silence.
+
+### 4.5 `folder` — the notes folder
+
+One directory the user chose on this device. The `local-folder` plugin keeps every note in it
+as a Markdown file, both ways, while the app runs.
+
+| method | params | result |
+|---|---|---|
+| `folder.current` | — | `{ label } \| null` |
+| `folder.choose` | — | `{ label }`; `cancelled`, `denied` |
+| `folder.forget` | — | `null` (the files stay) |
+| `folder.list` | — | `[{ path, kind: "file" \| "dir", size, mtimeMs }]`, recursive |
+| `folder.read` | `{ path }` | `{ data, mtimeMs }` (`data` base64) |
+| `folder.write` | `{ path, data }` | `{ mtimeMs }` |
+| `folder.move` | `{ from, to }` | `null` |
+| `folder.remove` | `{ path }` | `null` (a file or an empty directory; missing is fine) |
+
+* **Paths are relative** to the folder and `/`-separated. The shell refuses an absolute path,
+  a `..` segment, or one a symlink would carry outside the folder, with `invalid`, before
+  touching the disk. Every method but `current`/`choose` answers `unsupported` while no folder
+  is chosen.
+* **The choice belongs to the device**, not the account: the shell remembers it
+  (`<appSupport>/folder.json` on Android, `folder` in `~/.config/life-manager/desktop.toml` on
+  Linux). It is never written to synced settings.
+* **Writes are atomic**: bytes go to `.life-manager/tmp/` and are renamed into place, so a
+  sync client or an editor never reads half a file. `list` skips that directory.
+* **Changes are pushed, not polled**: the shell watches the folder and evaluates
+  `window.dispatchEvent(new CustomEvent("lm-folder-changed", { detail: { paths } }))`,
+  debounced, with the relative paths that changed (`.life-manager/` excluded). `paths` is a
+  hint; the page rescans either way. Pinned in `bridge_fixtures/window_shell.json`
+  (`folderChanged`).
+* **Android uses a real path** and therefore *all-files access* (`MANAGE_EXTERNAL_STORAGE`,
+  API 30+; the storage permission below that), which `choose` requests before the picker. A
+  Storage Access Framework URI cannot be watched, and a folder other apps can share is the
+  point. Play restricts the permission; this shell is sideloaded.
+* **The browser has a fallback** in the kernel, not here: the File System Access API in
+  Chromium, with no change events.
 
 ---
 

@@ -20,8 +20,9 @@ import type { DocumentsApi } from "@kernel";
 
 import { EXCLUDE_MACHINE_DOCUMENTS } from "../../_shared/machine-docs.js";
 
-import { TRASHED_ONLY } from "./filter.js";
-import { useLiveQuery } from "./useLiveQuery.js";
+import { useLiveQuery } from "../../_shared/useLiveQuery.js";
+
+import { TRASHED_ONLY } from "./DocListView.js";
 
 export interface ViewsPanelProps {
   readonly documents: DocumentsApi;

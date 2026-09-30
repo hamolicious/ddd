@@ -1,10 +1,11 @@
 /**
  * `editor` — edit mode: CodeMirror 6 bound to the document's `Y.Text` through
- * `y-codemirror.next` (SPEC §6.5).
+ * `y-codemirror.next` (SPEC §6.5). It adds its mode with `document-surface`'s `addMode`,
+ * and hosts three registries of its own: `addExtension`, `addPasteHandler`, `addSurface`.
  *
  * The binding is the point of this plugin, and it is also the reason the runtime layer
  * pins CodeMirror: `yCollab` needs the *same* `@codemirror/state` instance as every
- * `editor.extension` wired in, or extensions silently do nothing (SPEC §6.4, risk 6).
+ * extension added, or extensions silently do nothing (SPEC §6.4, risk 6).
  *
  * Three requirements that are easy to miss and expensive to retrofit:
  *
@@ -56,16 +57,24 @@ import {
   type DecorationSet,
 } from "@codemirror/view";
 import { defaultKeymap, indentWithTab } from "@codemirror/commands";
-import type { Disposable, Kernel, Unsubscribe } from "@kernel";
+import type { Kernel, Unsubscribe } from "@kernel";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import * as Y from "yjs";
 
-import type { Command } from "@protocols/lm/commands.command";
-import type { DocumentMode, DocumentModeProps } from "@protocols/lm/document.mode";
-import type { EditorExtension } from "@protocols/lm/editor.extension";
-import type { EditorInsertion, EditorPaste, EditorPasteEvent } from "@protocols/lm/editor.paste";
-import type { TextSurface } from "@protocols/lm/text.surface";
+import { addCommand } from "plugin:commands";
+import { addMode, type DocumentModeProps } from "plugin:document-surface";
+
+import {
+  extensionRegistry,
+  pasteRegistry,
+  surfaceRegistry,
+  type EditorExtension,
+  type EditorInsertion,
+  type EditorPaste,
+  type EditorPasteEvent,
+  type TextSurface,
+} from "./api.js";
 import { markAt, trackInsertion } from "../../_shared/text-mark.js";
 import { markdownSyntax } from "./markdown-language.js";
 import {
@@ -75,6 +84,57 @@ import {
   type LineReader,
   type Region,
 } from "./regions.js";
+
+export type {
+  EditorExtension,
+  EditorInsertion,
+  EditorPaste,
+  EditorPasteEvent,
+  TextMark,
+  TextSurface,
+} from "./api.js";
+
+/**
+ * Add a CodeMirror extension (or several) to every editor, including ones already open.
+ * Returns the function that takes it out again.
+ */
+export const addExtension: (items: EditorExtension | readonly EditorExtension[]) => () => void =
+  extensionRegistry.add;
+
+/**
+ * Add a paste and drop handler (or several). Handlers are asked in `order`; the first to
+ * return `true` takes the paste. Returns the function that takes it out again.
+ */
+export const addPasteHandler: (items: EditorPaste | readonly EditorPaste[]) => () => void = pasteRegistry.add;
+
+/**
+ * Announce a mounted text editor to everything that works at the caret. Add it on mount,
+ * call the returned function on unmount.
+ */
+export const addSurface: (items: TextSurface | readonly TextSurface[]) => () => void = surfaceRegistry.add;
+
+/** Every text surface mounted right now. */
+export function surfaces(): readonly TextSurface[] {
+  return surfaceRegistry.get();
+}
+
+/** Called now and after every surface added or removed. */
+export function onSurfacesChange(listener: (surfaces: readonly TextSurface[]) => void): Unsubscribe {
+  return surfaceRegistry.subscribe(listener);
+}
+
+/** Focus the editor for the document on screen. */
+export function focus(): void {
+  live?.focus();
+}
+
+/** Fold or unfold the `%%%` regions of the editor on screen. */
+export function setMachineSectionsFolded(folded: boolean): void {
+  if (live) setFolded(live, folded);
+}
+
+/** The view currently on screen. One document surface ⇒ at most one editor. */
+let live: EditorView | undefined;
 
 export interface EditorApi {
   /** Focus the editor for the document on screen. */
@@ -225,14 +285,21 @@ const refold = StateField.define<DecorationSet>({
   provide: (field) => EditorView.decorations.from(field),
 });
 
-export default function activate(kernel: Kernel): EditorApi {
-  // The two hosts, in seat order (PLUGIN-PROTOCOLS §6a): the wiring says who goes first,
-  // so nothing here sorts.
-  const extensions = kernel.ports.collect<EditorExtension>("extensions");
-  const pastes = kernel.ports.collect<EditorPaste>("paste");
+const setFolded = (view: EditorView, folded: boolean): void => {
+  const effects = foldableRegionsOf(regionsOf(view.state.doc))
+    .map((region) => foldRangeFor(view.state.doc, region))
+    .filter((range): range is { from: number; to: number } => range !== null)
+    .map((range) => (folded ? foldEffect.of(range) : unfoldEffect.of(range)));
+  if (effects.length > 0) view.dispatch({ effects });
+};
+
+export default function activate(kernel: Kernel): void {
+  // Both registries are already in `order`, so nothing here sorts.
+  const extensions = extensionRegistry;
+  const pastes = pasteRegistry;
 
   /**
-   * Offer a paste or a drop to each `editor.paste` handler in seat order; the first to say
+   * Offer a paste or a drop to each paste handler in order; the first to say
    * `true` has it. A handler that throws is reported and skipped, never allowed to lose
    * it: the next one, or CodeMirror, still gets it.
    *
@@ -314,13 +381,10 @@ export default function activate(kernel: Kernel): EditorApi {
   // preference, and leaving the key declared would keep a label and a description
   // written for a settings screen describing something the editor no longer does.
 
-  /** Numbers each mounted editor's `text.surface` id. */
+  /** Numbers each mounted editor's text surface id. */
   let surfaceCount = 0;
 
-  /** The view currently on screen. One document surface ⇒ at most one editor. */
-  let live: EditorView | undefined;
-
-  /** The extensions wired in, in seat order. A throwing one costs only itself. */
+  /** The extensions added, in order. A throwing one costs only itself. */
   const contributedExtensions = (): readonly Extension[] => {
     const collected: Extension[] = [];
     for (const entry of extensions.get()) {
@@ -331,14 +395,6 @@ export default function activate(kernel: Kernel): EditorApi {
       }
     }
     return collected;
-  };
-
-  const setFolded = (view: EditorView, folded: boolean): void => {
-    const effects = foldableRegionsOf(regionsOf(view.state.doc))
-      .map((region) => foldRangeFor(view.state.doc, region))
-      .filter((range): range is { from: number; to: number } => range !== null)
-      .map((range) => (folded ? foldEffect.of(range) : unfoldEffect.of(range)));
-    if (effects.length > 0) view.dispatch({ effects });
   };
 
   /**
@@ -386,8 +442,8 @@ export default function activate(kernel: Kernel): EditorApi {
       let view: EditorView | undefined;
       let undoManager: Y.UndoManager | undefined;
       let offPoint: Unsubscribe | undefined;
-      let surface: Disposable | undefined;
-      /** `text.surface` listeners: told about every text, caret and focus change. */
+      let removeSurface: (() => void) | undefined;
+      /** Text surface listeners: told about every text, caret and focus change. */
       const watchers = new Set<() => void>();
 
       try {
@@ -499,12 +555,12 @@ export default function activate(kernel: Kernel): EditorApi {
           view?.dispatch({ effects: extensionsCompartment.reconfigure(contributedExtensions()) });
         });
 
-        // The caret, for the slash menu and anything else that works there. Offered on
-        // the `surface` port per mounted editor and withdrawn on unmount.
+        // The caret, for the slash menu and anything else that works there. Added per
+        // mounted editor and removed on unmount.
         const bound = view;
         const text = open.text;
         const head = (): number => bound.state.selection.main.head;
-        surface = kernel.ports.offer<TextSurface>("surface", {
+        const surface: TextSurface = {
           id: `editor:${id}:${String((surfaceCount += 1))}`,
           documentId: id,
           element: bound.dom,
@@ -540,7 +596,8 @@ export default function activate(kernel: Kernel): EditorApi {
               watchers.delete(listener);
             };
           },
-        });
+        };
+        removeSurface = addSurface(surface);
 
         // `%%%` sections always start folded. Frontmatter never was folded here and
         // never is — it opens as plain, highlighted text like the rest of the document.
@@ -555,7 +612,7 @@ export default function activate(kernel: Kernel): EditorApi {
       }
 
       return () => {
-        surface?.dispose();
+        removeSurface?.();
         watchers.clear();
         offPoint?.();
         if (live === view) live = undefined;
@@ -622,7 +679,7 @@ export default function activate(kernel: Kernel): EditorApi {
     );
   };
 
-  kernel.ports.offer<DocumentMode>("mode", {
+  addMode({
     id: "edit",
     label: "Edit",
     order: 10,
@@ -636,36 +693,31 @@ export default function activate(kernel: Kernel): EditorApi {
     component: Edit,
   });
 
-  kernel.ports.offer<Command>("commands", [
+  addCommand([
     {
       id: "editor.focus",
       title: "Focus the editor",
       category: "Document",
       when: () => live !== undefined,
-      run: () => api.focus(),
+      run: () => focus(),
     },
     {
       id: "editor.unfoldMachineSections",
       title: "Show machine sections",
       category: "Document",
       when: () => live !== undefined,
-      run: () => api.setMachineSectionsFolded(false),
+      run: () => setMachineSectionsFolded(false),
     },
     {
       id: "editor.foldMachineSections",
       title: "Collapse machine sections",
       category: "Document",
       when: () => live !== undefined,
-      run: () => api.setMachineSectionsFolded(true),
+      run: () => setMachineSectionsFolded(true),
     },
   ]);
+}
 
-  const api: EditorApi = {
-    focus: () => live?.focus(),
-    setMachineSectionsFolded: (folded) => {
-      if (live) setFolded(live, folded);
-    },
-  };
-
-  return api;
+export function deactivate(): void {
+  live = undefined;
 }

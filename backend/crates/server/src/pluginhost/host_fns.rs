@@ -27,7 +27,8 @@
 //!
 //! The ungated set is deliberate. KV, config and cron are the "cron-and-KV plugin"
 //! SPEC §6.3 names as the archetype, and requiring a capability for a plugin's *own*
-//! namespace would be theatre. `call_plugin` is gated by the manifest's `backend.calls` instead, and
+//! namespace would be theatre. `call_plugin` is gated by the manifest's `dependencies` and the
+//! callee's `backend.exports` instead, and
 //! `emit_client` reaches only sessions of this workspace's users.
 //!
 //! The check lives in each **body**, never in the registration: all thirteen imports are
@@ -1227,11 +1228,21 @@ pub fn emit_client(
 // call_plugin
 // ---------------------------------------------------------------------------
 
-/// `call_plugin` — invoke a declared callee's `lm_call`.
+/// `call_plugin` — invoke a dependency's `lm_call` (HOST-ABI.md §3.10).
 ///
-/// Three refusals, three codes: not in `backend.calls` → `forbidden`; already on the
-/// stack → `reentrancy`; deeper than [`abi::limits::MAX_CALL_DEPTH`] → `limit_exceeded`.
-/// The callee shares this invocation's deadline.
+/// The refusals, in order:
+///
+/// - the callee is not in the caller's `dependencies` or `optionalDependencies`, or its
+///   version is outside the declared range → `forbidden`;
+/// - the function is not in the callee's `backend.exports` → `forbidden`;
+/// - the payload does not fit the export's `input` shape → `invalid_argument`;
+/// - the callee is already on the stack → `reentrancy`; deeper than
+///   [`abi::limits::MAX_CALL_DEPTH`] → `limit_exceeded`;
+/// - the returned value does not fit the export's `output` shape → `internal` (the
+///   callee broke its own contract; the caller cannot fix it).
+///
+/// A callee named by an id it only `provides` is reached the same way. The callee shares
+/// this invocation's deadline.
 pub fn call_plugin(
     context: &HostContext,
     input: abi::call::CallPluginInput,
@@ -1239,19 +1250,27 @@ pub fn call_plugin(
     if input.function.is_empty() {
         return Err(invalid("`function` is empty"));
     }
-    // The allowlist check comes first: it is the one refusal that is about the *manifest*
-    // rather than about this call, so a plugin author should see it before anything else.
-    if !context.plugin.calls.contains(&input.plugin) {
-        return Err(abi::HostError::new(
-            abi::ErrorCode::Forbidden,
-            format!(
-                "`{}` is not a declared callee of `{}`; add it to `backend.calls` in the \
-                 manifest",
-                input.plugin, context.plugin.id
-            ),
-        )
-        .with_detail(serde_json::json!({ "plugin": input.plugin })));
-    }
+    let host = super::PluginHost::get(&context.state);
+    let callee = host.get_active(&input.plugin).or_else(|| {
+        host.active().into_iter().find(|active| {
+            active
+                .provides
+                .as_ref()
+                .is_some_and(|(id, _)| id == &input.plugin)
+        })
+    });
+    // With no active callee there is nothing to check its exports against; the dispatch
+    // below reports why it is not there (`not_found`, or `unavailable` when disabled).
+    check_call(
+        &context.plugin,
+        callee.as_deref(),
+        &input.plugin,
+        &input.function,
+        &input.payload,
+    )?;
+    let target = callee
+        .as_ref()
+        .map_or_else(|| input.plugin.clone(), |callee| callee.id.clone());
 
     let invocation = super::Invocation {
         plugin_id: context.plugin.id.clone(),
@@ -1262,9 +1281,8 @@ pub fn call_plugin(
         stack: context.stack.clone(),
         user_id: context.user_id.clone(),
     }
-    .nested(&input.plugin, &input.function, input.payload)?;
+    .nested(&target, &input.function, input.payload)?;
 
-    let host = super::PluginHost::get(&context.state);
     let value = context
         .block_on(host.call_typed::<serde_json::Value>(&context.state, invocation))
         .map_err(|failure| match failure {
@@ -1272,11 +1290,118 @@ pub fn call_plugin(
             // the real cause instead of "the call failed".
             super::CallFailure::Refused(error) => error,
             super::CallFailure::Host(error) => error.as_host_error(),
-        })?;
+        })?
+        .unwrap_or(serde_json::Value::Null);
 
-    Ok(abi::call::CallPluginOutput {
-        value: value.unwrap_or(serde_json::Value::Null),
-    })
+    if let Some(callee) = callee.as_deref() {
+        check_output(callee, &input.function, &value)?;
+    }
+    Ok(abi::call::CallPluginOutput { value })
+}
+
+/// Everything about a `call_plugin` that can be refused before dispatch: the dependency,
+/// its version, the export and the payload's shape. `callee` is the active plugin the id
+/// resolved to (possibly through `provides`), when there is one.
+pub fn check_call(
+    caller: &super::ActivePlugin,
+    callee: Option<&super::ActivePlugin>,
+    requested: &str,
+    function: &str,
+    payload: &serde_json::Value,
+) -> Result<(), abi::HostError> {
+    // The dependency check comes first: it is the one refusal that is about the caller's
+    // *manifest* rather than about this call, so a plugin author should see it first.
+    let Some(range) = caller.deps.get(requested) else {
+        return Err(abi::HostError::new(
+            abi::ErrorCode::Forbidden,
+            format!(
+                "`{requested}` is not a dependency of `{}`; add it to `dependencies` (or \
+                 `optionalDependencies`) in the manifest",
+                caller.id
+            ),
+        )
+        .with_detail(serde_json::json!({ "plugin": requested })));
+    };
+    let Some(callee) = callee else {
+        return Ok(());
+    };
+    // The version the caller's range is about: the stand-in's provided one, when the id
+    // is one it provides.
+    let version = match callee.provides.as_ref() {
+        Some((id, version)) if callee.id != requested && id == requested => version.as_str(),
+        _ => callee.version.as_str(),
+    };
+    if !matches!(crate::plugins::satisfies(version, range), Ok(true)) {
+        return Err(abi::HostError::new(
+            abi::ErrorCode::Forbidden,
+            format!(
+                "`{}` depends on `{requested}` {range}, but {version} is active",
+                caller.id
+            ),
+        )
+        .with_detail(serde_json::json!({ "plugin": requested, "version": version })));
+    }
+    let Some(export) = callee.callable.get(function) else {
+        return Err(abi::HostError::new(
+            abi::ErrorCode::Forbidden,
+            format!(
+                "`{requested}` does not export `{function}`; only the functions in its \
+                 `backend.exports` may be called"
+            ),
+        )
+        .with_detail(serde_json::json!({ "plugin": requested, "function": function })));
+    };
+    if let Some(shape) = export.input.as_ref() {
+        let issues = life_manager_core::shape::validate(payload, shape);
+        if !issues.is_empty() {
+            return Err(abi::HostError::new(
+                abi::ErrorCode::InvalidArgument,
+                format!(
+                    "the payload for `{requested}`.`{function}` does not fit its input shape: {}",
+                    describe_issues(&issues)
+                ),
+            )
+            .with_detail(serde_json::json!({ "issues": issues })));
+        }
+    }
+    Ok(())
+}
+
+/// The callee's side of the contract: what it returned fits its `output` shape.
+pub fn check_output(
+    callee: &super::ActivePlugin,
+    function: &str,
+    value: &serde_json::Value,
+) -> Result<(), abi::HostError> {
+    let Some(shape) = callee
+        .callable
+        .get(function)
+        .and_then(|export| export.output.as_ref())
+    else {
+        return Ok(());
+    };
+    let issues = life_manager_core::shape::validate(value, shape);
+    if issues.is_empty() {
+        return Ok(());
+    }
+    Err(abi::HostError::new(
+        abi::ErrorCode::Internal,
+        format!(
+            "`{}`.`{function}` returned a value that does not fit its output shape: {}",
+            callee.id,
+            describe_issues(&issues)
+        ),
+    )
+    .with_detail(serde_json::json!({ "issues": issues })))
+}
+
+fn describe_issues(issues: &[life_manager_core::shape::Issue]) -> String {
+    issues
+        .iter()
+        .take(5)
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 // ---------------------------------------------------------------------------
@@ -2009,6 +2134,181 @@ mod tests {
     // admin-allowed CIDR. It is pure (`address_allowed`), so it needs no host, no plugin
     // and no database, and it is the check whose failure is invisible until it is abused.
     use super::*;
+
+    fn active(id: &str, version: &str) -> crate::pluginhost::ActivePlugin {
+        crate::pluginhost::ActivePlugin {
+            id: id.to_string(),
+            version: version.to_string(),
+            capabilities: abi::Capabilities {
+                documents: Vec::new(),
+                http_hosts: Vec::new(),
+                public_routes: Vec::new(),
+                notifications: false,
+            },
+            deps: Default::default(),
+            provides: None,
+            callable: Default::default(),
+            hooks: Vec::new(),
+            cron: Vec::new(),
+            routes: Vec::new(),
+            events: Vec::new(),
+            config_keys: Vec::new(),
+            config: Default::default(),
+            wasm_path: std::path::PathBuf::from("backend.wasm"),
+            module_sha256: String::new(),
+            abi_version: abi::ABI_VERSION,
+            exports: Vec::new(),
+        }
+    }
+
+    fn export(
+        input: Option<serde_json::Value>,
+        output: Option<serde_json::Value>,
+    ) -> crate::pluginhost::CallableExport {
+        crate::pluginhost::CallableExport::from_manifest(&crate::plugins::BackendExport {
+            input,
+            output,
+            description: None,
+        })
+    }
+
+    fn caller_of(id: &str, range: &str) -> crate::pluginhost::ActivePlugin {
+        let mut caller = active("caller", "1.0.0");
+        caller.deps.insert(id.to_string(), range.to_string());
+        caller
+    }
+
+    fn callee() -> crate::pluginhost::ActivePlugin {
+        let mut callee = active("calendar", "1.4.0");
+        callee.callable.insert(
+            "normalize".to_string(),
+            export(
+                Some(serde_json::json!({ "object": { "title": "string" } })),
+                Some(serde_json::json!("string")),
+            ),
+        );
+        callee
+            .callable
+            .insert("ping".to_string(), export(None, None));
+        callee
+    }
+
+    #[test]
+    fn a_call_needs_a_dependency_in_range() {
+        let payload = serde_json::json!({ "title": "x" });
+        // Not a dependency at all.
+        let stranger = active("caller", "1.0.0");
+        let err = check_call(
+            &stranger,
+            Some(&callee()),
+            "calendar",
+            "normalize",
+            &payload,
+        )
+        .unwrap_err();
+        assert_eq!(err.code, abi::ErrorCode::Forbidden);
+        assert!(err.message.contains("dependencies"), "{}", err.message);
+        // …even when the callee is not active: the manifest is checked first.
+        let err = check_call(&stranger, None, "calendar", "normalize", &payload).unwrap_err();
+        assert_eq!(err.code, abi::ErrorCode::Forbidden);
+        // A dependency at the wrong version.
+        let err = check_call(
+            &caller_of("calendar", "^2.0"),
+            Some(&callee()),
+            "calendar",
+            "normalize",
+            &payload,
+        )
+        .unwrap_err();
+        assert_eq!(err.code, abi::ErrorCode::Forbidden);
+        assert!(err.message.contains("1.4.0"), "{}", err.message);
+        // In range.
+        assert!(
+            check_call(
+                &caller_of("calendar", "^1.2"),
+                Some(&callee()),
+                "calendar",
+                "normalize",
+                &payload
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn only_exported_functions_are_callable() {
+        let caller = caller_of("calendar", "*");
+        let err = check_call(
+            &caller,
+            Some(&callee()),
+            "calendar",
+            "secret",
+            &serde_json::Value::Null,
+        )
+        .unwrap_err();
+        assert_eq!(err.code, abi::ErrorCode::Forbidden);
+        assert!(err.message.contains("backend.exports"), "{}", err.message);
+        // An export with no shapes takes anything.
+        assert!(
+            check_call(
+                &caller,
+                Some(&callee()),
+                "calendar",
+                "ping",
+                &serde_json::json!([1, 2])
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn payloads_and_results_are_checked_against_the_export_shapes() {
+        let caller = caller_of("calendar", "*");
+        let err = check_call(
+            &caller,
+            Some(&callee()),
+            "calendar",
+            "normalize",
+            &serde_json::json!({ "title": 5 }),
+        )
+        .unwrap_err();
+        assert_eq!(err.code, abi::ErrorCode::InvalidArgument);
+        assert!(err.message.contains("title"), "{}", err.message);
+
+        assert!(check_output(&callee(), "normalize", &serde_json::json!("ok")).is_ok());
+        let err = check_output(&callee(), "normalize", &serde_json::json!(1)).unwrap_err();
+        assert_eq!(err.code, abi::ErrorCode::Internal);
+        assert!(check_output(&callee(), "ping", &serde_json::json!(1)).is_ok());
+    }
+
+    #[test]
+    fn a_stand_in_is_called_at_its_provided_version() {
+        let mut stand_in = callee();
+        stand_in.id = "alt-calendar".to_string();
+        stand_in.version = "0.1.0".to_string();
+        stand_in.provides = Some(("calendar".to_string(), "1.5.0".to_string()));
+        let payload = serde_json::json!({ "title": "x" });
+        assert!(
+            check_call(
+                &caller_of("calendar", "^1.5"),
+                Some(&stand_in),
+                "calendar",
+                "normalize",
+                &payload
+            )
+            .is_ok()
+        );
+        assert!(
+            check_call(
+                &caller_of("calendar", "^0.1"),
+                Some(&stand_in),
+                "calendar",
+                "normalize",
+                &payload
+            )
+            .is_err()
+        );
+    }
 
     fn ip(text: &str) -> IpAddr {
         text.parse().expect("a literal address")

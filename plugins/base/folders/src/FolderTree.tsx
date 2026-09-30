@@ -13,8 +13,10 @@
  *
  * **Three ways to do everything, because one of them is a mouse gesture.** Dragging is
  * a mouse and pen gesture, so every drag has a keyboard and a touch equivalent that ends
- * in the same call: the row's ⋯ button (not on a phone), a long-press, a right-click, or
- * `M` on the active row opens a `context-menu` with Move / Rename / Delete in it.
+ * in the same call: `M` on the active row, or Move in the row's menu. A row is marked as
+ * an `lm/document` and blank space as `folders/root` (`_shared/target.ts`); the menus
+ * themselves — right-click, long press, the row's ⋯ button — are `context-menu`'s, built
+ * from what every plugin offers for those targets (`index.tsx` offers this tree's).
  *
  * **A drag lifts the row.** The tree's own drags are pointer-driven, not HTML5: the
  * browser draws an HTML5 drag as a translucent ghost that no style can make solid, and a
@@ -48,8 +50,9 @@ import type {
   ReactElement,
 } from "react";
 
-import type { ConfirmRequest, ContextMenu, MenuItem } from "@protocols/lm/context-menu";
+import type { ConfirmRequest, ContextMenu } from "plugin:context-menu";
 
+import { target as mark } from "../../_shared/target.js";
 import { useFitToScreen, useVirtualList } from "../../_shared/virtual-list.js";
 
 import { ancestorsOf, isWithin, type Hierarchy } from "./hierarchy.js";
@@ -62,10 +65,6 @@ export const DOCUMENT_DRAG_TYPE = "text/plain";
 
 /** How long a collapsed note must be hovered during a drag before it opens. */
 const AUTO_EXPAND_MS = 650;
-/** How long a touch must rest on a row before the sheet opens. */
-const LONG_PRESS_MS = 500;
-/** A touch that travels this far was a scroll, not a press. */
-const LONG_PRESS_SLOP = 12;
 /** A mouse press that travels this far is a drag, not a click. */
 const DRAG_THRESHOLD = 5;
 /** The least the tree's scroll box shrinks to when the sidebar is crowded, in pixels. */
@@ -120,8 +119,8 @@ export interface TreeTarget {
 }
 
 export interface FolderTreeProps {
-  /** The `menu` port (`lm/context-menu`): every sheet this tree opens goes through it. */
-  readonly menu: Pick<ContextMenu, "open" | "openSheet" | "confirm" | "close">;
+  /** `plugin:context-menu`'s functions: every sheet this tree opens goes through it. */
+  readonly menu: Pick<ContextMenu, "open" | "openSheet" | "confirm" | "close" | "openFor">;
   readonly hierarchy: Hierarchy;
   readonly loading: boolean;
   readonly error?: string;
@@ -143,8 +142,6 @@ export interface FolderTreeProps {
   readonly onRename: (id: string, title: string) => Promise<void>;
   /** `parent` moves its children up a level; `trash` sends them to Trash with it. */
   readonly onDelete: (id: string, mode: "parent" | "trash", options?: MoveProgress) => Promise<number>;
-  /** A new note, filed last under `parent`. */
-  readonly onNewNoteInside: (parent: string) => void;
   readonly onOpen: (id: string) => void;
   /**
    * The note open in the main view, however it was opened — a link, the graph, the
@@ -154,8 +151,6 @@ export interface FolderTreeProps {
   readonly openDocument?: string;
   /** Another plugin's colour and icon for a row (`lm/folders.decoration`). */
   readonly look?: (id: string) => FolderRowLook | undefined;
-  /** Other plugins' entries for a row's menu (`lm/folders.menu-item`), before "Delete". */
-  readonly extraActions?: (id: string, anchor?: HTMLElement) => readonly MenuItem[];
 }
 
 /**
@@ -169,7 +164,6 @@ export interface FolderRowLook {
 }
 
 type SheetState =
-  | { readonly kind: "actions"; readonly target: TreeTarget; readonly anchor?: HTMLElement }
   | { readonly kind: "move"; readonly target: TreeTarget }
   | { readonly kind: "delete"; readonly target: TreeTarget; readonly inside: number }
   /** The "are you sure?" every delete ends in, whatever was chosen before it. */
@@ -200,11 +194,9 @@ export function FolderTree({
   onMove,
   onRename,
   onDelete,
-  onNewNoteInside,
   onOpen,
   openDocument,
   look,
-  extraActions,
 }: FolderTreeProps): ReactElement {
   /*
    * Notes opened only to reveal the open document. Shown open, never stored: opening a
@@ -251,11 +243,6 @@ export function FolderTree({
   const [sheet, setSheet] = useState<SheetState | undefined>(undefined);
 
   const autoExpand = useRef<{ id: string; timer: ReturnType<typeof setTimeout> } | undefined>(undefined);
-  const longPress = useRef<{ timer: ReturnType<typeof setTimeout>; x: number; y: number } | undefined>(
-    undefined,
-  );
-  /** A long-press already acted; the click that follows it must not act again. */
-  const pressHandled = useRef(false);
 
   const titleOf = useCallback((id: string): string => hierarchy.notes.get(id)?.title ?? "Untitled", [hierarchy]);
   const parentOf = useCallback((id: string): string => hierarchy.parentOf.get(id) ?? "", [hierarchy]);
@@ -276,6 +263,8 @@ export function FolderTree({
 
   useEffect(() => {
     if (!scrollPending.current || active !== `n:${openDocument}`) return;
+    // A hidden tree (a phone's closed drawer) has nothing to scroll: kept for when it shows.
+    if (!scrollBox || scrollBox.clientHeight === 0) return;
     const index = visible.findIndex((row) => row.key === active);
     if (index < 0) return;
     scrollPending.current = false;
@@ -305,7 +294,6 @@ export function FolderTree({
   useEffect(
     () => () => {
       if (autoExpand.current) clearTimeout(autoExpand.current.timer);
-      if (longPress.current) clearTimeout(longPress.current.timer);
     },
     [],
   );
@@ -637,56 +625,6 @@ export function FolderTree({
   /** The note an "into" drop is outlining, if any (`""`: the root). */
   const intoNote = drop?.mode === "into" ? drop.parent : undefined;
 
-  // ---------------------------------------------------------------------------
-  // Long press → the sheet
-  // ---------------------------------------------------------------------------
-
-  const openActions = useCallback((target: TreeTarget, anchor?: HTMLElement) => {
-    setActive(`n:${target.id}`);
-    setSheet({ kind: "actions", target, ...(anchor ? { anchor } : {}) });
-  }, []);
-
-  const cancelLongPress = useCallback(() => {
-    if (longPress.current) clearTimeout(longPress.current.timer);
-    longPress.current = undefined;
-  }, []);
-
-  const pressStart = useCallback(
-    (event: ReactPointerEvent, target: TreeTarget) => {
-      if (event.pointerType !== "touch") return;
-      pressHandled.current = false;
-      cancelLongPress();
-      const { clientX: x, clientY: y } = event;
-      longPress.current = {
-        x,
-        y,
-        timer: setTimeout(() => {
-          longPress.current = undefined;
-          pressHandled.current = true;
-          openActions(target);
-        }, LONG_PRESS_MS),
-      };
-    },
-    [cancelLongPress, openActions],
-  );
-
-  const pressMove = useCallback(
-    (event: ReactPointerEvent) => {
-      const press = longPress.current;
-      if (!press) return;
-      if (Math.abs(event.clientX - press.x) > LONG_PRESS_SLOP || Math.abs(event.clientY - press.y) > LONG_PRESS_SLOP) {
-        cancelLongPress();
-      }
-    },
-    [cancelLongPress],
-  );
-
-  /** `true` when the click that follows a long press should be swallowed. */
-  const consumePress = useCallback((): boolean => {
-    if (!pressHandled.current) return false;
-    pressHandled.current = false;
-    return true;
-  }, []);
 
   // ---------------------------------------------------------------------------
   // Keyboard
@@ -860,19 +798,13 @@ export function FolderTree({
         onDragLeave={() => leave(row.id)}
         onDrop={(event) => dropInto(event, row.id)}
         onMouseDown={() => setActive(row.key)}
+        {...mark("lm/document", row.id, { label: row.title })}
         onPointerDown={(event) => {
-          pressStart(event, target);
           if (!editing) liftStart(event, target);
         }}
-        onPointerMove={pressMove}
-        onPointerUp={cancelLongPress}
-        onPointerCancel={cancelLongPress}
-        onContextMenu={(event) => {
-          event.preventDefault();
-          openActions(target);
-        }}
+        onContextMenu={() => setActive(row.key)}
         onClick={() => {
-          if (consumePress() || editing) return;
+          if (editing) return;
           setActive(row.key);
           onOpen(row.id);
         }}
@@ -922,7 +854,7 @@ export function FolderTree({
              * accessible name is already the title, and a label that contained it would
              * make every "the row called X" query ambiguous with `doc-list`'s row.
              *
-             * Not on a phone: there the long-press opens the same menu, and the row's
+             * Not on a phone: there a long press opens the same menu, and the row's
              * width is worth more to the title than to a button.
              */}
             <span className={`${ACTIONS_CLASSES} folders:compact:hidden ${isActive ? "folders:visible" : ""}`}>
@@ -933,7 +865,8 @@ export function FolderTree({
                 title={`Move, rename or delete ${row.title}`}
                 onClick={(event) => {
                   event.stopPropagation();
-                  openActions(target, event.currentTarget);
+                  setActive(row.key);
+                  menu.openFor(event.currentTarget);
                 }}
               >
                 ⋯
@@ -953,9 +886,9 @@ export function FolderTree({
   // render: replacing an open menu closes the previous one, which would clear `sheet`).
   //
   // `menu.close()` only when the tree dropped its own sheet. When the menu closed itself
-  // it is already shut, and the menu or sheet open now may be someone else's: an entry
-  // from `lm/folders.menu-item` opens its own sheet as the actions menu closes, and
-  // closing again here would shut that one.
+  // it is already shut, and the menu or sheet open now may be someone else's: an action
+  // that opens its own sheet as a row's menu closes, and closing again here would shut
+  // that one.
   const closedByMenu = useRef(false);
   useEffect(() => {
     const byMenu = closedByMenu.current;
@@ -1028,50 +961,22 @@ export function FolderTree({
       return;
     }
 
-    if (sheet.kind === "confirm") {
-      const action = sheet.action;
-      let live = true;
-      void menu.confirm(confirmRequest(action)).then((confirmed) => {
-        if (!live) return;
-        setSheet(undefined);
-        if (!confirmed) return;
-        run(() => onDelete(action.target.id, action.mode, { onProgress }));
-      });
-      return () => {
-        live = false;
-      };
-    }
-
-    const target = sheet.target;
-    const expandable = hierarchy.childrenOf.has(target.id);
-    const items: MenuItem[] = [
-      { id: "open", label: "Open", run: () => onOpen(target.id) },
-      { id: "new-note", label: "New note inside", run: () => onNewNoteInside(target.id) },
-      ...(expandable
-        ? [
-            { id: "expand-all", label: "Expand all inside", run: () => setExpandedDeep(target.id, true) },
-            { id: "collapse-all", label: "Collapse all inside", run: () => setExpandedDeep(target.id, false) },
-          ]
-        : []),
-      { id: "rename", label: "Rename", run: () => setRenaming(target.id) },
-      {
-        id: "move",
-        label: "Move to…",
-        hint: parentOf(target.id) === "" ? "Now at the root" : `Now in ${titleOf(parentOf(target.id))}`,
-        run: () => setSheet({ kind: "move", target }),
-      },
-      ...(extraActions?.(target.id, sheet.anchor) ?? []),
-      { id: "delete", label: "Delete", danger: true, run: () => startDelete(target) },
-    ];
-    menu.open({
-      title: target.title,
-      ...(sheet.anchor ? { anchor: sheet.anchor } : {}),
-      onClose,
-      sections: [{ items }],
+    const action = sheet.action;
+    let live = true;
+    void menu.confirm(confirmRequest(action)).then((confirmed) => {
+      if (!live) return;
+      setSheet(undefined);
+      if (!confirmed) return;
+      run(() => onDelete(action.target.id, action.mode, { onProgress }));
     });
+    return () => {
+      live = false;
+    };
+
     // Only `sheet` opens or replaces the menu; the handlers above are read when it does.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sheet, menu]);
+
 
   if (loading) {
     return (
@@ -1121,7 +1026,10 @@ export function FolderTree({
       )}
 
       {visible.length === 0 ? (
-        <div className="folders-empty folders:m-0 folders:flex folders:flex-col folders:gap-1 folders:text-[0.85em] folders:text-text-muted">
+        <div
+          className="folders-empty folders:m-0 folders:flex folders:flex-col folders:gap-1 folders:text-[0.85em] folders:text-text-muted"
+          {...mark("folders/root", "", { label: "Folders", enclosing: false })}
+        >
           <p>No notes yet.</p>
         </div>
       ) : (
@@ -1155,6 +1063,9 @@ export function FolderTree({
             onDrop={(event) => {
               if (event.target === event.currentTarget) dropInto(event, "");
             }}
+            // Blank space is the root here too: its menu makes a note there. Only blank
+            // space: a row's menu is the row's, without the root's under it.
+            {...mark("folders/root", "", { label: "Folders", enclosing: false })}
             {...(active !== undefined
               ? { "aria-activedescendant": `folders-row-${visible.findIndex((row) => row.key === active)}` }
               : {})}

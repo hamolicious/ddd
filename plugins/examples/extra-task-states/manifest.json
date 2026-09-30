@@ -1,12 +1,9 @@
 {
   "id": "extra-task-states",
   "version": "1.0.0",
-  "kernel": "^2.0",
-  "hot": true,
-  "provides": {
-    "states": {
-      "protocol": "lm/markdown.taskState@1.0.0"
-    }
+  "kernel": "^3.0",
+  "dependencies": {
+    "markdown": "^3.0"
   },
   "peerLibraries": {
     "react": "^18.0.0"

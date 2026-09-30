@@ -6,8 +6,9 @@
  * calls immediately before `activate(kernel)`, and the object it returns is the
  * *only* thing a plugin ever touches: every call inside it carries the plugin's id
  * without the plugin supplying one, which is what makes attribution — of
- * offers, settings, `%%%` sections, service access and log lines — a property of
- * the kernel rather than of plugin good manners.
+ * settings, `%%%` sections, notices and log lines — a property of the kernel rather
+ * than of plugin good manners. (Registry items are attributed by the loader's
+ * activation marker, `attribution.ts`.)
  */
 
 import type { ComponentType, ReactNode } from "react";
@@ -34,7 +35,8 @@ import { DocumentsHost } from "./documents.js";
 import { EventBus } from "./events.js";
 import { MountPoint } from "./mount.js";
 import { NoticeCenter } from "./notices.js";
-import { PortsHost } from "./ports.js";
+import { withdrawFromRegistries } from "./attribution.js";
+import { PluginsHost, type PluginImporter } from "./plugins.js";
 import { SessionHost, type SessionHostOptions } from "./session.js";
 import { SettingsHost } from "./settings.js";
 import { SyncHost } from "./sync.js";
@@ -48,8 +50,10 @@ export interface KernelHostOptions {
   readonly core: CoreBindings;
   readonly session: SessionHostOptions;
   readonly bootMode: BootMode;
-  /** An offered component threw, or an offered item was rejected. */
+  /** A contributed component threw while rendering. */
   readonly onPluginProblem?: (problem: PluginProblem) => void;
+  /** How `kernel.plugins.optional` imports a module; tests inject one. */
+  readonly importPlugin?: PluginImporter;
 }
 
 export interface PluginProblem {
@@ -60,8 +64,8 @@ export interface PluginProblem {
 }
 
 export class KernelHost {
-  /** The slot, service and event store behind every plugin's `kernel.ports` (§5). */
-  readonly ports: PortsHost;
+  /** The boot's plugin set behind every plugin's `kernel.plugins`; the loader fills it in. */
+  readonly plugins: PluginsHost;
   readonly events: EventBus;
   readonly notices = new NoticeCenter();
   readonly theme: ThemeController;
@@ -75,8 +79,7 @@ export class KernelHost {
   readonly info: KernelInfo;
 
   constructor(private readonly options: KernelHostOptions) {
-    const report = (problem: PluginProblem): void => options.onPluginProblem?.(problem);
-    this.ports = new PortsHost((r) => report({ pluginId: r.pluginId, point: r.point, message: r.message }));
+    this.plugins = new PluginsHost(options.importPlugin);
     this.events = new EventBus((type, error) =>
       console.warn(`[events] listener for "${type}" threw`, error),
     );
@@ -111,7 +114,7 @@ export class KernelHost {
 
   /**
    * Everything a plugin subscribed to or opened through its kernel, as disposers, so
-   * `retract` leaves nothing behind (the disposal contract, PLUGIN-PROTOCOLS §6c).
+   * `retract` leaves nothing behind.
    */
   readonly #bags = new Map<string, Set<() => void>>();
   /**
@@ -165,7 +168,7 @@ export class KernelHost {
           });
         },
       },
-      ports: this.ports.forPlugin(manifest),
+      plugins: this.plugins.forPlugin(manifest),
       events: {
         ...events,
         on: (type, listener) => track(events.on(type, listener)),
@@ -225,8 +228,8 @@ export class KernelHost {
   }
 
   /**
-   * Withdraw everything a plugin registered — failure, unplugging, a restart, or
-   * `?safe=bare` teardown: its slot items, services, event and host listeners, every
+   * Withdraw everything a plugin registered — a failed activation, or `?safe=bare`
+   * teardown: every registry item it added, its event and host listeners, every
    * subscription and open document, its notices and theme layers, its mount, and its
    * stylesheet. What it built outside the kernel is its own `deactivate()`'s job.
    */
@@ -240,7 +243,7 @@ export class KernelHost {
     }
     this.#bags.delete(pluginId);
     this.#live.delete(pluginId);
-    this.ports.removePlugin(pluginId);
+    withdrawFromRegistries(pluginId);
     this.mount.release(pluginId);
     if (typeof document !== "undefined") {
       for (const link of document.querySelectorAll(`link[data-lm-plugin="${CSS.escape(pluginId)}"]`)) link.remove();

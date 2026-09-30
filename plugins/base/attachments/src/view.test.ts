@@ -1,16 +1,16 @@
 /**
- * The `viewers` host as `view.tsx` reads it (PLUGIN-PROTOCOLS §6a, "Hosts stop sorting"):
- * the host is already in the wiring's seat order, so the first viewer claiming an extension
- * is its default, and an item's `order` hint means nothing here any more.
+ * The viewer registry as `view.tsx` reads it: the registry is already in `order`, so the
+ * first viewer claiming an extension is its default; `createViewers` sorts nothing itself.
  */
 
 import { describe, expect, it } from "vitest";
 
-import type { Kernel, SettingsValue, SlotHost, SlotItem } from "@kernel";
-import type { AttachmentViewer } from "@protocols/lm/attachments.viewer";
+import type { Kernel, RegistryEntry, SettingsValue } from "@kernel";
+
+import type { AttachmentViewer } from "./api.js";
 
 import { viewKey } from "./kinds.js";
-import { createViewers } from "./view.js";
+import { createViewers, type ViewerSource } from "./view.js";
 
 const kernel = { settings: { subscribe: () => () => undefined } } as unknown as Kernel;
 
@@ -22,11 +22,11 @@ const viewer = (id: string, extensions: readonly string[], order?: number): Atta
   ...(order === undefined ? {} : { order }),
 });
 
-/** A host in a fixed seat order, with a way to seat one more. */
-function host(seated: readonly SlotItem<AttachmentViewer>[]) {
+/** A registry in a fixed order, with a way to add one more at the end. */
+function host(seated: readonly RegistryEntry<AttachmentViewer>[]) {
   const items = [...seated];
   const listeners = new Set<(values: readonly AttachmentViewer[]) => void>();
-  const slot: SlotHost<AttachmentViewer> = {
+  const slot: ViewerSource = {
     get: () => items.map((item) => item.value),
     entries: () => [...items],
     subscribe: (listener) => {
@@ -37,17 +37,17 @@ function host(seated: readonly SlotItem<AttachmentViewer>[]) {
   };
   return {
     slot,
-    seat(item: SlotItem<AttachmentViewer>) {
+    seat(item: RegistryEntry<AttachmentViewer>) {
       items.push(item);
       for (const listener of [...listeners]) listener(slot.get());
     },
   };
 }
 
-const seat = (pluginId: string, value: AttachmentViewer): SlotItem<AttachmentViewer> => ({ pluginId, port: "viewers", value });
+const seat = (pluginId: string, value: AttachmentViewer): RegistryEntry<AttachmentViewer> => ({ pluginId, value });
 
 describe("createViewers", () => {
-  it("takes the first seat as the default, whatever the order hints say", () => {
+  it("takes the first in the registry's order as the default", () => {
     const { slot } = host([
       seat("late", viewer("late.image", ["png", "jpg"], 200)),
       seat("early", viewer("early.image", ["png"], 1)),
@@ -60,7 +60,7 @@ describe("createViewers", () => {
     expect(viewers.resolve("pdf")).toBeUndefined();
   });
 
-  it("lets the user's pick in Settings win over the seat", () => {
+  it("lets the user's pick in Settings win over the order", () => {
     const { slot } = host([seat("late", viewer("late.image", ["png"])), seat("early", viewer("early.image", ["png"]))]);
     const read = (key: string): SettingsValue | undefined => (key === viewKey("png") ? "early.image" : undefined);
     const viewers = createViewers(kernel, slot, read);
@@ -68,7 +68,7 @@ describe("createViewers", () => {
     expect(viewers.resolve("png")?.viewer.id).toBe("early.image");
   });
 
-  it("follows the host as viewers are wired in", () => {
+  it("follows the registry as viewers are added", () => {
     const { slot, seat: wire } = host([seat("native", viewer("native.image", ["png"]))]);
     const viewers = createViewers(kernel, slot, () => undefined);
     let changes = 0;

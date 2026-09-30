@@ -13,7 +13,8 @@
  */
 
 export { KernelHost, type KernelHostOptions, type PluginProblem } from "./host.js";
-export { PortsHost, type PortsConfig, type PortsReport } from "./ports.js";
+export { PluginsHost, type PluginImporter } from "./plugins.js";
+export { activatingPlugin, asPlugin, asPluginSync, withdrawFromRegistries } from "./attribution.js";
 export { EventBus } from "./events.js";
 export { NoticeCenter } from "./notices.js";
 export {
@@ -53,6 +54,8 @@ export { CapabilitiesHost, detectBridge, type ShellBridge } from "./capabilities
 // The full `window.shell` v1 declaration (SPEC §7; `app/BRIDGE.md` is authoritative).
 export {
   BRIDGE_VERSION,
+  FOLDER_CHANGED_EVENT,
+  bridgeOwnsSession,
   bridgeVersionOf,
   readShellBridge,
   shellServerBaseUrl,
@@ -61,6 +64,8 @@ export {
   type ShellBridgeV1,
   type ShellExportFile,
   type ShellFilesystem,
+  type ShellFolder,
+  type ShellFolderEntry,
   type ShellNotification,
   type ShellNotifications,
   type ShellPermission,

@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactElement } from "react";
 
-import type { IconProps } from "@protocols/lm/icons";
+import type { IconProps } from "./api.js";
 
 import { drawingNow, loadDrawing, type IconPath } from "./data.js";
 

@@ -29,7 +29,7 @@
  * GFM's node has no record of where the marker was.
  */
 
-import type { MarkdownTaskState } from "@protocols/lm/markdown.taskState";
+import type { MarkdownTaskState } from "./api.js";
 
 import { spanOf, walk, type MdNode } from "./mdast.js";
 
@@ -49,8 +49,8 @@ export interface TaskRegistry {
 }
 
 /**
- * Build the lookup from the `tasks` port's current items, **in seat order** — that is
- * the menu order (PLUGIN-PROTOCOLS §6a: hosts do not sort).
+ * Build the lookup from the added task states, **in registry order** (`order`, then the
+ * order they were added) — that is the menu order.
  *
  * `off`/`on` are resolved rather than hard-coded, because `markdown.taskState` is
  * replaceable like everything else (SPEC §6.1) and a workspace that replaced the
@@ -67,8 +67,8 @@ export interface TaskRegistry {
  */
 export function buildTaskRegistry(contributions: readonly MarkdownTaskState[]): TaskRegistry {
   const seen = new Map<string, MarkdownTaskState>();
-  // The host's own de-duplication: the protocol's key is the marker and the host already
-  // enforces first-wins, so this only guards a caller passing a raw array.
+  // The registry already keys on the marker (a later add replaces an earlier one), so
+  // this only guards a caller passing a raw array.
   for (const state of contributions) {
     if (!seen.has(state.marker)) seen.set(state.marker, state);
   }

@@ -16,11 +16,21 @@
  * already has: each specifier becomes a blob module that re-exports the *same*
  * instance the app is using. One React, one Yjs, in dev as in production.
  *
+ * **Plugins are specifiers too** (`@kernel` 3.0). `plugin:<id>` maps to the enabled
+ * plugin's version-scoped module URL (with the server's `?v=` fingerprint), plus an alias
+ * under the id a stand-in `provides`. The server writes those entries into its map; the dev
+ * map adds them from the plugin list. The loader and every plugin import a plugin only
+ * through its specifier, so each module is instantiated once.
+ *
  * It must run before the first plugin is imported (import maps are consulted at
- * resolution time), which is exactly where `main.tsx` calls it.
+ * resolution time), which is exactly where `main.tsx` calls it — after the plugin list is
+ * known, because the dev map needs it.
  */
 
+import { parsePluginRef, type InstalledPlugin } from "@kernel";
+
 import { RUNTIME_SPECIFIER_NAMES } from "../../runtime/specifiers.js";
+import { moduleUrl, pluginSpecifier } from "./loader.js";
 
 export interface ImportMap {
   readonly imports: Readonly<Record<string, string>>;
@@ -39,12 +49,44 @@ export function pageImportMap(): ImportMap | undefined {
 }
 
 /**
- * Specifiers the runtime layer promises but the page's map does not resolve.
+ * Whether the page was served the signed-out map: a server map with no `plugin:<id>`
+ * entry. The server names the installed plugins only to a session (`statics.rs`
+ * `page_imports`), and a map cannot change after load, so a page that signed in on top
+ * of it must reload to get the entries. `false` in dev, where there is no server map
+ * and `installDevImportMap` builds one after sign-in.
+ */
+export function pageMapLacksPlugins(): boolean {
+  const map = pageImportMap();
+  return map !== undefined && !Object.keys(map.imports ?? {}).some((specifier) => specifier.startsWith("plugin:"));
+}
+
+/**
+ * Every specifier the page's import maps resolve (a page can carry more than one), or
+ * `undefined` when there is no map at all (no DOM, or a map not installed yet).
+ */
+export function importMapSpecifiers(): ReadonlySet<string> | undefined {
+  if (typeof document === "undefined") return undefined;
+  const scripts = document.querySelectorAll('script[type="importmap"]');
+  if (scripts.length === 0) return undefined;
+  const specifiers = new Set<string>();
+  for (const script of scripts) {
+    try {
+      const map = JSON.parse(script.textContent ?? "") as Partial<ImportMap>;
+      for (const specifier of Object.keys(map.imports ?? {})) specifiers.add(specifier);
+    } catch {
+      // A map the browser could not parse either resolves nothing.
+    }
+  }
+  return specifiers;
+}
+
+/**
+ * Specifiers the runtime layer promises but the page's maps do not resolve.
  * Empty is the only acceptable answer in production.
  */
-export function missingSpecifiers(map: ImportMap | undefined): readonly string[] {
-  if (!map) return RUNTIME_SPECIFIER_NAMES;
-  return RUNTIME_SPECIFIER_NAMES.filter((specifier) => map.imports[specifier] === undefined);
+export function missingSpecifiers(specifiers: ReadonlySet<string> | undefined): readonly string[] {
+  if (!specifiers) return RUNTIME_SPECIFIER_NAMES;
+  return RUNTIME_SPECIFIER_NAMES.filter((specifier) => !specifiers.has(specifier));
 }
 
 /** Loaders for the dev map. Static imports, so Vite pre-bundles them. */
@@ -69,15 +111,32 @@ const DEV_MODULES: Readonly<Record<string, () => Promise<Record<string, unknown>
 };
 
 /**
- * Build and inject a dev-only import map whose entries are blob modules
- * re-exporting this bundle's instances. Returns the map, or `undefined` when the
- * page already has one (production).
+ * `plugin:<id>` → module URL for every plugin with a frontend, plus the alias a stand-in's
+ * `provides` names. The same entries the server writes (`plugins::plugin_imports`).
  */
-export async function installDevImportMap(): Promise<ImportMap | undefined> {
+export function pluginImports(plugins: readonly InstalledPlugin[]): Record<string, string> {
+  const imports: Record<string, string> = {};
+  for (const plugin of plugins) {
+    if (!plugin.manifest.frontend) continue;
+    const url = moduleUrl(plugin);
+    imports[pluginSpecifier(plugin.manifest.id)] = url;
+    const provided = plugin.manifest.provides ? parsePluginRef(plugin.manifest.provides) : undefined;
+    if (provided) imports[pluginSpecifier(provided.id)] ??= url;
+  }
+  return imports;
+}
+
+/**
+ * Build and inject a dev-only import map: blob modules re-exporting this bundle's
+ * instances of the runtime layer, and a `plugin:<id>` entry for every plugin in
+ * `plugins` (the ones this boot loads). Returns the map, or `undefined` when the page
+ * already has one (production: the server's map carries the plugin entries).
+ */
+export async function installDevImportMap(plugins: readonly InstalledPlugin[] = []): Promise<ImportMap | undefined> {
   if (typeof document === "undefined") return undefined;
   if (pageImportMap()) return undefined;
 
-  const imports: Record<string, string> = {};
+  const imports: Record<string, string> = { ...pluginImports(plugins) };
   const registry = ((globalThis as Record<string, unknown>)["__lmRuntime"] ??= {}) as Record<
     string,
     unknown

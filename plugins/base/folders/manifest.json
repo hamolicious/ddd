@@ -1,62 +1,20 @@
 {
   "id": "folders",
-  "version": "2.0.0",
+  "version": "4.0.0",
   "name": "Folders",
   "description": "A drag-and-drop tree of notes: a note's children are listed in its own section.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
-  "kernel": "^2.0",
-  "hot": true,
-  "consumes": {
-    "browser": {
-      "protocol": "lm/document-browser@^2.0",
-      "needs": [
-        "newDocument"
-      ]
-    },
-    "router": {
-      "protocol": "lm/router@^1.0",
-      "needs": [
-        "navigate",
-        "current",
-        "onChange"
-      ]
-    },
-    "menu": {
-      "protocol": "lm/context-menu@^1.0",
-      "needs": [
-        "open",
-        "openSheet",
-        "confirm",
-        "close"
-      ]
-    },
-    "decorations": {
-      "protocol": "lm/folders.decoration@^2.0"
-    },
-    "actions": {
-      "protocol": "lm/folders.menu-item@^2.0"
-    },
-    "created": {
-      "protocol": "lm/document-browser.created@^1.0"
-    }
-  },
-  "provides": {
-    "tree": {
-      "protocol": "lm/sidebar.panel@1.0.0",
-      "order": 20
-    },
-    "settings": {
-      "protocol": "lm/settings.section@1.0.0",
-      "order": 30
-    },
-    "commands": {
-      "protocol": "lm/commands.command@2.0.0"
-    },
-    "folders": {
-      "protocol": "lm/folders@1.2.0"
-    }
+  "kernel": "^3.0",
+  "dependencies": {
+    "commands": "^3.0",
+    "context-menu": "^2.0",
+    "doc-events": "^1.0",
+    "doc-list": "^5.0",
+    "router": "^2.0",
+    "settings": "^2.0",
+    "shell-ui": "^3.0"
   },
   "peerLibraries": {
     "react": "^18.0.0",

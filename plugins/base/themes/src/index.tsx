@@ -8,25 +8,26 @@
  * `themes` plugin failed still renders legibly (SPEC §6.4 error containment plus the
  * §6.5 note about where token defaults live).
  *
- * A theme therefore only names what it changes. Two are offered here — one per scheme,
- * on the `builtin` port, to this plugin's own `themes` host (`lm/themes.theme`, the
- * protocol package in `protocols/themes.theme/`) — which is what proves the point:
- * every value they do not mention is still the kernel's, and a third-party theme is
- * the same four fields on a port of its own.
+ * A theme therefore only names what it changes. Two are added here — one per scheme,
+ * through this plugin's own `addTheme` — which is what proves the point: every value
+ * they do not mention is still the kernel's, and a third-party theme is the same four
+ * fields passed to `addTheme` from its own `activate`.
  *
- * `apply.ts` holds the application logic (and its tests), `controller.ts` the selection
+ * `api.ts` holds the `Theme` type and the registry, `apply.ts` the application logic (and its tests), `controller.ts` the selection
  * state, `Picker.tsx` the settings section.
  */
 
 import { type Kernel, type Unsubscribe } from "@kernel";
-import type { Command } from "@protocols/lm/commands.command";
-import type { SettingsSection } from "@protocols/lm/settings.section";
-import type { SettingsShell } from "@protocols/lm/settings-shell";
-import type { Theme } from "@protocols/lm/themes.theme";
+import { addCommand } from "plugin:commands";
+import { addSection, open as openSettings } from "plugin:settings";
 
+import { themeRegistry, type Theme } from "./api.js";
 import { ThemePicker } from "./Picker.js";
 import { ThemesController } from "./controller.js";
 
+export type { Theme } from "./api.js";
+
+/** Everything the functions below export, as one object. */
 export interface ThemesApi {
   list(): readonly Theme[];
   /** Apply a theme by id; `undefined` returns to the kernel defaults. */
@@ -35,11 +36,37 @@ export interface ThemesApi {
   onChange(listener: (themeId: string | undefined) => void): Unsubscribe;
 }
 
-export default function activate(kernel: Kernel): ThemesApi {
-  // The host: every theme wired to the port, in seat order. The shape and the duplicate
-  // key (`id`) come from the protocol package.
-  const themes = kernel.ports.collect<Theme>("themes");
+let live: ThemesController | undefined;
 
+function controller(): ThemesController {
+  if (!live) throw new Error("themes: not active yet (call it from your own activate or later)");
+  return live;
+}
+
+/** Offer a theme (or several) to the picker. Returns the function that withdraws it. */
+export const addTheme: (items: Theme | readonly Theme[]) => () => void = themeRegistry.add;
+
+/** Every installed theme. */
+export function list(): readonly Theme[] {
+  return themeRegistry.get();
+}
+
+/** Apply a theme by id; `undefined` returns to the kernel defaults. */
+export function select(themeId: string | undefined): Promise<void> {
+  return controller().select(themeId);
+}
+
+/** The selected theme's id for the painted scheme, if any. */
+export function selected(): string | undefined {
+  return controller().selected();
+}
+
+/** Called with the selected id after every change. */
+export function onChange(listener: (themeId: string | undefined) => void): Unsubscribe {
+  return controller().onChange(listener);
+}
+
+export default function activate(kernel: Kernel): void {
   kernel.settings.defineSchema({
     theme: { type: "string", label: "Light theme", description: "Theme id, or empty for the kernel default." },
     themeDark: { type: "string", label: "Dark theme", description: "Theme id, or empty for the kernel default." },
@@ -53,7 +80,7 @@ export default function activate(kernel: Kernel): ThemesApi {
 
   // Examples, and the minimum a picker needs to be worth opening. Both name a handful
   // of tokens and inherit the rest — including every contrast-checked text pair.
-  kernel.ports.offer<Theme>("builtin", [
+  addTheme([
     {
       id: "warm",
       name: "Warm",
@@ -89,12 +116,13 @@ export default function activate(kernel: Kernel): ThemesApi {
     },
   ]);
 
-  const controller = new ThemesController(kernel, () => themes.get());
+  const controller = new ThemesController(kernel, () => themeRegistry.get());
+  live = controller;
   controller.adoptStoredAppearance();
 
   // Live in both directions: a theme contributed (or withdrawn with its plugin) later
   // re-resolves the stored id, and `subscribe` firing immediately is the initial apply.
-  themes.subscribe(() => controller.refresh());
+  themeRegistry.subscribe(() => controller.refresh());
   // A settings change — this tab, another tab, another device through sync. Never
   // unsubscribed: a frontend plugin's lifetime is the page's (activation is
   // reload-only, SPEC §6.4).
@@ -110,15 +138,15 @@ export default function activate(kernel: Kernel): ThemesApi {
     }
   });
 
-  kernel.ports.offer<SettingsSection>("settings", {
+  addSection({
     id: "themes",
     title: "Appearance",
     order: 10,
     description: "Light and dark appearance, and the theme used for each.",
-    component: () => <ThemePicker kernel={kernel} themes={themes} controller={controller} />,
+    component: () => <ThemePicker kernel={kernel} themes={themeRegistry} controller={controller} />,
   });
 
-  kernel.ports.offer<Command>("commands", [
+  addCommand([
     {
       id: "themes.toggleAppearance",
       title: "Toggle light / dark appearance",
@@ -129,21 +157,13 @@ export default function activate(kernel: Kernel): ThemesApi {
       id: "themes.open",
       title: "Change theme",
       category: "Appearance",
-      run: () => {
-        // Optional port: `undefined` while nothing is bound to it, and read at run time
-        // rather than at activation so a rewiring in between is honoured.
-        const shell = kernel.ports.use<Pick<SettingsShell, "open"> | undefined>("settings-shell");
-        shell?.open("themes");
-      },
+      run: () => openSettings("themes"),
     },
   ]);
+}
 
-  return {
-    list: () => themes.get(),
-    select: (themeId) => controller.select(themeId),
-    selected: () => controller.selected(),
-    onChange: (listener) => controller.onChange(listener),
-  };
+export function deactivate(): void {
+  live = undefined;
 }
 
 /**

@@ -14,7 +14,6 @@
 //! /api/plugins                     -> statics.rs                (authenticated)
 //! /api/plugins/:id/*               -> plugin_api.rs             (session, or public per manifest)
 //! /api/admin/plugins/*             -> plugin_api.rs             (admin only)
-//! /api/wiring, /api/wiring/*       -> wiring.rs                 (admin only; the wiring store)
 //! /api/shell/*                     -> shell.rs                  (authenticated; M5 bundle manifest)
 //! /importmap.json, /kernel.d.ts    -> statics.rs                (public)
 //! /plugins/:id/:version/*          -> statics.rs                (public, immutable)
@@ -32,7 +31,6 @@ pub mod shell;
 pub mod statics;
 pub mod sync;
 pub mod uploads;
-pub mod wiring;
 
 use std::time::Duration;
 
@@ -67,10 +65,6 @@ pub fn router(state: AppState, metrics: PrometheusHandle) -> Router {
         // `plugin_api.rs` owns both halves of the plugin HTTP surface (the admin screens
         // and the inbound dispatch), because the route table is the same resource.
         .nest("/admin/plugins", plugin_api::admin_router())
-        // PLUGIN-PROTOCOLS step 7: the wiring store's admin surface — the live version, the
-        // history, and the one route that applies a draft (`wiring.rs`). Admin-only like
-        // `/api/admin/*`, but its own nest: it is the store's surface, not the user admin's.
-        .nest("/wiring", wiring::router())
         // The installed-plugin list (M3) and the per-plugin route dispatch (M4) share the
         // `/api/plugins` prefix: `GET /` is the list, `/{id}/{*path}` reaches a backend
         // half. Merged rather than nested twice — axum resolves `/` and `/{id}/{*path}`

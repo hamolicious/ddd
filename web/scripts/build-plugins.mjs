@@ -7,6 +7,7 @@
  * ├── manifest.json
  * └── frontend/
  *     ├── index.mjs
+ *     ├── index.d.ts     the exports' types: `declare module "plugin:<id>"`
  *     └── style.css
  * ```
  *
@@ -28,6 +29,7 @@ import { fileURLToPath } from "node:url";
 import { build } from "vite";
 
 import { pluginConfig } from "../../plugins/base/_shared/vite.plugin-config.mjs";
+import { buildPluginDts } from "./build-plugin-dts.mjs";
 
 const web = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const baseDir = resolve(web, "..", "plugins", "base");
@@ -69,6 +71,8 @@ for (const id of plugins) {
   }
   const outDir = join(distRoot, manifest.id, manifest.version);
   await build(pluginConfig({ root, outDir, resolveFrom: web }));
+  // The types of its exports, as `declare module "plugin:<id>"` (`frontend/index.d.ts`).
+  await buildPluginDts({ root, outDir });
   built.push(`${manifest.id}@${manifest.version}`);
   console.log(`+ ${manifest.id}@${manifest.version} -> ${outDir}`);
 }

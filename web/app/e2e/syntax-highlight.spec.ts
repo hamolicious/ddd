@@ -6,6 +6,7 @@
  * Also the CSP check the unit tests cannot make: tree-sitter compiles wasm in the page,
  * which the policy allows (`'wasm-unsafe-eval'`) and nothing else it does may need more.
  */
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { expect, test } from "@playwright/test";
@@ -75,7 +76,12 @@ test("a grammar uploaded in Settings highlights its own fences, and a broken one
   request,
   baseURL,
 }) => {
-  const built = fileURLToPath(new URL("../../../plugins/base/dist/syntax-highlight/1.0.0/frontend/languages/", import.meta.url));
+  // The built plugin's own grammars, at whatever version the manifest says.
+  const plugin = new URL("../../../plugins/base/syntax-highlight/manifest.json", import.meta.url);
+  const { version } = JSON.parse(readFileSync(plugin, "utf8")) as { version: string };
+  const built = fileURLToPath(
+    new URL(`../../../plugins/base/dist/syntax-highlight/${version}/frontend/languages/`, import.meta.url),
+  );
   const problems: string[] = [];
   page.on("pageerror", (error) => problems.push(error.message));
 

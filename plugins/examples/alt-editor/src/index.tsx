@@ -3,20 +3,28 @@
  *
  * > *Acceptance: the built-in editor replaced by a separately-authored editor plugin.*
  *
- * This is that separately-authored editor. It lives **outside `plugins/base/`**, it
- * imports nothing from any other plugin's source, and everything it knows about the
- * host comes from `@kernel` — which at build time is
- * `web/kernel-api/dist/kernel.d.ts`, the same single file a third party downloads
- * from `/kernel.d.ts` (SPEC §6.4: "types are the contract"). If this plugin needs a
- * fact the `.d.ts` does not carry, the contract has a hole in it; that is what makes
- * it worth keeping in the tree rather than deleting after the test goes green.
+ * This is that separately-authored editor. It lives **outside `plugins/base/`**, and
+ * everything it knows about the host comes from published types only: `@kernel`
+ * (`web/kernel-api/dist/kernel.d.ts`, the file a third party downloads from
+ * `/kernel.d.ts`) and `plugin:document-surface` (the `frontend/index.d.ts` that plugin
+ * ships). If this plugin needs a fact those files do not carry, the contract has a hole.
  *
- * What it deliberately is *not*: CodeMirror. `base/editor` owns the `editor.extension`
- * point and the CodeMirror runtime-layer rows, and a replacement that also used
- * CodeMirror would prove only that two plugins can share a library. A plain
- * `<textarea>` proves the interesting thing — that `document.mode` has no built-in
- * favourite (SPEC §6.5) and that the surface hands a replacement exactly what it
- * handed the original.
+ * ### A stand-in, not an extra mode
+ *
+ * The manifest says `"provides": "editor@2.0.0"`: this plugin **replaces** `editor`, and
+ * enabling one disables the other. That is what the acceptance test does (the registry is
+ * the base distribution minus `editor`, plus this), and it is only honest if everything
+ * that depends on `editor` keeps working. So this module exports `editor`'s whole API with
+ * the same names and types — `addExtension`, `addPasteHandler`, `addSurface`, `surfaces`,
+ * `onSurfacesChange`, `focus`, `setMachineSectionsFolded` — and the `/` menu, frontmatter
+ * autocomplete, emoji, wikilinks and attachment pasting find a textarea where CodeMirror
+ * was. Two things a textarea cannot do, it accepts and ignores: CodeMirror extensions
+ * (`addExtension` keeps them, nothing runs them) and folding (`setMachineSectionsFolded`).
+ *
+ * What it deliberately is *not*: CodeMirror. A replacement that also used CodeMirror
+ * would prove only that two plugins can share a library. A plain `<textarea>` proves the
+ * interesting thing — that `document-surface` has no built-in favourite mode (SPEC §6.5)
+ * and hands a replacement exactly what it handed the original.
  *
  * ### The two things a Y.Text-backed textarea has to get right
  *
@@ -31,45 +39,137 @@
  *    it used to find the change.
  */
 
-import { useEffect, useRef, useState, type ReactElement } from "react";
+import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type ReactElement } from "react";
 import * as Y from "yjs";
 
-import type { Kernel, OpenDocument } from "@kernel";
+import { createRegistry, type DocumentId, type Kernel, type OpenDocument, type Unsubscribe } from "@kernel";
+import { addMode, type DocumentModeProps } from "plugin:document-surface";
 
 /*
- * The protocols this plugin offers on its two ports, typed from their packages.
- *
- * Importing the base plugins' sources for these would be *convenient and wrong*: they are
- * not part of any contract (SPEC §2 — the kernel knows protocols as data). What a
- * third-party plugin has is each protocol's generated `index.d.ts`, served at
- * `/protocols/<id>/<version>/index.d.ts` and mapped here as `@protocols/lm/<name>`
- * (`plugins/examples/tsconfig.json`), so this one has exactly that too.
+ * `editor`'s types, restated. Dependents of `editor` compile against `editor`'s own
+ * `.d.ts`; these must stay structurally the same, which is what "stand-in" promises.
  */
-import type { DocumentMode, DocumentModeProps } from "@protocols/lm/document.mode";
-import type { EditorInsertion } from "@protocols/lm/editor.paste";
-import type { TextMark, TextSurface } from "@protocols/lm/text.surface";
 
-export interface AltEditorApi {
-  /** The mode id this plugin claims. Exported so a test does not hard-code a string. */
-  readonly modeId: string;
+/**
+ * A CodeMirror extension. Accepted so dependents that add one keep working; a textarea
+ * has nothing to run it in, so it is kept and ignored.
+ */
+export interface EditorExtension {
+  readonly id: string;
+  readonly extension: unknown;
+  /** Lower first. Default 100. */
+  readonly order?: number;
 }
 
-/** The id the base distribution's `editor` uses, so this is a drop-in replacement. */
-const MODE_ID = "edit";
+export interface EditorPasteEvent {
+  readonly documentId: DocumentId;
+  /** A clipboard paste, or a drag dropped onto the text. */
+  readonly via: "paste" | "drop";
+  readonly files: readonly File[];
+  /** The clipboard's plain text; empty when there is none. */
+  readonly text: string;
+  /** Put text at the caret (a paste replaces the selection). Each call lands after the previous one. */
+  insert(text: string): EditorInsertion;
+}
 
-export default function activate(kernel: Kernel): AltEditorApi {
-  // On the `mode` port: the wiring seats it on `document-surface`'s host of
-  // `lm/document.mode`, beside (or instead of) `editor`'s mode of the same id.
-  kernel.ports.offer<DocumentMode>("mode", {
-    id: MODE_ID,
+/** Text a paste handler put in, followed through later edits. */
+export interface EditorInsertion {
+  /** Swap the inserted text for `text`; `false`, changing nothing, once it was edited or settled. */
+  replace(text: string): boolean;
+  /** Take the inserted text out again, under the same rule. */
+  remove(): boolean;
+}
+
+export interface EditorPaste {
+  readonly id: string;
+  /** Lower is asked first. Default 100. */
+  readonly order?: number;
+  /** `true` takes the paste; must answer synchronously. */
+  readonly paste: (event: EditorPasteEvent) => boolean;
+}
+
+/** A spot in a document to insert at later. Each insert lands after the previous one. */
+export interface TextMark {
+  insert(text: string): EditorInsertion;
+}
+
+/** A mounted editor, as the `/` menu and autocomplete see it. */
+export interface TextSurface {
+  readonly id: string;
+  readonly documentId: DocumentId;
+  readonly element: HTMLElement;
+  readonly hasFocus: () => boolean;
+  readonly focus: () => void;
+  readonly textBeforeCaret: () => string;
+  readonly caretRect: () => { readonly left: number; readonly top: number; readonly bottom: number } | null;
+  readonly takeBeforeCaret: (length: number) => TextMark;
+  readonly subscribe: (listener: () => void) => () => void;
+  readonly documentBeforeCaret?: () => string;
+  readonly replaceBeforeCaret?: (length: number, text: string) => void;
+}
+
+export interface EditorApi {
+  focus(): void;
+  setMachineSectionsFolded(folded: boolean): void;
+}
+
+const extensionRegistry = createRegistry<EditorExtension>({ key: (e) => e.id, order: (e) => e.order ?? 100 });
+const pasteRegistry = createRegistry<EditorPaste>({ key: (e) => e.id, order: (e) => e.order ?? 100 });
+const surfaceRegistry = createRegistry<TextSurface>({ key: (surface) => surface.id });
+
+/** Kept for `editor` compatibility; a textarea runs no CodeMirror extensions. Returns the remover. */
+export const addExtension: (items: EditorExtension | readonly EditorExtension[]) => () => void =
+  extensionRegistry.add;
+
+/** Add a paste and drop handler (or several), asked in `order`. Returns the remover. */
+export const addPasteHandler: (items: EditorPaste | readonly EditorPaste[]) => () => void = pasteRegistry.add;
+
+/** Announce a mounted text editor. Returns the remover. */
+export const addSurface: (items: TextSurface | readonly TextSurface[]) => () => void = surfaceRegistry.add;
+
+/** Every text surface mounted right now. */
+export function surfaces(): readonly TextSurface[] {
+  return surfaceRegistry.get();
+}
+
+/** Called now and after every surface added or removed. */
+export function onSurfacesChange(listener: (surfaces: readonly TextSurface[]) => void): Unsubscribe {
+  return surfaceRegistry.subscribe(listener);
+}
+
+/** Focus the editor for the document on screen. */
+export function focus(): void {
+  live?.focus();
+}
+
+/** A textarea has no folds, so this does nothing; it exists because `editor` has it. */
+export function setMachineSectionsFolded(folded: boolean): void {
+  void folded;
+}
+
+/** The mode id `editor` uses, so this is a drop-in replacement. */
+export const modeId = "edit";
+
+/** The textarea on screen. One document surface, so at most one editor. */
+let live: HTMLTextAreaElement | undefined;
+
+export default function activate(kernel: Kernel): void {
+  addMode({
+    id: modeId,
     label: "Edit (plain)",
-    order: 20,
+    order: 10,
+    icon: (
+      <svg aria-hidden="true" viewBox="0 0 24 24" width="1.15em" height="1.15em" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 013 3L8 19z" />
+      </svg>
+    ),
     component: (props: DocumentModeProps) => <PlainEditor kernel={kernel} {...props} />,
   });
+  kernel.log.info("alt-editor: added the plain-text `edit` mode");
+}
 
-  kernel.log.info("alt-editor: offered the plain-text `edit` mode");
-
-  return { modeId: MODE_ID };
+export function deactivate(): void {
+  live = undefined;
 }
 
 function PlainEditor({
@@ -128,9 +228,9 @@ function PlainEditor({
     for (const name of events) element.addEventListener(name, notify);
     const lineStart = (): number => element.value.lastIndexOf("\n", element.selectionStart - 1) + 1;
 
-    // On the `surface` port (`lm/text.surface`), for the `/` menu and autocomplete,
-    // withdrawn when the editor unmounts.
-    const surface = kernel.ports.offer<TextSurface>("surface", {
+    // For the `/` menu and autocomplete; removed when the editor unmounts.
+    live = element;
+    const removeSurface = addSurface({
       id: `alt-editor:${open.id}:${String((surfaceCount += 1))}`,
       documentId: open.id,
       element,
@@ -162,7 +262,8 @@ function PlainEditor({
       },
     });
     return () => {
-      surface.dispose();
+      removeSurface();
+      if (live === element) live = undefined;
       for (const name of events) element.removeEventListener(name, notify);
     };
   }, [open, phase]);
@@ -177,6 +278,44 @@ function PlainEditor({
       kernel.log.error("alt-editor: write failed", cause);
     } finally {
       writing.current = false;
+    }
+  };
+
+  /** Ask the paste handlers in order; the first to take it cancels the browser's own paste. */
+  const offerPaste = (
+    via: "paste" | "drop",
+    data: DataTransfer | null,
+    event: ClipboardEvent<HTMLTextAreaElement> | DragEvent<HTMLTextAreaElement>,
+  ): void => {
+    const element = area.current;
+    const handlers = pasteRegistry.get();
+    if (!open || !element || open.phase !== "live" || !data || handlers.length === 0) return;
+    let mark: TextMark | undefined;
+    const pasted: EditorPasteEvent = {
+      documentId: open.id,
+      via,
+      files: [...data.files],
+      text: data.getData("text/plain"),
+      // A textarea cannot tell where a drop landed, so a drop goes in at the caret too.
+      insert: (text) => {
+        if (!mark) {
+          const from = element.selectionStart;
+          const to = element.selectionEnd;
+          if (to > from) open.doc.transact(() => open.text.delete(from, to - from), "alt-editor");
+          mark = markAt(open.text, from);
+        }
+        return mark.insert(text);
+      },
+    };
+    for (const handler of handlers) {
+      try {
+        if (handler.paste(pasted)) {
+          event.preventDefault();
+          return;
+        }
+      } catch (cause) {
+        kernel.log.error(`alt-editor: paste handler ${handler.id} failed`, cause);
+      }
     }
   };
 
@@ -214,6 +353,8 @@ function PlainEditor({
         aria-label="Document text"
         spellCheck={false}
         onInput={onInput}
+        onPaste={(event) => offerPaste("paste", event.clipboardData, event)}
+        onDrop={(event) => offerPaste("drop", event.dataTransfer, event)}
       />
     </div>
   );

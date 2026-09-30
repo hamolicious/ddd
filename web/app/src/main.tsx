@@ -3,8 +3,8 @@
  * visible.
  *
  * ```
- * browser floor  →  service worker  →  auth gate  →  kernel init  →  import map
- *                →  plugin list  →  topological activation  →  shell mounts
+ * browser floor  →  service worker  →  auth gate  →  kernel init  →  plugin list
+ *                →  import map  →  activation in dependency order  →  shell mounts
  * ```
  *
  * Four properties of this sequence are load-bearing:
@@ -37,15 +37,7 @@
 import { StrictMode, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
-import {
-  KERNEL_API_VERSION,
-  type InstalledPlugin,
-  type LiveWiring,
-  type LogoutOptions,
-  type ProtocolPackage,
-  type ResolvedPluginSet,
-  type SessionUser,
-} from "@kernel";
+import { KERNEL_API_VERSION, type InstalledPlugin, type LogoutOptions, type PluginLoad, type SessionUser } from "@kernel";
 import {
   PluginErrorBoundary,
   paintKernelDefaultTokens,
@@ -53,13 +45,11 @@ import {
 } from "@kernel/runtime/index.js";
 
 import { AuthGate } from "./boot/AuthGate.js";
-import { OfflineError, installedPlugins, type PluginList, inviteTokenFromHash, logoutRequest, me, resetTokenFromHash } from "./boot/api.js";
+import { OfflineError, installedPlugins, inviteTokenFromHash, logoutRequest, me, resetTokenFromHash } from "./boot/api.js";
 import {
+  cachedLoad,
   cachedPlugins,
-  cachedProtocols,
-  cachedResolution,
   cachedSession,
-  cachedWiring,
   forgetBootCache,
   forgetSession,
   rememberPlugins,
@@ -69,7 +59,7 @@ import { initKernel, type KernelRuntime } from "./boot/kernel-init.js";
 import { bootModeFor, safeModeFrom } from "./boot/safe-mode.js";
 import { contributeShellSection } from "./boot/ShellSection.js";
 import {
-  inShell,
+  shellOwnsSession,
   onShellUpdateReady,
   rememberShellToken,
   reportBootFailed,
@@ -78,13 +68,11 @@ import {
   shellToken,
   type ShellUpdateReady,
 } from "./boot/shell.js";
-import { ReloadPrompt, WiringWatch } from "./boot/reload-prompt.js";
-import { installTestHooks } from "./boot/test-hooks.js";
+import { ReloadPrompt } from "./boot/reload-prompt.js";
 import { registerServiceWorker, type UpdateFlow } from "./boot/update.js";
 import { trackViewportHeight } from "./boot/viewport.js";
-import { installDevImportMap, missingSpecifiers, pageImportMap } from "./loader/importmap.js";
-import { failureNotice, loadPlugins, type ActiveModule } from "./loader/loader.js";
-import { PluginRuntime } from "./loader/runtime.js";
+import { importMapSpecifiers, installDevImportMap, missingSpecifiers, pageMapLacksPlugins } from "./loader/importmap.js";
+import { failureNotice, loadPlugins, pluginSpecifier } from "./loader/loader.js";
 import { BareManager } from "./safe-mode/BareManager.js";
 import { AppFrame } from "./ui/AppFrame.js";
 import { BootFailure, BootScreen, UnsupportedBrowser, supportsImportMaps } from "./ui/BootScreen.js";
@@ -149,9 +137,12 @@ async function boot(): Promise<void> {
   // two caches, two update stories, one of them invisible to the revert path. Registration
   // would also just 404, since the local server serves only manifest-listed paths.
   //
-  // The prompt is the one shared with wiring changes (`reload-prompt.ts`): a user is asked
-  // to reload once, whatever the reasons.
-  if (!inShell()) {
+  // The prompt is the one shared with a stale plugin list (`reload-prompt.ts`): a user is
+  // asked to reload once, whatever the reasons.
+  //
+  // A cookie shell (the desktop app) is served by the server like a tab and keeps the
+  // worker: it is its only offline cache.
+  if (!shellOwnsSession()) {
     updates = registerServiceWorker((apply) => reloadPrompt.offerUpdate(apply));
   }
 
@@ -223,12 +214,18 @@ async function boot(): Promise<void> {
         // `Set-Cookie` it will never send back and looks signed out on the next call.
         // `token !== undefined` was the wrong test — on first run there is no token yet,
         // which is exactly when the login form is shown.
-        bearer={inShell()}
+        bearer={shellOwnsSession()}
         resetToken={resetToken}
         inviteToken={inviteTokenFromHash()}
         onSignedIn={(signedIn, issued) => {
           if (issued) rememberShellToken(issued);
           rememberSession(signedIn);
+          // A signed-out page was served without the plugin entries; reload for the map
+          // that has them rather than boot plugins nothing can resolve.
+          if (pageMapLacksPlugins()) {
+            location.reload();
+            return;
+          }
           void withSession(signedIn, issued ?? token);
         }}
       />,
@@ -252,7 +249,7 @@ async function boot(): Promise<void> {
         bootMode: bootModeFor(safeMode),
         logout: (options) => signOut(runtime, bearer, options),
         onPluginProblem: (problem) => reportPluginProblem(problem),
-        onWiringVersion: (version) => wiringWatch.seen(version),
+        // `plugins.changed`: the sync client reloads the page (no hot reload, `@kernel` 3.0).
         onCoreUnavailable: (error) => console.warn("[wasm] core unavailable", error.message),
       });
       const host = runtime.host;
@@ -273,18 +270,13 @@ async function boot(): Promise<void> {
       reloadPrompt.attach((notice) => host.notices.notify(notice));
       if (shellUpdate) notifyShellUpdate(host, shellUpdate);
 
-      // Shell-only, and nothing is contributed in a browser: which bridge this device
-      // speaks, what it can do natively, and which bundle is running (SPEC §9 M5's OTA
-      // and revert criteria are not testable without a visible version).
-      contributeShellSection(host);
-
       render(
         <AppFrame
           host={host}
-          // `inShell()` and not just "we have a token": the re-auth overlay of SPEC §5.3
+          // `shellOwnsSession()` and not just "we have a token": the re-auth overlay of SPEC §5.3
           // must ask for a *bearer* token in the shell even on a launch that arrived here
           // without one, because a cookie cannot survive the loopback origin.
-          bearer={inShell() || bearer !== undefined}
+          bearer={shellOwnsSession() || bearer !== undefined}
           onSignedIn={(_user, issued) => resumeSession(issued)}
         />,
       );
@@ -301,6 +293,12 @@ async function boot(): Promise<void> {
       }
 
       await activatePlugins(host, bearer, safeMode === "base", offlineBoot);
+
+      // Shell-only, and nothing is contributed in a browser: which bridge this device
+      // speaks, what it can do natively, and which bundle is running (SPEC §9 M5's OTA
+      // and revert criteria are not testable without a visible version). After the
+      // plugins, because it goes into the `settings` plugin's sections.
+      await contributeShellSection(host).catch((error: unknown) => console.warn("[shell] the device section could not be added", error));
 
       // **Interactive.** The kernel is up, the projection is readable, and the plugin set
       // has activated (or failed, contained and reported — a workspace with a broken
@@ -335,87 +333,18 @@ let runtime: KernelRuntime | undefined;
 /** The service-worker update flow, when there is one (not in the shell, not in dev). */
 let updates: UpdateFlow | undefined;
 
-/** The one reload prompt, shared by the service-worker update and wiring changes. */
+/** The one reload prompt, shared by the service-worker update and a stale plugin list. */
 const reloadPrompt = new ReloadPrompt();
 
 /**
- * The wiring version this page runs against the server's. Behind means a reload until
- * clients can rewire in place (PLUGIN-PROTOCOLS §6c).
- */
-const wiringWatch = new WiringWatch(() => void followWiring());
-
-/** The activated plugin set, once boot is done: what a wiring change is applied to. */
-let pluginRuntime: PluginRuntime | undefined;
-/** How this page booted, for fetching the next plugin set the same way. */
-let bootContext: { readonly bearer: string | undefined; readonly baseOnly: boolean } | undefined;
-/** A reload has been asked for: later versions wait behind it rather than half-applying. */
-let reloadPending = false;
-/** One follow at a time; a version that lands meanwhile is picked up when it finishes. */
-let following: Promise<void> | undefined;
-
-/**
- * The server's wiring moved past this page's (PLUGIN-PROTOCOLS §6c): fetch the new plugin
- * set and apply it in place, or ask for a reload when the change needs one. Hot applies
- * are silent.
- */
-async function followWiring(): Promise<void> {
-  if (following || reloadPending) return;
-  following = (async () => {
-    const runtime = pluginRuntime;
-    const context = bootContext;
-    if (!runtime || !context) {
-      // No runtime: `?safe=bare`, or a boot whose list carried no live wiring.
-      reloadPending = true;
-      reloadPrompt.askForWiring();
-      return;
-    }
-    let list: PluginList;
-    try {
-      list = await installedPlugins(context.bearer);
-    } catch {
-      // Offline between the frame and the fetch: the next `welcome` brings it back here.
-      return;
-    }
-    if (!list.wiring || !list.resolved) {
-      reloadPending = true;
-      reloadPrompt.askForWiring();
-      return;
-    }
-    const outcome = await runtime.apply({
-      plugins: list.plugins,
-      wiring: list.wiring,
-      resolution: context.baseOnly ? list.resolved.safe : list.resolved.normal,
-      protocols: list.protocols ?? [],
-    });
-    if (outcome.kind === "reload") {
-      console.info(`[wiring] v${list.wiring.version} needs a reload: ${outcome.reasons.join("; ")}`);
-      reloadPending = true;
-      reloadPrompt.askForWiring();
-      return;
-    }
-    rememberPlugins(list.plugins, list.wiring, list.resolved, list.protocols);
-    console.info(
-      `[wiring] applied v${list.wiring.version} in place: stopped ${outcome.plan.stop.length}, restarted ${outcome.plan.restart.length}, started ${outcome.plan.start.length}`,
-    );
-    if (outcome.failed.length > 0) {
-      reportPluginProblem({ pluginId: outcome.failed.join(", "), point: "wiring", message: "failed to start after a wiring change" });
-    }
-    wiringWatch.setRunning(list.wiring.version);
-  })().finally(() => {
-    following = undefined;
-  });
-  await following;
-}
-
-/**
- * Every plugin problem the kernel detects — a contribution rejected by shape or key
- * validation, and every error boundary that caught a render — aggregated into **one**
+ * Every plugin problem the kernel detects — every error boundary that caught a render —
+ * aggregated into **one**
  * notice, with the count in the message and the individual lines in the detail.
  *
  * It is one notice rather than one per problem for the reason SPEC §6.4 gives for
  * activation failures: a workspace with three broken plugins must not show three
  * modals. And it is a notice rather than a `console.warn` because the console is not a
- * user interface — a `sidebar.panel` that throws at render shows its in-place chip, and
+ * user interface — a sidebar panel that throws at render shows its in-place chip, and
  * without this the user has no way to learn *which* plugin it was or that admin is
  * where to go next (SPEC §6.4: validation "rejects loudly").
  */
@@ -483,11 +412,29 @@ async function activatePlugins(
   baseOnly: boolean,
   offlineBoot: boolean,
 ): Promise<void> {
-  // In development there is no server-injected map; build one over this bundle's
-  // own modules so a plugin's `import "react"` resolves to the same React.
-  await installDevImportMap();
+  const { plugins, load } = await installedSet(host, bearer, offlineBoot);
+  if (!load) {
+    // A list without a load resolution: cached by an older app, or served by a server from
+    // before `@kernel` 3.0. The order is the server's alone, so no plugin starts; the one
+    // reload prompt says so, and a reload while online fetches a list that has one. (An
+    // empty list already has its own notice.)
+    if (plugins.length > 0) {
+      console.warn("[loader] the plugin list has no load resolution; not activating plugins until a reload fetches one");
+      reloadPrompt.askForStale();
+    }
+    return;
+  }
+  // The server resolved both boot modes; the loader activates from the one this page is in.
+  const order = baseOnly ? load.safe : load.normal;
+  const loading = new Set(order);
 
-  const missing = missingSpecifiers(pageImportMap());
+  // In development there is no server-injected map; build one over this bundle's own
+  // modules so a plugin's `import "react"` resolves to the same React, with a
+  // `plugin:<id>` entry for every plugin this boot loads.
+  await installDevImportMap(plugins.filter((plugin) => loading.has(plugin.manifest.id)));
+
+  const specifiers = importMapSpecifiers();
+  const missing = missingSpecifiers(specifiers);
   if (missing.length > 0) {
     console.error(
       `[loader] the import map does not resolve: ${missing.join(", ")}. Rebuild the app bundle (\`mise run web-build\`) so the server can serve a complete map.`,
@@ -502,46 +449,16 @@ async function activatePlugins(
     });
   }
 
-  const { plugins, wiringVersion, wiring, resolved, protocols } = await installedSet(host, bearer, offlineBoot);
-  // The server resolved the wiring for both boot modes; the loader activates from the one
-  // this page is in (PLUGIN-PROTOCOLS §6).
-  const resolution = resolved ? (baseOnly ? resolved.safe : resolved.normal) : undefined;
-  bootContext = { bearer, baseOnly };
-  if (!resolution) {
-    // A list without a resolution: cached here before resolutions existed, or served by
-    // a server older than wiring. The order is the server's alone since `@kernel` 2.0, so
-    // no plugin starts; the one reload prompt says so, and a reload while online fetches
-    // a list that has one. (An empty list already has its own notice.)
-    if (plugins.length > 0) {
-      console.warn("[loader] the plugin list has no resolution; not activating plugins until a reload fetches one");
-      reloadPending = true;
-      reloadPrompt.askForStale();
-    }
-    return;
-  }
-  const activeModules = new Map<string, ActiveModule>();
   const report = await loadPlugins({
     host,
     plugins,
     kernelVersion: KERNEL_API_VERSION,
-    resolution,
-    ...(protocols ? { protocols } : {}),
-    activeModules,
+    order,
+    serverSkipped: load.skipped,
+    // Offline, the cached map (in the cached `index.html`) and the cached list can come
+    // from different times: load only what both know about.
+    ...(specifiers ? { available: (id: string) => specifiers.has(pluginSpecifier(id)) } : {}),
   });
-
-  // Hot apply needs the live wiring to diff against; without one a change asks for a
-  // reload instead.
-  if (wiring) {
-    pluginRuntime = new PluginRuntime({
-      host,
-      current: { plugins, wiring, resolution, protocols: protocols ?? [] },
-      active: activeModules,
-      importMap: () => new Set(Object.keys(pageImportMap()?.imports ?? {})),
-    });
-  }
-  if (pluginRuntime) installTestHooks(host, pluginRuntime, baseOnly);
-  // Only now: a newer version seen during boot is applied to the finished plugin set.
-  wiringWatch.setRunning(wiringVersion);
 
   console.info(
     `[loader] ${report.activated.length} activated, ${report.failed.length} failed, ${report.skipped.length} skipped in ${report.elapsedMs} ms`,
@@ -567,38 +484,18 @@ async function installedSet(
   host: KernelHost,
   bearer: string | undefined,
   offlineBoot: boolean,
-): Promise<{
-  readonly plugins: readonly InstalledPlugin[];
-  readonly wiringVersion: number;
-  readonly wiring?: LiveWiring;
-  readonly resolved?: ResolvedPluginSet;
-  readonly protocols?: readonly ProtocolPackage[];
-}> {
+): Promise<{ readonly plugins: readonly InstalledPlugin[]; readonly load?: PluginLoad }> {
   try {
-    const { plugins, wiring, resolved, protocols } = await installedPlugins(bearer);
-    rememberPlugins(plugins, wiring, resolved, protocols);
-    return {
-      plugins,
-      wiringVersion: wiring?.version ?? 0,
-      ...(wiring ? { wiring } : {}),
-      ...(resolved ? { resolved } : {}),
-      ...(protocols ? { protocols } : {}),
-    };
+    const { plugins, load } = await installedPlugins(bearer);
+    rememberPlugins(plugins, load);
+    return { plugins, ...(load ? { load } : {}) };
   } catch (error) {
     if (!(error instanceof OfflineError)) throw error;
     const remembered = cachedPlugins();
     if (remembered) {
       console.info(`[loader] offline: activating the ${remembered.length} plugins last seen here`);
-      const resolved = cachedResolution();
-      const protocols = cachedProtocols();
-      const wiring = cachedWiring();
-      return {
-        plugins: remembered,
-        wiringVersion: wiring?.version ?? 0,
-        ...(wiring ? { wiring } : {}),
-        ...(resolved ? { resolved } : {}),
-        ...(protocols ? { protocols } : {}),
-      };
+      const load = cachedLoad();
+      return { plugins: remembered, ...(load ? { load } : {}) };
     }
     host.notices.notify({
       id: "kernel:plugins-unavailable",
@@ -610,7 +507,7 @@ async function installedSet(
         "Your documents are here, but the interface could not load. Reconnect and reload once.",
       actions: [{ label: "Reload", run: () => location.reload() }],
     });
-    return { plugins: [], wiringVersion: 0 };
+    return { plugins: [] };
   }
 }
 

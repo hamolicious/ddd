@@ -10,7 +10,7 @@ import { OfflineCopyNote } from "../../_shared/offline-copy.js";
 import { changesOfflineCopy } from "./offline.js";
 import { useCallback, useEffect, useState, type ReactElement, type ReactNode } from "react";
 
-import type { ConfirmRequest } from "@protocols/lm/context-menu";
+import type { ConfirmRequest } from "plugin:context-menu";
 
 import {
   describeReason,

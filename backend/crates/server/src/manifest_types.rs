@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 /// The `@kernel` contract version this server implements (`x-kernel-version`). The web
 /// bundle's `KERNEL_API_VERSION` is generated from the same line.
-pub const KERNEL_VERSION: &str = "2.1.0";
+pub const KERNEL_VERSION: &str = "3.0.0";
 
 /// A plugin's manifest.json (SPEC §6.2). The one source for the Rust and TypeScript manifest types and validators: `node web/scripts/gen-manifest.mjs` writes both, and `--check` fails when either is stale.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -20,6 +20,19 @@ pub struct PluginManifest {
     pub version: String,
     /// Semver range against the `@kernel` contract version.
     pub kernel: String,
+    /// Plugin id → semver range. Each one loads before this plugin, and this plugin is skipped when one is missing, out of range or failed. Its exports are importable as `plugin:<id>`.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub dependencies: BTreeMap<String, String>,
+    /// Like `dependencies`, but this plugin still loads without them. Reach one through `kernel.plugins.optional(id)`, never a static import.
+    #[serde(
+        default,
+        rename = "optionalDependencies",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub optional_dependencies: BTreeMap<String, String>,
+    /// `<id>@<version>`: this plugin stands in for another one at that API version. `plugin:<id>` resolves to whichever of the two is enabled; only one may be.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provides: Option<String>,
     /// Blessed runtime-layer libraries and their ranges (SPEC §6.4).
     #[serde(
         default,
@@ -39,15 +52,6 @@ pub struct PluginManifest {
     /// The backend half: module, hooks, cron, routes, event subscriptions.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub backend: Option<PluginBackend>,
-    /// Port name → the protocol this plugin provides there, at the exact version it implements (PLUGIN-PROTOCOLS §4).
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub provides: BTreeMap<String, ProvidedPort>,
-    /// Port name → the protocol this plugin consumes there, as a semver range (PLUGIN-PROTOCOLS §4).
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub consumes: BTreeMap<String, ConsumedPort>,
-    /// A promise that the kernel's retraction plus this plugin's own `deactivate()` leave nothing behind, so wiring changes that touch it apply without a reload (PLUGIN-PROTOCOLS §6c).
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub hot: bool,
     /// Human metadata; never load-bearing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
@@ -140,35 +144,19 @@ pub struct PluginBackend {
     /// Server-bus events delivered to `lm_event`, namespaced (`other-plugin:something`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub events: Vec<String>,
-    /// Plugin ids whose backend `lm_call` this half may reach through `call_plugin` (HOST-ABI.md §3.10). Replaces the `dependencies` allowlist removed in `@kernel` 2.0.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub calls: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ProvidedPort {
-    /// `<publisher>/<name>@<version>`: the exact version this port implements, in full.
-    pub protocol: String,
-    /// Default-seat hint for slot ports: seats follow it, then plugin id, until someone edits the wiring. Wiring order always wins.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub order: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
+    /// Functions this backend's `lm_call` answers for plugins that depend on it (HOST-ABI.md §3.10). A call to a name not listed is refused; `input`/`output` shapes are checked at the boundary.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub exports: BTreeMap<String, BackendExport>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ConsumedPort {
-    /// `<publisher>/<name>@<range>`, e.g. `lm/router@^1.0`.
-    pub protocol: String,
-    /// The protocol's keys this port uses. The type check asks only for these, and a service handle refuses any other key.
+pub struct BackendExport {
+    /// Shape JSON (`@kernel` `s.*`, serialized) the payload must fit. Absent: anything.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub needs: Option<Vec<String>>,
-    /// A service port that may stay unbound: the plugin still activates and `use()` returns `undefined`.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub optional: bool,
-    /// A slot host that shows exactly one contributor sets `1`.
+    pub input: Option<serde_json::Value>,
+    /// Shape JSON the returned value must fit. Absent: anything.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub seats: Option<u32>,
+    pub output: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
 }

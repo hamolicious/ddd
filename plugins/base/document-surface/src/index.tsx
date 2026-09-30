@@ -1,12 +1,11 @@
 /**
  * `document-surface` — owns the document route and the **mode registry** (SPEC §6.5).
  *
- * `viewer` and `editor` are symmetric offers on `document.mode`: this plugin has no
- * built-in favourite and no special case for either. That is what makes M3's
- * acceptance test possible — "the built-in editor replaced by a separately-authored
- * editor plugin" is a different offer wired to this host and nothing else. Nothing in
- * this file spells `viewer`, `editor`, `read` or `edit` except {@link DEFAULT_MODE_ID},
- * which is a *fallback preference* and degrades to the first seated mode.
+ * `viewer` and `editor` each call `addMode`: this plugin has no built-in favourite and no
+ * special case for either, so a separately-authored editor plugin replaces the built-in
+ * one by adding its own mode. Nothing in this file spells `viewer`, `editor`, `read` or
+ * `edit` except {@link DEFAULT_MODE_ID}, which is a *fallback preference* and degrades to
+ * the first mode in order.
  *
  * The surface owns the three things a mode must not each re-implement:
  *
@@ -16,7 +15,8 @@
  *   handle to the active mode, releasing it when the route changes. Two modes opening
  *   the same document would take two handles and hold the replica open twice.
  * - **Mode persistence.** The chosen mode per document is a per-user setting, so
- *   reopening a document returns you to how you were reading it.
+ *   reopening a document returns you to how you were reading it. A mode can also claim
+ *   a document (`prefer`), which outranks the user's default but not their own switch.
  *
  * **The switch is icons.** On a wide screen, a compact segmented control in the header —
  * each mode's `icon`, its label as the accessible name and tooltip (a mode with no icon
@@ -31,7 +31,8 @@ import type {
   Kernel,
   OpenDocument,
   QuerySubscription,
-  SlotHost,
+  Registry,
+  RegistryEntry,
   Unsubscribe,
 } from "@kernel";
 import {
@@ -44,53 +45,123 @@ import {
   type ReactNode,
 } from "react";
 
-import type { Command } from "@protocols/lm/commands.command";
-import type { DocumentMode, DocumentModeProps } from "@protocols/lm/document.mode";
-import type { KeybindingDefault } from "@protocols/lm/keybindings.default";
-import type { MainView } from "@protocols/lm/main.view";
-import type { Router } from "@protocols/lm/router";
-import type { Route } from "@protocols/lm/router.route";
-import type { SettingsSection } from "@protocols/lm/settings.section";
+import { addCommand, addKeybinding } from "plugin:commands";
+import { DOCUMENT_ROUTE, addRoute, current as currentPath, onChange as onPathChange } from "plugin:router";
+import { addSection } from "plugin:settings";
+import { addView } from "plugin:shell-ui";
+
+import { modeRegistry, type DocumentMode, type DocumentModeProps } from "./api.js";
 import { lineFromPath } from "./line.js";
 import { SaveState } from "./SaveState.js";
 import { DefaultModeSection } from "./SettingsSection.js";
 import {
+  claimedModeId,
   DEFAULT_MODE_ID,
   nextModeId,
   parseModeMemory,
   rememberMode,
   resolveModeId,
   serializeModeMemory,
-  visibleModes,
+  visibleModes as visibleOf,
 } from "./modes.js";
 
 export { LINE_PARAM, lineFromPath } from "./line.js";
+export type { DocumentMode, DocumentModeProps } from "./api.js";
 
-/** The `router` port: as much of `lm/router` as this plugin's manifest `needs`. */
-type RouterService = Pick<Router, "current" | "onChange">;
+/** What `onChange` reports. */
+export interface DocumentSurfaceState {
+  readonly documentId?: string;
+  readonly mode?: string;
+  /** Fires on row updates too, so dependents need no second query. */
+  readonly row?: DocumentRow;
+}
 
+/** Everything this plugin exports as functions, for code that wants one type for it. */
 export interface DocumentSurfaceApi {
+  addMode(modes: DocumentMode | readonly DocumentMode[]): () => void;
+  /** Every mode added, in switch order, whether or not it applies to the document on screen. */
+  modes(): readonly DocumentMode[];
+  /** The modes that may show the document on screen, in switch order. */
+  visibleModes(): readonly DocumentMode[];
   /** The document currently on screen, if any. */
   currentDocument(): string | undefined;
   /** The hydrated handle for the current document; `undefined` while hydrating. */
   currentHandle(): OpenDocument | undefined;
-  /**
-   * The live projection row of the document on screen, for a plugin that renders `fm`
-   * for whatever is on screen and must not open a second subscription for it. Additive
-   * to the M3 scaffold's API.
-   */
+  /** The live projection row of the document on screen. */
   currentRow(): DocumentRow | undefined;
-  modes(): readonly DocumentMode[];
   activeMode(): string | undefined;
   setMode(modeId: string): Promise<void>;
-  onChange(
-    listener: (state: {
-      documentId?: string;
-      mode?: string;
-      /** Additive: fires on row updates too, so dependents need no second query. */
-      row?: DocumentRow;
-    }) => void,
-  ): Unsubscribe;
+  onChange(listener: (state: DocumentSurfaceState) => void): Unsubscribe;
+}
+
+/**
+ * Add a way of showing a document (or several). Same `id` replaces the earlier mode.
+ * Returns the function that takes it out again.
+ */
+export const addMode: (modes: DocumentMode | readonly DocumentMode[]) => () => void = modeRegistry.add;
+
+/** Every mode added, in switch order. */
+export function modes(): readonly DocumentMode[] {
+  return modeRegistry.get();
+}
+
+/** Every mode added, with the plugin that added it: what a renderer needs for its error boundary. */
+export function modeEntries(): readonly RegistryEntry<DocumentMode>[] {
+  return modeRegistry.entries();
+}
+
+/** Called now and after every mode added or removed. */
+export function onModesChange(listener: (modes: readonly DocumentMode[]) => void): Unsubscribe {
+  return modeRegistry.subscribe(listener);
+}
+
+/** The modes that may show the document on screen, in switch order. */
+export function visibleModes(): readonly DocumentMode[] {
+  return liveSurface?.visible() ?? [];
+}
+
+/** The document currently on screen, if any. */
+export function currentDocument(): string | undefined {
+  return liveSurface?.snapshot.documentId;
+}
+
+/** The hydrated handle for the current document; `undefined` while hydrating. */
+export function currentHandle(): OpenDocument | undefined {
+  return liveSurface?.snapshot.handle;
+}
+
+/** The live projection row of the document on screen. */
+export function currentRow(): DocumentRow | undefined {
+  return liveSurface?.snapshot.row;
+}
+
+/** The mode the document on screen is shown in. */
+export function activeMode(): string | undefined {
+  return liveSurface?.snapshot.mode;
+}
+
+/** Show the document on screen in another mode, and remember the choice for it. */
+export function setMode(modeId: string): Promise<void> {
+  return requireSurface().setMode(modeId);
+}
+
+/** Called after every change to the document on screen, its row, or its mode. */
+export function onChange(listener: (state: DocumentSurfaceState) => void): Unsubscribe {
+  const surface = requireSurface();
+  return surface.subscribe(() => {
+    const { documentId, mode, row } = surface.snapshot;
+    listener({ documentId, mode, row });
+  });
+}
+
+function requireSurface(): Surface {
+  if (!liveSurface) throw new Error("document-surface is not active yet");
+  return liveSurface;
+}
+/** The two router functions the view follows. */
+interface RouterService {
+  current(): string;
+  onChange(listener: (path: string) => void): () => void;
 }
 
 /** What the route can be showing. Every state has a written-out UI below. */
@@ -132,10 +203,8 @@ const byId = (id: DocumentId): Record<string, unknown> => ({
   cmp: { field: "id", op: "eq", value: { str: id } },
 });
 
-export default function activate(kernel: Kernel): DocumentSurfaceApi {
-  // The host: every mode wired in, in seat order (PLUGIN-PROTOCOLS §6a). That order is
-  // the order of the switch, so nothing here sorts.
-  const modes = kernel.ports.collect<DocumentMode>("modes");
+export default function activate(kernel: Kernel): void {
+  const modes = modeRegistry;
 
   kernel.settings.defineSchema({
     [SETTING_DEFAULT_MODE]: {
@@ -156,10 +225,10 @@ export default function activate(kernel: Kernel): DocumentSurfaceApi {
 
   const surface = new Surface(kernel, modes);
   liveSurface = surface;
-  const router = kernel.ports.use<RouterService>("router");
+  const router: RouterService = { current: currentPath, onChange: onPathChange };
 
-  kernel.ports.offer<Route>("route", { path: "/doc/:id", view: "document.surface" });
-  kernel.ports.offer<MainView>("view", {
+  addRoute({ path: DOCUMENT_ROUTE, view: "document.surface" });
+  addView({
     id: "document.surface",
     title: "Document",
     component: (props: { readonly params?: Readonly<Record<string, string>> }) => (
@@ -167,15 +236,8 @@ export default function activate(kernel: Kernel): DocumentSurfaceApi {
     ),
   });
 
-  /**
-   * "Open documents in" — the screen for the setting declared above.
-   *
-   * Offered on the `settings` port without depending on `settings`: an offer reaches
-   * whichever host the wiring seats it on, and the protocol is an opaque name to the
-   * kernel. A hard dependency would buy nothing and would make read/edit mode
-   * disappear the day a workspace replaces the settings shell.
-   */
-  kernel.ports.offer<SettingsSection>("settings", {
+  /** "Open documents in": the screen for the setting declared above. */
+  addSection({
     id: "documents",
     title: "Documents",
     order: 20,
@@ -183,8 +245,10 @@ export default function activate(kernel: Kernel): DocumentSurfaceApi {
     component: () => (
       <DefaultModeSection
         kernel={kernel}
-        // Seat order: the same order every mode switcher in the app shows.
-        modes={() => modes.get()}
+        // Registry order: the same order every mode switcher in the app shows. Only the
+        // modes every document has: one with a `when` (a board, for its saved searches)
+        // cannot be where documents open.
+        modes={() => modes.get().filter((mode) => mode.when === undefined)}
         onModesChange={(listener) => modes.subscribe(() => listener())}
         // Not the raw stored value: `resolveModeId` is the same precedence the surface
         // opens a document with, so the select shows the mode that would actually be
@@ -197,31 +261,30 @@ export default function activate(kernel: Kernel): DocumentSurfaceApi {
     ),
   });
 
-  kernel.ports.offer<Command>("commands", {
+  addCommand({
     id: "document.nextMode",
     title: "Switch document mode",
     category: "Document",
     when: () => surface.snapshot.documentId !== undefined,
     run: () => {
-      const next = nextModeId(surface.visible(), api.activeMode());
-      if (next) void api.setMode(next);
+      const next = nextModeId(surface.visible(), surface.snapshot.mode);
+      if (next) void surface.setMode(next);
     },
   });
-  kernel.ports.offer<KeybindingDefault>("keys", { command: "document.nextMode", keys: "Mod+E" });
+  addKeybinding({ command: "document.nextMode", keys: "Mod+E" });
 
-  // One command per wired mode, so the palette can jump straight to a mode and a user
-  // can bind a key to it. Modes arrive over the lifetime of the boot (and can be
-  // withdrawn when a plugin fails), so this tracks the host rather than reading it
-  // once — `subscribe` fires immediately and on every change.
-  const modeCommands = new Map<string, { dispose(): void }>();
-  modes.subscribe((values) => {
+  // One command per mode, so the palette can jump straight to a mode and a user can bind
+  // a key to it. Modes arrive over the lifetime of the boot, so this tracks the registry
+  // rather than reading it once — `subscribe` fires immediately and on every change.
+  const modeCommands = new Map<string, () => void>();
+  stopModeCommands = modes.subscribe((values) => {
     const seen = new Set<string>();
     for (const mode of values) {
       seen.add(mode.id);
       if (modeCommands.has(mode.id)) continue;
       modeCommands.set(
         mode.id,
-        kernel.ports.offer<Command>("commands", {
+        addCommand({
           id: `document.mode.${mode.id}`,
           title: `Show document as: ${mode.label}`,
           category: "Document",
@@ -232,33 +295,20 @@ export default function activate(kernel: Kernel): DocumentSurfaceApi {
           when: () =>
             surface.snapshot.documentId !== undefined &&
             surface.visible().some((candidate) => candidate.id === mode.id),
-          run: () => api.setMode(mode.id),
+          run: () => surface.setMode(mode.id),
         }),
       );
     }
-    for (const [id, contribution] of modeCommands) {
+    for (const [id, remove] of modeCommands) {
       if (seen.has(id)) continue;
-      contribution.dispose();
+      remove();
       modeCommands.delete(id);
     }
   });
-
-  const api: DocumentSurfaceApi = {
-    currentDocument: () => surface.snapshot.documentId,
-    currentHandle: () => surface.snapshot.handle,
-    currentRow: () => surface.snapshot.row,
-    modes: () => surface.visible(),
-    activeMode: () => surface.snapshot.mode,
-    setMode: (modeId) => surface.setMode(modeId),
-    onChange: (listener) =>
-      surface.subscribe(() => {
-        const { documentId, mode, row } = surface.snapshot;
-        listener({ documentId, mode, row });
-      }),
-  };
-
-  return api;
 }
+
+/** Stops following the registry for per-mode commands; set in `activate`. */
+let stopModeCommands: Unsubscribe | undefined;
 
 /**
  * The surface's state, outside React.
@@ -289,7 +339,7 @@ class Surface {
 
   constructor(
     readonly kernel: Kernel,
-    private readonly point: SlotHost<DocumentMode>,
+    private readonly point: Registry<DocumentMode>,
   ) {
     // A mode offered (or withdrawn) after the document is on screen can change which
     // mode should be active — an uninstalled editor must fall back to reading.
@@ -325,7 +375,7 @@ class Surface {
 
   /** The modes that may show the document on screen, in order. */
   visible(): readonly DocumentMode[] {
-    return visibleModes(this.point.get(), this.#snapshot.row, (mode, error) =>
+    return visibleOf(this.point.get(), this.#snapshot.row, (mode, error) =>
       this.kernel.log.warn(`document.mode "${mode.id}" threw from when()`, error),
     );
   }
@@ -409,7 +459,12 @@ class Surface {
   async #watchRow(id: DocumentId, generation: number): Promise<void> {
     const apply = (row: DocumentRow | undefined): void => {
       if (generation !== this.#generation) return;
-      this.#patch({ row, status: row ? "ready" : "missing", mode: this.#resolve(this.#snapshot.mode, id, row) });
+      // A mode resolved before the first row was resolved blind — no `when`, no
+      // `prefer` — so the first row re-resolves it unless the user picked it. Later rows
+      // keep the mode on screen: a claim appearing mid-edit must not yank the pane away.
+      const blind = this.#snapshot.row === undefined && !this.#chosen;
+      const mode = this.#resolve(blind ? undefined : this.#snapshot.mode, id, row);
+      this.#patch({ row, status: row ? "ready" : "missing", mode });
     };
     try {
       // Tombstoned documents stay viewable: the Trash is a view over rows that are
@@ -467,11 +522,15 @@ class Surface {
 
   #resolve(current: string | undefined, id?: DocumentId, row?: DocumentRow): string | undefined {
     const documentId = id ?? this.#snapshot.documentId;
-    const visible = visibleModes(this.point.get(), row ?? this.#snapshot.row);
+    const shown = row ?? this.#snapshot.row;
+    const visible = visibleOf(this.point.get(), shown);
     // A mode the user is already on stays selected as long as it is still visible.
     if (current !== undefined && visible.some((mode) => mode.id === current)) return current;
     const remembered = documentId === undefined ? undefined : this.#memoryMap().get(documentId);
-    return resolveModeId(remembered, this.#preferredMode(), visible);
+    const claimed = claimedModeId(visible, shown, (mode, error) =>
+      this.kernel.log.warn(`document.mode "${mode.id}" threw from prefer()`, error),
+    );
+    return resolveModeId(remembered, this.#preferredMode(), visible, claimed);
   }
 
   /**
@@ -575,7 +634,7 @@ function boundaryFor(
   const existing = wrapped.get(mode.component);
   if (existing) return existing;
   const component = kernel.ui.boundary(mode.component, {
-    point: "document.mode",
+    point: "document-surface.mode",
     ...(pluginId === undefined ? {} : { pluginId }),
   });
   wrapped.set(mode.component, component);
@@ -602,7 +661,7 @@ function iconBoundaryFor(
   const existing = wrappedIcons.get(key);
   if (existing) return existing;
   const component = kernel.ui.boundary(IconSlot, {
-    point: "document.mode#icon",
+    point: "document-surface.mode#icon",
     ...(pluginId === undefined ? {} : { pluginId }),
   });
   wrappedIcons.set(key, component);
@@ -1014,10 +1073,12 @@ function cssEscape(value: string): string {
   return value.replace(/[^A-Za-z0-9_-]/g, "\\$&");
 }
 
-/** The surface `activate` built, for its pending write; the kernel withdraws everything else (§6c). */
-let liveSurface: { flush(): void } | undefined;
+/** The surface `activate` built: what the exported functions read, and its pending write on stop. */
+let liveSurface: Surface | undefined;
 
 export function deactivate(): void {
+  stopModeCommands?.();
+  stopModeCommands = undefined;
   liveSurface?.flush();
   liveSurface = undefined;
 }

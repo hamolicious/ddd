@@ -1,9 +1,19 @@
 # Life Manager — Linux desktop
 
 The server's PWA in a native window (Tauri 2 / WebKitGTK). Flutter has no Linux webview,
-so this is not the `app/` shell: it injects **no** `window.shell` and the page behaves as a
-browser tab — cookie login, service worker, offline boot. Files work through native dialogs:
-exports ask where to save, imports open the GTK file chooser.
+so this is not the `app/` shell. The page behaves as a browser tab — cookie login, service
+worker, offline boot — and its `window.shell` (`session: "cookie"`) adds one thing: the
+**notes folder**. Files work through native dialogs: exports ask where to save, imports open
+the GTK file chooser.
+
+## Notes folder
+
+On first launch the app offers to keep your notes as Markdown files in a folder. Choose one
+and every note is written there — folders as directories, attachments as their files — and
+kept in step both ways while the app runs. Change or stop it in Settings → Local folder.
+
+The choice is stored as `folder = "…"` in `~/.config/life-manager/desktop.toml`. The folder's
+`.life-manager/` directory is the mirror's own state; leave it alone.
 
 ## Setup (Arch)
 

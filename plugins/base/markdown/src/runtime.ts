@@ -11,9 +11,13 @@
  */
 
 import { embedReplace, embedToggle, type EmbedLocation } from "./embed-toggle.js";
-import type { Kernel } from "@kernel";
-import type { Folders, NoteLook } from "@protocols/lm/folders";
-import type { Router } from "@protocols/lm/router";
+import type { ComponentType } from "react";
+
+import type { DocumentRow, Kernel, RegistryEntry } from "@kernel";
+import type { ContextMenu } from "plugin:context-menu";
+import type { DocumentMode, DocumentModeProps } from "plugin:document-surface";
+import type { Folders, NoteLook } from "plugin:folders";
+import type { Router } from "plugin:router";
 
 import { regionsOf } from "../../_shared/regions.js";
 import { resolveMarkerOffset, type TaskLocation, type TaskScan } from "./tasks.js";
@@ -28,7 +32,7 @@ import { resolveMarkerOffset, type TaskLocation, type TaskScan } from "./tasks.j
 export const TASK_SPLICE_ORIGIN = { plugin: "markdown", write: "taskState" } as const;
 export const EMBED_SPLICE_ORIGIN = { plugin: "markdown", write: "embed" } as const;
 
-/** The route pattern `document-surface` owns. See the INTEGRATION note in `activate`. */
+/** The document route (`router`'s `DOCUMENT_ROUTE`), spelled here because `router` is optional. */
 export const DOC_ROUTE = "/doc/:id";
 
 export interface AttachmentMeta {
@@ -69,7 +73,7 @@ export interface MarkdownRuntime {
   openDocument(id: string, fragment?: string | null): void;
   /** The target's title from the local projection — offline-correct (SPEC §4.1). */
   titleOf(id: string): Promise<string | undefined>;
-  /** The note's colour and icon from `folders`, when it is wired. */
+  /** The note's colour and icon from `folders`, when it is enabled. */
   lookOf(id: string): NoteLook | undefined;
   /** Fires when any {@link lookOf} answer may have changed. */
   onLookChange(listener: () => void): () => void;
@@ -79,6 +83,8 @@ export interface MarkdownRuntime {
   attachmentBlob(id: string): Promise<AttachmentBlob | null>;
   /** Hand the viewer the file (SPEC §3.6 chips are downloadable). */
   downloadAttachment(id: string): Promise<void>;
+  /** Open the menu of the marked element at or around `from` (`context-menu`'s), beside it. */
+  openMenu(from: HTMLElement): void;
   /** Remember which embedded attachment the user is acting on, for the palette command. */
   focusAttachment(id: string | null, site?: EmbedSite): void;
   focusedAttachment(): string | null;
@@ -95,6 +101,13 @@ export interface MarkdownRuntime {
   writeTaskMarker(request: TaskWriteRequest): Promise<void>;
   /** Flip an embedded attachment between preview and link: add or remove its `!`. */
   toggleEmbed(request: EmbedToggleRequest): Promise<void>;
+  /**
+   * The view that claims this document (a `document-surface` mode's `prefer`), boundary-wrapped,
+   * for an embed to draw instead of the body — a saved search embeds as its results.
+   * `undefined` when no view claims it. The user's default mode is not consulted: an
+   * embed of a plain note is its body, never an editor.
+   */
+  embedView?(row: DocumentRow): ComponentType<DocumentModeProps> | undefined;
 }
 
 /** One embed in one document: what the toggle and promote write to. */
@@ -107,8 +120,17 @@ export interface EmbedSite {
 
 export type EmbedToggleRequest = EmbedSite;
 
-/** The `router` port — optional, so `use()` answers `undefined` with nothing wired to it. */
-type RouterLike = Pick<Router, "navigate" | "href">;
+/**
+ * The optional plugins the runtime reaches, as `activate` found them
+ * (`kernel.plugins.optional`); each is `undefined` when that plugin is not enabled.
+ */
+export interface RuntimeDeps {
+  readonly router?: Pick<Router, "navigate" | "href">;
+  readonly folders?: Pick<Folders, "fileNew" | "look" | "onLookChange">;
+  readonly menu?: Pick<ContextMenu, "openFor">;
+  /** `document-surface`'s modes, with attribution, in order. */
+  readonly modes?: () => readonly RegistryEntry<DocumentMode>[];
+}
 
 /**
  * Inline types a browser may render from a blob URL.
@@ -142,8 +164,11 @@ export function isInlineImage(mime: string): boolean {
  *   `dispose()` on plugin teardown, is the honest trade — bounded by the number of
  *   distinct attachments the user actually looked at.
  */
-export function createRuntime(kernel: Kernel): MarkdownRuntime & { dispose(): void } {
-  const router = kernel.ports.use<RouterLike | undefined>("router");
+export function createRuntime(
+  kernel: Kernel,
+  deps: RuntimeDeps = {},
+): MarkdownRuntime & { dispose(): void } {
+  const { router, folders, menu, modes } = deps;
   const metaCache = new Map<string, Promise<AttachmentMeta | null>>();
   const blobCache = new Map<string, Promise<AttachmentBlob | null>>();
   const objectUrls: string[] = [];
@@ -206,15 +231,36 @@ export function createRuntime(kernel: Kernel): MarkdownRuntime & { dispose(): vo
     }
   };
 
+  /** One boundary per mode component: a fresh wrapper per render would remount the view. */
+  const views = new WeakMap<ComponentType<DocumentModeProps>, ComponentType<DocumentModeProps>>();
+
   const runtime: MarkdownRuntime & { dispose(): void } = {
+    embedView: (row) => {
+      for (const entry of modes?.() ?? []) {
+        const mode = entry.value;
+        try {
+          if (mode.when?.(row) === false || mode.prefer?.(row) !== true) continue;
+        } catch (error) {
+          kernel.log.warn(`document.mode "${mode.id}" threw deciding an embed`, error);
+          continue;
+        }
+        let view = views.get(mode.component);
+        if (!view) {
+          view = kernel.ui.boundary(mode.component, { point: "document-surface.mode", pluginId: entry.pluginId });
+          views.set(mode.component, view);
+        }
+        return view;
+      }
+      return undefined;
+    },
     kernel,
 
     openDocument: (id, fragment) => {
       const base = router ? router.href(DOC_ROUTE, { id }) : `/doc/${encodeURIComponent(id)}`;
       const path = fragment ? `${base}#${fragment}` : base;
       if (router) router.navigate(path);
-      // INTEGRATION (base-shell): with `router` absent — a failed activation, or a
-      // workspace that replaced it — the hash is the documented fallback (`router`'s own
+      // With `router` absent — a failed activation, or a workspace that disabled it —
+      // the hash is the documented fallback (`router`'s own
       // `navigate` sets `location.hash`), so a `doc://` link still works in a degraded
       // boot instead of doing nothing.
       else location.hash = path;
@@ -226,17 +272,17 @@ export function createRuntime(kernel: Kernel): MarkdownRuntime & { dispose(): vo
     },
 
     lookOf: (id) => {
-      if (!kernel.ports.bound("folders")) return undefined;
+      if (!folders) return undefined;
       try {
-        return kernel.ports.use<Pick<Folders, "look">>("folders").look(id);
+        return folders.look(id);
       } catch {
         return undefined;
       }
     },
 
     onLookChange: (listener) => {
-      if (!kernel.ports.bound("folders")) return () => undefined;
-      return kernel.ports.use<Pick<Folders, "onLookChange">>("folders").onLookChange(listener);
+      if (!folders) return () => undefined;
+      return folders.onLookChange(listener);
     },
 
     attachmentMeta: (id) => {
@@ -273,6 +319,10 @@ export function createRuntime(kernel: Kernel): MarkdownRuntime & { dispose(): vo
       anchor.click();
     },
 
+    openMenu: (from) => {
+      menu?.openFor(from);
+    },
+
     focusAttachment: (id, site) => {
       focused = id;
       focusedSite = id === null ? undefined : site;
@@ -296,10 +346,9 @@ export function createRuntime(kernel: Kernel): MarkdownRuntime & { dispose(): vo
       const title = meta?.name ?? attachmentId;
       const lines = ["---", `title: ${yamlScalar(title)}`, "---", "", `![${title.replace(/[[\]]/g, "")}](attachment://${attachmentId})`, ""];
       const id = await kernel.documents.create({ text: lines.join("\n") });
-      // Filed where "Files go to" says, through `folders` (optional: unwired, it stays at the root).
-      if (kernel.ports.bound("folders")) {
-        await kernel.ports
-          .use<Pick<Folders, "fileNew">>("folders")
+      // Filed where "Files go to" says, through `folders` (optional: without it, it stays at the root).
+      if (folders) {
+        await folders
           .fileNew(id, "file")
           .catch((cause: unknown) => kernel.log.warn("could not file the promoted document", cause));
       }

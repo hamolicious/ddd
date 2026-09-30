@@ -1,6 +1,6 @@
 /**
  * `source-view` — a third way of showing a document, and the proof of two properties of
- * `document.mode` (SPEC §6.5):
+ * `document-surface`'s modes (SPEC §6.5):
  *
  * - **Any number of modes.** The surface has no idea there are "read and edit"; this is
  *   a third contribution, and the header's icon switch and the phone's floating button
@@ -16,21 +16,19 @@
 
 import type { ReactElement } from "react";
 
-import type { Kernel } from "@kernel";
 /*
- * The protocol's types, as a third party gets them: the generated `index.d.ts` the server
- * serves at `/protocols/lm/document.mode/1.0.0/index.d.ts` (see `alt-editor`).
+ * `document-surface`'s registration function and types, as a third party gets them: the
+ * `plugin:document-surface` declaration shipped in its `frontend/index.d.ts`.
  */
-import type { DocumentMode, DocumentModeProps } from "@protocols/lm/document.mode";
+import { addMode, type DocumentModeProps } from "plugin:document-surface";
 
 /** A frontmatter block at the top, or a `%%%` fence opening a machine section anywhere. */
 export function hasHiddenParts(content: string): boolean {
   return /^---\r?\n/.test(content) || /(^|\n)%%%[^\n]*\n/.test(content);
 }
 
-export default function activate(kernel: Kernel): void {
-  // On the `mode` port: the manifest wires it to `document-surface`'s host.
-  kernel.ports.offer<DocumentMode>("mode", {
+export default function activate(): void {
+  addMode({
     id: "source",
     label: "Source",
     order: 30,

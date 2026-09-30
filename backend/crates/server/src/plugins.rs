@@ -43,9 +43,12 @@ use crate::config::Config;
 pub const BASE_PLUGIN_IDS: &[&str] = &[
     "admin",
     "attachments",
+    "auto-fm",
+    "calendar",
     "changes",
     "commands",
     "context-menu",
+    "doc-events",
     "doc-list",
     "document-surface",
     "editor",
@@ -57,18 +60,24 @@ pub const BASE_PLUGIN_IDS: &[&str] = &[
     "header",
     "icons",
     "indexer",
+    "kanban",
+    "local-folder",
     "markdown",
     "native-preview",
     "notices",
     "router",
+    "search",
     "settings",
     "shell-ui",
     "slash-commands",
     "sync-status",
     "syntax-highlight",
+    "table",
     "themes",
+    "timeline",
     "viewer",
     "welcome",
+    "wikilinks",
 ];
 
 /// The `@kernel` contract version this server implements — what a manifest's `kernel`
@@ -83,8 +92,14 @@ pub const KERNEL_VERSION: &str = crate::manifest_types::KERNEL_VERSION;
 /// The manifest's types are generated from `schema/manifest.schema.json`
 /// (`web/scripts/gen-manifest.mjs`); their methods stay here.
 pub use crate::manifest_types::{
-    ConfigField, ConsumedPort, HttpCapability, PluginBackend, PluginCapabilities, PluginFrontend,
-    PluginManifest, ProvidedPort,
+    BackendExport, ConfigField, HttpCapability, PluginBackend, PluginCapabilities, PluginFrontend,
+    PluginManifest,
+};
+
+/// Load resolution lives in its own module; these are its entry points.
+pub use crate::load::{
+    LoadPlan, SkipReason, Skipped, effective_ids, fingerprint, module_url, plugin_imports,
+    resolve_load,
 };
 
 /// Hook names a manifest's `backend.hooks` may contain (SPEC §6.3).
@@ -612,8 +627,8 @@ pub enum ResolveError {
     PeerConflict { library: String, ranges: String },
 }
 
-/// Resolve the peer libraries over a set of manifests. (Activation order is the wiring
-/// resolver's, `life_manager_core::wiring`, over `provides`/`consumes`.)
+/// Resolve the peer libraries over a set of manifests. (Load order is
+/// [`resolve_load`]'s, over `dependencies`.)
 ///
 /// **One resolution, two consumers** (the promise M3 left open): the installer runs it to
 /// decide whether a package may be installed at all, and `/importmap.json` runs it to pick
@@ -822,6 +837,47 @@ pub struct InstalledPlugin {
     /// module" trap. Same bytes ⇒ same URL ⇒ still cached forever; new bytes ⇒ new URL.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub assets_version: Option<String>,
+    /// Why a `disabled` plugin is off: `"admin"`, `replaced by \`<id>\`` (a `provides`
+    /// partner was enabled), or the circuit breaker's reason.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled_reason: Option<String>,
+}
+
+/// `disabled_reason` for a plugin switched off because its `provides` partner was enabled.
+pub fn replaced_reason(by: &str) -> String {
+    format!("{REPLACED_BY_PREFIX}`{by}`")
+}
+
+/// The prefix of [`replaced_reason`].
+pub const REPLACED_BY_PREFIX: &str = "replaced by ";
+
+/// Is `reason` a person's decision (or the installer's), as opposed to the circuit
+/// breaker's? No reason at all counts as a decision: nothing says otherwise.
+pub fn disabled_on_purpose(reason: Option<&str>) -> bool {
+    match reason {
+        None => true,
+        Some(reason) => {
+            reason == crate::routes::plugin_api::ADMIN_DISABLE_REASON
+                || reason == crate::plugininstall::ABSENT_DISABLED_REASON
+                || reason.starts_with(REPLACED_BY_PREFIX)
+        }
+    }
+}
+
+impl InstalledPlugin {
+    /// Does an admin want this plugin's frontend loaded?
+    ///
+    /// `enabled` and `failed` (its backend half would not start; the frontend is still
+    /// good) do. `disabled` does not — **unless the circuit breaker did it**: a trip is
+    /// about the backend half, and must not change the load set, or every open client would
+    /// reload over a misbehaving cron job ([`crate::load::fingerprint`]).
+    pub fn wants_load(&self) -> bool {
+        match self.state {
+            PluginState::Enabled | PluginState::Failed => true,
+            PluginState::Disabled => !disabled_on_purpose(self.disabled_reason.as_deref()),
+            PluginState::Pending => false,
+        }
+    }
 }
 
 /// A plugin directory the registry refused, with the reason a human needs.
@@ -835,8 +891,6 @@ pub struct PluginProblem {
 pub struct Registry {
     plugins: Vec<InstalledPlugin>,
     problems: Vec<PluginProblem>,
-    /// The protocol packages the served plugins ship, by `id@version` (PLUGIN-PROTOCOLS §3).
-    protocols: BTreeMap<String, crate::protocols::RegisteredProtocol>,
     /// The directory that was scanned. `None` on the default (empty) registry, which is
     /// what `DISABLE_PLUGINS=1` returns — and what makes every asset route 404.
     root: Option<PathBuf>,
@@ -851,9 +905,19 @@ impl Registry {
         &self.problems
     }
 
-    /// The protocol packages the served plugins ship, by `id@version`.
-    pub fn protocols(&self) -> &BTreeMap<String, crate::protocols::RegisteredProtocol> {
-        &self.protocols
+    /// What each boot loads, in order, and what it skips ([`resolve_load`]).
+    pub fn load_plan(&self) -> LoadPlan {
+        resolve_load(&self.plugins)
+    }
+
+    /// The `plugin:<id>` import-map entries for [`Registry::load_plan`].
+    pub fn plugin_imports(&self) -> BTreeMap<String, String> {
+        plugin_imports(&self.plugins, &self.load_plan())
+    }
+
+    /// `plugins_version`: the fingerprint of the load set clients compare against.
+    pub fn plugins_version(&self) -> String {
+        fingerprint(&self.plugins, &self.load_plan())
     }
 
     pub fn root(&self) -> Option<&Path> {
@@ -916,6 +980,10 @@ impl Registry {
                 continue;
             }
             plugin.state = record.state;
+            plugin.disabled_reason = match record.state {
+                PluginState::Disabled => record.disabled_reason.clone(),
+                _ => None,
+            };
         }
     }
 
@@ -1035,20 +1103,6 @@ pub fn scan(dir: &Path) -> Registry {
         }
     }
 
-    let served: Vec<(String, bool, PathBuf)> = best
-        .iter()
-        .map(|(id, (version, _))| {
-            (
-                id.clone(),
-                BASE_PLUGIN_IDS.contains(&id.as_str()),
-                dir.join(id).join(version),
-            )
-        })
-        .collect();
-    let (protocols, protocol_problems) = crate::protocols::from_scan(&served);
-    registry.protocols = protocols;
-    registry.problems.extend(protocol_problems);
-
     for (id, (version, manifest)) in best {
         let assets_version = frontend_assets_version(&dir.join(&id).join(&version), &manifest);
         registry.plugins.push(InstalledPlugin {
@@ -1057,6 +1111,7 @@ pub fn scan(dir: &Path) -> Registry {
             state: PluginState::Enabled,
             manifest,
             assets_version,
+            disabled_reason: None,
         });
     }
     registry
@@ -1301,7 +1356,7 @@ pub fn reload(config: &Config) -> Arc<Registry> {
 
 /// [`reload`], with the approval records applied to the scan (M4).
 ///
-/// The wiring the M4 scaffold left open: `reload` alone reports `enabled` for a directory
+/// The link the M4 scaffold left open: `reload` alone reports `enabled` for a directory
 /// whose record says `disabled`, because a directory scan cannot know. Every
 /// `plugininstall` action that changes what is served calls this
 /// ([`crate::plugininstall::refresh_registry`]), so `/api/plugins` and the static asset
@@ -1412,7 +1467,7 @@ mod tests {
         let manifest: PluginManifest = serde_json::from_value(serde_json::json!({
             "id": id,
             "version": "1.0.0",
-            "kernel": "^2.0",
+            "kernel": "^3.0",
             "peerLibraries": peer_libraries,
             "frontend": { "module": "frontend/index.mjs" },
         }))
@@ -1423,6 +1478,7 @@ mod tests {
             state,
             manifest,
             assets_version: None,
+            disabled_reason: None,
         }
     }
 
@@ -1558,8 +1614,8 @@ mod tests {
     }
 
     #[test]
-    fn the_base_distribution_is_the_twenty_eight_plugins_of_spec_6_5() {
-        assert_eq!(BASE_PLUGIN_IDS.len(), 28);
+    fn the_base_distribution_is_the_thirty_seven_plugins_of_spec_6_5() {
+        assert_eq!(BASE_PLUGIN_IDS.len(), 37);
         assert!(BASE_PLUGIN_IDS.windows(2).all(|pair| pair[0] < pair[1]));
     }
 }

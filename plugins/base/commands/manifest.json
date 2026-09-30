@@ -1,45 +1,18 @@
 {
   "id": "commands",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "name": "Commands",
   "description": "Command registry, palette (Mod+K) and per-user keybindings.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
-  "kernel": "^2.0",
-  "hot": true,
-  "consumes": {
-    "commands": {
-      "protocol": "lm/commands.command@^2.0"
-    },
-    "keys": {
-      "protocol": "lm/keybindings.default@^1.0"
-    },
-    "icons": {
-      "protocol": "lm/icons@^1.0",
-      "needs": [
-        "Icon"
-      ],
-      "optional": true
-    }
+  "kernel": "^3.0",
+  "dependencies": {
+    "settings": "^2.0",
+    "shell-ui": "^3.0"
   },
-  "provides": {
-    "own": {
-      "protocol": "lm/commands.command@2.0.0"
-    },
-    "own-keys": {
-      "protocol": "lm/keybindings.default@1.0.0"
-    },
-    "palette": {
-      "protocol": "lm/shell.overlay@1.0.0"
-    },
-    "settings": {
-      "protocol": "lm/settings.section@1.0.0",
-      "order": 200
-    },
-    "api": {
-      "protocol": "lm/commands@1.0.0"
-    }
+  "optionalDependencies": {
+    "icons": "^2.0"
   },
   "peerLibraries": {
     "react": "^18.0.0",

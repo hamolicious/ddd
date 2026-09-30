@@ -15,10 +15,14 @@
  * so an interruption leaves the note in two lists (drawn once, repaired by its next move)
  * rather than in none.
  *
- * Only this plugin writes its section, so other plugins file notes through the `folders`
- * service (`lm/folders`): the Obsidian importer, and anything else that makes notes in
- * bulk. A note created through `doc-list` is announced on `lm/document-browser.created`
- * and filed here — under the `parent` its creator asked for, or the default location.
+ * Only this plugin writes its section, so other plugins file notes through its exports
+ * (`plugin:folders`: `file`, `fileNew`, `ensurePath`…): the Obsidian importer, and
+ * anything else that makes notes in bulk. A note created through `doc-list` (or a saved
+ * view) is announced through `plugin:doc-events`' `onCreated` and filed here — under the
+ * `parent` its creator asked for, or the default location.
+ *
+ * Other plugins dress rows with `addDecoration`; `look` gives the same dress to a link to
+ * the note elsewhere.
  *
  * ## Per-user state, all of it in settings
  *
@@ -36,23 +40,23 @@
 import { useEffect, useState } from "react";
 import type { ReactElement } from "react";
 
-import type { CoreValue, DocumentRow, Kernel, SettingsValue } from "@kernel";
-import type { Command } from "@protocols/lm/commands.command";
-import type { ContextMenu, MenuItem } from "@protocols/lm/context-menu";
-import type { DocumentBrowser } from "@protocols/lm/document-browser";
-import type { DocumentCreated } from "@protocols/lm/document-browser.created";
-import type { Folders } from "@protocols/lm/folders";
-import type { FolderDecoration, FolderLook } from "@protocols/lm/folders.decoration";
-import type { FolderMenuItem } from "@protocols/lm/folders.menu-item";
-import type { Router } from "@protocols/lm/router";
-import type { SettingsSection } from "@protocols/lm/settings.section";
-import type { SidebarPanel } from "@protocols/lm/sidebar.panel";
+import { createRegistry } from "@kernel";
+import type { CoreValue, DocumentRow, Kernel, SettingsValue, Unsubscribe } from "@kernel";
+import { addCommand } from "plugin:commands";
+import { addAction, close, confirm, modal, open, openFor, openSheet } from "plugin:context-menu";
+import type { MenuItem, Target } from "plugin:context-menu";
+import { onCreated } from "plugin:doc-events";
+import { newDocument } from "plugin:doc-list";
+import { current, navigate, onChange as onRouteChange } from "plugin:router";
+import { addSection } from "plugin:settings";
+import { addSidebarPanel } from "plugin:shell-ui";
 
-import { BoundedIcon, useSlotEntries } from "../../_shared/boundary.js";
+import { BoundedIcon, useRegistry } from "../../_shared/boundary.js";
 import { EXCLUDE_MACHINE_DOCUMENTS, isMachineDocument } from "../../_shared/machine-docs.js";
 
+import { FOLDER_DECORATION_SHAPE, type FolderDecoration, type FolderLook, type Folders, type NoteLook } from "./api.js";
 import { DefaultLocation } from "./DefaultLocation.js";
-import { FolderTree, type FolderRowLook, type MoveProgress, type TreeRequest } from "./FolderTree.js";
+import { FolderTree, type FolderRowLook, type MoveProgress, type TreeRequest, type TreeTarget } from "./FolderTree.js";
 import { MovePicker } from "./MovePicker.js";
 import {
   CHILDREN_KEY,
@@ -113,15 +117,85 @@ const readIds = (value: unknown): readonly string[] => {
 const sameIds = (left: readonly string[], right: readonly string[]): boolean =>
   left.length === right.length && left.every((entry, index) => entry === right[index]);
 
+export type { FolderDecoration, FolderLook, Folders, NoteLook } from "./api.js";
+export type FoldersApi = Folders;
+
+// The functions of the plugins this one depends on, grouped as they are read below.
+// `newDocument` rather than `createDocument`: it reports its own failures (offline, above all).
+const docs = { newDocument };
+const router = { navigate, current, onChange: onRouteChange };
+const menu = { open, openSheet, confirm, modal, close, openFor };
+
+/** Other plugins' colours and icons for rows. */
+const decorations = createRegistry<FolderDecoration>({
+  key: (decoration) => decoration.id,
+  order: (decoration) => decoration.order ?? 0,
+  shape: FOLDER_DECORATION_SHAPE,
+});
+
+/** Dress note rows in the tree (and links to them elsewhere). Returns the function that takes it off again. */
+export const addDecoration: (items: FolderDecoration | readonly FolderDecoration[]) => () => void = decorations.add;
+
+/** Listeners for "the tree may have changed", the tree's own included. */
+const listeners = new Set<() => void>();
+/** Listeners for "a look may have changed". */
+const lookListeners = new Set<() => void>();
+
+/** The functions `activate` builds over the live tree. */
+let service: Omit<Folders, "onChange" | "onLookChange"> | undefined;
+
+const active = (): Omit<Folders, "onChange" | "onLookChange"> => {
+  if (!service) throw new Error("folders is not active yet: call it from your plugin's activate() or later");
+  return service;
+};
+
+/** The note's parent id, `""` at the root, `undefined` for a note the tree does not know. */
+export function parentOf(id: string): string | undefined {
+  return active().parentOf(id);
+}
+
+/** The notes filed under `id`, in the tree's order; `[]` for none. */
+export function childrenOf(id: string): readonly string[] {
+  return active().childrenOf(id);
+}
+
+/** Fires when the tree may have changed: a note filed, moved, added or removed. */
+export function onChange(listener: () => void): Unsubscribe {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+/** Put the note under `parent` (`""` for the root), before the child at `index` or last. Rejects a parent inside the note itself. */
+export function file(id: string, parent: string, index?: number): Promise<void> {
+  return active().file(id, parent, index);
+}
+
+/** File a document just created where the person asked new ones of that kind to go. Does nothing when that is the root. */
+export function fileNew(id: string, kind: "note" | "file"): Promise<void> {
+  return active().fileNew(id, kind);
+}
+
+/** The note's colour and icon, as the tree draws them. */
+export function look(id: string): NoteLook | undefined {
+  return active().look(id);
+}
+
+/** Fires when any answer `look` gives may have changed. */
+export function onLookChange(listener: () => void): Unsubscribe {
+  lookListeners.add(listener);
+  return () => {
+    lookListeners.delete(listener);
+  };
+}
+
+/** The id of the note at that chain of titles from the root, creating the missing ones (without opening them). `[]` is the root, `""`. */
+export function ensurePath(titles: readonly string[]): Promise<string> {
+  return active().ensurePath(titles);
+}
+
 export default function activate(kernel: Kernel): void {
-  // Each handle is limited to the port's `needs` in the manifest. `newDocument` rather
-  // than `createDocument`: it reports its own failures (offline, above all).
-  const docs = kernel.ports.use<Pick<DocumentBrowser, "newDocument">>("browser");
-  const router = kernel.ports.use<Pick<Router, "navigate" | "current" | "onChange">>("router");
-  const menu = kernel.ports.use<Pick<ContextMenu, "open" | "openSheet" | "confirm" | "close">>("menu");
-  // Other plugins' colours and icons for rows, and their entries in a row's menu.
-  const decorations = kernel.ports.collect<FolderDecoration>("decorations");
-  const actions = kernel.ports.collect<FolderMenuItem>("actions");
 
   kernel.settings.defineSchema({
     // Rendered by this plugin's own section (a note picker), declared for its default.
@@ -137,7 +211,6 @@ export default function activate(kernel: Kernel): void {
   // Live state: one subscription, shared by the tree, the settings section and the service
   // ---------------------------------------------------------------------------
 
-  const listeners = new Set<() => void>();
   /** What the projection says — `rows` is this with the moves in flight applied. */
   let projected: readonly NoteRow[] = [];
   let hierarchy: Hierarchy = buildHierarchy([]);
@@ -418,7 +491,7 @@ export default function activate(kernel: Kernel): void {
   /** A note titled `title`, with nothing else in it, created without opening it. */
   const createNote = async (title: string): Promise<string> => {
     const front = kernel.documents.splice.planFrontmatterValue("", "title", title)[0]?.text ?? "";
-    return kernel.documents.create({ text: `${front}\n# ${title.replaceAll("\n", " ")}\n` });
+    return kernel.documents.create({ text: front });
   };
 
   const ensurePath = async (titles: readonly string[]): Promise<string> => {
@@ -452,7 +525,6 @@ export default function activate(kernel: Kernel): void {
   };
 
   // Looks change when a decoration says so, or when decorations come and go.
-  const lookListeners = new Set<() => void>();
   const announceLook = (): void => {
     for (const listener of [...lookListeners]) listener();
   };
@@ -468,14 +540,21 @@ export default function activate(kernel: Kernel): void {
       }
     });
   };
-  followLooks();
-  decorations.subscribe(() => {
-    followLooks();
-    announceLook();
+  // `subscribe` fires at once: that first call is the initial follow.
+  stops.push(
+    decorations.subscribe(() => {
+      followLooks();
+      announceLook();
+    }),
+  );
+  stops.push(() => {
+    for (const stop of lookStops) stop();
+    lookStops = [];
   });
 
-  kernel.ports.serve<Folders>("folders", {
+  service = {
     parentOf: (id) => (hierarchy.notes.has(id) ? (hierarchy.parentOf.get(id) ?? "") : undefined),
+    childrenOf: (id) => hierarchy.childrenOf.get(id) ?? [],
     file: async (id, parent, index) => {
       const before = index === undefined ? undefined : (hierarchy.childrenOf.get(parent) ?? [])[index];
       await file(id, parent, before);
@@ -486,22 +565,16 @@ export default function activate(kernel: Kernel): void {
     },
     ensurePath,
     look: (id) => lookOf(decorations.entries())(id),
-    onLookChange: (listener) => {
-      lookListeners.add(listener);
-      return () => {
-        lookListeners.delete(listener);
-      };
-    },
-  });
+  };
 
-  // A note `doc-list` just made: under the parent its creator named, or the default.
-  kernel.ports.on<DocumentCreated>("created", (event) => {
+  // A note `doc-list` (or a saved view) just made: under the parent its creator named, or the default.
+  stops.push(onCreated((event) => {
     const parent = typeof event.parent === "string" ? event.parent : locationFor("note");
     if (parent === "") return;
     void file(event.id, parent).catch((cause: unknown) => {
       kernel.log.warn(`could not file the new note ${event.id}`, cause);
     });
-  });
+  }));
 
   // ---------------------------------------------------------------------------
   // Requests from outside the panel (commands, keybindings)
@@ -587,7 +660,7 @@ export default function activate(kernel: Kernel): void {
 
   /** Each decoration's `onChange`, followed for as long as the tree is on screen. */
   const useDecorations = (): ReturnType<typeof decorations.entries> => {
-    const entries = useSlotEntries(decorations);
+    const entries = useRegistry(decorations);
     const [, setRevision] = useState(0);
     useEffect(() => {
       const bump = (): void => setRevision((value) => value + 1);
@@ -606,36 +679,9 @@ export default function activate(kernel: Kernel): void {
     return entries;
   };
 
-  /** Other plugins' entries for a row's menu, in seat order. */
-  const extraActionsOf = (entries: ReturnType<typeof actions.entries>) =>
-    (id: string, anchor?: HTMLElement): MenuItem[] =>
-      entries.flatMap(({ value }) => {
-        try {
-          if (value.when !== undefined && !value.when(id)) return [];
-        } catch (cause) {
-          kernel.log.warn(`folder menu item ${value.id} failed its check`, cause);
-          return [];
-        }
-        return [
-          {
-            id: `extra:${value.id}`,
-            label: value.label,
-            ...(value.hint !== undefined ? { hint: value.hint } : {}),
-            run: () => {
-              try {
-                value.run(id, anchor);
-              } catch (cause) {
-                kernel.log.warn(`folder menu item ${value.id} failed`, cause);
-              }
-            },
-          },
-        ];
-      });
-
   const TreeHost = (): ReactElement => {
     const live = useStore();
     const look = lookOf(useDecorations());
-    const extraActions = extraActionsOf(useSlotEntries(actions));
     // The open note, whatever opened it: the tree reveals it.
     const [openDocument, setOpenDocument] = useState(() => documentFromRoute(router.current()));
     useEffect(() => router.onChange((route) => setOpenDocument(documentFromRoute(route))), []);
@@ -658,11 +704,9 @@ export default function activate(kernel: Kernel): void {
         onMove={file}
         onRename={rename}
         onDelete={remove}
-        onNewNoteInside={(parent) => docs.newDocument({ parent })}
         onOpen={(id) => router.navigate(`/doc/${id}`)}
         {...(openDocument !== undefined ? { openDocument } : {})}
         look={look}
-        extraActions={extraActions}
       />
     );
   };
@@ -696,15 +740,17 @@ export default function activate(kernel: Kernel): void {
     );
   };
 
-  kernel.ports.offer<SidebarPanel>("tree", {
+  addSidebarPanel({
     id: "folders.tree",
     title: "Folders",
     order: 20,
     defaultOpen: true,
     component: TreeHost,
+    // The heading stands for the root, as blank space in the tree does: the same menu.
+    target: { type: "folders/root" },
   });
 
-  kernel.ports.offer<SettingsSection>("settings", {
+  addSection({
     id: "folders",
     title: "Folders",
     order: 30,
@@ -757,7 +803,7 @@ export default function activate(kernel: Kernel): void {
     });
   };
 
-  kernel.ports.offer<Command>("commands", [
+  addCommand([
     {
       id: "folders.newNoteInside",
       title: "New note inside this note",
@@ -821,12 +867,126 @@ export default function activate(kernel: Kernel): void {
       run: moveMany,
     },
   ]);
+
+  // ---------------------------------------------------------------------------
+  // Menus (`plugin:context-menu`'s `addAction`): a note anywhere, and the root
+  // ---------------------------------------------------------------------------
+
+  /** A row of the tree itself, where renaming and moving happen in place. */
+  const inTree = (target: Target): boolean => target.element.closest(".folders-tree") !== null;
+  const noteTarget = (id: string): TreeTarget => ({ id, title: hierarchy.notes.get(id)?.title ?? "Untitled" });
+
+  const renameElsewhere = async (id: string): Promise<void> => {
+    const title = hierarchy.notes.get(id)?.title ?? "";
+    const answer = await menu.modal({
+      title: "Rename",
+      fields: [{ kind: "text", id: "title", label: "Title", value: title, required: true }],
+      buttons: [
+        { id: "cancel", label: "Cancel", dismiss: true },
+        { id: "rename", label: "Rename", tone: "primary" },
+      ],
+    });
+    const next = typeof answer?.values.title === "string" ? answer.values.title.trim() : "";
+    if (next === "" || next === title) return;
+    await rename(id, next).catch((cause: unknown) => kernel.log.warn(`could not rename ${id}`, cause));
+  };
+
+  /** With the tree on screen its own delete runs, with its choices and progress; else a plain one. */
+  const deleteNote = async (id: string): Promise<void> => {
+    if (requestListeners.size > 0) {
+      request({ kind: "delete", target: noteTarget(id) });
+      return;
+    }
+    const inside = hierarchy.childrenOf.get(id)?.length ?? 0;
+    const confirmed = await menu.confirm({
+      title: `Delete “${noteTarget(id).title}”?`,
+      description:
+        inside === 0
+          ? "It goes to Trash, where it can be restored for 30 days."
+          : `The ${inside} note${inside === 1 ? "" : "s"} inside it stay, one level up.`,
+      confirmLabel: "Move to Trash",
+      danger: true,
+    });
+    if (!confirmed) return;
+    await remove(id, "parent").catch((cause: unknown) =>
+      kernel.ui.notify({ id: "folders.delete-failed", level: "error", message: `Could not delete it: ${String(cause)}` }),
+    );
+  };
+
+  addAction([
+    {
+      id: "folders.document",
+      target: "lm/document",
+      order: 10,
+      items: (target): MenuItem[] => {
+        const id = target.id;
+        if (!hierarchy.notes.has(id)) return [];
+        const here = inTree(target);
+        const parent = hierarchy.parentOf.get(id) ?? "";
+        return [
+          { id: "new-note", label: "New note inside", run: () => docs.newDocument({ parent: id }) },
+          ...(here && hierarchy.childrenOf.has(id)
+            ? [
+                { id: "expand-all", label: "Expand all inside", run: () => request({ kind: "fold", id, expanded: true }) },
+                { id: "collapse-all", label: "Collapse all inside", run: () => request({ kind: "fold", id, expanded: false }) },
+              ]
+            : []),
+          {
+            id: "rename",
+            label: "Rename",
+            run: () => (here ? request({ kind: "rename", target: noteTarget(id) }) : void renameElsewhere(id)),
+          },
+          {
+            id: "move",
+            label: "Move to…",
+            hint: parent === "" ? "Now at the root" : `Now in ${hierarchy.notes.get(parent)?.title ?? "Untitled"}`,
+            run: () => (here ? request({ kind: "move", target: noteTarget(id) }) : moveMany([id])),
+          },
+        ];
+      },
+    },
+    {
+      // The same id as `doc-list`'s, added after it (folders depends on doc-list), so this
+      // one replaces it: it knows what happens to the notes inside.
+      id: "document.trash",
+      target: "lm/document",
+      order: 100,
+      items: (target): MenuItem[] => [
+        hierarchy.notes.has(target.id)
+          ? { id: "delete", label: "Delete", danger: true, run: () => void deleteNote(target.id) }
+          : {
+              id: "delete",
+              label: "Move to Trash",
+              hint: "Restorable for 30 days.",
+              danger: true,
+              run: () =>
+                void kernel.documents.delete(target.id).catch((cause: unknown) =>
+                  kernel.ui.notify({ id: "folders.delete-failed", level: "error", message: `Could not delete it: ${String(cause)}` }),
+                ),
+            },
+      ],
+    },
+    {
+      id: "folders.root",
+      target: "folders/root",
+      items: (): MenuItem[] => [
+        // `""` is the root: filed there even when "New notes go to" names a note.
+        { id: "new-note-root", label: "New note at the root", run: () => docs.newDocument({ parent: "" }) },
+        { id: "expand-all", label: "Expand all", run: () => request({ kind: "fold", id: "", expanded: true }) },
+        { id: "collapse-all", label: "Collapse all", run: () => request({ kind: "fold", id: "", expanded: false }) },
+      ],
+    },
+  ]);
 }
 
-/** A pending settings write `activate` started; the kernel withdraws everything else (§6c). */
+/** A pending settings write `activate` started. */
 let flushOnStop: (() => void) | undefined;
+/** What `activate` subscribed to, undone on `deactivate`. */
+const stops: (() => void)[] = [];
 
 export function deactivate(): void {
   flushOnStop?.();
   flushOnStop = undefined;
+  for (const stop of stops.splice(0)) stop();
+  service = undefined;
 }

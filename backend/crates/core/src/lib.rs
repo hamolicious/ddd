@@ -20,10 +20,10 @@ pub mod filter;
 pub mod frontmatter;
 pub mod limits;
 pub mod sections;
+pub mod shape;
 pub mod splice;
 pub mod title;
 pub mod value;
-pub mod wiring;
 
 /// The wasm-bindgen ABI the client kernel imports (feature `wasm`; SPEC §2).
 /// Built by `mise run wasm` into `web/kernel/src/wasm/pkg/`.

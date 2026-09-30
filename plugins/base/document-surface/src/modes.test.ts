@@ -2,8 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { DocumentRow } from "@kernel";
 
-import type { DocumentMode } from "@protocols/lm/document.mode";
+import type { DocumentMode } from "./api.js";
 import {
+  claimedModeId,
   DEFAULT_MODE_ID,
   MODE_MEMORY_CAP,
   nextModeId,
@@ -48,9 +49,8 @@ describe("visibleModes", () => {
     ]);
   });
 
-  it("keeps the host's seat order and ignores `order` (PLUGIN-PROTOCOLS §6a)", () => {
-    // `order` is only the default-seat hint a manifest carries; the wiring decides the
-    // seats, and the switch shows exactly what `collect()` hands over.
+  it("keeps the registry's order and does not sort by `order` again", () => {
+    // The registry already sorted; the switch shows exactly what it hands over.
     const seated = [mode("late", { order: 500 }), mode("plain"), mode("early", { order: 0 })];
     expect(visibleModes(seated, row()).map((entry) => entry.id)).toEqual(["late", "plain", "early"]);
   });
@@ -111,6 +111,41 @@ describe("resolveModeId", () => {
 
   it("is undefined when nothing at all is registered", () => {
     expect(resolveModeId("read", "edit", [])).toBeUndefined();
+  });
+});
+
+describe("per-document claims", () => {
+  const isCanvas = (candidate: DocumentRow): boolean => candidate.fm.type === "canvas";
+  const visible = [mode("read"), mode("edit"), mode("canvas", { prefer: isCanvas })];
+
+  it("finds the mode that claims the document", () => {
+    expect(claimedModeId(visible, row({ fm: { type: "canvas" } }))).toBe("canvas");
+    expect(claimedModeId(visible, row())).toBeUndefined();
+    expect(claimedModeId(visible, undefined)).toBeUndefined();
+  });
+
+  it("takes the first claimant in seat order", () => {
+    const both = [mode("a", { prefer: () => true }), mode("b", { prefer: () => true })];
+    expect(claimedModeId(both, row())).toBe("a");
+  });
+
+  it("treats a `prefer` that throws as no claim, and reports it", () => {
+    const onError = vi.fn();
+    const broken = [mode("bad", { prefer: () => { throw new Error("boom"); } }), mode("good", { prefer: () => true })];
+    expect(claimedModeId(broken, row(), onError)).toBe("good");
+    expect(onError).toHaveBeenCalledOnce();
+  });
+
+  it("outranks the user's default", () => {
+    expect(resolveModeId(undefined, "edit", visible, "canvas")).toBe("canvas");
+  });
+
+  it("does not outrank the user's own switch on the document", () => {
+    expect(resolveModeId("read", "edit", visible, "canvas")).toBe("read");
+  });
+
+  it("is ignored when the claiming mode is not visible", () => {
+    expect(resolveModeId(undefined, "edit", visible.slice(0, 2), "canvas")).toBe("edit");
   });
 });
 

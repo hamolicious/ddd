@@ -35,13 +35,16 @@
  * 401 — the one case where the server has actually said the session is gone.
  */
 
-import type { InstalledPlugin, LiveWiring, ProtocolPackage, ResolvedPluginSet, SessionUser } from "@kernel";
+import type { InstalledPlugin, PluginLoad, SessionUser } from "@kernel";
 
 const SESSION_KEY = "life-manager.boot.session";
 const PLUGINS_KEY = "life-manager.boot.plugins";
 
-/** Bumped when either shape changes, so a stale entry is ignored rather than trusted. */
-const CACHE_VERSION = 1;
+/**
+ * Bumped when either shape changes, so a stale entry is ignored rather than trusted.
+ * 2: `@kernel` 3.0 — the load resolution replaced the wiring, resolution and protocols.
+ */
+const CACHE_VERSION = 2;
 
 interface SessionEntry {
   readonly v: number;
@@ -51,12 +54,8 @@ interface SessionEntry {
 interface PluginsEntry {
   readonly v: number;
   readonly plugins: readonly InstalledPlugin[];
-  /** Optional in version 1: entries written before wiring existed have none. */
-  readonly wiring?: LiveWiring;
-  /** The server's resolution of that wiring, so an offline boot activates the same way. */
-  readonly resolved?: ResolvedPluginSet;
-  /** The protocol registry, for the ports runtime's checks offline. */
-  readonly protocols?: readonly ProtocolPackage[];
+  /** The server's load resolution, so an offline boot activates in the same order. */
+  readonly load?: PluginLoad;
 }
 
 function read<T>(key: string): T | undefined {
@@ -99,27 +98,9 @@ export function cachedSession(): SessionUser | undefined {
   return typeof user?.id === "string" && typeof user.email === "string" ? user : undefined;
 }
 
-/** Remember the installed set, and the wiring it runs under, after `GET /api/plugins`. */
-export function rememberPlugins(
-  plugins: readonly InstalledPlugin[],
-  wiring?: LiveWiring,
-  resolved?: ResolvedPluginSet,
-  protocols?: readonly ProtocolPackage[],
-): void {
-  write(PLUGINS_KEY, {
-    v: CACHE_VERSION,
-    plugins,
-    ...(wiring ? { wiring } : {}),
-    ...(resolved ? { resolved } : {}),
-    ...(protocols ? { protocols } : {}),
-  } satisfies PluginsEntry);
-}
-
-/** The protocol registry the remembered plugin set was served with. */
-export function cachedProtocols(): readonly ProtocolPackage[] | undefined {
-  const entry = read<PluginsEntry>(PLUGINS_KEY);
-  if (!entry || entry.v !== CACHE_VERSION) return undefined;
-  return Array.isArray(entry.protocols) ? entry.protocols : undefined;
+/** Remember the installed set and its load resolution after `GET /api/plugins`. */
+export function rememberPlugins(plugins: readonly InstalledPlugin[], load?: PluginLoad): void {
+  write(PLUGINS_KEY, { v: CACHE_VERSION, plugins, ...(load ? { load } : {}) } satisfies PluginsEntry);
 }
 
 /**
@@ -133,18 +114,11 @@ export function cachedPlugins(): readonly InstalledPlugin[] | undefined {
   return Array.isArray(entry.plugins) ? entry.plugins : undefined;
 }
 
-/** The server's resolution the remembered plugin set was served with, when there is one. */
-export function cachedResolution(): ResolvedPluginSet | undefined {
+/** The load resolution the remembered plugin set was served with, when there is one. */
+export function cachedLoad(): PluginLoad | undefined {
   const entry = read<PluginsEntry>(PLUGINS_KEY);
   if (!entry || entry.v !== CACHE_VERSION) return undefined;
-  return Array.isArray(entry.resolved?.normal?.order) ? entry.resolved : undefined;
-}
-
-/** The wiring the remembered plugin set was served with, when there is one. */
-export function cachedWiring(): LiveWiring | undefined {
-  const entry = read<PluginsEntry>(PLUGINS_KEY);
-  if (!entry || entry.v !== CACHE_VERSION) return undefined;
-  return typeof entry.wiring?.version === "number" ? entry.wiring : undefined;
+  return Array.isArray(entry.load?.normal) && Array.isArray(entry.load?.safe) ? entry.load : undefined;
 }
 
 /** Sign-out, or a 401: the session is genuinely over. */

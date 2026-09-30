@@ -1258,12 +1258,15 @@ pub fn is_valid_plugin_id(id: &str) -> bool;         // ^[a-z0-9][a-z0-9-]{0,63}
 pub fn is_valid_version(version: &str) -> bool;      // x.y.z with an optional tail
 pub fn safe_relative_path(path: &str) -> bool;
 pub struct PluginFrontend { module, style }
-pub struct PluginManifest { id, version, kernel, peer_libraries, frontend,
-                            capabilities, config, backend, provides, consumes, hot,
-                            name, description, author, license, extra }
-                            // generated from schema/manifest.schema.json; `dependencies`
-                            // and `x-defines` were removed in @kernel 2.0
-pub struct InstalledPlugin { manifest, base_url, state, base }   // camelCase on the wire
+pub struct PluginManifest { id, version, kernel, dependencies, optional_dependencies,
+                            provides /* "id@version" */, peer_libraries, frontend,
+                            capabilities, config, backend, name, description, author,
+                            license, extra }
+                            // generated from schema/manifest.schema.json; `consumes`,
+                            // object-form `provides`, `hot` and `backend.calls` were
+                            // removed in @kernel 3.0 (`x-removed`)
+pub struct InstalledPlugin { manifest, base_url, state, base, assets_version,
+                             disabled_reason }   // camelCase on the wire
 pub struct PluginProblem { path, message }
 pub struct Registry;                                 // plugins(), problems(), root(),
                                                      // get(), peer_ranges(), unsatisfied_peers()
@@ -1619,7 +1622,8 @@ pub struct PluginCapabilities { documents, http, notifications, public_routes }
     // to_abi(), http_hosts(), approval_is_legal()
 pub struct HttpCapability { hosts }
 pub struct ConfigField { kind, secret, label, description, default, required, options }
-pub struct PluginBackend { module, hooks, cron, routes, events }
+pub struct PluginBackend { module, hooks, cron, routes, events, exports }
+pub struct BackendExport { input, output, description }   // shapes as JSON (@kernel 3.0)
 pub struct RouteSpec { method, path, public }              // parse("POST /webhook")
 pub enum PluginState { Pending, Enabled, Disabled, Failed } // wire: snake_case
 pub struct PluginRecord { … }  pub struct PluginKvEntry { … }  pub struct PluginConfigEntry { … }
@@ -1777,24 +1781,71 @@ mise run plugins        # frontend halves (unchanged)
 `mise run check` deliberately does **not** cover `crates/plugin-sdk` or `plugins/**` — both
 are wasm32-only. `plugin-check` is their gate, and both must pass before reporting done.
 
-## Area: http-routes (PLUGIN-PROTOCOLS step 7: the wiring routes)
+## `@kernel` 3.0: dependencies instead of ports and wiring
 
-`routes/wiring.rs`, nested at `/api/wiring` by `routes/mod.rs`. Admin-only like
-`/api/admin/*` (a non-admin gets 403, an anonymous caller 401), inside the `/api` body
-limit. `LiveWiring` is `{ version, unplugged, bind, cut, add, order }` (flat), as
-`wiring.json` is written.
+Ports, protocols and the wiring store are gone: `core/src/wiring/`, `server/src/{wiring.rs,
+protocols.rs,routes/wiring.rs}`, `/api/wiring*`, `/protocols/*`, the Wasm exports
+`resolve_wiring`/`plan_wiring`/`wiring_candidates`/`shape_fits`, and the `wiring` and
+`protocols` collections (migration 3, `drop_wiring_and_protocols`; `SCHEMA_VERSION` = 3).
+A package's `protocols/` tree is no longer extracted.
 
-| Route | Body | Response | Notes |
-|---|---|---|---|
-| `GET /api/wiring` | — | `{ live: LiveWiring, history: [{ version, action, actor?, subject?, at }…] }` | history newest first; `?limit=` default 50, max 200; `at` is RFC 3339 |
-| `GET /api/wiring/versions/{v}` | — | `{ version, wiring, action, actor?, subject?, at }` | 404 when there is no such version |
-| `POST /api/wiring/apply` | `{ base, wiring, action: "apply" \| "rollback" }` | `{ live: LiveWiring }` | writes `base + 1`; **409** when `base` is not the live version (nothing changes); any other `action` is 400 |
+**Load resolution** (`load.rs`, re-exported from `plugins.rs`):
 
-**Unplug is disable.** An apply whose `unplugged` lists an installed, switched-on plugin
-moves that plugin's record to `disabled` (reason `admin`); one whose `unplugged` no longer
-lists a `disabled` plugin moves it to `enabled`, breaker cleared, backend half activated.
-These are `plugininstall::disable_record` / `enable_record` — the record halves of
-`disable` / `enable`, without the wiring version those write, because the apply *is* the
-version. The version is committed first, then the records; the audit entry
-(`wiring.apply` / `wiring.rollback`) is the store's, and every socket hears
-`wiring.applied` once.
+```rust
+pub fn resolve_load(&[InstalledPlugin]) -> LoadPlan;       // pure
+pub struct LoadPlan { normal: Vec<String>, safe: Vec<String>, skipped: Vec<Skipped> }
+pub struct Skipped { id, reason: SkipReason, detail }
+pub enum SkipReason { Missing, Version, Cycle, DependencySkipped, Conflict } // kebab-case
+pub fn plugin_imports(&[InstalledPlugin], &LoadPlan) -> BTreeMap<String, String>;
+pub fn fingerprint(&[InstalledPlugin], &LoadPlan) -> String; // 16 hex
+impl Registry { load_plan(), plugin_imports(), plugins_version() }
+impl InstalledPlugin { wants_load() } // enabled | failed | disabled by the breaker
+```
+
+Candidates are the plugins an admin wants loaded: `enabled`, `failed` (backend half only),
+and `disabled` **by the circuit breaker** — a trip is about the backend and must not change
+what clients load. `disabled` by an admin (`"admin"`), by a `provides` partner
+(`` replaced by `<id>` ``) or because the package vanished is out. `safe` is the same
+resolution over base plugins only. Kahn a layer at a time, each layer sorted by id;
+optional dependencies order before when present and in range, never skip. One semver
+implementation: `plugins::satisfies`.
+
+**`GET /api/plugins`**:
+
+```jsonc
+{
+  "plugins": [InstalledPlugin…],       // camelCase; `disabledReason` when disabled
+  "problems": [{ "path", "message" }…],  // admins only
+  "disabled": false,                   // DISABLE_PLUGINS
+  "load": {
+    "normal": ["icons", "router", …],  // load order
+    "safe": ["icons", "router", …],
+    "skipped": [{ "id": "kanban", "reason": "missing", "detail": "it depends on `table` ^3.0, which is disabled" }],
+    "version": "3f9c0a1b2d4e5f60"      // = welcome.plugins_version
+  }
+}
+```
+
+**Import map** (`index.html`, `/importmap.json`, the shell bundle): the runtime layer plus
+`"plugin:<id>": "/plugins/<id>/<version>/<frontend.module>?v=<assetsVersion>"` for every id
+in `normal ∪ safe`, and `"plugin:<provided id>"` → the stand-in's URL for a stand-in in
+`normal`. The `plugin:` entries go to a **signed-in request only** (`statics::page_imports`):
+they name every installed plugin, which `GET /api/plugins` keeps behind a session, so a
+signed-out `index.html` or `/importmap.json` carries the runtime layer alone. The shell
+bundle is authenticated and always has them.
+
+**Change notification**: `plugininstall::refresh_registry` recomputes
+`Registry::plugins_version()` after every scan and broadcasts
+`{ "t": "plugins.changed", "version": "…" }` on the sync socket when it moved (never on
+the first scan of a process, a pending install, a no-op refresh or a breaker trip).
+`welcome` carries `plugins_version` instead of `wiring_version`.
+
+**Install**: `check_dependencies` refuses a package whose required `dependencies` are not
+installed at a version in range (`InstallError::Dependency`, 422; base-distribution
+installs are exempt). Approving or enabling a plugin disables every other plugin that
+answers to one of its ids (its own or its `provides`).
+
+**Backend calls**: `ActivePlugin { deps, provides, callable }` replaces `calls`;
+`host_fns::check_call` / `check_output` hold the rules (HOST-ABI §3.10). Shapes are
+`life_manager_core::shape::{Shape, validate, fits}`; `core/corpus/shapes.json`
+(`[{ name, shape, value, ok }]`) is the corpus both the Rust and the web validator run.

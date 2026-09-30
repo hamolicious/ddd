@@ -142,7 +142,7 @@ fn wasm_with_abi_export() -> Vec<u8> {
 /// must not depend on).
 fn manifest(id: &str, version: &str) -> String {
     format!(
-        r#"{{"id":"{id}","version":"{version}","kernel":"^2.0","frontend":{{"module":"frontend/index.mjs"}}}}"#
+        r#"{{"id":"{id}","version":"{version}","kernel":"^3.0","frontend":{{"module":"frontend/index.mjs"}}}}"#
     )
 }
 
@@ -363,7 +363,7 @@ async fn an_approval_may_widen_http_hosts_and_nothing_else() {
 
     // The calendar's shape: it asks for document access and for `http` with **no** hosts,
     // because the operator who enters the feed URL is the one who knows the host.
-    let requested = r#"{"id":"cal","version":"1.0.0","kernel":"^2.0",
+    let requested = r#"{"id":"cal","version":"1.0.0","kernel":"^3.0",
         "capabilities":{"documents":["read","write"],"http":{"hosts":[]}},
         "frontend":{"module":"frontend/index.mjs"}}"#;
     let archive = harness.package("cal", requested, false);
@@ -788,7 +788,7 @@ async fn a_package_for_another_kernel_major_never_reaches_the_filesystem() {
         return;
     };
 
-    // A 1.x package: `@kernel` 2.0 removed what it was written against.
+    // A 1.x package: `@kernel` 3.0 removed what it was written against.
     let future = r#"{"id":"demo","version":"1.0.0","kernel":"^1.0","frontend":{"module":"frontend/index.mjs"}}"#;
     let archive = harness.package("demo", future, false);
     let error = harness.install(archive).await.expect_err("must refuse");
@@ -821,19 +821,138 @@ async fn a_package_for_another_kernel_major_never_reaches_the_filesystem() {
 
 #[tokio::test]
 #[ignore = "requires MONGO_URI"]
-async fn a_manifest_with_dependencies_is_refused_and_rolls_back() {
+async fn a_manifest_with_unmet_dependencies_is_refused_and_rolls_back() {
     let Some(harness) = Harness::start("dependency").await else {
         return;
     };
 
-    // `dependencies` was removed in `@kernel` 2.0: `consumes` ports replace it.
-    let needy = r#"{"id":"needy","version":"1.0.0","kernel":"^2.0",
+    // `@kernel` 3.0: a required dependency must be installed, at a version in range,
+    // before the package is let in. `folders` is not installed in this harness.
+    let needy = r#"{"id":"needy","version":"1.0.0","kernel":"^3.0",
         "dependencies":{"folders":"^2.0"},
+        "optionalDependencies":{"icons":"^9.0"},
         "frontend":{"module":"frontend/index.mjs"}}"#;
     let archive = harness.package("needy", needy, false);
     let error = harness.install(archive).await.expect_err("must refuse");
-    assert!(error.to_string().contains("dependencies"), "{error}");
+    assert!(matches!(error, InstallError::Dependency(_)), "{error}");
+    assert!(error.to_string().contains("folders"), "{error}");
+    assert!(
+        !error.to_string().contains("icons"),
+        "an optional dependency never blocks an install: {error}"
+    );
     assert!(!harness.pending("needy", "1.0.0").exists());
+
+    harness.cleanup().await;
+}
+
+/// Install and approve a frontend-only package in one step.
+async fn install_enabled(harness: &Harness, id: &str, manifest: &str) {
+    let version = serde_json::from_str::<serde_json::Value>(manifest).expect("json")["version"]
+        .as_str()
+        .expect("a version")
+        .to_string();
+    let archive = harness.package(id, manifest, false);
+    harness.install(archive).await.expect("installs");
+    plugininstall::approve(
+        &harness.state,
+        id,
+        &version,
+        PluginCapabilities::default(),
+        &Actor::User(new_id()),
+    )
+    .await
+    .expect("approves");
+}
+
+#[tokio::test]
+#[ignore = "requires MONGO_URI"]
+async fn a_met_dependency_installs_and_a_stand_in_counts_at_its_provided_version() {
+    let Some(harness) = Harness::start("dependency-met").await else {
+        return;
+    };
+    install_enabled(&harness, "folders", &manifest("folders", "2.1.0")).await;
+    install_enabled(
+        &harness,
+        "tree",
+        r#"{"id":"tree","version":"1.0.0","kernel":"^3.0","dependencies":{"folders":"^2.0"},
+            "frontend":{"module":"frontend/index.mjs"}}"#,
+    )
+    .await;
+
+    // Out of range is refused with the version that is there.
+    let archive = harness.package(
+        "old",
+        r#"{"id":"old","version":"1.0.0","kernel":"^3.0","dependencies":{"folders":"^1.0"},
+            "frontend":{"module":"frontend/index.mjs"}}"#,
+        false,
+    );
+    let error = harness.install(archive).await.expect_err("must refuse");
+    assert!(error.to_string().contains("2.1.0"), "{error}");
+
+    // `provides` satisfies a dependency on the provided id, at the provided version.
+    install_enabled(
+        &harness,
+        "alt-editor",
+        r#"{"id":"alt-editor","version":"0.1.0","kernel":"^3.0","provides":"editor@3.0.0",
+            "frontend":{"module":"frontend/index.mjs"}}"#,
+    )
+    .await;
+    install_enabled(
+        &harness,
+        "emoji",
+        r#"{"id":"emoji","version":"1.0.0","kernel":"^3.0","dependencies":{"editor":"^3.0"},
+            "frontend":{"module":"frontend/index.mjs"}}"#,
+    )
+    .await;
+
+    let plan = plugins::registry(&harness.state.config).load_plan();
+    assert!(plan.skipped.is_empty(), "{:?}", plan.skipped);
+    let at = |id: &str| plan.normal.iter().position(|x| x == id).expect(id);
+    assert!(at("folders") < at("tree"));
+    assert!(at("alt-editor") < at("emoji"));
+
+    harness.cleanup().await;
+}
+
+#[tokio::test]
+#[ignore = "requires MONGO_URI"]
+async fn enabling_a_stand_in_disables_the_plugin_it_stands_in_for() {
+    let Some(harness) = Harness::start("provides").await else {
+        return;
+    };
+    install_enabled(&harness, "editor", &manifest("editor", "3.0.0")).await;
+    // Approval enables the stand-in, which switches the original off…
+    install_enabled(
+        &harness,
+        "alt-editor",
+        r#"{"id":"alt-editor","version":"0.1.0","kernel":"^3.0","provides":"editor@3.0.0",
+            "frontend":{"module":"frontend/index.mjs"}}"#,
+    )
+    .await;
+    let editor = plugininstall::record(&harness.state, "editor")
+        .await
+        .expect("reads")
+        .expect("a record");
+    assert_eq!(editor.state, PluginState::Disabled);
+    assert_eq!(
+        editor.disabled_reason.as_deref(),
+        Some("replaced by `alt-editor`")
+    );
+    let registry = plugins::registry(&harness.state.config);
+    assert_eq!(registry.load_plan().normal, vec!["alt-editor".to_string()]);
+    assert!(registry.plugin_imports()["plugin:editor"].starts_with("/plugins/alt-editor/0.1.0/"));
+
+    // …and enabling the original switches the stand-in off again.
+    plugininstall::enable(&harness.state, "editor", &Actor::User(new_id()))
+        .await
+        .expect("enables");
+    let alt = plugininstall::record(&harness.state, "alt-editor")
+        .await
+        .expect("reads")
+        .expect("a record");
+    assert_eq!(alt.state, PluginState::Disabled);
+    let registry = plugins::registry(&harness.state.config);
+    assert_eq!(registry.load_plan().normal, vec!["editor".to_string()]);
 
     harness.cleanup().await;
 }
@@ -845,7 +964,7 @@ async fn a_backend_half_without_the_abi_export_is_refused() {
         return;
     };
 
-    let with_backend = r#"{"id":"demo","version":"1.0.0","kernel":"^2.0",
+    let with_backend = r#"{"id":"demo","version":"1.0.0","kernel":"^3.0",
         "backend":{"module":"backend.wasm"},
         "frontend":{"module":"frontend/index.mjs"}}"#;
 
@@ -1105,7 +1224,7 @@ async fn an_absence_does_not_undo_a_narrowing_or_an_admin_disable() {
 
     let requested = |id: &str| {
         format!(
-            r#"{{"id":"{id}","version":"1.0.0","kernel":"^2.0",
+            r#"{{"id":"{id}","version":"1.0.0","kernel":"^3.0",
             "capabilities":{{"documents":["read","write"]}},
             "frontend":{{"module":"frontend/index.mjs"}}}}"#
         )
@@ -1301,7 +1420,7 @@ async fn a_secret_is_write_only_for_the_admin_and_readable_by_the_plugin() {
         return;
     };
 
-    let schema_json = r#"{"id":"cal","version":"1.0.0","kernel":"^2.0",
+    let schema_json = r#"{"id":"cal","version":"1.0.0","kernel":"^3.0",
         "config":{"feed_url":{"type":"string","required":true},
                   "auth_header":{"type":"string","secret":true}},
         "frontend":{"module":"frontend/index.mjs"}}"#;

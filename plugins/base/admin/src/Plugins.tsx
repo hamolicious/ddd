@@ -1,6 +1,7 @@
 /**
  * Plugin management: pending installs and their capability approval, the installed set, the
- * circuit breaker, uninstall, and the generated config form (SPEC §6.2, §6.3).
+ * circuit breaker, uninstall, the generated config form (SPEC §6.2, §6.3), and how the
+ * plugins depend on one another.
  *
  * # What this screen is for
  *
@@ -33,7 +34,7 @@
  * The server authorizes every route underneath; hiding a button here is a courtesy.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { ReactElement, ReactNode } from "react";
 
 import type { InstalledPlugin, PluginCapabilities } from "@kernel";
@@ -43,23 +44,17 @@ import {
   formatBytes,
   formatWhen,
   hostPolicyNote,
-  isStaleBase,
   parseHostList,
   type AdminClient,
   type PluginAdminList,
   type PluginAdminView,
   type PluginCronState,
-  type WiringHistory,
-  type WiringVersionInfo,
 } from "./api.js";
 import { AdminSectionFrame } from "./AdminView.js";
-import { useAsync, useConfirm, useModal, useMutation, useWiringEditor } from "./hooks.js";
+import { useAsync, useConfirm, useModal, useMutation } from "./hooks.js";
 import { CheckIcon, ChevronIcon, PlayIcon, PowerIcon, TrashIcon, UploadIcon } from "./icons.js";
-import { adminOfflineCopy } from "./offline.js";
 import { PluginConfigForm } from "./PluginConfig.js";
-import { ConnectionsPanel, PluginsDraftBar } from "./wiring/Connections.js";
-import type { EditorStore } from "./wiring/store.js";
-import { useOfflineCopy } from "../../_shared/offline-copy.js";
+import { describeSkip, pluginRelations, type DependencyView, type PluginRelations } from "./relations.js";
 
 export function PluginsSection({
   client,
@@ -83,21 +78,16 @@ export function PluginsSection({
     [list.data],
   );
 
-  // The Wiring tab's store: the Connections panels and the draft bar edit its draft. It
-  // loads with the tab, and again whenever the list does, since enabling or disabling a
-  // plugin writes a wiring version. A version applied from the draft bar reloads the list.
-  const editor = useWiringEditor();
-  const shared = editor.shared;
-  const liveVersion = useLiveVersion(shared?.store);
-  const seenVersion = useRef<number | undefined>(undefined);
-  useEffect(() => {
-    if (list.data !== undefined) void shared?.store.load();
-  }, [shared, list.data]);
-  useEffect(() => {
-    const previous = seenVersion.current;
-    seenVersion.current = liveVersion;
-    if (previous !== undefined && liveVersion !== undefined && liveVersion !== previous) list.reload();
-  }, [liveVersion, list.reload]);
+  const relations = useMemo(
+    () => pluginRelations(list.data?.plugins ?? [], installed.data?.load?.skipped ?? []),
+    [list.data, installed.data],
+  );
+  // Every change here also reloads the page (`plugins.changed`); reloading both lists
+  // covers the moment before that arrives.
+  const reload = useCallback(() => {
+    list.reload();
+    installed.reload();
+  }, [list.reload, installed.reload]);
 
   return (
     <AdminSectionFrame id="plugins" title="Plugins" embedded={embedded}>
@@ -172,6 +162,9 @@ export function PluginsSection({
           )}
 
           <h4>Installed ({live.length})</h4>
+          <p className="admin-note">
+            Enabling, disabling or uninstalling a plugin reloads the app on every open device.
+          </p>
           {live.length === 0 ? (
             <p className="admin-empty">No plugins installed.</p>
           ) : (
@@ -181,17 +174,12 @@ export function PluginsSection({
                   key={plugin.id}
                   client={client}
                   plugin={plugin}
-                  onDone={() => list.reload()}
+                  relations={relations.get(plugin.id)}
+                  onDone={reload}
                 />
               ))}
             </ul>
           )}
-
-          {shared !== undefined && <PluginsDraftBar shared={shared} onOpen={() => editor.open()} />}
-
-          {/* Keyed on the list's data: disabling a plugin above writes a wiring version
-              (unplug is disable), so the card reloads with the list. */}
-          <WiringCard key={`${liveVersion ?? ""}|${list.data.plugins.map((plugin) => `${plugin.id}:${plugin.state}`).join(",")}`} client={client} onApplied={() => list.reload()} />
 
           <HostSummary list={list.data} />
 
@@ -215,13 +203,6 @@ export function PluginsSection({
       )}
     </AdminSectionFrame>
   );
-}
-
-/** The shared wiring store's live version, once it has loaded. */
-function useLiveVersion(store: EditorStore | undefined): number | undefined {
-  const subscribe = useCallback((listener: () => void): (() => void) => store?.subscribe(listener) ?? (() => {}), [store]);
-  const read = (): number | undefined => (store?.state.phase === "ready" ? store.state.live.version : undefined);
-  return useSyncExternalStore(subscribe, read, read);
 }
 
 /** The accent fill for the one button a card is for (Approve). */
@@ -591,10 +572,12 @@ function HostPolicyNotes({ hosts }: { readonly hosts: readonly string[] }): Reac
 function InstalledCard({
   client,
   plugin,
+  relations,
   onDone,
 }: {
   readonly client: AdminClient;
   readonly plugin: PluginAdminView;
+  readonly relations: PluginRelations | undefined;
   readonly onDone: () => void;
 }): ReactElement {
   const [open, setOpen] = useState(false);
@@ -605,7 +588,6 @@ function InstalledCard({
   const enabled = plugin.state === "enabled";
   const toggleLabel = enabled ? "Disable" : plugin.breaker.open ? "Re-enable and clear the breaker" : "Enable";
   const detailsId = `admin-plugin-details-${plugin.id}`;
-  const shared = useWiringEditor().shared;
 
   return (
     <li className="admin-plugin admin:flex admin:flex-col admin:gap-2">
@@ -695,6 +677,11 @@ function InstalledCard({
           not loaded.
         </p>
       )}
+      {relations?.skipped !== undefined && plugin.state !== "disabled" && (
+        <p className="admin-warning" role="status">
+          <strong>Not loaded. {describeSkip(relations.skipped.reason)}.</strong> {relations.skipped.detail}
+        </p>
+      )}
       {plugin.state === "failed" && (
         <p className="admin-warning" role="status">
           The backend half could not be activated: {plugin.last_error ?? "no reason recorded"}.
@@ -724,7 +711,38 @@ function InstalledCard({
                 ["Approved", plugin.approved_at == null ? "—" : formatWhen(plugin.approved_at)],
                 ["Server part", plugin.has_backend ? describeBackend(plugin) : "None; it runs in the browser only"],
                 ["Kernel", <code key="kernel">{plugin.manifest.kernel}</code>],
-                ["Consumes", formatConsumed(plugin.manifest.consumes)],
+                ["Depends on", <DependencyList key="deps" dependencies={relations?.dependsOn ?? []} />],
+                ...(relations !== undefined && relations.optional.length > 0
+                  ? ([["Optional", <DependencyList key="optional" dependencies={relations.optional} />]] as const)
+                  : []),
+                ["Needed by", <IdList key="needed" ids={relations?.neededBy ?? []} />],
+                ...(relations?.standsInFor !== undefined
+                  ? ([
+                      [
+                        "Stands in for",
+                        <span key="provides">
+                          <code>{plugin.manifest.provides}</code>
+                          {relations.conflictsWith.length > 0 && (
+                            <>
+                              {" "}
+                              — only one of <IdList ids={[plugin.id, ...relations.conflictsWith]} /> can be
+                              enabled; enabling one disables the others.
+                            </>
+                          )}
+                        </span>,
+                      ],
+                    ] as const)
+                  : relations !== undefined && relations.conflictsWith.length > 0
+                    ? ([
+                        [
+                          "Stand-ins",
+                          <span key="conflicts">
+                            <IdList ids={relations.conflictsWith} /> can replace it; only one of them can be
+                            enabled.
+                          </span>,
+                        ],
+                      ] as const)
+                    : []),
                 ["Libraries", formatRanges(plugin.manifest.peerLibraries)],
                 [
                   "Capabilities",
@@ -774,8 +792,6 @@ function InstalledCard({
                 <PluginConfigForm client={client} plugin={plugin} />
               </DetailSection>
             )}
-
-            {shared !== undefined && <ConnectionsPanel shared={shared} plugin={plugin.id} />}
 
             <DetailSection title="Recent host events">
               <PluginLogs client={client} plugin={plugin} />
@@ -943,157 +959,8 @@ function PluginLogs({
 }
 
 // ---------------------------------------------------------------------------
-// Wiring: the live version, its history, and rollback (PLUGIN-PROTOCOLS §6c, §7)
+// Host
 // ---------------------------------------------------------------------------
-
-/**
- * The way back without the graph. Every applied wiring version is kept on the server;
- * rolling back re-applies an older one **as a new version**, through the same apply
- * route the editor uses, with the live version as its base. A stale base is a 409, and
- * the answer to that is to show the newer live version, not to overwrite it.
- *
- * Offline the card shows the last loaded copy (the section's note says so) and the
- * actions are off: the server is the only place a version can be written.
- */
-function WiringCard({
-  client,
-  onApplied,
-}: {
-  readonly client: AdminClient;
-  /** A rollback can plug plugins back in, so the list above reloads too. */
-  readonly onApplied: () => void;
-}): ReactElement {
-  const wiring = useAsync<WiringHistory>(() => client.wiring(), []);
-  const confirm = useConfirm();
-  const editor = useWiringEditor();
-  const offline = useOfflineCopy(adminOfflineCopy) !== undefined;
-  const [notice, setNotice] = useState<string | undefined>(undefined);
-  const mutate = useMutation(() => {
-    wiring.reload();
-    onApplied();
-  });
-  const live = wiring.data?.live;
-  const busy = mutate.busy !== undefined;
-
-  const rollBack = (entry: WiringVersionInfo, anchor: HTMLElement): void => {
-    if (live === undefined) return;
-    const base = live.version;
-    void confirm({
-      title: `Roll back to wiring version ${entry.version}?`,
-      description: `Version ${base} is live. Version ${entry.version} is applied again as version ${base + 1}; nothing is deleted.`,
-      confirmLabel: "Roll back",
-      anchor,
-    }).then((ok) => {
-      if (!ok) return;
-      setNotice(undefined);
-      mutate.run(`rollback-${entry.version}`, async () => {
-        const record = await client.wiringVersion(entry.version);
-        try {
-          await client.applyWiring({ base, wiring: record.wiring, action: "rollback" });
-        } catch (error) {
-          if (!isStaleBase(error)) throw error;
-          // Someone applied a version in between. The reload shows it; say why nothing moved.
-          const latest = await client.wiring();
-          setNotice(
-            `The live wiring moved on to version ${latest.live.version} in the meantime; nothing was changed. Choose again from the current list.`,
-          );
-        }
-      });
-    });
-  };
-
-  return (
-    <section className="admin-wiring admin:flex admin:flex-col admin:gap-2" aria-labelledby="admin-wiring-heading">
-      <h4 id="admin-wiring-heading">Wiring</h4>
-
-      {wiring.error !== undefined && (
-        <p className="admin-error" role="alert">
-          The wiring could not be read: {wiring.error}
-        </p>
-      )}
-      {wiring.loading && <p role="status">Loading wiring…</p>}
-
-      {wiring.data !== undefined && live !== undefined && (
-        <>
-          <div className="admin:flex admin:flex-wrap admin:items-center admin:gap-2">
-            <p className="admin-plugin-head admin:m-0">
-              <strong>Live version {live.version}</strong>
-              {live.unplugged.length > 0 && (
-                <span className="admin-badge">{live.unplugged.length} unplugged</span>
-              )}
-            </p>
-            <button type="button" onClick={() => editor.open()}>
-              Open the graph editor
-            </button>
-          </div>
-          <p className="admin-note">
-            Rolling back applies an older version as a new one; every version is kept.
-          </p>
-
-          {wiring.data.history.length === 0 ? (
-            <p className="admin-empty">No versions recorded yet.</p>
-          ) : (
-            <div className="admin-table-scroll">
-              <table className="admin-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Version</th>
-                    <th scope="col">Action</th>
-                    <th scope="col">By</th>
-                    <th scope="col">When</th>
-                    <th scope="col">
-                      <span className="admin:sr-only">Actions</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {wiring.data.history.map((entry) => (
-                    <tr key={entry.version} data-wiring-version={entry.version}>
-                      <th scope="row">
-                        {entry.version}
-                        {entry.version === live.version && <span className="admin-badge">live</span>}
-                      </th>
-                      <td data-label="Action">
-                        <code>{entry.action}</code>
-                        {entry.subject !== undefined && <> {entry.subject}</>}
-                      </td>
-                      <td data-label="By">{entry.actor ?? "—"}</td>
-                      <td data-label="When">{formatWhen(entry.at)}</td>
-                      <td className="admin-actions">
-                        {entry.version !== live.version && (
-                          <button
-                            type="button"
-                            aria-label={`Roll back to version ${entry.version}`}
-                            title={offline ? "Not while offline" : `Apply version ${entry.version} again`}
-                            disabled={offline || busy}
-                            onClick={(event) => rollBack(entry, event.currentTarget)}
-                          >
-                            Roll back
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {mutate.error !== undefined && (
-            <p className="admin-error" role="alert">
-              {mutate.error}
-            </p>
-          )}
-          {notice !== undefined && (
-            <p className="admin-note" role="status">
-              {notice}
-            </p>
-          )}
-        </>
-      )}
-    </section>
-  );
-}
 
 function HostSummary({ list }: { readonly list: PluginAdminList }): ReactElement {
   const { host, limits } = list;
@@ -1260,14 +1127,45 @@ export function describeSource(plugin: PluginAdminView): string {
   }
 }
 
-/** `lm/router@^1.0` on any port → `lm/router ^1.0`, each protocol once, sorted. */
-function formatConsumed(ports: Readonly<Record<string, { readonly protocol: string }>> | undefined): string {
-  const protocols = [...new Set(Object.values(ports ?? {}).map((port) => port.protocol.replace("@", " ")))].sort();
-  return protocols.length === 0 ? "none" : protocols.join(", ");
-}
-
 function formatRanges(ranges: Readonly<Record<string, string>> | undefined): string {
   const entries = Object.entries(ranges ?? {});
   if (entries.length === 0) return "none";
   return entries.map(([name, range]) => `${name} ${range}`).join(", ");
+}
+
+/** Plugin ids, each in `<code>`, comma-separated; "none" for an empty list. */
+function IdList({ ids }: { readonly ids: readonly string[] }): ReactElement {
+  if (ids.length === 0) return <>none</>;
+  return (
+    <>
+      {ids.map((id, index) => (
+        <span key={id}>
+          {index > 0 && ", "}
+          <code>{id}</code>
+        </span>
+      ))}
+    </>
+  );
+}
+
+const DEPENDENCY_STATUS: Readonly<Record<DependencyView["status"], string>> = {
+  ok: "",
+  missing: " (not installed)",
+  disabled: " (disabled)",
+};
+
+/** `context-menu ^2.0, header ^2.0`, flagging any the installed set cannot satisfy. */
+function DependencyList({ dependencies }: { readonly dependencies: readonly DependencyView[] }): ReactElement {
+  if (dependencies.length === 0) return <>none</>;
+  return (
+    <>
+      {dependencies.map((dependency, index) => (
+        <span key={dependency.id} className={dependency.status === "ok" ? undefined : "admin:text-warning"}>
+          {index > 0 && ", "}
+          <code>{dependency.id}</code> {dependency.range}
+          {DEPENDENCY_STATUS[dependency.status]}
+        </span>
+      ))}
+    </>
+  );
 }

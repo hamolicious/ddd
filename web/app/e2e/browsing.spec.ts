@@ -68,8 +68,11 @@ test("a machine-owned document is out of the list, the count and the tree — un
   // The sidebar count agrees with the list — the two disagreeing is the bug this
   // whole rule exists to fix, and it is the half a person actually notices.
   await showSidebar(page);
+  // The list is virtual, so it states its total rather than having it counted.
   const allDocuments = page.locator(".doclist-view", { hasText: "All documents" });
-  const listed = await docRows(page).count();
+  const status = page.locator(".search-status");
+  await expect(status).toHaveText(/^\d+ documents?$/);
+  const listed = Number.parseInt((await status.textContent()) ?? "", 10);
   await expect(allDocuments.locator(".doclist-count")).toHaveText(String(listed));
 
   // And the folder tree does not show it either. The ordinary note is there, so this is
@@ -120,7 +123,7 @@ test("Ctrl+Space searches the list, which keeps its filters and its sort", async
   await expect(page.getByRole("button", { name: "Quibble machine", exact: true })).toHaveCount(0);
   await expect(docRows(page)).toHaveCount(1);
   await expect(page.getByRole("button", { name: /^Sort by Best match$/ })).toBeVisible();
-  await expect(page.locator(".doclist-status")).toHaveText(`1 result for “${needle}”`);
+  await expect(page.locator(".search-status")).toHaveText(`1 result for “${needle}”`);
 
   // The machine-document filter applies to results as it does to the list.
   await page.getByRole("button", { name: /^Filters/ }).click();
@@ -138,7 +141,7 @@ test("Ctrl+Space searches the list, which keeps its filters and its sort", async
   await search.fill("");
   await expect(page).toHaveURL(/#\/$/);
   await expect(page.getByRole("button", { name: /^Sort by Last updated$/ })).toBeVisible();
-  await expect(page.locator(".doclist-status")).toContainText(/documents|Showing/);
+  await expect(page.locator(".search-status")).toContainText(/documents|Showing/);
 });
 
 test("?line=N opens the editor at that line, and a second link moves it again", async ({

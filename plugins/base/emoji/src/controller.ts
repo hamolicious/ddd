@@ -1,5 +1,5 @@
 /**
- * The shortcode menu's state machine, over every `text.surface`. The same shape as
+ * The shortcode menu's state machine, over every text surface (`plugin:editor`). The same shape as
  * `fm-autocomplete`'s and `slash-commands`' menus, deliberately, so the three feel alike
  * and never open together (none of them answers what the others do).
  *
@@ -9,9 +9,8 @@
  * loaded there is nothing to suggest, and the menu stays shut.
  */
 
-import type { Kernel } from "@kernel";
-
-import type { TextSurface } from "@protocols/lm/text.surface";
+import type { Unsubscribe } from "@kernel";
+import type { TextSurface } from "plugin:editor";
 
 import type { EmojiSet } from "./emojis.js";
 import { suggest, type Suggestion } from "./suggest.js";
@@ -35,7 +34,10 @@ export interface MenuController {
   dispose(): void;
 }
 
-export function createController(kernel: Kernel, emojis: () => EmojiSet | undefined): MenuController {
+export function createController(
+  emojis: () => EmojiSet | undefined,
+  watchSurfaces: (listener: (surfaces: readonly TextSurface[]) => void) => Unsubscribe,
+): MenuController {
   let current: MenuState | undefined;
   /** Escape was pressed on this text: stay shut until it changes. */
   let dismissed: { surface: string; before: string } | undefined;
@@ -103,8 +105,8 @@ export function createController(kernel: Kernel, emojis: () => EmojiSet | undefi
 
   /** Surfaces being watched, and how to stop. Surfaces come and go with editors. */
   const attached = new Map<TextSurface, () => void>();
-  // The `surfaces` host: every `text.surface` wired to this plugin, in seat order.
-  const unwatch = kernel.ports.collect<TextSurface>("surfaces").subscribe((all) => {
+  // Every text surface mounted right now (`plugin:editor`'s `onSurfacesChange`).
+  const unwatch = watchSurfaces((all) => {
     for (const [surface, detach] of [...attached]) {
       if (all.includes(surface)) continue;
       detach();

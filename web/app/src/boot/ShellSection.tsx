@@ -1,5 +1,5 @@
 /**
- * A `settings.section` that exists **only inside the Flutter shell** (SPEC §7): what
+ * A settings section (`settings.addSection`) that exists **only inside the Flutter shell** (SPEC §7): what
  * bridge this device speaks, what it can do natively, and which bundle is running.
  *
  * Three reasons it is worth the file rather than being a console log:
@@ -22,25 +22,45 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 
-import type { KernelHost } from "@kernel/runtime/index.js";
+import { asPluginSync, type KernelHost } from "@kernel/runtime/index.js";
 
 import { inShell, readShellManifest, shellInfo, type ShellManifestInfo } from "./shell.js";
 
 export const SHELL_SECTION_ID = "shell";
 
+/** The part of `plugin:settings` this file uses; typed here so the app does not compile a plugin. */
+interface SettingsModule {
+  readonly addSection?: (section: {
+    readonly id: string;
+    readonly title: string;
+    readonly description?: string;
+    readonly order?: number;
+    readonly component: () => ReactNode;
+  }) => () => void;
+}
+
 /**
- * Offer the section, in the shell only. Attributed to `kernel`, so the settings screen's
- * "provided by" line tells the truth; no plugin provides it, so it follows the wired seats.
+ * Add the section to the `settings` plugin, in the shell only, once the plugins have
+ * activated. Attributed to `kernel`, so the settings screen's "provided by" line tells the
+ * truth. Without an active `settings` plugin there is nowhere to put it, and nothing happens.
+ *
+ * The module is imported by its specifier through a variable, like the loader does: the
+ * app never bundles or type-checks against a plugin, and the import map hands back the
+ * very instance the settings plugin activated with.
  */
-export function contributeShellSection(host: KernelHost): void {
-  if (!inShell()) return;
-  host.ports.offerAsKernel("lm/settings.section", {
-    id: SHELL_SECTION_ID,
-    title: "This device",
-    description: "Bridge version, native capabilities and the bundle running on this device.",
-    order: 90,
-    component: () => <ShellSection host={host} />,
-  });
+export async function contributeShellSection(host: KernelHost): Promise<void> {
+  if (!inShell() || !host.plugins.active("settings")) return;
+  const specifier = "plugin:settings";
+  const settings = (await import(/* @vite-ignore */ specifier)) as SettingsModule;
+  asPluginSync("kernel", () =>
+    settings.addSection?.({
+      id: SHELL_SECTION_ID,
+      title: "This device",
+      description: "Bridge version, native capabilities and the bundle running on this device.",
+      order: 90,
+      component: () => <ShellSection host={host} />,
+    }),
+  );
 }
 
 function ShellSection({ host }: { readonly host: KernelHost }): ReactNode {

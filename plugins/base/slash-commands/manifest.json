@@ -1,6 +1,6 @@
 {
   "id": "slash-commands",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "name": "Slash commands",
   "description": "Type / in any editor for a menu of actions other plugins offer.",
   "author": "Life Manager base distribution",
@@ -8,20 +8,10 @@
   "x-tailwind": {
     "prefix": "slash"
   },
-  "kernel": "^2.0",
-  "hot": true,
-  "consumes": {
-    "surfaces": {
-      "protocol": "lm/text.surface@^1.0"
-    },
-    "commands": {
-      "protocol": "lm/slash.command@^1.0"
-    }
-  },
-  "provides": {
-    "menu": {
-      "protocol": "lm/shell.overlay@1.0.0"
-    }
+  "kernel": "^3.0",
+  "dependencies": {
+    "editor": "^2.0",
+    "shell-ui": "^3.0"
   },
   "peerLibraries": {
     "react": "^18.0.0"

@@ -32,7 +32,7 @@ import remarkParse from "remark-parse";
 import remarkGfm from "remark-gfm";
 import remarkDirective from "remark-directive";
 
-import type { MarkdownRemark } from "@protocols/lm/markdown.remark";
+import type { MarkdownRemark } from "./api.js";
 
 import type { MdNode } from "./mdast.js";
 
@@ -63,7 +63,7 @@ export function buildProcessor(plugins: readonly MarkdownRemark[]): MarkdownProc
     .use(remarkDirective)
     .use(detachedTextDirectives) as unknown as Pipeline;
 
-  // In seat order, as the host hands them over (PLUGIN-PROTOCOLS §6a).
+  // In registry order (`order`, then the order they were added).
   for (const contribution of plugins) {
     // A contribution that is not a usable `Pluggable` throws here, at boot, naming the
     // plugin — not three documents later with an empty pane.

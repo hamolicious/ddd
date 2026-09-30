@@ -54,48 +54,6 @@ const checks = [
   ["title resolver is exported", init.resolve_title("# Hello\n") === "Hello"],
 ];
 
-// The wiring corpus (PLUGIN-PROTOCOLS §9 step 4) through the Wasm build: the wiring editor
-// previews with exactly the resolver the server runs (`crates/core/tests/wiring.rs`).
-{
-  const corpusPath = new URL("../../backend/crates/core/corpus/wiring.json", import.meta.url);
-  const corpus = JSON.parse(await readFile(fileURLToPath(corpusPath), "utf8"));
-  const observed = (r) => ({
-    order: r.order,
-    skipped: Object.fromEntries(r.skipped.map((s) => [s.plugin, s.reason])),
-    bindings: r.bindings,
-    seats: r.seats,
-    bench: r.bench,
-    listeners: r.listeners,
-    status: Object.fromEntries(
-      Object.entries(r.status).map(([port, s]) => [port, s.count === undefined ? s.code : `${s.code}:${s.count}`]),
-    ),
-    diagnostics: r.diagnostics.map((d) => `${d.severity} ${d.code} ${d.plugin}`).sort(),
-  });
-  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-  const sorted = (value) =>
-    value && typeof value === "object" && !Array.isArray(value)
-      ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, sorted(value[key])]))
-      : Array.isArray(value) ? value.map(sorted) : value;
-  for (const kase of corpus.cases) {
-    const input = { plugins: kase.plugins, protocols: corpus.protocols, wiring: kase.wiring ?? {}, baseOnly: kase.base_only ?? false };
-    const before = JSON.parse(init.resolve_wiring(JSON.stringify(input)));
-    const got = observed(before);
-    const bad = Object.entries(kase.expect ?? {}).filter(([field, want]) => !same(sorted(got[field]), sorted(want)));
-    if (kase.plan) {
-      const after = JSON.parse(init.resolve_wiring(JSON.stringify({ ...input, wiring: kase.plan.wiring })));
-      const plan = JSON.parse(
-        init.plan_wiring(
-          JSON.stringify({ before, after, beforeWiring: kase.wiring ?? {}, afterWiring: kase.plan.wiring, hot: kase.plan.hot ?? [] }),
-        ),
-      );
-      bad.push(...Object.entries(kase.plan.expect).filter(([field, want]) => !same(sorted(plan[field]), sorted(want))));
-    }
-    checks.push([`wiring: ${kase.name}`, bad.length === 0 || (console.error(bad), false)]);
-  }
-  checks.push(["wiring: bad input is total", JSON.parse(init.resolve_wiring("{{{")).error !== undefined]);
-  checks.push(["wiring: shapes fit through Wasm", init.shape_fits('"string"', '{"literal":["a"]}') !== "[]"]);
-}
-
 let failed = 0;
 for (const [name, ok] of checks) {
   console.log(`${ok ? "ok  " : "FAIL"}  ${name}`);

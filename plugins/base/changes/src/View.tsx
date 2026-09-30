@@ -12,8 +12,8 @@ import { OfflineCopyNote } from "../../_shared/offline-copy.js";
 import { changesOfflineCopy } from "./offline.js";
 import { useEffect, useState, type ReactElement } from "react";
 
-import type { ConfirmRequest } from "@protocols/lm/context-menu";
-import type { MarkdownRenderer } from "@protocols/lm/markdown-renderer";
+import type { ConfirmRequest } from "plugin:context-menu";
+import type { MarkdownRenderer } from "plugin:markdown";
 
 import {
   describeReason,
@@ -23,7 +23,7 @@ import {
 } from "./api.js";
 import { DetachedBanner } from "./Banner.js";
 
-/** What these pages read through the `markdown` port: the manifest's `needs`. */
+/** The part of `plugin:markdown` these pages draw with. */
 export type MarkdownApi = Pick<MarkdownRenderer, "render" | "bodyOf">;
 
 export const READER_CLASSES =

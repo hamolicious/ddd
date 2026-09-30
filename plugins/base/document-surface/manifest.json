@@ -1,44 +1,19 @@
 {
   "id": "document-surface",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "name": "Document surface",
-  "description": "Owns the document route and the mode registry.",
+  "description": "Owns the document route and the modes other plugins add with addMode.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": {
     "prefix": "docsurface"
   },
-  "kernel": "^2.0",
-  "hot": true,
-  "consumes": {
-    "router": {
-      "protocol": "lm/router@^1.0",
-      "needs": [
-        "current",
-        "onChange"
-      ]
-    },
-    "modes": {
-      "protocol": "lm/document.mode@^1.0"
-    }
-  },
-  "provides": {
-    "view": {
-      "protocol": "lm/main.view@1.0.0"
-    },
-    "route": {
-      "protocol": "lm/router.route@1.0.0"
-    },
-    "commands": {
-      "protocol": "lm/commands.command@2.0.0"
-    },
-    "keys": {
-      "protocol": "lm/keybindings.default@1.0.0"
-    },
-    "settings": {
-      "protocol": "lm/settings.section@1.0.0",
-      "order": 20
-    }
+  "kernel": "^3.0",
+  "dependencies": {
+    "commands": "^3.0",
+    "router": "^2.0",
+    "settings": "^2.0",
+    "shell-ui": "^3.0"
   },
   "peerLibraries": {
     "react": "^18.0.0"

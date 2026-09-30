@@ -39,7 +39,7 @@ describe("spansOf", () => {
   });
 });
 
-const built = fileURLToPath(new URL("../../dist/syntax-highlight/1.0.0/frontend/", import.meta.url));
+const built = fileURLToPath(new URL("../../dist/syntax-highlight/2.0.0/frontend/", import.meta.url));
 
 describe.skipIf(!existsSync(`${built}languages/rust/grammar.wasm`))("engine, with the built grammars", () => {
   const engine = createEngine({

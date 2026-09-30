@@ -45,6 +45,7 @@ import 'package:flutter/material.dart';
 import 'bridge/auth.dart';
 import 'bridge/bridge.dart';
 import 'bridge/filesystem.dart';
+import 'bridge/folder.dart';
 import 'bridge/notifications.dart';
 import 'bundle/manifest.dart';
 import 'bundle/store.dart';
@@ -110,6 +111,10 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
   /// so the OS permission and the registry of scheduled notifications are not the old
   /// server's to lose. Only the handlers get rebuilt, onto the new bridge.
   final NotificationsCapability _notifications = NotificationsCapability();
+
+  /// The notes folder. One instance for the life of the app, like [_notifications]: the
+  /// folder and its watcher belong to the device, not to a server or a login.
+  final FolderCapability _folder = FolderCapability();
 
   /// One HTTP client for the whole login phase. [build] runs on every keystroke in the
   /// server-URL field, and a [LoginService] constructed there would open — and never close —
@@ -214,6 +219,7 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
     unawaited(_server?.stop());
     _updater?.close();
     _filesystem?.close();
+    unawaited(_folder.close());
     _login.close();
     super.dispose();
   }
@@ -539,6 +545,7 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
       ..registerOn(_bridge);
     // Re-registered onto the new bridge, but the same instance: see the field.
     _notifications.registerOn(_bridge);
+    _folder.registerOn(_bridge);
     _bridge.register('boot', 'ok', (Map<String, Object?> _) async {
       await _onBootOk();
       return null;

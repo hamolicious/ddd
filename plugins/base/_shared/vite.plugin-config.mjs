@@ -8,14 +8,16 @@
  *
  * Three decisions, all of them consequences of how plugins are loaded:
  *
- * 1. **Library mode, one ES module.** The loader does `import(url)` and reads the
- *    default export; there is no HTML, no CSS injection and no chunking, because a
- *    plugin is a module, not an app.
- * 2. **The blessed runtime layer is external.** `react`, `react-dom`, `yjs`, `@kernel`
- *    and the extension-point-coupled libraries stay bare specifiers in the output and
- *    resolve through the server's import map at load time. Bundling any of them would
- *    give the plugin its own React or its own Yjs, and the failure would look like a
- *    kernel bug (SPEC §6.4).
+ * 1. **Library mode, one ES module.** The loader does `import("plugin:<id>")` and reads
+ *    the default export (`activate`); the named exports are what other plugins import.
+ *    There is no HTML, no CSS injection and no chunking, because a plugin is a module,
+ *    not an app.
+ * 2. **The blessed runtime layer is external, and so is every other plugin.** `react`,
+ *    `react-dom`, `yjs`, `@kernel`, the extension-point-coupled libraries and every
+ *    `plugin:<id>` stay bare specifiers in the output and resolve through the server's
+ *    import map at load time. Bundling any of them would give the plugin its own React,
+ *    its own Yjs or its own copy of a dependency's registries, and the failure would look
+ *    like a kernel bug (SPEC §6.4).
  * 3. **`style.css` is a sibling file, not a module import.** The kernel links it on
  *    activation. It is copied normally, or compiled with the opt-in Tailwind preset.
  *
@@ -30,7 +32,7 @@
  * with `{ root, outDir, resolveFrom }` and writes whatever it needs under `frontend/`.
  */
 
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -86,6 +88,9 @@ export const RUNTIME_EXTERNALS = [
   "remark-gfm",
   "remark-directive",
 ];
+
+/** Other plugins' public modules (`import { addItem } from "plugin:header"`): never bundled. */
+export const PLUGIN_SPECIFIER = /^plugin:/;
 
 /** The directory of package `name`, as resolved from `require`'s location. */
 function packageDir(require, name) {
@@ -152,7 +157,7 @@ export function pluginConfig({ root, outDir, entry, tailwind, resolveFrom = root
         fileName: () => moduleName,
       },
       rollupOptions: {
-        external: RUNTIME_EXTERNALS,
+        external: [...RUNTIME_EXTERNALS, PLUGIN_SPECIFIER],
         output: {
           // Keep the module's exports as written: the loader reads `default`.
           exports: "named",
@@ -196,19 +201,6 @@ export function pluginConfig({ root, outDir, entry, tailwind, resolveFrom = root
               copyFileSync(source, target);
             } else {
               this.warn(`manifest declares ${stylePath} but ${source} does not exist`);
-            }
-          }
-          // Protocol packages the plugin owns (PLUGIN-PROTOCOLS §3): the generated files, not
-          // the `shape.mjs` source. The zip allowlist admits exactly these.
-          const protocols = join(root, "protocols");
-          if (existsSync(protocols)) {
-            for (const name of readdirSync(protocols)) {
-              for (const file of ["protocol.json", "index.d.ts", "README.md", "conformance.mjs"]) {
-                const source = join(protocols, name, file);
-                if (!existsSync(source)) continue;
-                mkdirSync(join(out, "protocols", name), { recursive: true });
-                copyFileSync(source, join(out, "protocols", name, file));
-              }
             }
           }
           const step = join(root, "build.mjs");

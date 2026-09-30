@@ -1,9 +1,12 @@
 /**
- * The document list and Trash are paged: a page of rows, and the next one loads by
- * itself as the reader scrolls near the end — no button (`doc-list/src/pagination.ts`).
+ * The document list and Trash are paged: a page of rows, and the next one loads by itself
+ * as the reader scrolls near the end — no button (`_shared/pagination.ts`,
+ * `_shared/LoadMore.tsx`).
  *
- * The document list is virtual, so its rows in the DOM are only those on screen: what
- * it has loaded is read from the status line, not by counting rows.
+ * The document list is `table`'s results table: a box ten rows tall, scrolling inside
+ * itself, whose page size is its height; it is virtual, so what it has loaded is read
+ * from the box's scroll height, not by counting rows. Trash is `doc-list`'s own list, fifty
+ * at a time, every loaded row in the DOM.
  *
  * Named to run last: it adds more than a page of documents, which would push the
  * seeded welcome documents off the first page for every spec after it. It trashes them
@@ -12,9 +15,9 @@
 
 import { expect, test } from "@playwright/test";
 
-import { createDocument, docRows, signIn } from "./helpers.js";
+import { createDocument, signIn } from "./helpers.js";
 
-const PAGE_SIZE = 50;
+const TRASH_PAGE = 50;
 const PROBES = 60;
 
 test("the list and Trash show a page at a time, and load the rest as they scroll", async ({
@@ -29,22 +32,22 @@ test("the list and Trash show a page at a time, and load the rest as they scroll
   }
 
   await signIn(page);
-  const status = page.locator(".doclist-status");
-  await expect(status).toContainText(/^Showing 50 of \d+$/);
-  const total = Number(/of (\d+)/.exec((await status.textContent()) ?? "")?.[1]);
-  expect(total).toBeGreaterThan(PAGE_SIZE);
+  // The count under the list is always the real total.
+  const status = page.locator(".search-status");
+  await expect(status).toHaveText(/^\d+ documents$/);
+  expect(Number.parseInt((await status.textContent()) ?? "", 10)).toBeGreaterThanOrEqual(PROBES);
 
-  // Scrolling near the end loads the next page by itself, and says nothing about it.
-  const more = page.locator(".doclist-load-more");
-  await expect(more).toHaveText("");
-  await more.scrollIntoViewIfNeeded();
-  await expect(status).toHaveText(
-    2 * PAGE_SIZE >= total ? `${total.toLocaleString()} documents` : `Showing ${2 * PAGE_SIZE} of ${total.toLocaleString()}`,
-  );
+  // Scrolling the box to its end loads the next page by itself, and says nothing about it.
+  const box = page.locator(".search-table-box");
+  const loaded = (): Promise<number> => box.evaluate((element) => element.scrollHeight);
+  const first = await loaded();
+  await box.evaluate((element) => element.scrollTo(0, element.scrollHeight));
+  await expect.poll(loaded).toBeGreaterThan(first);
 
   // A change to the sort starts again from one page.
+  await box.evaluate((element) => element.scrollTo(0, 0));
   await page.getByRole("button", { name: /^Order:/ }).click();
-  await expect(status).toContainText(/^Showing 50 of \d+$/);
+  await expect.poll(loaded).toBeLessThanOrEqual(first);
 
   // Trash: the same paging.
   for (const id of ids) {
@@ -59,7 +62,8 @@ test("the list and Trash show a page at a time, and load the rest as they scroll
     Number(/of (\d+)/.exec((await trashStatus.textContent()) ?? "")?.[1]);
   await expect.poll(trashedNow).toBeGreaterThanOrEqual(PROBES);
   const trashed = await trashedNow();
-  await expect(docRows(page)).toHaveCount(PAGE_SIZE);
-  await page.locator(".doclist-load-more").scrollIntoViewIfNeeded();
-  await expect(docRows(page)).toHaveCount(Math.min(2 * PAGE_SIZE, trashed));
+  const rows = page.locator(".doclist-item");
+  await expect(rows).toHaveCount(TRASH_PAGE);
+  await rows.last().scrollIntoViewIfNeeded();
+  await expect(rows).toHaveCount(Math.min(2 * TRASH_PAGE, trashed));
 });

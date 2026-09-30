@@ -15,6 +15,7 @@ import type { InstalledPlugin, SessionUser } from "@kernel";
 
 import { ApiError, OfflineError, installedPlugins, me } from "./api.js";
 import {
+  cachedLoad,
   cachedPlugins,
   cachedSession,
   forgetBootCache,
@@ -66,6 +67,17 @@ describe("what the boot sequence remembers", () => {
     expect(cachedSession()).toEqual(USER);
     expect(cachedPlugins()).toHaveLength(1);
     expect(cachedPlugins()?.[0]?.manifest.id).toBe("shell-ui");
+    expect(cachedLoad()).toBeUndefined();
+  });
+
+  it("remembers the load resolution with the list, so an offline boot keeps the order", () => {
+    const load = { normal: ["shell-ui"], safe: ["shell-ui"], skipped: [{ id: "graph", reason: "needs indexer" }] };
+    rememberPlugins([PLUGIN], load);
+    expect(cachedLoad()).toEqual(load);
+    // An entry an older app wrote (version 1, with wiring) is ignored rather than trusted.
+    localStorage.setItem("life-manager.boot.plugins", JSON.stringify({ v: 1, plugins: [PLUGIN], wiring: { version: 3 } }));
+    expect(cachedPlugins()).toBeUndefined();
+    expect(cachedLoad()).toBeUndefined();
   });
 
   it("forgets the session without forgetting the plugin list", () => {

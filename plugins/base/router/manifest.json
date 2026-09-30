@@ -1,31 +1,14 @@
 {
   "id": "router",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "name": "Router",
   "description": "URL to view, over the hash so the Flutter shell works from a local origin.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
-  "kernel": "^2.0",
-  "hot": true,
-  "consumes": {
-    "shell": {
-      "protocol": "lm/shell@^1.0",
-      "needs": [
-        "setMainView"
-      ]
-    },
-    "routes": {
-      "protocol": "lm/router.route@^1.0"
-    }
-  },
-  "provides": {
-    "router": {
-      "protocol": "lm/router@1.0.0"
-    },
-    "not-found": {
-      "protocol": "lm/main.view@1.0.0"
-    }
+  "kernel": "^3.0",
+  "dependencies": {
+    "shell-ui": "^3.0"
   },
   "peerLibraries": {
     "react": "^18.0.0"

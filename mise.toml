@@ -291,13 +291,16 @@ run = [
 [tasks.web-check]
 description = "Typecheck and unit-test the web tree: kernel contract, kernel runtime, PWA loader, base plugins"
 dir = "web"
-# The generated files first (PLUGIN-PROTOCOLS §9 steps 1 and 3): the manifest types from
-# `schema/manifest.schema.json`, and every protocol package from its `shape.mjs`. Stale
+# The generated files first: the manifest types from `schema/manifest.schema.json`. Stale
 # output fails here, naming the file, before anything is compiled against it. Then the
-# protocol declarations with `skipLibCheck` off, which the main typecheck cannot do.
+# plugin dependency graph (`scripts/check-plugin-graph.mjs`): every dependency exists at a
+# satisfying version, no cycles, every static `plugin:` import is a declared dependency and
+# no optional one is imported statically. The typecheck then follows `plugin:*` into each
+# dependency's source.
 run = [
   "npm install --no-audit --no-fund",
   "npm run check:generated",
+  "npm run check:plugins",
   "npm run typecheck",
   "npm run test",
 ]
@@ -360,6 +363,11 @@ run = "cargo tauri build"
 description = "Convergence harness against a running server (SPEC §9 M2)"
 dir = "web"
 run = "npm run harness:convergence --"
+
+[tasks.collab]
+description = "Collaboration suite: people editing together, online and offline, against a real server it starts itself (needs mongo up and `cargo build --bin life-manager`)"
+dir = "web"
+run = "npm run test:collab --"
 
 [tasks.wasm]
 description = "Build the shared core to Wasm for the client kernel (writes web/kernel/src/wasm/pkg)"

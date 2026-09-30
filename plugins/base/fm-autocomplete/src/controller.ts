@@ -1,5 +1,5 @@
 /**
- * The suggestion menu's state machine, over every `text.surface`.
+ * The suggestion menu's state machine, over every text surface (`plugin:editor`).
  *
  * Each surface is watched through its own `subscribe`: after every change the text before
  * the caret is handed to `suggest.ts` (keys, or the typed key's values), and the menu
@@ -13,14 +13,13 @@
  * suggestions — without the first there is no telling the frontmatter from the body.
  */
 
-import type { Kernel } from "@kernel";
-
-import type { TextSurface } from "@protocols/lm/text.surface";
-import type { WorkspaceIndex } from "@protocols/lm/workspace-index";
+import type { Kernel, Unsubscribe } from "@kernel";
+import type { TextSurface } from "plugin:editor";
+import type { WorkspaceIndex } from "plugin:indexer";
 
 import { suggest, type Suggestion } from "./suggest.js";
 
-/** What the menu reads through the `index` port: the manifest's `needs`. */
+/** What the menu reads from `plugin:indexer`. */
 export type IndexSource = Pick<WorkspaceIndex, "fmFields" | "fmValues" | "documents" | "subscribe">;
 
 export interface MenuState {
@@ -42,7 +41,11 @@ export interface MenuController {
   dispose(): void;
 }
 
-export function createController(kernel: Kernel, indexer: IndexSource): MenuController {
+export function createController(
+  kernel: Kernel,
+  indexer: IndexSource,
+  watchSurfaces: (listener: (surfaces: readonly TextSurface[]) => void) => Unsubscribe,
+): MenuController {
   let current: MenuState | undefined;
   /** Escape was pressed on this text: stay shut until it changes. */
   let dismissed: { surface: string; before: string } | undefined;
@@ -124,8 +127,8 @@ export function createController(kernel: Kernel, indexer: IndexSource): MenuCont
 
   /** Surfaces being watched, and how to stop. Surfaces come and go with editors. */
   const attached = new Map<TextSurface, () => void>();
-  // The `surfaces` host: every `text.surface` wired to this plugin, in seat order.
-  const unwatch = kernel.ports.collect<TextSurface>("surfaces").subscribe((all) => {
+  // Every text surface mounted right now.
+  const unwatch = watchSurfaces((all) => {
     for (const [surface, detach] of [...attached]) {
       if (all.includes(surface)) continue;
       detach();

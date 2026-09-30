@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { FmField, FmValueCount } from "@protocols/lm/workspace-index";
+import type { FmField, FmValueCount } from "plugin:indexer";
 
 import { inFrontmatter, suggest, yamlScalar } from "./suggest.js";
 

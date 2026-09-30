@@ -2,7 +2,7 @@
  * The plugin manifest (SPEC §6.2) and the loader's view of an installed plugin.
  *
  * The **server** is the authority: it validates manifests at install, resolves the
- * wiring and the `peerLibraries` ranges, and serves the result. The
+ * dependency graph and the `peerLibraries` ranges, and serves the result. The
  * loader re-validates independently anyway, for one reason given in SPEC §6.4: a
  * stale offline client must hard-skip a plugin built for a kernel it does not
  * implement, rather than activate it and fail in pieces.
@@ -21,17 +21,16 @@ import {
 
 /**
  * The manifest's types are generated from `schema/manifest.schema.json`, the one source the
- * server's types come from too (`web/scripts/gen-manifest.mjs`, PLUGIN-PROTOCOLS §9 step 1).
+ * server's types come from too (`web/scripts/gen-manifest.mjs`).
  */
 export type {
-  ConsumedPort,
+  BackendExport,
   HttpCapability,
   PluginBackend,
   PluginCapabilities,
   PluginConfigField,
   PluginFrontend,
   PluginManifest,
-  ProvidedPort,
 } from "./manifest.generated.js";
 
 /** `^[a-z0-9][a-z0-9-]{0,63}$` — also the URL segment under `/plugins/`. */
@@ -39,9 +38,6 @@ export const PLUGIN_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 /** `1.2.3` with an optional prerelease/build tail. */
 export const PLUGIN_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)*$/;
-
-/** A port name: local to its plugin, never containing the `:` that joins it to an id. */
-export const PORT_NAME_PATTERN = /^[a-z][a-z0-9-]{0,63}$/;
 
 export type PluginState = "enabled" | "disabled" | "pending" | "failed";
 
@@ -67,6 +63,20 @@ export interface InstalledPlugin {
   readonly assetsVersion?: string;
 }
 
+/**
+ * The server's load resolution (`GET /api/plugins` → `load`): which plugins a boot
+ * activates, in order, per boot mode, and which it leaves out and why.
+ *
+ * `normal` is a normal boot, `safe` is `?safe=1` (base plugins only). Both are in
+ * dependency order: every plugin after its `dependencies` and `optionalDependencies`.
+ */
+export interface PluginLoad {
+  readonly normal: readonly string[];
+  readonly safe: readonly string[];
+  /** A dependency missing, out of range, disabled, or in a cycle — and every dependent of one. */
+  readonly skipped: readonly { readonly id: string; readonly reason: string }[];
+}
+
 export interface ManifestProblem {
   readonly field: string;
   readonly message: string;
@@ -77,7 +87,7 @@ export interface ManifestProblem {
  *
  * The server runs the same interpreter over the same schema (`manifest_schema.rs`), and
  * `schema/fixtures/manifests.json` pins that both report the same fields. This is still the
- * client's own floor rather than a duplicate of the install-time checks (wiring
+ * client's own floor rather than a duplicate of the install-time checks (dependency
  * resolution, capability approval, zip hardening are all server-side): a stale offline
  * client re-checks what it was served (SPEC §6.4).
  */
@@ -181,20 +191,8 @@ export function formatProblem(format: string, text: string): string | undefined 
       // The server canonicalizes too; a client that trusted the manifest here would
       // happily fetch `/plugins/x/1.0.0/../../etc/passwd`.
       return isSafeRelativePath(text) ? undefined : "must be a relative path inside the package, without `..`";
-    case "port-name":
-      return PORT_NAME_PATTERN.test(text) ? undefined : `must match ${String(PORT_NAME_PATTERN).slice(1, -1)}`;
-    case "protocol-exact": {
-      const ref = parseProtocolRef(text);
-      return ref && isValidVersion(ref.version)
-        ? undefined
-        : "must be <publisher>/<name>@<version>, e.g. lm/router@1.0.0";
-    }
-    case "protocol-range": {
-      const ref = parseProtocolRef(text);
-      return ref && isSemverRange(ref.version)
-        ? undefined
-        : "must be <publisher>/<name>@<range>, e.g. lm/router@^1.0";
-    }
+    case "plugin-ref":
+      return parsePluginRef(text) ? undefined : "must be <plugin-id>@<version>, e.g. editor@2.0.0";
     default:
       return undefined;
   }
@@ -235,27 +233,13 @@ export function isSafeRelativePath(path: string): boolean {
   );
 }
 
-/** `<publisher>/<name>`: publisher like a plugin id, name dotted and possibly camelCase. */
-export function isProtocolId(id: string): boolean {
-  const slash = id.indexOf("/");
-  if (slash === -1) return false;
-  const publisher = id.slice(0, slash);
-  const name = id.slice(slash + 1);
-  return (
-    PLUGIN_ID_PATTERN.test(publisher) &&
-    /^[a-z0-9][A-Za-z0-9.-]{0,127}$/.test(name) &&
-    !name.endsWith(".") &&
-    !name.includes("..")
-  );
-}
-
-/** Split `lm/router@^1.0` into its id and version (or range). */
-export function parseProtocolRef(text: string): { readonly id: string; readonly version: string } | undefined {
+/** Split `editor@2.0.0` (a manifest's `provides`) into a plugin id and an exact version. */
+export function parsePluginRef(text: string): { readonly id: string; readonly version: string } | undefined {
   const at = text.indexOf("@");
   if (at === -1) return undefined;
   const id = text.slice(0, at);
   const version = text.slice(at + 1);
-  return isProtocolId(id) && version.length > 0 ? { id, version } : undefined;
+  return PLUGIN_ID_PATTERN.test(id) && isValidVersion(version) ? { id, version } : undefined;
 }
 
 /**

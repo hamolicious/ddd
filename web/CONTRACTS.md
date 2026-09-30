@@ -364,20 +364,20 @@ web/
 │   ├── errors.ts       KernelError + notImplemented()
 │   ├── shape.ts        minimal runtime shape validation (`s.object({…})`)
 │   ├── documents.ts    queries, open→Y.Doc, create/delete, the SPLICE HELPERS
-│   ├── ports.ts        kernel.ports: use / serve / offer / collect / emit / on
-│   ├── protocols.ts    protocol packages; wiring.ts the resolver's types
+│   ├── registry.ts     createRegistry (host extension points) + checked (3.0)
 │   ├── events.ts       the ephemeral bus + KernelEvents
 │   ├── settings.ts     per-user settings documents
 │   ├── session.ts      user, authenticated fetch, logout
 │   ├── sync.ts         the observable status of SPEC §6.4
 │   ├── ui.ts           single mount, error boundary, notices, DEFAULT_*_TOKENS
 │   ├── capabilities.ts feature detection + the shell bridge
-│   ├── manifest.ts     SPEC §6.2 shapes, validateManifest, satisfies
-│   └── kernel.ts       the Kernel object, activate()/deactivate()
+│   ├── manifest.ts     SPEC §6.2 shapes, validateManifest, satisfies, PluginLoad
+│   └── kernel.ts       the Kernel object, kernel.plugins, activate()/deactivate()
 ├── kernel-api/tsconfig.build.json + scripts/build-kernel-dts.mjs        [scaffold]
 ├── kernel/src/runtime/              the implementation              [kernel-runtime]
 │   ├── host.ts         KernelHost + forPlugin(manifest)            (done)
-│   ├── ports.ts        slots, services and events by port + ports.test.ts (done)
+│   ├── plugins.ts      kernel.plugins: active / optional / list        (done)
+│   ├── attribution.ts  the loader's "activating plugin" marker for registries (done)
 │   ├── events.ts       the bus                                     (done)
 │   ├── notices.ts      the notice centre                           (done)
 │   ├── theme.ts        token layers + colour-scheme resolution      (done)
@@ -395,7 +395,7 @@ web/
 │   ├── runtime/        one re-export module per blessed specifier + specifiers.ts
 │   ├── src/main.tsx    the boot sequence
 │   ├── src/boot/       api, cache (offline boot), AuthGate, kernel-init, safe-mode, update
-│   ├── src/loader/     order.ts (+test), loader.ts, importmap.ts
+│   ├── src/loader/     loader.ts (+test), importmap.ts (plugin:<id> entries in dev)
 │   ├── src/ui/         AppFrame, BootScreen
 │   ├── src/safe-mode/  BareManager  (?safe=bare)
 │   ├── src/sw.ts       the Workbox service worker
@@ -404,8 +404,9 @@ web/
 └── scripts/build-app.mjs, scripts/build-plugins.mjs                     [scaffold]
 
 plugins/base/
-├── <id>/protocols/<name>/shape.mjs  a protocol the plugin owns (the rest is generated)
-├── _shared/vite.plugin-config.mjs   the reference build config           [scaffold]
+├── <id>/src/index.tsx               the plugin's exports = `plugin:<id>`; default = activate
+├── _shared/vite.plugin-config.mjs   the reference build config (`plugin:*` external) [scaffold]
+├── _shared/boundary.tsx             useRegistry + bounded: rendering contributed items
 ├── shell-ui, router, commands, themes                                  [base-shell]
 ├── doc-list, folders, document-surface, viewer, editor, properties      [base-docs]
 ├── markdown                                                        [base-markdown]
@@ -414,33 +415,46 @@ plugins/base/
 backend/  — see backend/CONTRACTS.md, area server-static
 ```
 
-## Protocols (formerly the frozen extension points)
+## Plugins import each other (`@kernel` 3.0)
 
-Every contract between plugins is a **protocol package** inside the plugin that owns it,
-`plugins/base/<owner>/protocols/<name>/`: a hand-written `shape.mjs`, and the generated
-`protocol.json`, `index.d.ts` and `README.md` (`plugins/base/README.md`, "Protocols and
-ports"). They are *not* part of `@kernel`: the kernel knows protocols only as data it is
-handed with the plugin list (SPEC §2), and the moment it knew what a navbar was, replacing
-`shell-ui` would be a kernel change. Each package's README is its reference; adding an
-**optional** field is a minor of that protocol, anything else a major.
+Ports, protocols and wiring are gone (`dev-docs/resolved/KERNEL-API.md`, 3.0.0). A plugin
+**exposes** components, functions and types as named exports of `src/index.tsx`, and
+**declares** the plugins it uses in its manifest's `dependencies` (id → semver range);
+`optionalDependencies` load first when present but are not required. The server resolves
+the graph (`GET /api/plugins` → `load: {normal, safe, skipped}`) and the loader activates
+in that order.
 
-`@kernel` 2.0 removed the old paths: there is no `kernel.extensions`, no
-`kernel.services`, no manifest `dependencies` or `x-defines`, and no
-`plugins/base/_shared/points.ts`. A plugin names its ports in `provides`/`consumes` and
-reaches them through `kernel.ports` (`dev-docs/resolved/KERNEL-API.md`, 2.0.0).
+- **Specifier.** `import { addItem } from "plugin:header"`. The import map maps
+  `plugin:<id>` to the enabled plugin's `frontend/index.mjs?v=<assets>` (plus an alias
+  under the id a stand-in `provides`); the server writes the entries, and in dev
+  `app/src/loader/importmap.ts` adds them from the plugin list. **The loader imports every
+  plugin by its specifier, never by URL**, so each module has one instance — a URL import
+  beside a specifier import would be two modules with two sets of registries.
+- **Build.** `/^plugin:/` is external in `_shared/vite.plugin-config.mjs`;
+  `scripts/build-plugin-dts.mjs` (rollup-plugin-dts) writes `frontend/index.d.ts` as an
+  ambient `declare module "plugin:<id>"`, run by `build-plugins.mjs` and
+  `build-examples.mjs`.
+- **Typecheck and tests.** `tsconfig.json` maps `plugin:*` to
+  `../plugins/base/*/src/index.tsx`; `vite.config.ts` aliases `^plugin:(.*)$` the same.
+  `plugins/examples/tsconfig.json` instead includes the built base plugins'
+  `frontend/index.d.ts`, as a third party would.
+- **Graph check.** `npm run check:plugins` (`scripts/check-plugin-graph.mjs`, in `mise run
+  web-check`): every dependency is a repo plugin at a satisfying version, no cycles, every
+  static `plugin:` import is under `dependencies`, and no optional dependency is imported
+  statically (reach it with `kernel.plugins.optional`).
+- **Extension points** are registries the host owns: `createRegistry<T>({key, order,
+  shape?})` at module scope, `export const addItem = items.add`, rendered with
+  `useRegistry(items)` and `bounded(kernel, component, point, entry.pluginId)` from
+  `_shared/boundary.tsx`. Attribution: the loader runs each plugin's module import and
+  `activate` inside `asPlugin(id)` (`kernel/src/runtime/attribution.ts`, not on the
+  `@kernel` surface), so an `add` made meanwhile is that plugin's; `host.retract` withdraws
+  a failed plugin's items from every registry.
+- **No hot reload.** `plugins.changed` (and a `welcome.plugins_version` that differs from
+  the first one the page saw) reloads every client (`kernel/src/sync/client.ts`).
 
 One rule for any item field that names what a component must read: never call it `key`.
 `key` is reserved in JSX — `createElement` strips it from the props to use as the element
-key — so such a field can never be delivered. (The removed `properties.editor` point
-spelled it `propertyKey` for this reason.)
-
-Slot semantics, pinned by `kernel/src/runtime/ports.test.ts`: a host's `collect` is
-**live** (`subscribe` fires immediately) and lists items **in seat order**, one provider's
-items together in offer order; an item that does not match its protocol **throws at the
-provider**; a duplicate key means the **lower seat wins** and the other is reported once; a
-**throwing subscriber is isolated** — the others are still notified and the throw is
-reported against the subscriber; and `removePlugin` (the loader's `retract`) withdraws a
-plugin's items, services and listeners.
+key — so such a field can never be delivered.
 
 ## Area: kernel-runtime
 
@@ -453,18 +467,18 @@ Hard requirements:
 
 - **Attribution is the kernel's, never the caller's.** Everything a plugin can reach
   comes from `host.forPlugin(manifest)`; no API takes a plugin id from its caller.
-- **The loader's failure rules are not negotiable** (SPEC §6.4): an `activate()` throw
-  marks the plugin failed, withdraws what it registered (`host.retract`), and skips
-  **every plugin that requires a service it provides**, transitively, through the
-  resolution's activation edges; the outcome is **one** aggregated notice.
+- **The loader's failure rules are not negotiable** (SPEC §6.4): an import or `activate()`
+  throw marks the plugin failed, withdraws what it registered (`host.retract`), and skips
+  **every plugin that depends on it**, transitively, through the manifests'
+  `dependencies`; the server's `load.skipped` are reported alongside; the outcome is
+  **one** aggregated notice.
 - **Every contributed component renders inside `kernel.ui.boundary`**, and the **mount
   itself renders inside a boundary the app owns** (`AppFrame`). The per-contribution
   wrappers cannot cover the shell's own render or the contributed `icon` fields (a
   `ReactNode` is not a component), and one throw in any of those unmounts the React root —
   a white page with no notice strip and no way out but typing `?safe=bare` by hand. Every
   render path ends in a boundary; none ends in a blank document.
-- **A plugin problem is user-visible.** Registry rejections and error-boundary catches both
-  arrive on `onPluginProblem`; they belong in `host.notices` (aggregated, one notice, linking
+- **A plugin problem is user-visible.** Error-boundary catches arrive on `onPluginProblem`; they belong in `host.notices` (aggregated, one notice, linking
   to admin), not only in `console.warn`.
 - **Safe mode works without any plugin**: `?safe=1` base-only, `?safe=bare` the built-in
   manager, and both must survive a broken `shell-ui`.
@@ -556,28 +570,33 @@ Hard requirements:
 ## Area: server-static
 
 See `backend/CONTRACTS.md` (M3 section). The client-side contract it has to keep:
-`GET /api/plugins` returns `{plugins: InstalledPlugin[], problems, disabled}` with
-**camelCase** `baseUrl`; `index.html` is served with the import map inlined at
+`GET /api/plugins` returns `{plugins: InstalledPlugin[], problems, disabled, load}` with
+**camelCase** `baseUrl` (`load` is `PluginLoad`: `normal`, `safe`, `skipped`); the import
+map carries `plugin:<id>` for every plugin in the load set **only for a signed-in request**
+(a signed-out page gets the runtime layer alone, and `main.tsx` reloads after sign-in to
+pick the entries up); `index.html` is served with the import map inlined at
 `<!--LM_IMPORT_MAP-->` and a matching CSP nonce; `/plugins/:id/:version/*` is immutable;
-`/importmap.json` and `/kernel.d.ts` are public.
+`/importmap.json` and `/kernel.d.ts` are public, the former without the plugin entries.
 
 ## Commands
 
 ```
 npm run typecheck        # tsc --noEmit over kernel-api, kernel, app and plugins/base
-npm run test             # vitest (adds the registry and loader-order suites)
+npm run check:plugins    # the plugin dependency graph (check-plugin-graph.mjs)
+npm run test             # vitest (registry, loader and kernel-api suites included)
 npm run dev:app          # the PWA on :5174, /api + /plugins proxied to the server
 npm run kernel:dts       # generate kernel-api/dist/kernel.d.ts
 npm run build:app        # runtime layer -> app bundle -> service worker, in that order
-npm run build:plugins    # plugins/base/* -> plugins/base/dist/<id>/<version>/
+npm run build:plugins    # plugins/base/* -> plugins/base/dist/<id>/<version>/ (+ frontend/index.d.ts)
 mise run web-build       # all three of the above
 npm run e2e:app          # the M3 journeys + safe mode + the M3 acceptance test
 ```
 
 `mise run app` needs the server for `/api` **and** `/plugins`, so run `mise run plugins`
 once first. In dev there is no server-injected import map: `app/src/loader/importmap.ts`
-builds one over this bundle's own modules before the first plugin is imported, so dev and
-production share one React, one Yjs and one `@kernel`.
+builds one over this bundle's own modules — and a `plugin:<id>` entry per plugin in the
+load set — before the first plugin is imported, so dev and production share one React, one
+Yjs, one `@kernel` and one instance of every plugin module.
 
 ## Dependencies added by M3
 

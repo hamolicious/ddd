@@ -32,7 +32,7 @@ import { loadCore, type CoreBindings } from "@kernel/wasm/index.js";
 import { KernelHost, type PluginProblem } from "@kernel/runtime/index.js";
 import type { BootMode, LogoutOptions, SessionUser } from "@kernel";
 
-import { inShell } from "./shell.js";
+import { shellOwnsSession } from "./shell.js";
 
 export interface KernelInitOptions {
   readonly user: SessionUser;
@@ -48,8 +48,11 @@ export interface KernelInitOptions {
   /** Sign-out: warn on unsynced edits, clear local data, reload (SPEC §5.3). */
   readonly logout: (options: LogoutOptions) => Promise<void>;
   readonly onPluginProblem?: (problem: PluginProblem) => void;
-  /** The server's live wiring version, from `welcome` and `wiring.applied`. */
-  readonly onWiringVersion?: (version: number) => void;
+  /**
+   * The server's plugin set changed (`plugins.changed`, or a `welcome` naming a different
+   * version than the first one this page saw). Default: `location.reload()`.
+   */
+  readonly onPluginsChanged?: (version: number | string) => void;
   /** Reported once, so the boot screen can say "filters are disabled". */
   readonly onCoreUnavailable?: (error: Error) => void;
 }
@@ -167,7 +170,7 @@ export async function initKernel(options: KernelInitOptions): Promise<KernelRunt
       }
     },
     onConnected: () => void host.documents.afterConnect(),
-    ...(options.onWiringVersion ? { onWiringVersion: options.onWiringVersion } : {}),
+    ...(options.onPluginsChanged ? { onPluginsChanged: options.onPluginsChanged } : {}),
     onState: (state) => {
       host.sync.update(state);
       // 4401 is "re-authenticate", and nothing else — local data is untouched
@@ -224,7 +227,8 @@ export async function initKernel(options: KernelInitOptions): Promise<KernelRunt
   // profile's eviction policy; in the Flutter webview the workspace lives in the app's
   // own private storage, which Android clears only when the app is uninstalled or the
   // user clears its data.
-  if (!inShell()) void askForPersistentStorage(host);
+  // The desktop shell is a browser profile of its own, so it asks like a tab does.
+  if (!shellOwnsSession()) void askForPersistentStorage(host);
 
   return { host, store, engine, sync, core };
 }
@@ -275,9 +279,5 @@ function unavailableCore(reason: string): CoreBindings {
     resolveTitle: fail,
     normalizeDate: fail,
     semanticsVersion: () => -1,
-    resolveWiring: fail,
-    planWiring: fail,
-    wiringCandidates: fail,
-    shapeFits: fail,
   };
 }

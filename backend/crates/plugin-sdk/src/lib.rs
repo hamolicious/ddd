@@ -167,7 +167,8 @@ macro_rules! http_routes {
     };
 }
 
-/// Export `lm_call` — what `call_plugin` from a plugin that lists you in `backend.calls` reaches.
+/// Export `lm_call` — what `call_plugin` reaches, from a plugin that lists you in
+/// `dependencies`, for a function your manifest lists in `backend.exports`.
 #[macro_export]
 macro_rules! calls {
     ($handler:path) => {

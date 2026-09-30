@@ -51,19 +51,4 @@ declare module "@life-manager/core-wasm" {
    * line → `"Untitled"`) without a full `parse_document` round trip through JSON.
    */
   export function resolve_title(text: string): string;
-
-  /**
-   * Resolve plugin wiring (PLUGIN-PROTOCOLS §6). JSON in (`ResolveInput`), JSON out
-   * (`Resolution`, or `{ error }` for input that does not parse).
-   */
-  export function resolve_wiring(input_json: string): string;
-
-  /** `{ before, after, beforeWiring, afterWiring, hot }` → `ApplyPlan` JSON. */
-  export function plan_wiring(request_json: string): string;
-
-  /** The ports that could connect to `port` (`dir` `"in"` or `"out"`), as a JSON array. */
-  export function wiring_candidates(input_json: string, port: string, dir: string): string;
-
-  /** Why a shape does not fit another: a JSON array of reasons, empty when it fits. */
-  export function shape_fits(offer_json: string, need_json: string): string;
 }

@@ -1,41 +1,37 @@
 /**
  * `slash-commands` — type `/` in any editor for a menu of actions.
  *
- * Two protocols, both owned here (`protocols/`), each hosted on a port of this plugin:
+ * - Commands are added with `addSlashCommand` (this plugin's registry). `attachments`
+ *   adds `/attach`.
+ * - Editors are found through `plugin:editor`'s text surfaces (`surfaces()` /
+ *   `onSurfacesChange`): CodeMirror and a plain textarea each add one while mounted. An
+ *   editor without a surface simply has no menu.
  *
- * - **`lm/text.surface`** on `surfaces`: an editor, editor-neutral. `editor` (CodeMirror)
- *   and `alt-editor` (a textarea) each offer one while mounted. That is the whole
- *   coupling: this plugin never imports an editor, and an editor without a surface simply
- *   has no menu.
- * - **`lm/slash.command`** on `commands`: an entry in the menu. `attachments` offers `/attach`.
- *
- * The menu is drawn from `shell-ui`'s overlay spot (`Menu.tsx`) and driven by
- * `controller.ts`. It consumes no service: what reaches each host is what the wiring
- * seats there.
+ * The menu is drawn in `shell-ui`'s overlay spot (`Menu.tsx`) and driven by
+ * `controller.ts`.
  */
 
 import type { Kernel } from "@kernel";
+import { onSurfacesChange } from "plugin:editor";
+import { addOverlay } from "plugin:shell-ui";
 
-import type { ShellOverlay } from "@protocols/lm/shell.overlay";
-import type { SlashCommand } from "@protocols/lm/slash.command";
-import type { TextSurface } from "@protocols/lm/text.surface";
-
+import { commandRegistry, type SlashCommand } from "./api.js";
 import { createController, type SlashController } from "./controller.js";
 import { SlashMenu } from "./Menu.js";
+
+export type { SlashCommand, SlashCommandContext } from "./api.js";
+
+/** Add a `/` menu entry (or several). Returns the function that takes it out again. */
+export const addSlashCommand: (items: SlashCommand | readonly SlashCommand[]) => () => void = commandRegistry.add;
 
 /** The controller of the running activation, for `deactivate` to detach. */
 let liveController: SlashController | undefined;
 
 export default function activate(kernel: Kernel): void {
-  // Both hosts: what is wired to `surfaces` and `commands`, in seat order. The shapes and
-  // the duplicate-`id` rule come from the protocol packages this plugin owns.
-  const surfaces = kernel.ports.collect<TextSurface>("surfaces");
-  const commands = kernel.ports.collect<SlashCommand>("commands");
-
-  const controller = createController(kernel, surfaces, commands);
+  const controller = createController(kernel, onSurfacesChange, () => commandRegistry.get());
   liveController = controller;
 
-  kernel.ports.offer<ShellOverlay>("menu", {
+  addOverlay({
     id: "slash-commands.menu",
     component: () => <SlashMenu controller={controller} />,
   });

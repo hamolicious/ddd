@@ -140,12 +140,6 @@ async fn serve(config: Config) -> anyhow::Result<()> {
                 warn!(error = %err, "could not reconcile the plugin records with the directory")
             }
         }
-        // The served plugins' protocol packages, into the registry that outlives them.
-        life_manager_server::protocols::register_served(&state).await;
-        // The live wiring, before the first request asks for it: `welcome` reads the
-        // in-memory copy (PLUGIN-PROTOCOLS §6).
-        let wiring = life_manager_server::wiring::load(&state).await;
-        info!(version = wiring.version, "wiring loaded");
         let host = pluginhost::PluginHost::get(&state);
         for (id, err) in host.reload(&state).await {
             warn!(plugin = %id, error = %err, "plugin backend not activated");

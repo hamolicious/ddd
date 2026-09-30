@@ -1,5 +1,5 @@
 /**
- * The `/` menu's state machine, over every `text.surface`.
+ * The `/` menu's state machine, over every text surface (`plugin:editor`).
  *
  * Each surface is watched through its own `subscribe`: after every change the text before
  * the caret is checked for `/word` (`match.ts`), and the menu opens, narrows or closes.
@@ -11,10 +11,10 @@
  * spot, still inside the key press or tap, so a command may open a file picker.
  */
 
-import type { Kernel, SlotHost } from "@kernel";
+import type { Kernel, Unsubscribe } from "@kernel";
+import type { TextSurface } from "plugin:editor";
 
-import type { SlashCommand } from "@protocols/lm/slash.command";
-import type { TextSurface } from "@protocols/lm/text.surface";
+import type { SlashCommand } from "./api.js";
 
 import { matchCommands, slashQuery } from "./match.js";
 
@@ -38,8 +38,8 @@ export interface SlashController {
 
 export function createController(
   kernel: Kernel,
-  surfaces: SlotHost<TextSurface>,
-  commands: SlotHost<SlashCommand>,
+  watchSurfaces: (listener: (surfaces: readonly TextSurface[]) => void) => Unsubscribe,
+  commands: () => readonly SlashCommand[],
 ): SlashController {
   let current: MenuState | undefined;
   /** Escape was pressed on this text: stay shut until it changes. */
@@ -61,7 +61,7 @@ export function createController(
     const query = slashQuery(before);
     if (dismissed && (dismissed.surface !== surface.id || dismissed.before !== before)) dismissed = undefined;
     const rect = query === undefined || dismissed ? null : surface.caretRect();
-    const items = rect ? matchCommands(commands.get(), query ?? "", surface.documentId) : [];
+    const items = rect ? matchCommands(commands(), query ?? "", surface.documentId) : [];
     if (!rect || items.length === 0) {
       if (current?.surface === surface || current === undefined) set(undefined);
       return;
@@ -120,7 +120,7 @@ export function createController(
 
   /** Surfaces being watched, and how to stop. Surfaces come and go with editors. */
   const attached = new Map<TextSurface, () => void>();
-  const unwatch = surfaces.subscribe((all) => {
+  const unwatch = watchSurfaces((all) => {
     for (const [surface, detach] of [...attached]) {
       if (all.includes(surface)) continue;
       detach();

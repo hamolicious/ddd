@@ -1,7 +1,15 @@
 /**
  * The rows of a set of conditions (`conditions.ts`): "Match all/any", one row per
- * condition, and "Add condition". Used by `doc-list`'s filter bar and `folder-style`'s
+ * condition, and "Add condition". Used by `search`'s filter bar and `folder-style`'s
  * rules.
+ *
+ * **A row is chosen left to right, and builds what is right of it.** The comparison
+ * first, then the value type it allows, then the sentence those make: the property, an
+ * icon for the operation, and the value. The two choices always sit first and always
+ * render — a type that does not apply is disabled, not removed — so picking a
+ * comparison never moves the boxes the person is aiming at. The property is left out
+ * for the folder comparisons, which are about the note itself; the value is left out
+ * where there is none (`exists`, a `null` type).
  *
  * **Styled by its host.** Tailwind compiles each plugin's own `src/` with that plugin's
  * prefix, so a shared component cannot carry utility classes. It carries plain ones
@@ -13,7 +21,9 @@
  * | `-row` | the "Match" row and the button row |
  * | `-field` | each labelled input or select |
  * | `-grow` | the value field, which takes the spare width |
- * | `-checkbox` | the "not" toggle |
+ * | `-checkbox` | the "not" and "including nested" toggles |
+ * | `-flags` | the line under the row that holds them |
+ * | `-op-icon` | the operation's symbol, between the property and the value |
  * | `-clauses` | the list of rows |
  * | `-clause`, `-clause-invalid` | one row, and one that produces nothing |
  * | `-clause-note` | why it produces nothing |
@@ -34,8 +44,11 @@ import type { ReactElement, ReactNode } from "react";
 
 import {
   FIELD_OPTIONS,
+  ORDERING_OPS,
+  TEXT_OPS,
   TREE_OPS,
   VALUELESS_OPS,
+  VALUE_KINDS,
   clauseProblem,
   describeClause,
   newClauseId,
@@ -61,26 +74,60 @@ export interface ConditionsEditorProps {
   readonly actions?: ReactNode;
 }
 
-const OP_LABELS: readonly { readonly op: ClauseOp; readonly label: string }[] = [
-  { op: "eq", label: "is" },
-  { op: "ne", label: "is not" },
-  { op: "text_contains", label: "contains text" },
-  { op: "text_starts_with", label: "starts with" },
-  { op: "text_ends_with", label: "ends with" },
-  { op: "gt", label: "is after / greater than" },
-  { op: "gte", label: "is at least" },
-  { op: "lt", label: "is before / less than" },
-  { op: "lte", label: "is at most" },
-  { op: "contains", label: "list contains" },
-  { op: "contains_any", label: "list contains any of" },
-  { op: "any", label: "any item is" },
-  { op: "every", label: "every item is" },
-  { op: "exists", label: "exists" },
-  { op: "missing", label: "is missing" },
-  { op: "is_null", label: "is null" },
-  { op: "child_of", label: "is inside note" },
-  { op: "parent_of", label: "contains note" },
+interface OpEntry {
+  readonly op: ClauseOp;
+  readonly label: string;
+  /** The symbol drawn between the property and the value. */
+  readonly icon: string;
+}
+
+const OP_GROUPS: readonly { readonly label: string; readonly ops: readonly OpEntry[] }[] = [
+  {
+    label: "Compare",
+    ops: [
+      { op: "eq", label: "is", icon: "=" },
+      { op: "ne", label: "is not", icon: "≠" },
+      { op: "gt", label: "is after / greater than", icon: ">" },
+      { op: "gte", label: "is at least", icon: "≥" },
+      { op: "lt", label: "is before / less than", icon: "<" },
+      { op: "lte", label: "is at most", icon: "≤" },
+    ],
+  },
+  {
+    label: "Text",
+    ops: [
+      { op: "text_contains", label: "contains text", icon: "…a…" },
+      { op: "text_starts_with", label: "starts with", icon: "a…" },
+      { op: "text_ends_with", label: "ends with", icon: "…a" },
+    ],
+  },
+  {
+    label: "List",
+    ops: [
+      { op: "contains", label: "list contains", icon: "∋" },
+      { op: "contains_any", label: "list contains any of", icon: "∋∨" },
+      { op: "any", label: "any item is", icon: "∃=" },
+      { op: "every", label: "every item is", icon: "∀=" },
+    ],
+  },
+  {
+    label: "Presence",
+    ops: [
+      { op: "exists", label: "exists", icon: "∃" },
+      { op: "missing", label: "is missing", icon: "∄" },
+      { op: "is_null", label: "is null", icon: "∅" },
+    ],
+  },
+  {
+    label: "Folder",
+    ops: [
+      { op: "child_of", label: "is inside note", icon: "⊂" },
+      { op: "parent_of", label: "contains note", icon: "⊃" },
+    ],
+  },
 ];
+
+const OP_BY_ID = new Map(OP_GROUPS.flatMap((group) => group.ops).map((entry) => [entry.op, entry] as const));
 
 const KIND_LABELS: readonly { readonly kind: ValueKind; readonly label: string }[] = [
   { kind: "str", label: "text" },
@@ -97,20 +144,46 @@ const LIST_OPS: readonly ClauseOp[] = ["contains", "contains_any", "any", "every
 const SCALAR_OPS: readonly ClauseOp[] = ["eq", "ne"];
 
 /**
+ * The value types a comparison takes, or `undefined` when it takes none: the folder
+ * comparisons (a note) and the presence ones (nothing). Narrowed to what `clauseProblem`
+ * accepts, so the list cannot offer a combination the row then refuses.
+ */
+function kindsFor(op: ClauseOp): readonly ValueKind[] | undefined {
+  if (TREE_OPS.includes(op) || VALUELESS_OPS.includes(op)) return undefined;
+  if (TEXT_OPS.includes(op)) return ["str"];
+  if (ORDERING_OPS.includes(op)) return ["str", "int", "float", "date"];
+  return VALUE_KINDS;
+}
+
+/**
  * A known property chosen: take its value type, and swap "is" for "list contains" (or
  * back) to fit what it holds. Anything else the person chose is left alone.
  */
 function fitToField(clause: FilterClause, option: FieldOption | undefined): Partial<FilterClause> {
   if (option === undefined) return {};
   const change: { kind?: ValueKind; op?: ClauseOp } = {};
-  if (option.kind !== undefined && option.kind !== clause.kind) change.kind = option.kind;
   if (option.list === true && SCALAR_OPS.includes(clause.op)) change.op = "contains";
   if (option.list === false && LIST_OPS.includes(clause.op)) change.op = "eq";
-  // A note id is no value for text, nor text for a note.
-  if (change.kind !== undefined && (change.kind === "doc") !== (clause.kind === "doc")) return { ...change, value: "" };
+  const allowed = kindsFor(change.op ?? clause.op);
+  if (option.kind !== undefined && option.kind !== clause.kind && allowed?.includes(option.kind) === true) {
+    change.kind = option.kind;
+  }
   return change;
 }
 
+/**
+ * A row after a change: a type the comparison does not take becomes one it does, and a
+ * value that meant something else — a note id where text was, or the reverse — is cleared.
+ */
+function settle(before: FilterClause, after: FilterClause): FilterClause {
+  const allowed = kindsFor(after.op);
+  const kind = allowed === undefined || allowed.includes(after.kind) ? after.kind : (allowed[0] as ValueKind);
+  const isNote = (clause: { op: ClauseOp; kind: ValueKind }): boolean =>
+    TREE_OPS.includes(clause.op) || (kindsFor(clause.op) !== undefined && clause.kind === "doc");
+  const crossing = isNote(before) !== isNote({ op: after.op, kind });
+  const bool = kind === "bool" && before.kind !== "bool";
+  return { ...after, kind, ...(crossing ? { value: "" } : bool ? { value: "true" } : {}) };
+}
 
 export function ConditionsEditor({
   value,
@@ -130,12 +203,12 @@ export function ConditionsEditor({
       .map((clause) => [clause.id, clauseProblem(clause)] as const)
       .filter((entry): entry is readonly [string, string] => entry[1] !== undefined),
   );
-  const ops = notes !== undefined ? OP_LABELS : OP_LABELS.filter((entry) => !TREE_OPS.includes(entry.op));
+  const groups = notes !== undefined ? OP_GROUPS : OP_GROUPS.filter((group) => group.label !== "Folder");
 
   const patch = (id: string, change: Partial<FilterClause>): void => {
     onChange({
       ...value,
-      clauses: value.clauses.map((clause) => (clause.id === id ? { ...clause, ...change } : clause)),
+      clauses: value.clauses.map((clause) => (clause.id === id ? settle(clause, { ...clause, ...change }) : clause)),
     });
   };
 
@@ -159,14 +232,52 @@ export function ConditionsEditor({
           <ul className={`${p}-clauses`}>
             {value.clauses.map((clause) => {
               const tree = TREE_OPS.includes(clause.op);
-              const valueless = VALUELESS_OPS.includes(clause.op);
+              const kinds = kindsFor(clause.op);
+              const entry = OP_BY_ID.get(clause.op);
+              const noteValue = notes !== undefined && (tree || (kinds !== undefined && clause.kind === "doc"));
               return (
                 <li key={clause.id} className={`${p}-clause${problems.has(clause.id) ? ` ${p}-clause-invalid` : ""}`}>
+                  <label className={`${p}-field`}>
+                    <select
+                      aria-label="Comparison"
+                      value={clause.op}
+                      onChange={(event) => patch(clause.id, { op: event.target.value as ClauseOp })}
+                    >
+                      {groups.map((group) => (
+                        <optgroup key={group.label} label={group.label}>
+                          {group.ops.map((option) => (
+                            <option key={option.op} value={option.op}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className={`${p}-field`}>
+                    <select
+                      aria-label="Value type"
+                      value={kinds === undefined ? "" : clause.kind}
+                      disabled={kinds === undefined}
+                      onChange={(event) => patch(clause.id, { kind: event.target.value as ValueKind })}
+                    >
+                      {kinds === undefined ? (
+                        <option value="">{tree ? "note" : "—"}</option>
+                      ) : (
+                        KIND_LABELS.filter((option) => kinds.includes(option.kind)).map((option) => (
+                          <option key={option.kind} value={option.kind}>
+                            {option.label}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </label>
+
                   {!tree && (
                     <label className={`${p}-field`}>
                       <input
-
-                        aria-label="Field"
+                        aria-label="Property"
                         list={fieldList}
                         value={clause.field}
                         placeholder="Property name"
@@ -179,103 +290,51 @@ export function ConditionsEditor({
                     </label>
                   )}
 
-                  <label className={`${p}-field`}>
-                    <select
+                  <span className={`${p}-op-icon`} role="img" aria-label={entry?.label} title={entry?.label}>
+                    {clause.negate === true ? "¬" : ""}
+                    {entry?.icon}
+                  </span>
 
-                      aria-label="Operator"
-                      value={clause.op}
-                      onChange={(event) => {
-                        const op = event.target.value as ClauseOp;
-                        // A note id is no value for a property, nor the reverse.
-                        const crossing = TREE_OPS.includes(op) !== tree;
-                        patch(clause.id, { op, ...(crossing ? { value: "" } : {}) });
-                      }}
-                    >
-                      {ops.map((entry) => (
-                        <option key={entry.op} value={entry.op}>
-                          {entry.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  {tree && notes !== undefined && (
+                  {noteValue && notes !== undefined ? (
                     <NoteField
                       classPrefix={p}
                       notes={notes}
                       value={clause.value}
                       onChange={(id) => patch(clause.id, { value: id })}
                     />
-                  )}
-
-                  {!tree && !valueless && (
-                    <>
-                      <label className={`${p}-field`}>
-                        <select
-
-                          aria-label="Value type"
-                          value={clause.kind}
-                          onChange={(event) => patch(clause.id, { kind: event.target.value as ValueKind })}
-                        >
-                          {KIND_LABELS.map((entry) => (
-                            <option key={entry.kind} value={entry.kind}>
-                              {entry.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      {clause.kind === "doc" && notes !== undefined ? (
-                        <NoteField
-                          classPrefix={p}
-                          notes={notes}
-                          value={clause.value}
-                          onChange={(id) => patch(clause.id, { value: id })}
-                        />
-                      ) : (
-                      <label className={`${p}-field ${p}-grow`}>
-                        <input
-
-                          aria-label="Value"
-                          list={`${fieldList}-${clause.id}`}
-                          value={clause.value}
-                          placeholder={
-                            clause.op === "contains_any"
-                              ? "work, home"
-                              : clause.kind === "date"
-                                ? "2026-09-23"
-                                : "Value"
-                          }
-                          onChange={(event) => patch(clause.id, { value: event.target.value })}
-                        />
-                        <datalist id={`${fieldList}-${clause.id}`}>
-                          {(suggestions?.values(clause.field.trim()) ?? []).map((value) => (
-                            <option key={value} value={value} />
-                          ))}
-                        </datalist>
-                      </label>
-                      )}
-                    </>
-                  )}
-
-                  {clause.op === "child_of" && (
-                    <label className={`${p}-checkbox`} title="Also notes inside the notes inside it, all the way down">
+                  ) : kinds === undefined || clause.kind === "null" ? null : clause.kind === "bool" ? (
+                    <label className={`${p}-field`}>
+                      <select
+                        aria-label="Value"
+                        value={clause.value.trim().toLowerCase()}
+                        onChange={(event) => patch(clause.id, { value: event.target.value })}
+                      >
+                        <option value="true">true</option>
+                        <option value="false">false</option>
+                      </select>
+                    </label>
+                  ) : (
+                    <label className={`${p}-field ${p}-grow`}>
                       <input
-                        type="checkbox"
-                        checked={clause.deep === true}
-                        onChange={(event) => patch(clause.id, { deep: event.target.checked })}
+                        aria-label="Value"
+                        list={`${fieldList}-${clause.id}`}
+                        value={clause.value}
+                        placeholder={
+                          clause.op === "contains_any"
+                            ? "work, home"
+                            : clause.kind === "date"
+                              ? "2026-09-23"
+                              : "Value"
+                        }
+                        onChange={(event) => patch(clause.id, { value: event.target.value })}
                       />
-                      <span>including nested</span>
+                      <datalist id={`${fieldList}-${clause.id}`}>
+                        {(suggestions?.values(clause.field.trim()) ?? []).map((value) => (
+                          <option key={value} value={value} />
+                        ))}
+                      </datalist>
                     </label>
                   )}
-
-                  <label className={`${p}-checkbox`}>
-                    <input
-                      type="checkbox"
-                      checked={clause.negate === true}
-                      onChange={(event) => patch(clause.id, { negate: event.target.checked })}
-                    />
-                    <span>not</span>
-                  </label>
 
                   <button
                     type="button"
@@ -287,6 +346,28 @@ export function ConditionsEditor({
                   >
                     ✕
                   </button>
+
+                  <div className={`${p}-flags`}>
+                    {clause.op === "child_of" && (
+                      <label className={`${p}-checkbox`} title="Also notes inside the notes inside it, all the way down">
+                        <input
+                          type="checkbox"
+                          checked={clause.deep === true}
+                          onChange={(event) => patch(clause.id, { deep: event.target.checked })}
+                        />
+                        <span>including nested</span>
+                      </label>
+                    )}
+
+                    <label className={`${p}-checkbox`}>
+                      <input
+                        type="checkbox"
+                        checked={clause.negate === true}
+                        onChange={(event) => patch(clause.id, { negate: event.target.checked })}
+                      />
+                      <span>not</span>
+                    </label>
+                  </div>
 
                   {problems.has(clause.id) && (
                     <p className={`${p}-clause-note`}>Not applied. {problems.get(clause.id)}</p>

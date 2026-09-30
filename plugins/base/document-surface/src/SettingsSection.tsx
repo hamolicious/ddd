@@ -16,6 +16,8 @@
  * here with nothing to change; a workspace with one mode gets a select with one option
  * rather than a special case.
  *
+ * A mode's claim on a document (`prefer`) also outranks this setting, below the memory.
+ *
  * The remembered per-document choice still wins over this setting when there is one
  * (that is what "unless the mode switch says otherwise" means), so the section also
  * offers the one control that makes the preference reassert itself everywhere:
@@ -26,7 +28,7 @@
 import type { Kernel, Unsubscribe } from "@kernel";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
-import type { DocumentMode } from "@protocols/lm/document.mode";
+import type { DocumentMode } from "./api.js";
 
 export interface DefaultModeSectionProps {
   readonly kernel: Kernel;
@@ -128,7 +130,8 @@ export function DefaultModeSection({
 
       <p className="docsurface:m-0 docsurface:text-sm docsurface:leading-[1.5] docsurface:text-text-muted">
         Used when you open a document you have not switched modes on. Switching modes on
-        a document is remembered for that document and wins over this.
+        a document is remembered for that document and wins over this. Some notes open in
+        their own mode (a canvas, say) unless you switch them.
       </p>
 
       {remembered > 0 ? (

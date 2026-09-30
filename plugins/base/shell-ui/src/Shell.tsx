@@ -2,7 +2,7 @@
  * The layout: a header spot, sidebar, one main region, and the altbar opposite the
  * sidebar. Everything inside them belongs
  * to another plugin, which is what makes this shell replaceable — a different shell
- * hosts the same protocols and nothing else has to change (SPEC §6.1).
+ * exports the same functions and nothing else has to change (SPEC §6.1).
  *
  * The properties that are requirements rather than styling:
  *
@@ -18,22 +18,30 @@
  * - **A view id the shell cannot resolve is a message, not an empty pane.** The
  *   router can legitimately select a view before the plugin that provides it has
  *   activated, and `main.view` is live, so the resolution has to happen at render.
- * - **Nothing here sorts.** Every host list arrives in seat order (PLUGIN-PROTOCOLS
- *   §6a), and the header port has one seat, so its list is the header or nothing.
+ * - **Nothing here sorts.** Every registry hands its entries over in `order`, and the
+ *   header spot shows the most recent `setHeader` only.
  */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
-import type { Kernel, SlotHost, SlotItem } from "@kernel";
+import type { Kernel, RegistryEntry } from "@kernel";
 
-import type { AltbarPanel, ShownView } from "@protocols/lm/altbar.panel";
-import type { MainView } from "@protocols/lm/main.view";
-import type { ShellHeader } from "@protocols/lm/shell.header";
-import type { ShellOverlay } from "@protocols/lm/shell.overlay";
-import type { SidebarPanel } from "@protocols/lm/sidebar.panel";
+import { BoundedIcon, bounded, useRegistry } from "../../_shared/boundary.js";
+import { target as mark } from "../../_shared/target.js";
 
-import { BoundedIcon, bounded, useSlotEntries } from "../../_shared/boundary.js";
-
+import {
+  altbarPanels,
+  headers as headerSeat,
+  overlays as overlayRegistry,
+  sidebarPanels,
+  views as viewRegistry,
+  type AltbarPanel,
+  type MainView,
+  type ShellHeaderComponent,
+  type ShellOverlay,
+  type ShownView,
+  type SidebarPanel,
+} from "./api.js";
 import { useShell } from "./hooks.js";
 import {
   ALTBAR_WIDTH_KEY,
@@ -46,44 +54,34 @@ import {
 } from "./resize.js";
 import type { ShellState, ViewSelection } from "./state.js";
 
-/** The sidebar element's id — `ShellUiApi.sidebarId`, for a toggle's `aria-controls`. */
+/** The sidebar element's id — `sidebarId`, for a toggle's `aria-controls`. */
 export const SIDEBAR_ID = "shell-sidebar";
-/** The altbar element's id — `ShellUiApi.altbarId`. */
+/** The altbar element's id — `altbarId`. */
 export const ALTBAR_ID = "shell-altbar";
 
 const NO_VIEW: ShownView = { id: "", params: {} };
 
-/** The protocol each host speaks: what the error boundary names a failed item by. */
-const PROTOCOL = {
-  header: "lm/shell.header",
-  overlay: "lm/shell.overlay",
-  sidebar: "lm/sidebar.panel",
-  altbar: "lm/altbar.panel",
-  view: "lm/main.view",
+/** Where each contributed component renders: what the error boundary names a failed item by. */
+const POINT = {
+  header: "shell-ui.header",
+  overlay: "shell-ui.overlay",
+  sidebar: "shell-ui.sidebar",
+  altbar: "shell-ui.altbar",
+  view: "shell-ui.view",
 } as const;
-
-/** The shell's five hosts (`kernel.ports.collect`), created once in `activate`. */
-export interface ShellHosts {
-  readonly headers: SlotHost<ShellHeader>;
-  readonly overlays: SlotHost<ShellOverlay>;
-  readonly panels: SlotHost<SidebarPanel>;
-  readonly altbar: SlotHost<AltbarPanel>;
-  readonly views: SlotHost<MainView>;
-}
 
 export interface ShellProps {
   readonly kernel: Kernel;
   readonly state: ShellState;
-  readonly hosts: ShellHosts;
 }
 
-export function Shell({ kernel, state, hosts }: ShellProps): ReactNode {
+export function Shell({ kernel, state }: ShellProps): ReactNode {
   const shell = useShell(state);
-  const views = useSlotEntries(hosts.views);
-  const panels = useSlotEntries(hosts.panels);
-  const altbarEntries = useSlotEntries(hosts.altbar);
-  const headers = useSlotEntries(hosts.headers);
-  const overlays = useSlotEntries(hosts.overlays);
+  const views = useRegistry(viewRegistry);
+  const panels = useRegistry(sidebarPanels);
+  const altbarEntries = useRegistry(altbarPanels);
+  const headers = useRegistry(headerSeat);
+  const overlays = useRegistry(overlayRegistry);
 
   const main = useRef<HTMLElement>(null);
   const sidebar = useRef<HTMLElement>(null);
@@ -95,7 +93,7 @@ export function Shell({ kernel, state, hosts }: ShellProps): ReactNode {
   const altDrawer = shell.compact && shell.altbarOpen;
   const hasSidebar = panels.length > 0;
   const shown: ShownView = shell.view ?? NO_VIEW;
-  // Seat order, as the host hands it over; only `when` thins the list.
+  // Registry order; only `when` thins the list.
   const altPanels = altbarEntries.filter((entry) => accepts(kernel, entry, shown));
   const hasAltbar = altPanels.length > 0;
 
@@ -135,11 +133,11 @@ export function Shell({ kernel, state, hosts }: ShellProps): ReactNode {
     return () => document.removeEventListener("keydown", onKey);
   }, [anyDrawer, drawer, closeDrawer]);
 
-  // A `seats: 1` port: the wiring benches every header but one.
-  const header = headers[0];
+  // One seat: the most recent `setHeader` still in place.
+  const header = headers[headers.length - 1];
 
   return (
-    <div className="shell-root shellui:flex shellui:h-full shellui:min-h-0 shellui:flex-col shellui:font-sans shellui:text-text" data-compact={shell.compact ? "" : undefined}>
+    <div className="shell-root shellui:relative shellui:flex shellui:h-full shellui:overflow-hidden shellui:min-h-0 shellui:flex-col shellui:font-sans shellui:text-text" data-compact={shell.compact ? "" : undefined}>
       {/*
         A real anchor so it is the first tab stop and announces as a link — but the
         click is handled here: `href="#shell-main"` would rewrite `location.hash`,
@@ -159,12 +157,12 @@ export function Shell({ kernel, state, hosts }: ShellProps): ReactNode {
 
       {header ? <HeaderSlot kernel={kernel} entry={header} /> : null}
 
-      <div className="shellui:relative shellui:flex shellui:min-h-0 shellui:flex-1">
+      <div className="shellui:relative shellui:flex shellui:min-h-0 shellui:flex-1 shellui:overflow-hidden">
         {hasSidebar ? (
           <aside
             id={SIDEBAR_ID}
             ref={sidebar}
-            className="shellui:@container shellui:w-[min(18rem,32vw)] shellui:shrink-0 shellui:overflow-y-auto shellui:overscroll-contain shellui:border-r shellui:border-border shellui:bg-bg-subtle shellui:p-1 shellui:pb-[calc(var(--lm-space)*0.5+var(--lm-safe-bottom))] shellui:compact:absolute shellui:compact:inset-y-0 shellui:compact:left-0 shellui:compact:z-20 shellui:compact:w-[min(20rem,86vw)] shellui:compact:border-border-strong shellui:compact:shadow-2"
+            className="shellui:@container shellui:relative shellui:w-[min(18rem,32vw)] shellui:shrink-0 shellui:overflow-y-auto shellui:overscroll-contain shellui:border-r shellui:border-border shellui:bg-bg-subtle shellui:p-1 shellui:pb-[calc(var(--lm-space)*0.5+var(--lm-safe-bottom))] shellui:compact:absolute shellui:compact:inset-y-0 shellui:compact:left-0 shellui:compact:z-20 shellui:compact:w-[min(20rem,86vw)] shellui:compact:border-border-strong shellui:compact:shadow-2"
             aria-label="Sidebar"
             tabIndex={-1}
             hidden={!shell.sidebarOpen}
@@ -193,7 +191,7 @@ export function Shell({ kernel, state, hosts }: ShellProps): ReactNode {
           />
         ) : null}
 
-        <main id="shell-main" ref={main} className="shellui:min-h-0 shellui:min-w-0 shellui:flex-1 shellui:overflow-auto shellui:focus:outline-none shellui:focus-visible:outline-2 shellui:focus-visible:outline-offset-[-2px] shellui:focus-visible:outline-focus" tabIndex={-1}>
+        <main id="shell-main" ref={main} className="shellui:relative shellui:min-h-0 shellui:min-w-0 shellui:flex-1 shellui:overflow-auto shellui:focus:outline-none shellui:focus-visible:outline-2 shellui:focus-visible:outline-offset-[-2px] shellui:focus-visible:outline-focus" tabIndex={-1}>
           {active ? (
             <ActiveView kernel={kernel} entry={active} view={shell.view} />
           ) : (
@@ -209,7 +207,7 @@ export function Shell({ kernel, state, hosts }: ShellProps): ReactNode {
           <aside
             id={ALTBAR_ID}
             ref={altbar}
-            className="shellui:@container shellui:w-[min(20rem,32vw)] shellui:shrink-0 shellui:overflow-y-auto shellui:overscroll-contain shellui:border-l shellui:border-border shellui:bg-bg-subtle shellui:p-1 shellui:pb-[calc(var(--lm-space)*0.5+var(--lm-safe-bottom))] shellui:compact:absolute shellui:compact:inset-y-0 shellui:compact:right-0 shellui:compact:z-20 shellui:compact:w-[min(22rem,90vw)] shellui:compact:border-border-strong shellui:compact:shadow-2"
+            className="shellui:@container shellui:relative shellui:w-[min(20rem,32vw)] shellui:shrink-0 shellui:overflow-y-auto shellui:overscroll-contain shellui:border-l shellui:border-border shellui:bg-bg-subtle shellui:p-1 shellui:pb-[calc(var(--lm-space)*0.5+var(--lm-safe-bottom))] shellui:compact:absolute shellui:compact:inset-y-0 shellui:compact:right-0 shellui:compact:z-20 shellui:compact:w-[min(22rem,90vw)] shellui:compact:border-border-strong shellui:compact:shadow-2"
             aria-label="Side panel"
             tabIndex={-1}
             hidden={!shell.altbarOpen}
@@ -233,7 +231,7 @@ export function Shell({ kernel, state, hosts }: ShellProps): ReactNode {
 }
 
 /** A panel's `when` is another plugin's code: a throw hides that panel, nothing else. */
-function accepts(kernel: Kernel, entry: SlotItem<AltbarPanel>, view: ShownView): boolean {
+function accepts(kernel: Kernel, entry: RegistryEntry<AltbarPanel>, view: ShownView): boolean {
   try {
     return entry.value.when?.(view) ?? true;
   } catch (error) {
@@ -338,9 +336,9 @@ function OverlaySlot({
   entry,
 }: {
   readonly kernel: Kernel;
-  readonly entry: SlotItem<ShellOverlay>;
+  readonly entry: RegistryEntry<ShellOverlay>;
 }): ReactNode {
-  const Rendered = bounded(kernel, entry.value.component, PROTOCOL.overlay, entry.pluginId);
+  const Rendered = bounded(kernel, entry.value.component, POINT.overlay, entry.pluginId);
   return <Rendered />;
 }
 
@@ -349,9 +347,9 @@ function HeaderSlot({
   entry,
 }: {
   readonly kernel: Kernel;
-  readonly entry: SlotItem<ShellHeader>;
+  readonly entry: RegistryEntry<{ readonly component: ShellHeaderComponent }>;
 }): ReactNode {
-  const Rendered = bounded(kernel, entry.value.component, PROTOCOL.header, entry.pluginId);
+  const Rendered = bounded(kernel, entry.value.component, POINT.header, entry.pluginId);
   return <Rendered />;
 }
 
@@ -361,29 +359,33 @@ function Panel({
   state,
 }: {
   readonly kernel: Kernel;
-  readonly entry: SlotItem<SidebarPanel>;
+  readonly entry: RegistryEntry<SidebarPanel>;
   readonly state: ShellState;
 }): ReactNode {
   const panel = entry.value;
   const open = state.panelOpen(panel.id, panel.defaultOpen ?? true);
-  const Rendered = bounded(kernel, panel.component, PROTOCOL.sidebar, entry.pluginId);
+  const Rendered = bounded(kernel, panel.component, POINT.sidebar, entry.pluginId);
   return (
     <PanelFrame
       kernel={kernel}
       pluginId={entry.pluginId}
-      point={PROTOCOL.sidebar}
+      point={POINT.sidebar}
       title={panel.title}
       icon={panel.icon}
       bodyId={`shell-panel-${panel.id}`}
       open={open}
       onToggle={() => state.setPanelOpen(panel.id, !open)}
+      {...(panel.target !== undefined ? { target: panel.target } : {})}
     >
       <Rendered />
     </PanelFrame>
   );
 }
 
-/** A collapsible panel: a heading that toggles it, and its body. */
+/**
+ * A collapsible panel: a heading that toggles it, and its body. A panel with a menu opens
+ * it from the heading's context menu — right-click, or a long press on touch.
+ */
 function PanelFrame({
   kernel,
   pluginId,
@@ -393,6 +395,7 @@ function PanelFrame({
   bodyId,
   open,
   onToggle,
+  target,
   children,
 }: {
   readonly kernel: Kernel;
@@ -403,6 +406,7 @@ function PanelFrame({
   readonly bodyId: string;
   readonly open: boolean;
   readonly onToggle: () => void;
+  readonly target?: SidebarPanel["target"];
   readonly children: ReactNode;
 }): ReactNode {
   return (
@@ -414,6 +418,8 @@ function PanelFrame({
           aria-expanded={open}
           aria-controls={bodyId}
           onClick={onToggle}
+          // The heading's menu is whatever is offered for what it stands for.
+          {...(target !== undefined ? mark(target.type, target.id ?? "", { label: title }) : {})}
         >
           <span className="shellui:w-[1em]" aria-hidden="true">
             {open ? "▾" : "▸"}
@@ -437,7 +443,7 @@ function AltPanel({
   view,
 }: {
   readonly kernel: Kernel;
-  readonly entry: SlotItem<AltbarPanel>;
+  readonly entry: RegistryEntry<AltbarPanel>;
   readonly state: ShellState;
   readonly view: ShownView;
 }): ReactNode {
@@ -445,12 +451,12 @@ function AltPanel({
   // A key of its own, so a sidebar panel and an altbar panel may share an id.
   const key = `altbar:${panel.id}`;
   const open = state.panelOpen(key, panel.defaultOpen ?? true);
-  const Rendered = bounded(kernel, panel.component, PROTOCOL.altbar, entry.pluginId);
+  const Rendered = bounded(kernel, panel.component, POINT.altbar, entry.pluginId);
   return (
     <PanelFrame
       kernel={kernel}
       pluginId={entry.pluginId}
-      point={PROTOCOL.altbar}
+      point={POINT.altbar}
       title={panel.title}
       icon={panel.icon}
       bodyId={`shell-altbar-panel-${panel.id}`}
@@ -468,10 +474,10 @@ function ActiveView({
   view,
 }: {
   readonly kernel: Kernel;
-  readonly entry: SlotItem<MainView>;
+  readonly entry: RegistryEntry<MainView>;
   readonly view: ViewSelection | undefined;
 }): ReactNode {
-  const Rendered = bounded(kernel, entry.value.component, PROTOCOL.view, entry.pluginId);
+  const Rendered = bounded(kernel, entry.value.component, POINT.view, entry.pluginId);
   return <Rendered params={view?.params ?? {}} />;
 }
 

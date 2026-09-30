@@ -1,11 +1,11 @@
 //! Life Manager on the Linux desktop: the server's PWA in a WebKitGTK window.
 //!
-//! Deliberately **not** a port of the Flutter shell (`app/`). No `window.shell` is
-//! injected: a versioned bridge makes `inShell()` true in `web/app/src/boot/shell.ts`,
-//! which switches the page to bearer auth and skips the service worker — i.e. no offline
-//! boot. Loaded straight from the server, the page is an ordinary browser tab (cookie
-//! session, service worker, IndexedDB), and its browser fallbacks for
-//! `kernel.capabilities.filesystem` already cover everything:
+//! Deliberately **not** a port of the Flutter shell (`app/`). Loaded straight from the
+//! server, the page is an ordinary browser tab (cookie session, service worker,
+//! IndexedDB). The `window.shell` injected here says `session: "cookie"`, so the page
+//! keeps all of that, and carries one native capability: `folder`, the notes folder
+//! (`folder.rs`, `app/BRIDGE.md` §4.5). The browser fallbacks for
+//! `kernel.capabilities.filesystem` cover the rest:
 //!
 //! * `export` is a blob `<a download>` → [`on_download`] asks where to save it;
 //! * `pick` is `<input type=file>` → WebKitGTK opens the native chooser by itself;
@@ -14,9 +14,10 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::path::PathBuf;
+mod config;
+mod folder;
 
-use serde::Deserialize;
+use tauri::ipc::CapabilityBuilder;
 use tauri::webview::{DownloadEvent, NewWindowResponse};
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
@@ -24,19 +25,6 @@ use url::Url;
 
 const CONFIG_HINT: &str = "Set the server with `--server <url>`, the LM_SERVER_URL \
 environment variable, or `server_url = \"https://…\"` in ~/.config/life-manager/desktop.toml.";
-
-#[derive(Deserialize)]
-struct Config {
-    server_url: Option<String>,
-}
-
-fn config_path() -> Option<PathBuf> {
-    let base = std::env::var_os("XDG_CONFIG_HOME")
-        .filter(|v| !v.is_empty())
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
-    Some(base.join("life-manager").join("desktop.toml"))
-}
 
 /// `--server` beats `LM_SERVER_URL` beats the config file.
 fn server_url() -> Result<Url, String> {
@@ -50,15 +38,19 @@ fn server_url() -> Result<Url, String> {
         }
     }
     let raw = from_args
-        .or_else(|| std::env::var("LM_SERVER_URL").ok().filter(|v| !v.is_empty()))
         .or_else(|| {
-            let text = std::fs::read_to_string(config_path()?).ok()?;
-            toml::from_str::<Config>(&text).ok()?.server_url
+            std::env::var("LM_SERVER_URL")
+                .ok()
+                .filter(|v| !v.is_empty())
         })
+        .or_else(|| config::read()?.server_url)
         .ok_or_else(|| format!("No server configured.\n\n{CONFIG_HINT}"))?;
-    let url = Url::parse(&raw).map_err(|e| format!("`{raw}` is not a URL ({e}).\n\n{CONFIG_HINT}"))?;
+    let url =
+        Url::parse(&raw).map_err(|e| format!("`{raw}` is not a URL ({e}).\n\n{CONFIG_HINT}"))?;
     if url.scheme() != "http" && url.scheme() != "https" {
-        return Err(format!("`{raw}` must be http:// or https://.\n\n{CONFIG_HINT}"));
+        return Err(format!(
+            "`{raw}` must be http:// or https://.\n\n{CONFIG_HINT}"
+        ));
     }
     Ok(url)
 }
@@ -107,7 +99,11 @@ fn on_download(event: DownloadEvent<'_>) -> bool {
                 None => false,
             }
         }
-        DownloadEvent::Finished { success: false, path, .. } => {
+        DownloadEvent::Finished {
+            success: false,
+            path,
+            ..
+        } => {
             // A cancelled dialog also lands here with no path; only a real attempt is news.
             if let Some(path) = path {
                 show_error(format!("Could not save {}.", path.display()));
@@ -147,7 +143,33 @@ fn main() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .manage(folder::Folder::load())
+        .invoke_handler(tauri::generate_handler![
+            folder::folder_current,
+            folder::folder_choose,
+            folder::folder_forget,
+            folder::folder_list,
+            folder::folder_read,
+            folder::folder_write,
+            folder::folder_move,
+            folder::folder_remove,
+        ])
         .setup(move |app| {
+            // The server's pages may call the folder commands, and nothing else may: the
+            // origin is only known now, so the capability is built here, not in JSON.
+            let origin = server.origin().ascii_serialization();
+            let mut capability = CapabilityBuilder::new("server-folder")
+                .remote(format!("{origin}/*"))
+                .local(false)
+                .window("main");
+            for command in [
+                "current", "choose", "forget", "list", "read", "write", "move", "remove",
+            ] {
+                capability = capability.permission(format!("allow-folder-{command}"));
+            }
+            app.add_capability(capability)?;
+            app.state::<folder::Folder>().watch(app.handle());
+
             let handle = app.handle().clone();
             let nav_handle = handle.clone();
             let nav_origin = server.clone();
@@ -158,6 +180,7 @@ fn main() {
                 .title("Life Manager")
                 .inner_size(1280.0, 860.0)
                 .min_inner_size(480.0, 480.0)
+                .initialization_script(folder::bridge_script(&origin))
                 .on_navigation(move |url| {
                     // `blob:`/`data:`/`about:` are the page's own (downloads, iframes).
                     if same_origin(url, &nav_origin)

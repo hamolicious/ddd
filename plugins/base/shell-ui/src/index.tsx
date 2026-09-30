@@ -2,96 +2,144 @@
  * `shell-ui` — the layout skeleton, and the only plugin that takes the kernel's UI
  * mount (SPEC §6.5).
  *
- * It hosts five slot ports and no features: a header spot, a sidebar of panels, one
- * main region that renders whichever `main.view` the router selected, an altbar of
- * panels about that view (opposite the sidebar), and always-mounted overlays (the
- * command palette). Everything visible inside them belongs to somebody else — the top
- * bar itself is the `header` plugin — which is what makes this plugin replaceable: a
- * different shell hosts the same five protocols and nothing else has to change.
+ * It hosts five contribution points and no features: a header spot (`setHeader`), a
+ * sidebar of panels (`addSidebarPanel`), one main region that renders whichever view
+ * the router selected (`addView`), an altbar of panels about that view
+ * (`addAltbarPanel`), and always-mounted overlays (`addOverlay`). Everything visible
+ * inside them belongs to somebody else — the top bar itself, with the ☰ and the altbar
+ * toggle, is the `header` plugin's.
  *
  * What lives where:
  *
+ * - `api.ts` — the exported types and the module-scope registries.
  * - `state.ts` — the shell's own state (selected view, sidebar, breakpoint), outside
  *   React because the router and `matchMedia` both drive it from outside the tree.
  * - `Shell.tsx` — the layout, the landmarks, the drawer, the error boundaries.
- * - `SidebarToggle.tsx` — the ☰, offered to the header's `start` seat.
- * - `AltbarToggle.tsx` — the altbar's button, in the header's `end` seat.
  * - `resize.ts` — the column widths, clamped and remembered per device.
  */
 
-import { type Kernel } from "@kernel";
+import type { Kernel, Unsubscribe } from "@kernel";
 
-import type { AltbarPanel } from "@protocols/lm/altbar.panel";
-import type { MainView } from "@protocols/lm/main.view";
-import type { NavbarItem } from "@protocols/lm/navbar.item";
-import type { Shell as ShellApi } from "@protocols/lm/shell";
-import type { ShellHeader } from "@protocols/lm/shell.header";
-import type { ShellOverlay } from "@protocols/lm/shell.overlay";
-import type { SidebarPanel } from "@protocols/lm/sidebar.panel";
-
-import { AltbarToggle } from "./AltbarToggle.js";
-import { ALTBAR_ID, SIDEBAR_ID, Shell, type ShellHosts } from "./Shell.js";
-import { SidebarToggle } from "./SidebarToggle.js";
+import {
+  altbarPanels,
+  headers,
+  overlays,
+  sidebarPanels,
+  views,
+  type AltbarPanel,
+  type MainView,
+  type ShellHeaderComponent,
+  type ShellLayout,
+  type ShellOverlay,
+  type SidebarPanel,
+} from "./api.js";
+import { ALTBAR_ID, SIDEBAR_ID, Shell as ShellView } from "./Shell.js";
 import { ShellState } from "./state.js";
 
-export type { Shell as ShellUiApi } from "@protocols/lm/shell";
+export type {
+  AltbarPanel,
+  MainView,
+  Shell,
+  ShellHeaderComponent,
+  ShellLayout,
+  ShellOverlay,
+  ShownView,
+  SidebarPanel,
+} from "./api.js";
+/** Kept for dependents that named the service type this way. */
+export type { Shell as ShellUiApi } from "./api.js";
 
-export default function activate(kernel: Kernel): ShellApi {
-  // The five hosts, each a live list in seat order. `header` is a `seats: 1` port, so
-  // its list holds at most the one seated header; the rest are benched by the wiring.
-  const hosts: ShellHosts = {
-    headers: kernel.ports.collect<ShellHeader>("header"),
-    overlays: kernel.ports.collect<ShellOverlay>("overlays"),
-    panels: kernel.ports.collect<SidebarPanel>("sidebar"),
-    altbar: kernel.ports.collect<AltbarPanel>("altbar"),
-    views: kernel.ports.collect<MainView>("views"),
-  };
+let live: ShellState | undefined;
+let kernelRef: Kernel | undefined;
 
-  const state = new ShellState();
-  live = state;
-
-  // The one mount (SPEC §6.4). Everything below this line is React reading the hosts
-  // live: a plugin that offers a panel or a view later — or fails and has its offers
-  // withdrawn — changes the layout without another mount.
-  kernel.ui.mount(<Shell kernel={kernel} state={state} hosts={hosts} />);
-
-  // The ☰ is a seat item like any other, so the top bar needs no knowledge of the
-  // sidebar. It is simply absent while nothing hosts `lm/navbar.item`.
-  kernel.ports.offer<NavbarItem>("sidebar-toggle", {
-    id: "shell-ui.sidebar-toggle",
-    label: "Sidebar",
-    side: "start",
-    order: 0,
-    component: () => <SidebarToggle state={state} />,
-  });
-  // Rightmost, mirroring the ☰: each button sits on the side of the column it opens.
-  kernel.ports.offer<NavbarItem>("altbar-toggle", {
-    id: "shell-ui.altbar-toggle",
-    label: "Side panel",
-    side: "end",
-    order: 2000,
-    component: () => <AltbarToggle state={state} />,
-  });
-
-  const api: ShellApi = {
-    isCompact: () => state.compact,
-    onLayoutChange: (listener) => state.onLayoutChange(listener),
-    layout: state.layout,
-    subscribeLayout: state.subscribe,
-    sidebarId: SIDEBAR_ID,
-    toggleSidebar: (open) => state.toggleSidebar(open),
-    altbarId: ALTBAR_ID,
-    toggleAltbar: (open) => state.toggleAltbar(open),
-    setMainView: (id, params) => state.setMainView(id, params),
-  };
-  kernel.ports.serve("shell", api);
-  return api;
+function state(): ShellState {
+  if (!live) throw new Error("shell-ui: the shell is not active yet (call it from your own activate or later)");
+  return live;
 }
 
-/** The breakpoint listener `activate` started; the kernel withdraws everything else (§6c). */
-let live: ShellState | undefined;
+// ---------------------------------------------------------------------------
+// Contribution points
+// ---------------------------------------------------------------------------
+
+/** Add a full-pane view (or several). Returns the function that takes it out again. */
+export const addView: (items: MainView | readonly MainView[]) => () => void = views.add;
+/** Add an always-mounted component (a palette, a toast stack). Returns its remover. */
+export const addOverlay: (items: ShellOverlay | readonly ShellOverlay[]) => () => void = overlays.add;
+/** Add a collapsible sidebar panel. Returns its remover. */
+export const addSidebarPanel: (items: SidebarPanel | readonly SidebarPanel[]) => () => void = sidebarPanels.add;
+/** Add an altbar panel about the current view. Returns its remover. */
+export const addAltbarPanel: (items: AltbarPanel | readonly AltbarPanel[]) => () => void = altbarPanels.add;
+
+/**
+ * Put `component` in the header spot above the sidebar and main region. There is one
+ * spot: a second call replaces the first (and logs a warning). Returns the function that
+ * takes it out again, bringing back whatever it replaced.
+ */
+export function setHeader(component: ShellHeaderComponent): () => void {
+  if (headers.get().length > 0) {
+    const warn = kernelRef?.log.warn.bind(kernelRef.log) ?? console.warn;
+    warn("shell-ui: setHeader called while a header is already set; the new one replaces it");
+  }
+  return headers.add({ component });
+}
+
+// ---------------------------------------------------------------------------
+// The shell service
+// ---------------------------------------------------------------------------
+
+/** `true` below the mobile breakpoint: adapt rather than re-measure. */
+export function isCompact(): boolean {
+  return state().compact;
+}
+
+/** Called with the new `compact` whenever the window crosses the mobile breakpoint. */
+export function onLayoutChange(listener: (compact: boolean) => void): Unsubscribe {
+  return state().onLayoutChange(listener);
+}
+
+/** The current layout; the same object until something in it changes, for `useSyncExternalStore`. */
+export function layout(): ShellLayout {
+  return state().layout();
+}
+
+/** Called after every layout change. */
+export function subscribeLayout(listener: () => void): Unsubscribe {
+  return state().subscribe(listener);
+}
+
+/** The sidebar element's id, for a toggle's `aria-controls`. */
+export const sidebarId = SIDEBAR_ID;
+/** The altbar element's id, for a toggle's `aria-controls`. */
+export const altbarId = ALTBAR_ID;
+
+/** Open or close the drawer (phone), or collapse the column (desktop). No argument toggles. */
+export function toggleSidebar(open?: boolean): void {
+  state().toggleSidebar(open);
+}
+
+/** Open or close the altbar: a column on a wide screen, a drawer on a phone. No argument toggles. */
+export function toggleAltbar(open?: boolean): void {
+  state().toggleAltbar(open);
+}
+
+/** Which main view is showing; the router sets it. */
+export function setMainView(id: string, params?: Readonly<Record<string, string>>): void {
+  state().setMainView(id, params);
+}
+
+export default function activate(kernel: Kernel): void {
+  kernelRef = kernel;
+  const shellState = new ShellState();
+  live = shellState;
+
+  // The one mount (SPEC §6.4). Everything below this line is React reading the
+  // registries live: a plugin that adds a panel or a view later — or fails and has its
+  // items withdrawn — changes the layout without another mount.
+  kernel.ui.mount(<ShellView kernel={kernel} state={shellState} />);
+}
 
 export function deactivate(): void {
   live?.dispose();
   live = undefined;
+  kernelRef = undefined;
 }

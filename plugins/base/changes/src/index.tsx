@@ -24,14 +24,11 @@ import { offlineCopies } from "../../_shared/offline-copy.js";
 import { changesOfflineCopy } from "./offline.js";
 import type { Kernel } from "@kernel";
 
-import type { AltbarPanel, ShownView } from "@protocols/lm/altbar.panel";
-import type { Command } from "@protocols/lm/commands.command";
-import type { ContextMenu } from "@protocols/lm/context-menu";
-import type { MainView } from "@protocols/lm/main.view";
-import type { MarkdownRenderer } from "@protocols/lm/markdown-renderer";
-import type { Router } from "@protocols/lm/router";
-import type { Route } from "@protocols/lm/router.route";
-import type { Shell } from "@protocols/lm/shell";
+import { addCommand } from "plugin:commands";
+import { confirm } from "plugin:context-menu";
+import { bodyOf, render } from "plugin:markdown";
+import { addRoute, navigate } from "plugin:router";
+import { addAltbarPanel, addView, layout, toggleAltbar, type MainView, type ShownView } from "plugin:shell-ui";
 
 import { createSnapshotsClient } from "./api.js";
 import { ChangeView } from "./ChangeView.js";
@@ -59,16 +56,11 @@ const viewingOf = (view: ShownView): Viewing | undefined => {
 };
 
 export default function activate(kernel: Kernel): void {
-  // Each handle is limited to its port's `needs` in the manifest: `confirm`; `layout` and
-  // `toggleAltbar`; `render` and `bodyOf`; `navigate`.
-  const menu = kernel.ports.use<ContextMenu>("menu");
-  const shell = kernel.ports.use<Shell>("shell");
-  const markdown = kernel.ports.use<MarkdownRenderer>("markdown");
-  const router = kernel.ports.use<Router>("router");
+  const markdown = { render, bodyOf };
   // Offline, the panel and views show what they last loaded, marked (dev-docs/resolved/SYNC-DECISIONS.md §9).
   const client = createSnapshotsClient(offlineCopies((path, init) => kernel.session.fetch(path, init), changesOfflineCopy));
 
-  kernel.ports.offer<AltbarPanel>("panel", {
+  addAltbarPanel({
     id: "changes",
     title: "Changes",
     order: 100,
@@ -80,13 +72,13 @@ export default function activate(kernel: Kernel): void {
         viewing={viewingOf(view)}
         isAdmin={kernel.session.isAdmin()}
         client={client}
-        confirm={(request) => menu.confirm(request)}
-        navigate={(path) => router.navigate(path)}
+        confirm={confirm}
+        navigate={(path) => navigate(path)}
       />
     ),
   });
 
-  kernel.ports.offer<Route>("route", [
+  addRoute([
     { path: "/doc/:id/snapshot/:snapshot", view: SNAPSHOT_VIEW },
     { path: "/doc/:id/change/:from/:to", view: CHANGE_VIEW },
   ]);
@@ -100,8 +92,8 @@ export default function activate(kernel: Kernel): void {
         snapshotId={params?.["snapshot"] ?? ""}
         client={client}
         markdown={markdown}
-        confirm={(request) => menu.confirm(request)}
-        navigate={(path) => router.navigate(path)}
+        confirm={confirm}
+        navigate={(path) => navigate(path)}
       />
     ),
   };
@@ -116,18 +108,18 @@ export default function activate(kernel: Kernel): void {
         to={Number(params?.["to"])}
         client={client}
         markdown={markdown}
-        confirm={(request) => menu.confirm(request)}
-        navigate={(path) => router.navigate(path)}
+        confirm={confirm}
+        navigate={(path) => navigate(path)}
       />
     ),
   };
-  kernel.ports.offer<MainView>("views", [snapshotView, changeView]);
+  addView([snapshotView, changeView]);
 
-  kernel.ports.offer<Command>("commands", {
+  addCommand({
     id: "changes.show",
     title: "Show this document's changes",
     category: "Document",
-    when: () => shell.layout().hasAltbar,
-    run: () => shell.toggleAltbar(true),
+    when: () => layout().hasAltbar,
+    run: () => toggleAltbar(true),
   });
 }

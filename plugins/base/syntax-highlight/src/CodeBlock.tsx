@@ -8,10 +8,10 @@
 
 import { Fragment, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 
-import type { MarkdownCodeBlockProps } from "@protocols/lm/markdown.codeBlock";
+import type { MarkdownCodeBlockProps } from "plugin:markdown";
 
 import type { Span } from "./engine.js";
-import type { SyntaxApi } from "./index.js";
+import type { SyntaxApi } from "./api.js";
 
 export function segments(code: string, spans: readonly Span[]): ReactNode[] {
   const out: ReactNode[] = [];

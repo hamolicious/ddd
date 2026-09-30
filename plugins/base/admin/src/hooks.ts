@@ -13,9 +13,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 
-import type { ConfirmRequest, ModalRequest, ModalResult, SheetRequest } from "@protocols/lm/context-menu";
-
-import type { EditorStore } from "./wiring/store.js";
+import type { ConfirmRequest, ModalRequest, ModalResult, SheetRequest } from "plugin:context-menu";
 
 export interface AsyncState<T> {
   readonly data: T | undefined;
@@ -107,27 +105,3 @@ export const DialogsContext = createContext<Dialogs>({
 export const useConfirm = (): Dialogs["confirm"] => useContext(DialogsContext).confirm;
 export const useModal = (): Dialogs["modal"] => useContext(DialogsContext).modal;
 export const useSheet = (): Dialogs["openSheet"] => useContext(DialogsContext).openSheet;
-
-/** The way from the Wiring card to the graph editor, the Wiring tab (`#/admin/wiring`). */
-export interface WiringEditorLink {
-  open(): void;
-  /**
-   * The editor's one store and the actions that carry its confirms, shared with the plugin
-   * list's Connections panels so both edit the same draft. Absent in a bare render (a test).
-   */
-  readonly shared?: SharedWiring;
-}
-
-export interface SharedWiring {
-  readonly store: EditorStore;
-  /** Wire `from` to `to`; a by-shape wire asks first, naming both protocols. */
-  connect(from: string, to: string): void;
-  /** Apply the draft; added errors and stopping the editor ask first. */
-  apply(): void;
-}
-
-export const WiringEditorContext = createContext<WiringEditorLink>({
-  open: () => {},
-});
-
-export const useWiringEditor = (): WiringEditorLink => useContext(WiringEditorContext);

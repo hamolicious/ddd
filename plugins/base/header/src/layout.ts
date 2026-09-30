@@ -1,13 +1,13 @@
 /**
- * Where each `navbar.item` goes: the user's arrangement first, the wiring's seat order
- * second.
+ * Where each top-bar item goes: the user's arrangement first, the items' registry order
+ * (`order`, then when they were added) second.
  *
  * The arrangement is two lists of item ids, one per seat, stored in the user's settings
  * (flat lists, because settings values are YAML scalars one key per line). An id listed
  * in a seat goes there in that position, whatever `side` the item asked for. An item
  * listed nowhere — a plugin installed after the user last arranged the bar — keeps its
  * own `side`, and is placed after the arranged items of that seat in the order it
- * arrived, which is the host's seat order (PLUGIN-PROTOCOLS §6a): the personal
+ * arrived, which is the registry's order: the personal
  * arrangement starts from the workspace default and never feeds back into it. Ids of
  * items that no longer exist are simply skipped, so uninstalling a plugin needs no
  * cleanup. A third list, `hidden`, names items the user took out of the bar; they keep
@@ -44,7 +44,7 @@ export function arrange<T>(
   }
 
   const ranked: Record<Seat, { entry: T; index: number }[]> = { start: [], end: [] };
-  // Unranked items keep the order they arrived in: `entries` is seat order already.
+  // Unranked items keep the order they arrived in: `entries` is registry order already.
   const unranked: Record<Seat, T[]> = { start: [], end: [] };
   for (const entry of entries) {
     const value = valueOf(entry);

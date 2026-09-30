@@ -1,90 +1,20 @@
 {
   "id": "doc-list",
-  "version": "2.0.0",
+  "version": "5.0.0",
   "name": "Document list",
-  "description": "Browse, search, sort and filter documents; new document; the Trash view.",
+  "description": "The all-documents page (a search, as a table), new documents, and the Trash view.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
-  "kernel": "^2.0",
-  "hot": true,
-  "consumes": {
-    "router": {
-      "protocol": "lm/router@^1.0",
-      "needs": [
-        "navigate",
-        "current",
-        "onChange"
-      ]
-    },
-    "menu": {
-      "protocol": "lm/context-menu@^1.0",
-      "needs": [
-        "open",
-        "confirm"
-      ]
-    },
-    "search": {
-      "protocol": "lm/search.provider@^1.0"
-    },
-    "registry": {
-      "protocol": "lm/commands@^1.0",
-      "needs": [
-        "list",
-        "run"
-      ],
-      "optional": true
-    },
-    "icons": {
-      "protocol": "lm/icons@^1.0",
-      "needs": [
-        "Icon"
-      ],
-      "optional": true
-    },
-    "index": {
-      "protocol": "lm/workspace-index@^1.0",
-      "needs": [
-        "fmFields",
-        "fmValues",
-        "documents",
-        "subscribe",
-        "version"
-      ],
-      "optional": true
-    }
-  },
-  "provides": {
-    "local": {
-      "protocol": "lm/search.provider@1.0.0",
-      "order": 0
-    },
-    "server": {
-      "protocol": "lm/search.provider@1.0.0",
-      "order": 10
-    },
-    "browser": {
-      "protocol": "lm/document-browser@2.0.0"
-    },
-    "list": {
-      "protocol": "lm/sidebar.panel@1.0.0",
-      "order": 10
-    },
-    "route": {
-      "protocol": "lm/router.route@1.0.0"
-    },
-    "views": {
-      "protocol": "lm/main.view@1.0.0"
-    },
-    "commands": {
-      "protocol": "lm/commands.command@2.0.0"
-    },
-    "keys": {
-      "protocol": "lm/keybindings.default@1.0.0"
-    },
-    "created": {
-      "protocol": "lm/document-browser.created@1.0.0"
-    }
+  "kernel": "^3.0",
+  "dependencies": {
+    "commands": "^3.0",
+    "context-menu": "^2.0",
+    "doc-events": "^1.0",
+    "router": "^2.0",
+    "search": "^4.0",
+    "shell-ui": "^3.0",
+    "table": "^3.0"
   },
   "peerLibraries": {
     "react": "^18.0.0"

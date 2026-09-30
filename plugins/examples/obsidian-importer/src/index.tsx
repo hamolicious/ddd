@@ -1,10 +1,11 @@
 /** Import the Markdown documents in an Obsidian vault ZIP through public kernel APIs only. */
 
 import type { Kernel } from "@kernel";
-import type { Command } from "@protocols/lm/commands.command";
-import type { NavbarItem } from "@protocols/lm/navbar.item";
+import { upload } from "plugin:attachments";
+import { addCommand } from "plugin:commands";
+import { addItem } from "plugin:header";
 
-import { importVault } from "./import.js";
+import { importVault, type FoldersApi } from "./import.js";
 import { readVaultArchive } from "./zip.js";
 
 const NOTICE_ID = "obsidian-importer.status";
@@ -28,7 +29,9 @@ export default function activate(kernel: Kernel): void {
       if (archive.notes.length === 0 && archive.attachments.length === 0) {
         throw new Error("the ZIP contains no importable notes or attachments");
       }
-      const result = await importVault(kernel, archiveName, archive, (finished, total) => {
+      // `folders` is optional: without it, documents land at the root.
+      const folders = await kernel.plugins.optional<FoldersApi>("folders");
+      const result = await importVault(kernel, { attachments: { upload }, folders }, archiveName, archive, (finished, total) => {
         kernel.ui.notify({
           id: NOTICE_ID,
           level: "info",
@@ -62,14 +65,14 @@ export default function activate(kernel: Kernel): void {
     }
   };
 
-  kernel.ports.offer<Command>("command", {
+  addCommand({
     id: "obsidian-importer.import",
     title: "Import an Obsidian vault",
     category: "Import",
     run,
     when: () => !running && kernel.capabilities.has("filesystem"),
   });
-  kernel.ports.offer<NavbarItem>("nav", {
+  addItem({
     id: "obsidian-importer.import",
     label: "Import Obsidian vault",
     icon: "⇩",

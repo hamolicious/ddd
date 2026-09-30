@@ -3,7 +3,7 @@
  */
 
 /** The `@kernel` contract version (`x-kernel-version`). The server's `KERNEL_VERSION` is generated from the same line. */
-export const MANIFEST_KERNEL_VERSION = "2.1.0";
+export const MANIFEST_KERNEL_VERSION = "3.0.0";
 
 export interface PluginFrontend {
   /** Path inside the package, e.g. `frontend/index.mjs`. */
@@ -53,27 +53,15 @@ export interface PluginBackend {
   readonly routes?: readonly (string)[];
   /** Server-bus events delivered to `lm_event`, namespaced (`other-plugin:something`). */
   readonly events?: readonly (string)[];
-  /** Plugin ids whose backend `lm_call` this half may reach through `call_plugin` (HOST-ABI.md §3.10). Replaces the `dependencies` allowlist removed in `@kernel` 2.0. */
-  readonly calls?: readonly (string)[];
+  /** Functions this backend's `lm_call` answers for plugins that depend on it (HOST-ABI.md §3.10). A call to a name not listed is refused; `input`/`output` shapes are checked at the boundary. */
+  readonly exports?: Readonly<Record<string, BackendExport>>;
 }
 
-export interface ProvidedPort {
-  /** `<publisher>/<name>@<version>`: the exact version this port implements, in full. */
-  readonly protocol: string;
-  /** Default-seat hint for slot ports: seats follow it, then plugin id, until someone edits the wiring. Wiring order always wins. */
-  readonly order?: number;
-  readonly description?: string;
-}
-
-export interface ConsumedPort {
-  /** `<publisher>/<name>@<range>`, e.g. `lm/router@^1.0`. */
-  readonly protocol: string;
-  /** The protocol's keys this port uses. The type check asks only for these, and a service handle refuses any other key. */
-  readonly needs?: readonly (string)[];
-  /** A service port that may stay unbound: the plugin still activates and `use()` returns `undefined`. */
-  readonly optional?: boolean;
-  /** A slot host that shows exactly one contributor sets `1`. */
-  readonly seats?: number;
+export interface BackendExport {
+  /** Shape JSON (`@kernel` `s.*`, serialized) the payload must fit. Absent: anything. */
+  readonly input?: unknown;
+  /** Shape JSON the returned value must fit. Absent: anything. */
+  readonly output?: unknown;
   readonly description?: string;
 }
 
@@ -85,6 +73,12 @@ export interface PluginManifest {
   readonly version: string;
   /** Semver range against the `@kernel` contract version. */
   readonly kernel: string;
+  /** Plugin id → semver range. Each one loads before this plugin, and this plugin is skipped when one is missing, out of range or failed. Its exports are importable as `plugin:<id>`. */
+  readonly dependencies?: Readonly<Record<string, string>>;
+  /** Like `dependencies`, but this plugin still loads without them. Reach one through `kernel.plugins.optional(id)`, never a static import. */
+  readonly optionalDependencies?: Readonly<Record<string, string>>;
+  /** `<id>@<version>`: this plugin stands in for another one at that API version. `plugin:<id>` resolves to whichever of the two is enabled; only one may be. */
+  readonly provides?: string;
   /** Blessed runtime-layer libraries and their ranges (SPEC §6.4). */
   readonly peerLibraries?: Readonly<Record<string, string>>;
   /** The frontend half. */
@@ -95,12 +89,6 @@ export interface PluginManifest {
   readonly config?: Readonly<Record<string, PluginConfigField>>;
   /** The backend half: module, hooks, cron, routes, event subscriptions. */
   readonly backend?: PluginBackend;
-  /** Port name → the protocol this plugin provides there, at the exact version it implements (PLUGIN-PROTOCOLS §4). */
-  readonly provides?: Readonly<Record<string, ProvidedPort>>;
-  /** Port name → the protocol this plugin consumes there, as a semver range (PLUGIN-PROTOCOLS §4). */
-  readonly consumes?: Readonly<Record<string, ConsumedPort>>;
-  /** A promise that the kernel's retraction plus this plugin's own `deactivate()` leave nothing behind, so wiring changes that touch it apply without a reload (PLUGIN-PROTOCOLS §6c). */
-  readonly hot?: boolean;
   /** Human metadata; never load-bearing. */
   readonly name?: string;
   /** Human metadata; never load-bearing. */
@@ -116,8 +104,9 @@ export interface PluginManifest {
 /** The schema itself, for `validateManifest`. */
 export const MANIFEST_SCHEMA: ManifestSchemaNode = {
   "x-removed": {
-    "dependencies": "was removed in @kernel 2.0: declare the services you use as `consumes` ports",
-    "x-defines": "was removed in @kernel 2.0: declare the slots you host as `consumes` ports"
+    "consumes": "was removed in @kernel 3.0: import what you use from `plugin:<id>` and list the plugin under `dependencies`",
+    "hot": "was removed in @kernel 3.0: every plugin change reloads the app",
+    "x-defines": "was removed in @kernel 2.0: export a registration function (`addItem`) instead"
   },
   "type": "object",
   "required": [
@@ -137,6 +126,30 @@ export const MANIFEST_SCHEMA: ManifestSchemaNode = {
     "kernel": {
       "type": "string",
       "format": "semver-range"
+    },
+    "dependencies": {
+      "type": "object",
+      "propertyNames": {
+        "format": "plugin-id"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "format": "semver-range"
+      }
+    },
+    "optionalDependencies": {
+      "type": "object",
+      "propertyNames": {
+        "format": "plugin-id"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "format": "semver-range"
+      }
+    },
+    "provides": {
+      "type": "string",
+      "format": "plugin-ref"
     },
     "peerLibraries": {
       "type": "object",
@@ -159,27 +172,6 @@ export const MANIFEST_SCHEMA: ManifestSchemaNode = {
     },
     "backend": {
       "$ref": "#/$defs/PluginBackend"
-    },
-    "provides": {
-      "type": "object",
-      "propertyNames": {
-        "format": "port-name"
-      },
-      "additionalProperties": {
-        "$ref": "#/$defs/ProvidedPort"
-      }
-    },
-    "consumes": {
-      "type": "object",
-      "propertyNames": {
-        "format": "port-name"
-      },
-      "additionalProperties": {
-        "$ref": "#/$defs/ConsumedPort"
-      }
-    },
-    "hot": {
-      "type": "boolean"
     },
     "name": {
       "type": "string"
@@ -287,6 +279,9 @@ export const MANIFEST_SCHEMA: ManifestSchemaNode = {
     },
     "PluginBackend": {
       "type": "object",
+      "x-removed": {
+        "calls": "was removed in @kernel 3.0: list the callee under the manifest's `dependencies`"
+      },
       "required": [
         "module"
       ],
@@ -324,56 +319,19 @@ export const MANIFEST_SCHEMA: ManifestSchemaNode = {
             "type": "string"
           }
         },
-        "calls": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "format": "plugin-id"
+        "exports": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/BackendExport"
           }
         }
       }
     },
-    "ProvidedPort": {
+    "BackendExport": {
       "type": "object",
-      "required": [
-        "protocol"
-      ],
       "properties": {
-        "protocol": {
-          "type": "string",
-          "format": "protocol-exact"
-        },
-        "order": {
-          "type": "number"
-        },
-        "description": {
-          "type": "string"
-        }
-      }
-    },
-    "ConsumedPort": {
-      "type": "object",
-      "required": [
-        "protocol"
-      ],
-      "properties": {
-        "protocol": {
-          "type": "string",
-          "format": "protocol-range"
-        },
-        "needs": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "optional": {
-          "type": "boolean"
-        },
-        "seats": {
-          "type": "integer",
-          "minimum": 1
-        },
+        "input": {},
+        "output": {},
         "description": {
           "type": "string"
         }

@@ -1,12 +1,16 @@
 /**
- * Minimal runtime shape validation for extension points (SPEC §6.4: "schema =
- * minimal runtime shape validation, rejects loudly").
+ * Minimal runtime shape validation (SPEC §6.4: "schema = minimal runtime shape
+ * validation, rejects loudly").
  *
- * Deliberately not a schema library. It answers one question — "does this
- * contribution have the fields the point promised?" — with a path and an
- * expectation per failure, and it costs no dependency and no bundle weight. It
- * validates *shape*, never semantics: a `navbar.item` with an `id` of `""` is
- * shape-valid and the shell's problem.
+ * Deliberately not a schema library. It answers one question — "does this value have
+ * the fields the caller promised?" — with a path and an expectation per failure, and it
+ * costs no dependency and no bundle weight. It validates *shape*, never semantics: an
+ * item with an `id` of `""` is shape-valid and its host's problem.
+ *
+ * Opt-in since `@kernel` 3.0: a registry validates items when it is given a `shape`
+ * (`createRegistry`), an exported function validates its arguments when it is wrapped in
+ * `checked(s.fn([...]), impl)`, and a backend's `backend.exports` are checked by the
+ * server with the same vocabulary (`backend/crates/core/src/shape.rs`, one corpus).
  *
  * **FROZEN.**
  */
@@ -19,9 +23,10 @@ export interface ShapeIssue {
 }
 
 /**
- * A shape as plain JSON (PLUGIN-PROTOCOLS §3): what a protocol package stores, what the
- * server and the wiring editor type-check wires with, and what `shapeFromJSON` rebuilds a
- * validator from. The same vocabulary as `s.*`.
+ * A shape as plain JSON: what a manifest's `backend.exports` declares, what the server
+ * validates a backend call with, and what `shapeFromJSON` rebuilds a validator from. The
+ * same vocabulary as `s.*`. A function's argument and result shapes are not part of it:
+ * `s.fn([...], ret)` serialises as `"func"`.
  */
 export type ShapeJson =
   | "string"
@@ -42,10 +47,10 @@ export type ShapeJson =
  * A shape check for values of `T`.
  *
  * `T` is documentation — there is deliberately no phantom field carrying it, so a
- * `Shape` built with `s.object({ icon: s.any() })` can still describe a protocol whose
+ * `Shape` built with `s.object({ icon: s.any() })` can still describe an item whose
  * type says `icon?: ReactNode`. Validation is a runtime floor (SPEC §6.4: *minimal*
- * shape validation); the compiler's opinion of an offered item comes from the
- * protocol's own `index.d.ts`, not from the validator.
+ * shape validation); the compiler's opinion of an item comes from the host plugin's
+ * exported types (`plugin:<id>`), not from the validator.
  *
  * The optional members are what the `s.*` builders add; a hand-built shape may omit them.
  */
@@ -69,6 +74,10 @@ export interface BuiltShape<T> extends Shape<T> {
     readonly fields?: Readonly<Record<string, BuiltShape<unknown>>>;
     readonly item?: BuiltShape<unknown>;
     readonly members?: readonly BuiltShape<unknown>[];
+    /** A function's argument shapes (`s.fn([...])`), in order. */
+    readonly args?: readonly BuiltShape<unknown>[];
+    /** A function's result shape (`s.fn([...], ret)`). */
+    readonly returns?: BuiltShape<unknown>;
   };
   /** The same check, spelled `ts` in generated TypeScript: `s.func().as("(path: string) => void")`. */
   as(ts: string): BuiltShape<T>;
@@ -116,15 +125,40 @@ export const number = (): BuiltShape<number> =>
   primitive("number", "number", (v) => typeof v === "number" && Number.isFinite(v));
 export const boolean = (): BuiltShape<boolean> => primitive("boolean", "boolean", (v) => typeof v === "boolean");
 
-export const func = <F extends (...args: never[]) => unknown>(): BuiltShape<F> =>
-  primitive("function", "func", (v) => typeof v === "function");
+/**
+ * A function. As a check on a value it tests `typeof` only — a function's arguments cannot
+ * be seen from outside it. `args` and `returns` are what {@link checked} validates when the
+ * function is *called*: `checked(s.fn([s.string()], s.number()), impl)`.
+ */
+export const func = <F extends (...args: never[]) => unknown>(
+  args?: readonly Shape<unknown>[],
+  returns?: Shape<unknown>,
+): BuiltShape<F> =>
+  make<F>(
+    "function",
+    (value, path) => (typeof value === "function" ? [] : [issue(path, "function", value)]),
+    () => "func",
+    args !== undefined || returns !== undefined
+      ? {
+          ...(args !== undefined ? { args: args as readonly BuiltShape<unknown>[] } : {}),
+          ...(returns !== undefined ? { returns: returns as BuiltShape<unknown> } : {}),
+        }
+      : undefined,
+  );
 
-/** A promise, or anything with a `then` method. */
-export const promise = <T = unknown>(): BuiltShape<Promise<T>> =>
-  primitive(
+const isThenable = (v: unknown): boolean =>
+  (typeof v === "object" || typeof v === "function") && v !== null && typeof (v as { then?: unknown }).then === "function";
+
+/**
+ * A promise, or anything with a `then` method. `inner` is the resolved value's shape, which
+ * only {@link checked} can see (it awaits the result); as a check on a value it is `then` only.
+ */
+export const promise = <T = unknown>(inner?: Shape<T>): BuiltShape<Promise<T>> =>
+  make<Promise<T>>(
     "promise",
-    "promise",
-    (v) => typeof v === "object" && v !== null && typeof (v as { then?: unknown }).then === "function",
+    (value, path) => (isThenable(value) ? [] : [issue(path, "promise", value)]),
+    () => "promise",
+    inner !== undefined ? { item: inner as BuiltShape<unknown> } : undefined,
   );
 
 /**
@@ -221,6 +255,8 @@ export const s = {
   number,
   boolean,
   func,
+  /** The same as `func`, spelled the way `checked(s.fn([...], ret), impl)` reads. */
+  fn: func,
   promise,
   component,
   literal,
@@ -231,10 +267,7 @@ export const s = {
   object,
 } as const;
 
-/**
- * Rebuild a validator from a protocol's JSON shape — how the kernel checks what a
- * provider offers against a protocol it only knows as data.
- */
+/** Rebuild a validator from a JSON shape (a manifest's `backend.exports`, a corpus case). */
 export function shapeFromJSON(json: ShapeJson): BuiltShape<unknown> {
   if (typeof json === "string") {
     switch (json) {

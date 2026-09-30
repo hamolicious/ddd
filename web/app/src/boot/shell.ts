@@ -111,8 +111,27 @@ export const shellBridge = (): ShellBridgeV1 | undefined => {
   return bridge !== undefined && bridgeVersionOf(bridge) !== undefined ? bridge : undefined;
 };
 
-/** `true` only inside the Flutter shell webview — never in a browser tab. */
+/**
+ * `true` inside any native shell — the Flutter app or the Linux desktop app — and never
+ * in a browser tab. Diagnostics and native affordances only: whether the page's
+ * *session* belongs to the shell is {@link shellOwnsSession}.
+ */
 export const inShell = (): boolean => shellBridge() !== undefined;
+
+/**
+ * `true` when the shell, not the page, holds the session — the Flutter shell, whose page
+ * origin is a loopback bundle server. Everything that differs from a browser tab gates on
+ * this: bearer login instead of the cookie, no service worker (the bundle updater is the
+ * offline cache), no `navigator.storage.persist()`.
+ *
+ * `false` for a cookie shell (`session: "cookie"`, `app/BRIDGE.md` §3): the desktop app
+ * loads the page from the server's own origin, so it is a browser tab with extra
+ * capabilities and must keep every browser behaviour, the offline worker included.
+ */
+export const shellOwnsSession = (): boolean => {
+  const bridge = shellBridge();
+  return bridge !== undefined && bridge.session !== "cookie";
+};
 
 /**
  * The origin every `/api` call and the sync socket must be resolved against:
@@ -145,7 +164,7 @@ export const apiBase = (): string => `${serverBaseUrl() ?? ""}/api`;
  */
 export function shellToken(): string | undefined {
   const bridge = shellBridge();
-  if (!bridge) return undefined;
+  if (!bridge || !shellOwnsSession()) return undefined;
   if (typeof bridge.bearerToken === "string" && bridge.bearerToken.length > 0) {
     return bridge.bearerToken;
   }
@@ -158,7 +177,7 @@ export function shellToken(): string | undefined {
 
 /** Hand a newly issued token to the keystore, or `undefined` to forget one. */
 export function rememberShellToken(token: string | undefined): void {
-  const store = shellBridge()?.setBearerToken;
+  const store = shellOwnsSession() ? shellBridge()?.setBearerToken : undefined;
   if (store) {
     try {
       store(token ?? null);
@@ -170,7 +189,7 @@ export function rememberShellToken(token: string | undefined): void {
   try {
     // Removed unconditionally: a browser carrying this key from an older build should
     // lose it at the first sign-out rather than keep a credential indefinitely.
-    if (token !== undefined && inShell()) localStorage.setItem(SHELL_TOKEN_KEY, token);
+    if (token !== undefined && shellOwnsSession()) localStorage.setItem(SHELL_TOKEN_KEY, token);
     else localStorage.removeItem(SHELL_TOKEN_KEY);
   } catch {
     // Private mode: the session lasts as long as the page does.

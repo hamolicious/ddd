@@ -762,7 +762,12 @@ async fn welcome_is_the_first_frame_and_announces_the_limits() {
         welcome["core_semantics_version"],
         life_manager_core::CORE_SEMANTICS_VERSION
     );
-    assert_eq!(welcome["wiring_version"], 0);
+    // The load set's fingerprint: a hex string, the same one `/api/plugins` reports.
+    let plugins_version = welcome["plugins_version"]
+        .as_str()
+        .expect("plugins_version");
+    assert_eq!(plugins_version.len(), 16);
+    assert!(plugins_version.chars().all(|c| c.is_ascii_hexdigit()));
     assert_no_extended_json(&welcome.to_string());
 
     // The app-level heartbeat answers with the echoed timestamp.

@@ -30,12 +30,21 @@ import {
   type WindowShellFixture,
 } from "./bridge-fixtures.js";
 import { CapabilitiesHost, detectBridge } from "./capabilities.js";
-import { BRIDGE_VERSION, bridgeVersionOf, readShellBridge, shellServerBaseUrl, shellUrl } from "./shell-bridge.js";
+import {
+  BRIDGE_VERSION,
+  FOLDER_CHANGED_EVENT,
+  bridgeOwnsSession,
+  bridgeVersionOf,
+  readShellBridge,
+  shellServerBaseUrl,
+  shellUrl,
+} from "./shell-bridge.js";
 
 const index = fixtureIndex();
 const auth = readFixture<BridgeFixtureFile>("auth.json");
 const boot = readFixture<BridgeFixtureFile>("boot.json");
 const filesystem = readFixture<BridgeFixtureFile>("filesystem.json");
+const folder = readFixture<BridgeFixtureFile>("folder.json");
 const notifications = readFixture<BridgeFixtureFile>("notifications.json");
 const envelope = readFixture<BridgeFixtureFile>("envelope.json");
 const windowShell = readFixture<WindowShellFixture>("window_shell.json");
@@ -45,6 +54,7 @@ const capabilityFiles: readonly (readonly [string, BridgeFixtureFile])[] = [
   ["auth.json", auth],
   ["boot.json", boot],
   ["filesystem.json", filesystem],
+  ["folder.json", folder],
   ["notifications.json", notifications],
 ];
 
@@ -56,7 +66,14 @@ afterEach(() => {
 describe("the fixture set", () => {
   it("names every case file it ships, so no side can quietly stop reading one", () => {
     expect([...index.cases].sort()).toEqual(
-      ["auth.json", "boot.json", "envelope.json", "filesystem.json", "notifications.json"].sort(),
+      [
+        "auth.json",
+        "boot.json",
+        "envelope.json",
+        "filesystem.json",
+        "folder.json",
+        "notifications.json",
+      ].sort(),
     );
     expect([...index.other].sort()).toEqual(["manifest.json", "window_shell.json"].sort());
     for (const file of [...index.cases, ...index.other]) {
@@ -343,6 +360,42 @@ describe("what the shim reads back", () => {
   });
 });
 
+describe("what the folder shim sends and reads back", () => {
+  const response = (name: string): unknown => {
+    const entry = folder.cases.find((c) => c.name === name);
+    if (!entry?.response.ok) throw new Error(`no successful case ${name}`);
+    return entry.response.result;
+  };
+
+  it("writes bytes as the frozen base64 params and reads them back", async () => {
+    const sent: unknown[] = [];
+    const read = folder.cases.find((c) => c.name === "read a file as base64")!;
+    const bridge = buildInjectedBridge();
+    Object.assign(bridge["folder"] as Record<string, unknown>, {
+      write: (params: unknown) => {
+        sent.push(params);
+        return response("write a file, creating its directory");
+      },
+      read: () => response("read a file as base64"),
+    });
+    const host = new CapabilitiesHost(bridge);
+    await host.folder.write("Work/Plans.md", new TextEncoder().encode("# Plans\n"));
+    expect(sent).toEqual([fixtureParams(folder.cases.find((c) => c.name === "write a file, creating its directory")!)]);
+    const file = await host.folder.read("Home/Home.md");
+    expect(new TextDecoder().decode(file.bytes)).toBe(read.bytes?.utf8);
+  });
+
+  it("refuses a path that climbs out before the shell sees it", async () => {
+    const host = new CapabilitiesHost(buildInjectedBridge());
+    await expect(host.folder.read("../secrets.txt")).rejects.toMatchObject({ code: "invalid" });
+  });
+
+  it("hears the shell's change event under the fixture's name", () => {
+    expect(FOLDER_CHANGED_EVENT).toBe(windowShell.folderChanged.event);
+    expect(windowShell.folderChanged.detailKey).toBe("paths");
+  });
+});
+
 describe("the detection rule (BRIDGE.md §3)", () => {
   it.each(windowShell.detection.map((entry) => [entry.name, entry] as const))(
     "%s",
@@ -353,6 +406,9 @@ describe("the detection rule (BRIDGE.md §3)", () => {
       expect(detectBridge() !== undefined).toBe(entry.detected);
       if (entry.bridgeVersion !== undefined) {
         expect(bridgeVersionOf(readShellBridge())).toBe(entry.bridgeVersion);
+      }
+      if (entry.ownsSession !== undefined) {
+        expect(bridgeOwnsSession(readShellBridge())).toBe(entry.ownsSession);
       }
       if (entry.serverBaseUrl !== undefined) {
         const resolved = shellServerBaseUrl(readShellBridge());
@@ -403,12 +459,12 @@ describe("the injected surface", () => {
     expect(functions.has("bootOk")).toBe(true);
   });
 
-  it("serves both plugin-facing capabilities natively, and exposes neither auth nor boot", () => {
+  it("serves every plugin-facing capability natively, and exposes neither auth nor boot", () => {
     const host = new CapabilitiesHost(buildInjectedBridge());
-    expect(index.pluginFacing).toEqual(["filesystem", "notifications"]);
+    expect(index.pluginFacing).toEqual(["filesystem", "folder", "notifications"]);
     for (const name of index.pluginFacing) {
-      expect(host.support(name as "filesystem" | "notifications")).toBe("native");
-      expect(host.has(name as "filesystem" | "notifications")).toBe(true);
+      expect(host.support(name as "filesystem" | "folder" | "notifications")).toBe("native");
+      expect(host.has(name as "filesystem" | "folder" | "notifications")).toBe(true);
     }
     expect(host.notifications.supportsScheduled).toBe(true);
     expect(host.filesystem.exportWorkspace).toBeDefined();

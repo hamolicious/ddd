@@ -10,6 +10,7 @@
       "auth",
       "boot",
       "filesystem",
+      "folder",
       "notifications"
     ],
     "methods": [
@@ -22,6 +23,14 @@
       "filesystem.exportWorkspace",
       "filesystem.importFile",
       "filesystem.pick",
+      "folder.choose",
+      "folder.current",
+      "folder.forget",
+      "folder.list",
+      "folder.move",
+      "folder.read",
+      "folder.remove",
+      "folder.write",
       "notifications.cancel",
       "notifications.list",
       "notifications.notify",
@@ -40,6 +49,14 @@
       "filesystem.pick",
       "filesystem.exportWorkspace",
       "filesystem.importFile",
+      "folder.current",
+      "folder.choose",
+      "folder.forget",
+      "folder.list",
+      "folder.read",
+      "folder.write",
+      "folder.move",
+      "folder.remove",
       "notifications.permission",
       "notifications.request",
       "notifications.notify",
@@ -56,6 +73,15 @@
     "detailKey": "bundleVersion",
     "script": "window.dispatchEvent(new CustomEvent(\"lm-shell-update-ready\", { detail: { bundleVersion: \"b1f3c0de00000000000000000000000000000000000000000000000000000000\" } }));",
     "scriptVersion": "b1f3c0de00000000000000000000000000000000000000000000000000000000"
+  },
+  "folderChanged": {
+    "note": "How a shell tells the page that files in the chosen folder changed outside it (BRIDGE.md §4.5). Like updateReady it is not a method: the shell evaluates a dispatch. `paths` is a hint (relative paths, possibly empty); the page rescans either way.",
+    "event": "lm-folder-changed",
+    "detailKey": "paths",
+    "script": "window.dispatchEvent(new CustomEvent(\"lm-folder-changed\", { detail: { paths: [\"Home/Home.md\"] } }));",
+    "scriptPaths": [
+      "Home/Home.md"
+    ]
   },
   "detection": [
     {
@@ -127,6 +153,26 @@
       "detected": true,
       "bridgeVersion": 1,
       "serverBaseUrl": "https://life.example.com"
+    },
+    {
+      "name": "a cookie shell is a shell that does not own the session",
+      "note": "The Linux desktop shell loads the page from the server's own origin and injects `session: \"cookie\"`: native capabilities are used, but login, the service worker and the workspace-export link stay the browser's (BRIDGE.md §3).",
+      "shell": {
+        "version": 1,
+        "session": "cookie"
+      },
+      "detected": true,
+      "bridgeVersion": 1,
+      "ownsSession": false
+    },
+    {
+      "name": "a shell that says nothing about the session owns it",
+      "shell": {
+        "version": 1
+      },
+      "detected": true,
+      "bridgeVersion": 1,
+      "ownsSession": true
     }
   ]
 }

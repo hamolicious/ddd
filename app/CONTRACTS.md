@@ -57,6 +57,7 @@ app/
 │   │   ├── bridge.dart             envelope, registry, injected shim     [shell-bridge] FROZEN
 │   │   ├── auth.dart               keystore: token + server URL          [shell-bridge]
 │   │   ├── filesystem.dart         export / pick / exportWorkspace       [shell-bridge]
+│   │   ├── folder.dart             the notes folder (BRIDGE.md §4.5)     [shell-bridge]
 │   │   └── notifications.dart      scheduled local notifications         [shell-bridge]
 │   ├── bundle/
 │   │   ├── manifest.dart           manifest types + sha256 verify        [scaffold] FROZEN
@@ -232,6 +233,12 @@ Hard requirements (SPEC §7; `BRIDGE.md` §3, §6):
 `bridgeVersionOf`, `detectBridge`'s contract (both version spellings accepted; a newer major
 degrades).
 
+**Announced after M5 (kernel 2.2.0):** `CapabilitiesApi.folder` and `CapabilityName` `"folder"`
+(the notes folder, `BRIDGE.md` §4.5), and the `ShellBridgeV1` members `folder` and
+`session`. A bridge with `session: "cookie"` (the Linux desktop shell) is a shell that does not
+own the session: `shellOwnsSession()` in `web/app/src/boot/shell.ts`, not `inShell()`, gates
+bearer login, the service worker, `navigator.storage.persist()` and the workspace-export link.
+
 ---
 
 ## Frozen types
@@ -295,7 +302,9 @@ Pinned in `pubspec.yaml`, resolved against Flutter 3.47.5 / Dart 3.13.4:
 | `crypto` | ^3.0.7 | SHA-256 verification |
 | `archive` | ^4.3.0 | reserved: the export zip, and a future single-archive bundle download |
 | `share_plus` | ^13.3.0 | handing a file to the user |
-| `file_picker` | ^13.1.0 | taking a file from the user |
+| `file_picker` | ^13.1.0 | taking a file from the user, and the notes folder |
+| `permission_handler` | ^12.0.1 | all-files access for the notes folder (`folder.dart`) |
+| `watcher` | ^1.1.2 | recursive change events for the notes folder on Linux/Android |
 
 `archive` is declared and currently unused: the workspace export is a zip the shell may want to
 inspect or unpack, and a future manifest revision may ship the bundle as one archive. If it is

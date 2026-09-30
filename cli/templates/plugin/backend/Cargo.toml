@@ -1,0 +1,24 @@
+[package]
+name = "{{crate}}"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# Its own workspace: this crate only builds for wasm32-unknown-unknown.
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+life-manager-plugin-sdk = {{sdk}}
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Shipped to every server that installs it: small, and a panic is a trap.
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

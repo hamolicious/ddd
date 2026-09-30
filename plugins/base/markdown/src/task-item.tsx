@@ -13,14 +13,18 @@
  *
  * The menu lists **every registered state in menu order**, including the current one, so
  * the registry is discoverable — a plugin that adds `[/]` and `[-]` needs no UI of its
- * own for them to be reachable.
+ * own for them to be reachable. The checkbox is marked `markdown/task` and the menu is
+ * `context-menu`'s (`menu.ts`): right-click, long press and the menu key all open it.
  */
 
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
-import type { MarkdownTaskState } from "@protocols/lm/markdown.taskState";
+import type { MenuItem } from "plugin:context-menu";
+import type { MarkdownTaskState } from "./api.js";
 
-import { PopupMenu, useLongPress, type MenuItem } from "./menu.js";
+import { target } from "../../_shared/target.js";
+
+import { useMenuItems } from "./menu.js";
 import type { MarkdownRuntime } from "./runtime.js";
 import { toggleMarker, type TaskLocation, type TaskRegistry, type TaskScan } from "./tasks.js";
 
@@ -45,9 +49,6 @@ export function TaskCheckbox({
   runtime,
   rescan,
 }: TaskCheckboxProps): ReactNode {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const longPress = useLongPress(() => setMenuOpen(true));
-
   /**
    * A checkbox with nowhere to write is rendered **disabled, not hidden**. It happens in
    * two real situations — a preview of text that belongs to no document, and a document
@@ -65,15 +66,17 @@ export function TaskCheckbox({
       });
   };
 
-  const items: readonly MenuItem[] = registry.states.map((candidate) => ({
-    id: candidate.marker,
-    label: candidate.label,
-    icon: candidate.icon,
-    selected: candidate.marker === location.marker,
-    run: () => write(candidate.marker),
-  }));
-
-  const openMenu = (): void => setMenuOpen(true);
+  const menuRef = useMenuItems<HTMLButtonElement>((): readonly MenuItem[] =>
+    writable
+      ? registry.states.map((candidate) => ({
+          id: candidate.marker,
+          label: candidate.label,
+          icon: candidate.icon,
+          checked: candidate.marker === location.marker,
+          run: () => write(candidate.marker),
+        }))
+      : [],
+  );
 
   return (
     <span className="md-task-control markdown:relative markdown:mx-[calc((var(--md-gutter)-var(--lm-tap-target))/2)] markdown:inline-flex markdown:min-w-[var(--lm-tap-target)] markdown:shrink-0 markdown:justify-center">
@@ -87,38 +90,21 @@ export function TaskCheckbox({
         aria-checked={state.done === true}
         aria-label={state.label}
         aria-haspopup="menu"
-        aria-expanded={menuOpen}
         disabled={!writable}
+        ref={menuRef}
+        {...target("markdown/task", location.marker, { label: "Task state" })}
         title={writable ? `${state.label}. Long-press for other states.` : state.label}
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
-          // A long press already opened the menu; the trailing click must not also toggle.
-          if (longPress.consumeClick()) return;
           const next = toggleMarker(location.marker, registry);
           if (next !== null) write(next);
         }}
-        onContextMenu={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          openMenu();
-        }}
-        onKeyDown={(event) => {
-          // The platform gestures for "open the context menu" from the keyboard.
-          if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
-            event.preventDefault();
-            openMenu();
-          }
-        }}
-        {...longPress.handlers}
       >
         <span className="md-task-icon" aria-hidden="true">
           {state.icon}
         </span>
       </button>
-      {menuOpen ? (
-        <PopupMenu label="Task state" items={items} onClose={() => setMenuOpen(false)} />
-      ) : null}
     </span>
   );
 }

@@ -1,22 +1,16 @@
 {
   "id": "context-menu",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "name": "Context menu",
-  "description": "One menu and sheet service for every plugin: anchored popovers on a wide screen, bottom sheets on a phone.",
+  "description": "One menu and sheet service for every plugin, and the right-click menu of anything a plugin marks: anchored popovers on a wide screen, bottom sheets on a phone.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": {
     "prefix": "ctxmenu"
   },
-  "kernel": "^2.0",
-  "hot": true,
-  "provides": {
-    "menu": {
-      "protocol": "lm/context-menu@1.1.0"
-    },
-    "sheet": {
-      "protocol": "lm/shell.overlay@1.0.0"
-    }
+  "kernel": "^3.0",
+  "dependencies": {
+    "shell-ui": "^3.0"
   },
   "peerLibraries": {
     "react": "^18.0.0",

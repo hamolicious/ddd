@@ -15,15 +15,11 @@
 
 import type { Kernel } from "@kernel";
 
-import type { AltbarPanel, ShownView } from "@protocols/lm/altbar.panel";
-import type { Command } from "@protocols/lm/commands.command";
-import type { KeybindingDefault } from "@protocols/lm/keybindings.default";
-import type { MainView } from "@protocols/lm/main.view";
-import type { NavbarItem } from "@protocols/lm/navbar.item";
-import type { Router } from "@protocols/lm/router";
-import type { Route } from "@protocols/lm/router.route";
-import type { Shell } from "@protocols/lm/shell";
-import type { WorkspaceIndex } from "@protocols/lm/workspace-index";
+import { addCommand, addKeybinding } from "plugin:commands";
+import { addItem } from "plugin:header";
+import * as indexer from "plugin:indexer";
+import { addRoute, navigate, query } from "plugin:router";
+import { addAltbarPanel, addView, layout, toggleAltbar, type ShownView } from "plugin:shell-ui";
 
 import { GraphView } from "./GraphView.js";
 import { createSettingsStore, settingsSchema, type SettingsStore } from "./settings.js";
@@ -45,35 +41,28 @@ const ICON = (
 let liveStore: SettingsStore | undefined;
 
 export default function activate(kernel: Kernel): void {
-  // Each handle is limited to its port's `needs` in the manifest: the index's `ready`,
-  // `version`, `documents`, `connections` and `subscribe`; the router's `navigate` and
-  // `query`; the shell's `layout` and `toggleAltbar`.
-  const indexer = kernel.ports.use<WorkspaceIndex>("index");
-  const router = kernel.ports.use<Router>("router");
-  const shell = kernel.ports.use<Shell>("shell");
-
   kernel.settings.defineSchema(settingsSchema());
   const store = createSettingsStore(kernel);
   liveStore = store;
 
-  const openGraph = (): void => router.navigate("/graph");
+  const openGraph = (): void => navigate("/graph");
   const open = (id: string, newTab: boolean): void => {
     const path = `/doc/${encodeURIComponent(id)}`;
     if (newTab) globalThis.open(`${location.pathname}${location.search}#${path}`, "_blank", "noopener");
-    else router.navigate(path);
+    else navigate(path);
   };
 
-  kernel.ports.offer<Route>("route", { path: "/graph", view: VIEW });
-  kernel.ports.offer<MainView>("view", {
+  addRoute({ path: "/graph", view: VIEW });
+  addView({
     id: VIEW,
     title: "Graph",
     // `?focus=<id>`: opened from a note's local graph, it zooms in to that note.
     component: () => (
-      <GraphView indexer={indexer} store={store} open={open} focus={router.query().get("focus") ?? undefined} />
+      <GraphView indexer={indexer} store={store} open={open} focus={query().get("focus") ?? undefined} />
     ),
   });
 
-  kernel.ports.offer<AltbarPanel>("panel", {
+  addAltbarPanel({
     id: "graph.local",
     title: "Graph",
     icon: ICON,
@@ -86,13 +75,13 @@ export default function activate(kernel: Kernel): void {
           store={store}
           open={open}
           center={view.params["id"]}
-          openGlobal={() => router.navigate(`/graph?focus=${encodeURIComponent(view.params["id"] ?? "")}`)}
+          openGlobal={() => navigate(`/graph?focus=${encodeURIComponent(view.params["id"] ?? "")}`)}
         />
       </div>
     ),
   });
 
-  kernel.ports.offer<NavbarItem>("nav", {
+  addItem({
     id: "graph.open",
     label: "Graph",
     icon: ICON,
@@ -101,7 +90,7 @@ export default function activate(kernel: Kernel): void {
     onSelect: openGraph,
   });
 
-  kernel.ports.offer<Command>("commands", [
+  addCommand([
     {
       id: "graph.open",
       title: "Open graph view",
@@ -112,11 +101,11 @@ export default function activate(kernel: Kernel): void {
       id: "graph.local",
       title: "Show this note's local graph",
       category: "Graph",
-      when: () => shell.layout().hasAltbar,
-      run: () => shell.toggleAltbar(true),
+      when: () => layout().hasAltbar,
+      run: () => toggleAltbar(true),
     },
   ]);
-  kernel.ports.offer<KeybindingDefault>("keys", { command: "graph.open", keys: "Mod+G" });
+  addKeybinding({ command: "graph.open", keys: "Mod+G" });
 }
 
 /** What the kernel does not withdraw: the settings writes still waiting on their timers. */

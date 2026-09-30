@@ -2,15 +2,15 @@
  * The `@kernel` module itself: what a plugin's `activate()` receives.
  *
  * **The object is per-plugin.** Every call is attributed to the plugin that made
- * it — offers carry its id, `settings` reads its namespace, `splice` writes its
- * `%%%` section, `ports` resolves its own port names against its own manifest, and
- * `log` is prefixed with its id. A plugin cannot spoof another by passing an id,
- * because it never passes one.
+ * it — `settings` reads its namespace, `splice` writes its `%%%` section, notices
+ * carry its id, and `log` is prefixed with it. A plugin cannot spoof another by
+ * passing an id, because it never passes one.
  *
- * **Activation follows the wiring** (PLUGIN-PROTOCOLS §6, §6c). Plugins activate in
- * the order the server's resolution gives, providers before the consumers of their
- * services; a wiring change stops, restarts and starts plugins in place, and
- * `deactivate` runs on every stop.
+ * **Activation follows the dependency graph** (`@kernel` 3.0). Plugins activate in the
+ * order the server's load resolution gives: every plugin after the plugins it lists under
+ * `dependencies` and `optionalDependencies`. Plugins reach each other through ordinary ES
+ * imports (`import { addItem } from "plugin:header"`), not through the kernel. There is no
+ * hot reload: any install, update, enable or disable reloads every open client.
  *
  * **FROZEN.**
  */
@@ -19,14 +19,11 @@ import type { CapabilitiesApi } from "./capabilities.js";
 import type { DocumentsApi } from "./documents.js";
 import type { EventsApi } from "./events.js";
 import type { PluginManifest } from "./manifest.js";
-import type { PortsApi } from "./ports.js";
 import type { SessionApi } from "./session.js";
 import type { SettingsApi } from "./settings.js";
 import type { SyncApi } from "./sync.js";
 import type { CoreMap, KernelLogger } from "./types.js";
-import type { ShapeJson } from "./shape.js";
 import type { UiApi } from "./ui.js";
-import type { ApplyPlan, PortCandidate, Resolution, WiringInput, WiringOverrides } from "./wiring.js";
 
 /**
  * The shared Rust core, in the client (SPEC §2: parity by construction).
@@ -45,24 +42,6 @@ export interface CoreApi {
   normalizeDate(input: string): string;
   /** The core's semantics version, compared against the server's at connect. */
   semanticsVersion(): number;
-  /**
-   * Resolve plugin wiring with the server's own resolver (PLUGIN-PROTOCOLS §6): what the
-   * wiring editor previews a draft with. Throws `CoreUnavailableError` without the Wasm
-   * core, which is the editor's cue to go read-only.
-   */
-  resolveWiring(input: WiringInput): Resolution;
-  /** What applying `after` on a client running `before` does (§6c). */
-  planWiring(request: {
-    readonly before: Resolution;
-    readonly after: Resolution;
-    readonly beforeWiring: WiringOverrides;
-    readonly afterWiring: WiringOverrides;
-    readonly hot: readonly string[];
-  }): ApplyPlan;
-  /** Every port that could connect to `port`, and why not when it cannot (§6b). */
-  wiringCandidates(input: WiringInput, port: string, dir: "in" | "out"): readonly PortCandidate[];
-  /** Why offering `offer` where `need` is required fails; empty when it fits (§6b). */
-  shapeFits(offer: ShapeJson, need: ShapeJson): readonly string[];
 }
 
 export interface ParsedText {
@@ -93,11 +72,8 @@ export interface Kernel {
   readonly manifest: PluginManifest;
 
   readonly documents: DocumentsApi;
-  /**
-   * Services, slots and events through the plugin's own ports (PLUGIN-PROTOCOLS §5): the
-   * only way plugins reach each other.
-   */
-  readonly ports: PortsApi;
+  /** The plugin set of this boot: who is active, and the way to an optional dependency. */
+  readonly plugins: PluginsApi;
   readonly events: EventsApi;
   readonly settings: SettingsApi;
   readonly session: SessionApi;
@@ -108,20 +84,56 @@ export interface Kernel {
   readonly log: KernelLogger;
 }
 
+/** One plugin of this boot's load set. */
+export interface LoadedPlugin {
+  readonly id: string;
+  readonly version: string;
+  /** `<id>@<version>` when this plugin stands in for another one. */
+  readonly provides?: string;
+}
+
 /**
- * A frontend plugin module. `activate` offers, serves and subscribes through
- * `kernel.ports`; its return value is ignored (a service is `kernel.ports.serve`d).
+ * `kernel.plugins` — the plugin set this page booted with (`@kernel` 3.0).
  *
- * Throwing from `activate` marks the plugin failed and **skips every plugin that
- * requires a service it provides**, with one aggregated notice linking to admin
- * (SPEC §6.4).
+ * A required dependency is a static import (`import { x } from "plugin:header"`); an
+ * **optional** one is never imported statically, because the import would fail when it is
+ * absent. It is reached here instead:
+ *
+ * ```ts
+ * const icons = await kernel.plugins.optional<typeof import("plugin:icons")>("icons");
+ * icons?.register(…);
+ * ```
+ */
+export interface PluginsApi {
+  /**
+   * Whether `id` activated in this boot. A stand-in counts under the id it provides
+   * (`provides: "editor@2.0.0"` makes `active("editor")` true).
+   */
+  active(id: string): boolean;
+  /**
+   * The module of an optional dependency, or `undefined` when it is not active. `id` must
+   * be listed under the calling plugin's `optionalDependencies` or `dependencies`;
+   * anything else throws `ContractViolationError`.
+   */
+  optional<M>(id: string): Promise<M | undefined>;
+  /** Every plugin in this boot's load set, in load order. */
+  list(): readonly LoadedPlugin[];
+}
+
+/**
+ * A frontend plugin module. `activate` receives the plugin's own kernel; its return value
+ * is ignored. What other plugins may use is the module's **named exports** (functions,
+ * components, types), importable as `plugin:<id>`.
+ *
+ * Throwing from `activate` marks the plugin failed and **skips every plugin that depends
+ * on it**, transitively, with one aggregated notice linking to admin (SPEC §6.4).
  */
 export type ActivateFn = (kernel: Kernel) => unknown | Promise<unknown>;
 
 /**
- * Runs on every stop: a wiring change, a restart, `?safe=bare` teardown. It releases what
- * the plugin built outside the kernel (window listeners, timers); the kernel withdraws the
- * rest (PLUGIN-PROTOCOLS §6c).
+ * Runs when the plugin is stopped (a failed activation's cleanup, `?safe=bare` teardown).
+ * It releases what the plugin built outside the kernel (window listeners, timers); the
+ * kernel withdraws the rest.
  */
 export type DeactivateFn = () => void | Promise<void>;
 

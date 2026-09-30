@@ -1,55 +1,192 @@
 [
   {
     "name": "minimal",
-    "manifest": { "id": "demo", "version": "1.0.0", "kernel": "^2.0" },
-    "problems": []
-  },
-  {
-    "name": "a full manifest",
     "manifest": {
-      "id": "graph",
+      "id": "demo",
       "version": "1.0.0",
-      "name": "Graph view",
-      "description": "Notes and links.",
-      "author": "Life Manager base distribution",
-      "license": "MIT OR Apache-2.0",
-      "x-tailwind": { "prefix": "graph" },
-      "kernel": "^2.0",
-      "peerLibraries": { "react": "^18.0.0" },
-      "frontend": { "module": "frontend/index.mjs", "style": "frontend/style.css" }
+      "kernel": "^3.0"
     },
     "problems": []
   },
   {
-    "name": "a 1.x manifest: dependencies and x-defines were removed in @kernel 2.0",
-    "manifest": {
-      "id": "graph",
-      "version": "1.0.0",
-      "x-defines": ["graph.thing"],
-      "kernel": "^1.0",
-      "dependencies": { "commands": "^1.0", "indexer": "~1.2.0" },
-      "frontend": { "module": "frontend/index.mjs" }
-    },
-    "problems": ["dependencies", "x-defines"]
-  },
-  {
-    "name": "a manifest with ports",
+    "name": "removed in @kernel 3.0: consumes, hot, object-form provides and backend.calls",
     "manifest": {
       "id": "graph",
       "version": "2.0.0",
       "kernel": "^2.0",
       "hot": true,
       "consumes": {
-        "index": { "protocol": "lm/workspace-index@^1.0", "needs": ["ready", "subscribe"] },
-        "router": { "protocol": "lm/router@^1.0", "optional": true },
-        "sidebar": { "protocol": "lm/sidebar.panel@^1.0", "seats": 1 }
+        "index": {
+          "protocol": "lm/workspace-index@^1.0"
+        }
       },
       "provides": {
-        "view": { "protocol": "lm/main.view@1.0.0" },
-        "mode": { "protocol": "lm/document.mode@1.0.0", "order": 20 },
-        "menu-button": { "protocol": "acme/navbar.item@1.2.3-beta.1" }
+        "view": {
+          "protocol": "lm/main.view@1.0.0"
+        }
       },
-      "frontend": { "module": "frontend/index.mjs" }
+      "backend": {
+        "module": "backend.wasm",
+        "calls": [
+          "other"
+        ]
+      }
+    },
+    "problems": [
+      "consumes",
+      "hot",
+      "provides",
+      "backend.calls"
+    ]
+  },
+  {
+    "name": "x-defines stays removed",
+    "manifest": {
+      "id": "graph",
+      "version": "1.0.0",
+      "kernel": "^3.0",
+      "x-defines": [
+        "graph.thing"
+      ]
+    },
+    "problems": [
+      "x-defines"
+    ]
+  },
+  {
+    "name": "a stand-in",
+    "manifest": {
+      "id": "alt-editor",
+      "version": "0.3.0",
+      "kernel": "^3.0",
+      "provides": "editor@2.0.0",
+      "dependencies": {
+        "shell-ui": "^2.0"
+      }
+    },
+    "problems": []
+  },
+  {
+    "name": "provides references",
+    "manifest": {
+      "id": "demo",
+      "version": "1.0.0",
+      "kernel": "^3.0",
+      "provides": "editor@^2.0"
+    },
+    "problems": [
+      "provides"
+    ]
+  },
+  {
+    "name": "provides without a version",
+    "manifest": {
+      "id": "demo",
+      "version": "1.0.0",
+      "kernel": "^3.0",
+      "provides": "editor"
+    },
+    "problems": [
+      "provides"
+    ]
+  },
+  {
+    "name": "provides with a bad id",
+    "manifest": {
+      "id": "demo",
+      "version": "1.0.0",
+      "kernel": "^3.0",
+      "provides": "lm/editor@2.0.0"
+    },
+    "problems": [
+      "provides"
+    ]
+  },
+  {
+    "name": "dependency ids and ranges",
+    "manifest": {
+      "id": "demo",
+      "version": "1.0.0",
+      "kernel": "^3.0",
+      "dependencies": {
+        "Bad_Id": "^1.0",
+        "router": "latest",
+        "ok": "^1.0"
+      },
+      "optionalDependencies": {
+        "icons": 2,
+        "lm/x": "*"
+      }
+    },
+    "problems": [
+      "dependencies.Bad_Id",
+      "dependencies.router",
+      "optionalDependencies.icons",
+      "optionalDependencies.lm/x"
+    ]
+  },
+  {
+    "name": "dependencies must be an object",
+    "manifest": {
+      "id": "demo",
+      "version": "1.0.0",
+      "kernel": "^3.0",
+      "dependencies": [
+        "router"
+      ]
+    },
+    "problems": [
+      "dependencies"
+    ]
+  },
+  {
+    "name": "backend exports",
+    "manifest": {
+      "id": "demo",
+      "version": "1.0.0",
+      "kernel": "^3.0",
+      "backend": {
+        "module": "backend.wasm",
+        "exports": {
+          "a": "fn",
+          "b": {
+            "description": 5
+          }
+        }
+      }
+    },
+    "problems": [
+      "backend.exports.a",
+      "backend.exports.b.description"
+    ]
+  },
+  {
+    "name": "a full manifest",
+    "manifest": {
+      "id": "graph",
+      "version": "2.0.0",
+      "name": "Graph view",
+      "description": "Notes and links.",
+      "author": "Life Manager base distribution",
+      "license": "MIT OR Apache-2.0",
+      "x-tailwind": {
+        "prefix": "graph"
+      },
+      "kernel": "^3.0",
+      "peerLibraries": {
+        "react": "^18.0.0"
+      },
+      "frontend": {
+        "module": "frontend/index.mjs",
+        "style": "frontend/style.css"
+      },
+      "dependencies": {
+        "indexer": "^2.0",
+        "router": "~2.1.0"
+      },
+      "optionalDependencies": {
+        "icons": "*"
+      }
     },
     "problems": []
   },
@@ -60,50 +197,130 @@
       "version": "0.1.0+build.7",
       "kernel": "*",
       "capabilities": {
-        "documents": ["read", "write"],
-        "http": { "hosts": ["example.com"] },
+        "documents": [
+          "read",
+          "write"
+        ],
+        "http": {
+          "hosts": [
+            "example.com"
+          ]
+        },
         "notifications": true,
-        "public-routes": ["/webhook"]
+        "public-routes": [
+          "/webhook"
+        ]
       },
       "config": {
-        "token": { "type": "string", "secret": true, "required": true },
-        "mode": { "type": "select", "options": ["a", "b"], "default": "a" },
-        "limit": { "type": "number", "default": 3 }
+        "token": {
+          "type": "string",
+          "secret": true,
+          "required": true
+        },
+        "mode": {
+          "type": "select",
+          "options": [
+            "a",
+            "b"
+          ],
+          "default": "a"
+        },
+        "limit": {
+          "type": "number",
+          "default": 3
+        }
       },
       "backend": {
         "module": "backend.wasm",
-        "hooks": ["document.created"],
-        "cron": ["*/5 * * * *"],
-        "routes": ["POST /webhook"],
-        "events": ["other:thing"]
+        "hooks": [
+          "document.created"
+        ],
+        "cron": [
+          "*/5 * * * *"
+        ],
+        "routes": [
+          "POST /webhook"
+        ],
+        "events": [
+          "other:thing"
+        ],
+        "exports": {
+          "normalize": {
+            "input": {
+              "object": {
+                "title": "string",
+                "tags": {
+                  "optional": {
+                    "array": "string"
+                  }
+                }
+              }
+            },
+            "output": "string",
+            "description": "Tidy a title."
+          },
+          "ping": {}
+        }
+      },
+      "dependencies": {
+        "calendar": "^1.0"
       }
     },
     "problems": []
   },
   {
     "name": "not an object",
-    "manifest": ["id"],
-    "problems": [""]
+    "manifest": [
+      "id"
+    ],
+    "problems": [
+      ""
+    ]
   },
   {
     "name": "missing required fields",
-    "manifest": { "name": "nameless" },
-    "problems": ["id", "version", "kernel"]
+    "manifest": {
+      "name": "nameless"
+    },
+    "problems": [
+      "id",
+      "version",
+      "kernel"
+    ]
   },
   {
     "name": "bad id and version",
-    "manifest": { "id": "Bad_Id", "version": "1.0", "kernel": "^2.0" },
-    "problems": ["id", "version"]
+    "manifest": {
+      "id": "Bad_Id",
+      "version": "1.0",
+      "kernel": "^3.0"
+    },
+    "problems": [
+      "id",
+      "version"
+    ]
   },
   {
     "name": "a version that escapes its directory",
-    "manifest": { "id": "demo", "version": "1.0.0-../../../srv", "kernel": "^2.0" },
-    "problems": ["version"]
+    "manifest": {
+      "id": "demo",
+      "version": "1.0.0-../../../srv",
+      "kernel": "^3.0"
+    },
+    "problems": [
+      "version"
+    ]
   },
   {
     "name": "a version with an empty prerelease identifier",
-    "manifest": { "id": "demo", "version": "1.0.0-a..b", "kernel": "^2.0" },
-    "problems": ["version"]
+    "manifest": {
+      "id": "demo",
+      "version": "1.0.0-a..b",
+      "kernel": "^3.0"
+    },
+    "problems": [
+      "version"
+    ]
   },
   {
     "name": "kernel and library ranges",
@@ -111,37 +328,58 @@
       "id": "demo",
       "version": "1.0.0",
       "kernel": "latest",
-      "peerLibraries": { "react": ">=18.0.0", "yjs": "^13.x", "d3": 7 }
+      "peerLibraries": {
+        "react": ">=18.0.0",
+        "yjs": "^13.x",
+        "d3": 7
+      }
     },
-    "problems": ["kernel", "peerLibraries.yjs", "peerLibraries.d3"]
+    "problems": [
+      "kernel",
+      "peerLibraries.yjs",
+      "peerLibraries.d3"
+    ]
   },
   {
     "name": "frontend paths",
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^2.0",
-      "frontend": { "module": "../escape.mjs", "style": "/abs.css" }
+      "kernel": "^3.0",
+      "frontend": {
+        "module": "../escape.mjs",
+        "style": "/abs.css"
+      }
     },
-    "problems": ["frontend.module", "frontend.style"]
+    "problems": [
+      "frontend.module",
+      "frontend.style"
+    ]
   },
   {
     "name": "frontend without a module, and a null style",
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^2.0",
-      "frontend": { "style": null }
+      "kernel": "^3.0",
+      "frontend": {
+        "style": null
+      }
     },
-    "problems": ["frontend.module", "frontend.style"]
+    "problems": [
+      "frontend.module",
+      "frontend.style"
+    ]
   },
   {
     "name": "a dotted file name is still a relative path",
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^2.0",
-      "frontend": { "module": "frontend/index..mjs" }
+      "kernel": "^3.0",
+      "frontend": {
+        "module": "frontend/index..mjs"
+      }
     },
     "problems": []
   },
@@ -150,95 +388,97 @@
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^2.0",
+      "kernel": "^3.0",
       "capabilities": {
-        "documents": ["read", "writes"],
-        "http": { "hosts": "example.com" },
+        "documents": [
+          "read",
+          "writes"
+        ],
+        "http": {
+          "hosts": "example.com"
+        },
         "notifications": "yes"
       }
     },
-    "problems": ["capabilities.documents[1]", "capabilities.http.hosts", "capabilities.notifications"]
+    "problems": [
+      "capabilities.documents[1]",
+      "capabilities.http.hosts",
+      "capabilities.notifications"
+    ]
   },
   {
     "name": "config fields",
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^2.0",
+      "kernel": "^3.0",
       "config": {
-        "a": { "type": "date" },
-        "b": { "secret": true },
-        "c": { "type": "select", "options": [1] }
+        "a": {
+          "type": "date"
+        },
+        "b": {
+          "secret": true
+        },
+        "c": {
+          "type": "select",
+          "options": [
+            1
+          ]
+        }
       }
     },
-    "problems": ["config.a.type", "config.b.type", "config.c.options[0]"]
+    "problems": [
+      "config.a.type",
+      "config.b.type",
+      "config.c.options[0]"
+    ]
   },
   {
     "name": "backend",
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^2.0",
-      "backend": { "hooks": ["document.opened"], "cron": [5] }
-    },
-    "problems": ["backend.module", "backend.hooks[0]", "backend.cron[0]"]
-  },
-  {
-    "name": "port names and protocol references",
-    "manifest": {
-      "id": "demo",
-      "version": "1.0.0",
-      "kernel": "^2.0",
-      "provides": {
-        "Bad": { "protocol": "lm/main.view@1.0.0" },
-        "view": { "protocol": "lm/main.view@^1.0" },
-        "nav": { "protocol": "main.view@1.0.0" },
-        "hint": { "protocol": "lm/navbar.item@1.0.0", "order": "first" }
-      },
-      "consumes": {
-        "index": { "protocol": "lm/workspace-index@1.x" },
-        "router": { "protocol": "lm/router@^1.0", "needs": "navigate", "optional": 1 },
-        "header": { "protocol": "lm/shell.header@^1.0", "seats": 0 },
-        "panels": { "protocol": "lm/sidebar.panel@^1.0", "seats": 1.5 },
-        "missing": { "needs": [] }
+      "kernel": "^3.0",
+      "backend": {
+        "hooks": [
+          "document.opened"
+        ],
+        "cron": [
+          5
+        ]
       }
     },
     "problems": [
-      "provides.Bad",
-      "provides.view.protocol",
-      "provides.nav.protocol",
-      "provides.hint.order",
-      "consumes.index.protocol",
-      "consumes.router.needs",
-      "consumes.router.optional",
-      "consumes.header.seats",
-      "consumes.panels.seats",
-      "consumes.missing.protocol"
+      "backend.module",
+      "backend.hooks[0]",
+      "backend.cron[0]"
     ]
   },
   {
-    "name": "hot must be a boolean",
-    "manifest": { "id": "demo", "version": "1.0.0", "kernel": "^2.0", "hot": "yes" },
-    "problems": ["hot"]
-  },
-  {
     "name": "unknown top-level keys pass through",
-    "manifest": { "id": "demo", "version": "1.0.0", "kernel": "^2.0", "futureField": { "a": 1 }, "x-own": true },
+    "manifest": {
+      "id": "demo",
+      "version": "1.0.0",
+      "kernel": "^3.0",
+      "futureField": {
+        "a": 1
+      },
+      "x-own": true
+    },
     "problems": []
   },
   {
     "name": "metadata types",
-    "manifest": { "id": "demo", "version": "1.0.0", "kernel": "^2.0", "name": 5, "license": null },
-    "problems": ["name", "license"]
-  },
-  {
-    "name": "a protocol name that ends in a dot",
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^2.0",
-      "provides": { "view": { "protocol": "lm/main.@1.0.0" } }
+      "kernel": "^3.0",
+      "name": 5,
+      "license": null
     },
-    "problems": ["provides.view.protocol"]
+    "problems": [
+      "name",
+      "license"
+    ]
   }
 ]

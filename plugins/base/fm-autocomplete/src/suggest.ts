@@ -26,7 +26,7 @@
  * empty line is where Enter makes room, not where it picks a key.
  */
 
-import type { FmField, FmValueCount } from "@protocols/lm/workspace-index";
+import type { FmField, FmValueCount } from "plugin:indexer";
 
 /**
  * What the suggestions are drawn from, for one document: `indexer`'s answers with that

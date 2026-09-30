@@ -13,6 +13,10 @@
  * (`playwright.app.config.ts`), and this file adds a few dozen notes to it; several
  * earlier specs assert on workspace-wide counts, so arriving before them would make this
  * file's setup their flake.
+ *
+ * Each test starts from an empty workspace (everything else to Trash): the tree is
+ * virtual and draws only the rows on screen, so a test's notes must not depend on how
+ * many the specs before it left at the root.
  */
 
 import { expect, test, type APIRequestContext, type Locator, type Page } from "@playwright/test";
@@ -25,6 +29,7 @@ import {
   runCommand,
   showSidebar,
   signIn,
+  trashAllDocuments,
   waitSynced,
 } from "./helpers.js";
 
@@ -132,6 +137,10 @@ async function listed(
   await expect.poll(async () => childrenIn(await rawText(request, baseURL, id)), { timeout: 20_000 }).toEqual(expected);
   return await rawText(request, baseURL, id);
 }
+
+test.beforeEach(async ({ request, baseURL }) => {
+  await trashAllDocuments(request, baseURL as string);
+});
 
 // ---------------------------------------------------------------------------
 // Moving notes
@@ -513,8 +522,15 @@ test("at 390 px a note is moved through the sheet, and the panel holds the page"
   await openTree(page);
   await expect(row(page, title)).toBeVisible();
 
-  // Scoped to the sheet: `doc-list`'s row action is "Move to Trash".
-  await (await actions(page, title)).getByRole("menuitem", { name: "Move to…" }).click();
+  // A phone has no ⋯ on a row: a long press opens its menu, as a sheet. A right-click is
+  // the same `contextmenu` event.
+  const sheet = async (): Promise<Locator> => {
+    await row(page, title).click({ button: "right" });
+    const menu = page.getByRole("dialog");
+    await expect(menu).toBeVisible();
+    return menu;
+  };
+  await (await sheet()).getByRole("menuitem", { name: "Move to…" }).click();
   const picker = page.getByRole("dialog");
   await picker.getByRole("textbox", { name: "Filter notes" }).fill(toTitle);
   await picker.getByRole("button", { name: toTitle }).first().click();
@@ -525,7 +541,7 @@ test("at 390 px a note is moved through the sheet, and the panel holds the page"
 
   // The sheet is portalled out of the sidebar on purpose — `shell-ui` declares
   // `container-type: inline-size` there, which traps a `position: fixed` panel.
-  await actions(page, title);
+  await sheet();
   const overflow = await page.evaluate(() => ({
     scrollWidth: document.documentElement.scrollWidth,
     clientWidth: document.documentElement.clientWidth,

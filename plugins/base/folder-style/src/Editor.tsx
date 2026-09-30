@@ -1,6 +1,6 @@
 import { useState, type ReactElement } from "react";
 
-import type { Icons } from "@protocols/lm/icons";
+import type { Icons } from "plugin:icons";
 
 import { normalizeColor, resolveStyle, textOn, type FolderStyle } from "./styles.js";
 

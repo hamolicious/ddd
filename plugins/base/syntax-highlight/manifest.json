@@ -1,6 +1,6 @@
 {
   "id": "syntax-highlight",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "name": "Syntax highlighting",
   "description": "Highlights fenced code with tree-sitter grammars, in read mode and in the editor. Languages are installed when you need them.",
   "author": "Life Manager base distribution",
@@ -8,27 +8,11 @@
   "x-bundle": [
     "web-tree-sitter"
   ],
-  "kernel": "^2.0",
-  "hot": true,
-  "consumes": {
-    "languages": {
-      "protocol": "lm/syntax.language@^1.0"
-    }
-  },
-  "provides": {
-    "builtin": {
-      "protocol": "lm/syntax.language@1.0.0"
-    },
-    "code": {
-      "protocol": "lm/markdown.codeBlock@1.0.0"
-    },
-    "decorate": {
-      "protocol": "lm/editor.extension@1.0.0"
-    },
-    "settings": {
-      "protocol": "lm/settings.section@1.0.0",
-      "order": 46
-    }
+  "kernel": "^3.0",
+  "dependencies": {
+    "editor": "^2.0",
+    "markdown": "^3.0",
+    "settings": "^2.0"
   },
   "peerLibraries": {
     "@codemirror/state": "^6.0.0",

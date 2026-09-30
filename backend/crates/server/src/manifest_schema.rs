@@ -10,9 +10,10 @@
 //! `additionalProperties`, `propertyNames`, `items`, `enum`, `minimum`, `$ref` and a fixed
 //! set of `format`s. Unknown top-level keys are allowed on purpose, so an older server
 //! still accepts a manifest written for a newer one; `x-*` is the author's own space. The
-//! one exception is `x-removed`: fields a past contract had and a major removed
-//! (`dependencies`, `x-defines` in `@kernel` 2.0), refused with the message that names
-//! their replacement rather than silently ignored.
+//! one exception is `x-removed` (on any object node, including nested `$defs`): fields a
+//! past contract had and a major removed (`consumes`, `hot`, `backend.calls` in `@kernel`
+//! 3.0), refused with the message that names their replacement rather than silently
+//! ignored.
 
 use std::sync::OnceLock;
 
@@ -25,7 +26,7 @@ pub const MANIFEST_SCHEMA_JSON: &str = include_str!("../../../../schema/manifest
 /// One thing wrong with a manifest, in the same shape the web validator reports.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ManifestProblem {
-    /// Dotted path into the manifest (`frontend.module`, `consumes.index.needs[0]`); empty
+    /// Dotted path into the manifest (`frontend.module`, `dependencies.router`); empty
     /// for the manifest itself.
     pub field: String,
     pub message: String,
@@ -215,12 +216,7 @@ pub fn format_problem(format: &str, text: &str) -> Option<&'static str> {
         "semver" => crate::plugins::is_valid_version(text),
         "semver-range" => is_semver_range(text),
         "relative-path" => crate::plugins::safe_relative_path(text),
-        "port-name" => is_port_name(text),
-        "protocol-exact" => parse_protocol_ref(text)
-            .is_some_and(|(_, version)| crate::plugins::is_valid_version(version)),
-        "protocol-range" => {
-            parse_protocol_ref(text).is_some_and(|(_, range)| is_semver_range(range))
-        }
+        "plugin-ref" => parse_plugin_ref(text).is_some(),
         _ => true,
     };
     if ok {
@@ -231,41 +227,17 @@ pub fn format_problem(format: &str, text: &str) -> Option<&'static str> {
         "semver" => "must be a semver version",
         "semver-range" => "must be a semver range, e.g. ^1.0",
         "relative-path" => "must be a relative path inside the package, without `..`",
-        "port-name" => "must match ^[a-z][a-z0-9-]{0,63}$",
-        "protocol-exact" => "must be <publisher>/<name>@<version>, e.g. lm/router@1.0.0",
-        "protocol-range" => "must be <publisher>/<name>@<range>, e.g. lm/router@^1.0",
+        "plugin-ref" => "must be <plugin-id>@<version>, e.g. editor@2.0.0",
         _ => "is malformed",
     })
 }
 
-/// `^[a-z][a-z0-9-]{0,63}$`: a port name is local to its plugin and never contains `:`,
-/// which is what separates it from the plugin id in a wire (`graph:index`).
-pub fn is_port_name(name: &str) -> bool {
-    let mut chars = name.chars();
-    matches!(chars.next(), Some(first) if first.is_ascii_lowercase())
-        && name.len() <= 64
-        && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
-}
-
-/// `<publisher>/<name>`: publisher like a plugin id, name dotted and possibly camelCase
-/// (`lm/markdown.taskState`), because point names carry over as protocol names.
-pub fn is_protocol_id(id: &str) -> bool {
-    let Some((publisher, name)) = id.split_once('/') else {
-        return false;
-    };
-    let mut chars = name.chars();
-    crate::plugins::is_valid_plugin_id(publisher)
-        && matches!(chars.next(), Some(first) if first.is_ascii_lowercase() || first.is_ascii_digit())
-        && name.len() <= 128
-        && chars.all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.')
-        && !name.ends_with('.')
-        && !name.contains("..")
-}
-
-/// Split `lm/router@^1.0` into `("lm/router", "^1.0")` when the id part is well-formed.
-pub fn parse_protocol_ref(text: &str) -> Option<(&str, &str)> {
+/// Split `editor@2.0.0` into `("editor", "2.0.0")` when both halves are well-formed: a
+/// plugin id and an exact semver version (the `provides` format).
+pub fn parse_plugin_ref(text: &str) -> Option<(&str, &str)> {
     let (id, version) = text.split_once('@')?;
-    (is_protocol_id(id) && !version.is_empty()).then_some((id, version))
+    (crate::plugins::is_valid_plugin_id(id) && crate::plugins::is_valid_version(version))
+        .then_some((id, version))
 }
 
 /// `*`, or an optional operator (`^ ~ = >= <= > <`) and one to three numeric components

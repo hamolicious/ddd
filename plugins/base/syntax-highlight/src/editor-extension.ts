@@ -10,7 +10,7 @@
 import { RangeSetBuilder, StateEffect, type Extension, type Text } from "@codemirror/state";
 import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 
-import type { SyntaxApi } from "./index.js";
+import type { SyntaxApi } from "./api.js";
 
 /** A fenced code block in the document: its info string and where its body is. */
 export interface Fence {

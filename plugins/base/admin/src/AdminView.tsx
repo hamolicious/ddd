@@ -10,15 +10,12 @@
  * Tabs are a `tablist` with roving `tabindex`, arrow-key navigation and `aria-controls`, and
  * the active tab is in the URL (`#/admin/<section>`) so a reload and the back button both
  * behave.
- *
- * The Wiring tab is the graph editor (`wiring/`): it fills the rest of the view, so the
- * page does not scroll there, and it has no settings section.
  */
 
 import { OfflineCopyNote } from "../../_shared/offline-copy.js";
 import { adminOfflineCopy } from "./offline.js";
 import { useCallback } from "react";
-import type { ComponentType, KeyboardEvent as ReactKeyboardEvent, ReactElement, ReactNode } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, ReactElement, ReactNode } from "react";
 
 import type { AdminClient } from "./api.js";
 import { AuditSection } from "./Audit.js";
@@ -26,15 +23,13 @@ import { PluginsSection } from "./Plugins.js";
 import { ExportSection, OrphansSection } from "./Storage.js";
 import { InvitesSection, UsersSection } from "./Users.js";
 
-export const ADMIN_SECTIONS = ["users", "invites", "audit", "orphans", "plugins", "wiring", "workspace"] as const;
+export const ADMIN_SECTIONS = ["users", "invites", "audit", "orphans", "plugins", "workspace"] as const;
 
 export type AdminSectionId = (typeof ADMIN_SECTIONS)[number];
 
-/** The sections that are also settings sections: all but the graph, which needs the whole view. */
-export type SettingsSectionId = Exclude<AdminSectionId, "wiring">;
-export const SETTINGS_SECTIONS: readonly SettingsSectionId[] = ADMIN_SECTIONS.filter(
-  (id): id is SettingsSectionId => id !== "wiring",
-);
+/** Every admin section is also a settings section. */
+export type SettingsSectionId = AdminSectionId;
+export const SETTINGS_SECTIONS: readonly SettingsSectionId[] = ADMIN_SECTIONS;
 
 const LABELS: Readonly<Record<AdminSectionId, string>> = {
   users: "Users",
@@ -42,7 +37,6 @@ const LABELS: Readonly<Record<AdminSectionId, string>> = {
   audit: "Audit log",
   orphans: "Orphan files",
   plugins: "Plugins",
-  wiring: "Wiring",
   workspace: "Workspace",
 };
 
@@ -93,8 +87,6 @@ export interface AdminViewProps {
   readonly selfId: string;
   readonly section: AdminSectionId;
   readonly onSelectSection: (section: AdminSectionId) => void;
-  /** The Wiring tab's body: the graph editor. */
-  readonly wiring: ComponentType;
 }
 
 export function AdminView({
@@ -103,7 +95,6 @@ export function AdminView({
   selfId,
   section,
   onSelectSection,
-  wiring: Wiring,
 }: AdminViewProps): ReactElement {
   const onKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -132,10 +123,8 @@ export function AdminView({
     );
   }
 
-  // The graph takes the rest of the view's height and scrolls nothing but itself.
-  const full = section === "wiring";
   return (
-    <section className={`admin:flex admin:flex-col admin:gap-3 admin:p-4 admin:font-sans admin:text-text admin:[&_h2]:m-0 admin:[&_:focus-visible]:outline-2 admin:[&_:focus-visible]:outline-offset-1 admin:[&_:focus-visible]:outline-focus${full ? " admin:h-full admin:min-h-0 admin:compact:p-2 admin:compact:gap-2" : ""}`} aria-labelledby="admin-heading">
+    <section className={`admin:flex admin:flex-col admin:gap-3 admin:p-4 admin:font-sans admin:text-text admin:[&_h2]:m-0 admin:[&_:focus-visible]:outline-2 admin:[&_:focus-visible]:outline-offset-1 admin:[&_:focus-visible]:outline-focus`} aria-labelledby="admin-heading">
       <h2 id="admin-heading">Administration</h2>
 
       <div className="admin:flex admin:flex-wrap admin:gap-1 admin:border-b admin:border-border" role="tablist" aria-label="Administration sections" onKeyDown={onKeyDown}>
@@ -156,24 +145,13 @@ export function AdminView({
         ))}
       </div>
 
-      {section === "wiring" ? (
-        <div
-          role="tabpanel"
-          id="admin-panel-wiring"
-          aria-labelledby="admin-tab-wiring"
-          className="admin:relative admin:min-h-0 admin:flex-1 admin:overflow-hidden admin:rounded admin:border admin:border-border"
-        >
-          <Wiring />
-        </div>
-      ) : (
-        <div role="tabpanel" id={`admin-panel-${section}`} aria-labelledby={`admin-tab-${section}`}>
-          <AdminSectionBody
-            section={section}
-            client={client}
-            selfId={selfId}
-          />
-        </div>
-      )}
+      <div role="tabpanel" id={`admin-panel-${section}`} aria-labelledby={`admin-tab-${section}`}>
+        <AdminSectionBody
+          section={section}
+          client={client}
+          selfId={selfId}
+        />
+      </div>
     </section>
   );
 }

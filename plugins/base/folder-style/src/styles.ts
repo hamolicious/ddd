@@ -33,7 +33,7 @@ import {
 export interface FolderStyle {
   /** `#rrggbb`, lower case. */
   readonly background?: string;
-  /** An `lm/icons` name. */
+  /** An icon name from the `icons` plugin. */
   readonly icon?: string;
 }
 

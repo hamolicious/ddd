@@ -1,51 +1,20 @@
 {
   "id": "folder-style",
-  "version": "2.0.0",
+  "version": "4.0.0",
   "name": "Folder colors and icons",
   "description": "Give any note in the folder tree a color and an icon, from its menu, with defaults for the rest in Settings.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
-  "kernel": "^2.0",
-  "hot": true,
-  "consumes": {
-    "icons": {
-      "protocol": "lm/icons@^1.0",
-      "needs": [
-        "Icon",
-        "Picker"
-      ],
-      "optional": true
-    },
-    "menu": {
-      "protocol": "lm/context-menu@^1.0",
-      "needs": [
-        "openSheet"
-      ]
-    },
-    "index": {
-      "protocol": "lm/workspace-index@^1.0",
-      "needs": [
-        "fmFields",
-        "fmValues",
-        "documents",
-        "subscribe",
-        "version"
-      ],
-      "optional": true
-    }
+  "kernel": "^3.0",
+  "dependencies": {
+    "context-menu": "^2.0",
+    "folders": "^4.0",
+    "indexer": "^2.0",
+    "settings": "^2.0"
   },
-  "provides": {
-    "look": {
-      "protocol": "lm/folders.decoration@2.0.0"
-    },
-    "edit": {
-      "protocol": "lm/folders.menu-item@2.0.0"
-    },
-    "settings": {
-      "protocol": "lm/settings.section@1.0.0",
-      "order": 35
-    }
+  "optionalDependencies": {
+    "icons": "^2.0"
   },
   "peerLibraries": {
     "react": "^18.0.0"

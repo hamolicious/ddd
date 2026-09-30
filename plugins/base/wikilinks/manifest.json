@@ -1,0 +1,29 @@
+{
+  "id": "wikilinks",
+  "version": "2.0.0",
+  "name": "Wikilinks",
+  "description": "Type [[ to link a note, or ![[ to embed one; the editor shows each linked note's title above its link.",
+  "author": "Life Manager base distribution",
+  "license": "MIT OR Apache-2.0",
+  "x-tailwind": {
+    "prefix": "wikilinks"
+  },
+  "kernel": "^3.0",
+  "dependencies": {
+    "editor": "^2.0",
+    "indexer": "^2.0",
+    "shell-ui": "^3.0"
+  },
+  "optionalDependencies": {
+    "router": "^2.0"
+  },
+  "peerLibraries": {
+    "@codemirror/state": "^6.0.0",
+    "@codemirror/view": "^6.0.0",
+    "react": "^18.0.0"
+  },
+  "frontend": {
+    "module": "frontend/index.mjs",
+    "style": "frontend/style.css"
+  }
+}

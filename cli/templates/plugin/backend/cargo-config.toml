@@ -1,0 +1,4 @@
+# `cargo build` in this directory produces .wasm with no flags, and rust-analyzer
+# resolves the Extism host imports instead of reporting them as link errors.
+[build]
+target = "wasm32-unknown-unknown"

@@ -1,6 +1,6 @@
 {
   "id": "native-preview",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "name": "Browser preview",
   "description": "Viewers for every file type a browser shows by itself: images, PDF, audio, video and plain text.",
   "author": "Life Manager base distribution",
@@ -8,12 +8,9 @@
   "x-tailwind": {
     "prefix": "nativepreview"
   },
-  "kernel": "^2.0",
-  "hot": true,
-  "provides": {
-    "viewers": {
-      "protocol": "lm/attachments.viewer@1.0.0"
-    }
+  "kernel": "^3.0",
+  "dependencies": {
+    "attachments": "^3.0"
   },
   "peerLibraries": {
     "react": "^18.0.0"

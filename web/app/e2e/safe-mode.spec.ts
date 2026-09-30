@@ -51,8 +51,9 @@ const SABOTAGE = `export default function activate() {
  * It offers both shapes that have to be covered: a `component` (which `shell-ui` wraps in
  * `kernel.ui.boundary`) and an `icon`, which is a `ReactNode` and therefore *cannot* be
  * wrapped as a component — the case that was rendered bare, outside every boundary. Since
- * `@kernel` 2.0 an item reaches a host only through a declared port, so the sabotage swaps
- * the manifest too (`withPorts`) and has the server rescan.
+ * `@kernel` 3.0 an item reaches a host through the host's exported `add*` function, and a
+ * static `plugin:` import must be a declared dependency, so the sabotage swaps the manifest
+ * too (`withHosts`) and has the server rescan.
  */
 const RENDER_SABOTAGE = `import { createElement } from "react";
 
@@ -60,17 +61,20 @@ const Boom = () => {
   throw new Error("extra-task-states: deliberately thrown while rendering");
 };
 
-export default function activate(kernel) {
-  kernel.ports.offer("nav", {
+import { addItem } from "plugin:header";
+import { addSidebarPanel } from "plugin:shell-ui";
+
+export default function activate() {
+  addItem({
     id: "extra-task-states.broken-icon",
     label: "Broken icon",
     side: "end",
-    // \`shell-ui\` renders an item's icon only inside the actionable form, so the item
+    // The header renders an item's icon only inside the actionable form, so the item
     // needs an \`onSelect\` for this to be the case under test at all.
     onSelect: () => undefined,
     icon: createElement(Boom),
   });
-  kernel.ports.offer("panel", {
+  addSidebarPanel({
     id: "extra-task-states.broken-panel",
     title: "Broken panel",
     component: Boom,
@@ -78,21 +82,17 @@ export default function activate(kernel) {
 }
 `;
 
-/** The served manifest, with the two provided ports the render sabotage offers on. */
-function withPorts(manifest: string): string {
-  const parsed = JSON.parse(manifest) as { provides?: Record<string, unknown> };
-  parsed.provides = {
-    ...parsed.provides,
-    nav: { protocol: "lm/navbar.item@1.0.0" },
-    panel: { protocol: "lm/sidebar.panel@1.0.0" },
-  };
+/** The served manifest, depending on the two hosts the render sabotage adds to. */
+function withHosts(manifest: string): string {
+  const parsed = JSON.parse(manifest) as { dependencies?: Record<string, string> };
+  parsed.dependencies = { ...parsed.dependencies, header: "*", "shell-ui": "*" };
   return `${JSON.stringify(parsed, null, 2)}\n`;
 }
 
 /**
  * Make the server read the plugin's directory again. The registry is cached; disabling and
- * enabling through the admin API rescans it (and writes two wiring versions, which a fresh
- * page boots from).
+ * enabling through the admin API rescans it (and sends two `plugins.changed`, which reload
+ * any open page).
  */
 async function rescan(request: APIRequestContext, base: string): Promise<void> {
   const login = await request.post(`${base}/api/auth/login`, { data: ADMIN });
@@ -119,12 +119,17 @@ test.afterAll(() => {
 });
 
 /**
- * The welcome document, found in the folder tree rather than the list: the list shows
- * the newest 50, and by the time this spec runs the suite has made more than that, so
- * the oldest document (this one) is on page two.
+ * The welcome document is there, found by searching the list for it: by the time this spec
+ * runs the suite has made far more documents than the list's first page or the folder
+ * tree's screenful (both virtual) shows, and this one is the oldest.
  */
-function welcomeDocument(page: Page) {
-  return page.getByRole("tree", { name: "Folders" }).getByRole("treeitem", { name: "Welcome to Life Manager", exact: true });
+async function expectWelcomeDocument(page: Page): Promise<void> {
+  const search = page.getByRole("searchbox", { name: "Search documents" });
+  await expect(search).toBeVisible();
+  await search.fill("Welcome to Life Manager");
+  await expect(
+    page.locator("#shell-main").getByRole("button", { name: "Welcome to Life Manager", exact: true }),
+  ).toBeVisible();
 }
 
 async function freshPage(browser: Browser, baseURL: string) {
@@ -145,7 +150,7 @@ test("a broken plugin fails alone, and safe mode boots past it", async ({ browse
 
       // The app is alive: the shell, the list and the welcome documents are all there.
       await expect(page.getByRole("banner")).toBeVisible();
-      await expect(welcomeDocument(page)).toBeVisible();
+      await expectWelcomeDocument(page);
 
       // And it says so: **one aggregated notice**, not one per plugin (SPEC §6.4),
       // with a route to admin.
@@ -191,7 +196,7 @@ test("a broken plugin fails alone, and safe mode boots past it", async ({ browse
     try {
       await signIn(page, ADMIN, { path: "/?safe=1" });
       await expect(page.getByRole("banner")).toBeVisible();
-      await expect(welcomeDocument(page)).toBeVisible();
+      await expectWelcomeDocument(page);
       // The broken plugin is not base, so it was never imported and there is nothing
       // to report: no failure notice at all.
       await expect(page.getByText(/plugin[s]? failed to load/i)).toHaveCount(0);
@@ -254,7 +259,7 @@ test("a broken plugin fails alone, and safe mode boots past it", async ({ browse
     const { context, page } = await freshPage(browser, base);
     try {
       await signIn(page, ADMIN);
-      await expect(welcomeDocument(page)).toBeVisible();
+      await expectWelcomeDocument(page);
       // No failure notice any more — the recovery needed nothing but the file.
       await expect(page.getByText(/plugin[s]? failed to load/i)).toHaveCount(0);
     } finally {
@@ -270,7 +275,7 @@ test("a plugin that throws while rendering costs a chip, not the application", a
 }) => {
   const base = baseURL as string;
   writeFileSync(brokenModule, RENDER_SABOTAGE);
-  writeFileSync(brokenManifest, withPorts(originalManifest));
+  writeFileSync(brokenManifest, withHosts(originalManifest));
   await rescan(request, base);
   const { context, page } = await freshPage(browser, base);
   try {
@@ -280,7 +285,7 @@ test("a plugin that throws while rendering costs a chip, not the application", a
     // the contributed `icon` were wrapped, one throw here unmounted the React root and
     // `#root` was empty — no shell, no notice strip, no way out.
     await expect(page.getByRole("banner")).toBeVisible();
-    await expect(welcomeDocument(page)).toBeVisible();
+    await expectWelcomeDocument(page);
 
     // Two in-place chips: one for the panel component, one for the icon — the icon being
     // the case no `boundary(component)` call could reach, because a `ReactNode` is not a
@@ -303,11 +308,11 @@ test("a plugin that throws while rendering costs a chip, not the application", a
 });
 
 /**
- * The way back is the bare manager (PLUGIN-PROTOCOLS §7, §10). A plugin an admin — or a
- * bad apply — switched off is plugged back in from `?safe=bare`, the one screen no plugin
- * can break, and a normal boot afterwards has it enabled again.
+ * The way back is the bare manager. A plugin an admin switched off is enabled again from
+ * `?safe=bare`, the one screen no plugin can break, and a normal boot afterwards has it
+ * enabled again.
  */
-test("an admin plugs a disabled plugin back in from the bare manager", async ({
+test("an admin enables a disabled plugin from the bare manager", async ({
   browser,
   baseURL,
   request,
@@ -324,7 +329,7 @@ test("an admin plugs a disabled plugin back in from the bare manager", async ({
   });
   expect(disabled.ok(), `disable -> ${disabled.status()} ${await disabled.text()}`).toBe(true);
 
-  // --- 1. `?safe=bare` as the admin: the row would not load, and offers Plug in. -------
+  // --- 1. `?safe=bare` as the admin: the row would not load, and offers Enable. -------
   {
     const { context, page } = await freshPage(browser, base);
     try {
@@ -340,16 +345,18 @@ test("an admin plugs a disabled plugin back in from the bare manager", async ({
       await expect(row).toBeVisible();
       await expect(row.locator("td").last()).toContainText("no —");
 
-      // The write path is on screen: the wiring history with a live version, and the
-      // footer names that version beside the kernel contract.
-      await expect(page.getByRole("heading", { name: "Wiring" })).toBeVisible();
-      await expect(page.getByText(/^Live version/)).toBeVisible();
-      await expect(page.locator(".lm-bare footer")).toContainText("wiring version");
+      await expect(page.locator(".lm-bare footer")).toContainText("Kernel contract");
 
-      await row.getByRole("button", { name: "Plug in extra-task-states" }).click();
-      // The list refetches: it would load now, and there is nothing left to plug in.
-      await expect(row.locator("td").last()).toHaveText("yes");
-      await expect(row.getByRole("button", { name: /Plug in/ })).toHaveCount(0);
+      // Enabling changes the plugin set, so the server sends `plugins.changed` and this
+      // page reloads — back into `?safe=bare`, where the row now would load.
+      const reloaded = page.waitForEvent("load");
+      await row.getByRole("button", { name: "Enable extra-task-states" }).click();
+      await reloaded;
+      const after = page
+        .locator(".lm-bare-table tr")
+        .filter({ has: page.getByRole("rowheader", { name: "extra-task-states", exact: true }) });
+      await expect(after.locator("td").last()).toHaveText("yes", { timeout: 30_000 });
+      await expect(after.getByRole("button", { name: /^Enable/ })).toHaveCount(0);
     } finally {
       await context.close();
     }

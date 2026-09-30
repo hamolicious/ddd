@@ -14,15 +14,15 @@
 
 import { useEffect, useId, useState, type ReactNode } from "react";
 
-import type { ColorScheme, Kernel, SlotHost } from "@kernel";
-import type { Theme } from "@protocols/lm/themes.theme";
+import type { ColorScheme, Kernel, Registry } from "@kernel";
+import type { Theme } from "./api.js";
 
 import type { ThemesController } from "./controller.js";
 
 export interface ThemePickerProps {
   readonly kernel: Kernel;
-  /** The `themes` host (`lm/themes.theme`): every installed theme, in seat order. */
-  readonly themes: SlotHost<Theme>;
+  /** Every installed theme (the `addTheme` registry). */
+  readonly themes: Registry<Theme>;
   readonly controller: ThemesController;
 }
 

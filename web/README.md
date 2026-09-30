@@ -142,21 +142,22 @@ wasm target and no `rustup` to add one).
    the single `kernel.ui.mount` inside its own `activate()`, so **the shell appears while
    the plugins behind it are still arriving** — deliberately, because one slow plugin must
    not hold the whole app behind a boot screen. The consequence is a rule, not a caveat:
-   *every host of a slot has to be live.* A component that reads
-   `kernel.ports.collect(port).get()` once at first render and never subscribes will be
+   *every host of a registry has to be live.* A component that reads
+   `registry.get()` once at first render and never subscribes (`useRegistry` does) will be
    permanently missing whatever landed after it. (This is what `app/e2e/helpers.ts`'s `pluginsActivated()` waits
    for, and how two such bugs were found.)
 5. **Import map.** In production the server injects it into `index.html` with the response's
    CSP nonce; in `vite dev` there is no server injection, so `app/src/loader/importmap.ts`
    installs one over this bundle's own modules before the first plugin is imported. Either
-   way there is exactly one React, one Yjs and one `@kernel`.
-6. **Load, in topological order.** `GET /api/plugins`, resolve the dependency graph, import
-   each module, link its `style.css`, call `activate(kernel)`, and register the return value
-   as the plugin's API for declared dependents.
+   way there is exactly one React, one Yjs and one `@kernel`, and a `plugin:<id>` entry per
+   plugin in the load set.
+6. **Load, in dependency order.** `GET /api/plugins` carries the server's order
+   (`load.normal`, or `load.safe` for `?safe=1`); the loader imports each module by its
+   `plugin:<id>` specifier, links its `style.css` and calls `activate(kernel)`.
 
 Failure is contained at every step (SPEC §6.4): an `activate()` throw marks that plugin
-failed, withdraws what it registered (**including the extension points it defined**, so a
-replacement can claim them), **skips all transitive dependents**, and produces **one
+failed, withdraws what it registered (its items in every host's registry, its
+subscriptions, its mount), **skips all transitive dependents**, and produces **one
 aggregated notice**; a render-time throw becomes an in-place "plugin X failed" chip from the
 kernel's error boundary, *and* a line in the notices.
 
@@ -199,8 +200,8 @@ my-plugin/
 {
   "id": "my-plugin",            // must equal the directory name
   "version": "1.0.0",
-  "kernel": "^2.0",             // checked at install *and* re-checked by the loader at boot
-  "provides": { "mode": { "protocol": "lm/document.mode@1.0.0" } },  // your ports (PLUGIN-PROTOCOLS §4)
+  "kernel": "^3.0",             // checked at install *and* re-checked by the loader at boot
+  "dependencies": { "document-surface": "^2.0" },  // what you import as `plugin:<id>`
   "peerLibraries": { "react": "^18.0.0", "yjs": "^13.0.0" },
   "frontend": { "module": "frontend/index.mjs", "style": "frontend/style.css" }
 }
@@ -214,13 +215,14 @@ preference:
   *generated file* rather than at `kernel-api/src`, which is what makes "builds against
   `kernel.d.ts` only" a checked claim — if the generator drops something the examples use,
   that config fails and `web/tsconfig.json` does not.
-- **Never import another plugin's source.** Declare a port in the manifest (`consumes` for
-  a service or a slot you host, `provides` for one you serve or offer on) and reach it with
-  `kernel.ports`. Types come from the protocol's own package, `@protocols/lm/<name>`, served
-  at `/protocols/<id>/<version>/index.d.ts` — the kernel knows protocols only as data
-  (SPEC §2). `alt-editor` shows the shape of that.
-- **The blessed runtime layer stays external** (`react`, `react-dom`, `yjs`, `@kernel`, the
-  CodeMirror and unified/remark rows). `plugins/base/_shared/vite.plugin-config.mjs` is the
+- **Reach another plugin through its specifier, never its files.** `import { addMode } from
+  "plugin:document-surface"`, and list the plugin under `dependencies`; an optional one goes
+  under `optionalDependencies` and is reached only with `await kernel.plugins.optional(id)`.
+  Types come from the plugin's generated `frontend/index.d.ts` (`declare module
+  "plugin:<id>"`). Anything you want others to use is a named export of your
+  `src/index.tsx`. `alt-editor` shows the shape of that.
+- **The blessed runtime layer and other plugins stay external** (`react`, `react-dom`,
+  `yjs`, `@kernel`, the CodeMirror and unified/remark rows, every `plugin:<id>`). `plugins/base/_shared/vite.plugin-config.mjs` is the
   reference build config and already does this; bundling any of them gives the plugin its
   own React or its own Yjs, and the failure reads as a kernel bug. Anything *outside* that
   list you bundle normally — that is allowed, and the cost is bundle size, not correctness.

@@ -325,6 +325,20 @@ class ShellBridge {
     return call('filesystem', 'importFile', options || {});
   });
 
+  var folder = {};
+  define(folder, 'current', 'folder.current', function () { return call('folder', 'current', {}); });
+  define(folder, 'choose', 'folder.choose', function () { return call('folder', 'choose', {}); });
+  define(folder, 'forget', 'folder.forget', function () { return call('folder', 'forget', {}); });
+  define(folder, 'list', 'folder.list', function () {
+    return call('folder', 'list', {}).then(function (entries) {
+      return Array.isArray(entries) ? entries : [];
+    });
+  });
+  define(folder, 'read', 'folder.read', function (p) { return call('folder', 'read', p || {}); });
+  define(folder, 'write', 'folder.write', function (p) { return call('folder', 'write', p || {}); });
+  define(folder, 'move', 'folder.move', function (p) { return call('folder', 'move', p || {}); });
+  define(folder, 'remove', 'folder.remove', function (p) { return call('folder', 'remove', p || {}); });
+
   var notifications = {};
   if (has('notifications.permission')) {
     notifications.permission = function () { return permission; };
@@ -375,6 +389,7 @@ class ShellBridge {
     bootFailed: function (reason) { return call('boot', 'failed', { reason: String(reason || '') }); },
     auth: auth,
     filesystem: filesystem,
+    folder: folder,
     notifications: notifications
   };
   Object.defineProperty(window, 'shell', { value: Object.freeze(shell), writable: false, configurable: true });

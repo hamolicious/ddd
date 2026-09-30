@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { FmField } from "@protocols/lm/workspace-index";
+import type { FmField } from "plugin:indexer";
 
 import { indexNoteSource, indexSuggestions, inferKind, type ConditionIndex } from "./conditions-index.js";
 

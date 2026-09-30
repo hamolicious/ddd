@@ -94,15 +94,26 @@ export async function waitSynced(page: Page): Promise<void> {
   );
 }
 
-/** Move one document-list row to Trash through its ⋯ menu. */
+/**
+ * Move one document-list row to Trash through its ⋯ menu. A note the folder tree knows
+ * offers `folders`' "Delete", which asks first; any other document, "Move to Trash".
+ */
 export async function trashRow(page: Page, row: Locator): Promise<void> {
   await row.getByRole("button", { name: /^Actions for/ }).click();
-  await page.getByRole("menuitem", { name: /^Move to Trash/ }).click();
+  const item = page.getByRole("menuitem", { name: /^(Move to Trash|Delete)/ });
+  const label = (await item.first().innerText()).trim();
+  await item.first().click();
+  if (label.startsWith("Delete")) {
+    await page.getByRole("dialog").getByRole("button", { name: "Move to Trash" }).click();
+  }
 }
 
-/** The document list's rows, as the list renders them. */
+/**
+ * The all-documents page's rows: `table`'s results table. Virtual, so only the rows in
+ * its box are in the DOM. (Trash is `doc-list`'s own list: `.doclist-item`.)
+ */
 export function docRows(page: Page): Locator {
-  return page.locator(".doclist-item");
+  return page.locator(".search-item");
 }
 
 /** Open the command palette (`Mod+K`) and run the command whose title matches. */
@@ -176,6 +187,25 @@ export async function rawText(
   expect(response.ok(), `GET /api/documents/${id} -> ${response.status()}`).toBe(true);
   const body = (await response.json()) as { content: string };
   return body.content;
+}
+
+/**
+ * Move every document to Trash over REST, machine-owned ones (settings) excepted: a
+ * workspace as empty as a user's first, for a spec whose surface is virtual (the folder
+ * tree draws a screenful) and would otherwise depend on what the specs before it made.
+ */
+export async function trashAllDocuments(request: APIRequestContext, baseURL: string): Promise<void> {
+  await ensureApiSession(request, baseURL);
+  const response = await request.get(`${baseURL}/api/documents?limit=500`);
+  expect(response.ok(), `GET /api/documents -> ${response.status()}`).toBe(true);
+  const { documents } = (await response.json()) as {
+    documents: { id: string; fm: { machine?: unknown } | null }[];
+  };
+  for (const document of documents) {
+    if (document.fm?.machine === true) continue;
+    const deleted = await request.delete(`${baseURL}/api/documents/${document.id}`);
+    expect(deleted.ok(), `DELETE ${document.id} -> ${deleted.status()}`).toBe(true);
+  }
 }
 
 /** Create a document over REST with exact text — the fixture for splice assertions. */

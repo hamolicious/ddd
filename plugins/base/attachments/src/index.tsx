@@ -2,22 +2,20 @@
  * `attachments` — files pasted into the editor become attachments (SPEC §3.6), and
  * every embedded file is shown by a viewer for its type.
  *
- * **Viewers.** The `viewers` port hosts `lm/attachments.viewer`: viewers by file extension,
- * in the wiring's seat order; this plugin draws none itself (`native-preview` is the base
- * distribution's). It offers the `markdown.attachment` renderer that picks one
- * (`view.tsx`), so an `![name](attachment://…)` in Read mode and a wrapper document's
- * full page both go through it. When several viewers claim a type, the first seat shows
- * it unless Settings → Attachments picks another.
+ * **Viewers.** `addViewer` takes viewers by file extension from any plugin, in `order`;
+ * this plugin draws none itself (`native-preview` is the base distribution's). It adds the
+ * attachment renderer that picks one to `plugin:markdown` (`view.tsx`), so an
+ * `![name](attachment://…)` in Read mode and a wrapper document's full page both go
+ * through it. When several viewers claim a type, the first in `order` shows it unless
+ * Settings → Attachments picks another.
  *
- * **`/attach`** (a `slash.command`) opens the device's file picker and uploads what is
- * chosen into the spot where it was typed, the same way a paste does.
+ * **`/attach`** (added to `plugin:slash-commands`) opens the device's file picker and
+ * uploads what is chosen into the spot where it was typed, the same way a paste does.
  *
- * It consumes no service: everything it offers goes to whichever host is wired to it, and
- * a port with no host is simply unheard. So turning `editor` off costs pasting, not the
- * viewers, and turning this plugin off leaves `markdown` drawing files the way it did
- * before. The uploader itself is served on the `uploads` port (`lm/attachments`).
+ * **`upload`** is the uploader for other plugins. A wrapper document the server made is
+ * filed where "Files go to" says, through `folders` when it is enabled (optional).
  *
- * A handler offered on `editor.paste` (pastes and drops alike): when the
+ * A paste handler added to `plugin:editor` (pastes and drops alike): when the
  * clipboard or the drag holds files, each one is uploaded in chunks (`uploads.ts`) and a
  * placeholder holds its place in the text until the upload is done — an embed of the file
  * as it is on this device, so Read mode already shows it (`queue.ts`). Each upload has a
@@ -44,14 +42,12 @@
  */
 
 import type { Kernel, SettingsValue } from "@kernel";
+import { addPasteHandler, type EditorInsertion } from "plugin:editor";
+import { addAttachmentRenderer } from "plugin:markdown";
+import { addSection } from "plugin:settings";
+import { addSlashCommand } from "plugin:slash-commands";
 
-import type { Attachments } from "@protocols/lm/attachments";
-import type { Folders } from "@protocols/lm/folders";
-import type { AttachmentViewer } from "@protocols/lm/attachments.viewer";
-import type { EditorInsertion, EditorPaste } from "@protocols/lm/editor.paste";
-import type { MarkdownAttachment } from "@protocols/lm/markdown.attachment";
-import type { SettingsSection } from "@protocols/lm/settings.section";
-import type { SlashCommand } from "@protocols/lm/slash.command";
+import { viewerRegistry, type AttachmentViewer, type UploadOptions, type UploadResponse } from "./api.js";
 
 import { extensionOf, pasteAs, schema, settingKey } from "./kinds.js";
 import { newToken, waitingPlaceholder, type WaitingUpload } from "./queue.js";
@@ -60,10 +56,40 @@ import { createAttachmentsApi } from "./uploader.js";
 import { FileTypeSettings } from "./FileTypeSettings.js";
 import { createAttachmentView, createViewers } from "./view.js";
 
+export type {
+  Attachments,
+  AttachmentViewer,
+  AttachmentViewerProps,
+  UploadOptions,
+  UploadResponse,
+} from "./api.js";
+
+type FoldersModule = typeof import("plugin:folders");
+
+/**
+ * Add a viewer (or several) for files by extension. The first in `order` claiming an
+ * extension shows it, unless the user picked another in Settings → Attachments. Returns
+ * the function that takes it out again.
+ */
+export const addViewer: (items: AttachmentViewer | readonly AttachmentViewer[]) => () => void = viewerRegistry.add;
+
+/** The uploader of the running activation. */
+let uploader: ((blob: Blob, name: string, options?: UploadOptions) => Promise<UploadResponse>) | undefined;
+
+/**
+ * Upload one file through the server's resumable chunk protocol. With `wrapper`, the
+ * server also makes a document for it, filed where "Files go to" says when `folders` is
+ * enabled.
+ */
+export function upload(blob: Blob, name: string, options?: UploadOptions): Promise<UploadResponse> {
+  if (!uploader) return Promise.reject(new Error("attachments is not active yet"));
+  return uploader(blob, name, options);
+}
+
 /** The uploads of the running activation, for `deactivate` to stop. */
 let liveUploads: Uploads | undefined;
 
-export default function activate(kernel: Kernel): Attachments {
+export default function activate(kernel: Kernel): void {
   try {
     kernel.settings.defineSchema(schema());
   } catch (error) {
@@ -78,11 +104,10 @@ export default function activate(kernel: Kernel): Attachments {
     }
   };
 
-  // The `viewers` host: every viewer wired in, in seat order. The shape and the duplicate
-  // `id` rule come from the `lm/attachments.viewer` protocol package.
-  const viewers = createViewers(kernel, kernel.ports.collect<AttachmentViewer>("viewers"), read);
+  // Every viewer added, in `order`.
+  const viewers = createViewers(kernel, viewerRegistry, read);
 
-  kernel.ports.offer<MarkdownAttachment>("embed", {
+  addAttachmentRenderer({
     id: "attachments",
     component: createAttachmentView(kernel, viewers),
   });
@@ -131,7 +156,7 @@ export default function activate(kernel: Kernel): Attachments {
     });
   };
 
-  kernel.ports.offer<EditorPaste>("paste", {
+  addPasteHandler({
     id: "attachments.upload",
     paste: (event) => {
       if (event.files.length === 0) return false;
@@ -140,7 +165,7 @@ export default function activate(kernel: Kernel): Attachments {
     },
   });
 
-  kernel.ports.offer<SlashCommand>("attach", {
+  addSlashCommand({
     id: "attachments.attach",
     title: "Attach file",
     description: "Upload files from this device",
@@ -170,7 +195,7 @@ export default function activate(kernel: Kernel): Attachments {
     },
   });
 
-  kernel.ports.offer<SettingsSection>("settings", {
+  addSection({
     id: "attachments",
     title: "Attachments",
     order: 40,
@@ -178,31 +203,34 @@ export default function activate(kernel: Kernel): Attachments {
     component: () => <FileTypeSettings kernel={kernel} viewers={viewers} />,
   });
 
-  // The `lm/attachments` service, on the `uploads` port; returned too, for the loader.
   // A wrapper document the server made is filed where "Files go to" says — through
-  // `folders`, which owns that setting, when it is wired.
+  // `folders`, which owns that setting, when it is enabled.
+  let folders: FoldersModule | undefined;
+  void kernel.plugins
+    .optional<FoldersModule>("folders")
+    .then((module) => {
+      folders = module;
+    })
+    .catch((cause: unknown) => kernel.log.warn("folders unavailable; new file documents stay unfiled", cause));
+
   const sender = createAttachmentsApi(kernel.session.fetch.bind(kernel.session));
-  const api: Attachments = {
-    upload: async (blob, name, options) => {
-      const response = await sender.upload(blob, name, options);
-      if (response.document_id !== undefined && kernel.ports.bound("folders")) {
-        await kernel.ports
-          .use<Pick<Folders, "fileNew">>("folders")
-          .fileNew(response.document_id, "file")
-          .catch((cause: unknown) => kernel.log.warn("could not file the new file document", cause));
-      }
-      return response;
-    },
+  uploader = async (blob, name, options) => {
+    const response = await sender.upload(blob, name, options);
+    if (response.document_id !== undefined && folders) {
+      await folders
+        .fileNew(response.document_id, "file")
+        .catch((cause: unknown) => kernel.log.warn("could not file the new file document", cause));
+    }
+    return response;
   };
-  kernel.ports.serve<Attachments>("uploads", api);
-  return api;
 }
 
 /**
- * What the kernel does not withdraw: the upload timers and the transfers in flight. A file
+ * Stop the upload timers and the transfers in flight. A file
  * that was kept on this device carries on from its last chunk when the plugin next starts.
  */
 export function deactivate(): void {
   liveUploads?.dispose();
   liveUploads = undefined;
+  uploader = undefined;
 }

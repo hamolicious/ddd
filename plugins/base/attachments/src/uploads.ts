@@ -22,7 +22,7 @@
 
 import type { Kernel, NoticeAction } from "@kernel";
 
-import type { EditorInsertion } from "@protocols/lm/editor.paste";
+import type { EditorInsertion } from "plugin:editor";
 
 import { reference } from "./kinds.js";
 import { QUEUE_LIMIT_BYTES, transfers, waiting, type TransferState, type WaitingUpload } from "./queue.js";

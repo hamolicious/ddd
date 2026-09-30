@@ -13,7 +13,7 @@
 
 import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 
-import type { LinkProps } from "@protocols/lm/router";
+import type { LinkProps } from "./api.js";
 
 import { fullPath } from "./match.js";
 

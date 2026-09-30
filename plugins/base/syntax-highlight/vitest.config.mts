@@ -19,6 +19,7 @@ export default {
     alias: [
       { find: /^@kernel$/, replacement: web("kernel-api/src/index.ts") },
       { find: /^@kernel\//, replacement: `${web("kernel/src")}/` },
+      { find: /^plugin:(.*)$/, replacement: `${here("..")}/$1/src/index.tsx` },
       { find: /^web-tree-sitter$/, replacement: web("node_modules/web-tree-sitter/web-tree-sitter.js") },
     ],
   },

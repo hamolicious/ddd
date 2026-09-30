@@ -27,7 +27,7 @@ import {
   type Unsubscribe,
 } from "@kernel";
 
-import type { Theme } from "@protocols/lm/themes.theme";
+import type { Theme } from "./api.js";
 
 import { ThemesController } from "./controller.js";
 

@@ -1,5 +1,5 @@
 /**
- * `markdown` — the unified/remark → React pipeline and the seven slot ports over it
+ * `markdown` — the unified/remark → React pipeline, and the seven registries over it
  * (SPEC §6.6).
  *
  * What this plugin is responsible for, in the order of how easily each one goes wrong:
@@ -14,204 +14,390 @@
  *   a file that is not cached offline renders "not available offline" (SPEC §3.6).
  * - **Directives and fences are the blessed syntaxes**: they degrade to literal text
  *   when the contributing plugin is absent, which is why they are preferred over
- *   `markdown.remark` — a raw remark plugin can change the meaning of a document.
- * - **Task states come from the `tasks` port**, `[ ]` and `[x]` being this plugin's own
- *   offers on it. Shipped interaction (replaceable): left-click toggles non-off → off
- *   and off → on; right-click, or long-press on touch, opens the state menu.
+ *   `addRemarkPlugin` — a raw remark plugin can change the meaning of a document.
+ * - **Task states come from `addTaskState`**, `[ ]` and `[x]` being this plugin's own.
+ *   Shipped interaction (replaceable): left-click toggles non-off → off and off → on;
+ *   right-click, or long-press on touch, opens the state menu.
  *
  * The implementation is split so each of those is one file: `schemes.ts` is the
  * allowlist, `regions.ts` finds the body, `processor.ts` builds the pipeline,
- * `render.tsx` walks mdast to React, `tasks.ts` owns marker semantics, and `runtime.ts`
- * holds the single write path. This file is the wiring and the public API.
+ * `render.tsx` walks mdast to React, `tasks.ts` owns marker semantics, `runtime.ts`
+ * holds the single write path, and `api.ts` the types and registries. This file is the
+ * public API.
  */
 
-import type { Kernel } from "@kernel";
-import type { Command } from "@protocols/lm/commands.command";
-import type { MarkdownRenderer } from "@protocols/lm/markdown-renderer";
-import type { MarkdownAttachment, MarkdownAttachmentProps } from "@protocols/lm/markdown.attachment";
-import type { MarkdownCodeBlock, MarkdownCodeBlockProps } from "@protocols/lm/markdown.codeBlock";
-import type { MarkdownComponent } from "@protocols/lm/markdown.component";
-import type { MarkdownDirective, MarkdownDirectiveProps } from "@protocols/lm/markdown.directive";
-import type { MarkdownFence, MarkdownFenceProps } from "@protocols/lm/markdown.fence";
-import type { MarkdownRemark } from "@protocols/lm/markdown.remark";
-import type { MarkdownTaskState } from "@protocols/lm/markdown.taskState";
-import type { SettingsSection } from "@protocols/lm/settings.section";
+import type { Kernel, Unsubscribe } from "@kernel";
 import type { ComponentType, ReactNode } from "react";
 
+import { addCommand } from "plugin:commands";
+import { addSection } from "plugin:settings";
+
+import {
+  attachmentRegistry,
+  codeBlockRegistry,
+  componentRegistry,
+  directiveRegistry,
+  fenceRegistry,
+  remarkRegistry,
+  taskStateRegistry,
+  type MarkdownAttachment,
+  type MarkdownAttachmentProps,
+  type MarkdownCodeBlock,
+  type MarkdownCodeBlockProps,
+  type MarkdownComponent,
+  type MarkdownDirective,
+  type MarkdownDirectiveProps,
+  type MarkdownFence,
+  type MarkdownFenceProps,
+  type MarkdownRemark,
+  type MarkdownRenderer,
+  type MarkdownTaskState,
+  type RenderAttachmentOptions,
+  type RenderOptions,
+} from "./api.js";
 import { type EmbedChain } from "./doc-embed.js";
 import { clampEmbedDepth, DEFAULT_EMBED_DEPTH, EMBED_DEPTH_KEY, MarkdownSettings } from "./MarkdownSettings.js";
 import { DocLink } from "./links.js";
+import { MENU_ACTIONS } from "./menu.js";
 import { ProcessorCache } from "./processor.js";
-import { bodyOf, regionsOf } from "../../_shared/regions.js";
+import { bodyOf as bodyOfText, regionsOf } from "../../_shared/regions.js";
 import { renderTree, type RenderRegistries } from "./render.js";
-import { createRuntime } from "./runtime.js";
+import { createRuntime, type MarkdownRuntime } from "./runtime.js";
 import { buildTaskRegistry, scanTasks } from "./tasks.js";
 
-/**
- * What this plugin serves on its `renderer` port: `lm/markdown-renderer`. The members are
- * documented in the protocol package; two notes that belong with the implementation:
- *
- * - `render`'s `offset` is the absolute offset of `text[0]` within the document, and only
- *   matters for task checkboxes: it is what a click's text splice is measured from. Omit
- *   it and `text` is taken to be this document's **body**, resolved against the document's
- *   *current* text at click time — which is what `viewer` does (`render(bodyOf(row.content))`)
- *   and is the correct default, because the body's start can move between render and click.
- * - `onChange` fires when a `markdown.*` offer changes, so a caller that cached a `render()`
- *   result can re-render. Without it, installing a plugin that adds a directive would leave
- *   every open document rendering the old tree until navigation.
- */
+export type {
+  DocumentRegions,
+  MarkdownAttachment,
+  MarkdownAttachmentProps,
+  MarkdownCodeBlock,
+  MarkdownCodeBlockProps,
+  MarkdownComponent,
+  MarkdownDirective,
+  MarkdownDirectiveProps,
+  MarkdownFence,
+  MarkdownFenceProps,
+  MarkdownRemark,
+  MarkdownRenderer,
+  MarkdownTaskState,
+  RenderAttachmentOptions,
+  RenderOptions,
+  TextSpan,
+} from "./api.js";
+export { TASK_SPLICE_ORIGIN } from "./runtime.js";
+
+/** The renderer functions as one type; the same as `MarkdownRenderer`. */
 export type MarkdownApi = MarkdownRenderer;
 
+// ---------------------------------------------------------------------------
+// Registration
+// ---------------------------------------------------------------------------
+
 /**
- * The live runtime, for {@link deactivate}.
- *
- * INTEGRATION (kernel-runtime): `DeactivateFn` takes no arguments, so module state is the
- * only way for teardown to reach what `activate` built. That is fine for a single client
- * per realm and wrong the moment two kernels share one (a harness mounting two
- * workspaces). Either `deactivate(kernel)` or letting `activate` return a disposer
- * alongside its API would remove the need for this variable.
+ * Draw embedded files (`![](attachment://…)`) yourself. The first in `order` wins; with
+ * none, markdown draws an inline image or a chip. Returns the function that takes it out.
  */
-let liveRuntime: { dispose(): void } | undefined;
+export const addAttachmentRenderer: (items: MarkdownAttachment | readonly MarkdownAttachment[]) => () => void =
+  attachmentRegistry.add;
 
-export default function activate(kernel: Kernel): MarkdownApi {
-  // The seven hosts. Shapes and duplicate keys come from the protocol packages; every
-  // list is in seat order, which is the order the wiring editor shows.
-  const directives = kernel.ports.collect<MarkdownDirective>("directives");
-  const fences = kernel.ports.collect<MarkdownFence>("fences");
-  const codeBlocks = kernel.ports.collect<MarkdownCodeBlock>("code");
-  const remarkPlugins = kernel.ports.collect<MarkdownRemark>("remark");
-  const components = kernel.ports.collect<MarkdownComponent>("components");
-  const taskStates = kernel.ports.collect<MarkdownTaskState>("tasks");
-  const attachmentRenderers = kernel.ports.collect<MarkdownAttachment>("attachments");
+/**
+ * Draw fenced code blocks no fence claims (```ts, ```rust, no language). The first in
+ * `order` wins; with none, markdown draws a `<pre>`. Returns the function that takes it out.
+ */
+export const addCodeBlockRenderer: (items: MarkdownCodeBlock | readonly MarkdownCodeBlock[]) => () => void =
+  codeBlockRegistry.add;
 
-  // The two built-in states (SPEC §6.6: "default `taskState` contributions"), offered on
-  // this plugin's own `task-states` port and seated first by its `order` hint.
-  kernel.ports.offer<MarkdownTaskState>("task-states", [
-    { marker: " ", label: "To do", icon: "☐", order: 0, done: false },
-    { marker: "x", label: "Done", icon: "☑", order: 10, done: true },
-  ]);
+/** Replace the component for one mdast node type. Returns the function that takes it out. */
+export const addComponent: (items: MarkdownComponent | readonly MarkdownComponent[]) => () => void =
+  componentRegistry.add;
 
-  const runtime = createRuntime(kernel);
-  liveRuntime = runtime;
+/**
+ * Render a directive (`:::name`, `::name`, `:name[…]`). Without it, the directive shows
+ * as the text it was written as. Returns the function that takes it out.
+ */
+export const addDirective: (items: MarkdownDirective | readonly MarkdownDirective[]) => () => void =
+  directiveRegistry.add;
 
-  // -------------------------------------------------------------------------
-  // Revisions: the processor and the render registries are rebuilt only when their
-  // inputs actually move (`web/CONTRACTS.md`: "build the processor once per point
-  // revision, not per render").
-  //
-  // Two counters, not one, because they invalidate different things: a new
-  // `markdown.remark` contribution changes how text *parses* and must rebuild the
-  // unified processor, while a new directive or task state only changes how the tree
-  // *renders* and must not.
-  // -------------------------------------------------------------------------
-  let parseRevision = 0;
-  let renderRevision = 0;
-  const listeners = new Set<() => void>();
-  const announce = (): void => {
-    for (const listener of [...listeners]) {
-      try {
-        listener();
-      } catch (error) {
-        kernel.log.error("markdown.onChange listener threw", error);
-      }
+/** Render fenced code blocks of one language (```mermaid). Returns the function that takes it out. */
+export const addFence: (items: MarkdownFence | readonly MarkdownFence[]) => () => void = fenceRegistry.add;
+
+/**
+ * Add a raw remark plugin to the parser: the last resort, since it can change what any
+ * document means. Plugins run in `order`. Returns the function that takes it out.
+ */
+export const addRemarkPlugin: (items: MarkdownRemark | readonly MarkdownRemark[]) => () => void = remarkRegistry.add;
+
+/**
+ * Add a task marker (`[/]`, `[-]`, …). States are listed in `order`; markdown's own
+ * `[ ]` and `[x]` are 0 and 10. Returns the function that takes it out.
+ */
+export const addTaskState: (items: MarkdownTaskState | readonly MarkdownTaskState[]) => () => void =
+  taskStateRegistry.add;
+
+// ---------------------------------------------------------------------------
+// Module state
+// ---------------------------------------------------------------------------
+
+let kernelRef: Kernel | undefined;
+let runtime: (MarkdownRuntime & { dispose(): void }) | undefined;
+/** What `activate` set up and `deactivate` takes down. */
+let teardown: (() => void)[] = [];
+
+// Revisions: the processor and the render registries are rebuilt only when their inputs
+// actually move (`web/CONTRACTS.md`: "build the processor once per point revision, not
+// per render"). Two counters, because a new remark plugin changes how text *parses* and
+// must rebuild the unified processor, while a new directive or task state only changes
+// how the tree *renders* and must not.
+let parseRevision = 0;
+let renderRevision = 0;
+const listeners = new Set<() => void>();
+const processors = new ProcessorCache();
+let registries: RenderRegistries | undefined;
+let registriesRevision = -1;
+
+const announce = (): void => {
+  for (const listener of [...listeners]) {
+    try {
+      listener();
+    } catch (error) {
+      kernelRef?.log.error("markdown.onChange listener threw", error);
     }
-  };
+  }
+};
 
-  remarkPlugins.subscribe(() => {
-    parseRevision += 1;
-    renderRevision += 1;
-    announce();
-  });
-  for (const host of [directives, fences, codeBlocks, components, taskStates, attachmentRenderers]) {
-    host.subscribe(() => {
-      renderRevision += 1;
-      announce();
-    });
+const rendered = (): void => {
+  renderRevision += 1;
+  announce();
+};
+
+function live(): { readonly kernel: Kernel; readonly runtime: MarkdownRuntime } {
+  if (!kernelRef || !runtime) throw new Error("markdown: the plugin is not active yet; call this from your own activate or later");
+  return { kernel: kernelRef, runtime };
+}
+
+/**
+ * The registries, every contributed component wrapped in the kernel's error boundary
+ * (SPEC §6.4) under the plugin that added it, so a thrown render says which plugin failed.
+ */
+function currentRegistries(kernel: Kernel): RenderRegistries {
+  if (registries && registriesRevision === renderRevision) return registries;
+  const wrap = <P extends object>(component: ComponentType<P>, point: string, pluginId: string): ComponentType<P> =>
+    kernel.ui.boundary(component, { point: `markdown.${point}`, pluginId });
+
+  const directiveMap = new Map<string, ComponentType<MarkdownDirectiveProps>>();
+  for (const entry of directiveRegistry.entries()) {
+    directiveMap.set(`${entry.value.kind}:${entry.value.name}`, wrap(entry.value.component, "directive", entry.pluginId));
+  }
+  const fenceMap = new Map<string, ComponentType<MarkdownFenceProps>>();
+  for (const entry of fenceRegistry.entries()) {
+    fenceMap.set(entry.value.language, wrap(entry.value.component, "fence", entry.pluginId));
+  }
+  const overrideMap = new Map<string, ComponentType<Record<string, unknown>>>();
+  for (const entry of componentRegistry.entries()) {
+    overrideMap.set(entry.value.node, wrap(entry.value.component, "component", entry.pluginId));
   }
 
-  const processors = new ProcessorCache();
-  let registries: RenderRegistries | undefined;
-  let registriesRevision = -1;
+  // The first in order wins.
+  const winner = attachmentRegistry.entries()[0];
+  const attachment: ComponentType<MarkdownAttachmentProps> | undefined = winner
+    ? wrap(winner.value.component, "attachment", winner.pluginId)
+    : undefined;
+  const codeWinner = codeBlockRegistry.entries()[0];
+  const codeBlock: ComponentType<MarkdownCodeBlockProps> | undefined = codeWinner
+    ? wrap(codeWinner.value.component, "codeBlock", codeWinner.pluginId)
+    : undefined;
 
-  /**
-   * Resolve the registries, wrapping every contributed component in the kernel's error
-   * boundary (SPEC §6.4: "every contribution is wrapped in an error boundary"). The
-   * attribution comes from `entries()` — the host records which plugin offered what, so a
-   * thrown render says "plugin X failed" with the right X, which is the whole value of
-   * the boundary.
-   */
-  const currentRegistries = (): RenderRegistries => {
-    if (registries && registriesRevision === renderRevision) return registries;
-
-    const directiveMap = new Map<string, ComponentType<MarkdownDirectiveProps>>();
-    for (const entry of directives.entries()) {
-      const key = `${entry.value.kind}:${entry.value.name}`;
-      if (directiveMap.has(key)) continue;
-      directiveMap.set(
-        key,
-        kernel.ui.boundary(entry.value.component, {
-          point: "markdown.directive",
-          pluginId: entry.pluginId,
-        }),
-      );
-    }
-
-    const fenceMap = new Map<string, ComponentType<MarkdownFenceProps>>();
-    for (const entry of fences.entries()) {
-      if (fenceMap.has(entry.value.language)) continue;
-      fenceMap.set(
-        entry.value.language,
-        kernel.ui.boundary(entry.value.component, {
-          point: "markdown.fence",
-          pluginId: entry.pluginId,
-        }),
-      );
-    }
-
-    const overrideMap = new Map<string, ComponentType<Record<string, unknown>>>();
-    for (const entry of components.entries()) {
-      if (overrideMap.has(entry.value.node)) continue;
-      overrideMap.set(
-        entry.value.node,
-        kernel.ui.boundary(entry.value.component, {
-          point: "markdown.component",
-          pluginId: entry.pluginId,
-        }),
-      );
-    }
-
-    // The first seat wins (PLUGIN-PROTOCOLS §6a): the wiring decides, not an `order`.
-    const winner = attachmentRenderers.entries()[0];
-    const attachment: ComponentType<MarkdownAttachmentProps> | undefined = winner
-      ? kernel.ui.boundary(winner.value.component, {
-          point: "markdown.attachment",
-          pluginId: winner.pluginId,
-        })
-      : undefined;
-
-    const codeWinner = codeBlocks.entries()[0];
-    const codeBlock: ComponentType<MarkdownCodeBlockProps> | undefined = codeWinner
-      ? kernel.ui.boundary(codeWinner.value.component, {
-          point: "markdown.codeBlock",
-          pluginId: codeWinner.pluginId,
-        })
-      : undefined;
-
-    registries = {
-      directives: directiveMap,
-      fences: fenceMap,
-      codeBlock,
-      overrides: overrideMap,
-      tasks: buildTaskRegistry(taskStates.get()),
-      attachment,
-    };
-    registriesRevision = renderRevision;
-    return registries;
+  registries = {
+    directives: directiveMap,
+    fences: fenceMap,
+    codeBlock,
+    overrides: overrideMap,
+    tasks: buildTaskRegistry(taskStateRegistry.get()),
+    attachment,
   };
+  registriesRevision = renderRevision;
+  return registries;
+}
 
-  // -------------------------------------------------------------------------
-  // Embedded documents (`![](doc://…)`): how many levels deep, per user.
-  // -------------------------------------------------------------------------
+/** Embedded documents (`![](doc://…)`): how many levels deep, per user. */
+function embedDepth(kernel: Kernel): number {
+  try {
+    return clampEmbedDepth(kernel.settings.get(EMBED_DEPTH_KEY));
+  } catch {
+    return DEFAULT_EMBED_DEPTH;
+  }
+}
+
+function renderWith(
+  kernel: Kernel,
+  run: MarkdownRuntime,
+  text: string,
+  documentId: string | undefined,
+  offset: number | undefined,
+  chain: EmbedChain,
+  maxDepth: number,
+): ReactNode {
+  const resolved = currentRegistries(kernel);
+  const processor = processors.get(parseRevision, () => remarkRegistry.get());
+
+  let tree;
+  try {
+    tree = processor.parse(text);
+  } catch (error) {
+    // A throw here is an added remark plugin, not markdown: remark's own parser is total.
+    // Showing the text beats showing nothing.
+    kernel.log.error("markdown pipeline threw while parsing", error);
+    return <pre className="markdown:overflow-x-auto markdown:rounded markdown:border markdown:border-danger markdown:p-3 markdown:font-mono">{text}</pre>;
+  }
+
+  const taskScan = scanTasks(tree, text, resolved.tasks);
+  return renderTree(tree, text, {
+    documentId,
+    offset,
+    registries: resolved,
+    runtime: run,
+    taskScan,
+    // The recovery path for a checkbox whose offset drifted: re-parse the text as it is
+    // *now* and match by ordinal (`tasks.ts`, `resolveMarkerOffset`).
+    rescan: (body) => scanTasks(processor.parse(body), body, resolved.tasks),
+    embeds: {
+      chain,
+      maxDepth,
+      // The embedded document's own body, with its own id: its checkboxes write there.
+      renderBody: (row, next) =>
+        renderWith(kernel, run, bodyOfText(row.content ?? ""), row.id, undefined, next, maxDepth),
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// The renderer
+// ---------------------------------------------------------------------------
+
+/**
+ * Render a body to React.
+ *
+ * `options.offset` is the absolute offset of `text[0]` within the document, and only
+ * matters for task checkboxes: it is what a click's text splice is measured from. Omit it
+ * and `text` is taken to be this document's **body**, resolved against the document's
+ * *current* text at click time — what `viewer` does (`render(bodyOf(row.content))`).
+ */
+export function render(text: string, options?: RenderOptions): ReactNode {
+  const { kernel, runtime: run } = live();
+  return renderWith(
+    kernel,
+    run,
+    text,
+    options?.documentId,
+    options?.offset,
+    { depth: 0, ancestors: options?.documentId ? [options.documentId] : [] },
+    embedDepth(kernel),
+  );
+}
+
+/** Strip the frontmatter and the `%%%` sections: what read mode shows. */
+export const bodyOf: (text: string) => string = bodyOfText;
+
+/** Where the frontmatter, the body and the `%%%` sections are in a document's text. */
+export const regions: MarkdownRenderer["regions"] = regionsOf;
+
+/** The task states added, in menu order. */
+export function taskStates(): readonly MarkdownTaskState[] {
+  return buildTaskRegistry(taskStateRegistry.get()).states;
+}
+
+/** A link to a document as the body draws `[](doc://…)`: its live title, colour and icon. */
+export function renderDocLink(documentId: string): ReactNode {
+  return <DocLink id={documentId} runtime={live().runtime} />;
+}
+
+/** An attachment as the winning renderer draws it, or `undefined` when none is added. */
+export function renderAttachment(attachmentId: string, options: RenderAttachmentOptions): ReactNode | undefined {
+  const Renderer = currentRegistries(live().kernel).attachment;
+  if (!Renderer) return undefined;
+  return (
+    <Renderer
+      id={attachmentId}
+      alt={options.alt}
+      placement={options.placement}
+      fallback={options.fallback}
+      frame={(content) => content}
+    />
+  );
+}
+
+/** Turn an embedded `attachment://` into a wrapper document, filed where "Files go to" says. */
+export function promoteToDocument(attachmentId: string): Promise<string> {
+  return live().runtime.promote(attachmentId);
+}
+
+/**
+ * Called when anything added to markdown changes, so a cached render can re-render.
+ * Without it, enabling a plugin that adds a directive would leave every open document
+ * rendering the old tree until navigation.
+ */
+export function onChange(listener: () => void): Unsubscribe {
+  listeners.add(listener);
+  return () => void listeners.delete(listener);
+}
+
+// ---------------------------------------------------------------------------
+// activate
+// ---------------------------------------------------------------------------
+
+type RouterModule = typeof import("plugin:router");
+type FoldersModule = typeof import("plugin:folders");
+type ContextMenuModule = typeof import("plugin:context-menu");
+type SurfaceModule = typeof import("plugin:document-surface");
+
+export default async function activate(kernel: Kernel): Promise<void> {
+  const optional = <M,>(id: string): Promise<M | undefined> =>
+    kernel.plugins.optional<M>(id).catch((cause: unknown) => {
+      kernel.log.warn(`markdown: "${id}" could not be loaded; going on without it`, cause);
+      return undefined;
+    });
+  const [router, folders, menu, surface] = await Promise.all([
+    optional<RouterModule>("router"),
+    optional<FoldersModule>("folders"),
+    optional<ContextMenuModule>("context-menu"),
+    optional<SurfaceModule>("document-surface"),
+  ]);
+
+  kernelRef = kernel;
+  // Views that claim a document (`prefer`) draw its embeds: a saved search embeds as results.
+  runtime = createRuntime(kernel, {
+    router,
+    folders,
+    menu,
+    modes: surface ? () => surface.modeEntries() : undefined,
+  });
+
+  const offs: (() => void)[] = [];
+  offs.push(
+    remarkRegistry.subscribe(() => {
+      parseRevision += 1;
+      rendered();
+    }),
+  );
+  for (const registry of [
+    directiveRegistry,
+    fenceRegistry,
+    codeBlockRegistry,
+    componentRegistry,
+    taskStateRegistry,
+    attachmentRegistry,
+  ] as const) {
+    offs.push((registry.subscribe as (listener: () => void) => Unsubscribe)(rendered));
+  }
+  if (surface) offs.push(surface.onModesChange(rendered));
+
+  // The two built-in states (SPEC §6.6), first in the menu.
+  offs.push(
+    addTaskState([
+      { marker: " ", label: "To do", icon: "☐", order: 0, done: false },
+      { marker: "x", label: "Done", icon: "☑", order: 10, done: true },
+    ]),
+  );
+
   try {
     kernel.settings.defineSchema({
       [EMBED_DEPTH_KEY]: {
@@ -221,161 +407,86 @@ export default function activate(kernel: Kernel): MarkdownApi {
         default: DEFAULT_EMBED_DEPTH,
       },
     });
-    kernel.settings.subscribe(() => {
-      renderRevision += 1;
-      announce();
-    });
+    offs.push(kernel.settings.subscribe(rendered));
   } catch (error) {
     kernel.log.warn("the embed depth setting is unavailable; using the default", error);
   }
-  const embedDepth = (): number => {
-    try {
-      return clampEmbedDepth(kernel.settings.get(EMBED_DEPTH_KEY));
-    } catch {
-      return DEFAULT_EMBED_DEPTH;
-    }
-  };
 
-  kernel.ports.offer<SettingsSection>("settings", {
-    id: "markdown",
-    title: "Markdown",
-    order: 45,
-    description: "How documents embedded with ![](doc://…) are shown.",
-    component: () => <MarkdownSettings kernel={kernel} />,
-  });
+  // A task's states and a file's actions, in `context-menu`'s menus (`menu.ts`).
+  if (menu) offs.push(menu.addAction(MENU_ACTIONS));
 
-  const renderWith = (
-    text: string,
-    documentId: string | undefined,
-    offset: number | undefined,
-    chain: EmbedChain,
-    maxDepth: number,
-  ): ReactNode => {
-      const resolved = currentRegistries();
-      const processor = processors.get(parseRevision, () => remarkPlugins.get());
+  offs.push(
+    addSection({
+      id: "markdown",
+      title: "Markdown",
+      order: 45,
+      description: "How documents embedded with ![](doc://…) are shown.",
+      component: () => <MarkdownSettings kernel={kernel} />,
+    }),
+  );
 
-      let tree;
-      try {
-        tree = processor.parse(text);
-      } catch (error) {
-        // A throw here is a contributed `markdown.remark` plugin, not markdown: remark's
-        // own parser is total. Showing the text beats showing nothing, and the error names
-        // the pipeline so the aggregated notice has something to point at.
-        kernel.log.error("markdown pipeline threw while parsing", error);
-        return <pre className="markdown:overflow-x-auto markdown:rounded markdown:border markdown:border-danger markdown:p-3 markdown:font-mono">{text}</pre>;
-      }
-
-      const taskScan = scanTasks(tree, text, resolved.tasks);
-      return renderTree(tree, text, {
-        documentId,
-        offset,
-        registries: resolved,
-        runtime,
-        taskScan,
-        // The recovery path for a checkbox whose offset drifted: re-parse the text as it
-        // is *now* and match by ordinal (`tasks.ts`, `resolveMarkerOffset`).
-        rescan: (body) => scanTasks(processor.parse(body), body, resolved.tasks),
-        embeds: {
-          chain,
-          maxDepth,
-          // The embedded document's own body, with its own id: its checkboxes write there.
-          renderBody: (row, next) => renderWith(bodyOf(row.content ?? ""), row.id, undefined, next, maxDepth),
-        },
-      });
-  };
-
-  const api: MarkdownApi = {
-    render: (text, options) =>
-      renderWith(
-        text,
-        options?.documentId,
-        options?.offset,
-        { depth: 0, ancestors: options?.documentId ? [options.documentId] : [] },
-        embedDepth(),
-      ),
-
-    bodyOf,
-    regions: regionsOf,
-
-    taskStates: () => currentRegistries().tasks.states,
-
-    renderDocLink: (documentId) => <DocLink id={documentId} runtime={runtime} />,
-
-    renderAttachment: (attachmentId, options) => {
-      const Renderer = currentRegistries().attachment;
-      if (!Renderer) return undefined;
-      return (
-        <Renderer
-          id={attachmentId}
-          alt={options.alt}
-          placement={options.placement}
-          fallback={options.fallback}
-          frame={(content) => content}
-        />
-      );
-    },
-
-    promoteToDocument: (attachmentId) => runtime.promote(attachmentId),
-
-    onChange: (listener) => {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-  };
-
-  kernel.ports.offer<Command>("commands", {
-    id: "markdown.promoteToDocument",
-    title: "Promote attachment to document",
-    category: "Markdown",
-    // Enabled only when there is something to act on, so the palette does not offer a
-    // command that can only fail (`Command.when` is what the palette filters on).
-    when: () => runtime.focusedAttachment() !== null,
-    run: (argument) => {
-      // From the attachment's own menu the id is the argument; from the palette it is the
-      // embedded attachment the user last touched.
-      const id = typeof argument === "string" && argument.length > 0 ? argument : runtime.focusedAttachment();
-      if (id === null) {
-        kernel.ui.notify({
-          id: "markdown.promote.no-target",
-          level: "info",
-          message: "Select an embedded file first.",
-        });
-        return;
-      }
-      // Creating the wrapper document is a REST call (SPEC §3.6, §5.1), so it rejects
-      // offline. The palette closes on `run`, so without a notice here the command looked
-      // like it had done nothing at all — the attachment's own menu already says so.
-      // From the palette, the site is the one the focused attachment was touched at, and
-      // only when the id is that attachment's.
-      const site = id === runtime.focusedAttachment() ? runtime.focusedSite() : undefined;
-      return runtime.promoteEmbed(id, site).then(
-        (documentId) => {
-          runtime.focusAttachment(null);
-          runtime.openDocument(documentId);
-        },
-        (error: unknown) => {
-          kernel.log.error("promote to document failed", { id, error });
+  const run = runtime;
+  offs.push(
+    addCommand({
+      id: "markdown.promoteToDocument",
+      title: "Promote attachment to document",
+      category: "Markdown",
+      // Enabled only when there is something to act on, so the palette does not offer a
+      // command that can only fail.
+      when: () => run.focusedAttachment() !== null,
+      run: (argument) => {
+        // From the attachment's own menu the id is the argument; from the palette it is the
+        // embedded attachment the user last touched.
+        const id = typeof argument === "string" && argument.length > 0 ? argument : run.focusedAttachment();
+        if (id === null) {
           kernel.ui.notify({
-            id: `markdown.promote.${id}`,
-            level: "error",
-            message: "Could not create a document for that file.",
-            detail: `${error instanceof Error ? error.message : String(error)}\n\nCreating a document needs the server; the file itself is untouched.`,
+            id: "markdown.promote.no-target",
+            level: "info",
+            message: "Select an embedded file first.",
           });
-        },
-      );
-    },
-  });
+          return;
+        }
+        // Creating the wrapper document is a REST call (SPEC §3.6, §5.1), so it rejects
+        // offline; the palette closes on `run`, so the failure needs a notice. From the
+        // palette, the site is the one the focused attachment was touched at.
+        const site = id === run.focusedAttachment() ? run.focusedSite() : undefined;
+        return run.promoteEmbed(id, site).then(
+          (documentId) => {
+            run.focusAttachment(null);
+            run.openDocument(documentId);
+          },
+          (error: unknown) => {
+            kernel.log.error("promote to document failed", { id, error });
+            kernel.ui.notify({
+              id: `markdown.promote.${id}`,
+              level: "error",
+              message: "Could not create a document for that file.",
+              detail: `${error instanceof Error ? error.message : String(error)}\n\nCreating a document needs the server; the file itself is untouched.`,
+            });
+          },
+        );
+      },
+    }),
+  );
 
-  kernel.ports.serve("renderer", api);
-  return api;
+  teardown = offs;
 }
 
 /**
- * Reload-only activation means this runs on teardown alone (`?safe=bare`, tests).
- * Its one job is the object URLs `runtime.ts` deliberately keeps for the life of the
- * page — see the cache note there for why they are not revoked per component.
+ * Teardown (`?safe=bare`, tests): takes out what `activate` added, and releases the object
+ * URLs `runtime.ts` deliberately keeps for the life of the page.
  */
 export function deactivate(): void {
-  liveRuntime?.dispose();
-  liveRuntime = undefined;
+  for (const off of teardown.splice(0)) {
+    try {
+      off();
+    } catch {
+      // Teardown is best effort.
+    }
+  }
+  runtime?.dispose();
+  runtime = undefined;
+  kernelRef = undefined;
+  registries = undefined;
+  registriesRevision = -1;
 }

@@ -1,7 +1,7 @@
 /**
  * `welcome` — fills a new, empty workspace with a short tour (`content.ts`): one note per
- * base feature, all deletable, filed inside the first one through the `folders` service
- * when it is wired (the tour still works as linked notes when it is not).
+ * base feature, all deletable, filed inside the first one through `folders` (an optional
+ * dependency) when it is there (the tour still works as linked notes when it is not).
  *
  * **Once per workspace.** After the first complete sync, if the hidden marker note is
  * missing: an empty workspace gets the tour, a workspace that already has notes gets
@@ -17,7 +17,6 @@
  */
 
 import type { Kernel } from "@kernel";
-import type { Folders } from "@protocols/lm/folders";
 
 import { withoutMachineDocuments } from "../../_shared/machine-docs.js";
 
@@ -43,7 +42,12 @@ async function seed(kernel: Kernel): Promise<void> {
     includeDeleted: true,
   });
   if (existing.total === 0) {
-    const folders = kernel.ports.bound("folders") ? kernel.ports.use<Pick<Folders, "file">>("folders") : undefined;
+    const folders = await kernel.plugins
+      .optional<typeof import("plugin:folders")>("folders")
+      .catch((error: unknown) => {
+        kernel.log.warn("folders unavailable; the tour notes are left unfiled", error);
+        return undefined;
+      });
     for (const note of TOUR) {
       // Filed only when this device made it: a note another device seeded is filed there.
       const made = await createOnce(kernel, note.id, note.text);

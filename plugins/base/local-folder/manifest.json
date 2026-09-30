@@ -1,0 +1,24 @@
+{
+  "id": "local-folder",
+  "version": "2.0.0",
+  "name": "Local folder",
+  "description": "Keeps every note as a Markdown file in a folder on this device, and keeps the two in step while the app runs.",
+  "author": "Life Manager base distribution",
+  "license": "MIT OR Apache-2.0",
+  "x-tailwind": true,
+  "kernel": "^3.0",
+  "dependencies": {
+    "settings": "^2.0"
+  },
+  "optionalDependencies": {
+    "attachments": "^3.0",
+    "folders": "^4.0"
+  },
+  "peerLibraries": {
+    "react": "^18.0.0"
+  },
+  "frontend": {
+    "module": "frontend/index.mjs",
+    "style": "frontend/style.css"
+  }
+}

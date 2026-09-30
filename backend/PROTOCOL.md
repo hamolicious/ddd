@@ -135,7 +135,7 @@ receives any other first frame must close with **4400**.
     "heartbeat_secs": 25
   },
   "core_semantics_version": 1,
-  "wiring_version": 13
+  "plugins_version": "3f9c0a1b2d4e5f60"
 }
 ```
 
@@ -143,10 +143,12 @@ receives any other first frame must close with **4400**.
   client whose Wasm core reports a different value must **not** trust its local
   materialization of `content` → `fm`/`title`; it keeps working read-only from the
   server-materialized projection rows and surfaces "reload to update".
-- `wiring_version` is the live plugin wiring version (PLUGIN-PROTOCOLS §6c). A client
-  compares it with the version its activated plugin set was resolved from, exactly as if
-  a `wiring.applied` had reached it, so a client that was offline during a change
-  catches up on reconnect.
+- `plugins_version` is the fingerprint of the plugin load set (`@kernel` 3.0): every
+  served plugin's `id@version#assets` and whether an admin wants it loaded, plus both
+  load orders. It is the `load.version` of `GET /api/plugins`. A client compares it with
+  the version it booted with and reloads when they differ, exactly as if a
+  `plugins.changed` had reached it, so a client that was offline during a change catches
+  up on reconnect. A circuit-breaker trip does not change it.
 - `floor_seq` is the oldest sequence number the feed can still serve. In M2 it is
   always `0`: the feed is never truncated (§2.2). It exists so ACL filtering (v2)
   and any future compaction have a way to say "resume is impossible, bootstrap".
@@ -685,16 +687,16 @@ Client → server (binary): `SYNC_STEP1`, `SYNC_STEP2`, `UPDATE`, `AWARENESS`,
 `AWARENESS_QUERY`.
 
 Server → client (JSON): `welcome`, `feed.batch`, `feed.reset`, `feed.resync`,
-`doc.subscribed`, `doc.error`, `doc.resync`, `pong`, `error`, `wiring.applied`.
+`doc.subscribed`, `doc.error`, `doc.resync`, `pong`, `error`, `plugins.changed`.
 
-`wiring.applied` goes to every connected session whenever the plugin wiring gets a new
-version (an Apply in the wiring editor, a rollback, or any install, upgrade, uninstall,
-approval, enable, disable or circuit-breaker trip). It is best-effort, like
-`plugin.event`: a socket that is not keeping up drops it, and `welcome.wiring_version`
-recovers it on the next connect.
+`plugins.changed` goes to every connected session whenever the plugin load set's
+fingerprint moves (an approval, upgrade, uninstall, enable or disable — not a pending
+install, and not a circuit-breaker trip). The client answers with `location.reload()`.
+It is best-effort, like `plugin.event`: a socket that is not keeping up drops it, and
+`welcome.plugins_version` recovers it on the next connect.
 
 ```json
-{ "t": "wiring.applied", "version": 14, "action": "apply", "at": "2026-09-28T02:30:00Z" }
+{ "t": "plugins.changed", "version": "3f9c0a1b2d4e5f60" }
 ```
 Server → client (binary): `SYNC_STEP1`, `SYNC_STEP2`, `UPDATE`, `AWARENESS`.
 

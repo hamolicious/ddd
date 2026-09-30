@@ -1,7 +1,14 @@
 {
   "bridgeVersion": 1,
   "handler": "lm_shell_v1",
-  "errorCodes": ["unsupported", "denied", "cancelled", "invalid", "timeout", "failed"],
+  "errorCodes": [
+    "unsupported",
+    "denied",
+    "cancelled",
+    "invalid",
+    "timeout",
+    "failed"
+  ],
   "methods": [
     "auth.clearToken",
     "auth.getToken",
@@ -12,6 +19,14 @@
     "filesystem.exportWorkspace",
     "filesystem.importFile",
     "filesystem.pick",
+    "folder.choose",
+    "folder.current",
+    "folder.forget",
+    "folder.list",
+    "folder.move",
+    "folder.read",
+    "folder.remove",
+    "folder.write",
     "notifications.cancel",
     "notifications.list",
     "notifications.notify",
@@ -26,13 +41,48 @@
     "setBearerToken": "auth.setToken"
   },
   "jsAliasNote": "key = the member `bootstrapScript` defines on `window.shell`; value = the registered `capability.method` behind it (BRIDGE.md §3, §4). Three of them are flat because the boot sequence reads them before any capability object is meaningful, and `notifications.scheduled` is the frozen kernel spelling of `notifications.list`. `boot.*` has no nested spelling at all: the only JS members are `bootOk` / `bootFailed`.",
-  "capabilities": ["auth", "boot", "filesystem", "notifications"],
-  "pluginFacing": ["filesystem", "notifications"],
+  "capabilities": [
+    "auth",
+    "boot",
+    "filesystem",
+    "folder",
+    "notifications"
+  ],
+  "pluginFacing": [
+    "filesystem",
+    "folder",
+    "notifications"
+  ],
   "envelopeKeys": {
-    "request": ["v", "id", "capability", "method", "params"],
-    "response": ["v", "id", "ok", "result", "error"],
-    "error": ["code", "message"]
+    "request": [
+      "v",
+      "id",
+      "capability",
+      "method",
+      "params"
+    ],
+    "response": [
+      "v",
+      "id",
+      "ok",
+      "result",
+      "error"
+    ],
+    "error": [
+      "code",
+      "message"
+    ]
   },
-  "cases": ["auth.json", "boot.json", "filesystem.json", "notifications.json", "envelope.json"],
-  "other": ["window_shell.json", "manifest.json"]
+  "cases": [
+    "auth.json",
+    "boot.json",
+    "filesystem.json",
+    "folder.json",
+    "notifications.json",
+    "envelope.json"
+  ],
+  "other": [
+    "window_shell.json",
+    "manifest.json"
+  ]
 }

@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { ModalField } from "@protocols/lm/context-menu";
+import type { ModalField } from "./api.js";
 
 import { check, confirmModal } from "./Modal.js";
 

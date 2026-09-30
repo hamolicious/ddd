@@ -2,7 +2,7 @@
  * What the `/` menu shows for what was typed. Pure, so it is tested without an editor.
  */
 
-import type { SlashCommand } from "@protocols/lm/slash.command";
+import type { SlashCommand } from "./api.js";
 
 /**
  * The query when the caret sits right after `/word`: the slash at the start of the line
@@ -15,7 +15,7 @@ export function slashQuery(beforeCaret: string): string | undefined {
 
 /**
  * Best first: title starts with it, then a keyword does, then either contains it. Within
- * a rank, `commands` keeps its order: the host's seat order, which the wiring decides.
+ * a rank, `commands` keeps its order: the registry's, by each command's `order`.
  */
 export function matchCommands(
   commands: readonly SlashCommand[],
@@ -43,7 +43,7 @@ export function matchCommands(
             : -1;
     if (rank >= 0) scored.push({ command, rank });
   }
-  // A stable sort: equal ranks stay in seat order.
+  // A stable sort: equal ranks stay in the order given.
   return scored
     .sort((a, b) => a.rank - b.rank)
     .slice(0, limit)

@@ -2,12 +2,13 @@
  * `syntax-highlight` — fenced code, highlighted with tree-sitter grammars the user
  * installs when they want them.
  *
- * - Hosts `syntax.language` on its `languages` port, and offers its own catalog on
- *   `builtin` (`languages.json`, built into `frontend/languages/` by `build.mjs`). Another
- *   plugin can offer a language the same way.
- * - Offers the `markdown.codeBlock` renderer, which replaces markdown's plain `<pre>` for
- *   every fence no `markdown.fence` claims; and an `editor.extension`, which colours the
- *   same blocks while editing (SPEC §6.6: a syntax contributor pairs the two).
+ * - Hosts languages: `addLanguage` (below) takes one from any plugin, and this plugin adds
+ *   its own catalog the same way (`languages.json`, built into `frontend/languages/` by
+ *   `build.mjs`).
+ * - Adds a code block renderer to `plugin:markdown`, which replaces markdown's plain
+ *   `<pre>` for every fence no fence renderer claims; and an extension to `plugin:editor`,
+ *   which colours the same blocks while editing (SPEC §6.6: a syntax contributor pairs
+ *   the two).
  * - Which languages are installed is a per-user setting; the bytes are fetched once per
  *   device and kept by the service worker.
  *
@@ -16,51 +17,32 @@
  */
 
 import type { Kernel } from "@kernel";
-import type { EditorExtension } from "@protocols/lm/editor.extension";
-import type { MarkdownCodeBlock } from "@protocols/lm/markdown.codeBlock";
-import type { SettingsSection } from "@protocols/lm/settings.section";
-import type { SyntaxLanguage } from "@protocols/lm/syntax.language";
+import { addExtension } from "plugin:editor";
+import { addCodeBlockRenderer } from "plugin:markdown";
+import { addSection } from "plugin:settings";
 
 import catalog from "../languages.json";
 
+import { languageRegistry, type SyntaxApi, type SyntaxLanguage } from "./api.js";
 import { codeBlockFor } from "./CodeBlock.js";
 import { editorExtension } from "./editor-extension.js";
-import { createCustom, type CustomLanguage, type CustomUpload, LANGUAGE_ID } from "./custom.js";
-import { createEngine, type LoadState, type Span } from "./engine.js";
+import { createCustom, LANGUAGE_ID } from "./custom.js";
+import { createEngine } from "./engine.js";
 import { createInstalled } from "./installed.js";
 import { indexLanguages, type LanguageIndex } from "./registry.js";
 import { SyntaxSettings } from "./Settings.js";
 
-/** The service this plugin returns, for plugins that want highlighted code of their own. */
-export interface SyntaxApi {
-  /** Every language on offer, installed or not. */
-  languages(): readonly SyntaxLanguage[];
-  /** The language an info string (`ts`, `Rust`, `rust {1}`) means, if any is on offer. */
-  resolve(infoString: string | undefined): SyntaxLanguage | undefined;
-  isInstalled(id: string): boolean;
-  /** Mark installed for this user and fetch it here. Rejects when it cannot be fetched. */
-  install(id: string): Promise<void>;
-  /** Unmark it, and drop its files from this device's cache. */
-  remove(id: string): Promise<void>;
-  state(id: string): LoadState | undefined;
-  /** Start fetching an installed language, unless it already is; `retry` after a failure. */
-  ensureLoaded(id: string, retry?: boolean): void;
-  /** Spans for `code` in `language` (an id or alias), or `undefined` while it is not ready. */
-  highlight(code: string, language: string): readonly Span[] | undefined;
-  /** The languages this user uploaded themselves. */
-  custom(): readonly CustomLanguage[];
-  /**
-   * Check an uploaded grammar and query in this browser, store them as attachments, and
-   * install the language. Rejects with a message fit to show.
-   */
-  addCustom(upload: CustomUpload): Promise<void>;
-  /** Uninstall and forget an uploaded language, deleting its files. */
-  removeCustom(id: string): Promise<void>;
-  /** Something changed: a grammar loaded, the installed set, the catalog. */
-  subscribe(listener: () => void): () => void;
-  /** Bumps on every such change, for `useSyncExternalStore`. */
-  revision(): number;
-}
+export type { SyntaxApi, SyntaxLanguage } from "./api.js";
+export type { CustomLanguage, CustomUpload } from "./custom.js";
+export type { LoadState, Span } from "./engine.js";
+
+/**
+ * Offer a language (or several) for code blocks. It shows in Settings, Code languages;
+ * nothing is fetched until the user installs it. The same `id` replaces the earlier one.
+ * Returns the function that takes it out again.
+ */
+export const addLanguage: (items: SyntaxLanguage | readonly SyntaxLanguage[]) => () => void =
+  languageRegistry.add;
 
 interface CatalogEntry {
   readonly id: string;
@@ -71,13 +53,9 @@ interface CatalogEntry {
 /** This module's URL; the grammars sit beside it. A variable, so Vite leaves `new URL` alone. */
 const base = import.meta.url;
 
-export default function activate(kernel: Kernel): SyntaxApi {
-  // The host: every language wired in, in seat order.
-  const point = kernel.ports.collect<SyntaxLanguage>("languages");
-
-  // The shipped catalog, offered together on `builtin` so it stays one block of seats.
-  kernel.ports.offer<SyntaxLanguage>(
-    "builtin",
+export default function activate(kernel: Kernel): void {
+  // The shipped catalog, added first so it resolves before anything added later.
+  addLanguage(
     (catalog.languages as readonly CatalogEntry[]).map((entry) => ({
       id: entry.id,
       name: entry.name,
@@ -93,7 +71,7 @@ export default function activate(kernel: Kernel): SyntaxApi {
   });
   const installed = createInstalled(kernel);
 
-  // Uploaded languages are offers like any other, kept in step with the setting.
+  // Uploaded languages are added like any other, kept in step with the setting.
   const customContributions = new Map<string, { readonly key: string; dispose(): void }>();
   const syncCustom = (): void => {
     const current = new Map(custom.list().map((language) => [language.id, language]));
@@ -106,7 +84,7 @@ export default function activate(kernel: Kernel): SyntaxApi {
     }
     for (const [id, language] of current) {
       if (customContributions.has(id)) continue;
-      const disposable = kernel.ports.offer<SyntaxLanguage>("builtin", {
+      const dispose = addLanguage({
         id,
         name: language.name,
         aliases: language.aliases,
@@ -114,7 +92,7 @@ export default function activate(kernel: Kernel): SyntaxApi {
         highlightsUrl: language.highlights,
         size: language.size,
       });
-      customContributions.set(id, { key: JSON.stringify(language), dispose: () => disposable.dispose() });
+      customContributions.set(id, { key: JSON.stringify(language), dispose });
     }
   };
   syncCustom();
@@ -133,9 +111,9 @@ export default function activate(kernel: Kernel): SyntaxApi {
     }
   };
 
-  let index: LanguageIndex = indexLanguages(point.get());
-  point.subscribe(() => {
-    index = indexLanguages(point.get());
+  let index: LanguageIndex = indexLanguages(languageRegistry.get());
+  languageRegistry.subscribe((all) => {
+    index = indexLanguages(all);
     announce();
   });
   installed.subscribe(announce);
@@ -212,25 +190,23 @@ export default function activate(kernel: Kernel): SyntaxApi {
     revision: () => revision,
   };
 
-  kernel.ports.offer<MarkdownCodeBlock>("code", {
+  addCodeBlockRenderer({
     id: "syntax-highlight",
     component: codeBlockFor(api),
   });
 
-  kernel.ports.offer<EditorExtension>("decorate", {
+  addExtension({
     id: "syntax-highlight",
     extension: editorExtension(api),
   });
 
-  kernel.ports.offer<SettingsSection>("settings", {
+  addSection({
     id: "syntax-highlight",
     title: "Code languages",
     order: 46,
     description: "Which languages fenced code is highlighted in.",
     component: () => <SyntaxSettings api={api} />,
   });
-
-  return api;
 }
 
 async function fetchServed(url: string): Promise<Uint8Array> {

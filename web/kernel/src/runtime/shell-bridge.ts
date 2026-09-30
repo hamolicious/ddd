@@ -94,6 +94,34 @@ export interface ShellNotifications {
   list?: () => Promise<readonly { readonly id: string; readonly at: number }[]>;
 }
 
+/** One entry of `folder.list()`. */
+export interface ShellFolderEntry {
+  readonly path: string;
+  readonly kind: "file" | "dir";
+  readonly size: number;
+  readonly mtimeMs: number;
+}
+
+/**
+ * A directory the user chose on this device (`app/BRIDGE.md` §4.5). Paths are relative to
+ * it and `/`-separated; the shell refuses anything absolute or climbing out with `..`.
+ * Changes made outside the page arrive as the `lm-folder-changed` window event.
+ */
+export interface ShellFolder {
+  current?: () => Promise<{ readonly label: string } | null>;
+  choose?: () => Promise<{ readonly label: string }>;
+  forget?: () => Promise<void>;
+  list?: () => Promise<readonly ShellFolderEntry[]>;
+  /** `data` is base64. */
+  read?: (params: { path: string }) => Promise<{ readonly data: string; readonly mtimeMs: number }>;
+  write?: (params: { path: string; data: string }) => Promise<{ readonly mtimeMs: number }>;
+  move?: (params: { from: string; to: string }) => Promise<void>;
+  remove?: (params: { path: string }) => Promise<void>;
+}
+
+/** The window event a shell dispatches when files in the chosen folder change. */
+export const FOLDER_CHANGED_EVENT = "lm-folder-changed";
+
 /** Everything the shell may put on `window.shell`. Every member is optional by rule 3. */
 export interface ShellBridgeV1 {
   /** The canonical version field, and the one {@link detectBridge} requires. */
@@ -105,6 +133,14 @@ export interface ShellBridgeV1 {
   /** `capability.method` keys, for diagnostics. */
   readonly methods?: readonly string[];
   readonly platform?: string;
+  /**
+   * Who holds the session. Absent means the shell does (a bearer token in its keystore,
+   * the Flutter shell); `"cookie"` means the page was loaded **from the server's own
+   * origin** and authenticates like a browser tab (the Linux desktop shell). A cookie
+   * shell keeps the service worker, the cookie login and the workspace-export link, and
+   * only adds native capabilities on top (`app/BRIDGE.md` §3).
+   */
+  readonly session?: "cookie";
   /**
    * The `bundle_version` the shell is **currently serving** to this webview — the
    * 64-character digest from the bundle manifest (`app/BRIDGE.md` §5).
@@ -136,6 +172,7 @@ export interface ShellBridgeV1 {
   readonly auth?: ShellAuth;
   readonly filesystem?: ShellFilesystem;
   readonly notifications?: ShellNotifications;
+  readonly folder?: ShellFolder;
 }
 
 /**
@@ -164,6 +201,15 @@ export function bridgeVersionOf(
 ): number | undefined {
   const raw = typeof bridge?.version === "number" ? bridge.version : bridge?.bridgeVersion;
   return typeof raw === "number" ? Math.trunc(raw) : undefined;
+}
+
+/**
+ * `true` when a bridge claims a version **and** holds the session itself — the Flutter
+ * shell. `false` in a browser and in a cookie shell (`session: "cookie"`), whose page is
+ * served by the server and authenticates with the ordinary cookie.
+ */
+export function bridgeOwnsSession(bridge = readShellBridge()): boolean {
+  return bridgeVersionOf(bridge) !== undefined && bridge?.session !== "cookie";
 }
 
 /**

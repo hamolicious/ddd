@@ -1,0 +1,12 @@
+{
+  "id": "doc-events",
+  "version": "1.0.0",
+  "name": "Document events",
+  "description": "Tells the plugins that care when a note is made on this device, so the view that made it and the tree that files it need not know each other.",
+  "author": "Life Manager base distribution",
+  "license": "MIT OR Apache-2.0",
+  "kernel": "^3.0",
+  "frontend": {
+    "module": "frontend/index.mjs"
+  }
+}

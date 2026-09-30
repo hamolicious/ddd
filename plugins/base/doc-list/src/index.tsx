@@ -1,16 +1,17 @@
 /**
- * `doc-list` — browse, search, sort, filter, create, and the **Trash view** (SPEC §6.5).
+ * `doc-list` — the all-documents page, new documents, and the **Trash view** (SPEC §6.5).
  *
- * **Search lives here** (it was its own plugin with its own results page). The list
- * page's search bar runs every provider seated on the `search` port (protocol
- * `lm/search.provider`, owned by this plugin), which offers the local index and the
- * server's itself, and the list becomes the ranked results (`search/`, `DocListView`).
- * The text is the URL's `?q=`, so a search survives reload and "back" from a result,
- * and the old `#/search?q=` address opens the same list. "Search documents" (Ctrl+Space by default) opens the list and focuses the bar.
+ * **The all-documents page is a search, as a table** — `table`'s `TablePage`
+ * (`plugin:table`), with the search in the URL: `#/?q=milk&where=…` is the spec's own
+ * query string, and the table's columns ride along as `t.<key>`, so it survives reload and
+ * "back" from a result, and the old `#/search?q=` address opens the same page. Searching
+ * and filtering are `search`'s, the table and saving it are `table`'s; this plugin owns the
+ * route, the heading, and "Search documents" (Ctrl+Space by default), which opens the page
+ * and focuses the bar.
  *
- * Everything it shows comes from `kernel.documents.subscribe`, which is a *live* local
- * query: the list updates as the feed arrives, offline included, with no polling and no
- * REST browsing (SPEC §4.1, §4.2).
+ * Everything shown comes from `kernel.documents.subscribe`, which is a *live* local query:
+ * the list updates as the feed arrives, offline included, with no polling and no REST
+ * browsing (SPEC §4.1, §4.2).
  *
  * Two details, both implemented in the files next to this one:
  *
@@ -28,16 +29,18 @@
  * merge with yet, and no existing block to destroy. Every *later* metadata write in this
  * plugin's neighbourhood goes through `kernel.documents.splice`.
  *
- * **Acting on results is commands.** The toolbar's Actions button lists every command
- * that `takes: "documents"` (`lm/commands.command`) and runs the chosen one, through the
- * `lm/commands` service, with the ids of the results listed. This plugin's own is "Move
- * to Trash"; `folders` offers "Move to folder…". No `commands` plugin: no button.
+ * **Acting on results is commands.** `search`'s Actions button lists every command that
+ * `takes: "documents"` (`plugin:commands`' `addCommand`) and runs it with the ids listed. This
+ * plugin's own is "Move to Trash"; `folders` offers "Move to folder…". A single note's
+ * menu, wherever it is right-clicked, starts with this plugin's "Open" and ends with its
+ * "Move to Trash" (`plugin:context-menu`'s `addAction`).
  *
  * **Where a new document is filed is not this plugin's business.** `createDocument`
- * takes an opaque `parent` hint and announces every document it created on the `created`
- * port (`lm/document-browser.created`), hint included; `folders` listens and files it —
- * under the hint, or wherever its "new notes go to" setting says. An event rather than a
- * service because `folders` uses this plugin's service, and the reverse would be a cycle.
+ * takes an opaque `parent` hint and announces every document it created through
+ * `plugin:doc-events`' `notifyCreated`, hint included; `folders` subscribes (`onCreated`)
+ * and files it — under the hint, or wherever its "new notes go to" setting says. Through
+ * `doc-events` rather than a call because `folders` depends on this plugin, and the
+ * reverse would be a cycle.
  * No `folders`, or one that failed to activate: the document is still created, at the
  * root. No plugin's opinion about folders may stop the app's most common action.
  */
@@ -46,60 +49,156 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactElement } from "react";
 
 import type { Kernel } from "@kernel";
-import type { Commands } from "@protocols/lm/commands";
-import type { Command } from "@protocols/lm/commands.command";
-import type { ContextMenu } from "@protocols/lm/context-menu";
-import type { DocumentBrowser } from "@protocols/lm/document-browser";
-import type { Icons } from "@protocols/lm/icons";
-import type { KeybindingDefault } from "@protocols/lm/keybindings.default";
-import type { MainView } from "@protocols/lm/main.view";
-import type { Router } from "@protocols/lm/router";
-import type { Route } from "@protocols/lm/router.route";
-import type { SidebarPanel } from "@protocols/lm/sidebar.panel";
+import { addCommand, addKeybinding } from "plugin:commands";
+import { addAction, confirm } from "plugin:context-menu";
+import { notifyCreated } from "plugin:doc-events";
+import { addRoute, current, navigate, onChange } from "plugin:router";
+import { encode, parse } from "plugin:search";
+import type { SearchSpec } from "plugin:search";
+import { addSidebarPanel, addView } from "plugin:shell-ui";
+import { TablePage, save as saveTable } from "plugin:table";
 
-import type { ConditionIndex } from "../../_shared/conditions-index.js";
+import { sameOptions } from "../../_shared/saved-view.js";
+import { yamlScalar } from "../../_shared/yaml.js";
 
-import { DocListView, TrashView } from "./DocListView.js";
-import { documentPath, listPath, queryParam } from "./search/hash.js";
-import { searchEngine } from "./search/providers.js";
+import { TrashView } from "./DocListView.js";
 import { ViewsPanel } from "./ViewsPanel.js";
-import { yamlScalar } from "./yaml.js";
+
+/** The query string part of a hash route, `""` when it has none. */
+function queryOf(hash: string): string {
+  const path = hash.replace(/^#/, "");
+  const index = path.indexOf("?");
+  return index === -1 ? "" : path.slice(index + 1);
+}
+
+/** A document's hash path, deep-linked to a line (`document-surface`'s `?line=`). */
+function documentPath(id: string, line?: number): string {
+  const path = `/doc/${encodeURIComponent(id)}`;
+  return line !== undefined && Number.isSafeInteger(line) && line >= 1 ? `${path}?line=${String(line)}` : path;
+}
+
+export interface NewDocumentOptions {
+  /**
+   * Where the new document belongs, as a hint for whoever files documents (`folders`
+   * files it under this note). Passed on to `plugin:doc-events`' `notifyCreated`.
+   */
+  readonly parent?: string;
+  readonly title?: string;
+}
 
 /**
- * What this plugin serves on its `browser` port: `lm/document-browser`, the protocol
- * package in `protocols/document-browser/`. `createDocument` rejects when the server
- * cannot be reached (creation is REST, SPEC §5.1); a caller with nowhere to show that
- * uses `newDocument`, which never rejects and reports a failure as a notice with a
- * retry action.
+ * What this plugin exports for creating documents (the old `lm/document-browser`
+ * service). `createDocument` rejects when the server cannot be reached (creation is REST,
+ * SPEC §5.1); a caller with nowhere to show that uses `newDocument`, which never rejects
+ * and reports a failure as a notice with a retry action.
  */
+export interface DocumentBrowser {
+  /** Create an empty document and navigate to it. Rejects when the server cannot be reached. */
+  readonly createDocument: (options?: NewDocumentOptions) => Promise<string>;
+  /** The same, for UI entry points: never rejects, and reports a failure as a notice with a retry. */
+  readonly newDocument: (options?: NewDocumentOptions) => void;
+  /** The ids currently shown, for "select all" style commands. */
+  readonly visible: () => readonly string[];
+}
+
 export type DocListApi = DocumentBrowser;
 
-export default function activate(kernel: Kernel): DocListApi {
-  // Each handle is limited to the port's `needs` in the manifest: exactly what is read here.
-  const router = kernel.ports.use<Pick<Router, "navigate" | "current" | "onChange">>("router");
-  const menu = kernel.ports.use<Pick<ContextMenu, "open" | "confirm">>("menu");
-  const registry = (): Pick<Commands, "list" | "run"> | undefined =>
-    kernel.ports.bound("registry") ? kernel.ports.use<Pick<Commands, "list" | "run">>("registry") : undefined;
-  const icons = (): Pick<Icons, "Icon"> | undefined =>
-    kernel.ports.bound("icons") ? kernel.ports.use<Pick<Icons, "Icon">>("icons") : undefined;
-  // Suggestions for the filter's properties and values; the filter works without them.
-  const index = (): ConditionIndex | undefined =>
-    kernel.ports.bound("index") ? kernel.ports.use<ConditionIndex>("index") : undefined;
+/** The table's settings on the all-documents page. */
+type TableOptions = Readonly<Record<string, string>>;
 
-  /** Ids the list last rendered, for `visible()`. */
-  let visible: readonly string[] = [];
+/** The URL prefix of the table's settings, beside the search's own params. */
+const TABLE_PARAM = "t.";
+
+/** The table's settings a list URL's query string carries. */
+function tableOptionsOf(query: string): TableOptions {
+  const options: Record<string, string> = {};
+  for (const [key, value] of new URLSearchParams(query)) {
+    if (key.startsWith(TABLE_PARAM) && key.length > TABLE_PARAM.length && value !== "") options[key.slice(TABLE_PARAM.length)] = value;
+  }
+  return options;
+}
+
+// The functions of the plugins this one depends on, grouped as they are read below.
+const router = { navigate, current, onChange };
+const menu = { confirm };
+const search = { parse, encode };
+const table = { TablePage, save: saveTable };
+
+let kernelRef: Kernel | undefined;
+
+const active = (): Kernel => {
+  if (!kernelRef) throw new Error("doc-list is not active yet: call it from your plugin's activate() or later");
+  return kernelRef;
+};
+
+/** Ids the list last rendered, for `visible()`. */
+let visibleIds: readonly string[] = [];
+
+/**
+ * "Search documents" asks for the field before the list may be on screen, so the request
+ * waits here and the field takes it when it mounts; a list already open is focused at once.
+ */
+let focusWanted = false;
+let focusSearch: (() => void) | undefined;
+
+/** Create an empty document and navigate to it. Rejects when the server cannot be reached. */
+export async function createDocument(options?: NewDocumentOptions): Promise<string> {
+  const kernel = active();
+  // A new document is just text. The frontmatter block is written here rather than
+  // spliced afterwards: at creation there is no concurrent writer to merge with, and
+  // this is the one moment when authoring the whole text is correct (SPEC §3.3).
+  const title = options?.title ?? "Untitled";
+  // Frontmatter only: a new note starts empty.
+  const text = ["---", `title: ${yamlScalar(title)}`, "---", ""].join("\n");
+  const id = await kernel.documents.create({ text });
+  // Filing is whoever listens: `folders` puts it under `parent`, or its default.
+  notifyCreated(options?.parent !== undefined ? { id, parent: options.parent } : { id });
+  router.navigate(`/doc/${id}`);
+  return id;
+}
+
+/**
+ * Creating a document is offered from four places — `Mod+N`, the navbar, the palette and
+ * the folder tree — and **it can fail**: offline it succeeds on the device, but the server
+ * can still refuse it (too large, say). Throwing the promise away meant the palette
+ * closed, no document opened, and the only trace was an unhandled rejection in the
+ * console. Every entry point goes through this instead, so a failure is a notice with a
+ * retry, the way the delete and restore paths already surface theirs.
+ */
+export function newDocument(options?: NewDocumentOptions): void {
+  const kernel = active();
+  void createDocument(options).catch((cause: unknown) => {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    kernel.log.error("could not create a document", cause);
+    kernel.ui.notify({
+      id: "doc-list.create-failed",
+      level: "error",
+      message: `Could not create the document: ${message}`,
+      actions: [{ label: "Try again", run: () => newDocument(options) }],
+    });
+  });
+}
+
+/** The ids currently shown, for "select all" style commands. */
+export function visible(): readonly string[] {
+  return visibleIds;
+}
+
+export default function activate(kernel: Kernel): void {
+  kernelRef = kernel;
+  /** The list's path for a search and its table: the bare list for the default one. */
+  const pathFor = (spec: SearchSpec, options: TableOptions): string => {
+    const params = new URLSearchParams(search.encode(spec));
+    for (const key of Object.keys(options).sort()) {
+      const value = options[key];
+      if (value !== undefined && value !== "") params.set(`${TABLE_PARAM}${key}`, value);
+    }
+    const encoded = params.toString();
+    return encoded === "" ? "/" : `/?${encoded}`;
+  };
 
   const open = (id: string, line?: number): void => router.navigate(documentPath(id, line));
 
-  const search = searchEngine(kernel);
-
-  /**
-   * "Search documents" asks for the field before the list may be on screen, so the
-   * request waits here and the field takes it when it mounts; a list already open is
-   * focused at once.
-   */
-  let focusWanted = false;
-  let focusSearch: (() => void) | undefined;
   const openSearch = (): void => {
     const onList = router.current().split("?")[0] === "/";
     if (!onList) router.navigate("/");
@@ -107,59 +206,7 @@ export default function activate(kernel: Kernel): DocListApi {
     else focusWanted = true;
   };
 
-  /**
-   * Creating a document is offered from four places — `Mod+N`, the navbar, the palette
-   * and the folder tree — and **it can fail**: offline it succeeds on the device, but
-   * the server can still refuse it (too large, say). Throwing the promise away (`void api.createDocument()`) meant the
-   * palette closed, no document opened, and the only trace was an unhandled rejection in
-   * the console. Every entry point goes through this instead, so a failure is a notice
-   * with a retry, the way the delete and restore paths already surface theirs.
-   */
-  const create = (options?: { readonly parent?: string; readonly title?: string }): void => {
-    void api.createDocument(options).catch((cause: unknown) => {
-      const message = cause instanceof Error ? cause.message : String(cause);
-      kernel.log.error("could not create a document", cause);
-      kernel.ui.notify({
-        id: "doc-list.create-failed",
-        level: "error",
-        message: `Could not create the document: ${message}`,
-        actions: [{ label: "Try again", run: () => create(options) }],
-      });
-    });
-  };
-
-  /** The Actions menu: every command that takes documents, run with the results' ids. */
-  const openActions = (ids: readonly string[], anchor: HTMLElement): void => {
-    const commands = registry();
-    const Icon = icons()?.Icon;
-    const available = (commands?.list() ?? []).filter((command) => command.takes === "documents");
-    menu.open({
-      title: `${ids.length.toLocaleString()} document${ids.length === 1 ? "" : "s"}`,
-      anchor,
-      sections: [
-        {
-          items:
-            available.length === 0
-              ? [{ id: "none", label: "No actions available", disabled: true, run: () => undefined }]
-              : available.map((command) => ({
-                  id: command.id,
-                  label: command.title,
-                  ...(Icon && command.icon !== undefined ? { icon: <Icon name={command.icon} /> } : {}),
-                  run: () => {
-                    void commands?.run(command.id, ids).catch((cause: unknown) => {
-                      kernel.log.error(`command "${command.id}" failed`, cause);
-                      kernel.ui.notify({
-                        id: "doc-list.action-failed",
-                        level: "error",
-                        message: `${command.title} failed: ${cause instanceof Error ? cause.message : String(cause)}`,
-                      });
-                    });
-                  },
-                })),
-        },
-      ],
-    });
-  };
+  const create = newDocument;
 
   /** "Move to Trash" for many documents at once, after asking. */
   const trashAll = async (argument: unknown): Promise<void> => {
@@ -189,25 +236,30 @@ export default function activate(kernel: Kernel): DocListApi {
   // ---------------------------------------------------------------------------
 
   const ListHost = (): ReactElement => {
-    const [query, setQuery] = useState(() => queryParam(location.hash, "q"));
+    const [spec, setSpec] = useState<SearchSpec>(() => search.parse(queryOf(location.hash)));
+    const [options, setOptions] = useState<TableOptions>(() => tableOptionsOf(queryOf(location.hash)));
     const input = useRef<HTMLInputElement>(null);
 
-    // The URL is the state: back, forward and links move the search box.
+    // The URL is the state: back, forward and links move the search.
     useEffect(() => {
       // The old results page's address, spelled the list's way — on arrival, and on a
       // hash change while the list is already on screen (same view, no remount).
       const canonical = (): void => {
         if (router.current().split("?")[0] === "/search") {
-          router.navigate(listPath(queryParam(location.hash, "q")), { replace: true });
+          const query = queryOf(location.hash);
+          router.navigate(pathFor(search.parse(query), tableOptionsOf(query)), { replace: true });
         }
       };
       canonical();
       return router.onChange(() => {
         canonical();
-        // Compared trimmed: the URL holds the trimmed text, and echoing it back would
-        // eat the space typed between two words.
-        const next = queryParam(location.hash, "q");
-        setQuery((current) => (current.trim() === next.trim() ? current : next));
+        // Compared encoded: the URL holds the trimmed text, and echoing it back would eat
+        // the space typed between two words; filter row ids are not in it either.
+        const query = queryOf(location.hash);
+        const next = search.parse(query);
+        setSpec((current) => (search.encode(current) === search.encode(next) ? current : next));
+        const nextOptions = tableOptionsOf(query);
+        setOptions((current) => (sameOptions(current, nextOptions) ? current : nextOptions));
       });
     }, []);
     useEffect(() => {
@@ -224,26 +276,40 @@ export default function activate(kernel: Kernel): DocListApi {
       };
     }, []);
 
+    const Page = table.TablePage;
     return (
-      <DocListView
-        documents={kernel.documents}
-        index={index()}
-        menu={menu}
-        onOpen={open}
-        onCreate={() => create()}
-        onDelete={(id) => kernel.documents.delete(id)}
-        onRendered={(ids) => {
-          visible = ids;
-        }}
-        search={search}
-        query={query}
-        onQueryChange={(next) => {
-          setQuery(next);
+      <Page
+        spec={spec}
+        onSpecChange={(next) => {
+          setSpec(next);
           // Replaced, not pushed: one history entry per search, not one per keystroke.
-          router.navigate(listPath(next), { replace: true });
+          router.navigate(pathFor(next, options), { replace: true });
         }}
+        options={options}
+        onOptionsChange={(next) => {
+          setOptions(next);
+          router.navigate(pathFor(spec, next), { replace: true });
+        }}
+        heading="Documents"
+        onOpen={open}
         searchInput={input}
-        {...(registry() ? { onActions: openActions } : {})}
+        onRendered={(ids) => {
+          visibleIds = ids;
+        }}
+        {...(search.encode(spec) !== "" || Object.keys(options).length > 0
+          ? {
+              onSave: () => {
+                void table.save(spec, options).catch((cause: unknown) => {
+                  kernel.log.error("could not save the search", cause);
+                  kernel.ui.notify({
+                    id: "doc-list.save-search-failed",
+                    level: "error",
+                    message: `Could not save the search: ${cause instanceof Error ? cause.message : String(cause)}`,
+                  });
+                });
+              },
+            }
+          : {})}
       />
     );
   };
@@ -269,20 +335,51 @@ export default function activate(kernel: Kernel): DocListApi {
     );
   };
 
-  // `/` is the catch-all. The router ranks routes by specificity and breaks ties by seat
-  // order (PLUGIN-PROTOCOLS §6a); `order` here is only the protocol's default-seat hint.
-  kernel.ports.offer<Route>("route", [
+  // `/` is the catch-all. The router ranks routes by specificity and breaks ties by `order`.
+  addRoute([
     { path: "/", view: "doc-list.all", order: 900 },
     { path: "/search", view: "doc-list.all" },
     { path: "/trash", view: "doc-list.trash" },
   ]);
 
-  kernel.ports.offer<MainView>("views", [
+  addView([
     { id: "doc-list.all", title: "Documents", component: ListHost },
     { id: "doc-list.trash", title: "Trash", component: TrashHost },
   ]);
 
-  kernel.ports.offer<SidebarPanel>("list", {
+  // Any note's menu: Open first, Move to Trash last. `document.trash` is a shared id, so a
+  // plugin that knows more (`folders`, about the notes inside) replaces it by adding its own.
+  addAction([
+    {
+      id: "document.open",
+      target: "lm/document",
+      order: 0,
+      items: (target) => [{ id: "open", label: "Open", run: () => router.navigate(`/doc/${encodeURIComponent(target.id)}`) }],
+    },
+    {
+      id: "document.trash",
+      target: "lm/document",
+      order: 100,
+      items: (target) => [
+        {
+          id: "trash",
+          label: "Move to Trash",
+          hint: "Restorable for 30 days.",
+          danger: true,
+          run: () =>
+            void kernel.documents.delete(target.id).catch((cause: unknown) =>
+              kernel.ui.notify({
+                id: "doc-list.trash-failed",
+                level: "error",
+                message: `Could not move it to Trash: ${cause instanceof Error ? cause.message : String(cause)}`,
+              }),
+            ),
+        },
+      ],
+    },
+  ]);
+
+  addSidebarPanel({
     id: "doc-list.views",
     title: "Views",
     order: 10,
@@ -290,7 +387,7 @@ export default function activate(kernel: Kernel): DocListApi {
     component: PanelHost,
   });
 
-  kernel.ports.offer<Command>("commands", [
+  addCommand([
     {
       id: "doc-list.new",
       title: "New document",
@@ -328,33 +425,15 @@ export default function activate(kernel: Kernel): DocListApi {
       run: trashAll,
     },
   ]);
-  kernel.ports.offer<KeybindingDefault>("keys", [
+  addKeybinding([
     { command: "doc-list.new", keys: "Mod+N" },
     // Literal Ctrl, not Mod: Cmd+Space is the Mac's own search.
     { command: "doc-list.search", keys: "Ctrl+Space" },
   ]);
+}
 
-  // ---------------------------------------------------------------------------
-  // API
-  // ---------------------------------------------------------------------------
-
-  const api: DocListApi = {
-    createDocument: async (options) => {
-      // A new document is just text. The frontmatter block is written here rather than
-      // spliced afterwards: at creation there is no concurrent writer to merge with, and
-      // this is the one moment when authoring the whole text is correct (SPEC §3.3).
-      const title = options?.title ?? "Untitled";
-      const text = ["---", `title: ${yamlScalar(title)}`, "---", "", `# ${title}`, ""].join("\n");
-      const id = await kernel.documents.create({ text });
-      // Filing is whoever listens: `folders` puts it under `parent`, or its default.
-      kernel.ports.emit("created", options?.parent !== undefined ? { id, parent: options.parent } : { id });
-      router.navigate(`/doc/${id}`);
-      return id;
-    },
-    newDocument: (options) => create(options),
-    visible: () => visible,
-  };
-
-  kernel.ports.serve("browser", api);
-  return api;
+export function deactivate(): void {
+  kernelRef = undefined;
+  focusSearch = undefined;
+  focusWanted = false;
 }

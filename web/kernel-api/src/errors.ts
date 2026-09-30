@@ -22,8 +22,9 @@ export class KernelError extends Error {
 }
 
 /**
- * A plugin's offer or call violated the contract: an item or service that does not
- * match its protocol, an undeclared port, a member read outside a port's `needs`.
+ * A plugin's contribution or call violated the contract: a registry item that does not
+ * fit the registry's shape, a `checked` function called with the wrong arguments, an
+ * optional dependency asked for without being declared.
  * Thrown loudly and never swallowed (SPEC §6.4: "rejects loudly").
  */
 export class ContractViolationError extends KernelError {}

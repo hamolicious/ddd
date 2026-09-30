@@ -154,7 +154,7 @@ fn record(capabilities: PluginCapabilities) -> PluginRecord {
 
 fn record_with(
     capabilities: PluginCapabilities,
-    calls: Vec<String>,
+    deps: Vec<String>,
     routes: Vec<String>,
 ) -> PluginRecord {
     let public_routes = capabilities.public_routes.clone();
@@ -165,7 +165,7 @@ fn record_with(
         manifest: PluginManifest {
             id: "hello-backend".to_string(),
             version: "1.0.0".to_string(),
-            kernel: "^2.0".to_string(),
+            kernel: "^3.0".to_string(),
             peer_libraries: BTreeMap::new(),
             frontend: None,
             capabilities: PluginCapabilities {
@@ -179,15 +179,23 @@ fn record_with(
                 cron: vec!["0 6 * * *".to_string()],
                 routes,
                 events: Vec::new(),
-                calls,
+                // `echo` is callable, which is what lets the reentrancy check be reached.
+                exports: BTreeMap::from([(
+                    "echo".to_string(),
+                    life_manager_server::plugins::BackendExport {
+                        input: None,
+                        output: None,
+                        description: None,
+                    },
+                )]),
             }),
             name: None,
             description: None,
             author: None,
             license: None,
-            provides: BTreeMap::new(),
-            consumes: BTreeMap::new(),
-            hot: false,
+            provides: None,
+            dependencies: deps.into_iter().map(|id| (id, "*".to_string())).collect(),
+            optional_dependencies: BTreeMap::new(),
             extra: BTreeMap::new(),
         },
         capabilities_approved: capabilities,
@@ -880,7 +888,7 @@ async fn kv_round_trips_through_mongo_in_the_plugins_own_namespace() {
 // call_plugin
 // ---------------------------------------------------------------------------
 
-/// `backend.calls` is what gates `call_plugin`, not a capability (HOST-ABI.md §3.10).
+/// `dependencies` is what gates `call_plugin`, not a capability (HOST-ABI.md §3.10).
 /// An undeclared callee is `forbidden` even when it is loaded and healthy.
 #[tokio::test]
 async fn call_plugin_refuses_an_undeclared_dependency_and_refuses_reentrancy() {
@@ -890,17 +898,17 @@ async fn call_plugin_refuses_an_undeclared_dependency_and_refuses_reentrancy() {
     let harness = harness!();
     // Declares itself as a callee, which is the only way to reach the reentrancy check
     // through a single fixture — and a legitimate thing for a manifest to be wrong about.
-    let calls = vec!["hello-backend".to_string()];
+    let deps = vec!["hello-backend".to_string()];
     harness
         .host
         .activate(
             &harness.state,
-            &record_with(PluginCapabilities::default(), calls, Vec::new()),
+            &record_with(PluginCapabilities::default(), deps, Vec::new()),
         )
         .await
         .expect("activates");
 
-    // Not in `backend.calls`: forbidden, before anything is looked up.
+    // Not in `dependencies`: forbidden, before anything is looked up.
     match harness
         .invoke(
             "call",
@@ -910,7 +918,7 @@ async fn call_plugin_refuses_an_undeclared_dependency_and_refuses_reentrancy() {
     {
         Err(CallFailure::Refused(error)) => {
             assert_eq!(error.code, abi::ErrorCode::Forbidden);
-            assert!(error.message.contains("backend.calls"));
+            assert!(error.message.contains("dependencies"));
         }
         other => panic!("expected forbidden, got {other:?}"),
     }

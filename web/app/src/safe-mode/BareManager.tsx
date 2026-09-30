@@ -5,18 +5,17 @@
  * did can affect this screen. It lists what is installed, shows why each entry would
  * or would not load in a normal boot, and offers the two exits.
  *
- * **What decides "would load" is the server's resolution** (PLUGIN-PROTOCOLS §6): the
- * live wiring resolved against this list, as `GET /api/plugins` ships it, with this
- * client's own kernel-range check on top (`orderFromResolution`). A list without one (a
- * server older than wiring) cannot say, and the column says that rather than guessing.
+ * **What decides "would load" is the server's load resolution** (`@kernel` 3.0): the
+ * enabled plugins in dependency order, and what was left out and why, as `GET
+ * /api/plugins` ships it (`load`), with this client's own manifest and kernel-range check
+ * on top (`clientCheck`). A list without one (a server older than 3.0) cannot say, and
+ * the column says that rather than guessing.
  *
- * **The write path is admin-only, and it is the way back** (PLUGIN-PROTOCOLS §7, §10): a
- * plugin that is disabled or unplugged gets a *Plug in* button, and the wiring history
- * offers *Roll back* to any earlier version. Both go through the same server routes the
- * `admin` plugin's Plugins and Wiring tabs use, so the server's admin check is the control here too;
- * a non-admin sees the read-only list and is told who can act. Nothing is pinned: a
- * rollback is an ordinary apply with an older version's overrides, and the server refuses
- * it (409) when live has moved on in between.
+ * **The write path is admin-only, and it is the way back**: a disabled plugin gets an
+ * *Enable* button, through the same server route the `admin` plugin's Plugins page uses,
+ * so the server's admin check is the control here too; a non-admin sees the read-only
+ * list and is told who can act. Enabling a plugin reloads every open client
+ * (`plugins.changed`), this one included — which lands back here, in `?safe=bare`.
  *
  * This screen needs the kernel, React and the session, and nothing else — no plugin
  * code, no plugin UI. Confirmation is `window.confirm`.
@@ -24,20 +23,11 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
-import { KERNEL_API_VERSION, type InstalledPlugin, type LiveWiring, type SessionUser } from "@kernel";
+import { KERNEL_API_VERSION, type InstalledPlugin, type SessionUser } from "@kernel";
 
-import {
-  ApiError,
-  applyWiring,
-  enablePlugin,
-  installedPlugins,
-  wiringHistory,
-  wiringVersion,
-  type PluginList,
-  type WiringVersionInfo,
-} from "../boot/api.js";
+import { enablePlugin, installedPlugins, type PluginList } from "../boot/api.js";
 import { safeModeUrl } from "../boot/safe-mode.js";
-import { orderFromResolution, type SkippedPlugin } from "../loader/order.js";
+import { clientCheck } from "../loader/loader.js";
 
 export interface BareManagerProps {
   /** The bearer token, for shells; a browser's session is its cookie. */
@@ -52,10 +42,7 @@ export function BareManager({ token, user }: BareManagerProps): ReactNode {
   const admin = user?.isAdmin === true;
   const [list, setList] = useState<PluginList | undefined>();
   const [error, setError] = useState<string | undefined>();
-  const [history, setHistory] = useState<readonly WiringVersionInfo[] | undefined>();
-  const [wiringLive, setWiringLive] = useState<LiveWiring | undefined>();
-  const [wiringError, setWiringError] = useState<string | undefined>();
-  /** The id or version an action is running for; one at a time on a recovery screen. */
+  /** The id an action is running for; one at a time on a recovery screen. */
   const [busy, setBusy] = useState<string | undefined>();
   const [notice, setNotice] = useState<string | undefined>();
   const [generation, setGeneration] = useState(0);
@@ -77,37 +64,22 @@ export function BareManager({ token, user }: BareManagerProps): ReactNode {
     };
   }, [token, generation]);
 
-  useEffect(() => {
-    // The history route is admin-only; asking as anyone else would only show a 403.
-    if (!admin) return;
-    let live = true;
-    wiringHistory(token)
-      .then((response) => {
-        if (!live) return;
-        setHistory(response.history);
-        setWiringLive(response.live);
-        setWiringError(undefined);
-      })
-      .catch((cause: unknown) => {
-        if (live) setWiringError(describe(cause));
-      });
-    return () => {
-      live = false;
-    };
-  }, [admin, token, generation]);
-
   const plugins = list?.plugins;
-  const liveWiring = wiringLive ?? list?.wiring;
-  const unplugged = new Set(liveWiring?.unplugged ?? []);
+  const load = list?.load;
+  const loading = new Set(load?.normal ?? []);
+  const serverSkipped = new Map((load?.skipped ?? []).map((entry) => [entry.id, entry.reason]));
 
-  // The server's resolution decides; without one nothing can be said about a plugin.
-  const resolved =
-    plugins && list?.resolved
-      ? orderFromResolution(plugins, list.resolved.normal, { kernelVersion: KERNEL_API_VERSION })
-      : undefined;
-  const skipReason = new Map<string, SkippedPlugin>(
-    (resolved?.skipped ?? []).map((entry) => [entry.pluginId, entry]),
-  );
+  /** Why a plugin would not load in a normal boot, or `undefined` when it would. */
+  const wouldNotLoad = (plugin: InstalledPlugin): string | undefined => {
+    const id = plugin.manifest.id;
+    if (plugin.state !== "enabled") return `it is ${plugin.state}`;
+    const server = serverSkipped.get(id);
+    if (server) return server;
+    const refused = clientCheck(plugin, KERNEL_API_VERSION);
+    if (refused) return refused.detail;
+    if (!loading.has(id)) return "the server's load order leaves it out";
+    return undefined;
+  };
 
   const run = (key: string, action: () => Promise<void>): void => {
     if (busy !== undefined) return;
@@ -119,40 +91,17 @@ export function BareManager({ token, user }: BareManagerProps): ReactNode {
       .finally(() => setBusy(undefined));
   };
 
-  const plugIn = (plugin: InstalledPlugin): void =>
-    run(`plug:${plugin.manifest.id}`, () => enablePlugin(plugin.manifest.id, token));
+  const enable = (plugin: InstalledPlugin): void =>
+    run(`enable:${plugin.manifest.id}`, () => enablePlugin(plugin.manifest.id, token));
 
-  const rollBack = (entry: WiringVersionInfo): void => {
-    if (liveWiring === undefined) return;
-    const base = liveWiring.version;
-    const ok = window.confirm(
-      `Roll back to wiring version ${entry.version}?\n\nVersion ${base} is live. Version ${entry.version} is applied again as version ${base + 1}; nothing is deleted.`,
-    );
-    if (!ok) return;
-    run(`rollback:${entry.version}`, async () => {
-      const record = await wiringVersion(entry.version, token);
-      try {
-        await applyWiring({ base, wiring: record.wiring, action: "rollback" }, token);
-      } catch (cause) {
-        if (!(cause instanceof ApiError && cause.status === 409)) throw cause;
-        // Someone applied a version in between: the reload shows it; say why nothing moved.
-        const latest = await wiringHistory(token);
-        throw new Error(
-          `The live wiring moved on to version ${latest.live.version} in the meantime; nothing was changed. Choose again from the current list.`,
-        );
-      }
-    });
-  };
-
-  const pluggable = (plugin: InstalledPlugin): boolean =>
-    plugin.state === "disabled" || unplugged.has(plugin.manifest.id);
+  const enableable = (plugin: InstalledPlugin): boolean => plugin.state === "disabled";
 
   return (
     <div className="lm-bare">
       <header>
         <h1>Plugin manager (safe mode)</h1>
         <p>No plugins are loaded.</p>
-        {!admin && <p>An administrator can plug plugins back in and roll the wiring back here.</p>}
+        {!admin && <p>An administrator can enable plugins again here.</p>}
         <p>
           <a href={safeModeUrl("off")}>Normal boot</a> ·{" "}
           <a href={safeModeUrl("base")}>Base plugins only</a>
@@ -182,7 +131,7 @@ export function BareManager({ token, user }: BareManagerProps): ReactNode {
                 .sort((a, b) => a.manifest.id.localeCompare(b.manifest.id))
                 .map((plugin) => {
                   const id = plugin.manifest.id;
-                  const skipped = skipReason.get(id);
+                  const why = load === undefined ? undefined : wouldNotLoad(plugin);
                   return (
                     <tr key={id}>
                       <th scope="row">{id}</th>
@@ -192,19 +141,15 @@ export function BareManager({ token, user }: BareManagerProps): ReactNode {
                       </td>
                       <td data-label="Base">{plugin.base ? "yes" : "no"}</td>
                       <td data-label="Would load">
-                        {resolved === undefined
-                          ? "unknown: the server sent no resolution"
-                          : skipped
-                            ? `no — ${skipped.detail}`
-                            : "yes"}
-                        {admin && pluggable(plugin) ? (
+                        {load === undefined ? "unknown: the server sent no load order" : why ? `no — ${why}` : "yes"}
+                        {admin && enableable(plugin) ? (
                           <button
                             type="button"
-                            aria-label={`Plug in ${id}`}
+                            aria-label={`Enable ${id}`}
                             disabled={busy !== undefined}
-                            onClick={() => plugIn(plugin)}
+                            onClick={() => enable(plugin)}
                           >
-                            {busy === `plug:${id}` ? "Plugging in…" : "Plug in"}
+                            {busy === `enable:${id}` ? "Enabling…" : "Enable"}
                           </button>
                         ) : null}
                       </td>
@@ -216,69 +161,6 @@ export function BareManager({ token, user }: BareManagerProps): ReactNode {
         </div>
       ) : null}
 
-      {admin ? (
-        <section className="lm-bare-wiring" aria-labelledby="lm-bare-wiring-heading">
-          <h2 id="lm-bare-wiring-heading">Wiring</h2>
-          {wiringError ? <p role="alert">Could not read the wiring history: {wiringError}</p> : null}
-          {!history && !wiringError ? <p>Loading the wiring history…</p> : null}
-          {history && liveWiring ? (
-            <>
-              <p>
-                Live version <strong>{liveWiring.version}</strong>
-                {liveWiring.unplugged.length > 0 ? <> · {liveWiring.unplugged.length} unplugged</> : null}
-              </p>
-              {history.length === 0 ? (
-                <p>No versions recorded yet.</p>
-              ) : (
-                <div className="lm-bare-scroll">
-                  <table className="lm-bare-table">
-                    <thead>
-                      <tr>
-                        <th scope="col">Version</th>
-                        <th scope="col">Action</th>
-                        <th scope="col">By</th>
-                        <th scope="col">When</th>
-                        <th scope="col">
-                          <span className="lm-sr-only">Roll back</span>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {history.map((entry) => (
-                        <tr key={entry.version} data-wiring-version={entry.version}>
-                          <th scope="row">
-                            {entry.version}
-                            {entry.version === liveWiring.version ? " (live)" : ""}
-                          </th>
-                          <td data-label="Action">
-                            <code>{entry.action}</code>
-                            {entry.subject !== undefined ? ` ${entry.subject}` : ""}
-                          </td>
-                          <td data-label="By">{entry.actor ?? "—"}</td>
-                          <td data-label="When">{formatWhen(entry.at)}</td>
-                          <td className="lm-bare-actions">
-                            {entry.version !== liveWiring.version ? (
-                              <button
-                                type="button"
-                                aria-label={`Roll back to version ${entry.version}`}
-                                disabled={busy !== undefined}
-                                onClick={() => rollBack(entry)}
-                              >
-                                {busy === `rollback:${entry.version}` ? "Rolling back…" : "Roll back"}
-                              </button>
-                            ) : null}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </>
-          ) : null}
-        </section>
-      ) : null}
-
       <footer>
         <p>
           An administrator enables and disables plugins on the server. To stop the server
@@ -286,22 +168,9 @@ export function BareManager({ token, user }: BareManagerProps): ReactNode {
           restart it.
         </p>
         <p>
-          Kernel contract <code>{KERNEL_API_VERSION}</code>
-          {liveWiring ? (
-            <>
-              {" "}
-              · wiring version <code>{liveWiring.version}</code>
-            </>
-          ) : null}
-          .
+          Kernel contract <code>{KERNEL_API_VERSION}</code>.
         </p>
       </footer>
     </div>
   );
-}
-
-/** A timestamp for display; the raw string when it does not parse. */
-function formatWhen(iso: string): string {
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
 }

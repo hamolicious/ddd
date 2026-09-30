@@ -1,35 +1,20 @@
 {
   "id": "viewer",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "name": "Viewer",
-  "description": "Read mode: renders the body, hides frontmatter and machine sections.",
+  "description": "Read mode: renders the body, hides frontmatter and machine sections, and lists the notes inside it.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
-  "kernel": "^2.0",
-  "hot": true,
-  "consumes": {
-    "markdown": {
-      "protocol": "lm/markdown-renderer@^2.1",
-      "needs": [
-        "render",
-        "bodyOf",
-        "renderAttachment",
-        "renderDocLink"
-      ]
-    }
+  "kernel": "^3.0",
+  "dependencies": {
+    "document-surface": "^2.0",
+    "markdown": "^3.0",
+    "router": "^2.0",
+    "shell-ui": "^3.0"
   },
-  "provides": {
-    "mode": {
-      "protocol": "lm/document.mode@1.0.0",
-      "order": 0
-    },
-    "view": {
-      "protocol": "lm/main.view@1.0.0"
-    },
-    "route": {
-      "protocol": "lm/router.route@1.0.0"
-    }
+  "optionalDependencies": {
+    "folders": "^4.0"
   },
   "peerLibraries": {
     "react": "^18.0.0"

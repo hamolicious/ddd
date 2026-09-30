@@ -1,14 +1,15 @@
 /**
  * `native-preview` — viewers for every file type a browser can show by itself.
  *
- * Five viewers offered on the `viewers` port (`lm/attachments.viewer`), each a plain
+ * Five viewers added with `plugin:attachments`' `addViewer`, each a plain
  * element around the object URL `attachments` hands over: `<img>`, `<video>`, `<audio>`,
  * an `<iframe>` for PDF (the browser's own PDF viewer) and a `<pre>` for plain text.
  * Nothing is decoded or parsed here, so what shows is whatever the browser supports: a
  * codec it lacks gets the "cannot play" message, not a broken player.
  *
- * Which viewer shows a type is the wiring's seat order on the host: a plugin seated
- * before this one takes the types it claims over, and the user can switch back per type.
+ * Which viewer shows a type is the viewers' `order` (these have the default, 100): a
+ * viewer with a lower `order` takes the types it claims over, and the user can switch
+ * back per type.
  *
  * **SVG is not here** (SPEC §3.6: a stored-XSS vector), and neither is HTML: those are
  * files a browser would *run*, not preview.
@@ -20,10 +21,8 @@
  * message instead of an empty frame.
  */
 
-import type { Kernel } from "@kernel";
+import { addViewer, type AttachmentViewer, type AttachmentViewerProps } from "plugin:attachments";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-
-import type { AttachmentViewer, AttachmentViewerProps } from "@protocols/lm/attachments.viewer";
 
 /** Beyond this, a text file shows its start and says so. */
 const MAX_TEXT_BYTES = 256 * 1024;
@@ -170,7 +169,6 @@ const VIEWERS: readonly AttachmentViewer[] = [
   },
 ];
 
-export default function activate(kernel: Kernel): void {
-  // One port, five viewers: they stay together, in this order, on every host wired to it.
-  kernel.ports.offer<AttachmentViewer>("viewers", VIEWERS);
+export default function activate(): void {
+  addViewer(VIEWERS);
 }

@@ -1,17 +1,16 @@
 /**
- * The `s.*` builders serialise (PLUGIN-PROTOCOLS §3): `toJSON()` is what a protocol package
- * stores and the wiring type check reads, and `shapeFromJSON` is how the kernel validates
- * against a protocol it only knows as data.
+ * The `s.*` builders serialise: `toJSON()` is what a manifest's `backend.exports` declares
+ * and the server validates backend calls with, and `shapeFromJSON` rebuilds a validator
+ * from that JSON.
  */
 
-import { execFileSync } from "node:child_process";
-import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { s, shapeFromJSON, splitProtocolRef, validate, type PluginManifest, type ProtocolPackage, type ShapeJson } from "@kernel";
+import { s, shapeFromJSON, validate, type ShapeJson } from "@kernel";
 
 const web = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -66,43 +65,32 @@ describe("shapes as JSON", () => {
     expect(validate(annotated, () => undefined)).toEqual([]);
     expect(validate(annotated, "nope")).toHaveLength(1);
   });
+
+  it("serialises a function with argument shapes as plain func", () => {
+    expect(s.fn([s.string()], s.number()).toJSON()).toBe("func");
+    expect(s.promise(s.string()).toJSON()).toBe("promise");
+  });
 });
 
-describe("the protocol packages", () => {
-  const base = resolve(web, "../plugins/base");
-  const packages: ProtocolPackage[] = readdirSync(base)
-    .filter((owner) => existsSync(resolve(base, owner, "protocols")))
-    .flatMap((owner) =>
-      readdirSync(resolve(base, owner, "protocols")).map(
-        (name) => JSON.parse(readFileSync(resolve(base, owner, "protocols", name, "protocol.json"), "utf8")) as ProtocolPackage,
-      ),
-    );
+/**
+ * The shared shapes corpus (`backend/crates/core/corpus/shapes.json`): the Rust validator
+ * that checks `backend.exports` and this one answer every case the same way.
+ */
+describe("the shapes corpus", () => {
+  const corpus = resolve(web, "../backend/crates/core/corpus/shapes.json");
+  interface Case {
+    readonly name: string;
+    readonly shape: ShapeJson;
+    readonly value: unknown;
+    readonly ok: boolean;
+  }
 
-  it("cover every protocol a base or example manifest provides or consumes", () => {
-    for (const tree of ["plugins/base", "plugins/examples"]) {
-      const root = resolve(web, "..", tree);
-      for (const id of readdirSync(root)) {
-        const path = resolve(root, id, "manifest.json");
-        if (!existsSync(path)) continue;
-        const manifest = JSON.parse(readFileSync(path, "utf8")) as PluginManifest;
-        for (const port of [...Object.values(manifest.provides ?? {}), ...Object.values(manifest.consumes ?? {})]) {
-          const [protocol] = splitProtocolRef(port.protocol);
-          expect(packages.some((p) => p.id === protocol), `${id}: ${port.protocol}`).toBe(true);
-        }
-      }
-    }
-    for (const service of ["lm/workspace-index", "lm/context-menu", "lm/shell"]) {
-      expect(packages.find((p) => p.id === service), service).toMatchObject({ kind: "service" });
+  it.skipIf(!existsSync(corpus))("agrees with the Rust validator on every case", () => {
+    const cases = JSON.parse(readFileSync(corpus, "utf8")) as Case[];
+    expect(cases.length).toBeGreaterThan(0);
+    for (const entry of cases) {
+      const issues = validate(shapeFromJSON(entry.shape), entry.value);
+      expect(issues.length === 0, `${entry.name}: ${JSON.stringify(issues)}`).toBe(entry.ok);
     }
   });
-
-  it("are generated from their shape.mjs", () => {
-    // Exits non-zero naming every stale file (and the protocols it read are checked for
-    // ids, versions, kinds and keys on the way).
-    const out = execFileSync("npx", ["vite-node", "scripts/gen-protocols.ts", "--check"], {
-      cwd: web,
-      encoding: "utf8",
-    });
-    expect(out).toMatch(/39 protocols up to date/);
-  }, 60_000);
 });

@@ -1,11 +1,14 @@
 /**
- * The one reload prompt (SPEC §8, PLUGIN-PROTOCOLS §6c).
+ * The one reload prompt (SPEC §8).
  *
- * Three things can ask a user to reload: a new app bundle waiting in the service worker, a
- * wiring change this client cannot apply in place, and a plugin list with no resolution to
- * activate from (one cached before resolutions existed, or served by an older server). They share one notice, so a user is
- * never asked twice, and one Reload covers both: when a new worker is waiting it takes
- * control first, so the reload lands on the newest bundle *and* the newest wiring.
+ * Two things can ask a user to reload: a new app bundle waiting in the service worker, and
+ * a plugin list with no load resolution to activate from (one cached by an older app, or
+ * served by an older server). They share one notice, so a user is never asked twice, and
+ * one Reload covers both: when a new worker is waiting it takes control first, so the
+ * reload lands on the newest bundle.
+ *
+ * A change to the plugin set does **not** come here: every client reloads at once on
+ * `plugins.changed` (`@kernel` 3.0, the sync client).
  *
  * It never reloads on its own. The page keeps running its current version until the user
  * chooses, which is safe because text edits already live in the local Yjs document and the
@@ -17,7 +20,7 @@ import type { Notice } from "@kernel";
 /** The id the service-worker update has always used, kept so there is one notice. */
 export const RELOAD_NOTICE_ID = "kernel:update-available";
 
-export type ReloadReason = "update" | "wiring" | "stale";
+export type ReloadReason = "update" | "stale";
 
 export class ReloadPrompt {
   #applyUpdate: (() => void) | undefined;
@@ -38,14 +41,9 @@ export class ReloadPrompt {
     this.#ask("update");
   }
 
-  /** The wiring moved and this client cannot follow it without a reload. */
-  askForWiring(): void {
-    this.#ask("wiring");
-  }
-
   /**
-   * The plugin list carries no resolution, so no plugin can start (`@kernel` 2.0: the order
-   * is the server's alone). A reload while online fetches one.
+   * The plugin list carries no load resolution, so no plugin can start (the order is the
+   * server's alone). A reload while online fetches one.
    */
   askForStale(): void {
     this.#ask("stale");
@@ -70,44 +68,8 @@ export class ReloadPrompt {
     this.#notify({
       id: RELOAD_NOTICE_ID,
       level: "info",
-      message: this.#reasons.has("update")
-        ? "An update is available."
-        : this.#reasons.has("stale")
-          ? "Plugins need updating. Reload while online."
-          : "Plugins changed.",
+      message: this.#reasons.has("update") ? "An update is available." : "Plugins need updating. Reload while online.",
       actions: [{ label: "Reload", run: () => this.reload() }],
     });
-  }
-}
-
-/**
- * Which wiring version this page runs, and which one the server has. The two arrive in
- * either order: `welcome` can land before the plugin list does.
- */
-export class WiringWatch {
-  #running: number | undefined;
-  #live: number | undefined;
-
-  constructor(private readonly onBehind: (live: number, running: number) => void) {}
-
-  get running(): number | undefined {
-    return this.#running;
-  }
-
-  /** The version the activated plugin set was resolved from. */
-  setRunning(version: number): void {
-    this.#running = version;
-    this.#check();
-  }
-
-  /** The server's live version, from `welcome` or `wiring.applied`. */
-  seen(version: number): void {
-    this.#live = Math.max(this.#live ?? version, version);
-    this.#check();
-  }
-
-  #check(): void {
-    if (this.#running === undefined || this.#live === undefined) return;
-    if (this.#live > this.#running) this.onBehind(this.#live, this.#running);
   }
 }

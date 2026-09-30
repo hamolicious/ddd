@@ -1,65 +1,19 @@
 {
   "id": "admin",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "name": "Admin",
-  "description": "Users, invites, audit log, orphan files, the plugin list, and the wiring editor.",
+  "description": "Users, invites, audit log, orphan files, and the plugin list with each plugin's dependencies.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
-  "kernel": "^2.0",
-  "hot": true,
-  "consumes": {
-    "router": {
-      "protocol": "lm/router@^1.0",
-      "needs": [
-        "navigate",
-        "current",
-        "onChange",
-        "href",
-        "url"
-      ]
-    },
-    "shell": {
-      "protocol": "lm/shell@^1.0",
-      "needs": [
-        "layout",
-        "subscribeLayout",
-        "toggleAltbar"
-      ]
-    },
-    "menu": {
-      "protocol": "lm/context-menu@^1.0",
-      "needs": [
-        "open",
-        "openSheet",
-        "modal",
-        "confirm",
-        "close"
-      ]
-    }
-  },
-  "provides": {
-    "route": {
-      "protocol": "lm/router.route@1.0.0"
-    },
-    "view": {
-      "protocol": "lm/main.view@1.0.0"
-    },
-    "panel": {
-      "protocol": "lm/altbar.panel@1.0.0",
-      "order": 60
-    },
-    "settings": {
-      "protocol": "lm/settings.section@1.0.0",
-      "order": 900
-    },
-    "nav": {
-      "protocol": "lm/navbar.item@1.0.0",
-      "order": 90
-    },
-    "commands": {
-      "protocol": "lm/commands.command@2.0.0"
-    }
+  "kernel": "^3.0",
+  "dependencies": {
+    "router": "^2.0",
+    "context-menu": "^2.0",
+    "shell-ui": "^3.0",
+    "settings": "^2.0",
+    "header": "^2.0",
+    "commands": "^3.0"
   },
   "peerLibraries": {
     "react": "^18.0.0"

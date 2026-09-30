@@ -188,18 +188,18 @@ test.describe("the document list's incomplete condition", () => {
 
     // The row is marked, and the mark names the reason rather than a state the boxes
     // are not in ("Incomplete" was shown over rows that were entirely filled in).
-    const note = page.locator(".doclist-clause-note");
+    const note = page.locator(".search-clause-note");
     await expect(note).toBeVisible();
     await expect(note).toContainText("Not applied.");
     await expect(note).toContainText("Type a value");
 
     // Q5, measured: the list is untouched, and the query says so in its own words.
     await expect(docRows(page)).toHaveCount(before);
-    await page.locator(".doclist-json summary").click();
-    const json = await page.locator(".doclist-json pre").innerText();
+    await page.locator(".search-json summary").click();
+    const json = await page.locator(".search-json pre").innerText();
     expect(json, "an unusable clause reached the query").not.toContain("fm.status");
 
     // The badge counts what the query carries. An unusable row is not a condition.
-    await expect(page.locator(".doclist-filter-count")).toHaveCount(0);
+    await expect(page.locator(".search-filter-count")).toHaveCount(0);
   });
 });

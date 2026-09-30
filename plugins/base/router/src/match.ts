@@ -12,18 +12,17 @@
  * - **A trailing `*` captures the rest** into `params.rest`, and is the lowest-
  *   priority form there is — it exists so a catch-all route is possible without
  *   making every other route negotiate with it.
- * - **Most specific wins, seat order breaks ties.** Specificity is the count of literal
+ * - **Most specific wins, list order breaks ties.** Specificity is the count of literal
  *   segments, because that is what "`/settings/theme` beats `/settings/:section`"
  *   means; between genuinely equivalent patterns the position in `routes` decides,
- *   and the host hands routes over in the wiring's seat order (PLUGIN-PROTOCOLS
- *   §6a), so ties are stable across reloads and editable in the wiring. A route's
- *   own `order` field is the default-seat hint and is not read here.
+ *   and the router's registry hands routes over sorted by their `order`, then the
+ *   order they were added in, so ties are stable across reloads.
  * - **Literal segments compare exactly**, case included. Case-insensitive matching
  *   would make `/Doc/x` and `/doc/x` the same URL and two different cache entries in
  *   every layer above.
  */
 
-import type { Route } from "@protocols/lm/router.route";
+import type { Route } from "./api.js";
 
 export interface RouteMatch {
   /** The `main.view` id to render. */
@@ -93,7 +92,7 @@ export function matchPath(
 }
 
 /**
- * The best match among `routes`, or `undefined`. `routes` arrives in seat order, which
+ * The best match among `routes`, or `undefined`. `routes` arrives in registry order, which
  * is the final tiebreaker — so this is a stable sort, not a scan.
  */
 export function matchRoutes(
@@ -116,7 +115,7 @@ export function matchRoutes(
 }
 
 /**
- * Negative ⇒ `a` wins; `0` ⇒ equally specific, and the caller's order (seat order)
+ * Negative ⇒ `a` wins; `0` ⇒ equally specific, and the caller's order (registry order)
  * decides. Exported because the ordering is a documented promise.
  */
 export function compareSpecificity(a: Route, b: Route): number {

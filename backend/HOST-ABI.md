@@ -92,14 +92,14 @@ Names are exactly SPEC §6.3's, plus `log` (§3.13, and the reason it exists is 
 | [`config_get`](#37-config_get) | none | `ConfigGetInput` → `ConfigGetOutput` |
 | [`emit`](#38-emit) | none | `EmitInput` → `EmitOutput` |
 | [`emit_client`](#39-emit_client) | none | `EmitClientInput` → `EmitClientOutput` |
-| [`call_plugin`](#310-call_plugin) | callee in `backend.calls` | `CallPluginInput` → `CallPluginOutput` |
+| [`call_plugin`](#310-call_plugin) | callee in `dependencies`, function in its `backend.exports` | `CallPluginInput` → `CallPluginOutput` |
 | [`http_request`](#311-http_request) | `http.hosts` | `HttpRequestInput` → `HttpResponseOutput` |
 | [`log`](#312-log) | none | `LogInput` → `null` |
 
 **Why KV, config, events and `call_plugin` are ungated.** SPEC §6.2's example of the
 capability system working is *"a cron-and-KV plugin can't silently read the workspace"* —
 so KV and config, which are the plugin's **own** namespace, need no grant; `call_plugin` is
-gated by the manifest's `backend.calls` list instead; and `emit_client` reaches only sessions of this
+gated by the caller's `dependencies` and the callee's `backend.exports` instead; and `emit_client` reaches only sessions of this
 workspace's users with a payload the plugin already has.
 
 ### 3.1 `get_document`
@@ -339,17 +339,46 @@ socket whose send queue is full drops it (PROTOCOL.md §6). State belongs in doc
 → { "value": "a/b" }
 ```
 
-Three rules, three codes (SPEC §6.3):
+`@kernel` 3.0: a backend half calls the plugins it **depends on**, and only the functions
+they **export**. The caller's manifest names the callee; the callee's manifest names what
+may be called and with what:
+
+```jsonc
+// caller
+{ "id": "tree", "dependencies": { "folders": "^2.0" }, "backend": { "module": "backend.wasm" } }
+// callee
+{ "id": "folders", "version": "2.1.0",
+  "backend": { "module": "backend.wasm",
+    "exports": { "normalize": { "input": { "object": { "path": "string" } }, "output": "string",
+                                "description": "Collapse a folder path." } } } }
+```
+
+`input` and `output` are shape JSON — the `@kernel` `s.*` vocabulary serialised
+(`"string"`, `{ "object": { … } }`, `{ "array": … }`, `{ "optional": … }`, `{ "union": [ … ] }`,
+`{ "record": … }`, `{ "literal": [ … ] }`, `"any"`); either may be left out to accept anything.
+The server checks values with `life_manager_core::shape::validate`, and the web kernel's
+`shapeFromJSON` answers the same way (`backend/crates/core/corpus/shapes.json` pins both).
+
+The rules, in the order they are checked (SPEC §6.3):
 
 | Rule | Refusal |
 |---|---|
-| the callee must be in the caller's manifest `backend.calls` | `forbidden` |
+| the callee is in the caller's `dependencies` or `optionalDependencies` | `forbidden` |
+| the callee's version satisfies that range (a stand-in's **provided** version, when the id is one it `provides`) | `forbidden` |
+| the function is in the callee's `backend.exports` | `forbidden` |
+| the payload fits the export's `input` shape | `invalid_argument` |
 | a plugin already on the call stack may not be re-entered | `reentrancy` |
 | the chain may be at most 3 deep | `limit_exceeded` |
+| the returned value fits the export's `output` shape | `internal` |
 
 Plus: an unknown or backend-less callee is `not_found`, a disabled one (or one whose
 breaker is open) is `unavailable`, and the callee's own refusal is forwarded with **its**
-code. The callee **shares the caller's deadline** — see §5.
+code. The callee **shares the caller's deadline** — see §5. Top-level invocations (hooks,
+cron, routes, the admin's test call) are not `call_plugin` and are not checked against
+`backend.exports`.
+
+`backend.calls` (`@kernel` 2.x) is refused at install with a message pointing at
+`dependencies`.
 
 ### 3.11 `http_request`
 
@@ -656,7 +685,7 @@ Codes are stable and **append-only**:
 |---|---|---|
 | `capability_denied` | the capability is not approved (fix the manifest / the approval) | no |
 | `blocked` | the capability is approved, **this destination** is refused | no |
-| `forbidden` | ownership: another plugin's document, a callee not in `backend.calls` | no |
+| `forbidden` | ownership: another plugin's document; a callee that is not a dependency (or outside its range), or a function it does not export | no |
 | `not_found` | no such document, plugin, function or route | no |
 | `gone` | the id is in the permanent graveyard | no |
 | `already_exists` | that document id is taken | no |
@@ -677,7 +706,8 @@ wrong*, the second means *my URL is wrong*.
 
 ```json
 {
-  "id": "calendar", "version": "1.0.0", "kernel": "^2.0",
+  "id": "calendar", "version": "1.0.0", "kernel": "^3.0",
+  "dependencies": { "indexer": "^2.0" },
   "capabilities": {
     "documents": ["read", "write"],
     "http": { "hosts": [] },
@@ -694,7 +724,12 @@ wrong*, the second means *my URL is wrong*.
     "cron": ["0 6 * * *"],
     "routes": ["POST /sync", "GET /status"],
     "events": [],
-    "calls": []
+    "exports": {
+      "next_occurrence": {
+        "input": { "object": { "rule": "string", "after": "string" } },
+        "output": { "optional": "string" }
+      }
+    }
   },
   "frontend": { "module": "frontend/index.mjs", "style": "frontend/style.css" }
 }
@@ -710,8 +745,11 @@ In order, and the first four happen **before anything is extracted**:
    component (`<PLUGINS_DIR>/<id>/<version>/…`, the staging tree, the asset URL) and must be
    one harmless segment.
 2. `kernel` range admits this server's kernel version.
-3. The manifest carries no field `@kernel` 2.0 removed (`dependencies`, `x-defines`); which
-   plugins feed which is the wiring's business, resolved per boot, not an install gate.
+3. The manifest carries no field `@kernel` 3.0 removed (`consumes`, object-form `provides`,
+   `hot`, `backend.calls`, `x-defines`), and every required `dependencies` entry is
+   installed — under its own id or as another plugin's `provides` — at a version in range
+   (`422`, `InstallError::Dependency`). A dependency that is installed but disabled passes;
+   the load plan reports the skip until it is enabled. `optionalDependencies` never block.
 4. `peerLibraries` ranges intersect with what the runtime bundle provides — one version of
    each library for every plugin, chosen once, because an import map cannot change after
    load (SPEC §6.4). Checked against the **version** the bundle shipped, which the runtime
@@ -744,6 +782,10 @@ The approved set may **narrow** anything. It may **extend** exactly one field:
 > a `documents` right, a public route the package never declared — is refused: those are the
 > package's own claims about itself.
 
+**One plugin per id.** A plugin with `provides: "editor@3.0.0"` stands in for `editor`.
+Approving or enabling either one disables the other, with `disabled_reason`
+`` replaced by `<id>` ``, so at most one plugin answers to an id at a time.
+
 ### 7.3 Uninstall
 
 KV and in-document `%%%` data are **retained by default** so a reinstall is lossless. An
@@ -764,8 +806,8 @@ sections through CRDT transactions, one document per transaction (SPEC §6.2).
   section: the projection already knows, and a 5 000-entry index would blow the value cap.
 - **Reading another plugin's KV or config.** By construction, not by check.
 - **A plugin-defined extension point on the server.** Extension points are a *frontend*
-  concept (SPEC §6.4); on the server, `call_plugin` to a callee named in `backend.calls` is
-  the whole composition story, until backend halves get ports (PLUGIN-PROTOCOLS §10).
+  concept (SPEC §6.4); on the server, `call_plugin` to a dependency's `backend.exports` is
+  the whole composition story.
 - **Web Push / device registration.** v2 (SPEC §7, §10). `emit_client` reaches *connected*
   sessions only, and says so.
 - **Anything scheduled finer than a minute.** Cron is minute-resolution; a plugin needing

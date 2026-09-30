@@ -14,12 +14,12 @@ pieces.
 A plugin declares the range it needs:
 
 ```json
-{ "kernel": "^2.0" }
+{ "kernel": "^3.0" }
 ```
 
 **The backend half's contract is `backend/HOST-ABI.md`**, and it is the *same* semver.
 That is the point of "one `kernel` semver covers both": a plugin declaring `"kernel":
-"^2.0"` is declaring both the `@kernel` surface its frontend half compiles against and the
+"^3.0"` is declaring both the `@kernel` surface its frontend half compiles against and the
 host-function set its Wasm half links. This file is the changelog for the frontend half;
 `HOST-ABI.md` is the specification for the backend half, listing every host function, its
 capability gate, the limits, and the five exports a module may define. A module also
@@ -175,6 +175,104 @@ should be written against:
   to rewrite a document it did not create — the host refuses that outright
   (`rewrite_document` checks `created_by`).
 
+## 3.0.0 — plugins import each other (2026-09-30)
+
+A **major**: ports, protocols and wiring are gone. A plugin exposes components and
+functions as ordinary ES exports, declares the plugins it needs by id and semver range, and
+the dependency graph sets the load order.
+
+**Removed**
+
+- **`kernel.ports`** and `PortsApi`, `SlotHost`, `SlotItem`; the protocol types
+  (`ProtocolPackage`, `ProtocolKind`, `ProtocolSource`, `protocolKey`); every wiring type
+  and value (`LiveWiring`, `WiringOverrides`, `Resolution`, `ResolvedPluginSet`,
+  `ApplyPlan`, `PortCandidate`, `WiringInput`, `EMPTY_WIRING`, `WIRE_ARROW`,
+  `splitPortKey`, `splitProtocolRef`, …); `PORT_NAME_PATTERN`, `isProtocolId`,
+  `parseProtocolRef`, `ConsumedPort`, `ProvidedPort`.
+- **`kernel.core.resolveWiring`, `planWiring`, `wiringCandidates`, `shapeFits`**, and the
+  Wasm exports behind them. `kernel.core` is the parser, the title resolver, the date
+  normalizer and the semantics version again.
+- **Manifest fields** `consumes`, `hot`, the object form of `provides`, and
+  `backend.calls`. Both validators refuse a manifest carrying one, each with a message
+  naming what replaced it.
+- **Hot reload.** There is no in-place apply and no `deactivate` on a plugin-set change:
+  any install, update, enable or disable broadcasts `plugins.changed` on the sync socket
+  (`welcome.plugins_version` for a client that was offline), and every client reloads.
+  `wiring.applied` and `welcome.wiring_version` are gone.
+
+**Added**
+
+- **Manifest `dependencies` and `optionalDependencies`** — plugin id → semver range. A
+  plugin loads after every plugin it lists under either. A missing, out-of-range,
+  disabled or cyclic required dependency — or one that fails to activate — skips the
+  plugin and, transitively, its dependents; the reasons are listed as problems
+  (`GET /api/plugins` → `load.skipped`). The server refuses to install a plugin whose
+  required dependencies are not met.
+- **Manifest `provides: "<id>@<version>"`** (format `plugin-ref`): this plugin stands in
+  for another at that API version. A dependent's range is checked against that version,
+  `plugin:<id>` resolves to whichever of the two is enabled, and only one may be enabled.
+- **Manifest `backend.exports`** — `{ fn: { input?, output?, description? } }`, shapes in
+  the `s.*` JSON vocabulary. `call_plugin` requires the callee to be a dependency at a
+  matching range and the function to be listed, and validates both directions
+  (HOST-ABI.md §3.10).
+- **`import … from "plugin:<id>"`.** A plugin's named exports are its API. At runtime the
+  import map resolves `plugin:<id>` to the enabled plugin's `frontend/index.mjs?v=…`; the
+  loader itself imports every plugin by that specifier, so there is one instance of each
+  module. A static `plugin:` import must be listed under `dependencies`; an optional
+  dependency is never imported statically. Each built plugin ships its exports' types as
+  `frontend/index.d.ts`, an ambient `declare module "plugin:<id>"`.
+- **`kernel.plugins`** (`PluginsApi`): `active(id)`, `optional<M>(id)` — the module of a
+  declared optional dependency, or `undefined` when it is not active — and `list()`, this
+  boot's load set (`LoadedPlugin`: `id`, `version`, `provides?`).
+- **`createRegistry<T>({ key?, order?, shape? })`** → `Registry<T>` (`add`, `get`,
+  `entries`, `subscribe`): how a host takes contributions. A host keeps one at module scope
+  and exports its `add` (`export const addItem = items.add`). `add` returns the function
+  that removes the items again; a repeated `key` replaces; values sort by `order`, then
+  insertion. `entries()` carry `pluginId`: the plugin whose module import or `activate`
+  was running when the item was added, else the key's prefix before the first `.`, else
+  `"unknown"`. A failed plugin's items are withdrawn from every registry.
+  `RegistryEntry<T>` and `RegistryOptions<T>` are exported with it.
+- **`checked(shape, impl)`** — opt-in validation of an exported function's arguments, and
+  of its result (or promised result) when the shape names one: `checked(s.fn([s.string()],
+  s.promise(s.boolean())), impl)`. A mismatch throws `ContractViolationError`.
+  **`s.func(args?, returns?)`** (alias **`s.fn`**) and **`s.promise(inner?)`** gained the
+  optional parts `checked` reads; their JSON is still `"func"` / `"promise"`.
+- `parsePluginRef`, `PluginLoad` (the `load` of `GET /api/plugins`: `normal`, `safe`,
+  `skipped`), `BackendExport`.
+
+**Migrating a plugin**
+
+- Everything other plugins used through a service port becomes a named export of
+  `src/index.tsx`; every slot a plugin hosted becomes a registry and an exported `add*`
+  function; every `kernel.ports.offer` becomes a call to the host's `add*`, and every
+  `kernel.ports.use` an import. List what you import under `dependencies`.
+- Registries and plain state live at module scope, so a dependent can call `add*` from its
+  own `activate` (which always runs after the host's). What needs the kernel is set in
+  `activate`; a service function called before that throws a clear error.
+- A host renders contributed components with `useRegistry(registry)` and
+  `bounded(kernel, component, point, entry.pluginId)` from
+  `plugins/base/_shared/boundary.tsx`, so a render failure is attributed to its plugin.
+- Every base plugin's major version goes up with this change, and `"kernel": "^3.0"`.
+
+On the backend side, `call_plugin`'s rules changed with it (dependencies and
+`backend.exports` instead of `backend.calls`; HOST-ABI.md §3.10).
+
+## 2.2.0 — the notes folder (2026-09-29)
+
+A **minor**: one new capability, nothing removed.
+
+- **`kernel.capabilities.folder`** (`FolderCapability`) — one directory the user chose on
+  this device: `status`, `choose`, `reconnect`, `forget`, `list`, `read`, `write`, `move`,
+  `remove`, `onChange`. Paths are relative and `/`-separated; `..` and absolute paths are
+  refused. `support` is `native` in both shells (a real, watched path), `fallback` in
+  Chromium browsers (File System Access API, `watches: false`, permission re-granted from a
+  click after a reload), `unavailable` elsewhere.
+- **`CapabilityName` gains `"folder"`**, so `has("folder")` / `support("folder")` answer it.
+- The choice is per device and never in synced settings. The `local-folder` base plugin is
+  its first user.
+
+The host ABI is unchanged.
+
 ## 2.1.0 — list splices (2026-09-28)
 
 A **minor**: new methods on `kernel.documents.splice`, nothing removed.
@@ -199,7 +297,7 @@ The host ABI is unchanged.
 ## 2.0.0 — ports only (2026-09-28)
 
 A **major**: the 1.2.0 shims are removed, and with them every way plugins reached each
-other except `kernel.ports`. The plan behind it is `dev-docs/todo/PLUGIN-PROTOCOLS.html`
+other except `kernel.ports`. The plan behind it is `dev-docs/resolved/PLUGIN-PROTOCOLS.html`
 (§9 step 8, and §10's "`@kernel` 1.2 during migration, 2.0 at the end").
 
 - **`kernel.extensions` is gone** — `definePoint`, `contribute`, `get`, `entries`,
@@ -236,7 +334,7 @@ The host ABI is unchanged and stays at version 1: nothing a backend half links m
 A **minor**: every addition below is new surface, nothing is removed, and a plugin built
 against 1.0 or 1.1 loads unchanged. `KERNEL_VERSION` and `KERNEL_API_VERSION` are now
 generated from one line (`x-kernel-version` in `schema/manifest.schema.json`), so they can
-no longer drift apart. The plan behind it is `dev-docs/todo/PLUGIN-PROTOCOLS.html`.
+no longer drift apart. The plan behind it is `dev-docs/resolved/PLUGIN-PROTOCOLS.html`.
 
 - **`kernel.ports`** (`PortsApi`): services, slots and events through the plugin's own port
   names, wired by the server's resolution of the live wiring.

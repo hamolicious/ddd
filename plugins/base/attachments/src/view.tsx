@@ -1,9 +1,9 @@
 /**
- * Showing a file: the `markdown.attachment` renderer this plugin offers.
+ * Showing a file: the attachment renderer this plugin adds to `plugin:markdown`.
  *
- * It finds the file's extension from its metadata, asks the `viewers` host who shows
- * that type (the user's pick in Settings → Attachments, else the first seat the wiring
- * gave it), fetches the bytes once, and hands them over. With no viewer for the
+ * It finds the file's extension from its metadata, asks the viewers added with
+ * `addViewer` who shows that type (the user's pick in Settings → Attachments, else the
+ * first in `order`), fetches the bytes once, and hands them over. With no viewer for the
  * type, or no bytes (offline and never fetched), it draws what `markdown` would have:
  * the `fallback`.
  *
@@ -19,11 +19,12 @@
  */
 
 import { OFFLINE_COPY_HEADER } from "../../_shared/offline-copy.js";
-import type { Kernel, SettingsValue, SlotHost } from "@kernel";
+import type { Kernel, Registry, SettingsValue } from "@kernel";
 import { useEffect, useState, useSyncExternalStore, type ComponentType, type ReactNode } from "react";
 
-import type { AttachmentViewer, AttachmentViewerProps } from "@protocols/lm/attachments.viewer";
-import type { MarkdownAttachmentProps } from "@protocols/lm/markdown.attachment";
+import type { MarkdownAttachmentProps } from "plugin:markdown";
+
+import type { AttachmentViewer, AttachmentViewerProps } from "./api.js";
 
 import { extensionOf, viewKey } from "./kinds.js";
 import { onQueueChange, transfers, waiting, waitingToken, type TransferState, type WaitingUpload } from "./queue.js";
@@ -49,13 +50,16 @@ export interface Viewers {
   subscribe(listener: () => void): () => void;
 }
 
+/** What `createViewers` reads from the viewer registry. */
+export type ViewerSource = Pick<Registry<AttachmentViewer>, "get" | "entries" | "subscribe">;
+
 /**
- * The viewers wired to the `viewers` host, by extension. `host` is already in seat order,
- * so the first viewer claiming an extension is the default for it; nothing is sorted here.
+ * The added viewers, by extension. `host` is already in `order`, so the first viewer
+ * claiming an extension is the default for it; nothing is sorted here.
  */
 export function createViewers(
   kernel: Kernel,
-  host: SlotHost<AttachmentViewer>,
+  host: ViewerSource,
   read: (key: string) => SettingsValue | undefined,
 ): Viewers {
   const claiming = (extension: string) => host.entries().filter((entry) => entry.value.extensions.includes(extension));

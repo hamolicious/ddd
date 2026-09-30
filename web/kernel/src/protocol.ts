@@ -219,21 +219,21 @@ export interface Welcome {
   readonly limits: ConnectionLimits;
   readonly core_semantics_version: number;
   /**
-   * The live wiring version (PLUGIN-PROTOCOLS §6c). A client that was offline while the
-   * wiring changed compares it with the version it runs. Absent on older servers.
+   * The installed plugin set's version (`@kernel` 3.0). A client that was offline while a
+   * plugin was installed, updated, enabled or disabled compares it with the version it
+   * booted with and reloads. Absent on older servers.
    */
-  readonly wiring_version?: number;
+  readonly plugins_version?: number | string;
 }
 
 /**
- * The plugin wiring moved to `version` (PLUGIN-PROTOCOLS §6c). Sent to every connected
- * session; a dropped one is recovered from `welcome.wiring_version` on reconnect.
+ * A plugin was installed, updated, enabled or disabled: the plugin set is now `version`.
+ * Sent to every connected session; every client reloads (there is no hot reload). A
+ * dropped one is recovered from `welcome.plugins_version` on reconnect.
  */
-export interface WiringApplied {
-  readonly t: "wiring.applied";
-  readonly version: number;
-  readonly action: string;
-  readonly at: Iso8601;
+export interface PluginsChanged {
+  readonly t: "plugins.changed";
+  readonly version: number | string;
 }
 
 export interface FeedBatch {
@@ -323,7 +323,7 @@ export type ServerControl =
   | DocResync
   | Pong
   | ServerNotice
-  | WiringApplied;
+  | PluginsChanged;
 
 // ---------------------------------------------------------------------------
 // Client → server control messages
@@ -406,7 +406,7 @@ const SERVER_CONTROL_TYPES = new Set<string>([
   "doc.resync",
   "pong",
   "error",
-  "wiring.applied",
+  "plugins.changed",
 ]);
 
 /** `true` when `value` is a control message this client version understands. */

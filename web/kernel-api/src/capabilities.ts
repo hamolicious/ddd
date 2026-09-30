@@ -22,7 +22,7 @@
 /** The bridge major version this kernel speaks (SPEC §7: versioned `window.shell`). */
 export const SUPPORTED_BRIDGE_VERSION = 1;
 
-export type CapabilityName = "filesystem" | "notifications";
+export type CapabilityName = "filesystem" | "notifications" | "folder";
 
 /** How a capability is being served right now — the honest answer for a UI. */
 export type CapabilitySupport = "native" | "fallback" | "unavailable";
@@ -109,6 +109,66 @@ export interface NotificationsCapability {
   scheduled(): Promise<readonly { readonly id: string; readonly at: number }[]>;
 }
 
+/** One entry of {@link FolderCapability.list}. Paths are relative, `/`-separated. */
+export interface FolderEntry {
+  readonly path: string;
+  readonly kind: "file" | "dir";
+  readonly size: number;
+  /** Last modification, epoch ms. Compared for equality only, never ordered. */
+  readonly mtimeMs: number;
+}
+
+/**
+ * Where the chosen folder stands on this device.
+ *
+ * - `none`: nothing chosen.
+ * - `ready`: chosen and readable/writable.
+ * - `needs-permission`: chosen, but the browser forgot the grant across a reload;
+ *   {@link FolderCapability.reconnect} from a click brings it back.
+ */
+export type FolderState = "none" | "ready" | "needs-permission";
+
+export interface FolderStatus {
+  readonly state: FolderState;
+  /** Something to show the user — a path in a shell, a directory name in a browser. */
+  readonly label?: string;
+}
+
+/**
+ * One directory on this device that the user chose, and nothing outside it (2.2.0).
+ *
+ * Every path is **relative to that directory**, `/`-separated, and refused when it is
+ * absolute or climbs out with `..`. The choice is per device and lives in the shell (or
+ * the browser's IndexedDB), never in a synced document: a folder on one machine means
+ * nothing on another.
+ *
+ * Native in both shells (a real path, watched for changes); a fallback through the File
+ * System Access API in Chromium browsers, where nothing tells the page about changes and
+ * a caller has to rescan. `unavailable` everywhere else.
+ */
+export interface FolderCapability {
+  readonly support: CapabilitySupport;
+  /** `true` when {@link onChange} fires for edits made outside the page. */
+  readonly watches: boolean;
+  status(): Promise<FolderStatus>;
+  /** Ask the user for a directory. Rejects with a `cancelled` error when they back out. */
+  choose(): Promise<FolderStatus>;
+  /** Browser only: re-grant a remembered directory. Must run inside a click. */
+  reconnect(): Promise<FolderStatus>;
+  /** Forget the directory. Its files are left alone. */
+  forget(): Promise<void>;
+  /** Every file and directory below the root, recursively. */
+  list(): Promise<readonly FolderEntry[]>;
+  read(path: string): Promise<{ readonly bytes: Uint8Array; readonly mtimeMs: number }>;
+  /** Replace or create, atomically where the platform allows; parents are created. */
+  write(path: string, bytes: Uint8Array): Promise<{ readonly mtimeMs: number }>;
+  move(from: string, to: string): Promise<void>;
+  /** A file, or an empty directory. A missing path is not an error. */
+  remove(path: string): Promise<void>;
+  /** Something changed on disk. `paths` is a hint and may be empty: rescan either way. */
+  onChange(listener: (paths: readonly string[]) => void): () => void;
+}
+
 export interface CapabilitiesApi {
   /** `true` when the capability can do something real — native *or* fallback. */
   has(name: CapabilityName): boolean;
@@ -117,6 +177,11 @@ export interface CapabilitiesApi {
   readonly bridgeVersion: number | undefined;
   readonly filesystem: FilesystemCapability;
   readonly notifications: NotificationsCapability;
+  /**
+   * A user-chosen directory on this device (2.2.0). Always present; check `support`
+   * before offering it — it is `unavailable` in most browsers.
+   */
+  readonly folder: FolderCapability;
   /**
    * Persistent storage (SPEC §6.4): the kernel requests it at first login and
    * warns when it is denied or quota nears. Exposed read-only so a plugin about to

@@ -16,7 +16,7 @@
 
 import type { Language, Parser, Query } from "web-tree-sitter";
 
-import type { SyntaxLanguage } from "@protocols/lm/syntax.language";
+import type { SyntaxLanguage } from "./api.js";
 
 import { captureClass } from "./captures.js";
 

@@ -9,7 +9,7 @@
 import { useEffect, useId, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 
 import { aliasesFrom } from "./custom.js";
-import type { SyntaxApi } from "./index.js";
+import type { SyntaxApi } from "./api.js";
 
 const base = import.meta.url;
 

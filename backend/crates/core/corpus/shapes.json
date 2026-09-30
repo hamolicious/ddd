@@ -1,0 +1,549 @@
+[
+  {
+    "name": "string fits a string",
+    "shape": "string",
+    "value": "hi",
+    "ok": true
+  },
+  {
+    "name": "empty string is a string",
+    "shape": "string",
+    "value": "",
+    "ok": true
+  },
+  {
+    "name": "number is not a string",
+    "shape": "string",
+    "value": 1,
+    "ok": false
+  },
+  {
+    "name": "null is not a string",
+    "shape": "string",
+    "value": null,
+    "ok": false
+  },
+  {
+    "name": "integer is a number",
+    "shape": "number",
+    "value": 3,
+    "ok": true
+  },
+  {
+    "name": "float is a number",
+    "shape": "number",
+    "value": -2.5,
+    "ok": true
+  },
+  {
+    "name": "numeric string is not a number",
+    "shape": "number",
+    "value": "3",
+    "ok": false
+  },
+  {
+    "name": "boolean",
+    "shape": "boolean",
+    "value": false,
+    "ok": true
+  },
+  {
+    "name": "zero is not a boolean",
+    "shape": "boolean",
+    "value": 0,
+    "ok": false
+  },
+  {
+    "name": "any takes null",
+    "shape": "any",
+    "value": null,
+    "ok": true
+  },
+  {
+    "name": "any takes an object",
+    "shape": "any",
+    "value": {
+      "a": [
+        1
+      ]
+    },
+    "ok": true
+  },
+  {
+    "name": "an unknown primitive name reads as any",
+    "shape": "date",
+    "value": "2026-01-01",
+    "ok": true
+  },
+  {
+    "name": "JSON has no functions",
+    "shape": "func",
+    "value": "f",
+    "ok": false
+  },
+  {
+    "name": "JSON has no promises",
+    "shape": "promise",
+    "value": {
+      "then": "x"
+    },
+    "ok": false
+  },
+  {
+    "name": "a component is any object",
+    "shape": "component",
+    "value": {},
+    "ok": true
+  },
+  {
+    "name": "an array is typeof object, so a component",
+    "shape": "component",
+    "value": [],
+    "ok": true
+  },
+  {
+    "name": "a string is not a component",
+    "shape": "component",
+    "value": "Card",
+    "ok": false
+  },
+  {
+    "name": "null is not a component",
+    "shape": "component",
+    "value": null,
+    "ok": false
+  },
+  {
+    "name": "literal member",
+    "shape": {
+      "literal": [
+        "light",
+        "dark"
+      ]
+    },
+    "value": "dark",
+    "ok": true
+  },
+  {
+    "name": "literal non-member",
+    "shape": {
+      "literal": [
+        "light",
+        "dark"
+      ]
+    },
+    "value": "dim",
+    "ok": false
+  },
+  {
+    "name": "numeric literal compares by value",
+    "shape": {
+      "literal": [
+        1,
+        2
+      ]
+    },
+    "value": 1.0,
+    "ok": true
+  },
+  {
+    "name": "literal is strict: 1 is not \"1\"",
+    "shape": {
+      "literal": [
+        1
+      ]
+    },
+    "value": "1",
+    "ok": false
+  },
+  {
+    "name": "boolean literal",
+    "shape": {
+      "literal": [
+        true
+      ]
+    },
+    "value": true,
+    "ok": true
+  },
+  {
+    "name": "union takes any member",
+    "shape": {
+      "union": [
+        "string",
+        "number"
+      ]
+    },
+    "value": 4,
+    "ok": true
+  },
+  {
+    "name": "union refuses the rest",
+    "shape": {
+      "union": [
+        "string",
+        "number"
+      ]
+    },
+    "value": true,
+    "ok": false
+  },
+  {
+    "name": "union of objects",
+    "shape": {
+      "union": [
+        {
+          "object": {
+            "a": "string"
+          }
+        },
+        {
+          "object": {
+            "b": "number"
+          }
+        }
+      ]
+    },
+    "value": {
+      "b": 1
+    },
+    "ok": true
+  },
+  {
+    "name": "array of strings",
+    "shape": {
+      "array": "string"
+    },
+    "value": [
+      "a",
+      "b"
+    ],
+    "ok": true
+  },
+  {
+    "name": "empty array",
+    "shape": {
+      "array": "number"
+    },
+    "value": [],
+    "ok": true
+  },
+  {
+    "name": "array with one bad item",
+    "shape": {
+      "array": "string"
+    },
+    "value": [
+      "a",
+      2
+    ],
+    "ok": false
+  },
+  {
+    "name": "object is not an array",
+    "shape": {
+      "array": "string"
+    },
+    "value": {
+      "0": "a"
+    },
+    "ok": false
+  },
+  {
+    "name": "record of numbers",
+    "shape": {
+      "record": "number"
+    },
+    "value": {
+      "a": 1,
+      "b": 2
+    },
+    "ok": true
+  },
+  {
+    "name": "empty record",
+    "shape": {
+      "record": "number"
+    },
+    "value": {},
+    "ok": true
+  },
+  {
+    "name": "record with a bad entry",
+    "shape": {
+      "record": "number"
+    },
+    "value": {
+      "a": 1,
+      "b": "2"
+    },
+    "ok": false
+  },
+  {
+    "name": "an array is not a record",
+    "shape": {
+      "record": "any"
+    },
+    "value": [],
+    "ok": false
+  },
+  {
+    "name": "null is not a record",
+    "shape": {
+      "record": "any"
+    },
+    "value": null,
+    "ok": false
+  },
+  {
+    "name": "object with its fields",
+    "shape": {
+      "object": {
+        "id": "string",
+        "n": "number"
+      }
+    },
+    "value": {
+      "id": "x",
+      "n": 1
+    },
+    "ok": true
+  },
+  {
+    "name": "extra keys are allowed",
+    "shape": {
+      "object": {
+        "id": "string"
+      }
+    },
+    "value": {
+      "id": "x",
+      "extra": true
+    },
+    "ok": true
+  },
+  {
+    "name": "a missing required field",
+    "shape": {
+      "object": {
+        "id": "string",
+        "n": "number"
+      }
+    },
+    "value": {
+      "id": "x"
+    },
+    "ok": false
+  },
+  {
+    "name": "a mistyped field",
+    "shape": {
+      "object": {
+        "id": "string"
+      }
+    },
+    "value": {
+      "id": 7
+    },
+    "ok": false
+  },
+  {
+    "name": "an optional field may be absent",
+    "shape": {
+      "object": {
+        "title": {
+          "optional": "string"
+        }
+      }
+    },
+    "value": {},
+    "ok": true
+  },
+  {
+    "name": "an optional field must match when present",
+    "shape": {
+      "object": {
+        "title": {
+          "optional": "string"
+        }
+      }
+    },
+    "value": {
+      "title": 5
+    },
+    "ok": false
+  },
+  {
+    "name": "null is not absent",
+    "shape": {
+      "object": {
+        "title": {
+          "optional": "string"
+        }
+      }
+    },
+    "value": {
+      "title": null
+    },
+    "ok": false
+  },
+  {
+    "name": "optional any accepts null",
+    "shape": {
+      "object": {
+        "title": {
+          "optional": "any"
+        }
+      }
+    },
+    "value": {
+      "title": null
+    },
+    "ok": true
+  },
+  {
+    "name": "an array is not an object",
+    "shape": {
+      "object": {}
+    },
+    "value": [],
+    "ok": false
+  },
+  {
+    "name": "null is not an object",
+    "shape": {
+      "object": {}
+    },
+    "value": null,
+    "ok": false
+  },
+  {
+    "name": "empty object shape takes any object",
+    "shape": {
+      "object": {}
+    },
+    "value": {
+      "a": 1
+    },
+    "ok": true
+  },
+  {
+    "name": "optional at the top takes a present value",
+    "shape": {
+      "optional": "string"
+    },
+    "value": "x",
+    "ok": true
+  },
+  {
+    "name": "optional at the top still checks",
+    "shape": {
+      "optional": "string"
+    },
+    "value": 1,
+    "ok": false
+  },
+  {
+    "name": "nested: deep miss",
+    "shape": {
+      "object": {
+        "items": {
+          "array": {
+            "object": {
+              "title": "string",
+              "tags": {
+                "optional": {
+                  "array": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "value": {
+      "items": [
+        {
+          "title": "a"
+        },
+        {
+          "title": "b",
+          "tags": [
+            "x",
+            1
+          ]
+        }
+      ]
+    },
+    "ok": false
+  },
+  {
+    "name": "nested: all good",
+    "shape": {
+      "object": {
+        "items": {
+          "array": {
+            "object": {
+              "title": "string",
+              "tags": {
+                "optional": {
+                  "array": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "value": {
+      "items": [
+        {
+          "title": "a"
+        },
+        {
+          "title": "b",
+          "tags": [
+            "x"
+          ]
+        }
+      ]
+    },
+    "ok": true
+  },
+  {
+    "name": "union with a literal and a record",
+    "shape": {
+      "union": [
+        {
+          "literal": [
+            "none"
+          ]
+        },
+        {
+          "record": "boolean"
+        }
+      ]
+    },
+    "value": {
+      "a": true
+    },
+    "ok": true
+  },
+  {
+    "name": "union with a literal and a record, neither",
+    "shape": {
+      "union": [
+        {
+          "literal": [
+            "none"
+          ]
+        },
+        {
+          "record": "boolean"
+        }
+      ]
+    },
+    "value": "some",
+    "ok": false
+  }
+]

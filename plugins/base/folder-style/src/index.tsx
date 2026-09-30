@@ -2,22 +2,21 @@
  * `folder-style` — a background colour and an icon for any folder. The name and icon on
  * the background are black or white, whichever has more contrast (`textOn`).
  *
- * `folders` knows nothing about this plugin. It hosts two slots and this plugin fills
- * them, both keyed by note id — which never changes, so a look follows its note through
- * every rename and move with nothing to do:
+ * `folders` knows nothing about this plugin. This plugin adds to two hosts, both keyed by
+ * note id — which never changes, so a look follows its note through every rename and move
+ * with nothing to do:
  *
- * - `look` (`lm/folders.decoration`) answers each row's colour and icon;
- * - `edit` (`lm/folders.menu-item`) adds "Color and icon…" to a row's menu, which opens
- *   the `Editor` in a sheet.
+ * - `addDecoration` (`plugin:folders`) answers each row's colour and icon;
+ * - `addAction` (`plugin:context-menu`) adds "Color and icon…" to a note's menu, wherever
+ *   the note is right-clicked; it opens the `Editor` in a sheet.
  *
  * A `settings` section sets the defaults and the rules (`Rules.tsx`): conditions, as in
  * the document list's filters, and the look of the notes that match (`matcher.ts`). A
  * note's own colour and icon always win, then the first matching rule, then the default,
  * field by field (`resolveStyle`).
  *
- * Icons come from whatever serves `lm/icons` (the base `icons` plugin draws Tabler).
- * That port is optional: without it folders still take a colour, and a stored icon name
- * waits, unused, until an icon set is wired again.
+ * Icons come from the `icons` plugin (Tabler), an optional dependency: without it folders
+ * still take a colour, and a stored icon name waits, unused, until `icons` is enabled.
  *
  * ## Per-user, in settings
  *
@@ -30,13 +29,13 @@ import { useEffect, useSyncExternalStore, type ReactElement } from "react";
 
 import type { CoreValue, Kernel, SettingsValue } from "@kernel";
 
-import type { ContextMenu } from "@protocols/lm/context-menu";
-import type { FolderDecoration } from "@protocols/lm/folders.decoration";
-import type { FolderMenuItem } from "@protocols/lm/folders.menu-item";
-import type { Icons } from "@protocols/lm/icons";
-import type { SettingsSection } from "@protocols/lm/settings.section";
+import { addAction, openSheet } from "plugin:context-menu";
+import { addDecoration, type FolderDecoration } from "plugin:folders";
+import type { Icons } from "plugin:icons";
+import * as indexer from "plugin:indexer";
+import { addSection } from "plugin:settings";
 
-import { documentsNoteSource, type NoteSource } from "../../_shared/note-picker.js";
+import type { NoteSource } from "../../_shared/note-picker.js";
 import {
   indexNoteSource,
   indexSuggestions,
@@ -87,10 +86,9 @@ interface Stored<T> {
 }
 
 export default function activate(kernel: Kernel): void {
-  const menu = kernel.ports.use<Pick<ContextMenu, "openSheet">>("menu");
-  // Optional, and rewirable while running: asked for each time rather than kept.
-  const icons = (): Pick<Icons, "Icon" | "Picker"> | undefined =>
-    kernel.ports.bound("icons") ? kernel.ports.use<Pick<Icons, "Icon" | "Picker">>("icons") : undefined;
+  // Optional: loaded once; until it arrives (or without it) looks have no icon.
+  let iconSet: Pick<Icons, "Icon" | "Picker"> | undefined;
+  const icons = (): Pick<Icons, "Icon" | "Picker"> | undefined => iconSet;
 
   kernel.settings.defineSchema({
     // Rendered by the folder tree rather than by a settings row: declared for its default
@@ -180,6 +178,15 @@ export default function activate(kernel: Kernel): void {
   matcher.set(rules.get());
   const all = [styles, defaults, rules] as const;
 
+  void kernel.plugins
+    .optional<typeof import("plugin:icons")>("icons")
+    .then((module) => {
+      if (module === undefined) return;
+      iconSet = module;
+      publish();
+    })
+    .catch((cause: unknown) => kernel.log.warn("icons unavailable; folders show no icon", cause));
+
   flushOnStop = () => {
     for (const each of all) each.flush();
     matcher.close();
@@ -213,58 +220,49 @@ export default function activate(kernel: Kernel): void {
     };
   };
 
-  kernel.ports.offer<FolderDecoration>("look", { id: "folder-style", decorate, onChange: onLookChange });
+  addDecoration({ id: "folder-style", decorate, onChange: onLookChange });
 
-  kernel.ports.offer<FolderMenuItem>("edit", {
-    id: "folder-style.edit",
-    label: "Color and icon…",
-    run: (id, anchor) => {
-      void kernel.documents.get(id).then((row) => {
-        menu.openSheet({
-          title: "Color and icon",
-          ...(anchor !== undefined ? { anchor } : {}),
-          // The debounce is for dragging across the colour picker, not for after the sheet
-          // is gone: a reload straight after closing it must not lose the look.
-          onClose: styles.flush,
-          render: (): ReactElement => (
-            <Editor
-              name={row?.title || "Untitled"}
-              initial={styles.get().get(id)}
-              // What it shows without a look of its own: the rules it matches, the default.
-              fallback={resolveStyle(undefined, defaults.get(), matcher.matched(id)) ?? {}}
-              icons={icons()}
-              onChange={(next) => {
-                const style = withStyle(styles.get().get(id), next);
-                const updated = new Map(styles.get());
-                if (style === undefined) updated.delete(id);
-                else updated.set(id, style);
-                styles.change(updated);
-              }}
-            />
-          ),
-        });
+  /** The look editor for one note, beside the element it was chosen from. */
+  const edit = (id: string, anchor: HTMLElement): void => {
+    void kernel.documents.get(id).then((row) => {
+      openSheet({
+        title: "Color and icon",
+        anchor: anchor.isConnected ? anchor : null,
+        // The debounce is for dragging across the colour picker, not for after the sheet
+        // is gone: a reload straight after closing it must not lose the look.
+        onClose: styles.flush,
+        render: (): ReactElement => (
+          <Editor
+            name={row?.title || "Untitled"}
+            initial={styles.get().get(id)}
+            // What it shows without a look of its own: the rules it matches, the default.
+            fallback={resolveStyle(undefined, defaults.get(), matcher.matched(id)) ?? {}}
+            icons={icons()}
+            onChange={(next) => {
+              const style = withStyle(styles.get().get(id), next);
+              const updated = new Map(styles.get());
+              if (style === undefined) updated.delete(id);
+              else updated.set(id, style);
+              styles.change(updated);
+            }}
+          />
+        ),
       });
-    },
+    });
+  };
+
+  addAction({
+    id: "folder-style.edit",
+    target: "lm/document",
+    order: 50,
+    items: (target) => [{ id: "edit", label: "Color and icon…", run: () => edit(target.id, target.element) }],
   });
 
-  // The indexer, when wired, suggests properties and values and finds notes offline.
-  // Rewirable while running, like `icons`: the section asks on each render.
-  const index = (): ConditionIndex | undefined =>
-    kernel.ports.bound("index") ? kernel.ports.use<ConditionIndex>("index") : undefined;
-  // The picker draws notes as the tree does; this plugin is what dresses them there.
-  const fallbackNotes: NoteSource = { ...documentsNoteSource(kernel.documents), look: decorate };
-  let lookups: { index: ConditionIndex | undefined; notes: NoteSource; suggestions: Suggestions | undefined } | undefined;
-  /** One lookup per wired index, so the editor's subscription is not renewed every render. */
-  const lookupsFor = (current: ConditionIndex | undefined) => {
-    if (lookups?.index !== current || lookups === undefined) {
-      lookups = {
-        index: current,
-        notes: current !== undefined ? indexNoteSource(current, { look: decorate, onChange: onLookChange }) : fallbackNotes,
-        suggestions: current !== undefined ? indexSuggestions(current) : undefined,
-      };
-    }
-    return lookups;
-  };
+  // The indexer suggests properties and values and finds notes offline; the picker
+  // draws notes as the tree does, since this plugin is what dresses them there.
+  const index: ConditionIndex = indexer;
+  const notes: NoteSource = indexNoteSource(index, { look: decorate, onChange: onLookChange });
+  const suggestions: Suggestions = indexSuggestions(index);
   const subscribe = (listener: () => void): (() => void) => {
     listeners.add(listener);
     return () => {
@@ -275,7 +273,6 @@ export default function activate(kernel: Kernel): void {
   /** The defaults, then the rules. Written as they change; leaving the section flushes. */
   const Section = (): ReactElement => {
     useSyncExternalStore(subscribe, () => version);
-    const { notes, suggestions } = lookupsFor(index());
     useEffect(
       () => () => {
         defaults.flush();
@@ -300,9 +297,9 @@ export default function activate(kernel: Kernel): void {
           defaults={defaults.get()}
           icons={icons()}
           notes={notes}
-          {...(suggestions !== undefined ? { suggestions } : {})}
+          suggestions={suggestions}
           openLook={(rule, label, anchor) =>
-            menu.openSheet({
+            openSheet({
               title: `Color and icon: ${label}`,
               anchor,
               onClose: rules.flush,
@@ -329,7 +326,7 @@ export default function activate(kernel: Kernel): void {
     );
   };
 
-  kernel.ports.offer<SettingsSection>("settings", {
+  addSection({
     id: "folder-style",
     title: "Folder colors and icons",
     order: 35,
@@ -338,7 +335,7 @@ export default function activate(kernel: Kernel): void {
   });
 }
 
-/** Looks still waiting to be written, and the rules' queries; the kernel withdraws everything else (§6c). */
+/** Looks still waiting to be written, and the rules' queries; the kernel withdraws everything else. */
 let flushOnStop: (() => void) | undefined;
 
 export function deactivate(): void {

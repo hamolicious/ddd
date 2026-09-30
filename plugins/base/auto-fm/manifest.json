@@ -1,0 +1,21 @@
+{
+  "id": "auto-fm",
+  "version": "2.0.0",
+  "name": "Automatic properties",
+  "description": "Adds the frontmatter properties you choose to notes you create or edit, leaving any a note already has alone.",
+  "author": "Life Manager base distribution",
+  "license": "MIT OR Apache-2.0",
+  "x-tailwind": true,
+  "kernel": "^3.0",
+  "dependencies": {
+    "indexer": "^2.0",
+    "settings": "^2.0"
+  },
+  "peerLibraries": {
+    "react": "^18.0.0"
+  },
+  "frontend": {
+    "module": "frontend/index.mjs",
+    "style": "frontend/style.css"
+  }
+}

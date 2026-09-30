@@ -1,6 +1,6 @@
 {
   "id": "emoji",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "name": "Emoji",
   "description": "Writes :shortcode: as its emoji in read mode, and suggests shortcodes as you type one.",
   "author": "Life Manager base distribution",
@@ -8,20 +8,11 @@
   "x-tailwind": {
     "prefix": "emoji"
   },
-  "kernel": "^2.0",
-  "hot": true,
-  "consumes": {
-    "surfaces": {
-      "protocol": "lm/text.surface@^1.0"
-    }
-  },
-  "provides": {
-    "shortcodes": {
-      "protocol": "lm/markdown.remark@1.0.0"
-    },
-    "popup": {
-      "protocol": "lm/shell.overlay@1.0.0"
-    }
+  "kernel": "^3.0",
+  "dependencies": {
+    "editor": "^2.0",
+    "markdown": "^3.0",
+    "shell-ui": "^3.0"
   },
   "peerLibraries": {
     "react": "^18.0.0"

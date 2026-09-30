@@ -1,18 +1,14 @@
 {
   "id": "notices",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "name": "Notices",
   "description": "The notice bell in the header: plugin failures, updates and other kernel notices.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
-  "kernel": "^2.0",
-  "hot": true,
-  "provides": {
-    "bell": {
-      "protocol": "lm/navbar.item@1.0.0",
-      "order": 900
-    }
+  "kernel": "^3.0",
+  "dependencies": {
+    "header": "^2.0"
   },
   "peerLibraries": {
     "react": "^18.0.0"

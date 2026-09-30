@@ -6,17 +6,16 @@
  *
  * The first change saves the *whole* current order of both seats, so after it every
  * item on screen is pinned where the user left it; an item installed later lands after
- * them, on its own side, in seat order (`layout.ts`).
+ * them, on its own side, in `order` (`layout.ts`).
  */
 
 import { useState, type ReactNode } from "react";
 
-import type { SlotHost } from "@kernel";
+import type { Registry } from "@kernel";
 
-import type { NavbarItem } from "@protocols/lm/navbar.item";
+import { useRegistry } from "../../_shared/boundary.js";
 
-import { useSlotEntries } from "../../_shared/boundary.js";
-
+import type { NavbarItem } from "./api.js";
 import type { ArrangementStore } from "./arrangement.js";
 import { useArrangement } from "./hooks.js";
 import { SEATS, arrange, move, toggleHidden, type Arrangement, type Seat } from "./layout.js";
@@ -32,10 +31,10 @@ export function BarSettings({
   items: host,
   store,
 }: {
-  readonly items: SlotHost<NavbarItem>;
+  readonly items: Registry<NavbarItem>;
   readonly store: ArrangementStore;
 }): ReactNode {
-  const items = useSlotEntries(host);
+  const items = useRegistry(host);
   const arrangement = useArrangement(store);
   const seats = arrange(items, (entry) => entry.value, arrangement);
   const [error, setError] = useState<string | undefined>(undefined);

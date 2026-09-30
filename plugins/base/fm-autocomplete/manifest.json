@@ -1,6 +1,6 @@
 {
   "id": "fm-autocomplete",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "name": "Frontmatter autocomplete",
   "description": "While you type a frontmatter value, suggests the values that key already has across the workspace.",
   "author": "Life Manager base distribution",
@@ -8,26 +8,11 @@
   "x-tailwind": {
     "prefix": "fmac"
   },
-  "kernel": "^2.0",
-  "hot": true,
-  "consumes": {
-    "index": {
-      "protocol": "lm/workspace-index@^1.0",
-      "needs": [
-        "fmFields",
-        "fmValues",
-        "documents",
-        "subscribe"
-      ]
-    },
-    "surfaces": {
-      "protocol": "lm/text.surface@^1.0"
-    }
-  },
-  "provides": {
-    "popup": {
-      "protocol": "lm/shell.overlay@1.0.0"
-    }
+  "kernel": "^3.0",
+  "dependencies": {
+    "editor": "^2.0",
+    "indexer": "^2.0",
+    "shell-ui": "^3.0"
   },
   "peerLibraries": {
     "react": "^18.0.0"

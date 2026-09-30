@@ -77,6 +77,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../bridge/auth.dart';
 import '../bridge/bridge.dart';
+import '../bridge/folder.dart';
 import '../bridge/notifications.dart';
 import '../bundle/manifest.dart';
 import '../bundle/updater.dart';
@@ -390,18 +391,25 @@ class _WebViewHostState extends State<WebViewHost> {
   InAppWebViewController? _controller;
   Timer? _watchdog;
   bool _settled = false;
+  StreamSubscription<List<String>>? _folderChanges;
 
   @override
   void initState() {
     super.initState();
     tappedNotificationRoute.addListener(_onTappedRoute);
     stagedBundleVersion.addListener(_onStagedBundle);
+    // Files changed in the notes folder (`bridge/folder.dart`): the page rescans.
+    _folderChanges = folderChanges.stream.listen(
+      (List<String> paths) =>
+          _controller?.evaluateJavascript(source: folderChangedScript(paths)),
+    );
   }
 
   @override
   void dispose() {
     tappedNotificationRoute.removeListener(_onTappedRoute);
     stagedBundleVersion.removeListener(_onStagedBundle);
+    _folderChanges?.cancel();
     _watchdog?.cancel();
     super.dispose();
   }

@@ -1,0 +1,1907 @@
+<title>Plugin Protocols &amp; Wiring</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+:root {
+  --bg: #eef1f5;
+  --surface: #ffffff;
+  --surface-2: #f6f8fb;
+  --ink: #152030;
+  --muted: #5a6679;
+  --faint: #8a95a6;
+  --line: #d4dbe5;
+  --line-2: #e4e9f0;
+  --accent: #2c55c9;
+  --accent-soft: #e3eafc;
+  --service: #117a7a;
+  --service-soft: #dcf1f1;
+  --slot: #b26c0a;
+  --slot-soft: #fbeedb;
+  --event: #b0386f;
+  --event-soft: #f8e1ec;
+  --warn: #a8660b;
+  --warn-soft: #fcf0d8;
+  --err: #bf3434;
+  --err-soft: #fbe3e3;
+  --ok: #2a7d4f;
+  --grid: #d9dfe8;
+  --code-bg: #f3f5f9;
+  --shadow: 0 1px 2px rgba(21, 32, 48, .06), 0 4px 14px rgba(21, 32, 48, .06);
+  --display: "Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0e131a;
+    --surface: #151c26;
+    --surface-2: #1a2230;
+    --ink: #e3e8ef;
+    --muted: #97a3b5;
+    --faint: #6d798b;
+    --line: #2a3443;
+    --line-2: #222b38;
+    --accent: #83a0ff;
+    --accent-soft: #1e2a4a;
+    --service: #45c4c4;
+    --service-soft: #12302f;
+    --slot: #e6a646;
+    --slot-soft: #33260f;
+    --event: #ec80b0;
+    --event-soft: #3a1a2a;
+    --warn: #e6a646;
+    --warn-soft: #33260f;
+    --err: #f07b7b;
+    --err-soft: #3a1b1b;
+    --ok: #62c28c;
+    --grid: #1f2835;
+    --code-bg: #111821;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.25);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0e131a;
+  --surface: #151c26;
+  --surface-2: #1a2230;
+  --ink: #e3e8ef;
+  --muted: #97a3b5;
+  --faint: #6d798b;
+  --line: #2a3443;
+  --line-2: #222b38;
+  --accent: #83a0ff;
+  --accent-soft: #1e2a4a;
+  --service: #45c4c4;
+  --service-soft: #12302f;
+  --slot: #e6a646;
+  --slot-soft: #33260f;
+  --event: #ec80b0;
+  --event-soft: #3a1a2a;
+  --warn: #e6a646;
+  --warn-soft: #33260f;
+  --err: #f07b7b;
+  --err-soft: #3a1b1b;
+  --ok: #62c28c;
+  --grid: #1f2835;
+  --code-bg: #111821;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.25);
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--display);
+  font-size: 15.5px;
+  line-height: 1.6;
+  padding-inline: 16px;
+  padding-block: 0 64px;
+}
+.wrap { max-width: 1120px; margin: 0 auto; }
+.prose { max-width: 70ch; }
+h1, h2, h3 { text-wrap: balance; line-height: 1.15; margin: 0; }
+h1 { font-size: clamp(2rem, 5vw, 3.1rem); font-weight: 800; letter-spacing: -.02em; }
+h2 { font-size: 1.6rem; font-weight: 700; letter-spacing: -.01em; }
+h3 { font-size: 1.08rem; font-weight: 650; }
+p { margin: 0; }
+a { color: var(--accent); }
+code, pre, .mono { font-family: var(--mono); font-size: .86em; }
+:not(pre) > code { background: var(--code-bg); border: 1px solid var(--line-2); border-radius: 4px; padding: .05em .35em; white-space: nowrap; }
+pre {
+  background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px;
+  padding: 14px 16px; overflow-x: auto; margin: 0; line-height: 1.55; font-size: .8rem;
+}
+.k { color: var(--accent); } .s { color: var(--service); } .c { color: var(--faint); } .y { color: var(--slot); } .e { color: var(--event); }
+
+/* header */
+.top { padding-block: 44px 28px; display: grid; gap: 18px; border-bottom: 1px solid var(--line); }
+.eyebrow { font-family: var(--mono); font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.eyebrow span { white-space: nowrap; }
+.lede { font-size: 1.15rem; color: var(--muted); max-width: 64ch; }
+.lede strong { color: var(--ink); font-weight: 600; }
+nav.toc { display: flex; flex-wrap: wrap; gap: 6px; }
+nav.toc a { font-size: .82rem; text-decoration: none; color: var(--ink); border: 1px solid var(--line); background: var(--surface); padding: 4px 10px; border-radius: 999px; }
+nav.toc a:hover, nav.toc a:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
+
+section { padding-block: 44px 8px; display: grid; gap: 18px; scroll-margin-top: 12px; }
+.sec-head { display: grid; gap: 6px; }
+.sec-no { font-family: var(--mono); font-size: .75rem; color: var(--accent); letter-spacing: .06em; text-transform: uppercase; }
+.muted { color: var(--muted); }
+
+.evidence { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); }
+.ev { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 8px; align-content: start; }
+.ev .fact { font-family: var(--mono); font-size: .78rem; color: var(--err); }
+.ev p { font-size: .92rem; }
+
+.kinds { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.kind { border-radius: 10px; padding: 16px; display: grid; gap: 8px; border: 1px solid var(--line); background: var(--surface); align-content: start; }
+.kind .tag { font-family: var(--mono); font-size: .72rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; display: inline-flex; align-items: center; gap: 7px; }
+.kind .tag::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
+.kind.service .tag { color: var(--service); }
+.kind.slot .tag { color: var(--slot); }
+.kind.event .tag { color: var(--event); }
+.kind p { font-size: .9rem; }
+.kind dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: .82rem; }
+.kind dt { color: var(--muted); } .kind dd { margin: 0; }
+
+.two { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); align-items: start; }
+.two > div { display: grid; gap: 8px; min-width: 0; }
+.cap { font-family: var(--mono); font-size: .72rem; color: var(--muted); letter-spacing: .05em; text-transform: uppercase; }
+
+.diagram { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; overflow-x: auto; }
+.diagram svg { display: block; min-width: 640px; width: 100%; height: auto; }
+.diagram text { font-family: var(--mono); }
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: .86rem; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line-2); vertical-align: top; }
+th { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; background: var(--surface-2); }
+tr:last-child td { border-bottom: 0; }
+td code { white-space: nowrap; }
+.pill { display: inline-block; font-family: var(--mono); font-size: .7rem; padding: 1px 7px; border-radius: 999px; font-weight: 600; white-space: nowrap; }
+.pill.service { background: var(--service-soft); color: var(--service); }
+.pill.slot { background: var(--slot-soft); color: var(--slot); }
+.pill.event { background: var(--event-soft); color: var(--event); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.err { background: var(--err-soft); color: var(--err); }
+.pill.ok { background: var(--accent-soft); color: var(--accent); }
+
+ol.phases { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; counter-reset: ph; }
+ol.phases li { counter-increment: ph; display: grid; grid-template-columns: 44px 1fr; gap: 14px; padding-block: 14px; border-top: 1px solid var(--line); }
+ol.phases li::before { content: counter(ph); font-family: var(--mono); font-weight: 600; font-size: .9rem; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; border: 1.5px solid var(--accent); color: var(--accent); }
+ol.phases h3 { margin-bottom: 4px; }
+ol.phases p { font-size: .92rem; color: var(--muted); }
+ol.phases .done { font-size: .82rem; margin-top: 6px; }
+
+.qs { display: grid; gap: 12px; }
+.q { border-left: 3px solid var(--line); padding: 2px 0 2px 14px; display: grid; gap: 4px; }
+.q .rec { font-size: .88rem; color: var(--muted); }
+.q .rec b { color: var(--ink); font-weight: 600; }
+
+/* ---------- graph view ---------- */
+.gv { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; display: grid; }
+.gv-bar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--surface-2); }
+.gv-bar .grp { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.gv-bar .lbl { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.chip { font: 600 .74rem var(--mono); border: 1px solid var(--line); background: var(--surface); color: var(--muted); padding: 4px 10px; border-radius: 999px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.chip .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; opacity: .35; }
+.chip[aria-pressed="true"] .dot { opacity: 1; }
+.chip.service[aria-pressed="true"] { color: var(--service); border-color: var(--service); background: var(--service-soft); }
+.chip.slot[aria-pressed="true"] { color: var(--slot); border-color: var(--slot); background: var(--slot-soft); }
+.chip.event[aria-pressed="true"] { color: var(--event); border-color: var(--event); background: var(--event-soft); }
+.btn { font: 600 .78rem var(--display); border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 5px 11px; border-radius: 7px; cursor: pointer; }
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn:focus-visible, .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn.danger { color: var(--err); }
+.btn.danger:hover { border-color: var(--err); }
+.gv-bar select { font: .8rem var(--mono); background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 7px; padding: 4px 6px; max-width: 220px; }
+.spacer { flex: 1; }
+
+.gv-body { display: grid; grid-template-columns: minmax(0, 1fr) 340px; min-height: 640px; }
+@media (max-width: 900px) { .gv-body { grid-template-columns: 1fr; } }
+.canvas {
+  position: relative; overflow: hidden; height: 640px; touch-action: none; cursor: grab;
+  background-color: var(--bg);
+  background-image: radial-gradient(var(--grid) 1.2px, transparent 1.2px);
+  background-size: 22px 22px;
+}
+.canvas.panning { cursor: grabbing; }
+.world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.world svg.wires { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.wires path.w { fill: none; stroke-width: 1.4; opacity: .5; pointer-events: stroke; cursor: pointer; transition: opacity .12s; }
+.wires path.hit { fill: none; stroke: transparent; stroke-width: 12; pointer-events: stroke; cursor: pointer; }
+.wires path.service { stroke: var(--service); stroke-width: 2.2; opacity: .8; }
+.wires path.slot { stroke: var(--slot); }
+.wires path.event { stroke: var(--event); stroke-dasharray: 6 5; stroke-width: 1.8; opacity: .8; }
+.wires path.w.hot { opacity: 1; stroke-width: 3; }
+.wires path.w.dim { opacity: .07; }
+.wires path.w.sel { opacity: 1; stroke-width: 3.4; stroke: var(--accent); }
+.wires path.temp { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 4 4; }
+.wires path.temp.bad { stroke: var(--err); }
+
+.node {
+  position: absolute; left: 0; top: 0; width: 228px; background: var(--surface); border: 1px solid var(--line); border-radius: 9px;
+  box-shadow: var(--shadow); font-size: .76rem; user-select: none; -webkit-user-select: none;
+}
+.node.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft), var(--shadow); }
+.node.dim { opacity: .35; }
+.node.off { border-style: dashed; }
+.node-h { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--line-2); cursor: move; font-weight: 700; font-size: .8rem; min-height: 30px; }
+.node-h .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.node-h .org { font: 600 .6rem var(--mono); text-transform: uppercase; letter-spacing: .05em; padding: 1px 5px; border-radius: 4px; color: var(--muted); border: 1px solid var(--line); }
+.node-h .org.example { color: var(--accent); border-color: var(--accent); }
+.node-h .org.third { color: var(--event); border-color: var(--event); }
+.ports { padding-block: 4px; }
+.ports + .ports { border-top: 1px dashed var(--line-2); }
+.port { position: relative; height: 20px; display: flex; align-items: center; gap: 6px; padding-inline: 12px; white-space: nowrap; }
+.port .pn { font-weight: 600; font-family: var(--mono); font-size: .7rem; }
+.port .pp { font-family: var(--mono); font-size: .64rem; color: var(--faint); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.port.R { justify-content: flex-end; text-align: right; }
+.port .pd { position: absolute; top: 50%; width: 11px; height: 11px; margin-top: -5.5px; border-radius: 50%; border: 2px solid var(--surface); cursor: crosshair; box-shadow: 0 0 0 1px var(--line); }
+.port.L .pd { left: -6px; } .port.R .pd { right: -6px; }
+.ports .cap-row { font: 600 .56rem var(--mono); color: var(--faint); text-transform: uppercase; letter-spacing: .08em; padding: 1px 12px 2px; }
+.ports.R .cap-row { text-align: right; }
+.node-h .dc { font: 600 .62rem var(--mono); color: var(--muted); min-width: 16px; text-align: center; border-radius: 4px; background: var(--line-2); padding: 0 4px; }
+.collabels .collabel { position: absolute; left: 0; top: 0; width: 228px; font: 600 11px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+.port .pd.service { background: var(--service); } .port .pd.slot { background: var(--slot); } .port .pd.event { background: var(--event); }
+.port .pd.many { border-radius: 3px; }
+.port.compat .pd { box-shadow: 0 0 0 3px var(--ok); }
+.port.nocompat { opacity: .3; }
+.port .badge { font: 700 .58rem var(--mono); padding: 0 4px; border-radius: 3px; }
+.port .badge.warn { background: var(--warn-soft); color: var(--warn); }
+.port .badge.err { background: var(--err-soft); color: var(--err); }
+.port .badge.opt { color: var(--faint); border: 1px solid var(--line); }
+
+.zoom { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 4px; }
+.zoom .btn { width: 32px; height: 32px; padding: 0; display: grid; place-items: center; font-size: 1rem; box-shadow: var(--shadow); }
+.toast { position: absolute; left: 50%; top: 12px; transform: translateX(-50%); max-width: calc(100% - 24px); background: var(--ink); color: var(--bg); font-size: .8rem; padding: 7px 12px; border-radius: 7px; box-shadow: var(--shadow); pointer-events: none; }
+.toast.bad { background: var(--err); color: #fff; }
+.legend { position: absolute; left: 10px; bottom: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: .68rem; color: var(--muted); display: grid; gap: 2px; box-shadow: var(--shadow); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); }
+.legend i { display: inline-block; width: 18px; height: 0; border-top: 2px solid; }
+
+.side { border-left: 1px solid var(--line); display: grid; grid-template-rows: auto auto 1fr; min-width: 0; max-height: 640px; overflow: auto; }
+@media (max-width: 900px) { .side { border-left: 0; border-top: 1px solid var(--line); max-height: none; } }
+.panel { padding: 12px 14px; border-bottom: 1px solid var(--line); display: grid; gap: 8px; min-width: 0; }
+.panel h4 { margin: 0; font-size: .72rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 600; display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.panel pre { font-size: .7rem; padding: 10px; max-height: 220px; }
+.diag { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: .78rem; }
+.diag li { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: start; }
+.diag li button { all: unset; cursor: pointer; }
+.diag li button:hover .who, .diag li button:focus-visible .who { text-decoration: underline; }
+.who { font-family: var(--mono); font-weight: 600; font-size: .74rem; }
+.insp { font-size: .8rem; display: grid; gap: 10px; }
+.insp .desc { color: var(--muted); }
+.insp table { font-size: .74rem; }
+.insp th, .insp td { padding: 5px 6px; }
+.insp td .mono { font-size: .7rem; }
+.linkish { all: unset; cursor: pointer; color: var(--accent); font-family: var(--mono); font-size: .72rem; font-weight: 600; }
+.linkish:hover, .linkish:focus-visible { text-decoration: underline; }
+.order { display: flex; flex-wrap: wrap; gap: 4px; font-family: var(--mono); font-size: .66rem; }
+.order span { border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; color: var(--muted); }
+.order span b { color: var(--faint); font-weight: 500; margin-right: 3px; }
+.order span.skip { color: var(--err); border-color: var(--err); text-decoration: line-through; }
+.gv-help { padding: 10px 14px; font-size: .8rem; color: var(--muted); border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 4px 18px; }
+.gv-help b { color: var(--ink); font-weight: 600; }
+
+.wires circle.seat { fill: var(--slot); stroke: var(--surface); stroke-width: 2; }
+.wires circle.seat.open { fill: var(--surface); stroke: var(--slot); stroke-width: 1.5; stroke-dasharray: 2 2; }
+.wires path.w.structural { stroke-dasharray: 1 5; stroke-linecap: round; stroke-width: 2.4; opacity: .9; }
+.wires path.w.bench { opacity: .18; stroke-dasharray: 3 5; }
+.wires g.seatno circle { fill: var(--surface); stroke: var(--slot); stroke-width: 1.4; }
+.wires g.seatno text { font: 700 9px var(--mono); fill: var(--slot); text-anchor: middle; dominant-baseline: central; }
+.port.in .pd.slot { background: transparent; box-shadow: none; border-color: transparent; }
+.port.multi { align-items: flex-start; }
+.port.multi > span { line-height: 20px; }
+.port.multi .pd { top: 10px; }
+.world svg.wires.top { pointer-events: none; }
+.port .pn { cursor: pointer; }
+.port.compat { background: color-mix(in srgb, var(--ok) 16%, transparent); }
+.port.fits { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.port.fits .pd { box-shadow: 0 0 0 3px var(--accent); }
+.port.picked { background: var(--accent-soft); }
+.port.picked .pn { color: var(--accent); }
+.tc td.ok { color: var(--ok); font-weight: 700; } .tc td.bad { color: var(--err); font-weight: 700; } .tc tr.extra td { color: var(--faint); }
+ol.seats { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 4px; }
+ol.seats li { display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; background: var(--surface); }
+ol.seats .no { font: 700 .66rem var(--mono); color: var(--slot); width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--slot); display: grid; place-items: center; }
+ol.seats li.bench { opacity: .6; }
+.btn.sm { padding: 2px 8px; font-size: .72rem; }
+.cands { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 5px; font-size: .74rem; }
+.cands li { display: grid; grid-template-columns: 14px 1fr auto; gap: 2px 6px; align-items: center; }
+.mark { font: 700 .72rem var(--mono); } .mark.ok { color: var(--ok); } .mark.fit { color: var(--accent); } .mark.bad { color: var(--err); }
+.reason { color: var(--muted); font-size: .7rem; grid-column: 2 / -1; }
+.needs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.needs code { font-size: .68rem; }
+
+.draftbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 8px 12px; border-bottom: 1px solid var(--line); font-size: .82rem; background: var(--surface); }
+.draftbar.dirty { background: var(--warn-soft); border-bottom-color: var(--warn); }
+.draftbar .state { font: 700 .72rem var(--mono); text-transform: uppercase; letter-spacing: .06em; padding: 2px 8px; border-radius: 999px; }
+.draftbar .state.live { color: var(--ok); border: 1px solid var(--ok); }
+.draftbar .state.draft { color: var(--warn); border: 1px solid var(--warn); }
+.draftbar .state.offline { color: var(--muted); border: 1px solid var(--line); }
+.seat-ctl { display: inline-flex; gap: 4px; }
+.btn[disabled] { opacity: .35; cursor: default; }
+.draftbar .clients { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-family: var(--mono); font-size: .74rem; }
+.draftbar .clients i { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); display: inline-block; }
+.draftbar .clients.pulse i { animation: pulse 1.2s ease-out 2; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 var(--ok); } 100% { box-shadow: 0 0 0 10px transparent; } }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+.btn.primary:hover { color: var(--surface); filter: brightness(1.08); }
+.wires path.w.gone { stroke: var(--err); stroke-dasharray: 4 4; opacity: .45; stroke-width: 1.6; }
+.wires path.w.new { stroke-width: 3.2; opacity: 1; }
+.node.unplugged { opacity: .5; border-style: dashed; }
+.node.unplugged .node-h { background: repeating-linear-gradient(-45deg, transparent 0 6px, var(--line-2) 6px 12px); }
+.node-h .plug { all: unset; cursor: pointer; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 4px; color: var(--ok); }
+.node-h .plug:hover, .node-h .plug:focus-visible { background: var(--line-2); }
+.node.unplugged .node-h .plug { color: var(--err); }
+.node-h .plug svg { width: 12px; height: 12px; }
+.changes { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; font-size: .76rem; }
+.changes li { display: grid; grid-template-columns: 16px 1fr; gap: 6px; }
+.changes .op { font: 700 .74rem var(--mono); text-align: center; }
+.changes .op.add { color: var(--ok); } .changes .op.del { color: var(--err); } .changes .op.mod { color: var(--warn); }
+.plan { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: .76rem; }
+.plan li::marker { font-family: var(--mono); color: var(--muted); }
+.plan .ids { font-family: var(--mono); font-size: .7rem; color: var(--muted); }
+.callout { font-size: .76rem; padding: 6px 8px; border-radius: 6px; background: var(--err-soft); color: var(--err); }
+.callout.warn { background: var(--warn-soft); color: var(--warn); }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+
+<aside role="note" style="margin:24px 0 8px;padding:14px 18px;border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:8px;background:var(--accent-soft);color:var(--ink);line-height:1.5">
+  <strong>Superseded by kernel 3.0 (2026-09-30).</strong> Ports, protocols, the wiring resolver, seats and the admin wiring editor described here are gone. Plugins now export functions and components from <code>src/index.tsx</code>, import each other as <code>plugin:&lt;id&gt;</code> and declare <code>dependencies</code> / <code>optionalDependencies</code>; hosts take contributions through <code>createRegistry</code>. See <a href="KERNEL-API.md#300--plugins-import-each-other-2026-09-30">KERNEL-API.md §3.0.0</a> and <a href="../../plugins/base/README.md#dependencies-and-exports">plugins/base/README.md</a>. Kept as the record of the 1.2–2.x design.
+</aside>
+
+<header class="top">
+  <div class="eyebrow"><span>dev-docs/resolved</span><span>Status: superseded by kernel 3.0 (2026-09-30); was implemented, steps 1 to 8 done (2026-09-28); the editor folded into <code>admin</code> (2026-09-28)</span><span>2026-09-27</span><span>Supersedes P1–P2 of PLUGIN-ARCHITECTURE-REVIEW</span></div>
+  <h1>Plugin Protocols &amp; Wiring</h1>
+  <p class="lede">Today a plugin reaches another plugin <strong>by its id</strong>, and the shape of what passes between them lives in a file third parties are told to copy. This plan makes every exchange a <strong>named, versioned protocol</strong>, declares each one as a <strong>port</strong> in the manifest, and turns who-feeds-whom into <strong>wiring you can see and edit</strong> in a graph.</p>
+  <nav class="toc" aria-label="Sections">
+    <a href="#why">Why</a><a href="#model">The model</a><a href="#package">Protocol packages</a><a href="#manifest">Manifest</a><a href="#runtime">Runtime API</a><a href="#rules">Resolution rules</a><a href="#seats">Seats</a><a href="#types">Type checking</a><a href="#apply">Drafts &amp; apply</a><a href="#graph">Graph view</a><a href="#mapping">Base mapping</a><a href="#migration">Migration</a><a href="#questions">Decisions</a>
+  </nav>
+</header>
+
+<section id="why">
+  <div class="sec-head"><span class="sec-no">§1 · Why</span><h2>Agreement today is by convention</h2></div>
+  <p class="prose">The kernel is sound: deterministic activation, contained failures, declared-dependents-only services. What breaks down at ecosystem scale is how plugins agree with each other. Each of these is from the current tree.</p>
+  <div class="evidence">
+    <div class="ev"><span class="fact">"dependencies": { "indexer": "^1.0" }</span><h3>Dependencies name a plugin, not a capability</h3><p><code>graph</code> and <code>fm-autocomplete</code> require the plugin called <code>indexer</code>. A better index has to take that exact id, and only one can be installed. Two indexes side by side is impossible to express.</p></div>
+    <div class="ev"><span class="fact">_shared/points.ts · 838 lines</span><h3>The contracts are a private file</h3><p>Twenty-five point shapes live in one base-distribution source file whose header tells a third party to "copy the type from here, or simply pass an object with the right fields".</p></div>
+    <div class="ev"><span class="fact">commands: in 9 base manifests, 0 service reads</span><h3>A dependency means different things</h3><p>Nine base plugins depend on <code>commands</code> and none reads its service; the edge only says "I contribute commands". Meanwhile <code>header</code> hosts <code>navbar.item</code> and none of the six plugins contributing to it declares it.</p></div>
+    <div class="ev"><span class="fact">"x-defines": [ … ] · informational</span><h3>Nothing declares what a plugin feeds</h3><p><code>x-defines</code> is not tied to runtime, and there is no counterpart for contributions. A misspelled point name buffers forever without a diagnostic.</p></div>
+    <div class="ev"><span class="fact">17 shapes with order?: number</span><h3>Order is a bidding war</h3><p>Where a panel or navbar item lands depends on the number each plugin picked for itself: <code>0</code>, <code>10</code>, <code>900</code>, <code>1000</code>. To go before someone, you undercut their number. No one can see the whole sequence, and the owner of the sidebar can't set it.</p></div>
+    <div class="ev"><span class="fact">kernel.events · "unfiled"</span><h3>Reverse relationships go untyped</h3><p><code>folders</code> tells <code>doc-list</code> where unfiled documents go. The dependency would have been a cycle, so it became an untyped event that no manifest mentions.</p></div>
+  </div>
+</section>
+
+<section id="model">
+  <div class="sec-head"><span class="sec-no">§2 · The model</span><h2>Protocols, ports and wires</h2></div>
+  <p class="prose">A <b>protocol</b> is a versioned contract with an id such as <code>lm/workspace-index@1.2.0</code>. A <b>port</b> is one named place on a plugin where it provides or consumes a protocol. A <b>wire</b> connects a provided port to a consumed port, and <b>the graph only allows it when the types fit</b>: every key the consumer requires must be there with a matching type, and extra keys are fine (§6b). Plugins name ports and protocols. They never name each other.</p>
+  <div class="kinds">
+    <div class="kind service"><span class="tag">service</span><p>One provider answers each consumer port. Replaces <code>services.require(id)</code>.</p><dl><dt>Cardinality</dt><dd>1 provider → a consumer port</dd><dt>Orders activation</dt><dd>Yes, provider first</dd><dt>Today</dt><dd><code>dependencies</code> + <code>*-api.ts</code></dd></dl></div>
+    <div class="kind slot"><span class="tag">slot</span><p>Many contributors feed a host port. Replaces extension points; the host is the consumer.</p><dl><dt>Cardinality</dt><dd>many providers → a host port</dd><dt>Seats</dt><dd>ordered; connection order is seat order</dd><dt>Orders activation</dt><dd>No, items buffer</dd><dt>Today</dt><dd><code>definePoint</code> / <code>contribute</code></dd></dl></div>
+    <div class="kind event"><span class="tag">event</span><p>A typed message stream. Emitters provide it and listeners consume it. Cycles are allowed.</p><dl><dt>Cardinality</dt><dd>many → many</dd><dt>Orders activation</dt><dd>No</dd><dt>Today</dt><dd>untyped <code>kernel.events</code></dd></dl></div>
+  </div>
+  <div class="diagram" role="img" aria-label="Diagram: indexer provides lm/workspace-index to graph's index port; graph provides a main.view item to shell-ui's views host port; a third-party index is also compatible with graph's index port but not wired.">
+    <svg viewBox="0 0 900 250">
+      <defs>
+        
+      </defs>
+      <g font-size="12">
+        <rect x="20" y="30" width="190" height="70" rx="8" style="fill:var(--surface-2);stroke:var(--line)"/>
+        <text x="36" y="54" font-weight="700" style="fill:var(--ink);font-family:var(--display)">indexer</text>
+        <text x="194" y="84" text-anchor="end" style="fill:var(--ink)">index</text>
+        <circle cx="210" cy="80" r="6" style="fill:var(--service)"/>
+
+        <rect x="20" y="150" width="190" height="70" rx="8" stroke-dasharray="4 3" style="fill:var(--surface-2);stroke:var(--line)"/>
+        <text x="36" y="174" font-weight="700" style="fill:var(--ink);font-family:var(--display)">acme-fuzzy-index</text>
+        <text x="194" y="204" text-anchor="end" style="fill:var(--ink)">index</text>
+        <circle cx="210" cy="200" r="6" style="fill:var(--service)"/>
+
+        <rect x="360" y="40" width="190" height="120" rx="8" style="fill:var(--surface-2);stroke:var(--line)"/>
+        <text x="376" y="64" font-weight="700" style="fill:var(--ink);font-family:var(--display)">graph</text>
+        <circle cx="360" cy="94" r="6" style="fill:var(--service)"/>
+        <text x="376" y="98" style="fill:var(--ink)">index</text>
+        <text x="534" y="138" text-anchor="end" style="fill:var(--ink)">view</text>
+        <circle cx="550" cy="134" r="6" style="fill:var(--slot)"/>
+
+        <rect x="690" y="80" width="190" height="90" rx="8" style="fill:var(--surface-2);stroke:var(--line)"/>
+        <text x="706" y="104" font-weight="700" style="fill:var(--ink);font-family:var(--display)">shell-ui</text>
+        <rect x="684" y="128" width="12" height="12" rx="3" style="fill:var(--slot)"/>
+        <text x="706" y="138" style="fill:var(--ink)">views</text>
+        <text x="706" y="156" font-size="10.5" style="fill:var(--faint)">many</text>
+
+        <path d="M216,80 C290,80 290,94 354,94" fill="none" stroke-width="2.5" style="stroke:var(--service)"/>
+        <path d="M216,200 C300,200 290,110 354,100" fill="none" stroke-width="1.5" stroke-dasharray="3 5" opacity=".6" style="stroke:var(--service)"/>
+        <path d="M556,134 C620,134 620,134 684,134" fill="none" stroke-width="2" style="stroke:var(--slot)"/>
+
+        <text x="285" y="66" text-anchor="middle" font-size="11" style="fill:var(--service)">lm/workspace-index</text>
+        <text x="285" y="228" text-anchor="middle" font-size="10.5" style="fill:var(--faint)">compatible, not chosen</text>
+        <text x="620" y="124" text-anchor="middle" font-size="11" style="fill:var(--slot)">lm/main.view</text>
+        <text x="455" y="190" text-anchor="middle" font-size="10.5" style="fill:var(--muted)">wires run from provider to consumer</text>
+      </g>
+    </svg>
+  </div>
+  <p class="prose muted">Because a host is a consumer, one contribution can feed several hosts. <code>editor</code>'s text surface already feeds both <code>slash-commands</code> and <code>fm-autocomplete</code>; today that works because two plugins read the same point name. In this model it is two wires from one port, and the graph shows it.</p>
+</section>
+
+<section id="package">
+  <div class="sec-head"><span class="sec-no">§3 · Protocol packages</span><h2>A contract ships on its own</h2></div>
+  <p class="prose">A protocol is a small package with no runtime code of its own besides a validator. It ships inside the plugin that owns it, for example <code>lm/workspace-index</code> inside <code>indexer</code>. On install, the server takes it into its protocol registry, where it stays even if that plugin is unplugged or replaced, so a replacement can speak it too. The kernel still knows no domain: it learns the <em>kind</em> and the <em>shape</em> from the package, never what a navbar is.</p>
+  <div class="two">
+    <div>
+      <span class="cap">Layout</span>
+<pre>plugins/base/indexer/protocols/workspace-index/
+  protocol.json       <span class="c"># generated: id, version, kind, owner, shape</span>
+  index.d.ts          <span class="c"># generated from shape.mjs</span>
+  shape.mjs           <span class="c"># the one authored source: s.object({…})</span>
+  README.md           <span class="c"># semantics: what a provider promises</span>
+  conformance.mjs     <span class="c"># optional: tests any provider runs</span></pre>
+    </div>
+    <div>
+      <span class="cap">protocol.json</span>
+<pre>{
+  <span class="k">"id"</span>: <span class="s">"lm/workspace-index"</span>,
+  <span class="k">"version"</span>: <span class="s">"1.2.0"</span>,
+  <span class="k">"kind"</span>: <span class="s">"service"</span>,
+  <span class="k">"owner"</span>: <span class="s">"life-manager"</span>,
+  <span class="k">"types"</span>: <span class="s">"index.d.ts"</span>,
+  <span class="k">"shape"</span>: {                <span class="c">// s.* serialised</span>
+    <span class="k">"ready"</span>:       <span class="s">"promise"</span>,
+    <span class="k">"version"</span>:     <span class="s">"number"</span>,
+    <span class="k">"stats"</span>:       <span class="s">"func"</span>,
+    <span class="k">"fmFields"</span>:    <span class="s">"func"</span>,
+    <span class="k">"fmValues"</span>:    <span class="s">"func"</span>,
+    <span class="k">"documents"</span>:   <span class="s">"func"</span>,
+    <span class="k">"connections"</span>: <span class="s">"func"</span>,
+    <span class="k">"subscribe"</span>:   <span class="s">"func"</span>
+  }
+}</pre>
+    </div>
+  </div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Rule</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Protocol ids are <code>&lt;publisher&gt;/&lt;name&gt;</code>. <code>lm/</code> is reserved for the base distribution. On each server, the first installed package to use a namespace owns it. Plugin ids keep today's rule (no <code>/</code>).</td><td>Two authors can both write a "tasks" protocol without colliding.</td></tr>
+      <tr><td>Semver: removing a method or making a field required is a major. Adding an optional field or a method is a minor.</td><td>The same rule <code>KERNEL-API.md</code> already applies to <code>@kernel</code>.</td></tr>
+      <tr><td>The server stores protocols by <code>id@version</code> with a content hash. A second package bundling the same id@version must be byte-identical, or the install is refused.</td><td>No two plugins can disagree about what <code>lm/route@1.0.0</code> means.</td></tr>
+      <tr><td>Types are served at <code>/protocols/&lt;id&gt;/&lt;version&gt;/index.d.ts</code>, like <code>/kernel.d.ts</code>.</td><td>An outside author compiles against what the server actually has, without copying files.</td></tr>
+      <tr><td>The shape is plain JSON in the <code>s.*</code> vocabulary: <code>string</code>, <code>number</code>, <code>boolean</code>, <code>func</code>, <code>promise</code>, <code>component</code>, <code>any</code>, <code>literal</code>, <code>union</code>, <code>array</code>, <code>record</code>, <code>object</code>, <code>optional</code>. The <code>s.*</code> builders gain a <code>toJSON()</code>; <code>promise</code> is new.</td><td>The server and the graph can type-check a wire without running any plugin code.</td></tr>
+      <tr><td>Only <code>shape.mjs</code> is written by hand. <code>protocol.json</code> and <code>index.d.ts</code> are generated from it, and CI fails when the checked-in output is stale.</td><td>One source, so the five hand-written <code>RouterService</code> copies can't happen again.</td></tr>
+      <tr><td>A provider that says <code>X@v</code> implements all of <code>X@v</code>. Everything it offers or serves is checked against that version's full shape; a failure fails the plugin. Partial support is an older version, or members the protocol marks optional.</td><td>A version number means the same thing for every provider.</td></tr>
+      <tr><td>Duplicate rules are data: <code>"key": "id"</code> names the field that must be unique on a host. The lower seat wins a duplicate.</td><td>Today <code>definePoint({ key: fn })</code> takes a function, which can't be serialised, and "first wins" depends on activation timing.</td></tr>
+      <tr><td>A protocol package ships in its plugin's <code>protocols/</code> folder: in the install zip allowlist, in <code>build-plugins.mjs</code>, <code>package-plugin.mjs</code> and <code>compose-plugins.mjs</code>, and registered when the server scans base plugins as well as on install. The registry travels in the plugin list, so clients can still validate after the owner is gone. In development a plugin may overwrite its own protocol without a version bump.</td><td>Today the zip allowlist and the build copy only <code>manifest.json</code>, <code>frontend/**</code> and the declared wasm.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="manifest">
+  <div class="sec-head"><span class="sec-no">§4 · Manifest</span><h2><code>provides</code> and <code>consumes</code> replace <code>dependencies</code> and <code>x-defines</code></h2></div>
+  <div class="two">
+    <div>
+      <span class="cap">graph · today</span>
+<pre>{
+  <span class="k">"id"</span>: <span class="s">"graph"</span>,
+  <span class="k">"kernel"</span>: <span class="s">"^1.0"</span>,
+  <span class="k">"dependencies"</span>: {
+    <span class="s">"commands"</span>: <span class="s">"^1.0"</span>,   <span class="c">// only contributes</span>
+    <span class="s">"indexer"</span>:  <span class="s">"^1.0"</span>,   <span class="c">// a plugin id</span>
+    <span class="s">"router"</span>:   <span class="s">"^1.0"</span>,
+    <span class="s">"shell-ui"</span>: <span class="s">"^1.0"</span>
+  }
+  <span class="c">// navbar.item, main.view, altbar.panel,</span>
+  <span class="c">// router.route, keybindings: undeclared</span>
+}</pre>
+    </div>
+    <div>
+      <span class="cap">graph · proposed</span>
+<pre>{
+  <span class="k">"id"</span>: <span class="s">"graph"</span>,
+  <span class="k">"kernel"</span>: <span class="s">"^2.0"</span>,
+  <span class="k">"consumes"</span>: {
+    <span class="k">"index"</span>:  { <span class="k">"protocol"</span>: <span class="s">"lm/workspace-index@^1.0"</span>,
+                <span class="k">"needs"</span>: [<span class="s">"ready"</span>, <span class="s">"version"</span>, <span class="s">"subscribe"</span>,
+                          <span class="s">"documents"</span>, <span class="s">"connections"</span>] },
+    <span class="k">"router"</span>: { <span class="k">"protocol"</span>: <span class="s">"lm/router@^1.0"</span>,
+                <span class="k">"needs"</span>: [<span class="s">"navigate"</span>, <span class="s">"query"</span>] },
+    <span class="k">"shell"</span>:  { <span class="k">"protocol"</span>: <span class="s">"lm/shell@^1.0"</span>,
+                <span class="k">"needs"</span>: [<span class="s">"layout"</span>, <span class="s">"toggleAltbar"</span>] }
+  },
+  <span class="k">"provides"</span>: {
+    <span class="k">"view"</span>:     { <span class="k">"protocol"</span>: <span class="s">"lm/main.view@1.0.0"</span> },
+    <span class="k">"panel"</span>:    { <span class="k">"protocol"</span>: <span class="s">"lm/altbar.panel@1.0.0"</span> },
+    <span class="k">"route"</span>:    { <span class="k">"protocol"</span>: <span class="s">"lm/router.route@1.0.0"</span> },
+    <span class="k">"commands"</span>: { <span class="k">"protocol"</span>: <span class="s">"lm/commands.command@1.0.0"</span> },
+    <span class="k">"keys"</span>:     { <span class="k">"protocol"</span>: <span class="s">"lm/keybindings.default@1.0.0"</span> },
+    <span class="k">"nav"</span>:      { <span class="k">"protocol"</span>: <span class="s">"lm/navbar.item@1.0.0"</span> }
+  }
+}</pre>
+    </div>
+  </div>
+  <p class="prose muted">A consumed port takes a semver <em>range</em>; a provided port states the exact version it implements. <code>needs</code> narrows a consumed port to the keys it actually uses, and the type check only asks for those (§6b). A <code>needs</code> key the protocol doesn't have is refused at install. <code>"optional": true</code> on a consumed service port covers the review's P2 (optional dependencies). A host port looks the same as any consumed port: the protocol's <code>kind: "slot"</code> is what makes it many-to-one. A host that shows exactly one contributor adds <code>"seats": 1</code>. There are no ordering numbers anywhere in the manifest, because order belongs to the wiring (§6a).</p>
+</section>
+
+<section id="runtime">
+  <div class="sec-head"><span class="sec-no">§5 · Runtime API</span><h2><code>kernel.ports</code>, addressed by your own port names</h2></div>
+  <div class="two">
+    <div>
+<pre><span class="k">export default function</span> activate(kernel: Kernel) {
+  <span class="c">// service: whatever the wiring bound to "index"</span>
+  <span class="k">const</span> index = kernel.ports.use&lt;WorkspaceIndex&gt;(<span class="s">"index"</span>);
+
+  <span class="c">// slot items: validated against the protocol's shape</span>
+  kernel.ports.offer(<span class="s">"view"</span>, { id: <span class="s">"graph"</span>, component: GraphView });
+  kernel.ports.offer(<span class="s">"commands"</span>, [openGraph, focusNode]);
+
+  <span class="c">// host side: a live list of what is wired in, in seat order</span>
+  <span class="k">const</span> items = kernel.ports.collect&lt;NavbarItem&gt;(<span class="s">"items"</span>);
+  items.subscribe(render);
+
+  <span class="c">// events</span>
+  kernel.ports.emit(<span class="s">"unfiled"</span>, { path: <span class="s">"inbox"</span> });
+  kernel.ports.on(<span class="s">"unfiled"</span>, (m) =&gt; …);
+
+  <span class="c">// providing a service</span>
+  kernel.ports.serve(<span class="s">"index"</span>, api);
+}</pre>
+    </div>
+    <div class="prose" style="display:grid;gap:10px;font-size:.93rem">
+      <p><b>Port names are local.</b> <code>graph</code> says <code>use("index")</code>, not <code>require("indexer")</code>. Which plugin answers is a wiring decision made outside the plugin.</p>
+      <p><b>Undeclared ports throw</b>, keeping the current <code>ContractViolationError</code> discipline from <code>runtime/services.ts</code>.</p>
+      <p><b><code>needs</code> is enforced.</b> <code>ports.use()</code> returns a handle limited to the declared keys. Reading any other key throws <code>ContractViolationError</code>, in development and production alike.</p>
+      <p><b>Kernel types become generic</b>: <code>ports.use</code> is typed by the protocol package's <code>index.d.ts</code>, pulled in at build time.</p>
+      <p><b>Shims are temporary.</b> During the migration, <code>extensions.contribute("navbar.item", x)</code> becomes <code>offer</code> on an implicit port speaking <code>lm/navbar.item@1</code>, and <code>services.require("indexer")</code> becomes <code>use</code> on an implicit port bound to that plugin. Once the base plugins and examples are ported, the shims, <code>dependencies</code> and <code>x-defines</code> are removed and <code>@kernel</code> 2.0 has only <code>ports</code>. A 1.x plugin then no longer loads.</p>
+    </div>
+  </div>
+</section>
+
+<section id="rules">
+  <div class="sec-head"><span class="sec-no">§6 · Resolution rules</span><h2>Auto-wire by default, store only the overrides</h2></div>
+  <p class="prose">Most installs never open the graph. The resolver wires everything it can, and the wiring file records only the choices a person made. A new plugin therefore joins every compatible host without anyone editing wiring.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Situation</th><th>Outcome</th><th>Shown in graph as</th></tr></thead>
+    <tbody>
+      <tr><td>Service port, one provider of the same protocol that fits</td><td>Bound automatically</td><td><span class="pill service">wire</span></td></tr>
+      <tr><td>Service port, several compatible providers</td><td>The install that creates the choice writes the current provider into <code>bind</code>, so the resolver never has to remember history. A fresh workspace prefers the base distribution.</td><td><span class="pill warn">choice</span></td></tr>
+      <tr><td>Pinned provider missing (uninstalled, unplugged, or left out by <code>?safe=1</code>)</td><td>Falls back to the automatic pick with a warning. The pin stays stored for when the provider returns.</td><td><span class="pill warn">pin missing</span></td></tr>
+      <tr><td>Service port, no provider, required</td><td>Plugin skipped. The notice names the protocol, not a plugin id.</td><td><span class="pill err">missing</span></td></tr>
+      <tr><td>Service port, no provider, optional</td><td>Activates; <code>use()</code> returns <code>undefined</code></td><td><span class="pill ok">optional</span></td></tr>
+      <tr><td>Slot or event port</td><td>Every compatible provider joins, minus wires that were cut. A plugin may feed its own slots and events (built-in themes, local search, default task states); it may not consume its own service.</td><td><span class="pill slot">wires</span></td></tr>
+      <tr><td>Same protocol, but the types don't fit or the version is out of range</td><td>No wire. The diagnostic names the missing or mistyped keys and offers adapter plugins.</td><td><span class="pill err">no fit</span></td></tr>
+      <tr><td>Different protocol, but the types fit</td><td>Slots only, never automatic. A person may wire it by hand after a confirm naming both protocols; it is stored in <code>add</code> and marked "by shape". Services and events wire only within one protocol id.</td><td><span class="pill ok">by shape</span></td></tr>
+      <tr><td>Provided port nobody consumes</td><td>Diagnostic. This replaces the unread <code>registry.pending()</code>.</td><td><span class="pill warn">unheard</span></td></tr>
+      <tr><td>Cycle through service wires</td><td>Every plugin in the cycle is skipped. Slot and event cycles are fine because they do not order activation.</td><td><span class="pill err">cycle</span></td></tr>
+    </tbody>
+  </table></div>
+  <div class="two">
+    <div>
+      <span class="cap">wiring.json · server plugin state, per workspace</span>
+<pre>{
+  <span class="k">"version"</span>: 13,
+  <span class="k">"unplugged"</span>: [<span class="s">"notices"</span>],
+  <span class="k">"bind"</span>: {
+    <span class="s">"graph:index"</span>: <span class="s">"acme-fuzzy-index:index"</span>
+  },
+  <span class="k">"cut"</span>: [
+    <span class="s">"sync-status:pill -&gt; header:items"</span>
+  ],
+  <span class="k">"add"</span>: [
+    <span class="s">"acme-outline:panel -&gt; shell-ui:sidebar"</span>
+  ],
+  <span class="k">"order"</span>: {
+    <span class="s">"shell-ui:sidebar"</span>: [<span class="s">"folders:tree"</span>,
+      <span class="s">"acme-outline:panel"</span>, <span class="s">"doc-list:list"</span>]
+  }
+}</pre>
+    </div>
+    <div class="prose" style="display:grid;gap:10px;font-size:.93rem">
+      <p><b>One resolver, and boot doesn't need Wasm.</b> It lives in the Rust core as <code>core::wiring</code>. The server runs it natively and puts the <em>resolved</em> result (bindings, seats, activation order, and the same for <code>?safe=1</code>) in the plugin list, so the loader only reads data and boot still works when the Wasm core fails to load (<code>kernel-init.ts</code>). The <code>wiring</code> editor runs the same code through Wasm for instant previews; without Wasm it is read-only. <code>corpus/wiring.json</code> pins both, like <code>corpus/splices.json</code>.</p>
+      <p><b>Applied as a unit.</b> Edits collect in a draft. Apply commits the draft as a new version and every connected client rewires in place (§6c).</p>
+      <p><b>Stored beside plugin state.</b> In Mongo next to <code>PluginState</code>, with the last applied version cached on disk, so the plugin list is still served when Mongo is down, as today.</p>
+      <p><b>Every change is a version.</b> Apply, rollback, install, upgrade, uninstall, approval and a circuit-breaker trip each write a new version and send the same <code>wiring.applied</code> frame. Uninstall also drops the plugin's entries from <code>order</code>, <code>cut</code>, <code>add</code> and <code>bind</code>.</p>
+    </div>
+  </div>
+</section>
+
+<section id="seats">
+  <div class="sec-head"><span class="sec-no">§6a · Seats</span><h2>Connection order is seat order</h2></div>
+  <p class="prose">A slot port on a host is <b>multi-seat</b>. The graph draws its seats as overlapping dots running down the node's edge, one per wire, with seat 1 at the top and an open seat at the bottom. The port's row grows to make room. Every new connection takes the open seat, so the order you connect things is the order the host receives them. For a sidebar, that is the order of its panels from top to bottom.</p>
+  <div class="diagram" role="img" aria-label="Diagram: shell-ui's sidebar port drawn as overlapping seats. folders is wired into seat 1, doc-list into seat 2, and a hollow open seat 3 waits for the next connection. The sidebar renders folders above doc-list.">
+    <svg viewBox="0 0 900 220">
+      <g font-size="12">
+        <rect x="30" y="30" width="190" height="56" rx="8" style="fill:var(--surface-2);stroke:var(--line)"/>
+        <text x="46" y="54" font-weight="700" style="fill:var(--ink);font-family:var(--display)">folders</text>
+        <text x="204" y="74" text-anchor="end" style="fill:var(--ink)">tree</text>
+        <circle cx="220" cy="70" r="6" style="fill:var(--slot)"/>
+        <rect x="30" y="130" width="190" height="56" rx="8" style="fill:var(--surface-2);stroke:var(--line)"/>
+        <text x="46" y="154" font-weight="700" style="fill:var(--ink);font-family:var(--display)">doc-list</text>
+        <text x="204" y="174" text-anchor="end" style="fill:var(--ink)">list</text>
+        <circle cx="220" cy="170" r="6" style="fill:var(--slot)"/>
+
+        <rect x="452" y="70" width="170" height="90" rx="8" style="fill:var(--surface-2);stroke:var(--line)"/>
+        <path d="M226,70 C340,70 340,106 452,106" fill="none" style="stroke:var(--slot)" stroke-width="2"/>
+        <path d="M226,170 C340,170 340,115 452,115" fill="none" style="stroke:var(--slot)" stroke-width="2"/>
+        <circle cx="452" cy="124" r="7" style="fill:var(--surface);stroke:var(--slot)" stroke-width="1.8" stroke-dasharray="2 2"/>
+        <circle cx="452" cy="115" r="7" style="fill:var(--slot);stroke:var(--surface)" stroke-width="2"/>
+        <circle cx="452" cy="106" r="7" style="fill:var(--slot);stroke:var(--surface)" stroke-width="2"/>
+        <text x="330" y="62" text-anchor="middle" style="fill:var(--slot)" font-size="11">connected 1st → seat 1</text>
+        <text x="330" y="196" text-anchor="middle" style="fill:var(--slot)" font-size="11">connected 2nd → seat 2</text>
+        <text x="440" y="150" text-anchor="end" style="fill:var(--faint)" font-size="10.5">open seat ↑</text>
+
+        <text x="468" y="94" font-weight="700" style="fill:var(--ink);font-family:var(--display)">shell-ui</text>
+        <text x="468" y="119" style="fill:var(--ink)">sidebar</text>
+        <text x="468" y="137" style="fill:var(--faint)" font-size="10.5">lm/sidebar.panel</text>
+
+        <path d="M632,115 L680,115" style="stroke:var(--muted)" stroke-width="1.5"/>
+        <path d="M674,110 L682,115 L674,120" fill="none" style="stroke:var(--muted)" stroke-width="1.5"/>
+        <rect x="700" y="46" width="170" height="138" rx="6" style="fill:var(--surface);stroke:var(--line)"/>
+        <text x="714" y="68" style="fill:var(--faint)" font-size="10.5">sidebar, as rendered</text>
+        <rect x="714" y="80" width="142" height="40" rx="4" style="fill:var(--slot-soft)"/>
+        <text x="724" y="104" style="fill:var(--ink)">1 · Folders</text>
+        <rect x="714" y="128" width="142" height="40" rx="4" style="fill:var(--surface-2)"/>
+        <text x="724" y="152" style="fill:var(--ink)">2 · Documents</text>
+      </g>
+    </svg>
+  </div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Rule</th><th>Detail</th></tr></thead>
+    <tbody>
+      <tr><td>Connecting takes the open seat</td><td>A new wire always goes at the end. To move a contributor, cut its wire and connect it again, or use the up/down controls in the seat list.</td></tr>
+      <tr><td>The order is stored as a list</td><td><code>wiring.json</code> keeps <code>order["shell-ui:sidebar"]</code> as the full list of sources, in seat order, from the first edit onwards.</td></tr>
+      <tr><td>Default seats come from the <code>order</code> hint</td><td>Before anyone edits a port, contributors are seated by their <code>order</code> hint, then alphabetically by plugin id. That keeps today's layout, including <code>alt-editor</code>'s place among document modes. A plugin added later sits after the seats already listed in <code>order</code>.</td></tr>
+      <tr><td>Single-seat hosts: <code>"seats": 1</code></td><td>For example, <code>shell-ui:header</code> shows one top bar. A new connection goes into the only seat and moves the previous occupant to the bench, which the graph draws as a faded wire. This replaces "lowest <code>order</code> wins".</td></tr>
+      <tr><td>The host receives seat order</td><td><code>kernel.ports.collect()</code> returns items by seat. When a plugin offers several items on one port, they stay together in the order that plugin offered them.</td></tr>
+      <tr><td><code>order?: number</code> becomes a hint</td><td>It only sets the default seat. <code>wiring.order</code> always wins over it.</td></tr>
+      <tr><td>Hosts stop sorting</td><td>About 15 hosts sort by <code>order</code> themselves today (<code>Shell.tsx</code>, <code>header/layout.ts</code>, <code>editor</code>, <code>document-surface/modes.ts</code>, <code>markdown</code>, <code>slash-commands</code>, <code>doc-list</code> search, <code>attachments</code>). They take <code>collect()</code> order instead. <code>router</code> keeps route specificity first and uses seat order only to break ties.</td></tr>
+    </tbody>
+  </table></div>
+  <p class="prose muted">Seat order is the workspace default, set by whoever edits the wiring. A host can still let each user rearrange on top of it, like <code>header</code>'s existing "Top bar" ordering setting. That personal order starts from the seat order and never feeds back into the wiring.</p>
+</section>
+
+<section id="types">
+  <div class="sec-head"><span class="sec-no">§6b · Type checking</span><h2>A wire exists only if the types fit</h2></div>
+  <p class="prose">Every port carries a shape, and the graph refuses a connection before it exists: while you drag, ports that don't fit fade and say why. The check is structural. The consumer's shape is the requirement and the provider's shape is the offer.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Consumer needs</th><th>Provider offers</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><td><code>{ id: string, title: string }</code></td><td><code>{ id: string, title: string, icon: any }</code></td><td><span class="pill ok">fits</span> Extra keys are ignored.</td></tr>
+      <tr><td><code>{ id: string, search: func }</code></td><td><code>{ id: string, query: func }</code></td><td><span class="pill err">refused</span> Missing required <code>search</code>.</td></tr>
+      <tr><td><code>{ id: string }</code></td><td><code>{ id: number }</code></td><td><span class="pill err">refused</span> <code>id</code> is number, needs string.</td></tr>
+      <tr><td><code>{ title?: string }</code></td><td><code>{ }</code></td><td><span class="pill ok">fits</span> An optional key may be absent.</td></tr>
+      <tr><td><code>{ title?: string }</code></td><td><code>{ title: number }</code></td><td><span class="pill err">refused</span> If it is there, its type must match.</td></tr>
+      <tr><td><code>{ label: string }</code></td><td><code>{ label?: string }</code></td><td><span class="pill err">refused</span> The provider may leave out a key the consumer requires.</td></tr>
+      <tr><td><code>"light" | "dark"</code></td><td><code>"light"</code> or <code>string</code></td><td><span class="pill ok">fits</span> / <span class="pill err">refused</span> Literals must be a subset.</td></tr>
+      <tr><td><code>string[]</code>, <code>Record&lt;string&gt;</code>, nested objects</td><td>the same</td><td>Checked element by element and key by key, recursively.</td></tr>
+      <tr><td><code>func</code></td><td><code>func</code></td><td><span class="pill ok">fits</span> Presence and kind only. Parameter types are checked at build time against the protocol's <code>index.d.ts</code>.</td></tr>
+    </tbody>
+  </table></div>
+  <div class="two">
+    <div class="prose" style="display:grid;gap:10px;font-size:.93rem">
+      <p><b>Consumers say what they use.</b> Five base plugins each declare their own <code>RouterService</code> interface today, each a different slice: <code>changes</code> uses <code>navigate</code>, <code>graph</code> uses <code>navigate</code> and <code>query</code>, <code>settings</code> uses <code>navigate</code> and <code>url</code>. <code>MarkdownApi</code> is declared twice the same way. <code>needs</code> writes that slice into the manifest, so a smaller router can serve <code>changes</code> without implementing <code>url</code>.</p>
+      <p><b>The same provider can fit one consumer and not another.</b> <code>graph</code> reads five members of the index and <code>fm-autocomplete</code> reads three different ones. In the prototype, <code>acme-fuzzy-index</code> implements <code>lm/workspace-index@1.0.0</code>, before <code>fmFields</code> and <code>fmValues</code> existed (an example history). It serves <code>graph</code> (<code>^1.0</code>) and is refused for <code>fm-autocomplete</code> (<code>^1.1</code>).</p>
+    </div>
+    <div class="prose" style="display:grid;gap:10px;font-size:.93rem">
+      <p><b>Shape decides what is allowed; protocol decides what is automatic.</b> <code>markdown.codeBlock</code> and <code>markdown.attachment</code> have the same shape, and a main view fits the overlay layer. Auto-wiring therefore needs the same protocol id and a version in range. A manual "by shape" wire across protocols is allowed for slots only, after a confirm naming both protocols. Services are mostly <code>func</code>, so a shape match says little there; they and events need the same protocol id, and adapters cover the rest.</p>
+      <p><b>Semver still matters for meaning.</b> <code>SectionLineEdit</code>'s <code>value: null</code> changed meaning in 1.1.0 without changing shape (<code>KERNEL-API.md</code>). A type check can't see that, and a major version bump can. A "by shape" wire says a person has vouched for the meaning.</p>
+      <p><b>Runtime still validates.</b> A declared shape can be wrong. Each item a provider offers is checked against the shape of every consumer it is wired to, and a failure is reported against the provider.</p>
+    </div>
+  </div>
+</section>
+
+<section id="apply">
+  <div class="sec-head"><span class="sec-no">§6c · Drafts, apply and hot-plugging</span><h2>Nothing changes until you press Apply</h2></div>
+  <p class="prose">Every edit in the graph goes into a <b>draft</b>: a wire, a seat, a pin or unplugging a plugin. The draft is stored on the server with the live version it started from, so it survives a reload and other admins can see it. The graph draws the draft over live wiring. New wires are bold, removed wires are red ghosts, and the side panel lists the consequences before anything runs. <b>Apply</b> commits the draft as the next version and every connected client switches to it, in place.</p>
+
+  <div class="two">
+    <div>
+      <span class="cap">What unplugging a plugin does</span>
+      <div class="table-wrap"><table>
+        <tbody>
+          <tr><td>Its wires</td><td>Disappear from the draft. Its seats stay in <code>order</code>, so plugging it back in returns it to the same seat.</td></tr>
+          <tr><td>Its dependents</td><td>A plugin that required a service only this one provided stops too. The draft names them first, for example "unplugging router also stops 7 others".</td></tr>
+          <tr><td>Its state</td><td>Unplug is disable. <code>PluginState</code> stays the gate the server, the circuit breaker and backend halves use, and <code>unplugged</code> mirrors it both ways, so unplugging also stops a backend half. Its settings section and any documents it created stay.</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <div>
+      <span class="cap">Drafts</span>
+      <div class="table-wrap"><table>
+        <tbody>
+          <tr><td>Kept in the editor</td><td>The draft lives in the admin's browser. Apply sends it with the live version it started from.</td></tr>
+          <tr><td>Live moved on</td><td>The server refuses a draft whose base isn't the live version. The editor loads the new live wiring, re-applies the draft's edits on top, and shows what changed before you Apply again.</td></tr>
+          <tr><td>Rollback</td><td>Every applied version is kept on the server. Rolling back loads an old version as a draft, and it goes through Apply like any other edit.</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <span class="cap">What Apply runs</span>
+  <ol class="phases">
+    <li><div><h3>Validate</h3><p>The server refuses a draft whose base isn't the live version, then runs the resolver on it. A draft that adds errors, such as a plugin that won't activate, needs an explicit confirm. So does a draft that would stop the running <code>wiring</code> editor.</p></div></li>
+    <li><div><h3>Commit</h3><p>Wiring version N+1 is written atomically, N goes into history, <code>PluginState</code> is updated for anything plugged or unplugged, and the change is audited as <code>wiring.apply</code> (or <code>wiring.rollback</code>).</p></div></li>
+    <li><div><h3>Broadcast</h3><p>A <code>wiring.applied</code> frame goes out on the sync socket, the channel <code>plugin.event</code> already uses. A client that is offline gets the new version from bootstrap when it reconnects.</p></div></li>
+    <li><div><h3>Hot-apply on every client</h3><p>Each client compares the version it runs with N+1 and changes only the difference. First it stops what goes away, in reverse activation order. Then it restarts every plugin whose service wires changed, plus everything that depends on those through services, and updates hosts' seats and event listeners with no restart. Last it starts what arrives, in activation order. A frame that arrives while boot or another apply is still running waits its turn.</p></div></li>
+    <li><div><h3>Reload only as a fallback, and only when the user says so</h3><p>A client needs a reload in three cases: a plugin the change touches doesn't declare <code>"hot": true</code>, a newly plugged plugin needs a library missing from the page's import map (the map is fixed when the page loads), or a stop throws. It then shows a banner and keeps running its current version until the user chooses to reload, which goes straight to the newest version. The banner is the same one the service-worker update uses (<code>boot/update.ts</code>), not a second prompt. Text is safe either way, because edits already live in the local Yjs document and the outbox.</p></div></li>
+  </ol>
+
+  <span class="cap">The disposal contract hot-plugging needs</span>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Surface</th><th>On unplug</th><th>Today</th></tr></thead>
+    <tbody>
+      <tr><td>Slot items, extension points</td><td>Withdrawn. Hosts' live lists update and their seats close up.</td><td><span class="pill ok">exists</span> <code>host.retract()</code> → <code>extensions.removePlugin</code></td></tr>
+      <tr><td>Services</td><td>Withdrawn. Their consumers restart.</td><td><span class="pill ok">exists</span> <code>services.remove</code></td></tr>
+      <tr><td>A view or route on screen from the unplugged plugin</td><td>The host falls back to its not-found view; <code>shell-ui</code> closes an altbar panel that is gone.</td><td><span class="pill warn">new</span></td></tr>
+      <tr><td><code>ui.mount</code></td><td>Released</td><td><span class="pill ok">exists</span> <code>mount.release</code></td></tr>
+      <tr><td><code>events.on</code>, <code>settings.subscribe</code>, <code>documents.subscribe</code>, theme and sync listeners</td><td>Unsubscribed, tracked per plugin like contributions</td><td><span class="pill warn">new</span></td></tr>
+      <tr><td>Stylesheet</td><td>Its <code>&lt;link&gt;</code> removed</td><td><span class="pill warn">new</span> the loader already tags each link with the plugin id</td></tr>
+      <tr><td>Notices</td><td>Dismissed</td><td><span class="pill warn">new</span></td></tr>
+      <tr><td>Anything the plugin built itself: timers, DOM outside its mount, workers</td><td>The plugin's own <code>export function deactivate()</code></td><td><span class="pill warn">new</span></td></tr>
+    </tbody>
+  </table></div>
+  <div class="two">
+    <div class="prose" style="display:grid;gap:10px;font-size:.93rem">
+      <p><b>Service changes restart their consumers.</b> Consumers register callbacks on providers (<code>router.onChange</code>, <code>index.subscribe</code>, <code>shell.subscribeLayout</code>), and no handle can move those to a new provider. So when a service wire changes, the consumer and everything that depends on it through services restart, in activation order. Slots, seats, events and leaf plugins hot-apply in place.</p>
+      <p><b>Events can be sticky.</b> An event protocol may declare <code>"sticky": true</code>: a new or restarted listener gets the last value at once. <code>lm/folders.default-location</code> needs it, because <code>folders</code> announces only at activation and a restarted <code>doc-list</code> would otherwise forget the folder (<code>doc-list/index.tsx:40-50</code>).</p>
+      <p><b><code>"hot": true</code> is a promise.</b> A plugin declares that the kernel's retraction plus its own <code>deactivate()</code> leave nothing behind. Without it, any change that touches the plugin falls back to a reload. All base plugins get it in migration step 6. In the prototype, <code>alt-editor</code> doesn't have it, to show the fallback.</p>
+    </div>
+    <div class="prose" style="display:grid;gap:10px;font-size:.93rem">
+      <p><b>Code can't be unloaded.</b> An ES module stays in memory once imported, so an unplugged plugin's module sits there, inert, until the next reload. Plugging a new version imports its new versioned URL. That is harmless, but a session that swaps plugins many times piles up dead modules.</p>
+      <p><b>This retires the review's "reload-only" position.</b> <code>PLUGIN-ARCHITECTURE-REVIEW.md</code> said hot activation should wait until every public surface has an explicit disposal contract. The table above is that contract, and half of it exists already.</p>
+    </div>
+  </div>
+</section>
+
+<section id="graph">
+  <div class="sec-head"><span class="sec-no">§7 · Graph view</span><h2>The wiring editor</h2></div>
+  <p class="prose">This prototype is what ships as <code>wiring</code>, a base plugin of its own and not part of <code>admin</code> (see "The editor is a plugin" below). It holds the base distribution mapped onto the proposed protocols, two real examples from <code>plugins/examples</code>, and two hypothetical third-party plugins. <code>acme-fuzzy-index</code> is a second workspace index at an older protocol version, which fits <code>graph</code> but not <code>fm-autocomplete</code>, and its <code>search.provider</code> is a new major with a different shape. <code>acme-outline</code> speaks its own panel protocol that nothing hosts. Try wiring it into <code>shell-ui · sidebar</code>: its shape fits, so it takes the next seat. Every edit is a draft until you press <b>Apply</b>. Try unplugging <code>router</code> with the power button on its node to see what else stops.</p>
+
+  <div class="gv" id="gv">
+    <div class="gv-bar">
+      <div class="grp" role="group" aria-label="Show wire kinds">
+        <span class="lbl">Show</span>
+        <button class="chip service" data-kind="service" aria-pressed="true"><span class="dot"></span>service</button>
+        <button class="chip slot" data-kind="slot" aria-pressed="true"><span class="dot"></span>slot</button>
+        <button class="chip event" data-kind="event" aria-pressed="true"><span class="dot"></span>event</button>
+      </div>
+      <div class="grp">
+        <label class="lbl" for="protoFilter">Protocol</label>
+        <select id="protoFilter"><option value="">all protocols</option></select>
+      </div>
+      <span class="spacer"></span>
+      <div class="grp">
+        <button class="btn" id="fitBtn" type="button">Fit</button>
+        <button class="btn" id="relayoutBtn" type="button">Tidy</button>
+        <button class="btn" id="resetBtn" type="button">Reset to automatic</button>
+      </div>
+    </div>
+    <div class="draftbar" id="draftbar"></div>
+    <div class="gv-body">
+      <div class="canvas" id="canvas" tabindex="0" aria-label="Plugin wiring graph. Drag between port dots to wire; click a wire to select it.">
+        <div class="world" id="world"><svg class="wires" id="wires" width="1" height="1"></svg></div>
+        <div class="legend" aria-hidden="true">
+          <span><i style="border-color:var(--service)"></i>service</span>
+          <span><i style="border-color:var(--slot)"></i>slot</span>
+          <span><i style="border-color:var(--event);border-top-style:dashed"></i>event</span>
+          <span><i style="border-color:var(--muted);border-top-style:dotted;border-top-width:3px"></i>wired by shape</span>
+        </div>
+        <div class="zoom"><button class="btn" id="zoomOut" type="button" aria-label="Zoom out">−</button><button class="btn" id="zoomIn" type="button" aria-label="Zoom in">+</button></div>
+        <div class="toast" id="toast" hidden></div>
+      </div>
+      <aside class="side">
+        <div class="panel" id="inspector"></div>
+        <div class="panel" id="changesPanel" hidden></div>
+        <div class="panel">
+          <h4>Diagnostics <span id="diagCount" class="pill warn"></span></h4>
+          <ul class="diag" id="diag"></ul>
+        </div>
+        <div class="panel">
+          <h4>wiring.json <span class="muted" id="wiringLabel" style="text-transform:none;letter-spacing:0"></span></h4>
+          <pre id="wiringJson"></pre>
+          <h4>Activation order <span class="muted" style="text-transform:none;letter-spacing:0">service wires only</span></h4>
+          <div class="order" id="order"></div>
+        </div>
+      </aside>
+    </div>
+    <div class="gv-help">
+      <span><b>Wire:</b> drag from a port dot. Green = same protocol and fits; blue = fits by shape only; faded = types don't fit (hover for why)</span>
+      <span><b>Cut:</b> click a wire, then Delete or the Cut button</span>
+      <span><b>Unplug:</b> the power button on a node</span>
+      <span><b>Nothing is live until Apply.</b> New wires are bold, removed ones are red ghosts</span>
+      <span><b>Layout:</b> columns run from fewest dependants (left) to most (right); the number in each title is its dependants. Left dots are what uses a plugin, right dots are what it uses</span>
+      <span><b>Move:</b> drag a node's title · <b>Pan:</b> drag the background · <b>Zoom:</b> wheel or ± buttons</span>
+      <span><b>Seats:</b> a multi-seat port stacks its dots down the node's edge, seat 1 at the top. Connect in the order you want; cut and reconnect to send one to the bottom</span><span><b>Click a port name</b> to see its seats, its type needs and what could connect, with Connect buttons</span>
+    </div>
+  </div>
+
+  <div class="two">
+    <div class="prose" style="display:grid;gap:10px;font-size:.93rem">
+      <h3>The editor is a plugin</h3>
+      <p><code>wiring</code> is an ordinary base plugin. It consumes <code>lm/router</code>, <code>lm/shell</code> and <code>lm/context-menu</code>. It offers a <code>main.view</code>, a <code>router.route</code>, a <code>commands.command</code> and an admin-only <code>navbar.item</code>. It has no kernel privilege: everything it does goes through the server's wiring routes, which check that the user is an admin, exactly as <code>admin</code>'s routes do today.</p>
+      <p><b>Look and feel.</b> It uses the app's existing tokens, Tailwind preset and components, the same way <code>admin</code> and <code>settings</code> do. No explanatory prose on screen: labels, icons, counts, pills and tooltips only. On a desktop the graph fills the main view and the inspector sits in the altbar. On a phone the graph is full screen and the inspector is a bottom sheet; editing works there through the inspector's connect, cut, move and plug controls. Offline, the whole editor is read-only.</p>
+      <p>Because it is a plugin, it can be replaced. Another flow editor that speaks the same server routes can be installed and <code>wiring</code> unplugged in favour of it. The resolver, the type check and the apply pipeline live in the kernel and the server, not in the editor.</p>
+    </div>
+    <div class="prose" style="display:grid;gap:10px;font-size:.93rem">
+      <h3>Unplugging the editor itself</h3>
+      <p>A plugin that can unplug everything can also unplug itself, and a draft can stop it indirectly, for example by unplugging <code>router</code>. So:</p>
+      <ul style="margin:0;padding-left:18px;display:grid;gap:4px">
+        <li>When a draft would stop the running editor, Apply asks for an explicit confirm naming the way back.</li>
+        <li>The way back outside the editor is <code>admin</code>'s plugin list, which can plug any plugin back in.</li>
+        <li><code>?safe=bare</code>'s built-in manager, read-only today (<code>BareManager.tsx</code>), gains an admin-only write path: plug plugins back in and roll back to an earlier version. Nothing is pinned.</li>
+        <li>Rollback is also available from the <code>admin</code> plugin list, so a bad Apply can be undone without the graph.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="mapping">
+  <div class="sec-head"><span class="sec-no">§8 · Base mapping</span><h2>What each current contract becomes</h2></div>
+  <p class="prose muted">Point names carry over as protocol names, so the <code>extensions.contribute</code> shim is a lookup, not a rename table. Service protocols get capability names instead of plugin names.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Today</th><th>Protocol</th><th>Kind</th><th>Base provider → consumer</th></tr></thead>
+    <tbody id="mapBody"></tbody>
+  </table></div>
+</section>
+
+<section id="migration">
+  <div class="sec-head"><span class="sec-no">§9 · Migration</span><h2>In order, each step shippable</h2></div>
+  <p class="prose muted">Each step is committed on its own and leaves the app working, so a run that stops partway still leaves something usable.</p>
+  <ol class="phases">
+    <li><div><h3>Generated manifest schema (review P0)</h3><p>One schema across Rust and TypeScript first. <code>provides</code> and <code>consumes</code> are new manifest fields and would otherwise widen the drift that already exists.</p><p class="done"><span class="pill ok">done when</span> Rust and TS types are generated from one source and a fixture corpus passes on both.</p></div></li>
+    <li><div><h3>Wiring store and delivery</h3><p><code>wiring.json</code> versions in Mongo beside <code>PluginState</code>, mirrored both ways, cached on disk. Every change (admin enable/disable, install, upgrade, uninstall, breaker) writes a version. The plugin list carries the live wiring; the sync socket carries <code>wiring.applied</code>.</p><p class="done"><span class="pill ok">done when</span> disabling a plugin in <code>admin</code> writes a wiring version and every connected client receives the frame.</p></div></li>
+    <li><div><h3>Protocol packages and registry</h3><p>Author <code>shape.mjs</code> for every base point and service inside its owning plugin, from the real interfaces (not the prototype's shapes), and generate the rest. Fix each port's final name here, so later steps never rename one. Zip allowlist, build scripts, scan-time registration, registry in the plugin list, <code>/protocols/…/index.d.ts</code>.</p><p class="done"><span class="pill ok">done when</span> every point in <code>points.ts</code> and every <code>*-api.ts</code> service exists as a generated protocol, and CI fails on stale output.</p></div></li>
+    <li><div><h3><code>core::wiring</code> resolver and corpus</h3><p>§6, §6a and §6b in Rust. The server resolves natively and ships the result; the <code>wiring</code> editor gets it through Wasm. Legacy manifests resolve through implicit ports that already use the final names.</p><p class="done"><span class="pill ok">done when</span> the loader activates from the server's resolved order, which matches today's order for the base set.</p></div></li>
+    <li><div><h3><code>kernel.ports</code> as <code>@kernel</code> 1.2.0</h3><p>A minor: new surface, with <code>services</code> and <code>extensions</code> kept as shims so ported and unported plugins load side by side. <code>registry.ts</code> becomes the slot implementation; <code>services.ts</code> the service one. <code>needs</code> is enforced here.</p><p class="done"><span class="pill ok">done when</span> a ported and an unported plugin wire to each other in one session.</p></div></li>
+    <li><div><h3>Disposal contract and hot apply</h3><p>Track every kernel subscription per plugin so <code>host.retract()</code> covers all of them. Add <code>deactivate()</code>, <code>"hot"</code>, sticky events, restarts for service changes, the apply queue, and the shared reload banner.</p><p class="done"><span class="pill ok">done when</span> unplugging and plugging back every base plugin 100 times in one session leaves no listeners, links or mounts behind.</p></div></li>
+    <li><div><h3>The <code>wiring</code> plugin and the bare manager</h3><p>The graph above as its own base plugin with its own route (<code>#/wiring</code>), in the app's own UI, desktop and phone layouts included. Browser drafts, Apply, history and rollback through admin-only routes. <code>?safe=bare</code> gets its write path.</p><p class="done"><span class="pill ok">done when</span> an admin can swap <code>graph</code>'s index provider, reorder the sidebar and unplug a plugin, and every connected client follows without a reload.</p></div></li>
+    <li><div><h3>Port everything, remove the old paths, <code>@kernel</code> 2.0.0</h3><p>Move the base plugins and examples to <code>provides</code>/<code>consumes</code>. Hosts stop sorting by <code>order</code>. Turn the <code>folders:default-location</code> message into <code>lm/folders.default-location</code>. Then delete the shims, <code>services.require</code>, <code>extensions.contribute</code>/<code>definePoint</code>, <code>dependencies</code> and <code>x-defines</code>; move <code>_shared/points.ts</code> and the <code>*-api.ts</code> files into the protocol packages; update <code>e2e/safe-mode.spec.ts</code> and <code>BareManager</code>; bump to 2.0.0.</p><p class="done"><span class="pill ok">done when</span> the old paths no longer exist, no manifest uses them, and every base and example plugin activates through ports.</p></div></li>
+  </ol>
+</section>
+
+<section id="questions">
+  <div class="sec-head"><span class="sec-no">§10 · Decisions</span><h2>Settled on 2026-09-28</h2></div>
+  <div class="qs">
+    <div class="q"><h3>Wire per port, not per item</h3><p class="rec">A wire and a seat belong to a whole port. A plugin that needs items ordered separately splits them across ports, so the graph and <code>wiring.json</code> stay small.</p></div>
+    <div class="q"><h3>The first install claims a namespace</h3><p class="rec">On each server, the first installed package to use a namespace such as <code>acme/</code> owns it. <code>lm/</code> is reserved from day one. Signed publisher keys come later, noted in <code>dev-docs/todo/PROTOCOL-SIGNING.md</code>.</p></div>
+    <div class="q"><h3>Backend Wasm halves get ports later</h3><p class="rec">This work is frontend only. The host ABI keeps its own semver, and backend events and routes become protocols in a follow-up.</p></div>
+    <div class="q"><h3>Wiring is per workspace</h3><p class="rec">Wiring decides what code runs for everyone, like enable and disable. Per-user preferences stay inside plugins, such as <code>header</code>'s "Top bar" ordering.</p></div>
+    <div class="q"><h3>Adapters are ordinary plugins</h3><p class="rec">No special machinery. A plugin that consumes <code>X@1</code> and provides <code>X@2</code> is an adapter, and the graph suggests installed ones whenever it reports a version or shape mismatch.</p></div>
+    <div class="q"><h3>Unplug is disable</h3><p class="rec"><code>PluginState</code> stays the gate for the server, the circuit breaker and backend halves; <code>unplugged</code> mirrors it both ways.</p></div>
+    <div class="q"><h3>Default seats follow the <code>order</code> hint</h3><p class="rec">Then alphabetical by plugin id. <code>wiring.order</code> overrides it; up/down controls and cut-and-reconnect both edit it.</p></div>
+    <div class="q"><h3>By-shape wires for slots only</h3><p class="rec">Across protocols, slots can be wired by hand after a confirm naming both protocols. Services and events need the same protocol id.</p></div>
+    <div class="q"><h3><code>needs</code> is enforced everywhere</h3><p class="rec">The handle refuses undeclared keys in production too, and a <code>needs</code> key the protocol lacks is refused at install.</p></div>
+    <div class="q"><h3>The layout holds still while you edit</h3><p class="rec">Columns by dependants are recomputed on load, Apply and Tidy only. Rows still grow for seats, and the boxes below move down.</p></div>
+    <div class="q"><h3>Read-only offline</h3><p class="rec">When the client is offline, the editor shows the cached live wiring and nothing else: no editing, no drafts, no Apply, no rollback. The controls come back when <code>sync</code> reports the server again.</p></div>
+    <div class="q"><h3>The way back is the bare manager</h3><p class="rec">Nothing is pinned. <code>?safe=bare</code> gets an admin-only write path to plug plugins back in and roll back.</p></div>
+    <div class="q"><h3>The editor is its own plugin, in the app's UI</h3><p class="rec"><code>wiring</code>, not part of <code>admin</code>. The app's tokens and components, no explanatory prose on screen, a full-width graph on desktop and a full-screen graph with a bottom-sheet inspector on phones.</p><p>On 2026-09-28, at the user's request, the editor was folded into <code>admin</code> as its Wiring tab (<code>#/admin/wiring</code>); the <code>wiring</code> plugin no longer exists.</p></div>
+    <div class="q"><h3>A reload fallback asks the user</h3><p class="rec">Hot applies are silent. A client that needs a reload shows a banner and keeps running its current version until that user chooses to reload. Later versions that can be hot-applied wait behind the banner. The reload goes straight to the newest version.</p></div>
+    <div class="q"><h3>Drafts live in the editor</h3><p class="rec">Apply sends the base version and the server refuses a mismatch; the editor rebases and shows the difference. History and rollback stay on the server.</p></div>
+    <div class="q"><h3><code>@kernel</code> 1.2 during migration, 2.0 at the end</h3><p class="rec"><code>kernel.ports</code> ships as a minor so ported and unported plugins coexist. The last step deletes the old paths and bumps to 2.0.0; 1.x plugins then stop loading.</p></div>
+    <div class="q"><h3>Protocols live in the plugin that owns them</h3><p class="rec"><code>plugins/base/&lt;id&gt;/protocols/&lt;name&gt;/</code>, installed with that plugin and kept in the server's registry independently of it.</p></div>
+    <div class="q"><h3>Frontend plugins stay curated and full-trust</h3><p class="rec">Frontend plugins keep running unsandboxed after admin approval, as today, with provenance and review strengthened over time. Protocols don't change the trust boundary, and a sandboxed plugin class is not part of this plan.</p></div>
+  </div>
+</section>
+
+</div>
+
+<script>
+(() => {
+  // ---------- the type language: a serialisable mirror of @kernel's s.* ----------
+  const str = "string", num = "number", bool = "boolean", fn = "func", comp = "component", any = "any", prom = "promise";
+  const opt = (t) => ({ opt: t }), lit = (...v) => ({ lit: v }), arr = (t) => ({ arr: t }), rec = (t) => ({ rec: t }), obj = (o) => ({ obj: o });
+  const fmt = (t) => typeof t === "string" ? t : t.opt ? `${fmt(t.opt)}?` : t.lit ? t.lit.map((v) => JSON.stringify(v)).join(" | ")
+    : t.arr ? `${fmt(t.arr)}[]` : t.rec ? `Record<${fmt(t.rec)}>` : t.obj ? "{ … }" : "?";
+
+  /** Problems with offering `p` where `c` is needed. Extra keys are fine; missing required keys are not. */
+  function fits(p, c, path = "") {
+    const at = path ? `\`${path}\`` : "value";
+    if (c === any) return [];
+    if (c.obj) {
+      if (!p || !p.obj) return [`${at} is ${fmt(p)}, needs an object`];
+      const out = [];
+      for (const [k, ct] of Object.entries(c.obj)) {
+        const kp = path ? `${path}.${k}` : k;
+        const pt = p.obj[k];
+        const required = !ct.opt;
+        if (pt === undefined) { if (required) out.push(`missing required \`${kp}\``); continue; }
+        if (required && pt.opt) { out.push(`\`${kp}\` may be absent, but is required`); continue; }
+        out.push(...fits(pt.opt || pt, ct.opt || ct, kp));
+      }
+      return out;
+    }
+    if (c.lit) return p.lit && p.lit.every((v) => c.lit.includes(v)) ? [] : [`${at} is ${fmt(p)}, needs ${fmt(c)}`];
+    if (c.arr) return p.arr ? fits(p.arr, c.arr, `${path}[]`) : [`${at} is ${fmt(p)}, needs ${fmt(c)}`];
+    if (c.rec) return p.rec ? fits(p.rec, c.rec, `${path}{}`) : [`${at} is ${fmt(p)}, needs ${fmt(c)}`];
+    return p === c ? [] : [`${at} is ${fmt(p)}, needs ${c}`];
+  }
+
+  // ---------- protocols: kind, owner, shape (slot shapes are points.ts verbatim) ----------
+  const PROTOS = {
+    "lm/shell": ["service", "shell-ui", obj({ isCompact: fn, onLayoutChange: fn, layout: fn, subscribeLayout: fn, sidebarId: str, toggleSidebar: fn, altbarId: str, toggleAltbar: fn, setMainView: fn })],
+    "lm/router": ["service", "router", obj({ navigate: fn, current: fn, query: fn, match: fn, onChange: fn, href: fn, url: fn, documentPath: fn, Link: comp })],
+    "lm/attachments": ["service", "attachments", obj({ upload: fn })],
+    "lm/context-menu": ["service", "context-menu", obj({ open: fn, openSheet: fn, modal: fn, confirm: fn, close: fn })],
+    "lm/document-browser": ["service", "doc-list", obj({ createDocument: fn, newDocument: fn })],
+    "lm/workspace-index": ["service", "indexer", obj({ ready: prom, version: num, stats: fn, fmFields: fn, fmValues: fn, documents: fn, connections: fn, subscribe: fn })],
+    "lm/markdown-renderer": ["service", "markdown", obj({ render: fn, bodyOf: fn, renderAttachment: opt(fn) })],
+    "lm/settings-shell": ["service", "settings", obj({ open: fn })],
+    "lm/shell.header": ["slot", "shell-ui", obj({ id: str, component: comp, order: opt(num) })],
+    "lm/shell.overlay": ["slot", "shell-ui", obj({ id: str, component: comp })],
+    "lm/sidebar.panel": ["slot", "shell-ui", obj({ id: str, title: str, component: comp, icon: opt(any), order: opt(num), defaultOpen: opt(bool) })],
+    "lm/altbar.panel": ["slot", "shell-ui", obj({ id: str, title: str, component: comp, icon: opt(any), order: opt(num), defaultOpen: opt(bool), when: opt(fn) })],
+    "lm/main.view": ["slot", "shell-ui", obj({ id: str, component: comp, title: opt(str) })],
+    "lm/navbar.item": ["slot", "header", obj({ id: str, label: str, icon: opt(any), order: opt(num), side: opt(lit("start", "end")), onSelect: opt(fn), component: opt(comp) })],
+    "lm/router.route": ["slot", "router", obj({ path: str, view: str, order: opt(num) })],
+    "lm/commands.command": ["slot", "commands", obj({ id: str, title: str, run: fn, category: opt(str), icon: opt(any), when: opt(fn) })],
+    "lm/keybindings.default": ["slot", "commands", obj({ command: str, keys: str, when: opt(str) })],
+    "lm/themes.theme": ["slot", "themes", obj({ id: str, name: str, scheme: lit("light", "dark"), tokens: rec(str) })],
+    "lm/search.provider": ["slot", "doc-list", obj({ id: str, label: str, order: opt(num), search: fn })],
+    "lm/document.mode": ["slot", "document-surface", obj({ id: str, label: str, component: comp, icon: opt(any), order: opt(num), when: opt(fn) })],
+    "lm/editor.extension": ["slot", "editor", obj({ id: str, extension: any, order: opt(num) })],
+    "lm/editor.paste": ["slot", "editor", obj({ id: str, order: opt(num), paste: fn })],
+    "lm/settings.section": ["slot", "settings", obj({ id: str, title: str, component: comp, order: opt(num), description: opt(str) })],
+    "lm/markdown.attachment": ["slot", "markdown", obj({ id: str, component: comp, order: opt(num) })],
+    "lm/markdown.codeBlock": ["slot", "markdown", obj({ id: str, component: comp, order: opt(num) })],
+    "lm/markdown.taskState": ["slot", "markdown", obj({ marker: str, label: str, icon: any, order: opt(num), done: opt(bool) })],
+    "lm/attachments.viewer": ["slot", "attachments", obj({ id: str, label: str, extensions: arr(str), component: comp, order: opt(num) })],
+    "lm/text.surface": ["slot", "slash-commands", obj({ id: str, documentId: str, element: any, hasFocus: fn, focus: fn, textBeforeCaret: fn, caretRect: fn, takeBeforeCaret: fn, subscribe: fn, documentBeforeCaret: opt(fn), replaceBeforeCaret: opt(fn) })],
+    "lm/slash.command": ["slot", "slash-commands", obj({ id: str, title: str, description: opt(str), icon: opt(any), keywords: opt(arr(str)), order: opt(num), when: opt(fn), run: fn })],
+    "lm/markdown.directive": ["slot", "markdown", obj({ name: str, kind: lit("container", "leaf", "text"), component: comp })],
+    "lm/markdown.fence": ["slot", "markdown", obj({ language: str, component: comp })],
+    "lm/markdown.remark": ["slot", "markdown", obj({ id: str, plugin: any, options: opt(any), order: opt(num) })],
+    "lm/markdown.component": ["slot", "markdown", obj({ node: str, component: comp, order: opt(num) })],
+    "lm/syntax.language": ["slot", "syntax-highlight", obj({ id: str, name: str, aliases: opt(arr(str)), wasmUrl: str, highlightsUrl: str, size: opt(num) })],
+    "lm/folders.default-location": ["event", "folders", obj({ path: str })],
+    "acme/outline.panel": ["slot", "acme-outline", obj({ id: str, title: str, component: comp, icon: opt(any), collapsible: bool })],
+  };
+  const TODAY = {
+    "lm/shell": 'services.require("shell-ui")', "lm/router": 'services.require("router")', "lm/context-menu": 'services.require("context-menu")',
+    "lm/document-browser": 'services.require("doc-list")', "lm/workspace-index": 'services.require("indexer")',
+    "lm/markdown-renderer": 'services.require("markdown")', "lm/settings-shell": 'services.get("settings")',
+    "lm/folders.default-location": 'kernel.events "folders:default-location"', "lm/attachments": 'services.require("attachments")',
+  };
+  const kindOf = (p) => PROTOS[p][0];
+  /** Example history: fmFields/fmValues arrived in workspace-index 1.1.0; search.provider 2.0.0 renamed search to query. */
+  const SHAPE_AT = {
+    "lm/workspace-index@1.0.0": obj({ ready: prom, version: num, stats: fn, documents: fn, connections: fn, subscribe: fn }),
+    "lm/search.provider@2.0.0": obj({ id: num, label: str, order: opt(num), query: fn }),
+  };
+
+  // in: port, protocol, range, { needs, optional, seats }; out: port, protocol, version, shape
+  const I = (p, proto, o = {}) => ({ p, proto, range: "^1.0", ...o });
+  const O = (p, proto, ver = "1.0.0", o = {}) => ({ p, proto, ver, ...o });
+  const ROUTER_NAV = ["navigate", "onChange", "current"];
+
+  const NODES = [
+    // col 0
+    { id: "indexer", col: 0, desc: "Workspace stats, frontmatter fields and connections, rebuilt locally on every edit.", in: [], out: [O("index", "lm/workspace-index", "1.2.0")] },
+    { id: "acme-fuzzy-index", col: 0, org: "third", desc: "Hypothetical third-party index. Implements workspace-index 1.0.0 (no frontmatter values) and search.provider 2.0.0.", in: [],
+      out: [O("index", "lm/workspace-index", "1.0.0"), O("search", "lm/search.provider", "2.0.0")] },
+    { id: "acme-outline", col: 0, org: "third", desc: "Hypothetical third-party outline panel. Speaks its own protocol, acme/outline.panel, which nothing hosts. Its shape fits several shell-ui seats.", in: [],
+      out: [O("panel", "acme/outline.panel")] },
+    { id: "context-menu", col: 0, desc: "Menu, sheet and modal service.", in: [], out: [O("menu", "lm/context-menu"), O("sheet", "lm/shell.overlay")] },
+    { id: "native-preview", col: 0, desc: "Viewers for images, PDF, audio, video and text.", in: [], out: [O("viewers", "lm/attachments.viewer")] },
+    { id: "syntax-highlight", col: 0, desc: "tree-sitter highlighting in read mode and the editor.", in: [I("languages", "lm/syntax.language")], out: [O("builtin", "lm/syntax.language"), O("decorate", "lm/editor.extension"), O("code", "lm/markdown.codeBlock"), O("settings", "lm/settings.section")] },
+    { id: "obsidian-importer", col: 0, org: "example", desc: "plugins/examples: imports an Obsidian vault, uploading its attachments.", in: [I("attachments", "lm/attachments", { needs: ["upload"] })], out: [O("commands", "lm/commands.command")] },
+    { id: "extra-task-states", col: 0, org: "example", desc: "plugins/examples: adds task states to markdown.", in: [], out: [O("states", "lm/markdown.taskState")] },
+    { id: "alt-editor", col: 0, org: "example", hot: false, desc: "plugins/examples: a replacement edit mode. Doesn't declare \"hot\", so changes that touch it reload clients.", in: [], out: [O("mode", "lm/document.mode", "1.0.0", { order: 20 })] },
+    { id: "notices", col: 0, desc: "The notice bell in the header.", in: [], out: [O("bell", "lm/navbar.item")] },
+    { id: "sync-status", col: 0, desc: "The sync pill in the header.", in: [], out: [O("pill", "lm/navbar.item")] },
+    // col 1
+    { id: "attachments", col: 1, desc: "Paste-to-upload and a viewer per file type.", in: [I("viewers", "lm/attachments.viewer")], out: [O("uploads", "lm/attachments"), O("paste", "lm/editor.paste"), O("embed", "lm/markdown.attachment"), O("attach", "lm/slash.command"), O("settings", "lm/settings.section")] },
+    { id: "editor", col: 1, desc: "Edit mode: CodeMirror 6 over Yjs.", in: [I("extensions", "lm/editor.extension"), I("paste", "lm/editor.paste")], out: [O("mode", "lm/document.mode", "1.0.0", { order: 10 }), O("surface", "lm/text.surface"), O("commands", "lm/commands.command")] },
+    { id: "fm-autocomplete", col: 1, desc: "Suggests frontmatter keys and values while typing.", in: [I("index", "lm/workspace-index", { range: "^1.1", needs: ["fmFields", "fmValues", "subscribe"] }), I("surfaces", "lm/text.surface")], out: [O("popup", "lm/shell.overlay")] },
+    { id: "graph", col: 1, desc: "Force-directed graph of notes and links.", in: [I("index", "lm/workspace-index", { needs: ["ready", "version", "subscribe", "documents", "connections"] }), I("router", "lm/router", { needs: ["navigate", "query"] }), I("shell", "lm/shell", { needs: ["layout", "toggleAltbar"] })], out: [O("view", "lm/main.view"), O("panel", "lm/altbar.panel"), O("route", "lm/router.route"), O("commands", "lm/commands.command"), O("keys", "lm/keybindings.default"), O("nav", "lm/navbar.item")] },
+    { id: "slash-commands", col: 1, desc: "The / menu over editor-neutral text surfaces.", in: [I("surfaces", "lm/text.surface"), I("commands", "lm/slash.command")], out: [O("menu", "lm/shell.overlay")] },
+    { id: "themes", col: 1, desc: "Theme registry and picker.", in: [I("themes", "lm/themes.theme"), I("settings", "lm/settings-shell", { optional: true, needs: ["open"] })], out: [O("builtin", "lm/themes.theme"), O("commands", "lm/commands.command"), O("settings", "lm/settings.section")] },
+    // col 2
+    { id: "markdown", col: 2, desc: "The unified/remark to React pipeline.", in: [I("router", "lm/router", { optional: true, needs: ["navigate", "href"] }), I("attachments", "lm/markdown.attachment"), I("code", "lm/markdown.codeBlock"), I("tasks", "lm/markdown.taskState"), I("directives", "lm/markdown.directive"), I("fences", "lm/markdown.fence"), I("remark", "lm/markdown.remark"), I("components", "lm/markdown.component")], out: [O("renderer", "lm/markdown-renderer"), O("defaults", "lm/markdown.taskState", "1.0.0", { order: 0 }), O("commands", "lm/commands.command"), O("settings", "lm/settings.section")] },
+    { id: "viewer", col: 2, desc: "Read mode and the file page.", in: [I("markdown", "lm/markdown-renderer", { needs: ["render", "bodyOf", "renderAttachment"] })], out: [O("mode", "lm/document.mode", "1.0.0", { order: 0 }), O("view", "lm/main.view"), O("route", "lm/router.route")] },
+    { id: "changes", col: 2, desc: "History of the open document in the altbar.", in: [I("shell", "lm/shell", { needs: ["layout", "toggleAltbar"] }), I("router", "lm/router", { needs: ["navigate"] }), I("menu", "lm/context-menu"), I("markdown", "lm/markdown-renderer", { needs: ["render", "bodyOf"] })], out: [O("panel", "lm/altbar.panel"), O("view", "lm/main.view"), O("route", "lm/router.route"), O("commands", "lm/commands.command")] },
+    { id: "folders", col: 2, desc: "Drag-and-drop file tree over fm.path.", in: [I("browser", "lm/document-browser", { needs: ["createDocument", "newDocument"] }), I("router", "lm/router", { needs: ROUTER_NAV }), I("menu", "lm/context-menu")], out: [O("tree", "lm/sidebar.panel"), O("view", "lm/main.view"), O("route", "lm/router.route"), O("commands", "lm/commands.command"), O("settings", "lm/settings.section"), O("location", "lm/folders.default-location")] },
+    // col 3
+    { id: "doc-list", col: 3, desc: "Browse, search, sort, filter, Trash.", in: [I("router", "lm/router", { needs: ROUTER_NAV }), I("menu", "lm/context-menu"), I("search", "lm/search.provider"), I("location", "lm/folders.default-location")], out: [O("local", "lm/search.provider", "1.0.0", { order: 0 }), O("browser", "lm/document-browser"), O("list", "lm/sidebar.panel"), O("view", "lm/main.view"), O("route", "lm/router.route"), O("commands", "lm/commands.command"), O("keys", "lm/keybindings.default")] },
+    { id: "document-surface", col: 3, desc: "The document route and mode registry.", in: [I("router", "lm/router", { needs: ROUTER_NAV }), I("modes", "lm/document.mode")], out: [O("view", "lm/main.view"), O("route", "lm/router.route"), O("commands", "lm/commands.command"), O("keys", "lm/keybindings.default"), O("settings", "lm/settings.section")] },
+    { id: "admin", col: 3, desc: "Users, invites, audit, orphans, plugins.", in: [I("router", "lm/router", { needs: ROUTER_NAV }), I("menu", "lm/context-menu")], out: [O("view", "lm/main.view"), O("route", "lm/router.route"), O("commands", "lm/commands.command"), O("nav", "lm/navbar.item"), O("settings", "lm/settings.section")] },
+    // col 4
+    { id: "settings", col: 4, desc: "The settings shell.", in: [I("sections", "lm/settings.section"), I("router", "lm/router", { needs: ["navigate", "url"] })], out: [O("account", "lm/settings.section", "1.0.0", { order: 0 }), O("shell", "lm/settings-shell"), O("view", "lm/main.view"), O("route", "lm/router.route"), O("commands", "lm/commands.command"), O("keys", "lm/keybindings.default"), O("gear", "lm/navbar.item")] },
+    { id: "commands", col: 4, desc: "Command registry, palette, keybindings.", in: [I("commands", "lm/commands.command"), I("keys", "lm/keybindings.default")], out: [O("own", "lm/commands.command"), O("palette", "lm/shell.overlay"), O("settings", "lm/settings.section")] },
+    { id: "header", col: 4, desc: "The top bar and its start/end seats.", in: [I("items", "lm/navbar.item")], out: [O("bar", "lm/shell.header"), O("settings", "lm/settings.section")] },
+    { id: "router", col: 4, desc: "URL to view, hash-based.", in: [I("shell", "lm/shell", { needs: ["setMainView"] }), I("routes", "lm/router.route")], out: [O("router", "lm/router"), O("outlet", "lm/main.view")] },
+    // col 5
+    { id: "shell-ui", col: 5, desc: "Layout, breakpoint, top-bar spot, sidebar, altbar, overlays.", in: [I("header", "lm/shell.header", { seats: 1 }), I("overlays", "lm/shell.overlay"), I("sidebar", "lm/sidebar.panel"), I("altbar", "lm/altbar.panel"), I("views", "lm/main.view")], out: [O("shell", "lm/shell"), O("menu-button", "lm/navbar.item")] },
+  ];
+  const byId = Object.fromEntries(NODES.map((n) => [n.id, n]));
+  NODES.forEach((n) => { n.org = n.org || "base"; });
+
+  /** A consumer's requirement: the protocol's shape, cut down to `needs`. Unknown `needs` keys are refused at install. */
+  const needShape = (ip) => {
+    const base = PROTOS[ip.proto][2];
+    return ip.needs ? obj(Object.fromEntries(ip.needs.filter((k) => k in base.obj).map((k) => [k, base.obj[k]]))) : base;
+  };
+  const unknownNeeds = (ip) => (ip.needs || []).filter((k) => !(k in PROTOS[ip.proto][2].obj));
+  /** A provider implements the whole protocol at the version it claims. */
+  const offerShape = (op) => SHAPE_AT[`${op.proto}@${op.ver}`] || PROTOS[op.proto][2];
+  /** Default seat order: the contributor's `order` hint, then plugin id. */
+  const seatRank = (c) => [c.order ?? 100, c.n, c.p];
+  const cmpRank = (a, b) => { const x = seatRank(a), y = seatRank(b); return x[0] - y[0] || x[1].localeCompare(y[1]) || x[2].localeCompare(y[2]); };
+
+  // ---------- semver (major.minor.patch vs ^x.y) ----------
+  const satisfies = (ver, range) => {
+    const [M, m, p] = ver.split(".").map(Number);
+    const r = range.replace(/^\^/, "").split(".").map(Number);
+    if (M !== r[0]) return false;
+    if (m !== (r[1] ?? 0)) return m > (r[1] ?? 0);
+    return p >= (r[2] ?? 0);
+  };
+
+  /** Can provided port `op` of node `on` feed consumed port `ip` of node `inn`? */
+  function pair(on, op, inn, ip) {
+    const ko = kindOf(op.proto), ki = kindOf(ip.proto);
+    if (ko !== ki) return { ok: false, reasons: [`a ${ko} port can't feed a ${ki} port`] };
+    if (on === inn && ko === "service") return { ok: false, reasons: ["a plugin can't consume its own service"] };
+    const same = op.proto === ip.proto;
+    if (!same && ko !== "slot") return { ok: false, same, reasons: [`${ko} ports only wire within one protocol`] };
+    const reasons = fits(offerShape(op), needShape(ip));
+    const verOk = same && satisfies(op.ver, ip.range);
+    return { ok: !reasons.length, reasons, same, verOk, auto: same && verOk && !reasons.length };
+  }
+
+  // ---------- state ----------
+  const EMPTY = () => ({ unplugged: [], bind: {}, cut: [], add: [], order: {} });
+  const clone = (w) => JSON.parse(JSON.stringify(w));
+  const CLIENTS = 3;
+  /** What every client runs, and the edit being prepared. */
+  let live = { version: 12, w: EMPTY(), history: [] };
+  let overrides = EMPTY(); // the draft
+  const isDirty = () => JSON.stringify(overrides) !== JSON.stringify(live.w);
+  const isUnplugged = (w, id) => w.unplugged.includes(id);
+  const kindsOn = { service: true, slot: true, event: true };
+  let protoFilter = "";
+  let selNode = null, selEdge = null, selPort = null; // selPort: { dir, k }
+  const pos = {};
+  const view = { x: 20, y: 20, k: 0.6 };
+  const key = (n, p) => `${n}:${p}`;
+  const ekey = (a, b) => `${a} -> ${b}`;
+  const splitKey = (k) => { const i = k.lastIndexOf(":"); return [k.slice(0, i), k.slice(i + 1)]; };
+  const portOf = (dir, k) => { const [n, p] = splitKey(k); return byId[n][dir === "in" ? "in" : "out"].find((x) => x.p === p); };
+
+  // ---------- resolver ----------
+  function resolve(w = overrides) {
+    const edges = [], diags = [], status = {}, seatCount = {}, noFit = new Set();
+    const cut = new Set(w.cut), add = new Set(w.add);
+    const edge = (c, k, ip, kind, toN) => ({ from: c.k, to: k, proto: ip.proto, offerProto: c.proto, kind, fromN: c.n, toN, structural: !c.auto, seat: 0, bench: false });
+    for (const n of NODES) {
+      if (isUnplugged(w, n.id)) continue;
+      for (const ip of n.in) {
+        const k = key(n.id, ip.p), kind = kindOf(ip.proto);
+        const cands = [];
+        const bad = unknownNeeds(ip);
+        if (bad.length) diags.push({ sev: "err", node: n.id, text: `${n.id} · ${ip.p} needs \`${bad.join("`, `")}\`, which ${ip.proto} doesn't have. Refused at install.` });
+        for (const m of NODES) {
+          if (isUnplugged(w, m.id) || (m.id === n.id && kind === "service")) continue;
+          for (const op of m.out) {
+            const r = pair(m.id, op, n.id, ip);
+            if (r.same || r.ok) cands.push({ n: m.id, p: op.p, k: key(m.id, op.p), ver: op.ver, proto: op.proto, order: op.order, ...r });
+          }
+        }
+        for (const c of cands.filter((c) => c.same && !c.auto)) {
+          noFit.add(c.k);
+          diags.push({ sev: "warn", node: c.n, text: `${c.n} · ${c.p} can't serve ${n.id} · ${ip.p}: ${c.reasons.length ? c.reasons.join("; ") : `version ${c.ver} is outside ${ip.range}`}.` });
+        }
+        const autos = cands.filter((c) => c.auto);
+        if (kind === "service") {
+          let pick = null, chosen;
+          if (autos.length === 1) pick = autos[0];
+          else if (autos.length > 1) pick = autos.find((c) => byId[c.n].org === "base") || null;
+          if (k in w.bind && w.bind[k] === null) chosen = null;
+          else if (k in w.bind) {
+            chosen = cands.find((c) => c.k === w.bind[k] && c.ok) || null;
+            if (!chosen) {
+              chosen = pick;
+              status[k] = { badge: "pin missing", cls: "warn" };
+              diags.push({ sev: "warn", node: n.id, text: `${n.id} · ${ip.p} is pinned to ${w.bind[k]}, which isn't available. Using ${pick ? pick.n : "nothing"} until it returns.` });
+            }
+          } else chosen = pick;
+          if (chosen) edges.push(edge(chosen, k, ip, kind, n.id));
+          const fitting = cands.filter((c) => c.ok);
+          if (autos.length > 1) {
+            const pinned = k in w.bind && chosen && chosen.k === w.bind[k];
+            status[k] = { badge: pinned ? "pinned" : `${autos.length} providers`, cls: pinned ? "opt" : "warn" };
+            if (!pinned) diags.push({ sev: "warn", node: n.id, text: `${n.id} · ${ip.p}: ${autos.length} providers fit (${autos.map((c) => c.n).join(", ")}). Using ${chosen ? chosen.n : "none"}; wire one to pin it.` });
+          }
+          if (!chosen) {
+            if (ip.optional) status[k] = { badge: "optional", cls: "opt" };
+            else {
+              status[k] = { badge: "missing", cls: "err" };
+              diags.push({ sev: "err", node: n.id, text: `${n.id} won't activate: ${ip.p} needs ${ip.proto} and nothing that fits is wired${fitting.length ? ` (${fitting.length} would fit)` : ""}.` });
+            }
+          } else if (ip.optional && !status[k]) status[k] = { badge: "optional", cls: "opt" };
+        } else {
+          const list = cands.filter((c) => (c.auto && !cut.has(ekey(c.k, k))) || (c.ok && !c.auto && add.has(ekey(c.k, k))));
+          const ord = w.order[k] || [];
+          const at = (c) => { const i = ord.indexOf(c.k); return i === -1 ? 1e6 : i; };
+          list.sort((a, b) => at(a) - at(b) || cmpRank(a, b));
+          const seated = kind === "slot";
+          list.forEach((c, i) => {
+            const e = edge(c, k, ip, kind, n.id);
+            if (seated) { e.seat = ip.seats === 1 ? 1 : i + 1; e.bench = ip.seats === 1 && i > 0; }
+            edges.push(e);
+          });
+          if (seated) seatCount[k] = ip.seats === 1 ? Math.min(1, list.length) : list.length;
+          if (seated && ip.seats === 1 && list.length > 1) status[k] = { badge: `${list.length - 1} benched`, cls: "opt" };
+        }
+      }
+    }
+    // provided ports nothing consumes
+    const heard = new Set(edges.map((e) => e.from));
+    for (const n of NODES) for (const op of n.out) {
+      const k = key(n.id, op.p);
+      if (heard.has(k) || isUnplugged(w, n.id)) continue;
+      if (noFit.has(k)) { status[k] = { badge: "no fit", cls: "err" }; continue; }
+      status[k] = { badge: "unheard", cls: "warn" };
+      const where = [];
+      for (const m of NODES) for (const ip of m.in) {
+        if (isUnplugged(w, m.id)) continue;
+        const r = pair(n.id, op, m.id, ip);
+        if (r.ok) where.push({ k: key(m.id, ip.p), w: Object.keys(needShape(ip).obj).length });
+      }
+      where.sort((a, b) => b.w - a.w);
+      const hint = where.length ? ` Fits by shape: ${where.slice(0, 3).map((x) => x.k).join(", ")}${where.length > 3 ? ` +${where.length - 3} more` : ""}.` : "";
+      diags.push({ sev: "warn", node: n.id, text: `${n.id} · ${op.p} provides ${op.proto} and nothing consumes it.${hint}` });
+    }
+    // activation order over service edges (Kahn, alphabetical tie-break)
+    const skipped = new Set(diags.filter((d) => d.sev === "err" && d.text.includes("won't activate")).map((d) => d.node));
+    let svc = edges.filter((e) => e.kind === "service");
+    let changed = true;
+    // a provider that doesn't activate takes down consumers that require it; optional consumers lose the wire and carry on
+    while (changed) {
+      changed = false;
+      for (const e of svc) if (skipped.has(e.fromN) && !skipped.has(e.toN) && !portOf("in", e.to).optional) { skipped.add(e.toN); changed = true; }
+    }
+    for (let i = edges.length - 1; i >= 0; i--) if (edges[i].kind === "service" && skipped.has(edges[i].fromN)) edges.splice(i, 1);
+    svc = edges.filter((e) => e.kind === "service");
+    const plugged = NODES.filter((n) => !isUnplugged(w, n.id));
+    const indeg = {}, outs = {};
+    plugged.forEach((n) => { indeg[n.id] = 0; outs[n.id] = []; });
+    for (const e of svc) { indeg[e.toN]++; outs[e.fromN].push(e.toN); }
+    const ready = plugged.filter((n) => !indeg[n.id]).map((n) => n.id).sort();
+    const order = [];
+    while (ready.length) {
+      const id = ready.shift(); order.push(id);
+      for (const t of outs[id]) if (--indeg[t] === 0) { ready.push(t); ready.sort(); }
+    }
+    plugged.map((n) => n.id).filter((id) => !order.includes(id)).forEach((id) => { skipped.add(id); diags.push({ sev: "err", node: id, text: `${id} is in a cycle of service wires and is skipped.` }); });
+    diags.sort((a, b) => (a.sev === b.sev ? 0 : a.sev === "err" ? -1 : 1));
+    const active = new Set(plugged.map((n) => n.id).filter((id) => !skipped.has(id)));
+    return { edges, diags, status, order, skipped, seatCount, active, unplugged: new Set(w.unplugged) };
+  }
+
+  // ---------- draft vs live ----------
+  function diff() {
+    const L = resolve(live.w), D = R;
+    const ek = (e) => ekey(e.from, e.to);
+    const lm = new Map(L.edges.map((e) => [ek(e), e])), dm = new Map(D.edges.map((e) => [ek(e), e]));
+    const stop = NODES.filter((n) => L.active.has(n.id) && !D.active.has(n.id)).map((n) => n.id);
+    const start = NODES.filter((n) => !L.active.has(n.id) && D.active.has(n.id)).map((n) => n.id);
+    const moving = new Set([...stop, ...start]);
+    const unplug = overrides.unplugged.filter((id) => !live.w.unplugged.includes(id));
+    const plug = live.w.unplugged.filter((id) => !overrides.unplugged.includes(id));
+    const ops = [];
+    unplug.forEach((id) => ops.push({ op: "del", text: `unplug ${id}`, node: id }));
+    plug.forEach((id) => ops.push({ op: "add", text: `plug in ${id}`, node: id }));
+    // service bindings
+    const bound = (Rr) => Object.fromEntries(Rr.edges.filter((e) => e.kind === "service").map((e) => [e.to, e.from]));
+    const lb = bound(L), db = bound(D), restart = new Set();
+    for (const k of new Set([...Object.keys(lb), ...Object.keys(db)])) {
+      if (lb[k] === db[k]) continue;
+      const [c] = splitKey(k);
+      if (moving.has(c)) continue;
+      restart.add(c);
+      ops.push({ op: "mod", text: `${k}: ${lb[k] ? splitKey(lb[k])[0] : "nothing"} → ${db[k] ? splitKey(db[k])[0] : "nothing"}`, port: { dir: "in", k } });
+    }
+    // restarting a plugin restarts whatever depends on it through services
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const e of D.edges) if (e.kind === "service" && restart.has(e.fromN) && !restart.has(e.toN) && D.active.has(e.toN) && !moving.has(e.toN)) { restart.add(e.toN); grew = true; }
+    }
+    // slot hosts: new seat order; events: added and removed listeners
+    const hosts = new Set();
+    const seatsOf = (Rr, k) => Rr.edges.filter((e) => e.to === k && !e.bench).sort((a, b) => a.seat - b.seat).map((e) => e.from);
+    const touchesMoving = (e) => moving.has(e.fromN) || moving.has(e.toN);
+    const slotKeys = new Set([...L.edges, ...D.edges].filter((e) => e.kind === "slot").map((e) => e.to));
+    for (const k of slotKeys) {
+      const a = seatsOf(L, k).filter((x) => !moving.has(splitKey(x)[0])), b = seatsOf(D, k).filter((x) => !moving.has(splitKey(x)[0]));
+      if (moving.has(splitKey(k)[0]) || JSON.stringify(a) === JSON.stringify(b)) continue;
+      hosts.add(k);
+      const gone = a.filter((x) => !b.includes(x));
+      ops.push({ op: "mod", text: `${k} seats: ${b.map((x, i) => `${i + 1} ${splitKey(x)[0]}${a.includes(x) ? "" : " (new)"}`).join(", ") || "empty"}${gone.length ? `; removed ${gone.map((x) => splitKey(x)[0]).join(", ")}` : ""}`, port: { dir: "in", k } });
+    }
+    for (const e of D.edges) if (e.kind === "event" && !lm.has(ek(e)) && !touchesMoving(e)) { hosts.add(e.to); ops.push({ op: "add", text: `${e.from} → ${e.to}`, edge: ek(e) }); }
+    for (const e of L.edges) if (e.kind === "event" && !dm.has(ek(e)) && !touchesMoving(e)) { hosts.add(e.to); ops.push({ op: "del", text: `${e.from} → ${e.to}` }); }
+    const consequence = { stops: stop.filter((id) => !unplug.includes(id)), starts: start.filter((id) => !plug.includes(id)) };
+    const touched = [...stop, ...start, ...restart];
+    const cold = touched.filter((id) => byId[id].hot === false);
+    const actOrder = (ids) => [...ids].sort((x, y) => (D.order.indexOf(x) === -1 ? L.order.indexOf(x) : D.order.indexOf(x)) - (D.order.indexOf(y) === -1 ? L.order.indexOf(y) : D.order.indexOf(y)));
+    return { L, lm, dm, ops, stop: actOrder(stop).reverse(), start: actOrder(start), restart: actOrder(restart), hosts: [...hosts], cold, consequence };
+  }
+
+  // ---------- DOM ----------
+  const $ = (s) => document.querySelector(s);
+  const canvas = $("#canvas"), world = $("#world"), wires = $("#wires");
+  let topLayer = null;
+  const labelLayer = document.createElement("div");
+  labelLayer.className = "collabels";
+  world.appendChild(labelLayer);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const nodeEls = {}, portEls = {};
+  let R = null;
+  const short = (p) => p.replace(/^lm\//, "");
+
+  /**
+   * Which edge a port sits on. Left, "used by": what depends on this plugin, so the
+   * services it provides and the slots it hosts. Right, "uses": what it depends on, so
+   * the services it consumes and the items it contributes. Wires then run left to right,
+   * from dependant to dependency.
+   */
+  const sideOf = (dir, proto) => (kindOf(proto) === "slot") === (dir === "in") ? "L" : "R";
+  function portHtml(dir, port, side) {
+    const t = dir === "in"
+      ? `${port.proto}@${port.range}${port.needs ? ` · needs ${port.needs.join(", ")}` : ""}${port.optional ? " · optional" : ""}${port.seats === 1 ? " · 1 seat" : ""}`
+      : `${port.proto}@${port.ver}`;
+    const dot = `<span class="pd ${kindOf(port.proto)}"></span>`, name = `<span class="pn">${esc(port.p)}</span>`, proto = `<span class="pp">${esc(short(port.proto))}</span>`, badge = `<span class="bslot"></span>`;
+    return `<div class="port ${dir} ${side}" data-port="${esc(port.p)}" data-dir="${dir}" data-t="${esc(t)}" title="${esc(t)}">${side === "L" ? dot + name + proto + badge : badge + proto + name + dot}</div>`;
+  }
+  function buildNodes() {
+    for (const n of NODES) {
+      const el = document.createElement("div");
+      el.className = "node";
+      el.dataset.id = n.id;
+      const orgLabel = n.org === "base" ? "base" : n.org === "example" ? "example" : "3rd party";
+      const power = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 1.5v6"/><path d="M4.2 4a5.5 5.5 0 1 0 7.6 0"/></svg>`;
+      let html = `<div class="node-h"><span class="nm">${esc(n.id)}</span><span class="dc" title="plugins that depend on this one"></span><span class="org ${n.org}">${orgLabel}</span><button class="plug" type="button" data-plug="${esc(n.id)}" title="Unplug" aria-label="Unplug ${esc(n.id)}">${power}</button></div>`;
+      const ports = [...n.in.map((p) => ["in", p]), ...n.out.map((p) => ["out", p])];
+      const left = ports.filter(([d, p]) => sideOf(d, p.proto) === "L"), right = ports.filter(([d, p]) => sideOf(d, p.proto) === "R");
+      if (left.length) html += `<div class="ports L"><div class="cap-row">← used by</div>${left.map(([d, p]) => portHtml(d, p, "L")).join("")}</div>`;
+      if (right.length) html += `<div class="ports R"><div class="cap-row">uses →</div>${right.map(([d, p]) => portHtml(d, p, "R")).join("")}</div>`;
+      el.innerHTML = html;
+      world.appendChild(el);
+      nodeEls[n.id] = el;
+      el.querySelectorAll(".port").forEach((pe) => { portEls[`${pe.dataset.dir}|${key(n.id, pe.dataset.port)}`] = pe; });
+    }
+  }
+
+  /** Distinct plugins that depend on each one: consumers of its services and events, contributors to its slots. */
+  function dependants() {
+    const by = Object.fromEntries(NODES.map((n) => [n.id, new Set()]));
+    for (const e of (R ? R.edges : [])) {
+      const [dependant, dependee] = e.kind === "slot" ? [e.fromN, e.toN] : [e.toN, e.fromN];
+      if (dependant !== dependee) by[dependee].add(dependant);
+    }
+    return Object.fromEntries(Object.entries(by).map(([id, set]) => [id, set.size]));
+  }
+  const NODE_W = 228, GAP_X = 120, GAP_Y = 28, COLS = 6;
+  let colLabels = "";
+  /** Fewest dependants on the left, most on the right; columns filled top to bottom with fixed margins. */
+  function layout() {
+    const count = dependants();
+    for (const n of NODES) nodeEls[n.id].querySelector(".dc").textContent = count[n.id];
+    const sorted = NODES.slice().sort((a, b) => count[a.id] - count[b.id] || a.id.localeCompare(b.id));
+    const h = (n) => nodeEls[n.id].offsetHeight;
+    const target = sorted.reduce((sum, n) => sum + h(n) + GAP_Y, 0) / COLS;
+    const cols = [[]];
+    let y = 0;
+    for (const n of sorted) {
+      if (y > 0 && y + h(n) > target && cols.length < COLS) { cols.push([]); y = 0; }
+      cols[cols.length - 1].push(n);
+      y += h(n) + GAP_Y;
+    }
+    colLabels = "";
+    cols.forEach((col, c) => {
+      const x = c * (NODE_W + GAP_X);
+      let yy = 0;
+      for (const n of col) { pos[n.id] = { x, y: yy }; yy += h(n) + GAP_Y; }
+      const lo = count[col[0].id], hi = count[col[col.length - 1].id];
+      colLabels += `<div class="collabel" style="transform:translate(${x}px,-30px)">${lo === hi ? lo : `${lo}–${hi}`} dependant${hi === 1 ? "" : "s"}</div>`;
+    });
+    labelLayer.innerHTML = colLabels;
+    columns = cols.map((col) => col.map((n) => n.id));
+    for (const n of NODES) placeNode(n.id);
+  }
+  let columns = [];
+  /** Keep every box in its column while editing; only re-stack heights so nothing overlaps. */
+  function reflow() {
+    const count = dependants();
+    for (const n of NODES) nodeEls[n.id].querySelector(".dc").textContent = count[n.id];
+    for (const col of columns) {
+      let y = 0;
+      for (const id of col) { pos[id].y = y; y += nodeEls[id].offsetHeight + GAP_Y; }
+    }
+    for (const n of NODES) placeNode(n.id);
+  }
+  function placeNode(id) { const p = pos[id]; nodeEls[id].style.transform = `translate(${p.x}px, ${p.y}px)`; }
+  function applyView() { world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.k})`; }
+  function fit() {
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    for (const n of NODES) { const p = pos[n.id], el = nodeEls[n.id]; x1 = Math.min(x1, p.x - 12); y1 = Math.min(y1, p.y - 30); x2 = Math.max(x2, p.x + el.offsetWidth); y2 = Math.max(y2, p.y + el.offsetHeight); }
+    const W = canvas.clientWidth, H = canvas.clientHeight, pad = 24;
+    view.k = Math.min(1.2, Math.max(0.2, Math.min((W - pad * 2) / (x2 - x1), (H - pad * 2) / (y2 - y1))));
+    view.x = (W - (x2 - x1) * view.k) / 2 - x1 * view.k;
+    view.y = (H - (y2 - y1) * view.k) / 2 - y1 * view.k;
+    applyView();
+  }
+
+  // ---------- geometry ----------
+  const STEP = 9, SEAT_R = 6, ROW = 20;
+  function portTop(k) { const pe = portEls[`in|${k}`]; return pos[splitKey(k)[0]].y + pe.offsetTop; }
+  const seatY = (k, seat) => portTop(k) + ROW / 2 + STEP * (seat - 1);
+  function portPoint(dir, k) {
+    const pe = portEls[`${dir}|${k}`];
+    const [nid] = splitKey(k);
+    const p = pos[nid];
+    return { x: pe.classList.contains("R") ? p.x + nodeEls[nid].offsetWidth : p.x, y: p.y + pe.offsetTop + pe.offsetHeight / 2 };
+  }
+  function inPoint(e) {
+    const p = portPoint("in", e.to);
+    return e.kind === "slot" ? { x: p.x, y: seatY(e.to, e.bench ? 1 : e.seat) } : p;
+  }
+  /** Seats drawn on a port: one per wire plus the open one, or a single seat. */
+  function seatTotal(ip, k) { const c = (R && R.seatCount[k]) || 0; return ip.seats === 1 ? 1 : c + 1; }
+  /** Grow each multi-seat row so its seats run down the node's edge without spilling onto the next port. */
+  function sizeRows() {
+    for (const n of NODES) for (const ip of n.in) {
+      if (kindOf(ip.proto) !== "slot") continue;
+      const pe = portEls[`in|${key(n.id, ip.p)}`], total = seatTotal(ip, key(n.id, ip.p));
+      pe.style.height = `${ROW + STEP * (total - 1)}px`;
+      pe.classList.toggle("multi", total > 1);
+    }
+  }
+  /** +1 when a port's dot is on the right edge, -1 on the left: wires leave a dot outwards. */
+  const dirOf = (dir, k) => portEls[`${dir}|${k}`].classList.contains("R") ? 1 : -1;
+  function ends(e) { return [portPoint("out", e.from), inPoint(e), dirOf("out", e.from), dirOf("in", e.to)]; }
+  function ctrl(a, b, sa = 1, sb = -1) { const dx = Math.max(60, Math.abs(b.x - a.x) * 0.45); return [{ x: a.x + sa * dx, y: a.y }, { x: b.x + sb * dx, y: b.y }]; }
+  function curve(a, b, sa, sb) { const [c1, c2] = ctrl(a, b, sa, sb); return `M${a.x},${a.y} C${c1.x},${c1.y} ${c2.x},${c2.y} ${b.x},${b.y}`; }
+  function along(a, b, sa, sb, t) {
+    const [c1, c2] = ctrl(a, b, sa, sb), u = 1 - t;
+    return { x: u * u * u * a.x + 3 * u * u * t * c1.x + 3 * u * t * t * c2.x + t * t * t * b.x, y: u * u * u * a.y + 3 * u * u * t * c1.y + 3 * u * t * t * c2.y + t * t * t * b.y };
+  }
+
+  const visible = (e) => kindsOn[e.kind] && (!protoFilter || e.proto === protoFilter || e.offerProto === protoFilter);
+  const throughPort = (e) => selPort && (selPort.dir === "in" ? e.to === selPort.k : e.from === selPort.k);
+
+  function drawWires() {
+    const focus = selNode || (!selPort && !selEdge ? hoverNode : null);
+    let html = "", labels = "";
+    if (DF) for (const e of DF.L.edges) {
+      if (!visible(e) || DF.dm.has(ekey(e.from, e.to))) continue;
+      html += `<path class="w ${e.kind} gone" d="${curve(...ends(e))}"/>`;
+    }
+    for (const e of R.edges) {
+      if (!visible(e)) continue;
+      const [a, b, sa, sb] = ends(e);
+      const d = curve(a, b, sa, sb);
+      const ek = ekey(e.from, e.to);
+      let cls = `w ${e.kind}${e.structural ? " structural" : ""}${e.bench ? " bench" : ""}${DF && !DF.lm.has(ek) ? " new" : ""}`;
+      if (selEdge === ek) cls += " sel";
+      else if (selPort) cls += throughPort(e) ? " hot" : " dim";
+      else if (focus) cls += (e.fromN === focus || e.toN === focus) ? " hot" : " dim";
+      html += `<path class="hit" data-e="${esc(ek)}" d="${d}"/><path class="${cls}" data-e="${esc(ek)}" d="${d}"/>`;
+      const showNo = e.kind === "slot" && !e.bench && (R.seatCount[e.to] || 0) > 1 && ((selPort && throughPort(e)) || selEdge === ek || (focus && e.toN === focus));
+      if (showNo) { const q = along(a, b, sa, sb, 0.86); labels += `<g class="seatno"><circle cx="${q.x}" cy="${q.y}" r="8"/><text x="${q.x}" y="${q.y}">${e.seat}</text></g>`; }
+    }
+    // the seats: one dot per wire, overlapping, plus an open seat for the next connection
+    let seats = "";
+    if (kindsOn.slot) for (const n of NODES) for (const ip of n.in) {
+      if (kindOf(ip.proto) !== "slot" || (protoFilter && ip.proto !== protoFilter)) continue;
+      const k = key(n.id, ip.p), x = pos[n.id].x, count = R.seatCount[k] || 0;
+      for (let i = seatTotal(ip, k); i >= 1; i--) seats += `<circle class="seat${i > count ? " open" : ""}" cx="${x}" cy="${seatY(k, i)}" r="${SEAT_R}"/>`;
+    }
+    if (drag && drag.type === "wire" && drag.cur) {
+      const s = dirOf(drag.dir, drag.k), p = portPoint(drag.dir, drag.k);
+      html += `<path class="temp${drag.bad ? " bad" : ""}" d="${drag.dir === "out" ? curve(p, drag.cur, s, -s) : curve(drag.cur, p, -s, s)}"/>`;
+    }
+    wires.innerHTML = html;
+    topLayer.innerHTML = seats + labels;
+    labelLayer.hidden = handPlaced;
+    for (const n of NODES) {
+      const el = nodeEls[n.id];
+      el.classList.toggle("sel", selNode === n.id);
+      el.classList.toggle("off", R.skipped.has(n.id));
+      const un = R.unplugged.has(n.id);
+      el.classList.toggle("unplugged", un);
+      const pb = el.querySelector(".plug");
+      pb.title = un ? "Plug in" : "Unplug"; pb.setAttribute("aria-label", `${un ? "Plug in" : "Unplug"} ${n.id}`);
+      let involved = true;
+      if (selPort) { const pn = splitKey(selPort.k)[0]; involved = n.id === pn || R.edges.some((e) => throughPort(e) && (e.fromN === n.id || e.toN === n.id)); }
+      else if (focus) involved = focus === n.id || R.edges.some((e) => visible(e) && ((e.fromN === focus && e.toN === n.id) || (e.toN === focus && e.fromN === n.id)));
+      const protoHit = !protoFilter || n.in.concat(n.out).some((p) => p.proto === protoFilter);
+      el.classList.toggle("dim", !involved || !protoHit);
+    }
+    for (const [pk, pe] of Object.entries(portEls)) pe.classList.toggle("picked", !!selPort && pk === `${selPort.dir}|${selPort.k}`);
+  }
+
+  function drawBadges() {
+    for (const [pk, pe] of Object.entries(portEls)) {
+      const st = R.status[pk.slice(pk.indexOf("|") + 1)];
+      pe.querySelector(".bslot").innerHTML = st ? `<span class="badge ${st.cls}">${esc(st.badge)}</span>` : "";
+    }
+  }
+
+  function wiringJson() { return JSON.stringify({ version: isDirty() ? live.version + 1 : live.version, ...overrides }, null, 2); }
+
+  function drawSide() {
+    $("#wiringJson").textContent = wiringJson();
+    $("#wiringLabel").textContent = isDirty() ? `draft, based on v${live.version}` : `live, v${live.version}`;
+    const errs = R.diags.filter((d) => d.sev === "err").length;
+    const dc = $("#diagCount");
+    dc.textContent = `${R.diags.length}`;
+    dc.className = `pill ${errs ? "err" : R.diags.length ? "warn" : "ok"}`;
+    $("#diag").innerHTML = R.diags.length ? R.diags.map((d) => `<li><span class="pill ${d.sev}">${d.sev === "err" ? "error" : "warn"}</span><button type="button" data-node="${esc(d.node)}"><span>${esc(d.text).replace(/`([^`]+)`/g, "<code>$1</code>")}</span></button></li>`).join("") : `<li><span class="pill ok">ok</span><span>Everything required is wired.</span></li>`;
+    $("#order").innerHTML = R.order.map((id, i) => `<span class="${R.skipped.has(id) ? "skip" : ""}"><b>${i + 1}</b>${esc(id)}</span>`).join("");
+    drawInspector();
+  }
+
+  // ---------- inspector ----------
+  const nodeLink = (k) => `<button class="linkish" data-node="${esc(splitKey(k)[0])}">${esc(k)}</button>`;
+  const portLink = (dir, k, label) => `<button class="linkish" data-port="${dir}|${esc(k)}">${esc(label || k)}</button>`;
+
+  function typeTable(offer, need) {
+    let rows = "";
+    for (const [k, ct] of Object.entries(need.obj)) {
+      const pt = offer.obj ? offer.obj[k] : undefined;
+      const probs = fits(offer, obj({ [k]: ct }));
+      rows += `<tr><td class="mono">${esc(k)}</td><td class="mono">${esc(fmt(ct))}</td><td class="mono">${pt === undefined ? "—" : esc(fmt(pt))}</td><td class="${probs.length ? "bad" : "ok"}">${probs.length ? "✗" : "✓"}</td></tr>`;
+    }
+    for (const [k, pt] of Object.entries(offer.obj || {})) if (!(k in need.obj)) rows += `<tr class="extra"><td class="mono">${esc(k)}</td><td>not needed</td><td class="mono">${esc(fmt(pt))}</td><td>extra</td></tr>`;
+    return `<div class="table-wrap"><table class="tc"><thead><tr><th>key</th><th>needs</th><th>offers</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+
+  function candidateList(dir, k) {
+    // every port on the other side that shares the protocol or fits by shape
+    const me = portOf(dir, k), [nid] = splitKey(k), items = [];
+    for (const m of NODES) for (const p of (dir === "in" ? m.out : m.in)) {
+      const other = key(m.id, p.p);
+      const r = dir === "in" ? pair(m.id, p, nid, me) : pair(nid, me, m.id, p);
+      if (!r.same && !r.ok) continue;
+      const wired = R.edges.some((e) => (dir === "in" ? e.from === other && e.to === k : e.from === k && e.to === other));
+      items.push({ other, r, wired, w: r.auto ? 0 : r.ok ? 1 : 2 });
+    }
+    items.sort((a, b) => a.w - b.w || a.other.localeCompare(b.other));
+    if (!items.length) return `<p class="desc">No port on the other side shares this protocol or fits its shape.</p>`;
+    return `<ul class="cands">${items.slice(0, 14).map(({ other, r, wired }) => {
+      const mark = r.auto ? `<span class="mark ok" title="same protocol, fits">✓</span>` : r.ok ? `<span class="mark fit" title="fits by shape">◇</span>` : `<span class="mark bad" title="doesn't fit">✗</span>`;
+      const pairAttr = dir === "in" ? `${other}|${k}` : `${k}|${other}`;
+      const action = wired ? `<span class="muted mono" style="font-size:.66rem">wired</span>` : r.ok ? `<button class="btn sm" data-connect="${esc(pairAttr)}">Connect</button>` : "";
+      const why = !r.ok ? `<span class="reason">${esc(r.reasons.length ? r.reasons.slice(0, 2).join("; ") : "version out of range")}</span>` : !r.auto ? `<span class="reason">${esc(r.same ? `version outside ${dir === "in" ? me.range : portOf("in", other).range}; fits by shape` : `speaks ${(dir === "in" ? portOf("out", other) : portOf("in", other)).proto}; fits by shape`)}</span>` : "";
+      return `<li>${mark}${portLink(dir === "in" ? "out" : "in", other)}${action}${why}</li>`;
+    }).join("")}</ul>`;
+  }
+
+  function drawInspector() {
+    const box = $("#inspector");
+    if (pendingWire) {
+      const o = portOf("out", pendingWire.outK), i = portOf("in", pendingWire.inK);
+      box.innerHTML = `<h4>Wire by shape? <span class="pill slot">slot</span></h4>
+        <div class="insp"><div>${portLink("out", pendingWire.outK)} → ${portLink("in", pendingWire.inK)}</div>
+        <div class="desc mono">${esc(o.proto)} → ${esc(i.proto)}</div>
+        <div><span class="cap">type check</span>${typeTable(offerShape(o), needShape(i))}</div>
+        <div style="display:flex;gap:8px"><button class="btn primary" type="button" data-confirm-wire="1">Wire it</button><button class="btn" type="button" data-cancel-wire="1">Cancel</button></div></div>`;
+      return;
+    }
+    if (selEdge) {
+      const e = R.edges.find((x) => ekey(x.from, x.to) === selEdge);
+      if (!e) { selEdge = null; return drawInspector(); }
+      const [tn, tp] = splitKey(e.to);
+      const ip = portOf("in", e.to), op = portOf("out", e.from);
+      const seatLine = e.kind === "slot" ? `<div class="desc">${e.bench ? `On the bench: ${esc(tn)} · ${esc(tp)} has one seat.` : `Seat ${e.seat} of ${R.seatCount[e.to]} on ${portLink("in", e.to, `${tn} · ${tp}`)}.`}</div>` : "";
+      box.innerHTML = `<h4>Wire <span><span class="pill ${e.kind}">${e.kind}</span>${e.structural ? ` <span class="pill ok">by shape</span>` : ""}</span></h4>
+        <div class="insp"><div>${portLink("out", e.from)} → ${portLink("in", e.to)}</div>
+        <div class="desc mono">${esc(op.proto)}@${esc(op.ver)} → ${esc(ip.proto)}@${esc(ip.range)}</div>
+        ${e.structural ? `<div class="desc">Wired by shape. The type check passes, but the two ports don't share a protocol and major version, so whoever wired this is vouching for what the fields mean.</div>` : ""}
+        ${seatLine}
+        <div><span class="cap">type check</span>${typeTable(offerShape(op), needShape(ip))}</div>
+        ${e.kind === "service" ? `<div class="desc">Cutting leaves ${esc(tn)} · ${esc(tp)} unbound${ip.optional ? " (optional, so it still activates)" : ", and the plugin won't activate"}.</div>` : ""}
+        <div><button class="btn danger" data-cut="${esc(selEdge)}" type="button">Cut wire</button></div></div>`;
+      return;
+    }
+    if (selPort) {
+      const { dir, k } = selPort, [nid, pn] = splitKey(k), p = portOf(dir, k), kind = kindOf(p.proto);
+      if (dir === "in") {
+        const es = R.edges.filter((e) => e.to === k).sort((a, b) => (a.bench - b.bench) || a.seat - b.seat);
+        let wired;
+        if (kind === "slot") {
+          wired = es.length ? `<ol class="seats">${es.map((e, i) => `<li class="${e.bench ? "bench" : ""}"><span class="no">${e.bench ? "–" : e.seat}</span><span>${nodeLink(e.from)}${e.structural ? ` <span class="pill ok">by shape</span>` : ""}</span><span class="seat-ctl">${e.bench ? "" : `<button class="btn sm" aria-label="Move up" data-move="${esc(k)}|${esc(e.from)}|-1"${i === 0 ? " disabled" : ""}>↑</button><button class="btn sm" aria-label="Move down" data-move="${esc(k)}|${esc(e.from)}|1"${i === es.filter((x) => !x.bench).length - 1 ? " disabled" : ""}>↓</button>`}<button class="btn sm danger" data-cut="${esc(ekey(e.from, e.to))}">Cut</button></span></li>`).join("")}</ol>` : `<p class="desc">Empty. The next connection takes seat 1.</p>`;
+          wired += `<p class="desc">${p.seats === 1 ? "One seat: a new connection takes it and moves the current one to the bench." : `The next connection takes seat ${es.length + 1}. Use ↑ ↓, or cut and reconnect to send one to the end.`} ${overrides.order[k] ? "Order set by hand, stored in <code>order</code>." : "No edits yet: seats follow the <code>order</code> hint, then plugin id."}</p>`;
+          if (overrides.order[k]) wired += `<div><button class="btn sm" data-reset-order="${esc(k)}">Back to default order</button></div>`;
+        } else {
+          wired = es.length ? `<ul class="cands">${es.map((e) => `<li><span class="mark ok">●</span>${nodeLink(e.from)}<button class="btn sm danger" data-cut="${esc(ekey(e.from, e.to))}">Cut</button></li>`).join("")}</ul>` : `<p class="desc">${p.optional ? "Nothing bound (optional)." : "Nothing bound, so the plugin won't activate."}</p>`;
+        }
+        box.innerHTML = `<h4>${esc(nid)} · ${esc(pn)} <span class="pill ${kind}">${kind === "slot" ? (p.seats === 1 ? "1 seat" : "multi-seat") : kind}</span></h4>
+          <div class="insp"><div class="desc mono">consumes ${esc(p.proto)}@${esc(p.range)}${p.optional ? " · optional" : ""}</div>
+          <div><span class="cap">${kind === "slot" ? "seats, in the order the host receives them" : kind === "service" ? "bound to" : "listening to"}</span>${wired}</div>
+          <div><span class="cap">needs${p.needs ? " (a slice of the protocol)" : ""}</span><div class="needs">${Object.entries(needShape(p).obj).map(([kk, t]) => `<code>${esc(kk)}: ${esc(fmt(t))}</code>`).join(" ")}</div></div>
+          <div><span class="cap">could connect</span>${candidateList("in", k)}</div></div>`;
+      } else {
+        const es = R.edges.filter((e) => e.from === k);
+        box.innerHTML = `<h4>${esc(nid)} · ${esc(pn)} <span class="pill ${kind}">${kind}</span></h4>
+          <div class="insp"><div class="desc mono">provides ${esc(p.proto)}@${esc(p.ver)}${p.shape ? " · its own shape" : ""}</div>
+          <div><span class="cap">offers</span><div class="needs">${Object.entries(offerShape(p).obj).map(([kk, t]) => `<code>${esc(kk)}: ${esc(fmt(t))}</code>`).join(" ")}</div></div>
+          <div><span class="cap">wired to</span>${es.length ? `<ul class="cands">${es.map((e) => `<li><span class="mark ok">●</span>${portLink("in", e.to)}${e.seat ? `<span class="muted mono" style="font-size:.66rem">seat ${e.bench ? "–" : e.seat}</span>` : "<span></span>"}</li>`).join("")}</ul>` : `<p class="desc">Nothing.</p>`}</div>
+          <div><span class="cap">could connect</span>${candidateList("out", k)}</div></div>`;
+      }
+      return;
+    }
+    if (!selNode) {
+      box.innerHTML = `<h4>Inspector</h4><div class="insp desc">Select a plugin, a port name or a wire. Hover a port dot to see what fits: green for the same protocol, blue for a match by shape only, faded when the types don't fit.</div>`;
+      return;
+    }
+    const n = byId[selNode];
+    const manifest = {};
+    if (n.in.length) manifest.consumes = Object.fromEntries(n.in.map((p) => [p.p, { protocol: `${p.proto}@${p.range}`, ...(p.needs ? { needs: p.needs } : {}), ...(p.optional ? { optional: true } : {}), ...(p.seats ? { seats: p.seats } : {}) }]));
+    if (n.out.length) manifest.provides = Object.fromEntries(n.out.map((p) => [p.p, { protocol: `${p.proto}@${p.ver}` }]));
+    const inRows = n.in.map((p) => {
+      const k = key(n.id, p.p);
+      const es = R.edges.filter((e) => e.to === k).sort((a, b) => a.seat - b.seat);
+      return `<tr><td>${portLink("in", k, p.p)}<br><span class="muted mono">${esc(short(p.proto))}</span></td><td>${es.length ? es.map((e) => `${e.seat ? `<span class="muted mono">${e.bench ? "–" : e.seat}</span> ` : ""}${nodeLink(e.from)}`).join("<br>") : `<span class="muted">${p.optional ? "none (optional)" : "none"}</span>`}</td></tr>`;
+    }).join("");
+    const outRows = n.out.map((p) => {
+      const k = key(n.id, p.p);
+      const es = R.edges.filter((e) => e.from === k);
+      return `<tr><td>${portLink("out", k, p.p)}<br><span class="muted mono">${esc(short(p.proto))}</span></td><td>${es.length ? es.map((e) => nodeLink(e.to)).join("<br>") : `<span class="muted">nobody</span>`}</td></tr>`;
+    }).join("");
+    const un = R.unplugged.has(n.id);
+    const state = un ? ["err", "unplugged"] : R.skipped.has(n.id) ? ["err", "skipped"] : ["ok", "activates"];
+    box.innerHTML = `<h4>${esc(n.id)} <span class="pill ${state[0]}">${state[1]}</span></h4>
+      <div class="insp"><div class="desc">${esc(n.desc)}</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn ${un ? "" : "danger"}" type="button" data-plug="${esc(n.id)}">${un ? "Plug in" : "Unplug"}</button><span class="muted" style="font-size:.74rem">${n.hot === false ? "Not hot-pluggable: applying reloads clients." : "Hot-pluggable."} Takes effect on Apply.</span></div>
+      ${n.in.length ? `<div class="table-wrap"><table><thead><tr><th>consumes</th><th>from</th></tr></thead><tbody>${inRows}</tbody></table></div>` : ""}
+      ${n.out.length ? `<div class="table-wrap"><table><thead><tr><th>provides</th><th>to</th></tr></thead><tbody>${outRows}</tbody></table></div>` : ""}
+      <div><span class="cap">manifest.json fragment</span><pre>${esc(JSON.stringify(manifest, null, 2))}</pre></div></div>`;
+  }
+
+  let handPlaced = false, DF = null, needLayout = true;
+  function refresh() {
+    R = resolve();
+    DF = isDirty() ? diff() : null;
+    sizeRows();
+    if (!handPlaced) { if (needLayout) layout(); else reflow(); }
+    needLayout = false;
+    drawBadges(); drawWires(); drawSide(); drawDraft();
+  }
+
+  function drawDraft() {
+    const bar = $("#draftbar"), panel = $("#changesPanel");
+    bar.classList.toggle("dirty", !!DF);
+    const clients = `<span class="clients" id="clients"><i></i>${CLIENTS} clients on v${live.version}</span>`;
+    const net = `<button class="btn sm" type="button" data-offline="1" aria-pressed="${offline}">${offline ? "Go online" : "Simulate offline"}</button>`;
+    if (offline) {
+      bar.classList.remove("dirty");
+      bar.innerHTML = `<span class="state offline">offline</span><span>v${live.version} · read-only</span><span class="spacer"></span>${net}`;
+      panel.hidden = true;
+      return;
+    }
+    const prev = live.history.length ? live.history[live.history.length - 1] : null;
+    if (!DF) {
+      bar.innerHTML = `<span class="state live">live</span><span>v${live.version}</span>${clients}<span class="spacer"></span>${prev ? `<button class="btn" type="button" data-rollback="1">Load v${prev.version} as draft</button>` : ""}${net}`;
+      panel.hidden = true;
+      return;
+    }
+    const n = DF.ops.length;
+    bar.innerHTML = `<span class="state draft">draft</span><span>${n} change${n === 1 ? "" : "s"}, based on v${live.version}</span>${clients}<span class="spacer"></span><button class="btn" type="button" data-discard="1">Discard</button><button class="btn primary" type="button" data-apply="1">Apply to ${CLIENTS} clients</button>${net}`;
+    const steps = [];
+    steps.push(`Save wiring v${live.version + 1} and broadcast <code>wiring.applied</code> to ${CLIENTS} clients.`);
+    const ids = (a) => `<span class="ids">${a.map(esc).join(", ")}</span>`;
+    if (DF.cold.length) {
+      steps.push(`<b>Reload.</b> ${ids(DF.cold)} ${DF.cold.length === 1 ? "doesn't" : "don't"} declare <code>"hot": true</code>, so each client shows a reload banner and stays on v${live.version} until its user reloads.`);
+    } else {
+      if (DF.stop.length) steps.push(`Stop, in reverse activation order: ${ids(DF.stop)}. Each gets <code>deactivate()</code>, then the kernel retracts what it registered.`);
+      if (DF.restart.length) steps.push(`Restart, in activation order: ${ids(DF.restart)}. A service they use changed or restarted.`);
+      if (DF.hosts.length) steps.push(`Update seats and listeners on ${ids(DF.hosts)}. Live lists change; no restart.`);
+      if (DF.start.length) steps.push(`Start, in activation order: ${ids(DF.start)}.`);
+      steps.push(`No page reload.`);
+    }
+    const errs = R.diags.filter((d) => d.sev === "err").length - DF.L.diags.filter((d) => d.sev === "err").length;
+    panel.hidden = false;
+    panel.innerHTML = `<h4>Changes <span class="pill warn">${n}</span></h4>
+      <ul class="changes">${DF.ops.map((o) => `<li><span class="op ${o.op}">${o.op === "add" ? "+" : o.op === "del" ? "−" : "~"}</span>${o.node ? `<button class="linkish" data-node="${esc(o.node)}">${esc(o.text)}</button>` : o.port ? `<button class="linkish" data-port="${o.port.dir}|${esc(o.port.k)}">${esc(o.text)}</button>` : `<span class="mono" style="font-size:.7rem">${esc(o.text)}</span>`}</li>`).join("")}</ul>
+      ${DF.consequence.stops.length ? `<div class="callout">Also stops, because a service they require is gone: ${DF.consequence.stops.map(esc).join(", ")}.</div>` : ""}
+      ${DF.consequence.starts.length ? `<div class="callout warn">Also starts, because what they needed is back: ${DF.consequence.starts.map(esc).join(", ")}.</div>` : ""}
+      ${errs > 0 ? `<div class="callout">Adds ${errs} error${errs === 1 ? "" : "s"}. Apply will ask to confirm.</div>` : ""}
+      <h4>Apply plan</h4><ol class="plan">${steps.map((x) => `<li>${x}</li>`).join("")}</ol>`;
+  }
+
+  function apply() {
+    if (!DF || offline) return;
+    const errs = R.diags.filter((d) => d.sev === "err").length - DF.L.diags.filter((d) => d.sev === "err").length;
+    if (errs > 0 && !pendingConfirm) { pendingConfirm = true; toast(`This draft adds ${errs} error${errs === 1 ? "" : "s"}. Press Apply again to confirm.`, true); return; }
+    pendingConfirm = false;
+    const cold = DF.cold;
+    live.history.push({ version: live.version, w: clone(live.w) });
+    live = { version: live.version + 1, w: clone(overrides), history: live.history };
+    needLayout = true;
+    refresh();
+    toast(cold.length ? `Applied v${live.version}. ${cold[0]} isn't hot-pluggable, so ${CLIENTS} clients are showing a reload banner.` : `Applied v${live.version}. ${CLIENTS} clients rewired in place, no reload.`);
+    const c = $("#clients"); if (c) c.classList.add("pulse");
+  }
+  let pendingConfirm = false;
+  let offline = false;
+  function togglePlug(id) {
+    if (offline) return toast("Offline: read-only.", true);
+    const u = new Set(overrides.unplugged);
+    const was = u.has(id);
+    was ? u.delete(id) : u.add(id);
+    overrides.unplugged = [...u].sort();
+    pendingConfirm = false;
+    selNode = id; selEdge = null; selPort = null;
+    refresh();
+    const extra = DF ? (was ? DF.consequence.starts : DF.consequence.stops) : [];
+    toast(was ? `Plugged in ${id} (draft)${extra.length ? `; ${extra.length} more start again` : ""}.` : `Unplugged ${id} (draft)${extra.length ? `; ${extra.length} more stop: ${extra.slice(0, 3).join(", ")}${extra.length > 3 ? "…" : ""}` : ""}.`);
+  }
+  function select(what) { if (what.node || what.edge || what.port) pendingWire = null; selNode = what.node || null; selEdge = what.edge || null; selPort = what.port || null; drawWires(); drawInspector(); }
+
+  // ---------- toast ----------
+  let toastT = 0;
+  function toast(msg, bad) {
+    const t = $("#toast");
+    t.textContent = msg; t.className = `toast${bad ? " bad" : ""}`; t.hidden = false;
+    clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 3200);
+  }
+
+  // ---------- wiring ops ----------
+  function autoFor(k) {
+    const had = k in overrides.bind, saved = overrides.bind[k];
+    delete overrides.bind[k];
+    const r = resolve();
+    if (had) overrides.bind[k] = saved;
+    const e = r.edges.find((x) => x.to === k);
+    return { choice: e ? e.from : null, many: !!(r.status[k] && /providers/.test(r.status[k].badge)) };
+  }
+  let pendingWire = null;
+  function connect(outK, inK, confirmed = false) {
+    if (offline) return toast("Offline: read-only.", true);
+    const [on, opn] = splitKey(outK), [inn, ipn] = splitKey(inK);
+    const o = portOf("out", outK), i = portOf("in", inK);
+    const off = [on, inn].find((id) => isUnplugged(overrides, id));
+    if (off) return toast(`${off} is unplugged. Plug it in first.`, true);
+    const r = pair(on, o, inn, i);
+    if (!r.ok) return toast(`Doesn't fit ${inn} · ${ipn}: ${r.reasons.slice(0, 2).join("; ")}.`, true);
+    const kind = kindOf(i.proto), ek = ekey(outK, inK);
+    if (!r.same && !confirmed) { pendingWire = { outK, inK }; return select({}); }
+    pendingWire = null;
+    if (kind === "service") {
+      const a = autoFor(inK);
+      if (a.choice === outK && !a.many) delete overrides.bind[inK];
+      else overrides.bind[inK] = outK;
+      toast(`${inn} · ${ipn} now uses ${on}${r.auto ? "" : " (by shape)"}.`);
+      select({ edge: ek });
+    } else {
+      const current = R.edges.filter((e) => e.to === inK).sort((a, b) => (a.bench - b.bench) || a.seat - b.seat).map((e) => e.from);
+      const at = current.indexOf(outK);
+      const single = kind === "slot" && i.seats === 1;
+      if (at !== -1 && !(single && at > 0)) return toast(kind === "slot" ? `Already in seat ${at + 1}. Cut it and connect it again to move it to the end.` : "Already wired.");
+      overrides.cut = overrides.cut.filter((x) => x !== ek);
+      if (!r.auto && !overrides.add.includes(ek)) overrides.add.push(ek);
+      if (kind === "slot") {
+        const rest = current.filter((x) => x !== outK);
+        overrides.order[inK] = single ? [outK, ...rest] : [...rest, outK];
+        toast(single ? `${on} took the seat on ${inn} · ${ipn}${rest.length ? `; ${splitKey(rest[0])[0]} moved to the bench` : ""}.` : `${on} · ${opn} took seat ${rest.length + 1} on ${inn} · ${ipn}${r.auto ? "" : " (by shape)"}.`);
+        select({ port: { dir: "in", k: inK } });
+      } else {
+        toast(`Wired ${on} · ${opn} → ${inn} · ${ipn}.`);
+        select({ edge: ek });
+      }
+    }
+    refresh();
+  }
+  function moveSeat(k, from, delta) {
+    if (offline) return toast("Offline: read-only.", true);
+    const list = R.edges.filter((e) => e.to === k && !e.bench).sort((a, b) => a.seat - b.seat).map((e) => e.from);
+    const i = list.indexOf(from), j = i + delta;
+    if (i === -1 || j < 0 || j >= list.length) return;
+    [list[i], list[j]] = [list[j], list[i]];
+    overrides.order[k] = list;
+    select({ port: { dir: "in", k } });
+    refresh();
+  }
+  function cutEdge(ek) {
+    if (offline) return toast("Offline: read-only.", true);
+    const e = R.edges.find((x) => ekey(x.from, x.to) === ek);
+    if (!e) return;
+    if (e.kind === "service") overrides.bind[e.to] = null;
+    else if (overrides.add.includes(ek)) overrides.add = overrides.add.filter((x) => x !== ek);
+    else overrides.cut.push(ek);
+    if (overrides.order[e.to]) {
+      overrides.order[e.to] = overrides.order[e.to].filter((x) => x !== e.from);
+      if (!overrides.order[e.to].length) delete overrides.order[e.to];
+    }
+    toast(`Cut ${e.from} → ${e.to}.`);
+    if (e.kind === "slot") select({ port: { dir: "in", k: e.to } }); else select({ node: e.toN });
+    refresh();
+  }
+
+  // ---------- pointer interaction ----------
+  let drag = null, hoverNode = null, hoverPortKey = null;
+  const toWorld = (cx, cy) => { const r = canvas.getBoundingClientRect(); return { x: (cx - r.left - view.x) / view.k, y: (cy - r.top - view.y) / view.k }; };
+
+  function markCompat(dir, k) {
+    const [nid] = splitKey(k), me = portOf(dir, k);
+    for (const [pk, pe] of Object.entries(portEls)) {
+      const d = pk.slice(0, pk.indexOf("|")), kk = pk.slice(pk.indexOf("|") + 1);
+      if (kk === k && d === dir) continue;
+      if (d === dir) { pe.classList.add("nocompat"); continue; }
+      const [on2] = splitKey(kk), other = portOf(d, kk);
+      if (isUnplugged(overrides, on2) || isUnplugged(overrides, nid)) { pe.classList.add("nocompat"); pe.title = "Unplugged"; continue; }
+      const r = dir === "out" ? pair(nid, me, on2, other) : pair(on2, other, nid, me);
+      pe.classList.toggle("compat", r.auto);
+      pe.classList.toggle("fits", r.ok && !r.auto);
+      pe.classList.toggle("nocompat", !r.ok);
+      pe.title = r.ok ? (r.auto ? "Fits: same protocol" : "Fits by shape only") : `Doesn't fit: ${r.reasons.slice(0, 3).join("; ")}`;
+    }
+  }
+  function clearCompat() { Object.values(portEls).forEach((pe) => { pe.classList.remove("compat", "fits", "nocompat"); pe.title = pe.dataset.t; }); }
+
+  canvas.addEventListener("pointerdown", (ev) => {
+    if (ev.button !== 0) return;
+    const plugBtn = ev.target.closest("[data-plug]");
+    if (plugBtn) { ev.preventDefault(); return togglePlug(plugBtn.dataset.plug); }
+    const pd = offline ? null : ev.target.closest(".pd"), head = ev.target.closest(".node-h"), path = ev.target.closest("path[data-e]");
+    const portEl = ev.target.closest(".port"), nodeEl = ev.target.closest(".node");
+    if (pd) {
+      const pe = pd.closest(".port"), nid = pe.closest(".node").dataset.id;
+      drag = { type: "wire", dir: pe.dataset.dir, k: key(nid, pe.dataset.port), cur: toWorld(ev.clientX, ev.clientY) };
+      markCompat(drag.dir, drag.k);
+    } else if (head) {
+      const nid = nodeEl.dataset.id, w = toWorld(ev.clientX, ev.clientY);
+      drag = { type: "node", id: nid, dx: w.x - pos[nid].x, dy: w.y - pos[nid].y, moved: false };
+    } else if (path) {
+      return select({ edge: path.dataset.e });
+    } else if (portEl) {
+      return select({ port: { dir: portEl.dataset.dir, k: key(nodeEl.dataset.id, portEl.dataset.port) } });
+    } else if (nodeEl) {
+      return select({ node: nodeEl.dataset.id });
+    } else {
+      drag = { type: "pan", sx: ev.clientX, sy: ev.clientY, vx: view.x, vy: view.y, moved: false };
+      canvas.classList.add("panning");
+    }
+    canvas.setPointerCapture(ev.pointerId);
+    ev.preventDefault();
+  });
+  canvas.addEventListener("pointermove", (ev) => {
+    if (!drag) {
+      const nodeEl = ev.target.closest(".node"), pd = ev.target.closest(".pd");
+      const pk = pd ? `${pd.closest(".port").dataset.dir}|${key(nodeEl.dataset.id, pd.closest(".port").dataset.port)}` : null;
+      if (pk !== hoverPortKey) {
+        hoverPortKey = pk; clearCompat();
+        if (pk) markCompat(pk.slice(0, pk.indexOf("|")), pk.slice(pk.indexOf("|") + 1));
+      }
+      const h = nodeEl ? nodeEl.dataset.id : null;
+      if (h !== hoverNode) { hoverNode = h; if (!selNode && !selEdge && !selPort) drawWires(); }
+      return;
+    }
+    if (drag.type === "pan") {
+      view.x = drag.vx + ev.clientX - drag.sx; view.y = drag.vy + ev.clientY - drag.sy;
+      drag.moved = true; applyView();
+    } else if (drag.type === "node") {
+      const w = toWorld(ev.clientX, ev.clientY);
+      pos[drag.id] = { x: w.x - drag.dx, y: w.y - drag.dy }; drag.moved = true; handPlaced = true;
+      placeNode(drag.id); drawWires();
+    } else if (drag.type === "wire") {
+      drag.cur = toWorld(ev.clientX, ev.clientY);
+      const under = document.elementFromPoint(ev.clientX, ev.clientY);
+      const pe = under && under.closest(".port");
+      drag.bad = !!(pe && pe.classList.contains("nocompat"));
+      drawWires();
+    }
+  });
+  function endDrag(ev) {
+    if (!drag) return;
+    canvas.classList.remove("panning");
+    if (drag.type === "wire") {
+      const under = document.elementFromPoint(ev.clientX, ev.clientY);
+      const pe = under && under.closest(".port");
+      const d = drag; drag = null; hoverPortKey = null; clearCompat();
+      if (pe && pe.dataset.dir !== d.dir) {
+        const k2 = key(pe.closest(".node").dataset.id, pe.dataset.port);
+        if (d.dir === "out") connect(d.k, k2); else connect(k2, d.k);
+      } else if (pe && pe.dataset.dir === d.dir) { toast(`Connect a provided port (right) to a consumed port (left).`, true); drawWires(); }
+      else drawWires();
+      return;
+    }
+    const d = drag; drag = null;
+    if (d.type === "node" && !d.moved) return select({ node: d.id });
+    if (d.type === "pan" && !d.moved) return select({});
+    drawWires();
+  }
+  canvas.addEventListener("pointerup", endDrag);
+  canvas.addEventListener("pointercancel", () => { drag = null; clearCompat(); canvas.classList.remove("panning"); drawWires(); });
+  canvas.addEventListener("pointerleave", () => { if (!drag && hoverNode) { hoverNode = null; drawWires(); } });
+
+  function zoomAt(f, cx, cy) {
+    const r = canvas.getBoundingClientRect(), px = cx - r.left, py = cy - r.top;
+    const k = Math.min(2, Math.max(0.2, view.k * f));
+    view.x = px - (px - view.x) * (k / view.k); view.y = py - (py - view.y) * (k / view.k); view.k = k; applyView();
+  }
+  canvas.addEventListener("wheel", (ev) => { ev.preventDefault(); zoomAt(Math.exp(-ev.deltaY * 0.0015), ev.clientX, ev.clientY); }, { passive: false });
+  const centerZoom = (f) => { const r = canvas.getBoundingClientRect(); zoomAt(f, r.left + r.width / 2, r.top + r.height / 2); };
+  $("#zoomIn").onclick = () => centerZoom(1.2);
+  $("#zoomOut").onclick = () => centerZoom(1 / 1.2);
+  $("#fitBtn").onclick = fit;
+  $("#relayoutBtn").onclick = () => { handPlaced = false; needLayout = true; refresh(); fit(); };
+  $("#resetBtn").onclick = () => {
+    if (offline) return toast("Offline: read-only.", true); overrides = { ...EMPTY(), unplugged: [...overrides.unplugged] }; selEdge = null; selPort = null; refresh(); toast("Draft reset to automatic wiring. Unplugged plugins stay unplugged."); };
+  $("#draftbar").addEventListener("click", (ev) => {
+    const t = ev.target.closest("[data-apply],[data-discard],[data-rollback],[data-offline]");
+    if (!t) return;
+    if (t.dataset.offline) {
+      offline = !offline;
+      if (offline) { overrides = clone(live.w); pendingWire = null; }
+      refresh();
+      return toast(offline ? "Offline: showing the cached live wiring, read-only." : "Back online.");
+    }
+    if (t.dataset.apply) return apply();
+    if (t.dataset.discard) { overrides = clone(live.w); pendingConfirm = false; select({}); refresh(); return toast("Draft discarded."); }
+    if (t.dataset.rollback) { const prev = live.history[live.history.length - 1]; overrides = clone(prev.w); refresh(); toast(`v${prev.version} loaded as a draft. Apply to roll back.`); }
+  });
+
+  document.addEventListener("keydown", (ev) => {
+    if ((ev.key === "Delete" || ev.key === "Backspace") && selEdge && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) { ev.preventDefault(); cutEdge(selEdge); }
+    if (ev.key === "Escape") select({});
+  });
+
+  $(".side").addEventListener("click", (ev) => {
+    const t = ev.target.closest("[data-cut],[data-connect],[data-reset-order],[data-port],[data-node],[data-plug],[data-move],[data-confirm-wire],[data-cancel-wire]");
+    if (!t) return;
+    if (t.dataset.confirmWire) { const w = pendingWire; pendingWire = null; return connect(w.outK, w.inK, true); }
+    if (t.dataset.cancelWire) { pendingWire = null; return select({}); }
+    if (t.dataset.move) { const [k, from, d] = t.dataset.move.split("|"); return moveSeat(k, from, Number(d)); }
+    if (t.dataset.plug) return togglePlug(t.dataset.plug);
+    if (t.dataset.cut) return cutEdge(t.dataset.cut);
+    if (t.dataset.connect) { const [a, b] = t.dataset.connect.split("|"); return connect(a, b); }
+    if (t.dataset.resetOrder) { delete overrides.order[t.dataset.resetOrder]; refresh(); return toast("Seats follow the default order again."); }
+    if (t.dataset.port) { const i = t.dataset.port.indexOf("|"); return select({ port: { dir: t.dataset.port.slice(0, i), k: t.dataset.port.slice(i + 1) } }); }
+    if (t.dataset.node && byId[t.dataset.node]) select({ node: t.dataset.node });
+  });
+
+  document.querySelectorAll(".chip[data-kind]").forEach((c) => c.addEventListener("click", () => {
+    const k = c.dataset.kind; kindsOn[k] = !kindsOn[k]; c.setAttribute("aria-pressed", String(kindsOn[k])); drawWires();
+  }));
+  const sel = $("#protoFilter");
+  Object.keys(PROTOS).sort().forEach((p) => { const o = document.createElement("option"); o.value = p; o.textContent = `${p} (${kindOf(p)})`; sel.appendChild(o); });
+  sel.addEventListener("change", () => { protoFilter = sel.value; drawWires(); });
+
+  // ---------- mapping table ----------
+  function drawMapping() {
+    const r = resolve();
+    const rank = (p) => ["service", "slot", "event"].indexOf(kindOf(p));
+    const rows = Object.keys(PROTOS).filter((p) => p.startsWith("lm/")).sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+    $("#mapBody").innerHTML = rows.map((p) => {
+      const k = kindOf(p);
+      const today = TODAY[p] || `point "${short(p)}"`;
+      const es = r.edges.filter((e) => e.proto === p && byId[e.fromN].org === "base" && byId[e.toN].org === "base");
+      const froms = [...new Set(es.map((e) => e.fromN))], tos = [...new Set(es.map((e) => e.toN))];
+      const f = (a) => a.length > 3 ? `${a.slice(0, 3).join(", ")} +${a.length - 3}` : a.join(", ");
+      const rel = es.length ? `${f(froms)} → ${f(tos)}` : `<span class="muted">no base contributor → ${esc(PROTOS[p][1])}</span>`;
+      return `<tr><td><code>${esc(today)}</code></td><td><code>${esc(p)}@1</code></td><td><span class="pill ${k}">${k}</span></td><td>${rel}</td></tr>`;
+    }).join("");
+  }
+
+  // ---------- boot ----------
+  buildNodes();
+  topLayer = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  topLayer.setAttribute("class", "wires top");
+  world.appendChild(topLayer);
+  for (const l of [wires, topLayer]) { l.setAttribute("width", "2000"); l.setAttribute("height", "2000"); }
+  R = resolve(); sizeRows();
+  layout();
+  refresh();
+  drawMapping();
+  fit();
+  let rt = 0;
+  window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(fit, 120); });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { refresh(); fit(); });
+})();
+</script>

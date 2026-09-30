@@ -20,7 +20,7 @@
 
 import type { ColorScheme, ColorSchemePreference, Kernel, Unsubscribe } from "@kernel";
 
-import type { Theme } from "@protocols/lm/themes.theme";
+import type { Theme } from "./api.js";
 
 import { ThemeApplier, themeFor, type AppliedThemes, type ThemeSelection } from "./apply.js";
 import { preferenceStore, type PreferenceStore } from "./prefs.js";

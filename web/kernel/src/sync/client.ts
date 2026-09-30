@@ -60,10 +60,14 @@ export interface SyncClientOptions {
    */
   readonly onConnected?: () => void;
   /**
-   * The server's live wiring version: from every `welcome` (so a client that was offline
-   * catches up) and from every `wiring.applied` (PLUGIN-PROTOCOLS §6c).
+   * The plugin set changed on the server (`plugins.changed`, or a `welcome` whose
+   * `plugins_version` differs from the one this page booted with). Default: reload the
+   * page — there is no hot reload (`@kernel` 3.0). The first version seen is the booted
+   * one unless {@link pluginsVersion} names it.
    */
-  readonly onWiringVersion?: (version: number) => void;
+  readonly onPluginsChanged?: (version: number | string) => void;
+  /** The plugin-set version this page booted with, when the plugin list said. */
+  readonly pluginsVersion?: number | string;
   /** Injectable clock for tests: schedules the reconnect attempt. */
   readonly setTimeoutImpl?: (callback: () => void, ms: number) => unknown;
 }
@@ -88,11 +92,16 @@ export class SyncClient {
   #attemptOpened = false;
   #state: FeedState = { status: "offline", safeSeq: 0, headSeq: 0, pending: 0 };
   #unsubscribeStore: (() => void) | undefined;
+  /** The plugin-set version this page runs; `undefined` until the list or a `welcome` says. */
+  #pluginsVersion: number | string | undefined;
+  /** A change was reported once; later frames wait for the reload rather than repeat it. */
+  #pluginsChangeReported = false;
 
   constructor(
     readonly store: ProjectionStore,
     private readonly options: SyncClientOptions = {},
   ) {
+    this.#pluginsVersion = options.pluginsVersion;
     this.transport = new SyncTransport(options.transport, {
       onControl: (message) => this.#enqueue(message),
       onBinary: (frame) => this.docs.onBinary(frame),
@@ -205,6 +214,22 @@ export class SyncClient {
   }
 
   /** Control messages, one at a time, in arrival order. */
+  /**
+   * A plugin-set version from the server. The first one is the booted version (unless the
+   * plugin list named it); a different one means the plugin set changed and the page
+   * reloads (`@kernel` 3.0: no hot reload).
+   */
+  #pluginsVersionSeen(version: number | string): void {
+    if (this.#pluginsVersion === undefined) {
+      this.#pluginsVersion = version;
+      return;
+    }
+    if (version === this.#pluginsVersion || this.#pluginsChangeReported) return;
+    this.#pluginsChangeReported = true;
+    if (this.options.onPluginsChanged) this.options.onPluginsChanged(version);
+    else globalThis.location?.reload();
+  }
+
   #enqueue(message: ServerControl): void {
     this.#queue = this.#queue
       .then(() => this.#handle(message))
@@ -246,11 +271,11 @@ export class SyncClient {
         this.docs.resubscribeAll();
         await this.feed.start(message);
         this.options.onConnected?.();
-        if (typeof message.wiring_version === "number") this.options.onWiringVersion?.(message.wiring_version);
+        if (message.plugins_version !== undefined) this.#pluginsVersionSeen(message.plugins_version);
         return;
       }
-      case "wiring.applied":
-        this.options.onWiringVersion?.(message.version);
+      case "plugins.changed":
+        this.#pluginsVersionSeen(message.version);
         return;
       case "feed.batch":
         await this.feed.onBatch(message);

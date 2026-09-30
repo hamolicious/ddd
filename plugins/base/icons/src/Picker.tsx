@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from "react";
 
-import type { IconPickerProps } from "@protocols/lm/icons";
+import type { IconPickerProps } from "./api.js";
 
 import { loadIndex } from "./data.js";
 import { Icon } from "./Icon.js";

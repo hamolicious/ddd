@@ -1,0 +1,122 @@
+{
+  "capability": "folder",
+  "note": "One directory the user chose on this device (BRIDGE.md §4.5). Every path is relative to it and `/`-separated; the shell refuses absolute paths and `..` with `invalid` before touching the disk. Changes made outside the page are pushed as the `lm-folder-changed` window event (window_shell.json `folderChanged`).",
+  "cases": [
+    {
+      "name": "nothing chosen yet",
+      "method": "current",
+      "request": { "v": 1, "id": "1", "capability": "folder", "method": "current", "params": {} },
+      "response": { "v": 1, "id": "1", "ok": true, "result": null }
+    },
+    {
+      "name": "choose a folder",
+      "note": "`label` is for display only; the page never builds a path from it.",
+      "method": "choose",
+      "request": { "v": 1, "id": "2", "capability": "folder", "method": "choose", "params": {} },
+      "response": { "v": 1, "id": "2", "ok": true, "result": { "label": "/storage/emulated/0/Notes" } }
+    },
+    {
+      "name": "the picker was dismissed",
+      "method": "choose",
+      "request": { "v": 1, "id": "3", "capability": "folder", "method": "choose", "params": {} },
+      "response": {
+        "v": 1,
+        "id": "3",
+        "ok": false,
+        "error": { "code": "cancelled", "message": "no folder was chosen" }
+      }
+    },
+    {
+      "name": "storage permission refused",
+      "method": "choose",
+      "request": { "v": 1, "id": "4", "capability": "folder", "method": "choose", "params": {} },
+      "response": {
+        "v": 1,
+        "id": "4",
+        "ok": false,
+        "error": { "code": "denied", "message": "all-files access was not granted" }
+      }
+    },
+    {
+      "name": "the chosen folder",
+      "method": "current",
+      "request": { "v": 1, "id": "5", "capability": "folder", "method": "current", "params": {} },
+      "response": { "v": 1, "id": "5", "ok": true, "result": { "label": "/storage/emulated/0/Notes" } }
+    },
+    {
+      "name": "list everything below the root",
+      "note": "Directories are listed too, so an empty one the user made is visible. `mtimeMs` is compared for equality only.",
+      "method": "list",
+      "request": { "v": 1, "id": "6", "capability": "folder", "method": "list", "params": {} },
+      "response": {
+        "v": 1,
+        "id": "6",
+        "ok": true,
+        "result": [
+          { "path": "Home", "kind": "dir", "size": 0, "mtimeMs": 1790000000000 },
+          { "path": "Home/Home.md", "kind": "file", "size": 12, "mtimeMs": 1790000000000 },
+          { "path": "Home/photo.png", "kind": "file", "size": 2, "mtimeMs": 1790000000000 }
+        ]
+      }
+    },
+    {
+      "name": "read a file as base64",
+      "method": "read",
+      "request": { "v": 1, "id": "7", "capability": "folder", "method": "read", "params": { "path": "Home/Home.md" } },
+      "response": { "v": 1, "id": "7", "ok": true, "result": { "data": "IyBIb21lCgpoaQo=", "mtimeMs": 1790000000000 } },
+      "bytes": { "base64": "IyBIb21lCgpoaQo=", "utf8": "# Home\n\nhi\n" }
+    },
+    {
+      "name": "write a file, creating its directory",
+      "method": "write",
+      "request": {
+        "v": 1,
+        "id": "8",
+        "capability": "folder",
+        "method": "write",
+        "params": { "path": "Work/Plans.md", "data": "IyBQbGFucwo=" }
+      },
+      "response": { "v": 1, "id": "8", "ok": true, "result": { "mtimeMs": 1790000000500 } }
+    },
+    {
+      "name": "move a file",
+      "method": "move",
+      "request": {
+        "v": 1,
+        "id": "9",
+        "capability": "folder",
+        "method": "move",
+        "params": { "from": "Work/Plans.md", "to": "Home/Plans.md" }
+      },
+      "response": { "v": 1, "id": "9", "ok": true, "result": null }
+    },
+    {
+      "name": "remove a file",
+      "method": "remove",
+      "request": { "v": 1, "id": "10", "capability": "folder", "method": "remove", "params": { "path": "Home/Plans.md" } },
+      "response": { "v": 1, "id": "10", "ok": true, "result": null }
+    },
+    {
+      "name": "a path that climbs out is refused",
+      "method": "read",
+      "request": { "v": 1, "id": "11", "capability": "folder", "method": "read", "params": { "path": "../secrets.txt" } },
+      "response": {
+        "v": 1,
+        "id": "11",
+        "ok": false,
+        "error": { "code": "invalid", "message": "path climbs out of the folder" }
+      }
+    },
+    {
+      "name": "file access before a folder is chosen",
+      "method": "list",
+      "request": { "v": 1, "id": "12", "capability": "folder", "method": "list", "params": {} },
+      "response": {
+        "v": 1,
+        "id": "12",
+        "ok": false,
+        "error": { "code": "unsupported", "message": "no folder is chosen" }
+      }
+    }
+  ]
+}

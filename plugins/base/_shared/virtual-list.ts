@@ -96,6 +96,14 @@ export interface VirtualListOptions {
   readonly estimate: number;
   /** Rows drawn beyond each edge of the viewport; 6 by default. */
   readonly overscan?: number;
+  /**
+   * `false` for a list that scrolls in a box of its own (a results table embedded in a
+   * note): the rows in view are the box's, whether or not the page has scrolled the box
+   * partly off screen. The list only hears its own box scroll, so clipping to the window
+   * as well would leave it drawing the rows of a page position long since scrolled away.
+   * Default `true`.
+   */
+  readonly clipToWindow?: boolean;
 }
 
 export interface VirtualList {
@@ -126,10 +134,11 @@ function scrollParentOf(element: HTMLElement): HTMLElement | undefined {
 }
 
 /** The part of the screen `list` can be seen through, in the list's own pixels. */
-function viewportOf(list: HTMLElement, scroller: HTMLElement | undefined): Viewport {
+function viewportOf(list: HTMLElement, scroller: HTMLElement | undefined, clipToWindow = true): Viewport {
   const listTop = list.getBoundingClientRect().top;
-  let top = 0;
-  let bottom = window.innerHeight;
+  const window_ = scroller && !clipToWindow ? undefined : window;
+  let top = window_ ? 0 : -Infinity;
+  let bottom = window_ ? window_.innerHeight : Infinity;
   if (scroller) {
     const box = scroller.getBoundingClientRect();
     top = Math.max(top, box.top + scroller.clientTop);
@@ -144,9 +153,31 @@ function scrollBy(scroller: HTMLElement | undefined, delta: number): void {
   else window.scrollBy(0, delta);
 }
 
-export function useVirtualList({ count, keyOf, estimate, overscan = 6 }: VirtualListOptions): VirtualList {
+export function useVirtualList({
+  count,
+  keyOf,
+  estimate,
+  overscan = 6,
+  clipToWindow = true,
+}: VirtualListOptions): VirtualList {
   const [list, setList] = useState<HTMLElement | null>(null);
   const scroller = useRef<HTMLElement | undefined>(undefined);
+  const [rebind, setRebind] = useState(0);
+
+  /**
+   * The nearest scrolling ancestor, read each time it is used rather than once at mount: a
+   * plugin's stylesheet can arrive after its list mounts, and until it does the box meant
+   * to scroll does not, so the first answer would be an outer one (the sidebar) for good.
+   */
+  const resolveScroller = useCallback((): HTMLElement | undefined => {
+    if (!list) return scroller.current;
+    const next = scrollParentOf(list);
+    if (next !== scroller.current) {
+      scroller.current = next;
+      setRebind((value) => value + 1);
+    }
+    return next;
+  }, [list]);
 
   // Measured heights, by key, and their running mean for the rows not measured yet.
   const sizes = useRef(new Map<string, number>());
@@ -167,27 +198,26 @@ export function useVirtualList({ count, keyOf, estimate, overscan = 6 }: Virtual
   /** Re-read the viewport and redraw, only if the rows to draw changed. */
   const update = useCallback(() => {
     if (!list) return;
-    const view = viewportOf(list, scroller.current);
+    const view = viewportOf(list, resolveScroller(), clipToWindow);
     const next = rowSpan(latest.current.starts, view.top, view.bottom, latest.current.overscan);
     setSpan((current) => (current.first === next.first && current.end === next.end ? current : next));
-  }, [list]);
+  }, [list, clipToWindow, resolveScroller]);
 
-  // Scrolling and resizing move the viewport.
+  // Scrolling and resizing move the viewport. Bound again when the scroll parent changes.
   useEffect(() => {
     if (!list) return undefined;
-    scroller.current = scrollParentOf(list);
-    const target: HTMLElement | Window = scroller.current ?? window;
+    const target: HTMLElement | Window = resolveScroller() ?? window;
     target.addEventListener("scroll", update, { passive: true });
     window.addEventListener("resize", update);
     const resized = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(update);
-    if (scroller.current) resized?.observe(scroller.current);
+    if (target !== window) resized?.observe(target as HTMLElement);
     update();
     return () => {
       target.removeEventListener("scroll", update);
       window.removeEventListener("resize", update);
       resized?.disconnect();
     };
-  }, [list, update]);
+  }, [list, update, resolveScroller, rebind]);
 
   // Every drawn row is measured; a row whose height changed moves the ones after it.
   const keys = useRef(new WeakMap<Element, string>());
@@ -249,10 +279,11 @@ export function useVirtualList({ count, keyOf, estimate, overscan = 6 }: Virtual
       const row = list.querySelector<HTMLElement>(`:scope > [data-virtual-index="${pending.current}"]`);
       if (row) {
         pending.current = undefined;
-        const view = viewportOf(list, scroller.current);
+        const outer = resolveScroller();
+        const view = viewportOf(list, outer, clipToWindow);
         const box = row.getBoundingClientRect();
         const top = box.top - list.getBoundingClientRect().top;
-        scrollBy(scroller.current, scrollDelta(top, top + box.height, view.top, view.bottom));
+        scrollBy(outer, scrollDelta(top, top + box.height, view.top, view.bottom));
       }
     }
   });
@@ -261,13 +292,14 @@ export function useVirtualList({ count, keyOf, estimate, overscan = 6 }: Virtual
     (index: number) => {
       const { starts: current } = latest.current;
       if (!list || index < 0 || index >= current.length - 1) return;
-      const view = viewportOf(list, scroller.current);
-      scrollBy(scroller.current, scrollDelta(current[index] as number, current[index + 1] as number, view.top, view.bottom));
+      const outer = resolveScroller();
+      const view = viewportOf(list, outer, clipToWindow);
+      scrollBy(outer, scrollDelta(current[index] as number, current[index + 1] as number, view.top, view.bottom));
       // Where it lands was a guess if the row was never drawn: correct it once it is.
       pending.current = index;
       update();
     },
-    [list, update],
+    [list, update, clipToWindow, resolveScroller],
   );
 
   const first = Math.min(span.first, count);

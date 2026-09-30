@@ -14,8 +14,8 @@
 
 import * as Y from "yjs";
 
-import type { EditorInsertion } from "@protocols/lm/editor.paste";
-import type { TextMark } from "@protocols/lm/text.surface";
+import type { EditorInsertion } from "plugin:editor";
+import type { TextMark } from "plugin:editor";
 
 /**
  * Origin of the edits made through these. Not one `Y.UndoManager` tracks, so Mod-Z after

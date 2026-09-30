@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { SyntaxLanguage } from "@protocols/lm/syntax.language";
+import type { SyntaxLanguage } from "./api.js";
 
 import { indexLanguages } from "./registry.js";
 

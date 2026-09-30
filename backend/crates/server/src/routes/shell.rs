@@ -114,7 +114,7 @@ use crate::error::{AppError, AppResult};
 use crate::plugins;
 use crate::state::AppState;
 
-use super::statics::{ImportMap, render_index_body, runtime_imports};
+use super::statics::{ImportMap, page_imports, render_index_body};
 
 /// The bridge version this server's bundle requires of a shell, when the bundle does not
 /// say (SPEC §7: "the bundle declares a minimum bridge version").
@@ -662,9 +662,10 @@ async fn synthesize(state: &AppState, dist: &Path) -> AppResult<BTreeMap<String,
         ))
     })?;
 
-    // The same map `/importmap.json` serves, rendered the same way (pretty, `imports`
-    // only), because the shell's webview loads the same modules the browser does.
-    let imports = runtime_imports(state);
+    // The same map `/importmap.json` serves — the runtime layer and the `plugin:<id>`
+    // entries — rendered the same way (pretty, `imports` only), because the shell's webview
+    // loads the same modules the browser does.
+    let imports = page_imports(state, true);
     let importmap = serde_json::to_vec_pretty(&ImportMap {
         imports: imports.clone(),
     })

@@ -6,9 +6,9 @@
  * The rules that matter:
  *
  * - **Per-user keybindings win.** Plugins offer *suggested defaults*
- *   (`lm/keybindings.default`); the user's configuration — a `kernel.settings` value on
+ *   (`addKeybinding`); the user's configuration — a `kernel.settings` value on
  *   this plugin — overrides them.
- * - **The lower seat wins on a conflict, and conflicts are listed.** Two plugins
+ * - **The first added wins on a conflict, and conflicts are listed.** Two plugins
  *   claiming `Mod+K` is not resolved silently; the settings section shows both so the
  *   user can rebind one.
  * - **`Mod` is the portable modifier**: Cmd on Apple platforms, Ctrl elsewhere. A
@@ -25,18 +25,20 @@
  * pending-prefix state with a timeout — the only stateful part, and it resets on any
  * key that continues nothing.
  *
- * **The palette renders as an `lm/shell.overlay`.** `shell-ui` owns the single
+ * **The palette renders as a shell overlay.** `shell-ui` owns the single
  * `kernel.ui.mount` (SPEC §6.4), so a plugin needing a persistent React presence
- * offers an always-mounted overlay. There is no button in the top bar: Mod+K (or
+ * adds an always-mounted overlay (`addOverlay`). There is no button in the top bar: Mod+K (or
  * whatever it is rebound to) is the way in.
  *
  * **A command that `takes` documents is not the palette's.** It needs ids to act on, and
  * neither the palette nor a keystroke has any; the document list's Actions button runs
- * it, through the `lm/commands` service this plugin serves. The palette, the keybindings
+ * it, through the `run` this plugin exports. The palette, the keybindings
  * table and the dispatcher all leave it out.
  *
- * **Icons are names, drawn through `lm/icons`** when something serves it. Without it the
- * palette simply has no icons.
+ * **Icons are names, drawn through `plugin:icons`** when it is installed (an optional
+ * dependency). Without it the palette simply has no icons.
+ *
+ * **"Open settings" lives here**, with its Mod+, default: it calls `settings`' `open`.
  *
  * **Settings may be unavailable.** `kernel.settings` is document-backed (SPEC §6.4), so a
  * replaced kernel or a future contract can throw from it. Letting that escape
@@ -51,7 +53,10 @@ import { useEffect, useState } from "react";
 import type { ReactElement } from "react";
 
 import type { Kernel, Unsubscribe } from "@kernel";
+import { addSection, open as openSettings } from "plugin:settings";
+import { addOverlay } from "plugin:shell-ui";
 
+import { commandRegistry, keybindingRegistry, type Command, type KeybindingDefault } from "./api.js";
 import {
   parseOverrides,
   resolveBindings,
@@ -69,12 +74,9 @@ import {
 } from "./keys.js";
 import { Palette } from "./Palette.js";
 
-import type { Command } from "@protocols/lm/commands.command";
-import type { Commands } from "@protocols/lm/commands";
-import type { Icons } from "@protocols/lm/icons";
-import type { KeybindingDefault } from "@protocols/lm/keybindings.default";
-import type { SettingsSection } from "@protocols/lm/settings.section";
-import type { ShellOverlay } from "@protocols/lm/shell.overlay";
+export type { Command, Commands, KeybindingDefault } from "./api.js";
+
+type IconsModule = typeof import("plugin:icons");
 
 /** How long a sequence prefix (the `g` of `g d`) stays pending. */
 const SEQUENCE_TIMEOUT_MS = 1_500;
@@ -89,6 +91,7 @@ const OVERRIDES_KEY = "keybindings";
  */
 const teardown: (() => void)[] = [];
 
+/** Everything the functions below export, as one object. */
 export interface CommandsApi {
   /** Run a command by id. Throws when it is unknown — a typo must not be silent. */
   run(id: string, argument?: unknown): Promise<void>;
@@ -103,13 +106,89 @@ export interface CommandsApi {
   onPaletteToggle(listener: (open: boolean) => void): Unsubscribe;
 }
 
-export default function activate(kernel: Kernel): CommandsApi {
-  // Both hosts hand their items over in seat order, which is what "first wins" means
-  // below; the protocol packages carry the shapes and the duplicate keys.
-  const commands = kernel.ports.collect<Command>("commands");
-  const keybindings = kernel.ports.collect<KeybindingDefault>("keys");
-  const icons = (): Pick<Icons, "Icon"> | undefined =>
-    kernel.ports.bound("icons") ? kernel.ports.use<Pick<Icons, "Icon">>("icons") : undefined;
+// ---------------------------------------------------------------------------
+// Contribution points
+// ---------------------------------------------------------------------------
+
+/** Add a command (or several). Returns the function that takes it out again. */
+export const addCommand: (items: Command | readonly Command[]) => () => void = commandRegistry.add;
+/** Suggest a default key for a command (or several). Returns the function that takes it out again. */
+export const addKeybinding: (items: KeybindingDefault | readonly KeybindingDefault[]) => () => void =
+  keybindingRegistry.add;
+
+// ---------------------------------------------------------------------------
+// Module state: readable before `activate`, filled in by it
+// ---------------------------------------------------------------------------
+
+let resolved: ResolvedBindings = resolveBindings([], new Map());
+let paletteOpen = false;
+let paletteQuery = "";
+const paletteListeners = new Set<(open: boolean) => void>();
+
+// ---------------------------------------------------------------------------
+// The service
+// ---------------------------------------------------------------------------
+
+/** Run a command by id. Rejects for an unknown id; does nothing when its `when()` says no. */
+export async function run(id: string, argument?: unknown): Promise<void> {
+  const command = commandRegistry.get().find((entry) => entry.id === id);
+  if (!command) throw new Error(`unknown command: ${id}`);
+  if (command.when && !command.when()) return;
+  await command.run(argument);
+}
+
+/** Every command enabled right now (`when()` honoured), in the order they were added. */
+export function list(): readonly Command[] {
+  return commandRegistry.get().filter((command) => !command.when || command.when());
+}
+
+/** Open the command palette, optionally with a query already typed. */
+export function openPalette(initialQuery = ""): void {
+  paletteQuery = initialQuery;
+  paletteOpen = true;
+  for (const listener of [...paletteListeners]) listener(true);
+}
+
+export function closePalette(): void {
+  if (!paletteOpen) return;
+  paletteOpen = false;
+  for (const listener of [...paletteListeners]) listener(false);
+}
+
+/** The effective binding for a command: user override, else the first default. */
+export function binding(commandId: string): string | undefined {
+  return resolved.byCommand.get(commandId);
+}
+
+/** Conflicting defaults, for the settings section. */
+export function conflicts(): readonly { readonly keys: string; readonly commands: readonly string[] }[] {
+  return resolved.conflicts;
+}
+
+/** Called with `true`/`false` whenever the palette opens or closes. */
+export function onPaletteToggle(listener: (open: boolean) => void): Unsubscribe {
+  paletteListeners.add(listener);
+  return () => {
+    paletteListeners.delete(listener);
+  };
+}
+
+const api: CommandsApi = { run, list, openPalette, closePalette, binding, conflicts, onPaletteToggle };
+
+export default function activate(kernel: Kernel): void {
+  // Both registries hand their items over in the order they were added, which is what
+  // "first wins" means below; the registries carry the shapes and the duplicate keys.
+  const commands = commandRegistry;
+  const keybindings = keybindingRegistry;
+  // Optional: without `icons` the palette has no icons. Nothing renders the palette
+  // before a keystroke, so the lookup need not hold up activation.
+  let icons: IconsModule | undefined;
+  void kernel.plugins
+    .optional<IconsModule>("icons")
+    .then((module) => {
+      icons = module;
+    })
+    .catch((cause: unknown) => kernel.log.warn("icons unavailable; the palette shows none", cause));
 
   /** What the palette and keys can run: everything that needs no documents handed to it. */
   const runnable = (): readonly Command[] => api.list().filter((command) => command.takes === undefined);
@@ -176,7 +255,7 @@ export default function activate(kernel: Kernel): CommandsApi {
   // ---------------------------------------------------------------------------
 
   let overrides = readOverrides();
-  let resolved: ResolvedBindings = resolveBindings(keybindings.get(), overrides);
+  resolved = resolveBindings(keybindings.get(), overrides);
   const changeListeners = new Set<() => void>();
 
   const announceChange = (): void => {
@@ -199,14 +278,6 @@ export default function activate(kernel: Kernel): CommandsApi {
       }),
     undefined,
   );
-
-  // ---------------------------------------------------------------------------
-  // Palette state
-  // ---------------------------------------------------------------------------
-
-  let paletteOpen = false;
-  let paletteQuery = "";
-  const paletteListeners = new Set<(open: boolean) => void>();
 
   // ---------------------------------------------------------------------------
   // Dispatch
@@ -270,7 +341,7 @@ export default function activate(kernel: Kernel): CommandsApi {
   // ---------------------------------------------------------------------------
 
   // The palette's own commands, so they appear in the palette and can be rebound.
-  kernel.ports.offer<Command>("own", [
+  addCommand([
     {
       id: "commands.openPalette",
       title: "Show all commands",
@@ -284,14 +355,21 @@ export default function activate(kernel: Kernel): CommandsApi {
       category: "Commands",
       icon: "keyboard",
       run: () => {
-        location.hash = "/settings";
+        openSettings("commands.keybindings");
       },
     },
+    {
+      id: "settings.open",
+      title: "Open settings",
+      category: "Settings",
+      icon: "settings",
+      run: () => openSettings(),
+    },
   ]);
-  kernel.ports.offer<KeybindingDefault>("own-keys", {
-    command: "commands.openPalette",
-    keys: "Mod+K",
-  });
+  addKeybinding([
+    { command: "commands.openPalette", keys: "Mod+K" },
+    { command: "settings.open", keys: "Mod+," },
+  ]);
 
   /** Re-render on any host/override change. */
   const useBindings = (): ResolvedBindings => {
@@ -310,7 +388,7 @@ export default function activate(kernel: Kernel): CommandsApi {
     const bindings = useBindings();
     const [open, setOpen] = useState(paletteOpen);
     useEffect(() => api.onPaletteToggle(setOpen), []);
-    const Icon = icons()?.Icon;
+    const Icon = icons?.Icon;
 
     return (
       <>
@@ -323,7 +401,7 @@ export default function activate(kernel: Kernel): CommandsApi {
             conflictCount={bindings.conflicts.length}
             onShowConflicts={() => {
               api.closePalette();
-              location.hash = "/settings";
+              openSettings("commands.keybindings");
             }}
             onRun={(command) => {
               void api.run(command.id).catch((cause: unknown) => {
@@ -337,12 +415,12 @@ export default function activate(kernel: Kernel): CommandsApi {
     );
   };
 
-  kernel.ports.offer<ShellOverlay>("palette", {
+  addOverlay({
     id: "commands.palette",
     component: PaletteHost,
   });
 
-  kernel.ports.offer<SettingsSection>("settings", {
+  addSection({
     id: "commands.keybindings",
     title: "Keybindings",
     order: 200,
@@ -381,46 +459,11 @@ export default function activate(kernel: Kernel): CommandsApi {
       writable: () => settingsUsable,
     }),
   });
-
-  // ---------------------------------------------------------------------------
-  // API
-  // ---------------------------------------------------------------------------
-
-  const api: CommandsApi = {
-    run: async (id, argument) => {
-      const command = commands.get().find((entry) => entry.id === id);
-      if (!command) throw new Error(`unknown command: ${id}`);
-      if (command.when && !command.when()) return;
-      await command.run(argument);
-    },
-    list: () => commands.get().filter((command) => !command.when || command.when()),
-    openPalette: (initialQuery = "") => {
-      paletteQuery = initialQuery;
-      paletteOpen = true;
-      for (const listener of [...paletteListeners]) listener(true);
-    },
-    closePalette: () => {
-      if (!paletteOpen) return;
-      paletteOpen = false;
-      for (const listener of [...paletteListeners]) listener(false);
-    },
-    binding: (commandId) => resolved.byCommand.get(commandId),
-    conflicts: () => resolved.conflicts,
-    onPaletteToggle: (listener) => {
-      paletteListeners.add(listener);
-      return () => {
-        paletteListeners.delete(listener);
-      };
-    },
-  };
-
-  kernel.ports.serve<Commands>("api", api);
-  return api;
 }
 
 /**
  * Symmetry with `activate` (SPEC §6.4): activation is reload-only, so this runs only on
- * teardown (`?safe=bare`). It removes the global chord listener — the offers
+ * teardown (`?safe=bare`). It removes the global chord listener — the registered items
  * themselves are withdrawn by the kernel, not by this plugin.
  */
 export function deactivate(): void {

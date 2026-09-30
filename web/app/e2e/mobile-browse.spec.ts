@@ -1,8 +1,8 @@
 /**
  * Phone-width regressions for the four **browse and find** surfaces: the document list
- * and Trash (`doc-list`), the folder tree and a folder's contents (`folders`), the
- * navbar search box and the results page (`search`), and the command palette plus the
- * keybindings settings section (`commands`).
+ * (`table`'s results table under `search`'s controls) and Trash (`doc-list`), the folder
+ * tree (`folders`), searching the list, and the command palette plus the keybindings
+ * settings section (`commands`).
  *
  * Each test asserts two things, and the pair is the point:
  *
@@ -30,6 +30,7 @@ import {
   createDocument,
   docRows,
   modeSwitch,
+  openDocument,
   runCommand,
   showSidebar,
   signIn,
@@ -74,7 +75,27 @@ async function edges(control: Locator): Promise<{ right: number; bottom: number 
   return { right: (box?.x ?? 0) + (box?.width ?? 0), bottom: (box?.y ?? 0) + (box?.height ?? 0) };
 }
 
-/** A row of documents to browse, filed so the folder tree has something to draw. */
+/**
+ * Four notes, each listed in its parent's `%%% folders` section: a four-deep path in the
+ * folder tree. Returns the deepest.
+ */
+async function seedPath(
+  request: import("@playwright/test").APIRequestContext,
+  baseURL: string,
+): Promise<string> {
+  const leaf = await createDocument(request, baseURL, "---\ntitle: Phone path leaf\n---\n\nbody\n");
+  let child = leaf;
+  for (const title of ["Phone path third", "Phone path second", "Phone path root"]) {
+    child = await createDocument(
+      request,
+      baseURL,
+      `---\ntitle: ${title}\n---\n\nbody\n\n%%% folders\nchildren:\n  - ${child}\n%%%\n`,
+    );
+  }
+  return leaf;
+}
+
+/** A row of documents to browse. */
 async function seed(
   request: import("@playwright/test").APIRequestContext,
   baseURL: string,
@@ -112,7 +133,7 @@ test.describe("browse and find, at phone width", () => {
     );
 
     // The most-used control in the product, measured 22.5 px tall before this.
-    const open = rows.first().locator(".doclist-open");
+    const open = rows.first().locator(".search-open");
     await tappable(open, "the document title button");
 
     // A long title truncates rather than widening the row: one line, and no wider than
@@ -137,7 +158,7 @@ test.describe("browse and find, at phone width", () => {
 
     // And the row still opens the document — the whole reason the target was widened.
     await filters.click();
-    await rows.first().locator(".doclist-open").click();
+    await rows.first().locator(".search-open").click();
     await expect(modeSwitch(page)).toBeVisible();
   });
 
@@ -171,8 +192,11 @@ test.describe("browse and find, at phone width", () => {
     request,
     baseURL,
   }) => {
-    await seed(request, baseURL as string);
+    const deepest = await seedPath(request, baseURL as string);
     await signIn(page, ADMIN);
+    // The tree reveals the open note, so the path is unfolded and on screen however many
+    // notes the specs before this one left at the root (the tree is virtual).
+    await openDocument(page, deepest);
     await showSidebar(page);
 
     const tree = page.getByRole("tree", { name: /folders/i });
@@ -195,29 +219,27 @@ test.describe("browse and find, at phone width", () => {
     const twistyBox = await twisty.boundingBox();
     expect(twistyBox?.width ?? 0).toBeGreaterThanOrEqual(44);
 
-    // It expands, which is the interaction. A collapsed root hides its children.
-    const before = await nodes.count();
+    // It folds, which is the interaction. (Counted rows say nothing: the tree is virtual,
+    // and draws a screenful either way.)
+    const label = (await twisty.getAttribute("aria-label")) ?? "";
+    const flipped = label.startsWith("Collapse ") ? label.replace(/^Collapse /, "Expand ") : label.replace(/^Expand /, "Collapse ");
     await twisty.click();
-    await expect(tree.locator(".folders-node")).not.toHaveCount(before);
+    await expect(tree.getByRole("button", { name: flipped, exact: true })).toBeVisible();
     await noHorizontalScroll(page, "the folder tree collapsed");
   });
 
-  test("a folder's contents open from the tree and fit", async ({ page, request, baseURL }) => {
+  test("a note opens from the tree and fits", async ({ page, request, baseURL }) => {
     await seed(request, baseURL as string);
     await signIn(page, ADMIN);
     await showSidebar(page);
 
+    // A folder is a note: its row opens it.
     const tree = page.getByRole("tree", { name: /folders/i });
-    await tree.locator("button.folders-name").first().click();
-    await expect(page.getByRole("heading", { level: 2 }).first()).toBeVisible();
-    await noHorizontalScroll(page, "folder contents");
-
-    const doc = page.locator(".folders-doc").first();
-    if (await doc.count()) {
-      await tappable(doc, "a document row in a folder");
-      await doc.click();
-      await expect(modeSwitch(page)).toBeVisible();
-    }
+    const row = tree.getByRole("treeitem").first();
+    await tappable(row, "a note row in the tree");
+    await row.click();
+    await expect(modeSwitch(page)).toBeVisible();
+    await noHorizontalScroll(page, "a note opened from the tree");
   });
 
   test("search docks at the bottom, widens when focused, and opens a result", async ({
@@ -232,25 +254,25 @@ test.describe("browse and find, at phone width", () => {
     await page.goto("/#/search?q=phoneneedle");
     await expect(page.getByRole("heading", { name: "Documents", level: 2 })).toBeVisible();
     await expect(page).toHaveURL(/#\/\?q=phoneneedle$/);
-    const results = page.locator(".doclist-open");
-    await expect(page.locator(".doclist-snippet").first()).toBeVisible({ timeout: 20_000 });
-    await expect(page.locator(".doclist-snippet mark").first()).toHaveText("phoneneedle");
+    // The title alone: the matched line is a column the View panel adds (`t.cols=match`).
+    const results = page.locator(".search-open");
+    await expect(results.first()).toBeVisible({ timeout: 20_000 });
     await noHorizontalScroll(page, "search results");
 
     // Docked: the toolbar card sits on the bottom edge of the screen, filters opening upwards.
-    const card = page.locator(".doclist-controls");
+    const card = page.locator(".search-controls");
     const box = await card.boundingBox();
     expect(Math.round((box?.y ?? 0) + (box?.height ?? 0))).toBe(PHONE.height);
     await page.getByRole("button", { name: /^Filters/ }).click();
-    const panel = await page.locator(".doclist-filter-panel").boundingBox();
-    const bar = await page.locator(".doclist-toolbar").boundingBox();
+    const panel = await page.locator(".search-filter-panel").boundingBox();
+    const bar = await page.locator(".search-toolbar").boundingBox();
     expect((panel?.y ?? 0) + (panel?.height ?? 0)).toBeLessThanOrEqual((bar?.y ?? 0) + 1);
     // Everything outside the card is dimmed while they are open; a tap there folds them.
-    const scrim = page.locator(".doclist-filter-scrim");
+    const scrim = page.locator(".search-filter-scrim");
     await expect(scrim).toBeVisible();
     await scrim.click({ position: { x: 20, y: 120 } });
     await expect(scrim).toHaveCount(0);
-    await expect(page.locator(".doclist-filter-panel")).toBeHidden();
+    await expect(page.locator(".search-filter-panel")).toBeHidden();
 
     // Focused, the field takes the icons' room; blurred, it gives it back.
     const search = page.getByRole("searchbox", { name: "Search documents" });
@@ -258,7 +280,7 @@ test.describe("browse and find, at phone width", () => {
     await search.focus();
     await expect.poll(async () => (await search.boundingBox())?.width ?? 0).toBeGreaterThan(narrow + 100);
     // Tucked away is out of reach too, not just out of sight.
-    const icons = page.locator(".doclist-toolbar-icons");
+    const icons = page.locator(".search-toolbar-icons");
     await expect(icons).toHaveAttribute("inert", "");
     await expect.poll(async () => (await icons.boundingBox())?.width ?? 0).toBeLessThan(2);
     await search.blur();
@@ -381,7 +403,7 @@ test.describe("the same phone, rotated and at the Android floor", () => {
     const actions = row.getByRole("button", { name: /^Actions for/ });
     await expect(actions).toBeVisible();
     expect((await edges(actions)).right).toBeLessThanOrEqual(360);
-    await tappable(row.locator(".doclist-open"), "the document title button at 360 px");
+    await tappable(row.locator(".search-open"), "the document title button at 360 px");
   });
 
   test("landscape gets the compact palette and reachable folder actions", async ({
@@ -395,11 +417,15 @@ test.describe("the same phone, rotated and at the Android floor", () => {
 
     // `(hover: none)`: above the 640 px width breakpoint, with no pointer that can
     // hover, the row actions used to be `display: none` and unreachable by any means.
+    // A phone has no ⋯ on a row: a long press (a context menu) opens its menu, as a sheet.
     await showSidebar(page);
     const tree = page.getByRole("tree", { name: /folders/i });
-    const action = tree.locator(".folders-actions button").first();
+    await tree.getByRole("treeitem").first().click({ button: "right" });
+    const action = page.getByRole("dialog").getByRole("menuitem", { name: "Rename" });
     await expect(action).toBeVisible();
     await tappable(action, "a folder row action in landscape");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
 
     // And the palette is a sheet measured against 390 px of height, not a 70vh dialog
     // in a viewport that has no 70vh to give.

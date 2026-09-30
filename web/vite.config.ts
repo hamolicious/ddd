@@ -23,6 +23,9 @@ export default defineConfig({
       { find: "@life-manager/core-wasm", replacement: wasmPkg },
       { find: /^@kernel$/, replacement: here("./kernel-api/src/index.ts") },
       { find: /^@kernel\//, replacement: `${here("./kernel/src")}/` },
+      // `plugin:<id>` is a base plugin's public module (`@kernel` 3.0). At runtime the import
+      // map resolves it to the enabled plugin's bundle; under vitest it is the source.
+      { find: /^plugin:(.*)$/, replacement: `${here("../plugins/base")}/$1/src/index.tsx` },
     ],
   },
   server: {
@@ -45,6 +48,7 @@ export default defineConfig({
     environment: "node",
     include: [
       "kernel/src/**/*.test.ts",
+      "kernel-api/src/**/*.test.ts",
       "harness/src/**/*.test.ts",
       // M3: the loader's ordering rules are pure functions and unit-tested.
       "app/src/**/*.test.ts",

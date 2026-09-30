@@ -1,32 +1,15 @@
 {
   "id": "editor",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "name": "Editor",
   "description": "Edit mode: CodeMirror 6 bound to the document's Y.Text.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
-  "kernel": "^2.0",
-  "hot": true,
-  "consumes": {
-    "extensions": {
-      "protocol": "lm/editor.extension@^1.0"
-    },
-    "paste": {
-      "protocol": "lm/editor.paste@^1.0"
-    }
-  },
-  "provides": {
-    "mode": {
-      "protocol": "lm/document.mode@1.0.0",
-      "order": 10
-    },
-    "surface": {
-      "protocol": "lm/text.surface@1.0.0"
-    },
-    "commands": {
-      "protocol": "lm/commands.command@2.0.0"
-    }
+  "kernel": "^3.0",
+  "dependencies": {
+    "commands": "^3.0",
+    "document-surface": "^2.0"
   },
   "peerLibraries": {
     "@codemirror/commands": "^6.0.0",

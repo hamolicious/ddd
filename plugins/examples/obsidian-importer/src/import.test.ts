@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Kernel, SectionLineEdit } from "@kernel";
 
 import { setFrontmatterValue, spliceSection } from "../../../../web/kernel/src/runtime/splice.js";
-import { importVault, prepareAttachmentDocument } from "./import.js";
+import { importVault, prepareAttachmentDocument, type ImportServices } from "./import.js";
 
 const kernel = {
   pluginId: "obsidian-importer",
@@ -55,7 +55,6 @@ describe("Obsidian attachment wrappers", () => {
     }));
     const importingKernel = {
       ...kernel,
-      ports: { bound: () => false, use: () => ({ upload }) },
       documents: {
         ...kernel.documents,
         query: async ({ offset }: { readonly offset: number }) => ({
@@ -92,8 +91,9 @@ describe("Obsidian attachment wrappers", () => {
       skippedFiles: 0,
     };
 
-    const first = await importVault(importingKernel, "Retry Vault", archive, () => undefined);
-    const second = await importVault(importingKernel, "Retry Vault", archive, () => undefined);
+    const services = { attachments: { upload } } as unknown as ImportServices;
+    const first = await importVault(importingKernel, services, "Retry Vault", archive, () => undefined);
+    const second = await importVault(importingKernel, services, "Retry Vault", archive, () => undefined);
 
     expect(first).toMatchObject({ attachmentsImported: 1, attachmentsAlreadyImported: 0, failed: [] });
     expect(second).toMatchObject({ attachmentsImported: 0, attachmentsAlreadyImported: 1, failed: [] });
@@ -131,7 +131,6 @@ describe("Obsidian attachment wrappers", () => {
     const importingKernel = {
       ...kernel,
       core: { parseDocument: () => ({ fm: {} }) },
-      ports: { bound: () => false, use: () => ({ upload: vi.fn() }) },
       documents: {
         ...kernel.documents,
         query: async ({ offset }: { readonly offset: number }) => ({
@@ -165,7 +164,7 @@ describe("Obsidian attachment wrappers", () => {
       skippedFiles: 0,
     };
 
-    const result = await importVault(importingKernel, "Retry Vault", archive, () => undefined);
+    const result = await importVault(importingKernel, { attachments: { upload: vi.fn() } } as unknown as ImportServices, "Retry Vault", archive, () => undefined);
 
     expect(result).toMatchObject({
       alreadyImported: 1,
@@ -186,10 +185,6 @@ describe("Obsidian folders", () => {
     const importingKernel = {
       ...kernel,
       core: { parseDocument: () => ({ fm: {} }) },
-      ports: {
-        bound: (port: string) => port === "folders",
-        use: (port: string) => (port === "folders" ? { ensurePath, file } : { upload: vi.fn() }),
-      },
       documents: {
         ...kernel.documents,
         query: async () => ({ rows: [], total: 0 }),
@@ -212,7 +207,7 @@ describe("Obsidian folders", () => {
       skippedFiles: 0,
     };
 
-    await importVault(importingKernel, "Vault", archive, () => undefined);
+    await importVault(importingKernel, { attachments: { upload: vi.fn() }, folders: { ensurePath, file } } as unknown as ImportServices, "Vault", archive, () => undefined);
 
     // One folder chain per vault folder, however many notes are in it.
     expect(ensurePath).toHaveBeenCalledTimes(1);

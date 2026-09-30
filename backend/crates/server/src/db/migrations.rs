@@ -14,7 +14,7 @@ use thiserror::Error;
 use crate::domain::{MigrationLock, SchemaMeta};
 
 /// Schema version this binary understands. Bump when adding a migration.
-pub const SCHEMA_VERSION: i32 = 2;
+pub const SCHEMA_VERSION: i32 = 3;
 
 /// How long a migration may hold the advisory lock before another process may
 /// steal it (a crashed migrator must not wedge the deployment forever).
@@ -71,6 +71,11 @@ pub fn migrations() -> Vec<Migration> {
             version: 2,
             name: "backfill_feed_seq",
             run: |db| Box::pin(m002_backfill_feed_seq(db)),
+        },
+        Migration {
+            version: 3,
+            name: "drop_wiring_and_protocols",
+            run: |db| Box::pin(m003_drop_wiring_and_protocols(db)),
         },
     ]
 }
@@ -415,6 +420,24 @@ async fn highest_feed_seq(db: &Database, collection: &str) -> anyhow::Result<i64
         .and_then(|row| row.get_i64("feed_seq").ok())
         .unwrap_or(0))
 }
+
+/// The collections `@kernel` 3.0 retired: `wiring` (the versioned port-wiring store) and
+/// `protocols` (the protocol-package registry and its namespace claims). Plugins now name
+/// each other by id in `dependencies`, so neither has anything left to record.
+///
+/// Idempotent: dropping a collection that does not exist is a no-op for the driver.
+async fn m003_drop_wiring_and_protocols(db: &Database) -> anyhow::Result<()> {
+    for name in RETIRED_COLLECTIONS {
+        db.collection::<bson::Document>(name)
+            .drop()
+            .await
+            .with_context(|| format!("dropping the retired `{name}` collection"))?;
+    }
+    Ok(())
+}
+
+/// What [`m003_drop_wiring_and_protocols`] removes.
+pub const RETIRED_COLLECTIONS: &[&str] = &["wiring", "protocols"];
 
 /// Mongo error code 48 — `NamespaceExists`.
 fn is_namespace_exists(err: &mongodb::error::Error) -> bool {

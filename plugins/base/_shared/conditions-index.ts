@@ -7,7 +7,7 @@
 
 import type { Unsubscribe } from "@kernel";
 
-import type { FmField, PropertyKind, WorkspaceIndex } from "@protocols/lm/workspace-index";
+import type { FmField, PropertyKind, WorkspaceIndex } from "plugin:indexer";
 
 import { DOC_PREFIX, FIELD_OPTIONS, type FieldOption, type ValueKind } from "./conditions.js";
 import type { NoteLook, NoteSource, PickableNote } from "./note-picker.js";

@@ -146,7 +146,7 @@ fn write_plugin(plugins: &Path, id: &str, version: &str) {
         json!({
             "id": id,
             "version": version,
-            "kernel": "^2.0",
+            "kernel": "^3.0",
             "peerLibraries": { "react": "^18.0.0" },
             "frontend": { "module": "frontend/index.mjs", "style": "frontend/style.css" },
             "x-tailwind": { "prefix": "main" },
@@ -330,13 +330,30 @@ async fn the_import_map_is_exactly_what_the_build_emitted() {
     );
     assert_eq!(imports["@kernel"], "/runtime/kernel-BdFAWC4t.js");
     assert_eq!(imports["yjs"], "/runtime/yjs-DFgAKIW1.js");
-    // Only the blessed runtime layer: plugin modules are loaded by URL, never by bare
-    // specifier, so nothing about the installed set may leak here.
-    assert!(
-        imports.as_object().expect("imports is an object").len() == 4,
-        "the import map grew an entry: {imports}"
+    // Signed out: the runtime layer alone. The `plugin:<id>` entries name every
+    // installed plugin, which is what `/api/plugins` keeps behind a session.
+    let object = imports.as_object().expect("imports is an object");
+    assert_eq!(
+        object.len(),
+        4,
+        "the anonymous map names a plugin: {imports}"
     );
-    assert!(!response.text().contains("shell-ui"));
+
+    // Signed in: plus one `plugin:<id>` entry per loaded plugin (`@kernel` 3.0: a plugin
+    // module is imported by that specifier, so every importer shares one copy),
+    // versioned with its assets fingerprint.
+    let response = app.get_authenticated("/importmap.json").await;
+    response.expect_status(StatusCode::OK);
+    let imports = &response.json()["imports"];
+    let object = imports.as_object().expect("imports is an object");
+    assert_eq!(object.len(), 5, "the import map grew an entry: {imports}");
+    let shell = imports["plugin:shell-ui"]
+        .as_str()
+        .expect("plugin:shell-ui");
+    assert!(
+        shell.starts_with("/plugins/shell-ui/1.0.0/frontend/index.mjs?v="),
+        "{shell}"
+    );
 
     app.cleanup().await;
 }
@@ -464,6 +481,31 @@ async fn index_html_is_never_served_as_a_file_from_any_spelling() {
             "{uri} was cached"
         );
     }
+    app.cleanup().await;
+}
+
+#[tokio::test]
+#[ignore = "needs MONGO_URI"]
+async fn index_html_names_the_installed_plugins_only_to_a_session() {
+    let fixture = Fixture::new("index-plugins");
+    let Some(app) = StaticsApp::start(with_fixture(&fixture)).await else {
+        return;
+    };
+    // The inline import map is the page's; a signed-out visitor sees the login form and
+    // must not learn what is installed from it (the same rule as `/api/plugins`).
+    let anonymous = app.get("/").await;
+    anonymous.expect_status(StatusCode::OK);
+    assert!(
+        !anonymous.text().contains("plugin:"),
+        "the signed-out page names a plugin"
+    );
+
+    let signed_in = app.get_authenticated("/").await;
+    signed_in.expect_status(StatusCode::OK);
+    assert!(
+        signed_in.text().contains("\"plugin:shell-ui\""),
+        "the signed-in page is missing the plugin entries"
+    );
     app.cleanup().await;
 }
 
@@ -884,6 +926,16 @@ async fn the_installed_list_needs_a_session_and_reports_refusals() {
     assert_eq!(plugin["manifest"]["peerLibraries"]["react"], "^18.0.0");
     assert_eq!(plugin["manifest"]["x-tailwind"]["prefix"], "main");
 
+    // `load` (`@kernel` 3.0): what each boot loads, in order, what it skips, and the
+    // fingerprint `welcome.plugins_version` and `plugins.changed` carry.
+    assert_eq!(body["load"]["normal"], json!(["shell-ui"]));
+    assert_eq!(body["load"]["safe"], json!(["shell-ui"]));
+    assert_eq!(body["load"]["skipped"], json!([]));
+    assert_eq!(body["load"]["version"].as_str().map(str::len), Some(16));
+    for gone in ["wiring", "protocols", "resolved"] {
+        assert!(body.get(gone).is_none(), "`{gone}` is gone in @kernel 3.0");
+    }
+
     // A bad directory disables one plugin and is reported — never fatal, and never
     // silent, or the admin screen shows a mysteriously missing feature.
     let problems = body["problems"].as_array().expect("problems is an array");
@@ -926,17 +978,14 @@ async fn disable_plugins_is_the_server_side_half_of_safe_mode() {
             "plugins": [],
             "problems": [],
             "disabled": true,
-            "wiring": { "version": 0, "unplugged": [], "bind": {}, "cut": [], "add": [], "order": {} },
-            "protocols": [],
-            "resolved": {
-                "normal": {
-                    "order": [], "skipped": [], "wires": [], "bindings": {}, "seats": {}, "bench": {},
-                    "listeners": {}, "activation": [], "diagnostics": [], "status": {}
-                },
-                "safe": {
-                    "order": [], "skipped": [], "wires": [], "bindings": {}, "seats": {}, "bench": {},
-                    "listeners": {}, "activation": [], "diagnostics": [], "status": {}
-                },
+            "load": {
+                "normal": [],
+                "safe": [],
+                "skipped": [],
+                "version": life_manager_server::plugins::fingerprint(
+                    &[],
+                    &life_manager_server::plugins::LoadPlan::default()
+                ),
             },
         }),
         "DISABLE_PLUGINS must say *why* the app is bare (SPEC §6.1)"

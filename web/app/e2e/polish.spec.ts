@@ -229,13 +229,14 @@ test.describe("the task state menu", () => {
     await openDocument(page, id);
 
     const box = page.locator(".md-task-box").first();
-    const menu = page.getByRole("menu", { name: "Task state" });
+    // `context-menu`'s popover: a dialog named for what it is the menu of.
+    const menu = page.getByRole("dialog", { name: "Task state" });
 
     await box.click({ button: "right" });
     await expect(menu).toBeVisible();
     // Focus really is inside the menu first — otherwise the assertion below would pass
     // for a menu that never took focus at all.
-    await expect(menu.getByRole("menuitem").first()).toBeFocused();
+    await expect(menu.getByRole("menuitemradio").first()).toBeFocused();
 
     await page.keyboard.press("Escape");
     await expect(menu).toHaveCount(0);
@@ -245,19 +246,19 @@ test.describe("the task state menu", () => {
     // focus call; it is still the control the user should be on.
     await box.click({ button: "right" });
     await expect(menu).toBeVisible();
-    await menu.getByRole("menuitem", { name: "Done" }).click();
+    await menu.getByRole("menuitemradio", { name: "Done" }).click();
     await expect(box).toHaveAttribute("aria-checked", "true");
     await expect(box).toBeFocused();
   });
 
-  test("closing by clicking elsewhere leaves focus where the user put it", async ({
+  test("a click elsewhere closes it without landing underneath, and focus comes back", async ({
     page,
     request,
     baseURL,
   }) => {
-    // The other half of the same rule: the menu must not *pull* focus back when it was
-    // dismissed by the user going somewhere else. A menu that does is worse than one
-    // that drops focus, because it fights the pointer.
+    // The backdrop takes the click that closes the menu (`context-menu`'s `Menu.tsx`), so a
+    // click outside never also acts on whatever was under it, and focus goes back to the
+    // control the menu was for.
     const id = await createDocument(
       request,
       baseURL as string,
@@ -269,17 +270,17 @@ test.describe("the task state menu", () => {
 
     const box = page.locator(".md-task-box").first();
     await box.click({ button: "right" });
-    await expect(page.getByRole("menu", { name: "Task state" })).toBeVisible();
+    const menu = page.getByRole("dialog", { name: "Task state" });
+    await expect(menu).toBeVisible();
 
-    // The already-selected mode tab: focusable, and it leaves the read view mounted, so
-    // the checkbox is still there to assert *isn't* focused. (Clicking "Edit" would
-    // unmount the whole article and prove nothing.)
-    const elsewhere = page.getByRole("tab", { name: "Read" });
-    await elsewhere.click();
-    await expect(page.getByRole("menu", { name: "Task state" })).toHaveCount(0);
-    await expect(box).toBeVisible();
-    await expect(box).not.toBeFocused();
-    await expect(elsewhere).toBeFocused();
+    // A click on the Edit tab, which would switch modes if it got through.
+    const edit = page.getByRole("tab", { name: "Edit" });
+    const at = await edit.boundingBox();
+    if (!at) throw new Error("the Edit tab has no box");
+    await page.mouse.click(at.x + at.width / 2, at.y + at.height / 2);
+    await expect(menu).toHaveCount(0);
+    await expect(page.getByRole("tab", { name: "Read" })).toHaveAttribute("aria-selected", "true");
+    await expect(box).toBeFocused();
   });
 });
 

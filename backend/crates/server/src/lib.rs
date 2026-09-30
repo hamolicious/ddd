@@ -26,16 +26,15 @@ pub mod docstore;
 pub mod domain;
 pub mod error;
 pub mod feed;
+pub mod load;
 pub mod manifest_schema;
 pub mod manifest_types;
 pub mod pluginhost;
 pub mod plugininstall;
 pub mod plugins;
-pub mod protocols;
 pub mod routes;
 pub mod state;
 pub mod telemetry;
-pub mod wiring;
 
 /// Crate version, reported by `/readyz`.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

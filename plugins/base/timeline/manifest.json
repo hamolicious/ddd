@@ -1,0 +1,29 @@
+{
+  "id": "timeline",
+  "version": "4.0.0",
+  "name": "Timeline",
+  "description": "Shows a saved search along a time axis, placed by whichever fields you choose. New timelines from the command palette or the folder tree.",
+  "author": "Life Manager base distribution",
+  "license": "MIT OR Apache-2.0",
+  "x-tailwind": {
+    "prefix": "timeline"
+  },
+  "kernel": "^3.0",
+  "dependencies": {
+    "commands": "^3.0",
+    "context-menu": "^2.0",
+    "doc-events": "^1.0",
+    "document-surface": "^2.0",
+    "search": "^4.0"
+  },
+  "optionalDependencies": {
+    "router": "^2.0"
+  },
+  "peerLibraries": {
+    "react": "^18.0.0"
+  },
+  "frontend": {
+    "module": "frontend/index.mjs",
+    "style": "frontend/style.css"
+  }
+}

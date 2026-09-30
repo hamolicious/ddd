@@ -7,7 +7,7 @@
 //! |---|---|
 //! | `GET /` + SPA fallback | `index.html` with the import map injected and a CSP nonce |
 //! | `GET /assets/*`, `/runtime/*`, `/sw.js`, `/icon.svg`, … | the built bundle, from `WEB_DIST_DIR` |
-//! | `GET /importmap.json` | the blessed runtime layer, for debugging and the service worker |
+//! | `GET /importmap.json` | the runtime layer and the `plugin:<id>` entries, for debugging and the service worker |
 //! | `GET /plugins/{id}/{version}/{*path}` | plugin modules and assets, immutable |
 //! | `GET /kernel.d.ts` | the generated plugin contract |
 //! | `GET /api/plugins` | the installed list the loader activates from (authenticated) |
@@ -53,7 +53,7 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 
-use crate::auth::AuthUser;
+use crate::auth::{AuthUser, MaybeAuthUser};
 use crate::error::{AppError, AppResult};
 use crate::plugins::{self, InstalledPlugin, safe_relative_path};
 use crate::state::AppState;
@@ -99,10 +99,6 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/importmap.json", get(import_map))
         .route("/kernel.d.ts", get(kernel_dts))
-        .route(
-            "/protocols/{publisher}/{name}/{version}/{file}",
-            get(protocol_file),
-        )
         .route("/plugins/{id}/{version}/{*path}", get(plugin_asset))
 }
 
@@ -123,15 +119,18 @@ pub struct InstalledResponse {
     pub problems: Vec<plugins::PluginProblem>,
     /// `true` when `DISABLE_PLUGINS=1` (SPEC §6.1). The client shows why it is bare.
     pub disabled: bool,
-    /// The live wiring (PLUGIN-PROTOCOLS §6): its version is what a client compares
-    /// `wiring.applied` and `welcome.wiring_version` against.
-    pub wiring: crate::wiring::LiveWiring,
-    /// Every registered protocol (PLUGIN-PROTOCOLS §3), including those whose owner is
-    /// gone, so a client can still type-check wires.
-    pub protocols: Vec<life_manager_core::wiring::ProtocolPackage>,
-    /// The live wiring resolved against the served set, for normal and `?safe=1` boots
-    /// (PLUGIN-PROTOCOLS §6): the loader activates from it, so boot needs no Wasm.
-    pub resolved: crate::wiring::ResolvedSet,
+    /// What the loader loads, in order, for a normal and a `?safe=1` boot, and which
+    /// wanted plugins it skips and why ([`plugins::resolve_load`]).
+    pub load: LoadResponse,
+}
+
+/// `load` in `GET /api/plugins`: [`plugins::LoadPlan`] plus the version it fingerprints.
+#[derive(Debug, Serialize)]
+pub struct LoadResponse {
+    #[serde(flatten)]
+    pub plan: plugins::LoadPlan,
+    /// The same string `welcome.plugins_version` and `plugins.changed.version` carry.
+    pub version: String,
 }
 
 /// Authenticated: the plugin list names what is installed in this workspace, which is
@@ -143,13 +142,8 @@ pub async fn installed(
     user: AuthUser,
 ) -> AppResult<axum::Json<InstalledResponse>> {
     let registry = plugins::registry(&state.config);
-    let wiring = crate::wiring::load(&state).await;
-    let protocols: Vec<life_manager_core::wiring::ProtocolPackage> = crate::protocols::all(&state)
-        .await
-        .into_values()
-        .map(|protocol| protocol.package)
-        .collect();
-    let resolved = crate::wiring::resolve_served(&registry, protocols.clone(), &wiring);
+    let plan = registry.load_plan();
+    let version = plugins::fingerprint(registry.plugins(), &plan);
     Ok(axum::Json(InstalledResponse {
         plugins: registry.plugins().to_vec(),
         problems: if user.is_admin() {
@@ -158,9 +152,7 @@ pub async fn installed(
             Vec::new()
         },
         disabled: state.config.disable_plugins,
-        wiring,
-        protocols,
-        resolved,
+        load: LoadResponse { plan, version },
     }))
 }
 
@@ -206,6 +198,29 @@ pub fn runtime_imports(state: &AppState) -> BTreeMap<String, String> {
     runtime_manifest(state).imports
 }
 
+/// The page's whole import map: the runtime layer, plus — for a signed-in caller only —
+/// a `plugin:<id>` entry for every plugin either boot loads ([`plugins::plugin_imports`]).
+///
+/// The entries name every installed plugin, which is exactly what `GET /api/plugins`
+/// keeps behind a session, so a signed-out page gets the runtime layer alone. That
+/// page only ever shows the login form; signing in reloads it (`web/app/src/main.tsx`),
+/// and the reloaded page carries the full map. The shell bundle is authenticated, so it
+/// always passes `true`.
+pub fn page_imports(state: &AppState, signed_in: bool) -> BTreeMap<String, String> {
+    let mut imports = runtime_imports(state);
+    if signed_in {
+        imports.extend(plugins::registry(&state.config).plugin_imports());
+    }
+    imports
+}
+
+/// Whether the request carries a valid session. Any failure to tell — no credential, an
+/// expired one, or the database being unreachable — counts as signed out: the page must
+/// still render (it is the login form, or an offline shell), just without the plugin list.
+fn is_signed_in(user: Result<MaybeAuthUser, AppError>) -> bool {
+    matches!(user, Ok(MaybeAuthUser(Some(_))))
+}
+
 /// Specifier → the version the built bundle provides, for the peer-range check.
 ///
 /// Empty when there is no bundle, and possibly missing an entry when the build could not read
@@ -236,13 +251,17 @@ fn runtime_manifest(state: &AppState) -> RuntimeManifest {
     }
 }
 
-/// `GET /importmap.json` — unauthenticated.
+/// `GET /importmap.json` — unauthenticated, but the `plugin:<id>` entries of the load set
+/// are added for a signed-in caller only (see [`page_imports`]).
 ///
-/// It names only the blessed runtime layer, never a plugin: plugin modules are loaded by
-/// URL, not by bare specifier, so nothing about the installed set leaks here. It is
-/// generated *from* the installed set in one sense that matters — every declared
-/// `peerLibraries` entry is checked against it, and an unsatisfied one is logged.
-pub async fn import_map(State(state): State<AppState>) -> Response {
+/// The blessed runtime layer plus, when signed in, the plugin entries (`@kernel` 3.0: a
+/// plugin's module is imported by that specifier, never by URL, so every importer shares
+/// one instance). Every declared `peerLibraries` entry is also checked against the
+/// runtime layer, and an unsatisfied one is logged.
+pub async fn import_map(
+    State(state): State<AppState>,
+    user: Result<MaybeAuthUser, AppError>,
+) -> Response {
     let imports = runtime_imports(&state);
     let registry = plugins::registry(&state.config);
 
@@ -265,10 +284,11 @@ pub async fn import_map(State(state): State<AppState>) -> Response {
         warn!(warning = %warning, "peer library resolution");
     }
 
-    let body = serde_json::to_vec_pretty(&ImportMap {
-        imports: resolution.imports,
-    })
-    .unwrap_or_else(|_| b"{}".to_vec());
+    let mut imports = resolution.imports;
+    if is_signed_in(user) {
+        imports.extend(registry.plugin_imports());
+    }
+    let body = serde_json::to_vec_pretty(&ImportMap { imports }).unwrap_or_else(|_| b"{}".to_vec());
     (
         StatusCode::OK,
         [
@@ -315,45 +335,6 @@ pub async fn kernel_dts(State(state): State<AppState>) -> Response {
         )
             .into_response(),
     }
-}
-
-// ---------------------------------------------------------------------------
-// /protocols/{publisher}/{name}/{version}/{index.d.ts | protocol.json}
-// ---------------------------------------------------------------------------
-
-/// A registered protocol's types or package (PLUGIN-PROTOCOLS §3). Public, like
-/// `/kernel.d.ts`: an outside author compiles against what this server actually has,
-/// without copying files. Served from the registry, so it outlives the owning plugin.
-pub async fn protocol_file(
-    State(state): State<AppState>,
-    AxumPath((publisher, name, version, file)): AxumPath<(String, String, String, String)>,
-) -> Response {
-    let id = format!("{publisher}/{name}");
-    let protocols = crate::protocols::all(&state).await;
-    let Some(protocol) = protocols.get(&format!("{id}@{version}")) else {
-        return not_found();
-    };
-    let (content_type, body) = match file.as_str() {
-        "index.d.ts" => match protocol.types.clone() {
-            Some(types) => ("text/plain; charset=utf-8", types),
-            None => return not_found(),
-        },
-        "protocol.json" => (
-            "application/json",
-            serde_json::to_string_pretty(&protocol.package).unwrap_or_default(),
-        ),
-        _ => return not_found(),
-    };
-    (
-        StatusCode::OK,
-        [
-            (CONTENT_TYPE, HeaderValue::from_static(content_type)),
-            (NOSNIFF, HeaderValue::from_static("nosniff")),
-            (CACHE_CONTROL, HeaderValue::from_static("no-cache")),
-        ],
-        body,
-    )
-        .into_response()
 }
 
 // ---------------------------------------------------------------------------
@@ -461,7 +442,12 @@ fn is_frontend_path(path: &str) -> bool {
 /// 2. an existing file under `WEB_DIST_DIR` → that file;
 /// 3. anything else → `index.html`, because the router is a plugin and every in-app URL
 ///    is a client-side route (`/doc/01J…` must survive a reload).
-pub async fn fallback(State(state): State<AppState>, uri: Uri) -> Response {
+pub async fn fallback(
+    State(state): State<AppState>,
+    user: Result<MaybeAuthUser, AppError>,
+    uri: Uri,
+) -> Response {
+    let signed_in = is_signed_in(user);
     let path = uri.path();
     if path.starts_with("/api/") || path == "/api" {
         return AppError::NotFound("route").into_response();
@@ -499,7 +485,7 @@ pub async fn fallback(State(state): State<AppState>, uri: Uri) -> Response {
     // this check, and `/./index.html` and `/index.html/` walked straight past it into the
     // file branch.
     if segments == ["index.html"] {
-        return index_html(&state, &dist).await;
+        return index_html(&state, &dist, signed_in).await;
     }
     if !segments.is_empty()
         && let Some(file) = resolve_within(&dist, &segments.join("/"))
@@ -512,7 +498,7 @@ pub async fn fallback(State(state): State<AppState>, uri: Uri) -> Response {
         return serve_file(&file, policy).await;
     }
 
-    index_html(&state, &dist).await
+    index_html(&state, &dist, signed_in).await
 }
 
 /// The rendered `index.html`: the body to send and the policy that must accompany it.
@@ -616,7 +602,7 @@ fn render_index(html: &str, imports: &BTreeMap<String, String>, nonce: &str) -> 
 }
 
 /// `index.html` with the import map inlined and a per-response CSP nonce.
-async fn index_html(state: &AppState, dist: &Path) -> Response {
+async fn index_html(state: &AppState, dist: &Path, signed_in: bool) -> Response {
     let path = dist.join("index.html");
     let Ok(html) = tokio::fs::read_to_string(&path).await else {
         return (
@@ -630,7 +616,7 @@ async fn index_html(state: &AppState, dist: &Path) -> Response {
             .into_response();
     };
 
-    let page = render_index(&html, &runtime_imports(state), &nonce());
+    let page = render_index(&html, &page_imports(state, signed_in), &nonce());
 
     (
         StatusCode::OK,

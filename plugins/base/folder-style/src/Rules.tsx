@@ -1,6 +1,7 @@
+import { useState } from "react";
 import type { ReactElement } from "react";
 
-import type { Icons } from "@protocols/lm/icons";
+import type { Icons } from "plugin:icons";
 
 import { ConditionsEditor } from "../../_shared/conditions-editor.js";
 import type { NoteSource } from "../../_shared/note-picker.js";
@@ -43,10 +44,22 @@ const CONDITIONS =
   "folderstyle:[&_.folderstyle-grow]:flex-[1_1_12rem] folderstyle:compact:[&_.folderstyle-grow]:basis-full " +
   "folderstyle:[&_.folderstyle-checkbox]:tap-h folderstyle:[&_.folderstyle-checkbox]:inline-flex folderstyle:[&_.folderstyle-checkbox]:cursor-pointer folderstyle:[&_.folderstyle-checkbox]:items-center folderstyle:[&_.folderstyle-checkbox]:gap-1 folderstyle:[&_.folderstyle-checkbox]:whitespace-nowrap " +
   "folderstyle:[&_.folderstyle-icon-button]:min-w-[var(--lm-tap-target)] " +
+  "folderstyle:[&_.folderstyle-flags]:flex folderstyle:[&_.folderstyle-flags]:flex-[1_1_100%] folderstyle:[&_.folderstyle-flags]:flex-wrap folderstyle:[&_.folderstyle-flags]:items-center folderstyle:[&_.folderstyle-flags]:gap-3 " +
+  "folderstyle:[&_.folderstyle-op-icon]:tap-h folderstyle:[&_.folderstyle-op-icon]:inline-flex folderstyle:[&_.folderstyle-op-icon]:min-w-[2ch] folderstyle:[&_.folderstyle-op-icon]:items-center folderstyle:[&_.folderstyle-op-icon]:justify-center folderstyle:[&_.folderstyle-op-icon]:px-1 folderstyle:[&_.folderstyle-op-icon]:font-mono folderstyle:[&_.folderstyle-op-icon]:text-text-muted folderstyle:[&_.folderstyle-op-icon]:whitespace-nowrap " +
   "folderstyle:[&_.folderstyle-note-results]:flex folderstyle:[&_.folderstyle-note-results]:flex-wrap folderstyle:[&_.folderstyle-note-results]:gap-1";
 
-/** The rules, in order: the first a note matches wins, field by field. */
+/**
+ * The rules, in order: the first a note matches wins, field by field. Each is folded to
+ * its header until opened, but for one just added; which are open is not saved.
+ */
 export function Rules({ rules, onChange, defaults, icons, notes, suggestions, openLook }: RulesProps): ReactElement {
+  const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
+  const toggleFold = (id: string): void =>
+    setOpened((before) => {
+      const after = new Set(before);
+      if (!after.delete(id)) after.add(id);
+      return after;
+    });
   const replace = (id: string, change: Partial<Rule>): void =>
     onChange(rules.map((rule) => (rule.id === id ? { ...rule, ...change } : rule)));
   const move = (index: number, by: -1 | 1): void => {
@@ -69,12 +82,23 @@ export function Rules({ rules, onChange, defaults, icons, notes, suggestions, op
         {rules.map((rule, index) => {
           const shown = resolveStyle(rule.style, defaults);
           const label = ruleLabel(rule, index);
+          const open = opened.has(rule.id);
+          const count = rule.when.clauses.length;
           return (
             <li
               key={rule.id}
               className="folder-style-rule folderstyle:flex folderstyle:flex-col folderstyle:gap-2 folderstyle:rounded folderstyle:border folderstyle:border-border folderstyle:p-2"
             >
               <div className="folderstyle:flex folderstyle:flex-wrap folderstyle:items-center folderstyle:gap-1">
+                <button
+                  type="button"
+                  className={`${BUTTON} folderstyle:min-w-[var(--lm-tap-target)]`}
+                  aria-expanded={open}
+                  aria-label={open ? `Fold ${label}` : `Unfold ${label}`}
+                  onClick={() => toggleFold(rule.id)}
+                >
+                  {open ? "▾" : "▸"}
+                </button>
                 <button
                   type="button"
                   className={BUTTON}
@@ -93,14 +117,12 @@ export function Rules({ rules, onChange, defaults, icons, notes, suggestions, op
                     <span>{label}</span>
                   </span>
                 </button>
-                <input
-                  type="text"
-                  aria-label={`Name of ${label}`}
-                  placeholder={`Rule ${index + 1}`}
-                  value={rule.name ?? ""}
-                  className="folderstyle:tap-h folderstyle:min-w-0 folderstyle:flex-1 folderstyle:rounded folderstyle:border folderstyle:border-border folderstyle:bg-bg folderstyle:px-2 folderstyle:text-base folderstyle:text-text"
-                  onChange={(event) => replace(rule.id, { name: event.target.value })}
-                />
+                <span className="folderstyle:flex-1" />
+                {!open && (
+                  <span className="folderstyle:whitespace-nowrap folderstyle:text-sm folderstyle:text-text-muted">
+                    {count === 1 ? "1 condition" : `${count} conditions`}
+                  </span>
+                )}
                 <button type="button" className={BUTTON} aria-label="Move up" disabled={index === 0} onClick={() => move(index, -1)}>
                   ↑
                 </button>
@@ -122,16 +144,28 @@ export function Rules({ rules, onChange, defaults, icons, notes, suggestions, op
                   ✕
                 </button>
               </div>
-              <div className={CONDITIONS}>
-                <ConditionsEditor
-                  value={rule.when}
-                  onChange={(when) => replace(rule.id, { when })}
-                  classPrefix="folderstyle"
-                  notes={notes}
-                  {...(suggestions !== undefined ? { suggestions } : {})}
+              {open && (
+                <input
+                  type="text"
+                  aria-label={`Name of ${label}`}
+                  placeholder={`Rule ${index + 1}`}
+                  value={rule.name ?? ""}
+                  className="folderstyle:tap-h folderstyle:w-full folderstyle:min-w-0 folderstyle:rounded folderstyle:border folderstyle:border-border folderstyle:bg-bg folderstyle:px-2 folderstyle:text-base folderstyle:text-text"
+                  onChange={(event) => replace(rule.id, { name: event.target.value })}
                 />
-              </div>
-              {rule.when.clauses.length === 0 && (
+              )}
+              {open && (
+                <div className={CONDITIONS}>
+                  <ConditionsEditor
+                    value={rule.when}
+                    onChange={(when) => replace(rule.id, { when })}
+                    classPrefix="folderstyle"
+                    notes={notes}
+                    {...(suggestions !== undefined ? { suggestions } : {})}
+                  />
+                </div>
+              )}
+              {open && count === 0 && (
                 <p className="folderstyle:m-0 folderstyle:text-sm folderstyle:text-text-muted">
                   Add a condition: a rule without one matches nothing.
                 </p>
@@ -145,19 +179,21 @@ export function Rules({ rules, onChange, defaults, icons, notes, suggestions, op
         <button
           type="button"
           className={BUTTON}
-          onClick={() =>
+          onClick={() => {
+            const id = newRuleId();
+            setOpened((before) => new Set(before).add(id));
             onChange([
               ...rules,
               {
-                id: newRuleId(),
+                id,
                 when: {
                   combine: "and",
                   clauses: [{ id: newClauseId(), field: "fm.tags", op: "contains", value: "", kind: "str" }],
                 },
                 style: {},
               },
-            ])
-          }
+            ]);
+          }}
         >
           Add rule
         </button>

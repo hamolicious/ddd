@@ -18,14 +18,7 @@
  * whole response bodies for `$date`/`$oid`, so anything arriving here is a plain string.
  */
 
-import type {
-  InstalledPlugin,
-  LiveWiring,
-  ManifestProblem,
-  PluginCapabilities,
-  PluginManifest,
-  WiringOverrides,
-} from "@kernel";
+import type { InstalledPlugin, ManifestProblem, PluginCapabilities, PluginManifest } from "@kernel";
 
 export type ApiFetch = (path: string, init?: RequestInit) => Promise<Response>;
 
@@ -132,10 +125,31 @@ export interface AdminStats {
   readonly history_alert_bytes?: number;
 }
 
+/** Why a wanted plugin does not load (`load.rs` `SkipReason`, kebab-case on the wire). */
+export type SkipReason = "missing" | "version" | "cycle" | "dependency-skipped" | "conflict";
+
+/** One plugin the loader leaves out, and why. `detail` is one sentence for people. */
+export interface SkippedPlugin {
+  readonly id: string;
+  readonly reason: SkipReason;
+  readonly detail: string;
+}
+
+/** `load` in `GET /api/plugins`: what each boot loads, in order, and what it skips. */
+export interface PluginLoadView {
+  readonly normal: readonly string[];
+  readonly safe: readonly string[];
+  readonly skipped: readonly SkippedPlugin[];
+  /** The fingerprint `plugins.changed` carries. */
+  readonly version: string;
+}
+
 export interface InstalledPluginsResponse {
   readonly plugins: readonly InstalledPlugin[];
   readonly problems: readonly { readonly path: string; readonly message: string }[];
   readonly disabled: boolean;
+  /** Absent on a server older than `@kernel` 3.0. */
+  readonly load?: PluginLoadView;
 }
 
 // ---------------------------------------------------------------------------
@@ -336,43 +350,6 @@ export interface AuditQuery {
   readonly limit?: number;
 }
 
-// ---------------------------------------------------------------------------
-// Wiring versions (`/api/wiring`, PLUGIN-PROTOCOLS §6c)
-// ---------------------------------------------------------------------------
-
-/** One entry of the wiring history. `at` is RFC 3339. */
-export interface WiringVersionInfo {
-  readonly version: number;
-  /** `apply`, `rollback`, or whatever the server recorded for an implicit write. */
-  readonly action: string;
-  readonly actor?: string;
-  /** What the change was about, when the server knows (a plugin id, say). */
-  readonly subject?: string;
-  readonly at: string;
-}
-
-/** `GET /api/wiring`: the live version and every version kept, newest first. */
-export interface WiringHistory {
-  readonly live: LiveWiring;
-  readonly history: readonly WiringVersionInfo[];
-}
-
-/** `GET /api/wiring/versions/{v}`: one kept version, with the overrides it recorded. */
-export interface WiringVersionRecord extends WiringVersionInfo {
-  readonly wiring: WiringOverrides;
-}
-
-/**
- * `POST /api/wiring/apply`. `base` is the live version the caller saw; the server answers
- * 409 when live has moved on, and the caller refetches rather than overwriting someone
- * else's change.
- */
-export interface WiringApplyBody {
-  readonly base: number;
-  readonly wiring: WiringOverrides;
-  readonly action: "apply" | "rollback";
-}
-
 export interface AdminClient {
   stats(): Promise<AdminStats>;
 
@@ -418,13 +395,6 @@ export interface AdminClient {
   runPluginCron(id: string, index: number): Promise<CronRunResult>;
   pluginLogs(id: string, limit?: number): Promise<PluginLogView>;
 
-  // ---- Wiring versions ----
-  /** The live wiring and its history, newest first. */
-  wiring(): Promise<WiringHistory>;
-  /** One kept version, overrides included: what a rollback re-applies. */
-  wiringVersion(version: number): Promise<WiringVersionRecord>;
-  /** Commit overrides as the next version. Rejects with `status: 409` when `base` is stale. */
-  applyWiring(body: WiringApplyBody): Promise<{ readonly live: LiveWiring }>;
 }
 
 export function createAdminClient(fetchApi: ApiFetch): AdminClient {
@@ -509,16 +479,7 @@ export function createAdminClient(fetchApi: ApiFetch): AdminClient {
         `/admin/plugins/${id(pluginId)}/logs${limit === undefined ? "" : `?limit=${limit}`}`,
       ),
 
-    wiring: () => json<WiringHistory>("/wiring"),
-    wiringVersion: (version) =>
-      json<WiringVersionRecord>(`/wiring/versions/${encodeURIComponent(String(version))}`),
-    applyWiring: (body) => json<{ readonly live: LiveWiring }>("/wiring/apply", postJson(body)),
   };
-}
-
-/** The 409 a stale `base` gets: live moved on, and nothing was written. */
-export function isStaleBase(error: unknown): boolean {
-  return typeof error === "object" && error !== null && (error as { status?: unknown }).status === 409;
 }
 
 // ---------------------------------------------------------------------------

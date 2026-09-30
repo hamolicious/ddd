@@ -6,17 +6,16 @@
 
 import type { Kernel } from "@kernel";
 
-import type { NavbarItem } from "@protocols/lm/navbar.item";
+import { addItem } from "plugin:header";
 
 import { NoticeBell } from "./NoticeBell.js";
 
 export default function activate(kernel: Kernel): void {
-  kernel.ports.offer<NavbarItem>("bell", {
+  addItem({
     id: "notices.bell",
     label: "Notices",
     side: "end",
-    // Default-seat hint: after every other end item, the bell and the sync pill close
-    // the bar. The wiring's seat order is what the header reads.
+    // After every other end item: the bell and the sync pill close the bar.
     order: 900,
     component: () => <NoticeBell kernel={kernel} />,
   });

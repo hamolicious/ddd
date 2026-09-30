@@ -1,6 +1,6 @@
 {
   "id": "changes",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "name": "Changes",
   "description": "The open document's history in the side panel: every change and snapshot, to view, revert or restore.",
   "author": "Life Manager base distribution",
@@ -8,50 +8,13 @@
   "x-tailwind": {
     "prefix": "chg"
   },
-  "kernel": "^2.0",
-  "hot": true,
-  "consumes": {
-    "menu": {
-      "protocol": "lm/context-menu@^1.0",
-      "needs": [
-        "confirm"
-      ]
-    },
-    "shell": {
-      "protocol": "lm/shell@^1.0",
-      "needs": [
-        "layout",
-        "toggleAltbar"
-      ]
-    },
-    "markdown": {
-      "protocol": "lm/markdown-renderer@^2.0",
-      "needs": [
-        "render",
-        "bodyOf"
-      ]
-    },
-    "router": {
-      "protocol": "lm/router@^1.0",
-      "needs": [
-        "navigate"
-      ]
-    }
-  },
-  "provides": {
-    "panel": {
-      "protocol": "lm/altbar.panel@1.0.0",
-      "order": 100
-    },
-    "route": {
-      "protocol": "lm/router.route@1.0.0"
-    },
-    "views": {
-      "protocol": "lm/main.view@1.0.0"
-    },
-    "commands": {
-      "protocol": "lm/commands.command@2.0.0"
-    }
+  "kernel": "^3.0",
+  "dependencies": {
+    "commands": "^3.0",
+    "context-menu": "^2.0",
+    "markdown": "^3.0",
+    "router": "^2.0",
+    "shell-ui": "^3.0"
   },
   "peerLibraries": {
     "react": "^18.0.0"

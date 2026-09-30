@@ -16,14 +16,7 @@
  * here went to a 404 in the shell until this was a function.
  */
 
-import type {
-  InstalledPlugin,
-  LiveWiring,
-  ProtocolPackage,
-  ResolvedPluginSet,
-  SessionUser,
-  WiringOverrides,
-} from "@kernel";
+import type { InstalledPlugin, PluginLoad, SessionUser } from "@kernel";
 
 import { apiBase } from "./shell.js";
 
@@ -216,64 +209,33 @@ export async function me(token?: string): Promise<SessionUser | undefined> {
 export const logoutRequest = (token?: string): Promise<void> =>
   call<void>("/auth/logout", { method: "POST" }, token);
 
-/** What `GET /api/plugins` answers. `wiring` is absent on servers from before wiring. */
+/** A plugin directory the server refused to load (admins only; empty for everyone else). */
+export interface PluginDirectoryProblem {
+  readonly [key: string]: unknown;
+}
+
+/** What `GET /api/plugins` answers. `load` is absent on servers from before `@kernel` 3.0. */
 export interface PluginList {
   readonly plugins: readonly InstalledPlugin[];
-  readonly wiring?: LiveWiring;
-  /** Every registered protocol, owners gone included (PLUGIN-PROTOCOLS §3). */
-  readonly protocols?: readonly ProtocolPackage[];
-  /** The live wiring resolved against this list by the server, per boot mode (§6). */
-  readonly resolved?: ResolvedPluginSet;
+  readonly problems?: readonly PluginDirectoryProblem[];
+  /** `DISABLE_PLUGINS=1` on the server (SPEC §6.1). */
+  readonly disabled?: boolean;
+  /** The server's load resolution per boot mode: the order the loader activates in. */
+  readonly load?: PluginLoad;
+  /** The plugin-set version, when the server sends one: what `plugins.changed` is compared with. */
+  readonly version?: number | string;
 }
 
 /**
- * The installed frontend plugins, in no particular order — the loader sorts them — and
- * the live wiring (`GET /api/plugins`, authenticated; see `backend/CONTRACTS.md` area
- * server-static).
+ * The installed plugins and their load resolution (`GET /api/plugins`, authenticated; see
+ * `backend/CONTRACTS.md` area server-static).
  */
 export const installedPlugins = (token?: string): Promise<PluginList> => call<PluginList>("/plugins", {}, token);
 
 // ---------------------------------------------------------------------------
-// The bare manager's write path (PLUGIN-PROTOCOLS §7): admin-only, no kernel needed
+// The bare manager's write path: admin-only, no kernel needed
 // ---------------------------------------------------------------------------
 
-/** One entry of the wiring history (`GET /api/wiring`). `at` is RFC 3339. */
-export interface WiringVersionInfo {
-  readonly version: number;
-  readonly action: string;
-  readonly actor?: string;
-  readonly subject?: string;
-  readonly at: string;
-}
-
-export interface WiringHistory {
-  readonly live: LiveWiring;
-  /** Newest first. */
-  readonly history: readonly WiringVersionInfo[];
-}
-
-export interface WiringVersionRecord extends WiringVersionInfo {
-  readonly wiring: WiringOverrides;
-}
-
-export interface WiringApplyBody {
-  /** The live version the caller saw; the server answers 409 when it has moved on. */
-  readonly base: number;
-  readonly wiring: WiringOverrides;
-  readonly action: "apply" | "rollback";
-}
-
-/** The live wiring and every kept version, admin only. */
-export const wiringHistory = (token?: string): Promise<WiringHistory> => call<WiringHistory>("/wiring", {}, token);
-
-/** One kept version with its overrides: what a rollback applies again. */
-export const wiringVersion = (version: number, token?: string): Promise<WiringVersionRecord> =>
-  call<WiringVersionRecord>(`/wiring/versions/${encodeURIComponent(String(version))}`, {}, token);
-
-/** Commit overrides as the next version. Rejects with an `ApiError` of status 409 on a stale base. */
-export const applyWiring = (body: WiringApplyBody, token?: string): Promise<{ readonly live: LiveWiring }> =>
-  call<{ readonly live: LiveWiring }>("/wiring/apply", { method: "POST", body: JSON.stringify(body) }, token);
-
-/** Plug a plugin back in: `POST /api/admin/plugins/{id}/enable`, which also updates the wiring. */
+/** `POST /api/admin/plugins/{id}/enable`. Every client reloads when it lands (`plugins.changed`). */
 export const enablePlugin = (id: string, token?: string): Promise<void> =>
   call<void>(`/admin/plugins/${encodeURIComponent(id)}/enable`, { method: "POST" }, token);

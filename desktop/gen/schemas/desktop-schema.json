@@ -345,6 +345,102 @@
       "description": "Permission identifier",
       "oneOf": [
         {
+          "description": "Enables the folder_choose command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-folder-choose",
+          "markdownDescription": "Enables the folder_choose command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the folder_current command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-folder-current",
+          "markdownDescription": "Enables the folder_current command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the folder_forget command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-folder-forget",
+          "markdownDescription": "Enables the folder_forget command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the folder_list command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-folder-list",
+          "markdownDescription": "Enables the folder_list command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the folder_move command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-folder-move",
+          "markdownDescription": "Enables the folder_move command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the folder_read command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-folder-read",
+          "markdownDescription": "Enables the folder_read command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the folder_remove command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-folder-remove",
+          "markdownDescription": "Enables the folder_remove command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the folder_write command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-folder-write",
+          "markdownDescription": "Enables the folder_write command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the folder_choose command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-folder-choose",
+          "markdownDescription": "Denies the folder_choose command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the folder_current command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-folder-current",
+          "markdownDescription": "Denies the folder_current command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the folder_forget command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-folder-forget",
+          "markdownDescription": "Denies the folder_forget command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the folder_list command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-folder-list",
+          "markdownDescription": "Denies the folder_list command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the folder_move command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-folder-move",
+          "markdownDescription": "Denies the folder_move command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the folder_read command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-folder-read",
+          "markdownDescription": "Denies the folder_read command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the folder_remove command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-folder-remove",
+          "markdownDescription": "Denies the folder_remove command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the folder_write command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-folder-write",
+          "markdownDescription": "Denies the folder_write command without any pre-configured scope."
+        },
+        {
           "description": "Default core plugins set.\n#### This default permission set includes:\n\n- `core:path:default`\n- `core:event:default`\n- `core:window:default`\n- `core:webview:default`\n- `core:app:default`\n- `core:image:default`\n- `core:resources:default`\n- `core:menu:default`\n- `core:tray:default`",
           "type": "string",
           "const": "core:default",

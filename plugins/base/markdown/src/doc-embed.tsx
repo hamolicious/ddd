@@ -10,6 +10,12 @@
  * chain, the embed is an ordinary link. So a document embedding itself costs a link, not
  * the page.
  *
+ * **A view that claims the document draws it instead** (`lm/document.mode`'s `prefer`):
+ * a saved search embeds as its live results, not as its empty body. Only a claim counts —
+ * the user's default mode is about opening a note, and an embed is never an editor. The
+ * view gets no hydrated handle and `unavailable`, so one that edits shows read-only, and
+ * `embedded`, so it leaves out its own controls.
+ *
  * Task checkboxes inside write to the *embedded* document: it is rendered with its own
  * id, so ticking one is the same splice as ticking it on its own page.
  */
@@ -79,6 +85,20 @@ export interface DocEmbedProps {
   readonly renderBody: (row: DocumentRow) => ReactNode;
 }
 
+function Body({
+  row,
+  runtime,
+  renderBody,
+}: {
+  readonly row: DocumentRow;
+  readonly runtime: MarkdownRuntime;
+  readonly renderBody: (row: DocumentRow) => ReactNode;
+}): ReactNode {
+  const View = runtime.embedView?.(row);
+  if (!View) return renderBody(row);
+  return <View id={row.id} row={row} unavailable embedded />;
+}
+
 export function DocEmbed({ id, runtime, renderBody }: DocEmbedProps): ReactNode {
   const row = useRow(runtime.kernel, id);
 
@@ -97,7 +117,7 @@ export function DocEmbed({ id, runtime, renderBody }: DocEmbedProps): ReactNode 
           loading…
         </p>
       ) : (
-        renderBody(row)
+        <Body row={row} runtime={runtime} renderBody={renderBody} />
       )}
     </div>
   );

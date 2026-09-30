@@ -58,16 +58,6 @@ pub const MANIFEST_ENTRY: &str = "manifest.json";
 /// The only directory of browser assets that is extracted — and the only one the static
 /// route will ever serve (`web/CONTRACTS.md`, the M3 carry-over).
 pub const FRONTEND_PREFIX: &str = "frontend/";
-/// Protocol packages the plugin owns (PLUGIN-PROTOCOLS §3): `protocols/<name>/<file>`,
-/// with only the files a package has. The shape source (`shape.mjs`) stays with the author.
-pub const PROTOCOLS_PREFIX: &str = "protocols/";
-/// The files a protocol package may carry.
-pub const PROTOCOL_FILES: &[&str] = &[
-    "protocol.json",
-    "index.d.ts",
-    "README.md",
-    "conformance.mjs",
-];
 
 /// How often [`wait_for_stable`] samples a file's size.
 const STABLE_POLL: Duration = Duration::from_millis(250);
@@ -370,23 +360,10 @@ pub fn entry_allowed(name: &str, manifest: &PluginManifest) -> bool {
     if let Some(rest) = name.strip_prefix(FRONTEND_PREFIX) {
         return !rest.is_empty();
     }
-    if let Some(rest) = name.strip_prefix(PROTOCOLS_PREFIX) {
-        return is_protocol_entry(rest);
-    }
     manifest
         .backend
         .as_ref()
         .is_some_and(|backend| backend.module == name)
-}
-
-/// `<name>/<file>` under `protocols/`: one directory per protocol, and only the files a
-/// protocol package has.
-fn is_protocol_entry(rest: &str) -> bool {
-    let mut parts = rest.split('/');
-    matches!(
-        (parts.next(), parts.next(), parts.next()),
-        (Some(name), Some(file), None) if !name.is_empty() && PROTOCOL_FILES.contains(&file)
-    )
 }
 
 /// The lexical rules, with the error that names the reason — [`entry_allowed`] is the
@@ -630,24 +607,13 @@ mod tests {
         assert!(!entry_allowed("frontend", &with_wasm));
         assert!(!entry_allowed("Frontend/index.mjs", &with_wasm));
         assert!(!entry_allowed(".git/config", &with_wasm));
-        // Protocol packages: exactly `protocols/<name>/<package file>`.
-        assert!(entry_allowed(
+        // `@kernel` 3.0 has no protocol packages; a stale `protocols/` tree is ignored.
+        // A plugin's types ship as `frontend/index.d.ts`, like every other asset.
+        assert!(!entry_allowed(
             "protocols/navbar.item/protocol.json",
             &with_wasm
         ));
-        assert!(entry_allowed(
-            "protocols/navbar.item/index.d.ts",
-            &with_wasm
-        ));
-        assert!(!entry_allowed(
-            "protocols/navbar.item/shape.mjs",
-            &with_wasm
-        ));
-        assert!(!entry_allowed(
-            "protocols/navbar.item/deep/protocol.json",
-            &with_wasm
-        ));
-        assert!(!entry_allowed("protocols/protocol.json", &with_wasm));
+        assert!(entry_allowed("frontend/index.d.ts", &with_wasm));
     }
 
     #[test]

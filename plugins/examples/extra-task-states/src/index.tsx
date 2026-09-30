@@ -19,8 +19,8 @@
  */
 
 import type { Kernel } from "@kernel";
-/** The protocol's type, from the generated declaration the server serves under `/protocols/`. */
-import type { MarkdownTaskState } from "@protocols/lm/markdown.taskState";
+/** `markdown`'s registration function and its type, from the `.d.ts` it ships with. */
+import { addTaskState, type MarkdownTaskState } from "plugin:markdown";
 
 /**
  * `done` is the interesting field. "In progress" and "Question" are **not** done, so
@@ -34,9 +34,11 @@ const STATES: readonly MarkdownTaskState[] = [
   { marker: "?", label: "Question", icon: "?", order: 40 },
 ];
 
-export default function activate(kernel: Kernel): { readonly markers: readonly string[] } {
-  // One port, three markers: they stay together, in this order, on `markdown`'s host.
-  kernel.ports.offer<MarkdownTaskState>("states", STATES);
+/** The markers this plugin adds, for a test that should not hard-code them. */
+export const markers: readonly string[] = STATES.map((state) => state.marker);
+
+export default function activate(kernel: Kernel): void {
+  // One call, three markers; `markdown` orders them among its own by `order`.
+  addTaskState(STATES);
   kernel.log.info(`extra-task-states: added ${STATES.length} markers`);
-  return { markers: STATES.map((state) => state.marker) };
 }

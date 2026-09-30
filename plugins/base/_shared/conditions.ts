@@ -1,6 +1,6 @@
 /**
  * Conditions: rows a person fills in ("fm.status is open"), turned into the filter DSL.
- * Shared by `doc-list` (its filter bar) and `folder-style` (its styling rules), with the
+ * Shared by `search` (its filter bar) and `folder-style` (its styling rules), with the
  * row editor in `conditions-editor.tsx`.
  *
  * **The DSL is ours, not Mongo's** (SPEC §4.2), and the reason this file is pure and

@@ -6,8 +6,7 @@
  * my-plugin-1.2.0.zip
  * ├── manifest.json
  * ├── backend.wasm        ← only if the manifest declares one
- * ├── frontend/…
- * └── protocols/<name>/   ← protocol.json, index.d.ts, README.md (PLUGIN-PROTOCOLS §3)
+ * └── frontend/…          ← index.mjs, index.d.ts (the exports' types), style.css, …
  * ```
  *
  * The input is the **built** plugin directory (`plugins/base/dist/<id>/<version>`), not the
@@ -105,19 +104,6 @@ if (module) {
 
 const frontendDir = join(root, "frontend");
 if (existsSync(frontendDir)) entries.push(...walk(frontendDir, "frontend"));
-
-// Protocol packages the plugin owns (PLUGIN-PROTOCOLS §3): `protocols/<name>/<file>`, and
-// only the files the installer's allowlist admits.
-const protocolsDir = join(root, "protocols");
-if (existsSync(protocolsDir)) {
-  const allowed = new Set(["protocol.json", "index.d.ts", "README.md", "conformance.mjs"]);
-  entries.push(
-    ...walk(protocolsDir, "protocols").filter(({ name }) => {
-      const parts = name.split("/");
-      return parts.length === 3 && allowed.has(parts[2]);
-    }),
-  );
-}
 
 // ---- the archive ----------------------------------------------------------------
 // A ~60-line zip writer instead of a dependency: this is the only place in the repo that

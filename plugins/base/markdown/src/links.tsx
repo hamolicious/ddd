@@ -24,8 +24,12 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
-import { PopupMenu, type MenuItem } from "./menu.js";
-import type { NoteLook } from "@protocols/lm/folders";
+import type { MenuItem } from "plugin:context-menu";
+import type { NoteLook } from "plugin:folders";
+
+import { target } from "../../_shared/target.js";
+
+import { useMenuItems } from "./menu.js";
 
 import { isInlineImage, type AttachmentMeta, type EmbedSite, type MarkdownRuntime } from "./runtime.js";
 
@@ -153,7 +157,8 @@ interface AttachmentActionsProps {
   readonly id: string;
   readonly runtime: MarkdownRuntime;
   readonly embed?: EmbedToggle;
-  readonly children: (open: () => void) => ReactNode;
+  /** `open` opens the file's menu beside `from`, an element inside the wrapper. */
+  readonly children: (open: (from: HTMLElement) => void) => ReactNode;
 }
 
 /**
@@ -161,12 +166,11 @@ interface AttachmentActionsProps {
  *
  * The menu is the home of "promote to document" (SPEC §3.6) — it is a per-object action,
  * so a context menu on the object is where it belongs, and the same command is registered
- * in the palette against whichever attachment was last touched.
+ * in the palette against whichever attachment was last touched. The wrapper is marked
+ * `markdown/attachment`; the menu is `context-menu`'s (`menu.ts`).
  */
 export function AttachmentActions({ id, runtime, embed, children }: AttachmentActionsProps): ReactNode {
-  const [menuOpen, setMenuOpen] = useState(false);
-
-  const items: readonly MenuItem[] = [
+  const menuRef = useMenuItems<HTMLSpanElement>((): readonly MenuItem[] => [
     ...(embed
       ? [
           {
@@ -201,26 +205,22 @@ export function AttachmentActions({ id, runtime, embed, children }: AttachmentAc
         );
       },
     },
-  ];
+  ]);
 
   return (
     <span
+      ref={menuRef}
+      {...target("markdown/attachment", id, { label: "File actions" })}
       className="markdown:relative markdown:inline-block markdown:max-w-full"
-      onContextMenu={(event) => {
-        event.preventDefault();
-        runtime.focusAttachment(id, embed?.site);
-        setMenuOpen(true);
-      }}
+      // A right-click is a press too: the palette's command acts on this file after it.
+      onContextMenu={() => runtime.focusAttachment(id, embed?.site)}
       onFocus={() => runtime.focusAttachment(id, embed?.site)}
       onPointerDown={() => runtime.focusAttachment(id, embed?.site)}
     >
-      {children(() => {
+      {children((from) => {
         runtime.focusAttachment(id, embed?.site);
-        setMenuOpen(true);
+        runtime.openMenu(from);
       })}
-      {menuOpen ? (
-        <PopupMenu label="File actions" items={items} onClose={() => setMenuOpen(false)} />
-      ) : null}
     </span>
   );
 }
@@ -261,7 +261,7 @@ export function AttachmentImage({ id, alt, runtime, embed }: AttachmentProps): R
           src={blob.objectUrl}
           alt={alt ?? ""}
           loading="lazy"
-          onDoubleClick={open}
+          onDoubleClick={(event) => open(event.currentTarget)}
         />
       )}
     </AttachmentActions>
@@ -295,7 +295,7 @@ export function AttachmentChip({ id, alt, runtime, unavailable, embed }: Attachm
           className="markdown:tap-h markdown:inline-flex markdown:cursor-pointer markdown:items-center markdown:gap-1 markdown:rounded-lg markdown:border markdown:border-border markdown:bg-bg-subtle markdown:px-2 markdown:py-1 markdown:text-text markdown:hover:bg-accent-subtle"
           title={`attachment://${id}`}
           aria-haspopup="menu"
-          onClick={open}
+          onClick={(event) => open(event.currentTarget)}
         >
           <span aria-hidden="true">🗎</span> {name}
           {meta ? <span className="markdown:text-[0.85em] markdown:text-text-muted">{formatSize(meta.size)}</span> : null}

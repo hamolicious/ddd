@@ -10,8 +10,14 @@
    * a checked claim instead of a comment — if the generator drops a type the examples
    * use, this config fails and `web/tsconfig.json` does not.
    *
-   * Consequence: run `npm run kernel:dts` before `npx tsc -p plugins/examples`. That
-   * ordering is real for third parties too, so it is not worth hiding.
+   * The same goes for other plugins: an example imports a base plugin's exports as
+   * `plugin:<id>`, typed by the base plugin's **generated** `frontend/index.d.ts` (an ambient
+   * `declare module "plugin:<id>"`, `web/scripts/build-plugin-dts.mjs`), which is what a
+   * third party downloads with the plugin — not by the base plugin's source.
+   *
+   * Consequence: run `npm run kernel:dts` and `mise run plugins` before
+   * `npx tsc -p plugins/examples`. That ordering is real for third parties too, so it is
+   * not worth hiding.
    */
   "compilerOptions": {
     "target": "ES2022",
@@ -36,11 +42,6 @@
     "baseUrl": ".",
     "paths": {
       "@kernel": ["../../web/kernel-api/dist/kernel.d.ts"],
-      /* Protocol packages (PLUGIN-PROTOCOLS §3), type-only. A third party downloads each
-         one's generated `index.d.ts` from `/protocols/<id>/<version>/index.d.ts`; the
-         re-exports under `plugins/base/_protocols` are those same generated files, one
-         per protocol id, so the mapping is the same one `web/tsconfig.json` uses. */
-      "@protocols/*": ["../base/_protocols/*"],
       /* The runtime layer, type-only: at runtime each one is an import-map singleton
          the server resolves, exactly as it is for a base plugin. */
       "react": ["../../web/node_modules/@types/react"],
@@ -49,6 +50,11 @@
       "vitest": ["../../web/node_modules/vitest"]
     }
   },
-  "include": ["*/src/**/*.ts", "*/src/**/*.tsx"],
+  "include": [
+    "*/src/**/*.ts",
+    "*/src/**/*.tsx",
+    /* Every built base plugin's `declare module "plugin:<id>"`. */
+    "../base/dist/*/*/frontend/index.d.ts"
+  ],
   "exclude": ["dist", "*/dist"]
 }

@@ -40,10 +40,11 @@
       /* Kernel internals: the M2 substrate plus the M3 runtime. Not a plugin
          specifier; `web/` code only. */
       "@kernel/*": ["kernel/src/*"],
-      /* Protocol packages (PLUGIN-PROTOCOLS §3), by id: `@protocols/lm/navbar.item`.
-         Type-only: each resolves to a generated `index.d.ts` inside the owning plugin
-         (through `plugins/base/_protocols`), and a plugin imports it with `import type`. */
-      "@protocols/*": ["../plugins/base/_protocols/*"],
+      /* Another plugin's exports (`@kernel` 3.0): `import { addItem } from "plugin:header"`.
+         At runtime the import map resolves the specifier to the enabled plugin's bundle;
+         here it is the plugin's source, so a change to a host's exported API fails the
+         typecheck of every dependent. Vitest aliases the same (`vite.config.ts`). */
+      "plugin:*": ["../plugins/base/*/src/index.tsx"],
       /* `plugins/base/**` is outside `web/`, so ordinary node resolution walks *up*
          from there and never reaches `web/node_modules`. These entries point the
          blessed runtime layer (SPEC §6.4) at this project's copies — at `@types/*`
@@ -83,6 +84,8 @@
     "app/runtime/**/*.ts",
     "demo/src/**/*.ts",
     "harness/src/**/*.ts",
+    "collab/**/*.ts",
+    "vitest.collab.config.ts",
     "vite.config.ts",
     "vite.app.config.ts",
     "vite.runtime.config.ts",

@@ -1,7 +1,6 @@
 /**
- * The settings screen lists sections in the **seat order** its `sections` host hands it
- * (PLUGIN-PROTOCOLS §6a: hosts stop sorting). The host here is seated against the items'
- * own `order` hints, so a view that went back to sorting by `order` would fail this.
+ * The settings screen lists sections in the order its registry hands them over: by each
+ * section's `order`, then by when it was added.
  *
  * Rendered to static markup: no DOM is needed to read the navigation list, and effects
  * (the base-plugin fetch) do not run.
@@ -10,22 +9,23 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import type { Kernel, SlotHost, SlotItem } from "@kernel";
-import type { SettingsSection } from "@protocols/lm/settings.section";
+import { createRegistry, type Kernel, type Registry } from "@kernel";
 
+import type { SettingsSection } from "./sections.js";
 import { SettingsView } from "./SettingsView.js";
 
-const section = (pluginId: string, id: string, order: number): SlotItem<SettingsSection> => ({
-  pluginId,
-  port: "settings",
-  value: { id, title: id, order, component: () => null },
+const section = (id: string, order?: number): SettingsSection => ({
+  id,
+  title: id,
+  ...(order !== undefined ? { order } : {}),
+  component: () => null,
 });
 
-const host = (items: readonly SlotItem<SettingsSection>[]): SlotHost<SettingsSection> => ({
-  get: () => items.map((item) => item.value),
-  entries: () => items,
-  subscribe: () => () => undefined,
-});
+const host = (items: readonly SettingsSection[]): Registry<SettingsSection> => {
+  const registry = createRegistry<SettingsSection>({ key: (s) => s.id, order: (s) => s.order ?? 100 });
+  registry.add(items);
+  return registry;
+};
 
 const kernel = {
   ui: { boundary: (component: unknown) => component },
@@ -37,19 +37,19 @@ const router = { navigate: () => undefined, url: (path: string) => `#${path}` };
 const titles = (html: string): string[] => [...html.matchAll(/settings-nav-link[^>]*>([^<]+)</g)].map((m) => m[1] ?? "");
 
 describe("SettingsView", () => {
-  it("lists sections in the host's seat order, not by their `order` hint", () => {
+  it("lists sections by their `order`, then in the order they were added", () => {
     const html = renderToStaticMarkup(
       <SettingsView
         kernel={kernel}
         router={router}
-        sections={host([section("themes", "appearance", 10), section("settings", "account", 0), section("folders", "folders", 30)])}
+        sections={host([section("zeta"), section("appearance", 10), section("account", 0), section("folders", 30)])}
       />,
     );
-    expect(titles(html)).toEqual(["appearance", "account", "folders"]);
+    expect(titles(html)).toEqual(["account", "appearance", "folders", "zeta"]);
   });
 
-  it("opens the section the URL names, and the first seated one otherwise", () => {
-    const items = [section("themes", "appearance", 10), section("settings", "account", 0)];
+  it("opens the section the URL names, and the first listed one otherwise", () => {
+    const items = [section("appearance", 0), section("account", 10)];
     const named = renderToStaticMarkup(
       <SettingsView kernel={kernel} router={router} sections={host(items)} params={{ section: "account" }} />,
     );

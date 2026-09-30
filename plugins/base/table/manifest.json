@@ -1,0 +1,29 @@
+{
+  "id": "table",
+  "version": "3.0.0",
+  "name": "Table",
+  "description": "Shows a saved search as a table, with the columns you choose. New tables from the command palette or the folder tree.",
+  "author": "Life Manager base distribution",
+  "license": "MIT OR Apache-2.0",
+  "x-tailwind": {
+    "prefix": "table"
+  },
+  "kernel": "^3.0",
+  "dependencies": {
+    "commands": "^3.0",
+    "context-menu": "^2.0",
+    "doc-events": "^1.0",
+    "document-surface": "^2.0",
+    "search": "^4.0"
+  },
+  "optionalDependencies": {
+    "router": "^2.0"
+  },
+  "peerLibraries": {
+    "react": "^18.0.0"
+  },
+  "frontend": {
+    "module": "frontend/index.mjs",
+    "style": "frontend/style.css"
+  }
+}

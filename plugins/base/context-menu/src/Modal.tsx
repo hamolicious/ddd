@@ -17,7 +17,7 @@ import type {
   ModalRequest,
   ModalResult,
   ModalValue,
-} from "@protocols/lm/context-menu";
+} from "./api.js";
 
 const OK: readonly ModalButton[] = [{ id: "ok", label: "OK", tone: "primary" }];
 

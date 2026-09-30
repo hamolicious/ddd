@@ -23,7 +23,7 @@
  * **Not access control and not deletion.** Every one of these documents is a document:
  * readable, editable, linkable, exportable, and visible to every user in the shared
  * workspace (SPEC §5.4). Hiding is a default view, revealed by a toggle
- * (`doc-list`'s filter bar, `search`'s results page), and every deep link keeps working
+ * (`search`'s filter bar), and every deep link keeps working
  * whether or not the toggle is on. Nothing here changes what the server returns, what
  * the local index holds, or what `kernel.documents` answers — the kernel knows one
  * domain model and "machine-owned" is not part of it (SPEC §2). This is a convention

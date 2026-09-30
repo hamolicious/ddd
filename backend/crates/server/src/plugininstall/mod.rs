@@ -171,6 +171,10 @@ pub enum InstallError {
     // somewhere else.
     #[error("unsatisfiable peer library: {0}")]
     PeerLibrary(String),
+    /// `@kernel` 3.0: a required `dependencies` entry is not installed at a version in
+    /// range. A 422, like the kernel and peer-library refusals.
+    #[error("{0}")]
+    Dependency(String),
     #[error("{id} {version} is already installed")]
     AlreadyInstalled { id: String, version: String },
     #[error("another install is in progress")]
@@ -209,9 +213,9 @@ impl From<InstallError> for crate::error::AppError {
             InstallError::Manifest(message) => {
                 AppError::BadRequest(format!("the manifest is not valid: {message}"))
             }
-            InstallError::KernelIncompatible { .. } | InstallError::PeerLibrary(_) => {
-                AppError::Unprocessable(error.to_string())
-            }
+            InstallError::KernelIncompatible { .. }
+            | InstallError::PeerLibrary(_)
+            | InstallError::Dependency(_) => AppError::Unprocessable(error.to_string()),
             InstallError::AlreadyInstalled { .. } | InstallError::Conflict(_) => {
                 AppError::Conflict(error.to_string())
             }
@@ -281,6 +285,13 @@ async fn install_locked(
     // 2. Everything that can be known from the manifest alone.
     let warnings = validate_manifest(state, &manifest, None)?;
 
+    // 2b. Its required dependencies, against what is installed. The base distribution is
+    //     exempt: it ships as one set, and its members arrive in no particular order.
+    if request.source != InstallSource::Base {
+        let registry = plugins::registry(&state.config);
+        check_dependencies(&manifest, registry.plugins()).map_err(InstallError::Dependency)?;
+    }
+
     // 3. Is this version already installed and approved? An *upgrade* (a different
     //    version) is allowed and keeps the plugin's KV; the same version again is not,
     //    because the artifacts it would replace are the ones currently being served.
@@ -311,13 +322,6 @@ async fn install_locked(
             return Err(err.into());
         }
     };
-
-    // The package's protocols and ports (PLUGIN-PROTOCOLS §3, §4): a claimed namespace, an
-    // `id@version` that means something else here, or a `needs` key the protocol lacks.
-    if let Err(message) = crate::protocols::check_install(state, &manifest, &extracted.dir).await {
-        let _ = fs::remove_dir_all(&work);
-        return Err(InstallError::Manifest(message));
-    }
 
     let outcome = stage_and_record(
         state,
@@ -496,20 +500,6 @@ async fn stage_and_record(
     } else {
         refresh_registry(state).await;
     }
-    // One wiring version for the whole install, auto-approval included (PLUGIN-PROTOCOLS
-    // §6: every change is a version).
-    crate::wiring::mirror_plugin_states(
-        state,
-        if replaced.is_some() {
-            "upgrade"
-        } else {
-            "install"
-        },
-        &request.actor,
-        &id,
-        false,
-    )
-    .await;
 
     Ok(InstallOutcome {
         id,
@@ -539,7 +529,6 @@ pub async fn approve(
         approve_locked(state, id, version, capabilities, actor).await
     })
     .await?;
-    crate::wiring::mirror_plugin_states(state, "approve", actor, id, false).await;
     Ok(record)
 }
 
@@ -628,6 +617,7 @@ async fn approve_locked(
     record.disabled_reason = None;
     record.last_error = None;
     save_record(state, &record).await?;
+    disable_provides_partners(state, &record, actor).await?;
 
     state
         .audit(
@@ -708,24 +698,12 @@ pub async fn disable(
     reason: &str,
     actor: &Actor,
 ) -> Result<(), InstallError> {
-    disable_record(state, id, reason, actor).await?;
-    // The circuit breaker disables as the system; an admin's switch is a person.
-    let action = if matches!(actor, Actor::System) {
-        "breaker"
-    } else {
-        "disable"
-    };
-    crate::wiring::mirror_plugin_states(state, action, actor, id, false).await;
-    Ok(())
+    disable_record(state, id, reason, actor).await
 }
 
 /// The record half of [`disable`]: the backend half stopped, the record moved to
-/// `disabled`, the audit entry written, the registry refreshed — and **no wiring version**.
-///
-/// For a caller that is already writing one: a wiring Apply that unplugs a plugin
-/// (`routes/wiring.rs`) has committed its version before it moves the records, and a
-/// second version saying the same thing would only be noise in the history. Everything
-/// else goes through [`disable`].
+/// `disabled`, the audit entry written, the registry refreshed (which broadcasts
+/// `plugins.changed` when the load set moved — a breaker trip does not move it).
 pub async fn disable_record(
     state: &AppState,
     id: &str,
@@ -762,14 +740,11 @@ pub async fn disable_record(
 
 /// Re-enable a disabled plugin and clear its breaker.
 pub async fn enable(state: &AppState, id: &str, actor: &Actor) -> Result<(), InstallError> {
-    enable_record(state, id, actor).await?;
-    crate::wiring::mirror_plugin_states(state, "enable", actor, id, false).await;
-    Ok(())
+    enable_record(state, id, actor).await
 }
 
-/// The record half of [`enable`]: the record moved to `enabled`, its breaker cleared, its
-/// backend half activated, the audit entry written — and **no wiring version**, for the
-/// same reason as [`disable_record`].
+/// The record half of [`enable`]: the record moved to `enabled`, its `provides` partner
+/// switched off, its breaker cleared, its backend half activated, the audit entry written.
 pub async fn enable_record(state: &AppState, id: &str, actor: &Actor) -> Result<(), InstallError> {
     let mut record = require_record(state, id).await?;
     if record.state == PluginState::Pending {
@@ -782,6 +757,7 @@ pub async fn enable_record(state: &AppState, id: &str, actor: &Actor) -> Result<
     record.disabled_reason = None;
     record.last_error = None;
     save_record(state, &record).await?;
+    disable_provides_partners(state, &record, actor).await?;
 
     state
         .audit(AuditEntry::new(
@@ -857,8 +833,6 @@ pub async fn uninstall(
             )
             .await;
         info!(plugin = %id, purge, "plugin uninstalled");
-        // Uninstall also forgets the plugin's pins, cut and added wires and seats.
-        crate::wiring::mirror_plugin_states(state, "uninstall", &actor, id, true).await;
 
         if purge {
             let kv = state
@@ -1443,7 +1417,7 @@ async fn retire_absent_records(
 
 /// Re-scan `PLUGINS_DIR` and apply the approval records to it.
 ///
-/// The wiring `backend/CONTRACTS.md` left open ("`Registry::apply_states` is not called
+/// The link `backend/CONTRACTS.md` left open ("`Registry::apply_states` is not called
 /// anywhere yet"): every install-flow action that can change what is served ends here, so
 /// `/api/plugins` reports `disabled` for a plugin whose record says so instead of
 /// `enabled`.
@@ -1459,10 +1433,126 @@ pub async fn refresh_registry(state: &AppState) -> Arc<plugins::Registry> {
         }
     };
     let registry = plugins::reload_with_records(&state.config, &records);
-    // Every scan that can change what is served also takes its protocols into the
-    // registry, which keeps them after their owner is gone (PLUGIN-PROTOCOLS §3).
-    crate::protocols::register_served(state).await;
+    // Every scan that can change what is served ends here, so this is where clients hear
+    // about it: `plugins.changed` when the load set's fingerprint moved, and only then —
+    // an install that stays pending, a breaker trip or a second refresh in one action
+    // changes nothing a client loads, and must not reload every open tab.
+    let version = registry.plugins_version();
+    if announce(&state.config.plugins_dir, &version) {
+        let sockets = crate::routes::sync::publish_plugins_changed(state, &version);
+        info!(%version, sockets, "plugin set changed");
+    }
     registry
+}
+
+/// Record `version` as the load set's fingerprint for `dir`; `true` when it differs from
+/// the one recorded before (the first fingerprint a process sees is not a change).
+fn announce(dir: &Path, version: &str) -> bool {
+    use std::sync::{Mutex, OnceLock};
+    static LAST: OnceLock<Mutex<BTreeMap<std::path::PathBuf, String>>> = OnceLock::new();
+    let mut last = LAST
+        .get_or_init(|| Mutex::new(BTreeMap::new()))
+        .lock()
+        .expect("plugin version cell poisoned");
+    match last.insert(dir.to_path_buf(), version.to_string()) {
+        Some(previous) => previous != version,
+        None => false,
+    }
+}
+
+/// Every installed plugin's required dependencies must be met before the package is let in:
+/// an id some installed plugin answers to (its own, or one it `provides`), at a version in
+/// range. Optional dependencies are never checked. A dependency that is installed but
+/// disabled passes — enabling it is one click, and the load plan reports the skip meanwhile.
+pub fn check_dependencies(
+    manifest: &PluginManifest,
+    installed: &[plugins::InstalledPlugin],
+) -> Result<(), String> {
+    let mut unmet = Vec::new();
+    for (dependency, range) in &manifest.dependencies {
+        if dependency == &manifest.id {
+            unmet.push(format!("`{dependency}` is this plugin itself"));
+            continue;
+        }
+        let versions: Vec<(String, String)> = installed
+            .iter()
+            .filter(|plugin| plugin.manifest.id != manifest.id)
+            .flat_map(|plugin| {
+                plugins::effective_ids(&plugin.manifest)
+                    .into_iter()
+                    .filter(|(id, _)| id == dependency)
+                    .map(|(_, version)| (plugin.manifest.id.clone(), version))
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        if versions.is_empty() {
+            unmet.push(format!("`{dependency}` {range} is not installed"));
+            continue;
+        }
+        let fits = versions
+            .iter()
+            .any(|(_, version)| matches!(plugins::satisfies(version, range), Ok(true)));
+        if !fits {
+            let have: Vec<String> = versions
+                .iter()
+                .map(|(holder, version)| {
+                    if holder == dependency {
+                        version.clone()
+                    } else {
+                        format!("{version} (provided by `{holder}`)")
+                    }
+                })
+                .collect();
+            unmet.push(format!(
+                "`{dependency}` {range} is needed, but {} is installed",
+                have.join(" / ")
+            ));
+        }
+    }
+    if unmet.is_empty() {
+        Ok(())
+    } else {
+        Err(format!("unmet dependencies: {}", unmet.join("; ")))
+    }
+}
+
+/// Only one plugin per id may be enabled (`provides`): enabling `record` switches off every
+/// other plugin that answers to one of its ids, with `replaced by \`<id>\`` as the reason.
+async fn disable_provides_partners(
+    state: &AppState,
+    record: &PluginRecord,
+    actor: &Actor,
+) -> Result<(), InstallError> {
+    let mine: Vec<String> = plugins::effective_ids(&record.manifest)
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect();
+    for other in records(state).await? {
+        if other.id == record.id
+            || other.state == PluginState::Pending
+            || (other.state == PluginState::Disabled
+                && plugins::disabled_on_purpose(other.disabled_reason.as_deref()))
+        {
+            continue;
+        }
+        let clashes = plugins::effective_ids(&other.manifest)
+            .iter()
+            .any(|(id, _)| mine.contains(id));
+        if clashes {
+            info!(
+                plugin = %other.id, by = %record.id,
+                "disabling a plugin whose id the newly enabled one also answers to"
+            );
+            disable_record(
+                state,
+                &other.id,
+                &plugins::replaced_reason(&record.id),
+                actor,
+            )
+            .await?;
+        }
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -1717,9 +1807,8 @@ pub fn validate_manifest(
     }
 
     // 3/4. The peer libraries, over the installed set *including* this package —
-    //      resolution has to see what the set will look like, not what it was. (Which
-    //      plugins feed which is the wiring's business, resolved per boot, not an install
-    //      gate: a consumer whose provider is missing installs and waits unwired.)
+    //      resolution has to see what the set will look like, not what it was. (Required
+    //      `dependencies` are checked by the caller, [`check_dependencies`].)
     //
     //      `loaded_manifests`, not `manifests`: the set that resolution is *about* is the set
     //      that will be in one page together, and a disabled or failed plugin is not loaded
@@ -1822,5 +1911,78 @@ fn check_backend_module(manifest: &PluginManifest, wasm: &Path) -> Result<(), In
             abi::names::ABI_VERSION
         ))),
         Err(err) => Err(InstallError::Io(err)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn installed(manifest: serde_json::Value) -> plugins::InstalledPlugin {
+        let manifest: PluginManifest = serde_json::from_value(manifest).expect("a manifest");
+        plugins::InstalledPlugin {
+            base_url: format!("/plugins/{}/{}/", manifest.id, manifest.version),
+            base: false,
+            state: PluginState::Enabled,
+            manifest,
+            assets_version: None,
+            disabled_reason: None,
+        }
+    }
+
+    fn needing(dependencies: serde_json::Value) -> PluginManifest {
+        serde_json::from_value(serde_json::json!({
+            "id": "needy", "version": "1.0.0", "kernel": "^3.0",
+            "dependencies": dependencies,
+            "optionalDependencies": { "absent": "*" },
+        }))
+        .expect("a manifest")
+    }
+
+    #[test]
+    fn only_a_new_fingerprint_is_announced() {
+        let dir = Path::new("/nonexistent/announce-test");
+        assert!(
+            !announce(dir, "a"),
+            "the first fingerprint a process sees is not a change"
+        );
+        assert!(!announce(dir, "a"), "a refresh that changed nothing");
+        assert!(announce(dir, "b"));
+        assert!(!announce(dir, "b"));
+    }
+
+    #[test]
+    fn install_needs_every_required_dependency_in_range() {
+        let set = vec![
+            installed(serde_json::json!({ "id": "folders", "version": "2.1.0", "kernel": "^3.0" })),
+            installed(serde_json::json!({
+                "id": "alt-editor", "version": "0.1.0", "kernel": "^3.0", "provides": "editor@3.2.0"
+            })),
+        ];
+        assert!(check_dependencies(&needing(serde_json::json!({})), &set).is_ok());
+        assert!(
+            check_dependencies(&needing(serde_json::json!({ "folders": "^2.0" })), &set).is_ok()
+        );
+        // Through `provides`, at the provided version.
+        assert!(
+            check_dependencies(&needing(serde_json::json!({ "editor": "^3.1" })), &set).is_ok()
+        );
+
+        let missing =
+            check_dependencies(&needing(serde_json::json!({ "graph": "*" })), &set).unwrap_err();
+        assert!(missing.contains("`graph` * is not installed"), "{missing}");
+
+        let old = check_dependencies(&needing(serde_json::json!({ "folders": "^1.0" })), &set)
+            .unwrap_err();
+        assert!(old.contains("2.1.0"), "{old}");
+
+        let stand_in = check_dependencies(&needing(serde_json::json!({ "editor": "^4.0" })), &set)
+            .unwrap_err();
+        assert!(stand_in.contains("provided by `alt-editor`"), "{stand_in}");
+
+        // A plugin cannot satisfy its own dependency.
+        let own =
+            check_dependencies(&needing(serde_json::json!({ "needy": "*" })), &set).unwrap_err();
+        assert!(own.contains("itself"), "{own}");
     }
 }
