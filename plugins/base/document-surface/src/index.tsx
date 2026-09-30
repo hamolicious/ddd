@@ -918,7 +918,8 @@ function hasIcon(mode: DocumentMode): boolean {
 }
 
 /**
- * The phone's mode switch, bottom-right where a thumb already is. Any number of modes:
+ * The phone's mode switch, bottom-right where a thumb already is, above the shell's
+ * footer (`--shell-footer-height`) when there is one. Any number of modes:
  *
  * - **Two** (read and edit): one round button that switches straight to the other mode
  *   and shows *its* icon — the pencil while reading, the book while editing.
@@ -971,7 +972,7 @@ function ModeBubble({
   return (
     <div
       ref={root}
-      className="docsurface-mode-bubble docsurface:hidden docsurface:compact:flex docsurface:fixed docsurface:right-[calc(1rem+var(--lm-safe-right))] docsurface:bottom-[calc(1rem+var(--lm-safe-bottom))] docsurface:z-10 docsurface:flex-col docsurface:items-end docsurface:gap-3"
+      className="docsurface-mode-bubble docsurface:hidden docsurface:compact:flex docsurface:fixed docsurface:right-[calc(1rem+var(--lm-safe-right))] docsurface:bottom-[calc(1rem+max(var(--lm-safe-bottom),var(--shell-footer-height,0px)))] docsurface:z-10 docsurface:flex-col docsurface:items-end docsurface:gap-3"
     >
       {open && (
         <ul className="docsurface:m-0 docsurface:flex docsurface:list-none docsurface:flex-col docsurface:items-end docsurface:gap-2 docsurface:p-0 docsurface:pr-1" aria-label="Document modes">

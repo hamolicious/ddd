@@ -1,14 +1,14 @@
 {
   "id": "sync-status",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "name": "Sync status",
-  "description": "The sync pill in the header: synced/offline dot, unsynced count, retry and sign-in.",
+  "description": "The sync pill in the toolbar: synced/offline dot, unsynced count, retry and sign-in.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
   "kernel": "^3.0",
   "dependencies": {
-    "header": "^2.0"
+    "toolbar": "^1.0"
   },
   "peerLibraries": {
     "react": "^18.0.0"

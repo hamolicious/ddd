@@ -41,6 +41,12 @@ describe("inferKind", () => {
     expect(inferKind("due", null)).toBe("date");
     expect(inferKind("created_at", "")).toBe("date");
     expect(isDateKey("start_date")).toBe(true);
+    expect(isDateKey("end-date")).toBe(true);
+    expect(isDateKey("endDate")).toBe(true);
+    expect(isDateKey("created-at")).toBe(true);
+    expect(isDateKey("createdAt")).toBe(true);
+    expect(isDateKey("update")).toBe(false);
+    expect(isDateKey("chat")).toBe(false);
     expect(isDateKey("dates")).toBe(false);
   });
 

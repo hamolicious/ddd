@@ -8,7 +8,7 @@
  * ```tsx
  * const entries = useRegistry(items);
  * return entries.map(({ value, pluginId }) => {
- *   const Item = bounded(kernel, value.component, "header.item", pluginId);
+ *   const Item = bounded(kernel, value.component, "toolbar.item", pluginId);
  *   return <Item key={value.id} />;
  * });
  * ```
@@ -78,7 +78,7 @@ export function BoundedIcon({
 
 /**
  * A contributed component wrapped in the kernel's error boundary, memoized. `point` names
- * where it renders (`"header.item"`), `pluginId` is the entry's `pluginId` from
+ * where it renders (`"toolbar.item"`), `pluginId` is the entry's `pluginId` from
  * `useRegistry`: both appear in the failure chip and the aggregated problems notice.
  */
 export function bounded<P extends object>(

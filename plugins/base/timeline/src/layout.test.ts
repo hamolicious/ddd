@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { DocumentRow } from "@kernel";
 
 import { isoDay } from "../../_shared/dates.js";
-import { layoutItems, timelineOptions, windowFor, withTimeline } from "./layout.js";
+import { layoutItems, timelineOptions, windowClauses, windowFor, withTimeline } from "./layout.js";
 
 const note = (id: string, fm: DocumentRow["fm"]): DocumentRow =>
   ({ id, title: id, fm, created_at: "2026-09-10T12:00:00Z", updated_at: "2026-09-10T12:00:00Z" }) as DocumentRow;
@@ -66,5 +66,33 @@ describe("the timeline", () => {
       windowFor(anchor, "day"),
     );
     expect(lane?.rows.map((row) => row.map((item) => item.row.id))).toEqual([["a", "c"], ["b"]]);
+  });
+
+  it("fetches a span that started long before the window and is still running", () => {
+    // What the search's date conditions do with a date-only value: compare the days.
+    const matches = (row: DocumentRow, clauses: ReturnType<typeof windowClauses>["starts"]): boolean =>
+      clauses.every((clause) => {
+        const value = (row.fm as Record<string, unknown>)[clause.field.slice(3)];
+        if (typeof value !== "string") return false;
+        return clause.op === "gte" ? value >= clause.value : value < clause.value;
+      });
+    const fetched = (row: DocumentRow, settings: ReturnType<typeof timelineOptions>): boolean => {
+      const { starts, spans } = windowClauses(settings, windowFor(anchor, settings.scale));
+      return matches(row, starts) || (spans !== undefined && matches(row, spans));
+    };
+    const settings = timelineOptions({ start: "fm.start-date", end: "fm.end-date", scale: "month" });
+
+    const payoff = note("payoff", { "start-date": "2025-01-01", "end-date": "2027-01-01" });
+    expect(fetched(payoff, settings)).toBe(true);
+    expect(layoutItems([payoff], settings, windowFor(anchor, "month"))).toHaveLength(1);
+
+    // Ended before the window, starts after it: not fetched.
+    expect(fetched(note("over", { "start-date": "2025-01-01", "end-date": "2026-03-01" }), settings)).toBe(false);
+    expect(fetched(note("later", { "start-date": "2027-09-01", "end-date": "2027-10-01" }), settings)).toBe(false);
+    // A point in the window is still fetched; an old one is not.
+    expect(fetched(note("point", { "start-date": "2026-10-01" }), settings)).toBe(true);
+    expect(fetched(note("old point", { "start-date": "2025-01-01" }), settings)).toBe(false);
+    // Without an end field there is only the one search.
+    expect(windowClauses(timelineOptions({ start: "fm.start-date" }), windowFor(anchor, "week")).spans).toBeUndefined();
   });
 });

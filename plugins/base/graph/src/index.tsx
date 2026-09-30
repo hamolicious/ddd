@@ -7,7 +7,7 @@
  * - `GraphView.tsx` / `Controls.tsx` — the view and its settings panel.
  * - `settings.ts` — filters, display and forces, stored per user.
  *
- * Two places to see it: the whole workspace at `#/graph` (the header's button, the
+ * Two places to see it: the whole workspace at `#/graph` (the toolbar's button, the
  * palette, `Mod+G`), and the open note's neighbourhood as a panel in the altbar, whose
  * expand button opens the full graph zoomed in to that note (`#/graph?focus=<id>`). Both
  * follow the index, so a link typed into a note appears in the graph as it is typed.
@@ -16,7 +16,7 @@
 import type { Kernel } from "@kernel";
 
 import { addCommand, addKeybinding } from "plugin:commands";
-import { addItem } from "plugin:header";
+import { addItem } from "plugin:toolbar";
 import * as indexer from "plugin:indexer";
 import { addRoute, navigate, query } from "plugin:router";
 import { addAltbarPanel, addView, layout, toggleAltbar, type ShownView } from "plugin:shell-ui";

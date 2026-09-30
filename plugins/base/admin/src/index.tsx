@@ -38,7 +38,7 @@ import type { Kernel } from "@kernel";
 
 import { addCommand } from "plugin:commands";
 import { confirm, modal, openSheet } from "plugin:context-menu";
-import { addItem } from "plugin:header";
+import { addItem } from "plugin:toolbar";
 import { addRoute, current, navigate, onChange } from "plugin:router";
 import { addSection, type SettingsSection } from "plugin:settings";
 import { addView } from "plugin:shell-ui";

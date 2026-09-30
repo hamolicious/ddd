@@ -233,7 +233,8 @@ tags: [tour]
 
 # History and changes
 
-Every edit is kept. Open the **side panel** with the button at the top right.
+Every edit is kept. Open the **side panel** with its button: top right on a computer, in
+the bottom toolbar on a phone.
 
 - Each change shows who made it, when, and what it added and removed
 - The **eye** shows a change as a diff, or the whole note as it was then
@@ -256,7 +257,8 @@ tags: [tour]
 - **Ctrl/⌘ K** opens the command palette: every action, searchable
 - Type **/** in **Edit** for things to insert
 - Settings → Keybindings changes any shortcut
-- Settings → Top bar reorders or hides the buttons up there
+- Settings → Toolbar arranges the buttons in the top and bottom bars, separately for a
+  computer and a phone
 - Settings → Appearance switches between light and dark
 `,
   },

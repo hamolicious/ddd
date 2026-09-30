@@ -9,7 +9,7 @@
  *
  * ```ts
  * import type { Kernel } from "@kernel";
- * import { addItem } from "plugin:header";          // a dependency's exports
+ * import { addItem } from "plugin:toolbar";          // a dependency's exports
  *
  * export function greet(): string { return "hi"; }   // what dependents import
  *

@@ -28,11 +28,11 @@ dist/<id>/<version>/              build output = the installed layout the server
 
 | Plugin | Responsibility | Exports (`plugin:<id>`) |
 |---|---|---|
-| `shell-ui` | layout, mobile breakpoint, a spot for the top bar, the altbar opposite the sidebar, always-mounted overlays | `addView`, `addOverlay`, `addSidebarPanel`, `addAltbarPanel`, `setHeader`, `toggleSidebar`, `toggleAltbar`, `layout`… |
-| `header` | the top bar: `start`/`end` seats (the ☰ is `shell-ui`'s item), the "Top bar" ordering setting | `addItem` |
+| `shell-ui` | layout, mobile breakpoint, a spot for the top bar and one for the bottom bar, the altbar opposite the sidebar, always-mounted overlays | `addView`, `addOverlay`, `addSidebarPanel`, `addAltbarPanel`, `setHeader`, `setFooter`, `toggleSidebar`, `toggleAltbar`, `layout`… |
+| `toolbar` | the top and bottom bars: a header and a status footer on desktop, a thin top bar and a bottom icon toolbar on a phone; items pick a bar and side (`bar`, `side`, `mobile`), and Settings → Toolbar has a per-device layout | `addItem` |
 | `context-menu` | the menu / sheet / modal service: popover beside a button, bottom sheet on a phone; `modal` and `confirm`. Also the right-click / long-press / menu-key menu of anything a plugin marks with a target type (`data-lm-target`, `_shared/target.ts`), built from every plugin's actions for that type. It alone decides popover or sheet: plugins never draw a menu of their own | `addAction`, `open`, `modal`, `confirm`… |
-| `notices` | the notice bell, in the header's `end` seat | — |
-| `sync-status` | the sync pill, in the header's `end` seat | — |
+| `notices` | the notice bell, at the end of the top bar | — |
+| `sync-status` | the sync pill, at the end of the top bar | — |
 | `router` | URL ↔ view (hash-based) | `addRoute`, `navigate`, `Link`, `href`… |
 | `commands` | command registry, palette, keybindings; draws each command's `icon` name through `icons` when it is there; other plugins list and run commands through its exports | `addCommand`, `addKeybinding`, `run`, `list`, `openPalette`… |
 | `themes` | theme registry + picker; overrides kernel tokens | `addTheme`, `select`… |
@@ -208,7 +208,7 @@ A plugin's API is its **named exports** from `src/index.tsx` — functions, comp
 types. Another plugin imports them by id and lists that id in its manifest:
 
 ```ts
-import { addItem } from "plugin:header";          // "dependencies": { "header": "^2.0" }
+import { addItem } from "plugin:toolbar";          // "dependencies": { "toolbar": "^1.0" }
 const folders = await kernel.plugins.optional<typeof import("plugin:folders")>("folders");
                                                    // "optionalDependencies": { "folders": "^4.0" }
 ```
@@ -221,7 +221,7 @@ const folders = await kernel.plugins.optional<typeof import("plugin:folders")>("
   that removes the items again. Module scope matters: a dependent calls `addX` from its own
   `activate`, which runs after the host's. The host draws what it collected with
   `useRegistry` and `bounded` from `_shared/boundary.tsx`, so a component that throws is
-  reported against the plugin that added it (`<host>.<point>`, e.g. `header.item`).
+  reported against the plugin that added it (`<host>.<point>`, e.g. `toolbar.item`).
 - **Events are exports too:** `onX(listener) → unsubscribe` and `notifyX(payload)`.
 - **Validation is opt-in.** A registry can take a `shape`, and an exported function can be
   wrapped in `checked(s.fn([…], ret?), impl)`; a mismatch throws `ContractViolationError`
@@ -373,7 +373,7 @@ export default function activate(kernel: Kernel): void {
 
 ```json
 { "id": "hello", "version": "1.0.0", "kernel": "^3.0",
-  "dependencies": { "shelf": "^1.0", "header": "^2.0" },
+  "dependencies": { "shelf": "^1.0", "toolbar": "^1.0" },
   "optionalDependencies": { "router": "^2.0" },
   "frontend": { "module": "frontend/index.mjs" } }
 ```
@@ -381,7 +381,7 @@ export default function activate(kernel: Kernel): void {
 ```tsx
 // hello/src/index.tsx
 import type { Kernel } from "@kernel";
-import { addItem as addToBar } from "plugin:header";
+import { addItem as addToBar } from "plugin:toolbar";
 import { addItem as addToShelf } from "plugin:shelf";
 
 type Router = typeof import("plugin:router");      // type-only: erased, so fine for an optional one

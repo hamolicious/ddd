@@ -61,7 +61,7 @@ const Boom = () => {
   throw new Error("extra-task-states: deliberately thrown while rendering");
 };
 
-import { addItem } from "plugin:header";
+import { addItem } from "plugin:toolbar";
 import { addSidebarPanel } from "plugin:shell-ui";
 
 export default function activate() {
@@ -69,7 +69,7 @@ export default function activate() {
     id: "extra-task-states.broken-icon",
     label: "Broken icon",
     side: "end",
-    // The header renders an item's icon only inside the actionable form, so the item
+    // The toolbar renders an item's icon only inside the actionable form, so the item
     // needs an \`onSelect\` for this to be the case under test at all.
     onSelect: () => undefined,
     icon: createElement(Boom),
@@ -85,7 +85,7 @@ export default function activate() {
 /** The served manifest, depending on the two hosts the render sabotage adds to. */
 function withHosts(manifest: string): string {
   const parsed = JSON.parse(manifest) as { dependencies?: Record<string, string> };
-  parsed.dependencies = { ...parsed.dependencies, header: "*", "shell-ui": "*" };
+  parsed.dependencies = { ...parsed.dependencies, toolbar: "*", "shell-ui": "*" };
   return `${JSON.stringify(parsed, null, 2)}\n`;
 }
 

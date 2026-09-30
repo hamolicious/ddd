@@ -75,6 +75,9 @@ export interface AltbarPanel {
 /** The top row's component. It owns its whole row, `<header>` included. */
 export type ShellHeaderComponent = ComponentType<Record<string, never>>;
 
+/** The bottom row's component. It owns its whole row, and the bottom safe-area inset under it. */
+export type ShellFooterComponent = ComponentType<Record<string, never>>;
+
 /** What a header or toolbar needs to know to drive the shell's sidebar. */
 export interface ShellLayout {
   /** Below the mobile breakpoint: drawer sidebar, single pane. */
@@ -158,5 +161,10 @@ export const altbarPanels = createRegistry<AltbarPanel>({
  * is still in place, so undoing the latest brings back the one it replaced.
  */
 export const headers = createRegistry<{ readonly component: ShellHeaderComponent }>({
+  shape: s.object({ component: s.component() }),
+});
+
+/** The footer seat: the bottom row, under the sidebar and main region. Same rules as `headers`. */
+export const footers = createRegistry<{ readonly component: ShellFooterComponent }>({
   shape: s.object({ component: s.component() }),
 });

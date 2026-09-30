@@ -2,12 +2,12 @@
  * `shell-ui` — the layout skeleton, and the only plugin that takes the kernel's UI
  * mount (SPEC §6.5).
  *
- * It hosts five contribution points and no features: a header spot (`setHeader`), a
- * sidebar of panels (`addSidebarPanel`), one main region that renders whichever view
+ * It hosts six contribution points and no features: a header spot (`setHeader`), a
+ * footer spot (`setFooter`), a sidebar of panels (`addSidebarPanel`), one main region that renders whichever view
  * the router selected (`addView`), an altbar of panels about that view
  * (`addAltbarPanel`), and always-mounted overlays (`addOverlay`). Everything visible
- * inside them belongs to somebody else — the top bar itself, with the ☰ and the altbar
- * toggle, is the `header` plugin's.
+ * inside them belongs to somebody else — the top and bottom bars, with the ☰ and the
+ * altbar toggle, are the `toolbar` plugin's.
  *
  * What lives where:
  *
@@ -22,12 +22,14 @@ import type { Kernel, Unsubscribe } from "@kernel";
 
 import {
   altbarPanels,
+  footers,
   headers,
   overlays,
   sidebarPanels,
   views,
   type AltbarPanel,
   type MainView,
+  type ShellFooterComponent,
   type ShellHeaderComponent,
   type ShellLayout,
   type ShellOverlay,
@@ -40,6 +42,7 @@ export type {
   AltbarPanel,
   MainView,
   Shell,
+  ShellFooterComponent,
   ShellHeaderComponent,
   ShellLayout,
   ShellOverlay,
@@ -81,6 +84,20 @@ export function setHeader(component: ShellHeaderComponent): () => void {
     warn("shell-ui: setHeader called while a header is already set; the new one replaces it");
   }
   return headers.add({ component });
+}
+
+/**
+ * Put `component` in the footer spot below the sidebar and main region. Like `setHeader`:
+ * one spot, a second call replaces the first. While a footer is shown the shell publishes
+ * its height as `--shell-footer-height`, so anything fixed to the bottom of the screen
+ * can sit above it.
+ */
+export function setFooter(component: ShellFooterComponent): () => void {
+  if (footers.get().length > 0) {
+    const warn = kernelRef?.log.warn.bind(kernelRef.log) ?? console.warn;
+    warn("shell-ui: setFooter called while a footer is already set; the new one replaces it");
+  }
+  return footers.add({ component });
 }
 
 // ---------------------------------------------------------------------------

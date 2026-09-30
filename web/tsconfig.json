@@ -40,7 +40,7 @@
       /* Kernel internals: the M2 substrate plus the M3 runtime. Not a plugin
          specifier; `web/` code only. */
       "@kernel/*": ["kernel/src/*"],
-      /* Another plugin's exports (`@kernel` 3.0): `import { addItem } from "plugin:header"`.
+      /* Another plugin's exports (`@kernel` 3.0): `import { addItem } from "plugin:toolbar"`.
          At runtime the import map resolves the specifier to the enabled plugin's bundle;
          here it is the plugin's source, so a change to a host's exported API fails the
          typecheck of every dependent. Vitest aliases the same (`vite.config.ts`). */

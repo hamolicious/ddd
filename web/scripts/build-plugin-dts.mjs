@@ -3,7 +3,7 @@
  * Build a plugin's `frontend/index.d.ts`: the types of what it exports, as the one ambient
  * module `declare module "plugin:<id>" { … }` (`@kernel` 3.0).
  *
- * Why: a plugin's named exports are its API (`import { addItem } from "plugin:header"`).
+ * Why: a plugin's named exports are its API (`import { addItem } from "plugin:toolbar"`).
  * Inside this repository the tsconfig maps `plugin:*` straight to the sources; anybody else
  * — an example plugin, a third party — compiles against this file, exactly as they compile
  * against `/kernel.d.ts` for `@kernel`. An ambient module is the shape that makes a bare

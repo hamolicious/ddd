@@ -259,10 +259,13 @@ test.describe("browse and find, at phone width", () => {
     await expect(results.first()).toBeVisible({ timeout: 20_000 });
     await noHorizontalScroll(page, "search results");
 
-    // Docked: the toolbar card sits on the bottom edge of the screen, filters opening upwards.
+    // Docked: the toolbar card sits on the bottom edge of the pane, right on top of the
+    // shell's bottom toolbar, filters opening upwards.
     const card = page.locator(".search-controls");
     const box = await card.boundingBox();
-    expect(Math.round((box?.y ?? 0) + (box?.height ?? 0))).toBe(PHONE.height);
+    const dock = await page.getByRole("contentinfo").boundingBox();
+    expect(Math.round(dock?.y ?? 0) + Math.round(dock?.height ?? 0)).toBe(PHONE.height);
+    expect(Math.round((box?.y ?? 0) + (box?.height ?? 0))).toBe(Math.round(dock?.y ?? 0));
     await page.getByRole("button", { name: /^Filters/ }).click();
     const panel = await page.locator(".search-filter-panel").boundingBox();
     const bar = await page.locator(".search-toolbar").boundingBox();

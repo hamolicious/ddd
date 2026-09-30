@@ -109,14 +109,26 @@ export function shiftAnchor(anchor: Date, scale: Scale, by: number): Date {
   return addDays(anchor, (scale === "day" ? 7 : 28) * by);
 }
 
+type Clauses = ReturnType<typeof rangeClauses>;
+
 /**
- * The search conditions that fetch what a window can show: notes that start in it, or —
- * with an end field — that started up to a year before it and may still be running.
+ * The two searches that fetch what a window can show, each a set of conditions all of
+ * which hold (a search's `within` has no "or"):
+ *
+ * - `starts`: notes that start in the window — every point, and spans that begin here.
+ * - `spans`: with an end field, notes that start before the window ends and end after it
+ *   begins — a span that began any time before the window and is still running. Absent
+ *   without an end field.
+ *
+ * Two bounded searches rather than one with only an upper bound: that one would fetch
+ * every note with no end since the beginning of time, and fill its page with them.
  */
-export function windowClauses(settings: TimelineOptions, window: TimeWindow): ReturnType<typeof rangeClauses> {
-  return settings.end === ""
-    ? rangeClauses(settings.start, window.from, window.to)
-    : rangeClauses(settings.start, addDays(window.from, -366), window.to);
+export function windowClauses(settings: TimelineOptions, window: TimeWindow): { readonly starts: Clauses; readonly spans?: Clauses } {
+  const starts = rangeClauses(settings.start, window.from, window.to);
+  if (settings.end === "") return { starts };
+  const [, before] = rangeClauses(settings.start, window.from, window.to);
+  const [after] = rangeClauses(settings.end, window.from, window.to);
+  return { starts, spans: [before!, after!] };
 }
 
 export interface Item {

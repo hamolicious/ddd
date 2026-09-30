@@ -297,11 +297,11 @@ Their genuine niche: **cron while nobody's looking, outbound HTTP with secrets, 
 
 | Plugin | Responsibility | Exports (`plugin:<id>`) |
 |---|---|---|
-| `shell-ui` | Layout skeleton; **mobile breakpoint** (drawer sidebar, single pane, 44 px targets); a spot for the top bar; the altbar (panels about the current view, opposite the sidebar, toggled from the top bar); always-mounted overlays | `addView`, `addOverlay`, `addSidebarPanel`, `addAltbarPanel`, `setHeader`, layout |
-| `header` | The top bar, set as `shell-ui`'s header: `start`/`end` seats other plugins fill with `addItem` (the ☰, altbar toggle and settings gear are its own); per-user order and visibility in Settings → Top bar | `addItem` |
+| `shell-ui` | Layout skeleton; **mobile breakpoint** (drawer sidebar, single pane, 44 px targets); a spot for the top bar and one for the bottom bar; the altbar (panels about the current view, opposite the sidebar, toggled from the toolbar); always-mounted overlays | `addView`, `addOverlay`, `addSidebarPanel`, `addAltbarPanel`, `setHeader`, `setFooter`, layout |
+| `toolbar` | The bars, set as `shell-ui`'s header and footer: on desktop a header and an IDE-style status footer, on a phone a thin top bar and a bottom row of big icon buttons. Other plugins fill their seats with `addItem` (the ☰, altbar toggle and settings gear are its own); per-user layout and visibility for each kind of device in Settings → Toolbar | `addItem` |
 | `context-menu` | One menu / sheet / modal service for every plugin: anchored popover on a wide screen, bottom sheet on a phone; `modal` (fields and buttons) and `confirm` ("are you sure?") resolve with the answer. Owns every context menu: components mark elements with a target type (`owner/item-type`, e.g. `lm/document`), plugins add actions per type, and a right-click, long press or the menu key opens one menu merged from the marked elements under it, innermost first | `addAction`, `open`, `modal`, `confirm` |
-| `notices` | The notice bell in the header's `end` seat: plugin failures, update prompts, other kernel notices | — |
-| `sync-status` | The sync pill in the header's `end` seat: status dot, unsynced count, retry / sign-in | — |
+| `notices` | The notice bell at the end of the top bar: plugin failures, update prompts, other kernel notices | — |
+| `sync-status` | The sync pill at the end of the top bar: status dot, unsynced count, retry / sign-in | — |
 | `router` | URL ↔ view | `addRoute`, `navigate`, `Link`, `href` |
 | `commands` | Command registry + palette (Ctrl+K) **+ keybindings** (per-user config; plugin-suggested defaults; first registration wins on conflict, conflicts listed) | `addCommand`, `addKeybinding`, `run`, `openPalette` |
 | `themes` | Theme registry + picker; **overrides** kernel default tokens | `addTheme` |

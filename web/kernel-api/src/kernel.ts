@@ -9,7 +9,7 @@
  * **Activation follows the dependency graph** (`@kernel` 3.0). Plugins activate in the
  * order the server's load resolution gives: every plugin after the plugins it lists under
  * `dependencies` and `optionalDependencies`. Plugins reach each other through ordinary ES
- * imports (`import { addItem } from "plugin:header"`), not through the kernel. There is no
+ * imports (`import { addItem } from "plugin:toolbar"`), not through the kernel. There is no
  * hot reload: any install, update, enable or disable reloads every open client.
  *
  * **FROZEN.**
@@ -95,7 +95,7 @@ export interface LoadedPlugin {
 /**
  * `kernel.plugins` — the plugin set this page booted with (`@kernel` 3.0).
  *
- * A required dependency is a static import (`import { x } from "plugin:header"`); an
+ * A required dependency is a static import (`import { x } from "plugin:toolbar"`); an
  * **optional** one is never imported statically, because the import would fail when it is
  * absent. It is reached here instead:
  *

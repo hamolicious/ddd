@@ -1,21 +1,21 @@
 /**
- * The header's built-in buttons for the shell's two columns: the ☰ in the `start` seat
- * and the altbar's button in the `end` seat, each on the side of the column it opens.
- * Like every other item, the user can move or hide them in Settings → Top bar.
+ * The toolbar's built-in buttons for the shell's two columns: the ☰ at the start and the
+ * altbar's button at the end, each on the side of the column it opens. Like every other
+ * item, the user can move or hide them in Settings → Toolbar.
  *
  * Each renders nothing while its column has nothing in it: there is nothing to toggle.
  * Focus returns to the ☰ when the phone drawer closes because the shell remembers
  * whatever had focus when the drawer opened, not because it holds a ref to this button.
  */
 
-import { useSyncExternalStore, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
-import { altbarId, layout, sidebarId, subscribeLayout, toggleAltbar, toggleSidebar } from "plugin:shell-ui";
+import { altbarId, sidebarId, toggleAltbar, toggleSidebar } from "plugin:shell-ui";
+
+import { useShellLayout as useLayout } from "./hooks.js";
 
 const BUTTON =
-  "header:tap header:box-border header:inline-flex header:cursor-pointer header:items-center header:justify-center header:rounded header:border header:border-transparent header:bg-transparent header:p-0 header:hover:border-border header:hover:bg-bg-raised";
-
-const useLayout = () => useSyncExternalStore(subscribeLayout, layout, layout);
+  "toolbar:tap toolbar:box-border toolbar:inline-flex toolbar:cursor-pointer toolbar:items-center toolbar:justify-center toolbar:rounded toolbar:border toolbar:border-transparent toolbar:bg-transparent toolbar:p-0 toolbar:hover:border-border toolbar:hover:bg-bg-raised";
 
 export function SidebarToggle(): ReactNode {
   const shell = useLayout();
@@ -29,7 +29,7 @@ export function SidebarToggle(): ReactNode {
       onClick={() => toggleSidebar()}
     >
       <span aria-hidden="true">☰</span>
-      <span className="header:sr-only">{shell.sidebarOpen ? "Hide the sidebar" : "Show the sidebar"}</span>
+      <span className="toolbar:sr-only">{shell.sidebarOpen ? "Hide the sidebar" : "Show the sidebar"}</span>
     </button>
   );
 }
@@ -41,7 +41,7 @@ export function AltbarToggle(): ReactNode {
   return (
     <button
       type="button"
-      className={`shell-altbar-toggle ${BUTTON} header:aria-expanded:text-accent`}
+      className={`shell-altbar-toggle ${BUTTON} toolbar:aria-expanded:text-accent`}
       aria-expanded={shell.altbarOpen}
       aria-controls={altbarId}
       title={label}
@@ -51,7 +51,7 @@ export function AltbarToggle(): ReactNode {
         <rect x="3" y="4" width="18" height="16" rx="2" />
         <path d="M15 4v16" />
       </svg>
-      <span className="header:sr-only">{label}</span>
+      <span className="toolbar:sr-only">{label}</span>
     </button>
   );
 }

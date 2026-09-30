@@ -6,7 +6,7 @@
  *
  * ```ts
  * const items = createRegistry<NavbarItem>({ key: (i) => i.id, order: (i) => i.order ?? 100 });
- * export const addItem = items.add;          // header.addItem(item) → unregister
+ * export const addItem = items.add;          // toolbar.addItem(item) → unregister
  * ```
  *
  * A dependent calls it from its own `activate`, which always runs after the host's. The host

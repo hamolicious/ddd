@@ -1,6 +1,6 @@
 {
   "id": "document-surface",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "name": "Document surface",
   "description": "Owns the document route and the modes other plugins add with addMode.",
   "author": "Life Manager base distribution",

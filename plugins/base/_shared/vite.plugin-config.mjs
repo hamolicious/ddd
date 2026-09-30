@@ -89,7 +89,7 @@ export const RUNTIME_EXTERNALS = [
   "remark-directive",
 ];
 
-/** Other plugins' public modules (`import { addItem } from "plugin:header"`): never bundled. */
+/** Other plugins' public modules (`import { addItem } from "plugin:toolbar"`): never bundled. */
 export const PLUGIN_SPECIFIER = /^plugin:/;
 
 /** The directory of package `name`, as resolved from `require`'s location. */

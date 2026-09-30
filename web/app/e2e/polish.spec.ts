@@ -406,18 +406,21 @@ test.describe("the sync status", () => {
   });
 });
 
-test.describe("the top bar", () => {
-  test("its items can be reordered, moved between seats and hidden from Settings", async ({ page }) => {
+test.describe("the toolbar", () => {
+  test("its items can be reordered, moved between seats and bars, and hidden from Settings", async ({ page }) => {
     await signIn(page, ADMIN);
-    const bar = page.getByRole("banner");
-    const endSeat = bar.locator('ul[data-side="end"]');
-    const startSeat = bar.locator('ul[data-side="start"]');
+    const header = page.getByRole("banner");
+    const endSeat = header.locator('ul[data-seat="top-end"]');
+    const startSeat = header.locator('ul[data-seat="top-start"]');
+    const footer = page.getByRole("contentinfo");
 
-    await page.goto("/#/settings/header.bar");
-    await expect(page.getByRole("heading", { name: /^End/ })).toBeVisible();
+    await page.goto("/#/settings/toolbar.layout");
+    // A wide screen opens on its own tab.
+    await expect(page.getByRole("tab", { name: /^Desktop/ })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByRole("heading", { name: "Header — right" })).toBeVisible();
 
-    // Settings moves to the start seat, and the bar follows without a reload.
-    await page.getByRole("button", { name: "Move Settings to the start seat" }).click();
+    // Settings moves to the header's left, and the bar follows without a reload.
+    await page.getByRole("combobox", { name: "Move Settings to" }).selectOption({ label: "Header — left" });
     await expect(startSeat.getByRole("button", { name: "Settings" })).toBeVisible();
     await expect(endSeat.getByRole("button", { name: "Settings" })).toHaveCount(0);
 
@@ -425,15 +428,41 @@ test.describe("the top bar", () => {
     await page.reload();
     await expect(startSeat.getByRole("button", { name: "Settings" })).toBeVisible();
 
-    // Hidden: gone from the bar, still listed in Settings so it can come back.
+    // Down to the status bar along the bottom.
+    await page.getByRole("combobox", { name: "Move Settings to" }).selectOption({ label: "Footer — right" });
+    await expect(footer.locator('ul[data-seat="bottom-end"]').getByRole("button", { name: "Settings" })).toBeVisible();
+    await expect(header.getByRole("button", { name: "Settings" })).toHaveCount(0);
+
+    // Hidden: gone from the bars, still listed in Settings so it can come back.
     await page.getByRole("button", { name: "Hide Admin" }).click();
-    await expect(bar.getByRole("button", { name: "Admin" })).toHaveCount(0);
+    await expect(header.getByRole("button", { name: "Admin" })).toHaveCount(0);
     await page.getByRole("button", { name: "Show Admin" }).click();
     await expect(endSeat.getByRole("button", { name: "Admin" })).toBeVisible();
 
-    // And reset puts every item back where its plugin asked to be.
-    await page.getByRole("button", { name: "Reset to default order" }).click();
+    // The phone's layout is its own: nothing above touched it.
+    await page.getByRole("tab", { name: /^Phone/ }).click();
+    await expect(page.getByRole("heading", { name: "Bottom toolbar" })).toBeVisible();
+    await expect(page.getByRole("combobox", { name: "Move Settings to" })).toHaveValue("bottom");
+
+    // And reset puts every desktop item back where its plugin asked to be.
+    await page.getByRole("tab", { name: /^Desktop/ }).click();
+    await page.getByRole("button", { name: "Reset desktop layout" }).click();
     await expect(endSeat.getByRole("button", { name: "Settings" })).toBeVisible();
+  });
+
+  test("a phone gets a bottom toolbar and opens Settings on its own tab", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signIn(page, ADMIN);
+    const dock = page.getByRole("contentinfo").getByRole("navigation", { name: "Toolbar" });
+    await expect(dock.getByRole("button", { name: "Settings" })).toBeVisible();
+
+    await page.goto("/#/settings/toolbar.layout");
+    await expect(page.getByRole("tab", { name: /^Phone/ })).toHaveAttribute("aria-selected", "true");
+    await page.getByRole("combobox", { name: "Move Settings to" }).selectOption({ label: "Top bar — right" });
+    await expect(page.getByRole("banner").getByRole("button", { name: "Settings" })).toBeVisible();
+    await expect(dock.getByRole("button", { name: "Settings" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Reset phone layout" }).click();
+    await expect(dock.getByRole("button", { name: "Settings" })).toBeVisible();
   });
 });
 

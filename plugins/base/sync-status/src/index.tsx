@@ -7,7 +7,7 @@
 
 import type { Kernel } from "@kernel";
 
-import { addItem } from "plugin:header";
+import { addItem } from "plugin:toolbar";
 
 import { SyncIndicator } from "./SyncIndicator.js";
 
@@ -18,6 +18,8 @@ export default function activate(kernel: Kernel): void {
     side: "end",
     // Last in the bar, after the notice bell.
     order: 1000,
+    // On a phone, up in the thin top bar: a status, not something to tap all day.
+    mobile: { bar: "top" },
     component: () => <SyncIndicator kernel={kernel} />,
   });
 }

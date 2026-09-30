@@ -1,6 +1,6 @@
 /**
- * The layout: a header spot, sidebar, one main region, and the altbar opposite the
- * sidebar. Everything inside them belongs
+ * The layout: a header spot, sidebar, one main region, the altbar opposite the
+ * sidebar, and a footer spot under all of them. Everything inside them belongs
  * to another plugin, which is what makes this shell replaceable — a different shell
  * exports the same functions and nothing else has to change (SPEC §6.1).
  *
@@ -19,7 +19,7 @@
  *   router can legitimately select a view before the plugin that provides it has
  *   activated, and `main.view` is live, so the resolution has to happen at render.
  * - **Nothing here sorts.** Every registry hands its entries over in `order`, and the
- *   header spot shows the most recent `setHeader` only.
+ *   header and footer spots each show the most recent `setHeader` / `setFooter` only.
  */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
@@ -31,12 +31,14 @@ import { target as mark } from "../../_shared/target.js";
 
 import {
   altbarPanels,
+  footers as footerSeat,
   headers as headerSeat,
   overlays as overlayRegistry,
   sidebarPanels,
   views as viewRegistry,
   type AltbarPanel,
   type MainView,
+  type ShellFooterComponent,
   type ShellHeaderComponent,
   type ShellOverlay,
   type ShownView,
@@ -64,6 +66,7 @@ const NO_VIEW: ShownView = { id: "", params: {} };
 /** Where each contributed component renders: what the error boundary names a failed item by. */
 const POINT = {
   header: "shell-ui.header",
+  footer: "shell-ui.footer",
   overlay: "shell-ui.overlay",
   sidebar: "shell-ui.sidebar",
   altbar: "shell-ui.altbar",
@@ -81,6 +84,7 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
   const panels = useRegistry(sidebarPanels);
   const altbarEntries = useRegistry(altbarPanels);
   const headers = useRegistry(headerSeat);
+  const footers = useRegistry(footerSeat);
   const overlays = useRegistry(overlayRegistry);
 
   const main = useRef<HTMLElement>(null);
@@ -133,11 +137,15 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
     return () => document.removeEventListener("keydown", onKey);
   }, [anyDrawer, drawer, closeDrawer]);
 
-  // One seat: the most recent `setHeader` still in place.
+  // One seat each: the most recent `setHeader` / `setFooter` still in place.
   const header = headers[headers.length - 1];
+  const footer = footers[footers.length - 1];
+  const root = useRef<HTMLDivElement>(null);
+  const footerBox = useRef<HTMLDivElement>(null);
+  useFooterHeight(root, footerBox, footer !== undefined);
 
   return (
-    <div className="shell-root shellui:relative shellui:flex shellui:h-full shellui:overflow-hidden shellui:min-h-0 shellui:flex-col shellui:font-sans shellui:text-text" data-compact={shell.compact ? "" : undefined}>
+    <div ref={root} className="shell-root shellui:relative shellui:flex shellui:h-full shellui:overflow-hidden shellui:min-h-0 shellui:flex-col shellui:font-sans shellui:text-text" data-compact={shell.compact ? "" : undefined}>
       {/*
         A real anchor so it is the first tab stop and announces as a link — but the
         click is handled here: `href="#shell-main"` would rewrite `location.hash`,
@@ -222,6 +230,12 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
           </aside>
         ) : null}
       </div>
+
+      {footer ? (
+        <div ref={footerBox} className="shellui:shrink-0">
+          <FooterSlot kernel={kernel} entry={footer} />
+        </div>
+      ) : null}
 
       {overlays.map((entry) => (
         <OverlaySlot key={entry.value.id} kernel={kernel} entry={entry} />
@@ -339,6 +353,43 @@ function OverlaySlot({
   readonly entry: RegistryEntry<ShellOverlay>;
 }): ReactNode {
   const Rendered = bounded(kernel, entry.value.component, POINT.overlay, entry.pluginId);
+  return <Rendered />;
+}
+
+/**
+ * Publish the footer's height on the shell root as `--shell-footer-height` (`0px` without
+ * one), so something fixed to the bottom of the screen — `document-surface`'s mode
+ * button — can clear it.
+ */
+function useFooterHeight(
+  root: React.RefObject<HTMLElement | null>,
+  footer: React.RefObject<HTMLElement | null>,
+  present: boolean,
+): void {
+  useEffect(() => {
+    const shell = root.current;
+    const box = footer.current;
+    if (!shell) return undefined;
+    const publish = (): void => {
+      const height = present && box ? box.getBoundingClientRect().height : 0;
+      shell.style.setProperty("--shell-footer-height", `${height}px`);
+    };
+    publish();
+    if (!present || !box || typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(publish);
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, [root, footer, present]);
+}
+
+function FooterSlot({
+  kernel,
+  entry,
+}: {
+  readonly kernel: Kernel;
+  readonly entry: RegistryEntry<{ readonly component: ShellFooterComponent }>;
+}): ReactNode {
+  const Rendered = bounded(kernel, entry.value.component, POINT.footer, entry.pluginId);
   return <Rendered />;
 }
 

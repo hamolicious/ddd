@@ -1,6 +1,6 @@
 {
   "id": "welcome",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "name": "Welcome",
   "description": "Fills a new, empty workspace with a short tour: one note per base feature, all deletable.",
   "author": "Life Manager base distribution",

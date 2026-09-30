@@ -3,7 +3,7 @@
 import type { Kernel } from "@kernel";
 import { upload } from "plugin:attachments";
 import { addCommand } from "plugin:commands";
-import { addItem } from "plugin:header";
+import { addItem } from "plugin:toolbar";
 
 import { importVault, type FoldersApi } from "./import.js";
 import { readVaultArchive } from "./zip.js";

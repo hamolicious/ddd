@@ -57,8 +57,11 @@ export const PREFERRED_KEY_ORDER: readonly string[] = [
   "aliases",
 ];
 
-/** Keys whose value is a date even when it is currently empty or malformed. */
-const DATE_KEY = /(^|_)date$|^due$|^created$|^updated$|_at$/;
+/**
+ * Keys whose value is a date even when it is currently empty or malformed: `date`,
+ * `end_date`, `end-date`, `endDate`, `due`, `created_at`, `createdAt`.
+ */
+const DATE_KEY = /(^|[_-])date$|[a-z0-9]Date$|^due$|^created$|^updated$|[_-]at$|[a-z0-9]At$/;
 
 /** `YYYY-MM-DD`. Exported because the date picker splits on the same shape. */
 export const ISO_DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;

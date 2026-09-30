@@ -124,7 +124,7 @@ test("registering the first user boots the whole plugin distribution", async ({
   ).toBeVisible();
 
   // Contributions from across the distribution are on screen, which is the real
-  // assertion "every plugin activated" is standing in for: the bar is `header`'s, the
+  // assertion "every plugin activated" is standing in for: the bars are `toolbar`'s, the
   // admin and settings entries are `admin`'s and `settings`'s, and the palette —
   // `commands`', mounted as a `shell.overlay` — answers Mod+K.
   await expect(page.getByRole("banner").getByRole("navigation", { name: "Main" })).toBeVisible();

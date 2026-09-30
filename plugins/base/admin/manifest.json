@@ -1,6 +1,6 @@
 {
   "id": "admin",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "name": "Admin",
   "description": "Users, invites, audit log, orphan files, and the plugin list with each plugin's dependencies.",
   "author": "Life Manager base distribution",
@@ -12,7 +12,7 @@
     "context-menu": "^2.0",
     "shell-ui": "^3.0",
     "settings": "^2.0",
-    "header": "^2.0",
+    "toolbar": "^1.0",
     "commands": "^3.0"
   },
   "peerLibraries": {

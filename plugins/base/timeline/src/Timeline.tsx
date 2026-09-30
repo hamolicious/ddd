@@ -12,7 +12,7 @@
  * narrow to read. Clicking a note opens it; right-clicking opens its menu (an `lm/document`).
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { ReactElement } from "react";
 
 import type { Search } from "plugin:search";
@@ -32,8 +32,24 @@ export function createTimeline(search: () => Pick<Search, "useResults">) {
     const settings = timelineOptions(options);
     const [anchor, setAnchor] = useState(() => new Date());
     const frame = windowFor(anchor, settings.scale);
-    const results = search().useResults(spec, { pageSize: PAGE, within: windowClauses(settings, frame) });
-    const lanes = layoutItems(results.rows, settings, frame);
+    const clauses = windowClauses(settings, frame);
+    const starting = search().useResults(spec, { pageSize: PAGE, within: clauses.starts });
+    // Without an end field the second search is the first again, and adds nothing.
+    const spanning = search().useResults(spec, { pageSize: PAGE, within: clauses.spans ?? clauses.starts });
+    const rows = useMemo(() => {
+      const seen = new Set(starting.rows.map((row) => row.id));
+      return [...starting.rows, ...spanning.rows.filter((row) => !seen.has(row.id))];
+    }, [starting.rows, spanning.rows]);
+    const results = {
+      rows,
+      loading: starting.loading || spanning.loading,
+      hasMore: starting.hasMore || spanning.hasMore,
+      more: () => {
+        if (starting.hasMore) starting.more();
+        if (spanning.hasMore) spanning.more();
+      },
+    };
+    const lanes = layoutItems(rows, settings, frame);
     const span = frame.to.getTime() - frame.from.getTime();
     const now = (Date.now() - frame.from.getTime()) / span;
     const width = frame.units.length * UNIT_PX[settings.scale];

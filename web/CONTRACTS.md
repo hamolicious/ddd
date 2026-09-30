@@ -424,7 +424,7 @@ Ports, protocols and wiring are gone (`dev-docs/resolved/KERNEL-API.md`, 3.0.0).
 the graph (`GET /api/plugins` → `load: {normal, safe, skipped}`) and the loader activates
 in that order.
 
-- **Specifier.** `import { addItem } from "plugin:header"`. The import map maps
+- **Specifier.** `import { addItem } from "plugin:toolbar"`. The import map maps
   `plugin:<id>` to the enabled plugin's `frontend/index.mjs?v=<assets>` (plus an alias
   under the id a stand-in `provides`); the server writes the entries, and in dev
   `app/src/loader/importmap.ts` adds them from the plugin list. **The loader imports every

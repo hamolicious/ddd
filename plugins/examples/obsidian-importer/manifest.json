@@ -1,11 +1,11 @@
 {
   "id": "obsidian-importer",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "kernel": "^3.0",
   "dependencies": {
     "attachments": "^3.0",
     "commands": "^3.0",
-    "header": "^2.0"
+    "toolbar": "^1.0"
   },
   "optionalDependencies": {
     "folders": "^4.0"

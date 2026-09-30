@@ -1,0 +1,21 @@
+{
+  "id": "toolbar",
+  "version": "1.0.0",
+  "name": "Toolbar",
+  "description": "The bars around the app: a header and a status footer on desktop, a thin top bar and a bottom icon toolbar on a phone. Other plugins fill them with addItem; each device type has its own per-user layout in Settings.",
+  "author": "Life Manager base distribution",
+  "license": "MIT OR Apache-2.0",
+  "x-tailwind": true,
+  "kernel": "^3.0",
+  "dependencies": {
+    "settings": "^2.0",
+    "shell-ui": "^3.1"
+  },
+  "peerLibraries": {
+    "react": "^18.0.0"
+  },
+  "frontend": {
+    "module": "frontend/index.mjs",
+    "style": "frontend/style.css"
+  }
+}

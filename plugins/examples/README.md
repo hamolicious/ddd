@@ -23,7 +23,7 @@ Each one uses the kernel 3.0 model: it lists the plugins it calls under `depende
 - `source-view`: `addMode` from `plugin:document-surface`.
 - `extra-task-states`: `addTaskState` from `plugin:markdown`.
 - `obsidian-importer`: `upload` from `plugin:attachments`, `addCommand` from
-  `plugin:commands`, `addItem` from `plugin:header`; `folders` is optional and reached
+  `plugin:commands`, `addItem` from `plugin:toolbar`; `folders` is optional and reached
   with `kernel.plugins.optional("folders")`.
 
 | Plugin | Why it exists |
