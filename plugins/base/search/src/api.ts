@@ -178,6 +178,11 @@ export interface NoteSelectProps {
   readonly autoFocus?: boolean;
   /** Offer "no note" (chosen as `""`) under this name: "Root", "None". */
   readonly emptyLabel?: string;
+  /**
+   * The note the picking happens from: the notes nearest it in the folder tree come first,
+   * then the last updated. `""` is the root. Since 4.6.0.
+   */
+  readonly cwd?: string;
 }
 
 export interface ResultsOptions {

@@ -7,6 +7,10 @@
  * (`_shared/virtual-list.ts`), so a workspace of thousands costs a screenful. The notes are
  * one live query, held only while the list is open.
  *
+ * With `cwd`, the notes nearest it in the tree come first (`proximity.ts`), last updated
+ * first among equals. That needs the tree, from `folders` as well; without it, `cwd` is
+ * ignored.
+ *
  * Arrow keys move through the list, Enter picks, Escape closes it. Unfocused, the box
  * shows the chosen note's title; focused, it is the text. With `emptyLabel`, "no note" is
  * a choice too: first in the list, and chosen as `""`.
@@ -24,10 +28,16 @@ import { NoteName, type NoteLook } from "../../../_shared/note-picker.js";
 import { useLiveQuery } from "../../../_shared/useLiveQuery.js";
 import { useVirtualList } from "../../../_shared/virtual-list.js";
 
-/** How notes are dressed: `folders`' `look` and `onLookChange`. */
+import { byProximity, type ParentOf } from "./proximity.js";
+
+/** How notes are dressed, and where they sit: `folders`' functions of the same names. */
 export interface NoteLooks {
   readonly look: (id: string) => NoteLook | undefined;
   readonly onLookChange: (listener: () => void) => Unsubscribe;
+  /** The note's parent, `""` at the root; for `cwd`. Since 4.6.0. */
+  readonly parentOf?: ParentOf;
+  /** Fires when the tree changes. Since 4.6.0. */
+  readonly onChange?: (listener: () => void) => Unsubscribe;
 }
 
 export interface NoteSelectDeps {
@@ -91,19 +101,28 @@ export function createNoteSelect({ documents, index, looks, onLooksSet }: NoteSe
     return useMemo(() => new Map(index.documents().map((note) => [note.id, note.folder])), [version]);
   }
 
-  /** The looks in force; re-renders when they are set, or any note's look changes. */
-  function useLooks(): NoteLooks | undefined {
-    const [, bump] = useState(0);
+  /** The looks in force; re-renders when they are set, or any note's look or place changes. */
+  function useLooks(): { readonly current: NoteLooks | undefined; readonly version: number } {
+    const [version, bump] = useState(0);
     useEffect(() => onLooksSet(() => bump((count) => count + 1)), []);
     const current = looks();
-    useEffect(() => current?.onLookChange(() => bump((count) => count + 1)), [current]);
-    return current;
+    useEffect(() => {
+      const again = (): void => bump((count) => count + 1);
+      const offLook = current?.onLookChange(again);
+      const offTree = current?.onChange?.(again);
+      return () => {
+        offLook?.();
+        offTree?.();
+      };
+    }, [current]);
+    return { current, version };
   }
 
   /** The open list: every note, last updated first, narrowed by `query`. */
   function OptionList({
     id,
     query,
+    cwd,
     emptyLabel,
     active,
     setActive,
@@ -114,6 +133,7 @@ export function createNoteSelect({ documents, index, looks, onLooksSet }: NoteSe
   }: {
     readonly id: string;
     readonly query: string;
+    readonly cwd: string | undefined;
     readonly emptyLabel: string | undefined;
     readonly active: number;
     readonly setActive: (index: number) => void;
@@ -124,7 +144,7 @@ export function createNoteSelect({ documents, index, looks, onLooksSet }: NoteSe
   }): ReactElement {
     const live = useLiveQuery(documents, EVERY_NOTE);
     const folders = useFolders();
-    const dressed = useLooks();
+    const { current: dressed, version: dressedVersion } = useLooks();
 
     const options = useMemo(() => {
       const needle = query.trim().toLowerCase();
@@ -133,8 +153,11 @@ export function createNoteSelect({ documents, index, looks, onLooksSet }: NoteSe
         needle === ""
           ? all
           : all.filter((note) => note.title.toLowerCase().includes(needle) || note.folder.toLowerCase().includes(needle));
-      return emptyLabel !== undefined && needle === "" ? [{ id: "", title: emptyLabel, folder: "" }, ...matching] : matching;
-    }, [live.rows, folders, query, emptyLabel]);
+      const parentOf = dressed?.parentOf;
+      // The live query is last updated first, and ties keep that order.
+      const sorted = cwd !== undefined && parentOf !== undefined ? byProximity(matching, parentOf, cwd) : matching;
+      return emptyLabel !== undefined && needle === "" ? [{ id: "", title: emptyLabel, folder: "" }, ...sorted] : sorted;
+    }, [live.rows, folders, query, cwd, emptyLabel, dressed, dressedVersion]);
     useEffect(() => onOptions(options), [options]);
 
     const virtual = useVirtualList({
@@ -197,6 +220,7 @@ export function createNoteSelect({ documents, index, looks, onLooksSet }: NoteSe
     label = "Note",
     autoFocus = false,
     emptyLabel,
+    cwd,
   }: NoteSelectProps): ReactElement {
     const listId = useId();
     const title = useTitle(value);
@@ -276,6 +300,7 @@ export function createNoteSelect({ documents, index, looks, onLooksSet }: NoteSe
           <OptionList
             id={listId}
             query={query}
+            cwd={cwd}
             emptyLabel={emptyLabel}
             active={active}
             setActive={setActive}

@@ -1,6 +1,6 @@
 {
   "id": "search",
-  "version": "4.5.0",
+  "version": "4.6.0",
   "name": "Search",
   "description": "Searching the workspace: providers, saved searches, and the search controls every view shows.",
   "author": "Life Manager base distribution",
