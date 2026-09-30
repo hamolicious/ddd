@@ -10,6 +10,10 @@
  *   and the server provider does not (SPEC §6.5); one throwing must leave the other's
  *   results on screen with a note, not blank the list.
  *
+ * - **The device answers first.** Results are shown as each provider answers, so the
+ *   local index is on screen while a slower provider (the server) is still out; `running`
+ *   stays true until the last one is in.
+ *
  * It returns ranked ids and nothing else. Rows, filters and machine-document hiding are
  * the list's own live query, run over these ids (`DocListView`), so a search result
  * obeys the same filters as the list it replaces and updates as live as it does.
@@ -20,8 +24,15 @@ import { useEffect, useRef, useState } from "react";
 import { mergeHits, type MergedHit, type ProviderResult } from "./merge.js";
 
 export interface SearchEngine {
-  /** Runs every enabled provider and reports each one's outcome. */
-  run(query: string, options: { readonly limit?: number }): Promise<readonly ProviderResult[]>;
+  /**
+   * Runs every enabled provider and reports each one's outcome. `onProgress` is called with
+   * the answers so far each time a provider answers, in seat order.
+   */
+  run(
+    query: string,
+    options: { readonly limit?: number },
+    onProgress?: (results: readonly ProviderResult[]) => void,
+  ): Promise<readonly ProviderResult[]>;
 }
 
 export interface SearchState {
@@ -57,7 +68,10 @@ export function useSearch(
     const timer = setTimeout(() => {
       void (async () => {
         try {
-          const results = await engine.run(trimmed, { limit });
+          const results = await engine.run(trimmed, { limit }, (partial) => {
+            if (token.current !== mine) return;
+            setState({ settled: trimmed, running: true, results: partial, hits: mergeHits(partial, limit) });
+          });
           if (token.current !== mine) return;
           setState({ settled: trimmed, running: false, results, hits: mergeHits(results, limit) });
         } catch (cause) {
