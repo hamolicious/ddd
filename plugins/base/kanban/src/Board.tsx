@@ -34,9 +34,9 @@
  * all-documents page, or a saved board after "Edit search"; never an embed — each column's
  * header has a ⚙ that opens its settings in a sheet (`ColumnEditor.tsx`) and a ⇅ that
  * sorts it — by a field either way, or the board's order — and an "Add column" tile ends
- * the board. A sorted column's header shows its sort; clicking that reverses it. In a
- * sorted column the sort places cards: the gap shows where, and a drop only changes the
- * column.
+ * the board. A sorted column's header shows its sort as an arrow, its field on hover;
+ * clicking it reverses the sort. In a sorted column the sort places cards: the gap shows
+ * where, and a drop only changes the column.
  *
  * **Adding a card stays on the board.** A column's + opens a title field at its bottom;
  * Enter makes the card and leaves the field open for the next, Escape (or leaving it
@@ -95,6 +95,14 @@ const LONG_PRESS_SLOP = 10;
 /** How close to an edge, in pixels, the board starts scrolling on its own, and how fast. */
 const EDGE = 48;
 const SPEED = 14;
+
+/**
+ * A sorted column's sort, folded to its arrow: the column's name is what the header is
+ * for. Its field slides open beside the arrow on hover or keyboard focus; the tooltip
+ * and the accessible name always carry it.
+ */
+const SORT_NAME =
+  "kanban:max-w-0 kanban:overflow-hidden kanban:text-ellipsis kanban:whitespace-nowrap kanban:opacity-0 kanban:transition-[max-width,opacity,margin] kanban:duration-150 kanban:group-hover:ml-0.5 kanban:group-hover:max-w-[7rem] kanban:group-hover:opacity-100 kanban:group-focus-visible:ml-0.5 kanban:group-focus-visible:max-w-[7rem] kanban:group-focus-visible:opacity-100 kanban:motion-reduce:transition-none";
 
 export interface BoardDeps {
   readonly kernel: Kernel;
@@ -628,18 +636,18 @@ export function createBoard({ kernel, looks, menu, addCard }: BoardDeps) {
                     (canEdit ? (
                       <button
                         type="button"
-                        className="kanban:inline-flex kanban:min-h-0! kanban:max-w-[7rem] kanban:items-center kanban:gap-0.5 kanban:rounded-full! kanban:border-0! kanban:bg-bg-raised! kanban:px-1.5! kanban:py-0! kanban:text-xs kanban:font-normal kanban:text-text-muted kanban:hover:text-text"
+                        className="kanban:group kanban:inline-flex kanban:min-h-0! kanban:shrink-0 kanban:items-center kanban:rounded-full! kanban:border-0! kanban:bg-bg-raised! kanban:px-1.5! kanban:py-0! kanban:text-xs kanban:font-normal kanban:text-text-muted kanban:hover:text-text"
                         aria-label={`Sorted by ${sortLabel(column.def.sort)}, ${column.def.sort.direction === "asc" ? "ascending" : "descending"}. Reverse`}
-                        title="Reverse"
+                        title={`Sorted by ${sortLabel(column.def.sort)}. Click to reverse`}
                         onClick={() => column.def?.sort && setSort(column, { ...column.def.sort, direction: column.def.sort.direction === "asc" ? "desc" : "asc" })}
                       >
                         <span aria-hidden="true">{column.def.sort.direction === "asc" ? "↑" : "↓"}</span>
-                        <span className="kanban:truncate">{sortLabel(column.def.sort)}</span>
+                        <span className={SORT_NAME}>{sortLabel(column.def.sort)}</span>
                       </button>
                     ) : (
-                      <span className="kanban:inline-flex kanban:max-w-[7rem] kanban:items-center kanban:gap-0.5 kanban:text-xs kanban:font-normal kanban:text-text-muted" title={`Sorted by ${sortLabel(column.def.sort)}`}>
+                      <span className="kanban:group kanban:inline-flex kanban:shrink-0 kanban:items-center kanban:text-xs kanban:font-normal kanban:text-text-muted" title={`Sorted by ${sortLabel(column.def.sort)}`}>
                         <span aria-hidden="true">{column.def.sort.direction === "asc" ? "↑" : "↓"}</span>
-                        <span className="kanban:truncate">{sortLabel(column.def.sort)}</span>
+                        <span className={SORT_NAME}>{sortLabel(column.def.sort)}</span>
                       </span>
                     ))}
                   {canEdit && column.key !== undefined && (
@@ -803,7 +811,8 @@ function Gap({ height }: { readonly height: number }): ReactElement {
 
 /**
  * What a card shows, top to bottom, as the board's settings say (`card.ts`): the title
- * with its icon, a property as "key value", the note's words clamped to a few lines. An
+ * with its icon and a property as "key value", both wrapped in full, and the note's words
+ * clamped to a few lines. An
  * item with nothing to show is left out; a card whose items all come out empty falls back
  * to its title, faded, so no card is ever blank.
  */
@@ -811,7 +820,7 @@ function CardBody({ row, items, look }: { readonly row: DocumentRow; readonly it
   const lines = items
     .filter((item) => item.hidden !== true)
     .map((item) => {
-      if (item.kind === "title") return <NoteLabel key="title" title={row.title} look={look} />;
+      if (item.kind === "title") return <NoteLabel key="title" title={row.title} look={look} wrap />;
       if (item.kind === "content") {
         const text = excerpt(row.content);
         return text === "" ? null : (
@@ -824,14 +833,14 @@ function CardBody({ row, items, look }: { readonly row: DocumentRow; readonly it
       return text === "" ? null : (
         <span key={item.field} className="kanban:flex kanban:min-w-0 kanban:gap-1 kanban:text-xs">
           <span className="kanban:shrink-0 kanban:opacity-70">{item.field.slice("fm.".length)}</span>
-          <span className="kanban:min-w-0 kanban:truncate">{text}</span>
+          <span className="kanban:min-w-0 kanban:[overflow-wrap:anywhere]">{text}</span>
         </span>
       );
     })
     .filter((line) => line !== null);
   return (
     <span className="kanban:flex kanban:w-full kanban:min-w-0 kanban:flex-col kanban:gap-0.5">
-      {lines.length > 0 ? lines : <span className="kanban:opacity-60"><NoteLabel title={row.title} look={look} /></span>}
+      {lines.length > 0 ? lines : <span className="kanban:opacity-60"><NoteLabel title={row.title} look={look} wrap /></span>}
     </span>
   );
 }

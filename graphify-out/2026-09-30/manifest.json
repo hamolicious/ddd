@@ -1050,10 +1050,10 @@
     "semantic_hash": ""
   },
   "plugins/base/_shared/compact.ts": {
-    "mtime": 1790722717.1285894,
-    "seen": 1790723152.0545855,
-    "ast_hash": "0fac1a01134326c350f83fca862d3b16",
-    "semantic_hash": "0fac1a01134326c350f83fca862d3b16"
+    "mtime": 1790806118.713729,
+    "seen": 1790806162.0994594,
+    "ast_hash": "4f27618b4c5d4c16f36eeb7c6a8f31fe",
+    "semantic_hash": ""
   },
   "plugins/base/_shared/fm-display.test.ts": {
     "mtime": 1790802913.2306216,
@@ -1188,9 +1188,9 @@
     "semantic_hash": ""
   },
   "plugins/base/commands/src/Palette.tsx": {
-    "mtime": 1790723479.4983883,
-    "seen": 1790723622.7017858,
-    "ast_hash": "bd0b95c1b68d6b18d432a3912d95297f",
+    "mtime": 1790806118.7047207,
+    "seen": 1790806162.1020303,
+    "ast_hash": "253d09e9dda0de18d520862508e3cb58",
     "semantic_hash": ""
   },
   "plugins/base/commands/src/bindings.test.ts": {
@@ -4650,9 +4650,9 @@
     "semantic_hash": ""
   },
   "plugins/base/search/manifest.json": {
-    "mtime": 1790790952.8527892,
-    "seen": 1790791398.0017078,
-    "ast_hash": "76ecfe55dcce74b310d758c646bf2a93",
+    "mtime": 1790805925.6817582,
+    "seen": 1790806162.1069314,
+    "ast_hash": "f1eae401fce6e08a5a0107a3cc341168",
     "semantic_hash": ""
   },
   "plugins/base/search/src/FilterBar.tsx": {
@@ -4710,9 +4710,9 @@
     "semantic_hash": ""
   },
   "plugins/base/search/src/results.ts": {
-    "mtime": 1790723875.4587278,
-    "seen": 1790727220.2637265,
-    "ast_hash": "71bbdb2968d82d9c1d1a2c7c526ecc9c",
+    "mtime": 1790805869.230565,
+    "seen": 1790806162.1072679,
+    "ast_hash": "9e465a34d32d9a609b9863df8c7e1358",
     "semantic_hash": ""
   },
   "plugins/base/search/src/saved.test.ts": {
@@ -4950,9 +4950,9 @@
     "semantic_hash": ""
   },
   "plugins/base/search/src/SearchShell.tsx": {
-    "mtime": 1790805681.6086755,
-    "seen": 1790805689.3443918,
-    "ast_hash": "21129f8e981fa2be3ef0317c1c95a5c2",
+    "mtime": 1790805997.9830096,
+    "seen": 1790806162.106996,
+    "ast_hash": "299dff09d91bb4f3dea7b6801b02babb",
     "semantic_hash": ""
   },
   "plugins/base/table/manifest.json": {
@@ -5433,6 +5433,12 @@
     "mtime": 1790788883.8893545,
     "seen": 1790790403.278381,
     "ast_hash": "ecaf2c86a76d051bbdf020488a55e324",
+    "semantic_hash": ""
+  },
+  "plugins/base/_shared/back.ts": {
+    "mtime": 1790806091.7885232,
+    "seen": 1790806162.0994284,
+    "ast_hash": "818d7ba2d1faebb0103121e1e2b636e5",
     "semantic_hash": ""
   }
 }

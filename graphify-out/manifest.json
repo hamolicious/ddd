@@ -4764,9 +4764,9 @@
     "semantic_hash": ""
   },
   "plugins/base/calendar/manifest.json": {
-    "mtime": 1790724167.7415705,
-    "seen": 1790727220.2596462,
-    "ast_hash": "6cde13bc0b58e39d504d791a0f002a56",
+    "mtime": 1790808316.3178608,
+    "seen": 1790808458.1552033,
+    "ast_hash": "b2a9da359ee4652e43b684abebc7ecf5",
     "semantic_hash": ""
   },
   "plugins/base/calendar/src/Calendar.tsx": {
@@ -4836,21 +4836,21 @@
     "semantic_hash": ""
   },
   "plugins/base/_shared/note-look.tsx": {
-    "mtime": 1790722717.134758,
-    "seen": 1790723152.0546043,
-    "ast_hash": "425e3be4176d614da11b44aa9f54d466",
+    "mtime": 1790808316.3115642,
+    "seen": 1790808458.1535456,
+    "ast_hash": "e1e66b3ea99b50f8c35a1292bc7ee726",
     "semantic_hash": ""
   },
   "plugins/base/kanban/manifest.json": {
-    "mtime": 1790724167.7417743,
-    "seen": 1790727220.262818,
-    "ast_hash": "ff755d491825ad610c40b0622dd4a2e6",
+    "mtime": 1790808316.3177555,
+    "seen": 1790808458.158855,
+    "ast_hash": "ad331ae2e61d934854db180963ccc1e4",
     "semantic_hash": ""
   },
   "plugins/base/kanban/src/Board.tsx": {
-    "mtime": 1790724206.3155525,
-    "seen": 1790727220.2628195,
-    "ast_hash": "7790b506d8a81352da3182f35207a4ae",
+    "mtime": 1790808316.3123708,
+    "seen": 1790808458.1588562,
+    "ast_hash": "2ae03a32945c589cf7e373cc24140952",
     "semantic_hash": ""
   },
   "plugins/base/kanban/src/Settings.tsx": {

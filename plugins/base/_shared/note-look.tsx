@@ -40,17 +40,32 @@ export function useLookChanges(looks: Looks | undefined): void {
 const ROW: CSSProperties = { display: "flex", minWidth: 0, alignItems: "center", gap: "0.25rem" };
 const ICON: CSSProperties = { display: "inline-flex", flexShrink: 0, width: "1em", height: "1em" };
 const TEXT: CSSProperties = { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+// Wrapped, the icon sits on the first line rather than centred on the whole block.
+const ROW_WRAP: CSSProperties = { ...ROW, alignItems: "flex-start" };
+const ICON_WRAP: CSSProperties = { ...ICON, height: "1lh", alignItems: "center" };
+const TEXT_WRAP: CSSProperties = { minWidth: 0, overflowWrap: "anywhere" };
 
-/** A note's title with its icon, as the tree shows it. */
-export function NoteLabel({ title, look }: { readonly title: string; readonly look: NoteLook | undefined }): ReactElement {
+/**
+ * A note's title with its icon, as the tree shows it: one line, cut short with "…" —
+ * or, with `wrap`, the whole title over as many lines as it takes (a board's cards).
+ */
+export function NoteLabel({
+  title,
+  look,
+  wrap = false,
+}: {
+  readonly title: string;
+  readonly look: NoteLook | undefined;
+  readonly wrap?: boolean;
+}): ReactElement {
   return (
-    <span style={ROW}>
+    <span style={wrap ? ROW_WRAP : ROW}>
       {look?.icon !== undefined && (
-        <span aria-hidden="true" style={ICON}>
+        <span aria-hidden="true" style={wrap ? ICON_WRAP : ICON}>
           {look.icon}
         </span>
       )}
-      <span style={TEXT}>{title}</span>
+      <span style={wrap ? TEXT_WRAP : TEXT}>{title}</span>
     </span>
   );
 }
