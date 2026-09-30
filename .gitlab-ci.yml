@@ -118,11 +118,26 @@ android-apk:
       optional: true
   # A cold Gradle still downloads its dependencies; the default hour is not much headroom.
   timeout: 2h
+  variables:
+    # Both inside the project directory, because only paths under it can be cached: Gradle's
+    # dependency and wrapper downloads, and pub's packages. Everything else Gradle needs is
+    # already in the image.
+    GRADLE_USER_HOME: "$CI_PROJECT_DIR/.cache/gradle"
+    PUB_CACHE: "$CI_PROJECT_DIR/.cache/pub"
+  cache:
+    key: android-apk
+    paths:
+      - .cache/gradle/caches/
+      - .cache/gradle/wrapper/
+      - .cache/pub/
   before_script: []
   script:
     - cd app
     - flutter pub get
-    - flutter build apk --release
+    # --verbose because without it flutter prints nothing of Gradle's output: a build that
+    # hangs and a build that is slow both read `Running Gradle task 'assembleRelease'...` for
+    # as long as they take, which is how pipeline 2951's run spent two hours saying nothing.
+    - flutter build apk --release --verbose
     - cd ..
     - mv app/build/app/outputs/flutter-apk/app-release.apk "life-manager-${CI_COMMIT_SHORT_SHA}.apk"
     # Publish to public-artifacts/android's generic package registry, the way the template's
