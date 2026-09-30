@@ -47,7 +47,8 @@ import {
   type SearchSpec,
 } from "./api.js";
 import { createFmSelects } from "./components/FmSelect.js";
-import { createNoteSelect, type NoteLooks } from "./components/NoteSelect.js";
+import { createNoteSelect } from "./components/NoteSelect.js";
+import { createNoteHooks, type NoteLooks } from "./components/notes.js";
 import { searchEngine } from "./providers.js";
 import { resolveSearch, useResults as useResultsWith } from "./results.js";
 import { SAVED_SEARCH_KEY, savedSearchNoteText, savedSearchOf as savedSearchOfRow, savedSearchTitle } from "./saved.js";
@@ -55,7 +56,7 @@ import { createSavedSearch } from "./SavedSearch.js";
 import { createSearchShell } from "./SearchShell.js";
 import { documentPath, encodeSpec, parseSpec } from "./spec.js";
 
-export type { NoteLooks } from "./components/NoteSelect.js";
+export type { NoteLooks } from "./components/notes.js";
 export type {
   FmKeySelectProps,
   FmValueSelectProps,
@@ -244,8 +245,7 @@ export default function activate(kernel: Kernel): void {
     });
   };
 
-  const NoteSelect = createNoteSelect({
-    documents: kernel.documents,
+  const notes = createNoteHooks({
     index: indexer,
     looks: () => noteLooks,
     onLooksSet: (listener): Unsubscribe => {
@@ -255,8 +255,9 @@ export default function activate(kernel: Kernel): void {
       };
     },
   });
+  const NoteSelect = createNoteSelect({ documents: kernel.documents, notes });
 
-  const { FmKeySelect, FmValueSelect } = createFmSelects(indexer);
+  const { FmKeySelect, FmValueSelect } = createFmSelects(indexer, notes);
 
   const Shell = createSearchShell({
     kernel,
