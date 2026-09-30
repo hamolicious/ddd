@@ -7,7 +7,7 @@
  * **What a card shows** is a list here too (`card.ts`): the title, any property, the note's
  * text, top to bottom — each moved with ↑ ↓, hidden with the eye, removed with × (the title
  * can only be hidden). The last item shown cannot be hidden or removed: a card always says
- * something.
+ * something. Every property in the list is also a filter above the board (`Board.tsx`).
  */
 
 import type { ReactElement } from "react";
@@ -17,7 +17,7 @@ import type { ViewSettingsProps } from "../../_shared/saved-view-mode.js";
 import { FieldSelect } from "../../_shared/field-select.js";
 
 import { itemKey, type CardItem } from "./card.js";
-import { DEFAULT_ORDER, kanbanOptions, withKanban, writableGroup } from "./layout.js";
+import { kanbanOptions, withKanban, writableGroup } from "./layout.js";
 
 const SMALL = "kanban:inline-flex kanban:size-8 kanban:min-h-0! kanban:items-center kanban:justify-center kanban:p-0! kanban:text-text-muted kanban:hover:text-text kanban:disabled:opacity-40";
 
@@ -66,18 +66,15 @@ export function KanbanSettings({ options, onOptionsChange, fields }: ViewSetting
         <label className={FIELD}>
           <span>Order within columns</span>
           <select
-            value={settings.order === "" ? "search" : "board"}
-            // An older board's property stays the one it reads, while it keeps its own order.
-            onChange={(event) => onOptionsChange(withKanban({ ...settings, order: event.target.value === "search" ? "" : settings.order || DEFAULT_ORDER }, options))}
+            value={settings.order ? "board" : "search"}
+            onChange={(event) => onOptionsChange(withKanban({ ...settings, order: event.target.value === "board" }, options))}
           >
             <option value="board">Board order (drag to arrange)</option>
             <option value="search">The search's sort</option>
           </select>
         </label>
         <span className="kanban:max-w-[16rem] kanban:text-xs kanban:text-text-muted">
-          {settings.order === ""
-            ? "Cards follow the search's sort; dragging only changes the column."
-            : "Dragging a card saves its place with the card."}
+          {settings.order ? "Dragging a card saves its place with the card." : "Cards follow the search's sort; dragging only changes the column."}
         </span>
       </div>
     </div>

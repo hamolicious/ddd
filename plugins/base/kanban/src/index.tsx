@@ -30,7 +30,7 @@ import { offerSavedView, type SavedViewAction } from "../../_shared/saved-view-m
 import { BOARD_ACTIONS } from "./actions.js";
 import { createBoard } from "./Board.js";
 import { BOARD_OPTIONS, CARD_TITLE, cardFields, noteText } from "./create.js";
-import { RANK_KEY, RANK_STEP, rankOf, sinceField, type Column, type KanbanOptions } from "./layout.js";
+import { RANK_KEY, RANK_STEP, bornWith, rankOf, sinceField, type Column, type Filters, type KanbanOptions } from "./layout.js";
 import { KanbanSettings } from "./Settings.js";
 
 /** Cards loaded at a time: a board shows every column at once, so a large page. */
@@ -69,7 +69,8 @@ export default function activate(kernel: Kernel): void {
 
   /**
    * A card titled `title` in `column`, at its bottom, with what the board's search asks of
-   * every card. Resolves to its id; the board stays on screen.
+   * every card and what the board is filtered to. Resolves to its id; the board stays on
+   * screen.
    */
   const addCard = async (
     spec: SearchSpec,
@@ -77,15 +78,16 @@ export default function activate(kernel: Kernel): void {
     column: Column,
     title: string,
     queued: number,
+    filters: Filters,
   ): Promise<string> => {
-    const order = settings.order;
-    const ranks = column.cards.map((card) => rankOf(card, order)).filter((rank): rank is number => rank !== undefined);
+    const ranks = column.cards.map(rankOf).filter((rank): rank is number => rank !== undefined);
     // Below the column's last card, and below any added just before this one.
-    const rank = order === "" ? undefined : (ranks.length > 0 ? Math.max(...ranks) : 0) + RANK_STEP * (1 + queued);
+    const rank = settings.order ? (ranks.length > 0 ? Math.max(...ranks) : 0) + RANK_STEP * (1 + queued) : undefined;
     const fields = cardFields(spec, { field: settings.group, value: column.value });
-    // Born in the column: it entered it now.
+    // Born in the column: it entered it now. The filter's values first: what the search
+    // asks of every card, and the column, win over them.
     const since = sinceField(settings.group);
-    const fm = since ? { ...fields.fm, [since.slice(3)]: new Date().toISOString() } : fields.fm;
+    const fm = { ...bornWith(filters), ...fields.fm, ...(since ? { [since.slice(3)]: new Date().toISOString() } : {}) };
     const id = await kernel.documents.create({ text: noteText(title.trim() || CARD_TITLE, fm) });
     // Its place in the column is this plugin's bookkeeping: in its `%%% kanban` section.
     if (rank !== undefined) await kernel.documents.splice.spliceSection(id, [{ key: RANK_KEY, value: rank }]);

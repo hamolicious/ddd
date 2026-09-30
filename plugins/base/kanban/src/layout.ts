@@ -25,15 +25,16 @@
  * - **Cards are in the board's own order**, a number in the card's own `%%% kanban` section
  *   (`rank: 1024`), lowest first; cards without one follow, in the search's order. The rank
  *   is the plugin's bookkeeping, not a property of the note, so it stays out of the
- *   frontmatter. Boards from before kept it in a property (`fm.rank`, or the one their
- *   `order` option names): that is still read for a card with no section rank, and is
- *   removed when the card is next ranked (`legacyRankKey`). Dropping a card writes it a
- *   rank between its new neighbours (`planRanks`), renumbering the column only when there
- *   is no room or a neighbour has none. With the order turned off, cards follow the
- *   search's order and a drop only changes the column.
+ *   frontmatter. Dropping a card writes it a rank between its new neighbours
+ *   (`planRanks`), renumbering the column only when there is no room or a neighbour has
+ *   none. With the order turned off (`order: none`), cards follow the search's order and a
+ *   drop only changes the column.
  * - **Moving a card writes the field.** Only a top-level frontmatter key can be written by
  *   one splice (`setFrontmatterValue`), and only a scalar value moves cleanly, so cards of
  *   a nested key or a list value stay where they are; the board still shows them.
+ * - **A filter above the board** (`filterRows`) narrows it to the cards holding one value
+ *   of a field the cards show — local to the screen, never saved. A card made under a
+ *   filter is born with its value (`index.tsx`).
  */
 
 import type { CoreValue, DocumentRow } from "@kernel";
@@ -46,8 +47,6 @@ import { DEFAULT_CARD, parseCard, serializeCard, type CardItem } from "./card.js
 export const DEFAULT_GROUP = "fm.status";
 /** The key of a card's rank in its `%%% kanban` section. */
 export const RANK_KEY = "rank";
-/** Where boards kept a card's rank before it moved into the section: still read, never written. */
-export const DEFAULT_ORDER = "fm.rank";
 /** How `order` is stored when it is turned off: the default is on. */
 const NO_ORDER = "none";
 /** The step between ranks when a column is numbered afresh. */
@@ -89,22 +88,18 @@ export interface KanbanOptions {
   readonly group: string;
   /** Columns in this order first, shown even when empty. */
   readonly columns: readonly ColumnDef[];
-  /**
-   * `""` to follow the search's order. Otherwise the board keeps its own, in each card's
-   * `%%% kanban` section; the value is the property an older board kept it in, read for
-   * cards not yet ranked in the section.
-   */
-  readonly order: string;
+  /** The board keeps its own order, in each card's `%%% kanban` section; `false` to follow the search's. */
+  readonly order: boolean;
   /** What each card shows, top to bottom (`card.ts`). */
   readonly card: readonly CardItem[];
 }
 
 export function kanbanOptions(options: Readonly<Record<string, string>>): KanbanOptions {
-  const order = options["order"];
   return {
     group: options["group"] || DEFAULT_GROUP,
     columns: parseColumns(options["columns"] ?? ""),
-    order: order === NO_ORDER ? "" : order !== undefined && writableField(order) ? order : DEFAULT_ORDER,
+    // Older boards named the property they kept the rank in here: on, all the same.
+    order: options["order"] !== NO_ORDER,
     card: parseCard(options["card"] ?? ""),
   };
 }
@@ -117,7 +112,7 @@ export function withKanban(settings: KanbanOptions, options: Readonly<Record<str
     ...rest,
     ...(settings.group === DEFAULT_GROUP ? {} : { group: settings.group }),
     ...(settings.columns.length === 0 ? {} : { columns: serializeColumns(settings.columns) }),
-    ...(settings.order === DEFAULT_ORDER ? {} : { order: settings.order === "" ? NO_ORDER : settings.order }),
+    ...(settings.order ? {} : { order: NO_ORDER }),
     ...(card === serializeCard(DEFAULT_CARD) ? {} : { card }),
   };
 }
@@ -250,15 +245,18 @@ export interface KeptColumns {
 
 export const NO_KEPT: KeptColumns = { keys: [], loose: false };
 
-function isScalar(value: CoreValue | undefined): value is string | number | boolean {
+/** A value a card can be filed under: one that is its own column key. */
+export type Scalar = string | number | boolean;
+
+function isScalar(value: CoreValue | undefined): value is Scalar {
   return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
 }
 
 /** The group field's values on a note, as column keys, with the values they came from. */
-function valuesOf(row: DocumentRow, group: string): readonly (readonly [string, CoreValue])[] {
+function valuesOf(row: DocumentRow, group: string): readonly (readonly [string, Scalar])[] {
   const value = fieldValue(row, group);
   const items = Array.isArray(value) ? value : [value];
-  const seen = new Map<string, CoreValue>();
+  const seen = new Map<string, Scalar>();
   for (const item of items) {
     if (!isScalar(item) || item === "") continue;
     if (!seen.has(String(item))) seen.set(String(item), item);
@@ -271,35 +269,19 @@ const numeric = (value: unknown): number | undefined => {
   return Number.isFinite(number) ? number : undefined;
 };
 
-/** The rank in a card's own `%%% kanban` section, if it has one. */
-function sectionRank(row: DocumentRow): number | undefined {
+/** A card's rank, in its own `%%% kanban` section, if it has one. */
+export function rankOf(row: DocumentRow): number | undefined {
   const section = (row.plugins as Readonly<Record<string, unknown>> | undefined)?.["kanban"];
   if (section === null || typeof section !== "object" || Array.isArray(section)) return undefined;
   return numeric((section as Readonly<Record<string, unknown>>)[RANK_KEY]);
 }
 
-/** A card's rank: its section's, else the property an older board kept it in. */
-export function rankOf(row: DocumentRow, order: string): number | undefined {
-  if (order === "") return undefined;
-  return sectionRank(row) ?? numeric(fieldValue(row, order));
-}
-
-/**
- * The frontmatter key an older board left this card's rank in, when it did: removed as
- * the card is ranked in its section, so the note does not keep a stale number.
- */
-export function legacyRankKey(row: DocumentRow, order: string): string | undefined {
-  if (!writableField(order)) return undefined;
-  const key = order.slice(3);
-  return Object.prototype.hasOwnProperty.call(row.fm, key) ? key : undefined;
-}
-
 /** Cards by rank, the unranked after, each group in the search's order. */
-function ordered(cards: readonly DocumentRow[], order: string, position: ReadonlyMap<string, number>): readonly DocumentRow[] {
-  if (order === "") return cards;
+function ordered(cards: readonly DocumentRow[], order: boolean, position: ReadonlyMap<string, number>): readonly DocumentRow[] {
+  if (!order) return cards;
   return [...cards].sort((a, b) => {
-    const ra = rankOf(a, order);
-    const rb = rankOf(b, order);
+    const ra = rankOf(a);
+    const rb = rankOf(b);
     if (ra !== undefined && rb !== undefined && ra !== rb) return ra - rb;
     if (ra !== undefined && rb === undefined) return -1;
     if (ra === undefined && rb !== undefined) return 1;
@@ -370,16 +352,11 @@ export function movable(row: DocumentRow, group: string): boolean {
  * column as shown, without the moved card) at `slot`; or, when a neighbour has no rank or
  * there is no room left between them, the whole column afresh, `RANK_STEP` apart.
  */
-export function planRanks(
-  cards: readonly DocumentRow[],
-  slot: number,
-  id: string,
-  order: string,
-): ReadonlyMap<string, number> {
+export function planRanks(cards: readonly DocumentRow[], slot: number, id: string): ReadonlyMap<string, number> {
   const before = slot > 0 ? cards[slot - 1] : undefined;
   const after = slot < cards.length ? cards[slot] : undefined;
-  const low = before === undefined ? undefined : rankOf(before, order);
-  const high = after === undefined ? undefined : rankOf(after, order);
+  const low = before === undefined ? undefined : rankOf(before);
+  const high = after === undefined ? undefined : rankOf(after);
   const fits = (before === undefined || low !== undefined) && (after === undefined || high !== undefined);
   if (fits) {
     const rank =
@@ -452,7 +429,33 @@ export function settled(row: DocumentRow, settings: KanbanOptions, move: Move): 
     const same = value === undefined ? now === undefined || now === null || now === "" : now === value || String(now) === String(value);
     if (!same) return false;
   }
-  return move.rank === undefined || rankOf(row, settings.order) === move.rank;
+  return move.rank === undefined || rankOf(row) === move.rank;
+}
+
+/** A filter above the board: for each field, the one value a shown card must hold. */
+export type Filters = ReadonlyMap<string, Scalar>;
+
+/** The fields the board can filter by: every property the cards show. */
+export function filterFields(settings: KanbanOptions): readonly string[] {
+  return settings.card.flatMap((item) => (item.kind === "field" ? [item.field] : []));
+}
+
+/** The values `field` takes across `rows`, each once, in natural order: what a filter offers. */
+export function filterChoices(rows: readonly DocumentRow[], field: string): readonly Scalar[] {
+  const seen = new Map<string, Scalar>();
+  for (const row of rows) for (const [key, value] of valuesOf(row, field)) if (!seen.has(key)) seen.set(key, value);
+  return [...seen.entries()].sort(([a], [b]) => a.localeCompare(b, undefined, { sensitivity: "base", numeric: true })).map(([, value]) => value);
+}
+
+/** The rows holding every filter's value (a list value counts when any of its items does). */
+export function filterRows(rows: readonly DocumentRow[], filters: Filters): readonly DocumentRow[] {
+  if (filters.size === 0) return rows;
+  return rows.filter((row) => [...filters].every(([field, value]) => valuesOf(row, field).some(([key]) => key === String(value))));
+}
+
+/** What a card made under `filters` is born with: each filter's value, where a note can be given it. */
+export function bornWith(filters: Filters): Readonly<Record<string, Scalar>> {
+  return Object.fromEntries([...filters].filter(([field]) => writableField(field)).map(([field, value]) => [field.slice(3), value]));
 }
 
 /** A column's name on the board: its label, its value, or "No …" for the notes without one. */

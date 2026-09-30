@@ -41,6 +41,11 @@
  * **Adding a card stays on the board.** A column's + opens a title field at its bottom;
  * Enter makes the card and leaves the field open for the next, Escape (or leaving it
  * empty) closes it. The new card shows at once, faded, until the note it made arrives.
+ *
+ * **A filter bar above the board**, one select per property the cards show (the board's
+ * settings), narrows the board to the cards holding the chosen value — on this screen
+ * only, nothing is saved. A card added while a filter is on is born with its value, so it
+ * stays in view.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -64,10 +69,12 @@ import {
   NO_KEPT,
   columnTitle,
   columnsFor,
+  filterChoices,
+  filterFields,
+  filterRows,
   forgetColumn,
   kanbanOptions,
   keepColumns,
-  legacyRankKey,
   movable,
   placeColumn,
   planRanks,
@@ -82,9 +89,11 @@ import {
   type Column,
   type ColumnDef,
   type ColumnSort,
+  type Filters,
   type KanbanOptions,
   type KeptColumns,
   type Move,
+  type Scalar,
 } from "./layout.js";
 
 /** A mouse press that travels this far is a drag, not a click. */
@@ -108,9 +117,11 @@ export interface BoardDeps {
   readonly kernel: Kernel;
   readonly looks: () => Looks | undefined;
   readonly menu: () => Pick<ContextMenu, "open" | "openSheet"> | undefined;
-  /** A new card titled `title` at the bottom of `column`, born in it (`create.ts`). */
-  readonly addCard: (spec: SearchSpec, settings: KanbanOptions, column: Column, title: string, queued: number) => Promise<string>;
+  /** A new card titled `title` at the bottom of `column`, born in it and with the filter's values (`create.ts`). */
+  readonly addCard: (spec: SearchSpec, settings: KanbanOptions, column: Column, title: string, queued: number, filters: Filters) => Promise<string>;
 }
+
+const SELECT = "kanban:tap-h kanban:min-w-0 kanban:max-w-[12rem] kanban:rounded kanban:border kanban:border-border kanban:bg-bg kanban:px-2 kanban:text-sm kanban:text-text";
 
 /** The card being carried, and where. */
 interface Lift {
@@ -151,9 +162,20 @@ export function createBoard({ kernel, looks, menu, addCard }: BoardDeps) {
       onOptionsChange(withKanban(withColumn(settings, column.key, { collapsed }), options));
     };
 
-    // `""`: the search's order. Otherwise ranks, in each card's `%%% kanban` section.
+    // Ranks in each card's `%%% kanban` section; off, the search's order.
     const order = settings.order;
-    const rows = withMoves(results.rows, settings, moves);
+    /** The filter bar's choices, by field: only for the properties the cards show now. */
+    const [chosen, setChosen] = useState<Filters>(() => new Map());
+    const fields = filterFields(settings);
+    const filters: Filters = new Map([...chosen].filter(([field]) => fields.includes(field)));
+    const filter = (field: string, value: Scalar | undefined): void =>
+      setChosen((current) => {
+        const next = new Map(current);
+        if (value === undefined) next.delete(field);
+        else next.set(field, value);
+        return next;
+      });
+    const rows = filterRows(withMoves(results.rows, settings, moves), filters);
     // Columns seen while this board is on screen, for this grouping, stay.
     const kept = useRef<{ group: string; columns: KeptColumns }>({ group: settings.group, columns: NO_KEPT });
     if (kept.current.group !== settings.group) kept.current = { group: settings.group, columns: NO_KEPT };
@@ -201,7 +223,7 @@ export function createBoard({ kernel, looks, menu, addCard }: BoardDeps) {
             taken={named.filter((def) => def.value !== was).map((def) => def.value)}
             adding={column === undefined}
             sortFields={sortFields()}
-            unsorted={order === "" ? "The search's order" : "Board order (drag to arrange)"}
+            unsorted={order ? "Board order (drag to arrange)" : "The search's order"}
             onSave={(def, position) => {
               // A renamed column's old value goes too: its cards show under their own value.
               apply(placeColumn(named, at === -1 ? undefined : was, def, position), was !== undefined && was !== def.value ? was : undefined);
@@ -257,7 +279,7 @@ export function createBoard({ kernel, looks, menu, addCard }: BoardDeps) {
             items: [
               {
                 id: "board",
-                label: order === "" ? "The search's order" : "Board order (drag to arrange)",
+                label: order ? "Board order (drag to arrange)" : "The search's order",
                 checked: sort === undefined,
                 run: () => setSort(column, undefined),
               },
@@ -304,7 +326,7 @@ export function createBoard({ kernel, looks, menu, addCard }: BoardDeps) {
       const queued = pending.filter((card) => card.key === key).length;
       setError(undefined);
       setPending((current) => [...current, { key, title, token }]);
-      addCard(spec, settings, column, title, queued).then(
+      addCard(spec, settings, column, title, queued, filters).then(
         (id) => setPending((current) => current.map((card) => (card.token === token ? { ...card, id } : card))),
         (cause: unknown) => {
           kernel.log.error("could not add the card", cause);
@@ -330,8 +352,8 @@ export function createBoard({ kernel, looks, menu, addCard }: BoardDeps) {
       const same = column.cards.includes(row);
       // A sorted column places cards itself: a drop there only changes the column.
       const sorted = column.def?.sort !== undefined;
-      if (same && (order === "" || sorted || column.cards.indexOf(row) === slot)) return;
-      const ranks = order === "" || sorted ? new Map<string, number>() : planRanks(others, slot, row.id, order);
+      if (same && (!order || sorted || column.cards.indexOf(row) === slot)) return;
+      const ranks = !order || sorted ? new Map<string, number>() : planRanks(others, slot, row.id);
       const planned = new Map<string, Move>();
       for (const [id, rank] of ranks) planned.set(id, { rank });
       // Into another column: its value, and when it got there.
@@ -349,13 +371,7 @@ export function createBoard({ kernel, looks, menu, addCard }: BoardDeps) {
               : kernel.documents.splice.setFrontmatterValue(id, groupKey, planned_.group.value),
           );
         }
-        if (planned_.rank !== undefined) {
-          writes.push(kernel.documents.splice.spliceSection(id, [{ key: RANK_KEY, value: planned_.rank }]));
-          // Where an older board kept it: gone, now that the section holds it.
-          const card = results.rows.find((candidate) => candidate.id === id);
-          const legacy = card ? legacyRankKey(card, order) : undefined;
-          if (legacy !== undefined) writes.push(kernel.documents.splice.removeFrontmatterKey(id, legacy));
-        }
+        if (planned_.rank !== undefined) writes.push(kernel.documents.splice.spliceSection(id, [{ key: RANK_KEY, value: planned_.rank }]));
         const since = sinceField(settings.group);
         if (planned_.since !== undefined && since !== undefined) {
           writes.push(kernel.documents.splice.setFrontmatterValue(id, since.slice(3), planned_.since));
@@ -418,7 +434,7 @@ export function createBoard({ kernel, looks, menu, addCard }: BoardDeps) {
       if (column.def?.sort && carried) return { over: Number(index), slot: sortedSlot(others, carried, column.def.sort) };
       // A folded column has no list to aim into: a card dropped on it goes to its end.
       if (!list) return { over: Number(index), slot: others.length };
-      if (latest.current.order === "") {
+      if (!latest.current.order) {
         // The search's order decides: the gap goes where that order puts the card.
         const rank = new Map(latest.current.rows.map((row, at) => [row.id, at]));
         const mine = rank.get(id) ?? Number.MAX_SAFE_INTEGER;
@@ -559,11 +575,51 @@ export function createBoard({ kernel, looks, menu, addCard }: BoardDeps) {
             {error}
           </p>
         )}
+        {fields.length > 0 && (
+          <div className="kanban-filters kanban:flex kanban:flex-wrap kanban:items-center kanban:gap-2 kanban:text-sm">
+            {fields.map((field) => {
+              const name = field.slice("fm.".length);
+              const choices = filterChoices(results.rows, field);
+              const current = filters.get(field);
+              // What was chosen stays offered while it is chosen, even once no card holds it.
+              const offered = current !== undefined && !choices.some((choice) => String(choice) === String(current)) ? [current, ...choices] : choices;
+              return (
+                <label key={field} className="kanban:inline-flex kanban:items-center kanban:gap-1 kanban:text-text-muted">
+                  <span>{name}</span>
+                  <select
+                    aria-label={`Filter by ${name}`}
+                    className={`${SELECT} ${current === undefined ? "" : "kanban:border-accent kanban:text-text"}`}
+                    value={current === undefined ? "" : String(current)}
+                    onChange={(event) => filter(field, offered.find((choice) => String(choice) === event.target.value))}
+                  >
+                    <option value="">Any</option>
+                    {offered.map((choice) => (
+                      <option key={String(choice)} value={String(choice)}>
+                        {String(choice)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              );
+            })}
+            {filters.size > 0 && (
+              <button
+                type="button"
+                className="kanban:tap-h kanban:min-h-0! kanban:border-0! kanban:bg-transparent! kanban:px-1! kanban:text-sm kanban:text-text-muted kanban:hover:text-text"
+                onClick={() => setChosen(new Map())}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        )}
         {columns.length === 0 && (
           <p className="kanban:m-0 kanban:py-4 kanban:text-sm kanban:text-text-muted">
-            {canEdit
-              ? "No cards, and no columns yet. + Add column to start; each column gets a + for its cards."
-              : "No cards, and no columns yet. Edit the search to add columns."}
+            {filters.size > 0
+              ? "No cards match the filter."
+              : canEdit
+                ? "No cards, and no columns yet. + Add column to start; each column gets a + for its cards."
+                : "No cards, and no columns yet. Edit the search to add columns."}
           </p>
         )}
         <div

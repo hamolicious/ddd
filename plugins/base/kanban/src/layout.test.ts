@@ -5,9 +5,12 @@ import type { DocumentRow } from "@kernel";
 import {
   NO_KEPT,
   columnsFor,
+  filterChoices,
+  filterFields,
+  filterRows,
+  bornWith,
   kanbanOptions,
   keepColumns,
-  legacyRankKey,
   movable,
   planRanks,
   rankOf,
@@ -16,6 +19,7 @@ import {
   withKanban,
   withMoves,
   writableGroup,
+  type Scalar,
 } from "./layout.js";
 
 const note = (id: string, fm: DocumentRow["fm"], plugins: DocumentRow["plugins"] = {}): DocumentRow =>
@@ -23,14 +27,17 @@ const note = (id: string, fm: DocumentRow["fm"], plugins: DocumentRow["plugins"]
 
 describe("the board", () => {
   it("groups by status by default, and keeps defaults out of the options", () => {
-    expect(kanbanOptions({})).toEqual({ group: "fm.status", columns: [], order: "fm.rank", card: [{ kind: "title" }] });
+    expect(kanbanOptions({})).toEqual({ group: "fm.status", columns: [], order: true, card: [{ kind: "title" }] });
     expect(withKanban(kanbanOptions({}), { other: "x", group: "fm.stage" })).toEqual({ other: "x" });
-    expect(withKanban({ group: "fm.stage", columns: [{ value: "a" }, { value: "b" }], order: "", card: [{ kind: "title" }] }, {})).toEqual({
+    expect(withKanban({ group: "fm.stage", columns: [{ value: "a" }, { value: "b" }], order: false, card: [{ kind: "title" }] }, {})).toEqual({
       group: "fm.stage",
       columns: "a,b",
       order: "none",
     });
-    expect(kanbanOptions({ order: "none" }).order).toBe("");
+    expect(kanbanOptions({ order: "none" }).order).toBe(false);
+    // An older board named the property it kept the rank in: on, all the same.
+    expect(kanbanOptions({ order: "fm.pos" }).order).toBe(true);
+    expect(withKanban(kanbanOptions({ order: "fm.pos" }), { order: "fm.pos" })).toEqual({});
     expect(splitColumns(" todo, doing ,, todo,done ")).toEqual(["todo", "doing", "done"]);
   });
 
@@ -61,7 +68,7 @@ describe("the board", () => {
 describe("order and moves", () => {
   it("orders cards by rank, the unranked after in the search's order", () => {
     const [column] = columnsFor(
-      [note("a", { status: "x" }), note("b", { status: "x", rank: 2 }), note("c", { status: "x", rank: 1 }), note("d", { status: "x" })],
+      [note("a", { status: "x" }), note("b", { status: "x" }, { kanban: { rank: 2 } }), note("c", { status: "x" }, { kanban: { rank: 1 } }), note("d", { status: "x" })],
       kanbanOptions({}),
     );
     expect(column?.cards.map((card) => card.id)).toEqual(["c", "b", "a", "d"]);
@@ -76,13 +83,13 @@ describe("order and moves", () => {
   });
 
   it("ranks a dropped card between its neighbours, or renumbers when it must", () => {
-    const ranked = [note("a", { rank: 1024 }), note("b", { rank: 2048 })];
-    expect([...planRanks(ranked, 1, "x", "fm.rank")]).toEqual([["x", 1536]]);
-    expect([...planRanks(ranked, 0, "x", "fm.rank")]).toEqual([["x", 0]]);
-    expect([...planRanks(ranked, 2, "x", "fm.rank")]).toEqual([["x", 3072]]);
-    expect([...planRanks([], 0, "x", "fm.rank")]).toEqual([["x", 1024]]);
-    const unranked = [note("a", {}), note("b", { rank: 5 })];
-    expect([...planRanks(unranked, 1, "x", "fm.rank")]).toEqual([
+    const ranked = [note("a", {}, { kanban: { rank: 1024 } }), note("b", {}, { kanban: { rank: 2048 } })];
+    expect([...planRanks(ranked, 1, "x")]).toEqual([["x", 1536]]);
+    expect([...planRanks(ranked, 0, "x")]).toEqual([["x", 0]]);
+    expect([...planRanks(ranked, 2, "x")]).toEqual([["x", 3072]]);
+    expect([...planRanks([], 0, "x")]).toEqual([["x", 1024]]);
+    const unranked = [note("a", {}), note("b", {}, { kanban: { rank: 5 } })];
+    expect([...planRanks(unranked, 1, "x")]).toEqual([
       ["a", 1024],
       ["x", 2048],
       ["b", 3072],
@@ -101,23 +108,42 @@ describe("order and moves", () => {
     expect(settled(rows[0]!, settings, { group: { value: "todo" }, rank: 1 })).toBe(false);
   });
 
-  it("reads a card's rank from its own section, and an older board's property only without one", () => {
-    const order = kanbanOptions({}).order;
-    expect(rankOf(note("a", {}, { kanban: { rank: 7 } }), order)).toBe(7);
-    expect(rankOf(note("a", { rank: 3 }, { kanban: { rank: 7 } }), order)).toBe(7);
-    expect(rankOf(note("a", { rank: 3 }), order)).toBe(3);
-    expect(rankOf(note("a", {}, { kanban: { rank: 7 } }), "")).toBeUndefined();
+  it("reads a card's rank from its own section only", () => {
+    expect(rankOf(note("a", {}, { kanban: { rank: 7 } }))).toBe(7);
+    expect(rankOf(note("a", { rank: 3 }, { kanban: { rank: 7 } }))).toBe(7);
+    expect(rankOf(note("a", { rank: 3 }))).toBeUndefined();
     const [column] = columnsFor(
-      [note("a", { status: "x" }, { kanban: { rank: 2 } }), note("b", { status: "x", rank: 1 })],
+      [note("a", { status: "x" }, { kanban: { rank: 2 } }), note("b", { status: "x", rank: 1 }), note("c", { status: "x" }, { kanban: { rank: 1 } })],
       kanbanOptions({}),
     );
-    expect(column?.cards.map((card) => card.id)).toEqual(["b", "a"]);
+    expect(column?.cards.map((card) => card.id)).toEqual(["c", "a", "b"]);
+  });
+});
+
+describe("the filter bar", () => {
+  const rows = [
+    note("a", { status: "x", project: "Beta", priority: 2 }),
+    note("b", { status: "y", project: "alpha", tags: ["p", "q"] }),
+    note("c", { status: "x", project: "Beta", priority: 10 }),
+  ];
+
+  it("offers every property the cards show, and each value once in natural order", () => {
+    expect(filterFields(kanbanOptions({ card: "title,fm.project,!fm.priority,content" }))).toEqual(["fm.project", "fm.priority"]);
+    expect(filterChoices(rows, "fm.project")).toEqual(["alpha", "Beta"]);
+    expect(filterChoices(rows, "fm.priority")).toEqual([2, 10]);
+    expect(filterChoices(rows, "fm.tags")).toEqual(["p", "q"]);
+    expect(filterChoices(rows, "fm.none")).toEqual([]);
   });
 
-  it("names the old rank property to clean up, only where a card still has one", () => {
-    expect(legacyRankKey(note("a", { rank: 3 }), "fm.rank")).toBe("rank");
-    expect(legacyRankKey(note("a", {}), "fm.rank")).toBeUndefined();
-    expect(legacyRankKey(note("a", { pos: 1 }), kanbanOptions({ order: "fm.pos" }).order)).toBe("pos");
+  it("keeps the rows holding every chosen value, a list value by any of its items", () => {
+    expect(filterRows(rows, new Map()).map((row) => row.id)).toEqual(["a", "b", "c"]);
+    expect(filterRows(rows, new Map([["fm.project", "Beta"]])).map((row) => row.id)).toEqual(["a", "c"]);
+    expect(filterRows(rows, new Map<string, Scalar>([["fm.project", "Beta"], ["fm.priority", 10]])).map((row) => row.id)).toEqual(["c"]);
+    expect(filterRows(rows, new Map([["fm.tags", "q"]])).map((row) => row.id)).toEqual(["b"]);
+  });
+
+  it("gives a new card each filter's value, where a note can be given it", () => {
+    expect(bornWith(new Map<string, Scalar>([["fm.project", "Beta"], ["fm.priority", 2], ["fm.a.b", "nested"]]))).toEqual({ project: "Beta", priority: 2 });
   });
 });
 
