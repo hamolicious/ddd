@@ -1,6 +1,6 @@
 {
   "id": "folders",
-  "version": "4.1.0",
+  "version": "4.2.0",
   "name": "Folders",
   "description": "A drag-and-drop tree of notes: a note's children are listed in its own section.",
   "author": "Life Manager base distribution",
@@ -17,7 +17,7 @@
     "shell-ui": "^3.0"
   },
   "optionalDependencies": {
-    "search": "^4.0"
+    "search": "^4.4"
   },
   "peerLibraries": {
     "react": "^18.0.0",

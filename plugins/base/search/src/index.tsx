@@ -204,12 +204,15 @@ export default function activate(kernel: Kernel): void {
     });
   };
 
+  const NoteSelect = createNoteSelect({ documents: kernel.documents, engine });
+
   const Shell = createSearchShell({
     kernel,
     engine,
     menu: { open: openMenu },
     index,
     actions: () => (commands ? openActions : undefined),
+    NoteSelect,
   });
 
   /** A new note holding the search, filed like any new document, then opened. */
@@ -239,7 +242,7 @@ export default function activate(kernel: Kernel): void {
     save: saveSearch,
     SearchShell: Shell,
     SavedSearch: createSavedSearch({ SearchShell: Shell, open, update }),
-    NoteSelect: createNoteSelect({ documents: kernel.documents, engine }),
+    NoteSelect,
   };
 }
 

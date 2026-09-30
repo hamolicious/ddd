@@ -39,13 +39,13 @@
  */
 
 import { useId, useState } from "react";
-import type { ReactElement, ReactNode, RefObject } from "react";
+import type { ComponentType, ReactElement, ReactNode, RefObject } from "react";
 
 import type { ContextMenu } from "plugin:context-menu";
 
 import { useCompact } from "../../_shared/compact.js";
 import type { ConditionContext } from "../../_shared/conditions.js";
-import { ConditionsEditor } from "../../_shared/conditions-editor.js";
+import { ConditionsEditor, type NoteSelectLike } from "../../_shared/conditions-editor.js";
 import type { NoteSource } from "../../_shared/note-picker.js";
 import type { Suggestions } from "../../_shared/conditions-index.js";
 import {
@@ -82,6 +82,8 @@ export interface FilterBarProps {
   readonly saveLabel?: string;
   /** Finds notes for "is inside note" / "contains note"; without it they are not offered. */
   readonly notes?: NoteSource;
+  /** Picks the note for those. */
+  readonly NoteSelect?: ComponentType<NoteSelectLike>;
   /** Properties and values to offer, from the indexer. */
   readonly suggestions?: Suggestions;
   /** The children "is inside note" resolves against, for the JSON shown. */
@@ -104,6 +106,7 @@ export function FilterBar({
   onSave,
   saveLabel = "Save search",
   notes,
+  NoteSelect,
   suggestions,
   context,
 }: FilterBarProps): ReactElement {
@@ -261,6 +264,7 @@ export function FilterBar({
         onChange={(conditions) => onDraftChange({ ...draft, ...conditions })}
         classPrefix="search"
         {...(notes !== undefined ? { notes } : {})}
+        {...(NoteSelect !== undefined ? { NoteSelect } : {})}
         {...(suggestions !== undefined ? { suggestions } : {})}
         actions={
           (draft.clauses.length > 0 || draft.includeMachine === true) && (

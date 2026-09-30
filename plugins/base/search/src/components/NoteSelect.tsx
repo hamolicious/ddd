@@ -6,7 +6,8 @@
  * notes last updated, with text it is the providers' best matches. Arrow keys move through
  * the list, Enter picks, Escape closes it.
  *
- * Unfocused, the box shows the chosen note's title; focused, it is the search text.
+ * Unfocused, the box shows the chosen note's title; focused, it is the search text. With
+ * `emptyLabel`, "no note" is a choice too: first in the list, and chosen as `""`.
  */
 
 import { useEffect, useId, useState } from "react";
@@ -31,13 +32,14 @@ export function createNoteSelect({ documents, engine }: NoteSelectDeps): Compone
   function useTitle(id: string | undefined): string {
     const [title, setTitle] = useState("");
     useEffect(() => {
-      if (id === undefined) {
+      if (id === undefined || id === "") {
         setTitle("");
         return undefined;
       }
       let live = true;
       void documents.get(id).then((row) => {
-        if (live) setTitle(row?.title || "Untitled");
+        // Deleted, or not on this device yet: say so, not the id.
+        if (live) setTitle(row === undefined ? "Unknown note" : row.title || "Untitled");
       });
       return () => {
         live = false;
@@ -52,6 +54,7 @@ export function createNoteSelect({ documents, engine }: NoteSelectDeps): Compone
     placeholder = "Find a note",
     label = "Note",
     autoFocus = false,
+    emptyLabel,
   }: NoteSelectProps): ReactElement {
     const listId = useId();
     const title = useTitle(value);
@@ -60,7 +63,11 @@ export function createNoteSelect({ documents, engine }: NoteSelectDeps): Compone
     const [active, setActive] = useState(0);
 
     const results = useResults(documents, engine, { ...EMPTY_SPEC, query }, { pageSize: PAGE_SIZE });
-    const rows = open ? results.rows.slice(0, PAGE_SIZE) : [];
+    const found = open ? results.rows.slice(0, PAGE_SIZE) : [];
+    // "No note" is offered until the text narrows the list.
+    const rows: readonly { readonly id: string; readonly title: string }[] =
+      emptyLabel !== undefined && open && query.trim() === "" ? [{ id: "", title: emptyLabel }, ...found] : found;
+    const shown = value === "" && emptyLabel !== undefined ? emptyLabel : title;
 
     const choose = (id: string): void => {
       onChange(id);
@@ -84,7 +91,7 @@ export function createNoteSelect({ documents, engine }: NoteSelectDeps): Compone
           aria-autocomplete="list"
           {...(open && rows[active] ? { "aria-activedescendant": `${listId}-${active}` } : {})}
           placeholder={placeholder}
-          value={open ? query : title}
+          value={open ? query : shown}
           spellCheck={false}
           autoComplete="off"
           autoFocus={autoFocus}

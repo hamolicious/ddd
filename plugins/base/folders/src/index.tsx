@@ -752,6 +752,7 @@ export default function activate(kernel: Kernel): void {
           label="New notes go to"
           hint="A new note is filed inside this one. “New note inside” on a note in the tree still files it there."
           notes={notes}
+          {...(search ? { NoteSelect: search.NoteSelect } : {})}
           value={locationFor("note")}
           onChange={store(SETTINGS_KEYS.defaultLocation)}
         />
@@ -759,6 +760,7 @@ export default function activate(kernel: Kernel): void {
           label="Files go to"
           hint="The note a file added to the workspace is filed inside: an upload, or an attachment turned into a document."
           notes={notes}
+          {...(search ? { NoteSelect: search.NoteSelect } : {})}
           value={locationFor("file")}
           onChange={store(SETTINGS_KEYS.fileLocation)}
         />

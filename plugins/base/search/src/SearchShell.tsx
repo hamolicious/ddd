@@ -24,7 +24,7 @@ import type { ComponentType, ReactElement } from "react";
 
 import type { Kernel } from "@kernel";
 import type { ContextMenu } from "plugin:context-menu";
-import type { SearchField, SearchShellProps, SearchSort, SearchSpec, SearchViewProps } from "./api.js";
+import type { NoteSelectProps, SearchField, SearchShellProps, SearchSort, SearchSpec, SearchViewProps } from "./api.js";
 
 import { indexNoteSource, indexSuggestions, type ConditionIndex } from "../../_shared/conditions-index.js";
 import { useConditionContext } from "../../_shared/conditions-children.js";
@@ -45,6 +45,8 @@ export interface SearchShellDeps {
   readonly index: () => ConditionIndex | undefined;
   /** The Actions menu over these ids, when a commands registry is wired. */
   readonly actions: () => ((ids: readonly string[], anchor: HTMLElement) => void) | undefined;
+  /** Picks the note for "is inside note" and the like. */
+  readonly NoteSelect: ComponentType<NoteSelectProps>;
 }
 
 export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchShellProps> {
@@ -155,6 +157,7 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
             extraSorts={extraSorts}
             {...(searchInput ? { searchInput } : {})}
             notes={notes}
+            NoteSelect={deps.NoteSelect}
             {...(suggestions !== undefined ? { suggestions } : {})}
             context={context}
             {...(onSave ? { onSave } : {})}

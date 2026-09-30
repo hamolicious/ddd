@@ -17,6 +17,8 @@
  *
  * Icons come from the `icons` plugin (Tabler), an optional dependency: without it folders
  * still take a colour, and a stored icon name waits, unused, until `icons` is enabled.
+ * A rule's note is picked with `search`'s `NoteSelect`, also optional: without it, with the
+ * shared note picker.
  *
  * ## Per-user, in settings
  *
@@ -25,7 +27,7 @@
  * the later line wins (SPEC §3.3): for a cosmetic setting that is an acceptable loss.
  */
 
-import { useEffect, useSyncExternalStore, type ReactElement } from "react";
+import { useEffect, useSyncExternalStore, type ComponentType, type ReactElement } from "react";
 
 import type { CoreValue, Kernel, SettingsValue } from "@kernel";
 
@@ -35,6 +37,7 @@ import type { Icons } from "plugin:icons";
 import * as indexer from "plugin:indexer";
 import { addSection } from "plugin:settings";
 
+import type { NoteSelectLike } from "../../_shared/conditions-editor.js";
 import type { NoteSource } from "../../_shared/note-picker.js";
 import {
   indexNoteSource,
@@ -89,6 +92,7 @@ export default function activate(kernel: Kernel): void {
   // Optional: loaded once; until it arrives (or without it) looks have no icon.
   let iconSet: Pick<Icons, "Icon" | "Picker"> | undefined;
   const icons = (): Pick<Icons, "Icon" | "Picker"> | undefined => iconSet;
+  let NoteSelect: ComponentType<NoteSelectLike> | undefined;
 
   kernel.settings.defineSchema({
     // Rendered by the folder tree rather than by a settings row: declared for its default
@@ -186,6 +190,15 @@ export default function activate(kernel: Kernel): void {
       publish();
     })
     .catch((cause: unknown) => kernel.log.warn("icons unavailable; folders show no icon", cause));
+
+  void kernel.plugins
+    .optional<typeof import("plugin:search")>("search")
+    .then((module) => {
+      if (module === undefined) return;
+      NoteSelect = module.NoteSelect;
+      publish();
+    })
+    .catch((cause: unknown) => kernel.log.warn("search unavailable; rules pick notes from a list", cause));
 
   flushOnStop = () => {
     for (const each of all) each.flush();
@@ -297,6 +310,7 @@ export default function activate(kernel: Kernel): void {
           defaults={defaults.get()}
           icons={icons()}
           notes={notes}
+          {...(NoteSelect !== undefined ? { NoteSelect } : {})}
           suggestions={suggestions}
           openLook={(rule, label, anchor) =>
             openSheet({

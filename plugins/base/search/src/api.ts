@@ -176,6 +176,8 @@ export interface NoteSelectProps {
   /** The accessible name of the box; "Note" by default. */
   readonly label?: string;
   readonly autoFocus?: boolean;
+  /** Offer "no note" (chosen as `""`) under this name: "Root", "None". */
+  readonly emptyLabel?: string;
 }
 
 export interface ResultsOptions {

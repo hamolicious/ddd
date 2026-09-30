@@ -6,12 +6,15 @@
  * saying so, so a value that matches nothing is kept in the list, marked, and left
  * selected until someone changes it. New notes land at the root meanwhile.
  *
- * A `<select>` rather than a tree: it is one tab stop, it is a native picker on a phone,
+ * With `search` enabled the note is found by searching for it (`NoteSelect`); without it,
+ * a `<select>` rather than a tree: it is one tab stop, it is a native picker on a phone,
  * and at 390 px it cannot overflow the pane.
  */
 
 import { useId, useState } from "react";
-import type { ReactElement } from "react";
+import type { ComponentType, ReactElement } from "react";
+
+import type { NoteSelectProps } from "plugin:search";
 
 export interface DefaultLocationProps {
   readonly label: string;
@@ -26,9 +29,11 @@ export interface DefaultLocationProps {
    * control shows the difference, so a caller that swallows the failure makes it lie.
    */
   readonly onChange: (id: string) => Promise<void>;
+  /** `search`'s note picker, when it is enabled. */
+  readonly NoteSelect?: ComponentType<NoteSelectProps>;
 }
 
-export function DefaultLocation({ label, hint, notes, value, onChange }: DefaultLocationProps): ReactElement {
+export function DefaultLocation({ label, hint, notes, value, onChange, NoteSelect }: DefaultLocationProps): ReactElement {
   const id = useId();
   /*
    * Optimistic, and reverted on failure. A settings write is a CRDT splice into a
@@ -54,23 +59,32 @@ export function DefaultLocation({ label, hint, notes, value, onChange }: Default
 
   return (
     <div className="folders:flex folders:flex-col folders:gap-3 folders:font-sans folders:text-text">
-      <label className="folders:flex folders:flex-wrap folders:items-center folders:gap-3" htmlFor={id}>
-        <span>{label}</span>
-        <select
-          className="folders:min-h-[var(--lm-tap-target)] folders:min-w-0 folders:flex-1 folders:rounded folders:border folders:border-border folders:bg-bg folders:px-2 folders:text-text"
-          id={id}
-          value={current}
-          onChange={(event) => choose(event.target.value)}
-        >
-          <option value="">Root</option>
-          {missing && <option value={current}>A note that is gone (the root is used meanwhile)</option>}
-          {notes.map((note) => (
-            <option key={note.id} value={note.id}>
-              {note.path.join(" / ")}
-            </option>
-          ))}
-        </select>
-      </label>
+      {NoteSelect !== undefined ? (
+        <div className="folders:flex folders:flex-wrap folders:items-center folders:gap-3">
+          <span>{label}</span>
+          <div className="folders:min-w-0 folders:flex-1">
+            <NoteSelect label={label} value={current} emptyLabel="Root" onChange={choose} />
+          </div>
+        </div>
+      ) : (
+        <label className="folders:flex folders:flex-wrap folders:items-center folders:gap-3" htmlFor={id}>
+          <span>{label}</span>
+          <select
+            className="folders:min-h-[var(--lm-tap-target)] folders:min-w-0 folders:flex-1 folders:rounded folders:border folders:border-border folders:bg-bg folders:px-2 folders:text-text"
+            id={id}
+            value={current}
+            onChange={(event) => choose(event.target.value)}
+          >
+            <option value="">Root</option>
+            {missing && <option value={current}>A note that is gone (the root is used meanwhile)</option>}
+            {notes.map((note) => (
+              <option key={note.id} value={note.id}>
+                {note.path.join(" / ")}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <p className="folders:m-0 folders:text-sm folders:text-text-muted">{hint}</p>
       {problem !== undefined ? (
         <p className="folders:m-0 folders:text-sm folders:text-danger" role="alert">

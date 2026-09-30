@@ -31,6 +31,9 @@
  * | `-note-option` | a note in the picker (`note-picker.tsx`) |
  * | `-note-chosen`, `-note-folder` | the chosen note, and the notes above it |
  *
+ * **A note value is chosen with `NoteSelect`** when the host passes one (`search`'s), and
+ * with the picker here otherwise.
+ *
  * **Suggestions come from the indexer** when the host has it (`conditions-index.ts`): the
  * property box offers every frontmatter key in use, the value box the values that key
  * holds, and choosing a known key sets the value type (and "list contains" for a list).
@@ -40,7 +43,7 @@
  */
 
 import { useEffect, useId, useReducer, useState } from "react";
-import type { ReactElement, ReactNode } from "react";
+import type { ComponentType, ReactElement, ReactNode } from "react";
 
 import {
   FIELD_OPTIONS,
@@ -68,10 +71,19 @@ export interface ConditionsEditorProps {
   readonly classPrefix: string;
   /** The notes "is inside note", "contains note" and a document value choose from; without it those are not offered. */
   readonly notes?: NoteSource;
+  /** Picks a note value: `search`'s `NoteSelect`. Without it, the picker in `note-picker.tsx`. */
+  readonly NoteSelect?: ComponentType<NoteSelectLike>;
   /** Properties and values to offer; without them, the fixed {@link FIELD_OPTIONS}. */
   readonly suggestions?: Suggestions;
   /** More buttons, after "Add condition". */
   readonly actions?: ReactNode;
+}
+
+/** What this editor needs of `search`'s `NoteSelect`, so a shared file need not import it. */
+export interface NoteSelectLike {
+  readonly value?: string;
+  readonly onChange: (id: string) => void;
+  readonly label?: string;
 }
 
 interface OpEntry {
@@ -190,6 +202,7 @@ export function ConditionsEditor({
   onChange,
   classPrefix: p,
   notes,
+  NoteSelect,
   suggestions,
   actions,
 }: ConditionsEditorProps): ReactElement {
@@ -295,7 +308,15 @@ export function ConditionsEditor({
                     {entry?.icon}
                   </span>
 
-                  {noteValue && notes !== undefined ? (
+                  {noteValue && NoteSelect !== undefined ? (
+                    <span className={`${p}-field ${p}-grow`}>
+                      <NoteSelect
+                        label="Value"
+                        {...(clause.value !== "" ? { value: clause.value } : {})}
+                        onChange={(id) => patch(clause.id, { value: id })}
+                      />
+                    </span>
+                  ) : noteValue && notes !== undefined ? (
                     <NoteField
                       classPrefix={p}
                       notes={notes}

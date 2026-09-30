@@ -1,9 +1,9 @@
 import { useState } from "react";
-import type { ReactElement } from "react";
+import type { ComponentType, ReactElement } from "react";
 
 import type { Icons } from "plugin:icons";
 
-import { ConditionsEditor } from "../../_shared/conditions-editor.js";
+import { ConditionsEditor, type NoteSelectLike } from "../../_shared/conditions-editor.js";
 import type { NoteSource } from "../../_shared/note-picker.js";
 import type { Suggestions } from "../../_shared/conditions-index.js";
 import { newClauseId } from "../../_shared/conditions.js";
@@ -17,6 +17,8 @@ export interface RulesProps {
   readonly defaults: FolderStyle;
   readonly icons: Pick<Icons, "Icon" | "Picker"> | undefined;
   readonly notes: NoteSource;
+  /** Picks a condition's note: `search`'s, when it is enabled. */
+  readonly NoteSelect?: ComponentType<NoteSelectLike>;
   /** Properties and values to offer, from the indexer. */
   readonly suggestions?: Suggestions;
   /** Opens the colour and icon editor for `rule`, called `label`, beside `anchor`. */
@@ -52,7 +54,7 @@ const CONDITIONS =
  * The rules, in order: the first a note matches wins, field by field. Each is folded to
  * its header until opened, but for one just added; which are open is not saved.
  */
-export function Rules({ rules, onChange, defaults, icons, notes, suggestions, openLook }: RulesProps): ReactElement {
+export function Rules({ rules, onChange, defaults, icons, notes, NoteSelect, suggestions, openLook }: RulesProps): ReactElement {
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
   const toggleFold = (id: string): void =>
     setOpened((before) => {
@@ -161,6 +163,7 @@ export function Rules({ rules, onChange, defaults, icons, notes, suggestions, op
                     onChange={(when) => replace(rule.id, { when })}
                     classPrefix="folderstyle"
                     notes={notes}
+                    {...(NoteSelect !== undefined ? { NoteSelect } : {})}
                     {...(suggestions !== undefined ? { suggestions } : {})}
                   />
                 </div>
