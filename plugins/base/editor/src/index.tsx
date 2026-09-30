@@ -683,6 +683,8 @@ export default function activate(kernel: Kernel): void {
     id: "edit",
     label: "Edit",
     order: 10,
+    // A new note is empty: open it ready to type into, whatever the default mode is.
+    forNew: true,
     // A pencil. `currentColor`, so it follows the switch's selected/idle colours.
     icon: (
       <svg aria-hidden="true" viewBox="0 0 24 24" width="1.15em" height="1.15em" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

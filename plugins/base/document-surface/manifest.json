@@ -1,6 +1,6 @@
 {
   "id": "document-surface",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "name": "Document surface",
   "description": "Owns the document route and the modes other plugins add with addMode.",
   "author": "Life Manager base distribution",
@@ -11,6 +11,7 @@
   "kernel": "^3.0",
   "dependencies": {
     "commands": "^3.0",
+    "doc-events": "^1.0",
     "router": "^2.0",
     "settings": "^2.0",
     "shell-ui": "^3.0"

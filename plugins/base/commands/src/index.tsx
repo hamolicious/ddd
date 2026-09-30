@@ -27,8 +27,9 @@
  *
  * **The palette renders as a shell overlay.** `shell-ui` owns the single
  * `kernel.ui.mount` (SPEC §6.4), so a plugin needing a persistent React presence
- * adds an always-mounted overlay (`addOverlay`). There is no button in the top bar: Mod+K (or
- * whatever it is rebound to) is the way in.
+ * adds an always-mounted overlay (`addOverlay`). Mod+K (or whatever it is rebound to) opens
+ * it, and so does a "Commands" button in the toolbar when `toolbar` is installed — the
+ * way in on a phone, which has no keyboard shortcut. The user can move or hide it there.
  *
  * **A command that `takes` documents is not the palette's.** It needs ids to act on, and
  * neither the palette nor a keystroke has any; the document list's Actions button runs
@@ -77,6 +78,14 @@ import { Palette } from "./Palette.js";
 export type { Command, Commands, KeybindingDefault } from "./api.js";
 
 type IconsModule = typeof import("plugin:icons");
+type ToolbarModule = typeof import("plugin:toolbar");
+
+/** The toolbar button's icon: a ⌘-style command mark, sized to the text around it. */
+const PALETTE_ICON = (
+  <svg aria-hidden="true" viewBox="0 0 24 24" width="1.1em" height="1.1em" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M15 6v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3" />
+  </svg>
+);
 
 /** How long a sequence prefix (the `g` of `g d`) stays pending. */
 const SEQUENCE_TIMEOUT_MS = 1_500;
@@ -189,6 +198,24 @@ export default function activate(kernel: Kernel): void {
       icons = module;
     })
     .catch((cause: unknown) => kernel.log.warn("icons unavailable; the palette shows none", cause));
+  // Optional too: with `toolbar`, a button that opens the palette.
+  void kernel.plugins
+    .optional<ToolbarModule>("toolbar")
+    .then((toolbar) => {
+      if (!toolbar) return;
+      teardown.push(
+        toolbar.addItem({
+          id: "commands.palette",
+          label: "Commands",
+          icon: PALETTE_ICON,
+          side: "end",
+          // Before Graph (80) and Settings (90) on desktop; on a phone, the bottom toolbar.
+          order: 70,
+          onSelect: () => api.openPalette(),
+        }),
+      );
+    })
+    .catch((cause: unknown) => kernel.log.warn("toolbar unavailable; no Commands button", cause));
 
   /** What the palette and keys can run: everything that needs no documents handed to it. */
   const runnable = (): readonly Command[] => api.list().filter((command) => command.takes === undefined);

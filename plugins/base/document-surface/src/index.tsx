@@ -17,6 +17,7 @@
  * - **Mode persistence.** The chosen mode per document is a per-user setting, so
  *   reopening a document returns you to how you were reading it. A mode can also claim
  *   a document (`prefer`), which outranks the user's default but not their own switch.
+ *   A note just created here (`doc-events`) opens in the mode marked `forNew`, once.
  *
  * **The switch is icons.** On a wide screen, a compact segmented control in the header —
  * each mode's `icon`, its label as the accessible name and tooltip (a mode with no icon
@@ -46,6 +47,7 @@ import {
 } from "react";
 
 import { addCommand, addKeybinding } from "plugin:commands";
+import { onCreated } from "plugin:doc-events";
 import { DOCUMENT_ROUTE, addRoute, current as currentPath, onChange as onPathChange } from "plugin:router";
 import { addSection } from "plugin:settings";
 import { addView } from "plugin:shell-ui";
@@ -336,11 +338,16 @@ class Surface {
    * time on a cold boot, and a resolved one is just "the best of what had loaded so far".
    */
   #chosen = false;
+  /** Documents created on this device and not yet shown: they open in a `forNew` mode. */
+  readonly #created = new Set<DocumentId>();
+  /** Whether the document on screen is one of those, for as long as it stays on screen. */
+  #fresh = false;
 
   constructor(
     readonly kernel: Kernel,
     private readonly point: Registry<DocumentMode>,
   ) {
+    onCreated(({ id }) => this.#created.add(id));
     // A mode offered (or withdrawn) after the document is on screen can change which
     // mode should be active — an uninstalled editor must fall back to reading.
     this.point.subscribe(() => {
@@ -388,6 +395,7 @@ class Surface {
     if (id === this.#snapshot.documentId) return;
     const generation = ++this.#generation;
     this.#chosen = false;
+    this.#fresh = id !== undefined && this.#created.delete(id);
     this.#teardown();
     if (id === undefined) {
       this.#set({ status: "idle" });
@@ -526,6 +534,8 @@ class Surface {
     const visible = visibleOf(this.point.get(), shown);
     // A mode the user is already on stays selected as long as it is still visible.
     if (current !== undefined && visible.some((mode) => mode.id === current)) return current;
+    const forNew = this.#fresh ? visible.find((mode) => mode.forNew === true) : undefined;
+    if (forNew !== undefined) return forNew.id;
     const remembered = documentId === undefined ? undefined : this.#memoryMap().get(documentId);
     const claimed = claimedModeId(visible, shown, (mode, error) =>
       this.kernel.log.warn(`document.mode "${mode.id}" threw from prefer()`, error),

@@ -47,6 +47,8 @@ export interface DocumentMode {
   readonly when?: (row: DocumentRow) => boolean;
   /** Whether this document should open in this mode rather than in the user's default mode — a canvas plugin claiming its canvas notes, say. The user's own switch on the document still wins. Several claimants: the first in order. Asked again whenever the row changes. One that throws claims nothing and is reported. */
   readonly prefer?: (row: DocumentRow) => boolean;
+  /** Open a document just created on this device in this mode, whatever the user's default — an editor, so a new note is ready to type into. Only for that first showing; several: the first in order. */
+  readonly forNew?: boolean;
 }
 
 export const modeRegistry = createRegistry<DocumentMode>({
@@ -60,5 +62,6 @@ export const modeRegistry = createRegistry<DocumentMode>({
     order: s.optional(s.number()),
     when: s.optional(s.func()),
     prefer: s.optional(s.func()),
+    forNew: s.optional(s.boolean()),
   }),
 });

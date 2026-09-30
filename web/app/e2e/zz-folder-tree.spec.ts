@@ -331,6 +331,25 @@ test("a note is renamed inline, and a new note made inside it is listed there", 
   await expect(row(page, renamed)).toBeVisible();
 });
 
+test("New search inside files a saved search under the note and opens it", async ({ page, request, baseURL }) => {
+  const base = baseURL as string;
+  const name = unique("searches");
+  const id = await createDocument(request, base, fixture(name));
+
+  await signIn(page, ADMIN);
+  refuseNativeDialogs(page);
+  await openTree(page);
+  await expect(row(page, name)).toBeVisible();
+
+  await (await actions(page, name)).getByRole("menuitem", { name: /^New search inside/ }).click();
+  await expect(page).toHaveURL(/#\/doc\//);
+  const created = /#\/doc\/([^?]+)/.exec(page.url())?.[1] ?? "";
+  expect(created).not.toBe(id);
+  await waitSynced(page);
+  await listed(request, base, id, [created]);
+  expect(await rawText(request, base, created)).toMatch(/^saved-search:/m);
+});
+
 test("deleting a note can keep what is inside it, in its place in the parent", async ({
   page,
   request,

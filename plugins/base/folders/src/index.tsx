@@ -52,6 +52,7 @@ import { addSection } from "plugin:settings";
 import { addSidebarPanel } from "plugin:shell-ui";
 
 import { BoundedIcon, useRegistry } from "../../_shared/boundary.js";
+import { applyEdits, newUlid } from "../../_shared/saved-view.js";
 import { EXCLUDE_MACHINE_DOCUMENTS, isMachineDocument } from "../../_shared/machine-docs.js";
 
 import { FOLDER_DECORATION_SHAPE, type FolderDecoration, type FolderLook, type Folders, type NoteLook } from "./api.js";
@@ -104,6 +105,15 @@ const documentFromRoute = (route: string): string | undefined => {
   return match?.[1];
 };
 
+/** A note as copied (`copy`), or read for `duplicate`. */
+interface Copied {
+  readonly id: string;
+  readonly text: string;
+  readonly title: string;
+  /** It lists children: the copy must not. */
+  readonly parent: boolean;
+}
+
 /** A settings list of ids, cleaned: strings only, de-duplicated, order kept. */
 const readIds = (value: unknown): readonly string[] => {
   if (!Array.isArray(value)) return [];
@@ -123,6 +133,9 @@ export type FoldersApi = Folders;
 // The functions of the plugins this one depends on, grouped as they are read below.
 // `newDocument` rather than `createDocument`: it reports its own failures (offline, above all).
 const docs = { newDocument };
+/** `search`, an optional dependency: with it, the menus also offer a new saved search. */
+type SearchModule = typeof import("plugin:search");
+let search: SearchModule | undefined;
 const router = { navigate, current, onChange: onRouteChange };
 const menu = { open, openSheet, confirm, modal, close, openFor };
 
@@ -196,6 +209,19 @@ export function ensurePath(titles: readonly string[]): Promise<string> {
 }
 
 export default function activate(kernel: Kernel): void {
+  void kernel.plugins
+    .optional<SearchModule>("search")
+    .then((module) => {
+      search = module;
+    })
+    .catch((cause: unknown) => kernel.log.warn("search unavailable; no “New search” in the menus", cause));
+  /** A new saved search, filed under `parent` (`""` is the root) and opened. */
+  const newSearch = (parent: string): void => {
+    if (!search) return;
+    search.save(search.parse(""), { parent }).catch((cause: unknown) =>
+      kernel.ui.notify({ id: "folders.new-search-failed", level: "error", message: `Could not create the search: ${String(cause)}` }),
+    );
+  };
 
   kernel.settings.defineSchema({
     // Rendered by this plugin's own section (a note picker), declared for its default.
@@ -803,7 +829,117 @@ export default function activate(kernel: Kernel): void {
     });
   };
 
+  // ---------------------------------------------------------------------------
+  // Duplicate, copy and paste
+  // ---------------------------------------------------------------------------
+
+  /**
+   * The note last copied, as its text was then: pasting after the original was edited or
+   * deleted still pastes what was copied. This device and this page only — it is not the
+   * system clipboard.
+   */
+  let copied: Copied | undefined;
+
+  const failed = (what: string) => (cause: unknown): undefined => {
+    kernel.ui.notify({
+      id: "folders.copy-failed",
+      level: "error",
+      message: `Could not ${what}: ${cause instanceof Error ? cause.message : String(cause)}`,
+    });
+    return undefined;
+  };
+
+  const snapshot = async (id: string): Promise<Copied> => {
+    const open = await kernel.documents.open(id);
+    const row = hierarchy.notes.get(id);
+    try {
+      return { id, text: open.text.toString(), title: row?.title ?? "Untitled", parent: (row?.children.length ?? 0) > 0 };
+    } finally {
+      open.release();
+    }
+  };
+
+  /**
+   * A new note from a copied one, filed under `parent` (`""`: the root) before `before`.
+   * The copy is the note alone: its list of children is dropped, or each child would have
+   * two parents. Where the text names the note's own id (a view of the notes inside it),
+   * it names the copy instead.
+   */
+  const pasteCopy = async (
+    source: Copied,
+    parent: string,
+    options: { readonly title?: string; readonly before?: string } = {},
+  ): Promise<string> => {
+    const { splice } = kernel.documents;
+    let text = source.text;
+    if (source.parent) {
+      text = applyEdits(text, splice.planSection(text, [{ key: CHILDREN_KEY, value: null, remove: true }]));
+    }
+    if (options.title !== undefined) text = applyEdits(text, splice.planFrontmatterValue(text, "title", options.title));
+    const id = newUlid();
+    await kernel.documents.create({ id, text: text.replaceAll(source.id, id) });
+    if (parent !== "") await file(id, parent, options.before);
+    return id;
+  };
+
+  /** A copy of `id` beside it, titled "… (copy)". */
+  const duplicate = async (id: string): Promise<string | undefined> => {
+    const source = await snapshot(id);
+    const parent = hierarchy.parentOf.get(id) ?? "";
+    const siblings = hierarchy.notes.get(parent)?.children ?? [];
+    const after = siblings[siblings.indexOf(id) + 1];
+    return pasteCopy(source, parent, { title: `${source.title} (copy)`, ...(after !== undefined ? { before: after } : {}) });
+  };
+
+  const copy = async (id: string): Promise<void> => {
+    copied = await snapshot(id);
+    kernel.ui.notify({ id: "folders.copied", level: "info", message: `Copied ${copied.title}.` });
+  };
+
+  /** Paste the copied note under `parent`, or where new notes go. */
+  const paste = (parent: string = locationFor("note")): Promise<string | undefined> =>
+    copied === undefined ? Promise.resolve(undefined) : pasteCopy(copied, parent);
+
+  const openNote = (id: string | undefined): void => {
+    if (id !== undefined) router.navigate(`/doc/${encodeURIComponent(id)}`);
+  };
+  const noteOnScreen = (): string | undefined => {
+    const id = documentFromRoute(router.current());
+    return id !== undefined && hierarchy.notes.has(id) ? id : undefined;
+  };
+  const onNote = (): boolean => noteOnScreen() !== undefined;
+
   addCommand([
+    {
+      id: "folders.duplicateNote",
+      title: "Duplicate note",
+      category: "Folders",
+      icon: "copy-plus",
+      when: onNote,
+      run: () => {
+        const id = noteOnScreen();
+        if (id !== undefined) void duplicate(id).then(openNote, failed("duplicate it"));
+      },
+    },
+    {
+      id: "folders.copyNote",
+      title: "Copy note",
+      category: "Folders",
+      icon: "copy",
+      when: onNote,
+      run: () => {
+        const id = noteOnScreen();
+        if (id !== undefined) void copy(id).catch(failed("copy it"));
+      },
+    },
+    {
+      id: "folders.pasteNote",
+      title: "Paste note",
+      category: "Folders",
+      icon: "clipboard-plus",
+      when: () => copied !== undefined,
+      run: () => void paste().then(openNote, failed("paste it")),
+    },
     {
       id: "folders.newNoteInside",
       title: "New note inside this note",
@@ -925,11 +1061,17 @@ export default function activate(kernel: Kernel): void {
         const parent = hierarchy.parentOf.get(id) ?? "";
         return [
           { id: "new-note", label: "New note inside", run: () => docs.newDocument({ parent: id }) },
+          ...(search ? [{ id: "new-search", label: "New search inside", run: () => newSearch(id) }] : []),
           ...(here && hierarchy.childrenOf.has(id)
             ? [
                 { id: "expand-all", label: "Expand all inside", run: () => request({ kind: "fold", id, expanded: true }) },
                 { id: "collapse-all", label: "Collapse all inside", run: () => request({ kind: "fold", id, expanded: false }) },
               ]
+            : []),
+          { id: "duplicate", label: "Duplicate", run: () => void duplicate(id).catch(failed("duplicate it")) },
+          { id: "copy", label: "Copy", run: () => void copy(id).catch(failed("copy it")) },
+          ...(copied !== undefined
+            ? [{ id: "paste", label: "Paste inside", hint: copied.title, run: () => void paste(id).catch(failed("paste it")) }]
             : []),
           {
             id: "rename",
@@ -972,6 +1114,10 @@ export default function activate(kernel: Kernel): void {
       items: (): MenuItem[] => [
         // `""` is the root: filed there even when "New notes go to" names a note.
         { id: "new-note-root", label: "New note at the root", run: () => docs.newDocument({ parent: "" }) },
+        ...(copied !== undefined
+          ? [{ id: "paste-root", label: "Paste at the root", hint: copied.title, run: () => void paste("").catch(failed("paste it")) }]
+          : []),
+        ...(search ? [{ id: "new-search-root", label: "New search at the root", run: () => newSearch("") }] : []),
         { id: "expand-all", label: "Expand all", run: () => request({ kind: "fold", id: "", expanded: true }) },
         { id: "collapse-all", label: "Collapse all", run: () => request({ kind: "fold", id: "", expanded: false }) },
       ],
@@ -989,4 +1135,5 @@ export function deactivate(): void {
   flushOnStop = undefined;
   for (const stop of stops.splice(0)) stop();
   service = undefined;
+  search = undefined;
 }

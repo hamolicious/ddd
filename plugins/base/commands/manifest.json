@@ -1,8 +1,8 @@
 {
   "id": "commands",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "name": "Commands",
-  "description": "Command registry, palette (Mod+K) and per-user keybindings.",
+  "description": "Command registry, palette (Mod+K, or its toolbar button) and per-user keybindings.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
@@ -12,7 +12,8 @@
     "shell-ui": "^3.0"
   },
   "optionalDependencies": {
-    "icons": "^2.0"
+    "icons": "^2.0",
+    "toolbar": "^1.0"
   },
   "peerLibraries": {
     "react": "^18.0.0",
