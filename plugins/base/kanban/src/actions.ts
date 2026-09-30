@@ -19,6 +19,8 @@ export interface BoardHandle {
   /** The card's row, or `undefined` when it is not on this board. */
   readonly rowOf: (id: string) => DocumentRow | undefined;
   readonly movable: (row: DocumentRow) => boolean;
+  /** Whether the card can go into this column: not into another swimlane when it cannot leave its own. */
+  readonly reaches: (row: DocumentRow, column: Column) => boolean;
   readonly move: (row: DocumentRow, column: Column, slot: number) => void;
   readonly fold: (column: Column, collapsed: boolean) => void;
   readonly add: (column: Column) => void;
@@ -46,7 +48,7 @@ export const BOARD_ACTIONS: readonly ContextAction[] = [
       const row = board?.rowOf(target.id);
       if (!board || !row || !board.movable(row)) return [];
       return board.columns
-        .filter((column) => !column.cards.some((card) => card.id === row.id))
+        .filter((column) => !column.cards.some((card) => card.id === row.id) && board.reaches(row, column))
         .map((column, index) => ({
           id: `move-${index}`,
           label: `Move to ${board.titleOf(column)}`,

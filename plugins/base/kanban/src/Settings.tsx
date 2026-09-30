@@ -1,5 +1,6 @@
 /**
- * The board's settings, under the view picker: which field's values are the columns, and
+ * The board's settings, under the view picker: which field's values are the columns, which
+ * one's (if any) are the swimlanes (`lanes.ts`), and
  * whether the board keeps its own order within them — each card's place, saved in its own
  * `%%% kanban` section, not a property — or follows the search's sort, in which case cards
  * change column but a column cannot be rearranged. Each column's own settings live on the column (its ⚙, `ColumnEditor.tsx`).
@@ -17,7 +18,7 @@ import type { ViewSettingsProps } from "../../_shared/saved-view-mode.js";
 import { FieldSelect } from "../../_shared/field-select.js";
 
 import { itemKey, type CardItem } from "./card.js";
-import { kanbanOptions, withKanban, writableGroup } from "./layout.js";
+import { kanbanOptions, withKanban, writableField, writableGroup } from "./layout.js";
 
 const SMALL = "kanban:inline-flex kanban:size-8 kanban:min-h-0! kanban:items-center kanban:justify-center kanban:p-0! kanban:text-text-muted kanban:hover:text-text kanban:disabled:opacity-40";
 
@@ -60,6 +61,19 @@ export function KanbanSettings({ options, onOptionsChange, fields }: ViewSetting
         />
         {!writableGroup(settings.group) && (
           <span className="kanban:max-w-[16rem] kanban:text-xs kanban:text-warning">Cards cannot be moved: only a top-level property can be set.</span>
+        )}
+      </div>
+      <div className="kanban:flex kanban:flex-col kanban:gap-0.5">
+        <FieldSelect
+          className={FIELD}
+          label="Swimlanes by"
+          value={settings.lanes}
+          onChange={(lanes) => onOptionsChange(withKanban({ ...settings, lanes }, options))}
+          fields={fields}
+          none="No swimlanes"
+        />
+        {settings.lanes !== "" && !writableField(settings.lanes) && (
+          <span className="kanban:max-w-[16rem] kanban:text-xs kanban:text-warning">Cards cannot change swimlane: only a top-level property can be set.</span>
         )}
       </div>
       <div className="kanban:flex kanban:flex-col kanban:gap-0.5">

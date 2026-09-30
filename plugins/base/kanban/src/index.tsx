@@ -68,8 +68,8 @@ export default function activate(kernel: Kernel): void {
   const menu = (): MenuModule | undefined => menus;
 
   /**
-   * A card titled `title` in `column`, at its bottom, with what the board's search asks of
-   * every card and what the board is filtered to. Resolves to its id; the board stays on
+   * A card titled `title` in `column` (and its swimlane), at its bottom, with what the
+   * board's search asks of every card and what the board is filtered to. Resolves to its id; the board stays on
    * screen.
    */
   const addCard = async (
@@ -83,7 +83,8 @@ export default function activate(kernel: Kernel): void {
     const ranks = column.cards.map(rankOf).filter((rank): rank is number => rank !== undefined);
     // Below the column's last card, and below any added just before this one.
     const rank = settings.order ? (ranks.length > 0 ? Math.max(...ranks) : 0) + RANK_STEP * (1 + queued) : undefined;
-    const fields = cardFields(spec, { field: settings.group, value: column.value });
+    // In a swimlane, the lane's value too.
+    const fields = cardFields(spec, { field: settings.group, value: column.value }, column.lane && { field: settings.lanes, value: column.lane.value });
     // Born in the column: it entered it now. The filter's values first: what the search
     // asks of every card, and the column, win over them.
     const since = sinceField(settings.group);

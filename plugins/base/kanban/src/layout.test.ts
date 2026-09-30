@@ -27,9 +27,9 @@ const note = (id: string, fm: DocumentRow["fm"], plugins: DocumentRow["plugins"]
 
 describe("the board", () => {
   it("groups by status by default, and keeps defaults out of the options", () => {
-    expect(kanbanOptions({})).toEqual({ group: "fm.status", columns: [], order: true, card: [{ kind: "title" }] });
+    expect(kanbanOptions({})).toEqual({ group: "fm.status", columns: [], order: true, card: [{ kind: "title" }], lanes: "" });
     expect(withKanban(kanbanOptions({}), { other: "x", group: "fm.stage" })).toEqual({ other: "x" });
-    expect(withKanban({ group: "fm.stage", columns: [{ value: "a" }, { value: "b" }], order: false, card: [{ kind: "title" }] }, {})).toEqual({
+    expect(withKanban({ group: "fm.stage", columns: [{ value: "a" }, { value: "b" }], order: false, card: [{ kind: "title" }], lanes: "" }, {})).toEqual({
       group: "fm.stage",
       columns: "a,b",
       order: "none",

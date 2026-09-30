@@ -46,6 +46,11 @@
  * settings), narrows the board to the cards holding the chosen value — on this screen
  * only, nothing is saved. A card added while a filter is on is born with its value, so it
  * stays in view.
+ *
+ * **Swimlanes**, when the board's settings name a field for them, stack the board in rows,
+ * one per value of that field, each with the same columns (`lanes.ts`). Dropping a card
+ * into another lane writes that field as well as the column's; a column's + in a lane
+ * makes the card with the lane's value.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -65,10 +70,10 @@ import { boards, type BoardHandle } from "./actions.js";
 import { excerpt, fieldText, type CardItem } from "./card.js";
 import { ColumnEditor } from "./ColumnEditor.js";
 import { useFlip } from "./flip.js";
+import { holds, keepLanes, laneChange, laneCount, laneTitle, lanesFor, type Lane } from "./lanes.js";
 import {
   NO_KEPT,
   columnTitle,
-  columnsFor,
   filterChoices,
   filterFields,
   filterRows,
@@ -86,6 +91,7 @@ import {
   withColumn,
   withKanban,
   withMoves,
+  writableField,
   type Column,
   type ColumnDef,
   type ColumnSort,
@@ -151,9 +157,9 @@ export function createBoard({ kernel, looks, menu, addCard }: BoardDeps) {
     const [error, setError] = useState<string | undefined>(undefined);
     const [board, setBoard] = useState<HTMLDivElement | null>(null);
     /** The column whose title field is open, by key (`null`: the "No …" column). */
-    const [adding, setAdding] = useState<string | null | undefined>(undefined);
+    const [adding, setAdding] = useState<string | undefined>(undefined);
     /** Cards made here and not yet in the results: shown faded where they will appear. */
-    const [pending, setPending] = useState<readonly { readonly key: string | null; readonly title: string; readonly id?: string; readonly token: number }[]>([]);
+    const [pending, setPending] = useState<readonly { readonly key: string; readonly title: string; readonly id?: string; readonly token: number }[]>([]);
     const nextToken = useRef(0);
     const titleOf = (column: Column): string => columnTitle(column, settings.group);
     /** Fold or unfold a column from the board: a named one's setting, naming it if it was not. */
@@ -177,10 +183,26 @@ export function createBoard({ kernel, looks, menu, addCard }: BoardDeps) {
       });
     const rows = filterRows(withMoves(results.rows, settings, moves), filters);
     // Columns seen while this board is on screen, for this grouping, stay.
-    const kept = useRef<{ group: string; columns: KeptColumns }>({ group: settings.group, columns: NO_KEPT });
-    if (kept.current.group !== settings.group) kept.current = { group: settings.group, columns: NO_KEPT };
-    const columns = columnsFor(rows, { ...settings, order }, kept.current.columns);
+    // Lanes too, for this lane field.
+    const kept = useRef<{ group: string; lanesBy: string; columns: KeptColumns; lanes: KeptColumns }>({
+      group: settings.group,
+      lanesBy: settings.lanes,
+      columns: NO_KEPT,
+      lanes: NO_KEPT,
+    });
+    if (kept.current.group !== settings.group) kept.current = { ...kept.current, group: settings.group, columns: NO_KEPT };
+    if (kept.current.lanesBy !== settings.lanes) kept.current = { ...kept.current, lanesBy: settings.lanes, lanes: NO_KEPT };
+    const lanes = lanesFor(rows, settings, kept.current.columns, kept.current.lanes);
+    // Every lane's columns, one after another: a column's index is its place in this list.
+    const columns = lanes.flatMap((lane) => lane.columns);
     kept.current.columns = keepColumns(columns, kept.current.columns);
+    kept.current.lanes = keepLanes(lanes, kept.current.lanes);
+    const laned = settings.lanes !== "" && columns.length > 0;
+    /** A column in its lane, where the column's name alone could be any lane's. */
+    const placeOf = (column: Column): string =>
+      laned && column.lane ? `${titleOf(column)} · ${laneTitle(column.lane, settings.lanes)}` : titleOf(column);
+    /** A column in its lane, as a key: what the title field and the faded new cards belong to. */
+    const cellOf = (column: Column): string => JSON.stringify([column.lane?.key ?? null, column.key ?? null]);
 
     // A pending move is done once the live row says the same.
     useEffect(() => {
@@ -195,7 +217,7 @@ export function createBoard({ kernel, looks, menu, addCard }: BoardDeps) {
         for (const [id] of done) next.delete(id);
         return next;
       });
-    }, [results.rows, moves, settings.group, settings.order]);
+    }, [results.rows, moves, settings.group, settings.order, settings.lanes]);
 
     /**
      * A column's settings in a sheet: `column` to change (named or not yet), `undefined` to
@@ -321,7 +343,7 @@ export function createBoard({ kernel, looks, menu, addCard }: BoardDeps) {
 
     const submit = (column: Column, title: string): void => {
       const token = nextToken.current++;
-      const key = column.key ?? null;
+      const key = cellOf(column);
       // Cards still on their way to this column: each new one ranks below them.
       const queued = pending.filter((card) => card.key === key).length;
       setError(undefined);
@@ -339,15 +361,19 @@ export function createBoard({ kernel, looks, menu, addCard }: BoardDeps) {
     // Where the gap is: under the pointer, or back where the card came from.
     const gapColumn = lift === undefined ? undefined : lift.over ?? lift.from;
     const gapSlot = lift === undefined ? undefined : lift.over === undefined ? lift.origin : lift.slot;
-    const signature = `${columns.map((column) => `${column.key ?? ""}:${column.cards.map((card) => card.id).join(",")}`).join("|")}#${lift?.row.id ?? ""}@${gapColumn ?? ""}:${gapSlot ?? ""}`;
+    const signature = `${columns.map((column) => `${column.lane?.key ?? ""}/${column.key ?? ""}:${column.cards.map((card) => card.id).join(",")}`).join("|")}#${lift?.row.id ?? ""}@${gapColumn ?? ""}:${gapSlot ?? ""}`;
     const flip = useFlip(board, signature);
 
     /**
      * Put `row` into `column` at `slot` among its other cards: the column's value if it
-     * changed, and — when the board keeps its own order — ranks for the new place.
+     * changed, its lane's if that changed, and — when the board keeps its own order — ranks
+     * for the new place.
      */
     const move = (row: DocumentRow, column: Column, slot: number): void => {
       if (!movable(row, settings.group)) return;
+      // Into another lane: its value too, unless the card cannot leave its own.
+      const lane = laneChange(row, column, settings.lanes);
+      if (lane === null) return;
       const others = column.cards.filter((card) => card.id !== row.id);
       const same = column.cards.includes(row);
       // A sorted column places cards itself: a drop there only changes the column.
@@ -356,8 +382,16 @@ export function createBoard({ kernel, looks, menu, addCard }: BoardDeps) {
       const ranks = !order || sorted ? new Map<string, number>() : planRanks(others, slot, row.id);
       const planned = new Map<string, Move>();
       for (const [id, rank] of ranks) planned.set(id, { rank });
-      // Into another column: its value, and when it got there.
-      if (!same) planned.set(row.id, { ...planned.get(row.id), group: { value: column.value }, since: new Date().toISOString() });
+      // Into another column: its value, and when it got there. Into the same column of
+      // another lane: only the lane's value.
+      if (!same) {
+        const entering = !holds(row, settings.group, column.key);
+        planned.set(row.id, {
+          ...planned.get(row.id),
+          ...(entering ? { group: { value: column.value }, since: new Date().toISOString() } : {}),
+          ...(lane ? { lane } : {}),
+        });
+      }
       setError(undefined);
       setMoves((current) => new Map([...current, ...planned]));
 
@@ -369,6 +403,14 @@ export function createBoard({ kernel, looks, menu, addCard }: BoardDeps) {
             planned_.group.value === undefined
               ? kernel.documents.splice.removeFrontmatterKey(id, groupKey)
               : kernel.documents.splice.setFrontmatterValue(id, groupKey, planned_.group.value),
+          );
+        }
+        if (planned_.lane && writableField(settings.lanes)) {
+          const laneKey = settings.lanes.slice("fm.".length);
+          writes.push(
+            planned_.lane.value === undefined
+              ? kernel.documents.splice.removeFrontmatterKey(id, laneKey)
+              : kernel.documents.splice.setFrontmatterValue(id, laneKey, planned_.lane.value),
           );
         }
         if (planned_.rank !== undefined) writes.push(kernel.documents.splice.spliceSection(id, [{ key: RANK_KEY, value: planned_.rank }]));
@@ -392,12 +434,13 @@ export function createBoard({ kernel, looks, menu, addCard }: BoardDeps) {
     const handle = useRef<BoardHandle | undefined>(undefined);
     handle.current = {
       columns,
-      titleOf,
+      titleOf: placeOf,
       rowOf: (id) => rows.find((row) => row.id === id),
       movable: (row) => movable(row, settings.group),
+      reaches: (row, column) => laneChange(row, column, settings.lanes) !== null,
       move,
       fold,
-      add: (column) => setAdding(column.key ?? null),
+      add: (column) => setAdding(cellOf(column)),
       ...(canEdit ? { sort: openSort, edit: editColumn } : {}),
     };
     useEffect(() => {
@@ -411,8 +454,8 @@ export function createBoard({ kernel, looks, menu, addCard }: BoardDeps) {
     // --- the drag --------------------------------------------------------------------
 
     /** Read by the window listeners of a drag in flight, so they never act on stale state. */
-    const latest = useRef({ columns, rows, order, move, flip });
-    latest.current = { columns, rows, order, move, flip };
+    const latest = useRef({ columns, rows, order, move, flip, lanesBy: settings.lanes });
+    latest.current = { columns, rows, order, move, flip, lanesBy: settings.lanes };
     /** A finger's press, until it lifts or is abandoned. */
     const press = useRef<{ timer: ReturnType<typeof setTimeout> } | undefined>(undefined);
 
@@ -431,6 +474,8 @@ export function createBoard({ kernel, looks, menu, addCard }: BoardDeps) {
       const others = column.cards.filter((card) => card.id !== id);
       // A sorted column decides for itself: the gap goes where its sort puts the card.
       const carried = latest.current.rows.find((row) => row.id === id);
+      // Another lane the card cannot move to is no place to drop it: the gap waits at home.
+      if (carried && laneChange(carried, column, latest.current.lanesBy) === null) return { over: undefined, slot: 0 };
       if (column.def?.sort && carried) return { over: Number(index), slot: sortedSlot(others, carried, column.def.sort) };
       // A folded column has no list to aim into: a card dropped on it goes to its end.
       if (!list) return { over: Number(index), slot: others.length };
@@ -568,6 +613,202 @@ export function createBoard({ kernel, looks, menu, addCard }: BoardDeps) {
 
     const onClick = (row: DocumentRow) => (): void => onOpen(row.id);
 
+    /** One column, `index` its place among every lane's columns (`columns`). */
+    const renderColumn = (column: Column, index: number): ReactElement => {
+      const hot = lift !== undefined && lift.over === index;
+      // The carried card is out of its column — hidden, not removed: a finger's touch
+      // events keep coming from the element it started on only while that is in the
+      // page — and the gap stands where it will go.
+      const cards = lift ? column.cards.filter((card) => card.id !== lift.row.id) : column.cards;
+      const gapAt = gapColumn === index ? gapSlot : undefined;
+      let shown = 0;
+      const color = column.def?.color;
+      if (column.def?.collapsed === true) {
+        return (
+          <section
+            key={column.key ?? "\u0000"}
+            data-kanban-column={index}
+            {...mark("kanban/column", String(index), { label: placeOf(column) })}
+            aria-label={`${placeOf(column)}, folded, ${cards.length} card${cards.length === 1 ? "" : "s"}`}
+            className={`kanban-column kanban-folded kanban:flex kanban:w-10 kanban:shrink-0 kanban:flex-col kanban:items-center kanban:gap-2 kanban:self-stretch kanban:rounded-lg kanban:border kanban:py-2 kanban:transition-colors kanban:duration-150 ${color ? "kanban:border-t-4" : ""} ${hot ? "kanban:border-accent kanban:bg-accent-subtle" : "kanban:border-border kanban:bg-bg-subtle"}`}
+            style={color ? { borderTopColor: color } : undefined}
+          >
+            <button
+              type="button"
+              className="kanban:flex kanban:min-h-0! kanban:flex-1 kanban:flex-col kanban:items-center kanban:gap-2 kanban:border-0! kanban:bg-transparent! kanban:p-0! kanban:text-sm kanban:text-text"
+              aria-label={`Unfold ${titleOf(column)}`}
+              title={`Unfold ${titleOf(column)}`}
+              onClick={() => fold(column, false)}
+            >
+              <span className="kanban:text-xs kanban:text-text-muted kanban:tabular-nums">{cards.length}</span>
+              <span className="kanban:font-semibold kanban:[writing-mode:vertical-rl]">{titleOf(column)}</span>
+            </button>
+          </section>
+        );
+      }
+      return (
+        <section
+          key={column.key ?? "\u0000"}
+          data-kanban-column={index}
+          {...mark("kanban/column", String(index), { label: placeOf(column) })}
+          aria-label={`${placeOf(column)}, ${cards.length} card${cards.length === 1 ? "" : "s"}`}
+          className={`kanban-column kanban:flex kanban:w-64 kanban:shrink-0 kanban:flex-col kanban:gap-2 kanban:rounded-lg kanban:border kanban:p-2 kanban:transition-colors kanban:duration-150 kanban:compact:w-[80vw] ${color ? "kanban:border-t-4" : ""} ${hot ? "kanban:border-accent kanban:bg-accent-subtle" : "kanban:border-border kanban:bg-bg-subtle"}`}
+          style={color ? { borderTopColor: color } : undefined}
+        >
+          <h3 className="kanban:m-0 kanban:flex kanban:items-center kanban:gap-1.5 kanban:text-sm kanban:font-semibold">
+            {column.key !== undefined && (
+              <button
+                type="button"
+                className="kanban:inline-flex kanban:size-6 kanban:min-h-0! kanban:items-center kanban:justify-center kanban:rounded kanban:border-0! kanban:bg-transparent! kanban:p-0! kanban:text-xs kanban:text-text-muted kanban:hover:bg-bg-raised! kanban:hover:text-text"
+                aria-label={`Fold ${titleOf(column)}`}
+                title="Fold"
+                onClick={() => fold(column, true)}
+              >
+                ‹
+              </button>
+            )}
+            {color && <span aria-hidden="true" className="kanban:size-2.5 kanban:shrink-0 kanban:rounded-full" style={{ background: color }} />}
+            <span
+              className={`kanban:min-w-0 kanban:flex-1 kanban:truncate ${column.key === undefined ? "kanban:italic kanban:text-text-muted" : ""}`}
+              title={column.def?.label !== undefined && column.key !== undefined ? `${column.def.label} (${column.key})` : undefined}
+            >
+              {titleOf(column)}
+            </span>
+            <span className="kanban:text-xs kanban:font-normal kanban:text-text-muted kanban:tabular-nums">{cards.length}</span>
+            {column.def?.sort &&
+              (canEdit ? (
+                <button
+                  type="button"
+                  className="kanban:group kanban:inline-flex kanban:min-h-0! kanban:shrink-0 kanban:items-center kanban:rounded-full! kanban:border-0! kanban:bg-bg-raised! kanban:px-1.5! kanban:py-0! kanban:text-xs kanban:font-normal kanban:text-text-muted kanban:hover:text-text"
+                  aria-label={`Sorted by ${sortLabel(column.def.sort)}, ${column.def.sort.direction === "asc" ? "ascending" : "descending"}. Reverse`}
+                  title={`Sorted by ${sortLabel(column.def.sort)}. Click to reverse`}
+                  onClick={() => column.def?.sort && setSort(column, { ...column.def.sort, direction: column.def.sort.direction === "asc" ? "desc" : "asc" })}
+                >
+                  <span aria-hidden="true">{column.def.sort.direction === "asc" ? "↑" : "↓"}</span>
+                  <span className={SORT_NAME}>{sortLabel(column.def.sort)}</span>
+                </button>
+              ) : (
+                <span className="kanban:group kanban:inline-flex kanban:shrink-0 kanban:items-center kanban:text-xs kanban:font-normal kanban:text-text-muted" title={`Sorted by ${sortLabel(column.def.sort)}`}>
+                  <span aria-hidden="true">{column.def.sort.direction === "asc" ? "↑" : "↓"}</span>
+                  <span className={SORT_NAME}>{sortLabel(column.def.sort)}</span>
+                </span>
+              ))}
+            {canEdit && column.key !== undefined && (
+              <button
+                type="button"
+                className="kanban:inline-flex kanban:size-7 kanban:min-h-0! kanban:items-center kanban:justify-center kanban:rounded kanban:border-0! kanban:bg-transparent! kanban:p-0! kanban:text-sm kanban:text-text-muted kanban:hover:bg-bg-raised! kanban:hover:text-text"
+                aria-label={`Sort ${titleOf(column)}`}
+                aria-haspopup="menu"
+                title="Sort"
+                onClick={(event) => openSort(column, event.currentTarget)}
+              >
+                ⇅
+              </button>
+            )}
+            {canEdit && column.key !== undefined && (
+              <button
+                type="button"
+                className="kanban:inline-flex kanban:size-7 kanban:min-h-0! kanban:items-center kanban:justify-center kanban:rounded kanban:border-0! kanban:bg-transparent! kanban:p-0! kanban:text-sm kanban:text-text-muted kanban:hover:bg-bg-raised! kanban:hover:text-text"
+                aria-label={`Settings for ${titleOf(column)}`}
+                aria-haspopup="dialog"
+                title="Column settings"
+                onClick={(event) => editColumn(column, event.currentTarget)}
+              >
+                ⚙
+              </button>
+            )}
+            <button
+              type="button"
+              className="kanban:inline-flex kanban:size-7 kanban:min-h-0! kanban:items-center kanban:justify-center kanban:rounded kanban:border-0! kanban:bg-transparent! kanban:p-0! kanban:text-base kanban:text-text-muted kanban:hover:bg-bg-raised! kanban:hover:text-text"
+              aria-label={`Add a card to ${placeOf(column)}`}
+              title={`Add a card to ${placeOf(column)}`}
+              aria-expanded={adding === cellOf(column)}
+              onClick={() => setAdding(cellOf(column))}
+            >
+              +
+            </button>
+          </h3>
+          <ul
+            data-kanban-list
+            className="kanban:relative kanban:m-0 kanban:flex kanban:max-h-[70vh] kanban:min-h-10 kanban:list-none kanban:flex-col kanban:gap-1.5 kanban:overflow-y-auto kanban:p-0"
+          >
+            {column.cards.map((row) => {
+              const carried = lift?.row.id === row.id;
+              const at = carried ? -1 : shown++;
+              return (
+                <CardSlot
+                  key={row.id}
+                  row={row}
+                  look={lookOf(dress, row.id)}
+                  items={settings.card}
+                  carried={carried}
+                  gapBefore={!carried && gapAt === at ? lift?.height : undefined}
+                  draggable={movable(row, settings.group)}
+                  onPointerDown={(event) => startDrag(event, row, column, index)}
+                  onClick={onClick(row)}
+                />
+              );
+            })}
+            {gapAt === cards.length && lift && <Gap height={lift.height} />}
+            {pending
+              .filter((card) => card.key === cellOf(column))
+              .map((card) => (
+                <li key={`pending-${String(card.token)}`} aria-busy="true" className="kanban:shrink-0 kanban:opacity-60 kanban:transition-opacity kanban:duration-200 kanban:starting:opacity-0">
+                  <span className="kanban:flex kanban:w-full kanban:min-w-0 kanban:items-center kanban:truncate kanban:rounded kanban:border kanban:border-dashed kanban:border-border kanban:bg-bg-raised kanban:px-2 kanban:py-1.5 kanban:text-sm">
+                    {card.title}
+                  </span>
+                </li>
+              ))}
+            {adding === cellOf(column) && (
+              <li className="kanban:shrink-0">
+                <CardInput
+                  label={`New card in ${placeOf(column)}`}
+                  onSubmit={(title) => submit(column, title)}
+                  onClose={() => setAdding(undefined)}
+                />
+              </li>
+            )}
+          </ul>
+        </section>
+      );
+    };
+
+    const addColumn = canEdit ? (
+      <button
+        type="button"
+        className="kanban-add-column kanban:flex kanban:min-h-24! kanban:w-48 kanban:shrink-0 kanban:items-center kanban:justify-center kanban:rounded-lg kanban:border-2! kanban:border-dashed! kanban:border-border! kanban:bg-transparent! kanban:text-sm kanban:text-text-muted kanban:hover:border-accent! kanban:hover:text-text"
+        aria-haspopup="dialog"
+        onClick={(event) => editColumn(undefined, event.currentTarget)}
+      >
+        + Add column
+      </button>
+    ) : null;
+
+    /** A swimlane: its value as a header that stays in view while the board scrolls sideways, over its row of columns. */
+    const renderLane = (lane: Lane, first: number): ReactElement => {
+      const count = laneCount(lane);
+      return (
+        <section
+          key={lane.key ?? "\u0000"}
+          aria-label={`${laneTitle(lane, settings.lanes)}, ${count} card${count === 1 ? "" : "s"}`}
+          className="kanban-lane kanban:flex kanban:flex-col kanban:gap-2"
+        >
+          <h2
+            className={`kanban:sticky kanban:left-0 kanban:m-0 kanban:flex kanban:w-fit kanban:items-center kanban:gap-1.5 kanban:text-sm kanban:font-semibold ${lane.key === undefined ? "kanban:italic kanban:text-text-muted" : ""}`}
+          >
+            <span>{laneTitle(lane, settings.lanes)}</span>
+            <span className="kanban:text-xs kanban:font-normal kanban:not-italic kanban:text-text-muted kanban:tabular-nums">{count}</span>
+          </h2>
+          <div className="kanban:flex kanban:items-start kanban:gap-3">
+            {lane.columns.map((column, at) => renderColumn(column, first + at))}
+            {first === 0 && addColumn}
+          </div>
+        </section>
+      );
+    };
+    /** Where each lane's columns start in `columns`. */
+    const starts = lanes.map((_, at) => lanes.slice(0, at).reduce((sum, lane) => sum + lane.columns.length, 0));
+
     return (
       <div className="kanban-view kanban:flex kanban:min-w-0 kanban:flex-col kanban:gap-2 kanban:font-sans kanban:text-text">
         {error && (
@@ -625,176 +866,10 @@ export function createBoard({ kernel, looks, menu, addCard }: BoardDeps) {
         <div
           ref={setBoard}
           {...mark("kanban/board", "")}
-          className="kanban-board kanban:flex kanban:min-w-0 kanban:items-start kanban:gap-3 kanban:overflow-x-auto kanban:overscroll-x-contain kanban:pb-1"
+          className={`kanban-board kanban:flex kanban:min-w-0 kanban:items-start kanban:overflow-x-auto kanban:overscroll-x-contain kanban:pb-1 ${laned ? "kanban:flex-col kanban:gap-4" : "kanban:gap-3"}`}
         >
-          {columns.map((column, index) => {
-            const hot = lift !== undefined && lift.over === index;
-            // The carried card is out of its column — hidden, not removed: a finger's touch
-            // events keep coming from the element it started on only while that is in the
-            // page — and the gap stands where it will go.
-            const cards = lift ? column.cards.filter((card) => card.id !== lift.row.id) : column.cards;
-            const gapAt = gapColumn === index ? gapSlot : undefined;
-            let shown = 0;
-            const color = column.def?.color;
-            if (column.def?.collapsed === true) {
-              return (
-                <section
-                  key={column.key ?? "\u0000"}
-                  data-kanban-column={index}
-                  {...mark("kanban/column", String(index), { label: titleOf(column) })}
-                  aria-label={`${titleOf(column)}, folded, ${cards.length} card${cards.length === 1 ? "" : "s"}`}
-                  className={`kanban-column kanban-folded kanban:flex kanban:w-10 kanban:shrink-0 kanban:flex-col kanban:items-center kanban:gap-2 kanban:self-stretch kanban:rounded-lg kanban:border kanban:py-2 kanban:transition-colors kanban:duration-150 ${color ? "kanban:border-t-4" : ""} ${hot ? "kanban:border-accent kanban:bg-accent-subtle" : "kanban:border-border kanban:bg-bg-subtle"}`}
-                  style={color ? { borderTopColor: color } : undefined}
-                >
-                  <button
-                    type="button"
-                    className="kanban:flex kanban:min-h-0! kanban:flex-1 kanban:flex-col kanban:items-center kanban:gap-2 kanban:border-0! kanban:bg-transparent! kanban:p-0! kanban:text-sm kanban:text-text"
-                    aria-label={`Unfold ${titleOf(column)}`}
-                    title={`Unfold ${titleOf(column)}`}
-                    onClick={() => fold(column, false)}
-                  >
-                    <span className="kanban:text-xs kanban:text-text-muted kanban:tabular-nums">{cards.length}</span>
-                    <span className="kanban:font-semibold kanban:[writing-mode:vertical-rl]">{titleOf(column)}</span>
-                  </button>
-                </section>
-              );
-            }
-            return (
-              <section
-                key={column.key ?? "\u0000"}
-                data-kanban-column={index}
-                {...mark("kanban/column", String(index), { label: titleOf(column) })}
-                aria-label={`${titleOf(column)}, ${cards.length} card${cards.length === 1 ? "" : "s"}`}
-                className={`kanban-column kanban:flex kanban:w-64 kanban:shrink-0 kanban:flex-col kanban:gap-2 kanban:rounded-lg kanban:border kanban:p-2 kanban:transition-colors kanban:duration-150 kanban:compact:w-[80vw] ${color ? "kanban:border-t-4" : ""} ${hot ? "kanban:border-accent kanban:bg-accent-subtle" : "kanban:border-border kanban:bg-bg-subtle"}`}
-                style={color ? { borderTopColor: color } : undefined}
-              >
-                <h3 className="kanban:m-0 kanban:flex kanban:items-center kanban:gap-1.5 kanban:text-sm kanban:font-semibold">
-                  {column.key !== undefined && (
-                    <button
-                      type="button"
-                      className="kanban:inline-flex kanban:size-6 kanban:min-h-0! kanban:items-center kanban:justify-center kanban:rounded kanban:border-0! kanban:bg-transparent! kanban:p-0! kanban:text-xs kanban:text-text-muted kanban:hover:bg-bg-raised! kanban:hover:text-text"
-                      aria-label={`Fold ${titleOf(column)}`}
-                      title="Fold"
-                      onClick={() => fold(column, true)}
-                    >
-                      ‹
-                    </button>
-                  )}
-                  {color && <span aria-hidden="true" className="kanban:size-2.5 kanban:shrink-0 kanban:rounded-full" style={{ background: color }} />}
-                  <span
-                    className={`kanban:min-w-0 kanban:flex-1 kanban:truncate ${column.key === undefined ? "kanban:italic kanban:text-text-muted" : ""}`}
-                    title={column.def?.label !== undefined && column.key !== undefined ? `${column.def.label} (${column.key})` : undefined}
-                  >
-                    {titleOf(column)}
-                  </span>
-                  <span className="kanban:text-xs kanban:font-normal kanban:text-text-muted kanban:tabular-nums">{cards.length}</span>
-                  {column.def?.sort &&
-                    (canEdit ? (
-                      <button
-                        type="button"
-                        className="kanban:group kanban:inline-flex kanban:min-h-0! kanban:shrink-0 kanban:items-center kanban:rounded-full! kanban:border-0! kanban:bg-bg-raised! kanban:px-1.5! kanban:py-0! kanban:text-xs kanban:font-normal kanban:text-text-muted kanban:hover:text-text"
-                        aria-label={`Sorted by ${sortLabel(column.def.sort)}, ${column.def.sort.direction === "asc" ? "ascending" : "descending"}. Reverse`}
-                        title={`Sorted by ${sortLabel(column.def.sort)}. Click to reverse`}
-                        onClick={() => column.def?.sort && setSort(column, { ...column.def.sort, direction: column.def.sort.direction === "asc" ? "desc" : "asc" })}
-                      >
-                        <span aria-hidden="true">{column.def.sort.direction === "asc" ? "↑" : "↓"}</span>
-                        <span className={SORT_NAME}>{sortLabel(column.def.sort)}</span>
-                      </button>
-                    ) : (
-                      <span className="kanban:group kanban:inline-flex kanban:shrink-0 kanban:items-center kanban:text-xs kanban:font-normal kanban:text-text-muted" title={`Sorted by ${sortLabel(column.def.sort)}`}>
-                        <span aria-hidden="true">{column.def.sort.direction === "asc" ? "↑" : "↓"}</span>
-                        <span className={SORT_NAME}>{sortLabel(column.def.sort)}</span>
-                      </span>
-                    ))}
-                  {canEdit && column.key !== undefined && (
-                    <button
-                      type="button"
-                      className="kanban:inline-flex kanban:size-7 kanban:min-h-0! kanban:items-center kanban:justify-center kanban:rounded kanban:border-0! kanban:bg-transparent! kanban:p-0! kanban:text-sm kanban:text-text-muted kanban:hover:bg-bg-raised! kanban:hover:text-text"
-                      aria-label={`Sort ${titleOf(column)}`}
-                      aria-haspopup="menu"
-                      title="Sort"
-                      onClick={(event) => openSort(column, event.currentTarget)}
-                    >
-                      ⇅
-                    </button>
-                  )}
-                  {canEdit && column.key !== undefined && (
-                    <button
-                      type="button"
-                      className="kanban:inline-flex kanban:size-7 kanban:min-h-0! kanban:items-center kanban:justify-center kanban:rounded kanban:border-0! kanban:bg-transparent! kanban:p-0! kanban:text-sm kanban:text-text-muted kanban:hover:bg-bg-raised! kanban:hover:text-text"
-                      aria-label={`Settings for ${titleOf(column)}`}
-                      aria-haspopup="dialog"
-                      title="Column settings"
-                      onClick={(event) => editColumn(column, event.currentTarget)}
-                    >
-                      ⚙
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="kanban:inline-flex kanban:size-7 kanban:min-h-0! kanban:items-center kanban:justify-center kanban:rounded kanban:border-0! kanban:bg-transparent! kanban:p-0! kanban:text-base kanban:text-text-muted kanban:hover:bg-bg-raised! kanban:hover:text-text"
-                    aria-label={`Add a card to ${titleOf(column)}`}
-                    title={`Add a card to ${titleOf(column)}`}
-                    aria-expanded={adding === (column.key ?? null)}
-                    onClick={() => setAdding(column.key ?? null)}
-                  >
-                    +
-                  </button>
-                </h3>
-                <ul
-                  data-kanban-list
-                  className="kanban:relative kanban:m-0 kanban:flex kanban:max-h-[70vh] kanban:min-h-10 kanban:list-none kanban:flex-col kanban:gap-1.5 kanban:overflow-y-auto kanban:p-0"
-                >
-                  {column.cards.map((row) => {
-                    const carried = lift?.row.id === row.id;
-                    const at = carried ? -1 : shown++;
-                    return (
-                      <CardSlot
-                        key={row.id}
-                        row={row}
-                        look={lookOf(dress, row.id)}
-                        items={settings.card}
-                        carried={carried}
-                        gapBefore={!carried && gapAt === at ? lift?.height : undefined}
-                        draggable={movable(row, settings.group)}
-                        onPointerDown={(event) => startDrag(event, row, column, index)}
-                        onClick={onClick(row)}
-                      />
-                    );
-                  })}
-                  {gapAt === cards.length && lift && <Gap height={lift.height} />}
-                  {pending
-                    .filter((card) => card.key === (column.key ?? null))
-                    .map((card) => (
-                      <li key={`pending-${String(card.token)}`} aria-busy="true" className="kanban:shrink-0 kanban:opacity-60 kanban:transition-opacity kanban:duration-200 kanban:starting:opacity-0">
-                        <span className="kanban:flex kanban:w-full kanban:min-w-0 kanban:items-center kanban:truncate kanban:rounded kanban:border kanban:border-dashed kanban:border-border kanban:bg-bg-raised kanban:px-2 kanban:py-1.5 kanban:text-sm">
-                          {card.title}
-                        </span>
-                      </li>
-                    ))}
-                  {adding === (column.key ?? null) && (
-                    <li className="kanban:shrink-0">
-                      <CardInput
-                        label={`New card in ${titleOf(column)}`}
-                        onSubmit={(title) => submit(column, title)}
-                        onClose={() => setAdding(undefined)}
-                      />
-                    </li>
-                  )}
-                </ul>
-              </section>
-            );
-          })}
-          {canEdit && (
-            <button
-              type="button"
-              className="kanban-add-column kanban:flex kanban:min-h-24! kanban:w-48 kanban:shrink-0 kanban:items-center kanban:justify-center kanban:rounded-lg kanban:border-2! kanban:border-dashed! kanban:border-border! kanban:bg-transparent! kanban:text-sm kanban:text-text-muted kanban:hover:border-accent! kanban:hover:text-text"
-              aria-haspopup="dialog"
-              onClick={(event) => editColumn(undefined, event.currentTarget)}
-            >
-              + Add column
-            </button>
-          )}
+          {laned ? lanes.map((lane, at) => renderLane(lane, starts[at] ?? 0)) : columns.map(renderColumn)}
+          {!laned && addColumn}
         </div>
         {results.hasMore && (
           <p className="kanban:m-0 kanban:text-sm kanban:text-text-muted">

@@ -35,6 +35,13 @@ describe("new boards and cards", () => {
     });
   });
 
+  it("gives a card added in a swimlane that lane's value, and none for the 'No …' lane", () => {
+    const spec = boardSpec("01T");
+    expect(cardFields(spec, { field: "fm.status", value: "doing" }, { field: "fm.team", value: "web" }).fm).toEqual({ team: "web", status: "doing" });
+    expect(cardFields(spec, { field: "fm.status", value: "doing" }, { field: "fm.team", value: undefined }).fm).toEqual({ status: "doing" });
+    expect(cardFields(spec, { field: "fm.status", value: "doing" }, { field: "fm.a.b", value: "x" }).fm).toEqual({ status: "doing" });
+  });
+
   it("bakes in nothing but the column for an 'or' search, and no value for the 'No …' column", () => {
     const spec = { ...boardSpec("01T"), filter: { ...boardSpec("01T").filter, combine: "or" as const } };
     expect(cardFields(spec, { field: "fm.status", value: undefined })).toEqual({ fm: {} });

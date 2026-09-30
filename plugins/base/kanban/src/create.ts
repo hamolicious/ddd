@@ -10,7 +10,8 @@
  * whatever the board's search asks of every
  * note it shows and a note can be given: the parent of an "is inside note" condition (the
  * card is filed there), and the value of an "is" condition on a top-level property. So a
- * card added to a board is on that board, in that column. Its place at the end of the
+ * card added to a board is on that board, in that column — and, on a board with swimlanes,
+ * in that lane (the lane's value, when it has one). Its place at the end of the
  * column is not a property: `index.tsx` writes it to the card's `%%% kanban` section.
  */
 
@@ -58,6 +59,7 @@ export interface CardFields {
 export function cardFields(
   spec: SearchSpec,
   group: { readonly field: string; readonly value: CoreValue | undefined },
+  lane?: { readonly field: string; readonly value: CoreValue | undefined },
 ): CardFields {
   const fm: Record<string, CoreValue> = {};
   let parent: string | undefined;
@@ -68,6 +70,7 @@ export function cardFields(
       else if (clause.op === "eq" && writableField(clause.field)) fm[clause.field.slice(3)] = literal(clause.kind, clause.value);
     }
   }
+  if (lane?.value !== undefined && writableField(lane.field)) fm[lane.field.slice(3)] = lane.value;
   if (group.value !== undefined && writableField(group.field)) fm[group.field.slice(3)] = group.value;
   return { ...(parent !== undefined ? { parent } : {}), fm };
 }

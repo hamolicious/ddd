@@ -35,6 +35,9 @@
  * - **A filter above the board** (`filterRows`) narrows it to the cards holding one value
  *   of a field the cards show — local to the screen, never saved. A card made under a
  *   filter is born with its value (`index.tsx`).
+ * - **Swimlanes** (`lanes`, off by default) split the board into rows by a second field,
+ *   each row with the same columns (`lanes.ts`). A move into another lane writes that
+ *   field too, by the same splice as the column's.
  */
 
 import type { CoreValue, DocumentRow } from "@kernel";
@@ -92,6 +95,8 @@ export interface KanbanOptions {
   readonly order: boolean;
   /** What each card shows, top to bottom (`card.ts`). */
   readonly card: readonly CardItem[];
+  /** The field whose values are the swimlanes; `""`: none, one board of columns. */
+  readonly lanes: string;
 }
 
 export function kanbanOptions(options: Readonly<Record<string, string>>): KanbanOptions {
@@ -101,12 +106,13 @@ export function kanbanOptions(options: Readonly<Record<string, string>>): Kanban
     // Older boards named the property they kept the rank in here: on, all the same.
     order: options["order"] !== NO_ORDER,
     card: parseCard(options["card"] ?? ""),
+    lanes: options["lanes"] ?? "",
   };
 }
 
 /** The view options for these settings over `options`; defaults are removed, not written. */
 export function withKanban(settings: KanbanOptions, options: Readonly<Record<string, string>>): Readonly<Record<string, string>> {
-  const { group: _group, columns: _columns, order: _order, card: _card, ...rest } = options;
+  const { group: _group, columns: _columns, order: _order, card: _card, lanes: _lanes, ...rest } = options;
   const card = serializeCard(settings.card);
   return {
     ...rest,
@@ -114,6 +120,7 @@ export function withKanban(settings: KanbanOptions, options: Readonly<Record<str
     ...(settings.columns.length === 0 ? {} : { columns: serializeColumns(settings.columns) }),
     ...(settings.order ? {} : { order: NO_ORDER }),
     ...(card === serializeCard(DEFAULT_CARD) ? {} : { card }),
+    ...(settings.lanes === "" ? {} : { lanes: settings.lanes }),
   };
 }
 
@@ -185,6 +192,16 @@ export interface Column {
   readonly cards: readonly DocumentRow[];
   /** The user's definition, for a named column. */
   readonly def?: ColumnDef;
+  /** The swimlane this column stands in, when the board has them (`lanes.ts`). */
+  readonly lane?: LaneRef;
+}
+
+/** A swimlane, as a column in it knows it: its value as text, and what a move into it writes. */
+export interface LaneRef {
+  /** `undefined` for the lane of notes without a value. */
+  readonly key: string | undefined;
+  /** `undefined` removes the key. */
+  readonly value: Scalar | undefined;
 }
 
 /** What a card sorts by in a column sorted by `field`. */
@@ -253,7 +270,7 @@ function isScalar(value: CoreValue | undefined): value is Scalar {
 }
 
 /** The group field's values on a note, as column keys, with the values they came from. */
-function valuesOf(row: DocumentRow, group: string): readonly (readonly [string, Scalar])[] {
+export function valuesOf(row: DocumentRow, group: string): readonly (readonly [string, Scalar])[] {
   const value = fieldValue(row, group);
   const items = Array.isArray(value) ? value : [value];
   const seen = new Map<string, Scalar>();
@@ -383,6 +400,13 @@ export interface Move {
   readonly rank?: number;
   /** When it entered its new column, as an ISO time; with `group`. */
   readonly since?: string;
+  /** Present when the swimlane changes: the value to write, `undefined` to remove it. */
+  readonly lane?: { readonly value: CoreValue | undefined };
+}
+
+/** Whether `now` (a field's live value) is what writing `value` left there. */
+function holdsWritten(now: unknown, value: CoreValue | undefined): boolean {
+  return value === undefined ? now === undefined || now === null || now === "" : now === value || String(now) === String(value);
 }
 
 /**
@@ -414,6 +438,10 @@ export function withMoves(
     }
     const since = sinceField(settings.group);
     if (move.since !== undefined && since !== undefined) fm = { ...fm, [since.slice(3)]: move.since };
+    if (move.lane && writableField(settings.lanes)) {
+      const { [settings.lanes.slice(3)]: _old, ...rest } = fm;
+      fm = move.lane.value === undefined ? rest : { ...rest, [settings.lanes.slice(3)]: move.lane.value };
+    }
     if (move.rank === undefined) return { ...row, fm };
     const own = row.plugins["kanban"];
     const section = own !== null && typeof own === "object" && !Array.isArray(own) ? own : {};
@@ -423,12 +451,8 @@ export function withMoves(
 
 /** Whether the live row already says what a move wrote. */
 export function settled(row: DocumentRow, settings: KanbanOptions, move: Move): boolean {
-  if (move.group) {
-    const now = fieldValue(row, settings.group);
-    const value = move.group.value;
-    const same = value === undefined ? now === undefined || now === null || now === "" : now === value || String(now) === String(value);
-    if (!same) return false;
-  }
+  if (move.group && !holdsWritten(fieldValue(row, settings.group), move.group.value)) return false;
+  if (move.lane && !holdsWritten(fieldValue(row, settings.lanes), move.lane.value)) return false;
   return move.rank === undefined || rankOf(row) === move.rank;
 }
 
