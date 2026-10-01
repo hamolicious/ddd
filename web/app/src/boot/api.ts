@@ -23,18 +23,6 @@ import { apiBase } from "./shell.js";
 export interface AuthBootstrap {
   readonly needs_first_user: boolean;
   readonly invite_required: boolean;
-  /**
-   * RENAME-HOP: the server's canonical address (`https://ddd.slayhouse.net`), or `null`
-   * when it has none configured. A page on any other origin moves there once synced
-   * (`rename-hop-move.ts`). Absent on a server from before the hop.
-   */
-  readonly public_url?: string | null;
-  /**
-   * RENAME-HOP: the old origins (`https://life.slayhouse.net`) a page moves away from. Only
-   * a page on one of these moves; any other origin (a LAN address, localhost) stays. Absent
-   * on a server from before the hop: none.
-   */
-  readonly rename_hop_from?: readonly string[];
 }
 
 interface UserView {

@@ -69,14 +69,6 @@ Origin: https://app.example.com
 Resolution order for credentials: `Authorization` header → `ddd.bearer.*`
 subprotocol → session cookie. The first one present is the only one tried.
 
-**Rename hop (RENAME-HOP: remove in the cleanup release).** Until the cleanup
-release the server also accepts the pre-rename names, each only when its current
-counterpart is absent: the `life-manager.v1` subprotocol (selected and echoed
-back only when the client did not offer `ddd.v1`), the
-`life-manager.bearer.<token>` prefix, and the `lm_session` cookie. New
-cookies are always `ddd_session`; logout also expires `lm_session`.
-Every use counts on `ddd_legacy_client_total{kind}`.
-
 ### 1.2 Origin allowlist (mandatory — SPEC §4.3)
 
 Before anything else the server checks the `Origin` header against

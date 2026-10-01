@@ -27,9 +27,6 @@ url = "2"
 # The notes folder (`folder.rs`): change events for the page, and bytes as base64 over IPC.
 notify = "8"
 base64 = "0.22"
-# RENAME-HOP: `server_move` asks the configured server for its canonical origin
-# (`GET /api/auth/bootstrap`) before following a page's request to move.
-ureq = { version = "3", features = ["json"] }
 
 [profile.release]
 lto = "thin"

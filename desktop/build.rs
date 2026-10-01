@@ -12,7 +12,6 @@ fn main() {
             "folder_write",
             "folder_move",
             "folder_remove",
-            "server_move", // RENAME-HOP
         ]),
     ))
     .expect("failed to run tauri-build");

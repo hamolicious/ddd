@@ -26,30 +26,20 @@ pub fn read() -> Option<Config> {
 
 /// Set or clear `folder`, keeping every other key (and the user's `server_url`) as it was.
 pub fn set_folder(folder: Option<&Path>) -> Result<(), String> {
-    let text = folder
-        .map(|f| f.to_str().ok_or("the folder's path is not valid UTF-8"))
-        .transpose()?;
-    set("folder", text)
-}
-
-/// Set or clear `server_url`, keeping every other key as it was.
-pub fn set_server_url(url: &str) -> Result<(), String> {
-    set("server_url", Some(url))
-}
-
-/// Set or clear one string key in the config file, keeping every other key as it was.
-fn set(key: &str, value: Option<&str>) -> Result<(), String> {
     let path = path().ok_or("no home directory to keep the setting in")?;
     let mut table = std::fs::read_to_string(&path)
         .ok()
         .and_then(|text| text.parse::<toml::Table>().ok())
         .unwrap_or_default();
-    match value {
-        Some(value) => {
-            table.insert(key.into(), toml::Value::String(value.into()));
+    match folder {
+        Some(folder) => {
+            let text = folder
+                .to_str()
+                .ok_or("the folder's path is not valid UTF-8")?;
+            table.insert("folder".into(), toml::Value::String(text.into()));
         }
         None => {
-            table.remove(key);
+            table.remove("folder");
         }
     }
     if let Some(dir) = path.parent() {

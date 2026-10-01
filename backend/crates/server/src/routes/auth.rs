@@ -84,15 +84,6 @@ pub struct RedeemResetRequest {
 pub struct BootstrapState {
     pub needs_first_user: bool,
     pub invite_required: bool,
-    /// The deployment's canonical origin (`PUBLIC_URL`), `null` when unset. A
-    /// client loaded from another origin that also serves this API (during the
-    /// rename hop: the old domain) uses it to learn where to move. It is
-    /// already public — it is the address users type.
-    pub public_url: Option<String>,
-    /// RENAME-HOP: remove in the cleanup release. `RENAME_HOP_FROM`: the origins
-    /// this deployment used to be reached at, always present (`[]` when unset).
-    /// A client moves to `public_url` only when its own origin is listed here.
-    pub rename_hop_from: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -278,9 +269,6 @@ pub async fn logout(State(state): State<AppState>, user: AuthUser) -> AppResult<
     // Always clear the cookie, even for a bearer session: a stale cookie on the
     // same browser would otherwise outlive the logout the user asked for.
     set_cookie(&mut response, &auth::clear_session_cookie(&state))?;
-    // RENAME-HOP: remove in the cleanup release. The session may have arrived on
-    // the pre-rename cookie; expire it too or the browser keeps sending it.
-    set_cookie(&mut response, &auth::clear_legacy_session_cookie(&state))?;
     Ok(response)
 }
 
@@ -420,9 +408,6 @@ pub async fn bootstrap_state(
     Ok(Json(BootstrapState {
         needs_first_user,
         invite_required: !needs_first_user,
-        public_url: state.config.public_url.clone(),
-        // RENAME-HOP: remove in the cleanup release.
-        rename_hop_from: state.config.rename_hop_from.clone(),
     }))
 }
 
@@ -500,37 +485,6 @@ mod tests {
         assert_eq!(display_name(Some("  "), "ada@example.com"), "ada");
         assert_eq!(display_name(None, "ada@example.com"), "ada");
         assert_eq!(display_name(None, "not-an-email"), "not-an-email");
-    }
-
-    #[test]
-    fn bootstrap_state_always_carries_public_url() {
-        let unset = BootstrapState {
-            needs_first_user: false,
-            invite_required: true,
-            public_url: None,
-            rename_hop_from: Vec::new(),
-        };
-        assert_eq!(
-            serde_json::to_value(&unset).unwrap(),
-            serde_json::json!({
-                "needs_first_user": false,
-                "invite_required": true,
-                "public_url": null,
-                "rename_hop_from": [],
-            })
-        );
-        let set = BootstrapState {
-            public_url: Some("https://ddd.example.com".to_string()),
-            rename_hop_from: vec!["https://life.example.com".to_string()],
-            ..unset
-        };
-        let json = serde_json::to_value(&set).unwrap();
-        assert_eq!(json["public_url"], "https://ddd.example.com");
-        // RENAME-HOP: remove in the cleanup release.
-        assert_eq!(
-            json["rename_hop_from"],
-            serde_json::json!(["https://life.example.com"])
-        );
     }
 
     #[test]

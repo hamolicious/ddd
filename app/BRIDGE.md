@@ -292,34 +292,6 @@ as a Markdown file, both ways, while the app runs.
 * **The browser has a fallback** in the kernel, not here: the File System Access API in
   Chromium, with no change events.
 
-### 4.6 `server.move` — the desktop shell's server (RENAME-HOP)
-
-<!-- RENAME-HOP: one release only; the cleanup release removes this section. -->
-
-Linux desktop shell only, for the one-release move from the old domain to the renamed
-server. Listed in `methods` as `"server.move"`; not a capability (`capabilities` stays
-`["folder"]`), so the page tests `typeof window.shell.server?.move === "function"`.
-
-| method | params | result |
-|---|---|---|
-| `server.move` | `{ url }` | never resolves: the app restarts; `invalid`, `failed` |
-
-* `url` is an **origin**: `http://` or `https://`, nothing after the `/` (no path, query,
-  fragment or credentials), else `invalid`.
-* The shell checks the move with the server it is configured for, natively and off the
-  main thread: it fetches `<configured origin>/api/auth/bootstrap` and accepts only when
-  `url` is that response's `public_url` and the configured origin is listed in its
-  `rename_hop_from` (backend `RENAME_HOP_FROM`). Anything else, including an unreachable
-  server or a response without those fields, is `invalid` and nothing is written. A page
-  can therefore only move the app to where its own server says it now lives.
-* The shell writes it as `server_url` in `~/.config/ddd/desktop.toml` (other keys kept;
-  `failed` if it cannot) and restarts; the new process loads that origin with its own,
-  fresh webview data. The page calls it last, on the old domain, after it has synced and
-  cleared its data.
-* `--server`, `DDD_SERVER_URL` or the deprecated `LM_SERVER_URL` still beat the config:
-  with one set the shell writes the config, logs that an override is in effect, and
-  restarts on the override. The configured origin checked above is the one in effect.
-
 ---
 
 ## 5. The server contract: `GET /api/shell/manifest`

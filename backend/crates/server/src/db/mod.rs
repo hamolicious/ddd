@@ -4,8 +4,6 @@
 
 pub mod indexes;
 pub mod migrations;
-// RENAME-HOP: remove in the cleanup release.
-pub mod rename_hop;
 
 use std::time::Duration;
 

@@ -82,14 +82,6 @@ pub struct Config {
     /// that works is scheme-wide (`connect-src … https: http: wss: ws:`).
     /// Setting this names the server and the policy narrows to it.
     pub public_url: Option<String>,
-    /// RENAME-HOP: remove in the cleanup release.
-    ///
-    /// `RENAME_HOP_FROM` — comma-separated origins this deployment used to be
-    /// reached at (during the hop: the old domain), parsed by the same parser
-    /// as `APP_ORIGIN`. Default empty. `GET /api/auth/bootstrap` returns it as
-    /// `rename_hop_from`; a client moves to [`Config::public_url`] only when it
-    /// was loaded from one of these origins, never from anywhere else.
-    pub rename_hop_from: Vec<String>,
     /// `LOG_FORMAT` = `json` | `pretty`.
     pub log_format: LogFormat,
     /// `COOKIE_SECURE`, default true; only settable to false for local http dev.
@@ -304,9 +296,6 @@ impl Config {
             }
         };
 
-        // RENAME-HOP: remove in the cleanup release.
-        let rename_hop_from = parse_origins("RENAME_HOP_FROM")?;
-
         // Hoisted out of the struct literal because `PLUGIN_STAGING_DIR`'s default is
         // derived from it (`<PLUGINS_DIR>.staging`, a sibling of the served root).
         let plugins_dir = var("PLUGINS_DIR")
@@ -323,7 +312,6 @@ impl Config {
             max_document_bytes,
             app_origins,
             public_url,
-            rename_hop_from,
             log_format: parse_log_format("LOG_FORMAT")?,
             cookie_secure: parse_bool("COOKIE_SECURE", true)?,
             // Off by default: trusting a forwarding header that no proxy
@@ -678,12 +666,7 @@ fn derived_origins(port: u16, hosts: Option<&str>) -> Vec<String> {
 /// Parse `APP_ORIGIN` — comma separated, each entry `scheme://host[:port]` with
 /// no path and no trailing slash (that is what a browser sends in `Origin`).
 fn parse_origins(key: &'static str) -> Result<Vec<String>, ConfigError> {
-    parse_origin_list(key, var(key).as_deref())
-}
-
-/// [`parse_origins`] on a value already read (`None`: the variable is unset).
-fn parse_origin_list(key: &'static str, raw: Option<&str>) -> Result<Vec<String>, ConfigError> {
-    let Some(raw) = raw else {
+    let Some(raw) = var(key) else {
         return Ok(Vec::new());
     };
 
@@ -747,7 +730,6 @@ mod tests {
             max_document_bytes: ddd_core::limits::MAX_DOCUMENT_BYTES,
             app_origins: origins.iter().map(|o| o.to_string()).collect(),
             public_url: None,
-            rename_hop_from: Vec::new(),
             log_format: LogFormat::Json,
             cookie_secure: true,
             trust_proxy_headers: false,
@@ -785,46 +767,6 @@ mod tests {
             plugin_http_max_response_bytes: ddd_plugin_abi::limits::MAX_HTTP_RESPONSE_BYTES,
             plugin_http_allow_cidrs: Vec::new(),
             plugin_enable_cron: true,
-        }
-    }
-
-    // RENAME-HOP: remove in the cleanup release.
-    #[test]
-    fn rename_hop_from_is_an_origin_list() {
-        assert_eq!(
-            parse_origin_list("RENAME_HOP_FROM", None).unwrap(),
-            Vec::<String>::new()
-        );
-        assert_eq!(
-            parse_origin_list("RENAME_HOP_FROM", Some("")).unwrap(),
-            Vec::<String>::new()
-        );
-        assert_eq!(
-            parse_origin_list(
-                "RENAME_HOP_FROM",
-                Some(
-                    " https://life.slayhouse.net/ , http://old.lan:8080,https://life.slayhouse.net"
-                )
-            )
-            .unwrap(),
-            vec!["https://life.slayhouse.net", "http://old.lan:8080"]
-        );
-        for bad in [
-            "life.slayhouse.net",
-            "ftp://x.example",
-            "https://x.example/app",
-        ] {
-            let err = parse_origin_list("RENAME_HOP_FROM", Some(bad)).unwrap_err();
-            assert!(
-                matches!(
-                    err,
-                    ConfigError::Invalid {
-                        var: "RENAME_HOP_FROM",
-                        ..
-                    }
-                ),
-                "{bad}: {err}"
-            );
         }
     }
 

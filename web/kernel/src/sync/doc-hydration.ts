@@ -293,8 +293,6 @@ export class DocHydrator {
   /** Changes waiting elsewhere (the kernel's outbox), counted in `pending` too. */
   #queued = 0;
   #pending = 0;
-  /** RENAME-HOP: local edits and notes made on this page, ever; see {@link localEdits}. */
-  #localEdits = 0;
 
   constructor(
     private readonly transport: SyncTransport,
@@ -317,102 +315,6 @@ export class DocHydrator {
    */
   get pendingCount(): number {
     return this.#pending;
-  }
-
-  /**
-   * RENAME-HOP: how many local edits (and notes made here) this page has seen. Only ever
-   * grows: equal before and after a check means nothing was typed in between.
-   */
-  get localEdits(): number {
-    return this.#localEdits;
-  }
-
-  /**
-   * RENAME-HOP: prove, with a fresh server round trip, that the server holds everything
-   * this device holds — every open document and every stored replica.
-   *
-   * Why this and not `pendingCount === 0`: pending drops to zero when frames are *handed
-   * to the socket* (`#flush`, `#sendStep2` → `#clearOutbox`), and a live edit made while
-   * subscribed never counts at all. Neither says the server got anything: a socket that
-   * dies with bytes still buffered, or a server that drops an `UPDATE` for a document it
-   * has unsubscribed, leaves pending at zero and the edit nowhere but here. Clearing this
-   * origin on that signal would delete the only copy.
-   *
-   * So each document's state is fetched from the server over REST
-   * (`GET /api/documents/:id?format=crdt`: the room's live state, read under the room
-   * lock that every write holds until its update is in the durable update log) and this
-   * device's state is applied to a scratch copy of it. If that changes nothing — no new
-   * item, no new deletion — the server already has all of it. A state-vector comparison
-   * alone would not do: a deletion does not move the state vector.
-   *
-   * `repair` re-sends what is found missing (a fresh handshake, whose `SYNC_STEP2` carries
-   * every item and deletion the server lacks); the next check then passes. A document the
-   * server answers 404/410 for counts as received unless this device still marks it
-   * unsent: there is nowhere left to deliver a purged document's edits.
-   */
-  async confirmReceived(options: { readonly repair?: boolean; readonly concurrency?: number } = {}): Promise<ReceiptReport> {
-    const mark = this.#localEdits;
-    const ids = new Set<string>(this.#open.keys());
-    for (const replica of await this.replicas()) ids.add(replica.id);
-    for (const id of this.#seeds.keys()) ids.add(id);
-    const queue = [...ids];
-    const missing: string[] = [];
-    const failed: string[] = [];
-    const worker = async (): Promise<void> => {
-      for (let id = queue.shift(); id !== undefined; id = queue.shift()) {
-        try {
-          if (!(await this.#serverHolds(id))) missing.push(id);
-        } catch {
-          failed.push(id);
-        }
-      }
-    };
-    await Promise.all(Array.from({ length: Math.max(1, Math.min(options.concurrency ?? 4, ids.size)) }, worker));
-    const quiet = this.#localEdits === mark && this.#pending === 0 && this.#awaitingCreate.size === 0;
-    if (options.repair) for (const id of missing) void this.#resend(id);
-    return { confirmed: quiet && missing.length === 0 && failed.length === 0, checked: ids.size, missing, failed, quiet };
-  }
-
-  /** RENAME-HOP: does the server's copy of `id` hold all of this device's? */
-  async #serverHolds(id: string): Promise<boolean> {
-    const local = await this.#localState(id);
-    if (!local || local.byteLength === 0) return true;
-    const response = await this.#fetchCrdt(id);
-    if (response.status === 404 || response.status === 410) {
-      if (this.#awaitingCreate.has(id) || (this.#open.get(id)?.pending ?? 0) > 0) return false;
-      const stored = await this.options.persistence?.peek?.(id);
-      return stored !== undefined && stored.unsynced === false;
-    }
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return stateHolds(new Uint8Array(await response.arrayBuffer()), local);
-  }
-
-  /** RENAME-HOP: this device's full state of `id`: the open replica, else the stored one. */
-  async #localState(id: string): Promise<Uint8Array | undefined> {
-    const entry = this.#open.get(id);
-    if (entry) return Y.encodeStateAsUpdate(entry.doc);
-    const seeded = this.#seeds.get(id);
-    if (seeded) return seeded;
-    const persistence = this.options.persistence;
-    if (!persistence) return undefined;
-    return persistence.peek ? (await persistence.peek(id))?.state : await persistence.load(id);
-  }
-
-  /** RENAME-HOP: send `id` again through a fresh handshake. */
-  async #resend(id: string): Promise<void> {
-    if (this.transport.state !== "open" || this.#awaitingCreate.has(id)) return;
-    const entry = this.#open.get(id);
-    if (entry?.subscribed) {
-      entry.subscribed = false;
-      entry.synced = false;
-      this.#subscribe(entry);
-      return;
-    }
-    try {
-      (await this.open(id)).release();
-    } catch {
-      /* reported through onError; the next check finds it again */
-    }
   }
 
   /**
@@ -549,7 +451,6 @@ export class DocHydrator {
     const state = Y.encodeStateAsUpdate(doc);
     doc.destroy();
     this.#awaitingCreate.add(id);
-    this.#localEdits++; // RENAME-HOP
     if (this.options.persistence) await this.options.persistence.save(id, state, { unsynced: true });
     else this.#seeds.set(id, state);
     return state;
@@ -1022,7 +923,6 @@ export class DocHydrator {
       this.#schedulePersist(entry);
       return;
     }
-    this.#localEdits++; // RENAME-HOP
 
     if (entry.refused) {
       // Kept here, and offered again as a whole once the burst ends.
@@ -1243,9 +1143,21 @@ export class DocHydrator {
   // `application/octet-stream` (update encoding v1) — which is what M1 does today.
   // If that ever becomes a JSON envelope, this is the client half that breaks.
   async #hydrateOverRest(entry: DocEntry): Promise<void> {
-    if (!(this.options.fetchImpl ?? globalThis.fetch)) return;
+    const fetchImpl = this.options.fetchImpl ?? globalThis.fetch;
+    if (!fetchImpl) return;
+    const base =
+      this.options.restBaseUrl ??
+      (typeof location === "undefined" ? "http://127.0.0.1:8080" : location.href);
+    const url = new URL(`/api/documents/${encodeURIComponent(entry.id)}`, base);
+    url.searchParams.set("format", "crdt");
+    const headers: Record<string, string> = { accept: "application/octet-stream" };
+    if (this.options.bearerToken) headers.authorization = `Bearer ${this.options.bearerToken}`;
     try {
-      const response = await this.#fetchCrdt(entry.id);
+      const response = await fetchImpl(url.toString(), {
+        method: "GET",
+        headers,
+        credentials: "include",
+      });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const state = new Uint8Array(await response.arrayBuffer());
       this.#applyRemote(entry, state);
@@ -1258,20 +1170,6 @@ export class DocHydrator {
     }
   }
 
-  /** `GET /api/documents/:id?format=crdt`: the server's whole encoded state of `id`. */
-  #fetchCrdt(id: string): Promise<Response> {
-    const fetchImpl = this.options.fetchImpl ?? globalThis.fetch;
-    if (!fetchImpl) return Promise.reject(new Error("no fetch"));
-    const base =
-      this.options.restBaseUrl ??
-      (typeof location === "undefined" ? "http://127.0.0.1:8080" : location.href);
-    const url = new URL(`/api/documents/${encodeURIComponent(id)}`, base);
-    url.searchParams.set("format", "crdt");
-    const headers: Record<string, string> = { accept: "application/octet-stream" };
-    if (this.options.bearerToken) headers.authorization = `Bearer ${this.options.bearerToken}`;
-    return fetchImpl(url.toString(), { method: "GET", headers, credentials: "include", cache: "no-store" });
-  }
-
   /** Synthesize a client-side `doc.error` so every failure path has one shape. */
   #reportError(id: string, code: DocError["code"], message: string): void {
     this.options.onError?.(id, {
@@ -1281,48 +1179,6 @@ export class DocHydrator {
       message,
       retryable: code !== "gone" && code !== "invalid_id",
     });
-  }
-}
-
-/** RENAME-HOP: what {@link DocHydrator.confirmReceived} found. */
-export interface ReceiptReport {
-  /** The server holds everything this device holds, and nothing new was made meanwhile. */
-  readonly confirmed: boolean;
-  /** Documents compared. */
-  readonly checked: number;
-  /** Documents with something the server lacks. */
-  readonly missing: readonly string[];
-  /** Documents that could not be compared (offline, signed out, a server error). */
-  readonly failed: readonly string[];
-  /** No local edit, queued change or uncreated note appeared while checking. */
-  readonly quiet: boolean;
-}
-
-/**
- * RENAME-HOP: `server` (an encoded state) already contains everything in `local`: applying
- * `local` on top of it adds no item and no deletion.
- */
-export function stateHolds(server: Uint8Array, local: Uint8Array): boolean {
-  const scratch = new Y.Doc();
-  try {
-    Y.applyUpdate(scratch, server);
-    // Anything `local` leaves pending (structs or deletions waiting on items neither side
-    // has) is something the server lacks, too; compared as bytes, before and after.
-    const store = scratch.store as unknown as {
-      pendingStructs: { update: Uint8Array } | null;
-      pendingDs: Uint8Array | null;
-    };
-    const pending = (): string =>
-      `${store.pendingStructs ? store.pendingStructs.update.join(",") : "-"}|${store.pendingDs ? store.pendingDs.join(",") : "-"}`;
-    const pendingBefore = pending();
-    let changed = false;
-    scratch.on("update", () => {
-      changed = true;
-    });
-    Y.applyUpdate(scratch, local);
-    return !changed && pending() === pendingBefore;
-  } finally {
-    scratch.destroy();
   }
 }
 

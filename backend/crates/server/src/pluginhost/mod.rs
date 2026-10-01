@@ -1387,7 +1387,6 @@ pub(crate) mod test_support {
             max_document_bytes: ddd_core::limits::MAX_DOCUMENT_BYTES,
             app_origins: vec!["http://localhost:5173".to_string()],
             public_url: None,
-            rename_hop_from: Vec::new(),
             log_format: LogFormat::Pretty,
             cookie_secure: false,
             trust_proxy_headers: false,

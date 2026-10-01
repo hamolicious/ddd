@@ -7,7 +7,6 @@
 
 use std::sync::Arc;
 
-use anyhow::Context as _;
 use mongodb::{Client, Database};
 
 use crate::auth::RateLimiter;
@@ -132,13 +131,6 @@ impl AppState {
     /// and `FeedSequencer::set_head` only ever *raises* it, so calling this twice,
     /// or after a write, is harmless.
     pub async fn init_schema(&self) -> anyhow::Result<()> {
-        // RENAME-HOP: remove in the cleanup release. Before the migrations, so they
-        // see the copied schema version; the feed re-seed below covers the rows. The
-        // copy takes the migration advisory lock itself, so replicas booting
-        // together copy once.
-        crate::db::rename_hop::copy_at_boot(&self.mongo, &self.config.mongo_database)
-            .await
-            .context("RENAME-HOP: copying the pre-rename database")?;
         crate::db::init_schema(&self.db).await?;
         let head = self.feed.initialize().await?;
         tracing::debug!(head_seq = head, "change feed re-seeded after migrations");

@@ -77,7 +77,6 @@ pub fn test_config(mongo_uri: String, database: String) -> Config {
         max_document_bytes: 64 * 1024,
         app_origins: vec!["http://localhost:5173".to_string()],
         public_url: None,
-        rename_hop_from: Vec::new(),
         log_format: LogFormat::Pretty,
         cookie_secure: false,
         trust_proxy_headers: false,
