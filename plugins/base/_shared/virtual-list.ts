@@ -22,7 +22,14 @@
  *
  * `useFitToScreen` is its companion for a list that scrolls in a box of its own: it sizes
  * the box to the room its scrolling ancestor has left, so the box ends at the bottom of
- * the screen and everything around it stays in view.
+ * the screen and everything around it stays in view. `useScrollerHeight` is the plainer
+ * one: how tall the visible part of the box's scrolling ancestor is, for a box that only
+ * has to be no taller than the screen.
+ *
+ * **"The screen" is the visual viewport.** On a phone the layout viewport (`innerHeight`,
+ * `100vh`) stays full height under the browser's toolbars and the on-screen keyboard;
+ * only `visualViewport` shrinks. Every height read here from the window comes from
+ * `visibleHeight`, and both hooks listen to `visualViewport` as well as the window.
  *
  * The arithmetic is pure and exported, so it is tested without a browser.
  */
@@ -124,6 +131,45 @@ interface Viewport {
   readonly bottom: number;
 }
 
+/** The parts of `window` the visible height is read from (a parameter, for the tests). */
+export interface ViewportSource {
+  readonly innerHeight: number;
+  readonly visualViewport?: { readonly height: number; readonly offsetTop: number; readonly scale: number } | null;
+}
+
+/**
+ * The window's visible band, in client (layout-viewport) pixels: `top` to `bottom`. The
+ * visual viewport when there is one, so the on-screen keyboard and a phone browser's
+ * toolbars are outside it; the layout viewport otherwise. Pinch-zoomed in (a scale above
+ * 1), the visual viewport is the magnified region rather than the screen, so the layout
+ * viewport stands, as `web/app/src/boot/viewport.ts` does for `--lm-viewport-height`.
+ */
+export function visibleBand(source: ViewportSource): { readonly top: number; readonly bottom: number } {
+  const visual = source.visualViewport;
+  if (!visual || visual.scale > 1.01 || !(visual.height > 0)) return { top: 0, bottom: source.innerHeight };
+  const top = Math.max(0, visual.offsetTop);
+  return { top, bottom: Math.min(source.innerHeight, top + visual.height) };
+}
+
+/** How tall the visible part of the window is. */
+export function visibleHeight(source: ViewportSource): number {
+  const band = visibleBand(source);
+  return band.bottom - band.top;
+}
+
+/** Call `listener` whenever the visible part of the window moves or changes size. */
+function onViewportChange(listener: () => void): () => void {
+  const visual = window.visualViewport;
+  window.addEventListener("resize", listener);
+  visual?.addEventListener("resize", listener);
+  visual?.addEventListener("scroll", listener);
+  return () => {
+    window.removeEventListener("resize", listener);
+    visual?.removeEventListener("resize", listener);
+    visual?.removeEventListener("scroll", listener);
+  };
+}
+
 /** The nearest ancestor that scrolls vertically; `undefined` means the window does. */
 function scrollParentOf(element: HTMLElement): HTMLElement | undefined {
   for (let parent = element.parentElement; parent; parent = parent.parentElement) {
@@ -137,8 +183,9 @@ function scrollParentOf(element: HTMLElement): HTMLElement | undefined {
 function viewportOf(list: HTMLElement, scroller: HTMLElement | undefined, clipToWindow = true): Viewport {
   const listTop = list.getBoundingClientRect().top;
   const window_ = scroller && !clipToWindow ? undefined : window;
-  let top = window_ ? 0 : -Infinity;
-  let bottom = window_ ? window_.innerHeight : Infinity;
+  const band = window_ ? visibleBand(window_) : { top: -Infinity, bottom: Infinity };
+  let top = band.top;
+  let bottom = band.bottom;
   if (scroller) {
     const box = scroller.getBoundingClientRect();
     top = Math.max(top, box.top + scroller.clientTop);
@@ -192,7 +239,7 @@ export function useVirtualList({
   // Before the first layout there is no viewport to read: a screenful from the top.
   const [span, setSpan] = useState<RowSpan>(() => ({
     first: 0,
-    end: Math.min(count, Math.ceil((typeof window === "undefined" ? 800 : window.innerHeight) / estimate) + overscan),
+    end: Math.min(count, Math.ceil((typeof window === "undefined" ? 800 : visibleHeight(window)) / estimate) + overscan),
   }));
 
   /** Re-read the viewport and redraw, only if the rows to draw changed. */
@@ -208,13 +255,13 @@ export function useVirtualList({
     if (!list) return undefined;
     const target: HTMLElement | Window = resolveScroller() ?? window;
     target.addEventListener("scroll", update, { passive: true });
-    window.addEventListener("resize", update);
+    const unlisten = onViewportChange(update);
     const resized = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(update);
     if (target !== window) resized?.observe(target as HTMLElement);
     update();
     return () => {
       target.removeEventListener("scroll", update);
-      window.removeEventListener("resize", update);
+      unlisten();
       resized?.disconnect();
     };
   }, [list, update, resolveScroller, rebind]);
@@ -325,44 +372,138 @@ export function fitHeight(viewport: number, content: number, box: number, minimu
 }
 
 /**
- * How tall everything in `outer` is, padding included. Not `scrollHeight`: that is never
- * less than the viewport, so content that fits would read as filling it exactly.
+ * One ancestor between the box and its scrolling ancestor (the scrolling ancestor last),
+ * for `contentEnd`: `margin` is the bottom margin of its child on the way up from the box,
+ * `others` where each of its other children ends (bottom margin included), and `after`
+ * its own bottom padding and border.
  */
-function contentHeight(outer: HTMLElement, page: boolean): number {
-  const last = outer.lastElementChild;
-  const box = outer.getBoundingClientRect();
-  // The top of the scrolled content, wherever it is scrolled to.
-  const top = page ? box.top : box.top + outer.clientTop - outer.scrollTop;
-  if (!last) return 0;
-  const style = getComputedStyle(outer);
-  const bottom = last.getBoundingClientRect().bottom + parseFloat(getComputedStyle(last).marginBottom || "0");
-  return bottom - top + parseFloat(style.paddingBottom || "0");
+export interface FitLevel {
+  readonly margin: number;
+  readonly others: readonly number[];
+  readonly after: number;
 }
 
 /**
- * A `maxHeight` for `box` that makes it end at the bottom of its scrolling ancestor.
- * Re-measured when the window, the ancestor or anything in it changes size (a panel above
- * opening or closing).
+ * Where the content of the scrolling ancestor ends, starting from where the box ends and
+ * climbing one ancestor at a time: an ancestor's content ends after whichever of its
+ * children ends last, plus its own padding.
+ *
+ * Climbing, rather than reading where the ancestors' boxes end, is the point. A flex item
+ * may be shrunk below its content (a column item with `min-height: 100%` overrides the
+ * `min-height: auto` that would have stopped it), its content then overflowing it in
+ * plain sight. Its box then says the content is shorter than it is, and the box measured
+ * against it would be fitted to a screen taller than the real one: exactly what
+ * `search`'s phone layout (`compact:min-h-full`) did to the kanban board. The opposite,
+ * a box stretched taller than its content, would make the fit stop growing back.
+ */
+export function contentEnd(boxEnd: number, levels: readonly FitLevel[]): number {
+  let end = boxEnd;
+  for (const level of levels) {
+    end = Math.max(end + level.margin, ...level.others) + level.after;
+  }
+  return end;
+}
+
+function px(value: string): number {
+  const parsed = parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+/**
+ * How tall everything in `outer` is besides `box`, padding included, measured from the
+ * box up (`contentEnd`). Not `scrollHeight`: that is never less than the viewport, so
+ * content that fits would read as filling it exactly.
+ */
+function othersHeight(outer: HTMLElement, box: HTMLElement, page: boolean): number {
+  const rect = outer.getBoundingClientRect();
+  // The top of the scrolled content, wherever it is scrolled to.
+  const top = page ? rect.top : rect.top + outer.clientTop - outer.scrollTop;
+  const own = box.getBoundingClientRect();
+  const levels: FitLevel[] = [];
+  for (let child: HTMLElement = box; child !== outer && child.parentElement; child = child.parentElement) {
+    const parent = child.parentElement;
+    const others: number[] = [];
+    for (const sibling of Array.from(parent.children)) {
+      if (sibling === child) continue;
+      const style = getComputedStyle(sibling);
+      // Out of the flow, and out of the scrolled content: a dragged card, a menu.
+      if (style.position === "fixed" || style.display === "none") continue;
+      others.push(sibling.getBoundingClientRect().bottom + px(style.marginBottom));
+    }
+    const style = getComputedStyle(parent);
+    levels.push({
+      margin: px(getComputedStyle(child).marginBottom),
+      others,
+      // The scrolling ancestor's border is outside its content; anyone else's is inside.
+      after: px(style.paddingBottom) + (parent === outer ? 0 : px(style.borderBottomWidth)),
+    });
+  }
+  return contentEnd(own.bottom, levels) - top - own.height;
+}
+
+/** The scrolling ancestor of `box` and how tall its visible part is. */
+function scrollerOf(box: HTMLElement): { readonly outer: HTMLElement; readonly page: boolean; readonly height: () => number } {
+  const outer = scrollParentOf(box) ?? document.documentElement;
+  const page = outer === document.documentElement;
+  return { outer, page, height: () => (page ? visibleHeight(window) : outer.clientHeight) };
+}
+
+/**
+ * Run `measure` now and whenever the window or the visual viewport changes size, or
+ * `outer` or anything on the way down to `box` (every ancestor's children: a panel
+ * opening beside the box) does. An ancestor shrunk below its content does not change
+ * size when that content does, so watching `outer`'s children alone would miss it.
+ */
+function watchSizes(outer: HTMLElement, box: HTMLElement, measure: () => void): () => void {
+  const resized = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(measure);
+  resized?.observe(outer);
+  resized?.observe(box);
+  for (let child: HTMLElement = box; child !== outer && child.parentElement; child = child.parentElement) {
+    for (const sibling of Array.from(child.parentElement.children)) resized?.observe(sibling);
+  }
+  const unlisten = onViewportChange(measure);
+  measure();
+  return () => {
+    resized?.disconnect();
+    unlisten();
+  };
+}
+
+/**
+ * A `maxHeight` for `box` that makes it end at the bottom of its scrolling ancestor (or
+ * of the visible window, when nothing else scrolls). Re-measured when the window, the
+ * visual viewport (the on-screen keyboard), the ancestor or anything in it changes size
+ * (a panel above opening or closing).
  */
 export function useFitToScreen(box: HTMLElement | null, minimum: number): number | undefined {
   const [height, setHeight] = useState<number | undefined>(undefined);
   useEffect(() => {
     if (!box) return undefined;
-    const outer = scrollParentOf(box) ?? document.documentElement;
-    const page = outer === document.documentElement;
-    const fit = (): void => {
-      setHeight(fitHeight(page ? window.innerHeight : outer.clientHeight, contentHeight(outer, page), box.getBoundingClientRect().height, minimum));
-    };
-    const resized = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(fit);
-    resized?.observe(outer);
-    for (const child of Array.from(outer.children)) resized?.observe(child);
-    resized?.observe(box);
-    window.addEventListener("resize", fit);
-    fit();
-    return () => {
-      resized?.disconnect();
-      window.removeEventListener("resize", fit);
-    };
+    const scroller = scrollerOf(box);
+    return watchSizes(scroller.outer, box, () => {
+      const others = othersHeight(scroller.outer, box, scroller.page);
+      const own = box.getBoundingClientRect().height;
+      setHeight(fitHeight(scroller.height(), others + own, own, minimum));
+    });
   }, [box, minimum]);
+  return height;
+}
+
+/**
+ * How tall the visible part of `box`'s scrolling ancestor is (the visible window when
+ * nothing else scrolls): a `maxHeight` for a box that must never be taller than the
+ * screen but, unlike `useFitToScreen`, need not end at its bottom, such as a table
+ * embedded in a long note.
+ */
+export function useScrollerHeight(box: HTMLElement | null): number | undefined {
+  const [height, setHeight] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    if (!box) return undefined;
+    const scroller = scrollerOf(box);
+    return watchSizes(scroller.outer, box, () => {
+      const next = Math.floor(scroller.height());
+      setHeight((current) => (current === next ? current : next));
+    });
+  }, [box]);
   return height;
 }

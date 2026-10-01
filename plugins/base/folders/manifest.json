@@ -1,6 +1,6 @@
 {
   "id": "folders",
-  "version": "4.5.0",
+  "version": "4.5.1",
   "name": "Folders",
   "description": "A drag-and-drop tree of notes: a note's children are listed in its own section.",
   "author": "Life Manager base distribution",

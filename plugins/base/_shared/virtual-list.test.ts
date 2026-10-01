@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { fitHeight, layoutRows, rowAt, rowSpan, scrollDelta } from "./virtual-list.js";
+import { contentEnd, fitHeight, layoutRows, rowAt, rowSpan, scrollDelta, visibleBand, visibleHeight } from "./virtual-list.js";
 
 /** 1000 rows of 40 px. */
 const even = layoutRows(1000, () => 40);
@@ -85,5 +85,66 @@ describe("fitHeight", () => {
 
   it("never goes below the minimum", () => {
     expect(fitHeight(400, 1000, 200, 150)).toBe(150);
+  });
+});
+
+describe("contentEnd", () => {
+  it("is where the box ends when nothing else is in the way", () => {
+    expect(contentEnd(500, [])).toBe(500);
+  });
+
+  it("adds each ancestor's padding and its child's margin on the way up", () => {
+    expect(
+      contentEnd(500, [
+        { margin: 4, others: [], after: 8 },
+        { margin: 0, others: [], after: 80 },
+      ]),
+    ).toBe(592);
+  });
+
+  it("ends after a sibling that ends below the box", () => {
+    expect(contentEnd(500, [{ margin: 0, others: [100, 540], after: 0 }])).toBe(540);
+  });
+
+  // The phone layout that made the kanban board taller than the screen: the search page is
+  // a flex item held to the pane's height (`min-height: 100%`), its 4000 px board
+  // overflowing it. Its box ends at 702; its content ends at the board.
+  it("follows content out of an ancestor shrunk below it", () => {
+    const boardEnd = 4156;
+    const end = contentEnd(boardEnd, [
+      { margin: 0, others: [], after: 0 }, // the view around the board
+      { margin: 0, others: [140], after: 8 }, // the search page: the filter bar above
+      { margin: 0, others: [], after: 80 }, // the pane: room for the mode button
+    ]);
+    expect(end).toBe(4244);
+    // Fitted against that, the board ends at the bottom of a 692 px pane whose content
+    // starts at 90, rather than keeping its 4058 px.
+    expect(fitHeight(692, end - 90, 4058, 320)).toBe(692 - (end - 90 - 4058));
+    expect(692 - (end - 90 - 4058)).toBeLessThan(692);
+  });
+});
+
+describe("visibleBand", () => {
+  it("is the layout viewport without a visual viewport", () => {
+    expect(visibleBand({ innerHeight: 844 })).toEqual({ top: 0, bottom: 844 });
+    expect(visibleBand({ innerHeight: 844, visualViewport: null })).toEqual({ top: 0, bottom: 844 });
+  });
+
+  it("is the visual viewport when the keyboard shrinks it", () => {
+    const source = { innerHeight: 844, visualViewport: { height: 500, offsetTop: 0, scale: 1 } };
+    expect(visibleBand(source)).toEqual({ top: 0, bottom: 500 });
+    expect(visibleHeight(source)).toBe(500);
+  });
+
+  it("follows the visual viewport when it is scrolled within the layout one", () => {
+    expect(visibleBand({ innerHeight: 844, visualViewport: { height: 500, offsetTop: 200, scale: 1 } })).toEqual({ top: 200, bottom: 700 });
+  });
+
+  it("is the layout viewport while pinch-zoomed", () => {
+    expect(visibleHeight({ innerHeight: 844, visualViewport: { height: 300, offsetTop: 120, scale: 2.5 } })).toBe(844);
+  });
+
+  it("ignores an empty visual viewport", () => {
+    expect(visibleHeight({ innerHeight: 844, visualViewport: { height: 0, offsetTop: 0, scale: 1 } })).toBe(844);
   });
 });

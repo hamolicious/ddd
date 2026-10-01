@@ -23,11 +23,14 @@ import type { ReactElement, ReactNode } from "react";
 import type { DocumentRow } from "@kernel";
 
 import { target as mark } from "../../_shared/target.js";
-import { useVirtualList } from "../../_shared/virtual-list.js";
+import { useScrollerHeight, useVirtualList } from "../../_shared/virtual-list.js";
 
 import { MATCH_COLUMN, cellText, columnLabel, columnOption } from "./columns.js";
 import { LoadMore } from "../../_shared/LoadMore.js";
 import type { SearchSnippet as Snippet } from "plugin:search";
+
+/** The shortest the box is held to by the screen: the header and a couple of rows. */
+const MIN_BOX = 120;
 
 export interface ResultsTableProps {
   readonly rows: readonly DocumentRow[];
@@ -75,6 +78,12 @@ export function ResultsTable({
     clipToWindow: false,
   });
   const capped = rows.length > rowLimit || more !== undefined;
+  // Never taller than what its scrolling ancestor shows (on a phone, `rowLimit` rows are
+  // several screens): a box taller than the screen is scrolled by the page, not by itself,
+  // and the rows it hears scroll are then never the ones on screen.
+  const screen = useScrollerHeight(box);
+  const limit = capped ? (height ?? 40 + rowLimit * (withSnippets ? 72 : 40)) : undefined;
+  const maxHeight = screen === undefined ? limit : Math.min(limit ?? Infinity, Math.max(MIN_BOX, screen));
 
   // Stop the box at the bottom of the `rowLimit`-th row, once it has been drawn. Guarded,
   // so a settled height is not set again; a row scrolled out of the DOM keeps the last one.
@@ -128,7 +137,7 @@ export function ResultsTable({
     <div
       ref={setBox}
       className="search-table-box table:min-w-0 table:overflow-auto table:overscroll-contain table:rounded table:border table:border-border"
-      style={capped ? { maxHeight: height ?? 40 + rowLimit * (withSnippets ? 72 : 40) } : undefined}
+      style={maxHeight === undefined ? undefined : { maxHeight }}
     >
       <table className="search-table table:w-full table:border-collapse">
         <thead className="table:sticky table:top-0 table:z-[1] table:bg-bg-subtle">
