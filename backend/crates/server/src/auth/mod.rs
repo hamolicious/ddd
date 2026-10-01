@@ -30,6 +30,7 @@ use crate::config::SessionSecret;
 use crate::domain::{LoginAttempt, Session, SessionKind, User, new_id};
 use crate::error::AppError;
 use crate::state::AppState;
+use crate::telemetry::LegacyClient;
 
 pub mod audit;
 pub mod cli;
@@ -44,6 +45,12 @@ pub use rate_limit::{RateKey, RateLimited, RateLimiter};
 pub const TOKEN_BYTES: usize = 32;
 /// Bearer scheme prefix.
 pub const BEARER_PREFIX: &str = "Bearer ";
+
+// RENAME-HOP: remove in the cleanup release.
+/// The pre-rename session cookie. Still *read* (never set) during the rename
+/// hop so a browser signed in before the rename keeps its session, and
+/// expired on logout so it does not outlive the session it carried.
+pub const LEGACY_SESSION_COOKIE: &str = "life_manager_session";
 
 /// Milliseconds in a day — token/session expiry arithmetic.
 const MILLIS_PER_DAY: i64 = 86_400_000;
@@ -122,8 +129,13 @@ impl FromRequestParts<AppState> for AuthUser {
         parts: &mut Parts,
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
-        let (token, via) = credential_from_parts(parts, state.config.session_cookie_name())
-            .ok_or(AppError::Unauthorized)?;
+        let (token, via, legacy) =
+            credential_with_legacy(parts, state.config.session_cookie_name())
+                .ok_or(AppError::Unauthorized)?;
+        // RENAME-HOP: remove in the cleanup release.
+        if let Some(kind) = legacy {
+            crate::telemetry::record_legacy_client(kind);
+        }
 
         let session = load_session(state, &token)
             .await?
@@ -200,7 +212,9 @@ impl FromRequestParts<AppState> for ClientMeta {
 
 /// Pull the raw credential out of a request: `Authorization: Bearer …` first,
 /// then the `ddd.bearer.<token>` WebSocket subprotocol, then the session
-/// cookie.
+/// cookie. RENAME-HOP: until the cleanup release the pre-rename carriers are
+/// accepted too (`life-manager.bearer.<token>`, the `life_manager_session`
+/// cookie), each only when its current counterpart is absent.
 ///
 /// The header wins deliberately (RFC 7235: credentials the client sent
 /// explicitly). A bearer client running where a cookie jar also exists — a
@@ -209,6 +223,16 @@ impl FromRequestParts<AppState> for ClientMeta {
 /// its valid token never consulted on a revoked cookie, and writes attributed to
 /// the cookie's user when both are valid.
 pub fn credential_from_parts(parts: &Parts, cookie_name: &str) -> Option<(String, AuthVia)> {
+    credential_with_legacy(parts, cookie_name).map(|(token, via, _)| (token, via))
+}
+
+/// [`credential_from_parts`], plus which pre-rename carrier (if any) the
+/// credential arrived on. RENAME-HOP: the third element goes away in the
+/// cleanup release.
+pub(crate) fn credential_with_legacy(
+    parts: &Parts,
+    cookie_name: &str,
+) -> Option<(String, AuthVia, Option<LegacyClient>)> {
     if let Some(header) = parts.headers.get(AUTHORIZATION).and_then(|v| v.to_str().ok())
         && let Some((scheme, rest)) = header.split_once(' ')
         // The scheme name is case-insensitive (RFC 7235); the token is not.
@@ -216,7 +240,7 @@ pub fn credential_from_parts(parts: &Parts, cookie_name: &str) -> Option<(String
     {
         let token = rest.trim();
         if !token.is_empty() {
-            return Some((token.to_string(), AuthVia::Bearer));
+            return Some((token.to_string(), AuthVia::Bearer, None));
         }
     }
 
@@ -226,18 +250,24 @@ pub fn credential_from_parts(parts: &Parts, cookie_name: &str) -> Option<(String
     // so the token rides there: `ddd.bearer.<raw token>`
     // (backend/PROTOCOL.md §1.1). It is never echoed in the selected-protocol
     // response header.
-    if let Some(token) = bearer_from_subprotocols(&parts.headers) {
-        return Some((token, AuthVia::Bearer));
+    if let Some((token, legacy)) = bearer_from_subprotocols_with_legacy(&parts.headers) {
+        return Some((token, AuthVia::Bearer, legacy));
     }
 
     let jar = CookieJar::from_headers(&parts.headers);
-    let cookie = jar.get(cookie_name)?;
-    let value = cookie.value().trim();
-    if value.is_empty() {
-        None
-    } else {
-        Some((value.to_string(), AuthVia::Cookie))
+    let non_empty = |name: &str| {
+        jar.get(name)
+            .map(|cookie| cookie.value().trim())
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned)
+    };
+    if let Some(value) = non_empty(cookie_name) {
+        return Some((value, AuthVia::Cookie, None));
     }
+    // RENAME-HOP: remove in the cleanup release. A browser signed in before the
+    // rename still holds only the old cookie; the current one always wins.
+    non_empty(LEGACY_SESSION_COOKIE)
+        .map(|value| (value, AuthVia::Cookie, Some(LegacyClient::Cookie)))
 }
 
 /// Extract a bearer token offered as a WebSocket subprotocol
@@ -247,18 +277,35 @@ pub fn credential_from_parts(parts: &Parts, cookie_name: &str) -> Option<(String
 /// it is a *credential carrier*: the auth layer owns the question "what did this
 /// request authenticate with", on every route, including the one that upgrades.
 pub fn bearer_from_subprotocols(headers: &axum::http::HeaderMap) -> Option<String> {
-    headers
-        .get_all(axum::http::header::SEC_WEBSOCKET_PROTOCOL)
-        .iter()
-        .filter_map(|value| value.to_str().ok())
-        .flat_map(|value| value.split(','))
-        .filter_map(|value| {
-            value
-                .trim()
-                .strip_prefix(crate::routes::sync::BEARER_SUBPROTOCOL_PREFIX)
-        })
-        .find(|token| !token.is_empty())
-        .map(str::to_owned)
+    bearer_from_subprotocols_with_legacy(headers).map(|(token, _)| token)
+}
+
+/// [`bearer_from_subprotocols`], plus whether the token came on the pre-rename
+/// prefix. The current prefix wins when both are offered. RENAME-HOP: the legacy
+/// prefix goes away in the cleanup release.
+fn bearer_from_subprotocols_with_legacy(
+    headers: &axum::http::HeaderMap,
+) -> Option<(String, Option<LegacyClient>)> {
+    let offered = || {
+        headers
+            .get_all(axum::http::header::SEC_WEBSOCKET_PROTOCOL)
+            .iter()
+            .filter_map(|value| value.to_str().ok())
+            .flat_map(|value| value.split(','))
+            .map(str::trim)
+    };
+    let with_prefix = |prefix: &str| {
+        offered()
+            .filter_map(|value| value.strip_prefix(prefix))
+            .find(|token| !token.is_empty())
+            .map(str::to_owned)
+    };
+    if let Some(token) = with_prefix(crate::routes::sync::BEARER_SUBPROTOCOL_PREFIX) {
+        return Some((token, None));
+    }
+    // RENAME-HOP: remove in the cleanup release.
+    with_prefix(crate::routes::sync::LEGACY_BEARER_SUBPROTOCOL_PREFIX)
+        .map(|token| (token, Some(LegacyClient::BearerSubprotocol)))
 }
 
 /// Client IP for rate limiting (SPEC §5.2) and audit entries (SPEC §5.4).
@@ -528,14 +575,31 @@ pub fn build_session_cookie(state: &AppState, token: &str) -> Cookie<'static> {
 
 /// Build the cookie that clears the session.
 pub fn clear_session_cookie(state: &AppState) -> Cookie<'static> {
-    Cookie::build((state.config.session_cookie_name(), String::new()))
+    expired_cookie(
+        state.config.session_cookie_name(),
+        state.config.cookie_secure,
+    )
+}
+
+/// An already-expired cookie named `name`, with the session cookie's
+/// attributes (a browser only replaces a cookie whose name, path and domain
+/// match).
+fn expired_cookie(name: &'static str, secure: bool) -> Cookie<'static> {
+    Cookie::build((name, String::new()))
         .http_only(true)
-        .secure(state.config.cookie_secure)
+        .secure(secure)
         .same_site(SameSite::Lax)
         .path("/")
         .max_age(time::Duration::ZERO)
         .expires(time::OffsetDateTime::UNIX_EPOCH)
         .build()
+}
+
+// RENAME-HOP: remove in the cleanup release.
+/// Expire the pre-rename session cookie, so a browser stops presenting it once
+/// the user logs out. Same attributes as the cookie the old server set.
+pub fn clear_legacy_session_cookie(state: &AppState) -> Cookie<'static> {
+    expired_cookie(LEGACY_SESSION_COOKIE, state.config.cookie_secure)
 }
 
 /// Write a login attempt to `login_attempts` (SPEC §5.2: "attempts logged").
@@ -677,6 +741,97 @@ mod tests {
         assert_eq!(
             credential_from_parts(&parts, "ddd_session"),
             Some(("cookie-token".to_string(), AuthVia::Cookie))
+        );
+    }
+
+    // RENAME-HOP: remove in the cleanup release.
+    #[test]
+    fn the_legacy_cookie_is_a_fallback_only() {
+        use axum::http::Request;
+
+        let parts = |cookie: &str| {
+            Request::builder()
+                .header(axum::http::header::COOKIE, cookie)
+                .body(())
+                .expect("a valid request")
+                .into_parts()
+                .0
+        };
+
+        let legacy_only = parts("life_manager_session=old-token");
+        assert_eq!(
+            credential_with_legacy(&legacy_only, "ddd_session"),
+            Some((
+                "old-token".to_string(),
+                AuthVia::Cookie,
+                Some(LegacyClient::Cookie)
+            ))
+        );
+
+        let both = parts("life_manager_session=old-token; ddd_session=new-token");
+        assert_eq!(
+            credential_with_legacy(&both, "ddd_session"),
+            Some(("new-token".to_string(), AuthVia::Cookie, None))
+        );
+
+        let empty_current = parts("ddd_session=; life_manager_session=old-token");
+        assert_eq!(
+            credential_from_parts(&empty_current, "ddd_session"),
+            Some(("old-token".to_string(), AuthVia::Cookie))
+        );
+
+        assert_eq!(
+            credential_from_parts(&parts("life_manager_session="), "ddd_session"),
+            None
+        );
+    }
+
+    // RENAME-HOP: remove in the cleanup release.
+    #[test]
+    fn logout_can_expire_the_legacy_cookie() {
+        let cookie = expired_cookie(LEGACY_SESSION_COOKIE, true).to_string();
+        assert!(cookie.starts_with("life_manager_session=;"), "{cookie}");
+        assert!(cookie.contains("Max-Age=0"), "{cookie}");
+        assert!(cookie.contains("Path=/"), "{cookie}");
+        assert!(cookie.contains("HttpOnly"), "{cookie}");
+        assert!(cookie.contains("Secure"), "{cookie}");
+    }
+
+    // RENAME-HOP: remove in the cleanup release.
+    #[test]
+    fn the_legacy_bearer_subprotocol_authenticates_and_is_flagged() {
+        use axum::http::Request;
+
+        let parts = |offer: &str| {
+            Request::builder()
+                .header(axum::http::header::SEC_WEBSOCKET_PROTOCOL, offer)
+                .body(())
+                .expect("a valid request")
+                .into_parts()
+                .0
+        };
+
+        assert_eq!(
+            credential_with_legacy(
+                &parts("life-manager.v1, life-manager.bearer.old"),
+                "ddd_session"
+            ),
+            Some((
+                "old".to_string(),
+                AuthVia::Bearer,
+                Some(LegacyClient::BearerSubprotocol)
+            ))
+        );
+        assert_eq!(
+            credential_with_legacy(
+                &parts("life-manager.bearer.old, ddd.bearer.new"),
+                "ddd_session"
+            ),
+            Some(("new".to_string(), AuthVia::Bearer, None))
+        );
+        assert_eq!(
+            credential_with_legacy(&parts("life-manager.bearer."), "ddd_session"),
+            None
         );
     }
 

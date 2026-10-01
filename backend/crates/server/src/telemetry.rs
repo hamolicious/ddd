@@ -83,6 +83,80 @@ pub mod names {
     pub const CONFIG_MAX_ATTACHMENT_BYTES: &str = "ddd_config_max_attachment_bytes";
     /// `1`, carrying the build version as a label.
     pub const BUILD_INFO: &str = "ddd_build_info";
+    /// RENAME-HOP: remove in the cleanup release.
+    ///
+    /// Requests that authenticated or connected with a pre-rename name, labelled
+    /// `kind="subprotocol"|"bearer-subprotocol"|"cookie"`. The cleanup release may
+    /// ship once this stops increasing.
+    pub const LEGACY_CLIENT: &str = "ddd_legacy_client_total";
+}
+
+// RENAME-HOP: remove in the cleanup release.
+/// Which pre-rename name a client used — the `kind` label of
+/// [`names::LEGACY_CLIENT`] and the `legacy` field of the warning.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LegacyClient {
+    /// The `life-manager.v1` WebSocket subprotocol.
+    Subprotocol,
+    /// The `life-manager.bearer.<token>` WebSocket subprotocol.
+    BearerSubprotocol,
+    /// The `life_manager_session` cookie.
+    Cookie,
+}
+
+// RENAME-HOP: remove in the cleanup release.
+impl LegacyClient {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            LegacyClient::Subprotocol => "subprotocol",
+            LegacyClient::BearerSubprotocol => "bearer-subprotocol",
+            LegacyClient::Cookie => "cookie",
+        }
+    }
+
+    const fn slot(self) -> usize {
+        match self {
+            LegacyClient::Subprotocol => 0,
+            LegacyClient::BearerSubprotocol => 1,
+            LegacyClient::Cookie => 2,
+        }
+    }
+}
+
+// RENAME-HOP: remove in the cleanup release.
+/// At most one legacy-client warning per kind per minute.
+const LEGACY_WARN_INTERVAL_MS: i64 = 60_000;
+
+// RENAME-HOP: remove in the cleanup release.
+/// Record one use of a pre-rename client name.
+///
+/// The counter moves on every use; the warning is throttled to one line per
+/// kind per minute, because an old PWA presents its legacy cookie on every
+/// request and the line exists to be noticed, not counted.
+pub fn record_legacy_client(kind: LegacyClient) {
+    use std::sync::atomic::{AtomicI64, Ordering};
+
+    static LAST_WARN_MS: [AtomicI64; 3] = [AtomicI64::new(0), AtomicI64::new(0), AtomicI64::new(0)];
+
+    counter!(names::LEGACY_CLIENT, "kind" => kind.as_str()).increment(1);
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| {
+            i64::try_from(elapsed.as_millis()).unwrap_or(i64::MAX)
+        });
+    let slot = &LAST_WARN_MS[kind.slot()];
+    let last = slot.load(Ordering::Relaxed);
+    if now.saturating_sub(last) >= LEGACY_WARN_INTERVAL_MS
+        && slot
+            .compare_exchange(last, now, Ordering::Relaxed, Ordering::Relaxed)
+            .is_ok()
+    {
+        tracing::warn!(
+            legacy = kind.as_str(),
+            "legacy client: a pre-rename name is still in use (RENAME-HOP)"
+        );
+    }
 }
 
 /// Latency buckets for HTTP handlers: sub-millisecond up to ten seconds.
@@ -261,6 +335,11 @@ fn describe() {
     describe_gauge!(
         names::CONFIG_MAX_ATTACHMENT_BYTES,
         "Configured maximum attachment size"
+    );
+    // RENAME-HOP: remove in the cleanup release.
+    describe_counter!(
+        names::LEGACY_CLIENT,
+        "Requests using a pre-rename protocol, bearer prefix or cookie, by kind"
     );
     describe_gauge!(
         names::BUILD_INFO,

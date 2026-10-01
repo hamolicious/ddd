@@ -128,6 +128,15 @@ pub const SUBPROTOCOL: &str = "ddd.v1";
 /// (SPEC §5.2, §7). The selected-protocol response header must never echo it.
 pub const BEARER_SUBPROTOCOL_PREFIX: &str = "ddd.bearer.";
 
+// RENAME-HOP: remove in the cleanup release.
+/// The pre-rename subprotocol. Accepted (and echoed back when it is the only one
+/// offered) so a client built before the rename can still connect and flush.
+pub const LEGACY_SUBPROTOCOL: &str = "life-manager.v1";
+
+// RENAME-HOP: remove in the cleanup release.
+/// The pre-rename bearer-subprotocol prefix: `life-manager.bearer.<raw token>`.
+pub const LEGACY_BEARER_SUBPROTOCOL_PREFIX: &str = "life-manager.bearer.";
+
 /// Hard frame ceiling, both directions (SPEC §4.3).
 pub const MAX_FRAME_BYTES: usize = 4 * 1024 * 1024;
 /// Document subscriptions per socket (the client LRU is ~20, SPEC §4.1).
@@ -310,6 +319,10 @@ pub async fn upgrade(
             "WebSocket client must offer the `{SUBPROTOCOL}` subprotocol"
         )));
     }
+    // RENAME-HOP: remove in the cleanup release.
+    if !offers(&headers, SUBPROTOCOL) {
+        crate::telemetry::record_legacy_client(crate::telemetry::LegacyClient::Subprotocol);
+    }
 
     Ok(ws
         // Deliberately one frame of slack above the protocol ceiling: tungstenite
@@ -320,7 +333,9 @@ pub async fn upgrade(
         // so a hostile stream cannot be buffered without bound.
         .max_frame_size(MAX_FRAME_BYTES * 2)
         .max_message_size(MAX_FRAME_BYTES * 2)
-        .protocols([SUBPROTOCOL])
+        // Server preference order: the current name wins when both are offered.
+        // RENAME-HOP: drop `LEGACY_SUBPROTOCOL` in the cleanup release.
+        .protocols(SELECTABLE_SUBPROTOCOLS)
         .on_upgrade(move |socket| async move { serve(state, user, socket).await }))
 }
 
@@ -367,14 +382,34 @@ fn origin_matches_host(origin: &str, headers: &HeaderMap) -> bool {
     authority.eq_ignore_ascii_case(host)
 }
 
-/// `true` when the client offered [`SUBPROTOCOL`].
+/// The subprotocols the upgrade may select, in preference order. Only these are
+/// ever echoed back — never a bearer value.
+/// RENAME-HOP: drop `LEGACY_SUBPROTOCOL` in the cleanup release.
+pub const SELECTABLE_SUBPROTOCOLS: [&str; 2] = [SUBPROTOCOL, LEGACY_SUBPROTOCOL];
+
+/// `true` when the client offered [`SUBPROTOCOL`] (or, during the rename hop,
+/// [`LEGACY_SUBPROTOCOL`] — RENAME-HOP).
 pub fn offers_subprotocol(headers: &HeaderMap) -> bool {
+    selected_subprotocol(headers).is_some()
+}
+
+/// The subprotocol the upgrade answers with: the first of
+/// [`SELECTABLE_SUBPROTOCOLS`] the client offered. Mirrors the selection
+/// `WebSocketUpgrade::protocols` makes.
+pub fn selected_subprotocol(headers: &HeaderMap) -> Option<&'static str> {
+    SELECTABLE_SUBPROTOCOLS
+        .into_iter()
+        .find(|protocol| offers(headers, protocol))
+}
+
+/// `true` when `protocol` is one of the client's offered subprotocols.
+fn offers(headers: &HeaderMap, protocol: &str) -> bool {
     headers
         .get_all(header::SEC_WEBSOCKET_PROTOCOL)
         .iter()
         .filter_map(|value| value.to_str().ok())
         .flat_map(|value| value.split(','))
-        .any(|value| value.trim() == SUBPROTOCOL)
+        .any(|value| value.trim() == protocol)
 }
 
 /// The bearer-subprotocol extractor lives in [`crate::auth`] — the auth layer owns
@@ -2995,6 +3030,46 @@ mod tests {
         let map = headers(&[("sec-websocket-protocol", "chat")]);
         assert!(!offers_subprotocol(&map));
         assert_eq!(bearer_token_from_subprotocols(&map), None);
+    }
+
+    // RENAME-HOP: remove in the cleanup release.
+    #[test]
+    fn the_legacy_subprotocol_is_accepted_and_selected_when_alone() {
+        let map = headers(&[(
+            "sec-websocket-protocol",
+            "life-manager.v1, life-manager.bearer.old",
+        )]);
+        assert!(offers_subprotocol(&map));
+        assert_eq!(selected_subprotocol(&map), Some(LEGACY_SUBPROTOCOL));
+        assert_eq!(bearer_token_from_subprotocols(&map).as_deref(), Some("old"));
+    }
+
+    // RENAME-HOP: remove in the cleanup release.
+    #[test]
+    fn the_current_subprotocol_wins_when_both_are_offered() {
+        for offer in [
+            "life-manager.v1, ddd.v1, ddd.bearer.new, life-manager.bearer.old",
+            "ddd.v1, life-manager.v1, life-manager.bearer.old, ddd.bearer.new",
+        ] {
+            let map = headers(&[("sec-websocket-protocol", offer)]);
+            assert_eq!(selected_subprotocol(&map), Some(SUBPROTOCOL), "{offer}");
+            assert_eq!(
+                bearer_token_from_subprotocols(&map).as_deref(),
+                Some("new"),
+                "{offer}"
+            );
+        }
+    }
+
+    // RENAME-HOP: remove in the cleanup release.
+    #[test]
+    fn a_bearer_value_is_never_selectable() {
+        let map = headers(&[(
+            "sec-websocket-protocol",
+            "ddd.bearer.abc, life-manager.bearer.abc",
+        )]);
+        assert!(!offers_subprotocol(&map));
+        assert_eq!(selected_subprotocol(&map), None);
     }
 
     #[test]

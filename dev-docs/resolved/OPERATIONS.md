@@ -309,6 +309,7 @@ public route. Names are stable (they come from one table in `telemetry.rs`):
 | `ddd_build_info` | gauge | Always 1, carries a `version` label. |
 | `ddd_ws_connections`, `ddd_ws_subscribed_documents` | gauge | Open sync sockets / documents subscribed across them. |
 | `ddd_ws_backpressure_drops_total` | counter | Send-queue overflows by `queue="feed"｜"doc"｜"plugin"`. `feed`/`doc` mean a client was told to re-derive; `plugin` is a dropped `plugin.event`, which is ephemeral by design. |
+| `ddd_legacy_client_total` | counter | RENAME-HOP. Requests from a pre-rename client, by `kind="subprotocol"｜"bearer-subprotocol"｜"cookie"`. See "Rename hop". |
 
 ### Plugins (M4)
 
@@ -362,6 +363,44 @@ before the response.
 
 Set the platform's kill timeout above `SHUTDOWN_GRACE_SECS` (compose:
 `stop_grace_period: 40s`) so the server's own deadline is what ends the process.
+
+## Rename hop
+
+<!-- RENAME-HOP: remove this section in the cleanup release. -->
+
+The project was renamed from life-manager (`lm`) to ddd. For one release the
+server keeps clients built before the rename working, so they can flush edits
+they have not synced yet, and tells them where the deployment now lives.
+
+- **Serve both domains.** Point the old and the new domain at the new
+  deployment, and list both in `APP_ORIGIN`, e.g.
+  `APP_ORIGIN=https://ddd.slayhouse.net,https://life.slayhouse.net`.
+- **`PUBLIC_URL` says where to move.** Set `PUBLIC_URL=https://ddd.slayhouse.net`.
+  `GET /api/auth/bootstrap` returns it as `public_url`, and a client loaded from
+  the old domain uses it to send the user to the new one.
+- **Old clients keep working.** The server accepts the `life-manager.v1`
+  subprotocol, the `life-manager.bearer.<token>` prefix and the
+  `life_manager_session` cookie alongside the current names. New sessions always
+  get `ddd_session`. Logout expires the old cookie too.
+- **The database is copied once, at boot.** If `MONGO_DATABASE` is the default
+  `ddd`, the server copies the old `life_manager` database into it before the
+  migrations run. It does this only when `ddd` has no `meta` `{_id: "schema"}`
+  document (no server has ever booted on it) and `life_manager` has one (it
+  holds a real workspace). Each collection, GridFS included, is copied on the
+  Mongo server with `$out`, and its indexes are recreated. `meta` goes last,
+  because it marks the copy as complete. Then the document counts are compared.
+  - Stop the old server first. A count that changes during the copy is a
+    mismatch, and a mismatch fails the boot rather than serving a partial copy.
+    Restarting redoes the copy from scratch.
+  - `life_manager` is never modified or dropped. Drop it yourself once you are
+    satisfied.
+  - The boot log shows `RENAME-HOP: copying the pre-rename database` and
+    `RENAME-HOP: pre-rename database copied` with collection and document counts.
+- **Watch for old clients.** `ddd_legacy_client_total{kind}` counts every use
+  of an old name, and the log shows at most one `legacy client` warning per kind
+  per minute (field `legacy`). The cleanup release, which removes all of this
+  (`grep -rn RENAME-HOP`), may ship once the counter stays at zero. After that,
+  the old domain can go too.
 
 ## Migrations and upgrades
 

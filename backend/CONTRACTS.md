@@ -900,6 +900,10 @@ pub async fn collect_rows(cursor: mongodb::Cursor<DocumentRow>,
 pub const PROTOCOL_VERSION: u32 = 1;
 pub const SUBPROTOCOL: &str = "ddd.v1";
 pub const BEARER_SUBPROTOCOL_PREFIX: &str = "ddd.bearer.";
+// RENAME-HOP: remove in the cleanup release (accepted, never preferred).
+pub const LEGACY_SUBPROTOCOL: &str = "life-manager.v1";
+pub const LEGACY_BEARER_SUBPROTOCOL_PREFIX: &str = "life-manager.bearer.";
+pub const SELECTABLE_SUBPROTOCOLS: [&str; 2] = [SUBPROTOCOL, LEGACY_SUBPROTOCOL];
 pub const MAX_FRAME_BYTES: usize = 4 * 1024 * 1024;
 pub const MAX_SUBSCRIPTIONS: usize = 32;      pub const MAX_SOCKETS_PER_SESSION: usize = 8;
 pub const FEED_QUEUE_MESSAGES: usize = 64;    pub const DOC_QUEUE_FRAMES: usize = 256;

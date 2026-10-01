@@ -181,7 +181,7 @@ destructive or administrative actions land in `audit_log`.
 
 | Method | Path | Behavior |
 |---|---|---|
-| `GET` | `/bootstrap` | Unauthenticated: `{needs_first_user, invite_required}` — what the sign-in screen should show. |
+| `GET` | `/bootstrap` | Unauthenticated: `{needs_first_user, invite_required, public_url}` — what the sign-in screen should show. `public_url` is `PUBLIC_URL` (the deployment's canonical origin) or `null`; a client loaded from any other origin uses it to learn where the deployment lives. |
 | `POST` | `/register` | `{email, password, name?, invite?, bearer?}`. The **first** user ever becomes admin with no invite; after that an invite is mandatory and always grants a plain account. |
 | `POST` | `/login` | `{email, password, bearer?}` → session cookie, plus a bearer token when asked. |
 | `POST` | `/logout` | Revokes the session and clears the cookie (bearer sessions too). |
