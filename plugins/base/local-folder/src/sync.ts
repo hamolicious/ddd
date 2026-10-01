@@ -46,6 +46,13 @@ export const STATE_DIR = ".ddd";
 const INDEX_PATH = `${STATE_DIR}/index.json`;
 const basePath = (id: string): string => `${STATE_DIR}/base/${id}${NOTE_EXT}`;
 
+/**
+ * RENAME-HOP: where builds from before the rename (life-manager → ddd) kept the same
+ * state. `#migrateLegacyState` moves it to {@link STATE_DIR} once; the cleanup release
+ * deletes this and the migration with it.
+ */
+const LEGACY_STATE_DIR = ".life-manager";
+
 /** How long a note the disk just changed is left where the disk put it. */
 const PIN_MS = 5_000;
 
@@ -182,6 +189,9 @@ export class FolderSync {
   async #loadIndex(): Promise<IndexFile> {
     if (this.#index) return this.#index;
     let index: IndexFile | undefined;
+    // RENAME-HOP: a folder last mirrored by a pre-rename build keeps its state under
+    // `.life-manager/`; move it before reading, so nothing is re-imported as new.
+    await this.#migrateLegacyState();
     try {
       const { bytes } = await this.deps.folder.read(INDEX_PATH);
       const parsed = JSON.parse(decoder.decode(bytes)) as Partial<IndexFile>;
@@ -200,6 +210,43 @@ export class FolderSync {
     if (index.owner !== this.deps.owner) throw new ForeignFolderError(index.owner);
     this.#index = index;
     return index;
+  }
+
+  /**
+   * RENAME-HOP: move `.life-manager/` (index and bases) to `.ddd/`, file by file — a
+   * browser folder cannot move a directory. The index goes last, so a run cut short
+   * starts again next time, and a base already moved is simply skipped. Never reads
+   * `list()`: hidden directories are not part of the mirror's view.
+   */
+  async #migrateLegacyState(): Promise<void> {
+    const { folder } = this.deps;
+    const readable = (path: string): Promise<boolean> =>
+      folder.read(path).then(
+        () => true,
+        () => false,
+      );
+    if (await readable(INDEX_PATH)) return;
+    const legacyIndex = `${LEGACY_STATE_DIR}/index.json`;
+    let legacy: Partial<IndexFile>;
+    try {
+      legacy = JSON.parse(decoder.decode((await folder.read(legacyIndex)).bytes)) as Partial<IndexFile>;
+    } catch {
+      return;
+    }
+    const ids = new Set((Array.isArray(legacy.entries) ? legacy.entries : []).map((entry) => entry?.id).filter((id) => typeof id === "string"));
+    for (const id of ids) {
+      const from = `${LEGACY_STATE_DIR}/base/${id}${NOTE_EXT}`;
+      try {
+        await folder.move(from, basePath(id));
+      } catch (error) {
+        // Not there (a file entry has no base, or an earlier run moved it): skip it.
+        if (await readable(from)) throw error;
+      }
+    }
+    await folder.move(legacyIndex, INDEX_PATH);
+    for (const dir of [`${LEGACY_STATE_DIR}/base`, `${LEGACY_STATE_DIR}/tmp`, LEGACY_STATE_DIR]) {
+      await folder.remove(dir).catch(() => undefined);
+    }
   }
 
   async #saveIndex(index: IndexFile): Promise<void> {

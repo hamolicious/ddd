@@ -363,4 +363,45 @@ describe("FolderSync", () => {
     for (const [path, file] of first.folder.files) second.folder.files.set(path, file);
     await expect(second.sync.run()).rejects.toBeInstanceOf(ForeignFolderError);
   });
+
+  // RENAME-HOP: a folder a pre-rename build mirrored keeps its state under `.life-manager/`.
+  describe("legacy state (.life-manager/)", () => {
+    /** Mirror once, then put the state where a pre-rename build kept it. */
+    async function legacyFolder() {
+      const t = setup();
+      t.notes.add("01A", "# Home\n");
+      t.notes.add("01B", "# Groceries\n\n- milk\n", "01A");
+      await t.sync.run();
+      for (const [path, file] of [...t.folder.files]) {
+        if (!path.startsWith(".ddd/")) continue;
+        t.folder.files.delete(path);
+        t.folder.files.set(`.life-manager/${path.slice(".ddd/".length)}`, file);
+      }
+      t.folder.put(".life-manager/tmp/stray", "x");
+      t.sync.reset();
+      return t;
+    }
+    const stateFiles = (folder: MemoryFolder): string[] => [...folder.files.keys()].filter((p) => p.startsWith(".")).sort();
+
+    it("moves the index and the bases to .ddd/ and carries on as if nothing happened", async () => {
+      const { folder, sync } = await legacyFolder();
+      expect(await sync.run()).toMatchObject({ written: 0, imported: 0 });
+      expect(stateFiles(folder)).toEqual([".ddd/base/01A.md", ".ddd/base/01B.md", ".ddd/index.json", ".life-manager/tmp/stray"]);
+      expect(folder.userPaths()).toEqual(["Home/Groceries.md", "Home/Home.md"]);
+    });
+
+    it("finishes a move cut short: bases already moved are skipped, the index goes last", async () => {
+      const { folder, sync } = await legacyFolder();
+      await folder.move(".life-manager/base/01A.md", ".ddd/base/01A.md");
+      expect(await sync.run()).toMatchObject({ written: 0, imported: 0 });
+      expect(stateFiles(folder)).toEqual([".ddd/base/01A.md", ".ddd/base/01B.md", ".ddd/index.json", ".life-manager/tmp/stray"]);
+    });
+
+    it("leaves the old state alone once .ddd/ has an index", async () => {
+      const { folder, sync } = await legacyFolder();
+      folder.put(".ddd/index.json", JSON.stringify({ version: 1, owner: "user-1", entries: [], dirs: [] }));
+      await sync.run();
+      expect(folder.text(".life-manager/index.json")).toBeDefined();
+    });
+  });
 });

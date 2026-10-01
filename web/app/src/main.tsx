@@ -70,6 +70,9 @@ import {
   type ShellUpdateReady,
 } from "./boot/shell.js";
 import { ReloadPrompt } from "./boot/reload-prompt.js";
+// RENAME-HOP: the two imports below go with the hop.
+import { legacyStorageDeps, migrateLegacyStorage } from "./boot/rename-hop.js";
+import { moveToCanonicalDomain } from "./boot/rename-hop-move.js";
 import { registerServiceWorker, type UpdateFlow } from "./boot/update.js";
 import { trackViewportHeight } from "./boot/viewport.js";
 import { importMapSpecifiers, installDevImportMap, missingSpecifiers, pageMapLacksPlugins } from "./loader/importmap.js";
@@ -111,6 +114,15 @@ const render = (node: ReactNode): void =>
 void boot();
 
 async function boot(): Promise<void> {
+  // RENAME-HOP: carry pre-rename storage over to the new names before anything opens it.
+  await migrateLegacyStorage({
+    ...legacyStorageDeps(),
+    onProgress: (done, total) => {
+      paintKernelDefaultTokens(document.documentElement);
+      render(<BootScreen message="Updating this device's copy…" progress={{ done, total }} />);
+    },
+  });
+
   if (!supportsImportMaps()) {
     render(<UnsupportedBrowser />);
     // A webview too old for import maps is a shell problem, not a bundle problem: say so
@@ -281,6 +293,9 @@ async function boot(): Promise<void> {
           onSignedIn={(_user, issued) => resumeSession(issued)}
         />,
       );
+
+      // RENAME-HOP: on the old domain, finish syncing here, then move to the canonical one.
+      moveToCanonicalDomain(runtime);
 
       if (safeMode === "bare") {
         // No plugins at all: the kernel's own manager takes the mount (SPEC §6.1).
