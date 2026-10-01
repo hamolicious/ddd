@@ -139,7 +139,7 @@ export function KanbanSettings({ options, onOptionsChange, fields }: ViewSetting
           value={adding}
           label="Add to cards"
           placeholder="Add to cards…"
-          builtIn={present.has("content") ? [] : [{ key: "content", label: "Text (the note's words)" }]}
+          builtIn={present.has("content") ? [] : [{ key: "content", label: "Text (the note's body)" }]}
           onChange={setAdding}
           onPick={(key) => {
             setAdding("");

@@ -72,22 +72,24 @@
  * makes the card with the lane's value.
  */
 
-import { useEffect, useRef, useState } from "react";
-import type { ComponentType, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactElement, ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ComponentType, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactElement, ReactNode, SyntheticEvent } from "react";
 import { createPortal } from "react-dom";
 
 import type { DocumentRow, Kernel } from "@kernel";
 import type { ContextMenu } from "plugin:context-menu";
 import type { NoteLook } from "plugin:folders";
+import { onChange as onMarkdownChange, render as renderMarkdown } from "plugin:markdown";
 import type { FmValueSelectProps, SearchSpec } from "plugin:search";
 import type { SavedViewProps } from "../../_shared/saved-view-mode.js";
 
 import { NoteLabel, lookOf, lookStyle, useLookChanges, type Looks } from "../../_shared/note-look.js";
+import { bodyOf } from "../../_shared/regions.js";
 import { LONG_PRESS_MS, target as mark } from "../../_shared/target.js";
 import { useFitToScreen, useVirtualList } from "../../_shared/virtual-list.js";
 
 import { boards, selectionItems, type BoardHandle, type DocumentAction } from "./actions.js";
-import { excerpt, fieldText, type CardItem } from "./card.js";
+import { fieldText, type CardItem } from "./card.js";
 import { ColumnEditor } from "./ColumnEditor.js";
 import { FilterBar } from "./FilterBar.js";
 import { useFlip } from "./flip.js";
@@ -1190,10 +1192,10 @@ function Gap({ height }: { readonly height: number }): ReactElement {
 
 /**
  * What a card shows, top to bottom, as the board's settings say (`card.ts`): the title
- * with its icon and a property as "key value", both wrapped in full, and the note's words
- * clamped to a few lines. An
- * item with nothing to show is left out; a card whose items all come out empty falls back
- * to its title, faded, so no card is ever blank.
+ * with its icon and a property as "key value", both wrapped in full, and the note's text
+ * — its whole body, rendered as markdown (`CardText`). An item with nothing to show is
+ * left out; a card whose items all come out empty falls back to its title, faded, so no
+ * card is ever blank.
  */
 function CardBody({ row, items, look }: { readonly row: DocumentRow; readonly items: readonly CardItem[]; readonly look: NoteLook | undefined }): ReactElement {
   const lines = items
@@ -1201,12 +1203,8 @@ function CardBody({ row, items, look }: { readonly row: DocumentRow; readonly it
     .map((item) => {
       if (item.kind === "title") return <NoteLabel key="title" title={row.title} look={look} wrap />;
       if (item.kind === "content") {
-        const text = excerpt(row.content);
-        return text === "" ? null : (
-          <span key="content" className="kanban:line-clamp-3 kanban:break-words kanban:text-xs kanban:leading-snug kanban:opacity-80">
-            {text}
-          </span>
-        );
+        const body = row.content === undefined ? "" : bodyOf(row.content).trim();
+        return body === "" ? null : <CardText key="content" id={row.id} body={body} />;
       }
       const text = fieldText(row, item.field);
       return text === "" ? null : (
@@ -1220,6 +1218,35 @@ function CardBody({ row, items, look }: { readonly row: DocumentRow; readonly it
   return (
     <span className="kanban:flex kanban:w-full kanban:min-w-0 kanban:flex-col kanban:gap-0.5">
       {lines.length > 0 ? lines : <span className="kanban:opacity-60"><NoteLabel title={row.title} look={look} wrap /></span>}
+    </span>
+  );
+}
+
+/**
+ * The note's body as `markdown` draws it, at the card's small size: block spacing and
+ * heading sizes brought down from the reading column's, and the parts that could run wide
+ * (code, tables, images) kept within the card. Tasks are live — ticked on the card, they
+ * are written to the note — and a click on a task, a link or any other control inside the
+ * text is that control's, not the card's: it neither opens the card nor starts a drag.
+ */
+const CARD_TEXT_CLASSES =
+  "kanban:min-w-0 kanban:w-full kanban:text-xs kanban:leading-snug kanban:opacity-90 kanban:[&_.md-root]:text-xs kanban:[&_.md-root]:leading-snug kanban:[&_.md-root>*+*]:mt-1 kanban:[&_.md-root_h1]:my-1 kanban:[&_.md-root_h1]:text-sm kanban:[&_.md-root_h1]:font-semibold kanban:[&_.md-root_h2]:my-1 kanban:[&_.md-root_h2]:text-sm kanban:[&_.md-root_h2]:font-semibold kanban:[&_.md-root_h3]:my-1 kanban:[&_.md-root_h3]:text-xs kanban:[&_.md-root_h3]:font-semibold kanban:[&_.md-root_h4]:my-1 kanban:[&_.md-root_h4]:text-xs kanban:[&_.md-root_h4]:font-semibold kanban:[&_.md-root_h5]:my-1 kanban:[&_.md-root_h5]:text-xs kanban:[&_.md-root_h5]:font-semibold kanban:[&_.md-root_h6]:my-1 kanban:[&_.md-root_h6]:text-xs kanban:[&_.md-root_h6]:font-semibold kanban:[&_.md-root_p]:my-0 kanban:[&_.md-root_ul]:my-0 kanban:[&_.md-root_ol]:my-0 kanban:[&_.md-root_blockquote]:my-0 kanban:[&_.md-root_blockquote]:border-l-2 kanban:[&_.md-root_blockquote]:pl-2 kanban:[&_.md-root_pre]:my-0 kanban:[&_.md-root_pre]:max-w-full kanban:[&_.md-root_pre]:overflow-x-auto kanban:[&_.md-root_pre]:rounded kanban:[&_.md-root_pre]:border kanban:[&_.md-root_pre]:border-border kanban:[&_.md-root_pre]:bg-bg-subtle kanban:[&_.md-root_pre]:p-1.5 kanban:[&_.md-root_code]:break-words kanban:[&_.md-root_code]:rounded-[3px] kanban:[&_.md-root_code]:bg-bg-subtle kanban:[&_.md-root_code]:px-[0.3em] kanban:[&_.md-root_code]:font-mono kanban:[&_.md-root_code]:text-[0.9em] kanban:[&_.md-root_pre_code]:bg-transparent kanban:[&_.md-root_pre_code]:p-0 kanban:[&_.md-root_img]:h-auto kanban:[&_.md-root_img]:max-w-full kanban:[&_.md-root_img]:rounded kanban:[&_.md-root_table]:my-0 kanban:[&_.md-root_table]:block kanban:[&_.md-root_table]:max-w-full kanban:[&_.md-root_table]:overflow-x-auto kanban:[&_.md-root_table]:border-collapse kanban:[&_.md-root_th]:border kanban:[&_.md-root_th]:border-border kanban:[&_.md-root_th]:px-1 kanban:[&_.md-root_th]:text-left kanban:[&_.md-root_td]:border kanban:[&_.md-root_td]:border-border kanban:[&_.md-root_td]:px-1 kanban:[&_.md-root_td]:text-left kanban:[&_.md-root_hr]:my-1";
+
+/** Controls inside the rendered text: their clicks and presses stay theirs. */
+const CONTROL = "a, button, input, select, textarea, label, [role='button'], [role='checkbox']";
+
+function CardText({ id, body }: { readonly id: string; readonly body: string }): ReactElement {
+  // Re-rendered when what is added to markdown changes (a directive, a task state).
+  const [revision, setRevision] = useState(0);
+  useEffect(() => onMarkdownChange(() => setRevision((at) => at + 1)), []);
+  // Parsing is the cost; the board redraws its cards on every move of a drag.
+  const rendered = useMemo(() => renderMarkdown(body, { documentId: id }), [body, id, revision]);
+  const keep = (event: SyntheticEvent<HTMLElement>): void => {
+    if ((event.target as Element).closest(CONTROL)) event.stopPropagation();
+  };
+  return (
+    <span className={CARD_TEXT_CLASSES} onClick={keep} onPointerDown={keep}>
+      {rendered}
     </span>
   );
 }
@@ -1338,9 +1365,13 @@ function CardSlot({
         {...(carried ? { hidden: true } : { "data-card": "", "data-slot": slot, "data-flip-id": row.id })}
         className="kanban:shrink-0 kanban:pb-1.5 kanban:transition-opacity kanban:duration-200 kanban:starting:opacity-0"
       >
-        <button
-          type="button"
-          className={`kanban-card kanban:flex kanban:w-full kanban:min-w-0 kanban:touch-manipulation kanban:items-stretch kanban:rounded kanban:border kanban:px-2! kanban:py-1.5! kanban:text-left kanban:text-sm kanban:shadow-1 kanban:transition-[opacity,box-shadow] kanban:duration-150 ${look?.background ? "" : "kanban:bg-bg-raised!"} ${draggable ? "kanban:cursor-grab" : ""} ${
+        {/* A div, not a button: the note's text rendered on the card holds links and task
+            checkboxes of its own, which no button may contain. Enter and Space open it as a
+            button's would. */}
+        <div
+          role="button"
+          tabIndex={0}
+          className={`kanban-card kanban:flex kanban:w-full kanban:min-w-0 kanban:touch-manipulation kanban:items-stretch kanban:rounded kanban:border kanban:px-2! kanban:py-1.5! kanban:text-left kanban:text-sm kanban:shadow-1 kanban:transition-[opacity,box-shadow] kanban:duration-150 kanban:focus-visible:outline-2 kanban:focus-visible:outline-focus ${look?.background ? "" : "kanban:bg-bg-raised!"} ${draggable ? "kanban:cursor-grab" : "kanban:cursor-pointer"} ${
             selected ? "kanban:border-accent kanban:ring-2 kanban:ring-accent kanban:ring-offset-1 kanban:ring-offset-bg-subtle" : "kanban:border-border"
           }`}
           style={lookStyle(look)}
@@ -1349,13 +1380,18 @@ function CardSlot({
           data-selected={selected ? "" : undefined}
           onPointerDown={onPointerDown}
           onClick={onClick}
+          onKeyDown={(event: ReactKeyboardEvent<HTMLElement>) => {
+            if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
+            event.preventDefault();
+            event.currentTarget.click();
+          }}
           // A long press is the drag's too: its menu opens when it is let go in place.
           {...mark("lm/document", row.id, { label: row.title, types: selected ? ["kanban/card", "kanban/selection"] : ["kanban/card"], pressOnRelease: true })}
           // The drag is ours; the browser's own would draw its ghost over it.
           onDragStart={(event) => event.preventDefault()}
         >
           <CardBody row={row} items={items} look={look} />
-        </button>
+        </div>
       </li>
     </>
   );

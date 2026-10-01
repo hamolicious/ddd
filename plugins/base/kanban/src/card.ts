@@ -1,6 +1,7 @@
 /**
  * What a card shows, pure: a list of items, top to bottom — the title, a property's value,
- * the note's text — each shown or hidden. The title alone by default.
+ * the note's text (its body, rendered as markdown) — each shown or hidden. The title alone by
+ * default.
  *
  * Stored in the board's `card` option as a comma list a person can read: `title`,
  * `content`, or a field path (`fm.status`), each prefixed `!` when hidden —
@@ -12,7 +13,6 @@ import type { DocumentRow } from "@kernel";
 
 import { fieldValue } from "../../_shared/dates.js";
 import { displayRow, inferKind } from "../../_shared/fm-display.js";
-import { bodyOf } from "../../_shared/regions.js";
 
 export type CardItem =
   | { readonly kind: "title"; readonly hidden?: boolean }
@@ -53,23 +53,4 @@ export function fieldText(row: DocumentRow, field: string): string {
   const key = field.slice("fm.".length);
   const value = fieldValue(row, field);
   return displayRow({ key, value, kind: inferKind(key, value) }).text;
-}
-
-/**
- * The note's text as a card shows it: the body only (no frontmatter, no plugin sections),
- * its markdown reduced to the words — headings, list and quote markers, emphasis, code
- * ticks, images and link targets gone — and runs of space folded. Capped at `limit`
- * characters; the card clamps it to a few lines.
- */
-export function excerpt(content: string | undefined, limit = 280): string {
-  if (!content) return "";
-  const text = bodyOf(content)
-    .replace(/^```[^\n]*\n[\s\S]*?(?:\n```|$)/gm, " ")
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/^\s{0,3}(?:#{1,6}\s+|>\s?|[-*+]\s+(?:\[[^\]]?\]\s+)?|\d+[.)]\s+)/gm, "")
-    .replace(/[*_`~]+/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  return text.length > limit ? `${text.slice(0, limit).trimEnd()}…` : text;
 }
