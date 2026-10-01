@@ -17,7 +17,9 @@
 import type { ComponentType, ReactNode, RefObject } from "react";
 
 import { createRegistry, s } from "@kernel";
-import type { DocumentRow, SearchHit } from "@kernel";
+import type { DocumentRow, QueryPlan, SearchHit } from "@kernel";
+
+import type { QueryBuilder, QueryState } from "./query.js";
 
 /**
  * A search backend. The default is the local index; the server is a fallback, and a plugin
@@ -270,4 +272,11 @@ export interface Search {
   readonly FmKeySelect: ComponentType<FmKeySelectProps>;
   /** A value of one frontmatter key, typed or picked from the values it holds. */
   readonly FmValueSelect: ComponentType<FmValueSelectProps>;
+  /**
+   * A new query, written as a chain: `query().filter("title", "text_contains", "a").sort("fm.key").run()`.
+   * The shared core's query plan, answered by the kernel's engine. Since 5.0.0.
+   */
+  readonly query: () => QueryBuilder;
+  /** A React hook: a query's answer, live. Since 5.0.0. */
+  readonly useQuery: (source: QueryBuilder | QueryPlan | undefined) => QueryState;
 }

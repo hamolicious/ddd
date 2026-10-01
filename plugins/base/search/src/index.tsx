@@ -13,6 +13,8 @@
  * - **Saved searches** (`saved.ts`): a note whose `saved-search` frontmatter holds a spec.
  *   `SavedSearch` is the shell for one; each view plugin's document mode claims the
  *   saved searches whose `type` names it and draws itself inside it.
+ * - **The functional query API** (`query.ts`): `query().filter(…).sort(…).run()`,
+ *   the shared core's query plan written as a chain, and `useQuery` for it live.
  * - **Components** (`components/`): the pieces other plugins build with — `NoteSelect`,
  *   `FmKeySelect` and `FmValueSelect`, boxes that pick a note, a frontmatter key and one of
  *   its values. `NoteSelect` draws each note as the folder tree does
@@ -52,11 +54,21 @@ import { createNoteHooks, type NoteLooks } from "./components/notes.js";
 import { searchEngine } from "./providers.js";
 import { resolveSearch, useResults as useResultsWith } from "./results.js";
 import { SAVED_SEARCH_KEY, savedSearchNoteText, savedSearchOf as savedSearchOfRow, savedSearchTitle } from "./saved.js";
+import { bindDocuments } from "./query.js";
 import { createSavedSearch } from "./SavedSearch.js";
 import { createSearchShell } from "./SearchShell.js";
 import { documentPath, encodeSpec, parseSpec } from "./spec.js";
 
 export type { NoteLooks } from "./components/notes.js";
+export {
+  QueryBuilder,
+  QueryError,
+  query,
+  useQuery,
+  type QueryOp,
+  type QueryState,
+  type QueryValue,
+} from "./query.js";
 export type {
   FmKeySelectProps,
   FmValueSelectProps,
@@ -190,6 +202,7 @@ export function FmValueSelect(props: FmValueSelectProps): ReactElement {
 }
 
 export default function activate(kernel: Kernel): void {
+  bindDocuments(kernel.documents);
   // Optional: no router, no opening a result; no commands, no Actions menu; no icons, none
   // in it. Nothing needs them before a click, so the lookups do not hold up activation.
   let router: RouterModule | undefined;
@@ -306,4 +319,5 @@ export default function activate(kernel: Kernel): void {
 
 export function deactivate(): void {
   active = undefined;
+  bindDocuments(undefined);
 }
