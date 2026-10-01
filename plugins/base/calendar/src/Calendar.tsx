@@ -26,6 +26,7 @@ import type { SavedViewProps } from "../../_shared/saved-view-mode.js";
 
 import { isoDay, sameDay, startOfMonth } from "../../_shared/dates.js";
 import { NoteLabel, lookOf, lookStyle, useLookChanges, type Looks } from "../../_shared/note-look.js";
+import { Spinner } from "../../_shared/Spinner.js";
 import { target as mark } from "../../_shared/target.js";
 
 import { calendarOptions, entriesByDay, gridClauses, monthGrid, shiftMonth, type Entry } from "./layout.js";
@@ -38,7 +39,7 @@ const PAGE = 500;
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export function createCalendar(search: () => Pick<Search, "useResults">, looks: () => Looks | undefined) {
-  return function CalendarView({ spec, options, onOpen }: SavedViewProps): ReactElement {
+  return function CalendarView({ spec, options, onOpen, embedded }: SavedViewProps): ReactElement {
     const dress = looks();
     // Re-draw when a note's colour or icon changes in the tree.
     useLookChanges(dress);
@@ -57,11 +58,12 @@ export function createCalendar(search: () => Pick<Search, "useResults">, looks: 
 
     return (
       <div className="calendar-view calendar:flex calendar:min-w-0 calendar:flex-col calendar:gap-2 calendar:font-sans calendar:text-text">
-        <div className="calendar:flex calendar:items-center calendar:gap-2">
+        {/* Clear of the search's cog over the top right (32px, and the shell's 12px gap beside it). */}
+        <div className={`calendar:flex calendar:items-center calendar:gap-2 ${embedded ? "" : "calendar:pr-11"}`}>
           <h3 className="calendar:m-0 calendar:flex-1 calendar:text-base calendar:font-semibold" aria-live="polite">
             {month.toLocaleDateString(undefined, { month: "long", year: "numeric" })}
           </h3>
-          {results.loading && <span className="calendar:text-sm calendar:text-text-muted">Loading…</span>}
+          {results.loading && <Spinner />}
           <button type="button" aria-label="Previous month" onClick={() => setMonth((current) => shiftMonth(current, -1))}>
             ‹
           </button>

@@ -17,6 +17,7 @@ import type { ReactElement } from "react";
 
 import type { Search } from "plugin:search";
 import type { SavedViewProps } from "../../_shared/saved-view-mode.js";
+import { Spinner } from "../../_shared/Spinner.js";
 import { target as mark } from "../../_shared/target.js";
 
 import { layoutItems, shiftAnchor, timelineOptions, windowClauses, windowFor, type Item } from "./layout.js";
@@ -28,7 +29,7 @@ const UNIT_PX = { day: 56, week: 72, month: 80, quarter: 80 } as const;
 const ROW_PX = 28;
 
 export function createTimeline(search: () => Pick<Search, "useResults">) {
-  return function TimelineView({ spec, options, onOpen }: SavedViewProps): ReactElement {
+  return function TimelineView({ spec, options, onOpen, embedded }: SavedViewProps): ReactElement {
     const settings = timelineOptions(options);
     const [anchor, setAnchor] = useState(() => new Date());
     const frame = windowFor(anchor, settings.scale);
@@ -60,11 +61,12 @@ export function createTimeline(search: () => Pick<Search, "useResults">) {
 
     return (
       <div className="timeline-view timeline:flex timeline:min-w-0 timeline:flex-col timeline:gap-2 timeline:font-sans timeline:text-text">
-        <div className="timeline:flex timeline:items-center timeline:gap-2">
+        {/* Clear of the search's cog over the top right (32px, and the shell's 12px gap beside it). */}
+        <div className={`timeline:flex timeline:items-center timeline:gap-2 ${embedded ? "" : "timeline:pr-11"}`}>
           <h3 className="timeline:m-0 timeline:flex-1 timeline:text-base timeline:font-semibold" aria-live="polite">
             {range}
           </h3>
-          {results.loading && <span className="timeline:text-sm timeline:text-text-muted">Loading…</span>}
+          {results.loading && <Spinner />}
           <button type="button" aria-label="Earlier" onClick={() => setAnchor((current) => shiftAnchor(current, settings.scale, -1))}>
             ‹
           </button>

@@ -32,6 +32,7 @@ import { indexNoteSource, indexSuggestions, type ConditionIndex } from "../../_s
 import { useConditionContext } from "../../_shared/conditions-children.js";
 import { treeToWatch } from "../../_shared/conditions.js";
 import { documentsNoteSource } from "../../_shared/note-picker.js";
+import { Spinner } from "../../_shared/Spinner.js";
 
 import { FilterBar } from "./FilterBar.js";
 import { RELEVANCE, SORT_OPTIONS, type FieldOption } from "./filter.js";
@@ -226,14 +227,8 @@ function Busy({ on, label, beside = false }: { readonly on: boolean; readonly la
     <div
       className={`search-busy search:pointer-events-none search:absolute search:top-[3px] search:z-10 ${beside ? "search:right-11" : "search:right-2"} search:flex search:size-5 search:items-center search:justify-center search:rounded-full search:bg-bg-raised search:opacity-0 search:shadow-1 search:transition-opacity search:duration-200 search:data-[on]:opacity-100 search:data-[on]:delay-150`}
       data-on={on ? "" : undefined}
-      role="status"
-      aria-live="polite"
     >
-      <span className="search:sr-only">{on ? `${label}…` : ""}</span>
-      <span
-        aria-hidden="true"
-        className="search:block search:size-3.5 search:animate-spin search:rounded-full search:border-2 search:border-border search:border-t-accent search:motion-reduce:animate-none"
-      />
+      <Spinner label={on ? `${label}…` : ""} />
     </div>
   );
 }

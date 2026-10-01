@@ -1,6 +1,6 @@
 {
   "id": "calendar",
-  "version": "4.2.0",
+  "version": "4.2.1",
   "name": "Calendar",
   "description": "Shows a saved search as a month calendar, dated by whichever field you choose. New calendars from the command palette or the folder tree.",
   "author": "Life Manager base distribution",
