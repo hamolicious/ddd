@@ -175,6 +175,55 @@ should be written against:
   to rewrite a document it did not create — the host refuses that outright
   (`rewrite_document` checks `created_by`).
 
+## 3.1.0 — one query engine, a query API everywhere (2026-10-01)
+
+Additive. Every read — list, live query, search, folder filter — is a **query plan**
+answered by the shared core's engine (`core::query`), which runs natively in the server
+and as wasm in the browser's query worker. A query answers identically online and
+offline, and reads the same in every language.
+
+**The plan** (`backend/crates/core/README.md` §6) — every field optional:
+
+```json
+{ "text": "milk",
+  "filter": { "and": [ { "text": { "field": "title", "mode": "contains", "value": "a" } },
+                       { "child_of": { "of": "01J…", "deep": true } } ] },
+  "sort": ["relevance", "-updated_at", "fm.key"],
+  "trash": "live", "limit": 50, "cursor": "…", "snippets": true }
+```
+
+The filter DSL gains `child_of {of, deep?}` and `parent_of {of}` (the `folders` tree).
+A cursor only pages the plan it came from. Snippet ranges are UTF-16 offsets.
+
+**Writing one**
+
+| Where | How |
+|---|---|
+| A frontend plugin | `query().filter("title", "text_contains", "a").sort("fm.key").run()` from `plugin:search` (5.0.0); `.subscribe()`, or `useQuery(q)` in React |
+| The kernel | `kernel.documents.queryPlan(plan)` / `subscribePlan(plan)` → `{ rows, total, nextCursor?, hits }` |
+| A backend plugin | `documents::run(Query::new().filter("title", Op::TextContains, "a").sort("fm.key"))` (SDK); the `query` host function |
+| HTTP | `POST /api/query` with the plan as the body (`?metadata_only=true`), bearer or cookie |
+| A shell | `lm login --server <url> --email <you>`, then `lm query --filter title:text_contains:a --sort fm.key` |
+
+The operators are the search's filter rows: `eq ne lt lte gt gte contains contains_any
+any every text_contains text_starts_with text_ends_with missing exists is_null child_of
+parent_of`. `any_of` / `anyOf` and `none_of` / `noneOf` group conditions.
+
+**Added**
+
+- `DocumentsApi.queryPlan`, `subscribePlan`; types `QueryPlan`, `PlanResult`, `PlanHit`,
+  `PlanSnippet`, `PlanSubscription`.
+- `CoreBindings.queryEngine` (kernel internals): the wasm `QueryEngine`.
+
+**Changed, not broken**
+
+- `documents.query`, `subscribe` and `search` run on the engine. Search matches prefixes
+  and near misses over title, frontmatter values and text; `SearchOptions.prefix`,
+  `fuzzy` and `fields` are accepted and ignored.
+- Rows missing a sort key sort **last in both directions**, from the server as from the
+  browser (Mongo used to put them first ascending).
+- `GET /api/documents` answers through the engine too, and its response gains `total`.
+
 ## 3.0.0 — plugins import each other (2026-09-30)
 
 A **major**: ports, protocols and wiring are gone. A plugin exposes components and
