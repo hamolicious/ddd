@@ -4,8 +4,9 @@
  * all this component with different `controls`.
  *
  * - **`shown`**: the toolbar, as the all-documents page has it.
- * - **`folded`**: an "Edit search" button unfolds it — a saved search, whose search is
- *   already decided.
+ * - **`folded`**: a cog over the top right of the results unfolds it — a saved search,
+ *   whose search is already decided. The cog is `icons`' (an optional dependency; a ⚙
+ *   without it), and "Update saved search" sits beside it when the search was changed.
  * - **`hidden`**: the results alone — an embed. A header click still sorts, on screen
  *   only: the reader is reading another note, not editing this one.
  *
@@ -24,6 +25,7 @@ import type { ComponentType, ReactElement } from "react";
 
 import type { Kernel } from "@kernel";
 import type { ContextMenu } from "plugin:context-menu";
+import type { Icons } from "plugin:icons";
 import type { FmKeySelectProps, FmValueSelectProps, NoteSelectProps, SearchField, SearchShellProps, SearchSort, SearchSpec, SearchViewProps } from "./api.js";
 
 import { indexNoteSource, indexSuggestions, type ConditionIndex } from "../../_shared/conditions-index.js";
@@ -42,6 +44,8 @@ export interface SearchShellDeps {
   readonly engine: SearchEngine;
   /** `context-menu`'s `open`: the sort menu. */
   readonly menu: Pick<ContextMenu, "open">;
+  /** `icons`, when it is there: the cog that unfolds a saved search's controls. */
+  readonly icons: () => Pick<Icons, "Icon"> | undefined;
   readonly index: () => ConditionIndex | undefined;
   /** The Actions menu over these ids, when a commands registry is wired. */
   readonly actions: () => ((ids: readonly string[], anchor: HTMLElement) => void) | undefined;
@@ -133,19 +137,6 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
           </header>
         )}
 
-        {controls === "folded" && (
-          <div className="search-edit search:flex search:items-center search:justify-end search:gap-2 search:text-sm">
-            {!searchOpen && onSave && (
-              <button type="button" onClick={onSave}>
-                {saveLabel ?? "Save search"}
-              </button>
-            )}
-            <button type="button" aria-expanded={searchOpen} onClick={() => setSearchOpen((value) => !value)}>
-              {searchOpen ? "Hide search" : "Edit search"}
-            </button>
-          </div>
-        )}
-
         {controls !== "hidden" && searchOpen && (
           <FilterBar
             menu={menu}
@@ -185,7 +176,15 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
         )}
 
         <div className={`search-results search:relative search:flex search:flex-col ${controls === "hidden" ? "search:gap-2" : "search:gap-3"}`}>
-        <Busy on={results.loading} label={searching ? "Searching" : "Loading"} />
+        {controls === "folded" && (
+          <SearchCog
+            open={searchOpen}
+            onToggle={() => setSearchOpen((value) => !value)}
+            Icon={deps.icons()?.Icon}
+            {...(!searchOpen && onSave ? { onSave, saveLabel: saveLabel ?? "Save search" } : {})}
+          />
+        )}
+        <Busy on={results.loading} label={searching ? "Searching" : "Loading"} beside={controls === "folded"} />
         {results.rows.length === 0 && showsEmpty === true ? (
           // A view whose frame means something with nothing in it: a board's columns.
           renderView(viewProps)
@@ -222,10 +221,10 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
  * moment, so a search that answers at once never flashes it, and fades out when done.
  * Absolutely placed, so it never moves anything; the live region carries the words.
  */
-function Busy({ on, label }: { readonly on: boolean; readonly label: string }): ReactElement {
+function Busy({ on, label, beside = false }: { readonly on: boolean; readonly label: string; readonly beside?: boolean }): ReactElement {
   return (
     <div
-      className="search-busy search:pointer-events-none search:absolute search:right-2 search:top-[3px] search:z-10 search:flex search:size-5 search:items-center search:justify-center search:rounded-full search:bg-bg-raised search:opacity-0 search:shadow-1 search:transition-opacity search:duration-200 search:data-[on]:opacity-100 search:data-[on]:delay-150"
+      className={`search-busy search:pointer-events-none search:absolute search:top-[3px] search:z-10 ${beside ? "search:right-11" : "search:right-2"} search:flex search:size-5 search:items-center search:justify-center search:rounded-full search:bg-bg-raised search:opacity-0 search:shadow-1 search:transition-opacity search:duration-200 search:data-[on]:opacity-100 search:data-[on]:delay-150`}
       data-on={on ? "" : undefined}
       role="status"
       aria-live="polite"
@@ -244,4 +243,51 @@ function statusText(shown: number, total: number | undefined, more: boolean, tex
   if (total !== undefined) return `${total.toLocaleString()} document${total === 1 ? "" : "s"}`;
   const count = `${shown.toLocaleString()}${more ? "+" : ""}`;
   return `${count} result${shown === 1 && !more ? "" : "s"}${text === "" ? "" : ` for “${text}”`}`;
+}
+
+/**
+ * A saved search's controls, folded behind a cog over the top right of the results: a
+ * round, raised button, in the accent while the controls are open. "Update saved search"
+ * (or "Save search") sits beside it while the search differs from what the note holds.
+ */
+function SearchCog({
+  open,
+  onToggle,
+  Icon,
+  onSave,
+  saveLabel,
+}: {
+  readonly open: boolean;
+  readonly onToggle: () => void;
+  readonly Icon: ComponentType<{ readonly name: string; readonly size?: number | string }> | undefined;
+  readonly onSave?: () => void;
+  readonly saveLabel?: string;
+}): ReactElement {
+  return (
+    <div className="search-cog search:absolute search:right-0 search:top-0 search:z-10 search:flex search:items-center search:gap-1.5">
+      {onSave && (
+        <button
+          type="button"
+          className="search:h-8! search:min-h-0! search:rounded-full! search:border-accent! search:bg-accent! search:px-3! search:text-xs search:font-medium search:text-accent-text! search:shadow-1 search:transition-colors search:duration-150 search:hover:opacity-90"
+          onClick={onSave}
+        >
+          {saveLabel}
+        </button>
+      )}
+      <button
+        type="button"
+        className={`search:inline-flex search:size-8! search:min-h-0! search:min-w-0! search:items-center search:justify-center search:rounded-full! search:p-0! search:text-base search:shadow-1 search:transition-colors search:duration-150 ${
+          open
+            ? "search:border-accent! search:bg-accent-subtle! search:text-text"
+            : "search:border-border! search:bg-bg-raised! search:text-text-muted search:hover:border-border-strong! search:hover:text-text"
+        }`}
+        aria-expanded={open}
+        aria-label={open ? "Hide search" : "Edit search"}
+        title={open ? "Hide search" : "Edit search"}
+        onClick={onToggle}
+      >
+        {Icon ? <Icon name="settings" size="1.1em" /> : <span aria-hidden="true">⚙</span>}
+      </button>
+    </div>
+  );
 }

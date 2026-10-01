@@ -263,6 +263,7 @@ export default function activate(kernel: Kernel): void {
     kernel,
     engine,
     menu: { open: openMenu },
+    icons: () => icons,
     index,
     actions: () => (commands ? openActions : undefined),
     NoteSelect,
