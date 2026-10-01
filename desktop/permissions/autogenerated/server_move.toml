@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-server-move"
+description = "Enables the server_move command without any pre-configured scope."
+commands.allow = ["server_move"]
+
+[[permission]]
+identifier = "deny-server-move"
+description = "Denies the server_move command without any pre-configured scope."
+commands.deny = ["server_move"]

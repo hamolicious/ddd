@@ -29,7 +29,7 @@ pub struct BridgeError {
 }
 
 impl BridgeError {
-    fn new(code: &'static str, message: impl Into<String>) -> Self {
+    pub fn new(code: &'static str, message: impl Into<String>) -> Self {
         Self {
             code,
             message: message.into(),
@@ -66,6 +66,10 @@ impl Folder {
             .and_then(|c| c.folder)
             .map(PathBuf::from)
             .filter(|p| p.is_dir());
+        // RENAME-HOP: the old build kept its state in `<folder>/.life-manager`.
+        if let Some(root) = &root {
+            crate::rename_hop::migrate_state_dir(root, STATE_DIR);
+        }
         Self {
             root: Mutex::new(root),
             watcher: Mutex::new(None),
@@ -109,6 +113,8 @@ impl Folder {
                     for path in event.map(|e| e.paths).unwrap_or_default() {
                         if let Some(rel) = relative(&root, &path)
                             && !rel.starts_with(STATE_DIR)
+                            // RENAME-HOP: the old state dir, until it is moved.
+                            && !rel.starts_with(crate::rename_hop::OLD_STATE_DIR)
                         {
                             paths.insert(rel);
                         }
@@ -230,6 +236,8 @@ pub async fn folder_choose(app: AppHandle, folder: State<'_, Folder>) -> Result<
         .await
         .ok_or_else(|| BridgeError::new("cancelled", "no folder was chosen"))?;
     let path = picked.path().to_path_buf();
+    // RENAME-HOP: a folder the old build used keeps its state in `.life-manager`.
+    crate::rename_hop::migrate_state_dir(&path, STATE_DIR);
     config::set_folder(Some(&path)).map_err(|e| BridgeError::new("failed", e))?;
     *folder.root.lock().unwrap() = Some(path.clone());
     folder.watch(&app);
@@ -363,7 +371,8 @@ pub async fn folder_remove(folder: State<'_, Folder>, path: String) -> Result<()
 }
 
 /// `window.shell` for the desktop page: a cookie-session bridge carrying `folder` only
-/// (`app/BRIDGE.md` §3). Injected into frames on the server's origin and nowhere else.
+/// (`app/BRIDGE.md` §3), plus the RENAME-HOP `server.move` (§4.6). Injected into frames on
+/// the server's origin and nowhere else.
 pub fn bridge_script(origin: &str) -> String {
     let origin = serde_json::to_string(origin).expect("a string serializes");
     format!(
@@ -388,6 +397,10 @@ pub fn bridge_script(origin: &str) -> String {
     move: function (p) {{ return invoke("folder_move", {{ from: p.from, to: p.to }}); }},
     remove: function (p) {{ return invoke("folder_remove", {{ path: p.path }}); }}
   }});
+  // RENAME-HOP: `server.move` switches the app to the renamed server's origin and restarts.
+  var server = Object.freeze({{
+    move: function (p) {{ return invoke("server_move", {{ url: p.url }}); }}
+  }});
   Object.defineProperty(window, "shell", {{
     value: Object.freeze({{
       version: 1,
@@ -395,8 +408,9 @@ pub fn bridge_script(origin: &str) -> String {
       platform: "linux",
       session: "cookie",
       capabilities: Object.freeze(["folder"]),
-      methods: Object.freeze(["folder.choose", "folder.current", "folder.forget", "folder.list", "folder.move", "folder.read", "folder.remove", "folder.write"]),
-      folder: folder
+      methods: Object.freeze(["folder.choose", "folder.current", "folder.forget", "folder.list", "folder.move", "folder.read", "folder.remove", "folder.write", "server.move"]),
+      folder: folder,
+      server: server
     }}),
     writable: false,
     configurable: false

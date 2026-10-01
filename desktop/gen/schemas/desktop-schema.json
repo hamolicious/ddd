@@ -393,6 +393,12 @@
           "markdownDescription": "Enables the folder_write command without any pre-configured scope."
         },
         {
+          "description": "Enables the server_move command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-server-move",
+          "markdownDescription": "Enables the server_move command without any pre-configured scope."
+        },
+        {
           "description": "Denies the folder_choose command without any pre-configured scope.",
           "type": "string",
           "const": "deny-folder-choose",
@@ -439,6 +445,12 @@
           "type": "string",
           "const": "deny-folder-write",
           "markdownDescription": "Denies the folder_write command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the server_move command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-server-move",
+          "markdownDescription": "Denies the server_move command without any pre-configured scope."
         },
         {
           "description": "Default core plugins set.\n#### This default permission set includes:\n\n- `core:path:default`\n- `core:event:default`\n- `core:window:default`\n- `core:webview:default`\n- `core:app:default`\n- `core:image:default`\n- `core:resources:default`\n- `core:menu:default`\n- `core:tray:default`",

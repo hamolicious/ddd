@@ -16,6 +16,7 @@
 
 mod config;
 mod folder;
+mod rename_hop;
 
 use tauri::ipc::CapabilityBuilder;
 use tauri::webview::{DownloadEvent, NewWindowResponse};
@@ -26,8 +27,8 @@ use url::Url;
 const CONFIG_HINT: &str = "Set the server with `--server <url>`, the DDD_SERVER_URL \
 environment variable, or `server_url = \"https://…\"` in ~/.config/ddd/desktop.toml.";
 
-/// `--server` beats `DDD_SERVER_URL` beats the config file.
-fn server_url() -> Result<Url, String> {
+/// The server from `--server` or `DDD_SERVER_URL`, which both beat the config file.
+fn server_override() -> Option<String> {
     let mut args = std::env::args().skip(1);
     let mut from_args = None;
     while let Some(arg) = args.next() {
@@ -37,12 +38,16 @@ fn server_url() -> Result<Url, String> {
             from_args = Some(v.to_owned());
         }
     }
-    let raw = from_args
-        .or_else(|| {
-            std::env::var("DDD_SERVER_URL")
-                .ok()
-                .filter(|v| !v.is_empty())
-        })
+    from_args.or_else(|| {
+        std::env::var("DDD_SERVER_URL")
+            .ok()
+            .filter(|v| !v.is_empty())
+    })
+}
+
+/// `--server` beats `DDD_SERVER_URL` beats the config file.
+fn server_url() -> Result<Url, String> {
+    let raw = server_override()
         .or_else(|| config::read()?.server_url)
         .ok_or_else(|| format!("No server configured.\n\n{CONFIG_HINT}"))?;
     let url =
@@ -53,6 +58,43 @@ fn server_url() -> Result<Url, String> {
         ));
     }
     Ok(url)
+}
+
+/// RENAME-HOP: a server origin for `server_move`: http(s), nothing past the `/`.
+fn parse_origin(raw: &str) -> Result<String, String> {
+    let url = Url::parse(raw).map_err(|e| format!("`{raw}` is not a URL ({e})"))?;
+    if url.scheme() != "http" && url.scheme() != "https" {
+        return Err(format!("`{raw}` must be http:// or https://"));
+    }
+    if url.path() != "/"
+        || url.query().is_some()
+        || url.fragment().is_some()
+        || !url.username().is_empty()
+        || url.password().is_some()
+    {
+        return Err(format!(
+            "`{raw}` must be an origin, like https://example.com"
+        ));
+    }
+    Ok(url.origin().ascii_serialization())
+}
+
+/// RENAME-HOP: `window.shell.server.move({ url })`. The page, on the old domain and done
+/// syncing, hands over the renamed server's origin: it becomes `server_url` in the config
+/// and the app restarts on it.
+#[tauri::command]
+async fn server_move(app: AppHandle, url: String) -> Result<(), folder::BridgeError> {
+    let origin = parse_origin(&url).map_err(|e| folder::BridgeError::new("invalid", e))?;
+    config::set_server_url(&origin).map_err(|e| folder::BridgeError::new("failed", e))?;
+    if let Some(over) = server_override() {
+        eprintln!(
+            "ddd-desktop: server_url = {origin} is written to the config, but --server or \
+             DDD_SERVER_URL ({over}) overrides it, so the app restarts on {over}."
+        );
+    } else {
+        eprintln!("ddd-desktop: server moved to {origin}; restarting.");
+    }
+    app.restart();
 }
 
 fn same_origin(a: &Url, b: &Url) -> bool {
@@ -155,6 +197,9 @@ fn work_around_webkit_nvidia() {
 
 fn main() {
     work_around_webkit_nvidia();
+    // RENAME-HOP: move the old build's config and webview data to the new names before
+    // anything reads the config or Tauri resolves a path.
+    rename_hop::migrate_all(&rename_hop::Bases::from_env());
     let server = match server_url() {
         Ok(url) => url,
         Err(message) => {
@@ -180,6 +225,7 @@ fn main() {
             folder::folder_write,
             folder::folder_move,
             folder::folder_remove,
+            server_move, // RENAME-HOP
         ])
         .setup(move |app| {
             // The server's pages may call the folder commands, and nothing else may: the
@@ -194,6 +240,8 @@ fn main() {
             ] {
                 capability = capability.permission(format!("allow-folder-{command}"));
             }
+            // RENAME-HOP: `window.shell.server.move`.
+            capability = capability.permission("allow-server-move");
             app.add_capability(capability)?;
             app.state::<folder::Folder>().watch(app.handle());
 

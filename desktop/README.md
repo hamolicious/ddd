@@ -15,6 +15,29 @@ kept in step both ways while the app runs. Change or stop it in Settings → Loc
 The choice is stored as `folder = "…"` in `~/.config/ddd/desktop.toml`. The folder's
 `.ddd/` directory is the mirror's own state; leave it alone.
 
+## Moving from life-manager
+
+<!-- RENAME-HOP: one release only; the cleanup release removes this section. -->
+
+The app used to be called life-manager. On its first start this version moves the old
+build's files to the new names, by renaming (never copying):
+
+| old | new |
+|---|---|
+| `~/.config/life-manager/` | `~/.config/ddd/` |
+| `~/.local/share/app.life-manager.desktop/` (cookies, offline data) | `~/.local/share/app.ddd.desktop/` |
+| `~/.cache/app.life-manager.desktop/`, `~/.config/app.life-manager.desktop/` | `…/app.ddd.desktop/` |
+| `<notes folder>/.life-manager/` | `<notes folder>/.ddd/` |
+
+`XDG_CONFIG_HOME`, `XDG_DATA_HOME` and `XDG_CACHE_HOME` are respected. A new directory that
+already exists wins and the old one is left alone. If a move fails (say the two places are on
+different filesystems) the app logs a warning and starts with fresh data, which the server
+fills again; move or delete the old directory by hand while the app is closed.
+
+When the server moves to its new address, the page asks the app to follow
+(`window.shell.server.move`): the new address is written as `server_url` in
+`~/.config/ddd/desktop.toml` and the app restarts on it.
+
 ## Setup (Arch)
 
 ```sh
