@@ -10,6 +10,7 @@
 //! | [`parse_document`] | frontmatter + `%%%` sections + title (SPEC §3.1, §3.4) |
 //! | [`evaluate_filter`] | the filter DSL over one projection row (SPEC §4.2) |
 //! | [`core_semantics_version`] | staleness check against the server's `welcome` |
+//! | [`QueryEngine`] | the query engine (`crate::query`): rows in, plans answered |
 //!
 //! **Filter *compilation* is deliberately absent.** Compiling to Mongo is the
 //! server's job (SPEC §4.2) and needs `bson`, which the Wasm build does not have.
@@ -29,8 +30,9 @@ use wasm_bindgen::prelude::wasm_bindgen;
 use crate::date::Date;
 use crate::document::parse_document as parse_document_native;
 use crate::filter::Filter;
-use crate::filter::evaluator::{Row, evaluate};
-use crate::value::{Map, Value};
+use crate::filter::evaluator::evaluate;
+use crate::query::{Doc, Engine, Plan};
+use crate::value::Map;
 
 /// Parse a document's text. Returns a JSON object:
 /// `{ "title": string, "fm": object, "plugins": object, "fm_parse_error": bool }`.
@@ -66,36 +68,116 @@ pub fn evaluate_filter(filter_json: &str, doc_json: &str) -> bool {
     let Ok(filter) = Filter::from_json_str(filter_json) else {
         return false;
     };
-    let Ok(document) = serde_json::from_str::<serde_json::Value>(doc_json) else {
+    let Ok(mut document) = serde_json::from_str::<serde_json::Value>(doc_json) else {
         return false;
     };
-
-    let id = str_field(&document, "id").unwrap_or_default();
-    let title = str_field(&document, "title").unwrap_or_default();
-    let content = str_field(&document, "content").unwrap_or_default();
-    let fm = map_field(&document, "fm");
-    let plugins = map_field(&document, "plugins");
-    let created_at = date_field(&document, "created_at");
-    let updated_at = date_field(&document, "updated_at");
-    let deleted_at = date_field(&document, "deleted_at");
-    let deleted = document
-        .get("deleted")
-        .and_then(serde_json::Value::as_bool)
-        .unwrap_or(false);
-
-    let row = Row {
-        id: &id,
-        title: &title,
-        content: &content,
-        fm: &fm,
-        plugins: &plugins,
-        created_at: created_at.as_ref(),
-        updated_at: updated_at.as_ref(),
-        deleted_at: deleted_at.as_ref(),
-        deleted,
+    // An id-less row still evaluates, as the empty id.
+    if let Some(object) = document.as_object_mut() {
+        object
+            .entry("id")
+            .or_insert_with(|| serde_json::Value::String(String::new()));
+    }
+    let Some(doc) = Doc::from_json(&document) else {
+        return false;
     };
+    evaluate(&filter, &doc.row()).unwrap_or(false)
+}
 
-    evaluate(&filter, &row).unwrap_or(false)
+/// The query engine (`crate::query`), for the browser's search worker: the same
+/// filter, text ranking, folder relations and sort the server answers with.
+///
+/// JSON in and out, like the rest of this ABI. Total: a malformed row is skipped, a
+/// malformed or refused plan is an `{"error": …}` answer, never a trap.
+#[wasm_bindgen]
+pub struct QueryEngine {
+    inner: Engine,
+}
+
+impl Default for QueryEngine {
+    fn default() -> QueryEngine {
+        QueryEngine::new()
+    }
+}
+
+#[wasm_bindgen]
+impl QueryEngine {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> QueryEngine {
+        QueryEngine {
+            inner: Engine::new(),
+        }
+    }
+
+    /// An engine saved with [`QueryEngine::to_json`]; `undefined` when it cannot be
+    /// read (another index version): rebuild from the rows instead.
+    pub fn load(json: &str) -> Option<QueryEngine> {
+        Engine::from_json_str(json).map(|inner| QueryEngine { inner })
+    }
+
+    /// Add or replace projection rows (a JSON array); a row with `purged: true` is
+    /// taken out. Returns how many rows were read.
+    pub fn upsert(&mut self, rows_json: &str) -> u32 {
+        let Ok(serde_json::Value::Array(rows)) =
+            serde_json::from_str::<serde_json::Value>(rows_json)
+        else {
+            return 0;
+        };
+        let mut read = 0;
+        for row in &rows {
+            if row.get("purged").and_then(serde_json::Value::as_bool) == Some(true) {
+                if let Some(id) = row.get("id").and_then(serde_json::Value::as_str) {
+                    self.inner.remove(id);
+                    read += 1;
+                }
+                continue;
+            }
+            if let Some(doc) = Doc::from_json(row) {
+                self.inner.upsert(doc);
+                read += 1;
+            }
+        }
+        read
+    }
+
+    /// Take documents out (a JSON array of ids).
+    pub fn remove(&mut self, ids_json: &str) {
+        if let Ok(ids) = serde_json::from_str::<Vec<String>>(ids_json) {
+            for id in ids {
+                self.inner.remove(&id);
+            }
+        }
+    }
+
+    /// Answer a plan (`crates/core/README.md` §6): `{"page": {ids, total, next_cursor?,
+    /// hits}}`, or `{"error": "…"}` for a plan that is malformed or refused.
+    pub fn run(&self, plan_json: &str) -> String {
+        let answer = Plan::from_json_str(plan_json)
+            .map_err(|err| err.to_string())
+            .and_then(|plan| {
+                self.inner
+                    .run(&plan)
+                    .map(|answer| answer.page())
+                    .map_err(|err| err.to_string())
+            });
+        match answer {
+            Ok(page) => serde_json::json!({ "page": page }).to_string(),
+            Err(error) => serde_json::json!({ "error": error }).to_string(),
+        }
+    }
+
+    /// The engine, saved, for [`QueryEngine::load`].
+    pub fn to_json(&self) -> String {
+        self.inner.to_json_string()
+    }
+
+    /// Documents held.
+    pub fn len(&self) -> u32 {
+        self.inner.len() as u32
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
 }
 
 /// [`crate::CORE_SEMANTICS_VERSION`] — compared against the server's `welcome`
@@ -124,7 +206,7 @@ pub fn resolve_title(text: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// JSON bridges (private: the exported ABI is the four functions above)
+// JSON bridges (private)
 // ---------------------------------------------------------------------------
 
 fn map_to_json(map: &Map) -> serde_json::Value {
@@ -133,27 +215,6 @@ fn map_to_json(map: &Map) -> serde_json::Value {
         object.insert(key.clone(), value.to_json());
     }
     serde_json::Value::Object(object)
-}
-
-fn str_field(document: &serde_json::Value, key: &str) -> Option<String> {
-    document
-        .get(key)
-        .and_then(serde_json::Value::as_str)
-        .map(str::to_owned)
-}
-
-fn map_field(document: &serde_json::Value, key: &str) -> Map {
-    match document.get(key) {
-        Some(value @ serde_json::Value::Object(_)) => match Value::from_json(value) {
-            Value::Map(map) => map,
-            _ => Map::new(),
-        },
-        _ => Map::new(),
-    }
-}
-
-fn date_field(document: &serde_json::Value, key: &str) -> Option<Date> {
-    Date::parse(document.get(key)?.as_str()?).ok()
 }
 
 #[cfg(test)]

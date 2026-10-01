@@ -93,6 +93,7 @@ function unavailableCore(reason: string): CoreBindings {
     evaluateFilter: fail,
     resolveTitle: fail,
     normalizeDate: fail,
+    queryEngine: fail,
     semanticsVersion: () => -1,
   };
 }

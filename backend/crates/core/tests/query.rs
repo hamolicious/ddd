@@ -280,3 +280,19 @@ fn rows_decode_from_projection_json() {
     assert_eq!(doc.content, "");
     assert!(Doc::from_json(&serde_json::json!({"title": "no id"})).is_none());
 }
+
+#[test]
+fn an_offset_pages_by_position() {
+    let engine = workspace();
+    let plan = Plan {
+        offset: Some(2),
+        limit: Some(1),
+        ..Plan::default()
+    };
+    assert_eq!(ids(&engine, &plan), ["a"]);
+    let both = Plan {
+        cursor: Some("0.0".into()),
+        ..plan
+    };
+    assert!(matches!(engine.run(&both), Err(QueryError::Plan(_))));
+}

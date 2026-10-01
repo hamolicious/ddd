@@ -3,7 +3,7 @@
   "$id": "https://life-manager.dev/schema/manifest.schema.json",
   "title": "PluginManifest",
   "description": "A plugin's manifest.json (SPEC §6.2). The one source for the Rust and TypeScript manifest types and validators: `node web/scripts/gen-manifest.mjs` writes both, and `--check` fails when either is stale.",
-  "x-kernel-version": "3.0.0",
+  "x-kernel-version": "3.1.0",
   "x-rust-name": "PluginManifest",
   "x-rust-derive": [
     "Debug",

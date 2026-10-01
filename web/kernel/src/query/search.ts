@@ -1,26 +1,32 @@
 /**
- * Full-text search over the projection (SPEC §4.2).
+ * The local query engine's index: the shared core's `QueryEngine` (wasm), holding
+ * every projection row, their full-text index and the folder tree (SPEC §4.2).
  *
- * MiniSearch, built in a Web Worker, **persisted and incrementally updated** —
- * never a cold-start main-thread rebuild. The worker lives in
- * `worker-search.ts` / `search-worker.ts`; the interface below is what both the
- * in-process and the worker-backed implementation satisfy, so moving between
- * them costs no callers.
+ * The same engine the server answers with, so filtering, ranking, relations and
+ * sorting agree online and offline by construction. It runs in a Web Worker
+ * (`worker-search.ts` / `search-worker.ts`), **persisted and incrementally
+ * updated** — a warm start loads the saved engine and indexes only what the feed
+ * moved since, never a cold-start main-thread rebuild.
  *
- * **FROZEN INTERFACE.**
+ * **FROZEN INTERFACE** (additive since kernel 3.1.0: `run` replaced `search`).
  */
 
-import MiniSearch, { type Options as MiniSearchOptions } from "minisearch";
-
-import type { CoreValue, ProjectionRow } from "../protocol.js";
+import type { ProjectionRow } from "../protocol.js";
+import { loadCore, type CoreBindings, type CoreQueryEngine } from "../wasm/index.js";
+import type { PlanPage, QueryPlan } from "./plan.js";
 
 export interface SearchHit {
   readonly id: string;
   readonly score: number;
-  /** Fields that matched, for result highlighting. */
+  /** The indexed terms it matched, for highlighting. */
   readonly terms: readonly string[];
 }
 
+/**
+ * `kernel.documents.search` options. The engine always matches prefixes and near
+ * misses over title, frontmatter and content, so `prefix`, `fuzzy` and `fields` are
+ * accepted and ignored.
+ */
 export interface SearchOptions {
   readonly limit?: number;
   readonly prefix?: boolean;
@@ -38,14 +44,15 @@ export interface SearchStats {
   readonly safeSeq: number;
 }
 
-export interface SearchIndex {
-  /** Load a persisted index, or start an empty one. */
+export interface EngineIndex {
+  /** Load a persisted engine, or start an empty one. */
   open(): Promise<void>;
   /** Add or replace rows. Called with every applied feed batch. */
   upsert(rows: readonly ProjectionRow[]): Promise<void>;
   remove(ids: readonly string[]): Promise<void>;
-  search(query: string, options?: SearchOptions): Promise<readonly SearchHit[]>;
-  /** Persist the serialized index plus its watermark. */
+  /** Answer a plan. Rejects on a malformed or refused plan. */
+  run(plan: QueryPlan): Promise<PlanPage>;
+  /** Persist the engine plus its watermark. */
   persist(safeSeq: number): Promise<void>;
   stats(): Promise<SearchStats>;
   /** Drop and rebuild from the store (only after `feed.reset`/schema change). */
@@ -53,16 +60,11 @@ export interface SearchIndex {
   close(): Promise<void>;
 }
 
-/** Fields indexed, and their boosts. Changing this invalidates persisted indexes. */
-export const SEARCH_FIELDS = {
-  title: 3,
-  content: 1,
-  /** Flattened `fm` scalar values, joined — tags and paths are searchable. */
-  fm: 2,
-} as const;
+/** The pre-3.1 name. */
+export type SearchIndex = EngineIndex;
 
-/** Bump when the index shape changes; a mismatch forces one rebuild. */
-export const SEARCH_INDEX_VERSION = 1;
+/** Bump when the persisted shape changes; a mismatch forces one rebuild. 2: the wasm engine. */
+export const SEARCH_INDEX_VERSION = 2;
 
 // ---------------------------------------------------------------------------
 // Persistence (the "no cold-start rebuild" half of SPEC §4.2)
@@ -75,7 +77,7 @@ export interface PersistedIndex {
   readonly safeSeq: number;
   readonly builtAt: number;
   readonly documents: number;
-  /** `MiniSearch#toJSON()`, already stringified. */
+  /** The engine as `CoreQueryEngine.toJson()` wrote it. */
   readonly index: string;
 }
 
@@ -184,176 +186,95 @@ export class IdbSearchPersistence implements SearchPersistence {
 }
 
 // ---------------------------------------------------------------------------
-// The index itself
+// The engine itself
 // ---------------------------------------------------------------------------
 
-/** One row as MiniSearch stores it. `fm` is flattened to its scalar leaves. */
-interface IndexedDocument {
-  readonly id: string;
-  readonly title: string;
-  readonly content: string;
-  readonly fm: string;
-  readonly deleted: boolean;
-}
-
-const INDEX_FIELDS = ["title", "content", "fm"] as const;
-
-/** An in-progress streaming rebuild (see {@link MiniSearchIndex.beginRebuild}). */
+/** An in-progress streaming rebuild (see {@link WasmEngineIndex.beginRebuild}). */
 export interface RebuildPass {
   add(rows: readonly ProjectionRow[]): void;
-  /** Install the new index in place of the old one. */
+  /** Install the new engine in place of the old one. */
   commit(): void;
 }
 
-/** MiniSearch construction options — `loadJSON` must be handed the same ones. */
-function miniSearchOptions(): MiniSearchOptions<IndexedDocument> {
-  return {
-    idField: "id",
-    fields: [...INDEX_FIELDS],
-    storeFields: ["deleted"],
-  };
+export interface WasmEngineIndexOptions {
+  readonly persistence?: SearchPersistence;
+  /** The shared core; loaded on `open()` when absent (the worker's case). */
+  readonly core?: CoreBindings;
 }
 
 /**
- * Flatten `fm` to searchable text: scalar leaves only, in key order, joined.
- *
- * Not a core-semantics reimplementation — nothing downstream depends on the
- * exact string, it only decides what a human can type to find a document. Keys
- * are left out so `status` does not match every document that has a status.
+ * The engine, in this thread. The worker wraps this same class behind a message
+ * port, which is where it runs in the app; Node and the tests use it directly.
  */
-function flattenForIndex(value: CoreValue, out: string[], depth = 0): void {
-  if (depth > 6) return;
-  if (value === null) return;
-  if (typeof value === "string") {
-    out.push(value);
-    return;
-  }
-  if (typeof value === "number" || typeof value === "boolean") {
-    out.push(String(value));
-    return;
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) flattenForIndex(item, out, depth + 1);
-    return;
-  }
-  for (const key of Object.keys(value).sort()) {
-    flattenForIndex((value as Record<string, CoreValue>)[key] as CoreValue, out, depth + 1);
-  }
-}
-
-/** Project a row into the indexed document. Exported for the worker. */
-export function indexDocument(row: ProjectionRow): IndexedDocument {
-  const fm: string[] = [];
-  flattenForIndex(row.fm, fm);
-  return {
-    id: row.id,
-    title: row.title,
-    content: row.content ?? "",
-    fm: fm.join(" "),
-    deleted: row.deleted,
-  };
-}
-
-/**
- * In-process MiniSearch implementation. The worker version
- * ({@link import("./worker-search.js").WorkerSearchIndex}) wraps this same class
- * behind a message port, which is where it runs in the app.
- */
-export class MiniSearchIndex implements SearchIndex {
-  #index: MiniSearch<IndexedDocument> | undefined;
+export class WasmEngineIndex implements EngineIndex {
+  #engine: CoreQueryEngine | undefined;
+  #core: CoreBindings | undefined;
   #safeSeq = 0;
   #builtAt: number | undefined;
   #bytes: number | undefined;
   readonly #persistence: SearchPersistence | undefined;
 
-  constructor(options: { readonly persistence?: SearchPersistence } = {}) {
+  constructor(options: WasmEngineIndexOptions = {}) {
     this.#persistence = options.persistence;
+    this.#core = options.core;
   }
 
   async open(): Promise<void> {
-    if (this.#index) return;
+    if (this.#engine) return;
+    const core = (this.#core ??= await loadCore());
     const entry = await this.#persistence?.load().catch(() => undefined);
     if (entry && entry.version === SEARCH_INDEX_VERSION) {
-      try {
-        // The whole point of persistence: deserialize, never re-tokenize.
-        this.#index = MiniSearch.loadJSON<IndexedDocument>(entry.index, miniSearchOptions());
+      // The whole point of persistence: load, never re-index.
+      const loaded = core.queryEngine(entry.index);
+      if (loaded) {
+        this.#engine = loaded;
         this.#safeSeq = entry.safeSeq;
         this.#builtAt = entry.builtAt;
         this.#bytes = entry.index.length;
         return;
-      } catch {
-        // A serialization format MiniSearch no longer accepts: start over.
-        await this.#persistence?.clear().catch(() => undefined);
       }
-    } else if (entry) {
-      // SEARCH_INDEX_VERSION moved: the one sanctioned full rebuild.
-      await this.#persistence?.clear().catch(() => undefined);
     }
-    this.#index = new MiniSearch<IndexedDocument>(miniSearchOptions());
+    // Another version, or unreadable: the one sanctioned full rebuild.
+    if (entry) await this.#persistence?.clear().catch(() => undefined);
+    this.#engine = this.#fresh(core);
     this.#safeSeq = 0;
     this.#builtAt = undefined;
     this.#bytes = undefined;
   }
 
   async upsert(rows: readonly ProjectionRow[]): Promise<void> {
-    const index = this.#require();
-    for (const row of rows) {
-      const document = indexDocument(row);
-      if (index.has(row.id)) index.replace(document);
-      else index.add(document);
-    }
+    if (rows.length > 0) this.#require().upsert(rows);
     return Promise.resolve();
   }
 
   async remove(ids: readonly string[]): Promise<void> {
-    const index = this.#require();
-    const present = ids.filter((id) => index.has(id));
-    if (present.length > 0) index.discardAll(present);
+    if (ids.length > 0) this.#require().remove(ids);
     return Promise.resolve();
   }
 
-  async search(query: string, options: SearchOptions = {}): Promise<readonly SearchHit[]> {
-    const index = this.#require();
-    const text = query.trim();
-    if (text.length === 0) return [];
-    const fields = options.fields ?? INDEX_FIELDS;
-    const includeDeleted = options.includeDeleted ?? false;
-    const results = index.search(text, {
-      fields: [...fields],
-      boost: { ...SEARCH_FIELDS },
-      prefix: options.prefix ?? true,
-      fuzzy: options.fuzzy ?? 0.2,
-      filter: includeDeleted ? undefined : (result) => result["deleted"] !== true,
-    });
-    const limit = options.limit ?? results.length;
-    return Promise.resolve(
-      results.slice(0, Math.max(0, limit)).map((result) => ({
-        id: String(result.id),
-        score: result.score,
-        terms: result.terms,
-      })),
-    );
+  async run(plan: QueryPlan): Promise<PlanPage> {
+    return Promise.resolve(this.#require().run(plan));
   }
 
   async persist(safeSeq: number): Promise<void> {
-    const index = this.#require();
+    const engine = this.#require();
     this.#safeSeq = safeSeq;
     this.#builtAt = Date.now();
     if (!this.#persistence) return;
-    const serialized = JSON.stringify(index.toJSON());
+    const serialized = engine.toJson();
     this.#bytes = serialized.length;
     await this.#persistence.save({
       version: SEARCH_INDEX_VERSION,
       safeSeq,
       builtAt: this.#builtAt,
-      documents: index.documentCount,
+      documents: engine.size,
       index: serialized,
     });
   }
 
   async stats(): Promise<SearchStats> {
     return Promise.resolve({
-      documents: this.#index?.documentCount ?? 0,
+      documents: this.#engine?.size ?? 0,
       bytes: this.#bytes,
       builtAt: this.#builtAt,
       safeSeq: this.#safeSeq,
@@ -361,6 +282,7 @@ export class MiniSearchIndex implements SearchIndex {
   }
 
   async rebuild(rows: AsyncIterable<ProjectionRow>): Promise<void> {
+    await this.open();
     const pass = this.beginRebuild();
     let batch: ProjectionRow[] = [];
     for await (const row of rows) {
@@ -375,16 +297,20 @@ export class MiniSearchIndex implements SearchIndex {
   }
 
   /**
-   * Streaming rebuild: the worker feeds pages as they arrive over the port
-   * instead of buffering the whole workspace to satisfy `rebuild`'s
-   * `AsyncIterable`. The half-built index is invisible until `commit()`.
+   * Streaming rebuild: the worker feeds pages as they arrive over the port instead of
+   * buffering the whole workspace. The half-built engine is invisible until `commit()`.
    */
   beginRebuild(): RebuildPass {
-    const next = new MiniSearch<IndexedDocument>(miniSearchOptions());
+    const core = this.#core;
+    if (!core) throw new Error("the query engine is not open: call open() first");
+    const next = this.#fresh(core);
     return {
-      add: (rows) => next.addAll(rows.map(indexDocument)),
+      add: (rows) => {
+        next.upsert(rows);
+      },
       commit: () => {
-        this.#index = next;
+        this.#engine?.free();
+        this.#engine = next;
         this.#safeSeq = 0;
         this.#builtAt = Date.now();
         this.#bytes = undefined;
@@ -393,13 +319,20 @@ export class MiniSearchIndex implements SearchIndex {
   }
 
   async close(): Promise<void> {
-    this.#index = undefined;
+    this.#engine?.free();
+    this.#engine = undefined;
     await this.#persistence?.close?.().catch(() => undefined);
   }
 
-  #require(): MiniSearch<IndexedDocument> {
-    const index = this.#index;
-    if (!index) throw new Error("search index is not open: call open() first");
-    return index;
+  #fresh(core: CoreBindings): CoreQueryEngine {
+    const engine = core.queryEngine();
+    if (!engine) throw new Error("the shared core could not create a query engine");
+    return engine;
+  }
+
+  #require(): CoreQueryEngine {
+    const engine = this.#engine;
+    if (!engine) throw new Error("the query engine is not open: call open() first");
+    return engine;
   }
 }

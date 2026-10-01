@@ -83,6 +83,9 @@ export default defineConfig(({ command }) => ({
       "/kernel.d.ts": { target: process.env.LM_SERVER ?? "http://127.0.0.1:8080", changeOrigin: false },
     },
   },
+  // The query worker loads the shared core's wasm with a dynamic import, which needs
+  // module output; it is created with `type: "module"` (`kernel/src/query/worker-search.ts`).
+  worker: { format: "es" },
   build: {
     outDir: here("./app/dist"),
     // The runtime-layer build writes into the same directory first; the orchestrator

@@ -170,7 +170,7 @@ Clients do **not** replicate CRDT state for the whole workspace (2–10× plaint
 
 ### 4.2 Local query engine
 
-The kernel materializes nothing itself — the projection *is* materialized. It maintains: the **shared Wasm filter evaluator** over projection rows, and a **full-text index** (MiniSearch or equivalent) built in a Web Worker, persisted and incrementally updated (never a cold-start main-thread rebuild). `documents.query` and search run locally, online or offline, with live-updating subscriptions. The server's query endpoints exist for scripts, integrations, and backend plugins — the PWA does not browse through them.
+The kernel materializes nothing itself — the projection *is* materialized. It maintains: the **shared Wasm filter evaluator** over projection rows, and the **shared query engine** (`core::query`: filter, full-text index, folder relations, sort — the same one the server answers with) running in a Web Worker, persisted and incrementally updated (never a cold-start main-thread rebuild). `documents.query` and search run locally, online or offline, with live-updating subscriptions. The server's query endpoints exist for scripts, integrations, and backend plugins — the PWA does not browse through them.
 
 **The filter language is ours, not Mongo's.** A small DSL with unambiguous, documented semantics: same-type comparisons only, explicit `contains`/`any` for arrays, explicit `missing` vs `null`, explicit date type. Evaluated by the shared Rust core on the client; **compiled to Mongo queries** on the server. (Mongo's implicit-array/type-bracketing semantics are explicitly not the contract.)
 

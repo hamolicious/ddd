@@ -1,17 +1,16 @@
 /**
- * The local full-text index: what it indexes, what it persists, and the worker
- * plumbing in front of it (SPEC §4.2).
+ * The local query engine's index: what it indexes, what it persists, and the worker
+ * plumbing in front of it (SPEC §4.2). Ranking and matching themselves are the
+ * shared core's, tested in Rust (`backend/crates/core/src/query/text.rs`).
  */
 
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 
 import type { CoreMap, ProjectionRow } from "../protocol.js";
-import {
-  MemorySearchPersistence,
-  MiniSearchIndex,
-  SEARCH_INDEX_VERSION,
-  indexDocument,
-} from "./search.js";
+import type { CoreBindings } from "../wasm/index.js";
+import { coreArtifactExists, loadCoreForNode } from "../wasm/node-core.js";
+import type { QueryPlan } from "./plan.js";
+import { MemorySearchPersistence, SEARCH_INDEX_VERSION, WasmEngineIndex, type EngineIndex } from "./search.js";
 import type {
   SearchRequestEnvelope,
   SearchResponseEnvelope,
@@ -35,120 +34,116 @@ const row = (
   updated_at: "2026-01-01T00:00:00.000Z",
   updated_by: null,
   deleted: fields.deleted ?? false,
-  deleted_at: null,
+  deleted_at: fields.deleted ? "2026-01-02T00:00:00.000Z" : null,
   deleted_by: null,
   purged: false,
 });
 
-const ids = (hits: readonly { id: string }[]) => hits.map((hit) => hit.id).sort();
+/** The ids a text search finds, best first. */
+async function find(index: EngineIndex, text: string, plan: QueryPlan = {}): Promise<readonly string[]> {
+  return (await index.run({ text, sort: ["relevance"], ...plan })).ids;
+}
 
-describe("indexDocument", () => {
-  it("flattens fm to its scalar leaves so tags and paths are searchable", () => {
-    const document = indexDocument(
-      row("a", { fm: { path: "home/lists", tags: ["work", "urgent"], nested: { k: 42 }, nothing: null } }),
-    );
-    // Key order (nested, nothing, path, tags), values only, nulls dropped.
-    expect(document.fm).toBe("42 home/lists work urgent");
+const available = coreArtifactExists();
+
+describe.skipIf(!available)("WasmEngineIndex", () => {
+  let core: CoreBindings;
+  beforeAll(async () => {
+    core = await loadCoreForNode();
   });
-
-  it("carries the tombstone flag as a stored field, not as text", () => {
-    expect(indexDocument(row("a", { deleted: true })).deleted).toBe(true);
-  });
-});
-
-describe("MiniSearchIndex", () => {
-  it("indexes title, content and fm, with title ranked highest", async () => {
-    const index = new MiniSearchIndex();
+  const open = async (persistence?: MemorySearchPersistence) => {
+    const index = new WasmEngineIndex(persistence ? { core, persistence } : { core });
     await index.open();
+    return index;
+  };
+
+  it("indexes title, content and fm values, with the title ranked highest", async () => {
+    const index = await open();
     await index.upsert([
-      row("title-hit", { title: "Mango", content: "nothing" }),
       row("content-hit", { title: "Nothing", content: "a mango, sliced" }),
-      row("fm-hit", { title: "Nothing", fm: { tags: ["mango"] } }),
+      row("fm-hit", { title: "Nothing", fm: { tags: ["mango"], status: "ripe" } }),
+      row("title-hit", { title: "Mango", content: "nothing" }),
     ]);
-    const hits = await index.search("mango");
-    expect(ids(hits)).toEqual(["content-hit", "fm-hit", "title-hit"]);
-    expect(hits[0]?.id).toBe("title-hit");
+    const hits = await find(index, "mango");
+    expect([...hits].sort()).toEqual(["content-hit", "fm-hit", "title-hit"]);
+    expect(hits[0]).toBe("title-hit");
+    // Keys are not text: `status` matches no document.
+    expect(await find(index, "status")).toEqual([]);
   });
 
   it("replaces a row rather than duplicating it", async () => {
-    const index = new MiniSearchIndex();
-    await index.open();
+    const index = await open();
     await index.upsert([row("a", { content: "before" })]);
     await index.upsert([row("a", { content: "after" })]);
     expect((await index.stats()).documents).toBe(1);
-    expect(await index.search("before")).toEqual([]);
-    expect(ids(await index.search("after"))).toEqual(["a"]);
+    expect(await find(index, "before")).toEqual([]);
+    expect(await find(index, "after")).toEqual(["a"]);
   });
 
   it("hides tombstoned rows unless asked, and drops removed ids", async () => {
-    const index = new MiniSearchIndex();
-    await index.open();
+    const index = await open();
     await index.upsert([row("live", { content: "shared word" }), row("trashed", { content: "shared word", deleted: true })]);
-    expect(ids(await index.search("shared"))).toEqual(["live"]);
-    expect(ids(await index.search("shared", { includeDeleted: true }))).toEqual(["live", "trashed"]);
+    expect(await find(index, "shared")).toEqual(["live"]);
+    expect([...(await find(index, "shared", { trash: "all" }))].sort()).toEqual(["live", "trashed"]);
 
     await index.remove(["trashed", "never-existed"]);
-    expect(ids(await index.search("shared", { includeDeleted: true }))).toEqual(["live"]);
+    expect(await find(index, "shared", { trash: "all" })).toEqual(["live"]);
   });
 
-  it("returns nothing for an empty query instead of everything", async () => {
-    const index = new MiniSearchIndex();
-    await index.open();
-    await index.upsert([row("a", { content: "text" })]);
-    expect(await index.search("   ")).toEqual([]);
+  it("answers filters and sorts without text", async () => {
+    const index = await open();
+    await index.upsert([row("b", { fm: { n: 2 } }), row("a", { fm: { n: 1 } }), row("c")]);
+    const page = await index.run({ filter: { exists: { field: "fm.n" } }, sort: ["-fm.n"] });
+    expect(page.ids).toEqual(["b", "a"]);
+    expect(page.total).toBe(2);
   });
 
-  it("round-trips through persistence without re-tokenizing", async () => {
+  it("rejects a plan the core refuses", async () => {
+    const index = await open();
+    await expect(index.run({ sort: ["nope"] } as QueryPlan)).rejects.toThrow(/plan/);
+  });
+
+  it("round-trips through persistence without re-indexing", async () => {
     const persistence = new MemorySearchPersistence();
-    const first = new MiniSearchIndex({ persistence });
-    await first.open();
+    const first = await open(persistence);
     await first.upsert([row("a", { title: "Durable", content: "persisted text" })]);
     await first.persist(42);
 
     const entry = await persistence.load();
     expect(entry?.version).toBe(SEARCH_INDEX_VERSION);
     expect(entry?.safeSeq).toBe(42);
-    expect(entry?.index.length ?? 0).toBeGreaterThan(0);
+    expect(entry?.documents).toBe(1);
 
-    const second = new MiniSearchIndex({ persistence });
-    await second.open();
+    const second = await open(persistence);
     expect((await second.stats()).safeSeq).toBe(42);
-    expect(ids(await second.search("persisted"))).toEqual(["a"]);
+    expect(await find(second, "persisted")).toEqual(["a"]);
   });
 
-  it("starts empty when the persisted index is unreadable", async () => {
+  it("starts empty when the persisted engine is unreadable", async () => {
     const persistence = new MemorySearchPersistence();
-    await persistence.save({
-      version: SEARCH_INDEX_VERSION,
-      safeSeq: 7,
-      builtAt: 1,
-      documents: 1,
-      index: "{not json}",
-    });
-    const index = new MiniSearchIndex({ persistence });
-    await index.open();
+    await persistence.save({ version: SEARCH_INDEX_VERSION, safeSeq: 7, builtAt: 1, documents: 1, index: "{not json}" });
+    const index = await open(persistence);
     expect((await index.stats()).documents).toBe(0);
     expect((await index.stats()).safeSeq).toBe(0);
     expect(await persistence.load()).toBeUndefined();
   });
 
   it("swaps a streamed rebuild in atomically", async () => {
-    const index = new MiniSearchIndex();
-    await index.open();
+    const index = await open();
     await index.upsert([row("old", { content: "obsolete" })]);
 
     const pass = index.beginRebuild();
     pass.add([row("new", { content: "fresh" })]);
-    // Not visible yet: the old index still answers.
-    expect(ids(await index.search("obsolete"))).toEqual(["old"]);
+    // Not visible yet: the old engine still answers.
+    expect(await find(index, "obsolete")).toEqual(["old"]);
     pass.commit();
 
-    expect(await index.search("obsolete")).toEqual([]);
-    expect(ids(await index.search("fresh"))).toEqual(["new"]);
+    expect(await find(index, "obsolete")).toEqual([]);
+    expect(await find(index, "fresh")).toEqual(["new"]);
   });
 
   it("refuses to work before open()", async () => {
-    await expect(new MiniSearchIndex().upsert([row("a")])).rejects.toThrow(/not open/);
+    await expect(new WasmEngineIndex({ core }).upsert([row("a")])).rejects.toThrow(/not open/);
   });
 });
 
@@ -158,11 +153,15 @@ describe("MiniSearchIndex", () => {
  * request/reply matching and the chunked rebuild — without a browser.
  */
 class LoopbackWorker implements Pick<Worker, "postMessage" | "addEventListener" | "terminate"> {
-  readonly index = new MiniSearchIndex();
+  readonly index: WasmEngineIndex;
   terminated = false;
   received = 0;
   readonly #listeners: ((event: { data: unknown }) => void)[] = [];
-  #rebuild: ReturnType<MiniSearchIndex["beginRebuild"]> | undefined;
+  #rebuild: ReturnType<WasmEngineIndex["beginRebuild"]> | undefined;
+
+  constructor(core: CoreBindings) {
+    this.index = new WasmEngineIndex({ core });
+  }
 
   postMessage(message: unknown): void {
     const envelope = message as SearchRequestEnvelope;
@@ -190,8 +189,8 @@ class LoopbackWorker implements Pick<Worker, "postMessage" | "addEventListener" 
         return await this.index.upsert(request.rows);
       case "remove":
         return await this.index.remove(request.ids);
-      case "search":
-        return await this.index.search(request.query, request.options);
+      case "run":
+        return await this.index.run(request.plan);
       case "persist":
         return await this.index.persist(request.safeSeq);
       case "stats":
@@ -215,9 +214,14 @@ class LoopbackWorker implements Pick<Worker, "postMessage" | "addEventListener" 
   }
 }
 
-describe("WorkerSearchIndex", () => {
+describe.skipIf(!available)("WorkerSearchIndex", () => {
+  let core: CoreBindings;
+  beforeAll(async () => {
+    core = await loadCoreForNode();
+  });
+
   const wire = () => {
-    const worker = new LoopbackWorker();
+    const worker = new LoopbackWorker(core);
     const index = new WorkerSearchIndex({ workerFactory: () => worker as unknown as Worker });
     return { worker, index };
   };
@@ -226,11 +230,11 @@ describe("WorkerSearchIndex", () => {
     const { index } = wire();
     await index.open();
     await index.upsert([row("a", { title: "Remote", content: "over the port" })]);
-    expect(ids(await index.search("port"))).toEqual(["a"]);
+    expect(await find(index, "port")).toEqual(["a"]);
     await index.persist(11);
     expect((await index.stats()).safeSeq).toBe(11);
     await index.remove(["a"]);
-    expect(await index.search("port")).toEqual([]);
+    expect(await find(index, "port")).toEqual([]);
   });
 
   it("streams a rebuild in chunks instead of one giant message", async () => {
@@ -246,7 +250,7 @@ describe("WorkerSearchIndex", () => {
     // 250-row chunks: three messages, not one.
     expect(worker.received - before).toBe(3);
     expect((await index.stats()).documents).toBe(600);
-    expect(ids(await index.search("body 599"))).toContain("d599");
+    expect((await find(index, "599"))[0]).toBe("d599");
   });
 
   it("skips the round trip for empty upserts and removals", async () => {

@@ -184,6 +184,7 @@ impl ListParams {
             limit: Some(clamp_limit(self.limit)?),
             cursor,
             snippets: false,
+            offset: None,
         };
         plan.validate()
             .map_err(|err| AppError::bad_request(err.to_string()))?;
@@ -486,7 +487,9 @@ pub async fn query(
     Query(params): Query<QueryParams>,
     Json(plan): Json<serde_json::Value>,
 ) -> AppResult<Json<QueryResponse>> {
-    let plan = Plan::from_json(&plan).map_err(|err| AppError::bad_request(err.to_string()))?;
+    let mut plan = Plan::from_json(&plan).map_err(|err| AppError::bad_request(err.to_string()))?;
+    // The list route's ceiling: a page is at most `MAX_LIMIT` rows, however asked.
+    plan.limit = Some(plan.limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT));
     let found = state
         .query
         .rows(&plan, !params.metadata_only)

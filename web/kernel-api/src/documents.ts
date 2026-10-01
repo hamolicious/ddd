@@ -100,6 +100,64 @@ export interface SearchHit {
   readonly terms: readonly string[];
 }
 
+/**
+ * A query as data — the shared core's query plan, the same one `POST /api/query` and a
+ * backend plugin's `query` take, so a query answers identically wherever it runs.
+ * Every field is optional; `{}` is every live document, last updated first.
+ * @since 3.1.0
+ */
+export interface QueryPlan {
+  /** Ranked full-text search over title, frontmatter values and text. */
+  readonly text?: string;
+  /** The filter DSL, plus `{"child_of": {"of": id, "deep"?: true}}` and `{"parent_of": {"of": id}}`. */
+  readonly filter?: FilterJson;
+  /** `"fm.date"`, `"-updated_at"`, `"relevance"`; then `id`. Empty: best match with text, else last updated. */
+  readonly sort?: readonly string[];
+  readonly trash?: "live" | "trashed" | "all";
+  /** Rows per page; 50 when absent. */
+  readonly limit?: number;
+  /** Rows to skip; not with `cursor`. */
+  readonly offset?: number;
+  /** A previous result's `nextCursor`; it only pages the plan it came from. */
+  readonly cursor?: string;
+  /** Each text hit carries the line it matched on. */
+  readonly snippets?: boolean;
+}
+
+/** The content line a text hit matched on. @since 3.1.0 */
+export interface PlanSnippet {
+  readonly text: string;
+  /** UTF-16 offsets into `text` (JavaScript string indices), ascending, non-overlapping. */
+  readonly ranges: readonly { readonly start: number; readonly end: number }[];
+  /** 1-based line of the content. */
+  readonly line: number;
+}
+
+/** Why a row matched a plan's text. @since 3.1.0 */
+export interface PlanHit {
+  readonly score: number;
+  readonly terms: readonly string[];
+  readonly snippet?: PlanSnippet;
+}
+
+/** @since 3.1.0 */
+export interface PlanResult {
+  readonly rows: readonly DocumentRow[];
+  /** Every match, before paging. */
+  readonly total: number;
+  /** Present while there is another page: pass it back as the plan's `cursor`. */
+  readonly nextCursor?: string;
+  /** By row id; empty without text. */
+  readonly hits: Readonly<Record<DocumentId, PlanHit>>;
+}
+
+/** A live plan. @since 3.1.0 */
+export interface PlanSubscription {
+  readonly result: PlanResult;
+  onChange(listener: (result: PlanResult) => void): Unsubscribe;
+  close(): void;
+}
+
 export type DocumentPhase = "hydrating" | "live" | "error" | "released";
 
 /**
@@ -255,6 +313,10 @@ export interface DocumentsApi {
   subscribe(query: DocumentQuery): Promise<QuerySubscription>;
   /** Ranked full-text search over the local index (SPEC §4.2). */
   search(text: string, options?: SearchOptions): Promise<readonly SearchHit[]>;
+  /** One-shot local query plan: rows, total, next cursor and text hits. @since 3.1.0 */
+  queryPlan(plan: QueryPlan): Promise<PlanResult>;
+  /** Live local query plan; re-runs only when a change can alter the result. @since 3.1.0 */
+  subscribePlan(plan: QueryPlan): Promise<PlanSubscription>;
   /** Hydrate for editing. Reference-counted: every `open` needs a `release`. */
   open(id: DocumentId): Promise<OpenDocument>;
   /** Create from full text. Resolves once the server has accepted the id. */

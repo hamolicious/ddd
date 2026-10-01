@@ -10,6 +10,7 @@
  */
 
 import type { CoreMap, ProjectionRow } from "../protocol.js";
+import type { PlanPage, QueryPlan } from "../query/plan.js";
 
 /** What `parse_document` returns (the JSON of `ParsedDocument`'s public half). */
 export interface ParsedDocument {
@@ -53,6 +54,22 @@ export interface FilterRow {
  * is the one kind of change this interface takes — additive, with the Rust side already
  * exporting what it adds.
  */
+/**
+ * One query engine instance (`QueryEngine` in `wasm.rs`): it holds the rows, their
+ * text index and the folder tree. Owned by whoever made it — `free()` it.
+ */
+export interface CoreQueryEngine {
+  /** Add or replace rows; a `purged` row is taken out. */
+  upsert(rows: readonly ProjectionRow[]): number;
+  remove(ids: readonly string[]): void;
+  /** Answer a plan. Throws on a malformed or refused plan. */
+  run(plan: QueryPlan): PlanPage;
+  /** The engine, saved, for {@link CoreBindings.queryEngine}. */
+  toJson(): string;
+  readonly size: number;
+  free(): void;
+}
+
 export interface CoreBindings {
   parseDocument(text: string): ParsedDocument;
   evaluateFilter(filter: FilterJson, row: FilterRow): boolean;
@@ -69,6 +86,11 @@ export interface CoreBindings {
    * server's would. Returns the input unchanged when it is not a date.
    */
   normalizeDate(input: string): string;
+  /**
+   * A query engine: empty, or loaded from `saved` (`CoreQueryEngine.toJson`). `undefined`
+   * only when `saved` cannot be loaded — rebuild from the rows. Since kernel 3.1.0.
+   */
+  queryEngine(saved?: string): CoreQueryEngine | undefined;
 }
 
 /** Project a stored projection row into the evaluator's row shape. */
@@ -106,9 +128,32 @@ export function loadCore(initInput?: BufferSource | WebAssembly.Module | URL | s
       semanticsVersion: () => mod.core_semantics_version(),
       resolveTitle: (text: string) => mod.resolve_title(text),
       normalizeDate: (input: string) => mod.normalize_date(input),
+      queryEngine: (saved?: string) => {
+        const engine = saved === undefined ? new mod.QueryEngine() : mod.QueryEngine.load(saved);
+        return engine === undefined ? undefined : wrapEngine(engine);
+      },
     } satisfies CoreBindings;
   })();
   return cached;
+}
+
+function wrapEngine(engine: import("@life-manager/core-wasm").QueryEngine): CoreQueryEngine {
+  return {
+    upsert: (rows) => engine.upsert(JSON.stringify(rows)),
+    remove: (ids) => engine.remove(JSON.stringify(ids)),
+    run: (plan) => {
+      const answer = JSON.parse(engine.run(JSON.stringify(plan))) as
+        | { readonly page: PlanPage }
+        | { readonly error: string };
+      if ("error" in answer) throw new Error(answer.error);
+      return answer.page;
+    },
+    toJson: () => engine.to_json(),
+    get size() {
+      return engine.len();
+    },
+    free: () => engine.free(),
+  };
 }
 
 /** Drop the cached instance (tests only). */

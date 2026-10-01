@@ -21,8 +21,9 @@ use crate::filter::{FieldPath, Filter, FilterParseError, SortKey, SortOrder};
 
 /// Rows per page when a plan names no `limit`.
 pub const DEFAULT_LIMIT: u32 = 50;
-/// The largest page a plan may ask for.
-pub const MAX_LIMIT: u32 = 1000;
+/// The largest page a plan may ask for. Generous on purpose: the browser's kernel
+/// asks for every row of a local query. Servers clamp their own callers lower.
+pub const MAX_LIMIT: u32 = 1_000_000;
 /// Longest accepted search text, in bytes.
 pub const MAX_TEXT_BYTES: usize = 1024;
 /// Most sort keys in one plan.
@@ -49,6 +50,10 @@ pub struct Plan {
     /// Opaque, from a previous answer's `next_cursor`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cursor: Option<String>,
+    /// Rows to skip, for a caller that pages by position (the kernel's `offset`).
+    /// Not with `cursor`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub offset: Option<u32>,
     /// Each text hit carries the content line it matched on.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub snippets: bool,
@@ -137,6 +142,8 @@ pub enum PlanError {
     BadLimit,
     #[error("the cursor is not from this query")]
     BadCursor,
+    #[error("a plan pages by cursor or by offset, not both")]
+    CursorAndOffset,
 }
 
 impl Plan {
@@ -174,6 +181,9 @@ impl Plan {
         if let Some(filter) = &self.filter {
             filter.validate()?;
         }
+        if self.cursor.is_some() && self.offset.is_some() {
+            return Err(PlanError::CursorAndOffset);
+        }
         Ok(())
     }
 
@@ -187,6 +197,7 @@ impl Plan {
     pub(crate) fn fingerprint(&self) -> u64 {
         let unpaged = Plan {
             cursor: None,
+            offset: None,
             limit: None,
             snippets: false,
             ..self.clone()

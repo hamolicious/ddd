@@ -51,4 +51,24 @@ declare module "@life-manager/core-wasm" {
    * line → `"Untitled"`) without a full `parse_document` round trip through JSON.
    */
   export function resolve_title(text: string): string;
+
+  /**
+   * The query engine (`life_manager_core::query`): rows in, plans answered — the
+   * same filter, text ranking, folder relations and sort the server runs.
+   */
+  export class QueryEngine {
+    constructor();
+    /** An engine saved with `to_json`; `undefined` when unreadable (another index version). */
+    static load(json: string): QueryEngine | undefined;
+    /** Add or replace rows (a JSON array of projection rows); `purged` rows are taken out. */
+    upsert(rows_json: string): number;
+    /** Take documents out (a JSON array of ids). */
+    remove(ids_json: string): void;
+    /** `{"page": {ids, total, next_cursor?, hits}}`, or `{"error": "…"}`. */
+    run(plan_json: string): string;
+    to_json(): string;
+    len(): number;
+    is_empty(): boolean;
+    free(): void;
+  }
 }

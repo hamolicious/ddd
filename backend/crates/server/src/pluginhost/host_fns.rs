@@ -608,6 +608,7 @@ pub fn query_documents(
         ),
         cursor: input.cursor.clone(),
         snippets: false,
+        offset: None,
     };
     let found = run_plan(context, &plan, input.metadata_only)?;
     Ok(abi::documents::QueryDocumentsOutput {

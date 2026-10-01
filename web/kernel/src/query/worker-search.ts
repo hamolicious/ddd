@@ -1,9 +1,9 @@
 /**
- * `SearchIndex` backed by the search worker (SPEC §4.2).
+ * `EngineIndex` backed by the query worker (SPEC §4.2).
  *
  * The main thread's half: it owns the port, matches replies to requests, and
- * satisfies the same {@link SearchIndex} interface the in-process
- * {@link MiniSearchIndex} does — so `QueryEngine` cannot tell which one it has,
+ * satisfies the same {@link EngineIndex} interface the in-process
+ * {@link WasmEngineIndex} does — so `QueryEngine` cannot tell which one it has,
  * and tests keep using the in-process one.
  *
  * Nothing here touches the DOM (kernel rule); `Worker` is a worker-scope global
@@ -12,13 +12,9 @@
  */
 
 import type { ProjectionRow } from "../protocol.js";
-import {
-  MiniSearchIndex,
-  type SearchHit,
-  type SearchIndex,
-  type SearchOptions,
-  type SearchStats,
-} from "./search.js";
+import type { CoreBindings } from "../wasm/index.js";
+import type { PlanPage, QueryPlan } from "./plan.js";
+import { WasmEngineIndex, type EngineIndex, type SearchStats } from "./search.js";
 import type {
   SearchRequest,
   SearchRequestEnvelope,
@@ -36,7 +32,7 @@ export interface WorkerSearchOptions {
   readonly workerFactory?: () => Worker;
 }
 
-export class WorkerSearchIndex implements SearchIndex {
+export class WorkerSearchIndex implements EngineIndex {
   #worker: Worker | undefined;
   #nextId = 1;
   readonly #pending = new Map<
@@ -60,8 +56,8 @@ export class WorkerSearchIndex implements SearchIndex {
     await this.#call({ op: "remove", ids });
   }
 
-  async search(query: string, options?: SearchOptions): Promise<readonly SearchHit[]> {
-    return (await this.#call({ op: "search", query, options })) as readonly SearchHit[];
+  async run(plan: QueryPlan): Promise<PlanPage> {
+    return (await this.#call({ op: "run", plan })) as PlanPage;
   }
 
   async persist(safeSeq: number): Promise<void> {
@@ -148,9 +144,11 @@ function defaultWorkerFactory(): Worker {
  *
  * Callers hand the result to `new QueryEngine(store, core, index)`.
  */
-export function createSearchIndex(options: WorkerSearchOptions = {}): SearchIndex {
+export function createSearchIndex(
+  options: WorkerSearchOptions & { readonly core?: CoreBindings } = {},
+): EngineIndex {
   if (options.workerFactory || typeof Worker !== "undefined") {
     return new WorkerSearchIndex(options);
   }
-  return new MiniSearchIndex();
+  return new WasmEngineIndex(options.core ? { core: options.core } : {});
 }

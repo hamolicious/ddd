@@ -34,7 +34,7 @@ kernel-api/src/          the @kernel contract — FROZEN, and what /kernel.d.ts 
 kernel/src/protocol.ts   the /api/sync wire protocol, mirroring ../backend/PROTOCOL.md
 kernel/src/store/        IndexedDB projection store (one store, the whole workspace)
 kernel/src/sync/         change feed, lazy document hydration, reconnect policy
-kernel/src/query/        filter (Wasm) + sort + full-text search (MiniSearch in a Worker)
+kernel/src/query/        the shared query engine (Wasm, in a Worker): filter, search, relations, sort
 kernel/src/wasm/         bindings to the shared Rust core; pkg/ is generated
 kernel/src/runtime/      the implementation of @kernel over all of the above
 app/                     the PWA: boot, auth gate, plugin loader, safe mode, service worker

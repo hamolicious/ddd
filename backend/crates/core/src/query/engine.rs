@@ -176,7 +176,7 @@ impl Engine {
         plan.validate()?;
         let offset = match &plan.cursor {
             Some(cursor) => decode_cursor(cursor, plan.fingerprint())?,
-            None => 0,
+            None => plan.offset.unwrap_or(0) as usize,
         };
 
         let hits: Option<HashMap<String, TextHit>> = (!plan.text.trim().is_empty()).then(|| {

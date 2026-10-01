@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 /// The `@kernel` contract version this server implements (`x-kernel-version`). The web
 /// bundle's `KERNEL_API_VERSION` is generated from the same line.
-pub const KERNEL_VERSION: &str = "3.0.0";
+pub const KERNEL_VERSION: &str = "3.1.0";
 
 /// A plugin's manifest.json (SPEC §6.2). The one source for the Rust and TypeScript manifest types and validators: `node web/scripts/gen-manifest.mjs` writes both, and `--check` fails when either is stale.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

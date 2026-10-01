@@ -17,18 +17,20 @@ import { MemoryProjectionStore } from "../store/testing.js";
 import type { CoreBindings, FilterJson } from "../wasm/index.js";
 import { coreArtifactExists, loadCoreForNode } from "../wasm/node-core.js";
 import { QueryEngine } from "./index.js";
-import {
-  MemorySearchPersistence,
-  MiniSearchIndex,
-  SEARCH_INDEX_VERSION,
-  type SearchIndex,
-} from "./search.js";
+import { MemorySearchPersistence, SEARCH_INDEX_VERSION, WasmEngineIndex } from "./search.js";
 
 let seq = 0;
 
 function feedRow(
   id: string,
-  fields: { title?: string; content?: string; fm?: CoreMap; deleted?: boolean; purged?: boolean } = {},
+  fields: {
+    title?: string;
+    content?: string;
+    fm?: CoreMap;
+    plugins?: CoreMap;
+    deleted?: boolean;
+    purged?: boolean;
+  } = {},
 ): FeedRow {
   seq += 1;
   const stamp = `2026-01-${String((seq % 28) + 1).padStart(2, "0")}T00:00:00.000Z`;
@@ -38,7 +40,7 @@ function feedRow(
     title: fields.title ?? id,
     content: fields.content ?? "",
     fm: fields.fm ?? {},
-    plugins: {},
+    plugins: fields.plugins ?? {},
     fm_parse_error: false,
     materialized_version: `v${seq}`,
     created_at: stamp,
@@ -178,60 +180,73 @@ describe.skipIf(!available)("QueryEngine", () => {
     expect(emissions).toBe(0);
   });
 
-  /**
-   * The regression this pins showed up only in a running app, and recovered on its own,
-   * which is the worst combination to debug: live-query delivery used to share one
-   * serialized queue with the search index, so every change that arrived while the index
-   * was opening (a Web Worker plus a walk of the whole store, on a cold start) waited for
-   * it. A client that booted and then received its first feed batch a second later showed
-   * a list that never refreshed — until indexing finished, at which point everything
-   * worked and the evidence was gone.
-   */
-  it("re-emits live queries while the search index is still opening", async () => {
+  /** A folder note listing its children, as the `folders` plugin writes it. */
+  const folder = (id: string, children: readonly string[]) =>
+    feedRow(id, { plugins: { folders: { children: [...children] } } });
+
+  it("answers folder relations, and re-runs them when a folder changes", async () => {
     const store = new MemoryProjectionStore();
-    await apply(store, [feedRow("a", { fm: { status: "open" } })]);
+    await apply(store, [folder("root", ["a", "sub"]), folder("sub", ["b"]), feedRow("a"), feedRow("b"), feedRow("c")]);
+    const engine = new QueryEngine(store, core);
 
-    // An index whose `open()` never resolves until this test lets it.
-    let release = (): void => {};
-    const opened = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    let upserts = 0;
-    const stalled: SearchIndex = {
-      open: () => opened,
-      upsert: async () => {
-        upserts += 1;
-      },
-      remove: async () => {},
-      search: async () => [],
-      persist: async () => {},
-      stats: async () => ({ documents: 0, safeSeq: 0, bytes: 0, builtAt: 0 }),
-      rebuild: async () => {},
-      close: async () => {},
-    };
+    const deep = { child_of: { of: "root", deep: true } } as FilterJson;
+    const ids = async (filter: FilterJson) =>
+      (await engine.run({ filter, sort: [{ field: "id", direction: "asc" }] })).rows.map((row) => row.id);
+    expect(await ids(deep)).toEqual(["a", "b", "sub"]);
+    expect(await ids({ child_of: { of: "root" } } as FilterJson)).toEqual(["a", "sub"]);
+    expect(await ids({ parent_of: { of: "b" } } as FilterJson)).toEqual(["sub"]);
 
-    const engine = new QueryEngine(store, core, stalled);
-    // `warmUp` kicks off `open()`, which is now hanging; nothing may depend on it.
-    const warm = engine.warmUp();
-
-    const live = await engine.subscribe({ filter: openFilter });
+    // `c` itself does not change: only the folder that now lists it does.
+    const live = await engine.subscribe({ filter: deep, sort: [{ field: "id", direction: "asc" }] });
     const seen: string[][] = [];
     live.onChange((result) => seen.push(result.rows.map((row) => row.id)));
-
-    await apply(store, [feedRow("b", { fm: { status: "open" } })]);
+    await apply(store, [folder("sub", ["b", "c"])]);
     await flush();
-
-    expect(seen).toEqual([["a", "b"]]);
-    expect(upserts).toBe(0);
-
-    // And the index still gets the batch once it finishes opening.
-    release();
-    await warm;
-    await flush();
-    await flush();
-    expect(upserts).toBeGreaterThan(0);
-
+    expect(seen).toEqual([["a", "b", "c", "sub"]]);
     live.close();
+    await engine.close();
+  });
+
+  it("answers plans with a cursor, the total and the text hits", async () => {
+    const store = new MemoryProjectionStore();
+    await apply(store, [
+      feedRow("a", { title: "Groceries", content: "# List\nbuy milk", fm: { n: 2 } }),
+      feedRow("b", { title: "Milk run", content: "", fm: { n: 1 } }),
+      feedRow("c", { title: "Other", content: "nothing" }),
+    ]);
+    const engine = new QueryEngine(store, core);
+
+    const first = await engine.runPlan({ text: "milk", sort: ["fm.n"], limit: 1, snippets: true });
+    expect(first.rows.map((row) => row.id)).toEqual(["b"]);
+    expect(first.total).toBe(2);
+    expect(first.hits["b"]?.terms).toEqual(["milk"]);
+    expect(first.nextCursor).toBeDefined();
+
+    const rest = await engine.runPlan({ text: "milk", sort: ["fm.n"], limit: 1, snippets: true, cursor: first.nextCursor });
+    expect(rest.rows.map((row) => row.id)).toEqual(["a"]);
+    expect(rest.hits["a"]?.snippet).toEqual({ text: "buy milk", ranges: [{ start: 4, end: 8 }], line: 2 });
+    expect(rest.nextCursor).toBeUndefined();
+
+    await expect(engine.runPlan({ sort: ["nope"] })).rejects.toThrow();
+
+    const live = await engine.subscribePlan({ text: "milk", sort: ["fm.n"] });
+    const seen: string[][] = [];
+    live.onChange((result) => seen.push(result.rows.map((row) => row.id)));
+    await apply(store, [feedRow("c", { title: "Other", content: "oat milk", fm: { n: 0 } })]);
+    await flush();
+    expect(seen).toEqual([["c", "b", "a"]]);
+    live.close();
+    await engine.close();
+  });
+
+  it("keeps one-shot queries current with no live query open", async () => {
+    const store = new MemoryProjectionStore();
+    await apply(store, [feedRow("a")]);
+    const engine = new QueryEngine(store, core);
+    expect((await engine.run({})).total).toBe(1);
+    await apply(store, [feedRow("b")]);
+    await flush();
+    expect((await engine.run({})).total).toBe(2);
     await engine.close();
   });
 
@@ -242,7 +257,7 @@ describe.skipIf(!available)("QueryEngine", () => {
       feedRow("b", { title: "Hardware", content: "milk crate", fm: { status: "done" } }),
       feedRow("c", { title: "Unrelated", content: "nothing here", fm: { status: "open" } }),
     ]);
-    const engine = new QueryEngine(store, core, new MiniSearchIndex());
+    const engine = new QueryEngine(store, core, new WasmEngineIndex({ core }));
     await engine.warmUp();
 
     const hits = await engine.searchDocuments("milk");
@@ -259,7 +274,7 @@ describe.skipIf(!available)("QueryEngine", () => {
   it("indexes new feed rows incrementally, without a rebuild", async () => {
     const store = new MemoryProjectionStore();
     await apply(store, [feedRow("a", { title: "first", content: "alpha" })]);
-    const index = new MiniSearchIndex();
+    const index = new WasmEngineIndex({ core });
     const engine = new QueryEngine(store, core, index);
     await engine.warmUp();
     expect((await index.stats()).documents).toBe(1);
@@ -282,7 +297,7 @@ describe.skipIf(!available)("QueryEngine", () => {
     await apply(store, [feedRow("a", { title: "Persisted", content: "durable text" })]);
     const persistence = new MemorySearchPersistence();
 
-    const first = new QueryEngine(store, core, new MiniSearchIndex({ persistence }));
+    const first = new QueryEngine(store, core, new WasmEngineIndex({ core, persistence }));
     await first.warmUp();
     await first.close(); // flushes the debounced persist
 
@@ -292,7 +307,7 @@ describe.skipIf(!available)("QueryEngine", () => {
     expect(entry?.safeSeq).toBeGreaterThan(0);
 
     // Second boot: open() deserializes, and the catch-up pass finds nothing to do.
-    const reopened = new MiniSearchIndex({ persistence });
+    const reopened = new WasmEngineIndex({ core, persistence });
     await reopened.open();
     const stats = await reopened.stats();
     expect(stats.documents).toBe(1);
@@ -315,7 +330,7 @@ describe.skipIf(!available)("QueryEngine", () => {
       index: "{}",
     });
 
-    const index = new MiniSearchIndex({ persistence });
+    const index = new WasmEngineIndex({ core, persistence });
     const engine = new QueryEngine(store, core, index);
     await engine.warmUp();
 
@@ -325,8 +340,4 @@ describe.skipIf(!available)("QueryEngine", () => {
     await engine.close();
   });
 
-  it("explains itself when search is used without an index", async () => {
-    const engine = new QueryEngine(new MemoryProjectionStore(), core);
-    await expect(engine.searchDocuments("anything")).rejects.toThrow(/no search index/);
-  });
 });

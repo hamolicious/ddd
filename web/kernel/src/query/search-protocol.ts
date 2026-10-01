@@ -7,13 +7,14 @@
  */
 
 import type { ProjectionRow } from "../protocol.js";
-import type { SearchHit, SearchOptions, SearchStats } from "./search.js";
+import type { PlanPage, QueryPlan } from "./plan.js";
+import type { SearchStats } from "./search.js";
 
 export type SearchRequest =
   | { readonly op: "open" }
   | { readonly op: "upsert"; readonly rows: readonly ProjectionRow[] }
   | { readonly op: "remove"; readonly ids: readonly string[] }
-  | { readonly op: "search"; readonly query: string; readonly options?: SearchOptions }
+  | { readonly op: "run"; readonly plan: QueryPlan }
   | { readonly op: "persist"; readonly safeSeq: number }
   | { readonly op: "stats" }
   /**
@@ -30,7 +31,7 @@ export type SearchRequest =
     }
   | { readonly op: "close" };
 
-export type SearchResponseValue = void | readonly SearchHit[] | SearchStats;
+export type SearchResponseValue = void | PlanPage | SearchStats;
 
 export interface SearchRequestEnvelope {
   readonly id: number;

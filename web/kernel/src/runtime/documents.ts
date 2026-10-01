@@ -25,6 +25,9 @@ import {
   type ListAction,
   type ListPlan,
   type OpenDocument,
+  type PlanResult,
+  type PlanSubscription,
+  type QueryPlan,
   type QuerySubscription,
   type SearchHit,
   type SearchOptions,
@@ -429,6 +432,14 @@ export class DocumentsHost {
     return this.options.engine.searchDocuments(text, options);
   }
 
+  async queryPlan(plan: QueryPlan): Promise<PlanResult> {
+    return (await this.options.engine.runPlan(plan)) as PlanResult;
+  }
+
+  async subscribePlan(plan: QueryPlan): Promise<PlanSubscription> {
+    return (await this.options.engine.subscribePlan(plan)) as unknown as PlanSubscription;
+  }
+
   async open(id: DocumentId): Promise<OpenDocument> {
     // Made offline in another tab: not on the server yet, so not to be subscribed.
     if (!this.options.sync.docs?.openIds?.includes(id)) {
@@ -504,6 +515,8 @@ export class DocumentsHost {
       query: (query) => this.query(query),
       subscribe: (query) => this.subscribe(query),
       search: (text, options) => this.search(text, options),
+      queryPlan: (plan) => this.queryPlan(plan),
+      subscribePlan: (plan) => this.subscribePlan(plan),
       open: (id) => this.open(id),
       create: (input) => this.create(input),
       delete: (id) => this.delete(id),

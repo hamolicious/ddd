@@ -59,8 +59,8 @@ web/
 │   │   └── index.ts             re-exports                          [web-sync]
 │   ├── query/
 │   │   ├── filter.ts            sort + Wasm filter evaluation       [web-query]
-│   │   ├── search.ts            MiniSearch index + persistence      [web-query]
-│   │   ├── search-worker.ts     MiniSearch in a module Worker       [web-query]
+│   │   ├── search.ts            query engine index + persistence    [web-query]
+│   │   ├── search-worker.ts     query engine in a module Worker     [web-query]
 │   │   ├── worker-search.ts     SearchIndex over that Worker        [web-query]
 │   │   ├── search-protocol.ts   the request/reply shapes            [web-query]
 │   │   └── index.ts             QueryEngine + re-exports            [web-query]
@@ -209,7 +209,7 @@ Hard requirements (SPEC §4.2):
 Frozen surface: `Query`, `QueryResult`, `SortKey`, `parseSortKey`, `resolvePath`,
 `compareRows`, `FilterEvaluator`, `WasmFilterEvaluator`, `SearchIndex`,
 `SearchHit`, `SearchOptions`, `SearchStats`, `SEARCH_FIELDS`,
-`SEARCH_INDEX_VERSION`, `MiniSearchIndex`, `QueryEngine`, `Subscription`.
+`SEARCH_INDEX_VERSION`, `WasmEngineIndex`, `EngineIndex`, `QueryPlan`, `QueryEngine`, `Subscription`.
 
 ## Area: wasm
 
@@ -277,7 +277,7 @@ Frozen surface: `HarnessConfig`, `DEFAULT_CONFIG`, `SimulatedClient`,
 
 Already declared; do not add or bump.
 
-Runtime: `yjs` (CRDT; `y-protocols` ships inside it), `minisearch` (local search),
+Runtime: `yjs` (CRDT; `y-protocols` ships inside it),
 `idb` (IndexedDB promises).
 Dev: `typescript`, `vite`, `vite-node`, `vitest`, `@playwright/test`,
 `@types/node`, `fake-indexeddb`.

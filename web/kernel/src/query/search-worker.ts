@@ -1,11 +1,12 @@
 /**
- * The search worker (SPEC §4.2: "a full-text index … built in a Web Worker,
+ * The query worker (SPEC §4.2: "a full-text index … built in a Web Worker,
  * persisted and incrementally updated").
  *
- * Everything expensive about search happens in here: tokenizing rows,
- * serializing the index, and writing it to IndexedDB. The main thread only ever
- * posts rows in and takes hits out, so a 5 000-document workspace never blocks a
- * frame — including on the first run, when there is nothing persisted yet.
+ * Everything expensive about querying happens in here: the shared core's query
+ * engine (wasm) holds the rows and their index, answers plans, and is serialized to
+ * IndexedDB. The main thread only ever posts rows and plans in and takes ids out, so
+ * a 5 000-document workspace never blocks a frame — including on the first run,
+ * when there is nothing persisted yet.
  *
  * It is the worker *entry point*, not a module anyone imports: the pairing is
  * `worker-search.ts` (client) ⇄ this file (server), over
@@ -15,7 +16,7 @@
 import {
   IdbSearchPersistence,
   MemorySearchPersistence,
-  MiniSearchIndex,
+  WasmEngineIndex,
   type RebuildPass,
 } from "./search.js";
 import type {
@@ -36,7 +37,7 @@ interface WorkerScope {
 
 const scope = globalThis as unknown as WorkerScope;
 
-const index = new MiniSearchIndex({
+const index = new WasmEngineIndex({
   persistence:
     typeof indexedDB === "undefined" ? new MemorySearchPersistence() : new IdbSearchPersistence(),
 });
@@ -53,8 +54,8 @@ async function handle(envelope: SearchRequestEnvelope): Promise<SearchResponseVa
       return await index.upsert(request.rows);
     case "remove":
       return await index.remove(request.ids);
-    case "search":
-      return await index.search(request.query, request.options);
+    case "run":
+      return await index.run(request.plan);
     case "persist":
       return await index.persist(request.safeSeq);
     case "stats":

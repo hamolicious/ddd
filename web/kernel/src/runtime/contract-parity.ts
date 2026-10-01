@@ -17,6 +17,9 @@ import type {
   DocumentQueryResult,
   DocumentRow,
   OpenDocument,
+  PlanHit,
+  PlanResult,
+  QueryPlan,
   SearchHit,
   SearchOptions,
   SortDirection,
@@ -27,6 +30,8 @@ import type {
 import type { ProjectionRow } from "../protocol.js";
 import type { Query, QueryResult, SortKey as InternalSortKey, SortDirection as InternalSortDirection } from "../query/filter.js";
 import type { SearchHit as InternalSearchHit, SearchOptions as InternalSearchOptions } from "../query/search.js";
+import type { PlanResult as InternalPlanResult } from "../query/index.js";
+import type { PlanHit as InternalPlanHit, QueryPlan as InternalQueryPlan } from "../query/plan.js";
 import type { SyncStatus as InternalSyncStatus } from "../sync/feed-client.js";
 import type { HydratedDoc } from "../sync/doc-hydration.js";
 
@@ -40,6 +45,9 @@ export type ContractParity = {
   readonly sortDirection: Same<SortDirection, InternalSortDirection>;
   readonly syncStatus: Same<SyncStatus, InternalSyncStatus>;
   readonly searchHit: Same<SearchHit, InternalSearchHit>;
+  readonly queryPlan: Same<QueryPlan, InternalQueryPlan>;
+  readonly planHit: Same<PlanHit, InternalPlanHit>;
+  readonly planResult: Same<PlanResult, InternalPlanResult>;
 };
 
 const _parity: ContractParity = {
@@ -48,6 +56,9 @@ const _parity: ContractParity = {
   sortDirection: true,
   syncStatus: true,
   searchHit: true,
+  queryPlan: true,
+  planHit: true,
+  planResult: true,
 };
 void _parity;
 
