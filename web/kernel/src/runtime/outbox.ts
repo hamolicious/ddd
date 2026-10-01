@@ -197,7 +197,7 @@ export class Outbox {
   async #withLock(run: () => Promise<void>): Promise<void> {
     const locks = (globalThis.navigator as { locks?: LockManager } | undefined)?.locks;
     if (!locks) return run();
-    await locks.request("life-manager:outbox", run);
+    await locks.request("ddd:outbox", run);
   }
 }
 

@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "name": "Themes",
   "description": "Theme registry and picker; overrides the kernel's default tokens.",
-  "author": "Life Manager base distribution",
+  "author": "ddd base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
   "kernel": "^3.0",

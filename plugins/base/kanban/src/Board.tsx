@@ -19,14 +19,14 @@
  * column scroll by themselves.
  * Escape puts it back. With a mouse the drag starts after a few pixels; with a finger,
  * after a long press — and a long press let go without moving opens the card's menu
- * (`context-menu`'s, which knows the card by its `data-lm-press="release"`).
+ * (`context-menu`'s, which knows the card by its `data-ddd-press="release"`).
  *
  * **Everything glides.** The move shows at once, before the write lands (`withMoves`),
  * and the dropped card travels from the pointer into its slot while the cards around it
  * make room (`flip.ts`). If the write fails, the card goes back and the board says why.
  *
  * **Without a pointer**, the card's menu (right-click, or long press) has "Move to". A
- * card is an `lm/document` and a `kanban/card`, a column a `kanban/column`, the board a
+ * card is an `ddd/document` and a `kanban/card`, a column a `kanban/column`, the board a
  * `kanban/board`; the menus are `context-menu`'s, and the board's own entries are
  * `actions.ts`'s, which reach this board through `boards`.
  *
@@ -1411,7 +1411,7 @@ function CardSlot({
             event.currentTarget.click();
           }}
           // A long press is the drag's too: its menu opens when it is let go in place.
-          {...mark("lm/document", row.id, { label: row.title, types: selected ? ["kanban/card", "kanban/selection"] : ["kanban/card"], pressOnRelease: true })}
+          {...mark("ddd/document", row.id, { label: row.title, types: selected ? ["kanban/card", "kanban/selection"] : ["kanban/card"], pressOnRelease: true })}
           // The drag is ours; the browser's own would draw its ghost over it.
           onDragStart={(event) => event.preventDefault()}
         >

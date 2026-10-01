@@ -11,11 +11,11 @@
 
 use bson::spec::BinarySubtype;
 use bson::{Binary, DateTime as BsonDateTime, doc};
-use life_manager_server::domain::{
+use ddd_server::domain::{
     Attachment, AttachmentView, Document, DocumentRow, DocumentView, Timestamp, User, UserView,
     materialized_to_json, new_id,
 };
-use life_manager_server::routes::documents::SnapshotView;
+use ddd_server::routes::documents::SnapshotView;
 use serde_json::{Value as Json, json};
 
 /// Millis chosen so the RFC 3339 rendering is unambiguous.

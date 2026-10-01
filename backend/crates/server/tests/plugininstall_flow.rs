@@ -14,7 +14,7 @@
 //!
 //! ```text
 //! docker compose up -d --wait mongo
-//! MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p life-manager-server \
+//! MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p ddd-server \
 //!   --test plugininstall_flow -- --ignored
 //! ```
 //!
@@ -28,10 +28,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use life_manager_server::domain::{Actor, new_id};
-use life_manager_server::plugininstall::{self, InstallError, InstallRequest, InstallSource};
-use life_manager_server::plugins::{self, HttpCapability, PluginCapabilities, PluginState};
-use life_manager_server::state::AppState;
+use ddd_server::domain::{Actor, new_id};
+use ddd_server::plugininstall::{self, InstallError, InstallRequest, InstallSource};
+use ddd_server::plugins::{self, HttpCapability, PluginCapabilities, PluginState};
+use ddd_server::state::AppState;
 use zip::write::SimpleFileOptions;
 
 /// One test's server, throwaway database and throwaway plugin directories.
@@ -43,7 +43,7 @@ struct Harness {
 impl Harness {
     async fn start(name: &str) -> Option<Harness> {
         let uri = common::mongo_uri()?;
-        let database = format!("lm_install_test_{}", new_id());
+        let database = format!("ddd_install_test_{}", new_id());
         let dir =
             Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("install-{name}-{}", new_id()));
         fs::create_dir_all(dir.join("served")).expect("a served root");
@@ -125,7 +125,7 @@ impl Harness {
 
 fn wasm_with_abi_export() -> Vec<u8> {
     let mut module = vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
-    let name = b"lm_abi_version";
+    let name = b"ddd_abi_version";
     let mut section = vec![1u8];
     section.push(name.len() as u8);
     section.extend_from_slice(name);

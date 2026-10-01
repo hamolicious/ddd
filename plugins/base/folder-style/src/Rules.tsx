@@ -48,7 +48,7 @@ const CONDITIONS =
   "folderstyle:[&_.folderstyle-field_select]:tap-h folderstyle:[&_.folderstyle-field_select]:rounded folderstyle:[&_.folderstyle-field_select]:border folderstyle:[&_.folderstyle-field_select]:border-border folderstyle:[&_.folderstyle-field_select]:bg-bg folderstyle:[&_.folderstyle-field_select]:px-2 folderstyle:[&_.folderstyle-field_select]:text-base folderstyle:[&_.folderstyle-field_select]:text-text " +
   "folderstyle:[&_.folderstyle-grow]:flex-[1_1_12rem] folderstyle:compact:[&_.folderstyle-grow]:basis-full " +
   "folderstyle:[&_.folderstyle-checkbox]:tap-h folderstyle:[&_.folderstyle-checkbox]:inline-flex folderstyle:[&_.folderstyle-checkbox]:cursor-pointer folderstyle:[&_.folderstyle-checkbox]:items-center folderstyle:[&_.folderstyle-checkbox]:gap-1 folderstyle:[&_.folderstyle-checkbox]:whitespace-nowrap " +
-  "folderstyle:[&_.folderstyle-icon-button]:min-w-[var(--lm-tap-target)] " +
+  "folderstyle:[&_.folderstyle-icon-button]:min-w-[var(--ddd-tap-target)] " +
   "folderstyle:[&_.folderstyle-flags]:flex folderstyle:[&_.folderstyle-flags]:flex-[1_1_100%] folderstyle:[&_.folderstyle-flags]:flex-wrap folderstyle:[&_.folderstyle-flags]:items-center folderstyle:[&_.folderstyle-flags]:gap-3 " +
   "folderstyle:[&_.folderstyle-op-icon]:tap-h folderstyle:[&_.folderstyle-op-icon]:inline-flex folderstyle:[&_.folderstyle-op-icon]:min-w-[2ch] folderstyle:[&_.folderstyle-op-icon]:items-center folderstyle:[&_.folderstyle-op-icon]:justify-center folderstyle:[&_.folderstyle-op-icon]:px-1 folderstyle:[&_.folderstyle-op-icon]:font-mono folderstyle:[&_.folderstyle-op-icon]:text-text-muted folderstyle:[&_.folderstyle-op-icon]:whitespace-nowrap " +
   "folderstyle:[&_.folderstyle-note-results]:flex folderstyle:[&_.folderstyle-note-results]:flex-wrap folderstyle:[&_.folderstyle-note-results]:gap-1";
@@ -97,7 +97,7 @@ export function Rules({ rules, onChange, defaults, icons, notes, NoteSelect, FmK
               <div className="folderstyle:flex folderstyle:flex-wrap folderstyle:items-center folderstyle:gap-1">
                 <button
                   type="button"
-                  className={`${BUTTON} folderstyle:min-w-[var(--lm-tap-target)]`}
+                  className={`${BUTTON} folderstyle:min-w-[var(--ddd-tap-target)]`}
                   aria-expanded={open}
                   aria-label={open ? `Fold ${label}` : `Unfold ${label}`}
                   onClick={() => toggleFold(rule.id)}

@@ -21,8 +21,8 @@ import 'package:http/http.dart' as http;
 import 'bridge.dart';
 
 /// Keystore keys. Changing one logs every device out; treat them as frozen.
-const String kTokenKey = 'lm.bearer-token';
-const String kServerKey = 'lm.server-base-url';
+const String kTokenKey = 'ddd.bearer-token';
+const String kServerKey = 'ddd.server-base-url';
 
 /// Attach the bearer token to [request] and **refuse to follow redirects while holding
 /// it**. Every authenticated request the shell makes natively goes through here.

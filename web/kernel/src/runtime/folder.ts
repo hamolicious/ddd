@@ -4,7 +4,7 @@
  * Three implementations behind one interface:
  *
  * - **Shell** (`window.shell.folder`, `app/BRIDGE.md` §4.5): a real path the shell
- *   remembers and watches. Changes arrive as the `lm-folder-changed` window event.
+ *   remembers and watches. Changes arrive as the `ddd-folder-changed` window event.
  * - **Browser** (File System Access API, Chromium only): a directory handle kept in
  *   IndexedDB. The grant does not survive a reload on its own, so the state comes back as
  *   `needs-permission` until a click calls `reconnect()`. Nothing reports outside edits
@@ -213,7 +213,7 @@ interface FileHandle {
 
 type PickerWindow = { showDirectoryPicker?: (options?: { id?: string; mode?: "readwrite" }) => Promise<DirectoryHandle> };
 
-const HANDLE_DB = "life-manager:folder";
+const HANDLE_DB = "ddd:folder";
 const HANDLE_STORE = "handles";
 const HANDLE_KEY = "root";
 
@@ -277,7 +277,7 @@ export class BrowserFolder implements FolderCapability {
   async choose(): Promise<FolderStatus> {
     let root: DirectoryHandle;
     try {
-      root = await (window as PickerWindow).showDirectoryPicker!({ id: "life-manager", mode: "readwrite" });
+      root = await (window as PickerWindow).showDirectoryPicker!({ id: "ddd", mode: "readwrite" });
     } catch (error) {
       if ((error as { name?: string }).name === "AbortError") throw folderError("cancelled", "no folder was chosen");
       throw error;

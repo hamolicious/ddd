@@ -293,12 +293,12 @@ test.describe("phone (390 × 844)", () => {
     // `?safe=bare` is the last recovery screen; it must not be the one that does not fit.
     await page.goto("/?safe=bare");
     await expect(page.getByRole("heading", { name: /plugin manager/i })).toBeVisible();
-    await expect(page.locator(".lm-bare-table tbody tr").first()).toBeVisible();
+    await expect(page.locator(".ddd-bare-table tbody tr").first()).toBeVisible();
     await noSidewaysScroll(page);
     await nothingOffScreen(page);
 
     // The stacked card labels each cell, since the header row is hidden at this width.
-    await expect(page.locator(".lm-bare-table td[data-label='Would load']").first()).toBeVisible();
+    await expect(page.locator(".ddd-bare-table td[data-label='Would load']").first()).toBeVisible();
   });
 });
 

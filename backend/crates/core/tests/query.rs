@@ -1,7 +1,7 @@
 //! The query engine end to end: plans in, pages out.
 
-use life_manager_core::query::{Doc, Engine, Op, Plan, Query, QueryError, Trash};
-use life_manager_core::{Date, Map, Value};
+use ddd_core::query::{Doc, Engine, Op, Plan, Query, QueryError, Trash};
+use ddd_core::{Date, Map, Value};
 
 fn doc(id: &str, title: &str, content: &str, updated: &str) -> Doc {
     Doc {

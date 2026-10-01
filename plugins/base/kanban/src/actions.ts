@@ -2,7 +2,7 @@
  * The board's entries in the menus of what is on it (`context-menu`'s `addAction`).
  *
  * A board marks itself `kanban/board`, each column `kanban/column` (its id is its index)
- * and each card `lm/document` + `kanban/card` — and `kanban/selection` while it is one of
+ * and each card `ddd/document` + `kanban/card` — and `kanban/selection` while it is one of
  * the cards selected on the board. The actions are offered once, in `activate`, but act on
  * a board on screen: each board registers what it can do under its element, and an action
  * finds the board around what was right-clicked.

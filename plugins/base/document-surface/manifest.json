@@ -3,7 +3,7 @@
   "version": "2.2.0",
   "name": "Document surface",
   "description": "Owns the document route and the modes other plugins add with addMode.",
-  "author": "Life Manager base distribution",
+  "author": "ddd base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": {
     "prefix": "docsurface"

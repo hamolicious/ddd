@@ -84,11 +84,11 @@ export function AppFrame({ host, bearer, onSignedIn }: AppFrameProps): ReactNode
   const holderDrawsNotices = mounted && !mountFailed && !bare;
 
   return (
-    <div className="lm-frame">
+    <div className="ddd-frame">
       {holderDrawsNotices ? null : (
         <NoticeStrip notices={notices} onDismiss={(id) => host.notices.dismiss(id)} />
       )}
-      <div className="lm-outlet">
+      <div className="ddd-outlet">
         {mounted ? (
           <PluginErrorBoundary
             pluginId={host.mount.holder ?? "unknown"}
@@ -133,12 +133,12 @@ function NoticeStrip({
 }): ReactNode {
   if (notices.length === 0) return null;
   return (
-    <ul className="lm-notices" aria-live="polite">
+    <ul className="ddd-notices" aria-live="polite">
       {notices.map((notice) => (
-        <li key={notice.id} className={`lm-notice lm-notice-${notice.level}`}>
-          <span className="lm-notice-message">{notice.message}</span>
+        <li key={notice.id} className={`ddd-notice ddd-notice-${notice.level}`}>
+          <span className="ddd-notice-message">{notice.message}</span>
           {notice.detail ? (
-            <details className="lm-notice-detail">
+            <details className="ddd-notice-detail">
               <summary>Details</summary>
               <pre>{notice.detail}</pre>
             </details>
@@ -153,7 +153,7 @@ function NoticeStrip({
           </button>
           {notice.progress ? (
             <div
-              className="lm-notice-progress"
+              className="ddd-notice-progress"
               role="progressbar"
               aria-valuemin={0}
               aria-valuemax={100}
@@ -190,13 +190,13 @@ function MountFailed({
   readonly pluginId: string;
 }): ReactNode {
   return (
-    <div className="lm-empty" role="alert">
+    <div className="ddd-empty" role="alert">
       <h1>The interface failed to render</h1>
       <p>
         <code>{pluginId}</code> draws the interface and it failed. Your documents are
         untouched.
       </p>
-      <pre className="lm-boot-error">{error.message}</pre>
+      <pre className="ddd-boot-error">{error.message}</pre>
       <p>
         <a href={safeModeUrl("base")}>Boot with base plugins only</a> ·{" "}
         <a href={safeModeUrl("bare")}>Open the built-in plugin manager</a>
@@ -212,7 +212,7 @@ function MountFailed({
  */
 function NoShell({ bootMode }: { readonly bootMode: string }): ReactNode {
   return (
-    <div className="lm-empty" role="alert">
+    <div className="ddd-empty" role="alert">
       <h1>No user interface is mounted</h1>
       <p>Your workspace loaded, but no plugin drew the interface.</p>
       <p>

@@ -1,4 +1,4 @@
-# `app/` — the Life Manager Android shell
+# `app/` — the ddd Android shell
 
 The optional per-device shell of SPEC §7: a webview serving a **downloaded, verified** copy of
 the PWA, a bearer token in the platform keystore, an OTA bundle updater that keeps the previous

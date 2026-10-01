@@ -159,7 +159,7 @@ class BundleServer {
     throw StateError(
       'the bundle server could not bind 127.0.0.1:$port — the port is fixed because '
       'every store the app has is keyed to that origin, so it cannot be moved. '
-      'Another copy of Life Manager is probably still shutting down. ($last)',
+      'Another copy of ddd is probably still shutting down. ($last)',
     );
   }
 
@@ -520,7 +520,7 @@ class _WebViewHostState extends State<WebViewHost> {
         // A native screen, never a blank webview: a white rectangle is indistinguishable
         // from a broken app (`CONTRACTS.md`).
         return _Message(
-          title: 'Life Manager cannot open the workspace',
+          title: 'ddd cannot open the workspace',
           detail: '${snapshot.error}',
         );
       }
@@ -724,7 +724,7 @@ String shellUpdateReadyScript(String version) {
 }
 
 /// The `CustomEvent` name the page listens for (`BRIDGE.md` §5, §7).
-const String kShellUpdateReadyEvent = 'lm-shell-update-ready';
+const String kShellUpdateReadyEvent = 'ddd-shell-update-ready';
 
 /// The values baked into the page at document start (`BRIDGE.md` §3).
 class _BootstrapValues {

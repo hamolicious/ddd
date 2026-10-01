@@ -94,7 +94,7 @@ impl<'de> Deserialize<'de> for Timestamp {
 /// row degrades to a string instead of leaking extended JSON to clients.
 pub fn materialized_to_json(document: &BsonDocument) -> serde_json::Value {
     let mut object = serde_json::Map::with_capacity(document.len());
-    for (key, value) in life_manager_core::value::map_from_bson(document) {
+    for (key, value) in ddd_core::value::map_from_bson(document) {
         object.insert(key, value.to_json());
     }
     serde_json::Value::Object(object)
@@ -596,7 +596,7 @@ pub struct Invite {
 }
 
 /// Collection `password_resets` — one-time admin-issued reset links and the
-/// `life-manager reset-password` CLI path (SPEC §5.1). `_id` is the token hash.
+/// `ddd reset-password` CLI path (SPEC §5.1). `_id` is the token hash.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PasswordReset {
     #[serde(rename = "_id")]

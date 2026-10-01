@@ -234,7 +234,7 @@ export async function initKernel(options: KernelInitOptions): Promise<KernelRunt
 }
 
 /** Remembers, per device, that the browser has been asked. */
-const STORAGE_ASKED_KEY = "life-manager:storage-asked";
+const STORAGE_ASKED_KEY = "ddd:storage-asked";
 
 async function askForPersistentStorage(host: KernelHost): Promise<void> {
   let asked: string | null = null;

@@ -112,7 +112,7 @@ export class MemorySearchPersistence implements SearchPersistence {
 }
 
 /** IndexedDB database holding the serialized search index. */
-export const SEARCH_DB_NAME = "life-manager-search";
+export const SEARCH_DB_NAME = "ddd-search";
 export const SEARCH_DB_VERSION = 1;
 export const SEARCH_STORE = "index";
 export const SEARCH_ENTRY_KEY = "projection";

@@ -1,13 +1,13 @@
 [package]
-name = "life-manager-server"
-description = "Life Manager server: REST API, CRDT document store, auth, attachments."
+name = "ddd-server"
+description = "ddd server: REST API, CRDT document store, auth, attachments."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
 [[bin]]
-name = "life-manager"
+name = "ddd"
 path = "src/main.rs"
 
 [dependencies]
@@ -39,8 +39,8 @@ hmac = "0.13.0"
 hickory-resolver = "0.26.3"
 infer = "0.22.0"
 ipnet = "2.12.2"
-life-manager-core = { path = "../core", features = ["mongo"] }
-life-manager-plugin-abi = { path = "../plugin-abi" }
+ddd-core = { path = "../core", features = ["mongo"] }
+ddd-plugin-abi = { path = "../plugin-abi" }
 metrics = "0.24.6"
 metrics-exporter-prometheus = "0.18.3"
 mongodb = "3.9.1"

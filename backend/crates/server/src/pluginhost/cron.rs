@@ -1,4 +1,4 @@
-//! Cron: a five-field parser and the scheduler that fires `lm_cron`.
+//! Cron: a five-field parser and the scheduler that fires `ddd_cron`.
 //!
 //! SPEC §6.3, in four clauses and what each one means here:
 //!
@@ -37,7 +37,7 @@ use std::sync::{Arc, Mutex as StdMutex, OnceLock};
 use std::time::Duration as StdDuration;
 
 use bson::doc;
-use life_manager_plugin_abi as abi;
+use ddd_plugin_abi as abi;
 use time::{Duration, OffsetDateTime, Time, UtcOffset};
 
 use super::limits::PluginLimits;
@@ -616,7 +616,7 @@ impl CronScheduler {
                 // install flow already refuses the manifest that causes it.
                 tracing::debug!(
                     plugin = %plugin.id,
-                    "plugin cron: schedules declared but `lm_cron` is not exported"
+                    "plugin cron: schedules declared but `ddd_cron` is not exported"
                 );
                 continue;
             }

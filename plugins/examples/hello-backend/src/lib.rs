@@ -1,7 +1,7 @@
 //! The smallest legal backend plugin, and the host's fixture.
 //!
 //! It exists to answer one question with a build rather than an opinion: *does a plugin
-//! written against `life-manager-plugin-sdk` compile to `wasm32-unknown-unknown` and load
+//! written against `ddd-plugin-sdk` compile to `wasm32-unknown-unknown` and load
 //! in the server's Extism host?* `crates/server/tests/pluginhost_smoke.rs` builds this
 //! crate, instantiates it with the real host-function set, and calls every export;
 //! `crates/server/tests/pluginhost_runtime.rs` loads it in the **real** host and drives the
@@ -12,23 +12,23 @@
 //! exists so the host's tests can reach a code path they otherwise could not, and the
 //! comment on each says which one.
 
-use life_manager_plugin_sdk as lm;
+use ddd_plugin_sdk as ddd;
 
 // Required of every backend half. The host refuses a module without it.
-lm::abi_version!();
+ddd::abi_version!();
 
-/// What `lm_init` was told, remembered **per instance** in a static.
+/// What `ddd_init` was told, remembered **per instance** in a static.
 ///
 /// The realistic shape of the pattern HOST-ABI.md §4.1 exists for: a plugin caches the approved
 /// capability set once and degrades deliberately, rather than discovering denials per call. It is
-/// also what makes "`lm_init` ran on this instance" observable to a host test — the host used to
+/// also what makes "`ddd_init` ran on this instance" observable to a host test — the host used to
 /// skip it on the instance activation warmed, so the first call of every plugin saw this as
 /// `None` and a real plugin silently ran with its defaults.
-static INITIALISED: std::sync::Mutex<Option<lm::abi::Capabilities>> = std::sync::Mutex::new(None);
+static INITIALISED: std::sync::Mutex<Option<ddd::abi::Capabilities>> = std::sync::Mutex::new(None);
 
-lm::init!(init);
-fn init(payload: lm::InitPayload) -> lm::Result<()> {
-    lm::log::info(&format!(
+ddd::init!(init);
+fn init(payload: ddd::InitPayload) -> ddd::Result<()> {
+    ddd::log::info(&format!(
         "hello-backend {} initialised (documents:read={})",
         payload.version,
         payload.capabilities.can_read_documents()
@@ -39,29 +39,29 @@ fn init(payload: lm::InitPayload) -> lm::Result<()> {
     Ok(())
 }
 
-lm::cron!(tick);
-fn tick(schedule: lm::abi::cron::CronPayload) -> lm::Result<()> {
+ddd::cron!(tick);
+fn tick(schedule: ddd::abi::cron::CronPayload) -> ddd::Result<()> {
     // KV needs no capability, so this works in a plugin with none at all — the
     // cron-and-KV plugin SPEC §6.3 names as the archetype.
-    let runs: u64 = lm::kv::get::<u64>("runs")?.unwrap_or(0) + 1;
-    lm::kv::set("runs", &runs)?;
-    lm::log::info(&format!(
+    let runs: u64 = ddd::kv::get::<u64>("runs")?.unwrap_or(0) + 1;
+    ddd::kv::set("runs", &runs)?;
+    ddd::log::info(&format!(
         "tick {} for `{}` (missed {})",
         runs, schedule.expression, schedule.missed
     ));
     Ok(())
 }
 
-lm::calls!(dispatch);
-fn dispatch(call: lm::abi::call::CallPayload) -> lm::Result<serde_json::Value> {
+ddd::calls!(dispatch);
+fn dispatch(call: ddd::abi::call::CallPayload) -> ddd::Result<serde_json::Value> {
     match call.function.as_str() {
         // The smoke test asserts on this: it proves input reaches the plugin and a value
         // comes back through the envelope.
         "echo" => Ok(call.payload),
-        "runs" => Ok(serde_json::json!(lm::kv::get::<u64>("runs")?.unwrap_or(0))),
+        "runs" => Ok(serde_json::json!(ddd::kv::get::<u64>("runs")?.unwrap_or(0))),
 
-        // What `lm_init` left behind on *this* instance. The host test for "the first call runs
-        // on an initialised instance" reads this; a plugin that got no `lm_init` reports
+        // What `ddd_init` left behind on *this* instance. The host test for "the first call runs
+        // on an initialised instance" reads this; a plugin that got no `ddd_init` reports
         // `initialised: false` and an empty grant, which is exactly the silent degradation the
         // promise exists to prevent.
         "caps" => {
@@ -88,26 +88,26 @@ fn dispatch(call: lm::abi::call::CallPayload) -> lm::Result<serde_json::Value> {
             let target = call.payload.get("host_fn").and_then(|v| v.as_str());
             let code = match target {
                 Some("get_document") => {
-                    code_of(lm::documents::get_metadata("01J0000000000000000000000O"))
+                    code_of(ddd::documents::get_metadata("01J0000000000000000000000O"))
                 }
-                Some("query_documents") => code_of(lm::documents::query(
-                    &lm::abi::documents::QueryDocumentsInput::default(),
+                Some("query_documents") => code_of(ddd::documents::query(
+                    &ddd::abi::documents::QueryDocumentsInput::default(),
                 )),
-                Some("query") => code_of(lm::documents::run(
-                    lm::documents::Query::new()
-                        .filter("title", lm::documents::Op::TextContains, "probe")
+                Some("query") => code_of(ddd::documents::run(
+                    ddd::documents::Query::new()
+                        .filter("title", ddd::documents::Op::TextContains, "probe")
                         .sort("fm.key")
                         .limit(5),
                 )),
                 Some("create_document") => {
-                    code_of(lm::documents::create("---\ntitle: probe\n---\n"))
+                    code_of(ddd::documents::create("---\ntitle: probe\n---\n"))
                 }
-                Some("http_request") => code_of(lm::http::get("https://example.test/")),
-                Some("config_get") => code_of(lm::config::all()),
-                Some("kv_get") => code_of(lm::kv::get::<serde_json::Value>("probe")),
+                Some("http_request") => code_of(ddd::http::get("https://example.test/")),
+                Some("config_get") => code_of(ddd::config::all()),
+                Some("kv_get") => code_of(ddd::kv::get::<serde_json::Value>("probe")),
                 other => {
-                    return Err(lm::HostError::new(
-                        lm::ErrorCode::InvalidArgument,
+                    return Err(ddd::HostError::new(
+                        ddd::ErrorCode::InvalidArgument,
                         format!("probe does not know `{other:?}`"),
                     ));
                 }
@@ -123,7 +123,7 @@ fn dispatch(call: lm::abi::call::CallPayload) -> lm::Result<serde_json::Value> {
                 .get("text")
                 .and_then(|v| v.as_str())
                 .unwrap_or("---\ntitle: from hello-backend\n---\n");
-            let written = lm::documents::create(text)?;
+            let written = ddd::documents::create(text)?;
             Ok(serde_json::json!({ "id": written.id, "title": written.title }))
         }
         "splice" => {
@@ -134,7 +134,7 @@ fn dispatch(call: lm::abi::call::CallPayload) -> lm::Result<serde_json::Value> {
                 .get("value")
                 .cloned()
                 .unwrap_or(serde_json::Value::Null);
-            let out = lm::documents::set_section(&id, &key, value)?;
+            let out = ddd::documents::set_section(&id, &key, value)?;
             Ok(serde_json::json!({
                 "edits_applied": out.edits_applied,
                 "changed": out.changed,
@@ -143,12 +143,12 @@ fn dispatch(call: lm::abi::call::CallPayload) -> lm::Result<serde_json::Value> {
         "rewrite" => {
             let id = require_str(&call.payload, "id")?;
             let text = require_str(&call.payload, "text")?;
-            let out = lm::documents::rewrite(&id, &text)?;
+            let out = ddd::documents::rewrite(&id, &text)?;
             Ok(serde_json::json!({ "id": out.id, "title": out.title }))
         }
         "read" => {
             let id = require_str(&call.payload, "id")?;
-            let doc = lm::documents::get(&id)?;
+            let doc = ddd::documents::get(&id)?;
             Ok(serde_json::json!({
                 "title": doc.title,
                 "content": doc.content,
@@ -161,13 +161,13 @@ fn dispatch(call: lm::abi::call::CallPayload) -> lm::Result<serde_json::Value> {
         // response cap can be driven from the outside rather than asserted about.
         "fetch" => {
             let url = require_str(&call.payload, "url")?;
-            let mut headers = lm::abi::JsonMap::new();
+            let mut headers = ddd::abi::JsonMap::new();
             if let Some(extra) = call.payload.get("headers").and_then(|v| v.as_object()) {
                 for (name, value) in extra {
                     headers.insert(name.clone(), value.clone());
                 }
             }
-            let response = lm::http::get_with_headers(&url, headers)?;
+            let response = ddd::http::get_with_headers(&url, headers)?;
             Ok(serde_json::json!({
                 "status": response.status(),
                 "headers": response.0.headers,
@@ -183,7 +183,7 @@ fn dispatch(call: lm::abi::call::CallPayload) -> lm::Result<serde_json::Value> {
         "call" => {
             let plugin = require_str(&call.payload, "plugin")?;
             let function = require_str(&call.payload, "function")?;
-            let value: serde_json::Value = lm::plugins::call(
+            let value: serde_json::Value = ddd::plugins::call(
                 &plugin,
                 &function,
                 &call
@@ -199,7 +199,7 @@ fn dispatch(call: lm::abi::call::CallPayload) -> lm::Result<serde_json::Value> {
         // extra ones are dropped and the call still succeeds.
         "log_flood" => {
             for line in 0..150u32 {
-                lm::log::info(&format!("flood {line}"));
+                ddd::log::info(&format!("flood {line}"));
             }
             Ok(serde_json::json!("logged"))
         }
@@ -238,7 +238,7 @@ fn dispatch(call: lm::abi::call::CallPayload) -> lm::Result<serde_json::Value> {
             for step in 0..steps {
                 // A host call per step, so the loop is interruptible at many points and its
                 // duration is dominated by real work rather than by the optimiser.
-                let _: Option<u64> = lm::kv::get("runs")?;
+                let _: Option<u64> = ddd::kv::get("runs")?;
                 for _ in 0..50_000u32 {
                     spun = std::hint::black_box(spun.wrapping_add(step));
                 }
@@ -246,8 +246,8 @@ fn dispatch(call: lm::abi::call::CallPayload) -> lm::Result<serde_json::Value> {
             Ok(serde_json::json!({ "steps": steps }))
         }
 
-        other => Err(lm::HostError::new(
-            lm::ErrorCode::NotFound,
+        other => Err(ddd::HostError::new(
+            ddd::ErrorCode::NotFound,
             format!("hello-backend has no function `{other}`"),
         )),
     }
@@ -255,55 +255,57 @@ fn dispatch(call: lm::abi::call::CallPayload) -> lm::Result<serde_json::Value> {
 
 /// The error code of a call, or `"ok"` — so a test can assert on a refusal instead of on a
 /// message.
-fn code_of<T>(result: lm::Result<T>) -> &'static str {
+fn code_of<T>(result: ddd::Result<T>) -> &'static str {
     match result {
         Ok(_) => "ok",
         Err(error) => error.code.as_str(),
     }
 }
 
-fn require_str(payload: &serde_json::Value, key: &str) -> lm::Result<String> {
+fn require_str(payload: &serde_json::Value, key: &str) -> ddd::Result<String> {
     payload
         .get(key)
         .and_then(|value| value.as_str())
         .map(str::to_string)
         .ok_or_else(|| {
-            lm::HostError::new(
-                lm::ErrorCode::InvalidArgument,
+            ddd::HostError::new(
+                ddd::ErrorCode::InvalidArgument,
                 format!("`{key}` is missing or not a string"),
             )
         })
 }
 
-lm::http_routes!(route);
-fn route(request: lm::abi::http::HttpRouteRequest) -> lm::Result<lm::abi::http::HttpRouteResponse> {
+ddd::http_routes!(route);
+fn route(
+    request: ddd::abi::http::HttpRouteRequest,
+) -> ddd::Result<ddd::abi::http::HttpRouteResponse> {
     // `/refuse` answers with a refusal rather than a status, so the host's route dispatcher
     // can be checked on the path where a plugin's own error code becomes the HTTP status.
     if request.path == "/refuse" {
-        return Err(lm::HostError::new(
-            lm::ErrorCode::NotFound,
+        return Err(ddd::HostError::new(
+            ddd::ErrorCode::NotFound,
             "hello-backend has nothing at /refuse",
         ));
     }
     // A response a plugin is not allowed to send: `set-cookie` must be stripped on the way
     // out, or a plugin could mint a session for this origin.
     if request.path == "/cookie" {
-        let mut headers = lm::abi::JsonMap::new();
+        let mut headers = ddd::abi::JsonMap::new();
         headers.insert(
             "set-cookie".to_string(),
-            serde_json::Value::String("lm_session=forged".to_string()),
+            serde_json::Value::String("ddd_session=forged".to_string()),
         );
         headers.insert(
             "x-from-plugin".to_string(),
             serde_json::Value::String("yes".to_string()),
         );
-        return Ok(lm::abi::http::HttpRouteResponse {
+        return Ok(ddd::abi::http::HttpRouteResponse {
             status: 200,
             headers,
             body_base64: None,
         });
     }
-    Ok(lm::abi::http::HttpRouteResponse::json(
+    Ok(ddd::abi::http::HttpRouteResponse::json(
         200,
         &serde_json::json!({
             "method": request.method,
@@ -317,10 +319,10 @@ fn route(request: lm::abi::http::HttpRouteRequest) -> lm::Result<lm::abi::http::
     ))
 }
 
-lm::hook_document_changed!(on_changed);
-fn on_changed(event: lm::abi::hooks::DocumentEvent) -> lm::Result<()> {
+ddd::hook_document_changed!(on_changed);
+fn on_changed(event: ddd::abi::hooks::DocumentEvent) -> ddd::Result<()> {
     // `origin` is never this plugin — the host does not deliver a plugin its own changes.
-    lm::log::debug(&format!(
+    ddd::log::debug(&format!(
         "document {} changed at seq {} ({:?})",
         event.id, event.seq, event.origin
     ));

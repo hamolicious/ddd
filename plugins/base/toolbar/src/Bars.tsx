@@ -54,11 +54,11 @@ export function TopBar(props: BarProps): ReactNode {
   const start = seats["top-start"] ?? [];
   const end = seats["top-end"] ?? [];
   if (start.length === 0 && end.length === 0) {
-    return <div aria-hidden="true" className="toolbar:shrink-0 toolbar:pt-[var(--lm-safe-top)]" />;
+    return <div aria-hidden="true" className="toolbar:shrink-0 toolbar:pt-[var(--ddd-safe-top)]" />;
   }
   const look: Look = mobile ? "strip" : "header";
   return (
-    <header className="toolbar:relative toolbar:flex toolbar:min-h-[var(--lm-tap-target)] toolbar:shrink-0 toolbar:items-center toolbar:gap-2 toolbar:border-b toolbar:border-border toolbar:bg-bg-subtle toolbar:pb-1 toolbar:pl-[calc(var(--lm-space)+var(--lm-safe-left))] toolbar:pr-[calc(var(--lm-space)+var(--lm-safe-right))] toolbar:pt-[calc(var(--lm-space)*0.5+var(--lm-safe-top))] toolbar:compact:gap-1 toolbar:compact:pb-0 toolbar:compact:pl-[calc(var(--lm-space)*0.5+var(--lm-safe-left))] toolbar:compact:pr-[calc(var(--lm-space)*0.5+var(--lm-safe-right))] toolbar:compact:pt-[var(--lm-safe-top)]">
+    <header className="toolbar:relative toolbar:flex toolbar:min-h-[var(--ddd-tap-target)] toolbar:shrink-0 toolbar:items-center toolbar:gap-2 toolbar:border-b toolbar:border-border toolbar:bg-bg-subtle toolbar:pb-1 toolbar:pl-[calc(var(--ddd-space)+var(--ddd-safe-left))] toolbar:pr-[calc(var(--ddd-space)+var(--ddd-safe-right))] toolbar:pt-[calc(var(--ddd-space)*0.5+var(--ddd-safe-top))] toolbar:compact:gap-1 toolbar:compact:pb-0 toolbar:compact:pl-[calc(var(--ddd-space)*0.5+var(--ddd-safe-left))] toolbar:compact:pr-[calc(var(--ddd-space)*0.5+var(--ddd-safe-right))] toolbar:compact:pt-[var(--ddd-safe-top)]">
       <nav className="toolbar:flex toolbar:min-w-0 toolbar:flex-1 toolbar:items-center toolbar:gap-2 toolbar:compact:gap-1" aria-label="Main">
         <Seat kernel={props.kernel} entries={start} seat="top-start" look={look} />
         <Seat kernel={props.kernel} entries={end} seat="top-end" look={look} />
@@ -73,7 +73,7 @@ export function BottomBar(props: BarProps): ReactNode {
     const row = seats.bottom ?? [];
     if (row.length === 0) return null;
     return (
-      <footer className="toolbar:shrink-0 toolbar:border-t toolbar:border-border toolbar:bg-bg-subtle toolbar:pb-[var(--lm-safe-bottom)] toolbar:pl-[var(--lm-safe-left)] toolbar:pr-[var(--lm-safe-right)]">
+      <footer className="toolbar:shrink-0 toolbar:border-t toolbar:border-border toolbar:bg-bg-subtle toolbar:pb-[var(--ddd-safe-bottom)] toolbar:pl-[var(--ddd-safe-left)] toolbar:pr-[var(--ddd-safe-right)]">
         <nav aria-label="Toolbar">
           <Seat kernel={props.kernel} entries={row} seat="bottom" look="dock" />
         </nav>
@@ -84,7 +84,7 @@ export function BottomBar(props: BarProps): ReactNode {
   const end = seats["bottom-end"] ?? [];
   if (start.length === 0 && end.length === 0) return null;
   return (
-    <footer className="toolbar:flex toolbar:min-h-7 toolbar:shrink-0 toolbar:items-center toolbar:gap-2 toolbar:border-t toolbar:border-border toolbar:bg-bg-subtle toolbar:pl-[calc(var(--lm-space)*0.5+var(--lm-safe-left))] toolbar:pr-[calc(var(--lm-space)*0.5+var(--lm-safe-right))] toolbar:pb-[var(--lm-safe-bottom)] toolbar:text-xs toolbar:text-text-muted">
+    <footer className="toolbar:flex toolbar:min-h-7 toolbar:shrink-0 toolbar:items-center toolbar:gap-2 toolbar:border-t toolbar:border-border toolbar:bg-bg-subtle toolbar:pl-[calc(var(--ddd-space)*0.5+var(--ddd-safe-left))] toolbar:pr-[calc(var(--ddd-space)*0.5+var(--ddd-safe-right))] toolbar:pb-[var(--ddd-safe-bottom)] toolbar:text-xs toolbar:text-text-muted">
       <nav className="toolbar:flex toolbar:min-w-0 toolbar:flex-1 toolbar:items-center toolbar:gap-2" aria-label="Status bar">
         <Seat kernel={props.kernel} entries={start} seat="bottom-start" look="footer" />
         <Seat kernel={props.kernel} entries={end} seat="bottom-end" look="footer" />
@@ -146,7 +146,7 @@ const ITEM_CLASS: Record<Look, { component: string; button: string; iconButton: 
     cell: "toolbar:flex toolbar:min-w-0 toolbar:items-center toolbar:shrink-0",
     component: "toolbar:flex toolbar:min-w-0 toolbar:items-center toolbar:shrink-0",
     button: "toolbar:tap toolbar:gap-1 toolbar:px-1.5 toolbar:[&_.toolbar-icon+_.toolbar-label]:sr-only",
-    iconButton: "toolbar:w-[var(--lm-tap-target)] toolbar:p-0!",
+    iconButton: "toolbar:w-[var(--ddd-tap-target)] toolbar:p-0!",
   },
   // Slim: a plugin's own widget is held to the footer's height too (the sync pill is a
   // full-size tap target elsewhere), except on a touch screen. Important, because the
@@ -158,8 +158,8 @@ const ITEM_CLASS: Record<Look, { component: string; button: string; iconButton: 
     iconButton: "",
   },
   dock: {
-    cell: "toolbar:flex toolbar:min-w-[var(--lm-tap-target)] toolbar:flex-1 toolbar:items-center toolbar:justify-center",
-    component: "toolbar:flex toolbar:min-w-[var(--lm-tap-target)] toolbar:flex-1 toolbar:items-center toolbar:justify-center",
+    cell: "toolbar:flex toolbar:min-w-[var(--ddd-tap-target)] toolbar:flex-1 toolbar:items-center toolbar:justify-center",
+    component: "toolbar:flex toolbar:min-w-[var(--ddd-tap-target)] toolbar:flex-1 toolbar:items-center toolbar:justify-center",
     button: "toolbar:size-full toolbar:min-h-14 toolbar:flex-col toolbar:gap-0.5 toolbar:px-1 toolbar:[&_.toolbar-icon+_.toolbar-label]:sr-only toolbar:[&_.toolbar-label]:text-xs toolbar:[&_.toolbar-icon]:inline-flex toolbar:[&_.toolbar-icon_svg]:size-[1em]",
     iconButton: "",
   },

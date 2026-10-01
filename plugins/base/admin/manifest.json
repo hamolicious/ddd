@@ -3,7 +3,7 @@
   "version": "2.2.0",
   "name": "Admin",
   "description": "Users, invites, audit log, orphan files, and the plugin list with each plugin's dependencies.",
-  "author": "Life Manager base distribution",
+  "author": "ddd base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
   "kernel": "^3.0",

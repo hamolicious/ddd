@@ -25,37 +25,37 @@ import type { Unsubscribe } from "./types.js";
 /** A CSS custom property the kernel defines a value for. */
 export type ThemeTokenName =
   // Surfaces
-  | "--lm-bg"
-  | "--lm-bg-subtle"
-  | "--lm-bg-raised"
-  | "--lm-bg-overlay"
-  | "--lm-border"
-  | "--lm-border-strong"
+  | "--ddd-bg"
+  | "--ddd-bg-subtle"
+  | "--ddd-bg-raised"
+  | "--ddd-bg-overlay"
+  | "--ddd-border"
+  | "--ddd-border-strong"
   // Text
-  | "--lm-text"
-  | "--lm-text-muted"
-  | "--lm-text-inverse"
-  | "--lm-link"
+  | "--ddd-text"
+  | "--ddd-text-muted"
+  | "--ddd-text-inverse"
+  | "--ddd-link"
   // Intents
-  | "--lm-accent"
-  | "--lm-accent-text"
-  | "--lm-accent-subtle"
-  | "--lm-danger"
-  | "--lm-danger-text"
-  | "--lm-warning"
-  | "--lm-success"
+  | "--ddd-accent"
+  | "--ddd-accent-text"
+  | "--ddd-accent-subtle"
+  | "--ddd-danger"
+  | "--ddd-danger-text"
+  | "--ddd-warning"
+  | "--ddd-success"
   // Affordances
-  | "--lm-focus-ring"
-  | "--lm-selection"
-  | "--lm-shadow-1"
-  | "--lm-shadow-2"
+  | "--ddd-focus-ring"
+  | "--ddd-selection"
+  | "--ddd-shadow-1"
+  | "--ddd-shadow-2"
   // Metrics and type
-  | "--lm-font-sans"
-  | "--lm-font-mono"
-  | "--lm-radius"
-  | "--lm-radius-lg"
-  | "--lm-space"
-  | "--lm-tap-target";
+  | "--ddd-font-sans"
+  | "--ddd-font-mono"
+  | "--ddd-radius"
+  | "--ddd-radius-lg"
+  | "--ddd-space"
+  | "--ddd-tap-target";
 
 export type ThemeTokens = Readonly<Record<ThemeTokenName, string>>;
 
@@ -64,73 +64,73 @@ export type ColorSchemePreference = ColorScheme | "system";
 
 /**
  * Kernel default **light** tokens. Text/background pairs clear WCAG AA:
- * `--lm-text` on `--lm-bg` ≈ 14.9:1, `--lm-text-muted` ≈ 5.3:1,
- * `--lm-accent-text` on `--lm-accent` ≈ 5.2:1.
+ * `--ddd-text` on `--ddd-bg` ≈ 14.9:1, `--ddd-text-muted` ≈ 5.3:1,
+ * `--ddd-accent-text` on `--ddd-accent` ≈ 5.2:1.
  */
 export const DEFAULT_LIGHT_TOKENS: ThemeTokens = {
-  "--lm-bg": "#ffffff",
-  "--lm-bg-subtle": "#f5f6f8",
-  "--lm-bg-raised": "#ffffff",
-  "--lm-bg-overlay": "rgba(16, 19, 24, 0.44)",
-  "--lm-border": "#dfe2e7",
-  "--lm-border-strong": "#b9bfc9",
-  "--lm-text": "#1b1f24",
-  "--lm-text-muted": "#59616d",
-  "--lm-text-inverse": "#ffffff",
-  "--lm-link": "#0b5fd7",
-  "--lm-accent": "#0b5fd7",
-  "--lm-accent-text": "#ffffff",
-  "--lm-accent-subtle": "#e8f0fd",
-  "--lm-danger": "#b3261e",
-  "--lm-danger-text": "#ffffff",
-  "--lm-warning": "#8a5300",
-  "--lm-success": "#1a7f37",
-  "--lm-focus-ring": "#0b5fd7",
-  "--lm-selection": "#cfe0fb",
-  "--lm-shadow-1": "0 1px 2px rgba(16, 19, 24, 0.10)",
-  "--lm-shadow-2": "0 8px 24px rgba(16, 19, 24, 0.16)",
-  "--lm-font-sans":
+  "--ddd-bg": "#ffffff",
+  "--ddd-bg-subtle": "#f5f6f8",
+  "--ddd-bg-raised": "#ffffff",
+  "--ddd-bg-overlay": "rgba(16, 19, 24, 0.44)",
+  "--ddd-border": "#dfe2e7",
+  "--ddd-border-strong": "#b9bfc9",
+  "--ddd-text": "#1b1f24",
+  "--ddd-text-muted": "#59616d",
+  "--ddd-text-inverse": "#ffffff",
+  "--ddd-link": "#0b5fd7",
+  "--ddd-accent": "#0b5fd7",
+  "--ddd-accent-text": "#ffffff",
+  "--ddd-accent-subtle": "#e8f0fd",
+  "--ddd-danger": "#b3261e",
+  "--ddd-danger-text": "#ffffff",
+  "--ddd-warning": "#8a5300",
+  "--ddd-success": "#1a7f37",
+  "--ddd-focus-ring": "#0b5fd7",
+  "--ddd-selection": "#cfe0fb",
+  "--ddd-shadow-1": "0 1px 2px rgba(16, 19, 24, 0.10)",
+  "--ddd-shadow-2": "0 8px 24px rgba(16, 19, 24, 0.16)",
+  "--ddd-font-sans":
     'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-  "--lm-font-mono": 'ui-monospace, SFMono-Regular, "JetBrains Mono", Consolas, monospace',
-  "--lm-radius": "6px",
-  "--lm-radius-lg": "12px",
-  "--lm-space": "8px",
+  "--ddd-font-mono": 'ui-monospace, SFMono-Regular, "JetBrains Mono", Consolas, monospace',
+  "--ddd-radius": "6px",
+  "--ddd-radius-lg": "12px",
+  "--ddd-space": "8px",
   /** SPEC §6.5: 44 px touch targets at the mobile breakpoint. */
-  "--lm-tap-target": "44px",
+  "--ddd-tap-target": "44px",
 };
 
 /**
- * Kernel default **dark** tokens. `--lm-text` on `--lm-bg` ≈ 13.6:1,
- * `--lm-text-muted` ≈ 6.4:1, `--lm-accent-text` on `--lm-accent` ≈ 8.1:1.
+ * Kernel default **dark** tokens. `--ddd-text` on `--ddd-bg` ≈ 13.6:1,
+ * `--ddd-text-muted` ≈ 6.4:1, `--ddd-accent-text` on `--ddd-accent` ≈ 8.1:1.
  */
 export const DEFAULT_DARK_TOKENS: ThemeTokens = {
-  "--lm-bg": "#14161a",
-  "--lm-bg-subtle": "#1a1d22",
-  "--lm-bg-raised": "#1f2329",
-  "--lm-bg-overlay": "rgba(0, 0, 0, 0.58)",
-  "--lm-border": "#2c313a",
-  "--lm-border-strong": "#3d444f",
-  "--lm-text": "#e6e9ed",
-  "--lm-text-muted": "#a4acb8",
-  "--lm-text-inverse": "#0c1016",
-  "--lm-link": "#8ab4ff",
-  "--lm-accent": "#8ab4ff",
-  "--lm-accent-text": "#0c1016",
-  "--lm-accent-subtle": "#1b2740",
-  "--lm-danger": "#f2685f",
-  "--lm-danger-text": "#1a0c0b",
-  "--lm-warning": "#e3b341",
-  "--lm-success": "#56d364",
-  "--lm-focus-ring": "#8ab4ff",
-  "--lm-selection": "#2b3f63",
-  "--lm-shadow-1": "0 1px 2px rgba(0, 0, 0, 0.5)",
-  "--lm-shadow-2": "0 8px 24px rgba(0, 0, 0, 0.6)",
-  "--lm-font-sans": DEFAULT_LIGHT_TOKENS["--lm-font-sans"],
-  "--lm-font-mono": DEFAULT_LIGHT_TOKENS["--lm-font-mono"],
-  "--lm-radius": "6px",
-  "--lm-radius-lg": "12px",
-  "--lm-space": "8px",
-  "--lm-tap-target": "44px",
+  "--ddd-bg": "#14161a",
+  "--ddd-bg-subtle": "#1a1d22",
+  "--ddd-bg-raised": "#1f2329",
+  "--ddd-bg-overlay": "rgba(0, 0, 0, 0.58)",
+  "--ddd-border": "#2c313a",
+  "--ddd-border-strong": "#3d444f",
+  "--ddd-text": "#e6e9ed",
+  "--ddd-text-muted": "#a4acb8",
+  "--ddd-text-inverse": "#0c1016",
+  "--ddd-link": "#8ab4ff",
+  "--ddd-accent": "#8ab4ff",
+  "--ddd-accent-text": "#0c1016",
+  "--ddd-accent-subtle": "#1b2740",
+  "--ddd-danger": "#f2685f",
+  "--ddd-danger-text": "#1a0c0b",
+  "--ddd-warning": "#e3b341",
+  "--ddd-success": "#56d364",
+  "--ddd-focus-ring": "#8ab4ff",
+  "--ddd-selection": "#2b3f63",
+  "--ddd-shadow-1": "0 1px 2px rgba(0, 0, 0, 0.5)",
+  "--ddd-shadow-2": "0 8px 24px rgba(0, 0, 0, 0.6)",
+  "--ddd-font-sans": DEFAULT_LIGHT_TOKENS["--ddd-font-sans"],
+  "--ddd-font-mono": DEFAULT_LIGHT_TOKENS["--ddd-font-mono"],
+  "--ddd-radius": "6px",
+  "--ddd-radius-lg": "12px",
+  "--ddd-space": "8px",
+  "--ddd-tap-target": "44px",
 };
 
 /** Every token name, in declaration order. */

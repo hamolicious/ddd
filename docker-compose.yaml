@@ -29,7 +29,7 @@
 # container, the host port it is published on, what the healthcheck and the caddy
 # upstream talk to, and the port of the loopback origins the server allows by itself.
 
-name: life-manager
+name: ddd
 
 services:
   mongo:
@@ -44,7 +44,7 @@ services:
         soft: 64000
         hard: 64000
     environment:
-      MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-life_manager}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-ddd}
     volumes:
       - mongo-data:/data/db
       - mongo-config:/data/configdb
@@ -74,7 +74,7 @@ services:
         condition: service_healthy
     environment:
       MONGO_URI: mongodb://mongo:27017
-      MONGO_DATABASE: ${MONGO_DATABASE:-life_manager}
+      MONGO_DATABASE: ${MONGO_DATABASE:-ddd}
       PORT: 8081
       BIND_ADDR: 0.0.0.0:${PORT:-8080}
       # Required, >= 32 bytes, no default (SPEC §5.2). Rotating it logs everyone out.
@@ -106,7 +106,7 @@ services:
       # caddy block below is the *only* route to the server.
       TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-false}
       LOG_FORMAT: ${LOG_FORMAT:-json}
-      RUST_LOG: ${RUST_LOG:-info,life_manager_server=debug}
+      RUST_LOG: ${RUST_LOG:-info,ddd_server=debug}
       # Must stay below stop_grace_period (SPEC §8: exit within 30 s).
       SHUTDOWN_GRACE_SECS: ${SHUTDOWN_GRACE_SECS:-30}
     # BIND_HOST narrows where the host publishes it (127.0.0.1 behind the caddy profile).

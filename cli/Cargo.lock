@@ -177,6 +177,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "ddd-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "ddd-core",
+ "serde_json",
+ "ureq",
+]
+
+[[package]]
+name = "ddd-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "deranged"
 version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -404,26 +424,6 @@ name = "libc"
 version = "0.2.189"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
-
-[[package]]
-name = "life-manager-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "life-manager-core",
- "serde_json",
- "ureq",
-]
-
-[[package]]
-name = "life-manager-core"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "thiserror",
-]
 
 [[package]]
 name = "litemap"

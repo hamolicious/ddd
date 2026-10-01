@@ -5,7 +5,7 @@
  * It lives outside React because two of the three are driven from *outside* the
  * React tree — the router calls `setMainView` during its own activation, and
  * `matchMedia` fires whenever the window crosses the breakpoint — and because
- * `lm/shell` has to answer `isCompact()` synchronously for consumers that are not
+ * `ddd/shell` has to answer `isCompact()` synchronously for consumers that are not
  * components at all.
  *
  * `snapshot()` returns a cached immutable object so `useSyncExternalStore` can use
@@ -27,9 +27,9 @@ import type { ShellLayout } from "./api.js";
 export const COMPACT_QUERY = COMPACT_MEDIA_QUERY;
 
 /** Where the per-device panel collapse state is remembered. */
-const PANELS_KEY = "life-manager.shell-ui.panels";
+const PANELS_KEY = "ddd.shell-ui.panels";
 /** Whether the altbar column is shown on a wide screen, per device. */
-const ALTBAR_KEY = "life-manager.shell-ui.altbar";
+const ALTBAR_KEY = "ddd.shell-ui.altbar";
 
 export interface ViewSelection {
   readonly id: string;

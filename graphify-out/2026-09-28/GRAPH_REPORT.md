@@ -1,4 +1,4 @@
-# Graph Report - life-manager  (2026-09-28)
+# Graph Report - ddd  (2026-09-28)
 
 ## Corpus Check
 - 915 files · ~895,305 words
@@ -128,7 +128,7 @@
 - ConnectionSession
 - string
 - ops.ts
-- Life Manager project specification
+- ddd project specification
 - plugin-abi/src/documents.rs
 - pluginhost/hooks.rs
 - config.dart
@@ -262,7 +262,7 @@
 - web_kernel_api_src_index_documentqueryresult
 - web_kernel_api_src_index_documentrow
 - web_kernel_api_src_index_documentsapi
-- ref_protocols_lm
+- ref_protocols_ddd
 - offline-copy.tsx
 - web_kernel_api_src_index_documentspliceapi
 - kinds.ts
@@ -298,7 +298,7 @@
 - web_kernel_api_src_index_sessionapi
 - web_kernel_api_src_index_sessionuser
 - web_kernel_api_src_index_settingsapi
-- life-manager-plugin-abi
+- ddd-plugin-abi
 - web_kernel_api_src_index_splicetarget
 - web_kernel_api_src_index_syncstatus
 - web_kernel_api_src_index_textedit
@@ -563,7 +563,7 @@
 - NoticeBell.tsx
 - acceptance.spec.ts
 - crate::error::AppError
-- lm/keybindings.default
+- ddd/keybindings.default
 - providers.test.ts
 - BuiltShape
 - .fmt
@@ -581,15 +581,15 @@
 10. `Actor` - 55 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `lm/navbar.item` --references--> `header()`  [INFERRED]
+- `ddd/navbar.item` --references--> `header()`  [INFERRED]
   plugins/base/header/protocols/navbar.item/README.md → web/kernel/src/sync/bootstrap.test.ts
-- `lm/editor.paste` --references--> `paste()`  [INFERRED]
+- `ddd/editor.paste` --references--> `paste()`  [INFERRED]
   plugins/base/editor/protocols/editor.paste/README.md → web/app/e2e/attachments.spec.ts
-- `lm/text.surface` --references--> `DocumentId`  [INFERRED]
+- `ddd/text.surface` --references--> `DocumentId`  [INFERRED]
   plugins/base/slash-commands/protocols/text.surface/README.md → web/kernel-api/src/documents.ts
-- `lm/attachments.viewer` --references--> `string()`  [INFERRED]
+- `ddd/attachments.viewer` --references--> `string()`  [INFERRED]
   plugins/base/attachments/protocols/attachments.viewer/README.md → web/kernel-api/src/shape.ts
-- `lm/commands.command` --references--> `string()`  [INFERRED]
+- `ddd/commands.command` --references--> `string()`  [INFERRED]
   plugins/base/commands/protocols/commands.command/README.md → web/kernel-api/src/shape.ts
 
 ## Import Cycles
@@ -654,7 +654,7 @@ Nodes (77): a_big_page_is_split_into_frame_sized_batches(), a_missing_offer_is_r
 
 ### Community 12 - "document-surface/src/index.tsx"
 Cohesion: 0.06
-Nodes (38): lm/document-browser, activate(), ActiveMode(), boundaryFor(), byId(), cssEscape(), deactivate(), DocumentSurfaceApi (+30 more)
+Nodes (38): ddd/document-browser, activate(), ActiveMode(), boundaryFor(), byId(), cssEscape(), deactivate(), DocumentSurfaceApi (+30 more)
 
 ### Community 13 - "main.dart"
 Cohesion: 0.03
@@ -706,7 +706,7 @@ Nodes (65): accept, auth, base64, bytes, _client, close, config, _dispositionFil
 
 ### Community 25 - "ShellState"
 Cohesion: 0.08
-Nodes (18): COMPACT_MEDIA_QUERY, lm/shell, activate(), ShellProps, COMPACT_QUERY, EMPTY_PARAMS, readAltbar(), readPanels() (+10 more)
+Nodes (18): COMPACT_MEDIA_QUERY, ddd/shell, activate(), ShellProps, COMPACT_QUERY, EMPTY_PARAMS, readAltbar(), readPanels() (+10 more)
 
 ### Community 26 - "zipcheck.rs"
 Cohesion: 0.10
@@ -1042,13 +1042,13 @@ Nodes (23): an_empty_payload_is_a_valid_frame(), ConnectionSession, control_mess
 
 ### Community 110 - "string"
 Cohesion: 0.08
-Nodes (18): options(), lm/search.provider, lm/document.mode, lm/editor.extension, lm/folders.decoration, lm/folders.default-location, lm/folders.menu-item, lm/folders.moved (+10 more)
+Nodes (18): options(), ddd/search.provider, ddd/document.mode, ddd/editor.extension, ddd/folders.decoration, ddd/folders.default-location, ddd/folders.menu-item, ddd/folders.moved (+10 more)
 
 ### Community 111 - "ops.ts"
 Cohesion: 0.13
 Nodes (28): ulidForIndex(), applyOp(), escapeRegExp(), findLine(), FM_KEYS, frontmatterEnd(), frontmatterValue(), indexOfLineEnd() (+20 more)
 
-### Community 112 - "Life Manager project specification"
+### Community 112 - "ddd project specification"
 Cohesion: 0.07
 Nodes (40): Shell Capability Bridge Contract, M5 Build Contracts (Flutter Shell), Flutter Shell README, M5 On-Device Acceptance Script, Backend plugin build contracts, Backend build contracts, Core Library README, Filter DSL (+32 more)
 
@@ -1194,7 +1194,7 @@ Nodes (33): author, protocol, consumes, modes, router, description, frontend, mo
 
 ### Community 148 - "data.ts"
 Cohesion: 0.15
-Nodes (23): lm/icons, drawingNow(), IconPath, load(), loadDrawing(), loadIndex(), pending, shardOf() (+15 more)
+Nodes (23): ddd/icons, drawingNow(), IconPath, load(), loadDrawing(), loadIndex(), pending, shardOf() (+15 more)
 
 ### Community 149 - "pluginhost_http.rs"
 Cohesion: 0.21
@@ -1218,7 +1218,7 @@ Nodes (32): RFC-3986, MdPoint, MdPosition, sourceOf(), spanOf(), textOf(), walk(
 
 ### Community 154 - "workspace-index.ts"
 Cohesion: 0.15
-Nodes (13): lm/workspace-index, Extracted, activate(), ancestors(), byCount(), countValues(), Derived, Entry (+5 more)
+Nodes (13): ddd/workspace-index, Extracted, activate(), ancestors(), byCount(), countValues(), Derived, Entry (+5 more)
 
 ### Community 155 - "routes/changes.rs"
 Cohesion: 0.12
@@ -1274,7 +1274,7 @@ Nodes (14): all(), ensure(), EXPIRE_AT_FIELD, index(), IndexSpec, LOGIN_ATTEMPT_
 
 ### Community 169 - "host.ts"
 Cohesion: 0.05
-Nodes (38): ref_boundary_js, ref_life_manager_core_wasm, ref_mount_js, canonicalizeDates(), encodeBase32(), harnessCore, mintUlid(), PKG (+30 more)
+Nodes (38): ref_boundary_js, ref_ddd_core_wasm, ref_mount_js, canonicalizeDates(), encodeBase32(), harnessCore, mintUlid(), PKG (+30 more)
 
 ### Community 170 - "Shell.tsx"
 Cohesion: 0.13
@@ -1290,7 +1290,7 @@ Nodes (23): FlutterWindow, flutter_controller_, OnCreate, OnDestroy, project_, D
 
 ### Community 173 - "plugin-abi/src/lib.rs"
 Cohesion: 0.15
-Nodes (16): ABI_VERSION, Capabilities, InitPayload, Vec, btreemap, life_manager_plugin_sdk_as_lm, code_of(), dispatch() (+8 more)
+Nodes (16): ABI_VERSION, Capabilities, InitPayload, Vec, btreemap, ddd_plugin_sdk_as_ddd, code_of(), dispatch() (+8 more)
 
 ### Community 174 - "server/tests/common/mod.rs"
 Cohesion: 0.08
@@ -1322,7 +1322,7 @@ Nodes (34): map_from_bson(), map_to_bson(), Bson, Map, Value, value_from_bson(),
 
 ### Community 181 - "runtime/settings.ts"
 Cohesion: 0.08
-Nodes (13): lm/text.surface, FilterJson, QuerySubscription, SettingsApi, asSettingsValue(), sameValues(), SETTINGS_OWNER_KEY, SettingsEdit (+5 more)
+Nodes (13): ddd/text.surface, FilterJson, QuerySubscription, SettingsApi, asSettingsValue(), sameValues(), SETTINGS_OWNER_KEY, SettingsEdit (+5 more)
 
 ### Community 182 - "MessageHandler"
 Cohesion: 0.36
@@ -1548,7 +1548,7 @@ Nodes (10): DartProject, HWND, LPARAM, LRESULT, UINT, WPARAM, FlutterWindow::Flu
 Cohesion: 0.35
 Nodes (11): Envelope, dispatch(), erroring_stub(), map_mongo_error(), Error, F, O, run_body() (+3 more)
 
-### Community 246 - "ref_protocols_lm"
+### Community 246 - "ref_protocols_ddd"
 Cohesion: 0.04
 Nodes (36): DefaultModeSection(), DefaultModeSectionProps, describe(), DocumentRegions, MarkdownRenderer, ProtocolId, ProtocolVersion, RenderAttachmentOptions (+28 more)
 
@@ -1620,9 +1620,9 @@ Nodes (15): Connection, ConnectionKind, FieldScope, FmField, FmValueCount, Index
 Cohesion: 0.13
 Nodes (16): a_bootstrap_cursor_carries_the_pinned_watermark(), bootstrap_flags_accept_both_spellings(), BootstrapCursor<'a>, BootstrapHeader, Flag, mongo_io_error(), ndjson_line(), ndjson_stream() (+8 more)
 
-### Community 282 - "life-manager-plugin-abi"
+### Community 282 - "ddd-plugin-abi"
 Cohesion: 0.40
-Nodes (5): hello-backend, life-manager-core, life-manager-plugin-abi, life-manager-plugin-sdk, life-manager-server
+Nodes (5): hello-backend, ddd-core, ddd-plugin-abi, ddd-plugin-sdk, ddd-server
 
 ### Community 287 - "LaunchImage README"
 Cohesion: 0.50
@@ -1658,7 +1658,7 @@ Nodes (12): crdt_state_survives_a_room_eviction(), create_get_replace_roundtrip(
 
 ### Community 316 - "obsidian-importer/src/index.tsx"
 Cohesion: 0.17
-Nodes (12): STATES, activate(), vaultName(), activate(), hasHiddenParts(), Source(), ref_protocols_lm_commands_command, ref_protocols_lm_document_mode (+4 more)
+Nodes (12): STATES, activate(), vaultName(), activate(), hasHiddenParts(), Source(), ref_protocols_ddd_commands_command, ref_protocols_ddd_document_mode (+4 more)
 
 ### Community 317 - "protocol_registry.rs"
 Cohesion: 0.23
@@ -1710,7 +1710,7 @@ Nodes (13): Findings, Missing adversarial tests, Offline → online sync recon, 
 
 ### Community 329 - "alt-editor/src/index.tsx"
 Cohesion: 0.27
-Nodes (9): AltEditorApi, applyMinimalEdit(), caretRect(), commonPrefix(), markAt(), PlainEditor(), ref_protocols_lm_editor_paste, ref_protocols_lm_text_surface (+1 more)
+Nodes (9): AltEditorApi, applyMinimalEdit(), caretRect(), commonPrefix(), markAt(), PlainEditor(), ref_protocols_ddd_editor_paste, ref_protocols_ddd_text_surface (+1 more)
 
 ### Community 331 - "docstore_splice.rs"
 Cohesion: 0.17
@@ -1730,7 +1730,7 @@ Nodes (9): body_line_fallback_is_truncated(), first_heading(), first_non_empty_l
 
 ### Community 335 - "_shared/regions.ts"
 Cohesion: 0.21
-Nodes (12): lm/markdown-renderer, bodyOf(), bodyStart(), DocumentRegions, findFrontmatter(), findSectionRun(), Line, openFenceId() (+4 more)
+Nodes (12): ddd/markdown-renderer, bodyOf(), bodyStart(), DocumentRegions, findFrontmatter(), findSectionRun(), Line, openFenceId() (+4 more)
 
 ### Community 337 - "folders/manifest.json"
 Cohesion: 0.04
@@ -1750,7 +1750,7 @@ Nodes (17): author, description, frontend, module, style, hot, protocol, id (+9 
 
 ### Community 341 - "KeybindingsSection.tsx"
 Cohesion: 0.20
-Nodes (7): lm/commands.command, ResolvedBindings, BindingsController, createKeybindingsSection(), useRevision(), useTouchOnly(), VisibleViewport
+Nodes (7): ddd/commands.command, ResolvedBindings, BindingsController, createKeybindingsSection(), useRevision(), useTouchOnly(), VisibleViewport
 
 ### Community 342 - "ref_kernel"
 Cohesion: 0.05
@@ -1766,7 +1766,7 @@ Nodes (17): properties, required, type, x-rust-derive, ConsumedPort, description
 
 ### Community 345 - "component"
 Cohesion: 0.11
-Nodes (10): lm/attachments.viewer, lm/markdown.attachment, lm/markdown.component, lm/markdown.directive, lm/markdown.fence, lm/settings.section, lm/shell.header, lm/shell.overlay (+2 more)
+Nodes (10): ddd/attachments.viewer, ddd/markdown.attachment, ddd/markdown.component, ddd/markdown.directive, ddd/markdown.fence, ddd/settings.section, ddd/shell.header, ddd/shell.overlay (+2 more)
 
 ### Community 346 - "properties"
 Cohesion: 0.14
@@ -1858,7 +1858,7 @@ Nodes (8): bit(), CronDecision, CronSchedule, decide(), slot(), to_offset(), tru
 
 ### Community 409 - "editor.paste/index.d.ts"
 Cohesion: 0.17
-Nodes (7): EditorInsertion, EditorPaste, EditorPasteEvent, ProtocolId, ProtocolVersion, lm/editor.paste, paste()
+Nodes (7): EditorInsertion, EditorPaste, EditorPasteEvent, ProtocolId, ProtocolVersion, ddd/editor.paste, paste()
 
 ### Community 410 - "compose-plugins.mjs"
 Cohesion: 0.18
@@ -1958,7 +1958,7 @@ Nodes (8): http_observability(), looks_like_id(), request_id_header(), route_lab
 
 ### Community 473 - ".upload"
 Cohesion: 0.40
-Nodes (3): P1 — the attachment queue has no cross-tab owner or idempotency key, lm/attachments, AttachmentsApi
+Nodes (3): P1 — the attachment queue has no cross-tab owner or idempotency key, ddd/attachments, AttachmentsApi
 
 ### Community 474 - "context-menu/src/Menu.tsx"
 Cohesion: 0.22
@@ -2022,7 +2022,7 @@ Nodes (11): deepEqual(), markersIn(), assertConvergence(), cheapHash(), Converge
 
 ### Community 492 - "Link"
 Cohesion: 0.39
-Nodes (3): lm/router, Link(), LinkRouter
+Nodes (3): ddd/router, Link(), LinkRouter
 
 ### Community 493 - "attachments/src/index.tsx"
 Cohesion: 0.43
@@ -2038,7 +2038,7 @@ Nodes (4): boot(), REGISTRY, repo, web
 
 ### Community 497 - "boolean"
 Cohesion: 0.29
-Nodes (4): lm/markdown.taskState, lm/altbar.panel, lm/sidebar.panel, boolean()
+Nodes (4): ddd/markdown.taskState, ddd/altbar.panel, ddd/sidebar.panel, boolean()
 
 ### Community 499 - "frontmatter.spec.ts"
 Cohesion: 0.22
@@ -2076,9 +2076,9 @@ Nodes (3): REGISTRY, repo, web
 Cohesion: 0.50
 Nodes (3): crate::error::AppError, From, Self
 
-### Community 513 - "lm/keybindings.default"
+### Community 513 - "ddd/keybindings.default"
 Cohesion: 0.50
-Nodes (3): lm/keybindings.default, keys(), command()
+Nodes (3): ddd/keybindings.default, keys(), command()
 
 ## Knowledge Gaps
 - **2699 isolated node(s):** `note`, `bundle_version`, `min_bridge_version`, `index_csp`, `files` (+2694 more)
@@ -2095,7 +2095,7 @@ _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `String` connect `String` to `routes/documents.rs`, `value.rs`, `Response`, `sync_ws.rs`, `docstore.rs`, `attachments.rs`, `sync.rs`, `.fire`, `admin.rs`, `shell.rs`, `telemetry.rs`, `zipcheck.rs`, `plugininstall/mod.rs`, `plugininstall/config.rs`, `routes/statics.rs`, `auth/mod.rs`, `protocols.rs`, `AppState`, `server/src/plugins.rs`, `PluginPool`, `HookDispatcher`, `ApiResponse`, `MongoDocStoreInner`, `domain.rs`, `DocStoreError`, `Date`, `feed.rs`, `plugin_api.rs`, `ast.rs`, `tests/statics.rs`, `pluginhost_runtime.rs`, `shell_bundle.rs`, `routes/uploads.rs`, `rate_limit.rs`, `plugininstall_flow.rs`, `bootstrap`, `src/changes.rs`, `resolve.rs`, `evaluator.rs`, `HostError`, `.lock`, `plugininstall_zip.rs`, `AppError`, `CircuitBreaker`, `pluginhost/limits.rs`, `super`, `Config`, `migrations.rs`, `splice.rs`, `ChangeFeed`, `ConnectionSession`, `plugin-abi/src/documents.rs`, `main.rs`, `serve`, `HookQueue`, `document.rs`, `sections.rs`, `host_fns.rs`, `HookKind`, `pluginhost/mod.rs`, `convergence.rs`, `health.rs`, `password.rs`, `pluginhost_smoke.rs`, `pluginhost_http.rs`, `routes/changes.rs`, `pluginhost_routes.rs`, `conformance.rs`, `wasm.rs`, `plugin-abi/src/lib.rs`, `server/tests/common/mod.rs`, `Value`, `yaml.rs`, `call_value`, `plugin-sdk/src/kv.rs`, `PluginHost`, `plugin-abi/src/events.rs`, `manifest_types.rs`, `audit.rs`, `write_envelope`, `ConfigGetOutput`, `mongo.rs`, `wiring_store.rs`, `ndjson_stream`, `protocol_registry.rs`, `docstore_splice.rs`, `title.rs`, `routes/wiring.rs`, `tests/uploads.rs`, `ListQuery`, `MongoDocStore`, `plugin-sdk/src/log.rs`, `plugin-abi/src/error.rs`, `http_observability`, `core/src/lib.rs`, `in_flight`, `.parse`?**
   _High betweenness centrality (0.172) - this node is a cross-community bridge._
-- **Why does `react` connect `react` to `menu.tsx`, `main.tsx`, `AdminClient`, `icons.tsx`, `Controls.tsx`, `document-surface/src/index.tsx`, `tasks.ts`, `store.ts`, `normalizePath`, `ThemesController`, `Modal.tsx`, `data.ts`, `commands/src/index.tsx`, `context-menu/index.d.ts`, `fm-display.ts`, `render.tsx`, `ShellState`, `editor/src/index.tsx`, `connections.test.ts`, `merge.ts`, `doc-embed.tsx`, `viewer/src/index.tsx`, `src/filter.ts`, `host.ts`, `Shell.tsx`, `native-preview/src/index.tsx`, `MarkdownRuntime`, `Inspector.tsx`, `obsidian-importer/src/index.tsx`, `path.ts`, `folders/src/index.tsx`, `pipeline.test.ts`, `Panel.tsx`, `Unsubscribe`, `plugin.test.ts`, `doc-list/src/index.tsx`, `alt-editor/src/index.tsx`, `router/src/match.ts`, `importmap.ts`, `admin/src/api.ts`, `DocListView.tsx`, `package.json`, `KeybindingsSection.tsx`, `ref_kernel`, `context-menu/src/Menu.tsx`, `Palette.tsx`, `wiring/layout.ts`, `graph/src/settings.ts`, `styles.ts`, `FolderTree.tsx`, `icons/index.d.ts`, `MarkdownSettings.tsx`, `view.tsx`, `Account.tsx`, `runtime/boundary.tsx`, `_shared/boundary.tsx`, `ViewsPanel.tsx`, `ref_protocols_lm`, `offline-copy.tsx`, `custom.ts`, `kinds.ts`, `router/index.d.ts`, `BarSettings.tsx`, `suggest.ts`, `NoticeBell.tsx`?**
+- **Why does `react` connect `react` to `menu.tsx`, `main.tsx`, `AdminClient`, `icons.tsx`, `Controls.tsx`, `document-surface/src/index.tsx`, `tasks.ts`, `store.ts`, `normalizePath`, `ThemesController`, `Modal.tsx`, `data.ts`, `commands/src/index.tsx`, `context-menu/index.d.ts`, `fm-display.ts`, `render.tsx`, `ShellState`, `editor/src/index.tsx`, `connections.test.ts`, `merge.ts`, `doc-embed.tsx`, `viewer/src/index.tsx`, `src/filter.ts`, `host.ts`, `Shell.tsx`, `native-preview/src/index.tsx`, `MarkdownRuntime`, `Inspector.tsx`, `obsidian-importer/src/index.tsx`, `path.ts`, `folders/src/index.tsx`, `pipeline.test.ts`, `Panel.tsx`, `Unsubscribe`, `plugin.test.ts`, `doc-list/src/index.tsx`, `alt-editor/src/index.tsx`, `router/src/match.ts`, `importmap.ts`, `admin/src/api.ts`, `DocListView.tsx`, `package.json`, `KeybindingsSection.tsx`, `ref_kernel`, `context-menu/src/Menu.tsx`, `Palette.tsx`, `wiring/layout.ts`, `graph/src/settings.ts`, `styles.ts`, `FolderTree.tsx`, `icons/index.d.ts`, `MarkdownSettings.tsx`, `view.tsx`, `Account.tsx`, `runtime/boundary.tsx`, `_shared/boundary.tsx`, `ViewsPanel.tsx`, `ref_protocols_ddd`, `offline-copy.tsx`, `custom.ts`, `kinds.ts`, `router/index.d.ts`, `BarSettings.tsx`, `suggest.ts`, `NoticeBell.tsx`?**
   _High betweenness centrality (0.144) - this node is a cross-community bridge._
 - **Why does `Drop` connect `feed.rs` to `AppState`, `in_flight`, `PluginPool`, `HookDispatcher`, `tests/statics.rs`, `.lock`, `FolderTree.tsx`, `shell_bundle.rs`?**
   _High betweenness centrality (0.138) - this node is a cross-community bridge._

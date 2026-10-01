@@ -56,24 +56,24 @@ pub const HOST_FUNCTIONS: &[&str] = &[
 /// any plugin with a backend half; the install flow refuses a module without it, and the
 /// host re-checks it at activation (the same stale-bundle guard the frontend loader
 /// applies, SPEC §6.4).
-pub const ABI_VERSION: &str = "lm_abi_version";
+pub const ABI_VERSION: &str = "ddd_abi_version";
 
 /// Optional. Called once per instance, with [`crate::InitPayload`], before any other
 /// export. A refusal marks the plugin failed.
-pub const INIT: &str = "lm_init";
+pub const INIT: &str = "ddd_init";
 
-pub const HOOK_DOCUMENT_CREATED: &str = "lm_hook_document_created";
-pub const HOOK_DOCUMENT_CHANGED: &str = "lm_hook_document_changed";
-pub const HOOK_DOCUMENT_DELETED: &str = "lm_hook_document_deleted";
+pub const HOOK_DOCUMENT_CREATED: &str = "ddd_hook_document_created";
+pub const HOOK_DOCUMENT_CHANGED: &str = "ddd_hook_document_changed";
+pub const HOOK_DOCUMENT_DELETED: &str = "ddd_hook_document_deleted";
 
 /// [`crate::cron::CronPayload`] in, `null` out.
-pub const CRON: &str = "lm_cron";
+pub const CRON: &str = "ddd_cron";
 /// [`crate::http::HttpRouteRequest`] in, [`crate::http::HttpRouteResponse`] out.
-pub const HTTP: &str = "lm_http";
+pub const HTTP: &str = "ddd_http";
 /// [`crate::call::CallPayload`] in, any JSON out.
-pub const CALL: &str = "lm_call";
+pub const CALL: &str = "ddd_call";
 /// [`crate::events::EventPayload`] in, `null` out.
-pub const EVENT: &str = "lm_event";
+pub const EVENT: &str = "ddd_event";
 
 /// Every export the host may call.
 pub const EXPORTS: &[&str] = &[
@@ -110,6 +110,6 @@ mod tests {
         exports.sort_unstable();
         exports.dedup();
         assert_eq!(exports.len(), EXPORTS.len());
-        assert!(EXPORTS.iter().all(|name| name.starts_with("lm_")));
+        assert!(EXPORTS.iter().all(|name| name.starts_with("ddd_")));
     }
 }

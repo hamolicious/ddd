@@ -22,8 +22,8 @@ use serde_json::Value;
 pub struct CallPluginInput {
     /// The callee's plugin id — or an id it `provides`.
     pub plugin: String,
-    /// The function name as the callee's `lm_call` dispatcher understands it, and as its
-    /// `backend.exports` lists it — *not* a Wasm export name. Every invoked call lands on the single `lm_call` export
+    /// The function name as the callee's `ddd_call` dispatcher understands it, and as its
+    /// `backend.exports` lists it — *not* a Wasm export name. Every invoked call lands on the single `ddd_call` export
     /// (`crate::names::CALL`), which is what keeps the export surface fixed.
     pub function: String,
     #[serde(default)]
@@ -40,7 +40,7 @@ pub struct CallPluginOutput {
     pub value: Value,
 }
 
-/// What the callee's `lm_call` export receives.
+/// What the callee's `ddd_call` export receives.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CallPayload {
     pub function: String,

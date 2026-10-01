@@ -14,9 +14,9 @@
  */
 export interface Target {
   readonly type: string;
-  /** `data-lm-target-id`; `""` when the element has none. */
+  /** `data-ddd-target-id`; `""` when the element has none. */
   readonly id: string;
-  /** `data-lm-target-label`: the menu title, or its section's. */
+  /** `data-ddd-target-label`: the menu title, or its section's. */
   readonly label?: string;
   readonly element: HTMLElement;
 }
@@ -24,13 +24,13 @@ export interface Target {
 /** How long a touch rests before it is a long press: the menu's, and a drag's that starts the same way. */
 export const LONG_PRESS_MS = 500;
 
-export const TARGET_ATTR = "data-lm-target";
-export const TARGET_ID_ATTR = "data-lm-target-id";
-export const TARGET_LABEL_ATTR = "data-lm-target-label";
+export const TARGET_ATTR = "data-ddd-target";
+export const TARGET_ID_ATTR = "data-ddd-target-id";
+export const TARGET_LABEL_ATTR = "data-ddd-target-label";
 /** `"release"`: a long press opens the menu on release, not on the timer (a card that also drags). */
-export const PRESS_ATTR = "data-lm-press";
+export const PRESS_ATTR = "data-ddd-press";
 /** `"false"`: only a target when nothing marked is nearer (blank space, not what is on it). */
-export const ENCLOSING_ATTR = "data-lm-target-enclosing";
+export const ENCLOSING_ATTR = "data-ddd-target-enclosing";
 
 export interface TargetOptions {
   /** The menu title (innermost) or the section title (enclosing). */

@@ -56,7 +56,7 @@ pub struct EmitClientOutput {
     pub sockets: u32,
 }
 
-/// What a subscribing plugin's `lm_event` export receives.
+/// What a subscribing plugin's `ddd_event` export receives.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EventPayload {
     /// Namespaced (`calendar:synced`).

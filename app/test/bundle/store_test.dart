@@ -8,8 +8,8 @@ library;
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:life_manager_shell/bundle/manifest.dart';
-import 'package:life_manager_shell/bundle/store.dart';
+import 'package:ddd_shell/bundle/manifest.dart';
+import 'package:ddd_shell/bundle/store.dart';
 
 import 'bundle_fixtures.dart';
 
@@ -148,7 +148,7 @@ void main() {
     late BundleStore store;
 
     setUp(() {
-      root = Directory.systemTemp.createTempSync('lm-store');
+      root = Directory.systemTemp.createTempSync('ddd-store');
       store = BundleStore(root);
     });
 

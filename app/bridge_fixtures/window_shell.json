@@ -5,7 +5,7 @@
     "bridgeVersion": 1,
     "platform": "android",
     "serverBaseUrl": "https://life.example.com",
-    "bearerToken": "lm.session.Ax9…",
+    "bearerToken": "ddd.session.Ax9…",
     "capabilities": [
       "auth",
       "boot",
@@ -68,17 +68,17 @@
   },
   "updateReady": {
     "note": "How the shell tells a running page that a new bundle is verified and staged (BRIDGE.md §5, §7). Not a bridge method: the page does not ask, it is told, so the shell only has to `evaluateJavascript` a dispatch. Both spellings land on the same notice; the event is the one a plugin can also subscribe to. Purely informational — promotion happens at the next launch either way. It lives here because the listeners shipped on the web side before anything in the shell fired them, and a shared string is what keeps the two halves from drifting apart silently.",
-    "event": "lm-shell-update-ready",
+    "event": "ddd-shell-update-ready",
     "functionSpelling": "lmShellUpdateReady",
     "detailKey": "bundleVersion",
-    "script": "window.dispatchEvent(new CustomEvent(\"lm-shell-update-ready\", { detail: { bundleVersion: \"b1f3c0de00000000000000000000000000000000000000000000000000000000\" } }));",
+    "script": "window.dispatchEvent(new CustomEvent(\"ddd-shell-update-ready\", { detail: { bundleVersion: \"b1f3c0de00000000000000000000000000000000000000000000000000000000\" } }));",
     "scriptVersion": "b1f3c0de00000000000000000000000000000000000000000000000000000000"
   },
   "folderChanged": {
     "note": "How a shell tells the page that files in the chosen folder changed outside it (BRIDGE.md §4.5). Like updateReady it is not a method: the shell evaluates a dispatch. `paths` is a hint (relative paths, possibly empty); the page rescans either way.",
-    "event": "lm-folder-changed",
+    "event": "ddd-folder-changed",
     "detailKey": "paths",
-    "script": "window.dispatchEvent(new CustomEvent(\"lm-folder-changed\", { detail: { paths: [\"Home/Home.md\"] } }));",
+    "script": "window.dispatchEvent(new CustomEvent(\"ddd-folder-changed\", { detail: { paths: [\"Home/Home.md\"] } }));",
     "scriptPaths": [
       "Home/Home.md"
     ]

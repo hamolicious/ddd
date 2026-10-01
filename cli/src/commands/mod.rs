@@ -13,7 +13,7 @@ pub enum Command {
     Plugin(plugin::PluginCommand),
     /// Query a workspace's documents: `--filter title:text_contains:a --sort fm.key`.
     Query(query::QueryArgs),
-    /// Sign in to a server and print a bearer token for `lm query`.
+    /// Sign in to a server and print a bearer token for `ddd query`.
     Login(login::LoginArgs),
 }
 

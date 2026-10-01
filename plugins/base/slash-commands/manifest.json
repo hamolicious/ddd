@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "name": "Slash commands",
   "description": "Type / in any editor for a menu of actions other plugins offer.",
-  "author": "Life Manager base distribution",
+  "author": "ddd base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": {
     "prefix": "slash"

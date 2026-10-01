@@ -3,7 +3,7 @@
   "version": "2.1.0",
   "name": "Graph view",
   "description": "Every note and the links between them as a live, force-directed graph — the whole workspace, or the neighbourhood of the open note in the side panel.",
-  "author": "Life Manager base distribution",
+  "author": "ddd base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": {
     "prefix": "graph"

@@ -27,7 +27,7 @@ export interface PickableNote {
   readonly folder: string;
 }
 
-/** A note's colour and icon, as `lm/folders.decoration` gives them. */
+/** A note's colour and icon, as `ddd/folders.decoration` gives them. */
 export interface NoteLook {
   readonly background?: string;
   readonly color?: string;
@@ -62,7 +62,7 @@ export function NoteName({ title, look }: { readonly title: string; readonly loo
         gap: "0.25rem",
         lineHeight: 1.4,
         verticalAlign: "middle",
-        ...(pill ? { borderRadius: "var(--lm-radius)", paddingInline: "0.375rem", background: look.background } : {}),
+        ...(pill ? { borderRadius: "var(--ddd-radius)", paddingInline: "0.375rem", background: look.background } : {}),
         ...(look?.color !== undefined ? { color: look.color } : {}),
       }}
     >
@@ -77,16 +77,16 @@ export function NoteName({ title, look }: { readonly title: string; readonly loo
 const OPTION: CSSProperties = {
   display: "flex",
   width: "100%",
-  minHeight: "var(--lm-tap-target)",
+  minHeight: "var(--ddd-tap-target)",
   alignItems: "center",
   gap: "0.5rem",
   border: 0,
-  borderRadius: "var(--lm-radius)",
+  borderRadius: "var(--ddd-radius)",
   background: "transparent",
   paddingInline: "0.5rem",
   textAlign: "left",
   font: "inherit",
-  color: "var(--lm-text)",
+  color: "var(--ddd-text)",
   cursor: "pointer",
 };
 
@@ -96,7 +96,7 @@ const MUTED: CSSProperties = {
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
   fontSize: "0.85em",
-  color: "var(--lm-text-muted)",
+  color: "var(--ddd-text-muted)",
 };
 
 /** How tall the list's box may grow before it scrolls. */
@@ -151,9 +151,9 @@ export function NotePicker({ source, onChoose, classPrefix: p, autoFocus = false
           maxHeight: BOX_HEIGHT,
           overflowY: "auto",
           overscrollBehavior: "contain",
-          border: "1px solid var(--lm-border)",
-          borderRadius: "var(--lm-radius)",
-          background: "var(--lm-bg)",
+          border: "1px solid var(--ddd-border)",
+          borderRadius: "var(--ddd-radius)",
+          background: "var(--ddd-bg)",
         }}
       >
         {shown.length === 0 ? (

@@ -84,8 +84,8 @@ describe("reconnect policy", () => {
 
 describe("handshake", () => {
   it("offers the bearer subprotocol only when a token is present", () => {
-    expect(subprotocols()).toEqual(["life-manager.v1"]);
-    expect(subprotocols("abc")).toEqual(["life-manager.v1", "life-manager.bearer.abc"]);
+    expect(subprotocols()).toEqual(["ddd.v1"]);
+    expect(subprotocols("abc")).toEqual(["ddd.v1", "ddd.bearer.abc"]);
   });
 });
 

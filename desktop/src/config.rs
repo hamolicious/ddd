@@ -1,4 +1,4 @@
-//! `~/.config/life-manager/desktop.toml`: the server, and the notes folder.
+//! `~/.config/ddd/desktop.toml`: the server, and the notes folder.
 
 use std::path::{Path, PathBuf};
 
@@ -16,7 +16,7 @@ pub fn path() -> Option<PathBuf> {
         .filter(|v| !v.is_empty())
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
-    Some(base.join("life-manager").join("desktop.toml"))
+    Some(base.join("ddd").join("desktop.toml"))
 }
 
 pub fn read() -> Option<Config> {

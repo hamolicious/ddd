@@ -1,4 +1,4 @@
-//! Life Manager on the Linux desktop: the server's PWA in a WebKitGTK window.
+//! ddd on the Linux desktop: the server's PWA in a WebKitGTK window.
 //!
 //! Deliberately **not** a port of the Flutter shell (`app/`). Loaded straight from the
 //! server, the page is an ordinary browser tab (cookie session, service worker,
@@ -23,10 +23,10 @@ use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
 use url::Url;
 
-const CONFIG_HINT: &str = "Set the server with `--server <url>`, the LM_SERVER_URL \
-environment variable, or `server_url = \"https://…\"` in ~/.config/life-manager/desktop.toml.";
+const CONFIG_HINT: &str = "Set the server with `--server <url>`, the DDD_SERVER_URL \
+environment variable, or `server_url = \"https://…\"` in ~/.config/ddd/desktop.toml.";
 
-/// `--server` beats `LM_SERVER_URL` beats the config file.
+/// `--server` beats `DDD_SERVER_URL` beats the config file.
 fn server_url() -> Result<Url, String> {
     let mut args = std::env::args().skip(1);
     let mut from_args = None;
@@ -39,7 +39,7 @@ fn server_url() -> Result<Url, String> {
     }
     let raw = from_args
         .or_else(|| {
-            std::env::var("LM_SERVER_URL")
+            std::env::var("DDD_SERVER_URL")
                 .ok()
                 .filter(|v| !v.is_empty())
         })
@@ -63,7 +63,7 @@ fn same_origin(a: &Url, b: &Url) -> bool {
 fn open_externally(app: &AppHandle, url: &Url) {
     if matches!(url.scheme(), "http" | "https" | "mailto") {
         if let Err(e) = app.opener().open_url(url.as_str(), None::<&str>) {
-            eprintln!("life-manager-desktop: could not open {url}: {e}");
+            eprintln!("ddd-desktop: could not open {url}: {e}");
         }
     }
 }
@@ -73,7 +73,7 @@ fn show_error(text: String) {
     std::thread::spawn(move || {
         rfd::MessageDialog::new()
             .set_level(rfd::MessageLevel::Error)
-            .set_title("Life Manager")
+            .set_title("ddd")
             .set_description(text)
             .show();
     });
@@ -158,10 +158,10 @@ fn main() {
     let server = match server_url() {
         Ok(url) => url,
         Err(message) => {
-            eprintln!("life-manager-desktop: {message}");
+            eprintln!("ddd-desktop: {message}");
             rfd::MessageDialog::new()
                 .set_level(rfd::MessageLevel::Error)
-                .set_title("Life Manager")
+                .set_title("ddd")
                 .set_description(message)
                 .show();
             std::process::exit(2);
@@ -217,7 +217,7 @@ fn main() {
             }
 
             window
-                .title("Life Manager")
+                .title("ddd")
                 .inner_size(1280.0, 860.0)
                 .min_inner_size(480.0, 480.0)
                 .initialization_script(folder::bridge_script(&origin))
@@ -250,5 +250,5 @@ fn main() {
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("error while running Life Manager");
+        .expect("error while running ddd");
 }

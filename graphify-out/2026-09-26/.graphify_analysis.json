@@ -249,7 +249,7 @@
       "ipaddr",
       "ipv4addr",
       "ipv6addr",
-      "life_manager_core_as_core",
+      "ddd_core_as_core",
       "output",
       "standard_as_base64",
       "url",
@@ -1206,12 +1206,12 @@
       "package_flutter_test_flutter_test_dart",
       "package_http_http_dart",
       "package_http_testing_dart",
-      "package_life_manager_shell_bridge_auth_dart",
-      "package_life_manager_shell_bridge_bridge_dart",
-      "package_life_manager_shell_bridge_filesystem_dart",
-      "package_life_manager_shell_bridge_notifications_dart",
-      "package_life_manager_shell_config_dart",
-      "package_life_manager_shell_shell_login_screen_dart",
+      "package_ddd_shell_bridge_auth_dart",
+      "package_ddd_shell_bridge_bridge_dart",
+      "package_ddd_shell_bridge_filesystem_dart",
+      "package_ddd_shell_bridge_notifications_dart",
+      "package_ddd_shell_config_dart",
+      "package_ddd_shell_shell_login_screen_dart",
       "return",
       "shellbridge",
       "string_get"
@@ -2185,7 +2185,7 @@
       "web_kernel_src_store_idb_store_idbprojectionstore_setcheckpoint",
       "web_kernel_src_store_idb_store_idbprojectionstore_subscribe",
       "web_kernel_src_store_idb_store_iterate_chunk_rows",
-      "web_kernel_src_store_idb_store_lifemanagerdb",
+      "web_kernel_src_store_idb_store_ddddb",
       "web_kernel_src_store_idb_store_store_docs",
       "web_kernel_src_store_idb_store_store_meta",
       "web_kernel_src_store_idb_store_store_projection",
@@ -3583,7 +3583,7 @@
       "backend_crates_plugin_abi_src_lib_initpayload",
       "backend_crates_plugin_abi_src_lib_rs_vec",
       "btreemap",
-      "life_manager_plugin_sdk_as_lm",
+      "ddd_plugin_sdk_as_ddd",
       "plugins_examples_hello_backend_src_lib",
       "plugins_examples_hello_backend_src_lib_code_of",
       "plugins_examples_hello_backend_src_lib_dispatch",
@@ -4093,7 +4093,7 @@
     ],
     "58": [
       "core_wasm",
-      "ref_life_manager_core_wasm",
+      "ref_ddd_core_wasm",
       "web_harness_src_core_harnesscore_parseasmaterialized",
       "web_kernel_src_index",
       "web_kernel_src_index_kernel_version",
@@ -4410,11 +4410,11 @@
       "directory",
       "httpclient",
       "list",
-      "package_life_manager_shell_bundle_manifest_dart",
-      "package_life_manager_shell_bundle_store_dart",
-      "package_life_manager_shell_bundle_updater_dart",
-      "package_life_manager_shell_shell_boot_guard_dart",
-      "package_life_manager_shell_shell_webview_host_dart",
+      "package_ddd_shell_bundle_manifest_dart",
+      "package_ddd_shell_bundle_store_dart",
+      "package_ddd_shell_bundle_updater_dart",
+      "package_ddd_shell_shell_boot_guard_dart",
+      "package_ddd_shell_shell_webview_host_dart",
       "socketexception"
     ],
     "65": [
@@ -5991,7 +5991,7 @@
       "backend_crates_server_tests_pluginhost_smoke_value_of",
       "extism",
       "extism_pdk",
-      "life_manager_plugin_abi_as_abi",
+      "ddd_plugin_abi_as_abi",
       "serde_json"
     ],
     "108": [
@@ -7461,7 +7461,7 @@
       "clap",
       "command",
       "exitcode",
-      "life_manager_server",
+      "ddd_server",
       "ordering",
       "tracing"
     ],
@@ -8137,7 +8137,7 @@
       "app_test_shell_notice_overlay_test_standin",
       "app_test_shell_notice_overlay_test_standinstate",
       "package_flutter_material_dart",
-      "package_life_manager_shell_main_dart",
+      "package_ddd_shell_main_dart",
       "statefulelement",
       "static_int"
     ],
@@ -8156,7 +8156,7 @@
       "prometheusbuilder"
     ],
     "206": [
-      "ref_virtual_lm_precache",
+      "ref_virtual_ddd_precache",
       "ref_workbox_precaching",
       "ref_workbox_routing",
       "ref_workbox_strategies",
@@ -8466,10 +8466,10 @@
     ],
     "234": [
       "pkg_hello_backend",
-      "pkg_life_manager_core",
-      "pkg_life_manager_plugin_abi",
-      "pkg_life_manager_plugin_sdk",
-      "pkg_life_manager_server"
+      "pkg_ddd_core",
+      "pkg_ddd_plugin_abi",
+      "pkg_ddd_plugin_sdk",
+      "pkg_ddd_server"
     ],
     "235": [
       "app_ios_runner_assets_xcassets_launchimage_imageset_readme",
@@ -8515,7 +8515,7 @@
     ],
     "243": [
       "app_ios_runner_runner_bridging_header",
-      "home_hamolicious_projects_life_manager_app_ios_runner_generatedpluginregistrant_h"
+      "home_hamolicious_projects_ddd_app_ios_runner_generatedpluginregistrant_h"
     ],
     "244": [
       "backend_contracts_m2",
@@ -8531,11 +8531,11 @@
     ],
     "247": [
       "web_app_src_virtual_modules_d",
-      "web_app_src_virtual_modules_d_virtual_lm_precache"
+      "web_app_src_virtual_modules_d_virtual_ddd_precache"
     ],
     "248": [
       "web_kernel_src_wasm_core_wasm_d",
-      "web_kernel_src_wasm_core_wasm_d_life_manager_core_wasm"
+      "web_kernel_src_wasm_core_wasm_d_ddd_core_wasm"
     ],
     "249": [
       "app_analysis_options_yaml"

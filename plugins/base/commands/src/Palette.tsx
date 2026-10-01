@@ -16,7 +16,7 @@
  * **On a phone it is a sheet as tall as the visible screen.** Android's soft keyboard
  * does not shrink the layout viewport, so `position: fixed; inset: 0` covers the area
  * behind the keyboard and the last options were unreachable underneath it. The height is
- * the app's `--lm-viewport-height` (`web/app/src/boot/viewport.ts`), which the app frame
+ * the app's `--ddd-viewport-height` (`web/app/src/boot/viewport.ts`), which the app frame
  * is sized from too — CSS, not React state: re-rendering the sheet on every viewport
  * event while the keyboard moved it made it flicker. For the same reason the active row
  * is kept in view by scrolling the list alone, never `scrollIntoView`, which pans the
@@ -167,7 +167,7 @@ export function Palette({
       onKeyDown={onKeyDown}
     >
       <div
-        className="cmd-palette commands:flex commands:max-h-[min(70vh,36rem)] commands:w-full commands:max-w-[42rem] commands:flex-col commands:overflow-hidden commands:rounded-lg commands:border commands:border-border commands:bg-bg-raised commands:font-sans commands:text-text commands:shadow-2 commands:focus-within:[&_:focus-visible]:outline-2 commands:focus-within:[&_:focus-visible]:outline-offset-[-2px] commands:focus-within:[&_:focus-visible]:outline-focus commands:compact:fixed commands:compact:inset-x-0 commands:compact:top-0 commands:compact:h-[var(--lm-viewport-height,100dvh)] commands:compact:max-h-none commands:compact:max-w-none commands:compact:rounded-none commands:compact:border-0 commands:compact:pb-[env(safe-area-inset-bottom,0px)]"
+        className="cmd-palette commands:flex commands:max-h-[min(70vh,36rem)] commands:w-full commands:max-w-[42rem] commands:flex-col commands:overflow-hidden commands:rounded-lg commands:border commands:border-border commands:bg-bg-raised commands:font-sans commands:text-text commands:shadow-2 commands:focus-within:[&_:focus-visible]:outline-2 commands:focus-within:[&_:focus-visible]:outline-offset-[-2px] commands:focus-within:[&_:focus-visible]:outline-focus commands:compact:fixed commands:compact:inset-x-0 commands:compact:top-0 commands:compact:h-[var(--ddd-viewport-height,100dvh)] commands:compact:max-h-none commands:compact:max-w-none commands:compact:rounded-none commands:compact:border-0 commands:compact:pb-[env(safe-area-inset-bottom,0px)]"
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"

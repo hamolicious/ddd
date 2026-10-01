@@ -166,27 +166,27 @@ export const markdownLanguage = StreamLanguage.define<MarkdownState>({
 
 /** Token-driven colours. Every value is a kernel theme token (SPEC §6.4). */
 const markdownStyle = HighlightStyle.define([
-  { tag: tags.heading1, fontSize: "1.5em", fontWeight: "700", color: "var(--lm-text)" },
-  { tag: tags.heading2, fontSize: "1.3em", fontWeight: "700", color: "var(--lm-text)" },
-  { tag: tags.heading3, fontSize: "1.15em", fontWeight: "600", color: "var(--lm-text)" },
-  { tag: [tags.heading, tags.heading4, tags.heading5, tags.heading6], fontWeight: "600", color: "var(--lm-text)" },
+  { tag: tags.heading1, fontSize: "1.5em", fontWeight: "700", color: "var(--ddd-text)" },
+  { tag: tags.heading2, fontSize: "1.3em", fontWeight: "700", color: "var(--ddd-text)" },
+  { tag: tags.heading3, fontSize: "1.15em", fontWeight: "600", color: "var(--ddd-text)" },
+  { tag: [tags.heading, tags.heading4, tags.heading5, tags.heading6], fontWeight: "600", color: "var(--ddd-text)" },
   { tag: tags.emphasis, fontStyle: "italic" },
   { tag: tags.strong, fontWeight: "700" },
   { tag: tags.strikethrough, textDecoration: "line-through" },
-  { tag: tags.quote, color: "var(--lm-text-muted)" },
-  { tag: tags.list, color: "var(--lm-accent)" },
-  { tag: [tags.link, tags.url], color: "var(--lm-link)", textDecoration: "underline" },
-  { tag: tags.monospace, fontFamily: "var(--lm-font-mono)", color: "var(--lm-text)" },
-  { tag: tags.labelName, color: "var(--lm-text-muted)" },
-  { tag: tags.propertyName, color: "var(--lm-accent)" },
-  { tag: tags.punctuation, color: "var(--lm-text-muted)" },
-  { tag: tags.string, color: "var(--lm-text)" },
-  { tag: tags.comment, color: "var(--lm-text-muted)", fontStyle: "italic" },
-  { tag: tags.escape, color: "var(--lm-text-muted)" },
-  { tag: tags.contentSeparator, color: "var(--lm-border-strong)" },
+  { tag: tags.quote, color: "var(--ddd-text-muted)" },
+  { tag: tags.list, color: "var(--ddd-accent)" },
+  { tag: [tags.link, tags.url], color: "var(--ddd-link)", textDecoration: "underline" },
+  { tag: tags.monospace, fontFamily: "var(--ddd-font-mono)", color: "var(--ddd-text)" },
+  { tag: tags.labelName, color: "var(--ddd-text-muted)" },
+  { tag: tags.propertyName, color: "var(--ddd-accent)" },
+  { tag: tags.punctuation, color: "var(--ddd-text-muted)" },
+  { tag: tags.string, color: "var(--ddd-text)" },
+  { tag: tags.comment, color: "var(--ddd-text-muted)", fontStyle: "italic" },
+  { tag: tags.escape, color: "var(--ddd-text-muted)" },
+  { tag: tags.contentSeparator, color: "var(--ddd-border-strong)" },
   // Syntax marks stay visible but recede: this is a plain-text editor on purpose
   // (SPEC §3.1 — the document *is* the markdown), not a WYSIWYG surface.
-  { tag: tags.processingInstruction, color: "var(--lm-text-muted)" },
+  { tag: tags.processingInstruction, color: "var(--ddd-text-muted)" },
 ]);
 
 /** The language plus its highlighting — one extension for the editor to install. */

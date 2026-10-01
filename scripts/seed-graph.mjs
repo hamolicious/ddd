@@ -18,21 +18,21 @@
  *   node scripts/seed-graph.mjs [--count 500] [--url http://localhost:8080]
  *                               [--email you@example.com] [--password …] [--seed 42]
  *
- * `--email`/`--password` default to `LM_EMAIL`/`LM_PASSWORD`, `--url` to `LM_APP`.
+ * `--email`/`--password` default to `DDD_EMAIL`/`DDD_PASSWORD`, `--url` to `DDD_APP`.
  */
 
 import { randomBytes } from "node:crypto";
 
 const options = parseArgs(process.argv.slice(2));
 const count = Number(options.count ?? 500);
-const baseUrl = String(options.url ?? process.env.LM_APP ?? "http://localhost:8080").replace(/\/$/, "");
-const email = options.email ?? process.env.LM_EMAIL;
-const password = options.password ?? process.env.LM_PASSWORD;
+const baseUrl = String(options.url ?? process.env.DDD_APP ?? "http://localhost:8080").replace(/\/$/, "");
+const email = options.email ?? process.env.DDD_EMAIL;
+const password = options.password ?? process.env.DDD_PASSWORD;
 const concurrency = Number(options.concurrency ?? 16);
 const random = mulberry32(Number(options.seed ?? Date.now()));
 
 if (!Number.isInteger(count) || count < 1) fail("--count must be a positive whole number");
-if (!email || !password) fail("sign-in needed: pass --email and --password, or set LM_EMAIL and LM_PASSWORD");
+if (!email || !password) fail("sign-in needed: pass --email and --password, or set DDD_EMAIL and DDD_PASSWORD");
 
 // To the millisecond: two runs in the same second still get two folders.
 const stamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").replace(".", "-").slice(0, 19);

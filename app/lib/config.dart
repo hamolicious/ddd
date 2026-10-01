@@ -14,7 +14,7 @@ const int kBridgeVersion = 1;
 
 /// The `flutter_inappwebview` JavaScript handler name every bridge call goes through
 /// (`BRIDGE.md` §2). One handler, one envelope — see `bridge/bridge.dart`.
-const String kBridgeHandlerName = 'lm_shell_v1';
+const String kBridgeHandlerName = 'ddd_shell_v1';
 
 /// The loopback port the active bundle is served from (`BRIDGE.md` §6).
 ///
@@ -63,7 +63,7 @@ class ShellConfig {
     this.loopbackPort = kLoopbackPort,
   });
 
-  /// Origin only, no path: `https://lm.example.com`. `/api/…` is appended by callers.
+  /// Origin only, no path: `https://ddd.example.com`. `/api/…` is appended by callers.
   final Uri serverBaseUrl;
 
   /// Overridable in tests; production is always [kLoopbackPort].

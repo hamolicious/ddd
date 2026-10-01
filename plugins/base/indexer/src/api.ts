@@ -133,7 +133,7 @@ export interface FieldScope {
   readonly exclude?: DocumentId;
 }
 
-/** Everything `plugin:indexer` exports at runtime, as one type (the old `lm/workspace-index` service). */
+/** Everything `plugin:indexer` exports at runtime, as one type (the old `ddd/workspace-index` service). */
 export interface WorkspaceIndex {
   /** Resolves after the first full build; rejects if the projection could not be read. */
   readonly ready: Promise<void>;

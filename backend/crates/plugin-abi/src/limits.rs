@@ -103,7 +103,7 @@ pub const MAX_HTTP_REQUEST_BODY_BYTES: usize = 1024 * 1024;
 pub const MAX_HTTP_REDIRECTS: u32 = 3;
 pub const MAX_HTTP_REQUEST_HEADERS: usize = 32;
 pub const MAX_HTTP_HEADER_BYTES: usize = 4 * 1024;
-/// Inbound route body cap, and the cap on what `lm_http` may answer with.
+/// Inbound route body cap, and the cap on what `ddd_http` may answer with.
 pub const MAX_ROUTE_BODY_BYTES: usize = 1024 * 1024;
 pub const MAX_ROUTE_RESPONSE_HEADERS: usize = 16;
 /// Requests per minute per plugin route, per client (SPEC §5.1 "rate-limited").

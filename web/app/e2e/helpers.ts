@@ -58,7 +58,7 @@ export async function signIn(
   // on its mode, and the mode *switch* next to it reads "Back to sign in" — matching on
   // text picks up both and fails as a strict-mode violation rather than as anything
   // informative.
-  await page.locator("form.lm-auth-form button[type=submit]").click();
+  await page.locator("form.ddd-auth-form button[type=submit]").click();
 
   await expect(page.locator("main")).toBeVisible();
   await waitSynced(page);

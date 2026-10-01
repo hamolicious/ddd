@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:life_manager_shell/bridge/bridge.dart';
-import 'package:life_manager_shell/bridge/folder.dart';
+import 'package:ddd_shell/bridge/bridge.dart';
+import 'package:ddd_shell/bridge/folder.dart';
 
 /// The capability over a real temporary directory; the picker, the permission prompt and
 /// the watcher are ports.
@@ -38,7 +38,7 @@ void main() {
   });
 
   setUp(() async {
-    sandbox = await Directory.systemTemp.createTemp('lm-folder-');
+    sandbox = await Directory.systemTemp.createTemp('ddd-folder-');
     notes = await Directory('${sandbox.path}/notes').create();
     settings = await Directory('${sandbox.path}/settings').create();
     watched = StreamController<String>.broadcast();
@@ -111,10 +111,7 @@ void main() {
         .map((Object? e) => (e! as Map<String, Object?>)['path']! as String)
         .toList();
     expect(paths, containsAll(<String>['Work', 'Work/Plans.md']));
-    expect(
-      paths.where((String p) => p.startsWith('.life-manager/tmp')),
-      isEmpty,
-    );
+    expect(paths.where((String p) => p.startsWith('.ddd/tmp')), isEmpty);
 
     final Map<String, Object?> read =
         (await call(bridge, 'read', <String, Object?>{
@@ -172,7 +169,7 @@ void main() {
       final Future<List<String>> first = changes.stream.first;
       watched
         ..add('${notes.path}/Home/Home.md')
-        ..add('${notes.path}/.life-manager/index.json')
+        ..add('${notes.path}/.ddd/index.json')
         ..add('${notes.path}/Home/Home.md');
       expect(await first, <String>['Home/Home.md']);
     },
@@ -181,7 +178,7 @@ void main() {
   test('the event script is the one the page listens for', () {
     expect(
       folderChangedScript(<String>['a.md']),
-      'window.dispatchEvent(new CustomEvent("lm-folder-changed", { detail: { paths: ["a.md"] } }));',
+      'window.dispatchEvent(new CustomEvent("ddd-folder-changed", { detail: { paths: ["a.md"] } }));',
     );
   });
 }

@@ -35,8 +35,8 @@ use base64::Engine as _;
 use bson::doc;
 use std::collections::HashMap;
 
-use life_manager_core::filter::ast::{Filter, SortKey};
-use life_manager_core::query::{Hit, Plan, Sort, Trash};
+use ddd_core::filter::ast::{Filter, SortKey};
+use ddd_core::query::{Hit, Plan, Sort, Trash};
 use serde::{Deserialize, Serialize};
 
 use crate::auth::AuthUser;
@@ -54,7 +54,7 @@ pub const MAX_LIMIT: u32 = 500;
 /// absent (megabyte strings are not a sort key) and so is anything CRDT-shaped.
 ///
 /// This list must stay a subset of the shared core's addressable roots
-/// ([`life_manager_core::filter::ast::FieldPath`]), because every token also goes
+/// ([`ddd_core::filter::ast::FieldPath`]), because every token also goes
 /// through `SortKey::parse`: `deleted_at` and `materialized_version` were once
 /// advertised here and always 400'd, since neither was a field of the projection
 /// the DSL addresses (SPEC §4.1).

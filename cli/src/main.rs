@@ -1,6 +1,6 @@
-//! `lm` — developer tooling for Life Manager.
+//! `ddd` — developer tooling for ddd.
 //!
-//! Commands are grouped by the thing they act on (`lm plugin new`, `lm plugin types`), one
+//! Commands are grouped by the thing they act on (`ddd plugin new`, `ddd plugin types`), one
 //! module per group under `commands/`. A new job is a new variant in [`commands::Command`]
 //! (or in a group's own enum) plus the module that implements it; nothing else changes.
 
@@ -14,7 +14,7 @@ use std::process::ExitCode;
 use clap::Parser;
 
 #[derive(Parser)]
-#[command(name = "lm", version, about = "Developer tooling for Life Manager")]
+#[command(name = "ddd", version, about = "Developer tooling for ddd")]
 struct Cli {
     #[command(subcommand)]
     command: commands::Command,

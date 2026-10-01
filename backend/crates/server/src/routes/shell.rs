@@ -707,7 +707,7 @@ async fn synthesize(state: &AppState, dist: &Path) -> AppResult<BTreeMap<String,
 /// a nonce that depended on the version would be a cycle.
 fn stable_nonce(html: &str, importmap: &[u8]) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(b"lm-shell-index-nonce\n");
+    hasher.update(b"ddd-shell-index-nonce\n");
     hasher.update(html.as_bytes());
     hasher.update(b"\n");
     hasher.update(importmap);
@@ -978,7 +978,7 @@ mod tests {
         for kept in [
             "assets/index-PoVlm7Xk.js",
             "assets/index-CMwrM_cN.css",
-            "assets/life_manager_core_bg-S03RaG2A.wasm",
+            "assets/ddd_core_bg-S03RaG2A.wasm",
             "assets/search-worker-CuM4H6I-.js",
             "runtime/kernel-BdFAWC4t.js",
             "runtime/shared/yjs-CLkt2p0d.js",

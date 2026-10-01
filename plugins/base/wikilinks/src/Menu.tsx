@@ -52,7 +52,7 @@ export function NoteMenu({ controller }: { readonly controller: MenuController }
           key={item.id}
           role="option"
           aria-selected={index === state.selected}
-          className={`wikilinks:flex wikilinks:min-h-[calc(var(--lm-tap-target)-8px)] wikilinks:cursor-pointer wikilinks:flex-col wikilinks:justify-center wikilinks:rounded wikilinks:px-2 wikilinks:py-1 ${
+          className={`wikilinks:flex wikilinks:min-h-[calc(var(--ddd-tap-target)-8px)] wikilinks:cursor-pointer wikilinks:flex-col wikilinks:justify-center wikilinks:rounded wikilinks:px-2 wikilinks:py-1 ${
             index === state.selected ? "wikilinks:bg-accent-subtle" : ""
           }`}
           onPointerEnter={() => controller.select(index)}

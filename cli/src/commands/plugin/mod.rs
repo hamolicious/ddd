@@ -1,4 +1,4 @@
-//! `lm plugin …` — plugin projects outside the base distribution.
+//! `ddd plugin …` — plugin projects outside the base distribution.
 
 mod new;
 mod types;

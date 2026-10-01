@@ -29,7 +29,7 @@ import { ADMIN, signIn } from "./helpers.js";
  * default location is the one thing both files have to agree on.
  */
 const registry =
-  process.env["LM_E2E_PLUGINS"] ?? join(process.cwd(), "app", "e2e", ".plugins", "default");
+  process.env["DDD_E2E_PLUGINS"] ?? join(process.cwd(), "app", "e2e", ".plugins", "default");
 const brokenModule = join(registry, "extra-task-states", "1.0.0", "frontend", "index.mjs");
 const brokenManifest = join(registry, "extra-task-states", "1.0.0", "manifest.json");
 
@@ -126,9 +126,9 @@ test.afterAll(() => {
 async function expectWelcomeDocument(page: Page): Promise<void> {
   const search = page.getByRole("searchbox", { name: "Search documents" });
   await expect(search).toBeVisible();
-  await search.fill("Welcome to Life Manager");
+  await search.fill("Welcome to ddd");
   await expect(
-    page.locator("#shell-main").getByRole("button", { name: "Welcome to Life Manager", exact: true }),
+    page.locator("#shell-main").getByRole("button", { name: "Welcome to ddd", exact: true }),
   ).toBeVisible();
 }
 
@@ -224,7 +224,7 @@ test("a broken plugin fails alone, and safe mode boots past it", async ({ browse
       // apply: there is no shell and no loader line. The gate is the same one.
       await page.locator("#email").fill(ADMIN.email);
       await page.locator("#password").fill(ADMIN.password);
-      await page.locator("form.lm-auth-form button[type=submit]").click();
+      await page.locator("form.ddd-auth-form button[type=submit]").click();
 
       // The floor: no `shell-ui`, so no banner. What has to be there is a list of the
       // installed plugins and a way back — this is what someone types into a URL bar
@@ -232,7 +232,7 @@ test("a broken plugin fails alone, and safe mode boots past it", async ({ browse
       await expect(page.getByText(/safe mode|plugin manager/i).first()).toBeVisible({
         timeout: 30_000,
       });
-      await expect(page.locator(".lm-bare")).toBeVisible();
+      await expect(page.locator(".ddd-bare")).toBeVisible();
       await expect(page.getByText("shell-ui").first()).toBeVisible();
       await expect(page.getByText("extra-task-states").first()).toBeVisible();
       // `shell-ui` itself did not run — its layout root is what proves that. (The bare
@@ -245,7 +245,7 @@ test("a broken plugin fails alone, and safe mode boots past it", async ({ browse
       // the kernel itself holds it, `BareManager` has no notice UI, and no plugin loaded
       // that could give it one. Keying that dedupe on "something holds the mount" blanked
       // every notice on the one screen SPEC §6.1 calls the recovery path.
-      await expect(page.locator(".lm-notices")).toBeVisible();
+      await expect(page.locator(".ddd-notices")).toBeVisible();
       await expect(page.getByText(/may delete this workspace's offline copy/i)).toBeVisible();
     } finally {
       await context.close();
@@ -290,7 +290,7 @@ test("a plugin that throws while rendering costs a chip, not the application", a
     // Two in-place chips: one for the panel component, one for the icon — the icon being
     // the case no `boundary(component)` call could reach, because a `ReactNode` is not a
     // component.
-    const chips = page.locator(".lm-plugin-failed");
+    const chips = page.locator(".ddd-plugin-failed");
     await expect(chips).toHaveCount(2);
     await expect(chips.first()).toContainText("extra-task-states");
 
@@ -336,16 +336,16 @@ test("an admin enables a disabled plugin from the bare manager", async ({
       await page.goto("/?safe=bare");
       await page.locator("#email").fill(ADMIN.email);
       await page.locator("#password").fill(ADMIN.password);
-      await page.locator("form.lm-auth-form button[type=submit]").click();
-      await expect(page.locator(".lm-bare")).toBeVisible({ timeout: 30_000 });
+      await page.locator("form.ddd-auth-form button[type=submit]").click();
+      await expect(page.locator(".ddd-bare")).toBeVisible({ timeout: 30_000 });
 
       const row = page
-        .locator(".lm-bare-table tr")
+        .locator(".ddd-bare-table tr")
         .filter({ has: page.getByRole("rowheader", { name: "extra-task-states", exact: true }) });
       await expect(row).toBeVisible();
       await expect(row.locator("td").last()).toContainText("no —");
 
-      await expect(page.locator(".lm-bare footer")).toContainText("Kernel contract");
+      await expect(page.locator(".ddd-bare footer")).toContainText("Kernel contract");
 
       // Enabling changes the plugin set, so the server sends `plugins.changed` and this
       // page reloads — back into `?safe=bare`, where the row now would load.
@@ -353,7 +353,7 @@ test("an admin enables a disabled plugin from the bare manager", async ({
       await row.getByRole("button", { name: "Enable extra-task-states" }).click();
       await reloaded;
       const after = page
-        .locator(".lm-bare-table tr")
+        .locator(".ddd-bare-table tr")
         .filter({ has: page.getByRole("rowheader", { name: "extra-task-states", exact: true }) });
       await expect(after.locator("td").last()).toHaveText("yes", { timeout: 30_000 });
       await expect(after.getByRole("button", { name: /^Enable/ })).toHaveCount(0);

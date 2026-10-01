@@ -1,9 +1,9 @@
 {
-  "name": "@life-manager/web",
+  "name": "@ddd/web",
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Life Manager web: the kernel contract (kernel-api), the kernel runtime and M2 substrate, the PWA (app/), the M2 demo page kept as a harness fixture, and the harnesses.",
+  "description": "ddd web: the kernel contract (kernel-api), the kernel runtime and M2 substrate, the PWA (app/), the M2 demo page kept as a harness fixture, and the harnesses.",
   "license": "MIT OR Apache-2.0",
   "engines": {
     "node": ">=20"

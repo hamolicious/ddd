@@ -113,7 +113,7 @@ describe("handshake", () => {
     const harness = makeClient();
     const socket = await started(harness);
 
-    expect(socket.protocols).toEqual(["life-manager.v1", "life-manager.bearer.t0ken"]);
+    expect(socket.protocols).toEqual(["ddd.v1", "ddd.bearer.t0ken"]);
     expect(socket.controlOfType("feed.subscribe")).toHaveLength(1);
     expect(harness.client.welcome?.protocol).toBe(1);
   });

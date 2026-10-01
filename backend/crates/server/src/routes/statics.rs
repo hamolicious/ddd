@@ -17,7 +17,7 @@
 //! **The import map is injected inline, with a nonce.** Browsers never shipped an
 //! external import map (`<script type="importmap" src>` does not exist), so "served
 //! external or nonced" in SPEC §8 resolves to nonced-inline. `index.html` carries an
-//! `<!--LM_IMPORT_MAP-->` marker; this module replaces it per response and puts the
+//! `<!--DDD_IMPORT_MAP-->` marker; this module replaces it per response and puts the
 //! matching nonce in the CSP. That is also why `index.html` is never cached: the nonce
 //! must be fresh, and a cached CSP nonce is a CSP bypass.
 //!
@@ -59,7 +59,7 @@ use crate::plugins::{self, InstalledPlugin, safe_relative_path};
 use crate::state::AppState;
 
 /// The marker `web/app/index.html` carries where the import map belongs.
-pub const IMPORT_MAP_MARKER: &str = "<!--LM_IMPORT_MAP-->";
+pub const IMPORT_MAP_MARKER: &str = "<!--DDD_IMPORT_MAP-->";
 
 /// `runtime-manifest.json`, written by the runtime-layer build next to `index.html`.
 pub const RUNTIME_MANIFEST_FILE: &str = "runtime-manifest.json";
@@ -479,7 +479,7 @@ pub async fn fallback(
     // `index.html` is never served as a file, from **any** spelling of its path: it has
     // to go through `index_html`, which injects the import map and a fresh CSP nonce.
     // This is not a nicety — serving the raw file produced a page whose
-    // `<!--LM_IMPORT_MAP-->` marker was still a comment, so every bare specifier failed
+    // `<!--DDD_IMPORT_MAP-->` marker was still a comment, so every bare specifier failed
     // to resolve and the whole app died with "Failed to resolve module specifier
     // \"react\"". Comparing the *raw* path against one spelling was the first version of
     // this check, and `/./index.html` and `/index.html/` walked straight past it into the

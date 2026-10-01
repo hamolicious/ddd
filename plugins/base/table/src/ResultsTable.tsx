@@ -144,7 +144,7 @@ export function ResultsTable({
           <tr>
             {header("title", "Title", "table:min-w-[12rem]")}
             {columns.map((field) => header(field, columnLabel(field)))}
-            <th scope="col" className="table:w-[var(--lm-tap-target)] table:border-b table:border-border">
+            <th scope="col" className="table:w-[var(--ddd-tap-target)] table:border-b table:border-border">
               <span className="table:sr-only">Actions</span>
             </th>
           </tr>
@@ -157,7 +157,7 @@ export function ResultsTable({
               <tr
                 key={row.id}
                 data-virtual-index={virtual.first + offset}
-                {...mark("lm/document", row.id, { label: row.title })}
+                {...mark("ddd/document", row.id, { label: row.title })}
                 className="search-item table:border-b table:border-border table:last:border-b-0"
               >
                 {/* `max-w-0` with `w-full`: the title takes the room the other columns leave,
@@ -165,7 +165,7 @@ export function ResultsTable({
                 <td className="table:w-full table:min-w-0 table:max-w-0 table:px-2 table:py-1 table:align-top">
                   <button
                     type="button"
-                    className="search-open table:flex table:min-h-[calc(var(--lm-tap-target)/2)] table:max-w-full table:items-center table:overflow-hidden table:text-ellipsis table:whitespace-nowrap table:border-0! table:bg-transparent! table:p-0! table:text-left table:text-base table:text-link table:compact:min-h-[var(--lm-tap-target)]"
+                    className="search-open table:flex table:min-h-[calc(var(--ddd-tap-target)/2)] table:max-w-full table:items-center table:overflow-hidden table:text-ellipsis table:whitespace-nowrap table:border-0! table:bg-transparent! table:p-0! table:text-left table:text-base table:text-link table:compact:min-h-[var(--ddd-tap-target)]"
                     // Draggable so the `folders` tree can be dropped onto: a bare
                     // `text/plain` document id, the only thing two plugins can agree on
                     // without importing each other (SPEC §6.1).
@@ -206,7 +206,7 @@ export function ResultsTable({
                 <td className="table:px-1 table:align-top">
                   <button
                     type="button"
-                    className="search-row-menu table:inline-flex table:w-[var(--lm-tap-target)] table:items-center table:justify-center table:border-transparent! table:bg-transparent! table:p-0! table:text-text-muted table:hover:border-border! table:hover:text-text"
+                    className="search-row-menu table:inline-flex table:w-[var(--ddd-tap-target)] table:items-center table:justify-center table:border-transparent! table:bg-transparent! table:p-0! table:text-text-muted table:hover:border-border! table:hover:text-text"
                     aria-haspopup="menu"
                     aria-label={`Actions for ${row.title}`}
                     disabled={busy === row.id}

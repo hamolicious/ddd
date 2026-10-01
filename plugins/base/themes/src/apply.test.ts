@@ -72,19 +72,19 @@ const warm: Theme = {
   id: "warm",
   name: "Warm",
   scheme: "light",
-  tokens: { "--lm-bg": "#fdfaf5", "--lm-accent": "#9a5b16" },
+  tokens: { "--ddd-bg": "#fdfaf5", "--ddd-accent": "#9a5b16" },
 };
 const paper: Theme = {
   id: "paper",
   name: "Paper",
   scheme: "light",
-  tokens: { "--lm-bg": "#f7f4ee" },
+  tokens: { "--ddd-bg": "#f7f4ee" },
 };
 const midnight: Theme = {
   id: "midnight",
   name: "Midnight",
   scheme: "dark",
-  tokens: { "--lm-bg": "#0d1117", "--lm-accent": "#7aa2f7" },
+  tokens: { "--ddd-bg": "#0d1117", "--ddd-accent": "#7aa2f7" },
 };
 const themes: readonly Theme[] = [warm, paper, midnight];
 
@@ -111,11 +111,11 @@ describe("ThemeApplier", () => {
     new ThemeApplier(tokens).apply(themes, { light: "warm", dark: undefined });
 
     const applied = resolve(tokens.layers, "light");
-    expect(applied["--lm-bg"]).toBe("#fdfaf5");
-    expect(applied["--lm-accent"]).toBe("#9a5b16");
+    expect(applied["--ddd-bg"]).toBe("#fdfaf5");
+    expect(applied["--ddd-accent"]).toBe("#9a5b16");
     // Everything the theme is silent about stays the kernel's legible default.
     for (const name of THEME_TOKEN_NAMES) {
-      if (name === "--lm-bg" || name === "--lm-accent") continue;
+      if (name === "--ddd-bg" || name === "--ddd-accent") continue;
       expect(applied[name]).toBe(DEFAULT_LIGHT_TOKENS[name]);
     }
   });
@@ -127,8 +127,8 @@ describe("ThemeApplier", () => {
     expect(result.light).toBe(warm);
     expect(result.dark).toBe(midnight);
     expect(tokens.layers).toHaveLength(2);
-    expect(resolve(tokens.layers, "light")["--lm-bg"]).toBe("#fdfaf5");
-    expect(resolve(tokens.layers, "dark")["--lm-bg"]).toBe("#0d1117");
+    expect(resolve(tokens.layers, "light")["--ddd-bg"]).toBe("#fdfaf5");
+    expect(resolve(tokens.layers, "dark")["--ddd-bg"]).toBe("#0d1117");
   });
 
   it("replaces its layer instead of stacking it", () => {
@@ -141,10 +141,10 @@ describe("ThemeApplier", () => {
     expect(applier.layerCount).toBe(1);
     expect(tokens.layers).toHaveLength(1);
     const applied = resolve(tokens.layers, "light");
-    expect(applied["--lm-bg"]).toBe("#f7f4ee");
+    expect(applied["--ddd-bg"]).toBe("#f7f4ee");
     // `warm` also set the accent; `paper` does not, so the *kernel* default must be
     // back — not the accent of the theme the user just switched away from.
-    expect(applied["--lm-accent"]).toBe(DEFAULT_LIGHT_TOKENS["--lm-accent"]);
+    expect(applied["--ddd-accent"]).toBe(DEFAULT_LIGHT_TOKENS["--ddd-accent"]);
   });
 
   it("returns to the kernel defaults on reset and on an empty selection", () => {
@@ -182,7 +182,7 @@ describe("ThemeApplier", () => {
 describe("preview", () => {
   it("is the defaults with the theme's tokens on top", () => {
     expect(preview(DEFAULT_LIGHT_TOKENS, undefined)).toEqual(DEFAULT_LIGHT_TOKENS);
-    expect(preview(DEFAULT_LIGHT_TOKENS, warm)["--lm-bg"]).toBe("#fdfaf5");
-    expect(preview(DEFAULT_LIGHT_TOKENS, warm)["--lm-text"]).toBe(DEFAULT_LIGHT_TOKENS["--lm-text"]);
+    expect(preview(DEFAULT_LIGHT_TOKENS, warm)["--ddd-bg"]).toBe("#fdfaf5");
+    expect(preview(DEFAULT_LIGHT_TOKENS, warm)["--ddd-text"]).toBe(DEFAULT_LIGHT_TOKENS["--ddd-text"]);
   });
 });

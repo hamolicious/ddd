@@ -8,7 +8,7 @@
  * carries a unique marker and no edit ever cuts into one, so "every marker exactly
  * once" is an exact test for a lost or doubled update.
  *
- * `LM_COLLAB_SEEDS=20` runs more seeds; `LM_COLLAB_SEED=7` runs just one. A failing
+ * `DDD_COLLAB_SEEDS=20` runs more seeds; `DDD_COLLAB_SEED=7` runs just one. A failing
  * seed prints its journal and fails again the same way: the script is seeded, only
  * the network timing is real.
  */
@@ -20,10 +20,10 @@ import { rng } from "../harness/src/scenario.js";
 import { Peer } from "./peer.js";
 import { ALICE, BOB, converged, sleep, world, type World } from "./world.js";
 
-const STEPS = Number(process.env["LM_COLLAB_STEPS"] ?? 160);
-const seeds = process.env["LM_COLLAB_SEED"]
-  ? [Number(process.env["LM_COLLAB_SEED"])]
-  : Array.from({ length: Number(process.env["LM_COLLAB_SEEDS"] ?? 6) }, (_, index) => index + 1);
+const STEPS = Number(process.env["DDD_COLLAB_STEPS"] ?? 160);
+const seeds = process.env["DDD_COLLAB_SEED"]
+  ? [Number(process.env["DDD_COLLAB_SEED"])]
+  : Array.from({ length: Number(process.env["DDD_COLLAB_SEEDS"] ?? 6) }, (_, index) => index + 1);
 
 let w: World;
 beforeAll(async () => {
@@ -118,7 +118,7 @@ test.each(seeds)("seed %i: every note converges and no edit is lost or doubled",
       expect((await w.rest.getDocument(id)).fm_parse_error, `${id} frontmatter`).toBe(false);
     }
   } catch (error) {
-    console.error(`seed ${seed} failed; replay with LM_COLLAB_SEED=${seed}. Journal:\n${journal.join("\n")}`);
+    console.error(`seed ${seed} failed; replay with DDD_COLLAB_SEED=${seed}. Journal:\n${journal.join("\n")}`);
     throw error;
   } finally {
     await Promise.all(devices.map((device) => device.close()));

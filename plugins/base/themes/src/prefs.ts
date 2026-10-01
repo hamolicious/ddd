@@ -48,9 +48,9 @@ export interface PreferenceStore {
 }
 
 export function preferenceStore(kernel: Kernel, prefix: string): PreferenceStore {
-  const localKey = (key: string): string => `life-manager.${prefix}.${key}`;
+  const localKey = (key: string): string => `ddd.${prefix}.${key}`;
   /** Keys whose value is on this device only, because the write did not land. */
-  const pendingKey = `life-manager.${prefix}.__pending`;
+  const pendingKey = `ddd.${prefix}.__pending`;
   let warned = false;
 
   const readLocal = (key: string): string | undefined => {

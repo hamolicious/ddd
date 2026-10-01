@@ -489,7 +489,7 @@ async fn ensure_not_last_admin(
 /// "one other admin remains", both proceed, and the workspace is left with nobody
 /// who can administer it — with no supported way back, because registration needs
 /// an invite only an admin can mint and the break-glass
-/// `life-manager reset-password` CLI issues a password reset, not an admin flag.
+/// `ddd reset-password` CLI issues a password reset, not an admin flag.
 /// Mongo here is standalone (SPEC §8 pins a single replica, and Compose runs a
 /// standalone mongod), so there is no multi-document transaction to wrap the pair
 /// in; instead whoever notices the empty result repairs the row it just changed.
@@ -691,10 +691,7 @@ pub async fn export_documents(
         }
     });
 
-    let filename = format!(
-        "life-manager-export-{}.zip",
-        BsonDateTime::now().timestamp_millis()
-    );
+    let filename = format!("ddd-export-{}.zip", BsonDateTime::now().timestamp_millis());
     let body = Body::from_stream(tokio_stream_from(byte_rx));
 
     Ok((
@@ -928,12 +925,12 @@ mod tests {
     #[test]
     fn an_app_link_names_the_public_url_or_nothing() {
         assert_eq!(
-            super::app_link(Some("https://lm.example.com/"), "reset", "abc_-1"),
-            Some("https://lm.example.com/#/reset/abc_-1".to_string())
+            super::app_link(Some("https://ddd.example.com/"), "reset", "abc_-1"),
+            Some("https://ddd.example.com/#/reset/abc_-1".to_string())
         );
         assert_eq!(
-            super::app_link(Some("https://lm.example.com"), "invite", "abc"),
-            Some("https://lm.example.com/#/invite/abc".to_string())
+            super::app_link(Some("https://ddd.example.com"), "invite", "abc"),
+            Some("https://ddd.example.com/#/invite/abc".to_string())
         );
         assert_eq!(super::app_link(None, "reset", "abc"), None);
     }

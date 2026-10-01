@@ -1,4 +1,4 @@
-//! The Life Manager **backend-plugin host ABI**, as types.
+//! The ddd **backend-plugin host ABI**, as types.
 //!
 //! [`backend/HOST-ABI.md`](../../../HOST-ABI.md) is the prose form of this crate: every
 //! host function, its JSON input and output, the hook payloads, the cron and HTTP
@@ -9,8 +9,8 @@
 //! **Why a crate and not two copies of some structs.** The server registers the host
 //! functions and the plugin calls them; each side would otherwise hand-roll the same
 //! JSON, and a silent mismatch in one field name is a plugin that reads `None` forever.
-//! One definition, two dependents ([`life-manager-server`] and
-//! `life-manager-plugin-sdk`), no conversion layer.
+//! One definition, two dependents ([`ddd-server`] and
+//! `ddd-plugin-sdk`), no conversion layer.
 //!
 //! **Everything crossing the boundary is JSON.** Extism host functions take and return
 //! one memory handle each; this ABI puts a UTF-8 JSON document in it. Binary payloads
@@ -155,7 +155,7 @@ impl Origin {
     }
 }
 
-/// What the host tells a plugin about itself, once, at activation (`lm_init`).
+/// What the host tells a plugin about itself, once, at activation (`ddd_init`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InitPayload {
     /// The plugin's own id — the same string the host uses for its `%%%` section, its

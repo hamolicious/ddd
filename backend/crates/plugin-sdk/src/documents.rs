@@ -13,7 +13,7 @@
 //! Reading many: [`run`] takes a [`Query`], the chain the server and the browser use too:
 //!
 //! ```ignore
-//! use life_manager_plugin_sdk::documents::{self, Op, Query};
+//! use ddd_plugin_sdk::documents::{self, Op, Query};
 //!
 //! let page = documents::run(
 //!     Query::new().filter("title", Op::TextContains, "a").sort("fm.key").limit(20),
@@ -28,7 +28,7 @@ use crate::abi::documents::{
 use crate::host::{self, call_value};
 use crate::{ErrorCode, HostError};
 
-pub use life_manager_core::query::{Op, Plan, Query, Sort, Trash};
+pub use ddd_core::query::{Op, Plan, Query, Sort, Trash};
 
 /// One page of a [`Query`], `content` included. `documents:read`.
 ///

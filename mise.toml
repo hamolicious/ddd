@@ -118,7 +118,7 @@ run = [
   WEB_DIST_DIR="${WEB_DIST_DIR:-../web/app/dist}" \
   PLUGINS_DIR="${PLUGINS_DIR:-../plugins/base/dist}" \
   KERNEL_DTS_PATH="${KERNEL_DTS_PATH:-../web/kernel-api/dist/kernel.d.ts}" \
-  cargo run --bin life-manager -- serve
+  cargo run --bin ddd -- serve
   """,
 ]
 
@@ -151,7 +151,7 @@ run = [
     WEB_DIST_DIR="${WEB_DIST_DIR:-../web/app/dist}" \
     PLUGINS_DIR="${PLUGINS_DIR:-../plugins/base/dist}" \
     KERNEL_DTS_PATH="${KERNEL_DTS_PATH:-../web/kernel-api/dist/kernel.d.ts}" \
-    cargo run --bin life-manager -- serve
+    cargo run --bin ddd -- serve
   ) &
   SERVER_PID=$!
   # Wait for the API before Vite starts proxying at it.
@@ -159,7 +159,7 @@ run = [
     curl -sf -o /dev/null "http://127.0.0.1:$SERVER_PORT/healthz" && break
     sleep 1
   done
-  LM_SERVER="http://127.0.0.1:$SERVER_PORT" npm run dev:app -- --port "$PORT" --host --strictPort
+  DDD_SERVER="http://127.0.0.1:$SERVER_PORT" npm run dev:app -- --port "$PORT" --host --strictPort
   """,
 ]
 
@@ -185,12 +185,12 @@ run = "cargo test --workspace --all-targets"
 [tasks.build]
 description = "Build the release binary (the same profile the Docker image uses)"
 dir = "backend"
-run = "cargo build --release --locked --bin life-manager"
+run = "cargo build --release --locked --bin ddd"
 
 [tasks.wasm-check]
 description = "Check the shared core builds for the client kernel (no server deps, no bson)"
 dir = "backend"
-run = "cargo check -p life-manager-core --no-default-features"
+run = "cargo check -p ddd-core --no-default-features"
 
 [tasks.web]
 description = "Run the web dev server (proxies /api and the sync socket to the Rust server)"
@@ -270,7 +270,7 @@ run = [
 description = "M4: build the hello-world plugin and load it in a minimal Extism host (the ABI's end-to-end check)"
 depends = ["wasm-plugins"]
 dir = "backend"
-run = "cargo test -p life-manager-server --test pluginhost_smoke"
+run = "cargo test -p ddd-server --test pluginhost_smoke"
 
 [tasks.web-build]
 description = "Build everything the server serves: the Wasm core, the contract, the PWA bundle (runtime layer + app + service worker), and the base plugins"
@@ -352,7 +352,7 @@ flutter build apk "${@:---debug}"
 [tasks.desktop-run]
 description = "Linux desktop shell (Tauri, `desktop/`) against the local server on :$PORT — needs webkit2gtk-4.1"
 dir = "desktop"
-run = 'cargo run -- --server "${LM_SERVER_URL:-http://localhost:${PORT:-8080}}"'
+run = 'cargo run -- --server "${DDD_SERVER_URL:-http://localhost:${PORT:-8080}}"'
 
 [tasks.desktop-bundle]
 description = "Build the Linux desktop shell's .deb and AppImage — needs `cargo install tauri-cli --version ^2`"
@@ -365,7 +365,7 @@ dir = "web"
 run = "npm run harness:convergence --"
 
 [tasks.collab]
-description = "Collaboration suite: people editing together, online and offline, against a real server it starts itself (needs mongo up and `cargo build --bin life-manager`)"
+description = "Collaboration suite: people editing together, online and offline, against a real server it starts itself (needs mongo up and `cargo build --bin ddd`)"
 dir = "web"
 run = "npm run test:collab --"
 
@@ -376,7 +376,7 @@ set -euo pipefail
 
 target="wasm32-unknown-unknown"
 out="web/kernel/src/wasm/pkg"
-artifact="backend/target/$target/release/life_manager_core.wasm"
+artifact="backend/target/$target/release/ddd_core.wasm"
 
 # The target has to be installed once: `rustup target add wasm32-unknown-unknown`.
 if ! rustc --print target-list | grep -qx "$target"; then
@@ -391,13 +391,13 @@ fi
 #   cargo install wasm-bindgen-cli --version <that version>
 # or drop the prebuilt binary from the wasm-bindgen releases on your PATH.
 if command -v wasm-bindgen >/dev/null 2>&1; then
-  generate() { wasm-bindgen --target web --out-dir "$out" --out-name life_manager_core "$artifact"; }
+  generate() { wasm-bindgen --target web --out-dir "$out" --out-name ddd_core "$artifact"; }
 elif command -v wasm-pack >/dev/null 2>&1; then
   # wasm-pack drives the same code generator; it also writes a package.json we
   # do not use (the kernel imports the artifact directly through a Vite alias).
   generate() {
     wasm-pack build backend/crates/core --target web --release --out-dir "../../../$out" \
-      --out-name life_manager_core -- --no-default-features --features wasm
+      --out-name ddd_core -- --no-default-features --features wasm
   }
 else
   echo "neither wasm-bindgen nor wasm-pack is on PATH — see the comment in this task" >&2
@@ -405,7 +405,7 @@ else
 fi
 
 cd backend
-cargo build -p life-manager-core --target "$target" --release --no-default-features --features wasm
+cargo build -p ddd-core --target "$target" --release --no-default-features --features wasm
 cd ..
 mkdir -p "$out"
 generate
@@ -432,7 +432,7 @@ stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 out="backups/${stamp}"
 mkdir -p "$out"
 docker compose exec -T mongo mongodump \
-  --db "${MONGO_DATABASE:-life_manager}" --archive --gzip > "$out/dump.archive.gz"
+  --db "${MONGO_DATABASE:-ddd}" --archive --gzip > "$out/dump.archive.gz"
 echo "wrote $out/dump.archive.gz"
 '''
 

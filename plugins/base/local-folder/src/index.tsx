@@ -36,8 +36,8 @@ type AttachmentsModule = typeof import("plugin:attachments");
 let foldersModule: FoldersModule | undefined;
 let attachmentsModule: AttachmentsModule | undefined;
 
-const LOCK_NAME = "lm-local-folder";
-const DISMISSED_KEY = "life-manager.local-folder.dismissed";
+const LOCK_NAME = "ddd-local-folder";
+const DISMISSED_KEY = "ddd.local-folder.dismissed";
 const PROMPT_NOTICE = "local-folder.prompt";
 const RECONNECT_NOTICE = "local-folder.reconnect";
 const HELD_NOTICE = "local-folder.held";

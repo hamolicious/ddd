@@ -256,7 +256,7 @@ export async function run(config: HarnessConfig): Promise<PerfReport> {
 /**
  * Hold the whole projection in a real browser and report the heap.
  *
- * It runs against the Vite dev origin (`LM_WEB`, default `http://127.0.0.1:5173`)
+ * It runs against the Vite dev origin (`DDD_WEB`, default `http://127.0.0.1:5173`)
  * because that origin proxies `/api` — so the fetch is same-origin, the `Origin`
  * allowlist behaves as in production, and IndexedDB is available. Rows are held in
  * a `Map` *and* written to one IndexedDB store, which is the shape SPEC §4.1
@@ -268,7 +268,7 @@ export async function measureClientMemory(
   config: HarnessConfig,
   token: string,
 ): Promise<ClientMemoryReport> {
-  const webUrl = extraFlag(config, "web") ?? process.env.LM_WEB ?? "http://127.0.0.1:5173";
+  const webUrl = extraFlag(config, "web") ?? process.env.DDD_WEB ?? "http://127.0.0.1:5173";
   try {
     const probe = await fetch(webUrl, { method: "GET" });
     if (!probe.ok) throw new Error(`HTTP ${probe.status}`);
@@ -325,7 +325,7 @@ export async function measureClientMemory(
         // One IndexedDB store for the whole workspace (SPEC §4.1).
         const idbStarted = performance.now();
         await new Promise<void>((resolve, reject) => {
-          const request = indexedDB.open("life-manager-harness-memory", 1);
+          const request = indexedDB.open("ddd-harness-memory", 1);
           request.onupgradeneeded = () => {
             const db = request.result;
             if (db.objectStoreNames.contains("projection")) db.deleteObjectStore("projection");
@@ -477,7 +477,7 @@ async function main(): Promise<void> {
 
 // See the note in `convergence.ts`: under `vite-node` the script path is not in
 // `process.argv`, so an `argv[1]`-based guard never fires.
-if (!process.env.VITEST && !process.env.LM_HARNESS_NO_AUTORUN) {
+if (!process.env.VITEST && !process.env.DDD_HARNESS_NO_AUTORUN) {
   main()
     .catch((error: unknown) => {
       console.error(error);

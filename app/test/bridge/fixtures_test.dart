@@ -36,15 +36,15 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:crypto/crypto.dart';
 
-import 'package:life_manager_shell/bridge/auth.dart';
-import 'package:life_manager_shell/bridge/bridge.dart';
-import 'package:life_manager_shell/bridge/filesystem.dart';
-import 'package:life_manager_shell/bridge/folder.dart';
-import 'package:life_manager_shell/bridge/notifications.dart';
-import 'package:life_manager_shell/bundle/manifest.dart';
-import 'package:life_manager_shell/shell/webview_host.dart';
-import 'package:life_manager_shell/bundle/updater.dart';
-import 'package:life_manager_shell/config.dart';
+import 'package:ddd_shell/bridge/auth.dart';
+import 'package:ddd_shell/bridge/bridge.dart';
+import 'package:ddd_shell/bridge/filesystem.dart';
+import 'package:ddd_shell/bridge/folder.dart';
+import 'package:ddd_shell/bridge/notifications.dart';
+import 'package:ddd_shell/bundle/manifest.dart';
+import 'package:ddd_shell/shell/webview_host.dart';
+import 'package:ddd_shell/bundle/updater.dart';
+import 'package:ddd_shell/config.dart';
 
 /// `flutter test` runs with the package root as the working directory, which is what makes
 /// this a plain relative path rather than a package resource.
@@ -415,7 +415,7 @@ void main() {
 
     test('the shell dispatches exactly the event the page listens for', () {
       // The web half installed both listeners in M5 and nothing in `app/` ever fired
-      // them, so the whole `lm-shell-update-ready` contract was dead on a device while
+      // them, so the whole `ddd-shell-update-ready` contract was dead on a device while
       // passing its own unit tests. Pinning the string on both sides is what makes that
       // kind of drift a failing test rather than a code review.
       expect(kShellUpdateReadyEvent, updateReady['event']);

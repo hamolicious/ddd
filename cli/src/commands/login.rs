@@ -1,6 +1,6 @@
-//! `lm login` — trade an email and password for a bearer token, for the commands that
-//! read a workspace (`lm query`). The password is read from standard input, so it never
-//! sits in shell history: `lm login --server <url> --email <you>`, then type it.
+//! `ddd login` — trade an email and password for a bearer token, for the commands that
+//! read a workspace (`ddd query`). The password is read from standard input, so it never
+//! sits in shell history: `ddd login --server <url> --email <you>`, then type it.
 
 use std::io::BufRead;
 
@@ -11,8 +11,8 @@ use crate::server::Server;
 
 #[derive(Args)]
 pub struct LoginArgs {
-    /// The Life Manager server, e.g. https://notes.example.com.
-    #[arg(long, env = "LM_SERVER")]
+    /// The ddd server, e.g. https://notes.example.com.
+    #[arg(long, env = "DDD_SERVER")]
     server: Option<String>,
     #[arg(long)]
     email: String,
@@ -20,7 +20,7 @@ pub struct LoginArgs {
 
 pub fn run(args: LoginArgs) -> Result<()> {
     let Some(url) = args.server.as_deref() else {
-        bail!("which server? pass --server <url> or set LM_SERVER");
+        bail!("which server? pass --server <url> or set DDD_SERVER");
     };
     eprint!("password for {}: ", args.email);
     let mut password = String::new();
@@ -38,7 +38,7 @@ pub fn run(args: LoginArgs) -> Result<()> {
     let Some(token) = answer["token"].as_str() else {
         bail!("the server signed you in but sent no token");
     };
-    eprintln!("signed in; set LM_TOKEN to this (it is shown once):");
+    eprintln!("signed in; set DDD_TOKEN to this (it is shown once):");
     println!("{token}");
     Ok(())
 }

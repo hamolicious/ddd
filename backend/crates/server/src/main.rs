@@ -13,7 +13,7 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use clap::{Parser, Subcommand};
-use life_manager_server::{
+use ddd_server::{
     auth, config::Config, db, pluginhost, plugininstall, plugins, routes, state::AppState,
     telemetry,
 };
@@ -23,7 +23,7 @@ use tracing::{error, info, warn};
 const MAINTENANCE_INTERVAL: Duration = Duration::from_secs(15);
 
 #[derive(Debug, Parser)]
-#[command(name = "life-manager", version, about = "Life Manager server")]
+#[command(name = "ddd", version, about = "ddd server")]
 struct Cli {
     #[command(subcommand)]
     command: Option<Command>,
@@ -178,7 +178,7 @@ async fn serve(config: Config) -> anyhow::Result<()> {
     let app = routes::router(state.clone(), metrics);
 
     let listener = tokio::net::TcpListener::bind(bind_addr).await?;
-    info!(%bind_addr, version = life_manager_server::VERSION, "listening");
+    info!(%bind_addr, version = ddd_server::VERSION, "listening");
 
     // SIGTERM: stop accepting, let in-flight requests finish, then flush. The
     // watchdog inside `shutdown` guarantees the process leaves within the grace

@@ -13,7 +13,7 @@ use std::sync::Mutex;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
-use life_manager_plugin_abi as abi;
+use ddd_plugin_abi as abi;
 
 use crate::config::Config;
 

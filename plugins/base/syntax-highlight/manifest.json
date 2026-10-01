@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "name": "Syntax highlighting",
   "description": "Highlights fenced code with tree-sitter grammars, in read mode and in the editor. Languages are installed when you need them.",
-  "author": "Life Manager base distribution",
+  "author": "ddd base distribution",
   "license": "MIT OR Apache-2.0",
   "x-bundle": [
     "web-tree-sitter"

@@ -9,13 +9,13 @@ mod common;
 
 use std::collections::BTreeMap;
 
-use life_manager_core::date::{Date, DatePrecision};
-use life_manager_core::document::{Span, normalize_input, parse_document};
-use life_manager_core::filter::ast::{Filter, SortKey};
-use life_manager_core::filter::evaluator::{Row, compare_rows, evaluate};
-use life_manager_core::filter::mongo;
-use life_manager_core::splice::{self, ListAction, SectionLineEdit, TextEdit};
-use life_manager_core::value::{Map, Value, map_to_bson};
+use ddd_core::date::{Date, DatePrecision};
+use ddd_core::document::{Span, normalize_input, parse_document};
+use ddd_core::filter::ast::{Filter, SortKey};
+use ddd_core::filter::evaluator::{Row, compare_rows, evaluate};
+use ddd_core::filter::mongo;
+use ddd_core::splice::{self, ListAction, SectionLineEdit, TextEdit};
+use ddd_core::value::{Map, Value, map_to_bson};
 
 // ---------------------------------------------------------------------------
 // documents.json — parsing, fences, caps, title
@@ -169,19 +169,19 @@ fn metadata_intersection_short_circuit() {
         Span::new(text.len(), text.len()),
     ] {
         assert!(
-            life_manager_core::document::edit_affects_metadata(&parsed, edited),
+            ddd_core::document::edit_affects_metadata(&parsed, edited),
             "{edited:?} should force a re-parse"
         );
     }
     let body_middle = Span::new(fm.end + 2, fm.end + 5);
-    assert!(!life_manager_core::document::edit_affects_metadata(
+    assert!(!ddd_core::document::edit_affects_metadata(
         &parsed,
         body_middle
     ));
 
     // An unterminated fence makes the whole document sensitive.
     let parsed = parse_document("body\n%%% p\nk: 1\n");
-    assert!(life_manager_core::document::edit_affects_metadata(
+    assert!(ddd_core::document::edit_affects_metadata(
         &parsed,
         Span::new(1, 2)
     ));

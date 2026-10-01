@@ -128,7 +128,7 @@ Hard requirements from the spec:
   conformance corpus must cover it.
 - `mongo` is a **feature**: `bson` may only be used inside
   `#[cfg(feature = "mongo")]` code. `mise run wasm-check`
-  (`cargo check -p life-manager-core --no-default-features`) must stay green —
+  (`cargo check -p ddd-core --no-default-features`) must stay green —
   that build is what becomes Wasm in M2.
 
 **Public API (implement exactly these):**
@@ -756,7 +756,7 @@ timeout, request-id, catch-panic), `mongodb`, `bson`, `futures`, `yrs`, `serde`,
 `serde_json`, `thiserror`, `anyhow`, `argon2`, `rand`, `sha2`, `ulid`, `time`,
 `tracing`, `tracing-subscriber` (env-filter, json), `metrics`,
 `metrics-exporter-prometheus`, `async-trait`, `base64`, `hex`, `infer`, `bytes`,
-`tokio-util` (io), `dotenvy`, `zip`, `clap` (derive, env), `life-manager-core`.
+`tokio-util` (io), `dotenvy`, `zip`, `clap` (derive, env), `ddd-core`.
 
 Pinned by the resolver: `bson 2.15` (mongodb 3.9's bson — **not** bson 3),
 `yrs 0.28`, `axum 0.8`.
@@ -793,7 +793,7 @@ disagree, the document is the bug report, and where the document and
 The three M1 rules still hold (don't edit another area's files; don't change a
 frozen signature; report instead of improvising). One amendment: **dependencies
 were added by the scaffold** — `axum` gained the `ws` feature and
-`life-manager-core` gained an optional `wasm-bindgen` behind the new `wasm`
+`ddd-core` gained an optional `wasm-bindgen` behind the new `wasm`
 feature. Nothing else may be added.
 
 ## New and changed layout
@@ -822,7 +822,7 @@ Root: `mise.toml` gained `wasm`, `web`, `web-check`, `harness` — **[ops]**.
 Hard requirements (SPEC §4.1, §4.3; PROTOCOL.md §§1–7):
 
 - **Auth at upgrade only.** Cookie, `Authorization: Bearer`, or the
-  `life-manager.bearer.<token>` subprotocol — the last of which
+  `ddd.bearer.<token>` subprotocol — the last of which
   `auth::credential_from_parts` already resolves. Origin is checked **before**
   authentication, and a cookie connection with no `Origin` is refused.
 - Session revalidated every 5 min ± jitter → close **4401**. `4401` never implies
@@ -898,8 +898,8 @@ pub async fn collect_rows(cursor: mongodb::Cursor<DocumentRow>,
 
 // routes/sync.rs
 pub const PROTOCOL_VERSION: u32 = 1;
-pub const SUBPROTOCOL: &str = "life-manager.v1";
-pub const BEARER_SUBPROTOCOL_PREFIX: &str = "life-manager.bearer.";
+pub const SUBPROTOCOL: &str = "ddd.v1";
+pub const BEARER_SUBPROTOCOL_PREFIX: &str = "ddd.bearer.";
 pub const MAX_FRAME_BYTES: usize = 4 * 1024 * 1024;
 pub const MAX_SUBSCRIPTIONS: usize = 32;      pub const MAX_SOCKETS_PER_SESSION: usize = 8;
 pub const FEED_QUEUE_MESSAGES: usize = 64;    pub const DOC_QUEUE_FRAMES: usize = 256;
@@ -1193,7 +1193,7 @@ The M1/M2 rules still hold. Amendments, made by the scaffold and announced here:
 ### Hard requirements
 
 - **`index.html` is never served as a file.** Every spelling of it goes through the
-  injection path; serving the raw file ships a page whose `<!--LM_IMPORT_MAP-->` marker is
+  injection path; serving the raw file ships a page whose `<!--DDD_IMPORT_MAP-->` marker is
   still a comment, and then *every* bare specifier fails to resolve. Pinned by the reason
   it is written down: that is exactly how the first version of this route broke.
 - **The import map is inline and nonced** (SPEC §8: "external or nonced"). Browsers never
@@ -1275,7 +1275,7 @@ pub fn registry(config: &Config) -> Arc<Registry>;   // cached; empty when DISAB
 pub fn reload(config: &Config) -> Arc<Registry>;     // boot, and M4's installer
 
 // routes/statics.rs
-pub const IMPORT_MAP_MARKER: &str = "<!--LM_IMPORT_MAP-->";
+pub const IMPORT_MAP_MARKER: &str = "<!--DDD_IMPORT_MAP-->";
 pub const RUNTIME_MANIFEST_FILE: &str = "runtime-manifest.json";
 pub fn router() -> Router<AppState>;                 // importmap.json, kernel.d.ts, /plugins/*
 pub fn api_router() -> Router<AppState>;             // /api/plugins
@@ -1311,7 +1311,7 @@ loads and never syncs.
 `AppState::new` pings Mongo):
 
 ```text
-MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p life-manager-server --test statics -- --ignored
+MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p ddd-server --test statics -- --ignored
 ```
 
 ### Deliberate deviations from the M3 brief
@@ -1361,7 +1361,7 @@ Two defects and one structural fix, all inside this area's own files:
 
 1. **`index.html` was still reachable as a raw file.** The guard compared the *raw* request
    path against the single spelling `index.html`, so `/./index.html` and `/index.html/`
-   walked past it into the file branch and shipped a page whose `<!--LM_IMPORT_MAP-->` was
+   walked past it into the file branch and shipped a page whose `<!--DDD_IMPORT_MAP-->` was
    still a comment — the exact failure the guard exists to prevent. The fallback now
    normalizes away empty and `.` segments *before* deciding which branch runs, and
    `tests/statics.rs::index_html_is_never_served_as_a_file_from_any_spelling` pins all
@@ -1383,7 +1383,7 @@ Two defects and one structural fix, all inside this area's own files:
 `WEB_DIST_DIR=web/app/dist PLUGINS_DIR=plugins/base/dist` and the app driven in Chromium
 through registration. All 14 base plugins fetched their module *and* their stylesheet under
 `script-src 'self' 'nonce-…' 'wasm-unsafe-eval'`, all 17 runtime-layer specifiers resolved
-through the injected map, and `life_manager_core_bg.wasm` compiled with **no CSP violation**
+through the injected map, and `ddd_core_bg.wasm` compiled with **no CSP violation**
 — which is the one thing worth re-checking by hand after any policy edit, because a server
 built before `'wasm-unsafe-eval'` existed shows exactly this and nothing else:
 
@@ -1452,7 +1452,7 @@ here:
    `crates/plugin-sdk` pin `wasm32-unknown-unknown` in their own `.cargo/config.toml`, so no
    command needs `--target`.
 3. **Dependencies were added** to `crates/server`: `extism`, `reqwest` (rustls only),
-   `hickory-resolver`, `ipnet`, `chacha20poly1305`, `hkdf`, and `life-manager-plugin-abi`.
+   `hickory-resolver`, `ipnet`, `chacha20poly1305`, `hkdf`, and `ddd-plugin-abi`.
    Nothing else may be added. (`zip`, `hmac`, `sha2` were already there.)
 4. **`config.rs` gained twelve fields** (ops-owned file, scaffold edit) — the `PLUGIN_*`
    block and `CONFIG_KEY`; `.env.example` documents every one.
@@ -1597,7 +1597,7 @@ pub struct InstallOutcome { id, version, state, capabilities, replaced, warnings
 // M5 polish: `AbiIncompatible` was removed — it was never constructible. The ABI
 // *version value* is only knowable from a running instance, so it is checked by
 // `PluginHost::activate` (`PluginHostError::AbiMismatch`); install checks statically
-// that the module exports `lm_abi_version` at all, and reports that as `Manifest`.
+// that the module exports `ddd_abi_version` at all, and reports that as `Manifest`.
 pub enum InstallError { Package, Manifest, KernelIncompatible, Dependency,
     PeerLibrary, AlreadyInstalled, Locked, RolledBack, NotInstalled, Conflict, Config,
     Io, Db, Internal }
@@ -1760,10 +1760,10 @@ has a `plugin-builder` stage, and the admin approval screen exists. What is left
    shape on `PluginRecord`, which the admin API is not written against.
 5. ~~**`InstallError::AbiIncompatible` is unconstructed.**~~ **Closed (M5 polish):
    dropped.** Wiring it was not available — the ABI version is what the module's
-   `lm_abi_version` export *returns*, which needs a compiled instance, so install cannot
+   `ddd_abi_version` export *returns*, which needs a compiled instance, so install cannot
    know it. The variant advertised a check that lives in `PluginHost::activate`
    (`PluginHostError::AbiMismatch`, surfaced on the record's `last_error`). What install
-   can answer statically — "was this built with `lm::abi_version!()` at all" — it already
+   can answer statically — "was this built with `ddd::abi_version!()` at all" — it already
    answers, as a `Manifest` error.
 
 ## Commands
@@ -1847,5 +1847,5 @@ answers to one of its ids (its own or its `provides`).
 
 **Backend calls**: `ActivePlugin { deps, provides, callable }` replaces `calls`;
 `host_fns::check_call` / `check_output` hold the rules (HOST-ABI §3.10). Shapes are
-`life_manager_core::shape::{Shape, validate, fits}`; `core/corpus/shapes.json`
+`ddd_core::shape::{Shape, validate, fits}`; `core/corpus/shapes.json`
 (`[{ name, shape, value, ok }]`) is the corpus both the Rust and the web validator run.

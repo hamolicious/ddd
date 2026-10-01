@@ -70,7 +70,7 @@ export function DefaultLocation({ label, hint, notes, value, onChange, NoteSelec
         <label className="folders:flex folders:flex-wrap folders:items-center folders:gap-3" htmlFor={id}>
           <span>{label}</span>
           <select
-            className="folders:min-h-[var(--lm-tap-target)] folders:min-w-0 folders:flex-1 folders:rounded folders:border folders:border-border folders:bg-bg folders:px-2 folders:text-text"
+            className="folders:min-h-[var(--ddd-tap-target)] folders:min-w-0 folders:flex-1 folders:rounded folders:border folders:border-border folders:bg-bg folders:px-2 folders:text-text"
             id={id}
             value={current}
             onChange={(event) => choose(event.target.value)}

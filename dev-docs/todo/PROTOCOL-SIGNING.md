@@ -5,7 +5,7 @@
 ## Today's rule
 
 Protocol ids are `<publisher>/<name>`. On each server, the first installed package that
-uses a namespace owns it. `lm/` is reserved for the base distribution from day one. The
+uses a namespace owns it. `ddd/` is reserved for the base distribution from day one. The
 content-hash rule still applies on top: two packages that bundle the same `id@version`
 must be byte-identical, or the install is refused.
 

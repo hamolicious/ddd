@@ -15,9 +15,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:life_manager_shell/bridge/bridge.dart';
-import 'package:life_manager_shell/bridge/notifications.dart';
-import 'package:life_manager_shell/config.dart';
+import 'package:ddd_shell/bridge/bridge.dart';
+import 'package:ddd_shell/bridge/notifications.dart';
+import 'package:ddd_shell/config.dart';
 
 /// What the plugin was asked to do, in order.
 class _Call {
@@ -78,7 +78,7 @@ void main() {
   DateTime now = DateTime.utc(2026, 10, 1, 8, 0);
 
   setUp(() async {
-    support = await Directory.systemTemp.createTemp('lm-notifications-test');
+    support = await Directory.systemTemp.createTemp('ddd-notifications-test');
     port = _FakePort();
     now = DateTime.utc(2026, 10, 1, 8, 0);
   });

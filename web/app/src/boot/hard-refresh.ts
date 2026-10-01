@@ -8,8 +8,8 @@
  *
  * Cleared:
  * - every service worker registration for this origin;
- * - every Cache Storage cache — the Workbox precache, `lm-plugins`, `lm-runtime`,
- *   `lm-meta`, `lm-shell` (`sw.ts`) and anything else there;
+ * - every Cache Storage cache — the Workbox precache, `ddd-plugins`, `ddd-runtime`,
+ *   `ddd-meta`, `ddd-shell` (`sw.ts`) and anything else there;
  * - the two boot cache entries, the session user and the installed plugin list
  *   (`cache.ts`), so the reload asks the server for both.
  *

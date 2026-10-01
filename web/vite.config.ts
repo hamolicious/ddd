@@ -4,7 +4,7 @@ import { defineConfig } from "vitest/config";
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 
 /** Where `mise run wasm` writes the generated wasm-bindgen package. */
-const wasmPkg = here("./kernel/src/wasm/pkg/life_manager_core.js");
+const wasmPkg = here("./kernel/src/wasm/pkg/ddd_core.js");
 
 /**
  * M2 dev setup: the demo page is the app, the kernel is a plain source
@@ -20,7 +20,7 @@ export default defineConfig({
     // `@kernel/…` is kernel internals. The exact-match regex has to be tried
     // first — object-form aliases are prefix matches and would swallow it.
     alias: [
-      { find: "@life-manager/core-wasm", replacement: wasmPkg },
+      { find: "@ddd/core-wasm", replacement: wasmPkg },
       { find: /^@kernel$/, replacement: here("./kernel-api/src/index.ts") },
       { find: /^@kernel\//, replacement: `${here("./kernel/src")}/` },
       // `plugin:<id>` is a base plugin's public module (`@kernel` 3.0). At runtime the import
@@ -32,7 +32,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/api": {
-        target: process.env.LM_SERVER ?? "http://127.0.0.1:8080",
+        target: process.env.DDD_SERVER ?? "http://127.0.0.1:8080",
         changeOrigin: false,
         ws: true,
       },

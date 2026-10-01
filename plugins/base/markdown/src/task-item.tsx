@@ -105,12 +105,12 @@ export function TaskCheckbox({
   );
 
   return (
-    <span className="md-task-control markdown:relative markdown:mx-[calc((var(--md-gutter)-var(--lm-tap-target))/2)] markdown:inline-flex markdown:min-w-[var(--lm-tap-target)] markdown:shrink-0 markdown:justify-center">
+    <span className="md-task-control markdown:relative markdown:mx-[calc((var(--md-gutter)-var(--ddd-tap-target))/2)] markdown:inline-flex markdown:min-w-[var(--ddd-tap-target)] markdown:shrink-0 markdown:justify-center">
       <button
         type="button"
         // One line tall, so a list of tasks is spaced like a list of text. The 44 px touch
         // target (SPEC §6.5) is the `::before` overlay, which takes no room in the layout.
-        className="md-task-box markdown:relative markdown:h-[1.45em] markdown:w-[var(--lm-tap-target)] markdown:before:absolute markdown:before:inset-x-0 markdown:before:top-1/2 markdown:before:h-[var(--lm-tap-target)] markdown:before:-translate-y-1/2 markdown:before:content-[''] markdown:touch-manipulation markdown:select-none markdown:cursor-pointer markdown:rounded markdown:border-0 markdown:bg-transparent markdown:p-0 markdown:text-[1.1em] markdown:leading-none markdown:text-inherit markdown:hover:enabled:bg-accent-subtle markdown:disabled:cursor-default markdown:disabled:opacity-55"
+        className="md-task-box markdown:relative markdown:h-[1.45em] markdown:w-[var(--ddd-tap-target)] markdown:before:absolute markdown:before:inset-x-0 markdown:before:top-1/2 markdown:before:h-[var(--ddd-tap-target)] markdown:before:-translate-y-1/2 markdown:before:content-[''] markdown:touch-manipulation markdown:select-none markdown:cursor-pointer markdown:rounded markdown:border-0 markdown:bg-transparent markdown:p-0 markdown:text-[1.1em] markdown:leading-none markdown:text-inherit markdown:hover:enabled:bg-accent-subtle markdown:disabled:cursor-default markdown:disabled:opacity-55"
         // `role="checkbox"` with `aria-checked` is the right role even with more than two
         // states: `done` is the binary an assistive technology can act on, and `aria-label`
         // carries the state's real name ("In progress") so the nuance is not lost.

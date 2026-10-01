@@ -149,8 +149,8 @@ describe("inside the shell", () => {
     const shell = injectShell();
     expect(shellToken()).toBe(windowShell.injected.bearerToken);
 
-    rememberShellToken("lm.session.Bz1…");
-    expect(shell.setBearerToken).toHaveBeenCalledWith("lm.session.Bz1…");
+    rememberShellToken("ddd.session.Bz1…");
+    expect(shell.setBearerToken).toHaveBeenCalledWith("ddd.session.Bz1…");
     // Sign-out forgets it: `null`, not `undefined`, because only JSON crosses the bridge.
     rememberShellToken(undefined);
     expect(shell.setBearerToken).toHaveBeenLastCalledWith(null);

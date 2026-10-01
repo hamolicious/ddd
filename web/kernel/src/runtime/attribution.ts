@@ -7,8 +7,8 @@
  * makes it one value per page however many copies of `@kernel` the page has loaded.
  */
 
-const ACTIVATING = Symbol.for("life-manager.kernel.activating-plugin");
-const REGISTRIES = Symbol.for("life-manager.kernel.registries");
+const ACTIVATING = Symbol.for("ddd.kernel.activating-plugin");
+const REGISTRIES = Symbol.for("ddd.kernel.registries");
 
 type Global = { [ACTIVATING]?: string; [REGISTRIES]?: Set<(pluginId: string) => void> };
 const page = globalThis as unknown as Global;

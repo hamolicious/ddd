@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "name": "Editor",
   "description": "Edit mode: CodeMirror 6 bound to the document's Y.Text.",
-  "author": "Life Manager base distribution",
+  "author": "ddd base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
   "kernel": "^3.0",

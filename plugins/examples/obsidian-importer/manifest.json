@@ -15,6 +15,6 @@
   },
   "name": "Obsidian importer",
   "description": "Imports notes and attachments from an Obsidian vault ZIP, preserving folders and resolving links.",
-  "author": "Life Manager examples",
+  "author": "ddd examples",
   "license": "MIT OR Apache-2.0"
 }

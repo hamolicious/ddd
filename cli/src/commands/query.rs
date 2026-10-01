@@ -1,15 +1,15 @@
-//! `lm query` — query a workspace's documents: the functional query API from a shell.
+//! `ddd query` — query a workspace's documents: the functional query API from a shell.
 //!
 //! The plan is built by the shared core's `Query` builder — the one the server, the
 //! browser and backend plugins use — so a query here means exactly what it means
 //! there. `--plan` prints it without contacting anything; otherwise it is posted to
-//! `<server>/api/query` with a bearer token (`lm login`).
+//! `<server>/api/query` with a bearer token (`ddd login`).
 
 use anyhow::{Context, Result, bail};
 use clap::Args;
-use life_manager_core::Date;
-use life_manager_core::filter::{Filter, Literal};
-use life_manager_core::query::{Op, Plan, Query, Sort, Trash, lower};
+use ddd_core::Date;
+use ddd_core::filter::{Filter, Literal};
+use ddd_core::query::{Op, Plan, Query, Sort, Trash, lower};
 use serde_json::Value;
 
 use crate::server::Server;
@@ -60,11 +60,11 @@ pub struct QueryArgs {
     /// Print the server's answer as JSON instead of a table.
     #[arg(long)]
     json: bool,
-    /// The Life Manager server, e.g. https://notes.example.com.
-    #[arg(long, env = "LM_SERVER")]
+    /// The ddd server, e.g. https://notes.example.com.
+    #[arg(long, env = "DDD_SERVER")]
     server: Option<String>,
-    /// A bearer token from `lm login`.
-    #[arg(long, env = "LM_TOKEN", hide_env_values = true)]
+    /// A bearer token from `ddd login`.
+    #[arg(long, env = "DDD_TOKEN", hide_env_values = true)]
     token: Option<String>,
 }
 
@@ -75,11 +75,15 @@ pub fn run(args: QueryArgs) -> Result<()> {
         return Ok(());
     }
     let Some(url) = args.server.as_deref() else {
-        bail!("which server? pass --server <url> or set LM_SERVER (or --plan to print the query)");
+        bail!("which server? pass --server <url> or set DDD_SERVER (or --plan to print the query)");
     };
-    let Some(token) = args.token.as_deref().filter(|token| !token.trim().is_empty()) else {
+    let Some(token) = args
+        .token
+        .as_deref()
+        .filter(|token| !token.trim().is_empty())
+    else {
         bail!(
-            "not signed in: run `lm login --server {url} --email <you>` and set LM_TOKEN to what it prints"
+            "not signed in: run `ddd login --server {url} --email <you>` and set DDD_TOKEN to what it prints"
         );
     };
     let server = Server::new(url);
@@ -123,10 +127,8 @@ fn build(args: &QueryArgs) -> Result<Plan> {
         query = match Sort::parse(key).with_context(|| format!("`{key}` is not a sort key"))? {
             Sort::Relevance => query.sort_relevance(),
             Sort::Field(key) => match key.order {
-                life_manager_core::filter::SortOrder::Asc => query.sort(&key.field.as_dotted()),
-                life_manager_core::filter::SortOrder::Desc => {
-                    query.sort_desc(&key.field.as_dotted())
-                }
+                ddd_core::filter::SortOrder::Asc => query.sort(&key.field.as_dotted()),
+                ddd_core::filter::SortOrder::Desc => query.sort_desc(&key.field.as_dotted()),
             },
         };
     }
@@ -226,7 +228,7 @@ mod tests {
     }
 
     fn plan(argv: &[&str]) -> Value {
-        let cli = Cli::try_parse_from(std::iter::once("lm").chain(argv.iter().copied())).unwrap();
+        let cli = Cli::try_parse_from(std::iter::once("ddd").chain(argv.iter().copied())).unwrap();
         build(&cli.args).unwrap().to_json()
     }
 
@@ -297,9 +299,9 @@ mod tests {
 
     #[test]
     fn mistakes_are_refused_before_any_request() {
-        let cli = Cli::try_parse_from(["lm", "--filter", "nope:eq:1"]).unwrap();
+        let cli = Cli::try_parse_from(["ddd", "--filter", "nope:eq:1"]).unwrap();
         assert!(build(&cli.args).is_err());
-        let cli = Cli::try_parse_from(["lm", "--filter", "title:frobnicate:1"]).unwrap();
+        let cli = Cli::try_parse_from(["ddd", "--filter", "title:frobnicate:1"]).unwrap();
         assert!(build(&cli.args).is_err());
     }
 }

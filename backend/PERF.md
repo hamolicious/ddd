@@ -14,16 +14,16 @@ row shape.
 ```sh
 mise run wasm                                  # the harness fails hard without it
 docker compose up -d --wait mongo
-cd backend && cargo build --bin life-manager
-MONGO_DATABASE=lm_perf BIND_ADDR=127.0.0.1:8099 ./target/debug/life-manager serve
+cd backend && cargo build --bin ddd
+MONGO_DATABASE=ddd_perf BIND_ADDR=127.0.0.1:8099 ./target/debug/ddd serve
 
 cd web
 npx playwright install chromium                # the client-heap number only
-LM_SERVER=http://127.0.0.1:8099 npx vite --port 5173 --host 127.0.0.1
-LM_SERVER=http://127.0.0.1:8099 LM_WEB=http://localhost:5173 npm run harness:perf
+DDD_SERVER=http://127.0.0.1:8099 npx vite --port 5173 --host 127.0.0.1
+DDD_SERVER=http://127.0.0.1:8099 DDD_WEB=http://localhost:5173 npm run harness:perf
 ```
 
-`LM_SERVER` must be set for **both** Vite and the harness: Vite proxies `/api` to
+`DDD_SERVER` must be set for **both** Vite and the harness: Vite proxies `/api` to
 it, and the in-page measurement loads the demo from the Vite origin. Without it
 the browser half fails with `HTTP 404` and the run reports the heap as skipped.
 
@@ -72,14 +72,14 @@ against; nothing about the protocol changes, only the device.
 
 ## Observations that are not gate failures
 
-- **`lm_rooms` reached 5 000 after seeding.** Every `create` opens a room, and
+- **`ddd_rooms` reached 5 000 after seeding.** Every `create` opens a room, and
   rooms evict 10 minutes after their last subscriber (SPEC §4.3), so a bulk import
   leaves one in-memory `Y.Doc` per document for that window. It is not a leak and
   it does not affect these numbers, but a 100 000-document import would need the
   eviction to be pressure-driven rather than purely time-driven. Worth watching;
   not an M2 problem.
 - **Gauges are sampled, not collected on scrape.** `/metrics` gauges
-  (`lm_documents_total`, `lm_rooms`, `lm_feed_head_seq`, `lm_feed_safe_seq`) refresh
+  (`ddd_documents_total`, `ddd_rooms`, `ddd_feed_head_seq`, `ddd_feed_safe_seq`) refresh
   every 15 s, so a scrape taken within 15 s of boot reports the empty workspace the
   server started with. The `serverMetrics` block in the harness output is taken
   mid-run and shows exactly that; the settled values are correct on the next
@@ -89,7 +89,7 @@ against; nothing about the protocol changes, only the device.
   `feed_head_seq` climbs faster than the document count. Harmless by design.
 - **Materialization is still synchronous on the write path.** CONTRACTS.md docstore
   M2 item 2 asks for the debounce worker to own it. The measured cost is
-  `lm_materialize_duration_seconds_sum / _count` ≈ **1.2 ms** per materialization
+  `ddd_materialize_duration_seconds_sum / _count` ≈ **1.2 ms** per materialization
   and a p50 round trip of 21 ms, so the deferral is an optimization rather than a
   gate risk. Left as-is deliberately: `WriteOutcome` returns the materialized
   `content`/`title`/`materialized_version` that the REST routes hand straight back

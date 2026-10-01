@@ -1,4 +1,4 @@
-# Graph Report - life-manager  (2026-09-30)
+# Graph Report - ddd  (2026-09-30)
 
 ## Corpus Check
 - 853 files · ~957,055 words
@@ -128,7 +128,7 @@
 - ConnectionSession
 - folders/src/index.tsx
 - target
-- Life Manager project specification
+- ddd project specification
 - admin/src/api.ts
 - manifest_schema
 - config.dart
@@ -298,7 +298,7 @@
 - web_kernel_api_src_index_sessionapi
 - web_kernel_api_src_index_sessionuser
 - web_kernel_api_src_index_settingsapi
-- life-manager-plugin-abi
+- ddd-plugin-abi
 - web_kernel_api_src_index_splicetarget
 - web_kernel_api_src_index_syncstatus
 - web_kernel_api_src_index_textedit
@@ -473,47 +473,47 @@
 - P
 - Option
 - renderer.ts
-- Life Manager — Linux desktop
+- ddd — Linux desktop
 - KeybindingsSection.tsx
 - themes/src/index.tsx
 - plugin/mod.rs
 - Uploads
 - attachments/src/index.tsx
-- home_hamolicious_projects_life_manager_plugins_base_attachments_protocols_attachments_index_js
-- home_hamolicious_projects_life_manager_plugins_base_attachments_protocols_attachments_viewer_index_js
-- home_hamolicious_projects_life_manager_plugins_base_commands_protocols_commands_command_index_js
-- home_hamolicious_projects_life_manager_plugins_base_commands_protocols_keybindings_default_index_js
-- home_hamolicious_projects_life_manager_plugins_base_context_menu_protocols_context_menu_index_js
-- home_hamolicious_projects_life_manager_plugins_base_doc_list_protocols_document_browser_index_js
-- home_hamolicious_projects_life_manager_plugins_base_search_protocols_search_provider_index_js
-- home_hamolicious_projects_life_manager_plugins_base_document_surface_protocols_document_mode_index_js
-- home_hamolicious_projects_life_manager_plugins_base_editor_protocols_editor_extension_index_js
-- home_hamolicious_projects_life_manager_plugins_base_editor_protocols_editor_paste_index_js
-- home_hamolicious_projects_life_manager_plugins_base_folders_protocols_folders_default_location_index_js
-- home_hamolicious_projects_life_manager_plugins_base_header_protocols_navbar_item_index_js
-- home_hamolicious_projects_life_manager_plugins_base_indexer_protocols_workspace_index_index_js
-- home_hamolicious_projects_life_manager_plugins_base_markdown_protocols_markdown_attachment_index_js
-- home_hamolicious_projects_life_manager_plugins_base_markdown_protocols_markdown_codeblock_index_js
-- home_hamolicious_projects_life_manager_plugins_base_markdown_protocols_markdown_component_index_js
-- home_hamolicious_projects_life_manager_plugins_base_markdown_protocols_markdown_directive_index_js
-- home_hamolicious_projects_life_manager_plugins_base_markdown_protocols_markdown_fence_index_js
-- home_hamolicious_projects_life_manager_plugins_base_markdown_protocols_markdown_remark_index_js
-- home_hamolicious_projects_life_manager_plugins_base_markdown_protocols_markdown_renderer_index_js
-- home_hamolicious_projects_life_manager_plugins_base_markdown_protocols_markdown_taskstate_index_js
-- home_hamolicious_projects_life_manager_plugins_base_router_protocols_router_index_js
-- home_hamolicious_projects_life_manager_plugins_base_router_protocols_router_route_index_js
-- home_hamolicious_projects_life_manager_plugins_base_settings_protocols_settings_section_index_js
-- home_hamolicious_projects_life_manager_plugins_base_settings_protocols_settings_shell_index_js
-- home_hamolicious_projects_life_manager_plugins_base_shell_ui_protocols_altbar_panel_index_js
-- home_hamolicious_projects_life_manager_plugins_base_shell_ui_protocols_main_view_index_js
-- home_hamolicious_projects_life_manager_plugins_base_shell_ui_protocols_shell_header_index_js
-- home_hamolicious_projects_life_manager_plugins_base_shell_ui_protocols_shell_index_js
-- home_hamolicious_projects_life_manager_plugins_base_shell_ui_protocols_shell_overlay_index_js
-- home_hamolicious_projects_life_manager_plugins_base_shell_ui_protocols_sidebar_panel_index_js
-- home_hamolicious_projects_life_manager_plugins_base_slash_commands_protocols_slash_command_index_js
-- home_hamolicious_projects_life_manager_plugins_base_slash_commands_protocols_text_surface_index_js
-- home_hamolicious_projects_life_manager_plugins_base_syntax_highlight_protocols_syntax_language_index_js
-- home_hamolicious_projects_life_manager_plugins_base_themes_protocols_themes_theme_index_js
+- home_hamolicious_projects_ddd_plugins_base_attachments_protocols_attachments_index_js
+- home_hamolicious_projects_ddd_plugins_base_attachments_protocols_attachments_viewer_index_js
+- home_hamolicious_projects_ddd_plugins_base_commands_protocols_commands_command_index_js
+- home_hamolicious_projects_ddd_plugins_base_commands_protocols_keybindings_default_index_js
+- home_hamolicious_projects_ddd_plugins_base_context_menu_protocols_context_menu_index_js
+- home_hamolicious_projects_ddd_plugins_base_doc_list_protocols_document_browser_index_js
+- home_hamolicious_projects_ddd_plugins_base_search_protocols_search_provider_index_js
+- home_hamolicious_projects_ddd_plugins_base_document_surface_protocols_document_mode_index_js
+- home_hamolicious_projects_ddd_plugins_base_editor_protocols_editor_extension_index_js
+- home_hamolicious_projects_ddd_plugins_base_editor_protocols_editor_paste_index_js
+- home_hamolicious_projects_ddd_plugins_base_folders_protocols_folders_default_location_index_js
+- home_hamolicious_projects_ddd_plugins_base_header_protocols_navbar_item_index_js
+- home_hamolicious_projects_ddd_plugins_base_indexer_protocols_workspace_index_index_js
+- home_hamolicious_projects_ddd_plugins_base_markdown_protocols_markdown_attachment_index_js
+- home_hamolicious_projects_ddd_plugins_base_markdown_protocols_markdown_codeblock_index_js
+- home_hamolicious_projects_ddd_plugins_base_markdown_protocols_markdown_component_index_js
+- home_hamolicious_projects_ddd_plugins_base_markdown_protocols_markdown_directive_index_js
+- home_hamolicious_projects_ddd_plugins_base_markdown_protocols_markdown_fence_index_js
+- home_hamolicious_projects_ddd_plugins_base_markdown_protocols_markdown_remark_index_js
+- home_hamolicious_projects_ddd_plugins_base_markdown_protocols_markdown_renderer_index_js
+- home_hamolicious_projects_ddd_plugins_base_markdown_protocols_markdown_taskstate_index_js
+- home_hamolicious_projects_ddd_plugins_base_router_protocols_router_index_js
+- home_hamolicious_projects_ddd_plugins_base_router_protocols_router_route_index_js
+- home_hamolicious_projects_ddd_plugins_base_settings_protocols_settings_section_index_js
+- home_hamolicious_projects_ddd_plugins_base_settings_protocols_settings_shell_index_js
+- home_hamolicious_projects_ddd_plugins_base_shell_ui_protocols_altbar_panel_index_js
+- home_hamolicious_projects_ddd_plugins_base_shell_ui_protocols_main_view_index_js
+- home_hamolicious_projects_ddd_plugins_base_shell_ui_protocols_shell_header_index_js
+- home_hamolicious_projects_ddd_plugins_base_shell_ui_protocols_shell_index_js
+- home_hamolicious_projects_ddd_plugins_base_shell_ui_protocols_shell_overlay_index_js
+- home_hamolicious_projects_ddd_plugins_base_shell_ui_protocols_sidebar_panel_index_js
+- home_hamolicious_projects_ddd_plugins_base_slash_commands_protocols_slash_command_index_js
+- home_hamolicious_projects_ddd_plugins_base_slash_commands_protocols_text_surface_index_js
+- home_hamolicious_projects_ddd_plugins_base_syntax_highlight_protocols_syntax_language_index_js
+- home_hamolicious_projects_ddd_plugins_base_themes_protocols_themes_theme_index_js
 - wikilinks/src/controller.ts
 - themes/src/controller.ts
 - repo.rs
@@ -530,7 +530,7 @@
 - MessageHandler
 - SnapshotsClient
 - ColumnEditor.tsx
-- life-manager-desktop
+- ddd-desktop
 - virtual-list.ts
 - Bars.tsx
 - graph-plugin.mjs
@@ -538,23 +538,23 @@
 - doc-embed.tsx
 - doc-events/manifest.json
 - installed.ts
-- `lm` — Life Manager developer tooling
+- `ddd` — ddd developer tooling
 - plugin/README.md
 - editor-extension.ts
 - kanban/src/layout.ts
 - server/src/plugins.rs
 - Diagnostic
 - ConfigGetOutput
-- home_hamolicious_projects_life_manager_plugins_base_icons_protocols_icons_index_js
+- home_hamolicious_projects_ddd_plugins_base_icons_protocols_icons_index_js
 - README.backend.md
 - permissions
 - webviews
-- life-manager-cli
+- ddd-cli
 - permissions
 - webviews
-- home_hamolicious_projects_life_manager_plugins_base_folders_protocols_folders_decoration_index_js
-- home_hamolicious_projects_life_manager_plugins_base_folders_protocols_folders_menu_item_index_js
-- home_hamolicious_projects_life_manager_plugins_base_folders_protocols_folders_moved_index_js
+- home_hamolicious_projects_ddd_plugins_base_folders_protocols_folders_decoration_index_js
+- home_hamolicious_projects_ddd_plugins_base_folders_protocols_folders_menu_item_index_js
+- home_hamolicious_projects_ddd_plugins_base_folders_protocols_folders_moved_index_js
 - plugin-abi/src/documents.rs
 - extract.ts
 - update.ts
@@ -562,7 +562,7 @@
 - linux/flutter/generated_plugin_registrant.cc
 - compose-plugins.mjs
 - check-plugin-graph.mjs
-- ref_protocols_lm
+- ref_protocols_ddd
 - .new
 - field-select.tsx
 - Theme
@@ -575,8 +575,8 @@
 - mobile-routes.spec.ts
 - kernel-api/src/registry.ts
 - shape.ts
-- home_hamolicious_projects_life_manager_plugins_base_doc_list_protocols_document_browser_created_index_js
-- home_hamolicious_projects_life_manager_plugins_base_folders_protocols_folders_index_js
+- home_hamolicious_projects_ddd_plugins_base_doc_list_protocols_document_browser_created_index_js
+- home_hamolicious_projects_ddd_plugins_base_folders_protocols_folders_index_js
 - ref_foldercontents_js
 - ref_folders_protocols_folders_default_location_index_js
 - ref_folders_protocols_folders_moved_index_js
@@ -588,7 +588,7 @@
 - flutter_window.h
 - alt-editor/src/index.tsx
 - init_metrics
-- home_hamolicious_projects_life_manager_plugins_base_commands_protocols_commands_index_js
+- home_hamolicious_projects_ddd_plugins_base_commands_protocols_commands_index_js
 - vite.plugin-config.mjs
 - react-dom
 - Engine
@@ -615,16 +615,16 @@
 - PermissionEntry
 - Number
 - PermissionEntry
-- home_hamolicious_projects_life_manager_plugins_base_table_protocols_table_index_js
+- home_hamolicious_projects_ddd_plugins_base_table_protocols_table_index_js
 - message
 - mobile-shell.spec.ts
-- home_hamolicious_projects_life_manager_plugins_base_search_protocols_search_index_js
-- home_hamolicious_projects_life_manager_plugins_base_search_protocols_search_view_index_js
+- home_hamolicious_projects_ddd_plugins_base_search_protocols_search_index_js
+- home_hamolicious_projects_ddd_plugins_base_search_protocols_search_view_index_js
 - ref_attachments_protocols_attachments_index_js
 - ref_conditions_editor_js
 - ref_attachments_protocols_attachments_viewer_index_js
 - ref_search_protocols_search_view_index_js
-- home_hamolicious_projects_life_manager_plugins_base_doc_list_protocols_search_provider_index_js
+- home_hamolicious_projects_ddd_plugins_base_doc_list_protocols_search_provider_index_js
 - ref_doc_list_protocols_search_provider_index_js
 - ref_searchpage_js
 - ref_table_view_js
@@ -637,7 +637,7 @@
 - ThemesApi
 - .fmt
 - Collaboration suite
-- home_hamolicious_projects_life_manager_plugins_base_context_menu_protocols_context_menu_action_index_js
+- home_hamolicious_projects_ddd_plugins_base_context_menu_protocols_context_menu_action_index_js
 - ref_folders_protocols_folders_menu_item_index_js
 - ref_commands_protocols_keybindings_default_index_js
 - ref_context_menu_protocols_context_menu_action_index_js
@@ -660,14 +660,14 @@
 - ref_markdown_protocols_markdown_remark_index_js
 - ref_markdown_protocols_markdown_renderer_index_js
 - ref_markdown_protocols_markdown_taskstate_index_js
-- ref_protocols_lm_attachments
-- ref_protocols_lm_commands_command
-- ref_protocols_lm_document_mode
-- ref_protocols_lm_editor_paste
-- ref_protocols_lm_folders
-- ref_protocols_lm_markdown_taskstate
-- ref_protocols_lm_navbar_item
-- ref_protocols_lm_text_surface
+- ref_protocols_ddd_attachments
+- ref_protocols_ddd_commands_command
+- ref_protocols_ddd_document_mode
+- ref_protocols_ddd_editor_paste
+- ref_protocols_ddd_folders
+- ref_protocols_ddd_markdown_taskstate
+- ref_protocols_ddd_navbar_item
+- ref_protocols_ddd_text_surface
 - ref_router_protocols_router_index_js
 - ref_router_protocols_router_route_index_js
 - ref_search_protocols_search_index_js
@@ -917,7 +917,7 @@ Nodes (29): CANONICAL_SHAPE_REGEX, civil_from_days(), Date, date_only_canonicali
 
 ### Community 50 - "runtime/settings.test.ts"
 Cohesion: 0.07
-Nodes (25): values(), ref_life_manager_core_wasm, KernelRuntime, CoreMap, apply(), available, openFilter, FilterEvaluator (+17 more)
+Nodes (25): values(), ref_ddd_core_wasm, KernelRuntime, CoreMap, apply(), available, openFilter, FilterEvaluator (+17 more)
 
 ### Community 51 - "feed.rs"
 Cohesion: 0.08
@@ -1163,7 +1163,7 @@ Nodes (33): FOLDER_DECORATION_SHAPE, FolderDecoration, FolderLook, Folders, Note
 Cohesion: 0.08
 Nodes (27): DayList(), ContextAction, MenuSection, buildMenu(), editableFirst(), listen(), OpenAt, el() (+19 more)
 
-### Community 112 - "Life Manager project specification"
+### Community 112 - "ddd project specification"
 Cohesion: 0.08
 Nodes (38): Shell Capability Bridge Contract, M5 Build Contracts (Flutter Shell), Flutter Shell README, M5 On-Device Acceptance Script, Backend plugin build contracts, Backend build contracts, Core Library README, Filter DSL (+30 more)
 
@@ -1719,9 +1719,9 @@ Nodes (5): markdownLanguage, MarkdownState, markdownStyle, markdownSyntax, @code
 Cohesion: 0.16
 Nodes (16): Bar, itemRegistry, NavbarItem, Placement, Side, ToolbarItem, activate(), addItem (+8 more)
 
-### Community 282 - "life-manager-plugin-abi"
+### Community 282 - "ddd-plugin-abi"
 Cohesion: 0.40
-Nodes (5): hello-backend, life-manager-core, life-manager-plugin-abi, life-manager-plugin-sdk, life-manager-server
+Nodes (5): hello-backend, ddd-core, ddd-plugin-abi, ddd-plugin-sdk, ddd-server
 
 ### Community 287 - "LaunchImage README"
 Cohesion: 0.50
@@ -1809,7 +1809,7 @@ Nodes (18): author, dependencies, indexer, settings, description, frontend, modu
 
 ### Community 331 - "Capabilities"
 Cohesion: 0.12
-Nodes (20): CronPayload, Option, Capabilities, InitPayload, Vec, init(), Result, life_manager_plugin_sdk_as_lm (+12 more)
+Nodes (20): CronPayload, Option, Capabilities, InitPayload, Vec, init(), Result, ddd_plugin_sdk_as_ddd (+12 more)
 
 ### Community 332 - "Q: okay it imported the attachments but didnt link them"
 Cohesion: 0.40
@@ -2007,9 +2007,9 @@ Nodes (12): a_bootstrap_cursor_carries_the_pinned_watermark(), bootstrap_flags_a
 Cohesion: 0.20
 Nodes (9): GraphNode, Camera, CanvasEvents, clamp(), Gesture, GROUP_COLOURS, labelZoomAlpha(), Palette (+1 more)
 
-### Community 423 - "Life Manager — Linux desktop"
+### Community 423 - "ddd — Linux desktop"
 Cohesion: 0.33
-Nodes (5): Life Manager — Linux desktop, Notes folder, Run / package, Server, Setup (Arch)
+Nodes (5): ddd — Linux desktop, Notes folder, Run / package, Server, Setup (Arch)
 
 ### Community 424 - "KeybindingsSection.tsx"
 Cohesion: 0.27
@@ -2111,9 +2111,9 @@ Nodes (9): author, description, frontend, module, id, kernel, license, name (+1 
 Cohesion: 0.24
 Nodes (4): createInstalled(), idsOf(), Installed, INSTALLED_KEY
 
-### Community 489 - "`lm` — Life Manager developer tooling"
+### Community 489 - "`ddd` — ddd developer tooling"
 Cohesion: 0.50
-Nodes (3): Adding a command, `lm` — Life Manager developer tooling, The plugin SDK
+Nodes (3): Adding a command, `ddd` — ddd developer tooling, The plugin SDK
 
 ### Community 491 - "editor-extension.ts"
 Cohesion: 0.28

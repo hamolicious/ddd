@@ -510,7 +510,7 @@ export default function activate(kernel: Kernel): void {
   };
 
   // ---------------------------------------------------------------------------
-  // The service (`lm/folders`) and notes made elsewhere
+  // The service (`ddd/folders`) and notes made elsewhere
   // ---------------------------------------------------------------------------
 
   /** Notes `ensurePath` made this session, before the projection has them: `parent \0 title`. */
@@ -1057,7 +1057,7 @@ export default function activate(kernel: Kernel): void {
   addAction([
     {
       id: "folders.document",
-      target: "lm/document",
+      target: "ddd/document",
       order: 10,
       items: (target): MenuItem[] => {
         const id = target.id;
@@ -1096,7 +1096,7 @@ export default function activate(kernel: Kernel): void {
       // The same id as `doc-list`'s, added after it (folders depends on doc-list), so this
       // one replaces it: it knows what happens to the notes inside.
       id: "document.trash",
-      target: "lm/document",
+      target: "ddd/document",
       order: 100,
       items: (target): MenuItem[] => [
         hierarchy.notes.has(target.id)

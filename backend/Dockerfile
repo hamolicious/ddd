@@ -68,16 +68,16 @@ COPY backend/crates ./crates
 COPY schema /schema
 # Touch so cargo notices the real sources are newer than the dummy build.
 RUN find crates -name '*.rs' -exec touch {} + \
-    && cargo build --release --locked --bin life-manager \
-    && strip target/release/life-manager
+    && cargo build --release --locked --bin ddd \
+    && strip target/release/ddd
 
 # 3. The same core, compiled for the client kernel. `--no-default-features` drops `bson`
 #    (SPEC §4.2: compiling the filter DSL to Mongo stays server-side and must never reach
 #    the Wasm build); `--features wasm` adds the wasm-bindgen ABI of `core/src/wasm.rs`.
-RUN cargo build -p life-manager-core --target wasm32-unknown-unknown --release --locked \
+RUN cargo build -p ddd-core --target wasm32-unknown-unknown --release --locked \
         --no-default-features --features wasm \
-    && wasm-bindgen --target web --out-dir /wasm-pkg --out-name life_manager_core \
-        target/wasm32-unknown-unknown/release/life_manager_core.wasm
+    && wasm-bindgen --target web --out-dir /wasm-pkg --out-name ddd_core \
+        target/wasm32-unknown-unknown/release/ddd_core.wasm
 
 # ---------------------------------------------------------------------------
 # plugin-builder: the backend halves of plugins (M4).
@@ -155,16 +155,16 @@ RUN npm run kernel:dts \
 # ---------------------------------------------------------------------------
 FROM debian:bookworm-slim AS runtime
 
-LABEL org.opencontainers.image.title="life-manager" \
-      org.opencontainers.image.description="Life Manager server: REST API, CRDT document store, auth, attachments, the PWA bundle and the base plugin distribution." \
+LABEL org.opencontainers.image.title="ddd" \
+      org.opencontainers.image.description="ddd server: REST API, CRDT document store, auth, attachments, the PWA bundle and the base plugin distribution." \
       org.opencontainers.image.licenses="MIT OR Apache-2.0"
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && useradd --system --uid 10001 --create-home --shell /usr/sbin/nologin lifemanager
+    && useradd --system --uid 10001 --create-home --shell /usr/sbin/nologin ddd
 
-COPY --from=rust-builder /build/target/release/life-manager /usr/local/bin/life-manager
+COPY --from=rust-builder /build/target/release/ddd /usr/local/bin/ddd
 
 # The bundle and the contract are read-only: the server only ever reads them.
 COPY --from=web-builder /repo/web/app/dist /srv/web
@@ -181,7 +181,7 @@ COPY --from=web-builder --chown=10001:10001 /repo/plugins/base/dist /srv/plugins
 RUN install -d -o 10001 -g 10001 /srv/plugins.staging
 
 USER 10001:10001
-WORKDIR /home/lifemanager
+WORKDIR /home/ddd
 
 # Defaults only. MONGO_URI and SESSION_SECRET have no defaults and must be
 # supplied (SPEC §5.2) — the server refuses to start without them.
@@ -208,5 +208,5 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=15s --retries=5 \
 # the binary is PID 1 and handles the signal itself.
 STOPSIGNAL SIGTERM
 
-ENTRYPOINT ["/usr/local/bin/life-manager"]
+ENTRYPOINT ["/usr/local/bin/ddd"]
 CMD ["serve"]

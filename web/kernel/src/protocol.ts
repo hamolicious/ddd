@@ -15,13 +15,13 @@
 export const PROTOCOL_VERSION = 1;
 
 /** The subprotocol every client must offer. */
-export const SUBPROTOCOL = `life-manager.v${PROTOCOL_VERSION}`;
+export const SUBPROTOCOL = `ddd.v${PROTOCOL_VERSION}`;
 
 /**
  * Bearer-token subprotocol prefix (native shells and tests — PROTOCOL.md §1.1).
  * The raw session token is appended verbatim.
  */
-export const BEARER_SUBPROTOCOL_PREFIX = "life-manager.bearer.";
+export const BEARER_SUBPROTOCOL_PREFIX = "ddd.bearer.";
 
 /** Hard frame ceiling, both directions (SPEC §4.3). */
 export const MAX_FRAME_BYTES = 4 * 1024 * 1024;

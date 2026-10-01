@@ -199,13 +199,13 @@ impl FromRequestParts<AppState> for ClientMeta {
 }
 
 /// Pull the raw credential out of a request: `Authorization: Bearer …` first,
-/// then the `life-manager.bearer.<token>` WebSocket subprotocol, then the session
+/// then the `ddd.bearer.<token>` WebSocket subprotocol, then the session
 /// cookie.
 ///
 /// The header wins deliberately (RFC 7235: credentials the client sent
 /// explicitly). A bearer client running where a cookie jar also exists — a
 /// webview on an https origin, a script in a browser — would otherwise be
-/// authenticated as whatever stale `lm_session` cookie the browser still holds:
+/// authenticated as whatever stale `ddd_session` cookie the browser still holds:
 /// its valid token never consulted on a revoked cookie, and writes attributed to
 /// the cookie's user when both are valid.
 pub fn credential_from_parts(parts: &Parts, cookie_name: &str) -> Option<(String, AuthVia)> {
@@ -223,7 +223,7 @@ pub fn credential_from_parts(parts: &Parts, cookie_name: &str) -> Option<(String
     // A WebSocket handshake cannot carry `Authorization` from a browser API, and a
     // shell serving its bundle from a local-file origin has no cookie jar at all
     // (SPEC §5.2, §7). The subprotocol list is the only field a client controls,
-    // so the token rides there: `life-manager.bearer.<raw token>`
+    // so the token rides there: `ddd.bearer.<raw token>`
     // (backend/PROTOCOL.md §1.1). It is never echoed in the selected-protocol
     // response header.
     if let Some(token) = bearer_from_subprotocols(&parts.headers) {
@@ -241,7 +241,7 @@ pub fn credential_from_parts(parts: &Parts, cookie_name: &str) -> Option<(String
 }
 
 /// Extract a bearer token offered as a WebSocket subprotocol
-/// (`life-manager.bearer.<token>`, PROTOCOL.md §1.1).
+/// (`ddd.bearer.<token>`, PROTOCOL.md §1.1).
 ///
 /// Lives next to [`credential_from_parts`] rather than in the sync route, because
 /// it is a *credential carrier*: the auth layer owns the question "what did this
@@ -651,13 +651,13 @@ mod tests {
 
         let request = Request::builder()
             .header(AUTHORIZATION, "Bearer bearer-token")
-            .header(axum::http::header::COOKIE, "lm_session=cookie-token")
+            .header(axum::http::header::COOKIE, "ddd_session=cookie-token")
             .body(())
             .expect("a valid request");
         let (parts, ()) = request.into_parts();
 
         assert_eq!(
-            credential_from_parts(&parts, "lm_session"),
+            credential_from_parts(&parts, "ddd_session"),
             Some(("bearer-token".to_string(), AuthVia::Bearer))
         );
     }
@@ -667,7 +667,7 @@ mod tests {
         use axum::http::Request;
 
         let request = Request::builder()
-            .header(axum::http::header::COOKIE, "lm_session=cookie-token")
+            .header(axum::http::header::COOKIE, "ddd_session=cookie-token")
             // A non-bearer scheme must not shadow the cookie either.
             .header(AUTHORIZATION, "Basic dXNlcjpwYXNz")
             .body(())
@@ -675,7 +675,7 @@ mod tests {
         let (parts, ()) = request.into_parts();
 
         assert_eq!(
-            credential_from_parts(&parts, "lm_session"),
+            credential_from_parts(&parts, "ddd_session"),
             Some(("cookie-token".to_string(), AuthVia::Cookie))
         );
     }

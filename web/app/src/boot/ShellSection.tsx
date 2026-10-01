@@ -99,7 +99,7 @@ function ShellSection({ host }: { readonly host: KernelHost }): ReactNode {
     manifest.minBridgeVersion > info.bridgeVersion;
 
   return (
-    <dl className="lm-shell-facts">
+    <dl className="ddd-shell-facts">
       <Fact label="Platform" value={info.platform ?? "unknown"} />
       <Fact label="Bridge version" value={info.bridgeVersion === undefined ? "not reported" : String(info.bridgeVersion)} />
       <Fact label="Server" value={info.serverBaseUrl ?? "this page's origin"} />

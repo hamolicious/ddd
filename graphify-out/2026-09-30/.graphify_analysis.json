@@ -1616,7 +1616,7 @@
       "ref_workbox_precaching",
       "ref_workbox_routing",
       "ref_workbox_strategies",
-      "ref_virtual_lm_precache"
+      "ref_virtual_ddd_precache"
     ],
     "237": [
       "web_kernel_src_query_search_idbsearchpersistence",
@@ -2229,7 +2229,7 @@
       "web_kernel_src_wasm_index",
       "web_kernel_src_wasm_node_core",
       "ref_vitest",
-      "ref_life_manager_core_wasm",
+      "ref_ddd_core_wasm",
       "web_kernel_api_src_index_settingsapi"
     ],
     "41": [
@@ -2394,7 +2394,7 @@
       "web_kernel_src_protocol_feedrow",
       "web_kernel_src_store_idb_store_idbdocpersistence",
       "web_kernel_src_store_idb_store_idbprojectionstore",
-      "web_kernel_src_store_idb_store_lifemanagerdb",
+      "web_kernel_src_store_idb_store_ddddb",
       "web_kernel_src_store_idb_store_storeddocstate",
       "web_kernel_src_store_projection_store_appliedrows",
       "web_kernel_src_store_projection_store_storechange",
@@ -4993,7 +4993,7 @@
       "command",
       "exitcode",
       "clap",
-      "life_manager_server"
+      "ddd_server"
     ],
     "194": [
       "backend_crates_server_src_state_readiness",
@@ -6759,7 +6759,7 @@
       "ipv6addr",
       "method",
       "valtype",
-      "life_manager_core_as_core",
+      "ddd_core_as_core",
       "standard_as_base64"
     ],
     "70": [
@@ -7222,7 +7222,7 @@
       "plugins_examples_hello_backend_src_lib_rs_t",
       "plugins_examples_hello_backend_src_lib_tick",
       "btreemap",
-      "life_manager_plugin_sdk_as_lm",
+      "ddd_plugin_sdk_as_ddd",
       "serde"
     ],
     "96": [
@@ -7256,7 +7256,7 @@
       "backend_crates_server_tests_pluginhost_http_upstream",
       "documents",
       "extism_pdk",
-      "life_manager_plugin_abi_as_abi",
+      "ddd_plugin_abi_as_abi",
       "path_as_axumpath",
       "plugins",
       "response"
@@ -7954,12 +7954,12 @@
       "package_flutter_test_flutter_test_dart",
       "package_http_http_dart",
       "package_http_testing_dart",
-      "package_life_manager_shell_bridge_auth_dart",
-      "package_life_manager_shell_bridge_bridge_dart",
-      "package_life_manager_shell_bridge_filesystem_dart",
-      "package_life_manager_shell_bridge_notifications_dart",
-      "package_life_manager_shell_config_dart",
-      "package_life_manager_shell_shell_login_screen_dart",
+      "package_ddd_shell_bridge_auth_dart",
+      "package_ddd_shell_bridge_bridge_dart",
+      "package_ddd_shell_bridge_filesystem_dart",
+      "package_ddd_shell_bridge_notifications_dart",
+      "package_ddd_shell_config_dart",
+      "package_ddd_shell_shell_login_screen_dart",
       "return",
       "shellbridge",
       "string_get"
@@ -8625,7 +8625,7 @@
       "app_test_shell_notice_overlay_test_standin",
       "app_test_shell_notice_overlay_test_standinstate",
       "package_flutter_material_dart",
-      "package_life_manager_shell_main_dart",
+      "package_ddd_shell_main_dart",
       "statefulelement",
       "static_int"
     ],
@@ -8833,14 +8833,14 @@
     ],
     "282": [
       "pkg_hello_backend",
-      "pkg_life_manager_core",
-      "pkg_life_manager_plugin_abi",
-      "pkg_life_manager_plugin_sdk",
-      "pkg_life_manager_server"
+      "pkg_ddd_core",
+      "pkg_ddd_plugin_abi",
+      "pkg_ddd_plugin_sdk",
+      "pkg_ddd_server"
     ],
     "295": [
       "app_ios_runner_runner_bridging_header",
-      "home_hamolicious_projects_life_manager_app_ios_runner_generatedpluginregistrant_h"
+      "home_hamolicious_projects_ddd_app_ios_runner_generatedpluginregistrant_h"
     ],
     "296": [
       "backend_crates_server_src_lib",
@@ -8852,11 +8852,11 @@
     ],
     "302": [
       "web_app_src_virtual_modules_d",
-      "web_app_src_virtual_modules_d_virtual_lm_precache"
+      "web_app_src_virtual_modules_d_virtual_ddd_precache"
     ],
     "303": [
       "web_kernel_src_wasm_core_wasm_d",
-      "web_kernel_src_wasm_core_wasm_d_life_manager_core_wasm"
+      "web_kernel_src_wasm_core_wasm_d_ddd_core_wasm"
     ],
     "305": [
       "app_android_app_build_gradle"
@@ -9163,11 +9163,11 @@
       "directory",
       "httpclient",
       "list",
-      "package_life_manager_shell_bundle_manifest_dart",
-      "package_life_manager_shell_bundle_store_dart",
-      "package_life_manager_shell_bundle_updater_dart",
-      "package_life_manager_shell_shell_boot_guard_dart",
-      "package_life_manager_shell_shell_webview_host_dart",
+      "package_ddd_shell_bundle_manifest_dart",
+      "package_ddd_shell_bundle_store_dart",
+      "package_ddd_shell_bundle_updater_dart",
+      "package_ddd_shell_shell_boot_guard_dart",
+      "package_ddd_shell_shell_webview_host_dart",
       "socketexception"
     ],
     "64": [
@@ -9661,7 +9661,7 @@
       "backend_contracts_build_contracts",
       "backend_host_abi_backend_plugin_host_abi",
       "backend_protocol_sync_protocol",
-      "backend_readme_life_manager_server",
+      "backend_readme_ddd_server",
       "dev_docs_resolved_history_document_history",
       "dev_docs_resolved_kernel_api_kernel_api_changelog",
       "dev_docs_resolved_operations_operations",
@@ -9671,7 +9671,7 @@
       "plugins_base_readme_base_distribution",
       "plugins_examples_readme_third_party_plugin_examples",
       "review_gaps_spec_gap_review",
-      "spec_life_manager_specification",
+      "spec_ddd_specification",
       "web_contracts_web_build_contracts",
       "dev_docs_resolved_history_history_outside_live_crdt",
       "dev_docs_resolved_operations_single_replica_operation",

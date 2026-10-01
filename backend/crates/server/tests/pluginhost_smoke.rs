@@ -1,4 +1,4 @@
-//! Does a plugin written against `life-manager-plugin-sdk` actually load and run?
+//! Does a plugin written against `ddd-plugin-sdk` actually load and run?
 //!
 //! This suite answers that with a build and a call rather than an opinion, and it is the
 //! one M4 test that needs neither Mongo nor a router: a **minimal** Extism host, the real
@@ -9,13 +9,13 @@
 //! 1. **The module instantiates with the host-function set registered by name.** A typo in
 //!    an import name is an instantiation failure with an opaque message; here it is a named
 //!    assertion.
-//! 2. **`lm_abi_version` answers the version this server speaks.** The host's independent
+//! 2. **`ddd_abi_version` answers the version this server speaks.** The host's independent
 //!    re-check of a stale `.wasm` (SPEC §6.4) is only as good as the export being there.
-//! 3. **Input reaches the plugin and a value comes back through the envelope** (`lm_call`
+//! 3. **Input reaches the plugin and a value comes back through the envelope** (`ddd_call`
 //!    `echo`), so the JSON-in/JSON-out contract is verified end to end rather than assumed.
-//! 4. **Host functions work in both directions** — `lm_cron` reads KV, writes KV and logs,
+//! 4. **Host functions work in both directions** — `ddd_cron` reads KV, writes KV and logs,
 //!    and the second run sees the first run's value.
-//! 5. **A plugin's refusal is a successful call with `ok: false`** (`lm_call` on an unknown
+//! 5. **A plugin's refusal is a successful call with `ok: false`** (`ddd_call` on an unknown
 //!    function), which is the distinction the circuit breaker depends on.
 //!
 //! Run it after building the fixture:
@@ -31,8 +31,8 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+use ddd_plugin_abi as abi;
 use extism::{Function, Manifest, PluginBuilder, UserData, ValType, Wasm};
-use life_manager_plugin_abi as abi;
 use serde_json::{Value, json};
 
 /// Where `mise run wasm-plugins` leaves the fixture.
@@ -216,7 +216,7 @@ fn the_module_reports_the_abi_version_this_server_speaks() {
 
     let raw: String = plugin
         .call(abi::names::ABI_VERSION, "")
-        .expect("lm_abi_version is required of every backend half");
+        .expect("ddd_abi_version is required of every backend half");
     assert_eq!(value_of(&raw), json!(abi::ABI_VERSION));
 }
 
@@ -237,7 +237,7 @@ fn a_payload_reaches_the_plugin_and_a_value_comes_back() {
     });
     let raw: String = plugin
         .call(abi::names::CALL, payload.to_string())
-        .expect("lm_call");
+        .expect("ddd_call");
     assert_eq!(value_of(&raw), json!({ "hello": "world", "n": 7 }));
 }
 
@@ -288,7 +288,7 @@ fn host_functions_work_in_both_directions_across_two_calls() {
     for expected in 1..=2u64 {
         let raw: String = plugin
             .call(abi::names::CRON, cron.to_string())
-            .expect("lm_cron");
+            .expect("ddd_cron");
         assert_eq!(value_of(&raw), Value::Null, "a cron run returns no value");
 
         let host = snapshot(&shared);
@@ -331,7 +331,7 @@ fn an_http_route_answers_through_the_envelope() {
     });
     let raw: String = plugin
         .call(abi::names::HTTP, request.to_string())
-        .expect("lm_http");
+        .expect("ddd_http");
     let response = value_of(&raw);
     assert_eq!(response["status"], json!(200));
 

@@ -22,8 +22,8 @@
 
 use similar::{DiffOp, TextDiff};
 
-use life_manager_core::Span;
-use life_manager_core::splice::TextEdit;
+use ddd_core::Span;
+use ddd_core::splice::TextEdit;
 
 /// A pause this long, or another author, starts a new group.
 pub const GROUP_GAP_MS: i64 = 2 * 60 * 1000;
@@ -597,7 +597,7 @@ mod tests {
                 text: "A".into(),
             },
         ];
-        let new = life_manager_core::splice::apply(old, &edits);
+        let new = ddd_core::splice::apply(old, &edits);
         let change = Change {
             first_seq: 1,
             seq: 1,
@@ -632,7 +632,7 @@ mod tests {
         let t2 = "title\n\npara one, edited\n\npara two\n\npara three\n"; // later, elsewhere
         let later = vec![change(2, 1, "b", t1, t2)];
         let edits = revert_edits(t2, t0, t1, &later).unwrap();
-        let reverted = life_manager_core::splice::apply(t2, &edits);
+        let reverted = ddd_core::splice::apply(t2, &edits);
         assert_eq!(reverted, "title\n\npara one\n\npara two\n\npara three\n");
     }
 
@@ -659,7 +659,7 @@ mod tests {
         let t2 = "new first\nkeep\nkeep too\n";
         let edits = revert_edits(t2, t0, t1, &[change(2, 1, "b", t1, t2)]).unwrap();
         assert_eq!(
-            life_manager_core::splice::apply(t2, &edits),
+            ddd_core::splice::apply(t2, &edits),
             "new first\nkeep\ngone\nkeep too\n"
         );
     }

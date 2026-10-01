@@ -49,7 +49,7 @@ enum LoginFailure {
   /// Wrong email or password, or rate-limited (SPEC §5.2 backoff).
   rejected,
 
-  /// The URL is not a Life Manager server, or is unreachable.
+  /// The URL is not a ddd server, or is unreachable.
   unreachable,
 
   /// The server answered without a token — it is older than M1's bearer support, or
@@ -74,7 +74,7 @@ const Duration kLoginTimeout = Duration(seconds: 20);
 /// What the pre-flight learned about a URL, before any password is sent.
 ///
 /// Two independent facts, because they fail independently and the wording has to differ:
-/// a URL that is not a Life Manager server is the user's typo, and a server that does not
+/// a URL that is not a ddd server is the user's typo, and a server that does not
 /// allowlist the shell's origin is the operator's `APP_ORIGIN` (SPEC §4.3) — the single most
 /// likely cause of "signed in, never syncs" (`BRIDGE.md` §6).
 class Preflight {
@@ -175,7 +175,7 @@ class LoginService {
       // proxy error page, the wrong host entirely.
       throw LoginException(
         LoginFailure.unreachable,
-        '${request.serverBaseUrl.origin} answered, but not like a Life Manager server.',
+        '${request.serverBaseUrl.origin} answered, but not like a ddd server.',
       );
     }
     final Object? token = decoded is Map ? decoded['token'] : null;
@@ -202,7 +202,7 @@ class LoginService {
             'Too many attempts. Wait a minute before trying again '
                 '(the server backs off per account and per address).',
       HttpStatus.notFound =>
-        'There is no Life Manager API at ${response.request?.url.origin}.',
+        'There is no ddd API at ${response.request?.url.origin}.',
       _ =>
         message ??
             'The server refused the sign-in (HTTP ${response.statusCode}).',
@@ -249,7 +249,7 @@ class LoginService {
         originAllowed: false,
         detail:
             '${serverBaseUrl.origin} answered HTTP ${response.statusCode} at /healthz, '
-            'which is not what a Life Manager server answers. Check the URL — a reverse '
+            'which is not what a ddd server answers. Check the URL — a reverse '
             'proxy in front of a different app looks exactly like this.',
       );
     }
@@ -368,7 +368,7 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _error;
 
   /// A pre-flight warning the user has seen but not yet accepted. Set when the server is a
-  /// Life Manager server that does not allowlist the shell's origin: signing in will work
+  /// ddd server that does not allowlist the shell's origin: signing in will work
   /// and syncing will not, which is worth one extra tap rather than a silent surprise.
   String? _warning;
 
@@ -410,7 +410,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
     try {
-      // Pre-flight first, so "that is not a Life Manager server" is said before the
+      // Pre-flight first, so "that is not a ddd server" is said before the
       // password is sent, and the `APP_ORIGIN` problem is named while an operator is
       // still looking at it. A warning the user has already seen is not re-raised.
       if (_warning == null) {
@@ -451,10 +451,7 @@ class _LoginScreenState extends State<LoginScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              Text(
-                'Life Manager',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
+              Text('ddd', style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 24),
               TextField(
                 controller: _server,

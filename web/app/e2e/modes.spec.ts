@@ -22,7 +22,7 @@ import { ADMIN, signIn } from "./helpers.js";
 
 const web = process.cwd(); // Playwright runs with `web/` as the cwd.
 const repo = resolve(web, "..");
-const PORT = process.env["LM_E2E_MODES_PORT"] ?? "8127";
+const PORT = process.env["DDD_E2E_MODES_PORT"] ?? "8127";
 const ORIGIN = `http://localhost:${PORT}`;
 const REGISTRY = join(web, "app", "e2e", ".plugins", "source-view");
 
@@ -42,9 +42,9 @@ test.beforeAll(async () => {
     stdio: "inherit",
     env: {
       ...process.env,
-      LM_E2E_PORT: PORT,
-      LM_E2E_DB: "life_manager_e2e_modes",
-      LM_E2E_PLUGINS: REGISTRY,
+      DDD_E2E_PORT: PORT,
+      DDD_E2E_DB: "ddd_e2e_modes",
+      DDD_E2E_PLUGINS: REGISTRY,
     },
   });
 

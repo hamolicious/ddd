@@ -1,10 +1,10 @@
 [package]
-name = "life-manager-cli"
+name = "ddd-cli"
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 rust-version = "1.90"
-description = "`lm`: developer tooling for Life Manager (scaffolding plugin projects first)."
+description = "`ddd`: developer tooling for ddd (scaffolding plugin projects first)."
 
 # Standalone on purpose, not a member of `backend/`'s workspace: it is a developer tool,
 # not part of the server image, and a new member there would have to be threaded through
@@ -12,7 +12,7 @@ description = "`lm`: developer tooling for Life Manager (scaffolding plugin proj
 [workspace]
 
 [[bin]]
-name = "lm"
+name = "ddd"
 path = "src/main.rs"
 
 [dependencies]
@@ -20,5 +20,5 @@ anyhow = "1.0.104"
 clap = { version = "4.6.7", features = ["derive", "env"] }
 serde_json = { version = "1.0.151", features = ["preserve_order"] }
 ureq = { version = "3.4.2", features = ["json"] }
-# The query builder `lm query` writes plans with: the one the server answers with.
-life-manager-core = { path = "../backend/crates/core", default-features = false }
+# The query builder `ddd query` writes plans with: the one the server answers with.
+ddd-core = { path = "../backend/crates/core", default-features = false }

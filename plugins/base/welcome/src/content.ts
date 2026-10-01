@@ -38,11 +38,11 @@ export const TOUR: readonly TourNote[] = [
   {
     id: IDS.welcome,
     text: `---
-title: Welcome to Life Manager
+title: Welcome to ddd
 tags: [tour]
 ---
 
-# Welcome to Life Manager
+# Welcome to ddd
 
 Every note is one markdown file. Everything you see is built from plugins, and each of
 these notes shows one of them. Delete any of them when you are done; nothing depends on
@@ -160,7 +160,7 @@ tags: [tour]
 
 # Folders are notes
 
-This note sits inside **Welcome to Life Manager** in the sidebar: any note can hold other
+This note sits inside **Welcome to ddd** in the sidebar: any note can hold other
 notes, and one that does is a folder.
 
 - Drag a note onto another in the sidebar to put it inside

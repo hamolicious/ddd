@@ -5,7 +5,7 @@
  *
  * Each file owns one server because some scenarios **restart** it mid-test (edits made
  * while the server is down must still arrive), and a restart is only safe when nobody
- * else is using the process. `LM_COLLAB_SERVER` points a run at a server you started
+ * else is using the process. `DDD_COLLAB_SERVER` points a run at a server you started
  * yourself instead; the restart scenarios then skip.
  */
 
@@ -27,10 +27,10 @@ export interface CollabServer {
 }
 
 export async function startServer(options: { port: number; database: string }): Promise<CollabServer> {
-  const external = process.env["LM_COLLAB_SERVER"];
+  const external = process.env["DDD_COLLAB_SERVER"];
   if (external) {
     await waitHealthy(external, 10_000);
-    const refuse = () => Promise.reject(new Error("LM_COLLAB_SERVER is set: this suite does not own the server"));
+    const refuse = () => Promise.reject(new Error("DDD_COLLAB_SERVER is set: this suite does not own the server"));
     return { url: external, owned: false, stop: refuse, start: refuse, restart: refuse };
   }
 
@@ -45,9 +45,9 @@ export async function startServer(options: { port: number; database: string }): 
       stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...process.env,
-        LM_E2E_PORT: String(options.port),
-        LM_E2E_DB: options.database,
-        LM_E2E_KEEP_DB: keepDb ? "1" : "0",
+        DDD_E2E_PORT: String(options.port),
+        DDD_E2E_DB: options.database,
+        DDD_E2E_KEEP_DB: keepDb ? "1" : "0",
         RUST_LOG: process.env["RUST_LOG"] ?? "warn",
         ...extra,
       },

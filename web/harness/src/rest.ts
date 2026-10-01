@@ -424,11 +424,11 @@ export async function authenticate(
     if (!(error instanceof HttpError) || (error.status !== 401 && error.status !== 422)) throw error;
   }
   const state = await anonymous.authState();
-  const invite = process.env.LM_INVITE;
+  const invite = process.env.DDD_INVITE;
   if (!state.needs_first_user && !invite) {
     throw new Error(
       `no account for ${email} and the workspace already has users: ` +
-        "create one and pass LM_EMAIL/LM_PASSWORD, or set LM_INVITE=<invite token>",
+        "create one and pass DDD_EMAIL/DDD_PASSWORD, or set DDD_INVITE=<invite token>",
     );
   }
   return anonymous.register(email, password, invite);

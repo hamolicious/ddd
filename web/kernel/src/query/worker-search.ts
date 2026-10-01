@@ -134,7 +134,7 @@ function defaultWorkerFactory(): Worker {
   // step — see web/CONTRACTS.md).
   return new Worker(new URL("./search-worker.ts", import.meta.url), {
     type: "module",
-    name: "life-manager-search",
+    name: "ddd-search",
   });
 }
 

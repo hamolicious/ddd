@@ -16,10 +16,10 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:life_manager_shell/bridge/auth.dart';
-import 'package:life_manager_shell/bridge/bridge.dart';
-import 'package:life_manager_shell/bridge/filesystem.dart';
-import 'package:life_manager_shell/config.dart';
+import 'package:ddd_shell/bridge/auth.dart';
+import 'package:ddd_shell/bridge/bridge.dart';
+import 'package:ddd_shell/bridge/filesystem.dart';
+import 'package:ddd_shell/config.dart';
 
 /// One share that happened: what the sheet was handed.
 class _Shared {
@@ -39,7 +39,7 @@ void main() {
   late bool shareAccepted;
 
   setUp(() async {
-    temp = await Directory.systemTemp.createTemp('lm-filesystem-test');
+    temp = await Directory.systemTemp.createTemp('ddd-filesystem-test');
     FlutterSecureStorage.setMockInitialValues(<String, String>{
       kTokenKey: 'tok-123',
     });
@@ -354,7 +354,7 @@ void main() {
         await capability(client: answering(200, body: 'zip')).exportWorkspace();
 
         // `now` is pinned to 2026-10-01T08:30:15Z in `capability()`.
-        expect(shared.single.name, 'life-manager-export-20261001-083015.zip');
+        expect(shared.single.name, 'ddd-export-20261001-083015.zip');
       },
     );
 
@@ -527,11 +527,8 @@ void main() {
         'workspace.zip',
       );
       expect(
-        exportFileName(
-          "attachment; filename*=utf-8''life%20manager.zip",
-          now: now,
-        ),
-        'life manager.zip',
+        exportFileName("attachment; filename*=utf-8''my%20notes.zip", now: now),
+        'my notes.zip',
       );
     });
 
@@ -543,13 +540,10 @@ void main() {
     });
 
     test('falls back to a UTC timestamp', () {
-      expect(
-        exportFileName(null, now: now),
-        'life-manager-export-20261001-083015.zip',
-      );
+      expect(exportFileName(null, now: now), 'ddd-export-20261001-083015.zip');
       expect(
         exportFileName('attachment', now: now),
-        'life-manager-export-20261001-083015.zip',
+        'ddd-export-20261001-083015.zip',
       );
     });
   });

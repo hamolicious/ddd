@@ -170,7 +170,7 @@ String sha256Hex(List<int> bytes) => sha256.convert(bytes).toString();
 /// checked with [isSafeBundlePath] for exactly this reason; the id needs the same
 /// treatment and a stricter rule is available, because the server's derivation is frozen.
 ///
-/// Every manifest, from the network *and* from a bundle's own `.lm-manifest.json`, is
+/// Every manifest, from the network *and* from a bundle's own `.ddd-manifest.json`, is
 /// parsed through [BundleManifest.fromJson], so this is the only gate needed.
 bool isBundleVersion(String version) => _bundleVersion.hasMatch(version);
 

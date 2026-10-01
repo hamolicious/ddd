@@ -38,7 +38,7 @@ export interface RouteMatch {
   readonly params: Readonly<Record<string, string>>;
 }
 
-/** The navigation half of `plugin:router`'s exports, as one type (the old `lm/router` service). */
+/** The navigation half of `plugin:router`'s exports, as one type (the old `ddd/router` service). */
 export interface Router {
   /** Navigate, pushing history. `path` is concrete: `/doc/01J…`. */
   readonly navigate: (path: string, options?: { readonly replace?: boolean }) => void;

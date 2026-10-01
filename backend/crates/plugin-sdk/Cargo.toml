@@ -1,6 +1,6 @@
 [package]
-name = "life-manager-plugin-sdk"
-description = "Write a Life Manager backend plugin in Rust: the typed host ABI over Extism PDK, and the export macros the host looks for."
+name = "ddd-plugin-sdk"
+description = "Write a ddd backend plugin in Rust: the typed host ABI over Extism PDK, and the export macros the host looks for."
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
@@ -19,9 +19,9 @@ crate-type = ["rlib"]
 
 [dependencies]
 extism-pdk = { version = "1.4.1", default-features = false }
-life-manager-plugin-abi = { path = "../plugin-abi" }
+ddd-plugin-abi = { path = "../plugin-abi" }
 # The query builder (`documents::Query`): the same one the server and the browser use,
 # without Mongo (`default-features = false`).
-life-manager-core = { path = "../core", default-features = false }
+ddd-core = { path = "../core", default-features = false }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"

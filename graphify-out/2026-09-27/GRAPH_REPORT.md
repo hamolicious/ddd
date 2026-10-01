@@ -1,4 +1,4 @@
-# Graph Report - life-manager  (2026-09-27)
+# Graph Report - ddd  (2026-09-27)
 
 ## Corpus Check
 - 654 files · ~795,253 words
@@ -128,7 +128,7 @@
 - ConnectionSession
 - ProjectionStore
 - ops.ts
-- Life Manager project specification
+- ddd project specification
 - plugin-abi/src/documents.rs
 - HookKind
 - config.dart
@@ -298,7 +298,7 @@
 - web_kernel_api_src_index_sessionapi
 - web_kernel_api_src_index_sessionuser
 - web_kernel_api_src_index_settingsapi
-- life-manager-plugin-abi
+- ddd-plugin-abi
 - web_kernel_api_src_index_splicetarget
 - web_kernel_api_src_index_syncstatus
 - web_kernel_api_src_index_textedit
@@ -621,7 +621,7 @@ Nodes (48): Reference, EditorExtension, SyntaxLanguage, syntaxLanguageShape, plu
 
 ### Community 36 - "host.ts"
 Cohesion: 0.05
-Nodes (31): ref_boundary_js, ref_life_manager_core_wasm, ref_mount_js, askForPersistentStorage(), KernelInitOptions, unavailableCore(), boot(), BootMode (+23 more)
+Nodes (31): ref_boundary_js, ref_ddd_core_wasm, ref_mount_js, askForPersistentStorage(), KernelInitOptions, unavailableCore(), boot(), BootMode (+23 more)
 
 ### Community 37 - "server/src/plugins.rs"
 Cohesion: 0.06
@@ -919,7 +919,7 @@ Nodes (26): BootstrapFooter, BootstrapHeader, DEFAULT_BATCH_MAX_ROWS, DEFAULT_BO
 Cohesion: 0.09
 Nodes (36): applyOp(), chooseOp(), escapeRegExp(), findLine(), FM_KEYS, frontmatterEnd(), frontmatterValue(), indexOfLineEnd() (+28 more)
 
-### Community 112 - "Life Manager project specification"
+### Community 112 - "ddd project specification"
 Cohesion: 0.07
 Nodes (40): Shell Capability Bridge Contract, M5 Build Contracts (Flutter Shell), Flutter Shell README, M5 On-Device Acceptance Script, Backend plugin build contracts, Backend build contracts, Core Library README, Filter DSL (+32 more)
 
@@ -1473,7 +1473,7 @@ Nodes (7): Spec Critique (Opus agent, 2026-09-23), R1: Full CRDT Replication For
 
 ### Community 274 - "sw.ts"
 Cohesion: 0.18
-Nodes (7): ref_virtual_lm_precache, workbox-precaching, workbox-routing, workbox-strategies, shell, sw, WorkerScope
+Nodes (7): ref_virtual_ddd_precache, workbox-precaching, workbox-routing, workbox-strategies, shell, sw, WorkerScope
 
 ### Community 275 - "init_metrics"
 Cohesion: 0.25
@@ -1483,9 +1483,9 @@ Nodes (11): describe(), init_metrics(), init_tracing(), METRICS, metrics_handler
 Cohesion: 0.36
 Nodes (10): Bundle, BUNDLES, cache(), cached_bundle(), CacheEntry, Arc, BTreeMap, OnceLock (+2 more)
 
-### Community 282 - "life-manager-plugin-abi"
+### Community 282 - "ddd-plugin-abi"
 Cohesion: 0.40
-Nodes (5): hello-backend, life-manager-core, life-manager-plugin-abi, life-manager-plugin-sdk, life-manager-server
+Nodes (5): hello-backend, ddd-core, ddd-plugin-abi, ddd-plugin-sdk, ddd-server
 
 ### Community 287 - "LaunchImage README"
 Cohesion: 0.50

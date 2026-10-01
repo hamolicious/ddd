@@ -13,6 +13,6 @@
   },
   "name": "Extra task states",
   "description": "Adds three task markers: [/] in progress, [-] dropped, [?] question.",
-  "author": "Life Manager examples",
+  "author": "ddd examples",
   "license": "MIT OR Apache-2.0"
 }

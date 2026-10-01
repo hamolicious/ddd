@@ -3,7 +3,7 @@
   "version": "3.1.0",
   "name": "Shell UI",
   "description": "Layout skeleton and mobile breakpoint: a header spot, a footer spot, the sidebar, the main region and the altbar.",
-  "author": "Life Manager base distribution",
+  "author": "ddd base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
   "kernel": "^3.0",

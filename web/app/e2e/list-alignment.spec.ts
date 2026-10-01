@@ -19,7 +19,7 @@
  *    and the half the audit actually observed.
  *
  * Both tests assert **relationships between measured edges**, not pixel constants: a
- * theme is free to change `--lm-space`, and these still hold.
+ * theme is free to change `--ddd-space`, and these still hold.
  */
 
 import { expect, test, type Page } from "@playwright/test";

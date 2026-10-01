@@ -1,4 +1,4 @@
-# Graph Report - life-manager  (2026-09-26)
+# Graph Report - ddd  (2026-09-26)
 
 ## Corpus Check
 - 548 files · ~684,060 words
@@ -250,7 +250,7 @@
 - Mobile Layout Defects (39 items)
 - build-wasm-plugins.mjs
 - Operations Guide
-- life-manager-plugin-abi
+- ddd-plugin-abi
 - LaunchImage README
 - Core Library README
 - MainActivity.kt
@@ -268,7 +268,7 @@
 - Dart Analyzer Configuration
 - Backend Build Contracts (M1)
 - Backend Build Contracts (M3 Static Serving)
-- Life Manager Project Specification
+- ddd Project Specification
 - CMake Build System
 - Frontend Isolation (v2 Research)
 - iOS App Icon 76x76@1x
@@ -896,7 +896,7 @@ Nodes (25): compilerOptions, baseUrl, isolatedModules, jsx, lib, module, moduleD
 
 ### Community 125 - "host.ts"
 Cohesion: 0.04
-Nodes (40): ref_boundary_js, ref_life_manager_core_wasm, ref_mount_js, KernelInitOptions, KernelRuntime, unavailableCore(), BootMode, CoreApi (+32 more)
+Nodes (40): ref_boundary_js, ref_ddd_core_wasm, ref_mount_js, KernelInitOptions, KernelRuntime, unavailableCore(), BootMode, CoreApi (+32 more)
 
 ### Community 126 - "my_application.cc"
 Cohesion: 0.10
@@ -960,7 +960,7 @@ Nodes (21): diagnostics_use_document_line_numbers(), duplicate_key_targets_the_l
 
 ### Community 141 - "hello-backend/src/lib.rs"
 Cohesion: 0.33
-Nodes (10): life_manager_plugin_sdk_as_lm, code_of(), dispatch(), init(), on_changed(), require_str(), route(), Result (+2 more)
+Nodes (10): ddd_plugin_sdk_as_ddd, code_of(), dispatch(), init(), on_changed(), require_str(), route(), Result (+2 more)
 
 ### Community 142 - "bridge-fixtures.test.ts"
 Cohesion: 0.10
@@ -1296,7 +1296,7 @@ Nodes (6): TextMark, INSERTION_ORIGIN, markAt(), settled, trackInsertion(), yjs
 
 ### Community 229 - "sw.ts"
 Cohesion: 0.18
-Nodes (7): ref_virtual_lm_precache, workbox-precaching, workbox-routing, workbox-strategies, shell, sw, WorkerScope
+Nodes (7): ref_virtual_ddd_precache, workbox-precaching, workbox-routing, workbox-strategies, shell, sw, WorkerScope
 
 ### Community 231 - "Mobile Layout Defects (39 items)"
 Cohesion: 0.33
@@ -1310,9 +1310,9 @@ Nodes (12): argv, baseDir, built, debug, distRoot, pluginsRoot, prebuilt, repo (
 Cohesion: 0.40
 Nodes (5): Operations Guide, Backup Procedure, Graceful Shutdown, Restore Procedure, Secret Rotation
 
-### Community 234 - "life-manager-plugin-abi"
+### Community 234 - "ddd-plugin-abi"
 Cohesion: 0.40
-Nodes (5): hello-backend, life-manager-core, life-manager-plugin-abi, life-manager-plugin-sdk, life-manager-server
+Nodes (5): hello-backend, ddd-core, ddd-plugin-abi, ddd-plugin-sdk, ddd-server
 
 ### Community 235 - "LaunchImage README"
 Cohesion: 0.50
@@ -1320,7 +1320,7 @@ Nodes (4): LaunchImage README, iOS Launch Image 1x, iOS Launch Image 2x, iOS Lau
 
 ### Community 236 - "Core Library README"
 Cohesion: 0.83
-Nodes (4): Core Library README, Filter DSL, Shared Core (life-manager-core), Splice Helpers
+Nodes (4): Core Library README, Filter DSL, Shared Core (ddd-core), Splice Helpers
 
 ### Community 238 - "Flutter Shell Dependencies"
 Cohesion: 0.67
@@ -1342,9 +1342,9 @@ Nodes (3): Tailwind in Plugins Guide, Tailwind Build Hook, Tailwind Preset for P
 Cohesion: 0.67
 Nodes (3): Import Map Mechanism, Web App Index HTML, App Icon SVG
 
-### Community 255 - "Life Manager Project Specification"
+### Community 255 - "ddd Project Specification"
 Cohesion: 0.14
-Nodes (14): Docker Compose Configuration, Polish Backlog, Concurrent Frontmatter Key Writes (Correctness), Trash Permanent Delete and Empty, Life Manager Project Specification, Vision (Microkernel Document Manager), Out of Scope for v1 / v2 Seams, Known Risks (+6 more)
+Nodes (14): Docker Compose Configuration, Polish Backlog, Concurrent Frontmatter Key Writes (Correctness), Trash Permanent Delete and Empty, ddd Project Specification, Vision (Microkernel Document Manager), Out of Scope for v1 / v2 Seams, Known Risks (+6 more)
 
 ### Community 299 - "MongoDocStore"
 Cohesion: 0.12

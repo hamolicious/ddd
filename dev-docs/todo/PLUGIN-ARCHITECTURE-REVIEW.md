@@ -156,9 +156,9 @@ validator without importing the implementation plugin.
 Keep domain-specific points out of `@kernel`, but publish versioned contract packages owned
 by the plugin that defines them. For example:
 
-- `@life-manager/shell-ui-contract`;
-- `@life-manager/document-surface-contract`;
-- `@life-manager/markdown-contract`.
+- `@ddd/shell-ui-contract`;
+- `@ddd/document-surface-contract`;
+- `@ddd/markdown-contract`.
 
 Each package should expose point names and payload types. Reusable validators may also be
 appropriate, provided the defining plugin remains the runtime authority. This preserves

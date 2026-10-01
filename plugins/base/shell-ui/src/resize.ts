@@ -12,9 +12,9 @@ export const SIDEBAR_MIN = 192;
 export const SIDEBAR_DEFAULT = 288; // matches the stylesheet's `min(18rem, 32vw)` at 16px
 export const KEYBOARD_STEP = 16;
 
-const STORAGE_KEY = "lm.shell.sidebar-width";
+const STORAGE_KEY = "ddd.shell.sidebar-width";
 /** The altbar's width, remembered apart from the sidebar's. */
-export const ALTBAR_WIDTH_KEY = "lm.shell.altbar-width";
+export const ALTBAR_WIDTH_KEY = "ddd.shell.altbar-width";
 
 /** The widest the sidebar may be: never squeezes `main` below half the viewport. */
 export function sidebarMax(viewportWidth: number): number {

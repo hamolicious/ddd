@@ -12,15 +12,15 @@ import { defineConfig, devices } from "@playwright/test";
  *
  * `app/e2e/server.mjs` drops the test database before starting, so "register as the
  * first user" is repeatable. Prerequisites it checks and names: a built binary
- * (`cargo build --bin life-manager`), a built bundle and plugins (`mise run
+ * (`cargo build --bin ddd`), a built bundle and plugins (`mise run
  * web-build`), and a Mongo from the compose stack.
  *
- * `LM_APP` points the suite at a server you started yourself; `webServer` then
+ * `DDD_APP` points the suite at a server you started yourself; `webServer` then
  * reuses it rather than starting another.
  */
 
-const port = process.env["LM_E2E_PORT"] ?? "8121";
-const baseURL = process.env["LM_APP"] ?? `http://localhost:${port}`;
+const port = process.env["DDD_E2E_PORT"] ?? "8121";
+const baseURL = process.env["DDD_APP"] ?? `http://localhost:${port}`;
 
 export default defineConfig({
   testDir: "./app/e2e",

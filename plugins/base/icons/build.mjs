@@ -26,7 +26,7 @@ import { extract, fetchTarball } from "../_shared/npm-tarball.mjs";
 export default async function build({ root, outDir, resolveFrom }) {
   const pin = JSON.parse(readFileSync(join(root, "tabler.json"), "utf8"));
   const spec = `${pin.package}@${pin.version}`;
-  const cache = join(resolveFrom, "node_modules", ".cache", "lm-icons");
+  const cache = join(resolveFrom, "node_modules", ".cache", "ddd-icons");
   const tarball = fetchTarball(spec, pin.integrity, cache, "tabler.json");
   const json = (path) => JSON.parse(extract(tarball, path).toString("utf8"));
 

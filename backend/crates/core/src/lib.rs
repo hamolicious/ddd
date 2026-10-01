@@ -1,4 +1,4 @@
-//! Life Manager shared core.
+//! ddd shared core.
 //!
 //! Everything in this crate is used *identically* by the Rust server and by the
 //! client kernel (compiled to wasm32). Parity between offline and online

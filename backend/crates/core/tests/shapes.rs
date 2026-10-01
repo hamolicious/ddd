@@ -8,7 +8,7 @@
 
 mod common;
 
-use life_manager_core::shape::{Shape, validate};
+use ddd_core::shape::{Shape, validate};
 
 #[test]
 fn shape_corpus() {

@@ -11,11 +11,11 @@ library;
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:life_manager_shell/bundle/manifest.dart';
-import 'package:life_manager_shell/bundle/store.dart';
-import 'package:life_manager_shell/bundle/updater.dart';
-import 'package:life_manager_shell/config.dart';
-import 'package:life_manager_shell/shell/boot_guard.dart';
+import 'package:ddd_shell/bundle/manifest.dart';
+import 'package:ddd_shell/bundle/store.dart';
+import 'package:ddd_shell/bundle/updater.dart';
+import 'package:ddd_shell/config.dart';
+import 'package:ddd_shell/shell/boot_guard.dart';
 
 import 'bundle_fixtures.dart';
 
@@ -38,7 +38,7 @@ void main() {
       );
 
   setUp(() {
-    root = Directory.systemTemp.createTempSync('lm-bundles');
+    root = Directory.systemTemp.createTempSync('ddd-bundles');
     store = BundleStore(root);
     http = FakeHttp();
     auth = FakeAuth();
@@ -140,7 +140,7 @@ void main() {
       final Map<String, String> next = bundleFiles(
         appChunk: 'console.log("v2")',
       );
-      next['index.html'] = '<!doctype html><title>Life Manager 2</title>';
+      next['index.html'] = '<!doctype html><title>ddd 2</title>';
       http.publish(FakeBundle(idB, next));
       http.clearLog();
 
@@ -575,25 +575,25 @@ void main() {
     test('sends the synthesized documents to the shell route and the rest to their own', () {
       expect(
         updater.fileUrl('index.html').toString(),
-        'https://lm.test/api/shell/bundle/index.html',
+        'https://ddd.test/api/shell/bundle/index.html',
       );
       expect(
         updater.fileUrl('importmap.json').toString(),
-        'https://lm.test/api/shell/bundle/importmap.json',
+        'https://ddd.test/api/shell/bundle/importmap.json',
       );
       expect(
         updater.fileUrl('assets/app-1a2b3c.js').toString(),
-        'https://lm.test/assets/app-1a2b3c.js',
+        'https://ddd.test/assets/app-1a2b3c.js',
       );
       expect(
         updater.fileUrl('plugins/shell-ui/1.0.0/frontend/index.mjs').toString(),
-        'https://lm.test/plugins/shell-ui/1.0.0/frontend/index.mjs',
+        'https://ddd.test/plugins/shell-ui/1.0.0/frontend/index.mjs',
       );
     });
 
     test('a server on a path prefix still resolves to its own origin', () {
       final BundleUpdater onPath = BundleUpdater(
-        config: ShellConfig(serverBaseUrl: Uri.parse('https://lm.test/lm')),
+        config: ShellConfig(serverBaseUrl: Uri.parse('https://ddd.test/ddd')),
         store: store,
         auth: auth,
         client: http,
@@ -604,7 +604,7 @@ void main() {
       // decision rather than a surprise.
       expect(
         onPath.fileUrl('assets/app.js').toString(),
-        'https://lm.test/assets/app.js',
+        'https://ddd.test/assets/app.js',
       );
       onPath.close();
     });

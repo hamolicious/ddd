@@ -22,10 +22,10 @@
  *
  * **What each file is doing** (`transfers`): in memory, per tab.
  *
- * Named `life-manager:…` so signing out deletes it with the rest of this device's copy.
+ * Named `ddd:…` so signing out deletes it with the rest of this device's copy.
  */
 
-export const QUEUE_DB = "life-manager:attachments";
+export const QUEUE_DB = "ddd:attachments";
 const STORE = "waiting";
 
 /** What may be kept on a device, in total. Beyond it a file uploads from memory only. */

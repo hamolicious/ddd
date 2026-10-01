@@ -45,7 +45,7 @@ import 'manifest.dart';
 /// A collision would mean the shell overwriting a bundle file or losing its own metadata.
 /// [BundleUpdater] additionally refuses a manifest that lists this path, so the two can
 /// never be the same file.
-const String kBundleManifestFile = '.lm-manifest.json';
+const String kBundleManifestFile = '.ddd-manifest.json';
 
 /// The directory a download is assembled in, under the store root.
 const String kStagingDirName = '.staging';

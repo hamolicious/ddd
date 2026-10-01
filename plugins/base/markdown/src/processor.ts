@@ -41,7 +41,7 @@ import type { MdNode } from "./mdast.js";
  *
  * unified's generics re-type the processor on every `use()`, which cannot be expressed
  * by a `let` accumulating plugins in a loop. The contributed plugins are `unknown` at the
- * protocol anyway (`MarkdownRemark.plugin` is deliberately loose so `lm/markdown.remark`
+ * protocol anyway (`MarkdownRemark.plugin` is deliberately loose so `ddd/markdown.remark`
  * does not pin unified's types), so the chain is built through this minimal structural
  * type.
  */

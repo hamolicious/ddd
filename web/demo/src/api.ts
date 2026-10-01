@@ -11,7 +11,7 @@
  * keeps it in native secure storage (shell) or uses the cookie (browser).
  */
 
-const TOKEN_KEY = "life-manager.demo.bearer";
+const TOKEN_KEY = "ddd.demo.bearer";
 
 export interface User {
   readonly id: string;

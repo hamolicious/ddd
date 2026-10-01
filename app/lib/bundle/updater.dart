@@ -60,8 +60,8 @@ const int kMaxBundleBytes = 256 * 1024 * 1024;
 /// The version the shell has verified and staged for the next launch, or `null`.
 ///
 /// The page is *told* about a staged bundle rather than asked — `web/app/src/boot/shell.ts`
-/// listens for the `lm-shell-update-ready` event and turns it into the kernel notice
-/// "close and reopen Life Manager to finish it". `WebViewHost` watches this notifier and
+/// listens for the `ddd-shell-update-ready` event and turns it into the kernel notice
+/// "close and reopen ddd to finish it". `WebViewHost` watches this notifier and
 /// dispatches that event; a `ValueNotifier` rather than a direct call because the updater
 /// runs in the background and has no webview to talk to (the same shape as
 /// `tappedNotificationRoute` in `bridge/notifications.dart`).

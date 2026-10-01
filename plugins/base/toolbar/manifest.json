@@ -3,7 +3,7 @@
   "version": "1.1.0",
   "name": "Toolbar",
   "description": "The bars around the app: a header and a status footer on desktop, a thin top bar and a bottom icon toolbar on a phone. Other plugins fill them with addItem; each device type has its own per-user layout in Settings.",
-  "author": "Life Manager base distribution",
+  "author": "ddd base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
   "kernel": "^3.0",

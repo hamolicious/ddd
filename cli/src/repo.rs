@@ -2,7 +2,7 @@
 //!
 //! Everything a generated project copies from the repo — the reference Vite config, the
 //! kernel contract version, the tool versions the base plugins build with — is embedded
-//! from its source file rather than restated here, so rebuilding `lm` is all it takes to
+//! from its source file rather than restated here, so rebuilding `ddd` is all it takes to
 //! pick up a change and nothing can drift.
 
 use anyhow::{Context, Result, anyhow};
@@ -42,14 +42,14 @@ pub fn web_dependency(name: &str) -> Result<String> {
         .with_context(|| format!("web/package.json does not list {name}"))
 }
 
-/// The repository generated backend crates fetch `life-manager-plugin-sdk` from. Set
-/// `LM_SDK_GIT` when building `lm` to point it at a public mirror.
-pub const SDK_GIT: &str = match option_env!("LM_SDK_GIT") {
+/// The repository generated backend crates fetch `ddd-plugin-sdk` from. Set
+/// `DDD_SDK_GIT` when building `ddd` to point it at a public mirror.
+pub const SDK_GIT: &str = match option_env!("DDD_SDK_GIT") {
     Some(url) => url,
     // Placeholder until the repository is public.
-    None => "https://git.example.com/life-manager/life-manager.git",
+    None => "https://git.example.com/ddd/ddd.git",
 };
 
-/// The commit `lm` was built from (`build.rs`), so a generated crate gets the SDK that
+/// The commit `ddd` was built from (`build.rs`), so a generated crate gets the SDK that
 /// matches the tool that generated it.
-pub const SDK_REV: Option<&str> = option_env!("LM_SDK_REV");
+pub const SDK_REV: Option<&str> = option_env!("DDD_SDK_REV");

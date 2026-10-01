@@ -14,8 +14,8 @@ describe("ChildrenFooter", () => {
     const html = renderToStaticMarkup(<ChildrenFooter id="p" folders={tree({ p: ["b", "a"] })} renderDocLink={link} />);
     expect(html).toContain("Inside this note");
     expect(html.indexOf('data-note="b"')).toBeLessThan(html.indexOf('data-note="a"'));
-    expect(html).toContain('data-lm-target="lm/document"');
-    expect(html).toContain('data-lm-target-id="a"');
+    expect(html).toContain('data-ddd-target="ddd/document"');
+    expect(html).toContain('data-ddd-target-id="a"');
   });
 
   it("drops the rule above the list when there is no body to divide it from", () => {

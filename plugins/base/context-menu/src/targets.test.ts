@@ -25,7 +25,7 @@ class Node {
     return this.attrs[name] ?? null;
   }
   matches(selector: string): boolean {
-    if (selector === "[data-lm-target]") return this.attrs["data-lm-target"] !== undefined;
+    if (selector === "[data-ddd-target]") return this.attrs["data-ddd-target"] !== undefined;
     const editable = this.attrs["contenteditable"];
     return ["input", "textarea", "select"].includes(this.tag) || editable === "" || editable === "true";
   }
@@ -60,17 +60,17 @@ const labels = (menu: ReturnType<typeof buildMenu>): string[][] =>
 describe("buildMenu", () => {
   const board = el(null, target("kanban/board", ""));
   const column = el(board, target("kanban/column", "0", { label: "Doing" }));
-  const card = el(column, target("lm/document", "n1", { label: "Card", types: ["kanban/card"] }));
+  const card = el(column, target("ddd/document", "n1", { label: "Card", types: ["kanban/card"] }));
   const inside = el(card, {}, "span");
 
   it("finds nothing outside a mark", () => {
-    expect(buildMenu(asElement(el(null)), [action("a", "lm/document", () => [item("x")])])).toBeUndefined();
+    expect(buildMenu(asElement(el(null)), [action("a", "ddd/document", () => [item("x")])])).toBeUndefined();
   });
 
   it("merges every target from the innermost out, titling the outer sections", () => {
     const menu = buildMenu(asElement(inside), [
       action("column", "kanban/column", () => [item("add", "Add a card")]),
-      action("open", "lm/document", (t) => [item("open", `Open ${t.id}`)]),
+      action("open", "ddd/document", (t) => [item("open", `Open ${t.id}`)]),
       action("move", "kanban/card", () => [item("move", "Move to Done")]),
     ]);
     expect(menu?.title).toBe("Card");
@@ -80,10 +80,10 @@ describe("buildMenu", () => {
 
   it("orders an element's items by `order`, whatever type offered them, then by list order", () => {
     const menu = buildMenu(asElement(card), [
-      action("trash", "lm/document", () => [item("trash")], 100),
+      action("trash", "ddd/document", () => [item("trash")], 100),
       action("move", "kanban/card", () => [item("move")], 60),
-      action("open", "lm/document", () => [item("open")], 0),
-      action("rename", "lm/document", () => [item("rename")], 60),
+      action("open", "ddd/document", () => [item("open")], 0),
+      action("rename", "ddd/document", () => [item("rename")], 60),
     ]);
     expect(labels(menu)[0]).toEqual(["open", "move", "rename", "trash"]);
   });
@@ -103,13 +103,13 @@ describe("buildMenu", () => {
         return [];
       }),
     ]);
-    expect(seen).toEqual(["lm/document", "kanban/card", "kanban/column", "kanban/board"]);
+    expect(seen).toEqual(["ddd/document", "kanban/card", "kanban/column", "kanban/board"]);
   });
 
   it("shows one action per id, the first in list order", () => {
     const menu = buildMenu(asElement(card), [
-      action("document.trash", "lm/document", () => [item("delete", "Delete")], 100, "folders"),
-      action("document.trash", "lm/document", () => [item("trash", "Move to Trash")], 100, "doc-list"),
+      action("document.trash", "ddd/document", () => [item("delete", "Delete")], 100, "folders"),
+      action("document.trash", "ddd/document", () => [item("trash", "Move to Trash")], 100, "doc-list"),
     ]);
     expect(labels(menu)).toEqual([["Delete"]]);
   });
@@ -119,10 +119,10 @@ describe("buildMenu", () => {
     const menu = buildMenu(
       asElement(card),
       [
-        action("broken", "lm/document", () => {
+        action("broken", "ddd/document", () => {
           throw new Error("no");
         }),
-        action("open", "lm/document", () => [item("open")]),
+        action("open", "ddd/document", () => [item("open")]),
       ],
       (entry) => failed.push(entry.value.id),
     );
@@ -132,17 +132,17 @@ describe("buildMenu", () => {
 
   it("leaves blank space out of the chains of what is on it", () => {
     const tree = el(null, target("folders/root", "", { label: "Folders", enclosing: false }));
-    const row = el(tree, target("lm/document", "n2", { label: "Row" }));
+    const row = el(tree, target("ddd/document", "n2", { label: "Row" }));
     const actions = [
       action("root", "folders/root", () => [item("new", "New note at the root")]),
-      action("open", "lm/document", () => [item("open")]),
+      action("open", "ddd/document", () => [item("open")]),
     ];
     expect(labels(buildMenu(asElement(row), actions))).toEqual([["open"]]);
     expect(labels(buildMenu(asElement(tree), actions))).toEqual([["New note at the root"]]);
   });
 
   it("prefixes item ids with their action's, so two actions' items never collide", () => {
-    const menu = buildMenu(asElement(card), [action("a", "lm/document", () => [item("x")]), action("b", "lm/document", () => [item("x")])]);
+    const menu = buildMenu(asElement(card), [action("a", "ddd/document", () => [item("x")]), action("b", "ddd/document", () => [item("x")])]);
     expect(menu?.sections[0]?.items.map((each) => each.id)).toEqual(["a:x", "b:x"]);
   });
 });
@@ -161,11 +161,11 @@ describe("editableFirst", () => {
   });
 
   it("keeps a text field inside a mark for the browser", () => {
-    const row = el(null, target("lm/document", "n1"));
+    const row = el(null, target("ddd/document", "n1"));
     expect(editableFirst(asElement(el(row, {}, "input")))).toBe(true);
   });
 
   it("is not in the way where nothing is editable", () => {
-    expect(editableFirst(asElement(el(el(null, target("lm/document", "n1")))))).toBe(false);
+    expect(editableFirst(asElement(el(el(null, target("ddd/document", "n1")))))).toBe(false);
   });
 });

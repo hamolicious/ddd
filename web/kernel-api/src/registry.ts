@@ -64,9 +64,9 @@ export interface RegistryOptions<T> {
 // ---------------------------------------------------------------------------
 
 /** Where the loader records the plugin being imported/activated. Read through {@link activatingPlugin}. */
-const ACTIVATING = Symbol.for("life-manager.kernel.activating-plugin");
+const ACTIVATING = Symbol.for("ddd.kernel.activating-plugin");
 /** Every registry on the page, so a failed plugin's items can be withdrawn from all of them. */
-const REGISTRIES = Symbol.for("life-manager.kernel.registries");
+const REGISTRIES = Symbol.for("ddd.kernel.registries");
 
 type Global = { [ACTIVATING]?: string; [REGISTRIES]?: Set<(pluginId: string) => void> };
 const page = globalThis as unknown as Global;

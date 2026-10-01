@@ -2,7 +2,7 @@
  * A search as one query string: what the list's URL carries after `#/?`, and what a
  * saved-search note holds (`saved.ts`).
  *
- * `lm/router.route` patterns match `:name` *path* segments, so a query string is not
+ * `ddd/router.route` patterns match `:name` *path* segments, so a query string is not
  * something the router hands back — and a search that cannot be linked to, or that loses
  * itself on reload or on "back" from a result, is a worse answer than parsing it here.
  *

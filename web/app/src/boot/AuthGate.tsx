@@ -71,10 +71,10 @@ export function AuthGate({
 
   if (mode === "reset") {
     return (
-      <div className="lm-auth">
-        <form className="lm-auth-form" onSubmit={submitReset}>
+      <div className="ddd-auth">
+        <form className="ddd-auth-form" onSubmit={submitReset}>
           <h1>Set a new password</h1>
-          <p className="lm-auth-hint">
+          <p className="ddd-auth-hint">
             This link works once. Choose a password of at least 10 characters, then sign
             in with it.
           </p>
@@ -86,7 +86,7 @@ export function AuthGate({
           <input id="confirm-password" name="confirm-password" type="password" autoComplete="new-password" required minLength={10} />
 
           {error ? (
-            <p className="lm-auth-error" role="alert">
+            <p className="ddd-auth-error" role="alert">
               {error}
             </p>
           ) : null}
@@ -96,7 +96,7 @@ export function AuthGate({
           </button>
           <button
             type="button"
-            className="lm-auth-switch"
+            className="ddd-auth-switch"
             onClick={() => {
               setMode("sign-in");
               setError(undefined);
@@ -132,16 +132,16 @@ export function AuthGate({
   };
 
   return (
-    <div className="lm-auth">
-      <form className="lm-auth-form" onSubmit={submit}>
-        <h1>Life Manager</h1>
+    <div className="ddd-auth">
+      <form className="ddd-auth-form" onSubmit={submit}>
+        <h1>ddd</h1>
         {notice ? (
-          <p className="lm-auth-hint" role="status">
+          <p className="ddd-auth-hint" role="status">
             {notice}
           </p>
         ) : null}
         {state?.needs_first_user ? (
-          <p className="lm-auth-hint">
+          <p className="ddd-auth-hint">
             This workspace has no users yet. The account you create becomes the
             administrator.
           </p>
@@ -168,7 +168,7 @@ export function AuthGate({
         ) : null}
 
         {error ? (
-          <p className="lm-auth-error" role="alert">
+          <p className="ddd-auth-error" role="alert">
             {error}
           </p>
         ) : null}
@@ -180,7 +180,7 @@ export function AuthGate({
         {state?.needs_first_user ? null : (
           <button
             type="button"
-            className="lm-auth-switch"
+            className="ddd-auth-switch"
             onClick={() => {
               setMode(mode === "sign-in" ? "register" : "sign-in");
               setError(undefined);

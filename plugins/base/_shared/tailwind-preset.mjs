@@ -1,5 +1,5 @@
 /**
- * The blessed Tailwind preset for a Life Manager frontend plugin.
+ * The blessed Tailwind preset for a ddd frontend plugin.
  *
  * There is intentionally no preflight and no cascade layer here. Plugin stylesheets
  * are linked after the app shell: preflight would restyle the whole application, and
@@ -30,8 +30,8 @@ export function tailwindPrefix(manifest) {
     throw new Error(`${manifest.id}: Tailwind prefix "${chosen}" must be lowercase a-z only`);
   }
   // The prefix also names the theme variables Tailwind emits (`--<prefix>-text-sm`), and
-  // `--lm-*` is the kernel's token namespace: `lm` would overwrite the app's theme.
-  if (chosen === "lm") throw new Error(`${manifest.id}: Tailwind prefix "lm" is reserved`);
+  // `--ddd-*` is the kernel's token namespace: `ddd` would overwrite the app's theme.
+  if (chosen === "ddd") throw new Error(`${manifest.id}: Tailwind prefix "ddd" is reserved`);
   return chosen;
 }
 
@@ -41,7 +41,7 @@ export const tailwindPreset = (prefix) => String.raw`
 @import "tailwindcss/utilities.css" source(none);
 
 /* The kernel, rather than the OS preference, owns the active colour scheme. */
-@custom-variant dark (&:where([data-lm-scheme="dark"], [data-lm-scheme="dark"] *));
+@custom-variant dark (&:where([data-ddd-scheme="dark"], [data-ddd-scheme="dark"] *));
 
 /* Keep this in sync with _shared/compact.ts's COMPACT_MEDIA_QUERY. */
 @custom-variant compact (@media ((max-width: 640px) or ((max-height: 480px) and (pointer: coarse))));
@@ -52,49 +52,49 @@ export const tailwindPreset = (prefix) => String.raw`
 
 @theme inline {
   /* Surfaces and text */
-  --color-bg: var(--lm-bg);
-  --color-bg-subtle: var(--lm-bg-subtle);
-  --color-bg-raised: var(--lm-bg-raised);
-  --color-bg-overlay: var(--lm-bg-overlay);
-  --color-border: var(--lm-border);
-  --color-border-strong: var(--lm-border-strong);
-  --color-text: var(--lm-text);
-  --color-text-muted: var(--lm-text-muted);
-  --color-text-inverse: var(--lm-text-inverse);
+  --color-bg: var(--ddd-bg);
+  --color-bg-subtle: var(--ddd-bg-subtle);
+  --color-bg-raised: var(--ddd-bg-raised);
+  --color-bg-overlay: var(--ddd-bg-overlay);
+  --color-border: var(--ddd-border);
+  --color-border-strong: var(--ddd-border-strong);
+  --color-text: var(--ddd-text);
+  --color-text-muted: var(--ddd-text-muted);
+  --color-text-inverse: var(--ddd-text-inverse);
 
   /* Meaning */
-  --color-link: var(--lm-link);
-  --color-accent: var(--lm-accent);
-  --color-accent-text: var(--lm-accent-text);
-  --color-accent-subtle: var(--lm-accent-subtle);
-  --color-danger: var(--lm-danger);
-  --color-danger-text: var(--lm-danger-text);
-  --color-warning: var(--lm-warning);
-  --color-success: var(--lm-success);
+  --color-link: var(--ddd-link);
+  --color-accent: var(--ddd-accent);
+  --color-accent-text: var(--ddd-accent-text);
+  --color-accent-subtle: var(--ddd-accent-subtle);
+  --color-danger: var(--ddd-danger);
+  --color-danger-text: var(--ddd-danger-text);
+  --color-warning: var(--ddd-warning);
+  --color-success: var(--ddd-success);
 
   /* Affordances */
-  --color-focus: var(--lm-focus-ring);
-  --color-selection: var(--lm-selection);
-  --shadow-1: var(--lm-shadow-1);
-  --shadow-2: var(--lm-shadow-2);
+  --color-focus: var(--ddd-focus-ring);
+  --color-selection: var(--ddd-selection);
+  --shadow-1: var(--ddd-shadow-1);
+  --shadow-2: var(--ddd-shadow-2);
 
   /* Type and metrics */
-  --font-sans: var(--lm-font-sans);
-  --font-mono: var(--lm-font-mono);
-  --radius: var(--lm-radius);
-  --radius-md: var(--lm-radius);
-  --radius-lg: var(--lm-radius-lg);
+  --font-sans: var(--ddd-font-sans);
+  --font-mono: var(--ddd-font-mono);
+  --radius: var(--ddd-radius);
+  --radius-md: var(--ddd-radius);
+  --radius-lg: var(--ddd-radius-lg);
   /* Half a kernel space, so the numeric scale reads like stock Tailwind's 4 px one
-     (p-2 = one --lm-space) while still following a theme that changes the token. */
-  --spacing: calc(var(--lm-space) * 0.5);
+     (p-2 = one --ddd-space) while still following a theme that changes the token. */
+  --spacing: calc(var(--ddd-space) * 0.5);
 }
 
 /* SPEC §6.5's 44 px touch target; @utility makes it variant-aware. */
 @utility tap {
-  min-height: var(--lm-tap-target);
-  min-width: var(--lm-tap-target);
+  min-height: var(--ddd-tap-target);
+  min-width: var(--ddd-tap-target);
 }
 @utility tap-h {
-  min-height: var(--lm-tap-target);
+  min-height: var(--ddd-tap-target);
 }
 `;

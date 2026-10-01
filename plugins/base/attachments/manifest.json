@@ -3,7 +3,7 @@
   "version": "3.0.0",
   "name": "Attachments",
   "description": "Uploads files pasted into the editor, and shows embedded files with a viewer per file type.",
-  "author": "Life Manager base distribution",
+  "author": "ddd base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
   "kernel": "^3.0",

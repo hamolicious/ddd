@@ -704,7 +704,7 @@ async fn search_uses_the_text_index() {
 #[tokio::test]
 #[ignore = "requires MONGO_URI"]
 async fn post_query_answers_a_built_plan() {
-    use life_manager_core::query::{Op, Query};
+    use ddd_core::query::{Op, Query};
 
     let Some(app) = TestApp::start().await else {
         return;

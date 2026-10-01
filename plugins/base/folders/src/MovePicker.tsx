@@ -85,7 +85,7 @@ export function MovePicker({ hierarchy, subjects, onChoose, NoteSelect }: MovePi
       <label>
         <span className="folders:sr-only">Filter notes</span>
         <input
-          className="folders:min-h-[var(--lm-tap-target)] folders:w-full folders:rounded folders:border folders:border-border folders:bg-bg folders:px-3 folders:text-text"
+          className="folders:min-h-[var(--ddd-tap-target)] folders:w-full folders:rounded folders:border folders:border-border folders:bg-bg folders:px-3 folders:text-text"
           type="text"
           value={query}
           placeholder="Filter notes…"

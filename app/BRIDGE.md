@@ -48,7 +48,7 @@ background sync, camera, contacts, geolocation, biometrics. Those are v2 convers
 
 ## 2. The envelope
 
-One `flutter_inappwebview` JavaScript handler, named **`lm_shell_v1`**
+One `flutter_inappwebview` JavaScript handler, named **`ddd_shell_v1`**
 (`kBridgeHandlerName`). One handler rather than one per method, so versioning, the error
 shape, logging and timeouts are written once.
 
@@ -152,7 +152,7 @@ this device can do. **It is never the gate**; presence of the method is. Two sou
 would eventually disagree, and the one that matters is the one that gets called.
 
 `Object.freeze` on the injected object is a courtesy, not a boundary: frontend plugins run
-unsandboxed (SPEC §6.1) and can call `lm_shell_v1` directly. The bridge's job is ergonomics
+unsandboxed (SPEC §6.1) and can call `ddd_shell_v1` directly. The bridge's job is ergonomics
 and graceful degradation, not containment.
 
 ---
@@ -276,13 +276,13 @@ as a Markdown file, both ways, while the app runs.
   touching the disk. Every method but `current`/`choose` answers `unsupported` while no folder
   is chosen.
 * **The choice belongs to the device**, not the account: the shell remembers it
-  (`<appSupport>/folder.json` on Android, `folder` in `~/.config/life-manager/desktop.toml` on
+  (`<appSupport>/folder.json` on Android, `folder` in `~/.config/ddd/desktop.toml` on
   Linux). It is never written to synced settings.
-* **Writes are atomic**: bytes go to `.life-manager/tmp/` and are renamed into place, so a
+* **Writes are atomic**: bytes go to `.ddd/tmp/` and are renamed into place, so a
   sync client or an editor never reads half a file. `list` skips that directory.
 * **Changes are pushed, not polled**: the shell watches the folder and evaluates
-  `window.dispatchEvent(new CustomEvent("lm-folder-changed", { detail: { paths } }))`,
-  debounced, with the relative paths that changed (`.life-manager/` excluded). `paths` is a
+  `window.dispatchEvent(new CustomEvent("ddd-folder-changed", { detail: { paths } }))`,
+  debounced, with the relative paths that changed (`.ddd/` excluded). `paths` is a
   hint; the page rescans either way. Pinned in `bridge_fixtures/window_shell.json`
   (`folderChanged`).
 * **Android uses a real path** and therefore *all-files access* (`MANAGE_EXTERNAL_STORAGE`,
@@ -375,7 +375,7 @@ session, so a once-per-process check is not "on the next launch" in any sense a 
 recognise — and `routes/shell.rs`'s fingerprint cache exists precisely because a shell polls
 this endpoint often.
 
-**When it is staged**, the shell dispatches `lm-shell-update-ready` into the page (§7), on
+**When it is staged**, the shell dispatches `ddd-shell-update-ready` into the page (§7), on
 top of its own native banner.
 
 ---
@@ -488,9 +488,9 @@ Five properties, each one deliberate:
   rendering `AuthGate` (`web/app/src/main.tsx`): the bundle ran, and an expired session is
   not a reason to revert it.
 * **A staged bundle is announced to the page.** The shell evaluates
-  `window.dispatchEvent(new CustomEvent("lm-shell-update-ready", { detail: { bundleVersion } }))`
+  `window.dispatchEvent(new CustomEvent("ddd-shell-update-ready", { detail: { bundleVersion } }))`
   (`shellUpdateReadyScript`), which `web/app/src/boot/shell.ts` turns into the kernel notice
-  "close and reopen Life Manager to finish it"; `window.lmShellUpdateReady({ bundleVersion })`
+  "close and reopen ddd to finish it"; `window.lmShellUpdateReady({ bundleVersion })`
   is an accepted alternative spelling. The strings live in
   `bridge_fixtures/window_shell.json` and both sides are tested against them. Purely
   informational — promotion happens at the next launch either way, which is why there is no
@@ -528,13 +528,13 @@ by the web build into `shell-bundle.json`; the server reads it there.
 Changing any of these breaks a shell or a bundle already in the field. They move only with
 the version rules in §8, and every change is announced in `app/CONTRACTS.md`.
 
-* the handler name `lm_shell_v1`, the envelope keys (`v`, `id`, `capability`, `method`,
+* the handler name `ddd_shell_v1`, the envelope keys (`v`, `id`, `capability`, `method`,
   `params`, `ok`, `result`, `error.code`, `error.message`) and the six error codes;
 * every method name and parameter name in §4, and the `window.shell` member names in §3;
 * the manifest JSON field names in §5 (`bundle_version`, `min_bridge_version`, `index_csp`,
   `files[].path`, `files[].sha256`, `files[].size`) and the two routes
   `GET /api/shell/manifest`, `GET /api/shell/bundle/{path}`;
 * the loopback port `41847` — it is origin-keyed storage and an `APP_ORIGIN` entry;
-* the keystore keys `lm.bearer-token` and `lm.server-base-url` (changing one signs every
+* the keystore keys `ddd.bearer-token` and `ddd.server-base-url` (changing one signs every
   device out);
-* the notification channel id `lm.reminders`.
+* the notification channel id `ddd.reminders`.

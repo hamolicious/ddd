@@ -13,8 +13,8 @@
 
 import { useSyncExternalStore, type ReactNode } from "react";
 
-export const OFFLINE_COPY_HEADER = "x-life-manager-offline-copy";
-export const CACHED_AT_HEADER = "x-life-manager-cached-at";
+export const OFFLINE_COPY_HEADER = "x-ddd-offline-copy";
+export const CACHED_AT_HEADER = "x-ddd-cached-at";
 
 type Fetch = (path: string, init?: RequestInit) => Promise<Response>;
 

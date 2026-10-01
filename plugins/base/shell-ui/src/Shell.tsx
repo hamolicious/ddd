@@ -12,7 +12,7 @@
  * - **The mobile breakpoint** (SPEC §6.5): below it the sidebar (and the altbar, from
  *   the other edge) is a drawer over a single pane, Escape closes it, focus moves into it when it opens and back to
  *   whatever opened it when it closes, and every control is at least
- *   `--lm-tap-target` tall.
+ *   `--ddd-tap-target` tall.
  * - **Every contributed component renders inside `kernel.ui.boundary`** (SPEC §6.4),
  *   so a panel that throws is a chip in the sidebar, not a blank application.
  * - **A view id the shell cannot resolve is a message, not an empty pane.** The
@@ -120,7 +120,7 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
 
   useEffect(() => {
     const title = active?.value.title;
-    document.title = title ? `${title} · Life Manager` : "Life Manager";
+    document.title = title ? `${title} · ddd` : "ddd";
   }, [active]);
 
   // A drawer is modal-ish: Escape closes it and focus goes back where it came from.
@@ -153,7 +153,7 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
         would navigate away from it.
       */}
       <a
-        className="shellui:tap-h shellui:absolute shellui:left-[calc(var(--lm-space)*0.5+var(--lm-safe-left))] shellui:top-[calc(var(--lm-space)*0.5+var(--lm-safe-top))] shellui:z-30 shellui:inline-flex shellui:-translate-y-[200%] shellui:items-center shellui:rounded shellui:bg-bg-raised shellui:px-2 shellui:py-1.5 shellui:shadow-2 shellui:focus:translate-y-0"
+        className="shellui:tap-h shellui:absolute shellui:left-[calc(var(--ddd-space)*0.5+var(--ddd-safe-left))] shellui:top-[calc(var(--ddd-space)*0.5+var(--ddd-safe-top))] shellui:z-30 shellui:inline-flex shellui:-translate-y-[200%] shellui:items-center shellui:rounded shellui:bg-bg-raised shellui:px-2 shellui:py-1.5 shellui:shadow-2 shellui:focus:translate-y-0"
         href="#shell-main"
         onClick={(event) => {
           event.preventDefault();
@@ -170,7 +170,7 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
           <aside
             id={SIDEBAR_ID}
             ref={sidebar}
-            className="shellui:@container shellui:relative shellui:w-[min(18rem,32vw)] shellui:shrink-0 shellui:overflow-y-auto shellui:overscroll-contain shellui:border-r shellui:border-border shellui:bg-bg-subtle shellui:p-1 shellui:pb-[calc(var(--lm-space)*0.5+var(--lm-safe-bottom))] shellui:compact:absolute shellui:compact:inset-y-0 shellui:compact:left-0 shellui:compact:z-20 shellui:compact:w-[min(20rem,86vw)] shellui:compact:border-border-strong shellui:compact:shadow-2"
+            className="shellui:@container shellui:relative shellui:w-[min(18rem,32vw)] shellui:shrink-0 shellui:overflow-y-auto shellui:overscroll-contain shellui:border-r shellui:border-border shellui:bg-bg-subtle shellui:p-1 shellui:pb-[calc(var(--ddd-space)*0.5+var(--ddd-safe-bottom))] shellui:compact:absolute shellui:compact:inset-y-0 shellui:compact:left-0 shellui:compact:z-20 shellui:compact:w-[min(20rem,86vw)] shellui:compact:border-border-strong shellui:compact:shadow-2"
             aria-label="Sidebar"
             tabIndex={-1}
             hidden={!shell.sidebarOpen}
@@ -215,7 +215,7 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
           <aside
             id={ALTBAR_ID}
             ref={altbar}
-            className="shellui:@container shellui:relative shellui:w-[min(20rem,32vw)] shellui:shrink-0 shellui:overflow-y-auto shellui:overscroll-contain shellui:border-l shellui:border-border shellui:bg-bg-subtle shellui:p-1 shellui:pb-[calc(var(--lm-space)*0.5+var(--lm-safe-bottom))] shellui:compact:absolute shellui:compact:inset-y-0 shellui:compact:right-0 shellui:compact:z-20 shellui:compact:w-[min(22rem,90vw)] shellui:compact:border-border-strong shellui:compact:shadow-2"
+            className="shellui:@container shellui:relative shellui:w-[min(20rem,32vw)] shellui:shrink-0 shellui:overflow-y-auto shellui:overscroll-contain shellui:border-l shellui:border-border shellui:bg-bg-subtle shellui:p-1 shellui:pb-[calc(var(--ddd-space)*0.5+var(--ddd-safe-bottom))] shellui:compact:absolute shellui:compact:inset-y-0 shellui:compact:right-0 shellui:compact:z-20 shellui:compact:w-[min(22rem,90vw)] shellui:compact:border-border-strong shellui:compact:shadow-2"
             aria-label="Side panel"
             tabIndex={-1}
             hidden={!shell.altbarOpen}
@@ -329,7 +329,7 @@ function useColumnWidth(
 function ResizeHandle({ label, size }: { readonly label: string; readonly size: ColumnSize }): ReactNode {
   return (
     <div
-      className="shellui:relative shellui:z-[1] shellui:-mx-[5px] shellui:shrink-0 shellui:grow-0 shellui:basis-[10px] shellui:touch-none shellui:cursor-col-resize shellui:hover:bg-[linear-gradient(to_right,transparent_4px,var(--lm-accent)_4px,var(--lm-accent)_6px,transparent_6px)] shellui:focus-visible:bg-[linear-gradient(to_right,transparent_4px,var(--lm-accent)_4px,var(--lm-accent)_6px,transparent_6px)] shellui:focus-visible:outline-none shellui:data-[dragging]:bg-[linear-gradient(to_right,transparent_4px,var(--lm-accent)_4px,var(--lm-accent)_6px,transparent_6px)]"
+      className="shellui:relative shellui:z-[1] shellui:-mx-[5px] shellui:shrink-0 shellui:grow-0 shellui:basis-[10px] shellui:touch-none shellui:cursor-col-resize shellui:hover:bg-[linear-gradient(to_right,transparent_4px,var(--ddd-accent)_4px,var(--ddd-accent)_6px,transparent_6px)] shellui:focus-visible:bg-[linear-gradient(to_right,transparent_4px,var(--ddd-accent)_4px,var(--ddd-accent)_6px,transparent_6px)] shellui:focus-visible:outline-none shellui:data-[dragging]:bg-[linear-gradient(to_right,transparent_4px,var(--ddd-accent)_4px,var(--ddd-accent)_6px,transparent_6px)]"
       role="separator"
       aria-orientation="vertical"
       aria-label={label}

@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 
 import type { Kernel } from "@kernel";
 
-const CACHE_KEY = "life-manager.settings.base-plugins";
+const CACHE_KEY = "ddd.settings.base-plugins";
 
 export interface Grouped<T> {
   readonly base: readonly T[];

@@ -215,7 +215,7 @@ fn check_plugins(state: &AppState) -> CheckResult {
 /// misbehaving feed importer says nothing about whether this replica should receive
 /// traffic — it serves the API, the socket and every other plugin exactly as before, and
 /// taking it out of rotation would turn one broken plugin into an outage.
-/// `lm_plugins_disabled` is the alert; this is the human-readable echo of it.
+/// `ddd_plugins_disabled` is the alert; this is the human-readable echo of it.
 ///
 /// [`PluginHost::existing`] rather than `get`: a probe must not create the thing it
 /// reports on. A `None` means the host has not been built yet — pre-boot, or
@@ -251,8 +251,8 @@ mod tests {
     ///
     /// ```text
     /// SESSION_SECRET=0123456789012345678901234567890123456789 \
-    /// MONGO_URI=mongodb://127.0.0.1:27017 MONGO_DATABASE=life_manager_test \
-    ///   cargo test -p life-manager-server -- --ignored readyz
+    /// MONGO_URI=mongodb://127.0.0.1:27017 MONGO_DATABASE=ddd_test \
+    ///   cargo test -p ddd-server -- --ignored readyz
     /// ```
     #[tokio::test]
     #[ignore = "requires a reachable MongoDB"]

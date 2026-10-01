@@ -3,7 +3,7 @@
  *
  * ## API (`plugin:indexer`)
  *
- * The old `lm/workspace-index` service, member for member, as named exports:
+ * The old `ddd/workspace-index` service, member for member, as named exports:
  *
  * - `ready: Promise<void>` — resolves after the first full build; rejects if the
  *   projection could not be read.

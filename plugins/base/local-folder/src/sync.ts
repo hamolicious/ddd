@@ -5,8 +5,8 @@
  *
  * ## State, kept in the folder
  *
- * `.life-manager/index.json` maps each note id to its file and to the content hashes both
- * sides had when they last agreed; `.life-manager/base/<id>.md` is that agreed text, the
+ * `.ddd/index.json` maps each note id to its file and to the content hashes both
+ * sides had when they last agreed; `.ddd/base/<id>.md` is that agreed text, the
  * base of a three-way merge. Keeping them in the folder is what makes a reinstall, or a
  * second device pointed at a synced copy, pick up where it left off instead of importing
  * everything as new notes.
@@ -42,7 +42,7 @@ import {
 
 import type { FolderCapability, FolderEntry, TextEdit } from "@kernel";
 
-export const STATE_DIR = ".life-manager";
+export const STATE_DIR = ".ddd";
 const INDEX_PATH = `${STATE_DIR}/index.json`;
 const basePath = (id: string): string => `${STATE_DIR}/base/${id}${NOTE_EXT}`;
 

@@ -30,7 +30,7 @@ const UPDATE_CHECK_MS = 5 * 60_000;
 const SETTLE_MS = 20_000;
 /** An automatic apply is not repeated within this window (see the module header). */
 const AUTO_APPLY_GUARD_MS = 60_000;
-const AUTO_APPLY_KEY = "lm:sw-auto-applied-at";
+const AUTO_APPLY_KEY = "ddd:sw-auto-applied-at";
 
 export interface UpdateFlow {
   /** `undefined` when service workers are unavailable (private mode, http). */

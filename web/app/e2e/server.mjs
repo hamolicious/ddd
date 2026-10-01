@@ -19,11 +19,11 @@
  *
  * ```
  * node app/e2e/server.mjs                       # port 8121, base plugins, fresh DB
- * LM_E2E_PORT=8122 LM_E2E_PLUGINS=/tmp/x  node app/e2e/server.mjs
+ * DDD_E2E_PORT=8122 DDD_E2E_PLUGINS=/tmp/x  node app/e2e/server.mjs
  * ```
  *
- * Env: `LM_E2E_PORT`, `LM_E2E_DB`, `LM_E2E_PLUGINS`, `LM_E2E_KEEP_DB=1`,
- * `LM_E2E_BINARY`, `LM_MONGO_URI`.
+ * Env: `DDD_E2E_PORT`, `DDD_E2E_DB`, `DDD_E2E_PLUGINS`, `DDD_E2E_KEEP_DB=1`,
+ * `DDD_E2E_BINARY`, `DDD_MONGO_URI`.
  */
 
 import { spawn, spawnSync } from "node:child_process";
@@ -34,8 +34,8 @@ import { fileURLToPath } from "node:url";
 const web = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const repo = resolve(web, "..");
 
-const port = process.env["LM_E2E_PORT"] ?? "8121";
-const database = process.env["LM_E2E_DB"] ?? "life_manager_e2e";
+const port = process.env["DDD_E2E_PORT"] ?? "8121";
+const database = process.env["DDD_E2E_DB"] ?? "ddd_e2e";
 
 /**
  * The default registry is **base plus `extra-task-states`**, not base alone.
@@ -49,7 +49,7 @@ const database = process.env["LM_E2E_DB"] ?? "life_manager_e2e";
  *
  * A workspace with one extra plugin installed is also simply the normal case.
  */
-const pluginsDir = process.env["LM_E2E_PLUGINS"] ?? composeDefaultRegistry();
+const pluginsDir = process.env["DDD_E2E_PLUGINS"] ?? composeDefaultRegistry();
 
 function composeDefaultRegistry() {
   const out = resolve(web, "app", "e2e", ".plugins", "default");
@@ -70,9 +70,9 @@ function composeDefaultRegistry() {
   console.log(`[e2e] composed registry: ${out}`);
   return out;
 }
-const mongoUri = process.env["LM_MONGO_URI"] ?? process.env["MONGO_URI"] ?? "mongodb://127.0.0.1:27017";
+const mongoUri = process.env["DDD_MONGO_URI"] ?? process.env["MONGO_URI"] ?? "mongodb://127.0.0.1:27017";
 const binary =
-  process.env["LM_E2E_BINARY"] ?? resolve(repo, "backend", "target", "debug", "life-manager");
+  process.env["DDD_E2E_BINARY"] ?? resolve(repo, "backend", "target", "debug", "ddd");
 const webDist = resolve(web, "app", "dist");
 
 for (const [what, path] of [
@@ -83,7 +83,7 @@ for (const [what, path] of [
   if (existsSync(path)) continue;
   console.error(
     `[e2e] ${what} is missing: ${path}\n` +
-      `[e2e] build it first:  cargo build --bin life-manager   &&   mise run web-build`,
+      `[e2e] build it first:  cargo build --bin ddd   &&   mise run web-build`,
   );
   process.exit(1);
 }
@@ -96,7 +96,7 @@ for (const [what, path] of [
  * trade. A compose stack that is not running is a clear failure here rather than a
  * confusing one later.
  */
-if (process.env["LM_E2E_KEEP_DB"] !== "1") {
+if (process.env["DDD_E2E_KEEP_DB"] !== "1") {
   const drop = spawnSync(
     "docker",
     [
@@ -129,7 +129,7 @@ const child = spawn(binary, ["serve"], {
     ...process.env,
     // A fixed secret: these sessions live for the length of one test run, and a
     // random one would only make a failed run harder to poke at by hand.
-    SESSION_SECRET: "life-manager-e2e-session-secret-0123456789abcdef",
+    SESSION_SECRET: "ddd-e2e-session-secret-0123456789abcdef",
     MONGO_URI: mongoUri,
     MONGO_DATABASE: database,
     BIND_ADDR: `127.0.0.1:${port}`,

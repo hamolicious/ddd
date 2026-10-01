@@ -38,7 +38,7 @@ function id(n: number): string {
 let store: IdbProjectionStore;
 
 beforeEach(async () => {
-  store = new IdbProjectionStore(`life-manager-test-${++databases}`);
+  store = new IdbProjectionStore(`ddd-test-${++databases}`);
   await store.open();
 });
 

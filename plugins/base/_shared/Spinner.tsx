@@ -11,9 +11,9 @@
 
 import type { CSSProperties, ReactElement } from "react";
 
-const SPIN = "lm-shared-spinner-spin";
+const SPIN = "ddd-shared-spinner-spin";
 
-const KEYFRAMES = `@keyframes ${SPIN}{to{transform:rotate(360deg)}}@media (prefers-reduced-motion: reduce){[data-lm-spinner]{animation:none!important}}`;
+const KEYFRAMES = `@keyframes ${SPIN}{to{transform:rotate(360deg)}}@media (prefers-reduced-motion: reduce){[data-ddd-spinner]{animation:none!important}}`;
 
 const ROOT: CSSProperties = { display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "none" };
 
@@ -23,8 +23,8 @@ const RING: CSSProperties = {
   height: 14,
   boxSizing: "border-box",
   borderRadius: "9999px",
-  border: "2px solid var(--lm-border)",
-  borderTopColor: "var(--lm-accent)",
+  border: "2px solid var(--ddd-border)",
+  borderTopColor: "var(--ddd-accent)",
   animation: `${SPIN} 1s linear infinite`,
 };
 
@@ -53,7 +53,7 @@ export function Spinner({
     <span className={className} style={ROOT} role="status" aria-live="polite">
       <style>{KEYFRAMES}</style>
       <span style={SR_ONLY}>{label}</span>
-      <span aria-hidden="true" data-lm-spinner="" style={RING} />
+      <span aria-hidden="true" data-ddd-spinner="" style={RING} />
     </span>
   );
 }

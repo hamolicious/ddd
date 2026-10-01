@@ -4,7 +4,7 @@
  * The tree is `folders`' (an optional plugin): without it, or for a note with nothing
  * inside, there is no footer at all. The list follows the tree live — a note filed or
  * moved elsewhere shows up or goes at once — and each entry is the same link the body
- * draws for `[](doc://…)`: its title, colour and icon. Each is also marked `lm/document`, so
+ * draws for `[](doc://…)`: its title, colour and icon. Each is also marked `ddd/document`, so
  * its menu is a note's menu wherever it is right-clicked.
  */
 
@@ -50,7 +50,7 @@ export function ChildrenFooter({
         </h2>
         <ul className="viewer:m-0 viewer:flex viewer:list-none viewer:flex-col viewer:gap-0.5 viewer:p-0">
           {children.map((child) => (
-            <li key={child} className="viewer:flex viewer:min-h-[calc(var(--lm-tap-target)*0.75)] viewer:min-w-0 viewer:items-center viewer:break-words" {...target("lm/document", child)}>
+            <li key={child} className="viewer:flex viewer:min-h-[calc(var(--ddd-tap-target)*0.75)] viewer:min-w-0 viewer:items-center viewer:break-words" {...target("ddd/document", child)}>
               {renderDocLink(child)}
             </li>
           ))}

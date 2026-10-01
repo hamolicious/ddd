@@ -14,7 +14,7 @@
  * **Three ways to do everything, because one of them is a mouse gesture.** Dragging is
  * a mouse and pen gesture, so every drag has a keyboard and a touch equivalent that ends
  * in the same call: `M` on the active row, or Move in the row's menu. A row is marked as
- * an `lm/document` and blank space as `folders/root` (`_shared/target.ts`); the menus
+ * an `ddd/document` and blank space as `folders/root` (`_shared/target.ts`); the menus
  * themselves — right-click, long press, the row's ⋯ button — are `context-menu`'s, built
  * from what every plugin offers for those targets (`index.tsx` offers this tree's).
  *
@@ -89,16 +89,16 @@ interface Lift {
 }
 
 const NODE_CLASSES =
-  "folders-node folders:group folders:flex folders:min-h-[calc(var(--lm-tap-target)/2)] folders:items-center folders:gap-0.5 folders:rounded folders:pr-0.5 folders:pl-[calc(var(--lm-space)*0.5+var(--folders-indent)*min(var(--folders-depth,0),var(--folders-indent-cap)))] folders:hover:bg-bg-subtle folders:compact:min-h-[var(--lm-tap-target)]";
+  "folders-node folders:group folders:flex folders:min-h-[calc(var(--ddd-tap-target)/2)] folders:items-center folders:gap-0.5 folders:rounded folders:pr-0.5 folders:pl-[calc(var(--ddd-space)*0.5+var(--folders-indent)*min(var(--folders-depth,0),var(--folders-indent-cap)))] folders:hover:bg-bg-subtle folders:compact:min-h-[var(--ddd-tap-target)]";
 // On a touch screen the twisty is a full tap target that reaches left into the indent,
 // with the chevron drawn at its right edge: 44 px to hit, 24 px of row, and no gap
 // between the chevron and its name.
 const TWISTY_CLASSES =
-  "folders-twisty folders:box-border folders:flex folders:w-[1.25rem] folders:min-h-[1.375rem]! folders:shrink-0 folders:cursor-pointer folders:items-center folders:justify-center folders:border-0! folders:bg-transparent! folders:p-0! folders:text-text-muted folders:compact:w-[var(--lm-tap-target)] folders:compact:ml-[calc(1.5rem-var(--lm-tap-target))] folders:compact:justify-end folders:compact:pr-[0.45rem]! folders:compact:min-h-[var(--lm-tap-target)]! folders:touch:w-[var(--lm-tap-target)] folders:touch:ml-[calc(1.5rem-var(--lm-tap-target))] folders:touch:justify-end folders:touch:pr-[0.45rem]! folders:touch:min-h-[var(--lm-tap-target)]!";
+  "folders-twisty folders:box-border folders:flex folders:w-[1.25rem] folders:min-h-[1.375rem]! folders:shrink-0 folders:cursor-pointer folders:items-center folders:justify-center folders:border-0! folders:bg-transparent! folders:p-0! folders:text-text-muted folders:compact:w-[var(--ddd-tap-target)] folders:compact:ml-[calc(1.5rem-var(--ddd-tap-target))] folders:compact:justify-end folders:compact:pr-[0.45rem]! folders:compact:min-h-[var(--ddd-tap-target)]! folders:touch:w-[var(--ddd-tap-target)] folders:touch:ml-[calc(1.5rem-var(--ddd-tap-target))] folders:touch:justify-end folders:touch:pr-[0.45rem]! folders:touch:min-h-[var(--ddd-tap-target)]!";
 const ROW_LABEL_CLASSES =
   "folders:min-w-0 folders:flex-1 folders:cursor-pointer folders:overflow-hidden folders:text-ellipsis folders:whitespace-nowrap folders:border-0! folders:bg-transparent! folders:p-0! folders:text-left folders:font-sans folders:text-inherit";
 const ACTIONS_CLASSES =
-  "folders-actions folders:invisible folders:flex folders:shrink-0 folders:gap-0.5 folders:group-hover:visible folders:group-focus-within:visible folders:compact:visible folders:[&>button]:box-border folders:[&>button]:min-h-[1.375rem] folders:[&>button]:min-w-[1.375rem] folders:[&>button]:cursor-pointer folders:[&>button]:rounded folders:[&>button]:border folders:[&>button]:border-transparent folders:[&>button]:bg-transparent folders:[&>button]:p-0 folders:[&>button]:text-text-muted folders:hover:[&>button]:border-border folders:hover:[&>button]:text-text folders:compact:[&>button]:min-h-[var(--lm-tap-target)] folders:compact:[&>button]:min-w-[var(--lm-tap-target)] folders:touch:visible folders:touch:[&>button]:min-h-[var(--lm-tap-target)] folders:touch:[&>button]:min-w-[var(--lm-tap-target)]";
+  "folders-actions folders:invisible folders:flex folders:shrink-0 folders:gap-0.5 folders:group-hover:visible folders:group-focus-within:visible folders:compact:visible folders:[&>button]:box-border folders:[&>button]:min-h-[1.375rem] folders:[&>button]:min-w-[1.375rem] folders:[&>button]:cursor-pointer folders:[&>button]:rounded folders:[&>button]:border folders:[&>button]:border-transparent folders:[&>button]:bg-transparent folders:[&>button]:p-0 folders:[&>button]:text-text-muted folders:hover:[&>button]:border-border folders:hover:[&>button]:text-text folders:compact:[&>button]:min-h-[var(--ddd-tap-target)] folders:compact:[&>button]:min-w-[var(--ddd-tap-target)] folders:touch:visible folders:touch:[&>button]:min-h-[var(--ddd-tap-target)] folders:touch:[&>button]:min-w-[var(--ddd-tap-target)]";
 
 export interface MoveProgress {
   readonly onProgress?: (done: number, total: number) => void;
@@ -149,7 +149,7 @@ export interface FolderTreeProps {
    * into view, once each time it changes.
    */
   readonly openDocument?: string;
-  /** Another plugin's colour and icon for a row (`lm/folders.decoration`). */
+  /** Another plugin's colour and icon for a row (`ddd/folders.decoration`). */
   readonly look?: (id: string) => FolderRowLook | undefined;
 }
 
@@ -781,10 +781,10 @@ export function FolderTree({
             ? "folders-node-drop folders:outline-2 folders:outline-dashed folders:outline-accent folders:outline-offset-[-2px]"
             : "",
           drop?.mode === "before" && drop.target === row.id
-            ? "folders-node-before folders:shadow-[inset_0_2px_0_0_var(--lm-accent)]"
+            ? "folders-node-before folders:shadow-[inset_0_2px_0_0_var(--ddd-accent)]"
             : "",
           drop?.mode === "after" && drop.target === row.id
-            ? "folders-node-after folders:shadow-[inset_0_-2px_0_0_var(--lm-accent)]"
+            ? "folders-node-after folders:shadow-[inset_0_-2px_0_0_var(--ddd-accent)]"
             : "",
           lift?.target.id === row.id ? "folders-node-lifted folders:bg-bg-subtle folders:[&>*]:opacity-40" : "",
           editing ? "folders-node-editing" : "",
@@ -798,7 +798,7 @@ export function FolderTree({
         onDragLeave={() => leave(row.id)}
         onDrop={(event) => dropInto(event, row.id)}
         onMouseDown={() => setActive(row.key)}
-        {...mark("lm/document", row.id, { label: row.title })}
+        {...mark("ddd/document", row.id, { label: row.title })}
         onPointerDown={(event) => {
           if (!editing) liftStart(event, target);
         }}
@@ -1008,7 +1008,7 @@ export function FolderTree({
           {retry && (
             <button
               type="button"
-              className="folders-retry folders:min-h-[calc(var(--lm-tap-target)-12px)] folders:cursor-pointer folders:rounded folders:border folders:border-border-strong folders:bg-bg-raised folders:px-1.5 folders:font-sans"
+              className="folders-retry folders:min-h-[calc(var(--ddd-tap-target)-12px)] folders:cursor-pointer folders:rounded folders:border folders:border-border-strong folders:bg-bg-raised folders:px-1.5 folders:font-sans"
               onClick={retry.run}
             >
               Try again
@@ -1039,7 +1039,7 @@ export function FolderTree({
           style={boxHeight === undefined ? undefined : { maxHeight: boxHeight }}
         >
           <div
-            className={`folders-tree folders:flex folders:min-h-[calc(var(--lm-tap-target)*1.5)] folders:flex-col folders:[--folders-indent:calc(var(--lm-space)*1.5)] folders:[--folders-indent-cap:6] folders:focus-visible:outline-2 folders:focus-visible:outline-offset-[-2px] folders:focus-visible:outline-focus folders:compact:[--folders-indent:calc(var(--lm-space)*0.75)] folders:compact:[--folders-indent-cap:4] ${intoNote === "" ? " folders-tree-root-drop folders:rounded folders:outline-2 folders:outline-dashed folders:outline-accent folders:outline-offset-[-2px]" : ""}`}
+            className={`folders-tree folders:flex folders:min-h-[calc(var(--ddd-tap-target)*1.5)] folders:flex-col folders:[--folders-indent:calc(var(--ddd-space)*1.5)] folders:[--folders-indent-cap:6] folders:focus-visible:outline-2 folders:focus-visible:outline-offset-[-2px] folders:focus-visible:outline-focus folders:compact:[--folders-indent:calc(var(--ddd-space)*0.75)] folders:compact:[--folders-indent-cap:4] ${intoNote === "" ? " folders-tree-root-drop folders:rounded folders:outline-2 folders:outline-dashed folders:outline-accent folders:outline-offset-[-2px]" : ""}`}
             ref={virtual.listRef}
             // The rows not drawn, and the room under the last one (`pb-3`, which an
             // inline padding would otherwise replace).
@@ -1151,7 +1151,7 @@ function Dressed({ look, name }: { readonly look: FolderRowLook; readonly name: 
 function Lifted({ lift }: { readonly lift: Lift }): ReactElement {
   return createPortal(
     <div
-      className="folders-lifted folders:pointer-events-none folders:fixed folders:z-[1000] folders:flex folders:min-h-[calc(var(--lm-tap-target)/2)] folders:items-center folders:gap-1.5 folders:overflow-hidden folders:rounded folders:border folders:border-border-strong folders:bg-bg-raised folders:px-2 folders:font-sans folders:text-text folders:shadow-2"
+      className="folders-lifted folders:pointer-events-none folders:fixed folders:z-[1000] folders:flex folders:min-h-[calc(var(--ddd-tap-target)/2)] folders:items-center folders:gap-1.5 folders:overflow-hidden folders:rounded folders:border folders:border-border-strong folders:bg-bg-raised folders:px-2 folders:font-sans folders:text-text folders:shadow-2"
       style={{
         left: lift.x - lift.dx,
         top: lift.y - lift.dy,

@@ -55,7 +55,7 @@ const int kMaxImportBytes = 25 * 1024 * 1024;
 
 /// Where exports are staged before they are handed to the share sheet. One directory under
 /// the cache dir, so the OS may reclaim it and the next export can prune it wholesale.
-const String kExportDirName = 'lm-export';
+const String kExportDirName = 'ddd-export';
 
 /// A file the page wants saved. Exactly one of [text] and [base64] is set
 /// (`BRIDGE.md` §4.2).
@@ -535,7 +535,7 @@ String exportFileName(String? contentDisposition, {required DateTime now}) {
   }
   final DateTime stamp = now.toUtc();
   String two(int value) => value.toString().padLeft(2, '0');
-  return 'life-manager-export-${stamp.year}${two(stamp.month)}${two(stamp.day)}'
+  return 'ddd-export-${stamp.year}${two(stamp.month)}${two(stamp.day)}'
       '-${two(stamp.hour)}${two(stamp.minute)}${two(stamp.second)}.zip';
 }
 
@@ -559,7 +559,7 @@ String? _dispositionFilename(String? header) {
   return plain?.group(1)?.trim();
 }
 
-/// Extension → MIME, for [mimeForFileName]. Everything a Life Manager workspace actually
+/// Extension → MIME, for [mimeForFileName]. Everything a ddd workspace actually
 /// exchanges: markdown, the export zip, attachments.
 const Map<String, String> _mimeForExtension = <String, String>{
   'md': 'text/markdown',

@@ -1,6 +1,6 @@
 {
-  "name": "Life Manager",
-  "short_name": "Life Manager",
+  "name": "ddd",
+  "short_name": "ddd",
   "description": "An offline-first, collaborative document manager built as a microkernel.",
   "start_url": "/",
   "scope": "/",

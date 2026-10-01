@@ -17,7 +17,7 @@
 ///
 /// Every path is relative, `/`-separated, and refused with `invalid` when it is absolute,
 /// climbs out with `..`, or would leave the folder through a symlink. Changes made on disk
-/// are pushed to the page as the `lm-folder-changed` window event ([folderChanges],
+/// are pushed to the page as the `ddd-folder-changed` window event ([folderChanges],
 /// dispatched by `shell/webview_host.dart`).
 library;
 
@@ -33,13 +33,13 @@ import 'package:watcher/watcher.dart';
 import 'bridge.dart';
 
 /// The `CustomEvent` name the page listens for (`BRIDGE.md` §4.5).
-const String kFolderChangedEvent = 'lm-folder-changed';
+const String kFolderChangedEvent = 'ddd-folder-changed';
 
 /// The mirror's own directory inside the folder; its changes are not news to the page.
-const String kFolderStateDir = '.life-manager';
+const String kFolderStateDir = '.ddd';
 
 /// Where writes are staged before the rename that makes them visible.
-const String kFolderTmpDir = '.life-manager/tmp';
+const String kFolderTmpDir = '.ddd/tmp';
 
 /// Relative paths that changed on disk, debounced. `webview_host.dart` forwards them.
 final StreamController<List<String>> folderChanges =

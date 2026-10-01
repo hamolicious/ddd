@@ -1,5 +1,5 @@
 /*
- * The reference plugin build (SPEC §6.4), copied from the Life Manager repository into
+ * The reference plugin build (SPEC §6.4), copied from the ddd repository into
  * tools/. `vite build` writes the installed layout into dist/: manifest.json,
  * frontend/index.mjs and frontend/style.css.
  */

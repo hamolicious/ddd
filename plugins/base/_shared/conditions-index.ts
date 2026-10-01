@@ -1,5 +1,5 @@
 /**
- * What the condition editor suggests, from the indexer (`lm/workspace-index`): the
+ * What the condition editor suggests, from the indexer (`ddd/workspace-index`): the
  * frontmatter keys in use, the values each one holds, and the notes to pick for a
  * document value. All of it local and synchronous; a host without the index passes
  * nothing and the editor falls back to the fixed fields.

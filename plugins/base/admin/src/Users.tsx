@@ -14,7 +14,7 @@
  *   once**. It is shown once, as a link, with a copy button, and never fetched again —
  *   the listing only has its hash.
  * - **A reset link is issued once too**, and it is the recovery path when someone cannot
- *   sign in. The CLI (`life-manager reset-password`) is the break-glass below it.
+ *   sign in. The CLI (`ddd reset-password`) is the break-glass below it.
  */
 
 import { useState } from "react";

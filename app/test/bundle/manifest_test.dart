@@ -8,7 +8,7 @@ library;
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:life_manager_shell/bundle/manifest.dart';
+import 'package:ddd_shell/bundle/manifest.dart';
 
 const String emptySha =
     'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';

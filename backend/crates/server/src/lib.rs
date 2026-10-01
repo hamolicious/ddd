@@ -1,4 +1,4 @@
-//! Life Manager server library. `main.rs` is wiring only; everything else lives
+//! ddd server library. `main.rs` is wiring only; everything else lives
 //! in these modules so integration tests can drive the router directly.
 //!
 //! Module ownership (see `backend/CONTRACTS.md`):

@@ -23,7 +23,7 @@ import { extract, fetchTarball } from "../_shared/npm-tarball.mjs";
 export default async function build({ root, outDir, resolveFrom }) {
   const pin = JSON.parse(readFileSync(join(root, "gemoji.json"), "utf8"));
   const spec = `${pin.package}@${pin.version}`;
-  const cache = join(resolveFrom, "node_modules", ".cache", "lm-emoji");
+  const cache = join(resolveFrom, "node_modules", ".cache", "ddd-emoji");
   const tarball = fetchTarball(spec, pin.integrity, cache, "gemoji.json");
 
   // `index.js` is an ES module with no imports: one exported array literal.

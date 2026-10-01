@@ -141,10 +141,10 @@ pub struct PluginBackend {
     /// `"POST /webhook"`: method and path, space separated.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub routes: Vec<String>,
-    /// Server-bus events delivered to `lm_event`, namespaced (`other-plugin:something`).
+    /// Server-bus events delivered to `ddd_event`, namespaced (`other-plugin:something`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub events: Vec<String>,
-    /// Functions this backend's `lm_call` answers for plugins that depend on it (HOST-ABI.md §3.10). A call to a name not listed is refused; `input`/`output` shapes are checked at the boundary.
+    /// Functions this backend's `ddd_call` answers for plugins that depend on it (HOST-ABI.md §3.10). A call to a name not listed is refused; `input`/`output` shapes are checked at the boundary.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub exports: BTreeMap<String, BackendExport>,
 }

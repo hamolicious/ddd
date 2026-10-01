@@ -39,9 +39,9 @@ export interface HarnessConfig {
 }
 
 export const DEFAULT_CONFIG: HarnessConfig = {
-  baseUrl: process.env.LM_SERVER ?? "http://127.0.0.1:8080",
-  email: process.env.LM_EMAIL ?? "harness@example.com",
-  password: process.env.LM_PASSWORD ?? "harness-password-1",
+  baseUrl: process.env.DDD_SERVER ?? "http://127.0.0.1:8080",
+  email: process.env.DDD_EMAIL ?? "harness@example.com",
+  password: process.env.DDD_PASSWORD ?? "harness-password-1",
   clients: 5,
   documents: 25,
   operations: 200,

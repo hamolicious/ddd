@@ -3,9 +3,9 @@
 //!
 //! Every path from the page is relative and goes through [`resolve`], which refuses
 //! anything absolute or climbing out, and refuses a result that a symlink would carry
-//! outside the root. Writes land in `.life-manager/tmp/` first and are renamed into place,
+//! outside the root. Writes land in `.ddd/tmp/` first and are renamed into place,
 //! so another program never sees half a file. Changes on disk reach the page as the
-//! `lm-folder-changed` window event, debounced.
+//! `ddd-folder-changed` window event, debounced.
 
 use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};
@@ -49,8 +49,8 @@ impl From<std::io::Error> for BridgeError {
 
 type Result<T> = std::result::Result<T, BridgeError>;
 
-const STATE_DIR: &str = ".life-manager";
-const TMP_DIR: &str = ".life-manager/tmp";
+const STATE_DIR: &str = ".ddd";
+const TMP_DIR: &str = ".ddd/tmp";
 const DEBOUNCE: Duration = Duration::from_millis(300);
 
 #[derive(Default)]
@@ -91,12 +91,12 @@ impl Folder {
         let mut watcher = match notify::recommended_watcher(tx) {
             Ok(w) => w,
             Err(e) => {
-                eprintln!("life-manager-desktop: cannot watch {}: {e}", root.display());
+                eprintln!("ddd-desktop: cannot watch {}: {e}", root.display());
                 return;
             }
         };
         if let Err(e) = watcher.watch(&root, RecursiveMode::Recursive) {
-            eprintln!("life-manager-desktop: cannot watch {}: {e}", root.display());
+            eprintln!("ddd-desktop: cannot watch {}: {e}", root.display());
             return;
         }
         *slot = Some(watcher);
@@ -123,7 +123,7 @@ impl Folder {
                 }
                 let detail = serde_json::json!({ "paths": paths });
                 let script = format!(
-                    "window.dispatchEvent(new CustomEvent(\"lm-folder-changed\", {{ detail: {detail} }}));"
+                    "window.dispatchEvent(new CustomEvent(\"ddd-folder-changed\", {{ detail: {detail} }}));"
                 );
                 if let Some(main) = app.get_webview_window("main") {
                     let _ = main.eval(script);
@@ -410,7 +410,7 @@ mod tests {
     use super::*;
 
     fn root() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("lm-folder-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ddd-folder-test-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("Home")).unwrap();
         dir
     }

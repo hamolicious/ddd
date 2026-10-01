@@ -1,6 +1,6 @@
 [package]
-name = "life-manager-core"
-description = "Shared Life Manager core: document parsing, title resolution, filter DSL. Compiles natively (server) and to wasm32 (client kernel)."
+name = "ddd-core"
+description = "Shared ddd core: document parsing, title resolution, filter DSL. Compiles natively (server) and to wasm32 (client kernel)."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

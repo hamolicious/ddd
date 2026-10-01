@@ -59,7 +59,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::time::{Duration, Instant};
 
-use life_manager_plugin_abi as abi;
+use ddd_plugin_abi as abi;
 use serde_json::Value;
 
 use crate::error::AppError;
@@ -107,13 +107,13 @@ pub struct ActivePlugin {
     /// is not enough to answer `config_get`, which has to report *which declared keys have
     /// no value* — and that needs the declaration, not a list of the ones that do. Keeping
     /// the schema here is what lets the host answer without re-reading the record on every
-    /// call. `config_keys` stays: it is what `lm_init` carries.
+    /// call. `config_keys` stays: it is what `ddd_init` carries.
     pub config: BTreeMap<String, ConfigField>,
     pub wasm_path: PathBuf,
     /// Hex SHA-256 of the module, logged at activation and stored on the record. The
     /// answer to "is the running plugin the one I approved".
     pub module_sha256: String,
-    /// What the module's `lm_abi_version` export reported.
+    /// What the module's `ddd_abi_version` export reported.
     pub abi_version: u32,
     /// Exports the module actually has, so a hook is never scheduled for a plugin that
     /// cannot receive it.
@@ -124,9 +124,9 @@ pub struct ActivePlugin {
 #[derive(Debug, Clone, Default)]
 pub struct CallableExport {
     /// What the payload must fit. `None`: anything.
-    pub input: Option<life_manager_core::shape::Shape>,
+    pub input: Option<ddd_core::shape::Shape>,
     /// What the returned value must fit. `None`: anything.
-    pub output: Option<life_manager_core::shape::Shape>,
+    pub output: Option<ddd_core::shape::Shape>,
 }
 
 impl CallableExport {
@@ -136,7 +136,7 @@ impl CallableExport {
         let parse = |json: &Option<Value>| {
             json.as_ref().map(|json| {
                 serde_json::from_value(json.clone())
-                    .unwrap_or_else(|_| life_manager_core::shape::Shape::Unknown(json.clone()))
+                    .unwrap_or_else(|_| ddd_core::shape::Shape::Unknown(json.clone()))
             })
         };
         CallableExport {
@@ -324,7 +324,7 @@ impl Invocation {
         })
     }
 
-    /// The payload a callee's `lm_call` receives, with the remaining budget in it.
+    /// The payload a callee's `ddd_call` receives, with the remaining budget in it.
     fn call_payload(&self) -> Value {
         match &self.kind {
             CallKind::Invoked { caller, function } => {
@@ -643,10 +643,10 @@ impl PluginHost {
         &self.limits
     }
 
-    /// Compile, instantiate once, check the ABI export, run `lm_init`, and publish as
+    /// Compile, instantiate once, check the ABI export, run `ddd_init`, and publish as
     /// active.
     ///
-    /// Order matters: the ABI check happens **before** `lm_init`, so a module built
+    /// Order matters: the ABI check happens **before** `ddd_init`, so a module built
     /// against another major never runs a line of its own code. A failure here leaves the
     /// plugin inactive with the reason on its record — activation is never half-done.
     pub async fn activate(
@@ -760,7 +760,7 @@ impl PluginHost {
             exports,
         });
 
-        // `lm_init` runs per *instance*, so the payload is stored on the pool rather than
+        // `ddd_init` runs per *instance*, so the payload is stored on the pool rather than
         // called once here: the instance this activation warmed is not the only one that
         // will ever serve a call (HOST-ABI.md §4.1).
         if plugin.has_export(abi::names::INIT) {
@@ -1382,9 +1382,9 @@ pub(crate) mod test_support {
             mongo_uri: "mongodb://127.0.0.1:27017".to_string(),
             bind_addr: "127.0.0.1:0".parse().expect("a literal address"),
             session_secret: SessionSecret::new(vec![7u8; 48]).expect("48 bytes is enough"),
-            mongo_database: "lm_pluginhost_unit".to_string(),
+            mongo_database: "ddd_pluginhost_unit".to_string(),
             max_attachment_bytes: 1024 * 1024,
-            max_document_bytes: life_manager_core::limits::MAX_DOCUMENT_BYTES,
+            max_document_bytes: ddd_core::limits::MAX_DOCUMENT_BYTES,
             app_origins: vec!["http://localhost:5173".to_string()],
             public_url: None,
             log_format: LogFormat::Pretty,
@@ -1552,7 +1552,7 @@ mod tests {
         assert!(
             !PluginHostError::NoExport {
                 plugin: "calendar".into(),
-                export: "lm_cron".into()
+                export: "ddd_cron".into()
             }
             .counts_as_failure()
         );
@@ -1615,7 +1615,7 @@ mod tests {
             (
                 PluginHostError::NoExport {
                     plugin: "calendar".into(),
-                    export: "lm_http".into(),
+                    export: "ddd_http".into(),
                 },
                 StatusCode::NOT_FOUND,
             ),

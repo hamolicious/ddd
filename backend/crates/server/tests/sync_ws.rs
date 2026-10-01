@@ -8,7 +8,7 @@
 //!
 //! ```sh
 //! docker compose up -d mongo
-//! MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p life-manager-server --test sync_ws -- --ignored
+//! MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p ddd-server --test sync_ws -- --ignored
 //! ```
 //!
 //! Every test is `#[ignore]`d so that `cargo test` stays green with no database,
@@ -34,13 +34,13 @@ use std::time::Duration;
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
+use ddd_server::config::Config;
+use ddd_server::docstore::{TEXT_ROOT, new_doc};
+use ddd_server::domain::{Actor, Id, SessionKind, User};
+use ddd_server::routes::sync::{close, frame};
+use ddd_server::state::AppState;
+use ddd_server::{auth, db, routes, telemetry};
 use futures::{SinkExt, StreamExt};
-use life_manager_server::config::Config;
-use life_manager_server::docstore::{TEXT_ROOT, new_doc};
-use life_manager_server::domain::{Actor, Id, SessionKind, User};
-use life_manager_server::routes::sync::{close, frame};
-use life_manager_server::state::AppState;
-use life_manager_server::{auth, db, routes, telemetry};
 use tokio::net::TcpStream;
 use tokio_tungstenite::MaybeTlsStream;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
@@ -68,7 +68,7 @@ const ORIGIN: &str = "http://localhost:8080";
 /// 1024 file-descriptor limit — twenty parallel throwaway databases exhaust it and
 /// WiredTiger panics the server, which looks exactly like a sync bug and is not
 /// one. One database, emptied at the start of each test, touches no files at all.
-const TEST_DB: &str = "lm_test_sync";
+const TEST_DB: &str = "ddd_test_sync";
 
 /// Serializes the suite.
 ///
@@ -166,10 +166,9 @@ impl TestApp {
         let mut request = format!("ws://{}/api/sync", self.addr)
             .into_client_request()
             .expect("request");
-        request.headers_mut().insert(
-            header::SEC_WEBSOCKET_PROTOCOL,
-            "life-manager.v1".parse().unwrap(),
-        );
+        request
+            .headers_mut()
+            .insert(header::SEC_WEBSOCKET_PROTOCOL, "ddd.v1".parse().unwrap());
         decorate(&mut request);
         match tokio_tungstenite::connect_async(request).await {
             Ok((socket, _response)) => Ok(socket),
@@ -303,14 +302,14 @@ async fn empty_collections(database: &mongodb::Database) {
 }
 
 fn ulid_suffix() -> String {
-    life_manager_server::domain::new_id().to_lowercase()
+    ddd_server::domain::new_id().to_lowercase()
 }
 
 /// A user and a bearer session, written straight through the auth layer so the
 /// socket authenticates exactly as a shell would.
 async fn seed_user(state: &AppState) -> (Id, String) {
     let user = User {
-        id: life_manager_server::domain::new_id(),
+        id: ddd_server::domain::new_id(),
         email: format!("sync-{}@example.test", ulid_suffix()),
         name: "Sync Test".to_string(),
         password_hash: auth::password::hash("correct-horse-battery").expect("hash"),
@@ -578,7 +577,7 @@ async fn bootstrap_pages_the_projection_and_pins_safe_seq() {
     assert_eq!(header["total"], 5);
     assert_eq!(
         header["core_semantics_version"],
-        life_manager_core::CORE_SEMANTICS_VERSION
+        ddd_core::CORE_SEMANTICS_VERSION
     );
     let pinned_safe_seq = header["safe_seq"].as_i64().unwrap();
     assert!(pinned_safe_seq >= 5, "safe_seq should cover five creates");
@@ -760,7 +759,7 @@ async fn welcome_is_the_first_frame_and_announces_the_limits() {
     assert_eq!(welcome["limits"]["heartbeat_secs"], 25);
     assert_eq!(
         welcome["core_semantics_version"],
-        life_manager_core::CORE_SEMANTICS_VERSION
+        ddd_core::CORE_SEMANTICS_VERSION
     );
     // The load set's fingerprint: a hex string, the same one `/api/plugins` reports.
     let plugins_version = welcome["plugins_version"]
@@ -798,7 +797,7 @@ async fn the_upgrade_refuses_a_bad_origin_before_it_authenticates() {
         .header(header::UPGRADE, "websocket")
         .header(header::SEC_WEBSOCKET_VERSION, "13")
         .header(header::SEC_WEBSOCKET_KEY, "dGhlIHNhbXBsZSBub25jZQ==")
-        .header(header::SEC_WEBSOCKET_PROTOCOL, "life-manager.v1")
+        .header(header::SEC_WEBSOCKET_PROTOCOL, "ddd.v1")
         .body(Body::empty())
         .unwrap();
     let response = app.router.clone().oneshot(request).await.unwrap();
@@ -813,7 +812,7 @@ async fn the_upgrade_refuses_a_bad_origin_before_it_authenticates() {
         .header(header::UPGRADE, "websocket")
         .header(header::SEC_WEBSOCKET_VERSION, "13")
         .header(header::SEC_WEBSOCKET_KEY, "dGhlIHNhbXBsZSBub25jZQ==")
-        .header(header::SEC_WEBSOCKET_PROTOCOL, "life-manager.v1")
+        .header(header::SEC_WEBSOCKET_PROTOCOL, "ddd.v1")
         .body(Body::empty())
         .unwrap();
     let response = app.router.clone().oneshot(request).await.unwrap();
@@ -822,12 +821,12 @@ async fn the_upgrade_refuses_a_bad_origin_before_it_authenticates() {
     // A cookie connection with no `Origin` is the CSRF shape, and is refused.
     let request = Request::builder()
         .uri("/api/sync")
-        .header(header::COOKIE, format!("lm_session={}", app.token))
+        .header(header::COOKIE, format!("ddd_session={}", app.token))
         .header(header::CONNECTION, "upgrade")
         .header(header::UPGRADE, "websocket")
         .header(header::SEC_WEBSOCKET_VERSION, "13")
         .header(header::SEC_WEBSOCKET_KEY, "dGhlIHNhbXBsZSBub25jZQ==")
-        .header(header::SEC_WEBSOCKET_PROTOCOL, "life-manager.v1")
+        .header(header::SEC_WEBSOCKET_PROTOCOL, "ddd.v1")
         .body(Body::empty())
         .unwrap();
     let response = app.router.clone().oneshot(request).await.unwrap();
@@ -867,9 +866,7 @@ async fn the_bearer_subprotocol_authenticates_a_shell() {
         .connect_with(|request| {
             request.headers_mut().insert(
                 header::SEC_WEBSOCKET_PROTOCOL,
-                format!("life-manager.v1, life-manager.bearer.{}", app.token)
-                    .parse()
-                    .unwrap(),
+                format!("ddd.v1, ddd.bearer.{}", app.token).parse().unwrap(),
             );
         })
         .await
@@ -1469,7 +1466,7 @@ async fn subscribe_errors_are_scoped_to_the_document() {
     assert_eq!(error["retryable"], false);
 
     // A well-formed id nobody ever created.
-    let unknown = life_manager_server::domain::new_id();
+    let unknown = ddd_server::domain::new_id();
     send_json(
         &mut socket,
         serde_json::json!({ "t": "doc.subscribe", "id": unknown }),
@@ -1621,7 +1618,7 @@ async fn bootstrap_pages_five_thousand_documents_well_inside_the_budget() {
     let now = bson::DateTime::now();
     let mut batch = Vec::with_capacity(500);
     for index in 0..DOCUMENTS {
-        let id = life_manager_server::domain::new_id();
+        let id = ddd_server::domain::new_id();
         batch.push(bson::doc! {
             "_id": &id,
             "crdt": bson::Bson::Binary(bson::Binary { subtype: bson::spec::BinarySubtype::Generic, bytes: vec![] }),

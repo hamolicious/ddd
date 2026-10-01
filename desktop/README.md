@@ -1,4 +1,4 @@
-# Life Manager — Linux desktop
+# ddd — Linux desktop
 
 The server's PWA in a native window (Tauri 2 / WebKitGTK). Flutter has no Linux webview,
 so this is not the `app/` shell. The page behaves as a browser tab — cookie login, service
@@ -12,8 +12,8 @@ On first launch the app offers to keep your notes as Markdown files in a folder.
 and every note is written there — folders as directories, attachments as their files — and
 kept in step both ways while the app runs. Change or stop it in Settings → Local folder.
 
-The choice is stored as `folder = "…"` in `~/.config/life-manager/desktop.toml`. The folder's
-`.life-manager/` directory is the mirror's own state; leave it alone.
+The choice is stored as `folder = "…"` in `~/.config/ddd/desktop.toml`. The folder's
+`.ddd/` directory is the mirror's own state; leave it alone.
 
 ## Setup (Arch)
 
@@ -37,8 +37,8 @@ later render every frame on the CPU.
 First match wins:
 
 1. `--server https://life.example.com`
-2. `LM_SERVER_URL=https://life.example.com`
-3. `~/.config/life-manager/desktop.toml`:
+2. `DDD_SERVER_URL=https://life.example.com`
+3. `~/.config/ddd/desktop.toml`:
    ```toml
    server_url = "https://life.example.com"
    ```
@@ -52,7 +52,7 @@ mise run desktop-bundle       # .deb + AppImage under target/release/bundle/
 ```
 
 A debug build keeps its webview data (cookies, IndexedDB, service worker) in
-`~/.local/share/app.life-manager.desktop/dev-webview/`, apart from the installed app's. The
+`~/.local/share/app.ddd.desktop/dev-webview/`, apart from the installed app's. The
 debug build links the system WebKitGTK and the AppImage bundles its own; WebKit upgrades
 IndexedDB files to its own format but never downgrades them, so a shared directory left the
 AppImage failing at boot with "Unable to establish IDB database file".

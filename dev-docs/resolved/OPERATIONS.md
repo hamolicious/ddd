@@ -1,6 +1,6 @@
 # Operations
 
-Running, observing, backing up and recovering the Life Manager server (SPEC §8).
+Running, observing, backing up and recovering the ddd server (SPEC §8).
 
 The server is **one process, one replica, and TLS-unaware**. It terminates
 nothing, shares nothing, and holds live collaboration state, cron and hot
@@ -33,7 +33,7 @@ database is the only durable thing.
 | Shutdown | SIGTERM → drain → flush → exit, hard deadline `SHUTDOWN_GRACE_SECS` (30 s) |
 | Data | MongoDB: documents, CRDT state, sessions, audit log, GridFS attachments |
 | Backup | `mongodump` of the whole database (GridFS included) |
-| Break-glass | `life-manager reset-password --email …` |
+| Break-glass | `ddd reset-password --email …` |
 
 ## Running it
 
@@ -99,14 +99,14 @@ boot failure, not a warning.** A value that is set but empty counts as unset.
 | Variable | Default | Notes |
 |---|---|---|
 | `BIND_ADDR` | `0.0.0.0:8080` | Listen address. Under compose and the mise tasks its port is `PORT`, the one place the port is defined. |
-| `MONGO_DATABASE` | `life_manager` | Database name inside the URI's server. |
+| `MONGO_DATABASE` | `ddd` | Database name inside the URI's server. |
 | `APP_ORIGIN` | *(empty)* | Comma-separated origin allowlist for CORS and the WebSocket upgrade. Exact matches only: `scheme://host[:port]`, no path, no trailing slash, no wildcards. The server's own `http://localhost:<port>` and `http://127.0.0.1:<port>` (the `BIND_ADDR` port) are always allowed, so they need not be listed. **Add `http://127.0.0.1:41847` if anyone uses the Android shell** — see "The Android shell" below. |
 | `APP_ORIGIN_HOSTS` | *(empty)* | Comma-separated hosts allowed as `http://<host>:<BIND_ADDR port>`, e.g. a LAN address a phone opens. Follows the port when it moves. |
-| `PUBLIC_URL` | *(empty)* | The single origin clients reach this server at, e.g. `https://lm.example.com`. Same syntax as one `APP_ORIGIN` entry — `scheme://host[:port]`, no path, no trailing slash — but a different question: `APP_ORIGIN` is *who may talk to me*, this is *what URL am I reached at*, which a TLS-unaware server behind an ingress cannot work out for itself. Optional, and unset changes nothing. Setting it narrows the Content-Security-Policy published in the Android shell's bundle manifest (`index_csp`) from scheme-wide `connect-src 'self' https: http: wss: ws:` to `connect-src 'self' <PUBLIC_URL> <the same host as wss://>` — see "The Android shell" below. |
+| `PUBLIC_URL` | *(empty)* | The single origin clients reach this server at, e.g. `https://ddd.example.com`. Same syntax as one `APP_ORIGIN` entry — `scheme://host[:port]`, no path, no trailing slash — but a different question: `APP_ORIGIN` is *who may talk to me*, this is *what URL am I reached at*, which a TLS-unaware server behind an ingress cannot work out for itself. Optional, and unset changes nothing. Setting it narrows the Content-Security-Policy published in the Android shell's bundle manifest (`index_csp`) from scheme-wide `connect-src 'self' https: http: wss: ws:` to `connect-src 'self' <PUBLIC_URL> <the same host as wss://>` — see "The Android shell" below. |
 | `COOKIE_SECURE` | `true` | Set `false` only for plain-http local development. |
 | `TRUST_PROXY_HEADERS` | `false` | Where the client IP comes from — the input to the per-IP login backoff (SPEC §5.2) and to `ip` on every session row and audit entry (SPEC §5.4). `false`: the connection's peer address; `X-Forwarded-For` / `X-Real-IP` are ignored. `true`: the **rightmost** `X-Forwarded-For` hop, which is the one a single trusted proxy appended. **Set `true` only when a reverse proxy is the only route to the server** — otherwise a client picks its own rate-limit bucket and stamps its own origin on the audit log. Compose publishes the port directly, so it stays `false` there; behind the Kubernetes ingress of SPEC §8, set it to `true`. |
 | `LOG_FORMAT` | `json` | `json` or `pretty`. |
-| `RUST_LOG` | `info` | Standard `tracing` filter, e.g. `info,life_manager_server=debug`. |
+| `RUST_LOG` | `info` | Standard `tracing` filter, e.g. `info,ddd_server=debug`. |
 | `SHUTDOWN_GRACE_SECS` | `30` | Hard deadline for the whole shutdown sequence (SPEC §8). |
 | `SEED_WELCOME_DOCS` | `true` | First-run welcome documents. Skipped when the workspace is non-empty. |
 
@@ -117,7 +117,7 @@ boot failure, not a warning.** A value that is set but empty counts as unset.
 | `MAX_ATTACHMENT_BYTES` | `104857600` (100 MiB) | Streamed to GridFS; over the cap → 413. `0` is no limit. |
 | `MAX_DOCUMENT_BYTES` | `1048576` (1 MiB) | Document text cap. **Clamped to the shared core's 1 MiB** — it can only be lowered, because client and server must agree on what is too large. |
 | `CRDT_COMPACT_THRESHOLD_BYTES` | `4194304` (4 MiB) | Compact a document's CRDT blob above this. |
-| `CRDT_ALERT_THRESHOLD_BYTES` | `8388608` (8 MiB) | Alert above this — watch `lm_documents_oversized`. |
+| `CRDT_ALERT_THRESHOLD_BYTES` | `8388608` (8 MiB) | Alert above this — watch `ddd_documents_oversized`. |
 
 ### Sessions and login
 
@@ -188,7 +188,7 @@ you deploy a new build and is identical across restarts.
 entirely:**
 
 ```
-APP_ORIGIN=https://lm.example.com,http://127.0.0.1:41847
+APP_ORIGIN=https://ddd.example.com,http://127.0.0.1:41847
 ```
 
 The shell serves its downloaded bundle from a loopback HTTP server so the page gets a
@@ -203,7 +203,7 @@ keyed by.
 **One thing is worth configuring, and nothing breaks if you do not:**
 
 ```
-PUBLIC_URL=https://lm.example.com
+PUBLIC_URL=https://ddd.example.com
 ```
 
 The bundle manifest publishes `index_csp`, the Content-Security-Policy the shell's
@@ -216,7 +216,7 @@ which works everywhere and restricts nothing about *where* the page may connect.
 it narrows that to the two spellings of your own origin:
 
 ```
-connect-src 'self' https://lm.example.com wss://lm.example.com
+connect-src 'self' https://ddd.example.com wss://ddd.example.com
 ```
 
 Everything else in the policy is unchanged and was never the loose part — `script-src` is
@@ -286,7 +286,7 @@ backend half failed to activate, or one the breaker disabled, does not make the 
 unready — that is deliberate (SPEC §6.4's rule for the frontend, applied to the backend):
 a workspace missing one feature is a better outcome than a server that will not start
 because somebody dropped a bad zip in. Look at `GET /api/admin/plugins` for per-plugin
-state, and at `lm_plugin_disabled` for an alert.
+state, and at `ddd_plugin_disabled` for an alert.
 
 ## Metrics
 
@@ -295,39 +295,39 @@ public route. Names are stable (they come from one table in `telemetry.rs`):
 
 | Metric | Type | Meaning |
 |---|---|---|
-| `lm_http_requests_total` | counter | Requests by `method`, `route`, `status`. `route` is a bounded label: id-looking segments collapse to `:id`. |
-| `lm_http_request_duration_seconds` | histogram | Request latency by `method`, `route`. |
-| `lm_documents_total` | gauge | Documents stored, including trash (estimated; sampled every 15 s). |
-| `lm_crdt_updates_applied_total` | counter | CRDT updates applied. |
-| `lm_materialize_duration_seconds` | histogram | Time to materialize `content`/`title`/`fm`/`plugins` for one document. |
-| `lm_materialize_failures_total` | counter | Failed materialization passes. Should be flat at zero. |
-| `lm_rooms` / `lm_rooms_dirty` | gauge | Hot documents in memory / with unflushed materialization. A dirty count that does not fall is the alert that matters. |
-| `lm_documents_oversized` | gauge | Documents above `CRDT_COMPACT_THRESHOLD_BYTES`. |
-| `lm_attachment_bytes_total` | counter | Attachment bytes written to GridFS. |
-| `lm_login_failures_total` | counter | Failed logins — pair with the `login_attempts` collection. |
-| `lm_config_max_document_bytes`, `lm_config_max_attachment_bytes` | gauge | The effective limits, so a dashboard can draw the ceiling. |
-| `lm_build_info` | gauge | Always 1, carries a `version` label. |
-| `lm_ws_connections`, `lm_ws_subscribed_documents` | gauge | Open sync sockets / documents subscribed across them. |
-| `lm_ws_backpressure_drops_total` | counter | Send-queue overflows by `queue="feed"｜"doc"｜"plugin"`. `feed`/`doc` mean a client was told to re-derive; `plugin` is a dropped `plugin.event`, which is ephemeral by design. |
+| `ddd_http_requests_total` | counter | Requests by `method`, `route`, `status`. `route` is a bounded label: id-looking segments collapse to `:id`. |
+| `ddd_http_request_duration_seconds` | histogram | Request latency by `method`, `route`. |
+| `ddd_documents_total` | gauge | Documents stored, including trash (estimated; sampled every 15 s). |
+| `ddd_crdt_updates_applied_total` | counter | CRDT updates applied. |
+| `ddd_materialize_duration_seconds` | histogram | Time to materialize `content`/`title`/`fm`/`plugins` for one document. |
+| `ddd_materialize_failures_total` | counter | Failed materialization passes. Should be flat at zero. |
+| `ddd_rooms` / `ddd_rooms_dirty` | gauge | Hot documents in memory / with unflushed materialization. A dirty count that does not fall is the alert that matters. |
+| `ddd_documents_oversized` | gauge | Documents above `CRDT_COMPACT_THRESHOLD_BYTES`. |
+| `ddd_attachment_bytes_total` | counter | Attachment bytes written to GridFS. |
+| `ddd_login_failures_total` | counter | Failed logins — pair with the `login_attempts` collection. |
+| `ddd_config_max_document_bytes`, `ddd_config_max_attachment_bytes` | gauge | The effective limits, so a dashboard can draw the ceiling. |
+| `ddd_build_info` | gauge | Always 1, carries a `version` label. |
+| `ddd_ws_connections`, `ddd_ws_subscribed_documents` | gauge | Open sync sockets / documents subscribed across them. |
+| `ddd_ws_backpressure_drops_total` | counter | Send-queue overflows by `queue="feed"｜"doc"｜"plugin"`. `feed`/`doc` mean a client was told to re-derive; `plugin` is a dropped `plugin.event`, which is ephemeral by design. |
 
 ### Plugins (M4)
 
 | Metric | Type | Meaning |
 |---|---|---|
-| `lm_plugin_calls_total` | counter | Calls into a backend half, by `plugin` and `kind` (`cron`｜`hook`｜`route`｜`call`｜`init`). |
-| `lm_plugin_call_duration_seconds` | histogram | Call latency by `plugin`, `kind`. |
-| `lm_plugin_call_failures_total` | counter | Host-side failures by `plugin`, `kind`, `reason`. **A plugin's own refusal is not a failure** and does not appear here — it is a successful call that returned an error, and counting it would trip the breaker on a misconfiguration. |
-| `lm_plugins_active` / `lm_plugins_disabled` | gauge | Backend halves loaded / disabled. **`lm_plugins_disabled` above zero is the alert that matters**: it means the breaker opened or an admin switched something off, and nothing closes a breaker but a person. |
-| `lm_plugin_instances` | gauge | Pooled Wasm instances across all plugins. |
-| `lm_plugin_hooks_delivered_total` | counter | Hook deliveries by `plugin`, `outcome` (`ok`｜`failed`｜`rate_capped`). A sustained `rate_capped` is a plugin in a write loop; the 10/min per-document cap is the backstop that stopped it. |
-| `lm_plugin_hooks_pending` | gauge | Documents waiting out the 2 s hook debounce. |
-| `lm_plugin_http_requests_total` | counter | Outbound requests by `plugin`, `outcome`. |
-| `lm_plugin_document_writes_total` | counter | Document writes by `plugin`. |
-| `lm_plugin_write_cap_refusals_total` | counter | Writes refused by the per-plugin-per-document cap. Same signal as `rate_capped`, from the write side. |
+| `ddd_plugin_calls_total` | counter | Calls into a backend half, by `plugin` and `kind` (`cron`｜`hook`｜`route`｜`call`｜`init`). |
+| `ddd_plugin_call_duration_seconds` | histogram | Call latency by `plugin`, `kind`. |
+| `ddd_plugin_call_failures_total` | counter | Host-side failures by `plugin`, `kind`, `reason`. **A plugin's own refusal is not a failure** and does not appear here — it is a successful call that returned an error, and counting it would trip the breaker on a misconfiguration. |
+| `ddd_plugins_active` / `ddd_plugins_disabled` | gauge | Backend halves loaded / disabled. **`ddd_plugins_disabled` above zero is the alert that matters**: it means the breaker opened or an admin switched something off, and nothing closes a breaker but a person. |
+| `ddd_plugin_instances` | gauge | Pooled Wasm instances across all plugins. |
+| `ddd_plugin_hooks_delivered_total` | counter | Hook deliveries by `plugin`, `outcome` (`ok`｜`failed`｜`rate_capped`). A sustained `rate_capped` is a plugin in a write loop; the 10/min per-document cap is the backstop that stopped it. |
+| `ddd_plugin_hooks_pending` | gauge | Documents waiting out the 2 s hook debounce. |
+| `ddd_plugin_http_requests_total` | counter | Outbound requests by `plugin`, `outcome`. |
+| `ddd_plugin_document_writes_total` | counter | Document writes by `plugin`. |
+| `ddd_plugin_write_cap_refusals_total` | counter | Writes refused by the per-plugin-per-document cap. Same signal as `rate_capped`, from the write side. |
 
-Suggested first alerts: `lm_rooms_dirty` above zero for more than a few minutes,
-any `lm_materialize_failures_total` increase, `lm_documents_oversized` above
-zero, `lm_plugins_disabled` above zero, and `/readyz` failing.
+Suggested first alerts: `ddd_rooms_dirty` above zero for more than a few minutes,
+any `ddd_materialize_failures_total` increase, `ddd_documents_oversized` above
+zero, `ddd_plugins_disabled` above zero, and `/readyz` failing.
 
 ## Logs
 
@@ -395,19 +395,19 @@ else on disk to back up in M1.
 ```bash
 # Compose: whole database, gzipped archive on the host.
 docker compose exec -T mongo \
-  mongodump --db life_manager --archive --gzip > lm-$(date -u +%Y%m%dT%H%M%SZ).archive.gz
+  mongodump --db ddd --archive --gzip > ddd-$(date -u +%Y%m%dT%H%M%SZ).archive.gz
 
 # Same thing with the repo task (writes into ./backups/<timestamp>/).
 mise run backup
 
 # Directly against a mongo you can reach:
-mongodump --uri "$MONGO_URI" --db life_manager --archive --gzip > lm.archive.gz
+mongodump --uri "$MONGO_URI" --db ddd --archive --gzip > ddd.archive.gz
 ```
 
 Verify a backup is readable before trusting it:
 
 ```bash
-mongorestore --archive --gzip --dryRun < lm.archive.gz
+mongorestore --archive --gzip --dryRun < ddd.archive.gz
 ```
 
 **Consistency:** a standalone mongo has no oplog, so `mongodump` is not a
@@ -429,7 +429,7 @@ any editor. Keep one alongside the dumps (SPEC §8).
 docker compose stop server                     # never restore under a live server
 
 docker compose exec -T mongo \
-  mongorestore --archive --gzip --drop --nsInclude 'life_manager.*' < lm.archive.gz
+  mongorestore --archive --gzip --drop --nsInclude 'ddd.*' < ddd.archive.gz
 
 docker compose start server
 ```
@@ -440,7 +440,7 @@ live data instead of over it, remap the namespace:
 
 ```bash
 mongorestore --archive --gzip \
-  --nsFrom 'life_manager.*' --nsTo 'life_manager_restored.*' < lm.archive.gz
+  --nsFrom 'ddd.*' --nsTo 'ddd_restored.*' < ddd.archive.gz
 ```
 
 ### The split-brain caveat — read this before restoring
@@ -510,7 +510,7 @@ When nobody can log in as an admin (SPEC §5.1), run the CLI subcommand next to
 the database — no session required:
 
 ```bash
-docker compose exec server life-manager reset-password --email you@example.com
+docker compose exec server ddd reset-password --email you@example.com
 ```
 
 It prints a **one-time reset token**, valid for 60 minutes, single use. Only the
@@ -536,12 +536,12 @@ upgrade.
 **Boot fails: `SESSION_SECRET is required` / `must be at least 32 bytes`.** The
 secret is missing, empty, or short. This is by design (SPEC §5.2).
 
-**`lm_rooms_dirty` will not fall to zero.** Materialization is failing or
-starved; check `lm_materialize_failures_total` and the error logs, then Mongo's
+**`ddd_rooms_dirty` will not fall to zero.** Materialization is failing or
+starved; check `ddd_materialize_failures_total` and the error logs, then Mongo's
 health. Data is not lost — the CRDT state and the update log are authoritative —
 but search and list results are stale until it clears.
 
-**`lm_documents_oversized` above zero.** One or more documents' CRDT blobs are
+**`ddd_documents_oversized` above zero.** One or more documents' CRDT blobs are
 past the compaction threshold. Look for a document with a very long edit history;
 compaction runs above the threshold, and SPEC §3.5 names GridFS spill as the
 escape hatch if one keeps growing.
@@ -552,7 +552,7 @@ running, and confirm the platform's kill timeout is still above the grace period
 
 ### Plugins
 
-**`lm_plugins_disabled` is above zero.** Either an admin switched a plugin off, or the
+**`ddd_plugins_disabled` is above zero.** Either an admin switched a plugin off, or the
 circuit breaker opened after `PLUGIN_BREAKER_THRESHOLD` consecutive failures. Admin →
 Plugins shows which, and why: an admin switch reads as "disabled by …", a breaker trip
 names the last failure. Nothing closes a breaker but a person — clicking *enable* clears

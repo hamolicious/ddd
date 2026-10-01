@@ -24,7 +24,7 @@ import { RUNTIME_SPECIFIER_NAMES } from "./app/runtime/specifiers.js";
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 
 /** Where `mise run wasm` writes the generated wasm-bindgen package. */
-const wasmPkg = here("./kernel/src/wasm/pkg/life_manager_core.js");
+const wasmPkg = here("./kernel/src/wasm/pkg/ddd_core.js");
 
 /**
  * Dev-only `/sw.js`: a service worker that uninstalls itself.
@@ -38,7 +38,7 @@ const wasmPkg = here("./kernel/src/wasm/pkg/life_manager_core.js");
  * straight from Vite.
  */
 const swKillswitch = () => ({
-  name: "lm-dev-sw-killswitch",
+  name: "ddd-dev-sw-killswitch",
   configureServer(server: { middlewares: { use: (fn: (req: any, res: any, next: () => void) => void) => void } }) {
     server.middlewares.use((req, res, next) => {
       if (!req.url?.startsWith("/sw.js")) return next();
@@ -66,7 +66,7 @@ export default defineConfig(({ command }) => ({
   publicDir: here("./app/public"),
   resolve: {
     alias: [
-      { find: "@life-manager/core-wasm", replacement: wasmPkg },
+      { find: "@ddd/core-wasm", replacement: wasmPkg },
       // Exact `@kernel` is the public contract; `@kernel/…` is kernel internals.
       { find: /^@kernel$/, replacement: here("./kernel-api/src/index.ts") },
       { find: /^@kernel\//, replacement: `${here("./kernel/src")}/` },
@@ -77,10 +77,10 @@ export default defineConfig(({ command }) => ({
     proxy: {
       // `/plugins` too: in dev the plugin modules come from the Rust server, so the
       // page origin is one origin and the import map's URLs stay relative.
-      "/api": { target: process.env.LM_SERVER ?? "http://127.0.0.1:8080", ws: true, changeOrigin: false },
-      "/plugins": { target: process.env.LM_SERVER ?? "http://127.0.0.1:8080", changeOrigin: false },
-      "/importmap.json": { target: process.env.LM_SERVER ?? "http://127.0.0.1:8080", changeOrigin: false },
-      "/kernel.d.ts": { target: process.env.LM_SERVER ?? "http://127.0.0.1:8080", changeOrigin: false },
+      "/api": { target: process.env.DDD_SERVER ?? "http://127.0.0.1:8080", ws: true, changeOrigin: false },
+      "/plugins": { target: process.env.DDD_SERVER ?? "http://127.0.0.1:8080", changeOrigin: false },
+      "/importmap.json": { target: process.env.DDD_SERVER ?? "http://127.0.0.1:8080", changeOrigin: false },
+      "/kernel.d.ts": { target: process.env.DDD_SERVER ?? "http://127.0.0.1:8080", changeOrigin: false },
     },
   },
   // The query worker loads the shared core's wasm with a dynamic import, which needs

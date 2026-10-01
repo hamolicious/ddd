@@ -23,7 +23,7 @@ That is the point of "one `kernel` semver covers both": a plugin declaring `"ker
 host-function set its Wasm half links. This file is the changelog for the frontend half;
 `HOST-ABI.md` is the specification for the backend half, listing every host function, its
 capability gate, the limits, and the five exports a module may define. A module also
-carries the ABI version itself, in the required `lm_abi_version` export, which the host
+carries the ABI version itself, in the required `ddd_abi_version` export, which the host
 reads before any plugin logic runs.
 
 ## Writing a backend half
@@ -36,20 +36,20 @@ The whole story is in `backend/HOST-ABI.md`; this is the shape of it.
 crate-type = ["cdylib"]
 
 [dependencies]
-life-manager-plugin-sdk = { path = "../../../../backend/crates/plugin-sdk" }
+ddd-plugin-sdk = { path = "../../../../backend/crates/plugin-sdk" }
 ```
 
 ```rust
-lm::abi_version!();                 // required — the host reads it first
-lm::init!(init);                    // optional: config keys, capabilities, limits
-lm::cron!(tick);                    // optional: one call per matched schedule
-lm::http_routes!(route);            // optional: the manifest's declared routes
-lm::hooks!(on_deleted);             // optional: document.created/changed/deleted
+ddd::abi_version!();                 // required — the host reads it first
+ddd::init!(init);                    // optional: config keys, capabilities, limits
+ddd::cron!(tick);                    // optional: one call per matched schedule
+ddd::http_routes!(route);            // optional: the manifest's declared routes
+ddd::hooks!(on_deleted);             // optional: document.created/changed/deleted
 
-fn tick(_schedule: lm::abi::cron::CronPayload) -> lm::Result<()> {
-    let feed: String = lm::config::get("feed_url")?.unwrap_or_default();
-    let body = lm::http::get(&feed)?;              // needs `capabilities.http.hosts`
-    lm::documents::create(&render(&body))?;        // needs `capabilities.documents: write`
+fn tick(_schedule: ddd::abi::cron::CronPayload) -> ddd::Result<()> {
+    let feed: String = ddd::config::get("feed_url")?.unwrap_or_default();
+    let body = ddd::http::get(&feed)?;              // needs `capabilities.http.hosts`
+    ddd::documents::create(&render(&body))?;        // needs `capabilities.documents: write`
     Ok(())
 }
 ```
@@ -203,7 +203,7 @@ A cursor only pages the plan it came from. Snippet ranges are UTF-16 offsets.
 | The kernel | `kernel.documents.queryPlan(plan)` / `subscribePlan(plan)` → `{ rows, total, nextCursor?, hits }` |
 | A backend plugin | `documents::run(Query::new().filter("title", Op::TextContains, "a").sort("fm.key"))` (SDK); the `query` host function |
 | HTTP | `POST /api/query` with the plan as the body (`?metadata_only=true`), bearer or cookie |
-| A shell | `lm login --server <url> --email <you>`, then `lm query --filter title:text_contains:a --sort fm.key` |
+| A shell | `ddd login --server <url> --email <you>`, then `ddd query --filter title:text_contains:a --sort fm.key` |
 
 The operators are the search's filter rows: `eq ne lt lte gt gte contains contains_any
 any every text_contains text_starts_with text_ends_with missing exists is_null child_of
@@ -411,7 +411,7 @@ no longer drift apart. The plan behind it is `dev-docs/resolved/PLUGIN-PROTOCOLS
   server's resolver through the Wasm core, for the wiring editor.
 - **`kernel.extensions` and `kernel.services` are shims now**, over the same store as
   `kernel.ports`, and go in 2.0. A plugin that declares a port for a point's protocol
-  (a point name is a protocol name: `navbar.item` is `lm/navbar.item`) has its legacy calls
+  (a point name is a protocol name: `navbar.item` is `ddd/navbar.item`) has its legacy calls
   routed onto that port: `contribute` takes the port's wired seat, `definePoint` and `get`
   read the port's seats, and `services.require` of the bound provider returns the port's
   `needs`-limited handle. A plugin that declares nothing contributes to an implicit port

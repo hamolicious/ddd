@@ -75,7 +75,7 @@ describe("what the boot sequence remembers", () => {
     rememberPlugins([PLUGIN], load);
     expect(cachedLoad()).toEqual(load);
     // An entry an older app wrote (version 1, with wiring) is ignored rather than trusted.
-    localStorage.setItem("life-manager.boot.plugins", JSON.stringify({ v: 1, plugins: [PLUGIN], wiring: { version: 3 } }));
+    localStorage.setItem("ddd.boot.plugins", JSON.stringify({ v: 1, plugins: [PLUGIN], wiring: { version: 3 } }));
     expect(cachedPlugins()).toBeUndefined();
     expect(cachedLoad()).toBeUndefined();
   });
@@ -99,11 +99,11 @@ describe("what the boot sequence remembers", () => {
   });
 
   it("ignores a stale or corrupt entry rather than trusting it", () => {
-    localStorage.setItem("life-manager.boot.session", "{not json");
+    localStorage.setItem("ddd.boot.session", "{not json");
     expect(cachedSession()).toBeUndefined();
-    localStorage.setItem("life-manager.boot.session", JSON.stringify({ v: 99, user: USER }));
+    localStorage.setItem("ddd.boot.session", JSON.stringify({ v: 99, user: USER }));
     expect(cachedSession()).toBeUndefined();
-    localStorage.setItem("life-manager.boot.session", JSON.stringify({ v: 1, user: { id: 7 } }));
+    localStorage.setItem("ddd.boot.session", JSON.stringify({ v: 1, user: { id: 7 } }));
     expect(cachedSession()).toBeUndefined();
   });
 

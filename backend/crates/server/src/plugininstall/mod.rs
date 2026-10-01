@@ -77,7 +77,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use life_manager_plugin_abi as abi;
+use ddd_plugin_abi as abi;
 use mongodb::Collection;
 use tracing::{info, warn};
 
@@ -161,10 +161,10 @@ pub enum InstallError {
         current: String,
     },
     // There is deliberately no `AbiIncompatible` variant. The ABI *version value* cannot be
-    // known at install time: it is what the module's `lm_abi_version` export *returns*, and
+    // known at install time: it is what the module's `ddd_abi_version` export *returns*, and
     // reading it needs a compiled instance. What install can answer statically is whether
     // the export exists at all, and that is [`check_backend_module`] — reported as a
-    // `Manifest` error, because "this .wasm was not built with `lm::abi_version!()`" is a
+    // `Manifest` error, because "this .wasm was not built with `ddd::abi_version!()`" is a
     // packaging fault. The value is checked by `PluginHost::activate` before any of the
     // plugin's own code runs, and surfaces as `PluginHostError::AbiMismatch` on the record's
     // `last_error`. An unconstructible variant here only advertised a check that lives
@@ -808,7 +808,7 @@ pub async fn uninstall(
         // breaker *before* the active map on purpose, so "switched off" (503) and "not here"
         // (404) stay distinguishable — which means an uninstalled plugin whose breaker had
         // opened kept answering `503 "<id> is disabled"` on every route for the life of the
-        // process, and kept counting towards `lm_plugin_disabled`. `forget` is what makes the
+        // process, and kept counting towards `ddd_plugin_disabled`. `forget` is what makes the
         // distinction honest, and until now nothing in the tree called it.
         crate::pluginhost::PluginHost::get(state).forget(id);
 
@@ -967,8 +967,8 @@ async fn strip_one(
     plugin_id: &str,
 ) -> Result<bool, InstallError> {
     let removed = std::sync::atomic::AtomicBool::new(false);
-    let compute = |text: &str| -> Result<Vec<life_manager_core::splice::TextEdit>, String> {
-        let edits = life_manager_core::splice::remove_section(text, plugin_id).map_err(|err| {
+    let compute = |text: &str| -> Result<Vec<ddd_core::splice::TextEdit>, String> {
+        let edits = ddd_core::splice::remove_section(text, plugin_id).map_err(|err| {
             format!("the `%%% {plugin_id}` section cannot be removed cleanly: {err}")
         })?;
         removed.store(!edits.is_empty(), std::sync::atomic::Ordering::Relaxed);
@@ -1780,7 +1780,7 @@ pub fn validate_manifest(
     }
 
     for (key, field) in &manifest.config {
-        if !life_manager_core::limits::is_valid_key(key) {
+        if !ddd_core::limits::is_valid_key(key) {
             return Err(InstallError::Manifest(format!(
                 "`config` key `{key}` is not a valid key name"
             )));
@@ -1887,7 +1887,7 @@ pub fn validate_manifest(
 }
 
 /// HOST-ABI.md §7.1 step 7: the declared module exists, is within the size cap (checked by
-/// [`zipcheck::extract`]) and **exports `lm_abi_version`**.
+/// [`zipcheck::extract`]) and **exports `ddd_abi_version`**.
 ///
 /// The export is checked statically — the file's export section, no engine, no plugin code
 /// run. The value it returns needs an instance, and the host re-checks it at activation
@@ -1902,7 +1902,7 @@ fn check_backend_module(manifest: &PluginManifest, wasm: &Path) -> Result<(), In
     match zipcheck::wasm_exports(wasm, abi::names::ABI_VERSION) {
         Ok(true) => Ok(()),
         Ok(false) => Err(InstallError::Manifest(format!(
-            "`{}` does not export `{}`; a backend half built with the SDK declares it with `lm::abi_version!()`",
+            "`{}` does not export `{}`; a backend half built with the SDK declares it with `ddd::abi_version!()`",
             manifest
                 .backend
                 .as_ref()

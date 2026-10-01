@@ -3,7 +3,7 @@
   "version": "3.1.0",
   "name": "Commands",
   "description": "Command registry, palette (Mod+K, or its toolbar button) and per-user keybindings.",
-  "author": "Life Manager base distribution",
+  "author": "ddd base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
   "kernel": "^3.0",

@@ -9,7 +9,7 @@
  *
  * A day shows its first few notes and "+N more"; choosing a day lists all of them under
  * the grid. On a phone the cells are too small for titles, so each shows dots, and the
- * list under the grid is how its notes are read. Each note is marked as an `lm/document`,
+ * list under the grid is how its notes are read. Each note is marked as an `ddd/document`,
  * so right-clicking or long-pressing one opens its menu (`context-menu`'s).
  *
  * **A note looks like itself.** Its chip wears the colour and icon `folders` gives it — the
@@ -112,7 +112,7 @@ export function createCalendar(search: () => Pick<Search, "useResults">, looks: 
                           style={lookStyle(look)}
                           title={entry.row.title}
                           onClick={open(entry.row)}
-                          {...mark("lm/document", entry.row.id, { label: entry.row.title })}
+                          {...mark("ddd/document", entry.row.id, { label: entry.row.title })}
                         >
                           <NoteLabel title={entry.row.title} look={look} />
                         </button>
@@ -191,7 +191,7 @@ function DayList({
                   className={`calendar:flex calendar:w-full calendar:max-w-full calendar:items-center calendar:border-0! calendar:text-left ${look?.background ? "calendar:w-auto calendar:rounded-full calendar:px-2!" : "calendar:bg-transparent! calendar:px-0!"} ${look?.color ? "" : "calendar:text-link"}`}
                   style={lookStyle(look)}
                   onClick={onOpen(entry.row)}
-                  {...mark("lm/document", entry.row.id, { label: entry.row.title })}
+                  {...mark("ddd/document", entry.row.id, { label: entry.row.title })}
                 >
                   <NoteLabel title={entry.row.title} look={look} />
                 </button>

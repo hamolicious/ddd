@@ -37,8 +37,8 @@ use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as B64;
 use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::{XChaCha20Poly1305, XNonce};
+use ddd_plugin_abi as abi;
 use hkdf::Hkdf;
-use life_manager_plugin_abi as abi;
 use rand::Rng as _;
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
@@ -54,7 +54,7 @@ use super::InstallError;
 
 /// HKDF `info` for the `SESSION_SECRET` fallback. Changing it invalidates every stored
 /// secret, so it is a constant with a version in it and never an ad-hoc string.
-pub const KEY_INFO: &[u8] = b"life-manager/plugin-config/v1";
+pub const KEY_INFO: &[u8] = b"ddd/plugin-config/v1";
 /// Environment variable holding an explicit 32-byte key (hex or base64).
 pub const CONFIG_KEY_VAR: &str = "CONFIG_KEY";
 /// What the admin API returns in place of a stored secret.

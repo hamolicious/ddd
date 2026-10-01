@@ -1,5 +1,5 @@
 //! One-time password resets (SPEC §5.1): the admin
-//! `POST /api/admin/users/:id/reset` link and the `life-manager reset-password`
+//! `POST /api/admin/users/:id/reset` link and the `ddd reset-password`
 //! break-glass CLI both land here.
 //!
 //! `_id` is HMAC-SHA256(`SESSION_SECRET`, token), so rotating the secret

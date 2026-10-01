@@ -11,7 +11,7 @@
  * for a saved-search note, with "Update saved search". A view plugin (a table, a board)
  * adds its own document mode (`document-surface`'s `addMode`) for the saved searches whose
  * `type` names it, and draws itself inside `SavedSearch`. A view marks each result as an
- * `lm/document` (`_shared/target.ts`) and the row's menu is `context-menu`'s.
+ * `ddd/document` (`_shared/target.ts`) and the row's menu is `context-menu`'s.
  */
 
 import type { ComponentType, ReactNode, RefObject } from "react";

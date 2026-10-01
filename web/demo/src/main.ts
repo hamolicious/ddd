@@ -121,9 +121,9 @@ async function boot(): Promise<void> {
   engine = new QueryEngine(store, core, createSearchIndex());
   engine.onError((error) => log("query engine", error));
   // A debugging handle, not an API: poke at the kernel from the devtools console
-  // (`lm.engine.run({})`, `lm.store.count()`). The demo is the only place this
+  // (`ddd.engine.run({})`, `ddd.store.count()`). The demo is the only place this
   // exists — M3's kernel exposes `@kernel` to plugins instead.
-  Object.assign(globalThis, { lm: { store, engine, get client() { return client; } } });
+  Object.assign(globalThis, { ddd: { store, engine, get client() { return client; } } });
   // Start indexing before anyone types; a warm index means search is instant and
   // a cold one is built in the worker, not on this thread (SPEC §4.2).
   engine.warmUp().catch((error: unknown) => log("search index", error));

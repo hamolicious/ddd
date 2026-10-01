@@ -246,7 +246,7 @@ export class KernelHost {
     withdrawFromRegistries(pluginId);
     this.mount.release(pluginId);
     if (typeof document !== "undefined") {
-      for (const link of document.querySelectorAll(`link[data-lm-plugin="${CSS.escape(pluginId)}"]`)) link.remove();
+      for (const link of document.querySelectorAll(`link[data-ddd-plugin="${CSS.escape(pluginId)}"]`)) link.remove();
     }
   }
 

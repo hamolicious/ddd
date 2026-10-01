@@ -105,7 +105,7 @@ export interface ShellFolderEntry {
 /**
  * A directory the user chose on this device (`app/BRIDGE.md` §4.5). Paths are relative to
  * it and `/`-separated; the shell refuses anything absolute or climbing out with `..`.
- * Changes made outside the page arrive as the `lm-folder-changed` window event.
+ * Changes made outside the page arrive as the `ddd-folder-changed` window event.
  */
 export interface ShellFolder {
   current?: () => Promise<{ readonly label: string } | null>;
@@ -120,7 +120,7 @@ export interface ShellFolder {
 }
 
 /** The window event a shell dispatches when files in the chosen folder change. */
-export const FOLDER_CHANGED_EVENT = "lm-folder-changed";
+export const FOLDER_CHANGED_EVENT = "ddd-folder-changed";
 
 /** Everything the shell may put on `window.shell`. Every member is optional by rule 3. */
 export interface ShellBridgeV1 {

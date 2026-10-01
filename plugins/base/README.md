@@ -30,7 +30,7 @@ dist/<id>/<version>/              build output = the installed layout the server
 |---|---|---|
 | `shell-ui` | layout, mobile breakpoint, a spot for the top bar and one for the bottom bar, the altbar opposite the sidebar, always-mounted overlays | `addView`, `addOverlay`, `addSidebarPanel`, `addAltbarPanel`, `setHeader`, `setFooter`, `toggleSidebar`, `toggleAltbar`, `layout`… |
 | `toolbar` | the top and bottom bars: a header and a status footer on desktop, a thin top bar and a bottom icon toolbar on a phone; items pick a bar and side (`bar`, `side`, `mobile`), and Settings → Toolbar has a per-device layout | `addItem` |
-| `context-menu` | the menu / sheet / modal service: popover beside a button, bottom sheet on a phone; `modal` and `confirm`. Also the right-click / long-press / menu-key menu of anything a plugin marks with a target type (`data-lm-target`, `_shared/target.ts`), built from every plugin's actions for that type. It alone decides popover or sheet: plugins never draw a menu of their own | `addAction`, `open`, `modal`, `confirm`… |
+| `context-menu` | the menu / sheet / modal service: popover beside a button, bottom sheet on a phone; `modal` and `confirm`. Also the right-click / long-press / menu-key menu of anything a plugin marks with a target type (`data-ddd-target`, `_shared/target.ts`), built from every plugin's actions for that type. It alone decides popover or sheet: plugins never draw a menu of their own | `addAction`, `open`, `modal`, `confirm`… |
 | `notices` | the notice bell, at the end of the top bar | — |
 | `sync-status` | the sync pill, at the end of the top bar | — |
 | `router` | URL ↔ view (hash-based) | `addRoute`, `navigate`, `Link`, `href`… |
@@ -194,7 +194,7 @@ under that parent, or its "new notes go to" note — from `onCreated`. `doc-even
 leaf with no dependencies, because `folders` already depends on `doc-list` and a direct
 call the other way would be a cycle. A row's look reaches the tree through `folders`'
 `addDecoration`, keyed by note id, and "Color and icon…" is `folder-style`'s own
-`addAction` for any `lm/document`, so `folders` never learns `folder-style` exists.
+`addAction` for any `ddd/document`, so `folders` never learns `folder-style` exists.
 `welcome`, `local-folder` and the `obsidian-importer` example file their notes through
 `folders`, optionally.
 

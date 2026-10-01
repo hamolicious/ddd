@@ -179,7 +179,7 @@ export class GraphCanvas {
     this.#cleanup.push(() => scheme?.removeEventListener("change", repaint));
     // Themes set tokens on the root element; a change there is a repaint.
     const observer = new MutationObserver(repaint);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["style", "class", "data-lm-scheme"] });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["style", "class", "data-ddd-scheme"] });
     this.#cleanup.push(() => observer.disconnect());
   }
 
@@ -387,13 +387,13 @@ export class GraphCanvas {
     const style = getComputedStyle(this.#canvas);
     const token = (name: string, fallback: string): string => style.getPropertyValue(name).trim() || fallback;
     return {
-      node: token("--lm-text-muted", "#888"),
-      missing: token("--lm-border-strong", "#aaa"),
-      link: token("--lm-border-strong", "#bbb"),
-      accent: token("--lm-accent", "#7c5cff"),
-      text: token("--lm-text", "#222"),
-      halo: token("--lm-bg", "#fff"),
-      font: token("--lm-font-sans", "sans-serif"),
+      node: token("--ddd-text-muted", "#888"),
+      missing: token("--ddd-border-strong", "#aaa"),
+      link: token("--ddd-border-strong", "#bbb"),
+      accent: token("--ddd-accent", "#7c5cff"),
+      text: token("--ddd-text", "#222"),
+      halo: token("--ddd-bg", "#fff"),
+      font: token("--ddd-font-sans", "sans-serif"),
     };
   }
 

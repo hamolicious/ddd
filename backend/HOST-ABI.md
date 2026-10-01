@@ -321,7 +321,7 @@ log line. That is the `SESSION_SECRET`-rotated-without-`CONFIG_KEY` case (`dev-d
 secret rotation): the honest answer to the plugin is "not configured", so it degrades the
 way it already knows how while an admin re-enters the value.
 
-Secrets are **pulled, never pushed** (they are not in `lm_init`), never logged by the host,
+Secrets are **pulled, never pushed** (they are not in `ddd_init`), never logged by the host,
 and never placed in an error `detail`.
 
 ### 3.8 `emit`
@@ -333,7 +333,7 @@ and never placed in an error `detail`.
 
 The **server-side** bus. The host prefixes the emitting plugin's id, so a plugin cannot
 spoof another's event. Delivery is to plugins that declared the namespaced name in
-`backend.events`, on their `lm_event` export, as a nested invocation (§6 depth and deadline
+`backend.events`, on their `ddd_event` export, as a nested invocation (§6 depth and deadline
 rules apply). Never delivered back to the emitter. `subscribers: 0` is normal.
 
 ### 3.9 `emit_client`
@@ -383,7 +383,7 @@ may be called and with what:
 `input` and `output` are shape JSON — the `@kernel` `s.*` vocabulary serialised
 (`"string"`, `{ "object": { … } }`, `{ "array": … }`, `{ "optional": … }`, `{ "union": [ … ] }`,
 `{ "record": … }`, `{ "literal": [ … ] }`, `"any"`); either may be left out to accept anything.
-The server checks values with `life_manager_core::shape::validate`, and the web kernel's
+The server checks values with `ddd_core::shape::validate`, and the web kernel's
 `shapeFromJSON` answers the same way (`backend/crates/core/corpus/shapes.json` pins both).
 
 The rules, in the order they are checked (SPEC §6.3):
@@ -504,17 +504,17 @@ Every export takes one JSON payload and answers with an envelope.
 
 | Export | Payload → Value | Required? |
 |---|---|---|
-| `lm_abi_version` | `null` → `1` | **Yes**, for any plugin with a backend half |
-| `lm_init` | `InitPayload` → `null` | optional |
-| `lm_hook_document_created` | `DocumentEvent` → `null` | if declared in `backend.hooks` |
-| `lm_hook_document_changed` | `DocumentEvent` → `null` | ″ |
-| `lm_hook_document_deleted` | `DocumentEvent` → `null` | ″ |
-| `lm_cron` | `CronPayload` → `null` | if `backend.cron` is non-empty |
-| `lm_http` | `HttpRouteRequest` → `HttpRouteResponse` | if `backend.routes` is non-empty |
-| `lm_call` | `CallPayload` → any JSON | if dependents call it |
-| `lm_event` | `EventPayload` → `null` | if `backend.events` is non-empty |
+| `ddd_abi_version` | `null` → `1` | **Yes**, for any plugin with a backend half |
+| `ddd_init` | `InitPayload` → `null` | optional |
+| `ddd_hook_document_created` | `DocumentEvent` → `null` | if declared in `backend.hooks` |
+| `ddd_hook_document_changed` | `DocumentEvent` → `null` | ″ |
+| `ddd_hook_document_deleted` | `DocumentEvent` → `null` | ″ |
+| `ddd_cron` | `CronPayload` → `null` | if `backend.cron` is non-empty |
+| `ddd_http` | `HttpRouteRequest` → `HttpRouteResponse` | if `backend.routes` is non-empty |
+| `ddd_call` | `CallPayload` → any JSON | if dependents call it |
+| `ddd_event` | `EventPayload` → `null` | if `backend.events` is non-empty |
 
-`lm_abi_version` is required because the manifest can lie and a stale `.wasm` can outlive
+`ddd_abi_version` is required because the manifest can lie and a stale `.wasm` can outlive
 the manifest that describes it — the same belt-and-braces the frontend loader applies to a
 stale offline bundle (SPEC §6.4). The install flow refuses a backend module without it, and
 the host re-checks it at activation **before** running any of the plugin's own code.
@@ -522,7 +522,7 @@ the host re-checks it at activation **before** running any of the plugin's own c
 One export per kind, rather than one per hook/route/job, keeps the export surface fixed:
 the payload says which route, which cron slot, which function.
 
-### 4.1 `lm_init`
+### 4.1 `ddd_init`
 
 ```json
 { "plugin_id": "calendar", "version": "1.0.0", "abi_version": 1,
@@ -536,7 +536,7 @@ is for cheap preparation, not a migration. `capabilities` is what the admin **ap
 a plugin can degrade deliberately instead of discovering denials per call. A refusal here
 marks the plugin failed.
 
-"Once per instance" includes the instance activation warms to read `lm_abi_version` and the
+"Once per instance" includes the instance activation warms to read `ddd_abi_version` and the
 export list: it is initialised on its way out of the pool for the first real call, not skipped
 because some earlier code path already touched it. A plugin that caches `capabilities` in a
 static can rely on that — it used to see its default on that one instance, which is the
@@ -790,7 +790,7 @@ In order, and the first four happen **before anything is extracted**:
 6. `backend.hooks` are known names; `backend.cron` expressions parse; `backend.routes` parse
    as `METHOD /path`.
 7. The declared `backend.module` exists in the archive, ≤ 25 MB, and its
-   `lm_abi_version` export answers a major this server speaks.
+   `ddd_abi_version` export answers a major this server speaks.
 
 ### 7.2 Approval, and the one capability an admin may widen
 
@@ -845,21 +845,21 @@ sections through CRDT transactions, one document per transaction (SPEC §6.2).
 ## 9. Writing one
 
 ```rust
-use life_manager_plugin_sdk as lm;
+use ddd_plugin_sdk as ddd;
 
-lm::abi_version!();                       // required
+ddd::abi_version!();                       // required
 
-lm::cron!(sync);
-fn sync(schedule: lm::abi::cron::CronPayload) -> lm::Result<()> {
-    let url = lm::config::require_string("feed_url")?;
-    let mut headers = lm::abi::JsonMap::new();
-    if let Some(etag) = lm::kv::get_string("feed.etag")? {
+ddd::cron!(sync);
+fn sync(schedule: ddd::abi::cron::CronPayload) -> ddd::Result<()> {
+    let url = ddd::config::require_string("feed_url")?;
+    let mut headers = ddd::abi::JsonMap::new();
+    if let Some(etag) = ddd::kv::get_string("feed.etag")? {
         headers.insert("if-none-match".into(), etag.into());
     }
 
-    let response = lm::http::get_with_headers(&url, headers)?;
+    let response = ddd::http::get_with_headers(&url, headers)?;
     if response.status() == 304 {
-        lm::log::info("feed unchanged");
+        ddd::log::info("feed unchanged");
         return Ok(());
     }
     let body = response.error_for_status()?.text()?;
@@ -868,8 +868,8 @@ fn sync(schedule: lm::abi::cron::CronPayload) -> lm::Result<()> {
     //   splice_section for bookkeeping, rewrite_document for changed ones.
     let _ = body;
 
-    lm::kv::set("feed.last_sync", &schedule.fired_at)?;
-    lm::events::emit_client("synced", &serde_json::json!({ "at": schedule.fired_at }))?;
+    ddd::kv::set("feed.last_sync", &schedule.fired_at)?;
+    ddd::events::emit_client("synced", &serde_json::json!({ "at": schedule.fired_at }))?;
     Ok(())
 }
 ```

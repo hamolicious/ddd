@@ -16,7 +16,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:life_manager_shell/main.dart';
+import 'package:ddd_shell/main.dart';
 
 void main() {
   testWidgets('the page survives a notice appearing and being dismissed', (
@@ -90,7 +90,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: NoticeOverlay(
-            notice: 'Life Manager went back to an earlier version.',
+            notice: 'ddd went back to an earlier version.',
             onDismiss: () {},
             child: const _StandIn(),
           ),

@@ -9,8 +9,8 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use bson::doc;
 use common::{ApiResponse, TestApp};
-use life_manager_server::db::{GRIDFS_CHUNK_BYTES, GRIDFS_CHUNKS, UPLOADS};
-use life_manager_server::routes::uploads;
+use ddd_server::db::{GRIDFS_CHUNK_BYTES, GRIDFS_CHUNKS, UPLOADS};
+use ddd_server::routes::uploads;
 use serde_json::json;
 use sha2::{Digest as _, Sha256};
 

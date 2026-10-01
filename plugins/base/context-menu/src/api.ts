@@ -135,7 +135,7 @@ export interface ConfirmRequest {
   readonly anchor?: HTMLElement | null;
 }
 
-/** The menu functions of `plugin:context-menu` as one type (the old `lm/context-menu` service). */
+/** The menu functions of `plugin:context-menu` as one type (the old `ddd/context-menu` service). */
 export interface ContextMenu {
   readonly open: (menu: MenuRequest) => void;
   readonly openSheet: (sheet: SheetRequest) => void;
@@ -159,7 +159,7 @@ export interface ContextMenu {
 export interface ContextAction {
   /** Unique per action; one added later with the same id replaces the earlier one. */
   readonly id: string;
-  /** The target type these items are for: `lm/document`, `kanban/column`… */
+  /** The target type these items are for: `ddd/document`, `kanban/column`… */
   readonly target: string;
   /** Place within the target's items, low first; the order actions were added breaks ties. */
   readonly order?: number;

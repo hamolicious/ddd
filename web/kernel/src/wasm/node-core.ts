@@ -20,7 +20,7 @@ import { loadCore, type CoreBindings } from "./index.js";
 
 /** Absolute path of the generated `.wasm`, built or not. */
 export function coreArtifactPath(): string {
-  return fileURLToPath(new URL("./pkg/life_manager_core_bg.wasm", import.meta.url));
+  return fileURLToPath(new URL("./pkg/ddd_core_bg.wasm", import.meta.url));
 }
 
 /** `true` when `mise run wasm` has produced the artifact in this checkout. */

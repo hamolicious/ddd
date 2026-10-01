@@ -243,9 +243,9 @@ impl PluginCapabilities {
             .unwrap_or_default()
     }
 
-    /// The form the host hands a plugin ([`life_manager_plugin_abi::Capabilities`]).
-    pub fn to_abi(&self) -> life_manager_plugin_abi::Capabilities {
-        life_manager_plugin_abi::Capabilities {
+    /// The form the host hands a plugin ([`ddd_plugin_abi::Capabilities`]).
+    pub fn to_abi(&self) -> ddd_plugin_abi::Capabilities {
+        ddd_plugin_abi::Capabilities {
             documents: self.documents.clone(),
             http_hosts: self.http_hosts(),
             public_routes: self.public_routes.clone(),
@@ -1608,7 +1608,7 @@ mod tests {
 
     #[test]
     fn a_missing_directory_is_a_problem_not_a_panic() {
-        let registry = scan(Path::new("/nonexistent/life-manager/plugins"));
+        let registry = scan(Path::new("/nonexistent/ddd/plugins"));
         assert!(registry.plugins().is_empty());
         assert_eq!(registry.problems().len(), 1);
     }

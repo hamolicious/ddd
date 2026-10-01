@@ -1,7 +1,7 @@
-# `backend/` — Life Manager server
+# `backend/` — ddd server
 
-The Rust half of Life Manager: a single binary (`life-manager`) serving the REST
-API over MongoDB, plus `life-manager-core`, the shared parsing/filter crate that
+The Rust half of ddd (dynamic database for documents): a single binary (`ddd`) serving the REST
+API over MongoDB, plus `ddd-core`, the shared parsing/filter crate that
 also compiles to Wasm for the client kernel.
 
 **This is M4** ([SPEC](../SPEC.md) §9): M1's storage, auth, documents and
@@ -60,15 +60,15 @@ no `.env`.
 
 | Task | What it does | Without mise |
 |---|---|---|
-| `mise run dev` | Start Mongo in Docker, run the server on the host | `docker compose up -d --wait mongo` then `cargo run --bin life-manager -- serve` |
+| `mise run dev` | Start Mongo in Docker, run the server on the host | `docker compose up -d --wait mongo` then `cargo run --bin ddd -- serve` |
 | `mise run up` | Build and run the whole stack in Docker | `docker compose up --build -d` |
 | `mise run down` | Stop the stack, keep the Mongo volume | `docker compose down` |
 | `mise run logs` | Tail the server logs | `docker compose logs -f server` |
 | `mise run check` | fmt + `cargo check` + clippy `-D warnings`, whole workspace | see below |
 | `mise run test` | Whole workspace test suite | `cargo test --workspace --all-targets` |
-| `mise run wasm-check` | The core builds with no server deps (the Wasm shape) | `cargo check -p life-manager-core --no-default-features` |
+| `mise run wasm-check` | The core builds with no server deps (the Wasm shape) | `cargo check -p ddd-core --no-default-features` |
 | `mise run wasm` | Build the core to Wasm for the kernel + node smoke test | see [`../web/README.md`](../web/README.md) |
-| `mise run build` | Release binary, same profile as the Docker image | `cargo build --release --locked --bin life-manager` |
+| `mise run build` | Release binary, same profile as the Docker image | `cargo build --release --locked --bin ddd` |
 | `mise run backup` | `mongodump` (documents + GridFS) into `./backups` | see [`../dev-docs/resolved/OPERATIONS.md`](../dev-docs/resolved/OPERATIONS.md) |
 
 The Mongo-backed tests are `#[ignore]`d so a clean checkout tests green with no
@@ -110,7 +110,7 @@ The recovery path when no admin can sign in (SPEC §5.1). It needs the database,
 not a running server, and prints a single-use token valid for 24 h:
 
 ```bash
-cargo run --bin life-manager -- reset-password --email you@example.com
+cargo run --bin ddd -- reset-password --email you@example.com
 ```
 
 Issuing a token invalidates any outstanding unused one for that account. Redeem
@@ -137,7 +137,7 @@ annotated copy-me file; [`../dev-docs/resolved/OPERATIONS.md`](../dev-docs/resol
 
 | Variable | Default | Notes |
 |---|---|---|
-| `MONGO_DATABASE` | `life_manager` | GridFS attachment buckets live in the same database. |
+| `MONGO_DATABASE` | `ddd` | GridFS attachment buckets live in the same database. |
 | `BIND_ADDR` | `0.0.0.0:8080` | The server is TLS-unaware; terminate TLS at the ingress. |
 | `APP_ORIGIN` | *(empty)* | Comma-separated allowlist, exact `scheme://host[:port]` — no paths, no wildcards. Empty = same-origin only. Used for CORS **and** as the mandatory WebSocket origin check (SPEC §4.3): a cookie-authenticated `/api/sync` upgrade with no `Origin` is refused outright. |
 | `PUBLIC_URL` | *(empty)* | The single origin clients reach this server at (`scheme://host[:port]`). Not an allowlist — `APP_ORIGIN` is *who may talk to me*, this is *what URL am I reached at*. Unset changes nothing; set, it narrows the CSP the Android shell's bundle carries (`index_csp`) from scheme-wide `connect-src` to this origin's `https`/`wss` pair. |
@@ -295,7 +295,7 @@ alike.
 
 | Method | Path | Behavior |
 |---|---|---|
-| `GET` | `/api/sync` | WebSocket upgrade. Carries the **workspace change feed** (sequence-numbered projection rows + live tail), **per-document CRDT sync** (y-protocols over binary frames) for open documents, and an **opaque awareness relay**. Auth at upgrade (cookie, `Authorization: Bearer`, or the `life-manager.bearer.<token>` subprotocol) with a mandatory `Origin` check. |
+| `GET` | `/api/sync` | WebSocket upgrade. Carries the **workspace change feed** (sequence-numbered projection rows + live tail), **per-document CRDT sync** (y-protocols over binary frames) for open documents, and an **opaque awareness relay**. Auth at upgrade (cookie, `Authorization: Bearer`, or the `ddd.bearer.<token>` subprotocol) with a mandatory `Origin` check. |
 | `GET` | `/api/sync/bootstrap` | Cold start: the whole projection as paged NDJSON (`header`, `row`…, `footer`), ordered by `_id`, with the feed `safe_seq` pinned for the whole pass. Rows are **streamed from the Mongo cursor**, one at a time — a 1 000-row page of megabyte documents is not a `Vec`. The `cursor` is **opaque** — copy `next_cursor` verbatim; it carries the position, the watermark pin and the row total, so resuming a cancelled pass cannot skip rows and the progress denominator costs one count per pass instead of one per page. Concurrency-limited to 2 streams per user (**429** beyond that). `?probe=1` returns the header line and nothing else. |
 
 Two properties worth stating outright, because they are what the design turns on:
@@ -324,8 +324,8 @@ string**. MongoDB extended JSON (`{"$date": …}`) never reaches a client.
 | Path | Behavior |
 |---|---|
 | `GET /healthz` | Liveness. 200 without touching Mongo. |
-| `GET /readyz` | Readiness with detail: Mongo ping (2 s bound), migration state, the frontend plugin registry's **counts**, the backend plugin host's counts (active, breaker-open, cron schedules, instances, calls in flight), schema version, uptime, version. 200 / 503 on the same shape. Neither plugin check can fail the probe — one broken plugin is not a reason to take a serving replica out of rotation; `lm_plugins_disabled` is the alert. Unauthenticated, so the body carries counts only: no filesystem paths, no plugin ids, no manifest errors — those go to the log and the admin view. |
-| `GET /metrics` | Prometheus text 0.0.4 — `lm_http_requests_total`, `lm_http_request_duration_seconds`, `lm_materialize_duration_seconds`, `lm_crdt_updates_applied_total`, room/document gauges, the change-feed gauges (`lm_feed_head_seq`, `lm_feed_safe_seq`, `lm_feed_subscribers`), socket gauges (`lm_ws_connections`, `lm_ws_subscribed_documents`), `lm_ws_backpressure_drops_total` by queue, and build info. Gauges are **sampled every 15 s**, so a scrape within 15 s of boot reports the workspace the server started with — including zeros. |
+| `GET /readyz` | Readiness with detail: Mongo ping (2 s bound), migration state, the frontend plugin registry's **counts**, the backend plugin host's counts (active, breaker-open, cron schedules, instances, calls in flight), schema version, uptime, version. 200 / 503 on the same shape. Neither plugin check can fail the probe — one broken plugin is not a reason to take a serving replica out of rotation; `ddd_plugins_disabled` is the alert. Unauthenticated, so the body carries counts only: no filesystem paths, no plugin ids, no manifest errors — those go to the log and the admin view. |
+| `GET /metrics` | Prometheus text 0.0.4 — `ddd_http_requests_total`, `ddd_http_request_duration_seconds`, `ddd_materialize_duration_seconds`, `ddd_crdt_updates_applied_total`, room/document gauges, the change-feed gauges (`ddd_feed_head_seq`, `ddd_feed_safe_seq`, `ddd_feed_subscribers`), socket gauges (`ddd_ws_connections`, `ddd_ws_subscribed_documents`), `ddd_ws_backpressure_drops_total` by queue, and build info. Gauges are **sampled every 15 s**, so a scrape within 15 s of boot reports the workspace the server started with — including zeros. |
 
 ### Errors
 
@@ -400,7 +400,7 @@ mise run plugin-package doc-list              # → dist-packages/doc-list-1.0.0
 The suites behind it, all needing `MONGO_URI` and `mise run wasm-plugins`:
 
 ```bash
-cargo test -p life-manager-server \
+cargo test -p ddd-server \
   --test pluginhost_runtime  `# the host: limits, ownership, breaker, pooling, safe mode` \
   --test pluginhost_http     `# SSRF: allowlist, IP policy, resolve-then-pin, per-hop` \
   --test pluginhost_routes   `# inbound routes: auth default, credential stripping` \

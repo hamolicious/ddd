@@ -119,7 +119,7 @@ let cached: Promise<CoreBindings> | undefined;
  */
 export function loadCore(initInput?: BufferSource | WebAssembly.Module | URL | string): Promise<CoreBindings> {
   cached ??= (async () => {
-    const mod = await import("@life-manager/core-wasm");
+    const mod = await import("@ddd/core-wasm");
     await mod.default(initInput === undefined ? undefined : { module_or_path: initInput });
     return {
       parseDocument: (text: string) => JSON.parse(mod.parse_document(text)) as ParsedDocument,
@@ -137,7 +137,7 @@ export function loadCore(initInput?: BufferSource | WebAssembly.Module | URL | s
   return cached;
 }
 
-function wrapEngine(engine: import("@life-manager/core-wasm").QueryEngine): CoreQueryEngine {
+function wrapEngine(engine: import("@ddd/core-wasm").QueryEngine): CoreQueryEngine {
   return {
     upsert: (rows) => engine.upsert(JSON.stringify(rows)),
     remove: (ids) => engine.remove(JSON.stringify(ids)),

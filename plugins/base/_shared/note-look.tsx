@@ -1,6 +1,6 @@
 /**
  * A note as the folder tree dresses it — its colour and icon from `folders`
- * (`lm/folders`' `look`) — for any view that lists notes (`calendar`, `kanban`), so a note
+ * (`ddd/folders`' `look`) — for any view that lists notes (`calendar`, `kanban`), so a note
  * reads as the same note wherever it appears, as `markdown`'s links already make it.
  *
  * Styles are inline, not classes: this file is compiled into several plugins, and each
@@ -13,7 +13,7 @@ import type { CSSProperties, ReactElement } from "react";
 
 import type { Folders, NoteLook } from "plugin:folders";
 
-/** The part of `lm/folders` a view reads. */
+/** The part of `ddd/folders` a view reads. */
 export type Looks = Pick<Folders, "look" | "onLookChange">;
 
 /** A note's look, when it has anything to show. */

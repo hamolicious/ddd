@@ -142,7 +142,7 @@ export interface ViewportSource {
  * visual viewport when there is one, so the on-screen keyboard and a phone browser's
  * toolbars are outside it; the layout viewport otherwise. Pinch-zoomed in (a scale above
  * 1), the visual viewport is the magnified region rather than the screen, so the layout
- * viewport stands, as `web/app/src/boot/viewport.ts` does for `--lm-viewport-height`.
+ * viewport stands, as `web/app/src/boot/viewport.ts` does for `--ddd-viewport-height`.
  */
 export function visibleBand(source: ViewportSource): { readonly top: number; readonly bottom: number } {
   const visual = source.visualViewport;

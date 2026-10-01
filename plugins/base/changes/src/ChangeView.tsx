@@ -189,8 +189,8 @@ export function revertRequest(by: string, when: string, anchor: HTMLElement): Co
 
 const KIND = {
   same: { mark: " ", className: "chg:text-text-muted" },
-  removed: { mark: "−", className: "chg:bg-[color-mix(in_srgb,var(--lm-danger)_14%,transparent)] chg:text-text chg:line-through chg:decoration-danger/60" },
-  inserted: { mark: "+", className: "chg:bg-[color-mix(in_srgb,var(--lm-success,#1a7f37)_16%,transparent)] chg:text-text" },
+  removed: { mark: "−", className: "chg:bg-[color-mix(in_srgb,var(--ddd-danger)_14%,transparent)] chg:text-text chg:line-through chg:decoration-danger/60" },
+  inserted: { mark: "+", className: "chg:bg-[color-mix(in_srgb,var(--ddd-success,#1a7f37)_16%,transparent)] chg:text-text" },
 } as const;
 
 function Lines({ text, kind }: { readonly text: string; readonly kind: keyof typeof KIND }): ReactElement | null {

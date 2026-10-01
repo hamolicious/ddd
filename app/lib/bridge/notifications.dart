@@ -90,7 +90,7 @@ class ScheduledNotification {
     final String resolved = switch (<Object?>[id, tag]) {
       [final String value, _] when value.isNotEmpty => value,
       [_, final String value] when value.isNotEmpty => value,
-      _ => 'lm-${at.toUtc().millisecondsSinceEpoch}',
+      _ => 'ddd-${at.toUtc().millisecondsSinceEpoch}',
     };
     return ScheduledNotification(
       id: resolved,
@@ -164,7 +164,7 @@ final ValueNotifier<String?> tappedNotificationRoute = ValueNotifier<String?>(
 /// which id, which instant, which channel, which schedule mode — is only testable if the
 /// plugin can be replaced. [LocalNotificationPort] is the real one.
 abstract interface class NotificationPort {
-  /// Initialize the plugin, the timezone database and the [lm.reminders] channel.
+  /// Initialize the plugin, the timezone database and the [ddd.reminders] channel.
   Future<void> initialize();
 
   /// `POST_NOTIFICATIONS` on API 33+. `null` when the platform has no such prompt.
@@ -378,7 +378,7 @@ class NotificationsCapability {
   void _refuseIfDenied() {
     if (_permission == kPermissionDenied) {
       throw BridgeException.denied(
-        'notifications are turned off for Life Manager in Android settings',
+        'notifications are turned off for ddd in Android settings',
       );
     }
   }
@@ -475,7 +475,7 @@ class NotificationsCapability {
 
   /// The notification channel every reminder goes to. One channel, named in user-visible
   /// language, so Android's per-channel controls mean something.
-  static const String channelId = 'lm.reminders';
+  static const String channelId = 'ddd.reminders';
   static const String channelName = 'Reminders';
   static const String channelDescription =
       'Scheduled reminders from your documents';

@@ -1,4 +1,4 @@
-# Life Manager sync protocol — `/api/sync`
+# ddd sync protocol — `/api/sync`
 
 **Version:** `1` (the value of `protocol` in every handshake)
 **Status:** frozen for M2. Server (`crates/server/src/routes/sync.rs`, `feed.rs`) and
@@ -48,17 +48,17 @@ client                                                     server
 ```
 GET /api/sync
 Upgrade: websocket
-Sec-WebSocket-Protocol: life-manager.v1[, life-manager.bearer.<token>]
+Sec-WebSocket-Protocol: ddd.v1[, ddd.bearer.<token>]
 Origin: https://app.example.com
 ```
 
-- The client **must** offer `life-manager.v1`. The server selects exactly that
+- The client **must** offer `ddd.v1`. The server selects exactly that
   value in its `Sec-WebSocket-Protocol` response header. A client that offers no
   recognised protocol version is rejected with HTTP **400** before the upgrade
   (there is no socket yet, so there is no close code).
 - Native shells cannot set `Authorization` on a browser-less WebSocket and have no
   cookies (SPEC §5.2, §7). They additionally offer
-  `life-manager.bearer.<token>`, where `<token>` is the **raw session token**
+  `ddd.bearer.<token>`, where `<token>` is the **raw session token**
   exactly as `POST /api/auth/login` returned it (tokens are already URL-safe
   base64-ish opaque strings; they are used verbatim, not re-encoded). The server
   strips the prefix, authenticates the token, and **never** echoes that value in
@@ -66,7 +66,7 @@ Origin: https://app.example.com
 - Deployments where `Authorization` *can* be set (scripts, tests, the harness)
   may send `Authorization: Bearer <token>` instead; both carriers are accepted.
 
-Resolution order for credentials: `Authorization` header → `life-manager.bearer.*`
+Resolution order for credentials: `Authorization` header → `ddd.bearer.*`
 subprotocol → session cookie. The first one present is the only one tried.
 
 ### 1.2 Origin allowlist (mandatory — SPEC §4.3)
@@ -139,7 +139,7 @@ receives any other first frame must close with **4400**.
 }
 ```
 
-- `core_semantics_version` mirrors `life_manager_core::CORE_SEMANTICS_VERSION`. A
+- `core_semantics_version` mirrors `ddd_core::CORE_SEMANTICS_VERSION`. A
   client whose Wasm core reports a different value must **not** trust its local
   materialization of `content` → `fm`/`title`; it keeps working read-only from the
   server-materialized projection rows and surfaces "reload to update".
@@ -718,7 +718,7 @@ than a reconnect).
 
 A client implementation is conformant when it:
 
-1. offers `life-manager.v1`, honours `welcome` first, and rejects anything else;
+1. offers `ddd.v1`, honours `welcome` first, and rejects anything else;
 2. persists `safe_seq` (never `max(seq)`) in the *same* transaction as the rows;
 3. treats `purged` rows as "delete locally, offer recovery for unsynced edits";
 4. answers every `doc.resync`/`feed.resync` with the prescribed re-derivation;

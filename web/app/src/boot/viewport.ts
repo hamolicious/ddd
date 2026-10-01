@@ -1,5 +1,5 @@
 /**
- * `--lm-viewport-height`: how tall the screen actually is, right now.
+ * `--ddd-viewport-height`: how tall the screen actually is, right now.
  *
  * On Android the **layout** viewport does not shrink when the soft keyboard opens —
  * only the **visual** viewport does — so a frame sized `height: 100%` keeps its full
@@ -21,7 +21,7 @@
  */
 
 /** The property every full-height surface in the app and the base shell reads. */
-export const VIEWPORT_HEIGHT_TOKEN = "--lm-viewport-height";
+export const VIEWPORT_HEIGHT_TOKEN = "--ddd-viewport-height";
 
 /**
  * Start tracking, and return the unsubscribe. Safe to call where there is no

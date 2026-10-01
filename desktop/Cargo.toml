@@ -1,10 +1,10 @@
 [package]
-name = "life-manager-desktop"
+name = "ddd-desktop"
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 rust-version = "1.90"
-description = "Linux desktop shell for Life Manager: the server's PWA in a WebKitGTK window"
+description = "Linux desktop shell for ddd: the server's PWA in a WebKitGTK window"
 
 # Standalone on purpose, not a member of `backend/`'s workspace: WebKitGTK is a system
 # dependency the server and its CI have no business needing.

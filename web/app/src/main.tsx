@@ -20,7 +20,7 @@
  *    `/auth/me` and `/plugins` — are `NetworkOnly` in the service worker by design, so
  *    each one falls back to what the last successful boot remembered (`boot/cache.ts`)
  *    instead of failing the boot. An offline reload opens the local workspace; it does
- *    not show "Life Manager could not start" (SPEC §4.1, §8).
+ *    not show "ddd could not start" (SPEC §4.1, §8).
  * 4. **A plugin failure is contained and reported once.** The frame renders either
  *    way; the aggregated notice says what broke (SPEC §6.4), and registry rejections and
  *    render failures land in the same notice centre rather than in the console alone.
@@ -123,7 +123,7 @@ async function boot(): Promise<void> {
   // all written in kernel tokens, and none of them has a kernel yet (SPEC §6.4 —
   // the kernel ships the default light/dark token values).
   paintKernelDefaultTokens(document.documentElement);
-  // And `--lm-viewport-height`, for the same reason and at the same moment: the auth
+  // And `--ddd-viewport-height`, for the same reason and at the same moment: the auth
   // gate is a form a soft keyboard covers, and it renders before any plugin exists.
   trackViewportHeight();
 
@@ -204,7 +204,7 @@ async function boot(): Promise<void> {
     // Saying nothing here was the bug: the shell had already incremented `failedBoots`
     // before the webview loaded, and only `bootOk()` clears it (`app/BRIDGE.md` §7). So a
     // session that simply idled past its 30-day expiry (SPEC §5.2) produced a 25 s
-    // watchdog expiry mid-typing, a native "Life Manager could not start" over the login
+    // watchdog expiry mid-typing, a native "ddd could not start" over the login
     // form, and — two launches later — a revert that quarantined a perfectly good bundle,
     // permanently, for a failure that had nothing to do with it.
     reportBootOk();
@@ -327,7 +327,7 @@ function notifyShellUpdate(host: KernelHost, info: ShellUpdateReady): void {
   host.notices.notify({
     id: "kernel:shell-update-ready",
     level: "info",
-    message: "An app update is ready. Close and reopen Life Manager to finish it.",
+    message: "An app update is ready. Close and reopen ddd to finish it.",
     ...(info.bundleVersion ? { detail: `Bundle ${info.bundleVersion} is verified and staged.` } : {}),
   });
 }
@@ -544,7 +544,7 @@ async function signOut(
     await current?.store.clear();
     await deletePluginDatabases();
     // Server screens' offline copies (`kernel.session.fetch`, dev-docs/resolved/SYNC-DECISIONS.md §9).
-    await globalThis.caches?.delete("life-manager:api").catch(() => false);
+    await globalThis.caches?.delete("ddd:api").catch(() => false);
     rememberShellToken(undefined);
     forgetBootCache();
     location.assign("/");
@@ -552,14 +552,14 @@ async function signOut(
 }
 
 /**
- * Plugins that keep their own data on the device name its database `life-manager:…`
+ * Plugins that keep their own data on the device name its database `ddd:…`
  * (the files `attachments` holds while offline): it goes with the rest on sign-out.
  */
 async function deletePluginDatabases(): Promise<void> {
   try {
     const databases = (await indexedDB.databases?.()) ?? [];
     for (const { name } of databases) {
-      if (name?.startsWith("life-manager:")) indexedDB.deleteDatabase(name);
+      if (name?.startsWith("ddd:")) indexedDB.deleteDatabase(name);
     }
   } catch {
     // No listing in this browser: nothing more can be found to delete.

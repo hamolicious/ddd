@@ -757,11 +757,11 @@ fn percent_encode(input: &str) -> String {
 /// double-quoted without escaping control characters, so a filename containing a
 /// newline was written out with that newline **literal**, closing the frontmatter
 /// block early and injecting its own keys into the wrapper document.
-/// [`life_manager_core::value::Value::to_yaml_inline`] is the same serializer the
+/// [`ddd_core::value::Value::to_yaml_inline`] is the same serializer the
 /// `%%%` line splices use, and it escapes `\n`, `\r`, `\t` and every other control
 /// character.
 fn yaml_scalar(value: &str) -> String {
-    life_manager_core::value::Value::Str(value.to_string()).to_yaml_inline()
+    ddd_core::value::Value::Str(value.to_string()).to_yaml_inline()
 }
 
 /// Escape the characters that would break a markdown link label.
@@ -1098,7 +1098,7 @@ mod tests {
     /// not be able to close the block or add keys.
     #[test]
     fn wrapper_frontmatter_survives_a_hostile_filename() {
-        use life_manager_core::document::parse_document;
+        use ddd_core::document::parse_document;
 
         let text = wrapper_document_text(&view("photo.png", "image/png"));
         assert!(text.starts_with("---\n"), "{text}");

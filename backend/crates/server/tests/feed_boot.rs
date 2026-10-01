@@ -17,8 +17,8 @@
 mod common;
 
 use bson::{DateTime as BsonDateTime, doc};
-use life_manager_server::domain::{Actor, new_id};
-use life_manager_server::state::AppState;
+use ddd_server::domain::{Actor, new_id};
+use ddd_server::state::AppState;
 
 /// How many pre-feed documents the fake M1 workspace holds.
 const PRE_FEED_ROWS: i64 = 25;
@@ -47,7 +47,7 @@ async fn upgrading_an_m1_workspace_never_reuses_a_sequence_number() {
     let Some(uri) = common::mongo_uri() else {
         return;
     };
-    let database = format!("lm_boot_test_{}", new_id());
+    let database = format!("ddd_boot_test_{}", new_id());
     let config = common::test_config(uri.clone(), database.clone());
     let client = mongodb::Client::with_uri_str(&uri).await.expect("mongo");
 
@@ -136,7 +136,7 @@ async fn re_seeding_is_idempotent_and_never_lowers_the_head() {
     let Some(uri) = common::mongo_uri() else {
         return;
     };
-    let database = format!("lm_boot_test_{}", new_id());
+    let database = format!("ddd_boot_test_{}", new_id());
     let config = common::test_config(uri.clone(), database.clone());
     let client = mongodb::Client::with_uri_str(&uri).await.expect("mongo");
 

@@ -18,6 +18,6 @@ export {
   STORE_DOCS,
   STORE_META,
   STORE_PROJECTION,
-  type LifeManagerDb,
+  type DddDb,
   type StoredDocState,
 } from "./idb-store.js";

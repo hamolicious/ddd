@@ -55,7 +55,7 @@ describe("names", () => {
   });
 
   it("ignores hidden paths and editor droppings", () => {
-    expect(isIgnored(".life-manager/index.json")).toBe(true);
+    expect(isIgnored(".ddd/index.json")).toBe(true);
     expect(isIgnored("Home/.obsidian/app.json")).toBe(true);
     expect(isIgnored("Home/note.md.swp")).toBe(true);
     expect(isIgnored("Home/note.md")).toBe(false);

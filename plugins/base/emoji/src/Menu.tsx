@@ -54,7 +54,7 @@ export function EmojiMenu({ controller }: { readonly controller: MenuController 
           key={item.insert}
           role="option"
           aria-selected={index === state.selected}
-          className={`emoji:flex emoji:min-h-[calc(var(--lm-tap-target)-8px)] emoji:cursor-pointer emoji:items-center emoji:gap-2 emoji:rounded emoji:px-2 emoji:py-1 ${
+          className={`emoji:flex emoji:min-h-[calc(var(--ddd-tap-target)-8px)] emoji:cursor-pointer emoji:items-center emoji:gap-2 emoji:rounded emoji:px-2 emoji:py-1 ${
             index === state.selected ? "emoji:bg-accent-subtle" : ""
           }`}
           onPointerEnter={() => controller.select(index)}

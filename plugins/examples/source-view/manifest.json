@@ -15,6 +15,6 @@
   },
   "name": "Source view",
   "description": "A third, read-only `source` mode: the whole text, frontmatter and machine sections included. Offered only on documents that have either, to show a mode deciding for itself where it applies.",
-  "author": "Life Manager examples",
+  "author": "ddd examples",
   "license": "MIT OR Apache-2.0"
 }

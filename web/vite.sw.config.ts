@@ -45,17 +45,17 @@ function collect(dir: string, root = dir): string[] {
 }
 
 /**
- * `virtual:lm-precache`. Every URL is either content-hashed or `index.html`, so only
+ * `virtual:ddd-precache`. Every URL is either content-hashed or `index.html`, so only
  * the latter needs a revision — and it gets the build's own timestamp, which is what
  * makes a new deploy produce a new worker.
  */
 const precachePlugin: Plugin = {
-  name: "lm-precache",
+  name: "ddd-precache",
   resolveId(id) {
-    return id === "virtual:lm-precache" ? "\0virtual:lm-precache" : undefined;
+    return id === "virtual:ddd-precache" ? "\0virtual:ddd-precache" : undefined;
   },
   load(id) {
-    if (id !== "\0virtual:lm-precache") return undefined;
+    if (id !== "\0virtual:ddd-precache") return undefined;
     let urls: string[];
     try {
       urls = collect(outDir).sort();

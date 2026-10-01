@@ -69,7 +69,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex as StdMutex, MutexGuard};
 use std::time::{Duration, Instant};
 
-use life_manager_plugin_abi as abi;
+use ddd_plugin_abi as abi;
 
 use crate::domain::{Document, Id, Timestamp};
 use crate::feed::{FeedChangeKind, FeedNotice};
@@ -292,7 +292,7 @@ impl HookQueue {
     /// `in_flight.contains` branch on every tick and pushed the entry's deadline out by another
     /// debounce, so that document's hooks stalled for the life of the process while its pending
     /// entry was retained: silent, self-healing-looking, and visible only as a permanently
-    /// non-zero `lm_plugin_hooks_pending`.
+    /// non-zero `ddd_plugin_hooks_pending`.
     ///
     /// A guard whose `Drop` runs on every one of those paths is the difference.
     #[must_use = "dropping the claim immediately clears the in-flight mark"]
@@ -834,7 +834,7 @@ fn json_map(document: &bson::Document) -> abi::JsonMap {
 
 /// `emit` — publish on the **server-side** bus.
 ///
-/// Delivery is a nested invocation of each subscriber's `lm_event`, sharing this
+/// Delivery is a nested invocation of each subscriber's `ddd_event`, sharing this
 /// invocation's deadline and stack (HOST-ABI.md §3.8, §5). Never delivered back to the
 /// emitter, and `subscribers: 0` is the normal state of an event bus, not an error.
 pub fn emit_to_plugins(
@@ -1282,7 +1282,7 @@ mod tests {
     /// A claim dropped while unwinding still releases. A delivery task whose *last* statement
     /// was the release left the id in `in_flight` on any panic, and `take_due` then deferred
     /// every later change to that document for the life of the process — visible only as a
-    /// permanently non-zero `lm_plugin_hooks_pending`.
+    /// permanently non-zero `ddd_plugin_hooks_pending`.
     #[test]
     fn a_panicking_delivery_still_releases_its_document() {
         let queue = Arc::new(HookQueue::new());

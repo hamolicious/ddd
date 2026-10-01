@@ -132,7 +132,7 @@ interface ProjectionStore {
 
 Plus, in `idb-store.ts` (schema is frozen; the class may grow private members):
 `DB_NAME`, `DB_VERSION`, `STORE_PROJECTION`, `STORE_META`, `STORE_DOCS`,
-`CHECKPOINT_KEY`, `StoredDocState`, `LifeManagerDb`, `IdbProjectionStore`.
+`CHECKPOINT_KEY`, `StoredDocState`, `DddDb`, `IdbProjectionStore`.
 `STORE_DOCS` is where hydrated replicas persist — implement `DocPersistence`
 against it and hand it to the hydrator.
 
@@ -304,10 +304,10 @@ npm run harness:convergence -- --clients=6 --documents=25 --seed=7
 npm run harness:perf
 ```
 
-The harnesses and the Playwright config all read **`LM_SERVER`**, and Vite's `/api`
+The harnesses and the Playwright config all read **`DDD_SERVER`**, and Vite's `/api`
 proxy reads it too — so a server on a non-default port needs it exported for both,
 or the page loads and every `/api` call 404s. The perf harness additionally needs
-`LM_WEB` (the Vite origin) for the client-heap measurement, which degrades to a
+`DDD_WEB` (the Vite origin) for the client-heap measurement, which degrades to a
 reported skip without it. Measured numbers live in
 [`../backend/PERF.md`](../backend/PERF.md).
 
@@ -391,7 +391,7 @@ web/
 │   ├── capabilities.ts browser fallbacks done; bridge stubbed      [kernel-runtime]
 │   └── contract-parity.ts                                          [scaffold]
 ├── app/                             the PWA                        [kernel-runtime]
-│   ├── index.html      carries the <!--LM_IMPORT_MAP--> marker
+│   ├── index.html      carries the <!--DDD_IMPORT_MAP--> marker
 │   ├── runtime/        one re-export module per blessed specifier + specifiers.ts
 │   ├── src/main.tsx    the boot sequence
 │   ├── src/boot/       api, cache (offline boot), AuthGate, kernel-init, safe-mode, update
@@ -501,7 +501,7 @@ Hard requirements:
 
 - `shell-ui` is the only plugin that may call `kernel.ui.mount`.
 - The **mobile breakpoint** is this area's: drawer sidebar, single pane, 44 px targets
-  (`--lm-tap-target`), and the sync-status indicator (SPEC §6.5) — the indicator is
+  (`--ddd-tap-target`), and the sync-status indicator (SPEC §6.5) — the indicator is
   `sync-status`' contribution to the `end` seat of `header`'s bar, which is rendered in
   `shell-ui`'s `shell.header` spot.
 - Landmarks, a skip link, a keyboard-operable palette and visible focus rings are
@@ -575,7 +575,7 @@ See `backend/CONTRACTS.md` (M3 section). The client-side contract it has to keep
 map carries `plugin:<id>` for every plugin in the load set **only for a signed-in request**
 (a signed-out page gets the runtime layer alone, and `main.tsx` reloads after sign-in to
 pick the entries up); `index.html` is served with the import map inlined at
-`<!--LM_IMPORT_MAP-->` and a matching CSP nonce; `/plugins/:id/:version/*` is immutable;
+`<!--DDD_IMPORT_MAP-->` and a matching CSP nonce; `/plugins/:id/:version/*` is immutable;
 `/importmap.json` and `/kernel.d.ts` are public, the former without the plugin entries.
 
 ## Commands
@@ -712,7 +712,7 @@ nothing checking that automatically.
   deleted. It is **omitted, never sent as null**, for a live document — that is what
   Mongo stores and what `missing` is asked about, and a null would make the client
   answer `exists` where the server answers `missing` for every live row.
-- **`DocumentModeProps` (then in `plugins/base/_shared/points.ts`, now `lm/document.mode`) gained `line?: number`** — the
+- **`DocumentModeProps` (then in `plugins/base/_shared/points.ts`, now `ddd/document.mode`) gained `line?: number`** — the
   1-based line of `#/doc/<id>?line=42`. The surface parses the query and hands the number
   down; honouring it is a mode's own business (`editor` moves the cursor and scrolls, a
   rendered mode may ignore it).
@@ -797,7 +797,7 @@ server returns, what the local index holds or what `kernel.documents` answers ch
 ## A cross-plugin seam with no contract change: `folders:default-location`
 
 *Superseded (PLUGIN-PROTOCOLS §9 step 8): the message is now the sticky event protocol
-`lm/folders.default-location`, and `kernel.services` no longer exists. Kept as the record
+`ddd/folders.default-location`, and `kernel.services` no longer exists. Kept as the record
 of why the seam points this way.*
 
 `doc-list.createDocument` needs to ask "where do unfiled documents go?", and the plugin
@@ -881,14 +881,14 @@ Two consequences worth stating:
 
 ## `--md-gutter`: one token for every list indent
 
-`markdown`'s list indentation had been spelled three times — `calc(var(--lm-space) * 3)`
+`markdown`'s list indentation had been spelled three times — `calc(var(--ddd-space) * 3)`
 in a list's `padding-inline-start` and in a task row's negative margin, and
-`var(--lm-tap-target)` in the checkbox column — so a task's *text* sat 50 px from the
+`var(--ddd-tap-target)` in the checkbox column — so a task's *text* sat 50 px from the
 body margin while a bullet's sat at 24 px, and each nesting level stepped 50 against 24.
 It is now one custom property on `.md-root` that all three read, and the 44 px tap target
 **overhangs** its column (negative inline margins) instead of widening it. Anything
 styling lists should read `--md-gutter` rather than re-deriving it; a theme that changes
-`--lm-space` rescales tasks, bullets and numbers together.
+`--ddd-space` rescales tasks, bullets and numbers together.
 
 ## Review follow-ups (2026-09-25)
 
@@ -926,13 +926,13 @@ contract: no `@kernel` surface, no manifest `dependencies`, no extension point.
 
 ## Verification (integration close-out)
 
-Gates, on an isolated stack (port 8241, database `life_manager_verify`, its own composed
+Gates, on an isolated stack (port 8241, database `ddd_verify`, its own composed
 registry; the live `:8080` stack untouched):
 
 - `npm run typecheck` clean, `npx vitest run` **898 passed / 1 skipped**.
 - `playwright.app.config.ts` **71 passed / 0 failed**, twice over.
 - **Re-run after the review follow-ups above**, on an isolated stack (port 8121,
-  database `life_manager_e2e`; the demo smoke on port 8131 / `life_manager_demo_e2e`;
+  database `ddd_e2e`; the demo smoke on port 8131 / `ddd_demo_e2e`;
   the live `:8080` stack untouched): `npm run typecheck` clean, `npx vitest run`
   **907 passed / 1 skipped**, `playwright.app.config.ts` **74 passed / 0 failed**, and
   the SPEC §8 demo smoke **2 passed**. The three new app tests are the machine-owned

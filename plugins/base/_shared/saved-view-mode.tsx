@@ -171,7 +171,7 @@ export interface SavedViewPlugin extends Omit<SavedViewModeOptions, "kernel" | "
   readonly noun: string;
   /** The command's id; `<plugin>.new` by default. */
   readonly commandId?: string;
-  /** The command's icon, an `lm/icons` name. */
+  /** The command's icon, an `ddd/icons` name. */
   readonly commandIcon?: string;
   /** A new one's settings. */
   readonly starter?: ViewOptions;
@@ -270,7 +270,7 @@ export function offerSavedView(kernel: Kernel, plugin: SavedViewPlugin, hosts: S
   const actions: readonly SavedViewAction[] = [
     {
       id: `${kernel.pluginId}.new-inside`,
-      target: "lm/document",
+      target: "ddd/document",
       order: 20,
       items: (target: { readonly id: string }) => [
         { id: "new", label: `${title} inside`, run: () => void make(target.id).catch(failed) },

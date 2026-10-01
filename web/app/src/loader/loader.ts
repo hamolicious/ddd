@@ -285,7 +285,7 @@ export async function loadPlugins(options: LoadOptions): Promise<LoadReport> {
 export function linkStylesheet(plugin: InstalledPlugin): void {
   const href = styleUrl(plugin);
   if (!href || typeof document === "undefined") return;
-  const existing = document.querySelector(`link[data-lm-plugin="${plugin.manifest.id}"]`);
+  const existing = document.querySelector(`link[data-ddd-plugin="${plugin.manifest.id}"]`);
   if (existing) return;
   const link = document.createElement("link");
   link.rel = "stylesheet";

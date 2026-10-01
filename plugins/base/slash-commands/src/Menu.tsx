@@ -53,7 +53,7 @@ export function SlashMenu({ controller }: { readonly controller: SlashController
           key={command.id}
           role="option"
           aria-selected={index === state.selected}
-          className={`slash:flex slash:min-h-[calc(var(--lm-tap-target)-8px)] slash:cursor-pointer slash:items-center slash:gap-2 slash:rounded slash:px-2 slash:py-1 ${
+          className={`slash:flex slash:min-h-[calc(var(--ddd-tap-target)-8px)] slash:cursor-pointer slash:items-center slash:gap-2 slash:rounded slash:px-2 slash:py-1 ${
             index === state.selected ? "slash:bg-accent-subtle" : ""
           }`}
           onPointerEnter={() => controller.select(index)}

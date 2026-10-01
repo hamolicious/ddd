@@ -322,8 +322,8 @@ test.describe("every route at 390 px", () => {
       await page.goto("/?safe=bare");
       await page.locator("#email").fill(ADMIN.email);
       await page.locator("#password").fill(ADMIN.password);
-      await page.locator("form.lm-auth-form button[type=submit]").click();
-      await expect(page.locator(".lm-bare")).toBeVisible({ timeout: 30_000 });
+      await page.locator("form.ddd-auth-form button[type=submit]").click();
+      await expect(page.locator(".ddd-bare")).toBeVisible({ timeout: 30_000 });
       await page.waitForTimeout(250);
       failures.push(...(await measure(page, "?safe=bare")));
 

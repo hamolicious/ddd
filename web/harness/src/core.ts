@@ -41,7 +41,7 @@ export function harnessCore(): Promise<HarnessCore> {
     let bytes: Uint8Array;
     try {
       bytes = new Uint8Array(
-        await readFile(fileURLToPath(new URL("./life_manager_core_bg.wasm", PKG))),
+        await readFile(fileURLToPath(new URL("./ddd_core_bg.wasm", PKG))),
       );
     } catch {
       throw new Error(

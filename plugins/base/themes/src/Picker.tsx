@@ -1,5 +1,5 @@
 /**
- * The picker: one `lm/settings.section` item with the appearance control and a theme list per
+ * The picker: one `ddd/settings.section` item with the appearance control and a theme list per
  * scheme.
  *
  * It is two radio groups and a swatch, and the only thing worth explaining is the
@@ -187,12 +187,12 @@ function SchemeGroup({
 function Swatch({ tokens }: { readonly tokens: Record<string, string> | undefined }): ReactNode {
   const style = tokens
     ? {
-        background: tokens["--lm-bg"],
-        color: tokens["--lm-text"],
-        borderColor: tokens["--lm-border-strong"],
+        background: tokens["--ddd-bg"],
+        color: tokens["--ddd-text"],
+        borderColor: tokens["--ddd-border-strong"],
       }
     : undefined;
-  const accent = tokens?.["--lm-accent"];
+  const accent = tokens?.["--ddd-accent"];
   return (
     <span className="themes:inline-flex themes:h-[1.7rem] themes:w-12 themes:shrink-0 themes:items-center themes:justify-center themes:gap-[0.2em] themes:rounded themes:border themes:border-border-strong themes:bg-bg themes:text-xs themes:leading-none themes:text-text themes:compact:w-10" style={style} aria-hidden="true">
       Aa

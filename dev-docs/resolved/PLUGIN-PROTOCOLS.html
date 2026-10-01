@@ -380,13 +380,13 @@ ol.seats li.bench { opacity: .6; }
 
 <section id="model">
   <div class="sec-head"><span class="sec-no">§2 · The model</span><h2>Protocols, ports and wires</h2></div>
-  <p class="prose">A <b>protocol</b> is a versioned contract with an id such as <code>lm/workspace-index@1.2.0</code>. A <b>port</b> is one named place on a plugin where it provides or consumes a protocol. A <b>wire</b> connects a provided port to a consumed port, and <b>the graph only allows it when the types fit</b>: every key the consumer requires must be there with a matching type, and extra keys are fine (§6b). Plugins name ports and protocols. They never name each other.</p>
+  <p class="prose">A <b>protocol</b> is a versioned contract with an id such as <code>ddd/workspace-index@1.2.0</code>. A <b>port</b> is one named place on a plugin where it provides or consumes a protocol. A <b>wire</b> connects a provided port to a consumed port, and <b>the graph only allows it when the types fit</b>: every key the consumer requires must be there with a matching type, and extra keys are fine (§6b). Plugins name ports and protocols. They never name each other.</p>
   <div class="kinds">
     <div class="kind service"><span class="tag">service</span><p>One provider answers each consumer port. Replaces <code>services.require(id)</code>.</p><dl><dt>Cardinality</dt><dd>1 provider → a consumer port</dd><dt>Orders activation</dt><dd>Yes, provider first</dd><dt>Today</dt><dd><code>dependencies</code> + <code>*-api.ts</code></dd></dl></div>
     <div class="kind slot"><span class="tag">slot</span><p>Many contributors feed a host port. Replaces extension points; the host is the consumer.</p><dl><dt>Cardinality</dt><dd>many providers → a host port</dd><dt>Seats</dt><dd>ordered; connection order is seat order</dd><dt>Orders activation</dt><dd>No, items buffer</dd><dt>Today</dt><dd><code>definePoint</code> / <code>contribute</code></dd></dl></div>
     <div class="kind event"><span class="tag">event</span><p>A typed message stream. Emitters provide it and listeners consume it. Cycles are allowed.</p><dl><dt>Cardinality</dt><dd>many → many</dd><dt>Orders activation</dt><dd>No</dd><dt>Today</dt><dd>untyped <code>kernel.events</code></dd></dl></div>
   </div>
-  <div class="diagram" role="img" aria-label="Diagram: indexer provides lm/workspace-index to graph's index port; graph provides a main.view item to shell-ui's views host port; a third-party index is also compatible with graph's index port but not wired.">
+  <div class="diagram" role="img" aria-label="Diagram: indexer provides ddd/workspace-index to graph's index port; graph provides a main.view item to shell-ui's views host port; a third-party index is also compatible with graph's index port but not wired.">
     <svg viewBox="0 0 900 250">
       <defs>
         
@@ -419,9 +419,9 @@ ol.seats li.bench { opacity: .6; }
         <path d="M216,200 C300,200 290,110 354,100" fill="none" stroke-width="1.5" stroke-dasharray="3 5" opacity=".6" style="stroke:var(--service)"/>
         <path d="M556,134 C620,134 620,134 684,134" fill="none" stroke-width="2" style="stroke:var(--slot)"/>
 
-        <text x="285" y="66" text-anchor="middle" font-size="11" style="fill:var(--service)">lm/workspace-index</text>
+        <text x="285" y="66" text-anchor="middle" font-size="11" style="fill:var(--service)">ddd/workspace-index</text>
         <text x="285" y="228" text-anchor="middle" font-size="10.5" style="fill:var(--faint)">compatible, not chosen</text>
-        <text x="620" y="124" text-anchor="middle" font-size="11" style="fill:var(--slot)">lm/main.view</text>
+        <text x="620" y="124" text-anchor="middle" font-size="11" style="fill:var(--slot)">ddd/main.view</text>
         <text x="455" y="190" text-anchor="middle" font-size="10.5" style="fill:var(--muted)">wires run from provider to consumer</text>
       </g>
     </svg>
@@ -431,7 +431,7 @@ ol.seats li.bench { opacity: .6; }
 
 <section id="package">
   <div class="sec-head"><span class="sec-no">§3 · Protocol packages</span><h2>A contract ships on its own</h2></div>
-  <p class="prose">A protocol is a small package with no runtime code of its own besides a validator. It ships inside the plugin that owns it, for example <code>lm/workspace-index</code> inside <code>indexer</code>. On install, the server takes it into its protocol registry, where it stays even if that plugin is unplugged or replaced, so a replacement can speak it too. The kernel still knows no domain: it learns the <em>kind</em> and the <em>shape</em> from the package, never what a navbar is.</p>
+  <p class="prose">A protocol is a small package with no runtime code of its own besides a validator. It ships inside the plugin that owns it, for example <code>ddd/workspace-index</code> inside <code>indexer</code>. On install, the server takes it into its protocol registry, where it stays even if that plugin is unplugged or replaced, so a replacement can speak it too. The kernel still knows no domain: it learns the <em>kind</em> and the <em>shape</em> from the package, never what a navbar is.</p>
   <div class="two">
     <div>
       <span class="cap">Layout</span>
@@ -445,10 +445,10 @@ ol.seats li.bench { opacity: .6; }
     <div>
       <span class="cap">protocol.json</span>
 <pre>{
-  <span class="k">"id"</span>: <span class="s">"lm/workspace-index"</span>,
+  <span class="k">"id"</span>: <span class="s">"ddd/workspace-index"</span>,
   <span class="k">"version"</span>: <span class="s">"1.2.0"</span>,
   <span class="k">"kind"</span>: <span class="s">"service"</span>,
-  <span class="k">"owner"</span>: <span class="s">"life-manager"</span>,
+  <span class="k">"owner"</span>: <span class="s">"ddd"</span>,
   <span class="k">"types"</span>: <span class="s">"index.d.ts"</span>,
   <span class="k">"shape"</span>: {                <span class="c">// s.* serialised</span>
     <span class="k">"ready"</span>:       <span class="s">"promise"</span>,
@@ -466,9 +466,9 @@ ol.seats li.bench { opacity: .6; }
   <div class="table-wrap"><table>
     <thead><tr><th>Rule</th><th>Why</th></tr></thead>
     <tbody>
-      <tr><td>Protocol ids are <code>&lt;publisher&gt;/&lt;name&gt;</code>. <code>lm/</code> is reserved for the base distribution. On each server, the first installed package to use a namespace owns it. Plugin ids keep today's rule (no <code>/</code>).</td><td>Two authors can both write a "tasks" protocol without colliding.</td></tr>
+      <tr><td>Protocol ids are <code>&lt;publisher&gt;/&lt;name&gt;</code>. <code>ddd/</code> is reserved for the base distribution. On each server, the first installed package to use a namespace owns it. Plugin ids keep today's rule (no <code>/</code>).</td><td>Two authors can both write a "tasks" protocol without colliding.</td></tr>
       <tr><td>Semver: removing a method or making a field required is a major. Adding an optional field or a method is a minor.</td><td>The same rule <code>KERNEL-API.md</code> already applies to <code>@kernel</code>.</td></tr>
-      <tr><td>The server stores protocols by <code>id@version</code> with a content hash. A second package bundling the same id@version must be byte-identical, or the install is refused.</td><td>No two plugins can disagree about what <code>lm/route@1.0.0</code> means.</td></tr>
+      <tr><td>The server stores protocols by <code>id@version</code> with a content hash. A second package bundling the same id@version must be byte-identical, or the install is refused.</td><td>No two plugins can disagree about what <code>ddd/route@1.0.0</code> means.</td></tr>
       <tr><td>Types are served at <code>/protocols/&lt;id&gt;/&lt;version&gt;/index.d.ts</code>, like <code>/kernel.d.ts</code>.</td><td>An outside author compiles against what the server actually has, without copying files.</td></tr>
       <tr><td>The shape is plain JSON in the <code>s.*</code> vocabulary: <code>string</code>, <code>number</code>, <code>boolean</code>, <code>func</code>, <code>promise</code>, <code>component</code>, <code>any</code>, <code>literal</code>, <code>union</code>, <code>array</code>, <code>record</code>, <code>object</code>, <code>optional</code>. The <code>s.*</code> builders gain a <code>toJSON()</code>; <code>promise</code> is new.</td><td>The server and the graph can type-check a wire without running any plugin code.</td></tr>
       <tr><td>Only <code>shape.mjs</code> is written by hand. <code>protocol.json</code> and <code>index.d.ts</code> are generated from it, and CI fails when the checked-in output is stale.</td><td>One source, so the five hand-written <code>RouterService</code> copies can't happen again.</td></tr>
@@ -503,21 +503,21 @@ ol.seats li.bench { opacity: .6; }
   <span class="k">"id"</span>: <span class="s">"graph"</span>,
   <span class="k">"kernel"</span>: <span class="s">"^2.0"</span>,
   <span class="k">"consumes"</span>: {
-    <span class="k">"index"</span>:  { <span class="k">"protocol"</span>: <span class="s">"lm/workspace-index@^1.0"</span>,
+    <span class="k">"index"</span>:  { <span class="k">"protocol"</span>: <span class="s">"ddd/workspace-index@^1.0"</span>,
                 <span class="k">"needs"</span>: [<span class="s">"ready"</span>, <span class="s">"version"</span>, <span class="s">"subscribe"</span>,
                           <span class="s">"documents"</span>, <span class="s">"connections"</span>] },
-    <span class="k">"router"</span>: { <span class="k">"protocol"</span>: <span class="s">"lm/router@^1.0"</span>,
+    <span class="k">"router"</span>: { <span class="k">"protocol"</span>: <span class="s">"ddd/router@^1.0"</span>,
                 <span class="k">"needs"</span>: [<span class="s">"navigate"</span>, <span class="s">"query"</span>] },
-    <span class="k">"shell"</span>:  { <span class="k">"protocol"</span>: <span class="s">"lm/shell@^1.0"</span>,
+    <span class="k">"shell"</span>:  { <span class="k">"protocol"</span>: <span class="s">"ddd/shell@^1.0"</span>,
                 <span class="k">"needs"</span>: [<span class="s">"layout"</span>, <span class="s">"toggleAltbar"</span>] }
   },
   <span class="k">"provides"</span>: {
-    <span class="k">"view"</span>:     { <span class="k">"protocol"</span>: <span class="s">"lm/main.view@1.0.0"</span> },
-    <span class="k">"panel"</span>:    { <span class="k">"protocol"</span>: <span class="s">"lm/altbar.panel@1.0.0"</span> },
-    <span class="k">"route"</span>:    { <span class="k">"protocol"</span>: <span class="s">"lm/router.route@1.0.0"</span> },
-    <span class="k">"commands"</span>: { <span class="k">"protocol"</span>: <span class="s">"lm/commands.command@1.0.0"</span> },
-    <span class="k">"keys"</span>:     { <span class="k">"protocol"</span>: <span class="s">"lm/keybindings.default@1.0.0"</span> },
-    <span class="k">"nav"</span>:      { <span class="k">"protocol"</span>: <span class="s">"lm/navbar.item@1.0.0"</span> }
+    <span class="k">"view"</span>:     { <span class="k">"protocol"</span>: <span class="s">"ddd/main.view@1.0.0"</span> },
+    <span class="k">"panel"</span>:    { <span class="k">"protocol"</span>: <span class="s">"ddd/altbar.panel@1.0.0"</span> },
+    <span class="k">"route"</span>:    { <span class="k">"protocol"</span>: <span class="s">"ddd/router.route@1.0.0"</span> },
+    <span class="k">"commands"</span>: { <span class="k">"protocol"</span>: <span class="s">"ddd/commands.command@1.0.0"</span> },
+    <span class="k">"keys"</span>:     { <span class="k">"protocol"</span>: <span class="s">"ddd/keybindings.default@1.0.0"</span> },
+    <span class="k">"nav"</span>:      { <span class="k">"protocol"</span>: <span class="s">"ddd/navbar.item@1.0.0"</span> }
   }
 }</pre>
     </div>
@@ -554,7 +554,7 @@ ol.seats li.bench { opacity: .6; }
       <p><b>Undeclared ports throw</b>, keeping the current <code>ContractViolationError</code> discipline from <code>runtime/services.ts</code>.</p>
       <p><b><code>needs</code> is enforced.</b> <code>ports.use()</code> returns a handle limited to the declared keys. Reading any other key throws <code>ContractViolationError</code>, in development and production alike.</p>
       <p><b>Kernel types become generic</b>: <code>ports.use</code> is typed by the protocol package's <code>index.d.ts</code>, pulled in at build time.</p>
-      <p><b>Shims are temporary.</b> During the migration, <code>extensions.contribute("navbar.item", x)</code> becomes <code>offer</code> on an implicit port speaking <code>lm/navbar.item@1</code>, and <code>services.require("indexer")</code> becomes <code>use</code> on an implicit port bound to that plugin. Once the base plugins and examples are ported, the shims, <code>dependencies</code> and <code>x-defines</code> are removed and <code>@kernel</code> 2.0 has only <code>ports</code>. A 1.x plugin then no longer loads.</p>
+      <p><b>Shims are temporary.</b> During the migration, <code>extensions.contribute("navbar.item", x)</code> becomes <code>offer</code> on an implicit port speaking <code>ddd/navbar.item@1</code>, and <code>services.require("indexer")</code> becomes <code>use</code> on an implicit port bound to that plugin. Once the base plugins and examples are ported, the shims, <code>dependencies</code> and <code>x-defines</code> are removed and <code>@kernel</code> 2.0 has only <code>ports</code>. A 1.x plugin then no longer loads.</p>
     </div>
   </div>
 </section>
@@ -634,7 +634,7 @@ ol.seats li.bench { opacity: .6; }
 
         <text x="468" y="94" font-weight="700" style="fill:var(--ink);font-family:var(--display)">shell-ui</text>
         <text x="468" y="119" style="fill:var(--ink)">sidebar</text>
-        <text x="468" y="137" style="fill:var(--faint)" font-size="10.5">lm/sidebar.panel</text>
+        <text x="468" y="137" style="fill:var(--faint)" font-size="10.5">ddd/sidebar.panel</text>
 
         <path d="M632,115 L680,115" style="stroke:var(--muted)" stroke-width="1.5"/>
         <path d="M674,110 L682,115 L674,120" fill="none" style="stroke:var(--muted)" stroke-width="1.5"/>
@@ -682,7 +682,7 @@ ol.seats li.bench { opacity: .6; }
   <div class="two">
     <div class="prose" style="display:grid;gap:10px;font-size:.93rem">
       <p><b>Consumers say what they use.</b> Five base plugins each declare their own <code>RouterService</code> interface today, each a different slice: <code>changes</code> uses <code>navigate</code>, <code>graph</code> uses <code>navigate</code> and <code>query</code>, <code>settings</code> uses <code>navigate</code> and <code>url</code>. <code>MarkdownApi</code> is declared twice the same way. <code>needs</code> writes that slice into the manifest, so a smaller router can serve <code>changes</code> without implementing <code>url</code>.</p>
-      <p><b>The same provider can fit one consumer and not another.</b> <code>graph</code> reads five members of the index and <code>fm-autocomplete</code> reads three different ones. In the prototype, <code>acme-fuzzy-index</code> implements <code>lm/workspace-index@1.0.0</code>, before <code>fmFields</code> and <code>fmValues</code> existed (an example history). It serves <code>graph</code> (<code>^1.0</code>) and is refused for <code>fm-autocomplete</code> (<code>^1.1</code>).</p>
+      <p><b>The same provider can fit one consumer and not another.</b> <code>graph</code> reads five members of the index and <code>fm-autocomplete</code> reads three different ones. In the prototype, <code>acme-fuzzy-index</code> implements <code>ddd/workspace-index@1.0.0</code>, before <code>fmFields</code> and <code>fmValues</code> existed (an example history). It serves <code>graph</code> (<code>^1.0</code>) and is refused for <code>fm-autocomplete</code> (<code>^1.1</code>).</p>
     </div>
     <div class="prose" style="display:grid;gap:10px;font-size:.93rem">
       <p><b>Shape decides what is allowed; protocol decides what is automatic.</b> <code>markdown.codeBlock</code> and <code>markdown.attachment</code> have the same shape, and a main view fits the overlay layer. Auto-wiring therefore needs the same protocol id and a version in range. A manual "by shape" wire across protocols is allowed for slots only, after a confirm naming both protocols. Services are mostly <code>func</code>, so a shape match says little there; they and events need the same protocol id, and adapters cover the rest.</p>
@@ -745,7 +745,7 @@ ol.seats li.bench { opacity: .6; }
   <div class="two">
     <div class="prose" style="display:grid;gap:10px;font-size:.93rem">
       <p><b>Service changes restart their consumers.</b> Consumers register callbacks on providers (<code>router.onChange</code>, <code>index.subscribe</code>, <code>shell.subscribeLayout</code>), and no handle can move those to a new provider. So when a service wire changes, the consumer and everything that depends on it through services restart, in activation order. Slots, seats, events and leaf plugins hot-apply in place.</p>
-      <p><b>Events can be sticky.</b> An event protocol may declare <code>"sticky": true</code>: a new or restarted listener gets the last value at once. <code>lm/folders.default-location</code> needs it, because <code>folders</code> announces only at activation and a restarted <code>doc-list</code> would otherwise forget the folder (<code>doc-list/index.tsx:40-50</code>).</p>
+      <p><b>Events can be sticky.</b> An event protocol may declare <code>"sticky": true</code>: a new or restarted listener gets the last value at once. <code>ddd/folders.default-location</code> needs it, because <code>folders</code> announces only at activation and a restarted <code>doc-list</code> would otherwise forget the folder (<code>doc-list/index.tsx:40-50</code>).</p>
       <p><b><code>"hot": true</code> is a promise.</b> A plugin declares that the kernel's retraction plus its own <code>deactivate()</code> leave nothing behind. Without it, any change that touches the plugin falls back to a reload. All base plugins get it in migration step 6. In the prototype, <code>alt-editor</code> doesn't have it, to show the fallback.</p>
     </div>
     <div class="prose" style="display:grid;gap:10px;font-size:.93rem">
@@ -820,7 +820,7 @@ ol.seats li.bench { opacity: .6; }
   <div class="two">
     <div class="prose" style="display:grid;gap:10px;font-size:.93rem">
       <h3>The editor is a plugin</h3>
-      <p><code>wiring</code> is an ordinary base plugin. It consumes <code>lm/router</code>, <code>lm/shell</code> and <code>lm/context-menu</code>. It offers a <code>main.view</code>, a <code>router.route</code>, a <code>commands.command</code> and an admin-only <code>navbar.item</code>. It has no kernel privilege: everything it does goes through the server's wiring routes, which check that the user is an admin, exactly as <code>admin</code>'s routes do today.</p>
+      <p><code>wiring</code> is an ordinary base plugin. It consumes <code>ddd/router</code>, <code>ddd/shell</code> and <code>ddd/context-menu</code>. It offers a <code>main.view</code>, a <code>router.route</code>, a <code>commands.command</code> and an admin-only <code>navbar.item</code>. It has no kernel privilege: everything it does goes through the server's wiring routes, which check that the user is an admin, exactly as <code>admin</code>'s routes do today.</p>
       <p><b>Look and feel.</b> It uses the app's existing tokens, Tailwind preset and components, the same way <code>admin</code> and <code>settings</code> do. No explanatory prose on screen: labels, icons, counts, pills and tooltips only. On a desktop the graph fills the main view and the inspector sits in the altbar. On a phone the graph is full screen and the inspector is a bottom sheet; editing works there through the inspector's connect, cut, move and plug controls. Offline, the whole editor is read-only.</p>
       <p>Because it is a plugin, it can be replaced. Another flow editor that speaks the same server routes can be installed and <code>wiring</code> unplugged in favour of it. The resolver, the type check and the apply pipeline live in the kernel and the server, not in the editor.</p>
     </div>
@@ -857,7 +857,7 @@ ol.seats li.bench { opacity: .6; }
     <li><div><h3><code>kernel.ports</code> as <code>@kernel</code> 1.2.0</h3><p>A minor: new surface, with <code>services</code> and <code>extensions</code> kept as shims so ported and unported plugins load side by side. <code>registry.ts</code> becomes the slot implementation; <code>services.ts</code> the service one. <code>needs</code> is enforced here.</p><p class="done"><span class="pill ok">done when</span> a ported and an unported plugin wire to each other in one session.</p></div></li>
     <li><div><h3>Disposal contract and hot apply</h3><p>Track every kernel subscription per plugin so <code>host.retract()</code> covers all of them. Add <code>deactivate()</code>, <code>"hot"</code>, sticky events, restarts for service changes, the apply queue, and the shared reload banner.</p><p class="done"><span class="pill ok">done when</span> unplugging and plugging back every base plugin 100 times in one session leaves no listeners, links or mounts behind.</p></div></li>
     <li><div><h3>The <code>wiring</code> plugin and the bare manager</h3><p>The graph above as its own base plugin with its own route (<code>#/wiring</code>), in the app's own UI, desktop and phone layouts included. Browser drafts, Apply, history and rollback through admin-only routes. <code>?safe=bare</code> gets its write path.</p><p class="done"><span class="pill ok">done when</span> an admin can swap <code>graph</code>'s index provider, reorder the sidebar and unplug a plugin, and every connected client follows without a reload.</p></div></li>
-    <li><div><h3>Port everything, remove the old paths, <code>@kernel</code> 2.0.0</h3><p>Move the base plugins and examples to <code>provides</code>/<code>consumes</code>. Hosts stop sorting by <code>order</code>. Turn the <code>folders:default-location</code> message into <code>lm/folders.default-location</code>. Then delete the shims, <code>services.require</code>, <code>extensions.contribute</code>/<code>definePoint</code>, <code>dependencies</code> and <code>x-defines</code>; move <code>_shared/points.ts</code> and the <code>*-api.ts</code> files into the protocol packages; update <code>e2e/safe-mode.spec.ts</code> and <code>BareManager</code>; bump to 2.0.0.</p><p class="done"><span class="pill ok">done when</span> the old paths no longer exist, no manifest uses them, and every base and example plugin activates through ports.</p></div></li>
+    <li><div><h3>Port everything, remove the old paths, <code>@kernel</code> 2.0.0</h3><p>Move the base plugins and examples to <code>provides</code>/<code>consumes</code>. Hosts stop sorting by <code>order</code>. Turn the <code>folders:default-location</code> message into <code>ddd/folders.default-location</code>. Then delete the shims, <code>services.require</code>, <code>extensions.contribute</code>/<code>definePoint</code>, <code>dependencies</code> and <code>x-defines</code>; move <code>_shared/points.ts</code> and the <code>*-api.ts</code> files into the protocol packages; update <code>e2e/safe-mode.spec.ts</code> and <code>BareManager</code>; bump to 2.0.0.</p><p class="done"><span class="pill ok">done when</span> the old paths no longer exist, no manifest uses them, and every base and example plugin activates through ports.</p></div></li>
   </ol>
 </section>
 
@@ -865,7 +865,7 @@ ol.seats li.bench { opacity: .6; }
   <div class="sec-head"><span class="sec-no">§10 · Decisions</span><h2>Settled on 2026-09-28</h2></div>
   <div class="qs">
     <div class="q"><h3>Wire per port, not per item</h3><p class="rec">A wire and a seat belong to a whole port. A plugin that needs items ordered separately splits them across ports, so the graph and <code>wiring.json</code> stay small.</p></div>
-    <div class="q"><h3>The first install claims a namespace</h3><p class="rec">On each server, the first installed package to use a namespace such as <code>acme/</code> owns it. <code>lm/</code> is reserved from day one. Signed publisher keys come later, noted in <code>dev-docs/todo/PROTOCOL-SIGNING.md</code>.</p></div>
+    <div class="q"><h3>The first install claims a namespace</h3><p class="rec">On each server, the first installed package to use a namespace such as <code>acme/</code> owns it. <code>ddd/</code> is reserved from day one. Signed publisher keys come later, noted in <code>dev-docs/todo/PROTOCOL-SIGNING.md</code>.</p></div>
     <div class="q"><h3>Backend Wasm halves get ports later</h3><p class="rec">This work is frontend only. The host ABI keeps its own semver, and backend events and routes become protocols in a follow-up.</p></div>
     <div class="q"><h3>Wiring is per workspace</h3><p class="rec">Wiring decides what code runs for everyone, like enable and disable. Per-user preferences stay inside plugins, such as <code>header</code>'s "Top bar" ordering.</p></div>
     <div class="q"><h3>Adapters are ordinary plugins</h3><p class="rec">No special machinery. A plugin that consumes <code>X@1</code> and provides <code>X@2</code> is an adapter, and the graph suggests installed ones whenever it reports a version or shape mismatch.</p></div>
@@ -920,54 +920,54 @@ ol.seats li.bench { opacity: .6; }
 
   // ---------- protocols: kind, owner, shape (slot shapes are points.ts verbatim) ----------
   const PROTOS = {
-    "lm/shell": ["service", "shell-ui", obj({ isCompact: fn, onLayoutChange: fn, layout: fn, subscribeLayout: fn, sidebarId: str, toggleSidebar: fn, altbarId: str, toggleAltbar: fn, setMainView: fn })],
-    "lm/router": ["service", "router", obj({ navigate: fn, current: fn, query: fn, match: fn, onChange: fn, href: fn, url: fn, documentPath: fn, Link: comp })],
-    "lm/attachments": ["service", "attachments", obj({ upload: fn })],
-    "lm/context-menu": ["service", "context-menu", obj({ open: fn, openSheet: fn, modal: fn, confirm: fn, close: fn })],
-    "lm/document-browser": ["service", "doc-list", obj({ createDocument: fn, newDocument: fn })],
-    "lm/workspace-index": ["service", "indexer", obj({ ready: prom, version: num, stats: fn, fmFields: fn, fmValues: fn, documents: fn, connections: fn, subscribe: fn })],
-    "lm/markdown-renderer": ["service", "markdown", obj({ render: fn, bodyOf: fn, renderAttachment: opt(fn) })],
-    "lm/settings-shell": ["service", "settings", obj({ open: fn })],
-    "lm/shell.header": ["slot", "shell-ui", obj({ id: str, component: comp, order: opt(num) })],
-    "lm/shell.overlay": ["slot", "shell-ui", obj({ id: str, component: comp })],
-    "lm/sidebar.panel": ["slot", "shell-ui", obj({ id: str, title: str, component: comp, icon: opt(any), order: opt(num), defaultOpen: opt(bool) })],
-    "lm/altbar.panel": ["slot", "shell-ui", obj({ id: str, title: str, component: comp, icon: opt(any), order: opt(num), defaultOpen: opt(bool), when: opt(fn) })],
-    "lm/main.view": ["slot", "shell-ui", obj({ id: str, component: comp, title: opt(str) })],
-    "lm/navbar.item": ["slot", "header", obj({ id: str, label: str, icon: opt(any), order: opt(num), side: opt(lit("start", "end")), onSelect: opt(fn), component: opt(comp) })],
-    "lm/router.route": ["slot", "router", obj({ path: str, view: str, order: opt(num) })],
-    "lm/commands.command": ["slot", "commands", obj({ id: str, title: str, run: fn, category: opt(str), icon: opt(any), when: opt(fn) })],
-    "lm/keybindings.default": ["slot", "commands", obj({ command: str, keys: str, when: opt(str) })],
-    "lm/themes.theme": ["slot", "themes", obj({ id: str, name: str, scheme: lit("light", "dark"), tokens: rec(str) })],
-    "lm/search.provider": ["slot", "doc-list", obj({ id: str, label: str, order: opt(num), search: fn })],
-    "lm/document.mode": ["slot", "document-surface", obj({ id: str, label: str, component: comp, icon: opt(any), order: opt(num), when: opt(fn) })],
-    "lm/editor.extension": ["slot", "editor", obj({ id: str, extension: any, order: opt(num) })],
-    "lm/editor.paste": ["slot", "editor", obj({ id: str, order: opt(num), paste: fn })],
-    "lm/settings.section": ["slot", "settings", obj({ id: str, title: str, component: comp, order: opt(num), description: opt(str) })],
-    "lm/markdown.attachment": ["slot", "markdown", obj({ id: str, component: comp, order: opt(num) })],
-    "lm/markdown.codeBlock": ["slot", "markdown", obj({ id: str, component: comp, order: opt(num) })],
-    "lm/markdown.taskState": ["slot", "markdown", obj({ marker: str, label: str, icon: any, order: opt(num), done: opt(bool) })],
-    "lm/attachments.viewer": ["slot", "attachments", obj({ id: str, label: str, extensions: arr(str), component: comp, order: opt(num) })],
-    "lm/text.surface": ["slot", "slash-commands", obj({ id: str, documentId: str, element: any, hasFocus: fn, focus: fn, textBeforeCaret: fn, caretRect: fn, takeBeforeCaret: fn, subscribe: fn, documentBeforeCaret: opt(fn), replaceBeforeCaret: opt(fn) })],
-    "lm/slash.command": ["slot", "slash-commands", obj({ id: str, title: str, description: opt(str), icon: opt(any), keywords: opt(arr(str)), order: opt(num), when: opt(fn), run: fn })],
-    "lm/markdown.directive": ["slot", "markdown", obj({ name: str, kind: lit("container", "leaf", "text"), component: comp })],
-    "lm/markdown.fence": ["slot", "markdown", obj({ language: str, component: comp })],
-    "lm/markdown.remark": ["slot", "markdown", obj({ id: str, plugin: any, options: opt(any), order: opt(num) })],
-    "lm/markdown.component": ["slot", "markdown", obj({ node: str, component: comp, order: opt(num) })],
-    "lm/syntax.language": ["slot", "syntax-highlight", obj({ id: str, name: str, aliases: opt(arr(str)), wasmUrl: str, highlightsUrl: str, size: opt(num) })],
-    "lm/folders.default-location": ["event", "folders", obj({ path: str })],
+    "ddd/shell": ["service", "shell-ui", obj({ isCompact: fn, onLayoutChange: fn, layout: fn, subscribeLayout: fn, sidebarId: str, toggleSidebar: fn, altbarId: str, toggleAltbar: fn, setMainView: fn })],
+    "ddd/router": ["service", "router", obj({ navigate: fn, current: fn, query: fn, match: fn, onChange: fn, href: fn, url: fn, documentPath: fn, Link: comp })],
+    "ddd/attachments": ["service", "attachments", obj({ upload: fn })],
+    "ddd/context-menu": ["service", "context-menu", obj({ open: fn, openSheet: fn, modal: fn, confirm: fn, close: fn })],
+    "ddd/document-browser": ["service", "doc-list", obj({ createDocument: fn, newDocument: fn })],
+    "ddd/workspace-index": ["service", "indexer", obj({ ready: prom, version: num, stats: fn, fmFields: fn, fmValues: fn, documents: fn, connections: fn, subscribe: fn })],
+    "ddd/markdown-renderer": ["service", "markdown", obj({ render: fn, bodyOf: fn, renderAttachment: opt(fn) })],
+    "ddd/settings-shell": ["service", "settings", obj({ open: fn })],
+    "ddd/shell.header": ["slot", "shell-ui", obj({ id: str, component: comp, order: opt(num) })],
+    "ddd/shell.overlay": ["slot", "shell-ui", obj({ id: str, component: comp })],
+    "ddd/sidebar.panel": ["slot", "shell-ui", obj({ id: str, title: str, component: comp, icon: opt(any), order: opt(num), defaultOpen: opt(bool) })],
+    "ddd/altbar.panel": ["slot", "shell-ui", obj({ id: str, title: str, component: comp, icon: opt(any), order: opt(num), defaultOpen: opt(bool), when: opt(fn) })],
+    "ddd/main.view": ["slot", "shell-ui", obj({ id: str, component: comp, title: opt(str) })],
+    "ddd/navbar.item": ["slot", "header", obj({ id: str, label: str, icon: opt(any), order: opt(num), side: opt(lit("start", "end")), onSelect: opt(fn), component: opt(comp) })],
+    "ddd/router.route": ["slot", "router", obj({ path: str, view: str, order: opt(num) })],
+    "ddd/commands.command": ["slot", "commands", obj({ id: str, title: str, run: fn, category: opt(str), icon: opt(any), when: opt(fn) })],
+    "ddd/keybindings.default": ["slot", "commands", obj({ command: str, keys: str, when: opt(str) })],
+    "ddd/themes.theme": ["slot", "themes", obj({ id: str, name: str, scheme: lit("light", "dark"), tokens: rec(str) })],
+    "ddd/search.provider": ["slot", "doc-list", obj({ id: str, label: str, order: opt(num), search: fn })],
+    "ddd/document.mode": ["slot", "document-surface", obj({ id: str, label: str, component: comp, icon: opt(any), order: opt(num), when: opt(fn) })],
+    "ddd/editor.extension": ["slot", "editor", obj({ id: str, extension: any, order: opt(num) })],
+    "ddd/editor.paste": ["slot", "editor", obj({ id: str, order: opt(num), paste: fn })],
+    "ddd/settings.section": ["slot", "settings", obj({ id: str, title: str, component: comp, order: opt(num), description: opt(str) })],
+    "ddd/markdown.attachment": ["slot", "markdown", obj({ id: str, component: comp, order: opt(num) })],
+    "ddd/markdown.codeBlock": ["slot", "markdown", obj({ id: str, component: comp, order: opt(num) })],
+    "ddd/markdown.taskState": ["slot", "markdown", obj({ marker: str, label: str, icon: any, order: opt(num), done: opt(bool) })],
+    "ddd/attachments.viewer": ["slot", "attachments", obj({ id: str, label: str, extensions: arr(str), component: comp, order: opt(num) })],
+    "ddd/text.surface": ["slot", "slash-commands", obj({ id: str, documentId: str, element: any, hasFocus: fn, focus: fn, textBeforeCaret: fn, caretRect: fn, takeBeforeCaret: fn, subscribe: fn, documentBeforeCaret: opt(fn), replaceBeforeCaret: opt(fn) })],
+    "ddd/slash.command": ["slot", "slash-commands", obj({ id: str, title: str, description: opt(str), icon: opt(any), keywords: opt(arr(str)), order: opt(num), when: opt(fn), run: fn })],
+    "ddd/markdown.directive": ["slot", "markdown", obj({ name: str, kind: lit("container", "leaf", "text"), component: comp })],
+    "ddd/markdown.fence": ["slot", "markdown", obj({ language: str, component: comp })],
+    "ddd/markdown.remark": ["slot", "markdown", obj({ id: str, plugin: any, options: opt(any), order: opt(num) })],
+    "ddd/markdown.component": ["slot", "markdown", obj({ node: str, component: comp, order: opt(num) })],
+    "ddd/syntax.language": ["slot", "syntax-highlight", obj({ id: str, name: str, aliases: opt(arr(str)), wasmUrl: str, highlightsUrl: str, size: opt(num) })],
+    "ddd/folders.default-location": ["event", "folders", obj({ path: str })],
     "acme/outline.panel": ["slot", "acme-outline", obj({ id: str, title: str, component: comp, icon: opt(any), collapsible: bool })],
   };
   const TODAY = {
-    "lm/shell": 'services.require("shell-ui")', "lm/router": 'services.require("router")', "lm/context-menu": 'services.require("context-menu")',
-    "lm/document-browser": 'services.require("doc-list")', "lm/workspace-index": 'services.require("indexer")',
-    "lm/markdown-renderer": 'services.require("markdown")', "lm/settings-shell": 'services.get("settings")',
-    "lm/folders.default-location": 'kernel.events "folders:default-location"', "lm/attachments": 'services.require("attachments")',
+    "ddd/shell": 'services.require("shell-ui")', "ddd/router": 'services.require("router")', "ddd/context-menu": 'services.require("context-menu")',
+    "ddd/document-browser": 'services.require("doc-list")', "ddd/workspace-index": 'services.require("indexer")',
+    "ddd/markdown-renderer": 'services.require("markdown")', "ddd/settings-shell": 'services.get("settings")',
+    "ddd/folders.default-location": 'kernel.events "folders:default-location"', "ddd/attachments": 'services.require("attachments")',
   };
   const kindOf = (p) => PROTOS[p][0];
   /** Example history: fmFields/fmValues arrived in workspace-index 1.1.0; search.provider 2.0.0 renamed search to query. */
   const SHAPE_AT = {
-    "lm/workspace-index@1.0.0": obj({ ready: prom, version: num, stats: fn, documents: fn, connections: fn, subscribe: fn }),
-    "lm/search.provider@2.0.0": obj({ id: num, label: str, order: opt(num), query: fn }),
+    "ddd/workspace-index@1.0.0": obj({ ready: prom, version: num, stats: fn, documents: fn, connections: fn, subscribe: fn }),
+    "ddd/search.provider@2.0.0": obj({ id: num, label: str, order: opt(num), query: fn }),
   };
 
   // in: port, protocol, range, { needs, optional, seats }; out: port, protocol, version, shape
@@ -977,42 +977,42 @@ ol.seats li.bench { opacity: .6; }
 
   const NODES = [
     // col 0
-    { id: "indexer", col: 0, desc: "Workspace stats, frontmatter fields and connections, rebuilt locally on every edit.", in: [], out: [O("index", "lm/workspace-index", "1.2.0")] },
+    { id: "indexer", col: 0, desc: "Workspace stats, frontmatter fields and connections, rebuilt locally on every edit.", in: [], out: [O("index", "ddd/workspace-index", "1.2.0")] },
     { id: "acme-fuzzy-index", col: 0, org: "third", desc: "Hypothetical third-party index. Implements workspace-index 1.0.0 (no frontmatter values) and search.provider 2.0.0.", in: [],
-      out: [O("index", "lm/workspace-index", "1.0.0"), O("search", "lm/search.provider", "2.0.0")] },
+      out: [O("index", "ddd/workspace-index", "1.0.0"), O("search", "ddd/search.provider", "2.0.0")] },
     { id: "acme-outline", col: 0, org: "third", desc: "Hypothetical third-party outline panel. Speaks its own protocol, acme/outline.panel, which nothing hosts. Its shape fits several shell-ui seats.", in: [],
       out: [O("panel", "acme/outline.panel")] },
-    { id: "context-menu", col: 0, desc: "Menu, sheet and modal service.", in: [], out: [O("menu", "lm/context-menu"), O("sheet", "lm/shell.overlay")] },
-    { id: "native-preview", col: 0, desc: "Viewers for images, PDF, audio, video and text.", in: [], out: [O("viewers", "lm/attachments.viewer")] },
-    { id: "syntax-highlight", col: 0, desc: "tree-sitter highlighting in read mode and the editor.", in: [I("languages", "lm/syntax.language")], out: [O("builtin", "lm/syntax.language"), O("decorate", "lm/editor.extension"), O("code", "lm/markdown.codeBlock"), O("settings", "lm/settings.section")] },
-    { id: "obsidian-importer", col: 0, org: "example", desc: "plugins/examples: imports an Obsidian vault, uploading its attachments.", in: [I("attachments", "lm/attachments", { needs: ["upload"] })], out: [O("commands", "lm/commands.command")] },
-    { id: "extra-task-states", col: 0, org: "example", desc: "plugins/examples: adds task states to markdown.", in: [], out: [O("states", "lm/markdown.taskState")] },
-    { id: "alt-editor", col: 0, org: "example", hot: false, desc: "plugins/examples: a replacement edit mode. Doesn't declare \"hot\", so changes that touch it reload clients.", in: [], out: [O("mode", "lm/document.mode", "1.0.0", { order: 20 })] },
-    { id: "notices", col: 0, desc: "The notice bell in the header.", in: [], out: [O("bell", "lm/navbar.item")] },
-    { id: "sync-status", col: 0, desc: "The sync pill in the header.", in: [], out: [O("pill", "lm/navbar.item")] },
+    { id: "context-menu", col: 0, desc: "Menu, sheet and modal service.", in: [], out: [O("menu", "ddd/context-menu"), O("sheet", "ddd/shell.overlay")] },
+    { id: "native-preview", col: 0, desc: "Viewers for images, PDF, audio, video and text.", in: [], out: [O("viewers", "ddd/attachments.viewer")] },
+    { id: "syntax-highlight", col: 0, desc: "tree-sitter highlighting in read mode and the editor.", in: [I("languages", "ddd/syntax.language")], out: [O("builtin", "ddd/syntax.language"), O("decorate", "ddd/editor.extension"), O("code", "ddd/markdown.codeBlock"), O("settings", "ddd/settings.section")] },
+    { id: "obsidian-importer", col: 0, org: "example", desc: "plugins/examples: imports an Obsidian vault, uploading its attachments.", in: [I("attachments", "ddd/attachments", { needs: ["upload"] })], out: [O("commands", "ddd/commands.command")] },
+    { id: "extra-task-states", col: 0, org: "example", desc: "plugins/examples: adds task states to markdown.", in: [], out: [O("states", "ddd/markdown.taskState")] },
+    { id: "alt-editor", col: 0, org: "example", hot: false, desc: "plugins/examples: a replacement edit mode. Doesn't declare \"hot\", so changes that touch it reload clients.", in: [], out: [O("mode", "ddd/document.mode", "1.0.0", { order: 20 })] },
+    { id: "notices", col: 0, desc: "The notice bell in the header.", in: [], out: [O("bell", "ddd/navbar.item")] },
+    { id: "sync-status", col: 0, desc: "The sync pill in the header.", in: [], out: [O("pill", "ddd/navbar.item")] },
     // col 1
-    { id: "attachments", col: 1, desc: "Paste-to-upload and a viewer per file type.", in: [I("viewers", "lm/attachments.viewer")], out: [O("uploads", "lm/attachments"), O("paste", "lm/editor.paste"), O("embed", "lm/markdown.attachment"), O("attach", "lm/slash.command"), O("settings", "lm/settings.section")] },
-    { id: "editor", col: 1, desc: "Edit mode: CodeMirror 6 over Yjs.", in: [I("extensions", "lm/editor.extension"), I("paste", "lm/editor.paste")], out: [O("mode", "lm/document.mode", "1.0.0", { order: 10 }), O("surface", "lm/text.surface"), O("commands", "lm/commands.command")] },
-    { id: "fm-autocomplete", col: 1, desc: "Suggests frontmatter keys and values while typing.", in: [I("index", "lm/workspace-index", { range: "^1.1", needs: ["fmFields", "fmValues", "subscribe"] }), I("surfaces", "lm/text.surface")], out: [O("popup", "lm/shell.overlay")] },
-    { id: "graph", col: 1, desc: "Force-directed graph of notes and links.", in: [I("index", "lm/workspace-index", { needs: ["ready", "version", "subscribe", "documents", "connections"] }), I("router", "lm/router", { needs: ["navigate", "query"] }), I("shell", "lm/shell", { needs: ["layout", "toggleAltbar"] })], out: [O("view", "lm/main.view"), O("panel", "lm/altbar.panel"), O("route", "lm/router.route"), O("commands", "lm/commands.command"), O("keys", "lm/keybindings.default"), O("nav", "lm/navbar.item")] },
-    { id: "slash-commands", col: 1, desc: "The / menu over editor-neutral text surfaces.", in: [I("surfaces", "lm/text.surface"), I("commands", "lm/slash.command")], out: [O("menu", "lm/shell.overlay")] },
-    { id: "themes", col: 1, desc: "Theme registry and picker.", in: [I("themes", "lm/themes.theme"), I("settings", "lm/settings-shell", { optional: true, needs: ["open"] })], out: [O("builtin", "lm/themes.theme"), O("commands", "lm/commands.command"), O("settings", "lm/settings.section")] },
+    { id: "attachments", col: 1, desc: "Paste-to-upload and a viewer per file type.", in: [I("viewers", "ddd/attachments.viewer")], out: [O("uploads", "ddd/attachments"), O("paste", "ddd/editor.paste"), O("embed", "ddd/markdown.attachment"), O("attach", "ddd/slash.command"), O("settings", "ddd/settings.section")] },
+    { id: "editor", col: 1, desc: "Edit mode: CodeMirror 6 over Yjs.", in: [I("extensions", "ddd/editor.extension"), I("paste", "ddd/editor.paste")], out: [O("mode", "ddd/document.mode", "1.0.0", { order: 10 }), O("surface", "ddd/text.surface"), O("commands", "ddd/commands.command")] },
+    { id: "fm-autocomplete", col: 1, desc: "Suggests frontmatter keys and values while typing.", in: [I("index", "ddd/workspace-index", { range: "^1.1", needs: ["fmFields", "fmValues", "subscribe"] }), I("surfaces", "ddd/text.surface")], out: [O("popup", "ddd/shell.overlay")] },
+    { id: "graph", col: 1, desc: "Force-directed graph of notes and links.", in: [I("index", "ddd/workspace-index", { needs: ["ready", "version", "subscribe", "documents", "connections"] }), I("router", "ddd/router", { needs: ["navigate", "query"] }), I("shell", "ddd/shell", { needs: ["layout", "toggleAltbar"] })], out: [O("view", "ddd/main.view"), O("panel", "ddd/altbar.panel"), O("route", "ddd/router.route"), O("commands", "ddd/commands.command"), O("keys", "ddd/keybindings.default"), O("nav", "ddd/navbar.item")] },
+    { id: "slash-commands", col: 1, desc: "The / menu over editor-neutral text surfaces.", in: [I("surfaces", "ddd/text.surface"), I("commands", "ddd/slash.command")], out: [O("menu", "ddd/shell.overlay")] },
+    { id: "themes", col: 1, desc: "Theme registry and picker.", in: [I("themes", "ddd/themes.theme"), I("settings", "ddd/settings-shell", { optional: true, needs: ["open"] })], out: [O("builtin", "ddd/themes.theme"), O("commands", "ddd/commands.command"), O("settings", "ddd/settings.section")] },
     // col 2
-    { id: "markdown", col: 2, desc: "The unified/remark to React pipeline.", in: [I("router", "lm/router", { optional: true, needs: ["navigate", "href"] }), I("attachments", "lm/markdown.attachment"), I("code", "lm/markdown.codeBlock"), I("tasks", "lm/markdown.taskState"), I("directives", "lm/markdown.directive"), I("fences", "lm/markdown.fence"), I("remark", "lm/markdown.remark"), I("components", "lm/markdown.component")], out: [O("renderer", "lm/markdown-renderer"), O("defaults", "lm/markdown.taskState", "1.0.0", { order: 0 }), O("commands", "lm/commands.command"), O("settings", "lm/settings.section")] },
-    { id: "viewer", col: 2, desc: "Read mode and the file page.", in: [I("markdown", "lm/markdown-renderer", { needs: ["render", "bodyOf", "renderAttachment"] })], out: [O("mode", "lm/document.mode", "1.0.0", { order: 0 }), O("view", "lm/main.view"), O("route", "lm/router.route")] },
-    { id: "changes", col: 2, desc: "History of the open document in the altbar.", in: [I("shell", "lm/shell", { needs: ["layout", "toggleAltbar"] }), I("router", "lm/router", { needs: ["navigate"] }), I("menu", "lm/context-menu"), I("markdown", "lm/markdown-renderer", { needs: ["render", "bodyOf"] })], out: [O("panel", "lm/altbar.panel"), O("view", "lm/main.view"), O("route", "lm/router.route"), O("commands", "lm/commands.command")] },
-    { id: "folders", col: 2, desc: "Drag-and-drop file tree over fm.path.", in: [I("browser", "lm/document-browser", { needs: ["createDocument", "newDocument"] }), I("router", "lm/router", { needs: ROUTER_NAV }), I("menu", "lm/context-menu")], out: [O("tree", "lm/sidebar.panel"), O("view", "lm/main.view"), O("route", "lm/router.route"), O("commands", "lm/commands.command"), O("settings", "lm/settings.section"), O("location", "lm/folders.default-location")] },
+    { id: "markdown", col: 2, desc: "The unified/remark to React pipeline.", in: [I("router", "ddd/router", { optional: true, needs: ["navigate", "href"] }), I("attachments", "ddd/markdown.attachment"), I("code", "ddd/markdown.codeBlock"), I("tasks", "ddd/markdown.taskState"), I("directives", "ddd/markdown.directive"), I("fences", "ddd/markdown.fence"), I("remark", "ddd/markdown.remark"), I("components", "ddd/markdown.component")], out: [O("renderer", "ddd/markdown-renderer"), O("defaults", "ddd/markdown.taskState", "1.0.0", { order: 0 }), O("commands", "ddd/commands.command"), O("settings", "ddd/settings.section")] },
+    { id: "viewer", col: 2, desc: "Read mode and the file page.", in: [I("markdown", "ddd/markdown-renderer", { needs: ["render", "bodyOf", "renderAttachment"] })], out: [O("mode", "ddd/document.mode", "1.0.0", { order: 0 }), O("view", "ddd/main.view"), O("route", "ddd/router.route")] },
+    { id: "changes", col: 2, desc: "History of the open document in the altbar.", in: [I("shell", "ddd/shell", { needs: ["layout", "toggleAltbar"] }), I("router", "ddd/router", { needs: ["navigate"] }), I("menu", "ddd/context-menu"), I("markdown", "ddd/markdown-renderer", { needs: ["render", "bodyOf"] })], out: [O("panel", "ddd/altbar.panel"), O("view", "ddd/main.view"), O("route", "ddd/router.route"), O("commands", "ddd/commands.command")] },
+    { id: "folders", col: 2, desc: "Drag-and-drop file tree over fm.path.", in: [I("browser", "ddd/document-browser", { needs: ["createDocument", "newDocument"] }), I("router", "ddd/router", { needs: ROUTER_NAV }), I("menu", "ddd/context-menu")], out: [O("tree", "ddd/sidebar.panel"), O("view", "ddd/main.view"), O("route", "ddd/router.route"), O("commands", "ddd/commands.command"), O("settings", "ddd/settings.section"), O("location", "ddd/folders.default-location")] },
     // col 3
-    { id: "doc-list", col: 3, desc: "Browse, search, sort, filter, Trash.", in: [I("router", "lm/router", { needs: ROUTER_NAV }), I("menu", "lm/context-menu"), I("search", "lm/search.provider"), I("location", "lm/folders.default-location")], out: [O("local", "lm/search.provider", "1.0.0", { order: 0 }), O("browser", "lm/document-browser"), O("list", "lm/sidebar.panel"), O("view", "lm/main.view"), O("route", "lm/router.route"), O("commands", "lm/commands.command"), O("keys", "lm/keybindings.default")] },
-    { id: "document-surface", col: 3, desc: "The document route and mode registry.", in: [I("router", "lm/router", { needs: ROUTER_NAV }), I("modes", "lm/document.mode")], out: [O("view", "lm/main.view"), O("route", "lm/router.route"), O("commands", "lm/commands.command"), O("keys", "lm/keybindings.default"), O("settings", "lm/settings.section")] },
-    { id: "admin", col: 3, desc: "Users, invites, audit, orphans, plugins.", in: [I("router", "lm/router", { needs: ROUTER_NAV }), I("menu", "lm/context-menu")], out: [O("view", "lm/main.view"), O("route", "lm/router.route"), O("commands", "lm/commands.command"), O("nav", "lm/navbar.item"), O("settings", "lm/settings.section")] },
+    { id: "doc-list", col: 3, desc: "Browse, search, sort, filter, Trash.", in: [I("router", "ddd/router", { needs: ROUTER_NAV }), I("menu", "ddd/context-menu"), I("search", "ddd/search.provider"), I("location", "ddd/folders.default-location")], out: [O("local", "ddd/search.provider", "1.0.0", { order: 0 }), O("browser", "ddd/document-browser"), O("list", "ddd/sidebar.panel"), O("view", "ddd/main.view"), O("route", "ddd/router.route"), O("commands", "ddd/commands.command"), O("keys", "ddd/keybindings.default")] },
+    { id: "document-surface", col: 3, desc: "The document route and mode registry.", in: [I("router", "ddd/router", { needs: ROUTER_NAV }), I("modes", "ddd/document.mode")], out: [O("view", "ddd/main.view"), O("route", "ddd/router.route"), O("commands", "ddd/commands.command"), O("keys", "ddd/keybindings.default"), O("settings", "ddd/settings.section")] },
+    { id: "admin", col: 3, desc: "Users, invites, audit, orphans, plugins.", in: [I("router", "ddd/router", { needs: ROUTER_NAV }), I("menu", "ddd/context-menu")], out: [O("view", "ddd/main.view"), O("route", "ddd/router.route"), O("commands", "ddd/commands.command"), O("nav", "ddd/navbar.item"), O("settings", "ddd/settings.section")] },
     // col 4
-    { id: "settings", col: 4, desc: "The settings shell.", in: [I("sections", "lm/settings.section"), I("router", "lm/router", { needs: ["navigate", "url"] })], out: [O("account", "lm/settings.section", "1.0.0", { order: 0 }), O("shell", "lm/settings-shell"), O("view", "lm/main.view"), O("route", "lm/router.route"), O("commands", "lm/commands.command"), O("keys", "lm/keybindings.default"), O("gear", "lm/navbar.item")] },
-    { id: "commands", col: 4, desc: "Command registry, palette, keybindings.", in: [I("commands", "lm/commands.command"), I("keys", "lm/keybindings.default")], out: [O("own", "lm/commands.command"), O("palette", "lm/shell.overlay"), O("settings", "lm/settings.section")] },
-    { id: "header", col: 4, desc: "The top bar and its start/end seats.", in: [I("items", "lm/navbar.item")], out: [O("bar", "lm/shell.header"), O("settings", "lm/settings.section")] },
-    { id: "router", col: 4, desc: "URL to view, hash-based.", in: [I("shell", "lm/shell", { needs: ["setMainView"] }), I("routes", "lm/router.route")], out: [O("router", "lm/router"), O("outlet", "lm/main.view")] },
+    { id: "settings", col: 4, desc: "The settings shell.", in: [I("sections", "ddd/settings.section"), I("router", "ddd/router", { needs: ["navigate", "url"] })], out: [O("account", "ddd/settings.section", "1.0.0", { order: 0 }), O("shell", "ddd/settings-shell"), O("view", "ddd/main.view"), O("route", "ddd/router.route"), O("commands", "ddd/commands.command"), O("keys", "ddd/keybindings.default"), O("gear", "ddd/navbar.item")] },
+    { id: "commands", col: 4, desc: "Command registry, palette, keybindings.", in: [I("commands", "ddd/commands.command"), I("keys", "ddd/keybindings.default")], out: [O("own", "ddd/commands.command"), O("palette", "ddd/shell.overlay"), O("settings", "ddd/settings.section")] },
+    { id: "header", col: 4, desc: "The top bar and its start/end seats.", in: [I("items", "ddd/navbar.item")], out: [O("bar", "ddd/shell.header"), O("settings", "ddd/settings.section")] },
+    { id: "router", col: 4, desc: "URL to view, hash-based.", in: [I("shell", "ddd/shell", { needs: ["setMainView"] }), I("routes", "ddd/router.route")], out: [O("router", "ddd/router"), O("outlet", "ddd/main.view")] },
     // col 5
-    { id: "shell-ui", col: 5, desc: "Layout, breakpoint, top-bar spot, sidebar, altbar, overlays.", in: [I("header", "lm/shell.header", { seats: 1 }), I("overlays", "lm/shell.overlay"), I("sidebar", "lm/sidebar.panel"), I("altbar", "lm/altbar.panel"), I("views", "lm/main.view")], out: [O("shell", "lm/shell"), O("menu-button", "lm/navbar.item")] },
+    { id: "shell-ui", col: 5, desc: "Layout, breakpoint, top-bar spot, sidebar, altbar, overlays.", in: [I("header", "ddd/shell.header", { seats: 1 }), I("overlays", "ddd/shell.overlay"), I("sidebar", "ddd/sidebar.panel"), I("altbar", "ddd/altbar.panel"), I("views", "ddd/main.view")], out: [O("shell", "ddd/shell"), O("menu-button", "ddd/navbar.item")] },
   ];
   const byId = Object.fromEntries(NODES.map((n) => [n.id, n]));
   NODES.forEach((n) => { n.org = n.org || "base"; });
@@ -1184,7 +1184,7 @@ ol.seats li.bench { opacity: .6; }
   function diff() {
     const L = resolve(live.w), D = R;
     const ek = (e) => ekey(e.from, e.to);
-    const lm = new Map(L.edges.map((e) => [ek(e), e])), dm = new Map(D.edges.map((e) => [ek(e), e]));
+    const ddd = new Map(L.edges.map((e) => [ek(e), e])), dm = new Map(D.edges.map((e) => [ek(e), e]));
     const stop = NODES.filter((n) => L.active.has(n.id) && !D.active.has(n.id)).map((n) => n.id);
     const start = NODES.filter((n) => !L.active.has(n.id) && D.active.has(n.id)).map((n) => n.id);
     const moving = new Set([...stop, ...start]);
@@ -1221,13 +1221,13 @@ ol.seats li.bench { opacity: .6; }
       const gone = a.filter((x) => !b.includes(x));
       ops.push({ op: "mod", text: `${k} seats: ${b.map((x, i) => `${i + 1} ${splitKey(x)[0]}${a.includes(x) ? "" : " (new)"}`).join(", ") || "empty"}${gone.length ? `; removed ${gone.map((x) => splitKey(x)[0]).join(", ")}` : ""}`, port: { dir: "in", k } });
     }
-    for (const e of D.edges) if (e.kind === "event" && !lm.has(ek(e)) && !touchesMoving(e)) { hosts.add(e.to); ops.push({ op: "add", text: `${e.from} → ${e.to}`, edge: ek(e) }); }
+    for (const e of D.edges) if (e.kind === "event" && !ddd.has(ek(e)) && !touchesMoving(e)) { hosts.add(e.to); ops.push({ op: "add", text: `${e.from} → ${e.to}`, edge: ek(e) }); }
     for (const e of L.edges) if (e.kind === "event" && !dm.has(ek(e)) && !touchesMoving(e)) { hosts.add(e.to); ops.push({ op: "del", text: `${e.from} → ${e.to}` }); }
     const consequence = { stops: stop.filter((id) => !unplug.includes(id)), starts: start.filter((id) => !plug.includes(id)) };
     const touched = [...stop, ...start, ...restart];
     const cold = touched.filter((id) => byId[id].hot === false);
     const actOrder = (ids) => [...ids].sort((x, y) => (D.order.indexOf(x) === -1 ? L.order.indexOf(x) : D.order.indexOf(x)) - (D.order.indexOf(y) === -1 ? L.order.indexOf(y) : D.order.indexOf(y)));
-    return { L, lm, dm, ops, stop: actOrder(stop).reverse(), start: actOrder(start), restart: actOrder(restart), hosts: [...hosts], cold, consequence };
+    return { L, ddd, dm, ops, stop: actOrder(stop).reverse(), start: actOrder(start), restart: actOrder(restart), hosts: [...hosts], cold, consequence };
   }
 
   // ---------- DOM ----------
@@ -1240,7 +1240,7 @@ ol.seats li.bench { opacity: .6; }
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const nodeEls = {}, portEls = {};
   let R = null;
-  const short = (p) => p.replace(/^lm\//, "");
+  const short = (p) => p.replace(/^ddd\//, "");
 
   /**
    * Which edge a port sits on. Left, "used by": what depends on this plugin, so the
@@ -1385,7 +1385,7 @@ ol.seats li.bench { opacity: .6; }
       const [a, b, sa, sb] = ends(e);
       const d = curve(a, b, sa, sb);
       const ek = ekey(e.from, e.to);
-      let cls = `w ${e.kind}${e.structural ? " structural" : ""}${e.bench ? " bench" : ""}${DF && !DF.lm.has(ek) ? " new" : ""}`;
+      let cls = `w ${e.kind}${e.structural ? " structural" : ""}${e.bench ? " bench" : ""}${DF && !DF.ddd.has(ek) ? " new" : ""}`;
       if (selEdge === ek) cls += " sel";
       else if (selPort) cls += throughPort(e) ? " hot" : " dim";
       else if (focus) cls += (e.fromN === focus || e.toN === focus) ? " hot" : " dim";
@@ -1877,7 +1877,7 @@ ol.seats li.bench { opacity: .6; }
   function drawMapping() {
     const r = resolve();
     const rank = (p) => ["service", "slot", "event"].indexOf(kindOf(p));
-    const rows = Object.keys(PROTOS).filter((p) => p.startsWith("lm/")).sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+    const rows = Object.keys(PROTOS).filter((p) => p.startsWith("ddd/")).sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
     $("#mapBody").innerHTML = rows.map((p) => {
       const k = kindOf(p);
       const today = TODAY[p] || `point "${short(p)}"`;

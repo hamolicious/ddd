@@ -88,7 +88,7 @@ for (const name of files) {
 }
 
 const header = `/**
- * \`@kernel\` — the Life Manager plugin contract.
+ * \`@kernel\` — the ddd plugin contract.
  *
  * Generated from web/kernel-api/src by web/scripts/build-kernel-dts.mjs.
  * Do not edit: edit the source and re-run \`npm run kernel:dts\`.

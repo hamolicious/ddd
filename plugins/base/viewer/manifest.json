@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "name": "Viewer",
   "description": "Read mode: renders the body, hides frontmatter and machine sections, and lists the notes inside it.",
-  "author": "Life Manager base distribution",
+  "author": "ddd base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
   "kernel": "^3.0",

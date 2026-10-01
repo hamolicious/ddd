@@ -3,7 +3,7 @@
  *
  * `mise run wasm` builds `backend/crates/core` (feature `wasm`) into
  * `web/kernel/src/wasm/pkg/`, and `vite.config.ts` aliases the module id
- * `@life-manager/core-wasm` to the artifact there. The declaration is written by
+ * `@ddd/core-wasm` to the artifact there. The declaration is written by
  * hand on purpose: `npm run typecheck` must pass in a clean checkout that has
  * never run the Wasm build, and this is the one place where the ABI is spelled
  * out for the type checker.
@@ -12,7 +12,7 @@
  * `backend/crates/core/src/wasm.rs` exactly; changing either side without the
  * other is a bug in both.**
  */
-declare module "@life-manager/core-wasm" {
+declare module "@ddd/core-wasm" {
   /**
    * Initialize the module. `undefined` lets wasm-bindgen resolve the `.wasm`
    * next to the JS (the browser path); Node passes the bytes explicitly.
@@ -36,7 +36,7 @@ declare module "@life-manager/core-wasm" {
    */
   export function evaluate_filter(filter_json: string, doc_json: string): boolean;
 
-  /** `life_manager_core::CORE_SEMANTICS_VERSION` — compared against `welcome`. */
+  /** `ddd_core::CORE_SEMANTICS_VERSION` — compared against `welcome`. */
   export function core_semantics_version(): number;
 
   /**
@@ -53,7 +53,7 @@ declare module "@life-manager/core-wasm" {
   export function resolve_title(text: string): string;
 
   /**
-   * The query engine (`life_manager_core::query`): rows in, plans answered — the
+   * The query engine (`ddd_core::query`): rows in, plans answered — the
    * same filter, text ranking, folder relations and sort the server runs.
    */
   export class QueryEngine {

@@ -1,4 +1,4 @@
-//! The `life-manager reset-password --email …` break-glass path (SPEC §5.1).
+//! The `ddd reset-password --email …` break-glass path (SPEC §5.1).
 //!
 //! This is the recovery route when no admin can sign in. It needs the database,
 //! not an HTTP server, so it runs the whole command and exits — `main.rs` only

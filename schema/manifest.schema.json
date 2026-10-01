@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://life-manager.dev/schema/manifest.schema.json",
+  "$id": "https://ddd.dev/schema/manifest.schema.json",
   "title": "PluginManifest",
   "description": "A plugin's manifest.json (SPEC §6.2). The one source for the Rust and TypeScript manifest types and validators: `node web/scripts/gen-manifest.mjs` writes both, and `--check` fails when either is stale.",
   "x-kernel-version": "3.1.0",
@@ -309,14 +309,14 @@
           "items": {
             "type": "string"
           },
-          "description": "Server-bus events delivered to `lm_event`, namespaced (`other-plugin:something`)."
+          "description": "Server-bus events delivered to `ddd_event`, namespaced (`other-plugin:something`)."
         },
         "exports": {
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/BackendExport"
           },
-          "description": "Functions this backend's `lm_call` answers for plugins that depend on it (HOST-ABI.md §3.10). A call to a name not listed is refused; `input`/`output` shapes are checked at the boundary."
+          "description": "Functions this backend's `ddd_call` answers for plugins that depend on it (HOST-ABI.md §3.10). A call to a name not listed is refused; `input`/`output` shapes are checked at the boundary."
         }
       }
     },

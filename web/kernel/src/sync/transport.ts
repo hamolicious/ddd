@@ -31,7 +31,7 @@ export interface TransportOptions {
   readonly url?: string;
   /**
    * Bearer session token for shells and tests. Offered as the
-   * `life-manager.bearer.<token>` subprotocol (PROTOCOL.md §1.1); a browser with
+   * `ddd.bearer.<token>` subprotocol (PROTOCOL.md §1.1); a browser with
    * a session cookie passes nothing here.
    */
   readonly bearerToken?: string;

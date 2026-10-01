@@ -61,7 +61,7 @@ const CONDITIONS =
   "autofm:[&_.autofm-field_select]:tap-h autofm:[&_.autofm-field_select]:rounded autofm:[&_.autofm-field_select]:border autofm:[&_.autofm-field_select]:border-border autofm:[&_.autofm-field_select]:bg-bg autofm:[&_.autofm-field_select]:px-2 autofm:[&_.autofm-field_select]:text-base autofm:[&_.autofm-field_select]:text-text " +
   "autofm:[&_.autofm-grow]:flex-[1_1_12rem] autofm:compact:[&_.autofm-grow]:basis-full " +
   "autofm:[&_.autofm-checkbox]:tap-h autofm:[&_.autofm-checkbox]:inline-flex autofm:[&_.autofm-checkbox]:cursor-pointer autofm:[&_.autofm-checkbox]:items-center autofm:[&_.autofm-checkbox]:gap-1 autofm:[&_.autofm-checkbox]:whitespace-nowrap " +
-  "autofm:[&_.autofm-icon-button]:min-w-[var(--lm-tap-target)] " +
+  "autofm:[&_.autofm-icon-button]:min-w-[var(--ddd-tap-target)] " +
   "autofm:[&_.autofm-flags]:flex autofm:[&_.autofm-flags]:flex-[1_1_100%] autofm:[&_.autofm-flags]:flex-wrap autofm:[&_.autofm-flags]:items-center autofm:[&_.autofm-flags]:gap-3 " +
   "autofm:[&_.autofm-op-icon]:tap-h autofm:[&_.autofm-op-icon]:inline-flex autofm:[&_.autofm-op-icon]:min-w-[2ch] autofm:[&_.autofm-op-icon]:items-center autofm:[&_.autofm-op-icon]:justify-center autofm:[&_.autofm-op-icon]:px-1 autofm:[&_.autofm-op-icon]:font-mono autofm:[&_.autofm-op-icon]:text-text-muted autofm:[&_.autofm-op-icon]:whitespace-nowrap " +
   "autofm:[&_.autofm-note-results]:flex autofm:[&_.autofm-note-results]:flex-wrap autofm:[&_.autofm-note-results]:gap-1";
@@ -279,7 +279,7 @@ export default function activate(kernel: Kernel): void {
                   </button>
                   <button
                     type="button"
-                    className={`${BUTTON} autofm:min-w-[var(--lm-tap-target)]`}
+                    className={`${BUTTON} autofm:min-w-[var(--ddd-tap-target)]`}
                     aria-label={`Remove ${field.key.trim() || `property ${index + 1}`}`}
                     onClick={() => change(fields.filter((each) => each.id !== field.id))}
                   >

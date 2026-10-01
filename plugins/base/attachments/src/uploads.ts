@@ -401,7 +401,7 @@ export function createUploads(kernel: Kernel): Uploads {
 async function withLock(token: string, work: () => Promise<void>, elsewhere: () => void): Promise<void> {
   const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
   if (!locks) return work();
-  await locks.request(`life-manager:attachments:upload:${token}`, { ifAvailable: true }, async (lock) => {
+  await locks.request(`ddd:attachments:upload:${token}`, { ifAvailable: true }, async (lock) => {
     if (!lock) {
       elsewhere();
       return;

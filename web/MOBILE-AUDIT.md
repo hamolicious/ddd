@@ -9,7 +9,7 @@ three fix-agent ownerships so each list can be worked without reading the others
 An isolated stack, so nothing touched the owner's live workspace on `:8080`:
 
 ```bash
-LM_E2E_PORT=8131 LM_E2E_DB=life_manager_mobile_audit node web/app/e2e/server.mjs
+DDD_E2E_PORT=8131 DDD_E2E_DB=ddd_mobile_audit node web/app/e2e/server.mjs
 # real binary, real bundle (web/app/dist), real registry (15 plugins), fresh database
 ```
 
@@ -122,7 +122,7 @@ one is from the CSS, and it is why the owner's phone looks different from any sc
 here):
 
 - `plugins/base/shell-ui/src/style.css:60-69` — `.shell-navbar` has
-  `padding: calc(var(--lm-space) * 0.5) var(--lm-space)` and no top inset; the first row
+  `padding: calc(var(--ddd-space) * 0.5) var(--ddd-space)` and no top inset; the first row
   of the navbar sits under the status bar.
 - `plugins/base/shell-ui/src/style.css:415-426` — `.shell-sidebar` drawer is
   `inset-block: 0` with no bottom inset; its last panel sits under the gesture bar.
@@ -131,7 +131,7 @@ here):
 - `plugins/base/document-surface/src/style.css:124-130` — the document pane is the
   bottom-most scroller; its last line lands under the gesture bar.
 
-Fix shape: a `--lm-safe-*` set of tokens on `:root` in `web/app/src/styles.css` derived
+Fix shape: a `--ddd-safe-*` set of tokens on `:root` in `web/app/src/styles.css` derived
 from `env(safe-area-inset-*)`, consumed by the navbar, the drawer, the palette and the
 document pane. The tokens belong in the kernel stylesheet so a replacement shell inherits
 them.
@@ -139,7 +139,7 @@ them.
 ### A-2 · The layout viewport never shrinks for the keyboard
 
 `web/app/src/styles.css:19-24` pins `html, body, #root { height: 100% }`, and
-`:83-87` gives `.lm-frame` `height: 100%`. On Android the *layout* viewport does not shrink
+`:83-87` gives `.ddd-frame` `height: 100%`. On Android the *layout* viewport does not shrink
 when the soft keyboard opens (only the *visual* viewport does), so the frame keeps its full
 height and the keyboard is painted over the bottom of it. Nothing in the tree reads
 `window.visualViewport` — grep returns zero hits.
@@ -150,9 +150,9 @@ bottom edge and the `Change password` submit button below the fold, with 200 px 
 remaining 504 px still spent on the two-row navbar. On a device this is worse, not better.
 
 Fix shape: a `visualViewport` listener that writes the visible height into a
-`--lm-viewport-height` token, and `.lm-frame`/`.cmd-palette`/`.lm-reauth` sized from it.
+`--ddd-viewport-height` token, and `.ddd-frame`/`.cmd-palette`/`.ddd-reauth` sized from it.
 
-### A-3 · `.lm-reauth` centres a dialog the keyboard will cover
+### A-3 · `.ddd-reauth` centres a dialog the keyboard will cover
 
 `web/app/src/styles.css:212-222` — `position: fixed; inset: 0; display: grid;
 place-items: center`. The password field is vertically centred in the *layout* viewport,
@@ -175,7 +175,7 @@ by spending vertical space instead. On the document surface that leaves 640 px o
 ### A-5 · The notice panel is clipped off the **left** edge
 
 `plugins/base/shell-ui/src/style.css:235-248` — `.shell-notice-panel` is
-`position: absolute; right: 0; width: min(26rem, calc(100vw - var(--lm-space) * 2))`,
+`position: absolute; right: 0; width: min(26rem, calc(100vw - var(--ddd-space) * 2))`,
 anchored to `.shell-notices`, which is the bell at the far right of the navbar. At 390 px
 the width resolves to 374 px and `right: 0` puts the left edge at **x = −9**; at 360 px
 the same. Measured on `19-notices-panel__pixel7.png` and `__narrow.png`: the only
@@ -183,13 +183,13 @@ off-screen leaf on that surface is the panel itself. The first characters of eve
 are cut.
 
 Fix shape: at the mobile breakpoint, take the panel out of the bell's containing block —
-`position: fixed`, `inset-inline: var(--lm-space)`, `width: auto`.
+`position: fixed`, `inset-inline: var(--ddd-space)`, `width: auto`.
 
 ### A-6 · `.shell-notice-panel { max-height: 60vh }` — `styles.css:241`
 
 `vh` is the *large* viewport on Android: with the URL bar shown, 60vh is more than 60% of
 what is visible. Same file, same block as A-5. `dvh` with a `vh` fallback, or the
-`--lm-viewport-height` token from A-2.
+`--ddd-viewport-height` token from A-2.
 
 ### A-7 · The 640 px breakpoint is width-only, so phone **landscape** gets the desktop layout
 
@@ -232,7 +232,7 @@ navigation into admin from settings.
 The brief's rule for this page is "settings/admin become single-column stacked cards on
 narrow widths". `.settings-panes` already collapses to one column at `:227-230`; the nav
 should collapse with it — a stacked list of full-width rows (each already
-`min-height: var(--lm-tap-target)` at `:57-65`), not a row.
+`min-height: var(--ddd-tap-target)` at `:57-65`), not a row.
 
 ### A-9 · Settings: the pane is unclipped, so `main` scrolls sideways
 
@@ -300,9 +300,9 @@ PAST L=8 R=493 w=485 | li>p.admin-audit-target>button.admin-link | "d252a17bfa45
 entries from one token. `.admin-problems li` already has `overflow-wrap: anywhere`
 (`style.css:414-416`); `.admin-link` needs the same.
 
-### A-14 · `.lm-shell-facts` has no stylesheet rule at all
+### A-14 · `.ddd-shell-facts` has no stylesheet rule at all
 
-`web/app/src/boot/ShellSection.tsx:91` renders `<dl className="lm-shell-facts">`, and a
+`web/app/src/boot/ShellSection.tsx:91` renders `<dl className="ddd-shell-facts">`, and a
 grep for that class across `web/app/src` finds **one hit — the JSX**. There is no rule in
 `web/app/src/styles.css`. It therefore renders as a browser-default `<dl>`: indented
 `<dd>`s, no grid, no wrapping. Measured in landscape
@@ -312,7 +312,7 @@ grep for that class across `web/app/src` finds **one hit — the JSX**. There is
 It also means this section alone in the app does not match `.settings-facts`
 (`settings/style.css:108-121`), which is the same two-column `dt`/`dd` shape done properly.
 
-### A-15 · `.lm-bare-table` — five columns, `width: 100%`, no wrapper
+### A-15 · `.ddd-bare-table` — five columns, `width: 100%`, no wrapper
 
 `web/app/src/styles.css:241-252` / `web/app/src/safe-mode/BareManager.tsx:55-84`.
 Plugin · Version · Kernel · Base · Would load, with a free-text "no — <detail>" in the
@@ -321,7 +321,7 @@ broken; it should not be the screen that also does not fit.
 
 ### A-16 · `<summary>` gets no minimum height anywhere
 
-The global `button { min-height: var(--lm-tap-target) }` in `web/app/src/styles.css:58-65`
+The global `button { min-height: var(--ddd-tap-target) }` in `web/app/src/styles.css:58-65`
 does not reach `<summary>`, and no plugin adds a rule. Measured targets:
 
 | Where | size | file |
@@ -337,7 +337,7 @@ stylesheet beside the `button` rule.
 ### A-17 · Theme swatch radios are 17.6 × 17.6 px
 
 `plugins/base/themes/src/style.css:51-55` gives `.theme-option` (the `<label>`)
-`min-height: var(--lm-tap-target)`, so tapping the row works and this is **low severity** —
+`min-height: var(--ddd-tap-target)`, so tapping the row works and this is **low severity** —
 but the control itself is a quarter of the target, and the swatch beside it
 (`:83`, `width: 3rem`) is the thing a user aims at.
 
@@ -397,7 +397,7 @@ pattern, and the comment at `:63` states the rule this file then breaks for pros
 ```css
 .properties-input {
   /* 44 px touch target at the mobile breakpoint (SPEC §6.5). */
-  min-height: calc(var(--lm-tap-target) - 10px);
+  min-height: calc(var(--ddd-tap-target) - 10px);
 }
 ```
 
@@ -408,7 +408,7 @@ and a `@container (max-width: 20rem)` block at `:283-…`, and neither restores 
 
 ### B-3 · `.properties-remove` is 30 px wide — `properties/style.css:130-133`
 
-`width: calc(var(--lm-tap-target) - 14px); height: calc(var(--lm-tap-target) - 14px)`.
+`width: calc(var(--ddd-tap-target) - 14px); height: calc(var(--ddd-tap-target) - 14px)`.
 Measured 30 × 44 (the flex row stretches it vertically, not horizontally). It is the
 destroy-a-property button, one per row, sitting 8 px from a 34 px text field.
 
@@ -449,7 +449,7 @@ at x ≈ 8, where it fits.
 `padding: … 40vh` on the content. The intent (scroll headroom so the caret can reach the
 middle of the screen) is right and worth keeping, but `40vh` of the *large* viewport is
 338 px at 844 and is not what the comment above it claims. Pair it with the
-`--lm-viewport-height` token from A-2.
+`--ddd-viewport-height` token from A-2.
 
 ### B-8 · `.properties-input` is clipped in the landscape sidebar
 
@@ -471,7 +471,7 @@ Consequence of A-7 (desktop layout in landscape) plus `properties/style.css:64-6
   padding: 0 !important;
   border: 0 !important;
   background: none !important;
-  color: var(--lm-link);
+  color: var(--ddd-link);
 }
 ```
 
@@ -492,7 +492,7 @@ cosmetic, but it is the tell for C-11.)
 
 `plugins/base/folders/src/style.css:60-70` — `width: 1.5rem; min-height: 1.5rem`. The
 mobile block at `:276-285` correctly upsizes `.folders-actions button` to
-`var(--lm-tap-target)` in both dimensions, and does not include `.folders-twisty`. It is
+`var(--ddd-tap-target)` in both dimensions, and does not include `.folders-twisty`. It is
 the control that expands a folder — measured 24 × 24 in
 `07-sidebar-drawer__pixel7.png`.
 
@@ -659,7 +659,7 @@ internal vocabulary** (SPEC section numbers, a milestone number, `document.mode`
 | A-P29 | `plugins/base/themes/src/Picker.tsx:112-113` | "Your choice is saved on this device and has not reached your settings yet — it syncs to your other devices as soon as the server is reachable." | "Saved on this device. It reaches your other devices when you are online." |
 | A-P30 | `…/Picker.tsx:89` | "Currently showing the **{scheme}** appearance." | "Showing {scheme}." |
 | A-P31 | `…/Picker.tsx:147` | "Applied when the {scheme} appearance is showing." | "Used in {scheme}." |
-| A-P32 | `web/app/src/ui/BootScreen.tsx:93-95` | "Life Manager needs a browser with import-map support — Chrome or Edge 89+, Safari 16.4+, Firefox 108+. Everything else about your data is fine; this browser **simply** cannot load the app." | "Life Manager needs Chrome 89+, Edge 89+, Safari 16.4+ or Firefox 108+. Your data is unaffected." (**"simply" violation**) |
+| A-P32 | `web/app/src/ui/BootScreen.tsx:93-95` | "ddd needs a browser with import-map support — Chrome or Edge 89+, Safari 16.4+, Firefox 108+. Everything else about your data is fine; this browser **simply** cannot load the app." | "ddd needs Chrome 89+, Edge 89+, Safari 16.4+ or Firefox 108+. Your data is unaffected." (**"simply" violation**) |
 | A-P33 | `web/app/src/ui/BootScreen.tsx:65-67` | "The server cannot be reached, and this device has not signed in yet — so there is no local copy of your workspace to open. Connect once, and after that it opens offline." | "The server is unreachable and this device has never signed in, so there is nothing stored locally to open. Connect once and it will open offline after that." |
 | A-P34 | `web/app/src/boot/ShellSection.tsx:44` | "The app shell around this workspace: bridge version, what it can do natively, and which bundle is running." | "Bridge version, native capabilities and the bundle running on this device." |
 | A-P35 | `…/ShellSection.tsx:117-118` | "yes — this device is running the published bundle" / "no — a newer bundle is published; it installs at the next launch" | "Yes" / "No. A newer bundle installs at the next launch." |
@@ -734,7 +734,7 @@ internal vocabulary** (SPEC section numbers, a milestone number, `document.mode`
 | C-P29 | `web/app/src/boot/kernel-init.ts:134` | "Your settings could not be read; defaults are in use." | "Your settings could not be read, so defaults are in use. Reload to try again." (adds the remedy) |
 | C-P30 | `web/app/src/loader/loader.ts:207-211` | `"${n} plugins failed to load; ${skipped} skipped."` | Drop the second clause when `skipped === 0`. Today the common message reads "1 plugin failed to load; 0 skipped." |
 | C-P31 | `web/app/src/main.tsx:456-460` | "Offline, and this device has never fetched the plugin list." + detail "Your documents are here and readable, but no plugin could be activated — including the one that draws the interface. Reconnect and reload once; after that the list is remembered for offline boots." | "Your documents are here, but the interface could not load. Reconnect and reload once." |
-| C-P32 | `web/app/src/main.tsx:313-314` | "An app update is ready. Close and reopen Life Manager to finish it." | Good. Keep. |
+| C-P32 | `web/app/src/main.tsx:313-314` | "An app update is ready. Close and reopen ddd to finish it." | Good. Keep. |
 | C-P33 | `web/app/src/main.tsx:356` | `"${count} plugin problem${…} in this session."` | "{n} plugins had problems." ("in this session" is scoping trivia) |
 | C-P34 | `web/app/src/main.tsx:404-405` | "The runtime layer is incomplete; plugins may fail to load." + "The import map does not resolve: {list}. Rebuild the app bundle (`npm run build:app`)." | A build command in end-user copy. Keep the detail for the console; the notice should read "Some plugins may not load. Reinstall or update the app." |
 | C-P35 | `web/app/src/main.tsx:145, 255` | "An update is available." + `Reload` action | Good. Keep. |
@@ -822,7 +822,7 @@ compact rules are `shell-ui`'s. Whoever takes it should decide whether `shell-ui
   `probe-landscape.json`, `supplement-pixel7.json` — per surface, the full overflow /
   off-screen / touch-target lists with measured pixel values.
 - The walker: `…/scratchpad/audit.mjs`, `supplement.mjs`, `probe.mjs`.
-- Server log: `…/scratchpad/server.log` (port 8131, database `life_manager_mobile_audit`).
+- Server log: `…/scratchpad/server.log` (port 8131, database `ddd_mobile_audit`).
 
 ---
 
@@ -838,16 +838,16 @@ serving the **real** rebuilt bundle over a private registry snapshot, so a paral
 agent recomposing the shared registry could not swap plugin files mid-run:
 
 ```bash
-LM_E2E_PORT=8191 LM_E2E_DB=life_manager_verify \
-  LM_E2E_PLUGINS=<scratchpad>/registry  node web/app/e2e/server.mjs
+DDD_E2E_PORT=8191 DDD_E2E_DB=ddd_verify \
+  DDD_E2E_PLUGINS=<scratchpad>/registry  node web/app/e2e/server.mjs
 ```
 
 The owner's stack on `:8080` was never touched: it is a compose container serving the
 assets baked into its image (`/srv/web`, `/srv/plugins`), not the working tree, and it
 stayed up and healthy throughout. The only shared resource is Mongo, and
-`life_manager` was never opened — the test database is a different name and the
+`ddd` was never opened — the test database is a different name and the
 launcher drops only that one. Checked at the end: container still `Up (healthy)`,
-`life_manager.documents` still 11.
+`ddd.documents` still 11.
 
 ## Gates
 
@@ -857,7 +857,7 @@ launcher drops only that one. Checked at the end: container still `Up (healthy)`
 | `npm run test` (vitest) | **PASS** — 832 passed, 1 skipped, 45 files |
 | Playwright, full app suite | **PASS** — **54/54** |
 | `mise run web-build` from clean | **PASS** — `web/app/dist`, `plugins/base/dist` and `kernel-api/dist` deleted first; exit 0 |
-| `cargo test -p life-manager-server` | **not run, and correctly so** — no file under `backend/` changed in this wave |
+| `cargo test -p ddd-server` | **not run, and correctly so** — no file under `backend/` changed in this wave |
 
 The 54 are the 32 the fix agents left green plus the 6 new route-sweep tests below, in
 one run against one stack. Two things that were reported as failing during the fix wave
@@ -1028,4 +1028,4 @@ anything is not known to work.
   `prose-findings.txt`.
 - The walkers: `…/scratchpad/sweep.mjs`, `prose-scan.mjs`, `q5.mjs`.
 - Server log: `…/scratchpad/server-8191.log` (port 8191, database
-  `life_manager_verify`).
+  `ddd_verify`).

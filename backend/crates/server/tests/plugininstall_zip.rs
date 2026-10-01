@@ -15,9 +15,9 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use life_manager_server::domain::new_id;
-use life_manager_server::plugininstall::zipcheck::{self, ZipError};
-use life_manager_server::plugins::PluginManifest;
+use ddd_server::domain::new_id;
+use ddd_server::plugininstall::zipcheck::{self, ZipError};
+use ddd_server::plugins::PluginManifest;
 use zip::write::SimpleFileOptions;
 
 /// A throwaway directory per case.
@@ -39,10 +39,10 @@ fn manifest_json(backend: bool) -> String {
 }
 
 /// The smallest module the install flow accepts: a preamble plus an export section naming
-/// `lm_abi_version`.
+/// `ddd_abi_version`.
 fn wasm_with_abi_export() -> Vec<u8> {
     let mut module = vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
-    let name = b"lm_abi_version";
+    let name = b"ddd_abi_version";
     let mut section = vec![1u8];
     section.push(name.len() as u8);
     section.extend_from_slice(name);
@@ -427,7 +427,7 @@ fn a_version_string_cannot_escape_the_staging_root() {
         "1.0.0-a/b",
     ] {
         assert!(
-            !life_manager_server::plugins::is_valid_version(bad),
+            !ddd_server::plugins::is_valid_version(bad),
             "`{bad}` must not validate as a version"
         );
     }

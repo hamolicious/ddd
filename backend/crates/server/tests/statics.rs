@@ -19,7 +19,7 @@
 //!
 //! ```text
 //! docker compose up -d --wait mongo
-//! MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p life-manager-server --test statics -- --ignored
+//! MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p ddd-server --test statics -- --ignored
 //! ```
 
 mod common;
@@ -30,10 +30,10 @@ use std::path::{Path, PathBuf};
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
-use life_manager_server::config::Config;
-use life_manager_server::domain::new_id;
-use life_manager_server::state::AppState;
-use life_manager_server::{routes, telemetry};
+use ddd_server::config::Config;
+use ddd_server::domain::new_id;
+use ddd_server::state::AppState;
+use ddd_server::{routes, telemetry};
 use serde_json::{Value as Json, json};
 use tower::ServiceExt as _;
 
@@ -45,7 +45,7 @@ const SECRET: &str = "TOP-SECRET-OUTSIDE-THE-ROOT";
 
 /// The marker `web/app/index.html` carries; spelled here so a test fails if the constant
 /// and the real template ever disagree.
-const MARKER: &str = "<!--LM_IMPORT_MAP-->";
+const MARKER: &str = "<!--DDD_IMPORT_MAP-->";
 
 // ---------------------------------------------------------------------------
 // Fixture
@@ -80,7 +80,7 @@ impl Fixture {
         fs::write(
             dist.join("index.html"),
             format!(
-                "<!doctype html>\n<html><head><title>Life Manager</title>\n{MARKER}\n\
+                "<!doctype html>\n<html><head><title>ddd</title>\n{MARKER}\n\
                  <script type=\"module\" src=\"/assets/app-abc123.js\"></script>\n\
                  </head><body><div id=\"root\"></div></body></html>\n"
             ),
@@ -108,7 +108,7 @@ impl Fixture {
         .expect("icon");
         fs::write(
             dist.join("manifest.webmanifest"),
-            json!({"name": "Life Manager"}).to_string(),
+            json!({"name": "ddd"}).to_string(),
         )
         .expect("webmanifest");
 
@@ -159,7 +159,7 @@ fn write_plugin(plugins: &Path, id: &str, version: &str) {
         format!("export default function activate() {{ return {{ id: \"{id}\" }}; }}\n"),
     )
     .expect("plugin module");
-    fs::write(dir.join("frontend/style.css"), ".lm-shell {}\n").expect("plugin style");
+    fs::write(dir.join("frontend/style.css"), ".ddd-shell {}\n").expect("plugin style");
     // A plugin package is third-party content from our own origin: an SVG in it is the
     // same stored-XSS vector as one in an attachment (SPEC §3.6).
     fs::write(
@@ -196,7 +196,7 @@ impl StaticsApp {
     /// config and points it at this test's fixture.
     async fn start(configure: impl FnOnce(&mut Config)) -> Option<StaticsApp> {
         let uri = mongo_uri()?;
-        let database = format!("lm_router_test_{}", new_id());
+        let database = format!("ddd_router_test_{}", new_id());
         let mut config = test_config(uri.clone(), database.clone());
         configure(&mut config);
 
@@ -982,9 +982,9 @@ async fn disable_plugins_is_the_server_side_half_of_safe_mode() {
                 "normal": [],
                 "safe": [],
                 "skipped": [],
-                "version": life_manager_server::plugins::fingerprint(
+                "version": ddd_server::plugins::fingerprint(
                     &[],
-                    &life_manager_server::plugins::LoadPlan::default()
+                    &ddd_server::plugins::LoadPlan::default()
                 ),
             },
         }),

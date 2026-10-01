@@ -22,9 +22,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:life_manager_shell/bridge/auth.dart';
-import 'package:life_manager_shell/config.dart';
-import 'package:life_manager_shell/shell/login_screen.dart';
+import 'package:ddd_shell/bridge/auth.dart';
+import 'package:ddd_shell/config.dart';
+import 'package:ddd_shell/shell/login_screen.dart';
 
 void main() {
   late Map<String, String> keystore;
@@ -245,7 +245,7 @@ void main() {
                 .having(
                   (LoginException e) => e.message,
                   'message',
-                  contains('not like a Life Manager server'),
+                  contains('not like a ddd server'),
                 ),
           ),
         );
@@ -332,7 +332,7 @@ void main() {
       expect(check.originAllowed, isFalse);
     });
 
-    test('something that is not a Life Manager server says so', () async {
+    test('something that is not a ddd server says so', () async {
       final Preflight check = await service(
         healthz(status: 404, body: 'Not Found'),
       ).preflight(Uri.parse('https://life.example.com'));
@@ -342,16 +342,13 @@ void main() {
       expect(check.detail, contains('/healthz'));
     });
 
-    test(
-      'a 200 whose body is not `ok` is not a Life Manager server either',
-      () async {
-        final Preflight check = await service(
-          healthz(body: '<html>welcome</html>'),
-        ).preflight(Uri.parse('https://life.example.com'));
+    test('a 200 whose body is not `ok` is not a ddd server either', () async {
+      final Preflight check = await service(
+        healthz(body: '<html>welcome</html>'),
+      ).preflight(Uri.parse('https://life.example.com'));
 
-        expect(check.reachable, isFalse);
-      },
-    );
+      expect(check.reachable, isFalse);
+    });
 
     test(
       'never throws — everything it learns is reported, including nothing',

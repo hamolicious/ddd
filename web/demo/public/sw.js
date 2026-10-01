@@ -15,7 +15,7 @@
  *   caching (SPEC §4.1).
  */
 
-const CACHE = "life-manager-demo-v1";
+const CACHE = "ddd-demo-v1";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

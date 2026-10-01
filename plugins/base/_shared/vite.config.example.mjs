@@ -12,7 +12,7 @@
  * ```
  *
  * Types: fetch `/kernel.d.ts` from your server and reference it, or add
- * `@life-manager/kernel` to `devDependencies` once it is published. Both are the same
+ * `@ddd/kernel` to `devDependencies` once it is published. Both are the same
  * file; the served one is what the running server actually implements, which is the one
  * that matters when a workspace is behind.
  */

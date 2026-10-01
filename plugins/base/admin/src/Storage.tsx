@@ -227,7 +227,7 @@ export function ExportSection({
             const url = URL.createObjectURL(blob);
             const anchor = document.createElement("a");
             anchor.href = url;
-            anchor.download = `life-manager-export-${new Date().toISOString().slice(0, 10)}.zip`;
+            anchor.download = `ddd-export-${new Date().toISOString().slice(0, 10)}.zip`;
             document.body.append(anchor);
             anchor.click();
             anchor.remove();

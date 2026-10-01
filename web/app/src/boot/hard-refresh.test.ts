@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { hardRefresh, type HardRefreshDeps } from "./hard-refresh.js";
 
-const SESSION_KEY = "life-manager.boot.session";
-const PLUGINS_KEY = "life-manager.boot.plugins";
+const SESSION_KEY = "ddd.boot.session";
+const PLUGINS_KEY = "ddd.boot.plugins";
 
 function memoryStorage(entries: Record<string, string>): Storage {
   const map = new Map(Object.entries(entries));
@@ -27,7 +27,7 @@ function setup(options: { failingCache?: string } = {}) {
       return true;
     }),
   }));
-  const names = ["workbox-precache-v2", "lm-plugins", "lm-runtime", "lm-meta", "lm-shell"];
+  const names = ["workbox-precache-v2", "ddd-plugins", "ddd-runtime", "ddd-meta", "ddd-shell"];
   const caches = {
     keys: vi.fn(async () => names),
     delete: vi.fn(async (key: string) => {
@@ -53,8 +53,8 @@ describe("hard refresh", () => {
     const storage = memoryStorage({
       [SESSION_KEY]: "{}",
       [PLUGINS_KEY]: "{}",
-      "life-manager.shell.token": "t",
-      "life-manager.storage-persist": "asked",
+      "ddd.shell.token": "t",
+      "ddd.storage-persist": "asked",
       other: "x",
     });
     Object.defineProperty(globalThis, "localStorage", { value: storage, configurable: true });
@@ -70,8 +70,8 @@ describe("hard refresh", () => {
     expect(t.caches.delete.mock.calls.map(([key]) => key)).toEqual(t.names);
     expect(storage.getItem(SESSION_KEY)).toBeNull();
     expect(storage.getItem(PLUGINS_KEY)).toBeNull();
-    expect(storage.getItem("life-manager.shell.token")).toBe("t");
-    expect(storage.getItem("life-manager.storage-persist")).toBe("asked");
+    expect(storage.getItem("ddd.shell.token")).toBe("t");
+    expect(storage.getItem("ddd.storage-persist")).toBe("asked");
     expect(storage.getItem("other")).toBe("x");
     expect(t.reload).toHaveBeenCalledOnce();
     expect(t.order.at(-1)).toBe("reload");
@@ -89,7 +89,7 @@ describe("hard refresh", () => {
 
   it("carries on past a step that throws, and reloads last", async () => {
     storageWith();
-    const t = setup({ failingCache: "lm-plugins" });
+    const t = setup({ failingCache: "ddd-plugins" });
     const forget = vi.fn(() => {
       throw new Error("storage blocked");
     });

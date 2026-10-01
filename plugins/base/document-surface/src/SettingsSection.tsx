@@ -138,7 +138,7 @@ export function DefaultModeSection({
         <p className="docsurface:m-0 docsurface:text-sm docsurface:leading-[1.5] docsurface:text-text-muted">
           <button
             type="button"
-            className="docsurface:min-h-[calc(var(--lm-tap-target)-12px)] docsurface:cursor-pointer docsurface:rounded docsurface:border docsurface:border-border-strong docsurface:bg-bg-raised docsurface:px-2 docsurface:text-sm docsurface:text-text docsurface:focus-visible:outline-2 docsurface:focus-visible:outline-offset-2 docsurface:focus-visible:outline-focus"
+            className="docsurface:min-h-[calc(var(--ddd-tap-target)-12px)] docsurface:cursor-pointer docsurface:rounded docsurface:border docsurface:border-border-strong docsurface:bg-bg-raised docsurface:px-2 docsurface:text-sm docsurface:text-text docsurface:focus-visible:outline-2 docsurface:focus-visible:outline-offset-2 docsurface:focus-visible:outline-focus"
             onClick={() => {
               setProblem(undefined);
               void forgetRemembered()

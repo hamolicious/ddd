@@ -14,9 +14,9 @@ import { fileURLToPath } from "node:url";
 
 const pkg = new URL("../kernel/src/wasm/pkg/", import.meta.url);
 
-const init = await import(new URL("./life_manager_core.js", pkg).href);
+const init = await import(new URL("./ddd_core.js", pkg).href);
 await init.default({
-  module_or_path: await readFile(fileURLToPath(new URL("./life_manager_core_bg.wasm", pkg))),
+  module_or_path: await readFile(fileURLToPath(new URL("./ddd_core_bg.wasm", pkg))),
 });
 
 const text = "---\ntitle: Groceries\npath: home/lists\n---\n\n# Groceries\n\n- [ ] milk\n\n%%% calendar\nsource-uid: abc123\n%%%\n";

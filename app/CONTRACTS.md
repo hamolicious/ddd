@@ -110,9 +110,9 @@ Hard requirements (`BRIDGE.md` §2–§4, §6):
   editing with the Android soft keyboard (SPEC §9 M5).
 - **Login is native and comes first** (`BRIDGE.md` §4.1): the manifest endpoint is
   authenticated, so there is no bundle to show a form in on first run. Store the server URL
-  only on success; pre-flight `/healthz` and say so plainly when the URL is not a Life Manager
+  only on success; pre-flight `/healthz` and say so plainly when the URL is not a ddd
   server.
-- Notifications: inexact scheduling, one channel (`lm.reminders`), a registry file as the
+- Notifications: inexact scheduling, one channel (`ddd.reminders`), a registry file as the
   answer to `list()`, deterministic string→int ids. Re-scheduling an id replaces it.
 
 **Frozen:** `ShellBridge` (constructor, `register`, `dispatch`, `methods`, `capabilities`,
@@ -248,7 +248,7 @@ Dart (`lib/config.dart`, `lib/bridge/bridge.dart`, `lib/bundle/manifest.dart`,
 
 ```dart
 const int kBridgeVersion = 1;
-const String kBridgeHandlerName = 'lm_shell_v1';
+const String kBridgeHandlerName = 'ddd_shell_v1';
 const int kLoopbackPort = 41847;
 const int kMaxFailedBoots = 2;
 const Duration kBootWatchdog = Duration(seconds: 25);
@@ -342,8 +342,8 @@ These are facts about this machine and this scaffold, not decisions to re-litiga
    crosses plain HTTP.
 6. **`APP_ORIGIN` must list `http://127.0.0.1:41847`** on every server a shell talks to
    (`BRIDGE.md` §6). This is the most likely cause of "signed in, never syncs".
-7. **The package is `life_manager_shell`** (it was the template's `app`). Dart imports are
-   `package:life_manager_shell/…`.
+7. **The package is `ddd_shell`** (it was the template's `app`). Dart imports are
+   `package:ddd_shell/…`.
 8. **`app/mise.toml` is gone**; the Flutter tool definition moved to the root `mise.toml`, so
    `mise run shell-test` works from anywhere in the tree.
 

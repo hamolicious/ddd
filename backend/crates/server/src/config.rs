@@ -9,7 +9,7 @@ use std::time::Duration;
 use thiserror::Error;
 
 /// Default Mongo database name.
-pub const DEFAULT_DATABASE: &str = "life_manager";
+pub const DEFAULT_DATABASE: &str = "ddd";
 /// Default attachment size cap (SPEC §3.5). `0` in the environment means no cap.
 pub const DEFAULT_MAX_ATTACHMENT_BYTES: u64 = 100 * 1024 * 1024;
 /// Minimum `SESSION_SECRET` length in bytes (SPEC §5.2). No default value exists.
@@ -257,13 +257,11 @@ impl Config {
                 .expect("DEFAULT_BIND_ADDR is a valid socket address"),
         )?;
 
-        let max_document_bytes = parse_var::<usize>(
-            "MAX_DOCUMENT_BYTES",
-            life_manager_core::limits::MAX_DOCUMENT_BYTES,
-        )?
-        // The shared core's cap is a hard ceiling: client and server must agree
-        // on what is too large, so configuration may only lower it.
-        .min(life_manager_core::limits::MAX_DOCUMENT_BYTES);
+        let max_document_bytes =
+            parse_var::<usize>("MAX_DOCUMENT_BYTES", ddd_core::limits::MAX_DOCUMENT_BYTES)?
+                // The shared core's cap is a hard ceiling: client and server must agree
+                // on what is too large, so configuration may only lower it.
+                .min(ddd_core::limits::MAX_DOCUMENT_BYTES);
         if max_document_bytes == 0 {
             return Err(ConfigError::Invalid {
                 var: "MAX_DOCUMENT_BYTES",
@@ -364,31 +362,31 @@ impl Config {
             plugin_config_key: parse_config_key("CONFIG_KEY")?,
             plugin_call_timeout: parse_millis(
                 "PLUGIN_CALL_TIMEOUT_MS",
-                life_manager_plugin_abi::limits::CALL_TIMEOUT_MS,
+                ddd_plugin_abi::limits::CALL_TIMEOUT_MS,
             )?,
             plugin_cron_timeout: parse_millis(
                 "PLUGIN_CRON_TIMEOUT_MS",
-                life_manager_plugin_abi::limits::CRON_CALL_TIMEOUT_MS,
+                ddd_plugin_abi::limits::CRON_CALL_TIMEOUT_MS,
             )?,
             plugin_memory_bytes: parse_var(
                 "PLUGIN_MEMORY_BYTES",
-                life_manager_plugin_abi::limits::MEMORY_BYTES,
+                ddd_plugin_abi::limits::MEMORY_BYTES,
             )?,
             plugin_max_instances: parse_var(
                 "PLUGIN_MAX_INSTANCES",
-                life_manager_plugin_abi::limits::MAX_INSTANCES_PER_PLUGIN,
+                ddd_plugin_abi::limits::MAX_INSTANCES_PER_PLUGIN,
             )?,
             plugin_breaker_threshold: parse_var(
                 "PLUGIN_BREAKER_THRESHOLD",
-                life_manager_plugin_abi::limits::BREAKER_FAILURE_THRESHOLD,
+                ddd_plugin_abi::limits::BREAKER_FAILURE_THRESHOLD,
             )?,
             plugin_http_timeout: parse_millis(
                 "PLUGIN_HTTP_TIMEOUT_MS",
-                life_manager_plugin_abi::limits::HTTP_TIMEOUT_MS,
+                ddd_plugin_abi::limits::HTTP_TIMEOUT_MS,
             )?,
             plugin_http_max_response_bytes: parse_var(
                 "PLUGIN_HTTP_MAX_RESPONSE_BYTES",
-                life_manager_plugin_abi::limits::MAX_HTTP_RESPONSE_BYTES,
+                ddd_plugin_abi::limits::MAX_HTTP_RESPONSE_BYTES,
             )?,
             plugin_http_allow_cidrs: parse_cidrs("PLUGIN_HTTP_ALLOW_CIDRS")?,
             plugin_enable_cron: parse_bool("PLUGIN_ENABLE_CRON", true)?,
@@ -424,7 +422,7 @@ impl Config {
 
     /// Cookie name for browser sessions.
     pub fn session_cookie_name(&self) -> &'static str {
-        "lm_session"
+        "ddd_session"
     }
 
     /// [`Config::public_url`] as a WebSocket origin. See [`ws_origin`].
@@ -729,7 +727,7 @@ mod tests {
             session_secret: SessionSecret::new(vec![b'k'; 32]).expect("valid"),
             mongo_database: DEFAULT_DATABASE.to_string(),
             max_attachment_bytes: DEFAULT_MAX_ATTACHMENT_BYTES,
-            max_document_bytes: life_manager_core::limits::MAX_DOCUMENT_BYTES,
+            max_document_bytes: ddd_core::limits::MAX_DOCUMENT_BYTES,
             app_origins: origins.iter().map(|o| o.to_string()).collect(),
             public_url: None,
             log_format: LogFormat::Json,
@@ -758,20 +756,15 @@ mod tests {
             plugin_staging_dir: default_staging_dir(&PathBuf::from(DEFAULT_PLUGINS_DIR)),
             plugin_inbox_dir: None,
             plugin_config_key: None,
-            plugin_call_timeout: Duration::from_millis(
-                life_manager_plugin_abi::limits::CALL_TIMEOUT_MS,
-            ),
+            plugin_call_timeout: Duration::from_millis(ddd_plugin_abi::limits::CALL_TIMEOUT_MS),
             plugin_cron_timeout: Duration::from_millis(
-                life_manager_plugin_abi::limits::CRON_CALL_TIMEOUT_MS,
+                ddd_plugin_abi::limits::CRON_CALL_TIMEOUT_MS,
             ),
-            plugin_memory_bytes: life_manager_plugin_abi::limits::MEMORY_BYTES,
-            plugin_max_instances: life_manager_plugin_abi::limits::MAX_INSTANCES_PER_PLUGIN,
-            plugin_breaker_threshold: life_manager_plugin_abi::limits::BREAKER_FAILURE_THRESHOLD,
-            plugin_http_timeout: Duration::from_millis(
-                life_manager_plugin_abi::limits::HTTP_TIMEOUT_MS,
-            ),
-            plugin_http_max_response_bytes:
-                life_manager_plugin_abi::limits::MAX_HTTP_RESPONSE_BYTES,
+            plugin_memory_bytes: ddd_plugin_abi::limits::MEMORY_BYTES,
+            plugin_max_instances: ddd_plugin_abi::limits::MAX_INSTANCES_PER_PLUGIN,
+            plugin_breaker_threshold: ddd_plugin_abi::limits::BREAKER_FAILURE_THRESHOLD,
+            plugin_http_timeout: Duration::from_millis(ddd_plugin_abi::limits::HTTP_TIMEOUT_MS),
+            plugin_http_max_response_bytes: ddd_plugin_abi::limits::MAX_HTTP_RESPONSE_BYTES,
             plugin_http_allow_cidrs: Vec::new(),
             plugin_enable_cron: true,
         }

@@ -80,7 +80,7 @@ adb shell run-as com.example.app cat files/bundles/state.json
 
 **Steps**
 
-1. Launch Life Manager from the launcher.
+1. Launch ddd from the launcher.
 2. The login screen appears. Enter `http://127.0.0.1:8080`, the admin email and password.
 3. Tap **Sign in**.
 
@@ -107,7 +107,7 @@ counter here means `shell.bootOk()` never arrived, and the *next* launch will go
 even though this one looked fine.
 
 **Fails if** the progress screen never advances (server unreachable — check `adb reverse`), or
-the webview shows a white rectangle for 25 seconds and is replaced by "Life Manager could not
+the webview shows a white rectangle for 25 seconds and is replaced by "ddd could not
 start" (that is the watchdog in `lib/config.dart`, and it means the bundle loaded but never
 called `bootOk`).
 
@@ -154,7 +154,7 @@ handles cannot be grabbed.
 **Steps**
 
 1. Confirm the app works online (step 1 complete).
-2. **Force-stop it**: Settings → Apps → Life Manager → Force stop. Not just backgrounded —
+2. **Force-stop it**: Settings → Apps → ddd → Force stop. Not just backgrounded —
    the criterion is about a cold start.
 3. Put the phone in **aeroplane mode**, and on the laptop `adb reverse --remove-all` so
    there is no path to the server even over USB.
@@ -204,7 +204,7 @@ Restore: aeroplane mode off, `adb reverse tcp:8080 tcp:8080`.
 - A **banner strip above the page**: *"An update is ready. Restart to apply it."* with
   **Restart** and **Later**. A banner, never a dialog — what is underneath is a working app.
 - In the page itself, the kernel notice *"An app update is ready. Close and reopen Life
-  Manager to finish it."* — the `lm-shell-update-ready` event reaching the web side. Its
+  Manager to finish it."* — the `ddd-shell-update-ready` event reaching the web side. Its
   absence with the native banner present means the two halves have drifted; the strings are
   pinned in `bridge_fixtures/window_shell.json`.
 - The page underneath is **untouched**. An update is never applied to a running webview: it is
@@ -249,13 +249,13 @@ JavaScript**, so nothing in the recovery path may depend on the page.
 
 **Expect**
 
-- **Attempt 1:** blank/broken page for 25 s, then the native screen *"Life Manager could not
+- **Attempt 1:** blank/broken page for 25 s, then the native screen *"ddd could not
   start"* — never a white webview left on screen. `failedBoots` is now `1`.
 - **Attempt 2:** the same, but the bundle is loaded in **safe mode** (`?safe=1`, base plugins
   only) and a banner says so in plain words — *"…running with plugins switched off"* — not
   "safe mode" and not a spec reference. `failedBoots` is now `2`.
 - **Attempt 3:** the shell **reverts to the previous bundle**, boots it, and shows a banner:
-  *"Life Manager went back to an earlier version: …"* with the reason in it.
+  *"ddd went back to an earlier version: …"* with the reason in it.
   `state.json`'s `active` is the older version.
 - **The notify half is the part to watch.** A silent revert is a user discovering their app is
   mysteriously older; the criterion in the M5 brief is "revert to previous **+ notify**", and
@@ -281,10 +281,10 @@ The capability that most justifies the shell existing: a browser tab cannot do t
    In the app, do whatever schedules a reminder; Android's runtime prompt appears.
 2. **Deny it once.** Confirm the app degrades rather than breaking — the reminder is refused
    with a readable message, nothing crashes.
-3. Grant it (Settings → Apps → Life Manager → Notifications), return to the app.
+3. Grant it (Settings → Apps → ddd → Notifications), return to the app.
 4. Schedule a reminder **3 minutes out**.
 5. Confirm it is listed as pending in whatever UI lists reminders.
-6. **Force-stop the app.** Settings → Apps → Life Manager → Force stop.
+6. **Force-stop the app.** Settings → Apps → ddd → Force stop.
 7. Lock the phone and put it down. Wait out the 3 minutes.
 
 **Expect**

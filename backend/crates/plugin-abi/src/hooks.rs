@@ -120,7 +120,7 @@ mod tests {
         assert_eq!(HookKind::parse("document.moved"), None);
         assert_eq!(
             HookKind::DocumentCreated.export_name(),
-            "lm_hook_document_created"
+            "ddd_hook_document_created"
         );
     }
 

@@ -9,7 +9,7 @@
 //! rows, which is precisely the gap this suite fills (CONTRACTS.md, area
 //! http-routes, M2 item 1).
 //!
-//! Each test gets its **own database** (`lm_router_test_<ulid>`) so cases run in
+//! Each test gets its **own database** (`ddd_router_test_<ulid>`) so cases run in
 //! parallel without seeing each other's documents, and drops it again in
 //! `cleanup()`. Like the docstore's Mongo tests they are `#[ignore]`d and skip
 //! silently when `MONGO_URI` is unset, so a clean checkout tests green with no
@@ -17,7 +17,7 @@
 //!
 //! ```text
 //! docker compose up -d --wait mongo
-//! MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p life-manager-server -- --ignored
+//! MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p ddd-server -- --ignored
 //! ```
 //!
 //! A test that panics skips its `cleanup()` and leaves one database behind; they
@@ -26,7 +26,7 @@
 //! ```text
 //! docker compose exec -T mongo mongosh --quiet --eval \
 //!   'db.adminCommand({listDatabases:1,nameOnly:true}).databases \
-//!     .filter(d=>/^lm_(router|tuning)_test_/.test(d.name)) \
+//!     .filter(d=>/^ddd_(router|tuning)_test_/.test(d.name)) \
 //!     .forEach(d=>db.getSiblingDB(d.name).dropDatabase())'
 //! ```
 
@@ -39,14 +39,14 @@ use std::time::Duration;
 use axum::Router;
 use axum::body::{Body, Bytes};
 use axum::http::{HeaderMap, Request, StatusCode, header};
-use life_manager_core::date::Date;
-use life_manager_core::filter::ast::{Filter, SortKey};
-use life_manager_core::filter::evaluator::{self, Row};
-use life_manager_core::value::{Map, Value};
-use life_manager_server::config::{Config, LogFormat, SessionSecret};
-use life_manager_server::domain::{DocumentView, new_id};
-use life_manager_server::state::AppState;
-use life_manager_server::{routes, telemetry};
+use ddd_core::date::Date;
+use ddd_core::filter::ast::{Filter, SortKey};
+use ddd_core::filter::evaluator::{self, Row};
+use ddd_core::value::{Map, Value};
+use ddd_server::config::{Config, LogFormat, SessionSecret};
+use ddd_server::domain::{DocumentView, new_id};
+use ddd_server::state::AppState;
+use ddd_server::{routes, telemetry};
 use serde_json::{Value as Json, json};
 use tower::ServiceExt as _;
 
@@ -178,7 +178,7 @@ impl TestApp {
     /// keep their bearer token. `None` ⇒ no `MONGO_URI`, skip the test.
     pub async fn start() -> Option<TestApp> {
         let uri = mongo_uri()?;
-        let database = format!("lm_router_test_{}", new_id());
+        let database = format!("ddd_router_test_{}", new_id());
         let config = test_config(uri.clone(), database.clone());
 
         let client = mongodb::Client::with_uri_str(&uri).await.ok()?;

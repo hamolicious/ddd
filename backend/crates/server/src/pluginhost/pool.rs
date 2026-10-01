@@ -71,7 +71,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use life_manager_plugin_abi as abi;
+use ddd_plugin_abi as abi;
 
 use super::PluginHostError;
 use super::host_fns::HostContext;
@@ -131,7 +131,7 @@ pub struct PluginPool {
     /// trap costs one instantiation rather than one compilation, and capped at
     /// `max_instances` so a churning plugin cannot accumulate engines.
     spare: Mutex<Vec<extism::CompiledPlugin>>,
-    /// The `lm_init` payload, set once at activation. `None` ⇒ the module has no `lm_init`
+    /// The `ddd_init` payload, set once at activation. `None` ⇒ the module has no `ddd_init`
     /// and a fresh instance is usable immediately.
     init: Mutex<Option<Vec<u8>>>,
     /// Instances that exist right now (idle + checked out). The memory number.
@@ -153,8 +153,8 @@ pub struct Pooled {
     /// keeps a cancel from reaching a sibling call. Outlives the instance: on poison the
     /// module goes back to [`PluginPool::spare`] and the instance is dropped.
     compiled: extism::CompiledPlugin,
-    /// Has this instance had its `lm_init` attempted? Set by [`PluginPool::acquire`], which
-    /// is the only place `lm_init` runs. **Not** the same question as "was this instance made
+    /// Has this instance had its `ddd_init` attempted? Set by [`PluginPool::acquire`], which
+    /// is the only place `ddd_init` runs. **Not** the same question as "was this instance made
     /// by this call": activation warms an instance before the init payload even exists.
     initialised: bool,
     #[allow(dead_code)]
@@ -177,7 +177,7 @@ impl InstanceGuard {
     ///
     /// Runs the Extism call and translates its outcome: a cancel from the deadline timer
     /// is [`PluginHostError::Timeout`], a Wasm trap is [`PluginHostError::Trap`], and a
-    /// return value that is not an [`life_manager_plugin_abi::Envelope`] is
+    /// return value that is not an [`ddd_plugin_abi::Envelope`] is
     /// [`PluginHostError::BadResponse`]. All three poison the instance.
     ///
     /// **Blocking.** Extism calls are synchronous; the caller runs this on a
@@ -227,7 +227,7 @@ impl InstanceGuard {
             let cancelled = Arc::clone(&cancelled);
             let plugin_id = plugin_id.clone();
             std::thread::Builder::new()
-                .name(format!("lm-plugin-deadline-{plugin_id}"))
+                .name(format!("ddd-plugin-deadline-{plugin_id}"))
                 .spawn(move || {
                     if let Err(std::sync::mpsc::RecvTimeoutError::Timeout) =
                         done_rx.recv_timeout(budget)
@@ -390,7 +390,7 @@ impl PluginPool {
     ///
     /// This is the stale-`.wasm` guard of SPEC §6.4 applied to the backend half: the
     /// manifest can lie, and a `.wasm` can outlive the manifest that describes it. Run
-    /// before `lm_init` so a module built against another major never executes a line of
+    /// before `ddd_init` so a module built against another major never executes a line of
     /// its own logic.
     pub fn probe_abi_version(&self) -> Result<u32, PluginHostError> {
         let mut pooled = self.instantiate()?;
@@ -398,7 +398,7 @@ impl PluginPool {
         match outcome {
             // Keep the probe instance: it is already warm, and throwing it away would mean
             // paying for instantiation twice on the first real call. It has **not** run
-            // `lm_init` — `Pooled::initialised` says so, and `acquire` is what runs it.
+            // `ddd_init` — `Pooled::initialised` says so, and `acquire` is what runs it.
             Ok(version) => {
                 pooled.calls += 1;
                 self.idle.lock().expect("plugin pool poisoned").push(pooled);
@@ -468,7 +468,7 @@ impl PluginPool {
     }
 
     /// The payload every freshly instantiated instance is initialised with. `None` when
-    /// the module has no `lm_init`.
+    /// the module has no `ddd_init`.
     pub fn set_init_payload(&self, payload: Option<Vec<u8>>) {
         *self.init.lock().expect("plugin pool poisoned") = payload;
     }
@@ -479,7 +479,7 @@ impl PluginPool {
     /// [`PluginHostError::PoolExhausted`] — which the caller turns into `unavailable`
     /// rather than queueing forever behind a slow cron run.
     ///
-    /// An **uninitialised** instance is initialised here (`lm_init`, once per instance —
+    /// An **uninitialised** instance is initialised here (`ddd_init`, once per instance —
     /// SPEC's pooling means "once per plugin" is not a thing the host can offer).
     ///
     /// The test is [`Pooled::initialised`], not "did this call instantiate it". Keying on
@@ -487,10 +487,10 @@ impl PluginPool {
     /// [`PluginPool::probe_abi_version`] and [`PluginPool::exports`] leave a warm instance in
     /// the idle list *before* [`PluginPool::set_init_payload`] has been called, so the very
     /// first invocation of every plugin popped an instance, saw `fresh == false`, and skipped
-    /// `lm_init` entirely. HOST-ABI.md §4.1 promises the payload — with the approved
+    /// `ddd_init` entirely. HOST-ABI.md §4.1 promises the payload — with the approved
     /// capability set, so a plugin can "degrade deliberately instead of discovering denials
     /// per call" — runs once per instance; a plugin caching it in a static saw its default
-    /// until traffic forced a second instance, and an `lm_init` refusal (which is supposed to
+    /// until traffic forced a second instance, and an `ddd_init` refusal (which is supposed to
     /// mark the plugin failed) was unreachable on that one.
     pub async fn acquire(
         self: &Arc<Self>,
@@ -541,9 +541,9 @@ impl PluginPool {
 
         if needs_init {
             let payload = self.init.lock().expect("plugin pool poisoned").clone();
-            // Marked before the call: a `lm_init` that traps poisons the instance and it is
+            // Marked before the call: a `ddd_init` that traps poisons the instance and it is
             // never returned, and one that succeeds must not be asked again. Either way this
-            // instance's `lm_init` has been attempted exactly once.
+            // instance's `ddd_init` has been attempted exactly once.
             if let Some(pooled) = guard.pooled.as_mut() {
                 pooled.initialised = true;
             }
@@ -557,7 +557,7 @@ impl PluginPool {
                 .map_err(|err| PluginHostError::Internal(anyhow::Error::new(err)))?;
                 guard = returned;
                 let bytes = outcome?;
-                // A refusal from `lm_init` is the plugin saying it cannot work. Treat the
+                // A refusal from `ddd_init` is the plugin saying it cannot work. Treat the
                 // instance as unusable rather than handing back one that said no.
                 let envelope: abi::Envelope<serde_json::Value> = serde_json::from_slice(&bytes)
                     .map_err(|err| PluginHostError::BadResponse {
@@ -568,7 +568,7 @@ impl PluginPool {
                         ),
                     })?;
                 if let Err(refusal) = envelope.into_result() {
-                    guard.poison("lm_init refused");
+                    guard.poison("ddd_init refused");
                     return Err(PluginHostError::BadResponse {
                         plugin: self.plugin_id.clone(),
                         message: format!("{} refused: {refusal}", abi::names::INIT),

@@ -2,7 +2,7 @@
 /// (`BRIDGE.md` §4.1).
 ///
 /// Two things here are worth a test rather than a read-through. The **keys** are frozen —
-/// changing `lm.bearer-token` or `lm.server-base-url` signs every installed device out
+/// changing `ddd.bearer-token` or `ddd.server-base-url` signs every installed device out
 /// silently, with no error anywhere — and the **sign-out asymmetry** is a decision that
 /// looks like a bug: `clearToken` deliberately leaves the server URL behind so the login
 /// screen comes back pre-filled (SPEC §5.3 keeps local data and re-login separate).
@@ -14,9 +14,9 @@ library;
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:life_manager_shell/bridge/auth.dart';
-import 'package:life_manager_shell/bridge/bridge.dart';
-import 'package:life_manager_shell/config.dart';
+import 'package:ddd_shell/bridge/auth.dart';
+import 'package:ddd_shell/bridge/bridge.dart';
+import 'package:ddd_shell/config.dart';
 
 Map<String, Object?> envelope(String method, [Map<String, Object?>? params]) =>
     <String, Object?>{
@@ -49,7 +49,7 @@ void main() {
       expect(await auth.token(), 'tok-123');
       // Frozen (`BRIDGE.md` §9): changing this key signs every device out.
       expect(keystore[kTokenKey], 'tok-123');
-      expect(kTokenKey, 'lm.bearer-token');
+      expect(kTokenKey, 'ddd.bearer-token');
     });
 
     test('an empty token is refused rather than stored', () async {
@@ -73,7 +73,7 @@ void main() {
 
       expect(keystore[kServerKey], 'https://life.example.com');
       expect(await auth.serverBaseUrl(), Uri.parse('https://life.example.com'));
-      expect(kServerKey, 'lm.server-base-url');
+      expect(kServerKey, 'ddd.server-base-url');
     });
 
     test('signing out drops the token and keeps the server', () async {

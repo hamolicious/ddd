@@ -86,7 +86,7 @@ export function SettingsView({ kernel, router, sections: host, params }: Setting
   return (
     // `section` only when the URL actually named one that exists — `/settings` on its
     // own is the index, and on a wide screen both views render whichever this says.
-    <div className="settings:mx-auto settings:max-w-[62rem] settings:p-4 settings:font-sans settings:text-text settings:compact:px-[calc(var(--lm-space)+var(--lm-safe-right))] settings:compact:pb-[calc(var(--lm-space)+var(--lm-safe-bottom))] settings:compact:pl-[calc(var(--lm-space)+var(--lm-safe-left))] settings:compact:pt-2" data-view={chosen ? "section" : "index"}>
+    <div className="settings:mx-auto settings:max-w-[62rem] settings:p-4 settings:font-sans settings:text-text settings:compact:px-[calc(var(--ddd-space)+var(--ddd-safe-right))] settings:compact:pb-[calc(var(--ddd-space)+var(--ddd-safe-bottom))] settings:compact:pl-[calc(var(--ddd-space)+var(--ddd-safe-left))] settings:compact:pt-2" data-view={chosen ? "section" : "index"}>
       <header className="settings:[&_h1]:mb-2 settings:[&_h1]:mt-0 settings:[&_h1]:text-2xl settings:compact:[&_h1]:text-xl">
         <h1>Settings</h1>
         <p className="settings:mb-4 settings:mt-0 settings:rounded settings:border-l-[3px] settings:border-warning settings:bg-bg-subtle settings:p-2 settings:text-text-muted settings:compact:mb-2 settings:compact:text-sm">
@@ -114,7 +114,7 @@ export function SettingsView({ kernel, router, sections: host, params }: Setting
                 real navigation — and hidden by the stylesheet on a screen wide enough
                 to show the list beside the section anyway. */}
             <a
-              className="settings:mb-1 settings:hidden settings:min-h-[var(--lm-tap-target)] settings:items-center settings:text-link settings:before:mr-1 settings:before:content-['‹'] settings:compact:inline-flex"
+              className="settings:mb-1 settings:hidden settings:min-h-[var(--ddd-tap-target)] settings:items-center settings:text-link settings:before:mr-1 settings:before:content-['‹'] settings:compact:inline-flex"
               href={router.url("/settings")}
               onClick={(event) => {
                 if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;

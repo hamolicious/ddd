@@ -202,13 +202,13 @@ export interface DocPersistence {
 }
 
 /** Marks updates that came off the wire, so they are not echoed back to it. */
-const REMOTE_ORIGIN = Symbol("life-manager:remote");
+const REMOTE_ORIGIN = Symbol("ddd:remote");
 /**
  * Marks the replay of a persisted replica. Not queued for sending: the state
  * vector handshake is what tells the server about anything in it that it lacks,
  * and that works whether the replica is one edit old or a hundred.
  */
-const RESTORE_ORIGIN = Symbol("life-manager:restore");
+const RESTORE_ORIGIN = Symbol("ddd:restore");
 
 /** Everything the hydrator knows about one open document. */
 class DocEntry implements HydratedDoc {

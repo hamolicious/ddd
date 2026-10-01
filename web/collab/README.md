@@ -4,13 +4,13 @@ People editing the same notes together, online and offline, against a real serve
 
 ```bash
 docker compose up -d mongo            # the suite needs a Mongo
-cargo build --bin life-manager        # in backend/
+cargo build --bin ddd        # in backend/
 mise run collab                       # or: cd web && npm run test:collab
 ```
 
 Each file starts its own server (`app/e2e/server.mjs`) on its own port and a
-throwaway database (`life_manager_collab_<port>`), so it never touches your
-workspace. `LM_COLLAB_SERVER=http://…` points it at a server you started; the
+throwaway database (`ddd_collab_<port>`), so it never touches your
+workspace. `DDD_COLLAB_SERVER=http://…` points it at a server you started; the
 restart and purge tests then skip.
 
 | File | What it covers |
@@ -27,9 +27,9 @@ appears exactly once, so nothing is lost or doubled.
 ## Chaos seeds
 
 ```bash
-LM_COLLAB_SEEDS=50 npm run test:collab -- chaos     # more seeds (default 6)
-LM_COLLAB_SEED=17  npm run test:collab -- chaos     # replay one
-LM_COLLAB_STEPS=400 …                                # longer runs (default 160)
+DDD_COLLAB_SEEDS=50 npm run test:collab -- chaos     # more seeds (default 6)
+DDD_COLLAB_SEED=17  npm run test:collab -- chaos     # replay one
+DDD_COLLAB_STEPS=400 …                                # longer runs (default 160)
 ```
 
 A failing seed prints its journal. The script replays exactly; only the network

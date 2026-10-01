@@ -1,7 +1,7 @@
 /**
  * Menus for marked elements (`addAction`).
  *
- * A component marks what it draws (`data-lm-target`, see `_shared/target.ts`); plugins
+ * A component marks what it draws (`data-ddd-target`, see `_shared/target.ts`); plugins
  * offer actions per target type; this file finds the marked elements under a right-click,
  * a long press or the menu key, and builds one menu from them: the innermost target's
  * items first, then each enclosing target's in its own titled section.
@@ -78,7 +78,7 @@ export type OpenAt = (from: Element, anchor: HTMLElement | null) => boolean;
 
 /**
  * Right-click, long press and the menu key, on the whole document. Returns the teardown.
- * A long press on a `data-lm-press="release"` element opens when the finger lifts, so a
+ * A long press on a `data-ddd-press="release"` element opens when the finger lifts, so a
  * card that drags on a long press can still be dragged.
  */
 export function listen(openAt: OpenAt): () => void {

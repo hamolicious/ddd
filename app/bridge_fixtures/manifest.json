@@ -7,8 +7,8 @@
     "files": [
       {
         "path": "index.html",
-        "sha256": "f51954f0a78ea4995bfd7d5371c02560be0538b80f1728b50b4b6fe9baf48cdb",
-        "size": 44
+        "sha256": "2e91189aec33a82fc7677cf26c5e89c375e06b8cb35009aaa4d5b4646c699107",
+        "size": 35
       },
       {
         "path": "importmap.json",
@@ -40,9 +40,9 @@
     },
     {
       "name": "index.html sample bytes",
-      "utf8": "<!doctype html>\n<title>Life Manager</title>\n",
-      "sha256": "f51954f0a78ea4995bfd7d5371c02560be0538b80f1728b50b4b6fe9baf48cdb",
-      "size": 44
+      "utf8": "<!doctype html>\n<title>ddd</title>\n",
+      "sha256": "2e91189aec33a82fc7677cf26c5e89c375e06b8cb35009aaa4d5b4646c699107",
+      "size": 35
     }
   ],
   "invalid": [

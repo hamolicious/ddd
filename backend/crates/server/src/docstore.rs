@@ -38,11 +38,11 @@ use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD as B64;
 use bson::spec::BinarySubtype;
 use bson::{Binary, Bson, DateTime as BsonDateTime, Document as BsonDocument, doc};
+use ddd_core::date::Date;
+use ddd_core::document::{ParsedDocument, normalize_input, parse_document};
+use ddd_core::limits;
+use ddd_core::value::{Map, Value, map_to_bson};
 use futures::TryStreamExt;
-use life_manager_core::date::Date;
-use life_manager_core::document::{ParsedDocument, normalize_input, parse_document};
-use life_manager_core::limits;
-use life_manager_core::value::{Map, Value, map_to_bson};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use tokio::sync::Mutex;
@@ -206,7 +206,7 @@ pub struct Materialized {
 }
 
 /// Run the shared core over `text` and convert to storage shapes.
-/// The single bridge between [`life_manager_core`] and Mongo.
+/// The single bridge between [`ddd_core`] and Mongo.
 pub fn materialize(text: &str, materialized_version: String) -> Materialized {
     let normalized = normalize_input(text);
     let parsed = parse_document(normalized.as_ref());
@@ -390,7 +390,7 @@ pub enum EditTiming {
 /// contract is a closure rather than a precomputed edit list. `Err` carries a message for
 /// [`DocStoreError::SpliceRefused`].
 pub type SpliceFn<'a> =
-    &'a (dyn Fn(&str) -> Result<Vec<life_manager_core::splice::TextEdit>, String> + Send + Sync);
+    &'a (dyn Fn(&str) -> Result<Vec<ddd_core::splice::TextEdit>, String> + Send + Sync);
 
 /// CRDT-backed document storage.
 ///
@@ -437,7 +437,7 @@ pub trait DocStore: Send + Sync + 'static {
     ///
     /// # Why a closure and not an edit list
     ///
-    /// A [`life_manager_core::splice::TextEdit`] is a byte-offset span, and a byte offset is
+    /// A [`ddd_core::splice::TextEdit`] is a byte-offset span, and a byte offset is
     /// only meaningful against the exact string it was computed from. The obvious API —
     /// `text()` to read, compute the spans, `apply_edits()` to write — is two separate
     /// acquisitions of the room lock with a window in between, and a concurrent CRDT write in
@@ -974,12 +974,12 @@ impl MongoDocStoreInner {
         //
         //    This is also where a splice's edits are computed — inside the lock, from the
         //    text step 3 will apply them to, so the offsets cannot be stale.
-        let mut spliced: Vec<life_manager_core::splice::TextEdit> = Vec::new();
+        let mut spliced: Vec<ddd_core::splice::TextEdit> = Vec::new();
         let candidate: String = match mutation {
             Mutation::SetText(text) => normalize_input(text).into_owned(),
             Mutation::Splice(compute) => {
                 spliced = compute(&state.text).map_err(DocStoreError::SpliceRefused)?;
-                life_manager_core::splice::apply(&state.text, &spliced)
+                ddd_core::splice::apply(&state.text, &spliced)
             }
             Mutation::Update(update) => {
                 // Apply to a scratch replica to learn the resulting text without
@@ -2647,14 +2647,14 @@ fn common_suffix_len(a: &str, b: &str) -> usize {
     i
 }
 
-/// Convert shared-core [`TextEdit`](life_manager_core::splice::TextEdit)s (UTF-8
+/// Convert shared-core [`TextEdit`](ddd_core::splice::TextEdit)s (UTF-8
 /// byte spans against `text`) into UTF-16 splices, ordered so that applying them
 /// in sequence keeps every remaining offset valid.
 fn edit_deltas(
     text: &str,
-    edits: &[life_manager_core::splice::TextEdit],
+    edits: &[ddd_core::splice::TextEdit],
 ) -> Result<Vec<TextSplice>, DocStoreError> {
-    let mut ordered: Vec<&life_manager_core::splice::TextEdit> = edits.iter().collect();
+    let mut ordered: Vec<&ddd_core::splice::TextEdit> = edits.iter().collect();
     ordered.sort_by_key(|edit| std::cmp::Reverse(edit.range.start));
 
     let mut splices = Vec::with_capacity(ordered.len());
@@ -2720,8 +2720,8 @@ fn is_duplicate_key(err: &mongodb::error::Error) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use life_manager_core::document::Span;
-    use life_manager_core::splice::TextEdit;
+    use ddd_core::document::Span;
+    use ddd_core::splice::TextEdit;
 
     fn edit(start: usize, end: usize, text: &str) -> TextEdit {
         TextEdit {
@@ -2937,7 +2937,7 @@ mod tests {
 }
 
 /// Integration tests against a real MongoDB. Ignored by default; run with
-/// `MONGO_URI=mongodb://localhost:27017 cargo test -p life-manager-server -- --ignored`.
+/// `MONGO_URI=mongodb://localhost:27017 cargo test -p ddd-server -- --ignored`.
 ///
 /// These drive the full write path, so they also depend on the shared core's
 /// parser being implemented (`materialize` calls `parse_document`).
@@ -2948,7 +2948,7 @@ mod mongo_tests {
     async fn store() -> Option<MongoDocStore> {
         let uri = std::env::var("MONGO_URI").ok()?;
         let client = mongodb::Client::with_uri_str(&uri).await.ok()?;
-        let name = format!("life_manager_docstore_test_{}", new_id());
+        let name = format!("ddd_docstore_test_{}", new_id());
         let db = client.database(&name);
         crate::db::indexes::ensure(&db).await.ok()?;
         let feed = crate::feed::ChangeFeed::new(crate::db::Collections::new(db.clone()));

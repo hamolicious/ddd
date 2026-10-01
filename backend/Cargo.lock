@@ -1110,6 +1110,73 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4583a4551df46e2792f82ceeac45e850d2e2d5debba0b91f102385cda5b11f06"
 
 [[package]]
+name = "ddd-core"
+version = "0.1.0"
+dependencies = [
+ "bson",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "ddd-plugin-abi"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "ddd-server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "argon2",
+ "async-trait",
+ "axum",
+ "axum-extra",
+ "base64 0.23.1",
+ "bson",
+ "bytes",
+ "chacha20poly1305",
+ "clap",
+ "ddd-core",
+ "ddd-plugin-abi",
+ "dotenvy",
+ "extism",
+ "futures",
+ "hex",
+ "hickory-resolver",
+ "hkdf",
+ "hmac",
+ "infer",
+ "ipnet",
+ "metrics",
+ "metrics-exporter-prometheus",
+ "mongodb",
+ "rand 0.10.3",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "similar",
+ "thiserror 2.0.21",
+ "time",
+ "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
+ "tower",
+ "tower-http 0.7.1",
+ "tracing",
+ "tracing-subscriber",
+ "ulid",
+ "yrs",
+ "zip",
+]
+
+[[package]]
 name = "debugid"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2339,73 +2406,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61ff90caf6077a803a240f62fdbe88645a890bbca49ef8174c3cb0404362171d"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "life-manager-core"
-version = "0.1.0"
-dependencies = [
- "bson",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
- "wasm-bindgen",
-]
-
-[[package]]
-name = "life-manager-plugin-abi"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "life-manager-server"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "argon2",
- "async-trait",
- "axum",
- "axum-extra",
- "base64 0.23.1",
- "bson",
- "bytes",
- "chacha20poly1305",
- "clap",
- "dotenvy",
- "extism",
- "futures",
- "hex",
- "hickory-resolver",
- "hkdf",
- "hmac",
- "infer",
- "ipnet",
- "life-manager-core",
- "life-manager-plugin-abi",
- "metrics",
- "metrics-exporter-prometheus",
- "mongodb",
- "rand 0.10.3",
- "reqwest",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "similar",
- "thiserror 2.0.21",
- "time",
- "tokio",
- "tokio-tungstenite",
- "tokio-util",
- "tower",
- "tower-http 0.7.1",
- "tracing",
- "tracing-subscriber",
- "ulid",
- "yrs",
- "zip",
 ]
 
 [[package]]

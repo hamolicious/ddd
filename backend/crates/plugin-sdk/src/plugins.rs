@@ -1,4 +1,4 @@
-//! `call_plugin` — calling another backend half's `lm_call` export.
+//! `call_plugin` — calling another backend half's `ddd_call` export.
 //!
 //! The callee must be in your manifest's `dependencies` (or `optionalDependencies`) at a
 //! version in range, and the function in the callee's `backend.exports`; the chain may be

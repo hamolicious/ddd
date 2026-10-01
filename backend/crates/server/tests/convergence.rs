@@ -17,7 +17,7 @@
 //!
 //! ```bash
 //! docker compose up -d --wait mongo
-//! MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p life-manager-server --test convergence -- --ignored
+//! MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p ddd-server --test convergence -- --ignored
 //! ```
 //!
 //! Each test uses its own database and drops it on the way out, so a failed run
@@ -26,14 +26,14 @@
 use std::sync::Arc;
 
 use bson::Document as BsonDocument;
-use futures::TryStreamExt;
-use life_manager_core::document::parse_document;
-use life_manager_server::db::Collections;
-use life_manager_server::docstore::{
+use ddd_core::document::parse_document;
+use ddd_server::db::Collections;
+use ddd_server::docstore::{
     DocStore, DocStoreTuning, MongoDocStore, TEXT_ROOT, doc_options, materialize, version_hash,
 };
-use life_manager_server::domain::Actor;
-use life_manager_server::feed::ChangeFeed;
+use ddd_server::domain::Actor;
+use ddd_server::feed::ChangeFeed;
+use futures::TryStreamExt;
 use mongodb::{Client, Database};
 use ulid::Ulid;
 use yrs::updates::decoder::Decode;
@@ -68,7 +68,7 @@ impl Fixture {
     async fn new(label: &str) -> Option<Self> {
         let uri = std::env::var("MONGO_URI").ok()?;
         let client = Client::with_uri_str(&uri).await.ok()?;
-        let name = format!("life_manager_convergence_{label}_{}", Ulid::generate());
+        let name = format!("ddd_convergence_{label}_{}", Ulid::generate());
         let database = client.database(&name);
         let collections = Collections::new(database.clone());
         let feed = ChangeFeed::new(collections.clone());

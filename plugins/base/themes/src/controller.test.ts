@@ -35,7 +35,7 @@ const MIDNIGHT: Theme = {
   id: "midnight",
   name: "Midnight",
   scheme: "dark",
-  tokens: { "--lm-bg": "#0d1117" },
+  tokens: { "--ddd-bg": "#0d1117" },
 };
 
 interface FakeKernel {
@@ -128,7 +128,7 @@ function fakeKernel(initial: Record<string, string> = {}): FakeKernel {
     },
     stored: (key) => values.get(key),
     appliedBackground: () =>
-      layers.filter((layer) => layer.scheme === resolved()).at(-1)?.tokens["--lm-bg"],
+      layers.filter((layer) => layer.scheme === resolved()).at(-1)?.tokens["--ddd-bg"],
   };
 }
 

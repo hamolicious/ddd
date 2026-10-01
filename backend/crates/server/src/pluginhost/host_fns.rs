@@ -1,7 +1,7 @@
 //! The host functions a backend plugin imports — the whole of what a plugin can do
 //! (SPEC §6.3), and the capability checks that gate them (SPEC §6.2).
 //!
-//! `backend/HOST-ABI.md` is the contract; [`life_manager_plugin_abi`] is its type form.
+//! `backend/HOST-ABI.md` is the contract; [`ddd_plugin_abi`] is its type form.
 //! This module is the implementation and the enforcement point, and it is the file to read
 //! if you want to know what a plugin can reach.
 //!
@@ -70,9 +70,9 @@ use std::time::Duration;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
+use ddd_core as core;
+use ddd_plugin_abi as abi;
 use extism::{CurrentPlugin, Function, UserData, Val, ValType};
-use life_manager_core as core;
-use life_manager_plugin_abi as abi;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
@@ -1265,7 +1265,7 @@ pub fn emit_client(
 // call_plugin
 // ---------------------------------------------------------------------------
 
-/// `call_plugin` — invoke a dependency's `lm_call` (HOST-ABI.md §3.10).
+/// `call_plugin` — invoke a dependency's `ddd_call` (HOST-ABI.md §3.10).
 ///
 /// The refusals, in order:
 ///
@@ -1389,7 +1389,7 @@ pub fn check_call(
         .with_detail(serde_json::json!({ "plugin": requested, "function": function })));
     };
     if let Some(shape) = export.input.as_ref() {
-        let issues = life_manager_core::shape::validate(payload, shape);
+        let issues = ddd_core::shape::validate(payload, shape);
         if !issues.is_empty() {
             return Err(abi::HostError::new(
                 abi::ErrorCode::InvalidArgument,
@@ -1417,7 +1417,7 @@ pub fn check_output(
     else {
         return Ok(());
     };
-    let issues = life_manager_core::shape::validate(value, shape);
+    let issues = ddd_core::shape::validate(value, shape);
     if issues.is_empty() {
         return Ok(());
     }
@@ -1432,7 +1432,7 @@ pub fn check_output(
     .with_detail(serde_json::json!({ "issues": issues })))
 }
 
-fn describe_issues(issues: &[life_manager_core::shape::Issue]) -> String {
+fn describe_issues(issues: &[ddd_core::shape::Issue]) -> String {
     issues
         .iter()
         .take(5)
@@ -1671,7 +1671,7 @@ async fn fetch(request: FetchRequest<'_>) -> Result<abi::http::HttpResponseOutpu
             .resolve_to_addrs(&host, &addresses)
             .redirect(reqwest::redirect::Policy::none())
             .timeout(remaining)
-            .user_agent(concat!("life-manager/", env!("CARGO_PKG_VERSION")))
+            .user_agent(concat!("ddd/", env!("CARGO_PKG_VERSION")))
             .build()
             .map_err(|err| {
                 tracing::warn!(

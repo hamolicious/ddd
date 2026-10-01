@@ -82,7 +82,7 @@ const MUTED: CSSProperties = {
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
   fontSize: "0.85em",
-  color: "var(--lm-text-muted)",
+  color: "var(--ddd-text-muted)",
 };
 
 /** A note as the tree draws it: its pill and icon, its title, then the notes above it. */

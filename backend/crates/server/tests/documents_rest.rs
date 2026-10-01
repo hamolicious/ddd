@@ -11,7 +11,7 @@ mod common;
 
 use axum::http::{StatusCode, header};
 use common::{TEST_PASSWORD, TestApp, assert_no_extended_json, assert_rfc3339};
-use life_manager_server::domain::{Actor, new_id};
+use ddd_server::domain::{Actor, new_id};
 use serde_json::json;
 
 const ALPHA: &str =

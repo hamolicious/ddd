@@ -3,7 +3,7 @@
 //!
 //! # The bug this suite exists for
 //!
-//! A [`life_manager_core::splice::TextEdit`] is a **byte-offset span**, and a byte offset means
+//! A [`ddd_core::splice::TextEdit`] is a **byte-offset span**, and a byte offset means
 //! nothing except against the exact string it was computed from. The obvious API — read the text,
 //! compute the spans, apply them — is two separate acquisitions of the per-document lock, and a
 //! concurrent CRDT write in the window between them shifts every offset. Nothing downstream can
@@ -25,7 +25,7 @@
 //!
 //! ```text
 //! docker compose up -d --wait mongo
-//! MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p life-manager-server --test docstore_splice -- --ignored
+//! MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p ddd-server --test docstore_splice -- --ignored
 //! ```
 //!
 //! **Owner:** the `docstore` area, with the `wasm-host` builder (the caller that needed it).
@@ -34,11 +34,11 @@ mod common;
 
 use std::sync::{Arc, Mutex};
 
-use life_manager_core::splice::{self, SectionLineEdit};
-use life_manager_server::db;
-use life_manager_server::docstore::{DocStore as _, DocStoreError, DocStoreTuning, MongoDocStore};
-use life_manager_server::domain::{Actor, new_id};
-use life_manager_server::feed::ChangeFeed;
+use ddd_core::splice::{self, SectionLineEdit};
+use ddd_server::db;
+use ddd_server::docstore::{DocStore as _, DocStoreError, DocStoreTuning, MongoDocStore};
+use ddd_server::domain::{Actor, new_id};
+use ddd_server::feed::ChangeFeed;
 
 const PLUGIN: &str = "calendar";
 
@@ -56,7 +56,7 @@ fn document() -> String {
 async fn store() -> Option<(MongoDocStore, mongodb::Database, mongodb::Client)> {
     let uri = common::mongo_uri()?;
     let client = mongodb::Client::with_uri_str(&uri).await.ok()?;
-    let db = client.database(&format!("lm_splice_test_{}", new_id()));
+    let db = client.database(&format!("ddd_splice_test_{}", new_id()));
     db::indexes::ensure(&db).await.ok()?;
     let feed = ChangeFeed::new(db::Collections::new(db.clone()));
     let store = MongoDocStore::new(db.clone(), DocStoreTuning::default(), feed);
@@ -67,7 +67,7 @@ async fn store() -> Option<(MongoDocStore, mongodb::Database, mongodb::Client)> 
 fn set(key: &str, value: &str) -> Vec<SectionLineEdit> {
     vec![SectionLineEdit {
         key: key.to_string(),
-        value: Some(life_manager_core::Value::Str(value.to_string())),
+        value: Some(ddd_core::Value::Str(value.to_string())),
     }]
 }
 

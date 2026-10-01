@@ -17,7 +17,7 @@
  * **Acting on results** — the Actions button, which hands every loaded row's id to the
  * commands that `takes: "documents"` — is the shell's, so every view gets it without
  * re-implementing it. A single result's menu is `context-menu`'s: a view marks each result
- * as an `lm/document` (`_shared/target.ts`).
+ * as an `ddd/document` (`_shared/target.ts`).
  */
 
 import { useMemo, useState } from "react";

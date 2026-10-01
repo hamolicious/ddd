@@ -1,10 +1,10 @@
 # {{name}}
 
-A Life Manager plugin (`{{id}}`).
+A ddd plugin (`{{id}}`).
 
 ```bash
 npm install
-npm run types -- --server https://your-server   # or set LM_SERVER
+npm run types -- --server https://your-server   # or set DDD_SERVER
 npm run check    # type-check
 npm run build    # the installed layout, in dist/
 ```
@@ -15,4 +15,4 @@ npm run build    # the installed layout, in dist/
 - `src/style.css`: linked when the plugin activates.
 - `types/`: `@kernel` and each dependency's `plugin:<id>`, as your server serves them.
   Refresh them after the server or `dependencies` change.
-- `tools/`: the reference build from the Life Manager repository. Do not edit.
+- `tools/`: the reference build from the ddd repository. Do not edit.

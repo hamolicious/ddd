@@ -1,4 +1,4 @@
-//! `lm plugin types` — what a plugin compiles against, fetched from the server it targets.
+//! `ddd plugin types` — what a plugin compiles against, fetched from the server it targets.
 //!
 //! A third-party plugin sees exactly what the server serves: `/kernel.d.ts`, and each
 //! dependency's generated `frontend/index.d.ts` (`declare module "plugin:<id>"`). Fetching
@@ -19,15 +19,15 @@ pub struct TypesArgs {
     /// The plugin project (the directory holding manifest.json).
     #[arg(long, default_value = ".")]
     pub dir: PathBuf,
-    /// The Life Manager server the plugin targets, e.g. `https://notes.example.com`.
-    #[arg(long, env = "LM_SERVER")]
+    /// The ddd server the plugin targets, e.g. `https://notes.example.com`.
+    #[arg(long, env = "DDD_SERVER")]
     pub server: Option<String>,
 }
 
 pub fn run(args: TypesArgs) -> Result<()> {
     let Some(server) = args.server else {
         bail!(
-            "which server? pass --server <url> or set LM_SERVER (npm run types -- --server <url>)"
+            "which server? pass --server <url> or set DDD_SERVER (npm run types -- --server <url>)"
         );
     };
     fetch(&args.dir, &Server::new(&server))

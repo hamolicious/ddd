@@ -1,4 +1,4 @@
-# `life-manager-core` — the shared core
+# `ddd-core` — the shared core
 
 Everything in this crate runs **identically on the server and in the client
 kernel** (compiled to `wasm32`). Parity between offline and online behaviour is by
@@ -8,8 +8,8 @@ construction: one implementation, two build targets (SPEC §2, §3.4, §4.2).
 Three build shapes:
 
 ```
-cargo test  -p life-manager-core                        # native, `mongo` feature on
-cargo check -p life-manager-core --no-default-features  # the Wasm shape (no bson)
+cargo test  -p ddd-core                        # native, `mongo` feature on
+cargo check -p ddd-core --no-default-features  # the Wasm shape (no bson)
 mise run wasm                                           # wasm32 + wasm-bindgen + smoke test
 ```
 

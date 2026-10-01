@@ -3283,15 +3283,15 @@
       "source_location": "L86"
     },
     {
-      "id": "web_kernel_src_store_idb_store_lifemanagerdb",
-      "label": "LifeManagerDb",
+      "id": "web_kernel_src_store_idb_store_ddddb",
+      "label": "DddDb",
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
       "community": 24,
       "community_name": "idb-store.ts",
       "file_type": "code",
-      "norm_label": "lifemanagerdb",
+      "norm_label": "ddddb",
       "source_file": "web/kernel/src/store/idb-store.ts",
       "source_location": "L76"
     },
@@ -36553,35 +36553,35 @@
       "source_location": null
     },
     {
-      "id": "package_life_manager_shell_bridge_auth_dart",
-      "label": "package:life_manager_shell/bridge/auth.dart",
+      "id": "package_ddd_shell_bridge_auth_dart",
+      "label": "package:ddd_shell/bridge/auth.dart",
       "_origin": "ast",
       "community": 11,
       "community_name": "filesystem_test.dart",
       "file_type": "code",
-      "norm_label": "package:life_manager_shell/bridge/auth.dart",
+      "norm_label": "package:ddd_shell/bridge/auth.dart",
       "source_file": null,
       "source_location": null
     },
     {
-      "id": "package_life_manager_shell_bridge_filesystem_dart",
-      "label": "package:life_manager_shell/bridge/filesystem.dart",
+      "id": "package_ddd_shell_bridge_filesystem_dart",
+      "label": "package:ddd_shell/bridge/filesystem.dart",
       "_origin": "ast",
       "community": 11,
       "community_name": "filesystem_test.dart",
       "file_type": "code",
-      "norm_label": "package:life_manager_shell/bridge/filesystem.dart",
+      "norm_label": "package:ddd_shell/bridge/filesystem.dart",
       "source_file": null,
       "source_location": null
     },
     {
-      "id": "package_life_manager_shell_shell_login_screen_dart",
-      "label": "package:life_manager_shell/shell/login_screen.dart",
+      "id": "package_ddd_shell_shell_login_screen_dart",
+      "label": "package:ddd_shell/shell/login_screen.dart",
       "_origin": "ast",
       "community": 11,
       "community_name": "filesystem_test.dart",
       "file_type": "code",
-      "norm_label": "package:life_manager_shell/shell/login_screen.dart",
+      "norm_label": "package:ddd_shell/shell/login_screen.dart",
       "source_file": null,
       "source_location": null
     },
@@ -40998,14 +40998,14 @@
     },
     {
       "id": "core_wasm",
-      "label": "@life-manager/core-wasm",
+      "label": "@ddd/core-wasm",
       "_origin": "ast",
       "community": 125,
       "community_name": "host.ts",
       "confidence": "EXTRACTED",
       "file_type": "code",
-      "norm_label": "@life-manager/core-wasm",
-      "source_file": "@life-manager/core-wasm"
+      "norm_label": "@ddd/core-wasm",
+      "source_file": "@ddd/core-wasm"
     },
     {
       "id": "web_app_src_boot_kernel_init",
@@ -60140,13 +60140,13 @@
       "source_location": null
     },
     {
-      "id": "package_life_manager_shell_main_dart",
-      "label": "package:life_manager_shell/main.dart",
+      "id": "package_ddd_shell_main_dart",
+      "label": "package:ddd_shell/main.dart",
       "_origin": "ast",
       "community": 204,
       "community_name": "notice_overlay_test.dart",
       "file_type": "code",
-      "norm_label": "package:life_manager_shell/main.dart",
+      "norm_label": "package:ddd_shell/main.dart",
       "source_file": null,
       "source_location": null
     },
@@ -64563,7 +64563,7 @@
       "label": "hello-backend",
       "_origin": "ast",
       "community": 234,
-      "community_name": "life-manager-plugin-abi",
+      "community_name": "ddd-plugin-abi",
       "ecosystem": "cargo",
       "file_type": "code",
       "norm_label": "hello-backend",
@@ -64572,54 +64572,54 @@
       "type": "package"
     },
     {
-      "id": "pkg_life_manager_core",
-      "label": "life-manager-core",
+      "id": "pkg_ddd_core",
+      "label": "ddd-core",
       "_origin": "ast",
       "community": 234,
-      "community_name": "life-manager-plugin-abi",
+      "community_name": "ddd-plugin-abi",
       "ecosystem": "cargo",
       "file_type": "code",
-      "norm_label": "life-manager-core",
+      "norm_label": "ddd-core",
       "source_file": "backend/crates/core/Cargo.toml",
       "source_location": "L1",
       "type": "package"
     },
     {
-      "id": "pkg_life_manager_plugin_abi",
-      "label": "life-manager-plugin-abi",
+      "id": "pkg_ddd_plugin_abi",
+      "label": "ddd-plugin-abi",
       "_origin": "ast",
       "community": 234,
-      "community_name": "life-manager-plugin-abi",
+      "community_name": "ddd-plugin-abi",
       "ecosystem": "cargo",
       "file_type": "code",
-      "norm_label": "life-manager-plugin-abi",
+      "norm_label": "ddd-plugin-abi",
       "source_file": "backend/crates/plugin-abi/Cargo.toml",
       "source_location": "L1",
       "type": "package"
     },
     {
-      "id": "pkg_life_manager_plugin_sdk",
-      "label": "life-manager-plugin-sdk",
+      "id": "pkg_ddd_plugin_sdk",
+      "label": "ddd-plugin-sdk",
       "_origin": "ast",
       "community": 234,
-      "community_name": "life-manager-plugin-abi",
+      "community_name": "ddd-plugin-abi",
       "ecosystem": "cargo",
       "file_type": "code",
-      "norm_label": "life-manager-plugin-sdk",
+      "norm_label": "ddd-plugin-sdk",
       "source_file": "backend/crates/plugin-sdk/Cargo.toml",
       "source_location": "L1",
       "type": "package",
       "version": "0.1.0"
     },
     {
-      "id": "pkg_life_manager_server",
-      "label": "life-manager-server",
+      "id": "pkg_ddd_server",
+      "label": "ddd-server",
       "_origin": "ast",
       "community": 234,
-      "community_name": "life-manager-plugin-abi",
+      "community_name": "ddd-plugin-abi",
       "ecosystem": "cargo",
       "file_type": "code",
-      "norm_label": "life-manager-server",
+      "norm_label": "ddd-server",
       "source_file": "backend/crates/server/Cargo.toml",
       "source_location": "L1",
       "type": "package"
@@ -64845,13 +64845,13 @@
       "source_location": "L1"
     },
     {
-      "id": "web_app_src_virtual_modules_d_virtual_lm_precache",
-      "label": "virtual:lm-precache",
+      "id": "web_app_src_virtual_modules_d_virtual_ddd_precache",
+      "label": "virtual:ddd-precache",
       "_origin": "ast",
       "community": 247,
       "community_name": "virtual-modules.d.ts",
       "file_type": "code",
-      "norm_label": "virtual:lm-precache",
+      "norm_label": "virtual:ddd-precache",
       "source_file": "web/app/src/virtual-modules.d.ts",
       "source_location": "L9"
     },
@@ -64867,13 +64867,13 @@
       "source_location": "L1"
     },
     {
-      "id": "web_kernel_src_wasm_core_wasm_d_life_manager_core_wasm",
-      "label": "@life-manager/core-wasm",
+      "id": "web_kernel_src_wasm_core_wasm_d_ddd_core_wasm",
+      "label": "@ddd/core-wasm",
       "_origin": "ast",
       "community": 248,
       "community_name": "core-wasm.d.ts",
       "file_type": "code",
-      "norm_label": "@life-manager/core-wasm",
+      "norm_label": "@ddd/core-wasm",
       "source_file": "web/kernel/src/wasm/core-wasm.d.ts",
       "source_location": "L15"
     },
@@ -82076,57 +82076,57 @@
       "source_location": null
     },
     {
-      "id": "package_life_manager_shell_bundle_manifest_dart",
-      "label": "package:life_manager_shell/bundle/manifest.dart",
+      "id": "package_ddd_shell_bundle_manifest_dart",
+      "label": "package:ddd_shell/bundle/manifest.dart",
       "_origin": "ast",
       "community": 64,
       "community_name": "updater_test.dart",
       "file_type": "code",
-      "norm_label": "package:life_manager_shell/bundle/manifest.dart",
+      "norm_label": "package:ddd_shell/bundle/manifest.dart",
       "source_file": null,
       "source_location": null
     },
     {
-      "id": "package_life_manager_shell_bundle_store_dart",
-      "label": "package:life_manager_shell/bundle/store.dart",
+      "id": "package_ddd_shell_bundle_store_dart",
+      "label": "package:ddd_shell/bundle/store.dart",
       "_origin": "ast",
       "community": 64,
       "community_name": "updater_test.dart",
       "file_type": "code",
-      "norm_label": "package:life_manager_shell/bundle/store.dart",
+      "norm_label": "package:ddd_shell/bundle/store.dart",
       "source_file": null,
       "source_location": null
     },
     {
-      "id": "package_life_manager_shell_bundle_updater_dart",
-      "label": "package:life_manager_shell/bundle/updater.dart",
+      "id": "package_ddd_shell_bundle_updater_dart",
+      "label": "package:ddd_shell/bundle/updater.dart",
       "_origin": "ast",
       "community": 64,
       "community_name": "updater_test.dart",
       "file_type": "code",
-      "norm_label": "package:life_manager_shell/bundle/updater.dart",
+      "norm_label": "package:ddd_shell/bundle/updater.dart",
       "source_file": null,
       "source_location": null
     },
     {
-      "id": "package_life_manager_shell_shell_boot_guard_dart",
-      "label": "package:life_manager_shell/shell/boot_guard.dart",
+      "id": "package_ddd_shell_shell_boot_guard_dart",
+      "label": "package:ddd_shell/shell/boot_guard.dart",
       "_origin": "ast",
       "community": 64,
       "community_name": "updater_test.dart",
       "file_type": "code",
-      "norm_label": "package:life_manager_shell/shell/boot_guard.dart",
+      "norm_label": "package:ddd_shell/shell/boot_guard.dart",
       "source_file": null,
       "source_location": null
     },
     {
-      "id": "package_life_manager_shell_shell_webview_host_dart",
-      "label": "package:life_manager_shell/shell/webview_host.dart",
+      "id": "package_ddd_shell_shell_webview_host_dart",
+      "label": "package:ddd_shell/shell/webview_host.dart",
       "_origin": "ast",
       "community": 64,
       "community_name": "updater_test.dart",
       "file_type": "code",
-      "norm_label": "package:life_manager_shell/shell/webview_host.dart",
+      "norm_label": "package:ddd_shell/shell/webview_host.dart",
       "source_file": null,
       "source_location": null
     },
@@ -89754,35 +89754,35 @@
       "source_location": null
     },
     {
-      "id": "package_life_manager_shell_bridge_bridge_dart",
-      "label": "package:life_manager_shell/bridge/bridge.dart",
+      "id": "package_ddd_shell_bridge_bridge_dart",
+      "label": "package:ddd_shell/bridge/bridge.dart",
       "_origin": "ast",
       "community": 93,
       "community_name": "notifications_capability_test.dart",
       "file_type": "code",
-      "norm_label": "package:life_manager_shell/bridge/bridge.dart",
+      "norm_label": "package:ddd_shell/bridge/bridge.dart",
       "source_file": null,
       "source_location": null
     },
     {
-      "id": "package_life_manager_shell_bridge_notifications_dart",
-      "label": "package:life_manager_shell/bridge/notifications.dart",
+      "id": "package_ddd_shell_bridge_notifications_dart",
+      "label": "package:ddd_shell/bridge/notifications.dart",
       "_origin": "ast",
       "community": 93,
       "community_name": "notifications_capability_test.dart",
       "file_type": "code",
-      "norm_label": "package:life_manager_shell/bridge/notifications.dart",
+      "norm_label": "package:ddd_shell/bridge/notifications.dart",
       "source_file": null,
       "source_location": null
     },
     {
-      "id": "package_life_manager_shell_config_dart",
-      "label": "package:life_manager_shell/config.dart",
+      "id": "package_ddd_shell_config_dart",
+      "label": "package:ddd_shell/config.dart",
       "_origin": "ast",
       "community": 93,
       "community_name": "notifications_capability_test.dart",
       "file_type": "code",
-      "norm_label": "package:life_manager_shell/config.dart",
+      "norm_label": "package:ddd_shell/config.dart",
       "source_file": null,
       "source_location": null
     },
@@ -92038,7 +92038,7 @@
       "author": null,
       "captured_at": null,
       "community": 255,
-      "community_name": "Life Manager Project Specification",
+      "community_name": "ddd Project Specification",
       "contributor": null,
       "file_type": "code",
       "norm_label": "docker compose configuration",
@@ -92054,7 +92054,7 @@
       "author": null,
       "captured_at": null,
       "community": 255,
-      "community_name": "Life Manager Project Specification",
+      "community_name": "ddd Project Specification",
       "contributor": null,
       "file_type": "concept",
       "norm_label": "concurrent frontmatter key writes (correctness)",
@@ -92070,7 +92070,7 @@
       "author": null,
       "captured_at": null,
       "community": 255,
-      "community_name": "Life Manager Project Specification",
+      "community_name": "ddd Project Specification",
       "contributor": null,
       "file_type": "concept",
       "norm_label": "trash permanent delete and empty",
@@ -92086,7 +92086,7 @@
       "author": null,
       "captured_at": null,
       "community": 255,
-      "community_name": "Life Manager Project Specification",
+      "community_name": "ddd Project Specification",
       "contributor": null,
       "file_type": "concept",
       "norm_label": "vision (microkernel document manager)",
@@ -92102,7 +92102,7 @@
       "author": null,
       "captured_at": null,
       "community": 255,
-      "community_name": "Life Manager Project Specification",
+      "community_name": "ddd Project Specification",
       "contributor": null,
       "file_type": "concept",
       "norm_label": "out of scope for v1 / v2 seams",
@@ -92118,7 +92118,7 @@
       "author": null,
       "captured_at": null,
       "community": 255,
-      "community_name": "Life Manager Project Specification",
+      "community_name": "ddd Project Specification",
       "contributor": null,
       "file_type": "concept",
       "norm_label": "known risks",
@@ -92134,7 +92134,7 @@
       "author": null,
       "captured_at": null,
       "community": 255,
-      "community_name": "Life Manager Project Specification",
+      "community_name": "ddd Project Specification",
       "contributor": null,
       "file_type": "concept",
       "norm_label": "architecture overview",
@@ -92150,7 +92150,7 @@
       "author": null,
       "captured_at": null,
       "community": 255,
-      "community_name": "Life Manager Project Specification",
+      "community_name": "ddd Project Specification",
       "contributor": null,
       "file_type": "concept",
       "norm_label": "document model",
@@ -92166,7 +92166,7 @@
       "author": null,
       "captured_at": null,
       "community": 255,
-      "community_name": "Life Manager Project Specification",
+      "community_name": "ddd Project Specification",
       "contributor": null,
       "file_type": "concept",
       "norm_label": "sync & offline",
@@ -92182,7 +92182,7 @@
       "author": null,
       "captured_at": null,
       "community": 255,
-      "community_name": "Life Manager Project Specification",
+      "community_name": "ddd Project Specification",
       "contributor": null,
       "file_type": "concept",
       "norm_label": "rust server",
@@ -92198,7 +92198,7 @@
       "author": null,
       "captured_at": null,
       "community": 255,
-      "community_name": "Life Manager Project Specification",
+      "community_name": "ddd Project Specification",
       "contributor": null,
       "file_type": "concept",
       "norm_label": "plugin system",
@@ -92214,7 +92214,7 @@
       "author": null,
       "captured_at": null,
       "community": 255,
-      "community_name": "Life Manager Project Specification",
+      "community_name": "ddd Project Specification",
       "contributor": null,
       "file_type": "concept",
       "norm_label": "repo, deployment, operations",
@@ -92230,7 +92230,7 @@
       "author": null,
       "captured_at": null,
       "community": 255,
-      "community_name": "Life Manager Project Specification",
+      "community_name": "ddd Project Specification",
       "contributor": null,
       "file_type": "document",
       "norm_label": "polish backlog",
@@ -92241,16 +92241,16 @@
     },
     {
       "id": "spec",
-      "label": "Life Manager Project Specification",
+      "label": "ddd Project Specification",
       "_origin": "semantic",
       "author": null,
       "captured_at": null,
       "community": 255,
-      "community_name": "Life Manager Project Specification",
+      "community_name": "ddd Project Specification",
       "contributor": null,
       "file_type": "document",
-      "norm_label": "life manager project specification",
-      "rationale": "v2 spec revised after adversarial review. Defines the architecture, document model, sync, server, plugin system, Flutter shell, deployment, build order, and known risks for the Life Manager project.",
+      "norm_label": "ddd project specification",
+      "rationale": "v2 spec revised after adversarial review. Defines the architecture, document model, sync, server, plugin system, Flutter shell, deployment, build order, and known risks for the ddd project.",
       "source_file": "SPEC.md",
       "source_location": null,
       "source_url": null
@@ -92730,14 +92730,14 @@
       "source_file": "web/MOBILE-AUDIT.md"
     },
     {
-      "id": "life_manager_core_as_core",
-      "label": "life_manager_core_as_core",
+      "id": "ddd_core_as_core",
+      "label": "ddd_core_as_core",
       "_origin": "semantic",
       "community": 1,
       "community_name": "host_fns.rs",
       "external": true,
       "file_type": "concept",
-      "norm_label": "life_manager_core_as_core",
+      "norm_label": "ddd_core_as_core",
       "source_file": "",
       "type": "external"
     },
@@ -93066,14 +93066,14 @@
       "type": "external"
     },
     {
-      "id": "ref_life_manager_core_wasm",
-      "label": "ref_life_manager_core_wasm",
+      "id": "ref_ddd_core_wasm",
+      "label": "ref_ddd_core_wasm",
       "_origin": "semantic",
       "community": 125,
       "community_name": "host.ts",
       "external": true,
       "file_type": "concept",
-      "norm_label": "ref_life_manager_core_wasm",
+      "norm_label": "ref_ddd_core_wasm",
       "source_file": "",
       "type": "external"
     },
@@ -93282,14 +93282,14 @@
       "type": "external"
     },
     {
-      "id": "life_manager_plugin_sdk_as_lm",
-      "label": "life_manager_plugin_sdk_as_lm",
+      "id": "ddd_plugin_sdk_as_ddd",
+      "label": "ddd_plugin_sdk_as_ddd",
       "_origin": "semantic",
       "community": 141,
       "community_name": "hello-backend/src/lib.rs",
       "external": true,
       "file_type": "concept",
-      "norm_label": "life_manager_plugin_sdk_as_lm",
+      "norm_label": "ddd_plugin_sdk_as_ddd",
       "source_file": "",
       "type": "external"
     },
@@ -93702,14 +93702,14 @@
       "type": "external"
     },
     {
-      "id": "life_manager_server",
-      "label": "life_manager_server",
+      "id": "ddd_server",
+      "label": "ddd_server",
       "_origin": "semantic",
       "community": 185,
       "community_name": "server/tests/common/mod.rs",
       "external": true,
       "file_type": "concept",
-      "norm_label": "life_manager_server",
+      "norm_label": "ddd_server",
       "source_file": "",
       "type": "external"
     },
@@ -94538,14 +94538,14 @@
       "type": "external"
     },
     {
-      "id": "ref_virtual_lm_precache",
-      "label": "ref_virtual_lm_precache",
+      "id": "ref_virtual_ddd_precache",
+      "label": "ref_virtual_ddd_precache",
       "_origin": "semantic",
       "community": 229,
       "community_name": "sw.ts",
       "external": true,
       "file_type": "concept",
-      "norm_label": "ref_virtual_lm_precache",
+      "norm_label": "ref_virtual_ddd_precache",
       "source_file": "",
       "type": "external"
     },
@@ -94679,12 +94679,12 @@
     },
     {
       "id": "backend_shared_core",
-      "label": "Shared Core (life-manager-core)",
+      "label": "Shared Core (ddd-core)",
       "_origin": "semantic",
       "community": 236,
       "community_name": "Core Library README",
       "file_type": "concept",
-      "norm_label": "shared core (life-manager-core)",
+      "norm_label": "shared core (ddd-core)",
       "rationale": "The shared parsing/filter crate that compiles to both native (server) and wasm32 (client kernel), ensuring identical behavior. Covers document parsing, YAML subset, dates, filter DSL, and splices.",
       "source_file": "backend/crates/core/README.md"
     },
@@ -94762,7 +94762,7 @@
       "community_name": "Tailwind in Plugins Guide",
       "file_type": "concept",
       "norm_label": "tailwind preset for plugins",
-      "rationale": "Granular imports (no preflight, no layers), per-plugin prefix, dark/compact/touch variants, @theme inline mapping to kernel tokens, --spacing as half of --lm-space, tap utilities.",
+      "rationale": "Granular imports (no preflight, no layers), per-plugin prefix, dark/compact/touch variants, @theme inline mapping to kernel tokens, --spacing as half of --ddd-space, tap utilities.",
       "source_file": "docs/TAILWIND.md"
     },
     {
@@ -94777,14 +94777,14 @@
       "source_file": "docs/TAILWIND.md"
     },
     {
-      "id": "home_hamolicious_projects_life_manager_app_ios_runner_generatedpluginregistrant_h",
-      "label": "home_hamolicious_projects_life_manager_app_ios_runner_generatedpluginregistrant_h",
+      "id": "home_hamolicious_projects_ddd_app_ios_runner_generatedpluginregistrant_h",
+      "label": "home_hamolicious_projects_ddd_app_ios_runner_generatedpluginregistrant_h",
       "_origin": "semantic",
       "community": 243,
       "community_name": "Runner-Bridging-Header.h",
       "external": true,
       "file_type": "concept",
-      "norm_label": "home_hamolicious_projects_life_manager_app_ios_runner_generatedpluginregistrant_h",
+      "norm_label": "home_hamolicious_projects_ddd_app_ios_runner_generatedpluginregistrant_h",
       "source_file": "",
       "type": "external"
     },
@@ -95206,14 +95206,14 @@
       "type": "external"
     },
     {
-      "id": "life_manager_plugin_abi_as_abi",
-      "label": "life_manager_plugin_abi_as_abi",
+      "id": "ddd_plugin_abi_as_abi",
+      "label": "ddd_plugin_abi_as_abi",
       "_origin": "semantic",
       "community": 31,
       "community_name": "plugininstall/config.rs",
       "external": true,
       "file_type": "concept",
-      "norm_label": "life_manager_plugin_abi_as_abi",
+      "norm_label": "ddd_plugin_abi_as_abi",
       "source_file": "",
       "type": "external"
     },
@@ -143863,7 +143863,7 @@
     },
     {
       "source": "pkg_hello_backend",
-      "target": "pkg_life_manager_plugin_sdk",
+      "target": "pkg_ddd_plugin_sdk",
       "relation": "depends_on",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -143874,8 +143874,8 @@
       "weight": 1.0
     },
     {
-      "source": "pkg_life_manager_plugin_sdk",
-      "target": "pkg_life_manager_plugin_abi",
+      "source": "pkg_ddd_plugin_sdk",
+      "target": "pkg_ddd_plugin_abi",
       "relation": "depends_on",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -143886,8 +143886,8 @@
       "weight": 1.0
     },
     {
-      "source": "pkg_life_manager_server",
-      "target": "pkg_life_manager_core",
+      "source": "pkg_ddd_server",
+      "target": "pkg_ddd_core",
       "relation": "depends_on",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -143898,8 +143898,8 @@
       "weight": 1.0
     },
     {
-      "source": "pkg_life_manager_server",
-      "target": "pkg_life_manager_plugin_abi",
+      "source": "pkg_ddd_server",
+      "target": "pkg_ddd_plugin_abi",
       "relation": "depends_on",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -154419,7 +154419,7 @@
       "weight": 1.0
     },
     {
-      "source": "web_kernel_src_store_idb_store_lifemanagerdb",
+      "source": "web_kernel_src_store_idb_store_ddddb",
       "target": "web_kernel_src_store_projection_store_storedrow",
       "relation": "references",
       "_origin": "ast",
@@ -171210,7 +171210,7 @@
     },
     {
       "source": "web_kernel_src_wasm_index_loadcore",
-      "target": "ref_life_manager_core_wasm",
+      "target": "ref_ddd_core_wasm",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -171262,7 +171262,7 @@
     },
     {
       "source": "app_ios_runner_runner_bridging_header",
-      "target": "home_hamolicious_projects_life_manager_app_ios_runner_generatedpluginregistrant_h",
+      "target": "home_hamolicious_projects_ddd_app_ios_runner_generatedpluginregistrant_h",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -191878,7 +191878,7 @@
     },
     {
       "source": "backend_crates_plugin_sdk_src_lib",
-      "target": "life_manager_plugin_abi_as_abi",
+      "target": "ddd_plugin_abi_as_abi",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -193630,7 +193630,7 @@
     },
     {
       "source": "backend_crates_server_src_main",
-      "target": "life_manager_server",
+      "target": "ddd_server",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -193750,7 +193750,7 @@
     },
     {
       "source": "backend_crates_server_src_pluginhost_cron",
-      "target": "life_manager_plugin_abi_as_abi",
+      "target": "ddd_plugin_abi_as_abi",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -193894,7 +193894,7 @@
     },
     {
       "source": "backend_crates_server_src_pluginhost_hooks",
-      "target": "life_manager_plugin_abi_as_abi",
+      "target": "ddd_plugin_abi_as_abi",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -194062,7 +194062,7 @@
     },
     {
       "source": "backend_crates_server_src_pluginhost_host_fns",
-      "target": "life_manager_core_as_core",
+      "target": "ddd_core_as_core",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -194074,7 +194074,7 @@
     },
     {
       "source": "backend_crates_server_src_pluginhost_host_fns",
-      "target": "life_manager_plugin_abi_as_abi",
+      "target": "ddd_plugin_abi_as_abi",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -194218,7 +194218,7 @@
     },
     {
       "source": "backend_crates_server_src_pluginhost_limits",
-      "target": "life_manager_plugin_abi_as_abi",
+      "target": "ddd_plugin_abi_as_abi",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -194338,7 +194338,7 @@
     },
     {
       "source": "backend_crates_server_src_pluginhost_mod",
-      "target": "life_manager_plugin_abi_as_abi",
+      "target": "ddd_plugin_abi_as_abi",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -194494,7 +194494,7 @@
     },
     {
       "source": "backend_crates_server_src_pluginhost_pool",
-      "target": "life_manager_plugin_abi_as_abi",
+      "target": "ddd_plugin_abi_as_abi",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -194614,7 +194614,7 @@
     },
     {
       "source": "backend_crates_server_src_plugininstall_config",
-      "target": "life_manager_plugin_abi_as_abi",
+      "target": "ddd_plugin_abi_as_abi",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -194806,7 +194806,7 @@
     },
     {
       "source": "backend_crates_server_src_plugininstall_mod",
-      "target": "life_manager_plugin_abi_as_abi",
+      "target": "ddd_plugin_abi_as_abi",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -195106,7 +195106,7 @@
     },
     {
       "source": "backend_crates_server_src_plugininstall_zipcheck",
-      "target": "life_manager_plugin_abi_as_abi",
+      "target": "ddd_plugin_abi_as_abi",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -196474,7 +196474,7 @@
     },
     {
       "source": "backend_crates_server_src_routes_plugin_api",
-      "target": "life_manager_plugin_abi_as_abi",
+      "target": "ddd_plugin_abi_as_abi",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -197866,7 +197866,7 @@
     },
     {
       "source": "backend_crates_server_tests_common_mod",
-      "target": "life_manager_server",
+      "target": "ddd_server",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -198430,7 +198430,7 @@
     },
     {
       "source": "backend_crates_server_tests_pluginhost_http",
-      "target": "life_manager_plugin_abi_as_abi",
+      "target": "ddd_plugin_abi_as_abi",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -198610,7 +198610,7 @@
     },
     {
       "source": "backend_crates_server_tests_pluginhost_routes",
-      "target": "life_manager_server",
+      "target": "ddd_server",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -198682,7 +198682,7 @@
     },
     {
       "source": "backend_crates_server_tests_pluginhost_runtime",
-      "target": "life_manager_plugin_abi_as_abi",
+      "target": "ddd_plugin_abi_as_abi",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -198814,7 +198814,7 @@
     },
     {
       "source": "backend_crates_server_tests_pluginhost_smoke",
-      "target": "life_manager_plugin_abi_as_abi",
+      "target": "ddd_plugin_abi_as_abi",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -199150,7 +199150,7 @@
     },
     {
       "source": "backend_crates_server_tests_shell_bundle",
-      "target": "life_manager_server",
+      "target": "ddd_server",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -199306,7 +199306,7 @@
     },
     {
       "source": "backend_crates_server_tests_statics",
-      "target": "life_manager_server",
+      "target": "ddd_server",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -199486,7 +199486,7 @@
     },
     {
       "source": "backend_crates_server_tests_sync_ws",
-      "target": "life_manager_server",
+      "target": "ddd_server",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -205467,7 +205467,7 @@
     },
     {
       "source": "plugins_examples_hello_backend_src_lib",
-      "target": "life_manager_plugin_sdk_as_lm",
+      "target": "ddd_plugin_sdk_as_ddd",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -206930,7 +206930,7 @@
     },
     {
       "source": "web_app_src_sw",
-      "target": "ref_virtual_lm_precache",
+      "target": "ref_virtual_ddd_precache",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -228168,7 +228168,7 @@
     },
     {
       "source": "web_kernel_src_store_index",
-      "target": "web_kernel_src_store_idb_store_lifemanagerdb",
+      "target": "web_kernel_src_store_idb_store_ddddb",
       "relation": "re_exports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -282843,7 +282843,7 @@
     },
     {
       "source": "web_app_src_virtual_modules_d",
-      "target": "web_app_src_virtual_modules_d_virtual_lm_precache",
+      "target": "web_app_src_virtual_modules_d_virtual_ddd_precache",
       "relation": "contains",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -288618,7 +288618,7 @@
     },
     {
       "source": "web_kernel_src_store_idb_store",
-      "target": "web_kernel_src_store_idb_store_lifemanagerdb",
+      "target": "web_kernel_src_store_idb_store_ddddb",
       "relation": "contains",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -289465,7 +289465,7 @@
     },
     {
       "source": "web_kernel_src_wasm_core_wasm_d",
-      "target": "web_kernel_src_wasm_core_wasm_d_life_manager_core_wasm",
+      "target": "web_kernel_src_wasm_core_wasm_d_ddd_core_wasm",
       "relation": "contains",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300010,7 +300010,7 @@
     },
     {
       "source": "app_test_bridge_auth_test",
-      "target": "package_life_manager_shell_bridge_auth_dart",
+      "target": "package_ddd_shell_bridge_auth_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300021,7 +300021,7 @@
     },
     {
       "source": "app_test_bridge_auth_test",
-      "target": "package_life_manager_shell_bridge_bridge_dart",
+      "target": "package_ddd_shell_bridge_bridge_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300032,7 +300032,7 @@
     },
     {
       "source": "app_test_bridge_auth_test",
-      "target": "package_life_manager_shell_config_dart",
+      "target": "package_ddd_shell_config_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300043,7 +300043,7 @@
     },
     {
       "source": "app_test_bridge_bridge_test",
-      "target": "package_life_manager_shell_config_dart",
+      "target": "package_ddd_shell_config_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300065,7 +300065,7 @@
     },
     {
       "source": "app_test_bridge_bridge_test",
-      "target": "package_life_manager_shell_bridge_bridge_dart",
+      "target": "package_ddd_shell_bridge_bridge_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300153,7 +300153,7 @@
     },
     {
       "source": "app_test_bridge_filesystem_test",
-      "target": "package_life_manager_shell_bridge_auth_dart",
+      "target": "package_ddd_shell_bridge_auth_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300164,7 +300164,7 @@
     },
     {
       "source": "app_test_bridge_filesystem_test",
-      "target": "package_life_manager_shell_bridge_bridge_dart",
+      "target": "package_ddd_shell_bridge_bridge_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300175,7 +300175,7 @@
     },
     {
       "source": "app_test_bridge_filesystem_test",
-      "target": "package_life_manager_shell_bridge_filesystem_dart",
+      "target": "package_ddd_shell_bridge_filesystem_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300186,7 +300186,7 @@
     },
     {
       "source": "app_test_bridge_filesystem_test",
-      "target": "package_life_manager_shell_config_dart",
+      "target": "package_ddd_shell_config_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300252,7 +300252,7 @@
     },
     {
       "source": "app_test_bridge_fixtures_test",
-      "target": "package_life_manager_shell_bridge_auth_dart",
+      "target": "package_ddd_shell_bridge_auth_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300263,7 +300263,7 @@
     },
     {
       "source": "app_test_bridge_fixtures_test",
-      "target": "package_life_manager_shell_bridge_bridge_dart",
+      "target": "package_ddd_shell_bridge_bridge_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300274,7 +300274,7 @@
     },
     {
       "source": "app_test_bridge_fixtures_test",
-      "target": "package_life_manager_shell_bridge_filesystem_dart",
+      "target": "package_ddd_shell_bridge_filesystem_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300285,7 +300285,7 @@
     },
     {
       "source": "app_test_bridge_fixtures_test",
-      "target": "package_life_manager_shell_bridge_notifications_dart",
+      "target": "package_ddd_shell_bridge_notifications_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300296,7 +300296,7 @@
     },
     {
       "source": "app_test_bridge_fixtures_test",
-      "target": "package_life_manager_shell_bundle_manifest_dart",
+      "target": "package_ddd_shell_bundle_manifest_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300307,7 +300307,7 @@
     },
     {
       "source": "app_test_bridge_fixtures_test",
-      "target": "package_life_manager_shell_shell_webview_host_dart",
+      "target": "package_ddd_shell_shell_webview_host_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300318,7 +300318,7 @@
     },
     {
       "source": "app_test_bridge_fixtures_test",
-      "target": "package_life_manager_shell_bundle_updater_dart",
+      "target": "package_ddd_shell_bundle_updater_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300329,7 +300329,7 @@
     },
     {
       "source": "app_test_bridge_fixtures_test",
-      "target": "package_life_manager_shell_config_dart",
+      "target": "package_ddd_shell_config_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300373,7 +300373,7 @@
     },
     {
       "source": "app_test_bridge_notifications_capability_test",
-      "target": "package_life_manager_shell_bridge_bridge_dart",
+      "target": "package_ddd_shell_bridge_bridge_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300384,7 +300384,7 @@
     },
     {
       "source": "app_test_bridge_notifications_capability_test",
-      "target": "package_life_manager_shell_bridge_notifications_dart",
+      "target": "package_ddd_shell_bridge_notifications_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300395,7 +300395,7 @@
     },
     {
       "source": "app_test_bridge_notifications_capability_test",
-      "target": "package_life_manager_shell_config_dart",
+      "target": "package_ddd_shell_config_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300406,7 +300406,7 @@
     },
     {
       "source": "app_test_bridge_notifications_test",
-      "target": "package_life_manager_shell_bridge_notifications_dart",
+      "target": "package_ddd_shell_bridge_notifications_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300428,7 +300428,7 @@
     },
     {
       "source": "app_test_bridge_notifications_test",
-      "target": "package_life_manager_shell_bridge_bridge_dart",
+      "target": "package_ddd_shell_bridge_bridge_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300483,7 +300483,7 @@
     },
     {
       "source": "app_test_bundle_bundle_fixtures",
-      "target": "package_life_manager_shell_bridge_auth_dart",
+      "target": "package_ddd_shell_bridge_auth_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300494,7 +300494,7 @@
     },
     {
       "source": "app_test_bundle_bundle_fixtures",
-      "target": "package_life_manager_shell_bundle_manifest_dart",
+      "target": "package_ddd_shell_bundle_manifest_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300505,7 +300505,7 @@
     },
     {
       "source": "app_test_bundle_bundle_fixtures",
-      "target": "package_life_manager_shell_bundle_store_dart",
+      "target": "package_ddd_shell_bundle_store_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300516,7 +300516,7 @@
     },
     {
       "source": "app_test_bundle_bundle_fixtures",
-      "target": "package_life_manager_shell_bundle_updater_dart",
+      "target": "package_ddd_shell_bundle_updater_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300538,7 +300538,7 @@
     },
     {
       "source": "app_test_bundle_manifest_test",
-      "target": "package_life_manager_shell_bundle_manifest_dart",
+      "target": "package_ddd_shell_bundle_manifest_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300571,7 +300571,7 @@
     },
     {
       "source": "app_test_bundle_store_test",
-      "target": "package_life_manager_shell_bundle_manifest_dart",
+      "target": "package_ddd_shell_bundle_manifest_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300582,7 +300582,7 @@
     },
     {
       "source": "app_test_bundle_store_test",
-      "target": "package_life_manager_shell_bundle_store_dart",
+      "target": "package_ddd_shell_bundle_store_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300637,7 +300637,7 @@
     },
     {
       "source": "app_test_bundle_updater_test",
-      "target": "package_life_manager_shell_bundle_manifest_dart",
+      "target": "package_ddd_shell_bundle_manifest_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300648,7 +300648,7 @@
     },
     {
       "source": "app_test_bundle_updater_test",
-      "target": "package_life_manager_shell_bundle_store_dart",
+      "target": "package_ddd_shell_bundle_store_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300659,7 +300659,7 @@
     },
     {
       "source": "app_test_bundle_updater_test",
-      "target": "package_life_manager_shell_bundle_updater_dart",
+      "target": "package_ddd_shell_bundle_updater_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300670,7 +300670,7 @@
     },
     {
       "source": "app_test_bundle_updater_test",
-      "target": "package_life_manager_shell_config_dart",
+      "target": "package_ddd_shell_config_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300681,7 +300681,7 @@
     },
     {
       "source": "app_test_bundle_updater_test",
-      "target": "package_life_manager_shell_shell_boot_guard_dart",
+      "target": "package_ddd_shell_shell_boot_guard_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300725,7 +300725,7 @@
     },
     {
       "source": "app_test_shell_boot_guard_test",
-      "target": "package_life_manager_shell_bundle_manifest_dart",
+      "target": "package_ddd_shell_bundle_manifest_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300736,7 +300736,7 @@
     },
     {
       "source": "app_test_shell_boot_guard_test",
-      "target": "package_life_manager_shell_bundle_store_dart",
+      "target": "package_ddd_shell_bundle_store_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300747,7 +300747,7 @@
     },
     {
       "source": "app_test_shell_boot_guard_test",
-      "target": "package_life_manager_shell_shell_boot_guard_dart",
+      "target": "package_ddd_shell_shell_boot_guard_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300802,7 +300802,7 @@
     },
     {
       "source": "app_test_shell_bundle_server_test",
-      "target": "package_life_manager_shell_bundle_manifest_dart",
+      "target": "package_ddd_shell_bundle_manifest_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300813,7 +300813,7 @@
     },
     {
       "source": "app_test_shell_bundle_server_test",
-      "target": "package_life_manager_shell_shell_webview_host_dart",
+      "target": "package_ddd_shell_shell_webview_host_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300901,7 +300901,7 @@
     },
     {
       "source": "app_test_shell_login_test",
-      "target": "package_life_manager_shell_bridge_auth_dart",
+      "target": "package_ddd_shell_bridge_auth_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300912,7 +300912,7 @@
     },
     {
       "source": "app_test_shell_login_test",
-      "target": "package_life_manager_shell_config_dart",
+      "target": "package_ddd_shell_config_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300923,7 +300923,7 @@
     },
     {
       "source": "app_test_shell_login_test",
-      "target": "package_life_manager_shell_shell_login_screen_dart",
+      "target": "package_ddd_shell_shell_login_screen_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -300956,7 +300956,7 @@
     },
     {
       "source": "app_test_shell_notice_overlay_test",
-      "target": "package_life_manager_shell_main_dart",
+      "target": "package_ddd_shell_main_dart",
       "relation": "imports",
       "_origin": "ast",
       "confidence": "EXTRACTED",

@@ -80,20 +80,20 @@ export function ReauthOverlay({ user, bearer, onSignedIn, exportUnsent }: Reauth
   };
 
   return (
-    <div className="lm-reauth" role="dialog" aria-modal="true" aria-labelledby="lm-reauth-title">
-      <form className="lm-auth-form" onSubmit={submit}>
-        <h1 id="lm-reauth-title">Your session expired</h1>
-        <p className="lm-auth-hint">
+    <div className="ddd-reauth" role="dialog" aria-modal="true" aria-labelledby="ddd-reauth-title">
+      <form className="ddd-auth-form" onSubmit={submit}>
+        <h1 id="ddd-reauth-title">Your session expired</h1>
+        <p className="ddd-auth-hint">
           Sign in again to keep syncing. <strong>Nothing local has been cleared</strong> — your
           workspace copy and any unsynced edits are still here, and will sync once you are back.
         </p>
 
-        <label htmlFor="lm-reauth-email">Email</label>
-        <input id="lm-reauth-email" type="email" value={user.email} readOnly autoComplete="username" />
+        <label htmlFor="ddd-reauth-email">Email</label>
+        <input id="ddd-reauth-email" type="email" value={user.email} readOnly autoComplete="username" />
 
-        <label htmlFor="lm-reauth-password">Password</label>
+        <label htmlFor="ddd-reauth-password">Password</label>
         <input
-          id="lm-reauth-password"
+          id="ddd-reauth-password"
           name="password"
           type="password"
           autoComplete="current-password"
@@ -104,7 +104,7 @@ export function ReauthOverlay({ user, bearer, onSignedIn, exportUnsent }: Reauth
         />
 
         {error ? (
-          <p className="lm-auth-error" role="alert">
+          <p className="ddd-auth-error" role="alert">
             {error}
           </p>
         ) : null}
@@ -115,12 +115,12 @@ export function ReauthOverlay({ user, bearer, onSignedIn, exportUnsent }: Reauth
 
         {exportUnsent ? (
           <>
-            <p className="lm-auth-hint">Can’t sign in? Keep a copy of what has not synced.</p>
-            <button type="button" className="lm-auth-secondary" onClick={save}>
+            <p className="ddd-auth-hint">Can’t sign in? Keep a copy of what has not synced.</p>
+            <button type="button" className="ddd-auth-secondary" onClick={save}>
               Save my unsent changes to a file
             </button>
             {saved ? (
-              <p className="lm-auth-hint" role="status">
+              <p className="ddd-auth-hint" role="status">
                 {saved}
               </p>
             ) : null}

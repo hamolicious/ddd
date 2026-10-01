@@ -102,7 +102,7 @@ for (const [specifier, file] of Object.entries(RUNTIME_SPECIFIERS)) {
 
 /** Write `runtime-manifest.json` from what Rollup actually emitted. */
 const manifestPlugin: Plugin = {
-  name: "lm-runtime-manifest",
+  name: "ddd-runtime-manifest",
   writeBundle(_options, bundle) {
     const imports: Record<string, string> = {};
     for (const chunk of Object.values(bundle)) {

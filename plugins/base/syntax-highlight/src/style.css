@@ -1,5 +1,5 @@
 /*
- * syntax-highlight. Every colour is a `--lm-syntax-*` token a theme may set; unset, each
+ * syntax-highlight. Every colour is a `--ddd-syntax-*` token a theme may set; unset, each
  * falls back to a mix of the kernel's own tokens, so highlighting follows the theme and
  * stays readable in light and dark without this file knowing which is on.
  *
@@ -8,16 +8,16 @@
  */
 
 :root {
-  --lmsh-keyword: var(--lm-syntax-keyword, var(--lm-accent));
-  --lmsh-string: var(--lm-syntax-string, color-mix(in srgb, var(--lm-warning) 75%, var(--lm-text)));
-  --lmsh-number: var(--lm-syntax-number, color-mix(in srgb, var(--lm-danger) 70%, var(--lm-text)));
-  --lmsh-constant: var(--lm-syntax-constant, color-mix(in srgb, var(--lm-danger) 70%, var(--lm-text)));
-  --lmsh-comment: var(--lm-syntax-comment, var(--lm-text-muted));
-  --lmsh-function: var(--lm-syntax-function, var(--lm-link));
-  --lmsh-type: var(--lm-syntax-type, color-mix(in srgb, var(--lm-accent) 55%, var(--lm-link)));
-  --lmsh-property: var(--lm-syntax-property, color-mix(in srgb, var(--lm-link) 55%, var(--lm-text)));
-  --lmsh-tag: var(--lm-syntax-tag, var(--lm-accent));
-  --lmsh-punctuation: var(--lm-syntax-punctuation, var(--lm-text-muted));
+  --lmsh-keyword: var(--ddd-syntax-keyword, var(--ddd-accent));
+  --lmsh-string: var(--ddd-syntax-string, color-mix(in srgb, var(--ddd-warning) 75%, var(--ddd-text)));
+  --lmsh-number: var(--ddd-syntax-number, color-mix(in srgb, var(--ddd-danger) 70%, var(--ddd-text)));
+  --lmsh-constant: var(--ddd-syntax-constant, color-mix(in srgb, var(--ddd-danger) 70%, var(--ddd-text)));
+  --lmsh-comment: var(--ddd-syntax-comment, var(--ddd-text-muted));
+  --lmsh-function: var(--ddd-syntax-function, var(--ddd-link));
+  --lmsh-type: var(--ddd-syntax-type, color-mix(in srgb, var(--ddd-accent) 55%, var(--ddd-link)));
+  --lmsh-property: var(--ddd-syntax-property, color-mix(in srgb, var(--ddd-link) 55%, var(--ddd-text)));
+  --lmsh-tag: var(--ddd-syntax-tag, var(--ddd-accent));
+  --lmsh-punctuation: var(--ddd-syntax-punctuation, var(--ddd-text-muted));
 }
 
 .lmsh-keyword, .cm-content .lmsh-keyword * { color: var(--lmsh-keyword); }
@@ -56,24 +56,24 @@
 .lmsh-pre {
   margin: 0;
   overflow-x: auto;
-  border: 1px solid var(--lm-border);
-  border-radius: var(--lm-radius);
-  background: var(--lm-bg-subtle);
+  border: 1px solid var(--ddd-border);
+  border-radius: var(--ddd-radius);
+  background: var(--ddd-bg-subtle);
   padding: 0.75rem;
-  font-family: var(--lm-font-mono);
-  color: var(--lm-text);
+  font-family: var(--ddd-font-mono);
+  color: var(--ddd-text);
 }
 
 .lmsh-install {
   position: absolute;
   top: 0.35rem;
   right: 0.35rem;
-  border: 1px solid var(--lm-border);
-  border-radius: var(--lm-radius);
-  background: var(--lm-bg-raised);
+  border: 1px solid var(--ddd-border);
+  border-radius: var(--ddd-radius);
+  background: var(--ddd-bg-raised);
   padding: 0.15rem 0.5rem;
-  font: 0.75rem var(--lm-font-sans);
-  color: var(--lm-text-muted);
+  font: 0.75rem var(--ddd-font-sans);
+  color: var(--ddd-text-muted);
   cursor: pointer;
   opacity: 0.8;
 }
@@ -81,19 +81,19 @@
 .lmsh-install:hover,
 .lmsh-install:focus-visible {
   opacity: 1;
-  color: var(--lm-text);
+  color: var(--ddd-text);
 }
 
 .lmsh-install:focus-visible,
 .lmsh-action:focus-visible {
-  outline: 2px solid var(--lm-focus-ring);
+  outline: 2px solid var(--ddd-focus-ring);
   outline-offset: 2px;
 }
 
 .lmsh-problem {
   margin: 0.25rem 0 0;
-  font: 0.85rem var(--lm-font-sans);
-  color: var(--lm-danger);
+  font: 0.85rem var(--ddd-font-sans);
+  color: var(--ddd-danger);
 }
 
 /* Settings → Code languages */
@@ -103,35 +103,35 @@
   max-width: 60ch;
   flex-direction: column;
   gap: 0.75rem;
-  font-family: var(--lm-font-sans);
-  color: var(--lm-text);
+  font-family: var(--ddd-font-sans);
+  color: var(--ddd-text);
 }
 
 .lmsh-note {
   margin: 0;
   font-size: 0.875rem;
   line-height: 1.5;
-  color: var(--lm-text-muted);
+  color: var(--ddd-text-muted);
 }
 
 .lmsh-list {
   margin: 0;
   padding: 0;
   list-style: none;
-  border: 1px solid var(--lm-border);
-  border-radius: var(--lm-radius);
+  border: 1px solid var(--ddd-border);
+  border-radius: var(--ddd-radius);
 }
 
 .lmsh-row {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  min-height: var(--lm-tap-target, 44px);
+  min-height: var(--ddd-tap-target, 44px);
   padding: 0 0.75rem;
 }
 
 .lmsh-row + .lmsh-row {
-  border-top: 1px solid var(--lm-border);
+  border-top: 1px solid var(--ddd-border);
 }
 
 .lmsh-name {
@@ -145,17 +145,17 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.8rem;
-  color: var(--lm-text-muted);
+  color: var(--ddd-text-muted);
 }
 
 .lmsh-action {
-  border: 1px solid var(--lm-border-strong);
-  border-radius: var(--lm-radius);
-  background: var(--lm-bg-raised);
+  border: 1px solid var(--ddd-border-strong);
+  border-radius: var(--ddd-radius);
+  background: var(--ddd-bg-raised);
   padding: 0.25rem 0.75rem;
   font: inherit;
   font-size: 0.875rem;
-  color: var(--lm-text);
+  color: var(--ddd-text);
   cursor: pointer;
 }
 
@@ -170,7 +170,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
-  border-top: 1px solid var(--lm-border);
+  border-top: 1px solid var(--ddd-border);
   padding-top: 0.75rem;
 }
 
@@ -193,19 +193,19 @@
 }
 
 .lmsh-field > input:not([type="file"]) {
-  min-height: var(--lm-tap-target, 44px);
+  min-height: var(--ddd-tap-target, 44px);
   flex: 1;
   min-width: 12ch;
-  border: 1px solid var(--lm-border-strong);
-  border-radius: var(--lm-radius);
-  background: var(--lm-bg-raised);
+  border: 1px solid var(--ddd-border-strong);
+  border-radius: var(--ddd-radius);
+  background: var(--ddd-bg-raised);
   padding: 0 0.5rem;
   font: inherit;
-  color: var(--lm-text);
+  color: var(--ddd-text);
 }
 
 .lmsh-field > input:focus-visible {
-  outline: 2px solid var(--lm-focus-ring);
+  outline: 2px solid var(--ddd-focus-ring);
   outline-offset: 2px;
 }
 
@@ -213,5 +213,5 @@
   flex: 1;
   min-width: 0;
   font: inherit;
-  color: var(--lm-text-muted);
+  color: var(--ddd-text-muted);
 }

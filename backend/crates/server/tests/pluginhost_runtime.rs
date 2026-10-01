@@ -5,7 +5,7 @@
 //! *miniature* host and no database. This suite is the other half — everything that only
 //! exists in the real one:
 //!
-//! 1. **Activation is the ABI check, then publication.** A module whose `lm_abi_version`
+//! 1. **Activation is the ABI check, then publication.** A module whose `ddd_abi_version`
 //!    disagrees never runs a line of its own code, and a plugin is in the active map only
 //!    once every step succeeded.
 //! 2. **A capability that was not approved is an erroring stub, not a missing import**
@@ -27,7 +27,7 @@
 //! ```text
 //! docker compose up -d --wait mongo
 //! mise run wasm-plugins
-//! MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p life-manager-server --test pluginhost_runtime
+//! MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p ddd-server --test pluginhost_runtime
 //! ```
 
 mod common;
@@ -37,17 +37,15 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use life_manager_plugin_abi as abi;
-use life_manager_server::domain::{Actor, new_id};
-use life_manager_server::pluginhost::breaker::BreakerState;
-use life_manager_server::pluginhost::{
-    CallFailure, CallKind, Invocation, PluginHost, PluginHostError,
-};
-use life_manager_server::plugininstall::InstallSource;
-use life_manager_server::plugins::{
+use ddd_plugin_abi as abi;
+use ddd_server::domain::{Actor, new_id};
+use ddd_server::pluginhost::breaker::BreakerState;
+use ddd_server::pluginhost::{CallFailure, CallKind, Invocation, PluginHost, PluginHostError};
+use ddd_server::plugininstall::InstallSource;
+use ddd_server::plugins::{
     PluginBackend, PluginCapabilities, PluginManifest, PluginRecord, PluginState,
 };
-use life_manager_server::state::AppState;
+use ddd_server::state::AppState;
 use serde_json::{Value, json};
 
 /// Where `mise run wasm-plugins` leaves the fixture.
@@ -75,8 +73,8 @@ impl Harness {
         let uri = common::mongo_uri()?;
         let wasm = fixture()?;
 
-        let database = format!("lm_pluginhost_test_{}", new_id());
-        let plugins_dir = std::env::temp_dir().join(format!("lm-pluginhost-{database}"));
+        let database = format!("ddd_pluginhost_test_{}", new_id());
+        let plugins_dir = std::env::temp_dir().join(format!("ddd-pluginhost-{database}"));
 
         let mut config = common::test_config(uri.clone(), database.clone());
         config.plugins_dir = plugins_dir.clone();
@@ -114,7 +112,7 @@ impl Harness {
         let _ = std::fs::remove_dir_all(&self.plugins_dir);
     }
 
-    /// `lm_call` with a function and payload, as a plugin dependent would.
+    /// `ddd_call` with a function and payload, as a plugin dependent would.
     async fn invoke(&self, function: &str, payload: Value) -> Result<Option<Value>, CallFailure> {
         let invocation = Invocation::top_level(
             "hello-backend",
@@ -133,7 +131,7 @@ impl Harness {
         &self,
         function: &str,
         payload: Value,
-    ) -> Result<life_manager_server::pluginhost::CallOutcome, PluginHostError> {
+    ) -> Result<ddd_server::pluginhost::CallOutcome, PluginHostError> {
         let invocation = Invocation::top_level(
             "hello-backend",
             CallKind::Invoked {
@@ -182,7 +180,7 @@ fn record_with(
                 // `echo` is callable, which is what lets the reentrancy check be reached.
                 exports: BTreeMap::from([(
                     "echo".to_string(),
-                    life_manager_server::plugins::BackendExport {
+                    ddd_server::plugins::BackendExport {
                         input: None,
                         output: None,
                         description: None,
@@ -200,7 +198,7 @@ fn record_with(
         },
         capabilities_approved: capabilities,
         source: InstallSource::Base,
-        installed_at: life_manager_server::domain::Timestamp::now(),
+        installed_at: ddd_server::domain::Timestamp::now(),
         installed_by: None,
         approved_at: None,
         approved_by: None,
@@ -357,7 +355,7 @@ async fn a_payload_reaches_the_plugin_and_a_value_comes_back() {
     let echoed = harness
         .invoke("echo", json!({ "hello": "world", "n": 7 }))
         .await
-        .expect("lm_call echo");
+        .expect("ddd_call echo");
     assert_eq!(echoed, Some(json!({ "hello": "world", "n": 7 })));
 
     harness.cleanup().await;
@@ -429,7 +427,7 @@ async fn an_export_the_module_does_not_have_is_not_a_plugin_failure() {
         .host
         .call(&harness.state, invocation)
         .await
-        .expect_err("the fixture has no lm_hook_document_deleted");
+        .expect_err("the fixture has no ddd_hook_document_deleted");
     assert!(matches!(err, PluginHostError::NoExport { .. }), "{err}");
     assert_eq!(
         harness.host.breaker_state("hello-backend").failures(),
@@ -866,9 +864,9 @@ async fn kv_round_trips_through_mongo_in_the_plugins_own_namespace() {
             .host
             .call(&harness.state, invocation)
             .await
-            .expect("lm_cron");
+            .expect("ddd_cron");
 
-        // Read back through `lm_call` (the plugin's own view)…
+        // Read back through `ddd_call` (the plugin's own view)…
         assert_eq!(
             harness.invoke("runs", Value::Null).await.expect("runs"),
             Some(json!(expected))
@@ -879,7 +877,7 @@ async fn kv_round_trips_through_mongo_in_the_plugins_own_namespace() {
     let row = harness
         .state
         .collections
-        .raw(life_manager_server::db::PLUGIN_KV)
+        .raw(ddd_server::db::PLUGIN_KV)
         .find_one(bson::doc! { "_id": "hello-backend:runs" })
         .await
         .expect("query")
@@ -1232,7 +1230,7 @@ async fn safe_mode_makes_the_host_inert() {
         return;
     }
     let uri = common::mongo_uri().expect("checked");
-    let database = format!("lm_pluginhost_test_{}", new_id());
+    let database = format!("ddd_pluginhost_test_{}", new_id());
     let mut config = common::test_config(uri.clone(), database.clone());
     config.disable_plugins = true;
     let state = AppState::new(config).await.expect("state");
@@ -1356,15 +1354,15 @@ async fn a_timing_out_call_does_not_trap_its_siblings() {
     harness.cleanup().await;
 }
 
-/// `lm_init` runs **once per instance**, including on the instance activation warmed.
+/// `ddd_init` runs **once per instance**, including on the instance activation warmed.
 ///
 /// `probe_abi_version` and `exports` leave a warm instance in the idle list, and they run
 /// *before* `set_init_payload`. While `acquire` decided by "did this call instantiate it", that
-/// instance was popped with `fresh == false` and skipped `lm_init` entirely — so the very first
+/// instance was popped with `fresh == false` and skipped `ddd_init` entirely — so the very first
 /// invocation of every plugin ran on an uninitialised instance. HOST-ABI.md §4.1 promises the
 /// payload (with the approved capability set, so a plugin can degrade deliberately rather than
 /// discovering denials per call); a plugin caching it in a static saw its default until traffic
-/// forced a second instance, and an `lm_init` refusal was unreachable there.
+/// forced a second instance, and an `ddd_init` refusal was unreachable there.
 #[tokio::test]
 async fn the_first_call_runs_on_an_initialised_instance() {
     if skip() {
@@ -1381,7 +1379,7 @@ async fn the_first_call_runs_on_an_initialised_instance() {
     let before = harness.host.pool_stats("hello-backend").expect("the pool");
     assert_eq!(before.instances, 1, "activation warms one instance");
 
-    // The fixture's `lm_init` records what it was told; `caps` reads it back. A call landing on
+    // The fixture's `ddd_init` records what it was told; `caps` reads it back. A call landing on
     // an uninitialised instance would see nothing recorded.
     let answer = harness
         .invoke("caps", Value::Null)
@@ -1391,12 +1389,12 @@ async fn the_first_call_runs_on_an_initialised_instance() {
     assert_eq!(
         answer["initialised"],
         json!(true),
-        "the first call ran on an instance that never received `lm_init`: {answer}"
+        "the first call ran on an instance that never received `ddd_init`: {answer}"
     );
     assert_eq!(
         answer["documents"],
         json!(["read", "write"]),
-        "`lm_init` must carry the *approved* capability set: {answer}"
+        "`ddd_init` must carry the *approved* capability set: {answer}"
     );
 
     // Still one instance: this was the warm one, initialised on its way out of the pool.

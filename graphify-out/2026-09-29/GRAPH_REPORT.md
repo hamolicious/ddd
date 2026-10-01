@@ -1,4 +1,4 @@
-# Graph Report - life-manager  (2026-09-29)
+# Graph Report - ddd  (2026-09-29)
 
 ## Corpus Check
 - 1054 files · ~1,009,309 words
@@ -128,7 +128,7 @@
 - ConnectionSession
 - string
 - ChangeFeed
-- Life Manager project specification
+- ddd project specification
 - admin/src/api.ts
 - protocols.rs
 - config.dart
@@ -262,7 +262,7 @@
 - web_kernel_api_src_index_documentqueryresult
 - web_kernel_api_src_index_documentrow
 - web_kernel_api_src_index_documentsapi
-- ref_protocols_lm
+- ref_protocols_ddd
 - offline-copy.tsx
 - web_kernel_api_src_index_documentspliceapi
 - kinds.ts
@@ -298,7 +298,7 @@
 - web_kernel_api_src_index_sessionapi
 - web_kernel_api_src_index_sessionuser
 - web_kernel_api_src_index_settingsapi
-- life-manager-plugin-abi
+- ddd-plugin-abi
 - web_kernel_api_src_index_splicetarget
 - web_kernel_api_src_index_syncstatus
 - web_kernel_api_src_index_textedit
@@ -473,7 +473,7 @@
 - mobile-routes.spec.ts
 - document-browser/index.d.ts
 - keybindings.default/index.d.ts
-- Life Manager — Linux desktop
+- ddd — Linux desktop
 - markdown.remark/index.d.ts
 - router.route/index.d.ts
 - syntax.language/index.d.ts
@@ -489,7 +489,7 @@
 - document.mode.d.ts
 - editor.extension.d.ts
 - editor.paste.d.ts
-- home_hamolicious_projects_life_manager_plugins_base_folders_protocols_folders_default_location_index_js
+- home_hamolicious_projects_ddd_plugins_base_folders_protocols_folders_default_location_index_js
 - navbar.item.d.ts
 - workspace-index.d.ts
 - markdown.attachment.d.ts
@@ -530,7 +530,7 @@
 - icons/index.d.ts
 - MiniSearchIndex
 - note-picker.tsx
-- life-manager-desktop
+- ddd-desktop
 - virtual-list.ts
 - KeybindingsSection.tsx
 - graph-plugin.mjs
@@ -553,8 +553,8 @@
 - permissions
 - webviews
 - folders.decoration.d.ts
-- home_hamolicious_projects_life_manager_plugins_base_folders_protocols_folders_menu_item_index_js
-- home_hamolicious_projects_life_manager_plugins_base_folders_protocols_folders_moved_index_js
+- home_hamolicious_projects_ddd_plugins_base_folders_protocols_folders_menu_item_index_js
+- home_hamolicious_projects_ddd_plugins_base_folders_protocols_folders_moved_index_js
 - call_value
 - extract.ts
 - .default
@@ -619,12 +619,12 @@
 - PluginDescriptor
 - mobile-shell.spec.ts
 - search.d.ts
-- home_hamolicious_projects_life_manager_plugins_base_search_protocols_search_view_index_js
+- home_hamolicious_projects_ddd_plugins_base_search_protocols_search_view_index_js
 - linux/flutter/generated_plugin_registrant.cc
 - ref_conditions_editor_js
 - card.ts
 - ref_search_protocols_search_view_index_js
-- home_hamolicious_projects_life_manager_plugins_base_doc_list_protocols_search_provider_index_js
+- home_hamolicious_projects_ddd_plugins_base_doc_list_protocols_search_provider_index_js
 - ref_doc_list_protocols_search_provider_index_js
 - ref_searchpage_js
 - ref_table_view_js
@@ -667,15 +667,15 @@
 10. `AuthUser` - 54 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `lm/navbar.item` --references--> `header()`  [INFERRED]
+- `ddd/navbar.item` --references--> `header()`  [INFERRED]
   plugins/base/header/protocols/navbar.item/README.md → web/kernel/src/sync/bootstrap.test.ts
-- `lm/editor.paste` --references--> `paste()`  [INFERRED]
+- `ddd/editor.paste` --references--> `paste()`  [INFERRED]
   plugins/base/editor/protocols/editor.paste/README.md → web/app/e2e/attachments.spec.ts
-- `lm/commands.command` --references--> `string()`  [INFERRED]
+- `ddd/commands.command` --references--> `string()`  [INFERRED]
   plugins/base/commands/protocols/commands.command/README.md → web/kernel-api/src/shape.ts
-- `lm/keybindings.default` --references--> `string()`  [INFERRED]
+- `ddd/keybindings.default` --references--> `string()`  [INFERRED]
   plugins/base/commands/protocols/keybindings.default/README.md → web/kernel-api/src/shape.ts
-- `lm/document-browser.created` --references--> `string()`  [INFERRED]
+- `ddd/document-browser.created` --references--> `string()`  [INFERRED]
   plugins/base/doc-list/protocols/document-browser.created/README.md → web/kernel-api/src/shape.ts
 
 ## Import Cycles
@@ -740,7 +740,7 @@ Nodes (67): a_missing_offer_is_rejected(), an_empty_bearer_subprotocol_is_not_a_
 
 ### Community 12 - "document-surface/src/index.tsx"
 Cohesion: 0.05
-Nodes (39): lm/document-browser, activate(), ActiveMode(), boundaryFor(), byId(), cssEscape(), deactivate(), DocumentSurfaceApi (+31 more)
+Nodes (39): ddd/document-browser, activate(), ActiveMode(), boundaryFor(), byId(), cssEscape(), deactivate(), DocumentSurfaceApi (+31 more)
 
 ### Community 13 - "main.dart"
 Cohesion: 0.03
@@ -764,7 +764,7 @@ Nodes (73): AuthStore, BridgeException, ManifestException, LoginException, auth,
 
 ### Community 18 - "data.ts"
 Cohesion: 0.15
-Nodes (23): lm/icons, drawingNow(), IconPath, load(), loadDrawing(), loadIndex(), pending, shardOf() (+15 more)
+Nodes (23): ddd/icons, drawingNow(), IconPath, load(), loadDrawing(), loadIndex(), pending, shardOf() (+15 more)
 
 ### Community 19 - "webview_host.dart"
 Cohesion: 0.03
@@ -780,7 +780,7 @@ Nodes (50): ATTACHMENT_BYTES, BUILD_INFO, CONFIG_MAX_ATTACHMENT_BYTES, CONFIG_MA
 
 ### Community 22 - "commands/src/index.tsx"
 Cohesion: 0.12
-Nodes (14): lm/commands, BindingConflict, collectPrefixes(), parseOverrides(), resolveBindings(), serializeOverrides(), activate(), CommandsApi (+6 more)
+Nodes (14): ddd/commands, BindingConflict, collectPrefixes(), parseOverrides(), resolveBindings(), serializeOverrides(), activate(), CommandsApi (+6 more)
 
 ### Community 23 - "DocHydrator"
 Cohesion: 0.07
@@ -992,7 +992,7 @@ Nodes (36): split_port(), ActivationEdge, ApplyPlan, Candidate, candidates(), Ch
 
 ### Community 77 - "router/src/match.ts"
 Cohesion: 0.14
-Nodes (20): lm/router, activate(), DOCUMENT_ROUTE, NOT_FOUND_VIEW, RouterApi, createLink(), Link(), LinkRouter (+12 more)
+Nodes (20): ddd/router, activate(), DOCUMENT_ROUTE, NOT_FOUND_VIEW, RouterApi, createLink(), Link(), LinkRouter (+12 more)
 
 ### Community 78 - "target.ts"
 Cohesion: 0.10
@@ -1124,13 +1124,13 @@ Nodes (8): ConnectionSession, decode_history(), RateBucket, HashSet, Instant, Jo
 
 ### Community 110 - "string"
 Cohesion: 0.06
-Nodes (30): lm/attachments.viewer, options(), lm/context-menu.action, lm/document-browser.created, lm/document.mode, lm/editor.extension, lm/folders.decoration, lm/navbar.item (+22 more)
+Nodes (30): ddd/attachments.viewer, options(), ddd/context-menu.action, ddd/document-browser.created, ddd/document.mode, ddd/editor.extension, ddd/folders.decoration, ddd/navbar.item (+22 more)
 
 ### Community 111 - "ChangeFeed"
 Cohesion: 0.13
 Nodes (20): TrashFilter, BootstrapPage, ChangeFeed, collect_rows(), FeedError, FeedPage, FeedRow, max_feed_seq() (+12 more)
 
-### Community 112 - "Life Manager project specification"
+### Community 112 - "ddd project specification"
 Cohesion: 0.07
 Nodes (40): Shell Capability Bridge Contract, M5 Build Contracts (Flutter Shell), Flutter Shell README, M5 On-Device Acceptance Script, Backend plugin build contracts, Backend build contracts, Core Library README, Filter DSL (+32 more)
 
@@ -1168,7 +1168,7 @@ Nodes (27): AutoField, fieldValue(), fillTokens(), isKeyShaped(), isRecord(), ne
 
 ### Community 121 - "sync.test.ts"
 Cohesion: 0.13
-Nodes (8): lm/commands.command, SyncNote, dec, enc, MemoryFolder, Notes, setup(), titleEdits()
+Nodes (8): ddd/commands.command, SyncNote, dec, enc, MemoryFolder, Notes, setup(), titleEdits()
 
 ### Community 122 - "document.rs"
 Cohesion: 0.13
@@ -1260,7 +1260,7 @@ Nodes (28): SharedWiring, ApiFetch, ApplyAction, ApplyRequest, ApplyResult, crea
 
 ### Community 145 - "columns.ts"
 Cohesion: 0.13
-Nodes (29): FieldOption, lm/table, cellText(), clampRows(), columnForKey(), columnLabel(), columnOption(), decodeColumns() (+21 more)
+Nodes (29): FieldOption, ddd/table, cellText(), clampRows(), columnForKey(), columnLabel(), columnOption(), decodeColumns() (+21 more)
 
 ### Community 146 - "plugin.test.ts"
 Cohesion: 0.19
@@ -1272,11 +1272,11 @@ Nodes (33): author, protocol, consumes, modes, router, description, frontend, mo
 
 ### Community 148 - "ShellState"
 Cohesion: 0.14
-Nodes (7): lm/shell, activate(), ShellProps, sameParams(), ShellState, writeAltbar(), writePanels()
+Nodes (7): ddd/shell, activate(), ShellProps, sameParams(), ShellState, writeAltbar(), writePanels()
 
 ### Community 149 - "runtime/documents.ts"
 Cohesion: 0.04
-Nodes (47): lm/text.surface, CreateDocumentInput, DocumentId, DocumentPhase, DocumentQuery, DocumentQueryResult, DocumentRow, DocumentsApi (+39 more)
+Nodes (47): ddd/text.surface, CreateDocumentInput, DocumentId, DocumentPhase, DocumentQuery, DocumentQueryResult, DocumentRow, DocumentsApi (+39 more)
 
 ### Community 150 - "fm-display.ts"
 Cohesion: 0.17
@@ -1296,7 +1296,7 @@ Nodes (32): RFC-3986, MdPoint, MdPosition, sourceOf(), spanOf(), textOf(), walk(
 
 ### Community 154 - "workspace-index.ts"
 Cohesion: 0.15
-Nodes (13): lm/workspace-index, Extracted, activate(), byCount(), countValues(), Derived, Entry, FieldTally (+5 more)
+Nodes (13): ddd/workspace-index, Extracted, activate(), byCount(), countValues(), Derived, Entry, FieldTally (+5 more)
 
 ### Community 155 - "table/manifest.json"
 Cohesion: 0.05
@@ -1344,7 +1344,7 @@ Nodes (29): author, protocol, protocol, consumes, languages, protocol, descripti
 
 ### Community 167 - "host.ts"
 Cohesion: 0.05
-Nodes (37): ref_life_manager_core_wasm, KernelInitOptions, KernelRuntime, ActivateFn, BootMode, CoreApi, KernelInfo, ParsedText (+29 more)
+Nodes (37): ref_ddd_core_wasm, KernelInitOptions, KernelRuntime, ActivateFn, BootMode, CoreApi, KernelInfo, ParsedText (+29 more)
 
 ### Community 168 - "indexes.rs"
 Cohesion: 0.14
@@ -1516,7 +1516,7 @@ Nodes (42): author, protocol, consumes, folders, menu, router, search, protocol 
 
 ### Community 211 - "hello-backend/src/lib.rs"
 Cohesion: 0.27
-Nodes (11): CronPayload, life_manager_plugin_sdk_as_lm, code_of(), dispatch(), init(), on_changed(), require_str(), route() (+3 more)
+Nodes (11): CronPayload, ddd_plugin_sdk_as_ddd, code_of(), dispatch(), init(), on_changed(), require_str(), route() (+3 more)
 
 ### Community 212 - "plugininstall_zip.rs"
 Cohesion: 0.21
@@ -1626,7 +1626,7 @@ Nodes (10): background_color, description, display, icons, name, orientation, pr
 Cohesion: 0.18
 Nodes (10): DartProject, HWND, LPARAM, LRESULT, UINT, WPARAM, FlutterWindow::FlutterWindow(), MessageHandler (+2 more)
 
-### Community 246 - "ref_protocols_lm"
+### Community 246 - "ref_protocols_ddd"
 Cohesion: 0.04
 Nodes (36): Commands, ProtocolId, ProtocolVersion, ContextAction, ProtocolId, ProtocolVersion, Target, DefaultModeSection() (+28 more)
 
@@ -1698,9 +1698,9 @@ Nodes (15): Connection, ConnectionKind, FieldScope, FmField, FmValueCount, Index
 Cohesion: 0.17
 Nodes (9): askForPersistentStorage(), initKernel(), unavailableCore(), ServerControl, Welcome, BootstrapProgress, SyncClient, Harness (+1 more)
 
-### Community 282 - "life-manager-plugin-abi"
+### Community 282 - "ddd-plugin-abi"
 Cohesion: 0.40
-Nodes (5): hello-backend, life-manager-core, life-manager-plugin-abi, life-manager-plugin-sdk, life-manager-server
+Nodes (5): hello-backend, ddd-core, ddd-plugin-abi, ddd-plugin-sdk, ddd-server
 
 ### Community 287 - "LaunchImage README"
 Cohesion: 0.50
@@ -1932,7 +1932,7 @@ Nodes (14): anyOf, anyOf, description, definitions, Application, Target, Value, 
 
 ### Community 409 - "editor.paste/index.d.ts"
 Cohesion: 0.17
-Nodes (7): EditorInsertion, EditorPaste, EditorPasteEvent, ProtocolId, ProtocolVersion, lm/editor.paste, paste()
+Nodes (7): EditorInsertion, EditorPaste, EditorPasteEvent, ProtocolId, ProtocolVersion, ddd/editor.paste, paste()
 
 ### Community 410 - "folders"
 Cohesion: 0.50
@@ -1986,9 +1986,9 @@ Nodes (4): DocumentBrowser, NewDocumentOptions, ProtocolId, ProtocolVersion
 Cohesion: 0.50
 Nodes (3): KeybindingDefault, ProtocolId, ProtocolVersion
 
-### Community 423 - "Life Manager — Linux desktop"
+### Community 423 - "ddd — Linux desktop"
 Cohesion: 0.33
-Nodes (5): Life Manager — Linux desktop, Notes folder, Run / package, Server, Setup (Arch)
+Nodes (5): ddd — Linux desktop, Notes folder, Run / package, Server, Setup (Arch)
 
 ### Community 424 - "markdown.remark/index.d.ts"
 Cohesion: 0.50
@@ -2028,7 +2028,7 @@ Nodes (7): actions(), childrenIn(), exact(), listed(), openTree(), row(), tree()
 
 ### Community 469 - "tree.ts"
 Cohesion: 0.15
-Nodes (14): lm/keybindings.default, FolderTreeProps, Hierarchy, MovePicker(), MovePickerProps, buildFileTree(), compareText(), FileTree (+6 more)
+Nodes (14): ddd/keybindings.default, FolderTreeProps, Hierarchy, MovePicker(), MovePickerProps, buildFileTree(), compareText(), FileTree (+6 more)
 
 ### Community 470 - "ndjson_stream"
 Cohesion: 0.17
@@ -2060,7 +2060,7 @@ Nodes (4): MiniSearchIndex, miniSearchOptions(), RebuildPass, handle()
 
 ### Community 480 - "note-picker.tsx"
 Cohesion: 0.15
-Nodes (11): file(), lm/folders, documentsNoteSource(), MUTED, NoteLook, NotePicker(), NotePickerProps, NoteSource (+3 more)
+Nodes (11): file(), ddd/folders, documentsNoteSource(), MUTED, NoteLook, NotePicker(), NotePickerProps, NoteSource (+3 more)
 
 ### Community 482 - "virtual-list.ts"
 Cohesion: 0.22
@@ -2232,7 +2232,7 @@ Nodes (4): ErrorCode, Into, Self, Value
 
 ### Community 537 - "alt-editor/src/index.tsx"
 Cohesion: 0.27
-Nodes (9): AltEditorApi, applyMinimalEdit(), caretRect(), commonPrefix(), markAt(), PlainEditor(), ref_protocols_lm_editor_paste, ref_protocols_lm_text_surface (+1 more)
+Nodes (9): AltEditorApi, applyMinimalEdit(), caretRect(), commonPrefix(), markAt(), PlainEditor(), ref_protocols_ddd_editor_paste, ref_protocols_ddd_text_surface (+1 more)
 
 ### Community 538 - "init_metrics"
 Cohesion: 0.19
@@ -2368,7 +2368,7 @@ Nodes (5): CollabServer, startServer(), waitDown(), waitHealthy(), web
 
 ### Community 582 - "Dialogs"
 Cohesion: 0.32
-Nodes (4): Dialogs, useSheet(), Info(), lm/context-menu
+Nodes (4): Dialogs, useSheet(), Info(), ddd/context-menu
 
 ### Community 583 - "ColumnEditor.tsx"
 Cohesion: 0.32
@@ -2451,7 +2451,7 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.191) - this node is a cross-community bridge._
 - **Why does `Drop` connect `SyncHub` to `PluginPool`, `HookQueue`, `pluginhost/cron.rs`, `feed.rs`, `tests/statics.rs`, `FolderTree.tsx`, `shell_bundle.rs`, `queue.rs`?**
   _High betweenness centrality (0.133) - this node is a cross-community bridge._
-- **Why does `react` connect `react` to `note-look.tsx`, `task-item.tsx`, `bridge-fixtures.test.ts`, `Unsubscribe`, `graph/src/settings.ts`, `document-surface/src/index.tsx`, `kernel-api/src/index.ts`, `data.ts`, `commands/src/index.tsx`, `Palette.tsx`, `alt-editor/src/index.tsx`, `document.mode/index.d.ts`, `editor/src/index.tsx`, `connections.test.ts`, `folders.decoration/index.d.ts`, `context-menu/src/Menu.tsx`, `doc-embed.tsx`, `markdown.directive/index.d.ts`, `markdown.fence/index.d.ts`, `search/src/merge.ts`, `shell-ui/src/index.tsx`, `SyncIndicator.tsx`, `DocListView.tsx`, `saved-view.ts`, `MarkdownRuntime`, `Panel.tsx`, `results.ts`, `Dialogs`, `ColumnEditor.tsx`, `slash.command/index.d.ts`, `MarkdownSettings.tsx`, `Modal.tsx`, `NoticeBell.tsx`, `router/src/match.ts`, `target.ts`, `dates.ts`, `router/index.d.ts`, `package.json`, `emoji/src/index.tsx`, `_shared/boundary.tsx`, `field-select.tsx`, `folders/index.d.ts`, `markdown.codeBlock/index.d.ts`, `wiring/layout.ts`, `GraphView.tsx`, `admin/src/api.ts`, `Plugins.tsx`, `fields.ts`, `BarSettings.tsx`, `store.ts`, `columns.ts`, `plugin.test.ts`, `fm-display.ts`, `context-menu/index.d.ts`, `render.tsx`, `viewer/src/index.tsx`, `host.ts`, `AdminView.tsx`, `Shell.tsx`, `conditions.ts`, `state.ts`, `folders/src/index.tsx`, `importmap.ts`, `spec.ts`, `styles.ts`, `view.tsx`, `ref_protocols_lm`, `offline-copy.tsx`, `kinds.ts`, `src/runtime.ts`, `timeline/src/layout.ts`, `Inspector.tsx`, `import.test.ts`, `FolderTree.tsx`, `kanban/src/index.tsx`, `markdown/src/index.tsx`, `tasks.ts`, `ref_kernel`, `ThemesController`, `Board.tsx`, `icons.tsx`, `native-preview/src/index.tsx`, `fm-autocomplete/src/suggest.ts`, `tree.ts`, `search/index.d.ts`, `icons/index.d.ts`, `note-picker.tsx`, `virtual-list.ts`, `KeybindingsSection.tsx`, `custom.ts`, `wikilinks/src/controller.ts`, `SettingsView.tsx`, `main.tsx`?**
+- **Why does `react` connect `react` to `note-look.tsx`, `task-item.tsx`, `bridge-fixtures.test.ts`, `Unsubscribe`, `graph/src/settings.ts`, `document-surface/src/index.tsx`, `kernel-api/src/index.ts`, `data.ts`, `commands/src/index.tsx`, `Palette.tsx`, `alt-editor/src/index.tsx`, `document.mode/index.d.ts`, `editor/src/index.tsx`, `connections.test.ts`, `folders.decoration/index.d.ts`, `context-menu/src/Menu.tsx`, `doc-embed.tsx`, `markdown.directive/index.d.ts`, `markdown.fence/index.d.ts`, `search/src/merge.ts`, `shell-ui/src/index.tsx`, `SyncIndicator.tsx`, `DocListView.tsx`, `saved-view.ts`, `MarkdownRuntime`, `Panel.tsx`, `results.ts`, `Dialogs`, `ColumnEditor.tsx`, `slash.command/index.d.ts`, `MarkdownSettings.tsx`, `Modal.tsx`, `NoticeBell.tsx`, `router/src/match.ts`, `target.ts`, `dates.ts`, `router/index.d.ts`, `package.json`, `emoji/src/index.tsx`, `_shared/boundary.tsx`, `field-select.tsx`, `folders/index.d.ts`, `markdown.codeBlock/index.d.ts`, `wiring/layout.ts`, `GraphView.tsx`, `admin/src/api.ts`, `Plugins.tsx`, `fields.ts`, `BarSettings.tsx`, `store.ts`, `columns.ts`, `plugin.test.ts`, `fm-display.ts`, `context-menu/index.d.ts`, `render.tsx`, `viewer/src/index.tsx`, `host.ts`, `AdminView.tsx`, `Shell.tsx`, `conditions.ts`, `state.ts`, `folders/src/index.tsx`, `importmap.ts`, `spec.ts`, `styles.ts`, `view.tsx`, `ref_protocols_ddd`, `offline-copy.tsx`, `kinds.ts`, `src/runtime.ts`, `timeline/src/layout.ts`, `Inspector.tsx`, `import.test.ts`, `FolderTree.tsx`, `kanban/src/index.tsx`, `markdown/src/index.tsx`, `tasks.ts`, `ref_kernel`, `ThemesController`, `Board.tsx`, `icons.tsx`, `native-preview/src/index.tsx`, `fm-autocomplete/src/suggest.ts`, `tree.ts`, `search/index.d.ts`, `icons/index.d.ts`, `note-picker.tsx`, `virtual-list.ts`, `KeybindingsSection.tsx`, `custom.ts`, `wikilinks/src/controller.ts`, `SettingsView.tsx`, `main.tsx`?**
   _High betweenness centrality (0.123) - this node is a cross-community bridge._
 - **What connects `note`, `bundle_version`, `min_bridge_version` to the rest of the system?**
   _3202 weakly-connected nodes found - possible documentation gaps or missing edges._

@@ -9,7 +9,7 @@
 //! safe: an unauthenticated refresh endpoint is a free outbound-request amplifier pointed
 //! at whatever host the plugin is allowed to reach.
 //!
-//! Requests reach the plugin's single `lm_http` export with the path *inside* its
+//! Requests reach the plugin's single `ddd_http` export with the path *inside* its
 //! namespace (`/api/plugins/<id>/webhook` → `/webhook`).
 //!
 //! # What the host strips, in both directions
@@ -52,7 +52,7 @@ use axum::response::Response;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use bson::doc;
-use life_manager_plugin_abi as abi;
+use ddd_plugin_abi as abi;
 use serde::{Deserialize, Serialize};
 use tokio::io::AsyncWriteExt;
 
@@ -271,7 +271,7 @@ pub async fn dispatch(
         .await
     {
         Ok(Some(response)) => to_response(response),
-        // An `lm_http` that answered with nothing is a plugin bug; a gateway says 502 rather
+        // An `ddd_http` that answered with nothing is a plugin bug; a gateway says 502 rather
         // than inventing a body.
         Ok(None) => Ok(gateway_error(
             StatusCode::BAD_GATEWAY,
@@ -687,8 +687,8 @@ fn breaker_view(record: &PluginRecord) -> BreakerView {
 /// The per-plugin numbers the server can answer without a metrics scrape.
 ///
 /// Everything here comes off the plugin's own record, so it is per-plugin, durable, and
-/// cheap. The per-call series (`lm_plugin_calls_total`, `lm_plugin_call_duration_seconds`,
-/// `lm_plugin_call_failures_total`, all labelled by plugin) live on `/metrics` — a
+/// cheap. The per-call series (`ddd_plugin_calls_total`, `ddd_plugin_call_duration_seconds`,
+/// `ddd_plugin_call_failures_total`, all labelled by plugin) live on `/metrics` — a
 /// Prometheus histogram is not something an admin screen should re-derive, and pointing at
 /// it is more honest than inventing a second, disagreeing counter.
 #[derive(Debug, Clone, Default, Serialize)]

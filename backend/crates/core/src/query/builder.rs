@@ -1,7 +1,7 @@
 //! The chainable way to write a [`Plan`]:
 //!
 //! ```
-//! use life_manager_core::query::{Op, Query};
+//! use ddd_core::query::{Op, Query};
 //!
 //! let plan = Query::new()
 //!     .filter("title", Op::TextContains, "a")

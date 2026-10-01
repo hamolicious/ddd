@@ -1,5 +1,5 @@
 /**
- * `:shortcode:` → emoji, as a remark plugin on `lm/markdown.remark`.
+ * `:shortcode:` → emoji, as a remark plugin on `ddd/markdown.remark`.
  *
  * Only `text` nodes are touched, so code spans and fences keep their colons. A shortcode
  * has to start a word, the same rule `markdown` holds text directives to: `a :tada:`

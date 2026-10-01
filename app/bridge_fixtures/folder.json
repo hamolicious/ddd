@@ -1,6 +1,6 @@
 {
   "capability": "folder",
-  "note": "One directory the user chose on this device (BRIDGE.md §4.5). Every path is relative to it and `/`-separated; the shell refuses absolute paths and `..` with `invalid` before touching the disk. Changes made outside the page are pushed as the `lm-folder-changed` window event (window_shell.json `folderChanged`).",
+  "note": "One directory the user chose on this device (BRIDGE.md §4.5). Every path is relative to it and `/`-separated; the shell refuses absolute paths and `..` with `invalid` before touching the disk. Changes made outside the page are pushed as the `ddd-folder-changed` window event (window_shell.json `folderChanged`).",
   "cases": [
     {
       "name": "nothing chosen yet",

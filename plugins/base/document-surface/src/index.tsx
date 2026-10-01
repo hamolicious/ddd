@@ -791,7 +791,7 @@ function SurfaceView({
       <section
         // Room at the end on a phone, so the floating mode button never sits over the
         // last lines of a document scrolled to the bottom.
-        className={`docsurface-pane docsurface:flex docsurface:min-h-0 docsurface:min-w-0 docsurface:flex-1 docsurface:flex-col docsurface:overflow-auto ${visible.length > 1 ? "docsurface:compact:pb-[calc(5rem+var(--lm-safe-bottom))]" : ""}`}
+        className={`docsurface-pane docsurface:flex docsurface:min-h-0 docsurface:min-w-0 docsurface:flex-1 docsurface:flex-col docsurface:overflow-auto ${visible.length > 1 ? "docsurface:compact:pb-[calc(5rem+var(--ddd-safe-bottom))]" : ""}`}
         role="tabpanel"
         id={`docsurface-pane-${active?.id ?? "none"}`}
         aria-labelledby={active ? `docsurface-tab-${active.id}` : undefined}
@@ -895,7 +895,7 @@ function ModeTabs({
             role="tab"
             // Icon-only and short: the app's button tap height is a phone rule, and on a
             // phone this control is not shown (`ModeBubble` is).
-            className={`docsurface:inline-flex docsurface:h-7 docsurface:min-h-0! docsurface:cursor-pointer docsurface:items-center docsurface:justify-center docsurface:gap-1 docsurface:rounded-[calc(var(--lm-radius)-1px)] docsurface:border-0 docsurface:bg-transparent docsurface:py-0! docsurface:text-sm docsurface:text-text-muted docsurface:hover:text-text docsurface:aria-selected:bg-bg-raised docsurface:aria-selected:text-accent docsurface:aria-selected:shadow-1 docsurface:focus-visible:outline-2 docsurface:focus-visible:outline-offset-1 docsurface:focus-visible:outline-focus ${hasIcon(mode) ? "docsurface:w-8 docsurface:px-0!" : "docsurface:px-2.5"}`}
+            className={`docsurface:inline-flex docsurface:h-7 docsurface:min-h-0! docsurface:cursor-pointer docsurface:items-center docsurface:justify-center docsurface:gap-1 docsurface:rounded-[calc(var(--ddd-radius)-1px)] docsurface:border-0 docsurface:bg-transparent docsurface:py-0! docsurface:text-sm docsurface:text-text-muted docsurface:hover:text-text docsurface:aria-selected:bg-bg-raised docsurface:aria-selected:text-accent docsurface:aria-selected:shadow-1 docsurface:focus-visible:outline-2 docsurface:focus-visible:outline-offset-1 docsurface:focus-visible:outline-focus ${hasIcon(mode) ? "docsurface:w-8 docsurface:px-0!" : "docsurface:px-2.5"}`}
             aria-label={mode.label}
             title={mode.label}
             aria-selected={selected}
@@ -982,7 +982,7 @@ function ModeBubble({
   return (
     <div
       ref={root}
-      className="docsurface-mode-bubble docsurface:hidden docsurface:compact:flex docsurface:fixed docsurface:right-[calc(1rem+var(--lm-safe-right))] docsurface:bottom-[calc(1rem+max(var(--lm-safe-bottom),var(--shell-footer-height,0px)))] docsurface:z-10 docsurface:flex-col docsurface:items-end docsurface:gap-3"
+      className="docsurface-mode-bubble docsurface:hidden docsurface:compact:flex docsurface:fixed docsurface:right-[calc(1rem+var(--ddd-safe-right))] docsurface:bottom-[calc(1rem+max(var(--ddd-safe-bottom),var(--shell-footer-height,0px)))] docsurface:z-10 docsurface:flex-col docsurface:items-end docsurface:gap-3"
     >
       {open && (
         <ul className="docsurface:m-0 docsurface:flex docsurface:list-none docsurface:flex-col docsurface:items-end docsurface:gap-2 docsurface:p-0 docsurface:pr-1" aria-label="Document modes">
@@ -1054,7 +1054,7 @@ function TrashedBanner({
       30 days.{" "}
       <button
         type="button"
-        className="docsurface:min-h-[calc(var(--lm-tap-target)-12px)] docsurface:cursor-pointer docsurface:rounded docsurface:border docsurface:border-border-strong docsurface:bg-bg-raised docsurface:px-2 docsurface:text-sm docsurface:text-text docsurface:focus-visible:outline-2 docsurface:focus-visible:outline-offset-1 docsurface:focus-visible:outline-focus"
+        className="docsurface:min-h-[calc(var(--ddd-tap-target)-12px)] docsurface:cursor-pointer docsurface:rounded docsurface:border docsurface:border-border-strong docsurface:bg-bg-raised docsurface:px-2 docsurface:text-sm docsurface:text-text docsurface:focus-visible:outline-2 docsurface:focus-visible:outline-offset-1 docsurface:focus-visible:outline-focus"
         onClick={() => {
           void kernel.documents
             .restore(row.id)

@@ -62,7 +62,7 @@ export class ApiError extends Error {
  * It exists as its own type because the boot sequence has to tell it apart from a
  * server that answered: "the server says you are not signed in" is a login screen,
  * "there is no server right now" is the offline workspace (SPEC §4.1, §8). A bare
- * `TypeError: Failed to fetch` conflated the two, and the app showed "Life Manager
+ * `TypeError: Failed to fetch` conflated the two, and the app showed "ddd
  * could not start" to a user who was simply on a train.
  */
 export class OfflineError extends Error {

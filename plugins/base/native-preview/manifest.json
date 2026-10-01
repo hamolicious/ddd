@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "name": "Browser preview",
   "description": "Viewers for every file type a browser shows by itself: images, PDF, audio, video and plain text.",
-  "author": "Life Manager base distribution",
+  "author": "ddd base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": {
     "prefix": "nativepreview"

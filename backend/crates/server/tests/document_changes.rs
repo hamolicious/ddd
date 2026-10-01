@@ -6,7 +6,7 @@ mod common;
 
 use axum::http::StatusCode;
 use common::TestApp;
-use life_manager_server::domain::Actor;
+use ddd_server::domain::Actor;
 use serde_json::json;
 
 #[tokio::test]

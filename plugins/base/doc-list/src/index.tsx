@@ -87,7 +87,7 @@ export interface NewDocumentOptions {
 }
 
 /**
- * What this plugin exports for creating documents (the old `lm/document-browser`
+ * What this plugin exports for creating documents (the old `ddd/document-browser`
  * service). `createDocument` rejects when the server cannot be reached (creation is REST,
  * SPEC §5.1); a caller with nowhere to show that uses `newDocument`, which never rejects
  * and reports a failure as a notice with a retry action.
@@ -352,13 +352,13 @@ export default function activate(kernel: Kernel): void {
   addAction([
     {
       id: "document.open",
-      target: "lm/document",
+      target: "ddd/document",
       order: 0,
       items: (target) => [{ id: "open", label: "Open", run: () => router.navigate(`/doc/${encodeURIComponent(target.id)}`) }],
     },
     {
       id: "document.trash",
-      target: "lm/document",
+      target: "ddd/document",
       order: 100,
       items: (target) => [
         {

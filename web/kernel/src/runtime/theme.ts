@@ -23,13 +23,13 @@ import {
 } from "@kernel";
 
 /** Where the colour-scheme preference is remembered. Not a setting: it must be readable before plugins load. */
-export const COLOR_SCHEME_STORAGE_KEY = "life-manager.color-scheme";
+export const COLOR_SCHEME_STORAGE_KEY = "ddd.color-scheme";
 
 /**
  * Write the kernel's default tokens before anything else exists.
  *
  * The boot screen, the auth gate and a boot *failure* all render before there is a
- * kernel — and `app/src/styles.css` is written entirely in `--lm-*` tokens, so
+ * kernel — and `app/src/styles.css` is written entirely in `--ddd-*` tokens, so
  * without this the login screen is unstyled text on the browser's default white,
  * in dark mode included. The alternative would be a second copy of the palette in
  * CSS, which is one drifting copy too many: {@link DEFAULT_LIGHT_TOKENS} and

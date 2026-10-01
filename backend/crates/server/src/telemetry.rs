@@ -22,35 +22,35 @@ use crate::config::{Config, LogFormat};
 
 /// Metric names, so emitters and dashboards cannot drift (SPEC §8).
 pub mod names {
-    pub const HTTP_REQUESTS: &str = "lm_http_requests_total";
-    pub const HTTP_LATENCY: &str = "lm_http_request_duration_seconds";
-    pub const DOCUMENTS_TOTAL: &str = "lm_documents_total";
-    pub const UPDATES_APPLIED: &str = "lm_crdt_updates_applied_total";
-    pub const MATERIALIZE_LATENCY: &str = "lm_materialize_duration_seconds";
-    pub const MATERIALIZE_FAILURES: &str = "lm_materialize_failures_total";
-    pub const ROOMS: &str = "lm_rooms";
-    pub const DIRTY_ROOMS: &str = "lm_rooms_dirty";
-    pub const OVERSIZED_DOCS: &str = "lm_documents_oversized";
-    pub const ATTACHMENT_BYTES: &str = "lm_attachment_bytes_total";
-    pub const LOGIN_FAILURES: &str = "lm_login_failures_total";
+    pub const HTTP_REQUESTS: &str = "ddd_http_requests_total";
+    pub const HTTP_LATENCY: &str = "ddd_http_request_duration_seconds";
+    pub const DOCUMENTS_TOTAL: &str = "ddd_documents_total";
+    pub const UPDATES_APPLIED: &str = "ddd_crdt_updates_applied_total";
+    pub const MATERIALIZE_LATENCY: &str = "ddd_materialize_duration_seconds";
+    pub const MATERIALIZE_FAILURES: &str = "ddd_materialize_failures_total";
+    pub const ROOMS: &str = "ddd_rooms";
+    pub const DIRTY_ROOMS: &str = "ddd_rooms_dirty";
+    pub const OVERSIZED_DOCS: &str = "ddd_documents_oversized";
+    pub const ATTACHMENT_BYTES: &str = "ddd_attachment_bytes_total";
+    pub const LOGIN_FAILURES: &str = "ddd_login_failures_total";
     /// M2: WebSocket connections and subscribed docs.
-    pub const WS_CONNECTIONS: &str = "lm_ws_connections";
-    pub const WS_SUBSCRIBED_DOCS: &str = "lm_ws_subscribed_documents";
+    pub const WS_CONNECTIONS: &str = "ddd_ws_connections";
+    pub const WS_SUBSCRIBED_DOCS: &str = "ddd_ws_subscribed_documents";
     /// M2: the workspace change feed (PROTOCOL.md §2.2). `HEAD` is the highest
     /// number handed out, `SAFE` the watermark clients persist; a widening gap
     /// between them means writes are sitting in flight, which is the signal that
     /// the feed is stalling. `SUBSCRIBERS` counts the in-process notification
     /// receivers, i.e. sockets tailing the feed.
-    pub const FEED_HEAD_SEQ: &str = "lm_feed_head_seq";
-    pub const FEED_SAFE_SEQ: &str = "lm_feed_safe_seq";
-    pub const FEED_SUBSCRIBERS: &str = "lm_feed_subscribers";
+    pub const FEED_HEAD_SEQ: &str = "ddd_feed_head_seq";
+    pub const FEED_SAFE_SEQ: &str = "ddd_feed_safe_seq";
+    pub const FEED_SUBSCRIBERS: &str = "ddd_feed_subscribers";
     /// M2: send-queue overflows, labelled `queue="feed"|"doc"|"plugin"`. Every
     /// increment on `feed` or `doc` is a client that was told to re-derive
     /// (PROTOCOL.md §6) — cheap, but a sustained rate means the bounds are wrong for
     /// the workload. `plugin` (M4) is a dropped `plugin.event` frame, which is
     /// ephemeral by design (SPEC §6.3: no offline replay) — a chatty plugin loses
     /// events rather than closing everybody's socket.
-    pub const WS_BACKPRESSURE_DROPS: &str = "lm_ws_backpressure_drops_total";
+    pub const WS_BACKPRESSURE_DROPS: &str = "ddd_ws_backpressure_drops_total";
 
     /// M4: the plugin host (SPEC §8 names "hook latency/failures, wasm timeouts").
     ///
@@ -58,31 +58,31 @@ pub mod names {
     /// `kind="hook"|"cron"|"route"|"call"|"event"|"init"` — which is what makes "the
     /// cron of plugin X is slow" and "something is hammering a plugin route" different
     /// lines on a dashboard rather than one average.
-    pub const PLUGIN_CALLS: &str = "lm_plugin_calls_total";
-    pub const PLUGIN_CALL_LATENCY: &str = "lm_plugin_call_duration_seconds";
+    pub const PLUGIN_CALLS: &str = "ddd_plugin_calls_total";
+    pub const PLUGIN_CALL_LATENCY: &str = "ddd_plugin_call_duration_seconds";
     /// Labelled `outcome="refused"|"timeout"|"trap"|"bad_response"|"unavailable"`. A
     /// refusal is the plugin working; the other four are the breaker's input.
-    pub const PLUGIN_CALL_FAILURES: &str = "lm_plugin_call_failures_total";
-    pub const PLUGIN_ACTIVE: &str = "lm_plugins_active";
-    pub const PLUGIN_DISABLED: &str = "lm_plugins_disabled";
-    pub const PLUGIN_INSTANCES: &str = "lm_plugin_instances";
+    pub const PLUGIN_CALL_FAILURES: &str = "ddd_plugin_call_failures_total";
+    pub const PLUGIN_ACTIVE: &str = "ddd_plugins_active";
+    pub const PLUGIN_DISABLED: &str = "ddd_plugins_disabled";
+    pub const PLUGIN_INSTANCES: &str = "ddd_plugin_instances";
     /// Hook deliveries and the debounce backlog (SPEC §6.3).
-    pub const PLUGIN_HOOKS_DELIVERED: &str = "lm_plugin_hooks_delivered_total";
-    pub const PLUGIN_HOOKS_PENDING: &str = "lm_plugin_hooks_pending";
+    pub const PLUGIN_HOOKS_DELIVERED: &str = "ddd_plugin_hooks_delivered_total";
+    pub const PLUGIN_HOOKS_PENDING: &str = "ddd_plugin_hooks_pending";
     /// Outbound requests, labelled `outcome="ok"|"blocked"|"timeout"|"too_large"`. The
     /// `blocked` series is the one to alert on: a plugin repeatedly aiming at a refused
     /// address is either misconfigured or probing.
-    pub const PLUGIN_HTTP_REQUESTS: &str = "lm_plugin_http_requests_total";
+    pub const PLUGIN_HTTP_REQUESTS: &str = "ddd_plugin_http_requests_total";
     /// Document writes made by plugins, and the ones the per-document cap refused.
-    pub const PLUGIN_DOCUMENT_WRITES: &str = "lm_plugin_document_writes_total";
-    pub const PLUGIN_WRITES_REFUSED: &str = "lm_plugin_write_cap_refusals_total";
+    pub const PLUGIN_DOCUMENT_WRITES: &str = "ddd_plugin_document_writes_total";
+    pub const PLUGIN_WRITES_REFUSED: &str = "ddd_plugin_write_cap_refusals_total";
 
     /// Effective limits, published so a dashboard can draw the ceiling next to
     /// the usage it is comparing against.
-    pub const CONFIG_MAX_DOCUMENT_BYTES: &str = "lm_config_max_document_bytes";
-    pub const CONFIG_MAX_ATTACHMENT_BYTES: &str = "lm_config_max_attachment_bytes";
+    pub const CONFIG_MAX_DOCUMENT_BYTES: &str = "ddd_config_max_document_bytes";
+    pub const CONFIG_MAX_ATTACHMENT_BYTES: &str = "ddd_config_max_attachment_bytes";
     /// `1`, carrying the build version as a label.
-    pub const BUILD_INFO: &str = "lm_build_info";
+    pub const BUILD_INFO: &str = "ddd_build_info";
 }
 
 /// Latency buckets for HTTP handlers: sub-millisecond up to ten seconds.
@@ -521,13 +521,13 @@ mod tests {
         let body = String::from_utf8(body.to_vec()).expect("utf-8");
         assert!(body.contains(names::HTTP_REQUESTS), "{body}");
         assert!(
-            body.contains("# HELP lm_http_requests_total HTTP requests"),
+            body.contains("# HELP ddd_http_requests_total HTTP requests"),
             "{body}"
         );
         // Latency must render as a true histogram, not a summary: summaries
         // cannot be aggregated across scrapes.
         assert!(
-            body.contains("lm_http_request_duration_seconds_bucket"),
+            body.contains("ddd_http_request_duration_seconds_bucket"),
             "{body}"
         );
     }

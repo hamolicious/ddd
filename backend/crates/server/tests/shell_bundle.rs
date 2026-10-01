@@ -19,7 +19,7 @@
 //!
 //! ```text
 //! docker compose up -d --wait mongo
-//! MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p life-manager-server --test shell_bundle -- --ignored
+//! MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p ddd-server --test shell_bundle -- --ignored
 //! ```
 
 mod common;
@@ -31,11 +31,11 @@ use std::path::{Path, PathBuf};
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
-use life_manager_server::config::Config;
-use life_manager_server::domain::new_id;
-use life_manager_server::routes::shell::{ShellManifest, bundle_version};
-use life_manager_server::state::AppState;
-use life_manager_server::{routes, telemetry};
+use ddd_server::config::Config;
+use ddd_server::domain::new_id;
+use ddd_server::routes::shell::{ShellManifest, bundle_version};
+use ddd_server::state::AppState;
+use ddd_server::{routes, telemetry};
 use serde_json::{Value as Json, json};
 use sha2::{Digest as _, Sha256};
 use tower::ServiceExt as _;
@@ -46,7 +46,7 @@ use common::{ApiResponse, TEST_PASSWORD, mongo_uri, test_config};
 const SECRET: &str = "TOP-SECRET-OUTSIDE-THE-ROOT";
 
 /// The marker `web/app/index.html` carries, spelled here so a drift fails a test.
-const MARKER: &str = "<!--LM_IMPORT_MAP-->";
+const MARKER: &str = "<!--DDD_IMPORT_MAP-->";
 
 // ---------------------------------------------------------------------------
 // Fixture
@@ -93,7 +93,7 @@ impl Fixture {
         fs::write(
             dist.join("index.html"),
             format!(
-                "<!doctype html>\n<html><head><title>Life Manager</title>\n{MARKER}\n\
+                "<!doctype html>\n<html><head><title>ddd</title>\n{MARKER}\n\
                  <script type=\"module\" src=\"/assets/app-abc123.js\"></script>\n\
                  </head><body><div id=\"root\"></div></body></html>\n"
             ),
@@ -147,7 +147,7 @@ impl Fixture {
         .expect("icon");
         fs::write(
             dist.join("manifest.webmanifest"),
-            json!({"name": "Life Manager"}).to_string(),
+            json!({"name": "ddd"}).to_string(),
         )
         .expect("webmanifest");
         fs::write(
@@ -212,7 +212,7 @@ fn write_plugin(plugins: &Path, id: &str, version: &str) {
         format!("export default function activate() {{ return {{ id: \"{id}\" }}; }}\n"),
     )
     .expect("plugin module");
-    fs::write(dir.join("frontend/style.css"), format!(".lm-{id} {{}}\n")).expect("plugin style");
+    fs::write(dir.join("frontend/style.css"), format!(".ddd-{id} {{}}\n")).expect("plugin style");
     fs::write(dir.join("frontend/assets/logo.png"), b"\x89PNG\r\n\x1a\n").expect("plugin asset");
     fs::write(dir.join("frontend/index.mjs.map"), "{}\n").expect("plugin map");
     // Neither of these is a browser asset, and neither belongs on a device: the manifest
@@ -234,7 +234,7 @@ struct ShellApp {
 impl ShellApp {
     async fn start(configure: impl FnOnce(&mut Config)) -> Option<ShellApp> {
         let uri = mongo_uri()?;
-        let database = format!("lm_router_test_{}", new_id());
+        let database = format!("ddd_router_test_{}", new_id());
         let mut config = test_config(uri.clone(), database.clone());
         configure(&mut config);
 
@@ -717,7 +717,7 @@ async fn min_bridge_version_comes_from_the_bundle_and_is_not_the_content() {
 ///
 /// ```text
 /// mise run web-build && mise run plugins-build
-/// MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p life-manager-server --test shell_bundle -- --ignored
+/// MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p ddd-server --test shell_bundle -- --ignored
 /// ```
 #[tokio::test]
 #[ignore = "needs MONGO_URI"]
@@ -795,9 +795,9 @@ async fn the_real_distribution_produces_a_complete_manifest() {
         }
         // A real distribution has no `plugins/` directory of its own, so a path with that
         // prefix here came from a plugin root and cannot be shadowing anything.
-        let shadowed = !path.starts_with("plugins/")
-            && life_manager_server::routes::shell::is_shadowed_dist_path(path);
-        if life_manager_server::routes::shell::is_excluded(path) || shadowed {
+        let shadowed =
+            !path.starts_with("plugins/") && ddd_server::routes::shell::is_shadowed_dist_path(path);
+        if ddd_server::routes::shell::is_excluded(path) || shadowed {
             assert!(
                 !listed.contains_key(path.as_str()),
                 "{path} is excluded but was published"

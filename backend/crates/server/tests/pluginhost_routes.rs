@@ -22,7 +22,7 @@
 //! ```text
 //! docker compose up -d --wait mongo
 //! mise run wasm-plugins
-//! MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p life-manager-server --test pluginhost_routes
+//! MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p ddd-server --test pluginhost_routes
 //! ```
 
 mod common;
@@ -32,13 +32,13 @@ use std::path::PathBuf;
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
-use life_manager_server::domain::new_id;
-use life_manager_server::pluginhost::PluginHost;
-use life_manager_server::plugininstall::InstallSource;
-use life_manager_server::plugins::{
+use ddd_server::domain::new_id;
+use ddd_server::pluginhost::PluginHost;
+use ddd_server::plugininstall::InstallSource;
+use ddd_server::plugins::{
     PluginBackend, PluginCapabilities, PluginManifest, PluginRecord, PluginState,
 };
-use life_manager_server::{routes, telemetry};
+use ddd_server::{routes, telemetry};
 use serde_json::Value;
 
 fn fixture() -> Option<PathBuf> {
@@ -75,8 +75,8 @@ impl RouteApp {
         let uri = common::mongo_uri()?;
         let wasm = fixture()?;
 
-        let database = format!("lm_pluginroute_test_{}", new_id());
-        let plugins_dir = std::env::temp_dir().join(format!("lm-pluginroute-{database}"));
+        let database = format!("ddd_pluginroute_test_{}", new_id());
+        let plugins_dir = std::env::temp_dir().join(format!("ddd-pluginroute-{database}"));
         let dir = plugins_dir.join("hello-backend").join("1.0.0");
         std::fs::create_dir_all(&dir).expect("a temp plugin directory");
         std::fs::copy(&wasm, dir.join("backend.wasm")).expect("copy the fixture");
@@ -86,7 +86,7 @@ impl RouteApp {
         config.plugin_call_timeout = std::time::Duration::from_millis(1_500);
 
         let client = mongodb::Client::with_uri_str(&uri).await.ok()?;
-        let state = life_manager_server::state::AppState::new(config.clone())
+        let state = ddd_server::state::AppState::new(config.clone())
             .await
             .ok()?;
         state.init_schema().await.ok()?;
@@ -139,7 +139,7 @@ impl RouteApp {
             },
             capabilities_approved: granted,
             source: InstallSource::Base,
-            installed_at: life_manager_server::domain::Timestamp::now(),
+            installed_at: ddd_server::domain::Timestamp::now(),
             installed_by: None,
             approved_at: None,
             approved_by: None,
@@ -212,7 +212,7 @@ impl RouteApp {
                 .uri(uri)
                 .header(header::AUTHORIZATION, format!("Bearer {}", self.token))
                 // Both of these must be invisible to the plugin.
-                .header(header::COOKIE, "lm_session=secret-value")
+                .header(header::COOKIE, "ddd_session=secret-value")
                 .body(Body::empty())
                 .expect("a valid request"),
         )

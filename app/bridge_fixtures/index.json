@@ -1,6 +1,6 @@
 {
   "bridgeVersion": 1,
-  "handler": "lm_shell_v1",
+  "handler": "ddd_shell_v1",
   "errorCodes": [
     "unsupported",
     "denied",

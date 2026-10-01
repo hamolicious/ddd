@@ -3,7 +3,7 @@
 //!
 //! The manifest declares expressions, not handlers:
 //! `"backend": { "cron": ["0 6 * * *", "*/15 * * * *"] }`. Every one of them lands on the
-//! single `lm_cron` export; the payload says which fired, by index and by expression, so
+//! single `ddd_cron` export; the payload says which fired, by index and by expression, so
 //! a plugin with two schedules dispatches on that rather than on the clock.
 //!
 //! "Missed runs skipped" is a decision with teeth: a server that was down for a day does

@@ -100,7 +100,7 @@ export function TrashView({
           <ul className="doclist-items doclist:m-0 doclist:flex doclist:list-none doclist:flex-col doclist:p-0">
             {rows.map((row) => (
               <li key={row.id} className="doclist-item doclist:grid doclist:grid-cols-[minmax(0,1fr)_auto] doclist:grid-rows-2 doclist:items-center doclist:gap-x-2 doclist:border-b doclist:border-border doclist:py-0.5 doclist:compact:py-1">
-                <button type="button" className="doclist-open doclist:col-start-1 doclist:row-start-1 doclist:flex doclist:min-h-[calc(var(--lm-tap-target)/2)] doclist:min-w-0 doclist:items-center doclist:overflow-hidden doclist:text-ellipsis doclist:whitespace-nowrap doclist:border-0! doclist:bg-transparent! doclist:p-0! doclist:text-left doclist:text-lg doclist:text-link doclist:compact:min-h-[var(--lm-tap-target)]" onClick={() => onOpen(row.id)}>
+                <button type="button" className="doclist-open doclist:col-start-1 doclist:row-start-1 doclist:flex doclist:min-h-[calc(var(--ddd-tap-target)/2)] doclist:min-w-0 doclist:items-center doclist:overflow-hidden doclist:text-ellipsis doclist:whitespace-nowrap doclist:border-0! doclist:bg-transparent! doclist:p-0! doclist:text-left doclist:text-lg doclist:text-link doclist:compact:min-h-[var(--ddd-tap-target)]" onClick={() => onOpen(row.id)}>
                   {row.title}
                 </button>
                 <p className="doclist-meta doclist:col-start-1 doclist:row-start-2 doclist:mb-1 doclist:mt-0 doclist:flex doclist:min-w-0 doclist:flex-nowrap doclist:gap-2 doclist:overflow-hidden doclist:whitespace-nowrap doclist:text-sm doclist:text-text-muted doclist:[&>*]:shrink-0">

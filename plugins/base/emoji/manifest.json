@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "name": "Emoji",
   "description": "Writes :shortcode: as its emoji in read mode, and suggests shortcodes as you type one.",
-  "author": "Life Manager base distribution",
+  "author": "ddd base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": {
     "prefix": "emoji"

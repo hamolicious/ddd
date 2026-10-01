@@ -444,7 +444,7 @@ test("trash, restore and any note's edits, offline: shown at once, sent on recon
         page.evaluate(
           (id) =>
             new Promise<boolean>((resolve) => {
-              const open = indexedDB.open("life-manager");
+              const open = indexedDB.open("ddd");
               open.onsuccess = () => {
                 const get = open.result.transaction("docs").objectStore("docs").get(id);
                 get.onsuccess = () => resolve(get.result !== undefined);

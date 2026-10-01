@@ -50,7 +50,7 @@ import {
 const EXPECTED_PLUGINS = 38;
 
 /**
- * `--lm-bg` as the `midnight` theme paints it (`plugins/base/themes/src/index.tsx`).
+ * `--ddd-bg` as the `midnight` theme paints it (`plugins/base/themes/src/index.tsx`).
  * Named rather than read back from the page, so the theme journey can tell "the theme
  * was applied" apart from "the page kept whatever it already had".
  */
@@ -101,7 +101,7 @@ test("registering the first user boots the whole plugin distribution", async ({
   await page.goto("/#/?t.rows=200");
   const main = page.locator("#shell-main");
   for (const title of [
-    "Welcome to Life Manager",
+    "Welcome to ddd",
     "Writing in markdown",
     "Tasks and lists",
     "Properties",
@@ -398,7 +398,7 @@ test("a theme choice persists across a reload", async ({ page }) => {
 
   const background = (): Promise<string> =>
     page.evaluate(() =>
-      getComputedStyle(document.documentElement).getPropertyValue("--lm-bg").trim(),
+      getComputedStyle(document.documentElement).getPropertyValue("--ddd-bg").trim(),
     );
 
   // `themes` applies only through `kernel.ui.tokens.apply` (SPEC §6.5 — it overrides
@@ -485,8 +485,8 @@ test("an admin invite lets a second user register", async ({ page, browser, base
     // A second real session in the same shared workspace (SPEC §2).
     await expect(other.getByRole("banner")).toBeVisible();
     // Searched for: it is the oldest document, long off the list's first page.
-    await other.getByRole("searchbox", { name: "Search documents" }).fill("Welcome to Life Manager");
-    await expect(other.getByRole("button", { name: "Welcome to Life Manager", exact: true })).toBeVisible();
+    await other.getByRole("searchbox", { name: "Search documents" }).fill("Welcome to ddd");
+    await expect(other.getByRole("button", { name: "Welcome to ddd", exact: true })).toBeVisible();
   } finally {
     await second.close();
   }

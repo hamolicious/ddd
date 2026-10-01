@@ -1,6 +1,6 @@
 /**
  * What `folders` exports to other plugins (`plugin:folders`): where a note sits in the
- * tree, and how it is dressed. These were the `lm/folders` and `lm/folders.decoration`
+ * tree, and how it is dressed. These were the `ddd/folders` and `ddd/folders.decoration`
  * protocols before kernel 3.0; the member names are unchanged.
  */
 

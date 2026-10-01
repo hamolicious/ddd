@@ -6,7 +6,7 @@
  * fails, because a red suite that means "you forgot to start Mongo" trains people
  * to ignore red suites. In CI the server is up and this is the gate.
  *
- * It drives the page, never the kernel: `window.lm` exists for debugging, and a
+ * It drives the page, never the kernel: `window.ddd` exists for debugging, and a
  * smoke that reaches for it stops proving that a user can do any of this.
  */
 
@@ -27,9 +27,9 @@ import { expect, test, type Page } from "@playwright/test";
  * first-user slot and lock the other out of the workspace for good. The workspace
  * is shared by design (SPEC §2), so sharing the dev account is the honest default.
  */
-const email = process.env["LM_SMOKE_EMAIL"] ?? process.env["LM_EMAIL"] ?? "harness@example.com";
+const email = process.env["DDD_SMOKE_EMAIL"] ?? process.env["DDD_EMAIL"] ?? "harness@example.com";
 const password =
-  process.env["LM_SMOKE_PASSWORD"] ?? process.env["LM_PASSWORD"] ?? "harness-password-1";
+  process.env["DDD_SMOKE_PASSWORD"] ?? process.env["DDD_PASSWORD"] ?? "harness-password-1";
 
 /** `needs_first_user` decides register-vs-login; unreachable means skip. */
 let needsFirstUser: boolean | undefined;

@@ -10,7 +10,7 @@
  * chain, the embed is an ordinary link. So a document embedding itself costs a link, not
  * the page.
  *
- * **A view that claims the document draws it instead** (`lm/document.mode`'s `prefer`):
+ * **A view that claims the document draws it instead** (`ddd/document.mode`'s `prefer`):
  * a saved search embeds as its live results, not as its empty body. Only a claim counts —
  * the user's default mode is about opening a note, and an embed is never an editor. The
  * view gets no hydrated handle and `unavailable`, so one that edits shows read-only, and
@@ -112,7 +112,7 @@ export function DocEmbed({ id, runtime, renderBody }: DocEmbedProps): ReactNode 
       data-embed={id}
     >
       {/* The embedded note's own menu, on its name: the body below holds other notes' rows. */}
-      <div className="markdown:mb-1 markdown:text-sm markdown:text-text-muted" {...target("lm/document", id)}>
+      <div className="markdown:mb-1 markdown:text-sm markdown:text-text-muted" {...target("ddd/document", id)}>
         <DocLink id={id} runtime={runtime} />
       </div>
       {row === undefined ? (

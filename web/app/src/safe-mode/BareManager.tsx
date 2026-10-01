@@ -97,7 +97,7 @@ export function BareManager({ token, user }: BareManagerProps): ReactNode {
   const enableable = (plugin: InstalledPlugin): boolean => plugin.state === "disabled";
 
   return (
-    <div className="lm-bare">
+    <div className="ddd-bare">
       <header>
         <h1>Plugin manager (safe mode)</h1>
         <p>No plugins are loaded.</p>
@@ -115,8 +115,8 @@ export function BareManager({ token, user }: BareManagerProps): ReactNode {
       {plugins ? (
         // `data-label` on every cell, because at the compact breakpoint the kernel
         // stylesheet drops the header row and stacks each plugin into a card.
-        <div className="lm-bare-scroll">
-          <table className="lm-bare-table">
+        <div className="ddd-bare-scroll">
+          <table className="ddd-bare-table">
             <thead>
               <tr>
                 <th scope="col">Plugin</th>

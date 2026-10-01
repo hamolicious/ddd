@@ -16,8 +16,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:life_manager_shell/bundle/manifest.dart';
-import 'package:life_manager_shell/shell/webview_host.dart';
+import 'package:ddd_shell/bundle/manifest.dart';
+import 'package:ddd_shell/shell/webview_host.dart';
 
 /// A port of its own, so this suite never races the shell's real [kLoopbackPort] or a
 /// second test file.
@@ -30,7 +30,7 @@ void main() {
   late HttpClient client;
 
   const Map<String, String> files = <String, String>{
-    'index.html': '<!doctype html><title>Life Manager</title>',
+    'index.html': '<!doctype html><title>ddd</title>',
     'assets/app-1a2b3c.js': 'console.log("v1")',
     'plugins/shell-ui/1.0.0/frontend/index.mjs':
         'export function activate() {}',
@@ -38,7 +38,7 @@ void main() {
   const String csp = "default-src 'self'; script-src 'self' 'nonce-abc'";
 
   setUp(() async {
-    bundle = await Directory.systemTemp.createTemp('lm-bundle-server-test');
+    bundle = await Directory.systemTemp.createTemp('ddd-bundle-server-test');
     for (final MapEntry<String, String> entry in files.entries) {
       final File file = File('${bundle.path}/${entry.key}');
       await file.parent.create(recursive: true);

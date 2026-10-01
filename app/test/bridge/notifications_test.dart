@@ -6,8 +6,8 @@
 library;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:life_manager_shell/bridge/bridge.dart';
-import 'package:life_manager_shell/bridge/notifications.dart';
+import 'package:ddd_shell/bridge/bridge.dart';
+import 'package:ddd_shell/bridge/notifications.dart';
 
 void main() {
   group('ScheduledNotification.fromParams', () {

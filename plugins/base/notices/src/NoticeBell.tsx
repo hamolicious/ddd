@@ -122,7 +122,7 @@ export function NoticeBell({ kernel }: { readonly kernel: Kernel }): ReactNode {
           the button, carries the level's colour. */}
       <button
         type="button"
-        className="notices-bell notices:group notices:tap notices:relative notices:box-border notices:inline-flex notices:w-[var(--lm-tap-target)] notices:cursor-pointer notices:items-center notices:justify-center notices:rounded notices:border notices:border-transparent notices:bg-transparent notices:p-0 notices:text-text-muted notices:hover:border-border notices:hover:bg-bg-raised notices:hover:text-text"
+        className="notices-bell notices:group notices:tap notices:relative notices:box-border notices:inline-flex notices:w-[var(--ddd-tap-target)] notices:cursor-pointer notices:items-center notices:justify-center notices:rounded notices:border notices:border-transparent notices:bg-transparent notices:p-0 notices:text-text-muted notices:hover:border-border notices:hover:bg-bg-raised notices:hover:text-text"
         data-level={worst}
         aria-expanded={open}
         aria-controls={panelId}
@@ -160,7 +160,7 @@ export function NoticeBell({ kernel }: { readonly kernel: Kernel }): ReactNode {
           </span>
         ) : null}
       </button>
-      <div id={panelId} className="notices-panel notices:absolute notices:right-0 notices:top-[calc(100%+var(--lm-space)*0.5)] notices:z-25 notices:max-h-[calc(var(--lm-viewport-height)*0.6)] notices:w-[min(26rem,calc(100vw-var(--lm-space)*2))] notices:overflow-y-auto notices:rounded-lg notices:border notices:border-border notices:bg-bg-raised notices:p-2 notices:shadow-2 notices:compact:inset-x-2 notices:compact:w-auto notices:compact:pb-[calc(var(--lm-space)+var(--lm-safe-bottom))] notices:[&_li]:border-b notices:[&_li]:border-border notices:[&_li]:py-1.5 notices:[&_li:last-child]:border-b-0 notices:[&_pre]:mt-1 notices:[&_pre]:max-w-full notices:[&_pre]:overflow-x-auto notices:[&_pre]:whitespace-pre-wrap notices:[&_ul]:m-0 notices:[&_ul]:list-none notices:[&_ul]:p-0" hidden={!open} role="group" aria-label="Notices">
+      <div id={panelId} className="notices-panel notices:absolute notices:right-0 notices:top-[calc(100%+var(--ddd-space)*0.5)] notices:z-25 notices:max-h-[calc(var(--ddd-viewport-height)*0.6)] notices:w-[min(26rem,calc(100vw-var(--ddd-space)*2))] notices:overflow-y-auto notices:rounded-lg notices:border notices:border-border notices:bg-bg-raised notices:p-2 notices:shadow-2 notices:compact:inset-x-2 notices:compact:w-auto notices:compact:pb-[calc(var(--ddd-space)+var(--ddd-safe-bottom))] notices:[&_li]:border-b notices:[&_li]:border-border notices:[&_li]:py-1.5 notices:[&_li:last-child]:border-b-0 notices:[&_pre]:mt-1 notices:[&_pre]:max-w-full notices:[&_pre]:overflow-x-auto notices:[&_pre]:whitespace-pre-wrap notices:[&_ul]:m-0 notices:[&_ul]:list-none notices:[&_ul]:p-0" hidden={!open} role="group" aria-label="Notices">
         <ul>
           {notices.map((notice) => (
             <li key={notice.id} data-level={notice.level}>

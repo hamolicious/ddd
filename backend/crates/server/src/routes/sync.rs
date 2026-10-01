@@ -13,7 +13,7 @@
 //! Shape of the connection (SPEC §4.3):
 //!
 //! - **Auth at upgrade only** — cookie, `Authorization: Bearer`, or the
-//!   `life-manager.bearer.<token>` subprotocol. No in-band login exists.
+//!   `ddd.bearer.<token>` subprotocol. No in-band login exists.
 //! - **Origin allowlist is mandatory** and checked *before* authentication, so a
 //!   hostile page learns nothing about session validity.
 //! - One task per connection owns the socket. It holds: the feed cursor, the set
@@ -121,12 +121,12 @@ use crate::telemetry::names;
 pub const PROTOCOL_VERSION: u32 = 1;
 
 /// The subprotocol every client must offer.
-pub const SUBPROTOCOL: &str = "life-manager.v1";
+pub const SUBPROTOCOL: &str = "ddd.v1";
 
-/// Prefix of the bearer-token subprotocol: `life-manager.bearer.<raw token>`.
+/// Prefix of the bearer-token subprotocol: `ddd.bearer.<raw token>`.
 /// Native shells cannot set headers on a WebSocket and have no cookies
 /// (SPEC §5.2, §7). The selected-protocol response header must never echo it.
-pub const BEARER_SUBPROTOCOL_PREFIX: &str = "life-manager.bearer.";
+pub const BEARER_SUBPROTOCOL_PREFIX: &str = "ddd.bearer.";
 
 /// Hard frame ceiling, both directions (SPEC §4.3).
 pub const MAX_FRAME_BYTES: usize = 4 * 1024 * 1024;
@@ -1437,7 +1437,7 @@ fn welcome(state: &AppState, user: &AuthUser) -> serde_json::Value {
             "inbound_bytes_per_sec": INBOUND_BYTES_PER_SEC,
             "heartbeat_secs": HEARTBEAT_SECS,
         },
-        "core_semantics_version": life_manager_core::CORE_SEMANTICS_VERSION,
+        "core_semantics_version": ddd_core::CORE_SEMANTICS_VERSION,
         // A client that was offline while the plugin set changed compares this with the
         // version it booted with, exactly as if `plugins.changed` had reached it.
         "plugins_version": crate::plugins::registry(&state.config).plugins_version(),
@@ -2679,7 +2679,7 @@ pub async fn bootstrap(
         total,
         limit,
         cursor: params.cursor.clone(),
-        core_semantics_version: life_manager_core::CORE_SEMANTICS_VERSION,
+        core_semantics_version: ddd_core::CORE_SEMANTICS_VERSION,
     };
 
     // PROTOCOL.md §4: a probe is "a single header line only". A footer on a
@@ -2985,10 +2985,7 @@ mod tests {
 
     #[test]
     fn subprotocol_offer_is_detected_in_a_list() {
-        let map = headers(&[(
-            "sec-websocket-protocol",
-            "life-manager.v1, life-manager.bearer.abc",
-        )]);
+        let map = headers(&[("sec-websocket-protocol", "ddd.v1, ddd.bearer.abc")]);
         assert!(offers_subprotocol(&map));
         assert_eq!(bearer_token_from_subprotocols(&map).as_deref(), Some("abc"));
     }
@@ -3002,7 +2999,7 @@ mod tests {
 
     #[test]
     fn an_empty_bearer_subprotocol_is_not_a_token() {
-        let map = headers(&[("sec-websocket-protocol", "life-manager.bearer.")]);
+        let map = headers(&[("sec-websocket-protocol", "ddd.bearer.")]);
         assert_eq!(bearer_token_from_subprotocols(&map), None);
     }
 

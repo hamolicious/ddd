@@ -1,13 +1,13 @@
 [package]
-name = "life-manager-plugin-abi"
-description = "The Life Manager backend-plugin host ABI: every host-function input/output, hook payload, cron invocation and error shape, as serde types. One definition, used by the server host and by the plugin SDK."
+name = "ddd-plugin-abi"
+description = "The ddd backend-plugin host ABI: every host-function input/output, hook payload, cron invocation and error shape, as serde types. One definition, used by the server host and by the plugin SDK."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
 # Deliberately tiny and dependency-free apart from serde: this crate is linked into
-# *every* backend plugin (through `life-manager-plugin-sdk`) as well as into the
+# *every* backend plugin (through `ddd-plugin-sdk`) as well as into the
 # server, and a plugin's wasm module pays for everything it links. No bson, no
 # tokio, no extism — those belong to the two sides, not to the contract between
 # them. `backend/HOST-ABI.md` is the prose form of this crate; they change together.

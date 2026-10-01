@@ -7,7 +7,7 @@
  * - `notifyCreated(doc: DocumentCreated): void` — call once, after the create went
  *   through and before the note opens.
  * - `onCreated(listener: (doc: DocumentCreated) => void): Unsubscribe`
- * - Type: `DocumentCreated` — `{ id, parent? }`, the old `lm/document-browser.created`
+ * - Type: `DocumentCreated` — `{ id, parent? }`, the old `ddd/document-browser.created`
  *   payload.
  *
  * A leaf with no dependencies and no UI, so both sides can depend on it without a cycle

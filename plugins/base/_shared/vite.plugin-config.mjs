@@ -52,7 +52,7 @@ async function compileWithTailwind({ root, prefix, styleSource, out, resolveFrom
   const { default: postcss } = await import(require.resolve("postcss"));
   const { default: tailwind } = await import(require.resolve("@tailwindcss/postcss"));
   const nodeModules = join(require.resolve("tailwindcss/package.json"), "..", "..");
-  const from = join(nodeModules, ".lm-plugin-entry.css");
+  const from = join(nodeModules, ".ddd-plugin-entry.css");
   const entry = [
     tailwindPreset(prefix),
     `@source ${JSON.stringify(join(root, "src"))};`,
@@ -173,7 +173,7 @@ export function pluginConfig({ root, outDir, entry, tailwind, resolveFrom = root
         // bundled library's own wasm would ride along in the module whether it is used or
         // not. Hide the pattern from Vite: the URL still resolves at runtime, and the
         // plugin ships (or points the library at) the file itself, from its `build.mjs`.
-        name: "lm-bundled-assets",
+        name: "ddd-bundled-assets",
         enforce: "pre",
         transform(code, id) {
           if (!bundledDirs.some((dir) => id.startsWith(`${dir}/`))) return null;
@@ -185,7 +185,7 @@ export function pluginConfig({ root, outDir, entry, tailwind, resolveFrom = root
         },
       },
       {
-        name: "lm-plugin-package",
+        name: "ddd-plugin-package",
         async closeBundle() {
           // The manifest travels with the build — the server serves this directory as
           // the installed plugin, so the copy here is what `/api/plugins` reads.

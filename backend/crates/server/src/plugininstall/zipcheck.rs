@@ -39,7 +39,7 @@ use std::io::{self, Read, Write};
 use std::path::{Component, Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use life_manager_plugin_abi as abi;
+use ddd_plugin_abi as abi;
 use sha2::{Digest as _, Sha256};
 
 use crate::plugins::PluginManifest;
@@ -439,7 +439,7 @@ pub fn inside_root(root: &Path, candidate: &Path) -> bool {
 ///
 /// A static scan of section 7 (exports) — no instantiation, no engine, no plugin code run.
 /// It is what makes HOST-ABI.md §7.1 step 7 ("the declared module … and its
-/// `lm_abi_version` export") answerable at **install** time: the value that export returns
+/// `ddd_abi_version` export") answerable at **install** time: the value that export returns
 /// still needs a running instance, and the host re-checks it at activation before running
 /// any of the plugin's own code. What this catches is the common, confusing case — a
 /// manifest that declares a backend half next to a `.wasm` that was built without the
@@ -638,7 +638,7 @@ mod tests {
 
     #[test]
     fn a_resolved_path_must_stay_under_the_root() {
-        let root = std::env::temp_dir().join(format!("lm-inside-root-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("ddd-inside-root-{}", std::process::id()));
         fs::create_dir_all(root.join("frontend")).expect("a staging root");
 
         assert!(inside_root(&root, &root.join("frontend/index.mjs")));
@@ -649,8 +649,8 @@ mod tests {
         // A root that does not exist can contain nothing: the answer is "no", never a
         // panic and never an accidental `true`.
         assert!(!inside_root(
-            Path::new("/nonexistent/lm/staging"),
-            Path::new("/nonexistent/lm/staging/x")
+            Path::new("/nonexistent/ddd/staging"),
+            Path::new("/nonexistent/ddd/staging/x")
         ));
 
         let _ = fs::remove_dir_all(&root);
@@ -658,22 +658,22 @@ mod tests {
 
     #[test]
     fn a_module_without_the_abi_export_is_recognised_as_such() {
-        let dir = std::env::temp_dir().join(format!("lm-wasm-scan-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("ddd-wasm-scan-{}", std::process::id()));
         fs::create_dir_all(&dir).expect("a temp dir");
 
         let not_wasm = dir.join("not.wasm");
         fs::write(&not_wasm, b"#!/bin/sh\n").expect("write");
-        assert!(!wasm_exports(&not_wasm, "lm_abi_version").expect("readable"));
+        assert!(!wasm_exports(&not_wasm, "ddd_abi_version").expect("readable"));
 
         // An empty module: the preamble and nothing else.
         let empty = dir.join("empty.wasm");
         fs::write(&empty, WASM_PREAMBLE).expect("write");
-        assert!(!wasm_exports(&empty, "lm_abi_version").expect("readable"));
+        assert!(!wasm_exports(&empty, "ddd_abi_version").expect("readable"));
 
         // A hand-assembled module whose only section is an export section naming one
-        // function `lm_abi_version` (function index 0).
+        // function `ddd_abi_version` (function index 0).
         let mut module = WASM_PREAMBLE.to_vec();
-        let name = b"lm_abi_version";
+        let name = b"ddd_abi_version";
         let mut section = vec![1u8]; // one export
         section.push(name.len() as u8);
         section.extend_from_slice(name);
@@ -684,8 +684,8 @@ mod tests {
         module.extend_from_slice(&section);
         let good = dir.join("good.wasm");
         fs::write(&good, &module).expect("write");
-        assert!(wasm_exports(&good, "lm_abi_version").expect("readable"));
-        assert!(!wasm_exports(&good, "lm_cron").expect("readable"));
+        assert!(wasm_exports(&good, "ddd_abi_version").expect("readable"));
+        assert!(!wasm_exports(&good, "ddd_cron").expect("readable"));
 
         let _ = fs::remove_dir_all(&dir);
     }

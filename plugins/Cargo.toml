@@ -22,7 +22,7 @@ license = "MIT OR Apache-2.0"
 rust-version = "1.90"
 
 [workspace.dependencies]
-life-manager-plugin-sdk = { path = "../backend/crates/plugin-sdk" }
+ddd-plugin-sdk = { path = "../backend/crates/plugin-sdk" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 

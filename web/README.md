@@ -1,6 +1,6 @@
-# `web/` — Life Manager kernel and PWA
+# `web/` — ddd kernel and PWA
 
-The client half of Life Manager: the offline-first substrate of **M2** (projection store,
+The client half of ddd: the offline-first substrate of **M2** (projection store,
 sync client, local query engine, the shared Rust core as Wasm) and the microkernel
 frontend of **M3** (the `@kernel` contract, the plugin loader, the PWA).
 
@@ -80,7 +80,7 @@ APP_ORIGIN=http://localhost:8080     # its own origin, or the socket is refused 
 
 The dev server proxies `/api` **including the WebSocket**, so the browser sees one
 origin: cookies, the `Origin` allowlist and the sync socket all behave the way they
-will in production. Point it elsewhere with `LM_SERVER=http://host:port` — and note
+will in production. Point it elsewhere with `DDD_SERVER=http://host:port` — and note
 that the **harness and the Playwright config read the same variable**, so a server
 on a non-default port needs it exported for Vite *and* for whatever drives the
 browser, or the page loads and every `/api` call 404s.
@@ -119,7 +119,7 @@ wasm target and no `rustup` to add one).
 1. **Browser floor, then tokens.** An import-map-less browser gets a readable message
    (SPEC §8). Then the kernel's default light/dark tokens are painted onto
    `:root` *before React* — the boot screen, the auth gate and the boot-failure screen
-   are written in `--lm-*`, and they render before any plugin (or the theme layer) exists.
+   are written in `--ddd-*`, and they render before any plugin (or the theme layer) exists.
 2. **Session.** `GET /api/auth/me`; no session ⇒ the auth gate. A cookie session for a
    browser, a bearer token for the Flutter shell (SPEC §5.2) — and the token is read and
    stored **only** inside the shell, because a browser's credential is the HTTP-only cookie
@@ -295,8 +295,8 @@ registration past the first user is invite-only (SPEC §5.1) — with different
 default accounts, the first tool to run would claim the first-user slot and lock
 the others out of that database permanently.
 
-Override with `LM_EMAIL`/`LM_PASSWORD` (harness, also honoured by the smoke) or
-`LM_SMOKE_EMAIL`/`LM_SMOKE_PASSWORD` (Playwright only). Pointed at a workspace
+Override with `DDD_EMAIL`/`DDD_PASSWORD` (harness, also honoured by the smoke) or
+`DDD_SMOKE_EMAIL`/`DDD_SMOKE_PASSWORD` (Playwright only). Pointed at a workspace
 whose first user is somebody else, both fail with the refusal the server gave
 rather than a bare timeout.
 
@@ -305,7 +305,7 @@ rather than a bare timeout.
 ```bash
 cd ..                             # repo root
 docker compose up -d --wait mongo
-cargo build --manifest-path backend/Cargo.toml --bin life-manager
+cargo build --manifest-path backend/Cargo.toml --bin ddd
 mise run web-build                # bundle + base plugins + kernel.d.ts
 node web/scripts/build-examples.mjs
 cd web && npm run e2e:app
@@ -331,10 +331,10 @@ break.
 | `list-alignment.spec.ts` | Where list text actually lands, measured: a task's row starts at the body text margin, its text lines up with a bullet's, and the step is one gutter at every depth. Plus the document list not moving under a condition that was refused. |
 | `zz-folder-tree.spec.ts` | The folder tree as a file manager, checked against the **stored text**: a folder move re-prefixes every document inside it by one splice each and leaves a bystander byte-identical; a drop on Root removes the `path` line and nothing else; a folder is created empty, renamed inline and filled; delete goes to the parent by splice or to Trash and restores intact; the same move happens at 390 px through the sheet, because HTML5 drag and drop does not fire from touch; and a machine-owned document is refused a folder, because the tree's query excluding one never protected the write. It fails if anything opens a native dialog. **`zz-` so it runs last:** it adds documents to the shared workspace, and earlier specs assert on workspace-wide counts. |
 
-Notes for running it: `LM_APP` points the suite at a server you started yourself (and
+Notes for running it: `DDD_APP` points the suite at a server you started yourself (and
 `webServer` then reuses it — which also means the database is *not* dropped, so a
-repeatable run wants a fresh server). `LM_E2E_PORT`, `LM_E2E_DB`, `LM_E2E_PLUGINS` and
-`LM_E2E_KEEP_DB=1` tune the launcher. Service workers are blocked in this suite: they add
+repeatable run wants a fresh server). `DDD_E2E_PORT`, `DDD_E2E_DB`, `DDD_E2E_PLUGINS` and
+`DDD_E2E_KEEP_DB=1` tune the launcher. Service workers are blocked in this suite: they add
 nothing to these journeys and their immutable plugin cache makes rebuilds lie.
 
 Interfaces, file ownership and the rules for filling this scaffold in are in

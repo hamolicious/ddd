@@ -1,4 +1,4 @@
-//! `lm plugin new` — a plugin project that builds with the base distribution's tooling
+//! `ddd plugin new` — a plugin project that builds with the base distribution's tooling
 //! and type-checks against the server it targets.
 //!
 //! ```text
@@ -9,7 +9,7 @@
 //! ├── vite.config.mjs
 //! ├── src/index.tsx, src/style.css
 //! ├── tools/                the repository's reference Vite config, copied
-//! ├── types/                fetched from the server (`lm plugin types`)
+//! ├── types/                fetched from the server (`ddd plugin types`)
 //! └── backend/              with --backend: the Rust half
 //! ```
 
@@ -66,14 +66,14 @@ pub struct NewArgs {
     /// instead of git.
     #[arg(long, value_name = "PATH", conflicts_with = "sdk_git")]
     pub sdk: Option<PathBuf>,
-    /// The git repository to take the plugin SDK from [default: the one `lm` was built
+    /// The git repository to take the plugin SDK from [default: the one `ddd` was built
     /// from, at the commit it was built from].
     #[arg(long, value_name = "URL")]
     pub sdk_git: Option<String>,
-    /// The Life Manager server the plugin targets, e.g. `https://notes.example.com`. With
+    /// The ddd server the plugin targets, e.g. `https://notes.example.com`. With
     /// it, types/ is filled in now and bare `--dep <id>` ranges are resolved; without it,
     /// nothing is fetched.
-    #[arg(long, env = "LM_SERVER")]
+    #[arg(long, env = "DDD_SERVER")]
     pub server: Option<String>,
 }
 
@@ -180,7 +180,7 @@ fn resolve_dependencies(args: &NewArgs, server: Option<&Server>) -> Result<Map<S
     Ok(out)
 }
 
-/// The `life-manager-plugin-sdk` dependency, as a TOML inline table.
+/// The `ddd-plugin-sdk` dependency, as a TOML inline table.
 fn sdk_dependency(args: &NewArgs) -> Result<String> {
     let table = if let Some(dir) = &args.sdk {
         let dir = dir
@@ -261,7 +261,7 @@ fn package(args: &NewArgs) -> Result<Value> {
             "build": build,
             "watch": "vite build --watch",
             "check": check,
-            "types": "lm plugin types",
+            "types": "ddd plugin types",
         },
         "devDependencies": dev_dependencies,
     }))

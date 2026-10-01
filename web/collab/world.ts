@@ -37,7 +37,7 @@ export interface World {
 }
 
 export async function world(port: number): Promise<World> {
-  const server = await startServer({ port, database: `life_manager_collab_${port}` });
+  const server = await startServer({ port, database: `ddd_collab_${port}` });
   const aliceToken = await authenticate(server.url, ALICE.email, ALICE.password);
   const rest = new RestClient(server.url, aliceToken);
   await ensureAccount(server.url, rest, BOB);

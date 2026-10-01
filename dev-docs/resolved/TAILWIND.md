@@ -17,18 +17,18 @@ obvious, so they are stated up front:
    puts them in `@layer utilities`, and **unlayered CSS beats layered CSS regardless of
    specificity or order**. The app shell's `styles.css` styles bare `button`, `input`,
    `a` and `summary` unlayered — so a layered `.bg-accent` on a `<button>` silently loses
-   to `button { background: var(--lm-bg-raised) }`. Verified in a browser: layered
+   to `button { background: var(--ddd-bg-raised) }`. Verified in a browser: layered
    utilities computed to the app's 6 px radius / white background / 1 px border; the same
    declarations unlayered computed to the utility's values.
-2. **Every plugin needs its own `prefix()` — and it must never be `lm`.** *(Revised
+2. **Every plugin needs its own `prefix()` — and it must never be `ddd`.** *(Revised
    2026-09-26; this document originally said the opposite, see §5.)* Plugin stylesheets
    are compiled separately and linked into one document, so unprefixed utilities are
    shared names, and a stylesheet linked later re-declares them after an earlier
    plugin's variants and longhands. The build now prefixes each plugin (`folders:flex`,
    `folders:compact:gap-1`) with its id minus everything but `a-z`, or
-   `"x-tailwind": { "prefix": "…" }`. `lm` stays forbidden: the prefix also names the
-   emitted theme variables (`--<prefix>-*`), and `prefix(lm)` emits
-   `:root { --lm-radius-lg: var(--lm-radius-lg); … }` — self-referential custom
+   `"x-tailwind": { "prefix": "…" }`. `ddd` stays forbidden: the prefix also names the
+   emitted theme variables (`--<prefix>-*`), and `prefix(ddd)` emits
+   `:root { --ddd-radius-lg: var(--ddd-radius-lg); … }` — self-referential custom
    properties that **unset the kernel's own tokens for the whole document**.
 
 ---
@@ -37,21 +37,21 @@ obvious, so they are stated up front:
 
 Three facts, from the code:
 
-- `plugins/base/_shared/vite.plugin-config.mjs` — the `lm-plugin-package` plugin's
+- `plugins/base/_shared/vite.plugin-config.mjs` — the `ddd-plugin-package` plugin's
   `closeBundle` hook does `copyFileSync(<root>/src/style.css, <out>/frontend/style.css)`.
   **Vite never sees the CSS**: it is not imported by the module, there is no PostCSS
   pass, no transform, nothing. That is deliberate (the file's own comment: *"`style.css`
   is copied, not imported"*) and it is the one thing Tailwind has to change.
 - `web/app/src/loader/loader.ts:176` — `linkStylesheet()` appends one
-  `<link rel="stylesheet" data-lm-plugin="<id>">` per plugin at activation, in
+  `<link rel="stylesheet" data-ddd-plugin="<id>">` per plugin at activation, in
   topological order, *after* the app's own bundled `styles.css`.
-- `web/kernel/src/runtime/theme.ts` — `writeTokens()` sets the 25 `--lm-*` custom
+- `web/kernel/src/runtime/theme.ts` — `writeTokens()` sets the 25 `--ddd-*` custom
   properties as **inline styles on `document.documentElement`**, plus `color-scheme` and
-  `data-lm-scheme="light|dark"`. Themes are token *layers* over that; a custom theme is a
+  `data-ddd-scheme="light|dark"`. Themes are token *layers* over that; a custom theme is a
   different set of values for the same names.
 
-So the house idiom is: prefixed classes, every value a `var(--lm-*)`, themes for free.
-`grep` says no base stylesheet ever reads `data-lm-scheme` — dark mode is *entirely* the
+So the house idiom is: prefixed classes, every value a `var(--ddd-*)`, themes for free.
+`grep` says no base stylesheet ever reads `data-ddd-scheme` — dark mode is *entirely* the
 token values changing underneath. That matters in §5.
 
 Current cost of that idiom, for reference (14 base plugins, source bytes / gzip):
@@ -73,7 +73,7 @@ flowchart LR
     style_in["&lt;plugin&gt;/src/style.css<br/>(hand-written, unchanged)"] -- "@import (appended)" --> tw
     preset["the preset<br/>(in-memory, never on disk)"] --> tw
     tw["@tailwindcss/postcss"] --> out["dist/&lt;id&gt;/&lt;v&gt;/frontend/style.css"]
-    out -- "linked on activation" --> dom["&lt;link data-lm-plugin=…&gt;"]
+    out -- "linked on activation" --> dom["&lt;link data-ddd-plugin=…&gt;"]
 ```
 
 One compile, in the same `closeBundle` hook that copies today. The plugin's own
@@ -91,7 +91,7 @@ The live copy is `plugins/base/_shared/tailwind-preset.mjs` — `tailwindPreset(
 once already. What it sets up: granular `theme.css`/`utilities.css` imports with no
 preflight and no layers, the plugin's `prefix()`, the `dark`, `compact` and `touch`
 variants, `@theme inline` mapping every colour, radius, shadow and font onto the kernel
-tokens, `--spacing` as **half** of `--lm-space` (so the numeric scale reads like stock
+tokens, `--spacing` as **half** of `--ddd-space` (so the numeric scale reads like stock
 Tailwind's 4 px one: `p-2` is one space), and the `tap`/`tap-h` utilities.
 
 What a plugin with the prefix `mp` and the classes `mp:flex mp:gap-2 mp:rounded-lg
@@ -100,15 +100,15 @@ mp:bg-accent mp:p-4` gets, abridged:
 ```css
 /*! tailwindcss v4.3.3 | MIT License | https://tailwindcss.com */
 .mp\:flex        { display: flex; }
-.mp\:gap-2       { gap: calc(calc(var(--lm-space) * 0.5) * 2); }
-.mp\:rounded-lg  { border-radius: var(--lm-radius-lg); }
-.mp\:bg-accent   { background-color: var(--lm-accent); }
-.mp\:p-4         { padding: calc(calc(var(--lm-space) * 0.5) * 4); }
-.mp-root         { color: var(--lm-text); }   /* the plugin's own CSS, appended */
+.mp\:gap-2       { gap: calc(calc(var(--ddd-space) * 0.5) * 2); }
+.mp\:rounded-lg  { border-radius: var(--ddd-radius-lg); }
+.mp\:bg-accent   { background-color: var(--ddd-accent); }
+.mp\:p-4         { padding: calc(calc(var(--ddd-space) * 0.5) * 4); }
+.mp-root         { color: var(--ddd-text); }   /* the plugin's own CSS, appended */
 ```
 
 No preflight, no layers, no `:root` writes for anything token-shaped, and every value is
-a live `var(--lm-*)`. **A Tailwind plugin is theme-aware by construction** — more
+a live `var(--ddd-*)`. **A Tailwind plugin is theme-aware by construction** — more
 reliably than a hand-written one, which can always hardcode a hex.
 
 ### 2b. The build hook — exact
@@ -124,7 +124,7 @@ inside the `node_modules` that contains Tailwind**. The file never has to exist 
 is only used for resolution and source maps.
 
 ```js
-// plugins/base/_shared/vite.plugin-config.mjs — inside the `lm-plugin-package` plugin.
+// plugins/base/_shared/vite.plugin-config.mjs — inside the `ddd-plugin-package` plugin.
 import { createRequire } from "node:module";
 import { join } from "node:path";
 
@@ -143,7 +143,7 @@ async function compileWithTailwind({ root, styleSource, out, resolveFrom }) {
 
   // Resolution base: the `node_modules` that holds tailwindcss. The path is virtual.
   const nodeModules = join(require.resolve("tailwindcss/package.json"), "..", "..");
-  const from = join(nodeModules, ".lm-plugin-entry.css");
+  const from = join(nodeModules, ".ddd-plugin-entry.css");
 
   const entry = [
     tailwindPreset(prefix),                   // §2a; prefix = tailwindPrefix(manifest)
@@ -293,11 +293,11 @@ that brings a framework pays for it, alone, and removing the plugin removes the 
 `web/app/src/styles.css` is unlayered and styles bare elements:
 
 ```css
-button { min-height: var(--lm-tap-target); border: 1px solid var(--lm-border-strong);
-         background: var(--lm-bg-raised); border-radius: var(--lm-radius); … }
-input  { min-height: var(--lm-tap-target); border: 1px solid var(--lm-border); … }
-a      { color: var(--lm-link); }
-summary{ min-height: var(--lm-tap-target); … }
+button { min-height: var(--ddd-tap-target); border: 1px solid var(--ddd-border-strong);
+         background: var(--ddd-bg-raised); border-radius: var(--ddd-radius); … }
+input  { min-height: var(--ddd-tap-target); border: 1px solid var(--ddd-border); … }
+a      { color: var(--ddd-link); }
+summary{ min-height: var(--ddd-tap-target); … }
 ```
 
 Plugin stylesheets are appended to `<head>` *after* that. Tailwind's preflight zeroes
@@ -352,7 +352,7 @@ base-distribution migration proved otherwise, and the build now prefixes every p
   value wins **for both**. The blast radius is a shade or a font-size, never layout or
   structure, and it needs two plugins, two Tailwind versions and a changed constant to
   fire. Mitigations, in order: the preset maps everything token-shaped with `@theme
-  inline` so nothing `--lm-*`-derived is ever written globally (measured: a typical
+  inline` so nothing `--ddd-*`-derived is ever written globally (measured: a typical
   plugin's entire `:root` block is 2–4 declarations); pin the Tailwind version in the
   preset's docs the way `peerLibraries` pins the runtime layer; and an author who wants
   certainty can prefix. *(Now moot: the build prefixes every plugin, and prefixed theme
@@ -367,19 +367,19 @@ base-distribution migration proved otherwise, and the build now prefixes every p
 ### `prefix()` — the trap, again
 
 Stated at the top and repeated because it is the natural first thing an implementer will
-reach for: **v4's prefix renames theme variables to `--<prefix>-*`.** `prefix(lm)`
-therefore emits `:root { --lm-radius-lg: var(--lm-radius-lg); --lm-shadow-1:
-var(--lm-shadow-1); … }` — a cycle that invalidates the kernel's tokens document-wide.
+reach for: **v4's prefix renames theme variables to `--<prefix>-*`.** `prefix(ddd)`
+therefore emits `:root { --ddd-radius-lg: var(--ddd-radius-lg); --ddd-shadow-1:
+var(--ddd-shadow-1); … }` — a cycle that invalidates the kernel's tokens document-wide.
 Measured output, in full:
 
 ```css
 @layer theme {
   :root, :host {
-    --lm-font-sans: var(--lm-font-sans);
-    --lm-font-mono: var(--lm-font-mono);
-    --lm-radius-lg: var(--lm-radius-lg);
-    --lm-shadow-1: var(--lm-shadow-1);
-    --lm-shadow-2: var(--lm-shadow-2);
+    --ddd-font-sans: var(--ddd-font-sans);
+    --ddd-font-mono: var(--ddd-font-mono);
+    --ddd-radius-lg: var(--ddd-radius-lg);
+    --ddd-shadow-1: var(--ddd-shadow-1);
+    --ddd-shadow-2: var(--ddd-shadow-2);
   }
 }
 ```
@@ -390,12 +390,12 @@ lowercase ASCII letters only (`The prefix "lm7" is invalid`), so plugin ids with
 or digits cannot be used as one directly. *Revised conclusion:* the build sets one per
 plugin anyway — the collisions above are worse than the longer class names — deriving it
 from the id with everything but `a-z` removed (`doc-list` → `doclist`) or taking
-`"x-tailwind": { "prefix": "…" }`, and refusing `lm` (`tailwindPrefix` in the preset).
+`"x-tailwind": { "prefix": "…" }`, and refusing `ddd` (`tailwindPrefix` in the preset).
 
 ### Dark mode and custom themes
 
 The kernel's dark mode is *values*, not selectors: `ThemeController` rewrites the same 25
-`--lm-*` properties on `<html>` and sets `data-lm-scheme`. No base stylesheet reads that
+`--ddd-*` properties on `<html>` and sets `data-ddd-scheme`. No base stylesheet reads that
 attribute. So with the token map in place, **`dark:` is almost never the right tool** —
 `bg-bg-raised text-text` is already correct in both schemes, in the kernel default themes
 and in any custom theme a `themes.theme` contribution registers. Writing
@@ -408,7 +408,7 @@ explicit preference overrides the OS, and `prefers-color-scheme` would disagree 
 rest of the page:
 
 ```css
-@custom-variant dark (&:where([data-lm-scheme="dark"], [data-lm-scheme="dark"] *));
+@custom-variant dark (&:where([data-ddd-scheme="dark"], [data-ddd-scheme="dark"] *));
 ```
 
 ### Specificity against existing plugin CSS
@@ -446,7 +446,7 @@ a new test harness.
 
 **Build-time Tailwind v4 via `@tailwindcss/postcss`, invoked from the existing
 `closeBundle` hook, opt-in per plugin through `pluginConfig({ tailwind: true })`,
-utilities-only, unlayered, a per-plugin prefix (never `lm`), tokens mapped with
+utilities-only, unlayered, a per-plugin prefix (never `ddd`), tokens mapped with
 `@theme inline`.** The plugin
 contract does not move: one ES module, blessed runtime external, `style.css` a sibling
 file linked on activation. The only sentence in SPEC §6.4 that needs touching is the CSS
@@ -469,11 +469,11 @@ bullet, and only to add a clause.
 5. New `plugins/base/_shared/vite.config.tailwind.example.mjs` — §3, verbatim.
    **~30 lines.**
 6. A test that compiles a fixture and asserts the invariants that will otherwise rot:
-   no `@layer`, no preflight (`button` appears in no selector), `var(--lm-` present,
+   no `@layer`, no preflight (`button` appears in no selector), `var(--ddd-` present,
    `:root` block under 10 declarations, `.tap` present. **~70 lines.** This is the piece
    worth insisting on — every trap in §5 is silent.
 7. `plugins/base/README.md` — a "Tailwind, if you want it" section: the recipe, the
-   three rules (tokens not `bg-white`, `min-w-0`, don't prefix `lm`), and the statement
+   three rules (tokens not `bg-white`, `min-w-0`, don't prefix `ddd`), and the statement
    that base plugins do not use it. **~35 lines.**
 8. `SPEC.md` §6.4 — extend the CSS bullet: *"per-plugin class prefix convention +
    `style.css` linked on activation; no shadow DOM in v1. The reference build config can
@@ -492,7 +492,7 @@ the invariant test.**
 - **Preflight, at any opt-in level.** There is no correct per-plugin reset.
 - **A shared utilities layer, an import-map entry, or any server-side CSS compilation.**
   §4.
-- **Unprefixed utilities.** §5. The build always prefixes; `lm` is forbidden.
+- **Unprefixed utilities.** §5. The build always prefixes; `ddd` is forbidden.
 - **Runtime/CDN Tailwind (the browser build).** It scans the DOM and would style other
   plugins' markup — a plugin reaching outside itself, which the prefix convention exists
   to prevent.
@@ -507,7 +507,7 @@ the invariant test.**
 Not out of conservatism — three specific reasons:
 
 1. **The base distribution is the reference for writing a plugin.** Fourteen plugins in
-   one idiom — prefixed classes, every value a `var(--lm-*)` — is what makes reading
+   one idiom — prefixed classes, every value a `var(--ddd-*)` — is what makes reading
    `folders/src/style.css` teach you the system. Two idioms across fourteen plugins
    teaches you that there are two idioms.
 2. **The stylesheets carry the reasoning.** `settings-nav { min-width: 0 }` with eight
@@ -537,14 +537,14 @@ Every class carries the plugin's prefix; `p:` below stands for yours (`folders:`
 
 | you want | write | compiles to |
 |---|---|---|
-| a surface | `p:bg-bg-raised p:text-text` | `var(--lm-bg-raised)` / `var(--lm-text)` |
+| a surface | `p:bg-bg-raised p:text-text` | `var(--ddd-bg-raised)` / `var(--ddd-text)` |
 | the accent button | `p:bg-accent p:text-accent-text` | follows every theme |
-| one space unit | `p:gap-2`, `p:p-4` (two units) | `--lm-space`, `* 2` — a step is half a space |
-| half a unit | `p:gap-1` | `calc(var(--lm-space) * 0.5)` |
-| the house radius | `p:rounded`, `p:rounded-lg` | `var(--lm-radius)`, `var(--lm-radius-lg)` |
-| a 44 px tap target | `p:tap`, `p:tap-h` | `var(--lm-tap-target)` |
+| one space unit | `p:gap-2`, `p:p-4` (two units) | `--ddd-space`, `* 2` — a step is half a space |
+| half a unit | `p:gap-1` | `calc(var(--ddd-space) * 0.5)` |
+| the house radius | `p:rounded`, `p:rounded-lg` | `var(--ddd-radius)`, `var(--ddd-radius-lg)` |
+| a 44 px tap target | `p:tap`, `p:tap-h` | `var(--ddd-tap-target)` |
 | the mobile branch | `p:compact:flex-col` | `COMPACT_MEDIA_QUERY` |
 | no hover (touch, any width) | `p:touch:visible` | `@media (hover: none)` |
-| dark-only, rarely | `p:dark:border-border-strong` | `[data-lm-scheme="dark"]` |
+| dark-only, rarely | `p:dark:border-border-strong` | `[data-ddd-scheme="dark"]` |
 | to beat your own CSS | `p:p-0!` | `!important` |
 | not to overflow at 390 px | `p:min-w-0` on flex/grid children | — |

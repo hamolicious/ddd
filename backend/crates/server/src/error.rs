@@ -9,7 +9,7 @@
 use axum::Json;
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use life_manager_core::CoreError;
+use ddd_core::CoreError;
 use serde::Serialize;
 use serde_json::json;
 use thiserror::Error;

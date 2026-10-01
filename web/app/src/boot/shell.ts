@@ -33,7 +33,7 @@ import {
 } from "@kernel/runtime/index.js";
 
 /** Where a shell's bearer token lives when the bridge has no keystore yet (SPEC §5.2). */
-const SHELL_TOKEN_KEY = "life-manager.bearer";
+const SHELL_TOKEN_KEY = "ddd.bearer";
 
 /**
  * The event the shell fires when it has **verified and staged** a new bundle
@@ -43,7 +43,7 @@ const SHELL_TOKEN_KEY = "life-manager.bearer";
  *
  * The shell does this after `UpdateOutcome.staged` — `shellUpdateReadyScript` in
  * `app/lib/shell/webview_host.dart` evaluates
- * `window.dispatchEvent(new CustomEvent("lm-shell-update-ready", { detail: { bundleVersion } }))`
+ * `window.dispatchEvent(new CustomEvent("ddd-shell-update-ready", { detail: { bundleVersion } }))`
  * in the webview. `window.lmShellUpdateReady({ bundleVersion })` is an accepted alternative
  * for a shell that would rather call a function; both land on the same notice.
  *
@@ -56,7 +56,7 @@ const SHELL_TOKEN_KEY = "life-manager.bearer";
  * Neither spelling is required for the update to install: promotion happens at the next
  * launch either way, and this only tells the user why relaunching is worth doing.
  */
-export const SHELL_UPDATE_EVENT = "lm-shell-update-ready";
+export const SHELL_UPDATE_EVENT = "ddd-shell-update-ready";
 
 export interface ShellUpdateReady {
   /** The staged `bundle_version`, when the shell cares to say. */

@@ -272,7 +272,7 @@ export default function activate(kernel: Kernel): void {
 
   addAction({
     id: "folder-style.edit",
-    target: "lm/document",
+    target: "ddd/document",
     order: 50,
     items: (target) => [{ id: "edit", label: "Color and icon…", run: () => edit(target.id, target.element) }],
   });

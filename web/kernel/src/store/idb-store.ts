@@ -4,7 +4,7 @@
  * Schema (one store for the projection, one tiny store for metadata):
  *
  * ```text
- * db  "life-manager"            version DB_VERSION
+ * db  "ddd"            version DB_VERSION
  *   store "projection"          keyPath "id"
  *     index "seq"               on "seq"          (feed order, watermark repair)
  *     index "deleted"           on "deleted"     (Trash view)
@@ -42,7 +42,7 @@ import {
   type SyncCheckpoint,
 } from "./projection-store.js";
 
-export const DB_NAME = "life-manager";
+export const DB_NAME = "ddd";
 export const DB_VERSION = 1;
 export const STORE_PROJECTION = "projection";
 export const STORE_META = "meta";
@@ -82,7 +82,7 @@ export interface StoredDocState {
   readonly version?: string;
 }
 
-export interface LifeManagerDb extends DBSchema {
+export interface DddDb extends DBSchema {
   projection: {
     key: string;
     value: StoredRow;
@@ -93,7 +93,7 @@ export interface LifeManagerDb extends DBSchema {
 }
 
 export class IdbProjectionStore implements ProjectionStore {
-  #db: IDBPDatabase<LifeManagerDb> | undefined;
+  #db: IDBPDatabase<DddDb> | undefined;
   readonly #listeners = new Set<StoreListener>();
   #channel: BroadcastChannel | undefined;
 
@@ -137,7 +137,7 @@ export class IdbProjectionStore implements ProjectionStore {
 
   async open(): Promise<void> {
     this.#openChannel();
-    this.#db ??= await openDB<LifeManagerDb>(this.name, DB_VERSION, {
+    this.#db ??= await openDB<DddDb>(this.name, DB_VERSION, {
       upgrade(db) {
         if (!db.objectStoreNames.contains(STORE_PROJECTION)) {
           const rows = db.createObjectStore(STORE_PROJECTION, { keyPath: "id" });
@@ -169,7 +169,7 @@ export class IdbProjectionStore implements ProjectionStore {
     this.#channel = undefined;
   }
 
-  get db(): IDBPDatabase<LifeManagerDb> {
+  get db(): IDBPDatabase<DddDb> {
     if (!this.#db) throw new Error("IdbProjectionStore.open() has not been awaited");
     return this.#db;
   }

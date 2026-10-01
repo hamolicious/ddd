@@ -73,7 +73,7 @@ pub async fn connect(config: &Config) -> anyhow::Result<(Client, Database)> {
         .await
         .context("MONGO_URI is not a valid MongoDB connection string")?;
 
-    options.app_name = Some(format!("life-manager/{}", crate::VERSION));
+    options.app_name = Some(format!("ddd/{}", crate::VERSION));
     options.server_selection_timeout = Some(SERVER_SELECTION_TIMEOUT);
     options.connect_timeout = Some(CONNECT_TIMEOUT);
     options.max_pool_size = Some(MAX_POOL_SIZE);

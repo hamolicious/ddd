@@ -34,16 +34,16 @@ export interface SessionHostOptions {
  * live in IndexedDB under the sync protocol), and a screen that does not mark a stale
  * answer must not be handed one. Deleted on sign-out.
  */
-export const API_CACHE = "life-manager:api";
-export const OFFLINE_COPY_HEADER = "x-life-manager-offline-copy";
-export const CACHED_AT_HEADER = "x-life-manager-cached-at";
+export const API_CACHE = "ddd:api";
+export const OFFLINE_COPY_HEADER = "x-ddd-offline-copy";
+export const CACHED_AT_HEADER = "x-ddd-cached-at";
 
 async function readOfflineCopy(url: string): Promise<Response | undefined> {
   try {
     const hit = await (await caches.open(API_CACHE)).match(url);
     if (!hit) return undefined;
     const headers = new Headers(hit.headers);
-    headers.set(CACHED_AT_HEADER, hit.headers.get("x-life-manager-stored-at") ?? "");
+    headers.set(CACHED_AT_HEADER, hit.headers.get("x-ddd-stored-at") ?? "");
     return new Response(await hit.blob(), { status: hit.status, statusText: hit.statusText, headers });
   } catch {
     return undefined;
@@ -53,7 +53,7 @@ async function readOfflineCopy(url: string): Promise<Response | undefined> {
 async function writeOfflineCopy(url: string, response: Response): Promise<void> {
   try {
     const headers = new Headers(response.headers);
-    headers.set("x-life-manager-stored-at", new Date().toISOString());
+    headers.set("x-ddd-stored-at", new Date().toISOString());
     const copy = new Response(await response.blob(), { status: response.status, statusText: response.statusText, headers });
     await (await caches.open(API_CACHE)).put(url, copy);
   } catch {

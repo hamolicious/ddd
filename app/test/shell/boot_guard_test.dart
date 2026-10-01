@@ -11,9 +11,9 @@ library;
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:life_manager_shell/bundle/manifest.dart';
-import 'package:life_manager_shell/bundle/store.dart';
-import 'package:life_manager_shell/shell/boot_guard.dart';
+import 'package:ddd_shell/bundle/manifest.dart';
+import 'package:ddd_shell/bundle/store.dart';
+import 'package:ddd_shell/shell/boot_guard.dart';
 
 import '../bundle/bundle_fixtures.dart';
 
@@ -168,7 +168,7 @@ void main() {
     late BootGuard guard;
 
     setUp(() {
-      root = Directory.systemTemp.createTempSync('lm-boot');
+      root = Directory.systemTemp.createTempSync('ddd-boot');
       store = BundleStore(root);
       guard = BootGuard(store);
     });

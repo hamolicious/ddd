@@ -67,7 +67,7 @@ describe("persistence", () => {
   });
 
   it("ignores a corrupt stored value", () => {
-    globalThis.localStorage?.setItem("lm.shell.sidebar-width", "not-a-number");
+    globalThis.localStorage?.setItem("ddd.shell.sidebar-width", "not-a-number");
     expect(storedSidebarWidth()).toBeUndefined();
   });
 });

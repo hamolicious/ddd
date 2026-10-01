@@ -9,7 +9,7 @@
  * months) is a setting saved with the search.
  *
  * The axis scrolls sideways inside its box on a narrow screen: a column never gets too
- * narrow to read. Clicking a note opens it; right-clicking opens its menu (an `lm/document`).
+ * narrow to read. Clicking a note opens it; right-clicking opens its menu (an `ddd/document`).
  */
 
 import { useMemo, useState } from "react";
@@ -158,7 +158,7 @@ function Bar({
   const when = item.point
     ? item.start.toLocaleString()
     : `${item.start.toLocaleDateString()} – ${new Date(item.end.getTime() - 1).toLocaleDateString()}`;
-  const marked = mark("lm/document", item.row.id, { label: item.row.title });
+  const marked = mark("ddd/document", item.row.id, { label: item.row.title });
   return item.point ? (
     <button
       type="button"
@@ -174,7 +174,7 @@ function Bar({
   ) : (
     <button
       type="button"
-      className="timeline:absolute timeline:top-1 timeline:h-5 timeline:min-h-0! timeline:min-w-1.5 timeline:truncate timeline:rounded timeline:border-0! timeline:bg-accent-subtle! timeline:px-1.5! timeline:py-0! timeline:text-left timeline:text-xs timeline:leading-5 timeline:text-text timeline:shadow-[inset_3px_0_0_var(--lm-accent)]"
+      className="timeline:absolute timeline:top-1 timeline:h-5 timeline:min-h-0! timeline:min-w-1.5 timeline:truncate timeline:rounded timeline:border-0! timeline:bg-accent-subtle! timeline:px-1.5! timeline:py-0! timeline:text-left timeline:text-xs timeline:leading-5 timeline:text-text timeline:shadow-[inset_3px_0_0_var(--ddd-accent)]"
       style={{ left: `${left * 100}%`, width: `${Math.max(0, right - left) * 100}%` }}
       title={`${item.row.title} · ${when}`}
       onClick={() => onOpen(item.row.id)}

@@ -1,5 +1,5 @@
-name: life_manager_shell
-description: "Life Manager — Android shell: webview, verified bundle updater, capability bridge (SPEC §7)."
+name: ddd_shell
+description: "ddd — Android shell: webview, verified bundle updater, capability bridge (SPEC §7)."
 publish_to: 'none'
 version: 1.0.0+1
 

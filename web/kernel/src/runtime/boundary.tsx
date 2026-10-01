@@ -66,17 +66,17 @@ export class PluginErrorBoundary extends Component<BoundaryProps, BoundaryState>
 export function DefaultFallback({ error, pluginId }: BoundaryFallbackProps): ReactNode {
   return (
     <span
-      className="lm-plugin-failed"
+      className="ddd-plugin-failed"
       role="status"
       title={error.message}
       style={{
         display: "inline-block",
         maxWidth: "100%",
         padding: "2px 6px",
-        borderRadius: "var(--lm-radius)",
-        border: "1px solid var(--lm-danger)",
-        color: "var(--lm-danger)",
-        background: "var(--lm-bg-subtle)",
+        borderRadius: "var(--ddd-radius)",
+        border: "1px solid var(--ddd-danger)",
+        color: "var(--ddd-danger)",
+        background: "var(--ddd-bg-subtle)",
         font: "inherit",
         fontSize: "0.85em",
         overflow: "hidden",

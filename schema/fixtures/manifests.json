@@ -17,12 +17,12 @@
       "hot": true,
       "consumes": {
         "index": {
-          "protocol": "lm/workspace-index@^1.0"
+          "protocol": "ddd/workspace-index@^1.0"
         }
       },
       "provides": {
         "view": {
-          "protocol": "lm/main.view@1.0.0"
+          "protocol": "ddd/main.view@1.0.0"
         }
       },
       "backend": {
@@ -96,7 +96,7 @@
       "id": "demo",
       "version": "1.0.0",
       "kernel": "^3.0",
-      "provides": "lm/editor@2.0.0"
+      "provides": "ddd/editor@2.0.0"
     },
     "problems": [
       "provides"
@@ -115,14 +115,14 @@
       },
       "optionalDependencies": {
         "icons": 2,
-        "lm/x": "*"
+        "ddd/x": "*"
       }
     },
     "problems": [
       "dependencies.Bad_Id",
       "dependencies.router",
       "optionalDependencies.icons",
-      "optionalDependencies.lm/x"
+      "optionalDependencies.ddd/x"
     ]
   },
   {
@@ -167,7 +167,7 @@
       "version": "2.0.0",
       "name": "Graph view",
       "description": "Notes and links.",
-      "author": "Life Manager base distribution",
+      "author": "ddd base distribution",
       "license": "MIT OR Apache-2.0",
       "x-tailwind": {
         "prefix": "graph"

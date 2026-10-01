@@ -2,35 +2,35 @@
  * The kernel's own stylesheet: the reset, the frame, the boot screens, the auth
  * gate, and the safe-mode manager. Nothing else.
  *
- * Every value comes from a kernel token (`--lm-*`), which the runtime writes onto
+ * Every value comes from a kernel token (`--ddd-*`), which the runtime writes onto
  * `:root` before React renders — so a theme override reaches this file for free, and
  * a boot that never loaded a plugin is still legible in light and dark.
  *
  * Plugins bring their own `style.css`, linked on activation, and prefix their
- * classes (SPEC §6.4). The `lm-` prefix here is the kernel's.
+ * classes (SPEC §6.4). The `ddd-` prefix here is the kernel's.
  */
 
 /*
  * Two device tokens the kernel publishes beside the theme tokens, because every
  * surface that fills the screen needs them and none of them can derive them alone.
  *
- * `--lm-safe-*` — `index.html` sets `viewport-fit=cover`, which lays the page out under
+ * `--ddd-safe-*` — `index.html` sets `viewport-fit=cover`, which lays the page out under
  * the Android status bar and under the gesture bar. Anything anchored to a screen edge
  * (the navbar, the drawer, the palette, the bottom-most scroller) has to pay the inset
  * back or its first or last row is under system chrome. `env()` is 0 everywhere that
  * has no insets, including every desktop browser and Playwright, so these are free.
  *
- * `--lm-viewport-height` — the visible height, kept current from `visualViewport` by
+ * `--ddd-viewport-height` — the visible height, kept current from `visualViewport` by
  * `boot/viewport.ts`. The default is what the app used before it existed, so a browser
  * without `visualViewport` and a test that never starts the tracker both behave exactly
  * as they did.
  */
 :root {
-  --lm-safe-top: env(safe-area-inset-top, 0px);
-  --lm-safe-right: env(safe-area-inset-right, 0px);
-  --lm-safe-bottom: env(safe-area-inset-bottom, 0px);
-  --lm-safe-left: env(safe-area-inset-left, 0px);
-  --lm-viewport-height: 100vh;
+  --ddd-safe-top: env(safe-area-inset-top, 0px);
+  --ddd-safe-right: env(safe-area-inset-right, 0px);
+  --ddd-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --ddd-safe-left: env(safe-area-inset-left, 0px);
+  --ddd-viewport-height: 100vh;
 }
 
 *,
@@ -47,26 +47,26 @@ body,
 }
 
 body {
-  background: var(--lm-bg);
-  color: var(--lm-text);
-  font-family: var(--lm-font-sans);
+  background: var(--ddd-bg);
+  color: var(--ddd-text);
+  font-family: var(--ddd-font-sans);
   font-size: 15px;
   line-height: 1.5;
   -webkit-text-size-adjust: 100%;
 }
 
 :focus-visible {
-  outline: 2px solid var(--lm-focus-ring);
+  outline: 2px solid var(--ddd-focus-ring);
   outline-offset: 2px;
 }
 
 a {
-  color: var(--lm-link);
+  color: var(--ddd-link);
 }
 
 code,
 pre {
-  font-family: var(--lm-font-mono);
+  font-family: var(--ddd-font-mono);
   font-size: 0.9em;
 }
 
@@ -79,26 +79,26 @@ textarea {
 }
 
 button {
-  min-height: var(--lm-tap-target);
-  padding: 0 calc(var(--lm-space) * 1.5);
-  border: 1px solid var(--lm-border-strong);
-  border-radius: var(--lm-radius);
-  background: var(--lm-bg-raised);
+  min-height: var(--ddd-tap-target);
+  padding: 0 calc(var(--ddd-space) * 1.5);
+  border: 1px solid var(--ddd-border-strong);
+  border-radius: var(--ddd-radius);
+  background: var(--ddd-bg-raised);
   cursor: pointer;
 }
 
 button[type="submit"] {
-  border-color: var(--lm-accent);
-  background: var(--lm-accent);
-  color: var(--lm-accent-text);
+  border-color: var(--ddd-accent);
+  background: var(--ddd-accent);
+  color: var(--ddd-accent-text);
 }
 
 input {
-  min-height: var(--lm-tap-target);
-  padding: 0 calc(var(--lm-space) * 1.25);
-  border: 1px solid var(--lm-border);
-  border-radius: var(--lm-radius);
-  background: var(--lm-bg);
+  min-height: var(--ddd-tap-target);
+  padding: 0 calc(var(--ddd-space) * 1.25);
+  border: 1px solid var(--ddd-border);
+  border-radius: var(--ddd-radius);
+  background: var(--ddd-bg);
 }
 
 /*
@@ -111,162 +111,162 @@ input {
  * triangle with it (no `::marker` is generated on a flex container).
  */
 summary {
-  min-height: var(--lm-tap-target);
-  padding-block: calc((var(--lm-tap-target) - 1.5em) / 2);
+  min-height: var(--ddd-tap-target);
+  padding-block: calc((var(--ddd-tap-target) - 1.5em) / 2);
   cursor: pointer;
 }
 
 /* ---- frame ------------------------------------------------------------- */
 
-.lm-frame {
+.ddd-frame {
   display: flex;
   flex-direction: column;
   /* Not `100%`: on Android the layout viewport keeps its full height while the soft
      keyboard covers the bottom of it (see `boot/viewport.ts`). */
-  height: var(--lm-viewport-height);
+  height: var(--ddd-viewport-height);
 }
 
-.lm-outlet {
+.ddd-outlet {
   flex: 1 1 auto;
   min-height: 0;
 }
 
-.lm-notices {
+.ddd-notices {
   margin: 0;
   padding: 0;
   list-style: none;
-  border-bottom: 1px solid var(--lm-border);
+  border-bottom: 1px solid var(--ddd-border);
 }
 
-.lm-notice {
+.ddd-notice {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--lm-space);
+  gap: var(--ddd-space);
   align-items: center;
-  padding: calc(var(--lm-space) * 0.75) var(--lm-space);
-  background: var(--lm-bg-subtle);
+  padding: calc(var(--ddd-space) * 0.75) var(--ddd-space);
+  background: var(--ddd-bg-subtle);
 }
 
-.lm-notice-warning {
-  border-left: 3px solid var(--lm-warning);
+.ddd-notice-warning {
+  border-left: 3px solid var(--ddd-warning);
 }
 
-.lm-notice-error {
-  border-left: 3px solid var(--lm-danger);
+.ddd-notice-error {
+  border-left: 3px solid var(--ddd-danger);
 }
 
-.lm-notice-info {
-  border-left: 3px solid var(--lm-accent);
+.ddd-notice-info {
+  border-left: 3px solid var(--ddd-accent);
 }
 
-.lm-notice-message {
+.ddd-notice-message {
   flex: 1 1 auto;
 }
 
 /* The strip's dismiss and action controls. A full tap target, not the tap target
    minus 12 px: the strip is what the kernel draws when nothing else is holding the
    mount — the bare recovery screen included — so these are the only controls on it. */
-.lm-notice button {
-  min-width: var(--lm-tap-target);
-  min-height: var(--lm-tap-target);
+.ddd-notice button {
+  min-width: var(--ddd-tap-target);
+  min-height: var(--ddd-tap-target);
 }
 
-.lm-notice-detail pre {
+.ddd-notice-detail pre {
   max-width: 100%;
-  margin: var(--lm-space) 0 0;
+  margin: var(--ddd-space) 0 0;
   overflow-x: auto;
   white-space: pre-wrap;
 }
 
 /* A notice's progress: a bar along the bottom of it, the label under the bar's end. */
-.lm-notice-progress {
+.ddd-notice-progress {
   flex: 1 0 100%;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 2px;
-  background: linear-gradient(var(--lm-border), var(--lm-border)) top / 100% 4px no-repeat;
+  background: linear-gradient(var(--ddd-border), var(--ddd-border)) top / 100% 4px no-repeat;
 }
 
-.lm-notice-progress > span {
+.ddd-notice-progress > span {
   align-self: flex-start;
   height: 4px;
   border-radius: 2px;
-  background: var(--lm-accent);
+  background: var(--ddd-accent);
   transition: width 0.3s ease-out;
 }
 
-.lm-notice-progress > small {
-  color: var(--lm-text-muted);
+.ddd-notice-progress > small {
+  color: var(--ddd-text-muted);
 }
 
 /* ---- boot, auth, empty states ------------------------------------------ */
 
-.lm-boot,
-.lm-auth,
-.lm-empty {
+.ddd-boot,
+.ddd-auth,
+.ddd-empty {
   display: grid;
   place-items: center;
   min-height: 100%;
-  padding: calc(var(--lm-space) * 3 + var(--lm-safe-top))
-    calc(var(--lm-space) * 3 + var(--lm-safe-right))
-    calc(var(--lm-space) * 3 + var(--lm-safe-bottom))
-    calc(var(--lm-space) * 3 + var(--lm-safe-left));
+  padding: calc(var(--ddd-space) * 3 + var(--ddd-safe-top))
+    calc(var(--ddd-space) * 3 + var(--ddd-safe-right))
+    calc(var(--ddd-space) * 3 + var(--ddd-safe-bottom))
+    calc(var(--ddd-space) * 3 + var(--ddd-safe-left));
 }
 
-.lm-boot-inner,
-.lm-auth-form,
-.lm-empty {
+.ddd-boot-inner,
+.ddd-auth-form,
+.ddd-empty {
   width: min(28rem, 100%);
 }
 
-.lm-empty {
+.ddd-empty {
   text-align: left;
 }
 
-.lm-boot-inner progress {
+.ddd-boot-inner progress {
   width: 100%;
 }
 
-.lm-boot-error {
-  padding: var(--lm-space);
-  border: 1px solid var(--lm-danger);
-  border-radius: var(--lm-radius);
-  background: var(--lm-bg-subtle);
-  color: var(--lm-danger);
+.ddd-boot-error {
+  padding: var(--ddd-space);
+  border: 1px solid var(--ddd-danger);
+  border-radius: var(--ddd-radius);
+  background: var(--ddd-bg-subtle);
+  color: var(--ddd-danger);
   overflow-x: auto;
   white-space: pre-wrap;
 }
 
-.lm-auth-form {
+.ddd-auth-form {
   display: grid;
-  gap: calc(var(--lm-space) * 0.75);
-  padding: calc(var(--lm-space) * 3);
-  border: 1px solid var(--lm-border);
-  border-radius: var(--lm-radius-lg);
-  background: var(--lm-bg-raised);
-  box-shadow: var(--lm-shadow-1);
+  gap: calc(var(--ddd-space) * 0.75);
+  padding: calc(var(--ddd-space) * 3);
+  border: 1px solid var(--ddd-border);
+  border-radius: var(--ddd-radius-lg);
+  background: var(--ddd-bg-raised);
+  box-shadow: var(--ddd-shadow-1);
 }
 
-.lm-auth-form h1 {
-  margin: 0 0 var(--lm-space);
+.ddd-auth-form h1 {
+  margin: 0 0 var(--ddd-space);
   font-size: 1.4rem;
 }
 
-.lm-auth-hint {
+.ddd-auth-hint {
   margin: 0;
-  color: var(--lm-text-muted);
+  color: var(--ddd-text-muted);
 }
 
-.lm-auth-error {
+.ddd-auth-error {
   margin: 0;
-  color: var(--lm-danger);
+  color: var(--ddd-danger);
 }
 
-.lm-auth-switch {
+.ddd-auth-switch {
   border: 0;
   background: none;
-  color: var(--lm-link);
+  color: var(--ddd-link);
   text-decoration: underline;
 }
 
@@ -287,66 +287,66 @@ summary {
  * not — which `place-items: center` cannot do, because a centred grid item that
  * overflows overflows in *both* directions.
  */
-.lm-reauth {
+.ddd-reauth {
   position: fixed;
   top: 0;
   inset-inline: 0;
   z-index: 100;
-  height: var(--lm-viewport-height);
+  height: var(--ddd-viewport-height);
   display: flex;
   justify-content: center;
   overflow-y: auto;
-  padding: calc(var(--lm-space) * 3 + var(--lm-safe-top))
-    calc(var(--lm-space) * 3 + var(--lm-safe-right))
-    calc(var(--lm-space) * 3 + var(--lm-safe-bottom))
-    calc(var(--lm-space) * 3 + var(--lm-safe-left));
+  padding: calc(var(--ddd-space) * 3 + var(--ddd-safe-top))
+    calc(var(--ddd-space) * 3 + var(--ddd-safe-right))
+    calc(var(--ddd-space) * 3 + var(--ddd-safe-bottom))
+    calc(var(--ddd-space) * 3 + var(--ddd-safe-left));
   background: rgb(0 0 0 / 55%);
-  background: color-mix(in srgb, var(--lm-bg) 25%, transparent);
+  background: color-mix(in srgb, var(--ddd-bg) 25%, transparent);
   backdrop-filter: blur(2px);
 }
 
-.lm-reauth .lm-auth-form {
+.ddd-reauth .ddd-auth-form {
   width: min(28rem, 100%);
   margin: auto;
 }
 
-.lm-reauth .lm-auth-secondary {
-  border: 1px solid var(--lm-border);
+.ddd-reauth .ddd-auth-secondary {
+  border: 1px solid var(--ddd-border);
   background: transparent;
-  color: var(--lm-text);
+  color: var(--ddd-text);
 }
 
-.lm-reauth input[readonly] {
-  color: var(--lm-text-muted);
-  background: var(--lm-bg-subtle);
+.ddd-reauth input[readonly] {
+  color: var(--ddd-text-muted);
+  background: var(--ddd-bg-subtle);
 }
 
 /* ---- safe mode --------------------------------------------------------- */
 
-.lm-bare {
+.ddd-bare {
   max-width: 60rem;
   margin: 0 auto;
-  padding: calc(var(--lm-space) * 3 + var(--lm-safe-top))
-    calc(var(--lm-space) * 3 + var(--lm-safe-right))
-    calc(var(--lm-space) * 3 + var(--lm-safe-bottom))
-    calc(var(--lm-space) * 3 + var(--lm-safe-left));
+  padding: calc(var(--ddd-space) * 3 + var(--ddd-safe-top))
+    calc(var(--ddd-space) * 3 + var(--ddd-safe-right))
+    calc(var(--ddd-space) * 3 + var(--ddd-safe-bottom))
+    calc(var(--ddd-space) * 3 + var(--ddd-safe-left));
 }
 
 /* Five columns on a recovery screen. Safe mode is reached *because* something is
    already wrong; it must not also be the screen that does not fit. */
-.lm-bare-scroll {
+.ddd-bare-scroll {
   overflow-x: auto;
 }
 
-.lm-bare-table {
+.ddd-bare-table {
   width: 100%;
   border-collapse: collapse;
 }
 
-.lm-bare-table th,
-.lm-bare-table td {
-  padding: calc(var(--lm-space) * 0.75);
-  border-bottom: 1px solid var(--lm-border);
+.ddd-bare-table th,
+.ddd-bare-table td {
+  padding: calc(var(--ddd-space) * 0.75);
+  border-bottom: 1px solid var(--ddd-border);
   text-align: left;
   vertical-align: top;
   overflow-wrap: anywhere;
@@ -355,42 +355,42 @@ summary {
 /* The two ways out, and the only controls above the table. They were 20 px tall on a
    phone — inline links in a paragraph — on the screen someone reaches precisely
    because the normal way in stopped working. */
-.lm-bare header a {
+.ddd-bare header a {
   display: inline-flex;
   align-items: center;
-  min-height: var(--lm-tap-target);
+  min-height: var(--ddd-tap-target);
 }
 
-.lm-bare footer {
-  margin-top: calc(var(--lm-space) * 3);
-  color: var(--lm-text-muted);
+.ddd-bare footer {
+  margin-top: calc(var(--ddd-space) * 3);
+  color: var(--ddd-text-muted);
 }
 
 /* The admin-only write path (PLUGIN-PROTOCOLS §7): Plug in, Roll back. Plain buttons in
    kernel tokens, because there is no plugin UI on this screen to borrow one from. */
-.lm-bare button {
+.ddd-bare button {
   display: inline-flex;
   align-items: center;
-  min-height: var(--lm-tap-target);
-  padding: 0 calc(var(--lm-space) * 1.5);
-  border: 1px solid var(--lm-border);
-  border-radius: var(--lm-radius);
-  background: var(--lm-bg-subtle);
-  color: var(--lm-text);
+  min-height: var(--ddd-tap-target);
+  padding: 0 calc(var(--ddd-space) * 1.5);
+  border: 1px solid var(--ddd-border);
+  border-radius: var(--ddd-radius);
+  background: var(--ddd-bg-subtle);
+  color: var(--ddd-text);
   font: inherit;
   cursor: pointer;
 }
 
-.lm-bare button:disabled {
+.ddd-bare button:disabled {
   cursor: default;
   opacity: 0.55;
 }
 
-.lm-bare td button {
-  margin-inline-start: calc(var(--lm-space) * 0.75);
+.ddd-bare td button {
+  margin-inline-start: calc(var(--ddd-space) * 0.75);
 }
 
-.lm-bare .lm-sr-only {
+.ddd-bare .ddd-sr-only {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -408,18 +408,18 @@ summary {
  * Same two-column shape as `settings`' own `.settings-facts`, so the one kernel-owned
  * section on that screen stops being the one that looks different.
  */
-.lm-shell-facts {
+.ddd-shell-facts {
   display: grid;
   grid-template-columns: max-content 1fr;
-  gap: calc(var(--lm-space) * 0.5) calc(var(--lm-space) * 2);
+  gap: calc(var(--ddd-space) * 0.5) calc(var(--ddd-space) * 2);
   margin: 0;
 }
 
-.lm-shell-facts dt {
-  color: var(--lm-text-muted);
+.ddd-shell-facts dt {
+  color: var(--ddd-text-muted);
 }
 
-.lm-shell-facts dd {
+.ddd-shell-facts dd {
   margin: 0;
   /* A bundle hash and a server URL are both unbreakable words. */
   overflow-wrap: anywhere;
@@ -434,42 +434,42 @@ summary {
  * `pointer: coarse` on it is what keeps a short *desktop* window on the wide layout.
  */
 @media (max-width: 640px), (max-height: 480px) and (pointer: coarse) {
-  .lm-boot,
-  .lm-auth,
-  .lm-empty,
-  .lm-reauth {
-    padding: calc(var(--lm-space) + var(--lm-safe-top))
-      calc(var(--lm-space) + var(--lm-safe-right))
-      calc(var(--lm-space) + var(--lm-safe-bottom))
-      calc(var(--lm-space) + var(--lm-safe-left));
+  .ddd-boot,
+  .ddd-auth,
+  .ddd-empty,
+  .ddd-reauth {
+    padding: calc(var(--ddd-space) + var(--ddd-safe-top))
+      calc(var(--ddd-space) + var(--ddd-safe-right))
+      calc(var(--ddd-space) + var(--ddd-safe-bottom))
+      calc(var(--ddd-space) + var(--ddd-safe-left));
   }
 
-  .lm-auth-form {
-    padding: calc(var(--lm-space) * 2);
+  .ddd-auth-form {
+    padding: calc(var(--ddd-space) * 2);
   }
 
-  .lm-bare {
-    padding: calc(var(--lm-space) + var(--lm-safe-top))
-      calc(var(--lm-space) + var(--lm-safe-right))
-      calc(var(--lm-space) + var(--lm-safe-bottom))
-      calc(var(--lm-space) + var(--lm-safe-left));
+  .ddd-bare {
+    padding: calc(var(--ddd-space) + var(--ddd-safe-top))
+      calc(var(--ddd-space) + var(--ddd-safe-right))
+      calc(var(--ddd-space) + var(--ddd-safe-bottom))
+      calc(var(--ddd-space) + var(--ddd-safe-left));
   }
 
   /* One card per plugin instead of a five-column table nobody can read: the header
      row goes away and each cell carries its own label. */
-  .lm-bare-scroll {
+  .ddd-bare-scroll {
     overflow-x: visible;
   }
 
-  .lm-bare-table,
-  .lm-bare-table tbody,
-  .lm-bare-table tr,
-  .lm-bare-table th,
-  .lm-bare-table td {
+  .ddd-bare-table,
+  .ddd-bare-table tbody,
+  .ddd-bare-table tr,
+  .ddd-bare-table th,
+  .ddd-bare-table td {
     display: block;
   }
 
-  .lm-bare-table thead {
+  .ddd-bare-table thead {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -478,45 +478,45 @@ summary {
     overflow: hidden;
   }
 
-  .lm-bare-table tr {
-    margin-bottom: var(--lm-space);
-    padding: calc(var(--lm-space) * 0.75);
-    border: 1px solid var(--lm-border);
-    border-radius: var(--lm-radius);
+  .ddd-bare-table tr {
+    margin-bottom: var(--ddd-space);
+    padding: calc(var(--ddd-space) * 0.75);
+    border: 1px solid var(--ddd-border);
+    border-radius: var(--ddd-radius);
   }
 
-  .lm-bare-table th,
-  .lm-bare-table td {
+  .ddd-bare-table th,
+  .ddd-bare-table td {
     padding: 2px 0;
     border-bottom: 0;
   }
 
-  .lm-bare-table th[scope="row"] {
+  .ddd-bare-table th[scope="row"] {
     font-weight: 600;
     font-size: 1.05em;
   }
 
-  .lm-bare-table td::before {
+  .ddd-bare-table td::before {
     content: attr(data-label) ": ";
-    color: var(--lm-text-muted);
+    color: var(--ddd-text-muted);
   }
 
   /* A cell that is only a button has no label to prefix. */
-  .lm-bare-table td.lm-bare-actions::before {
+  .ddd-bare-table td.ddd-bare-actions::before {
     content: none;
   }
 
-  .lm-bare-table td.lm-bare-actions:empty {
+  .ddd-bare-table td.ddd-bare-actions:empty {
     display: none;
   }
 
-  .lm-shell-facts {
+  .ddd-shell-facts {
     grid-template-columns: 1fr;
     gap: 0;
   }
 
-  .lm-shell-facts dt {
-    margin-top: calc(var(--lm-space) * 0.75);
+  .ddd-shell-facts dt {
+    margin-top: calc(var(--ddd-space) * 0.75);
     font-size: 0.85em;
   }
 }

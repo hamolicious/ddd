@@ -23,13 +23,13 @@ export function BootScreen({
       ? Math.min(100, Math.round((progress.done / progress.total) * 100))
       : undefined;
   return (
-    <div className="lm-boot" role="status" aria-live="polite">
-      <div className="lm-boot-inner">
-        <p className="lm-boot-message">{message}</p>
+    <div className="ddd-boot" role="status" aria-live="polite">
+      <div className="ddd-boot-inner">
+        <p className="ddd-boot-message">{message}</p>
         {progress ? (
           <>
             <progress {...(percent !== undefined ? { value: percent, max: 100 } : {})} />
-            <p className="lm-boot-detail">
+            <p className="ddd-boot-detail">
               {progress.done}
               {progress.total ? ` / ${progress.total}` : ""} documents
             </p>
@@ -57,9 +57,9 @@ export function BootFailure({
   readonly offline?: boolean;
 }): ReactNode {
   return (
-    <div className="lm-boot" role="alert">
-      <div className="lm-boot-inner">
-        <h1>{offline ? "Life Manager is offline" : "Life Manager could not start"}</h1>
+    <div className="ddd-boot" role="alert">
+      <div className="ddd-boot-inner">
+        <h1>{offline ? "ddd is offline" : "ddd could not start"}</h1>
         {offline ? (
           <p>
             The server is unreachable and this device has never signed in, so there is
@@ -67,7 +67,7 @@ export function BootFailure({
             that.
           </p>
         ) : null}
-        <pre className="lm-boot-error">{error.message}</pre>
+        <pre className="ddd-boot-error">{error.message}</pre>
         <p>
           <button type="button" onClick={() => location.reload()}>
             Reload
@@ -86,11 +86,11 @@ export function BootFailure({
  */
 export function UnsupportedBrowser(): ReactNode {
   return (
-    <div className="lm-boot" role="alert">
-      <div className="lm-boot-inner">
+    <div className="ddd-boot" role="alert">
+      <div className="ddd-boot-inner">
         <h1>This browser is too old</h1>
         <p>
-          Life Manager needs Chrome 89+, Edge 89+, Safari 16.4+ or Firefox 108+. Your
+          ddd needs Chrome 89+, Edge 89+, Safari 16.4+ or Firefox 108+. Your
           data is unaffected.
         </p>
       </div>

@@ -516,14 +516,14 @@ export default function activate(kernel: Kernel): void {
                 "&": { height: "100%", fontSize: "0.95rem" },
                 ".cm-scroller": {
                   overflow: "auto",
-                  fontFamily: "var(--lm-font-mono)",
+                  fontFamily: "var(--ddd-font-mono)",
                   lineHeight: "1.6",
                 },
-                ".cm-content": { caretColor: "var(--lm-text)" },
+                ".cm-content": { caretColor: "var(--ddd-text)" },
                 "&.cm-focused": { outline: "none" },
-                ".cm-selectionBackground, ::selection": { background: "var(--lm-selection)" },
-                "&.cm-focused .cm-selectionBackground": { background: "var(--lm-selection)" },
-                ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--lm-text)" },
+                ".cm-selectionBackground, ::selection": { background: "var(--ddd-selection)" },
+                "&.cm-focused .cm-selectionBackground": { background: "var(--ddd-selection)" },
+                ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--ddd-text)" },
                 ".cm-foldPlaceholder, .editor-refold": {
                   display: "inline-flex",
                   alignItems: "center",
@@ -533,13 +533,13 @@ export default function activate(kernel: Kernel): void {
                   padding: "1px 6px",
                   minHeight: "0",
                   font: "inherit",
-                  border: "1px solid var(--lm-border-strong)",
+                  border: "1px solid var(--ddd-border-strong)",
                   borderRadius: "999px",
-                  background: "var(--lm-bg-subtle)",
-                  color: "var(--lm-text-muted)",
+                  background: "var(--ddd-bg-subtle)",
+                  color: "var(--ddd-text-muted)",
                   cursor: "pointer",
                 },
-                ".cm-foldPlaceholder:hover, .editor-refold:hover": { color: "var(--lm-text)" },
+                ".cm-foldPlaceholder:hover, .editor-refold:hover": { color: "var(--ddd-text)" },
               }),
 
               // --- everybody else's contributions ----------------------------
@@ -674,7 +674,7 @@ export default function activate(kernel: Kernel): void {
             Offline. Your edits are saved here and sync when the connection returns.
           </p>
         ) : null}
-        <div className="editor-surface editor:flex editor:min-h-0 editor:min-w-0 editor:flex-1 editor:flex-col editor:overflow-hidden editor:[&_.cm-content]:max-w-[88ch] editor:[&_.cm-content]:px-4 editor:[&_.cm-content]:pb-[calc(var(--lm-viewport-height,100dvh)*0.4)] editor:[&_.cm-content]:pt-4 editor:compact:[&_.cm-content]:px-3 editor:compact:[&_.cm-content]:pt-2 editor:[&_.cm-editor]:min-h-0 editor:[&_.cm-editor]:min-w-0 editor:[&_.cm-editor]:max-w-full editor:[&_.cm-editor]:flex-1 editor:[&_.cm-scroller]:max-w-full editor:[&_.cm-scroller]:overflow-x-auto editor:[&_.cm-scroller]:overscroll-x-contain editor:compact:[&_.cm-foldPlaceholder]:min-h-[calc(var(--lm-tap-target)-20px)]! editor:compact:[&_.cm-foldPlaceholder]:min-w-[calc(var(--lm-tap-target)-8px)] editor:compact:[&_.editor-refold]:min-h-[calc(var(--lm-tap-target)-20px)]! editor:compact:[&_.editor-refold]:min-w-[calc(var(--lm-tap-target)-8px)]" ref={host} />
+        <div className="editor-surface editor:flex editor:min-h-0 editor:min-w-0 editor:flex-1 editor:flex-col editor:overflow-hidden editor:[&_.cm-content]:max-w-[88ch] editor:[&_.cm-content]:px-4 editor:[&_.cm-content]:pb-[calc(var(--ddd-viewport-height,100dvh)*0.4)] editor:[&_.cm-content]:pt-4 editor:compact:[&_.cm-content]:px-3 editor:compact:[&_.cm-content]:pt-2 editor:[&_.cm-editor]:min-h-0 editor:[&_.cm-editor]:min-w-0 editor:[&_.cm-editor]:max-w-full editor:[&_.cm-editor]:flex-1 editor:[&_.cm-scroller]:max-w-full editor:[&_.cm-scroller]:overflow-x-auto editor:[&_.cm-scroller]:overscroll-x-contain editor:compact:[&_.cm-foldPlaceholder]:min-h-[calc(var(--ddd-tap-target)-20px)]! editor:compact:[&_.cm-foldPlaceholder]:min-w-[calc(var(--ddd-tap-target)-8px)] editor:compact:[&_.editor-refold]:min-h-[calc(var(--ddd-tap-target)-20px)]! editor:compact:[&_.editor-refold]:min-w-[calc(var(--ddd-tap-target)-8px)]" ref={host} />
       </div>
     );
   };

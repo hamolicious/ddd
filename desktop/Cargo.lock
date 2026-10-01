@@ -659,6 +659,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "ddd-desktop"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "notify",
+ "rfd",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-opener",
+ "toml 0.9.12+spec-1.1.0",
+ "url",
+]
+
+[[package]]
 name = "defmt"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2025,22 +2041,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61ff90caf6077a803a240f62fdbe88645a890bbca49ef8174c3cb0404362171d"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "life-manager-desktop"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "notify",
- "rfd",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-opener",
- "toml 0.9.12+spec-1.1.0",
- "url",
 ]
 
 [[package]]

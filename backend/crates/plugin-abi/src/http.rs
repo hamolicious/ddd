@@ -24,7 +24,7 @@
 //!
 //! # Inbound
 //!
-//! `/api/plugins/<id>/<path>` reaches the plugin's `lm_http` export. Session-authenticated
+//! `/api/plugins/<id>/<path>` reaches the plugin's `ddd_http` export. Session-authenticated
 //! by default; paths listed in `capabilities.public-routes` are reachable without a
 //! session and are shown to the admin as the capability they are (SPEC §5.1, §6.2).
 
@@ -77,7 +77,7 @@ pub struct HttpResponseOutput {
 }
 
 // ---------------------------------------------------------------------------
-// Inbound: what `lm_http` receives and returns
+// Inbound: what `ddd_http` receives and returns
 // ---------------------------------------------------------------------------
 
 /// The authenticated caller of a plugin route, when there is one.

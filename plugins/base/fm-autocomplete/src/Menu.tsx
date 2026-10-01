@@ -54,7 +54,7 @@ export function SuggestionMenu({ controller }: { readonly controller: MenuContro
           key={item.insert}
           role="option"
           aria-selected={index === state.selected}
-          className={`fmac:flex fmac:min-h-[calc(var(--lm-tap-target)-8px)] fmac:cursor-pointer fmac:items-center fmac:gap-2 fmac:rounded fmac:px-2 fmac:py-1 ${
+          className={`fmac:flex fmac:min-h-[calc(var(--ddd-tap-target)-8px)] fmac:cursor-pointer fmac:items-center fmac:gap-2 fmac:rounded fmac:px-2 fmac:py-1 ${
             index === state.selected ? "fmac:bg-accent-subtle" : ""
           }`}
           onPointerEnter={() => controller.select(index)}

@@ -87,7 +87,7 @@ describe("the fixture set", () => {
     // is what the Dart side is written against (`kBridgeVersion`).
     expect(BRIDGE_VERSION).toBe(index.bridgeVersion);
     expect(SUPPORTED_BRIDGE_VERSION).toBe(index.bridgeVersion);
-    expect(index.handler).toBe("lm_shell_v1");
+    expect(index.handler).toBe("ddd_shell_v1");
   });
 
   it("freezes the six error codes and the envelope keys (BRIDGE.md §9)", () => {

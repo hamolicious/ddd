@@ -1,5 +1,5 @@
-//! Talking to a running Life Manager server: the unauthenticated routes (`/kernel.d.ts`,
-//! `/importmap.json`, plugin assets), and JSON calls with a bearer token (`lm query`).
+//! Talking to a running ddd server: the unauthenticated routes (`/kernel.d.ts`,
+//! `/importmap.json`, plugin assets), and JSON calls with a bearer token (`ddd query`).
 
 use std::collections::BTreeMap;
 

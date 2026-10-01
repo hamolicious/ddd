@@ -28,7 +28,7 @@
 //! ```text
 //! docker compose up -d --wait mongo
 //! mise run wasm-plugins
-//! MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p life-manager-server --test pluginhost_http
+//! MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p ddd-server --test pluginhost_http
 //! ```
 
 mod common;
@@ -44,14 +44,14 @@ use axum::extract::Path as AxumPath;
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use life_manager_plugin_abi as abi;
-use life_manager_server::domain::new_id;
-use life_manager_server::pluginhost::{CallFailure, CallKind, Invocation, PluginHost};
-use life_manager_server::plugininstall::InstallSource;
-use life_manager_server::plugins::{
+use ddd_plugin_abi as abi;
+use ddd_server::domain::new_id;
+use ddd_server::pluginhost::{CallFailure, CallKind, Invocation, PluginHost};
+use ddd_server::plugininstall::InstallSource;
+use ddd_server::plugins::{
     PluginBackend, PluginCapabilities, PluginManifest, PluginRecord, PluginState,
 };
-use life_manager_server::state::AppState;
+use ddd_server::state::AppState;
 use serde_json::{Value, json};
 
 fn fixture() -> Option<PathBuf> {
@@ -162,8 +162,8 @@ impl HttpHarness {
         let wasm = fixture()?;
         let upstream = upstream().await;
 
-        let database = format!("lm_pluginhttp_test_{}", new_id());
-        let plugins_dir = std::env::temp_dir().join(format!("lm-pluginhttp-{database}"));
+        let database = format!("ddd_pluginhttp_test_{}", new_id());
+        let plugins_dir = std::env::temp_dir().join(format!("ddd-pluginhttp-{database}"));
         let dir = plugins_dir.join("hello-backend").join("1.0.0");
         std::fs::create_dir_all(&dir).expect("a temp plugin directory");
         std::fs::copy(&wasm, dir.join("backend.wasm")).expect("copy the fixture");
@@ -184,7 +184,7 @@ impl HttpHarness {
         state.init_schema().await.ok()?;
 
         let capabilities = PluginCapabilities {
-            http: Some(life_manager_server::plugins::HttpCapability {
+            http: Some(ddd_server::plugins::HttpCapability {
                 hosts: approved_hosts
                     .iter()
                     .map(|host| (*host).to_string())
@@ -223,7 +223,7 @@ impl HttpHarness {
             },
             capabilities_approved: capabilities,
             source: InstallSource::Base,
-            installed_at: life_manager_server::domain::Timestamp::now(),
+            installed_at: ddd_server::domain::Timestamp::now(),
             installed_by: None,
             approved_at: None,
             approved_by: None,

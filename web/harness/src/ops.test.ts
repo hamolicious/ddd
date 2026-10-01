@@ -224,19 +224,19 @@ describe("support code", () => {
   it("sums prometheus samples by metric name and skips buckets", () => {
     const metrics = parseMetrics(
       [
-        "# HELP lm_http_requests_total requests",
-        "# TYPE lm_http_requests_total counter",
-        'lm_http_requests_total{route="/api/documents",status="200"} 12',
-        'lm_http_requests_total{route="/api/sync",status="101"} 3',
-        'lm_materialize_duration_seconds_bucket{le="0.1"} 99',
-        "lm_materialize_duration_seconds_count 7",
-        "lm_rooms 2",
+        "# HELP ddd_http_requests_total requests",
+        "# TYPE ddd_http_requests_total counter",
+        'ddd_http_requests_total{route="/api/documents",status="200"} 12',
+        'ddd_http_requests_total{route="/api/sync",status="101"} 3',
+        'ddd_materialize_duration_seconds_bucket{le="0.1"} 99',
+        "ddd_materialize_duration_seconds_count 7",
+        "ddd_rooms 2",
       ].join("\n"),
     );
-    expect(metrics["lm_http_requests_total"]).toBe(15);
-    expect(metrics["lm_materialize_duration_seconds_count"]).toBe(7);
-    expect(metrics["lm_rooms"]).toBe(2);
-    expect(metrics["lm_materialize_duration_seconds_bucket"]).toBeUndefined();
+    expect(metrics["ddd_http_requests_total"]).toBe(15);
+    expect(metrics["ddd_materialize_duration_seconds_count"]).toBe(7);
+    expect(metrics["ddd_rooms"]).toBe(2);
+    expect(metrics["ddd_materialize_duration_seconds_bucket"]).toBeUndefined();
   });
 
   it("deep-equals the shared-core value model", () => {

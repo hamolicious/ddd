@@ -17,13 +17,11 @@ mod common;
 
 use std::time::Duration;
 
-use life_manager_core::limits;
-use life_manager_server::db;
-use life_manager_server::docstore::{
-    self, DocStore as _, DocStoreError, DocStoreTuning, MongoDocStore,
-};
-use life_manager_server::domain::{Actor, new_id};
-use life_manager_server::feed::ChangeFeed;
+use ddd_core::limits;
+use ddd_server::db;
+use ddd_server::docstore::{self, DocStore as _, DocStoreError, DocStoreTuning, MongoDocStore};
+use ddd_server::domain::{Actor, new_id};
+use ddd_server::feed::ChangeFeed;
 
 /// Every knob, mapped from a config whose values differ from **every** default, so
 /// a field left reading its constant or crossed with its neighbour fails here.
@@ -128,7 +126,7 @@ async fn a_store_enforces_its_own_tuning() {
     let Ok(client) = mongodb::Client::with_uri_str(&uri).await else {
         return;
     };
-    let database = format!("lm_tuning_test_{}", new_id());
+    let database = format!("ddd_tuning_test_{}", new_id());
     let db = client.database(&database);
     db::indexes::ensure(&db).await.expect("indexes");
 
@@ -196,7 +194,7 @@ async fn the_update_log_is_trimmed_to_the_tuned_retention() {
     let Ok(client) = mongodb::Client::with_uri_str(&uri).await else {
         return;
     };
-    let database = format!("lm_tuning_test_{}", new_id());
+    let database = format!("ddd_tuning_test_{}", new_id());
     let db = client.database(&database);
     db::indexes::ensure(&db).await.expect("indexes");
 

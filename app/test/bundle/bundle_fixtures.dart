@@ -13,14 +13,14 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:http/http.dart' as http;
-import 'package:life_manager_shell/bridge/auth.dart';
-import 'package:life_manager_shell/bundle/manifest.dart';
-import 'package:life_manager_shell/bundle/store.dart';
-import 'package:life_manager_shell/bundle/updater.dart';
+import 'package:ddd_shell/bridge/auth.dart';
+import 'package:ddd_shell/bundle/manifest.dart';
+import 'package:ddd_shell/bundle/store.dart';
+import 'package:ddd_shell/bundle/updater.dart';
 
 /// The server the tests talk to. Only the origin matters; the paths come from
 /// `BRIDGE.md` §5.
-final Uri testServer = Uri.parse('https://lm.test');
+final Uri testServer = Uri.parse('https://ddd.test');
 
 /// Bundle ids, in the shape the wire actually carries: a 64-character lowercase hex
 /// `sha256` (`BRIDGE.md` §5, enforced by [isBundleVersion]).
@@ -184,7 +184,7 @@ Future<void> placeBundle(BundleStore store, FakeBundle bundle) async {
 Map<String, String> bundleFiles({
   String appChunk = 'console.log("v1")',
 }) => <String, String>{
-  'index.html': '<!doctype html><title>Life Manager</title>',
+  'index.html': '<!doctype html><title>ddd</title>',
   'importmap.json': '{"imports":{"react":"/runtime/react.js"}}',
   'assets/app-1a2b3c.js': appChunk,
   'runtime/react.js': 'export default {}',

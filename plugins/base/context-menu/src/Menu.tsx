@@ -189,7 +189,7 @@ function Panel({ open, close }: { readonly open: Open; readonly close: () => voi
   const width = open.kind === "sheet" ? "ctxmenu:max-w-[min(30rem,calc(100vw-1rem))]" : "ctxmenu:max-w-[min(22rem,calc(100vw-1rem))]";
   const panelClasses = popover
     ? `context-menu ctxmenu:fixed ctxmenu:flex ctxmenu:max-h-[min(70vh,32rem)] ctxmenu:min-w-[14rem] ctxmenu:flex-col ctxmenu:gap-1 ctxmenu:overflow-y-auto ctxmenu:rounded-lg ctxmenu:border ctxmenu:border-border ctxmenu:bg-bg-raised ctxmenu:p-1 ctxmenu:font-sans ctxmenu:text-text ctxmenu:shadow-2 ${width}`
-    : "context-menu ctxmenu:flex ctxmenu:max-h-[85dvh] ctxmenu:w-full ctxmenu:flex-col ctxmenu:gap-3 ctxmenu:overflow-y-auto ctxmenu:rounded-t-lg ctxmenu:border ctxmenu:border-b-0 ctxmenu:border-border ctxmenu:bg-bg-raised ctxmenu:p-4 ctxmenu:pb-[calc(var(--lm-space)*1.5+env(safe-area-inset-bottom,0px))] ctxmenu:font-sans ctxmenu:text-text ctxmenu:shadow-2 ctxmenu:sm:max-h-[40rem] ctxmenu:sm:max-w-[30rem] ctxmenu:sm:rounded-lg ctxmenu:sm:border-b ctxmenu:sm:pb-4";
+    : "context-menu ctxmenu:flex ctxmenu:max-h-[85dvh] ctxmenu:w-full ctxmenu:flex-col ctxmenu:gap-3 ctxmenu:overflow-y-auto ctxmenu:rounded-t-lg ctxmenu:border ctxmenu:border-b-0 ctxmenu:border-border ctxmenu:bg-bg-raised ctxmenu:p-4 ctxmenu:pb-[calc(var(--ddd-space)*1.5+env(safe-area-inset-bottom,0px))] ctxmenu:font-sans ctxmenu:text-text ctxmenu:shadow-2 ctxmenu:sm:max-h-[40rem] ctxmenu:sm:max-w-[30rem] ctxmenu:sm:rounded-lg ctxmenu:sm:border-b ctxmenu:sm:pb-4";
 
   return createPortal(
     <div

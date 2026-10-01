@@ -8,7 +8,7 @@
  *   `{ id, target, order?, items(target, chain) }`: the items shown for every element
  *   marked with that target type. An action with the same `id` as an earlier one replaces it.
  *
- * The old `lm/context-menu` service, member for member, as named exports:
+ * The old `ddd/context-menu` service, member for member, as named exports:
  * - `open(menu: MenuRequest)`, `openSheet(sheet: SheetRequest)`, `close()`
  * - `modal(request: ModalRequest)` → `Promise<ModalResult | undefined>`
  * - `confirm(request: ConfirmRequest)` → `Promise<boolean>`

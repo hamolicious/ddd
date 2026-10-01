@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- The shell talks to the Life Manager server and to its own loopback bundle server
+    <!-- The shell talks to the ddd server and to its own loopback bundle server
          (BRIDGE.md §6). Flutter's template declares INTERNET only in the debug and profile
          manifests, which produces a release build that cannot reach anything. -->
     <uses-permission android:name="android.permission.INTERNET"/>
@@ -25,7 +25,7 @@
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29"/>
 
     <application
-        android:label="Life Manager"
+        android:label="ddd"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="false"

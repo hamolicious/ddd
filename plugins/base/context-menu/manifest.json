@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "name": "Context menu",
   "description": "One menu and sheet service for every plugin, and the right-click menu of anything a plugin marks: anchored popovers on a wide screen, bottom sheets on a phone.",
-  "author": "Life Manager base distribution",
+  "author": "ddd base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": {
     "prefix": "ctxmenu"

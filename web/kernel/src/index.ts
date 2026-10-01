@@ -1,5 +1,5 @@
 /**
- * `@life-manager/kernel` — M2 surface.
+ * `@ddd/kernel` — M2 surface.
  *
  * What exists here is the offline-first substrate of SPEC §4: the wire protocol,
  * the IndexedDB projection store, the sync client (change feed + lazy document

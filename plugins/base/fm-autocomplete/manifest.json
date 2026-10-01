@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "name": "Frontmatter autocomplete",
   "description": "While you type a frontmatter value, suggests the values that key already has across the workspace.",
-  "author": "Life Manager base distribution",
+  "author": "ddd base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": {
     "prefix": "fmac"

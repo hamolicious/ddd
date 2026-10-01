@@ -37,8 +37,8 @@
 
 import type { InstalledPlugin, PluginLoad, SessionUser } from "@kernel";
 
-const SESSION_KEY = "life-manager.boot.session";
-const PLUGINS_KEY = "life-manager.boot.plugins";
+const SESSION_KEY = "ddd.boot.session";
+const PLUGINS_KEY = "ddd.boot.plugins";
 
 /**
  * Bumped when either shape changes, so a stale entry is ignored rather than trusted.

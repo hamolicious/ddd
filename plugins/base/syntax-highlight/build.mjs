@@ -35,7 +35,7 @@ export default async function build({ root, outDir, resolveFrom }) {
   const require = createRequire(join(resolveFrom, "noop.cjs"));
   const catalog = JSON.parse(readFileSync(join(root, "languages.json"), "utf8")).languages;
   const byId = new Map(catalog.map((language) => [language.id, language]));
-  const cache = join(resolveFrom, "node_modules", ".cache", "lm-grammars");
+  const cache = join(resolveFrom, "node_modules", ".cache", "ddd-grammars");
   mkdirSync(cache, { recursive: true });
 
   const frontend = join(outDir, "frontend");

@@ -7,7 +7,7 @@
  * - `addRoute(route | routes)` → unregister. `Route` is `{ path, view, order? }`; a route
  *   with the same `path` as an earlier one replaces it.
  *
- * The old `lm/router` service, member for member, as named exports:
+ * The old `ddd/router` service, member for member, as named exports:
  * - `navigate(path, { replace? })`, `current()`, `query()`, `match(path)`,
  *   `onChange(listener)` → unsubscribe, `href(pattern, params?)`, `url(path)`,
  *   `documentPath(id)`, `Link` (component).

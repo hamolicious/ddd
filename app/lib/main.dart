@@ -66,7 +66,7 @@ class ShellApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-    title: 'Life Manager',
+    title: 'ddd',
     debugShowCheckedModeBanner: false,
     theme: ThemeData(
       colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF3B6EA5)),
@@ -289,7 +289,7 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
           );
         case BootAction.recovery:
           _block(
-            'Life Manager could not start',
+            'ddd could not start',
             '${plan.reason ?? 'The last two starts did not finish.'}\n\n'
                 'Downloading the workspace app again is the usual fix. Your documents are '
                 'not affected — they live on the server and in this app\'s own storage.',
@@ -299,7 +299,7 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
           // [BootGuard.resolve] follows a revert through to the bundle it lands on, so this
           // is unreachable. If it is ever reached, say so rather than showing nothing.
           _block(
-            'Life Manager could not start',
+            'ddd could not start',
             'The shell reverted to an earlier version of the workspace app but could not '
                 'start it. ${plan.reason ?? ''}',
             offerRedownload: true,
@@ -307,7 +307,7 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
       }
     } catch (error, stack) {
       _log('boot: $error\n$stack');
-      _block('Life Manager could not start', '$error', offerRedownload: true);
+      _block('ddd could not start', '$error', offerRedownload: true);
     }
   }
 
@@ -323,7 +323,7 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
       // `resolve()` checks this too and escalates it into the revert path; reaching it here
       // means the file went away in between.
       _block(
-        'Life Manager could not start',
+        'ddd could not start',
         'The installed workspace app ($version) has no manifest, so its files cannot be '
             'served safely.',
         offerRedownload: true,
@@ -342,8 +342,8 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
       // different port: the origin is origin-keyed storage (`BRIDGE.md` §6).
       _log('boot: the loopback server did not start: $error');
       _block(
-        'Life Manager could not start',
-        'The app could not serve its own files on port $kLoopbackPort. If Life Manager '
+        'ddd could not start',
+        'The app could not serve its own files on port $kLoopbackPort. If ddd '
             'was just closed, wait a moment and try again.\n\n$error',
       );
       return;
@@ -376,11 +376,11 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
       // SPEC §6.1 safe mode, in words rather than in jargon: what the user needs to know
       // is why their plugins are gone and that it is temporary, not which flag did it.
       _notify(
-        'Life Manager did not finish starting last time, so it is running with plugins '
+        'ddd did not finish starting last time, so it is running with plugins '
         'switched off. If it works now, a plugin is the problem.',
       );
     } else if (reason != null) {
-      _notify('Life Manager went back to an earlier version: $reason.');
+      _notify('ddd went back to an earlier version: $reason.');
     }
   }
 
@@ -440,7 +440,7 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
     await _server?.stop();
     _server = null;
     _block(
-      'Life Manager could not start',
+      'ddd could not start',
       '$reason\n\nStarting again will try the workspace app in safe mode, and then the '
           'version before it.',
       offerRedownload: true,
@@ -478,7 +478,7 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
         final String? pending = (await store.readState()).pending;
         if (!mounted) return;
         // The page's own notice (`web/app/src/boot/shell.ts`): the kernel says "close and
-        // reopen Life Manager to finish it" in the app's own language, and a plugin that
+        // reopen ddd to finish it" in the app's own language, and a plugin that
         // feature-detects the event can offer its own affordance. The native banner below
         // stays, because a bundle that is mid-boot or broken has no notice centre.
         stagedBundleVersion.value = pending;
@@ -491,7 +491,7 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
         _log('boot: $pending staged; offering a restart');
       case UpdateOutcome.needsNewerShell:
         _notify(
-          'The workspace has a newer app version than this one. Update Life Manager '
+          'The workspace has a newer app version than this one. Update ddd '
           'to get it.',
         );
       case UpdateOutcome.corrupt:
@@ -643,7 +643,7 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
       ),
     ),
     _Phase.blocked => _ShellMessage(
-      title: _blockedTitle ?? 'Life Manager could not start',
+      title: _blockedTitle ?? 'ddd could not start',
       detail: _blockedDetail,
       actions: <Widget>[
         FilledButton(
@@ -803,7 +803,7 @@ class _FirstRunScreenState extends State<_FirstRunScreen> {
       case UpdateOutcome.needsNewerShell:
         setState(
           () => _error =
-              'This workspace needs a newer version of the Life Manager app. Install the '
+              'This workspace needs a newer version of the ddd app. Install the '
               'update and start it again.',
         );
       case UpdateOutcome.corrupt:
@@ -922,4 +922,4 @@ class _ShellMessage extends StatelessWidget {
 
 /// `adb logcat` is the only window into a launch that never reaches the webview, so the
 /// whole boot flow logs through one function.
-void _log(String message) => debugPrint('life-manager shell: $message');
+void _log(String message) => debugPrint('ddd shell: $message');

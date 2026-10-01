@@ -155,7 +155,7 @@ pub struct QueryDocumentsOutput {
 // query
 // ---------------------------------------------------------------------------
 
-/// A query plan (`life_manager_core::query::Plan` as JSON): text, filter, relations
+/// A query plan (`ddd_core::query::Plan` as JSON): text, filter, relations
 /// (`child_of` / `parent_of`), sort, trash, limit, cursor, snippets. The SDK's
 /// `Query` builder writes it. Invalid plans are [`crate::ErrorCode::InvalidArgument`].
 #[derive(Debug, Clone, Serialize, Deserialize)]

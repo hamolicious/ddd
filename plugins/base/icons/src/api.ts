@@ -31,7 +31,7 @@ export interface IconInfo {
   readonly tags: readonly string[];
 }
 
-/** Everything `plugin:icons` exports at runtime, as one type (the old `lm/icons` service). */
+/** Everything `plugin:icons` exports at runtime, as one type (the old `ddd/icons` service). */
 export interface Icons {
   readonly Icon: ComponentType<IconProps>;
   /** A search box over a scrolling grid of every icon that matches. */

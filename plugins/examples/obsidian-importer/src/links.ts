@@ -29,7 +29,7 @@ interface ParsedWikilink {
   readonly label: string | undefined;
 }
 
-/** Convert Obsidian wikilinks to Life Manager's stable, id-addressed Markdown links. */
+/** Convert Obsidian wikilinks to ddd's stable, id-addressed Markdown links. */
 export function rewriteWikilinks(
   text: string,
   sourcePath: string,

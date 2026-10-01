@@ -28,7 +28,7 @@
 import { cleanupOutdatedCaches, precacheAndRoute } from "workbox-precaching";
 import { NavigationRoute, registerRoute } from "workbox-routing";
 import { CacheFirst, NetworkFirst, NetworkOnly, StaleWhileRevalidate } from "workbox-strategies";
-import { precacheEntries } from "virtual:lm-precache";
+import { precacheEntries } from "virtual:ddd-precache";
 
 /**
  * The three worker-scope members this file uses. Declared locally rather than by
@@ -52,7 +52,7 @@ interface WorkerScope {
 const sw = self as unknown as WorkerScope;
 
 /** The one cache entry holding a rendered `index.html`. */
-const SHELL_CACHE = "lm-shell";
+const SHELL_CACHE = "ddd-shell";
 
 precacheAndRoute([...precacheEntries]);
 cleanupOutdatedCaches();
@@ -60,19 +60,19 @@ cleanupOutdatedCaches();
 // Plugin modules and their assets: immutable per version.
 registerRoute(
   ({ url }) => url.pathname.startsWith("/plugins/"),
-  new CacheFirst({ cacheName: "lm-plugins" }),
+  new CacheFirst({ cacheName: "ddd-plugins" }),
 );
 
 // The runtime layer is precached, but a hashed chunk requested after an update
 // (a plugin pinned to an older map) still has to resolve.
 registerRoute(
   ({ url }) => url.pathname.startsWith("/runtime/"),
-  new CacheFirst({ cacheName: "lm-runtime" }),
+  new CacheFirst({ cacheName: "ddd-runtime" }),
 );
 
 registerRoute(
   ({ url }) => url.pathname === "/importmap.json" || url.pathname === "/kernel.d.ts",
-  new StaleWhileRevalidate({ cacheName: "lm-meta" }),
+  new StaleWhileRevalidate({ cacheName: "ddd-meta" }),
 );
 
 // The API and the sync socket are never the service worker's business.

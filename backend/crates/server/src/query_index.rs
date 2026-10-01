@@ -27,8 +27,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 use bson::doc;
+use ddd_core::query::{Doc, Engine, Page, Plan, QueryError};
 use futures::TryStreamExt;
-use life_manager_core::query::{Doc, Engine, Page, Plan, QueryError};
 use thiserror::Error;
 
 use crate::db::{self, Collections};

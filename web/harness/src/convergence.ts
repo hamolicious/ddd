@@ -200,7 +200,7 @@ export async function run(config: HarnessConfig): Promise<ConvergenceReport> {
     if (journalPath || failed) {
       // Default to the temp dir: a failing CI run should leave a file behind, not a
       // stray artifact in the repo. `--journal=<path>` puts it wherever you want.
-      const path = journalPath ?? join(tmpdir(), `lm-convergence-seed${config.seed}.json`);
+      const path = journalPath ?? join(tmpdir(), `ddd-convergence-seed${config.seed}.json`);
       await writeFile(
         path,
         JSON.stringify(
@@ -287,10 +287,10 @@ async function main(): Promise<void> {
  * path never reaches `process.argv` (argv[1] is the `vite-node` bin), so the
  * scaffold's `argv[1].endsWith("convergence.ts")` guard silently ran nothing and
  * exited 0 — a green gate that tested absolutely nothing. This module exists to be
- * executed; it runs unless a test runner imported it, and `LM_HARNESS_NO_AUTORUN=1`
+ * executed; it runs unless a test runner imported it, and `DDD_HARNESS_NO_AUTORUN=1`
  * suppresses it for anything else that needs to import `run`.
  */
-if (!process.env.VITEST && !process.env.LM_HARNESS_NO_AUTORUN) {
+if (!process.env.VITEST && !process.env.DDD_HARNESS_NO_AUTORUN) {
   main()
     .catch((error: unknown) => {
       console.error(error);
