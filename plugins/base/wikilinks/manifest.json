@@ -1,8 +1,8 @@
 {
   "id": "wikilinks",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "name": "Wikilinks",
-  "description": "Type [[ to link a note, or ![[ to embed one; the editor shows each linked note's title above its link.",
+  "description": "Type [[ to link a note, or ![[ to embed one — in the frontmatter too, where a property takes the note; the editor shows each linked note's title above its link.",
   "author": "Life Manager base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": {

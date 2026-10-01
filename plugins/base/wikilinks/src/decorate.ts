@@ -1,6 +1,7 @@
 /**
  * The `editor.extension`: each `doc://` link in the editor wears the linked note's title
- * above it, so `[](doc://01J…)` reads as the note it points at while writing.
+ * above it, so `[](doc://01J…)` reads as the note it points at while writing — and so
+ * does a bare `doc://01J…`, the form a frontmatter property holds.
  *
  * The title is a widget at the start of the link, drawn in a strip of padding the line
  * gains for it, so it sits over the link without covering the line above. Titles come
@@ -15,19 +16,19 @@ import type { NoteIndex } from "./controller.js";
 
 /** One `doc://` link in the text. */
 export interface FoundLink {
-  /** Offset of the link's first character (`!`, `[` or `<`). */
+  /** Offset of the link's first character (`!`, `[` or `<`; `d` for a bare `doc://`). */
   readonly from: number;
   readonly id: string;
   readonly embed: boolean;
 }
 
-const LINK = /(!?)\[[^\]\n]*\]\(doc:\/\/([^)\s]+)\)|<doc:\/\/([^>\s]+)>/g;
+const LINK = /(!?)\[[^\]\n]*\]\(doc:\/\/([^)\s]+)\)|<doc:\/\/([^>\s]+)>|(?<![\w(<])doc:\/\/([A-Za-z0-9_-]+)/g;
 
 /** Every `doc://` link in `text`, offsets relative to it. Pure. */
 export function linksIn(text: string): FoundLink[] {
   const found: FoundLink[] = [];
   for (const match of text.matchAll(LINK)) {
-    const id = match[2] ?? match[3];
+    const id = match[2] ?? match[3] ?? match[4];
     if (id) found.push({ from: match.index, id: decodeURIComponent(id), embed: match[1] === "!" });
   }
   return found;

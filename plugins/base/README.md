@@ -64,7 +64,7 @@ dist/<id>/<version>/              build output = the installed layout the server
 | `fm-autocomplete` | while typing frontmatter in an editor, suggests the keys in use and then the typed key's values, from `indexer` | — |
 | `graph` | every note and its links as a live force-directed graph: the whole workspace at `#/graph`, the open note's neighbourhood in the altbar; built from `indexer`'s documents and outgoing connections | — |
 | `emoji` | `:tada:` reads as 🎉 (GitHub's gemoji set, packed at build time from a pinned npm tarball); typing `:ta` in an editor suggests shortcodes | — |
-| `wikilinks` | `[[` links a note and `![[` embeds one, written as ordinary `doc://` links; the editor shows each linked note's title above its link | — |
+| `wikilinks` | `[[` links a note and `![[` embeds one, written as ordinary `doc://` links — in the frontmatter too, as the bare `doc://` a property holds; the editor shows each linked note's title above its link | — |
 
 That is the whole table. The first `calendar` (an ICS feed, not today's saved-search view)
 and `agenda` — M4's proof plugins, which shipped here and were never in `BASE_PLUGIN_IDS`

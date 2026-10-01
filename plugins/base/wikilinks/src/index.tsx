@@ -7,7 +7,8 @@
  * - `decorate.ts` — the editor extension that draws titles over `doc://` links.
  *
  * A chosen note is written as a plain markdown link, `[](doc://<id>)`: nothing new for
- * read mode to learn, and empty link text so `markdown` draws the note's live title.
+ * read mode to learn, and empty link text so `markdown` draws the note's live title. In
+ * the frontmatter it is the bare `doc://<id>` a property holds when it points at a note.
  * Notes and titles come from `plugin:indexer`; a click on a title opens the note when the
  * optional `router` is enabled.
  */

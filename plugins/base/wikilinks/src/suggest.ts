@@ -6,8 +6,10 @@
  * ones with a word that does, then ones that contain it, then notes whose folder does.
  * Choosing one writes `[](doc://<id>)` (or `![](doc://<id>)`), link text left empty so
  * read mode draws the note's live title and a rename never leaves a stale label behind.
- * Nothing is offered in the frontmatter, in a fenced code block, or inside an inline
- * code span on the caret's line.
+ * In the frontmatter it writes the bare `doc://<id>` instead — the form a property holds
+ * when it points at a note (`blocked-by: doc://01J…`), which every reader of `fm` draws as
+ * that note — and `![[` is just `[[` there, since a property cannot embed. Nothing is
+ * offered in a fenced code block, or inside an inline code span on the caret's line.
  */
 
 export interface Note {
@@ -34,9 +36,9 @@ export const MAX_SUGGESTIONS = 20;
 /** `[[` or `![[`, then anything but brackets, up to the caret. */
 const TYPED = /(!?)\[\[([^[\]\n]*)$/;
 
-/** The markdown a chosen note is written as. */
-export function linkTo(id: string, embed: boolean): string {
-  return `${embed ? "!" : ""}[](doc://${id})`;
+/** The markdown a chosen note is written as; in the frontmatter, the value a property holds. */
+export function linkTo(id: string, embed: boolean, frontmatter = false): string {
+  return frontmatter ? `doc://${id}` : `${embed ? "!" : ""}[](doc://${id})`;
 }
 
 export function suggest(
@@ -48,9 +50,10 @@ export function suggest(
   const match = TYPED.exec(lineBeforeCaret);
   if (!match) return undefined;
   const before = lineBeforeCaret.slice(0, match.index);
-  if (inCodeSpan(before) || inFrontmatter(documentBeforeCaret) || inFence(documentBeforeCaret)) return undefined;
+  const frontmatter = inFrontmatter(documentBeforeCaret);
+  if (!frontmatter && (inCodeSpan(before) || inFence(documentBeforeCaret))) return undefined;
 
-  const embed = match[1] === "!";
+  const embed = !frontmatter && match[1] === "!";
   const typed = (match[2] ?? "").trim().toLowerCase();
   const ranked: { note: Note; rank: number; at: number }[] = [];
   notes.forEach((note, at) => {
@@ -68,7 +71,7 @@ export function suggest(
       id: note.id,
       title: note.title,
       folder: note.folder,
-      insert: linkTo(note.id, embed),
+      insert: linkTo(note.id, embed, frontmatter),
     })),
   };
 }
