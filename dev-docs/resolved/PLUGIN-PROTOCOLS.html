@@ -1184,7 +1184,7 @@ ol.seats li.bench { opacity: .6; }
   function diff() {
     const L = resolve(live.w), D = R;
     const ek = (e) => ekey(e.from, e.to);
-    const ddd = new Map(L.edges.map((e) => [ek(e), e])), dm = new Map(D.edges.map((e) => [ek(e), e]));
+    const lEdges = new Map(L.edges.map((e) => [ek(e), e])), dm = new Map(D.edges.map((e) => [ek(e), e]));
     const stop = NODES.filter((n) => L.active.has(n.id) && !D.active.has(n.id)).map((n) => n.id);
     const start = NODES.filter((n) => !L.active.has(n.id) && D.active.has(n.id)).map((n) => n.id);
     const moving = new Set([...stop, ...start]);
@@ -1221,13 +1221,13 @@ ol.seats li.bench { opacity: .6; }
       const gone = a.filter((x) => !b.includes(x));
       ops.push({ op: "mod", text: `${k} seats: ${b.map((x, i) => `${i + 1} ${splitKey(x)[0]}${a.includes(x) ? "" : " (new)"}`).join(", ") || "empty"}${gone.length ? `; removed ${gone.map((x) => splitKey(x)[0]).join(", ")}` : ""}`, port: { dir: "in", k } });
     }
-    for (const e of D.edges) if (e.kind === "event" && !ddd.has(ek(e)) && !touchesMoving(e)) { hosts.add(e.to); ops.push({ op: "add", text: `${e.from} → ${e.to}`, edge: ek(e) }); }
+    for (const e of D.edges) if (e.kind === "event" && !lEdges.has(ek(e)) && !touchesMoving(e)) { hosts.add(e.to); ops.push({ op: "add", text: `${e.from} → ${e.to}`, edge: ek(e) }); }
     for (const e of L.edges) if (e.kind === "event" && !dm.has(ek(e)) && !touchesMoving(e)) { hosts.add(e.to); ops.push({ op: "del", text: `${e.from} → ${e.to}` }); }
     const consequence = { stops: stop.filter((id) => !unplug.includes(id)), starts: start.filter((id) => !plug.includes(id)) };
     const touched = [...stop, ...start, ...restart];
     const cold = touched.filter((id) => byId[id].hot === false);
     const actOrder = (ids) => [...ids].sort((x, y) => (D.order.indexOf(x) === -1 ? L.order.indexOf(x) : D.order.indexOf(x)) - (D.order.indexOf(y) === -1 ? L.order.indexOf(y) : D.order.indexOf(y)));
-    return { L, ddd, dm, ops, stop: actOrder(stop).reverse(), start: actOrder(start), restart: actOrder(restart), hosts: [...hosts], cold, consequence };
+    return { L, lEdges, dm, ops, stop: actOrder(stop).reverse(), start: actOrder(start), restart: actOrder(restart), hosts: [...hosts], cold, consequence };
   }
 
   // ---------- DOM ----------
@@ -1385,7 +1385,7 @@ ol.seats li.bench { opacity: .6; }
       const [a, b, sa, sb] = ends(e);
       const d = curve(a, b, sa, sb);
       const ek = ekey(e.from, e.to);
-      let cls = `w ${e.kind}${e.structural ? " structural" : ""}${e.bench ? " bench" : ""}${DF && !DF.ddd.has(ek) ? " new" : ""}`;
+      let cls = `w ${e.kind}${e.structural ? " structural" : ""}${e.bench ? " bench" : ""}${DF && !DF.lEdges.has(ek) ? " new" : ""}`;
       if (selEdge === ek) cls += " sel";
       else if (selPort) cls += throughPort(e) ? " hot" : " dim";
       else if (focus) cls += (e.fromN === focus || e.toN === focus) ? " hot" : " dim";

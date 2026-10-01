@@ -104,7 +104,7 @@ before the bundle runs. It defines `window.shell` with:
   capabilities: ["auth", "boot", "filesystem", "notifications"],
   methods: ["auth.getToken", …],   // "capability.method", sorted; diagnostics
   platform: "android",
-  serverBaseUrl: "https://life.example.com",
+  serverBaseUrl: "https://ddd.example.com",
   bearerToken: "…" | null,
   setBearerToken(token | null): Promise<void>,
   bootOk(): Promise<void>,
@@ -490,7 +490,7 @@ Five properties, each one deliberate:
 * **A staged bundle is announced to the page.** The shell evaluates
   `window.dispatchEvent(new CustomEvent("ddd-shell-update-ready", { detail: { bundleVersion } }))`
   (`shellUpdateReadyScript`), which `web/app/src/boot/shell.ts` turns into the kernel notice
-  "close and reopen ddd to finish it"; `window.lmShellUpdateReady({ bundleVersion })`
+  "close and reopen ddd to finish it"; `window.dddShellUpdateReady({ bundleVersion })`
   is an accepted alternative spelling. The strings live in
   `bridge_fixtures/window_shell.json` and both sides are tested against them. Purely
   informational — promotion happens at the next launch either way, which is why there is no

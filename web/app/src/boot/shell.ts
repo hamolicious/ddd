@@ -44,7 +44,7 @@ const SHELL_TOKEN_KEY = "ddd.bearer";
  * The shell does this after `UpdateOutcome.staged` — `shellUpdateReadyScript` in
  * `app/lib/shell/webview_host.dart` evaluates
  * `window.dispatchEvent(new CustomEvent("ddd-shell-update-ready", { detail: { bundleVersion } }))`
- * in the webview. `window.lmShellUpdateReady({ bundleVersion })` is an accepted alternative
+ * in the webview. `window.dddShellUpdateReady({ bundleVersion })` is an accepted alternative
  * for a shell that would rather call a function; both land on the same notice.
  *
  * The event name, the function spelling and the `detail` key live in
@@ -261,16 +261,16 @@ export function onShellUpdateReady(listener: (info: ShellUpdateReady) => void): 
   };
   events?.addEventListener(SHELL_UPDATE_EVENT, handler);
 
-  const target = globalThis as { lmShellUpdateReady?: (info?: unknown) => void };
-  const previous = target.lmShellUpdateReady;
-  target.lmShellUpdateReady = (info?: unknown): void => {
+  const target = globalThis as { dddShellUpdateReady?: (info?: unknown) => void };
+  const previous = target.dddShellUpdateReady;
+  target.dddShellUpdateReady = (info?: unknown): void => {
     previous?.(info);
     listener(updateInfo(info));
   };
   return () => {
     events?.removeEventListener(SHELL_UPDATE_EVENT, handler);
-    delete target.lmShellUpdateReady;
-    if (previous) target.lmShellUpdateReady = previous;
+    delete target.dddShellUpdateReady;
+    if (previous) target.dddShellUpdateReady = previous;
   };
 }
 

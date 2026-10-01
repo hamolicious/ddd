@@ -209,8 +209,8 @@ class LoginService {
     };
   }
 
-  /// A friendly pre-flight: `GET /healthz` on the entered URL, so "that is not a Life
-  /// Manager server" is said before the password is sent.
+  /// A friendly pre-flight: `GET /healthz` on the entered URL, so "that is not a ddd
+  /// server" is said before the password is sent.
   ///
   /// It is also where the `APP_ORIGIN` problem gets caught early: the shell's own origin
   /// (`http://127.0.0.1:41847`) has to be in the server's allowlist (SPEC §4.3), and a
@@ -303,8 +303,8 @@ String _short(Object error) => switch (error) {
 
 /// What the user typed, as an origin — or `null` when it is not one.
 ///
-/// A phone keyboard produces `life.example.com`, ` https://life.example.com/ ` and
-/// `https://life.example.com/app` about equally often; all three mean the same server, and
+/// A phone keyboard produces `ddd.example.com`, ` https://ddd.example.com/ ` and
+/// `https://ddd.example.com/app` about equally often; all three mean the same server, and
 /// only the first needs a scheme invented for it. Everything is reduced to an **origin**
 /// because that is what `ShellConfig.api()` resolves against and what the server's
 /// `APP_ORIGIN` compares — a remembered path would silently produce `/app/api/…`.
@@ -459,7 +459,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 autocorrect: false,
                 decoration: const InputDecoration(
                   labelText: 'Server',
-                  hintText: 'https://life.example.com',
+                  hintText: 'https://ddd.example.com',
                 ),
               ),
               const SizedBox(height: 12),

@@ -203,8 +203,8 @@ Restore: aeroplane mode off, `adb reverse tcp:8080 tcp:8080`.
 
 - A **banner strip above the page**: *"An update is ready. Restart to apply it."* with
   **Restart** and **Later**. A banner, never a dialog — what is underneath is a working app.
-- In the page itself, the kernel notice *"An app update is ready. Close and reopen Life
-  Manager to finish it."* — the `ddd-shell-update-ready` event reaching the web side. Its
+- In the page itself, the kernel notice *"An app update is ready. Close and reopen ddd to
+  finish it."* — the `ddd-shell-update-ready` event reaching the web side. Its
   absence with the native banner present means the two halves have drifted; the strings are
   pinned in `bridge_fixtures/window_shell.json`.
 - The page underneath is **untouched**. An update is never applied to a running webview: it is

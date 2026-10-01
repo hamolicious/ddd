@@ -57,7 +57,7 @@ void main() {
     PickPort? picker,
     int? maxImportBytes,
   }) => FilesystemCapability(
-    config: ShellConfig(serverBaseUrl: Uri.parse('https://life.example.com')),
+    config: ShellConfig(serverBaseUrl: Uri.parse('https://ddd.example.com')),
     auth: auth,
     maxImportBytes: maxImportBytes ?? kMaxImportBytes,
     client: client,
@@ -338,10 +338,7 @@ void main() {
 
         await capability(client: client).exportWorkspace();
 
-        expect(
-          seen.url,
-          Uri.parse('https://life.example.com/api/admin/export'),
-        );
+        expect(seen.url, Uri.parse('https://ddd.example.com/api/admin/export'));
         expect(seen.headers['authorization'], 'Bearer tok-123');
         expect(shared.single.name, 'workspace.zip');
         expect(shared.single.mime, 'application/zip');
@@ -414,7 +411,7 @@ void main() {
       await expectLater(
         FilesystemCapability(
           config: ShellConfig(
-            serverBaseUrl: Uri.parse('https://life.example.com'),
+            serverBaseUrl: Uri.parse('https://ddd.example.com'),
           ),
           auth: AuthStore(),
           client: client,

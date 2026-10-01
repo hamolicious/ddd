@@ -176,7 +176,7 @@ void main() {
 
   group('bootstrapScript', () {
     String script(ShellBridge bridge) => bridge.bootstrapScript(
-      serverBaseUrl: Uri.parse('https://life.example.com'),
+      serverBaseUrl: Uri.parse('https://ddd.example.com'),
       bearerToken: 'tok-123',
       notificationPermission: 'granted',
     );
@@ -191,7 +191,7 @@ void main() {
       expect(source, contains('version: V'));
       expect(source, contains('bridgeVersion: V'));
       expect(source, contains('"tok-123"'));
-      expect(source, contains('"https://life.example.com"'));
+      expect(source, contains('"https://ddd.example.com"'));
       expect(source, contains('"granted"'));
       expect(source, contains(kBridgeHandlerName));
     });

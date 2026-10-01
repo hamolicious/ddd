@@ -4,7 +4,7 @@
     "version": 1,
     "bridgeVersion": 1,
     "platform": "android",
-    "serverBaseUrl": "https://life.example.com",
+    "serverBaseUrl": "https://ddd.example.com",
     "bearerToken": "ddd.session.Ax9…",
     "capabilities": [
       "auth",
@@ -69,7 +69,7 @@
   "updateReady": {
     "note": "How the shell tells a running page that a new bundle is verified and staged (BRIDGE.md §5, §7). Not a bridge method: the page does not ask, it is told, so the shell only has to `evaluateJavascript` a dispatch. Both spellings land on the same notice; the event is the one a plugin can also subscribe to. Purely informational — promotion happens at the next launch either way. It lives here because the listeners shipped on the web side before anything in the shell fired them, and a shared string is what keeps the two halves from drifting apart silently.",
     "event": "ddd-shell-update-ready",
-    "functionSpelling": "lmShellUpdateReady",
+    "functionSpelling": "dddShellUpdateReady",
     "detailKey": "bundleVersion",
     "script": "window.dispatchEvent(new CustomEvent(\"ddd-shell-update-ready\", { detail: { bundleVersion: \"b1f3c0de00000000000000000000000000000000000000000000000000000000\" } }));",
     "scriptVersion": "b1f3c0de00000000000000000000000000000000000000000000000000000000"
@@ -148,11 +148,11 @@
       "name": "a trailing slash is stripped so callers can concatenate a rooted path",
       "shell": {
         "version": 1,
-        "serverBaseUrl": "https://life.example.com/"
+        "serverBaseUrl": "https://ddd.example.com/"
       },
       "detected": true,
       "bridgeVersion": 1,
-      "serverBaseUrl": "https://life.example.com"
+      "serverBaseUrl": "https://ddd.example.com"
     },
     {
       "name": "a cookie shell is a shell that does not own the session",

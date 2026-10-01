@@ -39,7 +39,7 @@ export interface KernelInitOptions {
   /** Present only in a shell (SPEC §5.2); browsers authenticate with the cookie. */
   readonly bearerToken?: string;
   /**
-   * Absolute server origin, e.g. `https://life.example.com` — the shell only
+   * Absolute server origin, e.g. `https://ddd.example.com` — the shell only
    * (`boot/shell.ts`). Absent means "this page's origin", which is what a browser wants.
    */
   readonly serverBaseUrl?: string;

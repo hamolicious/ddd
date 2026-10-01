@@ -55,7 +55,7 @@ function writeTokens(target: HTMLElement, scheme: ColorScheme, tokens: ThemeToke
   // `color-scheme` so native controls and scrollbars follow, and a data attribute
   // so CSS (the kernel's or a plugin's) can branch without reading JS state.
   target.style.colorScheme = scheme;
-  target.dataset["lmScheme"] = scheme;
+  target.dataset["dddScheme"] = scheme;
 }
 
 function resolveScheme(preference: ColorSchemePreference): ColorScheme {

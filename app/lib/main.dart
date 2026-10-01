@@ -283,8 +283,8 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
         case BootAction.needsNewerShell:
           _block(
             'Update the app',
-            'The workspace this device syncs with needs a newer version of the Life '
-                'Manager app than the one installed. Install the update and start it '
+            'The workspace this device syncs with needs a newer version of the ddd '
+                'app than the one installed. Install the update and start it '
                 'again.\n\n${plan.reason ?? ''}',
           );
         case BootAction.recovery:

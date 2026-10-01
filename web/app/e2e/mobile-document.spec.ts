@@ -285,7 +285,7 @@ async function longPress(page: Page, x: number, y: number): Promise<void> {
         clientY: py,
       };
       target.dispatchEvent(new PointerEvent("pointerdown", options));
-      (globalThis as { __lmLongPress?: () => void }).__lmLongPress = () => {
+      (globalThis as { __dddLongPress?: () => void }).__dddLongPress = () => {
         target.dispatchEvent(new PointerEvent("pointerup", options));
       };
     },
@@ -293,5 +293,5 @@ async function longPress(page: Page, x: number, y: number): Promise<void> {
   );
   // Real time, because the timer is a real `setTimeout` inside the component.
   await page.waitForTimeout(700);
-  await page.evaluate(() => (globalThis as { __lmLongPress?: () => void }).__lmLongPress?.());
+  await page.evaluate(() => (globalThis as { __dddLongPress?: () => void }).__dddLongPress?.());
 }

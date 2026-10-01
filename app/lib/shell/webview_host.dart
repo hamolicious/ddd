@@ -498,7 +498,7 @@ class _WebViewHostState extends State<WebViewHost> {
   ///
   /// Not a bridge method: the page does not ask, it is told, and a `CustomEvent` needs no
   /// handler registration on this side. The web half has listened for both spellings since
-  /// M5 — the event and `window.lmShellUpdateReady` — and this is the line that makes them
+  /// M5 — the event and `window.dddShellUpdateReady` — and this is the line that makes them
   /// reachable on a device rather than only in `shell.test.ts`. The event spelling is the
   /// one dispatched because it is the one a plugin can also subscribe to.
   ///

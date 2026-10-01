@@ -290,7 +290,7 @@ export function linkStylesheet(plugin: InstalledPlugin): void {
   const link = document.createElement("link");
   link.rel = "stylesheet";
   link.href = href;
-  link.dataset["lmPlugin"] = plugin.manifest.id;
+  link.dataset["dddPlugin"] = plugin.manifest.id;
   document.head.append(link);
 }
 

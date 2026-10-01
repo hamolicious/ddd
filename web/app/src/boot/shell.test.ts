@@ -47,7 +47,7 @@ const manifestFixture = readFixture<ManifestFixture>("manifest.json");
 
 const globals = globalThis as {
   shell?: unknown;
-  lmShellUpdateReady?: unknown;
+  dddShellUpdateReady?: unknown;
   addEventListener?: unknown;
   removeEventListener?: unknown;
   dispatchEvent?: unknown;
@@ -86,7 +86,7 @@ beforeEach(() => {
 
 afterEach(() => {
   delete globals.shell;
-  delete globals.lmShellUpdateReady;
+  delete globals.dddShellUpdateReady;
   resetBootReportForTests();
 });
 
@@ -109,7 +109,7 @@ describe("in a plain browser", () => {
     const stop = onShellUpdateReady(() => {
       throw new Error("a browser must never receive a shell update event");
     });
-    expect(globals.lmShellUpdateReady).toBeUndefined();
+    expect(globals.dddShellUpdateReady).toBeUndefined();
     expect(() => stop()).not.toThrow();
   });
 
@@ -264,7 +264,7 @@ describe("the update-ready signal", () => {
     const seen: unknown[] = [];
     const stop = onShellUpdateReady((info) => seen.push(info));
 
-    const notify = globals.lmShellUpdateReady as (info?: unknown) => void;
+    const notify = globals.dddShellUpdateReady as (info?: unknown) => void;
     expect(typeof notify).toBe("function");
     notify({ bundleVersion: manifestFixture.valid.bundle_version });
     // A shell that says nothing but "something is staged" is still a valid signal.
@@ -272,7 +272,7 @@ describe("the update-ready signal", () => {
     expect(seen).toEqual([{ bundleVersion: manifestFixture.valid.bundle_version }, {}]);
 
     stop();
-    expect(globals.lmShellUpdateReady).toBeUndefined();
+    expect(globals.dddShellUpdateReady).toBeUndefined();
   });
 
   it("listens for exactly the event the shell dispatches", () => {
@@ -281,7 +281,7 @@ describe("the update-ready signal", () => {
     // and the shell's `evaluateJavascript` can disagree forever while both suites pass —
     // which is precisely what happened between M5 landing and this fixture existing.
     expect(SHELL_UPDATE_EVENT).toBe(windowShell.updateReady.event);
-    expect(windowShell.updateReady.functionSpelling).toBe("lmShellUpdateReady");
+    expect(windowShell.updateReady.functionSpelling).toBe("dddShellUpdateReady");
     expect(windowShell.updateReady.script).toContain(JSON.stringify(SHELL_UPDATE_EVENT));
     expect(windowShell.updateReady.script).toContain(windowShell.updateReady.detailKey);
     expect(windowShell.updateReady.script).toContain(

@@ -39,7 +39,7 @@ void main() {
   LoginService service(MockClient client) =>
       LoginService(auth: auth, client: client);
 
-  LoginRequest request([String server = 'https://life.example.com']) =>
+  LoginRequest request([String server = 'https://ddd.example.com']) =>
       LoginRequest(
         serverBaseUrl: Uri.parse(server),
         email: 'a@b.co',
@@ -51,8 +51,8 @@ void main() {
       // The bearer token travels on every request (SPEC §5.2); guessing cleartext for
       // someone is not the shell's decision to make.
       expect(
-        normalizeServerUrl('life.example.com'),
-        Uri.parse('https://life.example.com'),
+        normalizeServerUrl('ddd.example.com'),
+        Uri.parse('https://ddd.example.com'),
       );
     });
 
@@ -60,13 +60,13 @@ void main() {
       // `ShellConfig.api()` resolves against this and `APP_ORIGIN` compares it; a
       // remembered path would quietly produce `/app/api/…`.
       for (final String typed in <String>[
-        '  https://life.example.com/  ',
-        'https://life.example.com/app',
-        'https://life.example.com/app?x=1#y',
+        '  https://ddd.example.com/  ',
+        'https://ddd.example.com/app',
+        'https://ddd.example.com/app?x=1#y',
       ]) {
         expect(
           normalizeServerUrl(typed),
-          Uri.parse('https://life.example.com'),
+          Uri.parse('https://ddd.example.com'),
           reason: typed,
         );
       }
@@ -82,7 +82,7 @@ void main() {
     test('nonsense is null, not a guess', () {
       expect(normalizeServerUrl(''), isNull);
       expect(normalizeServerUrl('   '), isNull);
-      expect(normalizeServerUrl('ftp://life.example.com'), isNull);
+      expect(normalizeServerUrl('ftp://ddd.example.com'), isNull);
       expect(normalizeServerUrl('https://'), isNull);
       // `Uri.tryParse` would percent-escape this into `https://not%20a%20url` and report
       // the result as "could not reach", which reads like a server outage, not a typo.
@@ -106,7 +106,7 @@ void main() {
     test('asks for a bearer token with the spelling SPEC §5.2 names', () {
       expect(
         request().url,
-        Uri.parse('https://life.example.com/api/auth/login'),
+        Uri.parse('https://ddd.example.com/api/auth/login'),
       );
       expect(jsonDecode(request().body), <String, Object?>{
         'email': 'a@b.co',
@@ -134,7 +134,7 @@ void main() {
 
       expect(token, 'tok-123');
       expect(keystore[kTokenKey], 'tok-123');
-      expect(keystore[kServerKey], 'https://life.example.com');
+      expect(keystore[kServerKey], 'https://ddd.example.com');
       // The CORS layer answers this the way it will answer the webview.
       expect(seen.headers['origin'], kLoopbackOrigin.origin);
     });
@@ -301,7 +301,7 @@ void main() {
               'access-control-allow-origin': kLoopbackOrigin.origin,
             },
           ),
-        ).preflight(Uri.parse('https://life.example.com'));
+        ).preflight(Uri.parse('https://ddd.example.com'));
 
         expect(check.isHealthy, isTrue);
         expect(check.detail, isNull);
@@ -312,7 +312,7 @@ void main() {
       // Signing in will work and syncing will not; an operator who is told this while they
       // are still looking at the server can fix it in one restart.
       final Preflight check = await service(healthz())
-          .preflight(Uri.parse('https://life.example.com'));
+          .preflight(Uri.parse('https://ddd.example.com'));
 
       expect(check.reachable, isTrue);
       expect(check.originAllowed, isFalse);
@@ -324,10 +324,10 @@ void main() {
       final Preflight check = await service(
         healthz(
           headers: <String, String>{
-            'access-control-allow-origin': 'https://life.example.com',
+            'access-control-allow-origin': 'https://ddd.example.com',
           },
         ),
-      ).preflight(Uri.parse('https://life.example.com'));
+      ).preflight(Uri.parse('https://ddd.example.com'));
 
       expect(check.originAllowed, isFalse);
     });
@@ -335,7 +335,7 @@ void main() {
     test('something that is not a ddd server says so', () async {
       final Preflight check = await service(
         healthz(status: 404, body: 'Not Found'),
-      ).preflight(Uri.parse('https://life.example.com'));
+      ).preflight(Uri.parse('https://ddd.example.com'));
 
       expect(check.reachable, isFalse);
       // A reverse proxy in front of a different app looks exactly like this.
@@ -345,7 +345,7 @@ void main() {
     test('a 200 whose body is not `ok` is not a ddd server either', () async {
       final Preflight check = await service(
         healthz(body: '<html>welcome</html>'),
-      ).preflight(Uri.parse('https://life.example.com'));
+      ).preflight(Uri.parse('https://ddd.example.com'));
 
       expect(check.reachable, isFalse);
     });
@@ -358,7 +358,7 @@ void main() {
             (http.Request _) async =>
                 throw const SocketException('No route to host'),
           ),
-        ).preflight(Uri.parse('https://life.example.com'));
+        ).preflight(Uri.parse('https://ddd.example.com'));
 
         expect(check.reachable, isFalse);
         expect(check.originAllowed, isFalse);
@@ -369,12 +369,12 @@ void main() {
     test('reachable() is preflight()\'s first half', () async {
       expect(
         await service(healthz())
-            .reachable(Uri.parse('https://life.example.com')),
+            .reachable(Uri.parse('https://ddd.example.com')),
         isTrue,
       );
       expect(
         await service(healthz(status: 500))
-            .reachable(Uri.parse('https://life.example.com')),
+            .reachable(Uri.parse('https://ddd.example.com')),
         isFalse,
       );
     });
@@ -396,7 +396,7 @@ void main() {
 
     Future<void> fillIn(
       WidgetTester tester, {
-      String server = 'life.example.com',
+      String server = 'ddd.example.com',
     }) async {
       await tester.enterText(find.byType(TextField).at(0), server);
       await tester.enterText(find.byType(TextField).at(1), 'a@b.co');
@@ -433,7 +433,7 @@ void main() {
       await tester.tap(find.text('Sign in'));
       await tester.pumpAndSettle();
 
-      expect(server, Uri.parse('https://life.example.com'));
+      expect(server, Uri.parse('https://ddd.example.com'));
       expect(token, 'tok-123');
     });
 

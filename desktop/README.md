@@ -36,11 +36,11 @@ later render every frame on the CPU.
 
 First match wins:
 
-1. `--server https://life.example.com`
-2. `DDD_SERVER_URL=https://life.example.com`
+1. `--server https://ddd.example.com`
+2. `DDD_SERVER_URL=https://ddd.example.com`
 3. `~/.config/ddd/desktop.toml`:
    ```toml
-   server_url = "https://life.example.com"
+   server_url = "https://ddd.example.com"
    ```
 
 ## Run / package

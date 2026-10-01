@@ -78,7 +78,7 @@ ShellBridge _fullyRegisteredBridge() {
   final ShellBridge bridge = ShellBridge();
   final AuthStore auth = AuthStore();
   final ShellConfig config = ShellConfig(
-    serverBaseUrl: Uri.parse('https://life.example.com'),
+    serverBaseUrl: Uri.parse('https://ddd.example.com'),
   );
   auth.registerOn(bridge);
   FilesystemCapability(config: config, auth: auth).registerOn(bridge);
@@ -382,7 +382,7 @@ void main() {
       // the same either way, and `METHODS` is the list it filters against — so what this
       // pins is that the list is the bridge's and that every definition is guarded by it.
       final String js = ShellBridge().bootstrapScript(
-        serverBaseUrl: Uri.parse('https://life.example.com'),
+        serverBaseUrl: Uri.parse('https://ddd.example.com'),
         bearerToken: null,
         notificationPermission: kPermissionDefault,
       );

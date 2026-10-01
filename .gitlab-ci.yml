@@ -198,9 +198,9 @@ linux-desktop:
     - cargo tauri build
     - cd ..
     # Publish both files to public-artifacts/cli's generic package registry, as one version:
-    # tauri.conf.json's version plus the commit, like the APK's. Renamed on the way out:
-    # Tauri names them after productName (`ddd_0.1.0_amd64.deb`), and a space is not
-    # something a package file name or its URL can carry.
+    # tauri.conf.json's version plus the commit, like the APK's. Renamed on the way out
+    # to a stable `ddd-desktop_<version>_amd64.*`, independent of what Tauri derives from
+    # productName.
     - |
       version="$(sed -n 's/^ *"version": *"\([^"]*\)".*/\1/p' desktop/tauri.conf.json | head -1)-${CI_COMMIT_SHORT_SHA}"
       mkdir -p dist

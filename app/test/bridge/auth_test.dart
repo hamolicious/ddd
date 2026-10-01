@@ -69,23 +69,23 @@ void main() {
     test('the server URL is stored as an origin, never as a path', () async {
       // `ShellConfig.api()` resolves against this, so a remembered `/app` prefix would
       // quietly produce `/app/api/…`.
-      await auth.setServerBaseUrl(Uri.parse('https://life.example.com/app/'));
+      await auth.setServerBaseUrl(Uri.parse('https://ddd.example.com/app/'));
 
-      expect(keystore[kServerKey], 'https://life.example.com');
-      expect(await auth.serverBaseUrl(), Uri.parse('https://life.example.com'));
+      expect(keystore[kServerKey], 'https://ddd.example.com');
+      expect(await auth.serverBaseUrl(), Uri.parse('https://ddd.example.com'));
       expect(kServerKey, 'ddd.server-base-url');
     });
 
     test('signing out drops the token and keeps the server', () async {
       await auth.setToken('tok-123');
-      await auth.setServerBaseUrl(Uri.parse('https://life.example.com'));
+      await auth.setServerBaseUrl(Uri.parse('https://ddd.example.com'));
 
       await auth.clearToken();
 
       expect(await auth.token(), isNull);
       // The login screen comes back pre-filled; a self-hosted URL is not a secret and
       // re-typing it on every sign-out is the worst part of a self-hosted app.
-      expect(await auth.serverBaseUrl(), Uri.parse('https://life.example.com'));
+      expect(await auth.serverBaseUrl(), Uri.parse('https://ddd.example.com'));
     });
   });
 

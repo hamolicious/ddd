@@ -137,7 +137,7 @@ export async function installDevImportMap(plugins: readonly InstalledPlugin[] = 
   if (pageImportMap()) return undefined;
 
   const imports: Record<string, string> = { ...pluginImports(plugins) };
-  const registry = ((globalThis as Record<string, unknown>)["__lmRuntime"] ??= {}) as Record<
+  const registry = ((globalThis as Record<string, unknown>)["__dddRuntime"] ??= {}) as Record<
     string,
     unknown
   >;
@@ -168,7 +168,7 @@ export async function installDevImportMap(plugins: readonly InstalledPlugin[] = 
 function reexportSource(specifier: string, module: Record<string, unknown>): string {
   const keys = Object.keys(module).filter((key) => key !== "default" && isIdentifier(key));
   const lines = [
-    `const m = globalThis.__lmRuntime[${JSON.stringify(specifier)}];`,
+    `const m = globalThis.__dddRuntime[${JSON.stringify(specifier)}];`,
     ...keys.map((key) => `export const ${key} = m[${JSON.stringify(key)}];`),
   ];
   if ("default" in module) lines.push("export default m.default;");
