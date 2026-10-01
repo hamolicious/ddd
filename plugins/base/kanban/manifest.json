@@ -1,6 +1,6 @@
 {
   "id": "kanban",
-  "version": "4.5.0",
+  "version": "4.5.1",
   "name": "Kanban",
   "description": "Shows a saved search as a board: columns from a field you choose; dragging a card sets it. Filter the board by any property the cards show. Optional swimlanes split it into rows by a second field. New boards from the command palette or the folder tree.",
   "author": "Life Manager base distribution",

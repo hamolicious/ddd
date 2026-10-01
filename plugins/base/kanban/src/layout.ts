@@ -393,6 +393,23 @@ export function planRanks(cards: readonly DocumentRow[], slot: number, id: strin
   return new Map(sequence.map((card, index) => [card, (index + 1) * RANK_STEP]));
 }
 
+/**
+ * The ranks that put a new card at the bottom of a column: `cards` as shown (in one lane,
+ * on a board with swimlanes), with `queued` new cards on their way below them. When every
+ * card has a rank, the new one's alone, a step below the highest; when some have none —
+ * they sort after every ranked card, so no rank could put it below them — the column is
+ * numbered afresh as shown, `RANK_STEP` apart, and the new card after it. `id` is the
+ * key the new card's rank is returned under.
+ */
+export function appendRanks(cards: readonly DocumentRow[], queued: number, id: string): ReadonlyMap<string, number> {
+  const ranks = cards.map(rankOf);
+  if (ranks.every((rank) => rank !== undefined)) {
+    const top = ranks.length > 0 ? Math.max(...(ranks as number[])) : 0;
+    return new Map([[id, top + RANK_STEP * (1 + queued)]]);
+  }
+  return new Map([...cards.map((card, index): [string, number] => [card.id, (index + 1) * RANK_STEP]), [id, (cards.length + 1 + queued) * RANK_STEP]]);
+}
+
 /** A card's move not yet saved: its new column's value, its new rank, or both. */
 export interface Move {
   /** Present when the column changes: the value to write, `undefined` to remove it. */

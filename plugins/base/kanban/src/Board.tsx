@@ -38,8 +38,8 @@
  * clicking it reverses the sort. In a sorted column the sort places cards: the gap shows
  * where, and a drop only changes the column.
  *
- * **Adding a card stays on the board.** A column's + opens a title field at its bottom;
- * Enter makes the card and leaves the field open for the next, Escape (or leaving it
+ * **Adding a card stays on the board.** A column's + opens a title field at its top; the
+ * card goes to the column's bottom (`appendRanks`). Enter makes the card and leaves the field open for the next, Escape (or leaving it
  * empty) closes it. The new card shows at once, faded, until the note it made arrives.
  *
  * **No column is taller than the screen.** The board ends at the bottom of its scrolling
@@ -747,6 +747,16 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect }: Boa
               +
             </button>
           </h3>
+          {/* The title field at the top, in reach of the +; the card it makes goes to the bottom. */}
+          {adding === cellOf(column) && (
+            <div className="kanban:shrink-0">
+              <CardInput
+                label={`New card in ${placeOf(column)}`}
+                onSubmit={(title) => submit(column, title)}
+                onClose={() => setAdding(undefined)}
+              />
+            </div>
+          )}
           <ColumnList column={column} lift={lift} gapAt={gapAt} dress={dress} items={settings.card} group={settings.group} onPointerDown={(event, row) => startDrag(event, row, column, index)} onClick={onClick}>
             {pending
               .filter((card) => card.key === cellOf(column))
@@ -757,15 +767,6 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect }: Boa
                   </span>
                 </div>
               ))}
-            {adding === cellOf(column) && (
-              <div className="kanban:shrink-0 kanban:pb-1.5">
-                <CardInput
-                  label={`New card in ${placeOf(column)}`}
-                  onSubmit={(title) => submit(column, title)}
-                  onClose={() => setAdding(undefined)}
-                />
-              </div>
-            )}
           </ColumnList>
         </section>
       );

@@ -4650,9 +4650,9 @@
     "semantic_hash": ""
   },
   "plugins/base/search/manifest.json": {
-    "mtime": 1790812277.4316099,
-    "seen": 1790812400.9547696,
-    "ast_hash": "11b81a72b6d2b9d9d051eba641129b49",
+    "mtime": 1790812596.374939,
+    "seen": 1790812663.7034457,
+    "ast_hash": "f3d31642a688d0195761e1683502c49a",
     "semantic_hash": ""
   },
   "plugins/base/search/src/FilterBar.tsx": {
@@ -4848,9 +4848,9 @@
     "semantic_hash": ""
   },
   "plugins/base/kanban/src/Board.tsx": {
-    "mtime": 1790811267.8095999,
-    "seen": 1790811352.787837,
-    "ast_hash": "12248e7c20fecd0f4061c17a21e99e8a",
+    "mtime": 1790812622.1149147,
+    "seen": 1790812663.7016506,
+    "ast_hash": "8c075deee93d98cb9e2b957dc85eb18b",
     "semantic_hash": ""
   },
   "plugins/base/kanban/src/Settings.tsx": {
@@ -5484,9 +5484,9 @@
     "semantic_hash": ""
   },
   "plugins/base/search/src/components/FmSelect.tsx": {
-    "mtime": 1790812277.4283311,
-    "seen": 1790812400.9548957,
-    "ast_hash": "82f1b137273e0fd8af190c4a7de3e794",
+    "mtime": 1790812596.3695014,
+    "seen": 1790812663.7036328,
+    "ast_hash": "6e05bc08d70457c1c82e046a3e5f358d",
     "semantic_hash": ""
   },
   "plugins/base/kanban/src/FilterBar.tsx": {

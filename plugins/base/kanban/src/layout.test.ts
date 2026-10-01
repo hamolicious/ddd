@@ -4,6 +4,7 @@ import type { DocumentRow } from "@kernel";
 
 import {
   NO_KEPT,
+  appendRanks,
   columnsFor,
   filterChoices,
   filterFields,
@@ -94,6 +95,25 @@ describe("order and moves", () => {
       ["x", 2048],
       ["b", 3072],
     ]);
+  });
+
+  it("puts a new card last: below the highest rank, or after the unranked by numbering the column afresh", () => {
+    const ranked = [note("a", {}, { kanban: { rank: 3072 } }), note("b", {}, { kanban: { rank: 1024 } })];
+    expect([...appendRanks(ranked, 0, "new")]).toEqual([["new", 4096]]);
+    expect([...appendRanks(ranked, 2, "new")]).toEqual([["new", 6144]]);
+    expect([...appendRanks([], 0, "new")]).toEqual([["new", 1024]]);
+    const mixed = [note("a", {}, { kanban: { rank: 5 } }), note("b", {})];
+    expect([...appendRanks(mixed, 1, "new")]).toEqual([
+      ["a", 1024],
+      ["b", 2048],
+      ["new", 4096],
+    ]);
+    // Laid out again, the new card is at the bottom of its column.
+    const [column] = columnsFor(
+      [...mixed, note("new", {})].map((row) => ({ ...row, fm: { status: "x" }, plugins: { kanban: { rank: appendRanks(mixed, 0, "new").get(row.id) } } })) as DocumentRow[],
+      kanbanOptions({}),
+    );
+    expect(column?.cards.map((card) => card.id)).toEqual(["a", "b", "new"]);
   });
 
   it("shows a pending move on a copy of the row, and knows when it has landed", () => {

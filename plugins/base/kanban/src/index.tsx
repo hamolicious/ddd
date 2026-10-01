@@ -30,7 +30,7 @@ import { offerSavedView, type SavedViewAction } from "../../_shared/saved-view-m
 import { BOARD_ACTIONS } from "./actions.js";
 import { createBoard } from "./Board.js";
 import { BOARD_OPTIONS, CARD_TITLE, cardFields, noteText } from "./create.js";
-import { RANK_KEY, RANK_STEP, bornWith, rankOf, sinceField, type Column, type Filters, type KanbanOptions } from "./layout.js";
+import { RANK_KEY, appendRanks, bornWith, sinceField, type Column, type Filters, type KanbanOptions } from "./layout.js";
 import { KanbanSettings } from "./Settings.js";
 
 /** Cards loaded at a time: a board shows every column at once, so a large page. */
@@ -80,9 +80,9 @@ export default function activate(kernel: Kernel): void {
     queued: number,
     filters: Filters,
   ): Promise<string> => {
-    const ranks = column.cards.map(rankOf).filter((rank): rank is number => rank !== undefined);
-    // Below the column's last card, and below any added just before this one.
-    const rank = settings.order ? (ranks.length > 0 ? Math.max(...ranks) : 0) + RANK_STEP * (1 + queued) : undefined;
+    // Below the column's last card (in its lane), and below any added just before this one.
+    const NEW = "\u0000new";
+    const ranks = settings.order ? appendRanks(column.cards, queued, NEW) : new Map<string, number>();
     // In a swimlane, the lane's value too.
     const fields = cardFields(spec, { field: settings.group, value: column.value }, column.lane && { field: settings.lanes, value: column.lane.value });
     // Born in the column: it entered it now. The filter's values first: what the search
@@ -91,7 +91,12 @@ export default function activate(kernel: Kernel): void {
     const fm = { ...bornWith(filters), ...fields.fm, ...(since ? { [since.slice(3)]: new Date().toISOString() } : {}) };
     const id = await kernel.documents.create({ text: noteText(title.trim() || CARD_TITLE, fm) });
     // Its place in the column is this plugin's bookkeeping: in its `%%% kanban` section.
+    const rank = ranks.get(NEW);
     if (rank !== undefined) await kernel.documents.splice.spliceSection(id, [{ key: RANK_KEY, value: rank }]);
+    // Cards without a rank sort after every ranked one: the column numbered afresh, so the new card is last.
+    await Promise.all(
+      [...ranks].filter(([card]) => card !== NEW).map(([card, value]) => kernel.documents.splice.spliceSection(card, [{ key: RANK_KEY, value }])),
+    );
     if (fields.parent !== undefined && folders) await folders.file(id, fields.parent);
     else notifyCreated({ id });
     return id;
