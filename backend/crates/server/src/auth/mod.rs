@@ -50,7 +50,7 @@ pub const BEARER_PREFIX: &str = "Bearer ";
 /// The pre-rename session cookie. Still *read* (never set) during the rename
 /// hop so a browser signed in before the rename keeps its session, and
 /// expired on logout so it does not outlive the session it carried.
-pub const LEGACY_SESSION_COOKIE: &str = "life_manager_session";
+pub const LEGACY_SESSION_COOKIE: &str = "lm_session";
 
 /// Milliseconds in a day — token/session expiry arithmetic.
 const MILLIS_PER_DAY: i64 = 86_400_000;
@@ -213,7 +213,7 @@ impl FromRequestParts<AppState> for ClientMeta {
 /// Pull the raw credential out of a request: `Authorization: Bearer …` first,
 /// then the `ddd.bearer.<token>` WebSocket subprotocol, then the session
 /// cookie. RENAME-HOP: until the cleanup release the pre-rename carriers are
-/// accepted too (`life-manager.bearer.<token>`, the `life_manager_session`
+/// accepted too (`life-manager.bearer.<token>`, the `lm_session`
 /// cookie), each only when its current counterpart is absent.
 ///
 /// The header wins deliberately (RFC 7235: credentials the client sent
@@ -758,7 +758,7 @@ mod tests {
                 .0
         };
 
-        let legacy_only = parts("life_manager_session=old-token");
+        let legacy_only = parts("lm_session=old-token");
         assert_eq!(
             credential_with_legacy(&legacy_only, "ddd_session"),
             Some((
@@ -768,20 +768,20 @@ mod tests {
             ))
         );
 
-        let both = parts("life_manager_session=old-token; ddd_session=new-token");
+        let both = parts("lm_session=old-token; ddd_session=new-token");
         assert_eq!(
             credential_with_legacy(&both, "ddd_session"),
             Some(("new-token".to_string(), AuthVia::Cookie, None))
         );
 
-        let empty_current = parts("ddd_session=; life_manager_session=old-token");
+        let empty_current = parts("ddd_session=; lm_session=old-token");
         assert_eq!(
             credential_from_parts(&empty_current, "ddd_session"),
             Some(("old-token".to_string(), AuthVia::Cookie))
         );
 
         assert_eq!(
-            credential_from_parts(&parts("life_manager_session="), "ddd_session"),
+            credential_from_parts(&parts("lm_session="), "ddd_session"),
             None
         );
     }
@@ -790,7 +790,7 @@ mod tests {
     #[test]
     fn logout_can_expire_the_legacy_cookie() {
         let cookie = expired_cookie(LEGACY_SESSION_COOKIE, true).to_string();
-        assert!(cookie.starts_with("life_manager_session=;"), "{cookie}");
+        assert!(cookie.starts_with("lm_session=;"), "{cookie}");
         assert!(cookie.contains("Max-Age=0"), "{cookie}");
         assert!(cookie.contains("Path=/"), "{cookie}");
         assert!(cookie.contains("HttpOnly"), "{cookie}");

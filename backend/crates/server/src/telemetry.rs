@@ -100,7 +100,7 @@ pub enum LegacyClient {
     Subprotocol,
     /// The `life-manager.bearer.<token>` WebSocket subprotocol.
     BearerSubprotocol,
-    /// The `life_manager_session` cookie.
+    /// The `lm_session` cookie.
     Cookie,
 }
 

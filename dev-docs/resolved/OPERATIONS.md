@@ -380,7 +380,7 @@ they have not synced yet, and tells them where the deployment now lives.
   the old domain uses it to send the user to the new one.
 - **Old clients keep working.** The server accepts the `life-manager.v1`
   subprotocol, the `life-manager.bearer.<token>` prefix and the
-  `life_manager_session` cookie alongside the current names. New sessions always
+  `lm_session` cookie alongside the current names. New sessions always
   get `ddd_session`. Logout expires the old cookie too.
 - **The database is copied once, at boot.** If `MONGO_DATABASE` is the default
   `ddd`, the server copies the old `life_manager` database into it before the

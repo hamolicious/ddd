@@ -924,9 +924,7 @@ async fn a_pre_rename_client_still_connects() {
     headers.insert(header::ORIGIN, ORIGIN.parse().unwrap());
     headers.insert(
         header::COOKIE,
-        format!("life_manager_session={}", app.token)
-            .parse()
-            .unwrap(),
+        format!("lm_session={}", app.token).parse().unwrap(),
     );
     let (mut socket, response) = tokio_tungstenite::connect_async(request)
         .await
