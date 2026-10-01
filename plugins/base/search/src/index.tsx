@@ -15,6 +15,10 @@
  *   saved searches whose `type` names it and draws itself inside it.
  * - **The functional query API** (`query.ts`): `query().filter(…).sort(…).run()`,
  *   the shared core's query plan written as a chain, and `useQuery` for it live.
+ * - **The search builder** (`builder.ts`): `search().where(field("fm.status").eq("open"))
+ *   .orderBy("fm.due").rows()` — conditions as values (`field`, `and`, `or`, `not`,
+ *   `childOf`, `parentOf`), the answer in the shape wanted, and the same search as a
+ *   `SearchSpec` (`toSpec`, `save`, `search(spec)`).
  * - **Components** (`components/`): the pieces other plugins build with — `NoteSelect`,
  *   `FmKeySelect` and `FmValueSelect`, boxes that pick a note, a frontmatter key and one of
  *   its values. `NoteSelect` draws each note as the folder tree does
@@ -54,6 +58,7 @@ import { createNoteHooks, type NoteLooks } from "./components/notes.js";
 import { searchEngine } from "./providers.js";
 import { resolveSearch, useResults as useResultsWith } from "./results.js";
 import { SAVED_SEARCH_KEY, savedSearchNoteText, savedSearchOf as savedSearchOfRow, savedSearchTitle } from "./saved.js";
+import { bindBuilder } from "./builder.js";
 import { bindDocuments } from "./query.js";
 import { createSavedSearch } from "./SavedSearch.js";
 import { createSearchShell } from "./SearchShell.js";
@@ -61,10 +66,28 @@ import { documentPath, encodeSpec, parseSpec } from "./spec.js";
 
 export type { NoteLooks } from "./components/notes.js";
 export {
+  Field,
+  SearchBuilder,
+  and,
+  childOf,
+  doc,
+  field,
+  fromSpec,
+  not,
+  or,
+  parentOf,
+  raw,
+  search,
+  type Condition,
+  type SearchValue,
+  type SortDirection,
+} from "./builder.js";
+export {
   QueryBuilder,
   QueryError,
   query,
   useQuery,
+  type Plannable,
   type QueryOp,
   type QueryState,
   type QueryValue,
@@ -315,9 +338,11 @@ export default function activate(kernel: Kernel): void {
     FmKeySelect,
     FmValueSelect,
   };
+  bindBuilder({ save: saveSearch });
 }
 
 export function deactivate(): void {
   active = undefined;
   bindDocuments(undefined);
+  bindBuilder(undefined);
 }

@@ -84,7 +84,7 @@ function literal(value: QueryValue): unknown {
 }
 
 /** One condition → one DSL node: the core's `query::lower`, in TypeScript. */
-function lower(field: string, op: QueryOp, values: readonly QueryValue[], deep: boolean): FilterJson {
+export function lower(field: string, op: QueryOp, values: readonly QueryValue[], deep: boolean): FilterJson {
   const one = (): QueryValue => {
     if (values.length !== 1) throw new QueryError(`\`${op}\` takes one value`);
     return values[0] as QueryValue;
@@ -295,7 +295,8 @@ export class QueryBuilder {
   }
 }
 
-function need(): DocumentsApi {
+/** The kernel's documents API; throws while this plugin is not active. */
+export function need(): DocumentsApi {
   if (!documents) throw new Error("search is not active yet: run a query from your plugin's activate() or later");
   return documents;
 }
@@ -313,15 +314,24 @@ export interface QueryState {
   readonly error?: string;
 }
 
+/** Anything that writes a plan: a `QueryBuilder`, a `SearchBuilder`. */
+export interface Plannable {
+  plan(): QueryPlan;
+}
+
+function isPlannable(source: Plannable | QueryPlan): source is Plannable {
+  return typeof (source as Partial<Plannable>).plan === "function";
+}
+
 /**
- * A React hook: the query's answer, live. Pass a builder or a plan; a new one with the
- * same content does not re-subscribe.
+ * A React hook: the query's answer, live. Pass a builder (`query()`, `search()`) or a
+ * plan; a new one with the same content does not re-subscribe.
  */
-export function useQuery(source: QueryBuilder | QueryPlan | undefined): QueryState {
+export function useQuery(source: Plannable | QueryPlan | undefined): QueryState {
   let plan: QueryPlan | undefined;
   let planError: string | undefined;
   try {
-    plan = source instanceof QueryBuilder ? source.plan() : source;
+    plan = source !== undefined && isPlannable(source) ? source.plan() : source;
   } catch (error) {
     planError = error instanceof Error ? error.message : String(error);
   }
