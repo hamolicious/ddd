@@ -11,6 +11,7 @@
 
 import type { DocumentRow } from "@kernel";
 
+import { DOC_PREFIX } from "../../_shared/conditions.js";
 import { fieldValue } from "../../_shared/dates.js";
 import { displayRow, inferKind } from "../../_shared/fm-display.js";
 
@@ -50,7 +51,34 @@ export function serializeCard(items: readonly CardItem[]): string {
 
 /** A property's value as a card line: `""` when the note has none. */
 export function fieldText(row: DocumentRow, field: string): string {
+  return fieldParts(row, field)
+    .map((part) => (part.kind === "doc" ? `${DOC_PREFIX}${part.id}` : part.text))
+    .join(", ");
+}
+
+/** A piece of a property's value on a card: a note it points at, or text. */
+export type FieldPart = { readonly kind: "doc"; readonly id: string } | { readonly kind: "text"; readonly text: string };
+
+/**
+ * A property's value as the parts a card draws, in order: each `doc://<id>` — the whole
+ * value, or an item of a list — is the note it points at, drawn as a link to it; anything
+ * else is text. Empty when the note has none.
+ */
+export function fieldParts(row: DocumentRow, field: string): readonly FieldPart[] {
   const key = field.slice("fm.".length);
   const value = fieldValue(row, field);
-  return displayRow({ key, value, kind: inferKind(key, value) }).text;
+  const shown = displayRow({ key, value, kind: inferKind(key, value) });
+  if (shown.empty) return [];
+  return (shown.items ?? [shown.text]).map((item) => {
+    const id = docLinkId(item);
+    return id === undefined ? { kind: "text", text: item } : { kind: "doc", id };
+  });
+}
+
+/** `doc://<id>`, the whole value: the id, or `undefined` for anything else. */
+function docLinkId(value: string): string | undefined {
+  const text = value.trim();
+  if (!text.startsWith(DOC_PREFIX)) return undefined;
+  const id = text.slice(DOC_PREFIX.length);
+  return /^[A-Za-z0-9_-]+$/.test(id) ? id : undefined;
 }

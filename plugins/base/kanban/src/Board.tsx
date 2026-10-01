@@ -72,14 +72,14 @@
  * makes the card with the lane's value.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentType, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactElement, ReactNode, SyntheticEvent } from "react";
 import { createPortal } from "react-dom";
 
 import type { DocumentRow, Kernel } from "@kernel";
 import type { ContextMenu } from "plugin:context-menu";
 import type { NoteLook } from "plugin:folders";
-import { onChange as onMarkdownChange, render as renderMarkdown } from "plugin:markdown";
+import { onChange as onMarkdownChange, render as renderMarkdown, renderDocLink } from "plugin:markdown";
 import type { FmValueSelectProps, SearchSpec } from "plugin:search";
 import type { SavedViewProps } from "../../_shared/saved-view-mode.js";
 
@@ -89,7 +89,7 @@ import { LONG_PRESS_MS, target as mark } from "../../_shared/target.js";
 import { useFitToScreen, useVirtualList } from "../../_shared/virtual-list.js";
 
 import { boards, selectionItems, type BoardHandle, type DocumentAction } from "./actions.js";
-import { fieldText, type CardItem } from "./card.js";
+import { fieldParts, type CardItem } from "./card.js";
 import { ColumnEditor } from "./ColumnEditor.js";
 import { FilterBar } from "./FilterBar.js";
 import { useFlip } from "./flip.js";
@@ -1192,7 +1192,8 @@ function Gap({ height }: { readonly height: number }): ReactElement {
 
 /**
  * What a card shows, top to bottom, as the board's settings say (`card.ts`): the title
- * with its icon and a property as "key value", both wrapped in full, and the note's text
+ * with its icon and a property as "key value", both wrapped in full (a property that points
+ * at a note shows that note as a link to it, its title and look), and the note's text
  * — its whole body, rendered as markdown (`CardText`). An item with nothing to show is
  * left out; a card whose items all come out empty falls back to its title, faded, so no
  * card is ever blank.
@@ -1206,11 +1207,24 @@ function CardBody({ row, items, look }: { readonly row: DocumentRow; readonly it
         const body = row.content === undefined ? "" : bodyOf(row.content).trim();
         return body === "" ? null : <CardText key="content" id={row.id} body={body} />;
       }
-      const text = fieldText(row, item.field);
-      return text === "" ? null : (
+      const parts = fieldParts(row, item.field);
+      return parts.length === 0 ? null : (
         <span key={item.field} className="kanban:flex kanban:min-w-0 kanban:gap-1 kanban:text-xs">
           <span className="kanban:shrink-0 kanban:opacity-70">{item.field.slice("fm.".length)}</span>
-          <span className="kanban:min-w-0 kanban:[overflow-wrap:anywhere]">{text}</span>
+          <span className="kanban:min-w-0 kanban:[overflow-wrap:anywhere]">
+            {parts.map((part, index) => (
+              <Fragment key={index}>
+                {index > 0 ? ", " : null}
+                {part.kind === "doc" ? (
+                  <span className={CARD_LINK_CLASSES} onClick={keepControl} onPointerDown={keepControl}>
+                    {renderDocLink(part.id)}
+                  </span>
+                ) : (
+                  part.text
+                )}
+              </Fragment>
+            ))}
+          </span>
         </span>
       );
     })
@@ -1233,8 +1247,21 @@ const CARD_TEXT_CLASSES =
   // The card's own colour (its folder look, inline) over markdown's theme text: as the title.
   "kanban:min-w-0 kanban:w-full kanban:text-xs kanban:leading-snug kanban:opacity-90 kanban:[&_.md-root]:text-inherit kanban:[&_.md-root_blockquote]:text-inherit kanban:[&_.md-root_blockquote]:opacity-75 kanban:[&_.md-root_li.md-task-done]:text-inherit kanban:[&_.md-root_li.md-task-done]:opacity-60 kanban:[&_.md-root]:text-xs kanban:[&_.md-root]:leading-snug kanban:[&_.md-root>*+*]:mt-1 kanban:[&_.md-root_h1]:my-1 kanban:[&_.md-root_h1]:text-sm kanban:[&_.md-root_h1]:font-semibold kanban:[&_.md-root_h2]:my-1 kanban:[&_.md-root_h2]:text-sm kanban:[&_.md-root_h2]:font-semibold kanban:[&_.md-root_h3]:my-1 kanban:[&_.md-root_h3]:text-xs kanban:[&_.md-root_h3]:font-semibold kanban:[&_.md-root_h4]:my-1 kanban:[&_.md-root_h4]:text-xs kanban:[&_.md-root_h4]:font-semibold kanban:[&_.md-root_h5]:my-1 kanban:[&_.md-root_h5]:text-xs kanban:[&_.md-root_h5]:font-semibold kanban:[&_.md-root_h6]:my-1 kanban:[&_.md-root_h6]:text-xs kanban:[&_.md-root_h6]:font-semibold kanban:[&_.md-root_p]:my-0 kanban:[&_.md-root_ul]:my-0 kanban:[&_.md-root_ol]:my-0 kanban:[&_.md-root_blockquote]:my-0 kanban:[&_.md-root_blockquote]:border-l-2 kanban:[&_.md-root_blockquote]:pl-2 kanban:[&_.md-root_pre]:my-0 kanban:[&_.md-root_pre]:max-w-full kanban:[&_.md-root_pre]:overflow-x-auto kanban:[&_.md-root_pre]:rounded kanban:[&_.md-root_pre]:border kanban:[&_.md-root_pre]:border-border kanban:[&_.md-root_pre]:bg-bg-subtle kanban:[&_.md-root_pre]:p-1.5 kanban:[&_.md-root_code]:break-words kanban:[&_.md-root_code]:rounded-[3px] kanban:[&_.md-root_code]:bg-bg-subtle kanban:[&_.md-root_code]:px-[0.3em] kanban:[&_.md-root_code]:font-mono kanban:[&_.md-root_code]:text-[0.9em] kanban:[&_.md-root_pre_code]:bg-transparent kanban:[&_.md-root_pre_code]:p-0 kanban:[&_.md-root_img]:h-auto kanban:[&_.md-root_img]:max-w-full kanban:[&_.md-root_img]:rounded kanban:[&_.md-root_table]:my-0 kanban:[&_.md-root_table]:block kanban:[&_.md-root_table]:max-w-full kanban:[&_.md-root_table]:overflow-x-auto kanban:[&_.md-root_table]:border-collapse kanban:[&_.md-root_th]:border kanban:[&_.md-root_th]:border-border kanban:[&_.md-root_th]:px-1 kanban:[&_.md-root_th]:text-left kanban:[&_.md-root_td]:border kanban:[&_.md-root_td]:border-border kanban:[&_.md-root_td]:px-1 kanban:[&_.md-root_td]:text-left kanban:[&_.md-root_hr]:my-1";
 
+/**
+ * A note a property points at, as `markdown` draws a link to it: its live title, colour
+ * and icon. The pill wears a drop shadow here, on the card, so a note in the card's own
+ * colour is still a thing of its own on it rather than a word in the same paint.
+ */
+const CARD_LINK_CLASSES =
+  "kanban:inline-flex kanban:max-w-full kanban:align-baseline kanban:[&>a]:max-w-full kanban:[&>a[style*=background]]:shadow-[0_1px_2px_rgba(0,0,0,0.35)]";
+
 /** Controls inside the rendered text: their clicks and presses stay theirs. */
 const CONTROL = "a, button, input, select, textarea, label, [role='button'], [role='checkbox']";
+
+/** A click or press on a control inside a card is that control's: it neither opens the card nor starts a drag. */
+function keepControl(event: SyntheticEvent<HTMLElement>): void {
+  if ((event.target as Element).closest(CONTROL)) event.stopPropagation();
+}
 
 function CardText({ id, body }: { readonly id: string; readonly body: string }): ReactElement {
   // Re-rendered when what is added to markdown changes (a directive, a task state).
@@ -1242,11 +1269,8 @@ function CardText({ id, body }: { readonly id: string; readonly body: string }):
   useEffect(() => onMarkdownChange(() => setRevision((at) => at + 1)), []);
   // Parsing is the cost; the board redraws its cards on every move of a drag.
   const rendered = useMemo(() => renderMarkdown(body, { documentId: id }), [body, id, revision]);
-  const keep = (event: SyntheticEvent<HTMLElement>): void => {
-    if ((event.target as Element).closest(CONTROL)) event.stopPropagation();
-  };
   return (
-    <span className={CARD_TEXT_CLASSES} onClick={keep} onPointerDown={keep}>
+    <span className={CARD_TEXT_CLASSES} onClick={keepControl} onPointerDown={keepControl}>
       {rendered}
     </span>
   );
