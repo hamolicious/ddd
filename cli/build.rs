@@ -12,7 +12,10 @@ fn main() {
     println!("cargo:rerun-if-changed=../.git/HEAD");
 
     let rev = std::env::var("LM_SDK_REV").ok().or_else(|| {
-        let out = Command::new("git").args(["rev-parse", "HEAD"]).output().ok()?;
+        let out = Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .output()
+            .ok()?;
         out.status
             .success()
             .then(|| String::from_utf8_lossy(&out.stdout).trim().to_owned())

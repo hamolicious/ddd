@@ -1,5 +1,5 @@
-//! Reading from a running Life Manager server. Only unauthenticated routes: `/kernel.d.ts`,
-//! `/importmap.json` and plugin assets.
+//! Talking to a running Life Manager server: the unauthenticated routes (`/kernel.d.ts`,
+//! `/importmap.json`, plugin assets), and JSON calls with a bearer token (`lm query`).
 
 use std::collections::BTreeMap;
 
@@ -27,6 +27,33 @@ impl Server {
             .call()
             .and_then(|mut response| response.body_mut().read_to_string())
             .with_context(|| format!("GET {url}"))
+    }
+
+    /// POST a JSON body, with a bearer token when given; the JSON answer. A refusal is an
+    /// error carrying the server's message.
+    pub fn post_json(&self, path: &str, body: &Value, token: Option<&str>) -> Result<Value> {
+        let url = format!("{}{path}", self.base);
+        let mut request = ureq::post(&url)
+            .config()
+            .http_status_as_error(false)
+            .build();
+        if let Some(token) = token {
+            request = request.header("Authorization", &format!("Bearer {token}"));
+        }
+        let mut response = request
+            .send_json(body)
+            .with_context(|| format!("POST {url}"))?;
+        let status = response.status();
+        let text = response
+            .body_mut()
+            .read_to_string()
+            .with_context(|| format!("POST {url}"))?;
+        let answer: Value = serde_json::from_str(&text).unwrap_or(Value::String(text));
+        if !status.is_success() {
+            let message = answer["error"]["message"].as_str().unwrap_or("no message");
+            anyhow::bail!("POST {url}: {status}: {message}");
+        }
+        Ok(answer)
     }
 
     /// Installed plugin id → the version the server loads, from the import map's

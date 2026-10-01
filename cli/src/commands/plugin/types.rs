@@ -26,7 +26,9 @@ pub struct TypesArgs {
 
 pub fn run(args: TypesArgs) -> Result<()> {
     let Some(server) = args.server else {
-        bail!("which server? pass --server <url> or set LM_SERVER (npm run types -- --server <url>)");
+        bail!(
+            "which server? pass --server <url> or set LM_SERVER (npm run types -- --server <url>)"
+        );
     };
     fetch(&args.dir, &Server::new(&server))
 }

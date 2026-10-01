@@ -89,12 +89,19 @@ pub fn run(args: NewArgs) -> Result<()> {
     let server = args.server.as_deref().map(Server::new);
     let name = args.name.clone().unwrap_or_else(|| title_case(id));
     let crate_name = id.replace('-', "_");
-    let vars = [("id", id), ("name", name.as_str()), ("crate", crate_name.as_str())];
+    let vars = [
+        ("id", id),
+        ("name", name.as_str()),
+        ("crate", crate_name.as_str()),
+    ];
 
     let dependencies = resolve_dependencies(&args, server.as_ref())?;
 
     let mut scaffold = Scaffold::default();
-    scaffold.file("manifest.json", pretty(&manifest(&args, &name, dependencies)?));
+    scaffold.file(
+        "manifest.json",
+        pretty(&manifest(&args, &name, dependencies)?),
+    );
     scaffold.file("package.json", pretty(&package(&args)?));
     scaffold.file("tsconfig.json", TSCONFIG);
     scaffold.file("vite.config.mjs", VITE_CONFIG);
@@ -148,7 +155,9 @@ fn resolve_dependencies(args: &NewArgs, server: Option<&Server>) -> Result<Map<S
             Some((id, range)) => (id, range.to_owned()),
             None => {
                 let Some(server) = server else {
-                    bail!("--dep {dep}: give a range (--dep {dep}@^1.0), or --server to take it from that server");
+                    bail!(
+                        "--dep {dep}: give a range (--dep {dep}@^1.0), or --server to take it from that server"
+                    );
                 };
                 if installed.is_none() {
                     installed = Some(server.plugin_versions().with_context(|| {
@@ -259,7 +268,10 @@ fn package(args: &NewArgs) -> Result<Value> {
 }
 
 fn pretty(value: &Value) -> String {
-    format!("{}\n", serde_json::to_string_pretty(value).expect("JSON values serialize"))
+    format!(
+        "{}\n",
+        serde_json::to_string_pretty(value).expect("JSON values serialize")
+    )
 }
 
 fn title_case(id: &str) -> String {

@@ -36,7 +36,8 @@ impl Scaffold {
                 fs::create_dir_all(parent)
                     .with_context(|| format!("creating {}", parent.display()))?;
             }
-            fs::write(&target, contents).with_context(|| format!("writing {}", target.display()))?;
+            fs::write(&target, contents)
+                .with_context(|| format!("writing {}", target.display()))?;
         }
         Ok(())
     }
