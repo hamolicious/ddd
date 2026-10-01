@@ -1,13 +1,14 @@
 /**
  * The filter bar above the board (`layout.ts`'s `filterRows`): a pill per property the
- * cards show. Idle, a pill names the property and the value chosen ("Any" for none) —
- * muted, or in the accent while a value is chosen. Clicked, it opens to `search`'s
- * `FmValueSelect` in place: the value typed, or picked from every value the workspace
- * holds for the property, commonest first, each with its note count.
+ * cards show, and one for the swimlane field. Idle, a pill names the property and the
+ * values chosen ("Any" for none) — muted, or in the accent while any is chosen; each
+ * chosen value has its own × to take it off. Clicked, the pill opens to `search`'s
+ * `FmValueSelect` in place: a value typed, or picked from every value the workspace holds
+ * for the property, commonest first, each with its note count.
  *
- * A value some card on the board holds applies as soon as it is typed or picked, and an
- * emptied box lifts the filter at once. Enter, a pick, or leaving the pill applies whatever
- * was typed and closes it; Escape only closes it. "× Clear" lifts every filter.
+ * A pick, Enter, or leaving the pill with something typed toggles that value: added when
+ * it was not chosen, taken off when it was. A card shows when it holds any of a pill's
+ * values (`toggleValue`). Escape only closes it. "× Clear" lifts every filter.
  */
 
 import { useRef, useState } from "react";
@@ -16,7 +17,7 @@ import type { ComponentType, ReactElement } from "react";
 import type { DocumentRow } from "@kernel";
 import type { FmValueSelectProps } from "plugin:search";
 
-import { filterChoices, type Filters, type Scalar } from "./layout.js";
+import { filterChoices, toggleValue, type Filters, type Scalar } from "./layout.js";
 
 const PILL =
   "kanban:relative kanban:inline-flex kanban:h-7 kanban:items-center kanban:gap-1 kanban:rounded-full! kanban:border! kanban:pl-2.5! kanban:pr-2! kanban:py-0! kanban:text-xs kanban:shadow-1 kanban:transition-colors kanban:duration-150 kanban:compact:h-9";
@@ -31,7 +32,8 @@ export interface FilterBarProps {
   /** Every card loaded: what each property takes on the board. */
   readonly rows: readonly DocumentRow[];
   readonly filters: Filters;
-  readonly onFilter: (field: string, value: Scalar | undefined) => void;
+  /** The field's values now: none lifts its filter. */
+  readonly onFilter: (field: string, values: readonly Scalar[]) => void;
   readonly onClear: () => void;
   readonly FmValueSelect: ComponentType<FmValueSelectProps>;
 }
@@ -47,8 +49,8 @@ export function FilterBar({ fields, rows, filters, onFilter, onClear, FmValueSel
           key={field}
           field={field}
           choices={filterChoices(rows, field)}
-          current={filters.get(field)}
-          onChange={(value) => onFilter(field, value)}
+          current={filters.get(field) ?? []}
+          onChange={(values) => onFilter(field, values)}
           Select={FmValueSelect}
         />
       ))}
@@ -75,12 +77,12 @@ function FilterPill({
   readonly field: string;
   /** The values cards on the board hold: typed exactly, one applies at once, as its own kind. */
   readonly choices: readonly Scalar[];
-  readonly current: Scalar | undefined;
-  readonly onChange: (value: Scalar | undefined) => void;
+  readonly current: readonly Scalar[];
+  readonly onChange: (values: readonly Scalar[]) => void;
   readonly Select: ComponentType<FmValueSelectProps>;
 }): ReactElement {
   const name = field.slice("fm.".length);
-  const active = current !== undefined;
+  const active = current.length > 0;
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   /** The draft as the handlers see it: a pick's `onChange` lands before the click reaches the pill. */
@@ -91,9 +93,8 @@ function FilterPill({
   const picking = useRef(false);
 
   const open = (): void => {
-    const text = active ? String(current) : "";
-    setDraft(text);
-    typed.current = text;
+    setDraft("");
+    typed.current = "";
     closed.current = false;
     setEditing(true);
   };
@@ -102,40 +103,61 @@ function FilterPill({
     setEditing(false);
   };
   const held = (text: string): Scalar | undefined => choices.find((choice) => String(choice) === text.trim());
-  /** Apply `text`: a value a card holds as that value, anything else as typed, nothing as no filter. */
+  /** Toggle `text`: a value a card holds as that value, anything else as typed; nothing changes nothing. */
   const apply = (text: string): void => {
     const trimmed = text.trim();
-    onChange(trimmed === "" ? undefined : (held(trimmed) ?? trimmed));
+    if (trimmed !== "") onChange(toggleValue(current, held(trimmed) ?? trimmed));
   };
   const type = (text: string): void => {
     setDraft(text);
     typed.current = text;
-    // What a card holds, or nothing at all, shows on the board as it is typed.
-    const value = held(text);
-    if (value !== undefined) onChange(value);
-    else if (text.trim() === "" && active) onChange(undefined);
   };
 
   if (!editing) {
     return (
-      <button
-        type="button"
-        className={`${PILL} kanban:min-h-0! kanban:cursor-pointer ${
+      <span
+        className={`${PILL} ${
           active
             ? "kanban:border-accent! kanban:bg-accent-subtle! kanban:text-text"
             : "kanban:border-border! kanban:bg-bg-raised! kanban:text-text-muted kanban:hover:border-border-strong! kanban:hover:text-text"
         }`}
-        aria-haspopup="listbox"
-        aria-label={`Filter by ${name}: ${active ? String(current) : "any"}`}
-        title={`Filter by ${name}`}
-        onClick={open}
       >
-        <span className={NAME}>{name}</span>
-        <span className={`kanban:max-w-[10rem] kanban:truncate ${active ? "kanban:font-semibold" : ""}`}>{active ? String(current) : "Any"}</span>
-        <span aria-hidden="true" className="kanban:text-[0.6rem] kanban:opacity-60">
-          ▾
-        </span>
-      </button>
+        <button
+          type="button"
+          className="kanban:inline-flex kanban:h-full kanban:min-h-0! kanban:cursor-pointer kanban:items-center kanban:gap-1 kanban:border-0! kanban:bg-transparent! kanban:p-0! kanban:text-xs kanban:text-inherit"
+          aria-haspopup="listbox"
+          aria-label={`Filter by ${name}: ${active ? current.map(String).join(" or ") : "any"}. Add a value`}
+          title={`Filter by ${name}`}
+          onClick={open}
+        >
+          <span className={NAME}>{name}</span>
+          {!active && <span>Any</span>}
+        </button>
+        {current.map((value) => (
+          <button
+            key={String(value)}
+            type="button"
+            className="kanban:inline-flex kanban:h-5 kanban:min-h-0! kanban:max-w-[10rem] kanban:items-center kanban:gap-0.5 kanban:rounded-full! kanban:border-0! kanban:bg-bg-raised! kanban:px-1.5! kanban:py-0! kanban:text-xs kanban:font-semibold kanban:text-text kanban:hover:text-danger"
+            aria-label={`Remove ${String(value)} from the ${name} filter`}
+            title={`Remove ${String(value)}`}
+            onClick={() => onChange(toggleValue(current, value))}
+          >
+            <span className="kanban:truncate">{String(value)}</span>
+            <span aria-hidden="true" className="kanban:opacity-60">
+              ×
+            </span>
+          </button>
+        ))}
+        <button
+          type="button"
+          className="kanban:inline-flex kanban:h-full kanban:min-h-0! kanban:cursor-pointer kanban:items-center kanban:border-0! kanban:bg-transparent! kanban:p-0! kanban:text-[0.6rem] kanban:text-inherit kanban:opacity-60"
+          aria-hidden="true"
+          tabIndex={-1}
+          onClick={open}
+        >
+          {active ? "+" : "▾"}
+        </button>
+      </span>
     );
   }
   return (
@@ -171,7 +193,7 @@ function FilterPill({
       }}
     >
       <span className={NAME}>{name}</span>
-      <Select fmKey={name} value={draft} onChange={type} label={`Filter by ${name}`} placeholder="Any" autoFocus />
+      <Select fmKey={name} value={draft} onChange={type} label={`Filter by ${name}: add or remove a value`} placeholder={active ? "Add or remove…" : "Any"} autoFocus />
     </div>
   );
 }

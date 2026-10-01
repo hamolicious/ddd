@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import type { DocumentRow } from "@kernel";
 
-import { holds, keepLanes, laneChange, laneCount, laneTitle, lanesFor } from "./lanes.js";
-import { NO_KEPT, kanbanOptions, settled, withMoves } from "./layout.js";
+import { holds, keepLanes, laneChange, laneCount, laneScope, laneTitle, lanesFor } from "./lanes.js";
+import { NO_KEPT, filterRows, kanbanOptions, settled, withMoves, type Scalar } from "./layout.js";
 
 const note = (id: string, fm: DocumentRow["fm"]): DocumentRow => ({ id, title: id, fm, plugins: {} }) as DocumentRow;
 
@@ -75,5 +75,27 @@ describe("swimlanes", () => {
     expect(settled(rows[0]!, settings, { lane: { value: "API" } })).toBe(false);
     expect(holds(rows[2]!, "fm.team", undefined)).toBe(true);
     expect(holds(rows[4]!, "fm.team", "ops")).toBe(true);
+  });
+
+  it("are exactly the chosen ones under a filter on the lane field, without the 'No …' lane", () => {
+    const filters = new Map<string, readonly Scalar[]>([["fm.team", ["web", "API"]]]);
+    const kept = keepLanes(lanesFor(rows, settings), NO_KEPT);
+    const lanes = lanesFor(filterRows(rows, filters), settings, NO_KEPT, kept, filters.get("fm.team"));
+    expect(lanes.map((lane) => lane.key)).toEqual(["API", "web"]);
+    expect(lanes[1]?.columns.map((column) => ids(column.cards))).toEqual([["a", "e"], ["d"], []]);
+    // A chosen value no card holds is still its lane, to drop into or add to.
+    const ghost = lanesFor(filterRows(rows, new Map([["fm.team", ["design"]]])), settings, NO_KEPT, kept, ["design"]);
+    expect(ghost.map((lane) => [lane.key, lane.value, laneCount(lane)])).toEqual([["design", "design", 0]]);
+    // No lane filter: as before.
+    expect(lanesFor(rows, settings, NO_KEPT, NO_KEPT, []).map((lane) => lane.key)).toEqual(["API", "ops", "web", undefined]);
+  });
+
+  it("are kept for a drag, but not across a change of filter", () => {
+    const none = laneScope("fm.team", new Map());
+    expect(laneScope("fm.team", new Map())).toBe(none);
+    expect(laneScope("fm.team", new Map([["fm.status", ["todo"]]]))).not.toBe(none);
+    expect(laneScope("fm.other", new Map())).not.toBe(none);
+    // The order the filters were chosen in, or a value's type, is no change.
+    expect(laneScope("fm.team", new Map<string, readonly Scalar[]>([["a", [1]], ["b", ["x"]]]))).toBe(laneScope("fm.team", new Map([["b", ["x"]], ["a", ["1"]]])));
   });
 });

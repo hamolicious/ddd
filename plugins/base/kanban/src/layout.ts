@@ -32,9 +32,10 @@
  * - **Moving a card writes the field.** Only a top-level frontmatter key can be written by
  *   one splice (`setFrontmatterValue`), and only a scalar value moves cleanly, so cards of
  *   a nested key or a list value stay where they are; the board still shows them.
- * - **A filter above the board** (`filterRows`) narrows it to the cards holding one value
- *   of a field the cards show — local to the screen, never saved. A card made under a
- *   filter is born with its value (`index.tsx`).
+ * - **A filter above the board** (`filterRows`) narrows it to the cards holding one of the
+ *   chosen values of each field it names (the swimlane field, or one the cards show) —
+ *   local to the screen, never saved. A card made under a filter of one value is born with
+ *   it (`index.tsx`).
  * - **Swimlanes** (`lanes`, off by default) split the board into rows by a second field,
  *   each row with the same columns (`lanes.ts`). A move into another lane writes that
  *   field too, by the same splice as the column's.
@@ -476,12 +477,16 @@ export function settled(row: DocumentRow, settings: KanbanOptions, move: Move): 
   return move.rank === undefined || rankOf(row) === move.rank;
 }
 
-/** A filter above the board: for each field, the one value a shown card must hold. */
-export type Filters = ReadonlyMap<string, Scalar>;
+/**
+ * A filter above the board: for each field, the values a shown card may hold — any one of
+ * them (or), every field at once (and). A field with no value chosen is not in the map.
+ */
+export type Filters = ReadonlyMap<string, readonly Scalar[]>;
 
-/** The fields the board can filter by: every property the cards show. */
+/** The fields the board can filter by: the swimlane field first, when there is one, then every property the cards show. */
 export function filterFields(settings: KanbanOptions): readonly string[] {
-  return settings.card.flatMap((item) => (item.kind === "field" ? [item.field] : []));
+  const shown = settings.card.flatMap((item) => (item.kind === "field" ? [item.field] : []));
+  return settings.lanes.startsWith("fm.") && !shown.includes(settings.lanes) ? [settings.lanes, ...shown] : shown;
 }
 
 /** The values `field` takes across `rows`, each once, in natural order: what a filter offers. */
@@ -491,15 +496,30 @@ export function filterChoices(rows: readonly DocumentRow[], field: string): read
   return [...seen.entries()].sort(([a], [b]) => a.localeCompare(b, undefined, { sensitivity: "base", numeric: true })).map(([, value]) => value);
 }
 
-/** The rows holding every filter's value (a list value counts when any of its items does). */
+/** The rows holding one of each filter's values (a list value counts when any of its items does). */
 export function filterRows(rows: readonly DocumentRow[], filters: Filters): readonly DocumentRow[] {
   if (filters.size === 0) return rows;
-  return rows.filter((row) => [...filters].every(([field, value]) => valuesOf(row, field).some(([key]) => key === String(value))));
+  return rows.filter((row) =>
+    [...filters].every(([field, values]) => {
+      const keys = new Set(values.map(String));
+      return valuesOf(row, field).some(([key]) => keys.has(key));
+    }),
+  );
 }
 
-/** What a card made under `filters` is born with: each filter's value, where a note can be given it. */
+/** `values` with `value` added, or taken out when it is there already (as text: `2` and `"2"` are one value). */
+export function toggleValue(values: readonly Scalar[], value: Scalar): readonly Scalar[] {
+  return values.some((each) => String(each) === String(value)) ? values.filter((each) => String(each) !== String(value)) : [...values, value];
+}
+
+/**
+ * What a card made under `filters` is born with: each filter's value, where a note can be
+ * given it — only a filter of one value: of several, no one of them is the card's.
+ */
 export function bornWith(filters: Filters): Readonly<Record<string, Scalar>> {
-  return Object.fromEntries([...filters].filter(([field]) => writableField(field)).map(([field, value]) => [field.slice(3), value]));
+  return Object.fromEntries(
+    [...filters].flatMap(([field, values]) => (writableField(field) && values.length === 1 && values[0] !== undefined ? [[field.slice(3), values[0]] as const] : [])),
+  );
 }
 
 /** A column's name on the board: its label, its value, or "No …" for the notes without one. */

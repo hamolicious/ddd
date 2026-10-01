@@ -49,9 +49,10 @@
  * knows its slot among the column's. With swimlanes the board itself scrolls its lanes.
  *
  * **A filter bar above the board** (`FilterBar.tsx`), one pill per property the cards
- * show (the board's settings), narrows the board to the cards holding the chosen value —
- * on this screen only, nothing is saved. A card added while a filter is on is born with its value, so it
- * stays in view.
+ * show (the board's settings) and one for the swimlane field, narrows the board to the
+ * cards holding one of each pill's chosen values — on this screen only, nothing is saved.
+ * Filtered on the swimlane field, the board shows exactly the chosen lanes. A card added
+ * while a one-value filter is on is born with its value, so it stays in view.
  *
  * **Cards can be selected together.** Dragging from anywhere on the board that is not a
  * card draws a box; the cards it crosses are selected (Shift or Ctrl held, added to those
@@ -90,7 +91,7 @@ import { excerpt, fieldText, type CardItem } from "./card.js";
 import { ColumnEditor } from "./ColumnEditor.js";
 import { FilterBar } from "./FilterBar.js";
 import { useFlip } from "./flip.js";
-import { holds, keepLanes, laneChange, laneCount, laneTitle, lanesFor, type Lane } from "./lanes.js";
+import { holds, keepLanes, laneChange, laneCount, laneScope, laneTitle, lanesFor, type Lane } from "./lanes.js";
 import {
   NO_KEPT,
   columnTitle,
@@ -225,11 +226,11 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
     const [chosen, setChosen] = useState<Filters>(() => new Map());
     const fields = filterFields(settings);
     const filters: Filters = new Map([...chosen].filter(([field]) => fields.includes(field)));
-    const filter = (field: string, value: Scalar | undefined): void =>
+    const filter = (field: string, values: readonly Scalar[]): void =>
       setChosen((current) => {
         const next = new Map(current);
-        if (value === undefined) next.delete(field);
-        else next.set(field, value);
+        if (values.length === 0) next.delete(field);
+        else next.set(field, values);
         return next;
       });
     const rows = filterRows(withMoves(results.rows, settings, moves), filters);
@@ -237,13 +238,15 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
     // Lanes too, for this lane field.
     const kept = useRef<{ group: string; lanesBy: string; columns: KeptColumns; lanes: KeptColumns }>({
       group: settings.group,
-      lanesBy: settings.lanes,
+      lanesBy: laneScope(settings.lanes, new Map()),
       columns: NO_KEPT,
       lanes: NO_KEPT,
     });
     if (kept.current.group !== settings.group) kept.current = { ...kept.current, group: settings.group, columns: NO_KEPT };
-    if (kept.current.lanesBy !== settings.lanes) kept.current = { ...kept.current, lanesBy: settings.lanes, lanes: NO_KEPT };
-    const lanes = lanesFor(rows, settings, kept.current.columns, kept.current.lanes);
+    // Kept for this lane field and these filters: a lane a new filter empties goes (`laneScope`).
+    const scope = laneScope(settings.lanes, filters);
+    if (kept.current.lanesBy !== scope) kept.current = { ...kept.current, lanesBy: scope, lanes: NO_KEPT };
+    const lanes = lanesFor(rows, settings, kept.current.columns, kept.current.lanes, filters.get(settings.lanes));
     // Every lane's columns, one after another: a column's index is its place in this list.
     const columns = lanes.flatMap((lane) => lane.columns);
     kept.current.columns = keepColumns(columns, kept.current.columns);

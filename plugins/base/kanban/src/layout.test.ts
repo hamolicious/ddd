@@ -9,6 +9,7 @@ import {
   filterChoices,
   filterFields,
   filterRows,
+  toggleValue,
   bornWith,
   kanbanOptions,
   keepColumns,
@@ -169,17 +170,29 @@ describe("the filter bar", () => {
     expect(filterChoices(rows, "fm.priority")).toEqual([2, 10]);
     expect(filterChoices(rows, "fm.tags")).toEqual(["p", "q"]);
     expect(filterChoices(rows, "fm.none")).toEqual([]);
+    // The swimlane field, first, even when the cards do not show it.
+    expect(filterFields(kanbanOptions({ card: "title,fm.project", lanes: "fm.team" }))).toEqual(["fm.team", "fm.project"]);
+    expect(filterFields(kanbanOptions({ card: "title,fm.team", lanes: "fm.team" }))).toEqual(["fm.team"]);
+  });
+
+  it("toggles a value on and off", () => {
+    expect(toggleValue([], "a")).toEqual(["a"]);
+    expect(toggleValue(["a", "b"], "a")).toEqual(["b"]);
+    expect(toggleValue([2], "2")).toEqual([]);
   });
 
   it("keeps the rows holding every chosen value, a list value by any of its items", () => {
     expect(filterRows(rows, new Map()).map((row) => row.id)).toEqual(["a", "b", "c"]);
-    expect(filterRows(rows, new Map([["fm.project", "Beta"]])).map((row) => row.id)).toEqual(["a", "c"]);
-    expect(filterRows(rows, new Map<string, Scalar>([["fm.project", "Beta"], ["fm.priority", 10]])).map((row) => row.id)).toEqual(["c"]);
-    expect(filterRows(rows, new Map([["fm.tags", "q"]])).map((row) => row.id)).toEqual(["b"]);
+    expect(filterRows(rows, new Map([["fm.project", ["Beta"]]])).map((row) => row.id)).toEqual(["a", "c"]);
+    expect(filterRows(rows, new Map<string, readonly Scalar[]>([["fm.project", ["Beta"]], ["fm.priority", [10]]])).map((row) => row.id)).toEqual(["c"]);
+    expect(filterRows(rows, new Map([["fm.tags", ["q"]]])).map((row) => row.id)).toEqual(["b"]);
+    // Several values of one field: any of them.
+    expect(filterRows(rows, new Map([["fm.project", ["alpha", "Beta"]]])).map((row) => row.id)).toEqual(["a", "b", "c"]);
+    expect(filterRows(rows, new Map<string, readonly Scalar[]>([["fm.project", ["alpha", "Beta"]], ["fm.priority", [2, "10"]]])).map((row) => row.id)).toEqual(["a", "c"]);
   });
 
   it("gives a new card each filter's value, where a note can be given it", () => {
-    expect(bornWith(new Map<string, Scalar>([["fm.project", "Beta"], ["fm.priority", 2], ["fm.a.b", "nested"]]))).toEqual({ project: "Beta", priority: 2 });
+    expect(bornWith(new Map<string, readonly Scalar[]>([["fm.project", ["Beta"]], ["fm.priority", [2]], ["fm.a.b", ["nested"]], ["fm.team", ["web", "api"]]]))).toEqual({ project: "Beta", priority: 2 });
   });
 });
 
