@@ -37479,7 +37479,7 @@
       "file_type": "code",
       "norm_label": "cardtext()",
       "source_file": "plugins/base/kanban/src/Board.tsx",
-      "source_location": "L1238"
+      "source_location": "L1239"
     },
     {
       "id": "plugins_base_kanban_src_board_columnlist",
@@ -37491,7 +37491,7 @@
       "file_type": "code",
       "norm_label": "columnlist()",
       "source_file": "plugins/base/kanban/src/Board.tsx",
-      "source_location": "L1261"
+      "source_location": "L1262"
     },
     {
       "id": "plugins_base_kanban_src_board_createboard",
@@ -37527,7 +37527,7 @@
       "file_type": "code",
       "norm_label": "lifted()",
       "source_file": "plugins/base/kanban/src/Board.tsx",
-      "source_location": "L1405"
+      "source_location": "L1406"
     },
     {
       "id": "plugins_base_kanban_src_board_marquee",
@@ -37539,7 +37539,7 @@
       "file_type": "code",
       "norm_label": "marquee()",
       "source_file": "plugins/base/kanban/src/Board.tsx",
-      "source_location": "L1458"
+      "source_location": "L1459"
     },
     {
       "id": "plugins_base_kanban_src_board_modified",
@@ -47189,7 +47189,7 @@
       "file_type": "code",
       "norm_label": "cardslot()",
       "source_file": "plugins/base/kanban/src/Board.tsx",
-      "source_location": "L1332"
+      "source_location": "L1333"
     },
     {
       "id": "plugins_base_shared_dates_adddays",
@@ -189824,7 +189824,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/kanban/src/Board.tsx",
-      "source_location": "L1389",
+      "source_location": "L1390",
       "weight": 1.0
     },
     {
@@ -189836,7 +189836,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/kanban/src/Board.tsx",
-      "source_location": "L1285",
+      "source_location": "L1286",
       "weight": 1.0
     },
     {
@@ -189848,7 +189848,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/kanban/src/Board.tsx",
-      "source_location": "L1319",
+      "source_location": "L1320",
       "weight": 1.0
     },
     {
@@ -406686,7 +406686,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/kanban/src/Board.tsx",
-      "source_location": "L1238",
+      "source_location": "L1239",
       "weight": 1.0
     },
     {
@@ -406697,7 +406697,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/kanban/src/Board.tsx",
-      "source_location": "L1261",
+      "source_location": "L1262",
       "weight": 1.0
     },
     {
@@ -406708,7 +406708,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/kanban/src/Board.tsx",
-      "source_location": "L1332",
+      "source_location": "L1333",
       "weight": 1.0
     },
     {
@@ -406719,7 +406719,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/kanban/src/Board.tsx",
-      "source_location": "L1405",
+      "source_location": "L1406",
       "weight": 1.0
     },
     {
@@ -406730,7 +406730,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/kanban/src/Board.tsx",
-      "source_location": "L1458",
+      "source_location": "L1459",
       "weight": 1.0
     },
     {
@@ -480161,5 +480161,5 @@
       "source_file": "plugins/base/README.md"
     }
   ],
-  "built_at_commit": "2c911fa7a147a3ee7c5e376bf90339884cb8ac3c"
+  "built_at_commit": "159baf84704c47b74f2aa28c1ae8381a516afe02"
 }
