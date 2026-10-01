@@ -19,8 +19,7 @@ import type { ComponentType, ReactNode, RefObject } from "react";
 import { createRegistry, s } from "@kernel";
 import type { DocumentRow, QueryPlan, SearchHit } from "@kernel";
 
-import type { Condition, Field, SearchBuilder } from "./builder.js";
-import type { Plannable, QueryBuilder, QueryState } from "./query.js";
+import type { QueryBuilder, QueryState } from "./query.js";
 
 /**
  * A search source besides the workspace's own — a semantic index, an external wiki —
@@ -279,20 +278,6 @@ export interface Search {
    * The shared core's query plan, answered by the kernel's engine. Since 4.11.0.
    */
   readonly query: () => QueryBuilder;
-  /** A React hook: a query's answer, live. Takes a `search()` too since 4.12.0. Since 4.11.0. */
-  readonly useQuery: (source: Plannable | QueryPlan | undefined) => QueryState;
-  /**
-   * The search builder: `search().where(field("fm.status").eq("open")).orderBy("fm.due").rows()`.
-   * Conditions are values (`field`, `and`, `or`, `not`, `childOf`, `parentOf`, `raw`); the
-   * answer comes as `rows`, `first`, `ids`, `count`, `all`, `run` or `live`; `toSpec` and
-   * `save` make it a search the shell shows, and `search(spec)` reads one. Since 4.12.0.
-   */
-  readonly search: (spec?: SearchSpec) => SearchBuilder;
-  /** A field to put conditions on: `field("fm.due").lte(new Date())`. Since 4.12.0. */
-  readonly field: (path: string) => Field;
-  readonly and: (...items: readonly Condition[]) => Condition;
-  readonly or: (...items: readonly Condition[]) => Condition;
-  readonly not: (item: Condition) => Condition;
-  readonly childOf: (id: string, options?: { readonly deep?: boolean }) => Condition;
-  readonly parentOf: (id: string) => Condition;
+  /** A React hook: a query's answer, live. Since 4.11.0. */
+  readonly useQuery: (source: QueryBuilder | QueryPlan | undefined) => QueryState;
 }

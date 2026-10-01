@@ -4842,15 +4842,15 @@
     "semantic_hash": ""
   },
   "plugins/base/kanban/manifest.json": {
-    "mtime": 1790871126.3144116,
-    "seen": 1790871239.1433446,
-    "ast_hash": "0edd7fe815a2017d47db0e03c0d90201",
+    "mtime": 1790857761.4833505,
+    "seen": 1790860137.5706923,
+    "ast_hash": "de726f96460860c69610c3e4a0b87f8e",
     "semantic_hash": ""
   },
   "plugins/base/kanban/src/Board.tsx": {
-    "mtime": 1790871126.3098807,
-    "seen": 1790871239.1433468,
-    "ast_hash": "bf597ace22fe0dbda4f524454a7d3a7a",
+    "mtime": 1790857761.4834409,
+    "seen": 1790860137.570694,
+    "ast_hash": "3b3438ec4401f1ca3af2fbb3215a1025",
     "semantic_hash": ""
   },
   "plugins/base/kanban/src/Settings.tsx": {
@@ -4908,15 +4908,15 @@
     "semantic_hash": ""
   },
   "plugins/base/kanban/src/card.test.ts": {
-    "mtime": 1790871110.9623423,
-    "seen": 1790871239.1434805,
-    "ast_hash": "6515443256b8e3ff708e75f963ba6693",
+    "mtime": 1790857761.4837162,
+    "seen": 1790860137.5707877,
+    "ast_hash": "ae1e03da905fcdfe144a6b39fbdfa10d",
     "semantic_hash": ""
   },
   "plugins/base/kanban/src/card.ts": {
-    "mtime": 1790871110.9622328,
-    "seen": 1790871239.143483,
-    "ast_hash": "a1c90b0455057c9e2e2bebeab1cf08e2",
+    "mtime": 1790857761.4837933,
+    "seen": 1790860137.5707886,
+    "ast_hash": "d26ee14efa9305accd0ee24ead3ffd44",
     "semantic_hash": ""
   },
   "plugins/base/_shared/highlights.ts": {
