@@ -231,7 +231,9 @@ export function useVirtualList({
   const measured = useRef({ sum: 0, count: 0 });
   const [, setVersion] = useState(0);
 
-  const guess = measured.current.count > 0 ? measured.current.sum / measured.current.count : estimate;
+  // Never 0: a guess of nothing would draw nothing, and a row never drawn is never measured.
+  const mean = measured.current.count > 0 ? measured.current.sum / measured.current.count : estimate;
+  const guess = mean > 0 ? mean : estimate;
   const starts = layoutRows(count, (index) => sizes.current.get(keyOf(index)) ?? guess);
   const latest = useRef({ starts, overscan });
   latest.current = { starts, overscan };
@@ -278,6 +280,11 @@ export function useVirtualList({
         const key = keys.current.get(entry.target);
         if (key === undefined || !entry.target.isConnected) continue;
         const height = entry.borderBoxSize?.[0]?.blockSize ?? entry.target.getBoundingClientRect().height;
+        // A row not rendered (kanban hides the card being carried) is reported at 0: no
+        // row's real height, and not to be learnt from. Kept at 0, it would stand in the
+        // mean, and a list whose only rows had all been carried out would guess 0 for the
+        // next row — a total height of 0, so nothing drawn, so nothing measured, for good.
+        if (!(height > 0)) continue;
         const previous = sizes.current.get(key);
         if (previous !== undefined && Math.abs(previous - height) < 0.5) continue;
         sizes.current.set(key, height);
