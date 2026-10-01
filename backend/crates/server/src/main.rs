@@ -92,6 +92,13 @@ async fn serve(config: Config) -> anyhow::Result<()> {
         .store(true, Ordering::Relaxed);
     info!(schema_version, "schema ready");
 
+    // The query engine loads from the feed in the background: a query that arrives
+    // first catches it up itself (`QueryIndex::catch_up`), so nothing waits on this.
+    tokio::spawn({
+        let query = std::sync::Arc::clone(&state.query);
+        async move { query.warm().await }
+    });
+
     // Scan the plugin directory at boot rather than lazily on the first request.
     // The registry is cached either way, so this is not about speed — it is about
     // *when the operator learns*. Scanned lazily, "0 plugins from …" and every

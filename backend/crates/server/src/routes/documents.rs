@@ -6,6 +6,7 @@
 //! | Method | Path | Behaviour |
 //! |---|---|---|
 //! | GET | `/api/documents` | list/query: `filter` (DSL), `search`, `sort`, `cursor`, `limit`, `trash` |
+//! | POST | `/api/query` | a query plan (`core::query::Plan`) as the body; the same answer, plus `total` and text `hits` |
 //! | POST | `/api/documents` | create from full text; existing id → 409, graveyarded id → 410 |
 //! | GET | `/api/documents/:id` | materialized JSON, forces a flush; `?format=crdt` returns CRDT state |
 //! | PUT | `/api/documents/:id` | replace full text in one CRDT transaction |
@@ -20,10 +21,10 @@
 //! The Trash view is `GET /api/documents?trash=trashed` — a tombstoned document
 //! is still a document, so it needs no second listing endpoint.
 //!
-//! Client JSON never reaches Mongo: `filter` is parsed by the shared core's DSL
-//! and compiled by [`life_manager_core::filter::mongo`], `sort` goes through a
-//! whitelist ([`sort_field_allowed`]), and `search` is handed to the docstore as
-//! opaque terms for its `$text` query.
+//! Listing and searching run on the query engine (`query_index.rs`), the same one
+//! the browser runs: `filter` is parsed by the shared core's DSL, `sort` goes through
+//! a whitelist ([`sort_field_allowed`]), and `search` is the engine's ranked text
+//! search. Mongo is only asked for the rows of the page, by id.
 
 use axum::extract::{Path, Query, State};
 use axum::http::{StatusCode, header};
@@ -32,14 +33,17 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use base64::Engine as _;
 use bson::doc;
+use std::collections::HashMap;
+
 use life_manager_core::filter::ast::{Filter, SortKey};
-use life_manager_core::filter::mongo as filter_mongo;
+use life_manager_core::query::{Hit, Plan, Sort, Trash};
 use serde::{Deserialize, Serialize};
 
 use crate::auth::AuthUser;
-use crate::docstore::{DocStoreError, ListQuery, TrashFilter};
+use crate::docstore::{DocStoreError, TrashFilter};
 use crate::domain::{AuditEntry, DocumentView, Id, Timestamp, is_valid_id};
 use crate::error::{AppError, AppResult};
+use crate::query_index::QueryIndexError;
 use crate::state::AppState;
 
 /// Default and maximum page size for list queries.
@@ -137,38 +141,30 @@ pub struct ListParams {
 }
 
 impl ListParams {
-    /// Validate and compile into a [`ListQuery`]: parse the DSL, compile it to
-    /// Mongo, clamp the limit, resolve the sort keys.
-    pub fn into_query(self) -> AppResult<ListQuery> {
+    /// Validate into a query [`Plan`], and whether the caller wants `content`: parse
+    /// the DSL, resolve the sort keys, clamp the limit.
+    pub fn into_plan(self) -> AppResult<(Plan, bool)> {
         let filter = match self.filter.as_deref().map(str::trim) {
             None | Some("") => None,
-            Some(raw) => {
-                let parsed = Filter::from_json_str(raw)
-                    .map_err(|err| AppError::bad_request(format!("invalid filter: {err}")))?;
-                let compiled = filter_mongo::compile(&parsed)
-                    .map_err(|err| AppError::bad_request(format!("invalid filter: {err}")))?;
-                Some(compiled)
-            }
+            Some(raw) => Some(
+                Filter::from_json_str(raw)
+                    .map_err(|err| AppError::bad_request(format!("invalid filter: {err}")))?,
+            ),
         };
 
         let sort = match self.sort.as_deref().map(str::trim) {
-            None | Some("") => None,
-            Some(raw) => {
-                let keys = parse_sort_spec(raw)?;
-                let compiled = filter_mongo::compile_sort(&keys)
-                    .map_err(|err| AppError::bad_request(format!("invalid sort: {err}")))?;
-                Some(compiled)
-            }
+            None | Some("") => Vec::new(),
+            Some(raw) => parse_sort_spec(raw)?.into_iter().map(Sort::Field).collect(),
         };
 
-        let search = match self.search.as_deref().map(str::trim) {
-            None | Some("") => None,
+        let text = match self.search.as_deref().map(str::trim) {
+            None | Some("") => String::new(),
             Some(terms) if terms.len() > MAX_SEARCH_LEN => {
                 return Err(AppError::bad_request(format!(
                     "search is limited to {MAX_SEARCH_LEN} characters"
                 )));
             }
-            Some(terms) => Some(terms.to_string()),
+            Some(terms) => terms.to_string(),
         };
 
         let cursor = match self.cursor.as_deref().map(str::trim) {
@@ -176,17 +172,22 @@ impl ListParams {
             Some(cursor) => Some(cursor.to_string()),
         };
 
-        Ok(ListQuery {
+        let plan = Plan {
+            text,
             filter,
             sort,
-            search,
+            trash: match parse_trash(self.trash.as_deref())? {
+                TrashFilter::Live => Trash::Live,
+                TrashFilter::Trashed => Trash::Trashed,
+                TrashFilter::All => Trash::All,
+            },
+            limit: Some(clamp_limit(self.limit)?),
             cursor,
-            limit: clamp_limit(self.limit)?,
-            trash: parse_trash(self.trash.as_deref())?,
-            // Passed down so the docstore leaves `content` out of the Mongo
-            // projection, rather than reading megabytes and blanking them here.
-            metadata_only: self.metadata_only,
-        })
+            snippets: false,
+        };
+        plan.validate()
+            .map_err(|err| AppError::bad_request(err.to_string()))?;
+        Ok((plan, self.metadata_only))
     }
 }
 
@@ -195,6 +196,26 @@ pub struct ListResponse {
     pub documents: Vec<DocumentView>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_cursor: Option<String>,
+    /// Every match, before paging.
+    pub total: usize,
+}
+
+/// `POST /api/query?metadata_only=` query string; the body is the plan.
+#[derive(Debug, Default, Deserialize)]
+pub struct QueryParams {
+    #[serde(default)]
+    pub metadata_only: bool,
+}
+
+/// `POST /api/query`: a page of rows, and why each matched the plan's text.
+#[derive(Debug, Serialize)]
+pub struct QueryResponse {
+    pub documents: Vec<DocumentView>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
+    pub total: usize,
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    pub hits: HashMap<String, Hit>,
 }
 
 /// `POST /api/documents`. `id` is client-mintable (offline creates).
@@ -443,20 +464,49 @@ pub async fn list(
     _user: AuthUser,
     Query(params): Query<ListParams>,
 ) -> AppResult<Json<ListResponse>> {
-    let query = params.into_query()?;
-    let page = state.docs.list(&query).await.map_err(map_docstore)?;
-
-    // `metadata_only` is honoured by the Mongo projection inside
-    // `DocStore::list` (`ListQuery::metadata_only`), so there is nothing to blank
-    // here: a row arrives with `content` already absent. Blanking it in this loop
-    // instead would mean reading every megabyte off the wire and throwing it away
-    // — the list path is exactly where that is not affordable (SPEC §3.5).
-    let documents = page.documents.into_iter().map(DocumentView::from).collect();
-
+    let (plan, metadata_only) = params.into_plan()?;
+    let found = state
+        .query
+        .rows(&plan, !metadata_only)
+        .await
+        .map_err(map_query)?;
     Ok(Json(ListResponse {
-        documents,
-        next_cursor: page.next_cursor,
+        documents: found.rows.into_iter().map(DocumentView::from).collect(),
+        next_cursor: found.page.next_cursor,
+        total: found.page.total,
     }))
+}
+
+/// `POST /api/query` — a [`Plan`] in, a page of documents out. The functional
+/// query surface for scripts and the CLI: everything `GET /api/documents` can ask,
+/// plus relevance sorting, folder relations and snippets.
+pub async fn query(
+    State(state): State<AppState>,
+    _user: AuthUser,
+    Query(params): Query<QueryParams>,
+    Json(plan): Json<serde_json::Value>,
+) -> AppResult<Json<QueryResponse>> {
+    let plan = Plan::from_json(&plan).map_err(|err| AppError::bad_request(err.to_string()))?;
+    let found = state
+        .query
+        .rows(&plan, !params.metadata_only)
+        .await
+        .map_err(map_query)?;
+    Ok(Json(QueryResponse {
+        documents: found.rows.into_iter().map(DocumentView::from).collect(),
+        next_cursor: found.page.next_cursor,
+        total: found.page.total,
+        hits: found.page.hits,
+    }))
+}
+
+/// A wrong plan is the caller's 400; anything else is ours.
+pub(crate) fn map_query(err: QueryIndexError) -> AppError {
+    match err {
+        QueryIndexError::Query(err) => AppError::bad_request(err.to_string()),
+        QueryIndexError::Db(err) => AppError::Db(err),
+        QueryIndexError::Feed(err) => AppError::Internal(err.into()),
+    }
 }
 
 pub async fn create(
@@ -837,22 +887,9 @@ mod tests {
     #[test]
     fn every_advertised_sort_field_survives_the_core() {
         for field in SORTABLE_FIELDS {
-            let key = SortKey::parse(field).unwrap_or_else(|err| {
+            SortKey::parse(field).unwrap_or_else(|err| {
                 panic!("`{field}` is advertised but the core refuses it: {err}")
             });
-            filter_mongo::compile_sort(std::slice::from_ref(&key)).unwrap_or_else(|err| {
-                panic!("`{field}` is advertised but does not compile to a Mongo sort: {err}")
-            });
-        }
-        // And the other direction, for the two the core accepts but sorting must not:
-        // `content` is megabytes of text and `deleted` is a derived boolean whose stored
-        // column is a timestamp.
-        for field in ["content", "deleted"] {
-            let key = SortKey::parse(field).expect("the core addresses it");
-            assert!(
-                filter_mongo::compile_sort(std::slice::from_ref(&key)).is_err(),
-                "`{field}` must not be a sort key"
-            );
         }
     }
 

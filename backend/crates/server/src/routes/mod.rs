@@ -58,6 +58,7 @@ pub fn router(state: AppState, metrics: PrometheusHandle) -> Router {
     let api = Router::new()
         .nest("/auth", auth::router())
         .nest("/documents", documents::router())
+        .route("/query", axum::routing::post(documents::query))
         .nest("/attachments", attachments::router())
         .nest("/uploads", uploads::router())
         .nest("/admin", admin::router())

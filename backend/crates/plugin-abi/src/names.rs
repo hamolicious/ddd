@@ -12,6 +12,7 @@
 
 pub const GET_DOCUMENT: &str = "get_document";
 pub const QUERY_DOCUMENTS: &str = "query_documents";
+pub const QUERY: &str = "query";
 pub const CREATE_DOCUMENT: &str = "create_document";
 pub const SPLICE_SECTION: &str = "splice_section";
 pub const REWRITE_DOCUMENT: &str = "rewrite_document";
@@ -26,12 +27,13 @@ pub const LOG: &str = "log";
 
 /// Every host function, in the order `backend/HOST-ABI.md` documents them.
 ///
-/// **All twelve plus `log` are linked into every instance**, declared or not: an
+/// **All thirteen plus `log` are linked into every instance**, declared or not: an
 /// undeclared one is linked as an *erroring stub* (SPEC §6.2), so instantiation never
 /// fails on imports and a plugin may probe for a capability it does not have.
 pub const HOST_FUNCTIONS: &[&str] = &[
     GET_DOCUMENT,
     QUERY_DOCUMENTS,
+    QUERY,
     CREATE_DOCUMENT,
     SPLICE_SECTION,
     REWRITE_DOCUMENT,

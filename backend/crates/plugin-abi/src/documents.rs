@@ -1,4 +1,4 @@
-//! The document host functions: `get_document`, `query_documents`, `create_document`,
+//! The document host functions: `get_document`, `query_documents`, `query`, `create_document`,
 //! `splice_section`, `rewrite_document`.
 //!
 //! **A document is text** (SPEC §2). `content` is the whole string — frontmatter, body
@@ -149,6 +149,32 @@ pub struct QueryDocumentsOutput {
     /// see a whole workspace; there is no unbounded read.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_cursor: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
+// query
+// ---------------------------------------------------------------------------
+
+/// A query plan (`life_manager_core::query::Plan` as JSON): text, filter, relations
+/// (`child_of` / `parent_of`), sort, trash, limit, cursor, snippets. The SDK's
+/// `Query` builder writes it. Invalid plans are [`crate::ErrorCode::InvalidArgument`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueryInput {
+    pub plan: Value,
+    #[serde(default)]
+    pub metadata_only: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QueryOutput {
+    pub documents: Vec<DocumentValue>,
+    /// Every match, before paging.
+    pub total: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
+    /// Per matched id, when the plan had text: `{ score, terms, snippet? }`.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub hits: std::collections::BTreeMap<String, Value>,
 }
 
 // ---------------------------------------------------------------------------

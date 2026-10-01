@@ -13,14 +13,14 @@
 //! - **A refusal is a value, not a trap.** SPEC §6.2 requires undeclared capabilities to
 //!   be linked as *erroring stubs* so instantiation never fails on imports and optional
 //!   use is expressible. A trap would poison the instance and lose the call.
-//! - **One serializer, one size cap, one log line** per host call, instead of thirteen
+//! - **One serializer, one size cap, one log line** per host call, instead of fourteen
 //!   near-identical ones.
 //!
 //! # Capability gating, in one table
 //!
 //! | Function | Capability |
 //! |---|---|
-//! | `get_document`, `query_documents` | `documents: ["read"]` |
+//! | `get_document`, `query_documents`, `query` | `documents: ["read"]` |
 //! | `create_document`, `splice_section`, `rewrite_document` | `documents: ["write"]` |
 //! | `http_request` | `http.hosts` contains the URL's host |
 //! | `kv_get`, `kv_set`, `config_get`, `emit`, `emit_client`, `call_plugin`, `log` | none |
@@ -31,7 +31,7 @@
 //! callee's `backend.exports` instead, and
 //! `emit_client` reaches only sessions of this workspace's users.
 //!
-//! The check lives in each **body**, never in the registration: all thirteen imports are
+//! The check lives in each **body**, never in the registration: all fourteen imports are
 //! linked into every instance whatever an admin approved, because SPEC §6.2 requires an
 //! undeclared one to be an *erroring stub* rather than a missing import.
 //!
@@ -78,7 +78,7 @@ use serde::de::DeserializeOwned;
 
 use super::limits::{CallCounters, Deadline, PluginLimits, WriteLedger};
 use super::{ActivePlugin, CallKind};
-use crate::docstore::{DocStoreError, ListQuery, TrashFilter};
+use crate::docstore::DocStoreError;
 use crate::state::AppState;
 
 /// Everything a host function needs to answer, for one invocation.
@@ -132,7 +132,7 @@ impl HostContext {
     }
 }
 
-/// The thirteen host functions.
+/// The fourteen host functions.
 ///
 /// **All of them are always registered**, including the ones whose capability is missing:
 /// those refuse in the body with [`abi::ErrorCode::CapabilityDenied`]. Registering only the
@@ -161,6 +161,7 @@ pub fn functions() -> Vec<Function> {
 
     host_fn!(abi::names::GET_DOCUMENT, get_document);
     host_fn!(abi::names::QUERY_DOCUMENTS, query_documents);
+    host_fn!(abi::names::QUERY, query);
     host_fn!(abi::names::CREATE_DOCUMENT, create_document);
     host_fn!(abi::names::SPLICE_SECTION, splice_section);
     host_fn!(abi::names::REWRITE_DOCUMENT, rewrite_document);
@@ -559,7 +560,8 @@ pub fn get_document(
     })
 }
 
-/// `query_documents` — the filter DSL, compiled to Mongo by the shared core.
+/// `query_documents` — the filter DSL, search and sort, answered by the query engine
+/// (`query_index.rs`), the same one the REST list and the browser run.
 ///
 /// The DSL is parsed by `core::filter`, never handed to Mongo as client JSON — the same
 /// rule the REST list route follows, and the reason a plugin cannot smuggle a `$where`.
@@ -571,70 +573,104 @@ pub fn query_documents(
 
     let filter = match input.filter.as_ref() {
         None | Some(serde_json::Value::Null) => None,
-        Some(json) => {
-            let parsed = core::filter::ast::Filter::from_json(json)
-                .map_err(|err| invalid(format!("the filter is not valid: {err}")))?;
-            Some(
-                core::filter::mongo::compile(&parsed)
-                    .map_err(|err| invalid(format!("the filter cannot be compiled: {err}")))?,
-            )
-        }
+        Some(json) => Some(
+            core::filter::ast::Filter::from_json(json)
+                .map_err(|err| invalid(format!("the filter is not valid: {err}")))?,
+        ),
     };
+    let sort = input
+        .sort
+        .iter()
+        .map(|token| {
+            core::query::Sort::parse(token)
+                .map_err(|err| invalid(format!("`{token}` is not a sort key: {err}")))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
-    let sort = if input.sort.is_empty() {
-        None
-    } else {
-        let keys: Vec<core::filter::ast::SortKey> = input
-            .sort
-            .iter()
-            .map(|token| {
-                core::filter::ast::SortKey::parse(token)
-                    .map_err(|err| invalid(format!("`{token}` is not a sort key: {err}")))
-            })
-            .collect::<Result<_, _>>()?;
-        Some(
-            core::filter::mongo::compile_sort(&keys)
-                .map_err(|err| invalid(format!("the sort cannot be compiled: {err}")))?,
-        )
-    };
-
-    let query = ListQuery {
-        filter,
-        sort,
-        search: input
+    let plan = core::query::Plan {
+        text: input
             .search
             .as_deref()
             .map(str::trim)
-            .filter(|terms| !terms.is_empty())
-            .map(str::to_string),
-        cursor: input.cursor.clone(),
+            .unwrap_or_default()
+            .to_string(),
+        filter,
+        sort,
+        trash: trash_of(input.trash),
         // **Clamped, not refused** (HOST-ABI.md §3.2): paging is the caller's job, and a
         // plugin that asks for 10 000 rows gets 200 and a cursor rather than an error it has
         // to learn about.
-        limit: input
-            .limit
-            .unwrap_or(abi::limits::DEFAULT_QUERY_LIMIT)
-            .clamp(1, abi::limits::MAX_QUERY_LIMIT),
-        trash: match input.trash {
-            abi::documents::TrashScope::Live => TrashFilter::Live,
-            abi::documents::TrashScope::Trashed => TrashFilter::Trashed,
-            abi::documents::TrashScope::All => TrashFilter::All,
-        },
-        metadata_only: input.metadata_only,
+        limit: Some(
+            input
+                .limit
+                .unwrap_or(abi::limits::DEFAULT_QUERY_LIMIT)
+                .clamp(1, abi::limits::MAX_QUERY_LIMIT),
+        ),
+        cursor: input.cursor.clone(),
+        snippets: false,
     };
-
-    let page = context
-        .block_on(context.state.docs.list(&query))
-        .map_err(map_docstore_error)?;
-
+    let found = run_plan(context, &plan, input.metadata_only)?;
     Ok(abi::documents::QueryDocumentsOutput {
-        documents: page
-            .documents
+        documents: found
+            .rows
             .iter()
             .map(|row| row_value(row, input.metadata_only))
             .collect(),
-        next_cursor: page.next_cursor,
+        next_cursor: found.page.next_cursor,
     })
+}
+
+/// `query` — a query plan (`core::query::Plan`), as the SDK's `Query` builder writes it.
+pub fn query(
+    context: &HostContext,
+    input: abi::documents::QueryInput,
+) -> Result<abi::documents::QueryOutput, abi::HostError> {
+    require_read(context)?;
+    let mut plan = core::query::Plan::from_json(&input.plan)
+        .map_err(|err| invalid(format!("the query is not valid: {err}")))?;
+    // The same ceiling `query_documents` clamps to.
+    plan.limit = Some(
+        plan.limit
+            .unwrap_or(abi::limits::DEFAULT_QUERY_LIMIT)
+            .clamp(1, abi::limits::MAX_QUERY_LIMIT),
+    );
+    let found = run_plan(context, &plan, input.metadata_only)?;
+    Ok(abi::documents::QueryOutput {
+        documents: found
+            .rows
+            .iter()
+            .map(|row| row_value(row, input.metadata_only))
+            .collect(),
+        total: found.page.total as u64,
+        next_cursor: found.page.next_cursor,
+        hits: found
+            .page
+            .hits
+            .into_iter()
+            .map(|(id, hit)| (id, serde_json::to_value(hit).unwrap_or_default()))
+            .collect(),
+    })
+}
+
+fn trash_of(scope: abi::documents::TrashScope) -> core::query::Trash {
+    match scope {
+        abi::documents::TrashScope::Live => core::query::Trash::Live,
+        abi::documents::TrashScope::Trashed => core::query::Trash::Trashed,
+        abi::documents::TrashScope::All => core::query::Trash::All,
+    }
+}
+
+fn run_plan(
+    context: &HostContext,
+    plan: &core::query::Plan,
+    metadata_only: bool,
+) -> Result<crate::query_index::RowPage, abi::HostError> {
+    context
+        .block_on(context.state.query.rows(plan, !metadata_only))
+        .map_err(|err| match err {
+            crate::query_index::QueryIndexError::Query(err) => invalid(err.to_string()),
+            other => abi::HostError::new(abi::ErrorCode::Internal, other.to_string()),
+        })
 }
 
 /// `create_document` — a machine-owned document.

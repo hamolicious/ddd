@@ -32,6 +32,7 @@ pub mod manifest_types;
 pub mod pluginhost;
 pub mod plugininstall;
 pub mod plugins;
+pub mod query_index;
 pub mod routes;
 pub mod state;
 pub mod telemetry;

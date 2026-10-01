@@ -14,6 +14,7 @@ use crate::config::Config;
 use crate::db::Collections;
 use crate::docstore::{DocStore, DocStoreTuning, DocStoreWorkers, MongoDocStore};
 use crate::feed::ChangeFeed;
+use crate::query_index::QueryIndex;
 
 /// The docstore's background workers (debounced materialization flush, idle room
 /// eviction, update-log trimming) belong to the concrete `MongoDocStore`, and
@@ -38,6 +39,9 @@ pub struct AppState {
     /// The workspace change feed (SPEC §4.1): sequence allocation for writes, and
     /// the notification channel + queries the sync sockets read from.
     pub feed: Arc<ChangeFeed>,
+    /// The query engine every list, search and plugin query runs on, kept current
+    /// from the feed (`query_index.rs`).
+    pub query: Arc<QueryIndex>,
     /// Per-IP + per-account login backoff (SPEC §5.2).
     pub login_limiter: Arc<RateLimiter>,
     /// Boot-time facts for `/readyz`.
@@ -97,11 +101,12 @@ impl AppState {
         ));
 
         Ok(AppState {
-            collections,
+            collections: collections.clone(),
             config: Arc::new(config),
             mongo,
             db,
             docs: Arc::new(store),
+            query: QueryIndex::new(Arc::clone(&feed), collections.clone()),
             feed,
             login_limiter,
             readiness: Arc::new(Readiness::default()),

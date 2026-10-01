@@ -84,6 +84,7 @@ Names are exactly SPEC §6.3's, plus `log` (§3.13, and the reason it exists is 
 |---|---|---|
 | [`get_document`](#31-get_document) | `documents: ["read"]` | `GetDocumentInput` → `GetDocumentOutput` |
 | [`query_documents`](#32-query_documents) | `documents: ["read"]` | `QueryDocumentsInput` → `QueryDocumentsOutput` |
+| [`query`](#32a-query) | `documents: ["read"]` | `QueryInput` → `QueryOutput` |
 | [`create_document`](#33-create_document) | `documents: ["write"]` | `CreateDocumentInput` → `WriteDocumentOutput` |
 | [`splice_section`](#34-splice_section) | `documents: ["write"]` | `SpliceSectionInput` → `SpliceSectionOutput` |
 | [`rewrite_document`](#35-rewrite_document) | `documents: ["write"]` + ownership | `RewriteDocumentInput` → `WriteDocumentOutput` |
@@ -148,8 +149,9 @@ Errors: `capability_denied`, `invalid_argument` (not a ULID), `not_found`, `gone
 ```
 
 - **The filter language is ours, not Mongo's** (SPEC §4.2). It is parsed by the shared core
-  (`core::filter`) and compiled to a Mongo query by the server; client JSON never reaches
-  Mongo, so a plugin cannot smuggle an operator.
+  (`core::filter`) and answered by the server's query engine (`core::query`, the one the
+  browser runs too); client JSON never reaches Mongo, so a plugin cannot smuggle an
+  operator. `search` is the engine's ranked text search.
 - `sort` uses the REST spelling: `"fm.date"`, `"-fm.date"`, `"title:desc"`.
 - `limit` is **clamped** to 200 (default 50), not refused. Paging is the caller's job:
   follow `next_cursor` until it is absent. There is no unbounded read.
@@ -172,6 +174,31 @@ Errors: `capability_denied`, `invalid_argument` (not a ULID), `not_found`, `gone
   document's exact current text really matters.
 
 Errors: `capability_denied`, `invalid_argument` (filter/sort), `too_large`, `unavailable`.
+
+### 3.2a `query`
+
+The same read as [§3.2](#32-query_documents), taking a whole query plan — what the SDK's
+`Query` builder writes — so a plugin gets everything the search does: ranked text, folder
+relations (`child_of`, `parent_of`), relevance sorting, snippets and the total.
+
+```json
+{ "plan": { "text": "invoice",
+            "filter": { "and": [ { "text": { "field": "title", "mode": "contains", "value": "2026" } },
+                                 { "child_of": { "of": "01J…", "deep": true } } ] },
+            "sort": ["relevance", "-updated_at"], "limit": 50, "snippets": true },
+  "metadata_only": false }
+```
+
+```json
+{ "documents": [ … ], "total": 12, "next_cursor": "32.9f…",
+  "hits": { "01J…": { "score": 4.2, "terms": ["invoice"],
+                      "snippet": { "text": "…", "ranges": [{ "start": 4, "end": 11 }], "line": 3 } } } }
+```
+
+- The plan is `crates/core/README.md` §6. `limit` is clamped to 200 like §3.2.
+- A cursor only pages the plan it came from; another plan's cursor is `invalid_argument`.
+
+Errors: `capability_denied`, `invalid_argument`, `too_large`, `unavailable`.
 
 ### 3.3 `create_document`
 

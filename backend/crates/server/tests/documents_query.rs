@@ -433,37 +433,17 @@ fn titles_of_ordered(ids: &[String], titles: &[(String, String)]) -> Vec<String>
         .collect()
 }
 
-/// A known, deliberate difference, pinned so it is a decision rather than a
-/// surprise: `compare_rows` puts a **missing** sort key last in both directions
-/// (`crates/core/src/filter/evaluator.rs`), while Mongo sorts an absent field
-/// lowest, i.e. **first** ascending. Rows that lack the sort key therefore appear
-/// at opposite ends of the same query depending on who ordered them.
-///
-/// The client browses locally and the server's list endpoint serves scripts and
-/// integrations (SPEC §4.2), so this is not a correctness bug today — but it is a
-/// real divergence, and if it is ever closed it will be closed here.
-///
-/// INTEGRATION (core + docstore): closing it means either making the comparator
-/// match Mongo's "missing first ascending", or having the query layer emit the
-/// `$ifNull`-style projection that moves missing values last. Both are outside
-/// this suite's ownership; reported, not fixed.
+/// Rows that lack the sort key come **last in both directions**, from the server
+/// exactly as from the shared comparator: the server lists through the query engine
+/// (`query_index.rs`), which sorts with `compare_rows`, so the divergence this suite
+/// used to pin — Mongo sorting an absent field first ascending — is gone.
 #[tokio::test]
 #[ignore = "requires MONGO_URI"]
-async fn missing_sort_keys_are_ordered_differently_by_the_two_engines() {
+async fn missing_sort_keys_sort_last_on_both_sides() {
     let Some(app) = TestApp::start().await else {
         return;
     };
     let (rows, _titles) = corpus(&app).await;
-
-    let page = app.list("sort=fm.priority&limit=100").await;
-    let from_server = page.ids();
-    let from_core = sorted_ids(&parse_sort("fm.priority"), &rows);
-
-    assert_eq!(
-        sorted(from_server.clone()),
-        sorted(from_core.clone()),
-        "the same rows must come back either way — only the order differs"
-    );
 
     let rows_without_key: Vec<&str> = rows
         .iter()
@@ -476,41 +456,27 @@ async fn missing_sort_keys_are_ordered_differently_by_the_two_engines() {
         "Epsilon and Eta have no priority"
     );
 
-    let server_head = &from_server[..rows_without_key.len()];
-    assert!(
-        server_head
-            .iter()
-            .all(|id| rows_without_key.contains(&id.as_str())),
-        "Mongo is expected to sort the rows without fm.priority first: {from_server:?}"
-    );
-    let core_tail = &from_core[from_core.len() - rows_without_key.len()..];
-    assert!(
-        core_tail
-            .iter()
-            .all(|id| rows_without_key.contains(&id.as_str())),
-        "the comparator is expected to put them last: {from_core:?}"
-    );
+    for spec in ["fm.priority", "-fm.priority"] {
+        let from_server = app.list(&format!("sort={spec}&limit=100")).await.ids();
+        let from_core = sorted_ids(&parse_sort(spec), &rows);
+        assert_eq!(from_server, from_core, "sort `{spec}`");
+        let tail = &from_server[from_server.len() - rows_without_key.len()..];
+        assert!(
+            tail.iter()
+                .all(|id| rows_without_key.contains(&id.as_str())),
+            "sort `{spec}`: the rows without fm.priority come last: {from_server:?}"
+        );
+    }
 
     app.cleanup().await;
 }
 
-/// The same divergence on the one root where it reaches a shipped sort.
-///
-/// `deleted_at` is not an `fm.*` path a caller chose: it is a fixed root, it is in
-/// `SORTABLE_FIELDS`, and it is what `doc-list`'s Trash view sorts by. It is also the only
-/// fixed root that can be **absent** — `Option` in `domain.rs` with
-/// `skip_serializing_if`, and `untombstone` `$unset`s it — so `?trash=all&sort=deleted_at`
-/// runs the disagreement above over live documents versus tombstoned ones and splits them
-/// to opposite ends of the first page.
-///
-/// Pinned rather than fixed, for the reason the test above gives: the fix is a `core` or
-/// `docstore` change that has to land with `web/kernel/src/query/filter.ts` in one commit.
-/// What this adds is that it can no longer be *discovered* — `-deleted_at`, the direction
-/// the Trash view actually sends, agrees between the two engines, so the corpus case that
-/// exists proved nothing about the ascending one.
+/// The same agreement on `deleted_at`, the one fixed root that can be absent and the
+/// one the Trash view sorts on: over `?trash=all`, live documents (no `deleted_at`)
+/// come last whichever way it is sorted.
 #[tokio::test]
 #[ignore = "requires MONGO_URI"]
-async fn deleted_at_ascending_diverges_where_a_document_is_still_live() {
+async fn deleted_at_sorts_live_documents_last_both_ways() {
     let Some(app) = TestApp::start().await else {
         return;
     };
@@ -525,46 +491,24 @@ async fn deleted_at_ascending_diverges_where_a_document_is_still_live() {
             .expect_status(StatusCode::NO_CONTENT);
     }
 
-    // Read the rows back the way the client sees them, tombstones included.
     let all = app.list("trash=all&limit=100").await;
     let rows: Vec<LocalRow> = all.documents.iter().map(LocalRow::from_view).collect();
     assert_eq!(rows.len(), CORPUS.len());
-    assert_eq!(
-        rows.iter().filter(|row| row.deleted_at.is_some()).count(),
-        trashed.len(),
-        "only the tombstoned documents carry `deleted_at`"
-    );
 
-    for (spec, agree) in [("-deleted_at", true), ("deleted_at", false)] {
+    for spec in ["-deleted_at", "deleted_at"] {
         let from_server = app
             .list(&format!("trash=all&sort={spec}&limit=100"))
             .await
             .ids();
         let from_core = sorted_ids(&parse_sort(spec), &rows);
-        assert_eq!(
-            sorted(from_server.clone()),
-            sorted(from_core.clone()),
-            "sort `{spec}`: the same rows must come back either way"
-        );
-        assert_eq!(
-            from_server == from_core,
-            agree,
-            "sort `{spec}`: server {from_server:?} vs comparator {from_core:?}"
+        assert_eq!(from_server, from_core, "sort `{spec}`");
+        assert!(
+            from_server[..trashed.len()]
+                .iter()
+                .all(|id| trashed.contains(id)),
+            "sort `{spec}`: the tombstones lead: {from_server:?}"
         );
     }
-
-    // And the shape of the disagreement, so a change to either engine fails here loudly
-    // rather than flipping a boolean above.
-    let ascending = app.list("trash=all&sort=deleted_at&limit=100").await.ids();
-    assert!(
-        !trashed.contains(&ascending[0]),
-        "Mongo sorts an absent `deleted_at` as Null, so the live documents lead: {ascending:?}"
-    );
-    let from_core = sorted_ids(&parse_sort("deleted_at"), &rows);
-    assert!(
-        trashed.contains(&from_core[0]),
-        "the comparator puts missing last, so the tombstones lead: {from_core:?}"
-    );
 
     app.cleanup().await;
 }
@@ -748,6 +692,60 @@ async fn search_uses_the_text_index() {
 
     let long = "x".repeat(300);
     app.get(&format!("/api/documents?search={long}"))
+        .await
+        .expect_status(StatusCode::BAD_REQUEST);
+
+    app.cleanup().await;
+}
+
+/// `POST /api/query`: a plan as the core's `Query` builder writes it — text, a
+/// filter row, a sort on a frontmatter key — answered with the rows, the total and
+/// why each matched; a plan the core refuses is a 400.
+#[tokio::test]
+#[ignore = "requires MONGO_URI"]
+async fn post_query_answers_a_built_plan() {
+    use life_manager_core::query::{Op, Query};
+
+    let Some(app) = TestApp::start().await else {
+        return;
+    };
+    let (_rows, titles) = corpus(&app).await;
+
+    let plan = Query::new()
+        .text("body")
+        .filter("fm.tags", Op::Contains, "work")
+        .sort("fm.priority")
+        .snippets()
+        .build()
+        .expect("a valid plan");
+    let response = app.post_json("/api/query", plan.to_json()).await;
+    response.expect_status(StatusCode::OK);
+    let body = response.json();
+    let ids: Vec<String> = body["documents"]
+        .as_array()
+        .expect("documents")
+        .iter()
+        .map(|row| row["id"].as_str().expect("id").to_string())
+        .collect();
+    assert_eq!(titles_of_ordered(&ids, &titles), ["Alpha", "Beta", "Zeta"]);
+    assert_eq!(body["total"], 3);
+    let alpha = &ids[0];
+    assert_eq!(body["hits"][alpha]["snippet"]["text"], "alpha body text");
+    assert!(body["documents"][0]["content"].is_string());
+
+    let metadata = app
+        .post_json("/api/query?metadata_only=true", plan.to_json())
+        .await
+        .json();
+    assert_eq!(
+        metadata["documents"][0]["content"], "",
+        "metadata_only leaves the text out"
+    );
+
+    app.post_json("/api/query", serde_json::json!({"sort": ["nope"]}))
+        .await
+        .expect_status(StatusCode::BAD_REQUEST);
+    app.post_json("/api/query", serde_json::json!({"cursor": "1.2"}))
         .await
         .expect_status(StatusCode::BAD_REQUEST);
 

@@ -138,6 +138,7 @@ fn functions(shared: &Shared) -> Vec<Function> {
     for name in [
         abi::names::GET_DOCUMENT,
         abi::names::QUERY_DOCUMENTS,
+        abi::names::QUERY,
         abi::names::CREATE_DOCUMENT,
         abi::names::SPLICE_SECTION,
         abi::names::REWRITE_DOCUMENT,
