@@ -24,8 +24,10 @@ test("a document's snapshots live in the altbar, and a restore asks first", asyn
   await expect(altbar).toBeVisible();
   await expect(altbar.getByRole("button", { name: "Changes" })).toHaveAttribute("aria-expanded", "true");
 
-  await altbar.getByRole("button", { name: "Take a snapshot now" }).click();
-  await expect(altbar.getByText("Snapshot taken.")).toBeVisible();
+  // The panel takes no snapshots itself: one posted through the API shows after Refresh.
+  expect((await request.post(`${baseURL}/api/documents/${id}/snapshots`, { data: { reason: "manual" } })).ok()).toBe(true);
+  await expect(altbar.getByRole("button", { name: "Take a snapshot now" })).toHaveCount(0);
+  await altbar.getByRole("button", { name: "Refresh" }).click();
   const list = altbar.getByRole("list", { name: "History, newest first" });
   await expect(list.getByText("Taken by hand")).toBeVisible();
 
@@ -90,8 +92,8 @@ test("View shows a snapshot read only, detached from the current text", async ({
   const toggle = page.locator(".shell-altbar-toggle");
   const altbar = page.getByRole("complementary", { name: "Side panel" });
   if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
-  await altbar.getByRole("button", { name: "Take a snapshot now" }).click();
-  await expect(altbar.getByText("Snapshot taken.")).toBeVisible();
+  expect((await request.post(`${baseURL}/api/documents/${id}/snapshots`, { data: { reason: "manual" } })).ok()).toBe(true);
+  await altbar.getByRole("button", { name: "Refresh" }).click();
   const changed = await request.put(`${baseURL}/api/documents/${id}`, { data: { content: "# Now\n\nDifferent.\n" } });
   expect(changed.ok()).toBe(true);
 

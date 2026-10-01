@@ -1,8 +1,9 @@
 /**
  * The altbar panel: one document's history, newest first. Change groups (one author, no
  * long pause) and snapshots in a single timeline, each row with View and, for a change,
- * Revert, for a snapshot, Restore. Take and Refresh sit above it; older changes page in
- * with "Show older". A narrow column, so each entry is a short stack of lines, not a
+ * Revert, for a snapshot, Restore. Refresh sits above it; older changes page in with
+ * "Show older". Snapshots are the server's: one is taken before every restore, none by
+ * hand. A narrow column, so each entry is a short stack of lines, not a
  * table row.
  */
 
@@ -140,16 +141,6 @@ export function ChangesPanel({
         className="chg:m-0 chg:rounded chg:border chg:border-warning chg:px-2 chg:py-1 chg:text-sm chg:text-text-muted"
       />
       <div className="chg:flex chg:items-center chg:gap-1">
-        <button
-          type="button"
-          className={BUTTON}
-          aria-label="Take a snapshot now"
-          title="Take a snapshot now"
-          disabled={busy !== undefined}
-          onClick={() => run("take", () => client.take(documentId), "Snapshot taken.")}
-        >
-          <CameraIcon />
-        </button>
         <button
           type="button"
           className={BUTTON}

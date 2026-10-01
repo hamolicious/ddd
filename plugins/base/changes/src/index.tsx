@@ -7,8 +7,9 @@
  *   (`backend/…/changes.rs`) and grouped by author and pause. View shows what a group
  *   did as a diff; Revert undoes it as a new change, keeping everything after it, and is
  *   refused, with the reason, when a later change touched the same text.
- * - **Snapshots**: whole texts kept forever: taken by hand, or automatically before a restore.
- *   View shows one read only; Restore puts it back, snapshotting the current text first.
+ * - **Snapshots**: whole texts kept forever, taken by the server before every restore (and
+ *   by anything that posts one). View shows one read only; Restore puts it back,
+ *   snapshotting the current text first.
  *
  * Any signed-in user may do all of it, as with editing: history is part of the document,
  * not an administrator's tool.

@@ -68,7 +68,7 @@ export interface SnapshotsClient {
   /** Newest first. */
   list(documentId: string): Promise<readonly SnapshotView[]>;
   get(documentId: string, snapshotId: string): Promise<SnapshotContent>;
-  take(documentId: string): Promise<void>;
+  /** Put a snapshot's text back; the server snapshots the current text first. */
   restore(documentId: string, snapshotId: string): Promise<void>;
   /** Newest first; `before` is the previous page's `next_before`. */
   changes(documentId: string, before?: number): Promise<ChangesPage>;
@@ -88,13 +88,6 @@ export function createSnapshotsClient(fetchApi: ApiFetch): SnapshotsClient {
       (await (await fetchApi(`/documents/${id(documentId)}/snapshots`)).json()) as readonly SnapshotView[],
     get: async (documentId, snapshotId) =>
       (await (await fetchApi(`/documents/${id(documentId)}/snapshots/${id(snapshotId)}`)).json()) as SnapshotContent,
-    take: async (documentId) => {
-      await fetchApi(`/documents/${id(documentId)}/snapshots`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ reason: "manual" }),
-      });
-    },
     restore: async (documentId, snapshotId) => {
       await fetchApi(`/documents/${id(documentId)}/snapshots/${id(snapshotId)}/restore`, { method: "POST" });
     },
@@ -116,6 +109,7 @@ export function createSnapshotsClient(fetchApi: ApiFetch): SnapshotsClient {
 }
 
 const REASONS: Readonly<Record<string, string>> = {
+  // Snapshots from when the panel had a button for it; the API still takes the reason.
   manual: "Taken by hand",
   quiescence: "After a pause in editing",
   daily: "Daily",
