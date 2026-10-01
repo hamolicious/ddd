@@ -255,6 +255,8 @@ Tagged JSON, one object per node; it is exactly what `serde` produces for the
 | `is_null` | `{field}` | the field is present and null |
 | `exists` | `{field}` | the field is present (null included) |
 | `text` | `{field, mode, value}` | case-insensitive `contains` / `starts_with` / `ends_with` |
+| `child_of` | `{of, deep?}` | the row is in note `of`'s children list; `deep`: anywhere below it |
+| `parent_of` | `{of}` | the row's children list holds note `of` |
 
 `op` ∈ `eq`, `ne`, `lt`, `lte`, `gt`, `gte`. `mode` ∈ `contains`, `starts_with`,
 `ends_with`.
@@ -281,6 +283,10 @@ is a parse error — which is also why a field path can never inject Mongo
 operator syntax.
 
 Limits: depth ≤ 16, nodes ≤ 256, `in` literals all of one type family.
+
+`child_of` / `parent_of` are joins over the folder tree (`plugins.folders.children`),
+so only the query engine (§6) answers them: plain `evaluate` returns `NeedsGraph`
+and the Mongo compiler `Unsupported`.
 
 ### Semantics, precisely
 
@@ -394,3 +400,24 @@ boundary, the `edit_affects_metadata` short-circuit, and a determinism check on
 every document case.
 
 Adding a rule means adding a corpus case in the same commit.
+
+## 6. Querying (`src/query/`)
+
+One engine for filter, full-text search, relations and sort, run natively by the
+server and as wasm by the browser, so a query answers the same wherever it runs.
+
+- **`Plan`**: a query as JSON, every field optional:
+  `{ text, filter, sort: ["relevance", "-updated_at", "fm.key"], trash: "live" | "trashed" | "all", limit, cursor, snippets }`.
+  `{}` is every live document, last updated first; with `text` and no `sort`, best
+  match first. The cursor is bound to the plan it came from.
+- **`Query`**: the chainable way to write a plan:
+  `Query::new().filter("title", Op::TextContains, "a").sort("fm.key").build()`.
+  The operators are the search's filter rows (`eq` … `parent_of`); `any_of` and
+  `none_of` group conditions.
+- **`Engine`**: holds the rows, their text index and the folder tree. `upsert` /
+  `remove` keep it current, `run(&plan)` answers with a page, the total and the next
+  cursor, and `to_json_string` / `from_json_str` persist it.
+- **Text search**: tokens are lowercased runs of letters and digits; title ×3,
+  frontmatter values ×2, content ×1; each query term matches exactly, as a prefix,
+  or within a fifth of its length in edits; BM25+ summed over the terms and
+  multiplied by how many matched. Snippet ranges are UTF-16 offsets.

@@ -115,6 +115,9 @@ pub fn compile(filter: &Filter) -> Result<BsonDocument, CompileError> {
             _ => Ok(doc! { stored_path(field)?: { "$exists": true } }),
         },
         Filter::Text { field, mode, value } => compile_text(field, *mode, value),
+        // A join over the folder tree: the query engine's, never a Mongo query.
+        Filter::ChildOf { .. } => Err(CompileError::Unsupported("child_of".to_string())),
+        Filter::ParentOf { .. } => Err(CompileError::Unsupported("parent_of".to_string())),
     }
 }
 

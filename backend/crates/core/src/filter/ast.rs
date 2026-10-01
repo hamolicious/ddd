@@ -267,6 +267,20 @@ pub enum Filter {
         mode: TextMatch,
         value: String,
     },
+    /// The row is in note `of`'s children list; with `deep`, anywhere below it.
+    ///
+    /// A join, so only an evaluator that knows the folder tree can answer it
+    /// ([`crate::filter::evaluate_in`] with a [`crate::filter::Graph`]): the query
+    /// engine. Plain [`crate::filter::evaluate`] and the Mongo compiler refuse it.
+    ChildOf {
+        of: String,
+        #[serde(default)]
+        deep: bool,
+    },
+    /// The row's children list holds note `of`.
+    ParentOf {
+        of: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]

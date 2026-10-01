@@ -8,7 +8,9 @@
 //! - No server dependencies (no tokio, axum, mongodb). `bson` only behind the
 //!   `mongo` feature, and only for [`filter::mongo`].
 //! - Every function here must be deterministic and stateless: the same input
-//!   text always yields the same output on both sides.
+//!   text always yields the same output on both sides. The one stateful type,
+//!   [`query::Engine`], is still deterministic: the same rows and plan give the
+//!   same answer on both sides.
 //! - Byte-exact fence handling; tolerant parsing (a malformed line or block-sequence
 //!   item is dropped and recorded, never fatal).
 
@@ -19,6 +21,7 @@ pub mod error;
 pub mod filter;
 pub mod frontmatter;
 pub mod limits;
+pub mod query;
 pub mod sections;
 pub mod shape;
 pub mod splice;

@@ -67,6 +67,8 @@ pub enum EvalError {
     NotApplicable { field: String },
     #[error("unknown field path: {0}")]
     UnknownField(String),
+    #[error("child_of / parent_of need the folder tree: run them through the query engine")]
+    NeedsGraph,
 }
 
 /// Evaluate a filter against one row.
@@ -76,6 +78,26 @@ pub enum EvalError {
 /// apply to the addressed kind of field. The server rejects those with 400; row
 /// data never produces an error.
 pub fn evaluate(filter: &Filter, row: &Row<'_>) -> Result<bool, EvalError> {
+    evaluate_in(filter, row, None)
+}
+
+/// The folder tree, for the relation nodes (`child_of`, `parent_of`): a join the
+/// row alone cannot answer. The query engine (`crate::query`) implements it.
+pub trait Graph {
+    /// `id` is in `of`'s children list; with `deep`, anywhere below `of`.
+    fn is_child(&self, id: &str, of: &str, deep: bool) -> bool;
+    /// `id`'s children list holds `of`.
+    fn is_parent(&self, id: &str, of: &str) -> bool;
+}
+
+/// [`evaluate`], with the folder tree for the relation nodes. Without one they are
+/// [`EvalError::NeedsGraph`].
+pub fn evaluate_in(
+    filter: &Filter,
+    row: &Row<'_>,
+    graph: Option<&dyn Graph>,
+) -> Result<bool, EvalError> {
+    let evaluate = |child: &Filter, row: &Row<'_>| evaluate_in(child, row, graph);
     match filter {
         Filter::All => Ok(true),
         Filter::None => Ok(false),
@@ -123,6 +145,12 @@ pub fn evaluate(filter: &Filter, row: &Row<'_>) -> Result<bool, EvalError> {
         Filter::Text { field, mode, value } => {
             text_match(&field.as_dotted(), resolve_field(row, field), *mode, value)
         }
+        Filter::ChildOf { of, deep } => graph
+            .map(|graph| graph.is_child(row.id, of, *deep))
+            .ok_or(EvalError::NeedsGraph),
+        Filter::ParentOf { of } => graph
+            .map(|graph| graph.is_parent(row.id, of))
+            .ok_or(EvalError::NeedsGraph),
     }
 }
 
@@ -356,26 +384,32 @@ fn text_match(
 /// because the present values lead either way.
 pub fn compare_rows(a: &Row<'_>, b: &Row<'_>, sort: &[SortKey]) -> Ordering {
     for key in sort {
-        let left = resolve_field(a, &key.field);
-        let right = resolve_field(b, &key.field);
-        let ordering = match (left == FieldRef::Missing, right == FieldRef::Missing) {
-            (true, true) => Ordering::Equal,
-            // Missing last, regardless of direction.
-            (true, false) => return Ordering::Greater,
-            (false, true) => return Ordering::Less,
-            (false, false) => {
-                let raw = order_fields(left, right);
-                match key.order {
-                    SortOrder::Asc => raw,
-                    SortOrder::Desc => raw.reverse(),
-                }
-            }
-        };
+        let ordering = compare_by_key(a, b, key);
         if ordering != Ordering::Equal {
             return ordering;
         }
     }
     a.id.cmp(b.id)
+}
+
+/// One key of [`compare_rows`], with no `id` tiebreak: for a caller that mixes field
+/// keys with its own (the query engine's relevance).
+pub fn compare_by_key(a: &Row<'_>, b: &Row<'_>, key: &SortKey) -> Ordering {
+    let left = resolve_field(a, &key.field);
+    let right = resolve_field(b, &key.field);
+    match (left == FieldRef::Missing, right == FieldRef::Missing) {
+        (true, true) => Ordering::Equal,
+        // Missing last, regardless of direction.
+        (true, false) => Ordering::Greater,
+        (false, true) => Ordering::Less,
+        (false, false) => {
+            let raw = order_fields(left, right);
+            match key.order {
+                SortOrder::Asc => raw,
+                SortOrder::Desc => raw.reverse(),
+            }
+        }
+    }
 }
 
 fn order_fields(left: FieldRef<'_>, right: FieldRef<'_>) -> Ordering {

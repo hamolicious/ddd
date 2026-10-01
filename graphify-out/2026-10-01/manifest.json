@@ -4842,15 +4842,15 @@
     "semantic_hash": ""
   },
   "plugins/base/kanban/manifest.json": {
-    "mtime": 1790812313.8625085,
-    "seen": 1790812400.953082,
-    "ast_hash": "b66fe19ef5ceac0bf9b61017fb05d051",
+    "mtime": 1790813558.725275,
+    "seen": 1790813572.6403918,
+    "ast_hash": "5cded0f01552b0db3788857a1f66b6c5",
     "semantic_hash": ""
   },
   "plugins/base/kanban/src/Board.tsx": {
-    "mtime": 1790812622.1149147,
-    "seen": 1790812663.7016506,
-    "ast_hash": "8c075deee93d98cb9e2b957dc85eb18b",
+    "mtime": 1790813529.503069,
+    "seen": 1790813572.640394,
+    "ast_hash": "c13335508884d67015e920f9d7697978",
     "semantic_hash": ""
   },
   "plugins/base/kanban/src/Settings.tsx": {
@@ -4860,21 +4860,21 @@
     "semantic_hash": ""
   },
   "plugins/base/kanban/src/index.tsx": {
-    "mtime": 1790811267.8097258,
-    "seen": 1790811352.7882016,
-    "ast_hash": "67065719432e914a6fac4e7ea84e6aa0",
+    "mtime": 1790813529.5035033,
+    "seen": 1790813572.6407363,
+    "ast_hash": "b92a5d7feca2dee49e503cd02d7a3266",
     "semantic_hash": ""
   },
   "plugins/base/kanban/src/layout.test.ts": {
-    "mtime": 1790810045.7241995,
-    "seen": 1790810257.001525,
-    "ast_hash": "724648756791ce8cb20b3063d45bb658",
+    "mtime": 1790813541.7872934,
+    "seen": 1790813572.640812,
+    "ast_hash": "d3da78f0a0d2e36cdc6bf89ccc9da45d",
     "semantic_hash": ""
   },
   "plugins/base/kanban/src/layout.ts": {
-    "mtime": 1790809986.9828188,
-    "seen": 1790810257.0015259,
-    "ast_hash": "606182fa0be688807ad464968ea5a9fb",
+    "mtime": 1790813529.5033383,
+    "seen": 1790813572.6408134,
+    "ast_hash": "1d858fea697ba6eb8c2cecc82980432d",
     "semantic_hash": ""
   },
   "plugins/base/kanban/src/flip.ts": {

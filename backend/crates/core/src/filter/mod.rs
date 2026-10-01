@@ -11,7 +11,10 @@ pub mod mongo;
 pub use ast::{
     CompareOp, FieldPath, Filter, FilterParseError, Literal, SortKey, SortOrder, TextMatch,
 };
-pub use evaluator::{EvalError, FieldRef, Row, evaluate, resolve_field};
+pub use evaluator::{
+    EvalError, FieldRef, Graph, Row, compare_by_key, compare_rows, evaluate, evaluate_in,
+    resolve_field,
+};
 #[cfg(feature = "mongo")]
 pub use mongo::{CompileError, compile, compile_sort};
 
