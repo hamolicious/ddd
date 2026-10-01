@@ -114,15 +114,27 @@ fn on_download(event: DownloadEvent<'_>) -> bool {
     }
 }
 
-/// WebKitGTK's DMA-BUF renderer dies on NVIDIA under Wayland ("Error 71 (Protocol error)
-/// dispatching to Wayland display", then a blank or closed window). Falling back to the
-/// shared-memory path costs some compositing speed and nothing else. Only on NVIDIA, and
-/// only when the user has not set it either way.
+/// WebKitGTK's DMA-BUF renderer dies on NVIDIA under Wayland: the driver's explicit sync
+/// trips over WebKit's buffers and the compositor drops the connection ("Error 71
+/// (Protocol error) dispatching to Wayland display", then a blank or closed window).
+/// Turning the driver's explicit sync off for this process is the whole fix: WebKit keeps
+/// the GPU — the page rendered by the web process on it, frames passed as DMA-BUFs — and
+/// nothing is lost. The old workaround, `WEBKIT_DISABLE_DMABUF_RENDERER=1`, is far worse
+/// than it looks: since WebKitGTK 2.44 it makes the web process render every frame on the
+/// CPU, with no compositor at all, which is why the shell felt slow on NVIDIA.
+///
+/// Under X11 nothing is needed: the DMA-BUF import fails harmlessly ("Failed to create GBM
+/// buffer") and WebKit passes frames through shared memory, still rendered on the GPU.
+/// Only on NVIDIA under Wayland, and only when the user has not set either variable.
 fn work_around_webkit_nvidia() {
-    const VAR: &str = "WEBKIT_DISABLE_DMABUF_RENDERER";
-    if std::env::var_os(VAR).is_none() && std::path::Path::new("/proc/driver/nvidia").exists() {
+    const EXPLICIT_SYNC: &str = "__NV_DISABLE_EXPLICIT_SYNC";
+    const DMABUF: &str = "WEBKIT_DISABLE_DMABUF_RENDERER";
+    let nvidia = std::path::Path::new("/proc/driver/nvidia").exists();
+    let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some_and(|display| !display.is_empty());
+    let unset = std::env::var_os(EXPLICIT_SYNC).is_none() && std::env::var_os(DMABUF).is_none();
+    if nvidia && wayland && unset {
         // SAFETY: first thing in `main`, before Tauri or anything else has spawned a thread.
-        unsafe { std::env::set_var(VAR, "1") };
+        unsafe { std::env::set_var(EXPLICIT_SYNC, "1") };
     }
 }
 

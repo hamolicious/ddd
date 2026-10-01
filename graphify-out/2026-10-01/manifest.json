@@ -4848,9 +4848,9 @@
     "semantic_hash": ""
   },
   "plugins/base/kanban/src/Board.tsx": {
-    "mtime": 1790856226.7965782,
-    "seen": 1790856536.1472301,
-    "ast_hash": "6f73dfe66c027d8aff34d072c232ba81",
+    "mtime": 1790856961.2551093,
+    "seen": 1790856996.3782043,
+    "ast_hash": "3b3438ec4401f1ca3af2fbb3215a1025",
     "semantic_hash": ""
   },
   "plugins/base/kanban/src/Settings.tsx": {
