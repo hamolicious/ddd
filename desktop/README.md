@@ -35,8 +35,10 @@ different filesystems) the app logs a warning and starts with fresh data, which 
 fills again; move or delete the old directory by hand while the app is closed.
 
 When the server moves to its new address, the page asks the app to follow
-(`window.shell.server.move`): the new address is written as `server_url` in
-`~/.config/ddd/desktop.toml` and the app restarts on it.
+(`window.shell.server.move`). The app first asks the current server where it lives and
+follows only if the server names that address and says it moved away from the current
+one. The new address is then written as `server_url` in `~/.config/ddd/desktop.toml` and
+the app restarts on it.
 
 ## Setup (Arch)
 
@@ -60,7 +62,8 @@ later render every frame on the CPU.
 First match wins:
 
 1. `--server https://ddd.example.com`
-2. `DDD_SERVER_URL=https://ddd.example.com`
+2. `DDD_SERVER_URL=https://ddd.example.com` (the old `LM_SERVER_URL` still works for
+   this release, with a warning)
 3. `~/.config/ddd/desktop.toml`:
    ```toml
    server_url = "https://ddd.example.com"

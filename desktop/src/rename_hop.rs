@@ -135,6 +135,84 @@ fn log(old: &Path, new: &Path, outcome: &Outcome) {
     }
 }
 
+/// RENAME-HOP: the part of `GET /api/auth/bootstrap` that `server_move` trusts.
+#[derive(Debug, Default, serde::Deserialize)]
+pub struct Bootstrap {
+    #[serde(default)]
+    pub public_url: Option<String>,
+    #[serde(default)]
+    pub rename_hop_from: Vec<String>,
+}
+
+/// RENAME-HOP: a server origin for `server_move`: http(s), nothing past the `/`.
+pub fn parse_origin(raw: &str) -> Result<String, String> {
+    let url = url::Url::parse(raw).map_err(|e| format!("`{raw}` is not a URL ({e})"))?;
+    if url.scheme() != "http" && url.scheme() != "https" {
+        return Err(format!("`{raw}` must be http:// or https://"));
+    }
+    if url.path() != "/"
+        || url.query().is_some()
+        || url.fragment().is_some()
+        || !url.username().is_empty()
+        || url.password().is_some()
+    {
+        return Err(format!(
+            "`{raw}` must be an origin, like https://example.com"
+        ));
+    }
+    Ok(url.origin().ascii_serialization())
+}
+
+/// RENAME-HOP: accept a move from `current` (the configured server's origin) to
+/// `requested` only when the server itself names `requested` as its canonical origin
+/// (`public_url`) and lists `current` as one it moved away from (`rename_hop_from`).
+/// Returns the origin to write.
+pub fn check_move(current: &str, requested: &str, bootstrap: &Bootstrap) -> Result<String, String> {
+    let requested = parse_origin(requested)?;
+    let current = parse_origin(current)?;
+    let public = bootstrap
+        .public_url
+        .as_deref()
+        .and_then(|raw| parse_origin(raw).ok())
+        .ok_or_else(|| format!("{current} names no canonical origin (PUBLIC_URL)"))?;
+    if requested != public {
+        return Err(format!(
+            "{current} is reached at {public}, not {requested}; refusing to move"
+        ));
+    }
+    if !bootstrap
+        .rename_hop_from
+        .iter()
+        .filter_map(|raw| parse_origin(raw).ok())
+        .any(|from| from == current)
+    {
+        return Err(format!(
+            "{current} is not an origin this server moved away from (RENAME_HOP_FROM); \
+             refusing to move"
+        ));
+    }
+    Ok(requested)
+}
+
+/// RENAME-HOP: fetch `<current>/api/auth/bootstrap` and [`check_move`]. Blocking: run
+/// it off the main thread.
+pub fn verify_move(current: &url::Url, requested: &str) -> Result<String, String> {
+    let current = current.origin().ascii_serialization();
+    let endpoint = format!("{current}/api/auth/bootstrap");
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(std::time::Duration::from_secs(15)))
+        .build()
+        .into();
+    let bootstrap: Bootstrap = agent
+        .get(&endpoint)
+        .call()
+        .map_err(|e| format!("could not ask {endpoint} where the server lives: {e}"))?
+        .body_mut()
+        .read_json()
+        .map_err(|e| format!("{endpoint} did not answer with bootstrap JSON: {e}"))?;
+    check_move(&current, requested, &bootstrap)
+}
+
 /// RENAME-HOP
 #[cfg(test)]
 mod tests {
@@ -154,6 +232,70 @@ mod tests {
             data: Some(root.join("data")),
             cache: Some(root.join("cache")),
         }
+    }
+
+    fn bootstrap(public_url: Option<&str>, from: &[&str]) -> Bootstrap {
+        Bootstrap {
+            public_url: public_url.map(str::to_string),
+            rename_hop_from: from.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn server_move_only_goes_where_the_server_says() {
+        let hop = bootstrap(
+            Some("https://ddd.slayhouse.net"),
+            &["https://life.slayhouse.net"],
+        );
+        assert_eq!(
+            check_move(
+                "https://life.slayhouse.net",
+                "https://ddd.slayhouse.net/",
+                &hop
+            ),
+            Ok("https://ddd.slayhouse.net".to_string())
+        );
+        // Anywhere else than public_url.
+        assert!(check_move("https://life.slayhouse.net", "https://evil.example", &hop).is_err());
+        // From an origin the server did not move away from.
+        assert!(
+            check_move(
+                "https://other.slayhouse.net",
+                "https://ddd.slayhouse.net",
+                &hop
+            )
+            .is_err()
+        );
+        // Not a hop deployment at all.
+        assert!(
+            check_move(
+                "https://life.slayhouse.net",
+                "https://ddd.slayhouse.net",
+                &bootstrap(Some("https://ddd.slayhouse.net"), &[])
+            )
+            .is_err()
+        );
+        assert!(
+            check_move(
+                "https://life.slayhouse.net",
+                "https://ddd.slayhouse.net",
+                &bootstrap(None, &["https://life.slayhouse.net"])
+            )
+            .is_err()
+        );
+        // Not an origin.
+        assert!(
+            check_move(
+                "https://life.slayhouse.net",
+                "https://ddd.slayhouse.net/x",
+                &hop
+            )
+            .is_err()
+        );
+        // The server's bootstrap without the hop fields parses to "no move".
+        let old: Bootstrap =
+            serde_json::from_str(r#"{"needs_first_user":false,"invite_required":true}"#).unwrap();
+        assert!(old.public_url.is_none() && old.rename_hop_from.is_empty());
     }
 
     #[test]

@@ -38,14 +38,29 @@ fn server_override() -> Option<String> {
             from_args = Some(v.to_owned());
         }
     }
-    from_args.or_else(|| {
-        std::env::var("DDD_SERVER_URL")
-            .ok()
-            .filter(|v| !v.is_empty())
-    })
+    from_args
+        .or_else(|| {
+            std::env::var("DDD_SERVER_URL")
+                .ok()
+                .filter(|v| !v.is_empty())
+        })
+        .or_else(legacy_server_env)
 }
 
-/// `--server` beats `DDD_SERVER_URL` beats the config file.
+/// RENAME-HOP: the pre-rename `LM_SERVER_URL`, after `DDD_SERVER_URL`.
+fn legacy_server_env() -> Option<String> {
+    let value = std::env::var("LM_SERVER_URL")
+        .ok()
+        .filter(|v| !v.is_empty())?;
+    eprintln!(
+        "ddd-desktop: LM_SERVER_URL is deprecated and goes in the next release; \
+         set DDD_SERVER_URL instead."
+    );
+    Some(value)
+}
+
+/// `--server` beats `DDD_SERVER_URL` (then the deprecated `LM_SERVER_URL`) beats the
+/// config file.
 fn server_url() -> Result<Url, String> {
     let raw = server_override()
         .or_else(|| config::read()?.server_url)
@@ -60,36 +75,24 @@ fn server_url() -> Result<Url, String> {
     Ok(url)
 }
 
-/// RENAME-HOP: a server origin for `server_move`: http(s), nothing past the `/`.
-fn parse_origin(raw: &str) -> Result<String, String> {
-    let url = Url::parse(raw).map_err(|e| format!("`{raw}` is not a URL ({e})"))?;
-    if url.scheme() != "http" && url.scheme() != "https" {
-        return Err(format!("`{raw}` must be http:// or https://"));
-    }
-    if url.path() != "/"
-        || url.query().is_some()
-        || url.fragment().is_some()
-        || !url.username().is_empty()
-        || url.password().is_some()
-    {
-        return Err(format!(
-            "`{raw}` must be an origin, like https://example.com"
-        ));
-    }
-    Ok(url.origin().ascii_serialization())
-}
-
 /// RENAME-HOP: `window.shell.server.move({ url })`. The page, on the old domain and done
 /// syncing, hands over the renamed server's origin: it becomes `server_url` in the config
-/// and the app restarts on it.
+/// and the app restarts on it. Only when the configured server agrees: its own
+/// `/api/auth/bootstrap` must name `url` as `public_url` and list the configured origin in
+/// `rename_hop_from` ([`rename_hop::verify_move`]); a page cannot point the app elsewhere.
 #[tauri::command]
 async fn server_move(app: AppHandle, url: String) -> Result<(), folder::BridgeError> {
-    let origin = parse_origin(&url).map_err(|e| folder::BridgeError::new("invalid", e))?;
+    let current = server_url().map_err(|e| folder::BridgeError::new("invalid", e))?;
+    let origin =
+        tauri::async_runtime::spawn_blocking(move || rename_hop::verify_move(&current, &url))
+            .await
+            .map_err(|e| folder::BridgeError::new("failed", e.to_string()))?
+            .map_err(|e| folder::BridgeError::new("invalid", e))?;
     config::set_server_url(&origin).map_err(|e| folder::BridgeError::new("failed", e))?;
     if let Some(over) = server_override() {
         eprintln!(
             "ddd-desktop: server_url = {origin} is written to the config, but --server or \
-             DDD_SERVER_URL ({over}) overrides it, so the app restarts on {over}."
+             DDD_SERVER_URL (or LM_SERVER_URL) ({over}) overrides it, so the app restarts on {over}."
         );
     } else {
         eprintln!("ddd-desktop: server moved to {origin}; restarting.");
@@ -103,10 +106,10 @@ fn same_origin(a: &Url, b: &Url) -> bool {
 
 /// Everything off-origin goes to the system browser; the app window stays on the app.
 fn open_externally(app: &AppHandle, url: &Url) {
-    if matches!(url.scheme(), "http" | "https" | "mailto") {
-        if let Err(e) = app.opener().open_url(url.as_str(), None::<&str>) {
-            eprintln!("ddd-desktop: could not open {url}: {e}");
-        }
+    if matches!(url.scheme(), "http" | "https" | "mailto")
+        && let Err(e) = app.opener().open_url(url.as_str(), None::<&str>)
+    {
+        eprintln!("ddd-desktop: could not open {url}: {e}");
     }
 }
 
