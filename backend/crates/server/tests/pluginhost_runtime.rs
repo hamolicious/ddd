@@ -462,6 +462,7 @@ async fn an_unapproved_capability_is_an_erroring_stub_the_plugin_can_probe() {
     for host_fn in [
         "get_document",
         "query_documents",
+        "query",
         "create_document",
         "http_request",
     ] {
@@ -516,6 +517,14 @@ async fn read_and_write_are_separate_grants() {
             .expect("probe"),
         Some(json!("ok")),
         "read was granted"
+    );
+    assert_eq!(
+        harness
+            .invoke("probe", json!({ "host_fn": "query" }))
+            .await
+            .expect("probe"),
+        Some(json!("ok")),
+        "`query` is the same read: the SDK's builder, answered by the engine"
     );
     assert_eq!(
         harness

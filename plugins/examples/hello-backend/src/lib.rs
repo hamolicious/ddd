@@ -93,6 +93,12 @@ fn dispatch(call: lm::abi::call::CallPayload) -> lm::Result<serde_json::Value> {
                 Some("query_documents") => code_of(lm::documents::query(
                     &lm::abi::documents::QueryDocumentsInput::default(),
                 )),
+                Some("query") => code_of(lm::documents::run(
+                    lm::documents::Query::new()
+                        .filter("title", lm::documents::Op::TextContains, "probe")
+                        .sort("fm.key")
+                        .limit(5),
+                )),
                 Some("create_document") => {
                     code_of(lm::documents::create("---\ntitle: probe\n---\n"))
                 }

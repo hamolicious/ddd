@@ -9,13 +9,49 @@
 //!   host records you as its creator, which is what makes [`rewrite`] legal later.
 //! - [`rewrite`] — the whole text of a document **you** created. Refused with
 //!   [`ErrorCode::Forbidden`](crate::ErrorCode::Forbidden) on anything else.
+//!
+//! Reading many: [`run`] takes a [`Query`], the chain the server and the browser use too:
+//!
+//! ```ignore
+//! use life_manager_plugin_sdk::documents::{self, Op, Query};
+//!
+//! let page = documents::run(
+//!     Query::new().filter("title", Op::TextContains, "a").sort("fm.key").limit(20),
+//! )?;
+//! ```
 
 use crate::abi::documents::{
     CreateDocumentInput, DocumentValue, GetDocumentInput, GetDocumentOutput, QueryDocumentsInput,
-    QueryDocumentsOutput, RewriteDocumentInput, SectionEdit, SpliceSectionInput,
-    SpliceSectionOutput, WriteDocumentOutput,
+    QueryDocumentsOutput, QueryInput, QueryOutput, RewriteDocumentInput, SectionEdit,
+    SpliceSectionInput, SpliceSectionOutput, WriteDocumentOutput,
 };
 use crate::host::{self, call_value};
+use crate::{ErrorCode, HostError};
+
+pub use life_manager_core::query::{Op, Plan, Query, Sort, Trash};
+
+/// One page of a [`Query`], `content` included. `documents:read`.
+///
+/// A mistake in the query (a malformed field, a value the operator cannot take) is
+/// [`ErrorCode::InvalidArgument`] before anything reaches the host. Follow
+/// [`next_cursor`](QueryOutput::next_cursor) with [`Query::cursor`] for the next page.
+pub fn run(query: Query) -> crate::Result<QueryOutput> {
+    let plan = query
+        .build()
+        .map_err(|err| HostError::new(ErrorCode::InvalidArgument, err.to_string()))?;
+    run_plan(&plan, false)
+}
+
+/// A query plan, as it is. `metadata_only` leaves `content` out of the rows.
+pub fn run_plan(plan: &Plan, metadata_only: bool) -> crate::Result<QueryOutput> {
+    call_value(
+        host::query,
+        &QueryInput {
+            plan: plan.to_json(),
+            metadata_only,
+        },
+    )
+}
 
 /// One document, `content` included. `documents:read`.
 pub fn get(id: &str) -> crate::Result<DocumentValue> {

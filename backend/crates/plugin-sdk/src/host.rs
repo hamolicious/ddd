@@ -20,6 +20,7 @@ use crate::abi::{Envelope, ErrorCode, HostError};
 unsafe extern "ExtismHost" {
     pub(crate) fn get_document(input: String) -> String;
     pub(crate) fn query_documents(input: String) -> String;
+    pub(crate) fn query(input: String) -> String;
     pub(crate) fn create_document(input: String) -> String;
     pub(crate) fn splice_section(input: String) -> String;
     pub(crate) fn rewrite_document(input: String) -> String;
