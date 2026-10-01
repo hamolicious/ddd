@@ -373,29 +373,66 @@ server keeps clients built before the rename working, so they can flush edits
 they have not synced yet, and tells them where the deployment now lives.
 
 - **Serve both domains.** Point the old and the new domain at the new
-  deployment, and list both in `APP_ORIGIN`, e.g.
-  `APP_ORIGIN=https://ddd.slayhouse.net,https://life.slayhouse.net`.
-- **`PUBLIC_URL` says where to move.** Set `PUBLIC_URL=https://ddd.slayhouse.net`.
-  `GET /api/auth/bootstrap` returns it as `public_url`, and a client loaded from
-  the old domain uses it to send the user to the new one.
+  deployment, and list both in `APP_ORIGIN`.
+- **Say where to move, and from where.** Production values:
+
+  ```text
+  PUBLIC_URL=https://ddd.slayhouse.net
+  RENAME_HOP_FROM=https://life.slayhouse.net
+  APP_ORIGIN=https://ddd.slayhouse.net,https://life.slayhouse.net
+  ```
+
+  `RENAME_HOP_FROM` is a comma-separated origin list, same format as
+  `APP_ORIGIN`, default empty. `GET /api/auth/bootstrap` returns both:
+
+  ```json
+  { "needs_first_user": false, "invite_required": true,
+    "public_url": "https://ddd.slayhouse.net",
+    "rename_hop_from": ["https://life.slayhouse.net"] }
+  ```
+
+  `rename_hop_from` is always present (`[]` when unset). A client moves to
+  `public_url` only when its own origin is in `rename_hop_from`; a client on
+  any other origin (a LAN address, a dev server) stays where it is. The desktop
+  app's `server.move` follows the same rule (app/BRIDGE.md §4.6).
 - **Old clients keep working.** The server accepts the `life-manager.v1`
   subprotocol, the `life-manager.bearer.<token>` prefix and the
   `lm_session` cookie alongside the current names. New sessions always
   get `ddd_session`. Logout expires the old cookie too.
+- **Stop the old server before the new one boots.** Scale the old deployment
+  to 0, or deploy the new image over it with `strategy: Recreate` (compose:
+  `docker compose up -d` replaces the container, which is the same thing).
+  Never run both at once: the copy below happens once, and a write the old
+  server makes to `life_manager` after it is never carried over.
 - **The database is copied once, at boot.** If `MONGO_DATABASE` is the default
   `ddd`, the server copies the old `life_manager` database into it before the
-  migrations run. It does this only when `ddd` has no `meta` `{_id: "schema"}`
-  document (no server has ever booted on it) and `life_manager` has one (it
-  holds a real workspace). Each collection, GridFS included, is copied on the
-  Mongo server with `$out`, and its indexes are recreated. `meta` goes last,
-  because it marks the copy as complete. Then the document counts are compared.
-  - Stop the old server first. A count that changes during the copy is a
-    mismatch, and a mismatch fails the boot rather than serving a partial copy.
-    Restarting redoes the copy from scratch.
+  migrations run, when `life_manager` has a `meta` `{_id: "schema"}` document
+  (it holds a real workspace) and `ddd` has **no users and no documents**. A
+  `ddd` that a server already booted on empty still qualifies; one that
+  anybody signed up to or wrote to is never touched.
+  - It runs under the migration advisory lock on `ddd`, so of several replicas
+    booting together exactly one copies; the others wait and then skip it.
+  - Each collection, GridFS included, is copied on the Mongo server with
+    `$out` into a freshly dropped target collection, and its indexes are
+    recreated. Then the document counts are compared; a mismatch fails the
+    boot rather than serving a partial copy.
+  - Progress is recorded on `ddd`'s schema document as
+    `rename_hop_copy.state`: `copying` while it runs (a restart redoes the copy
+    from scratch), `done` once `meta`, copied last, lands. A `done` database is
+    never copied into again.
+  - The lock is taken for at most 5 minutes (the migration lock TTL). A
+    personal workspace copies in seconds; a much larger one should be copied by
+    hand (`mongodump --db life_manager` / `mongorestore --nsFrom
+    'life_manager.*' --nsTo 'ddd.*'`) before the first boot.
   - `life_manager` is never modified or dropped. Drop it yourself once you are
     satisfied.
   - The boot log shows `RENAME-HOP: copying the pre-rename database` and
     `RENAME-HOP: pre-rename database copied` with collection and document counts.
+  - If `ddd` already has users or documents while `life_manager` also holds
+    some, the boot logs a loud `RENAME-HOP: NOT copying the pre-rename database`
+    warning and serves `ddd` as it is. To recover when `life_manager` is the
+    real workspace: stop every server, back up `ddd` (`mongodump --db ddd`),
+    drop it, and start one server; the copy then runs.
 - **Watch for old clients.** `ddd_legacy_client_total{kind}` counts every use
   of an old name, and the log shows at most one `legacy client` warning per kind
   per minute (field `legacy`). The cleanup release, which removes all of this

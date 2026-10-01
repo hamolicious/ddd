@@ -104,7 +104,12 @@ async fn the_legacy_database_is_copied_once_with_its_indexes() {
         .await
         .expect("schema marker");
 
-    // A previous interrupted copy left junk in the target, but no marker.
+    // A previous copy was interrupted: it marked the target and left junk in it.
+    target
+        .collection::<bson::Document>("meta")
+        .insert_one(doc! { "_id": "schema", "schema_version": 0, "rename_hop_copy": { "state": "copying" } })
+        .await
+        .expect("copying marker");
     target
         .collection::<bson::Document>("documents")
         .insert_one(doc! { "_id": "stale" })
@@ -144,15 +149,20 @@ async fn the_legacy_database_is_copied_once_with_its_indexes() {
             .unwrap()
             .is_none()
     );
+    let meta = target
+        .collection::<bson::Document>("meta")
+        .find_one(doc! { "_id": "schema" })
+        .await
+        .unwrap()
+        .expect("the schema document is copied");
+    assert_eq!(meta.get_i32("schema_version").ok(), Some(3));
     assert_eq!(
-        target
-            .collection::<bson::Document>("meta")
-            .find_one(doc! { "_id": "schema" })
-            .await
-            .unwrap()
-            .and_then(|meta| meta.get_i32("schema_version").ok()),
-        Some(3)
+        meta.get_document("rename_hop_copy")
+            .and_then(|marker| marker.get_str("state")),
+        Ok("done"),
+        "the copy is marked complete by the same write that carries the schema"
     );
+    assert!(meta.get("migration_lock").is_none());
 
     // Indexes carried with their options.
     let indexes: Vec<IndexModel> = target_documents
@@ -191,7 +201,7 @@ async fn the_legacy_database_is_copied_once_with_its_indexes() {
     // The legacy side is untouched.
     assert_eq!(documents.count_documents(doc! {}).await.unwrap(), 50);
 
-    // Once the marker is there, never again: a row written after the copy survives.
+    // Once marked done, never again: a row written after the copy survives.
     target_documents
         .insert_one(doc! { "_id": "after" })
         .await
@@ -219,4 +229,189 @@ async fn the_legacy_database_is_copied_once_with_its_indexes() {
     legacy.drop().await.expect("drop legacy");
     target.drop().await.expect("drop target");
     client.database(&other).drop().await.ok();
+}
+
+/// A legacy workspace with a user, a document and the schema marker.
+async fn seed_legacy(legacy: &mongodb::Database) {
+    legacy
+        .collection::<bson::Document>("users")
+        .insert_one(doc! { "_id": "u1", "email": "a@example.com" })
+        .await
+        .expect("seed user");
+    legacy
+        .collection::<bson::Document>("documents")
+        .insert_many((0..3).map(|i| doc! { "_id": format!("d{i}") }))
+        .await
+        .expect("seed documents");
+    legacy
+        .collection::<bson::Document>("meta")
+        .insert_one(
+            doc! { "_id": "schema", "schema_version": 3, "updated_at": bson::DateTime::now() },
+        )
+        .await
+        .expect("schema marker");
+}
+
+#[tokio::test]
+#[ignore = "needs a live MongoDB (MONGO_URI)"]
+async fn a_target_booted_empty_is_copied_into() {
+    let Some(uri) = common::mongo_uri() else {
+        return;
+    };
+    let client = mongodb::Client::with_uri_str(&uri).await.expect("mongo");
+    let suffix = new_id();
+    let legacy_name = format!("ddd_renamehop_test_legacy_{suffix}");
+    let target_name = format!("ddd_renamehop_test_target_{suffix}");
+    let legacy = client.database(&legacy_name);
+    let target = client.database(&target_name);
+    seed_legacy(&legacy).await;
+
+    // The new server booted on the target first: migrations and indexes ran, so
+    // it has `meta` and empty collections, but nobody signed up.
+    ddd_server::db::init_schema(&target)
+        .await
+        .expect("boot empty");
+    assert!(
+        target
+            .collection::<bson::Document>("meta")
+            .find_one(doc! { "_id": "schema" })
+            .await
+            .unwrap()
+            .is_some()
+    );
+
+    let report = copy_legacy_database(&client, &legacy_name, &target_name)
+        .await
+        .expect("copy")
+        .expect("an empty-but-migrated target is copied into");
+    assert_eq!(
+        report.collections.last().map(|(name, _)| name.as_str()),
+        Some("meta")
+    );
+    assert_eq!(
+        target
+            .collection::<bson::Document>("documents")
+            .count_documents(doc! {})
+            .await
+            .unwrap(),
+        3
+    );
+    assert_eq!(
+        target
+            .collection::<bson::Document>("users")
+            .count_documents(doc! {})
+            .await
+            .unwrap(),
+        1
+    );
+    // The boot after the copy runs the migrations and index pass on it cleanly.
+    ddd_server::db::init_schema(&target)
+        .await
+        .expect("boot after copy");
+    assert_eq!(
+        copy_legacy_database(&client, &legacy_name, &target_name)
+            .await
+            .unwrap(),
+        None,
+        "copied once"
+    );
+
+    legacy.drop().await.expect("drop legacy");
+    target.drop().await.expect("drop target");
+}
+
+#[tokio::test]
+#[ignore = "needs a live MongoDB (MONGO_URI)"]
+async fn a_target_with_users_is_never_touched() {
+    let Some(uri) = common::mongo_uri() else {
+        return;
+    };
+    let client = mongodb::Client::with_uri_str(&uri).await.expect("mongo");
+    let suffix = new_id();
+    let legacy_name = format!("ddd_renamehop_test_legacy_{suffix}");
+    let target_name = format!("ddd_renamehop_test_target_{suffix}");
+    let legacy = client.database(&legacy_name);
+    let target = client.database(&target_name);
+    seed_legacy(&legacy).await;
+
+    // Somebody signed up on the target — with or without a schema document.
+    let users = target.collection::<bson::Document>("users");
+    users
+        .insert_one(doc! { "_id": "mine", "email": "b@example.com" })
+        .await
+        .expect("target user");
+    assert_eq!(
+        copy_legacy_database(&client, &legacy_name, &target_name)
+            .await
+            .unwrap(),
+        None
+    );
+    ddd_server::db::init_schema(&target).await.expect("boot");
+    assert_eq!(
+        copy_legacy_database(&client, &legacy_name, &target_name)
+            .await
+            .unwrap(),
+        None
+    );
+    let only: Vec<bson::Document> = users
+        .find(doc! {})
+        .await
+        .unwrap()
+        .try_collect()
+        .await
+        .unwrap();
+    assert_eq!(only.len(), 1);
+    assert_eq!(only[0].get_str("_id"), Ok("mine"));
+    assert_eq!(
+        target
+            .collection::<bson::Document>("documents")
+            .count_documents(doc! {})
+            .await
+            .unwrap(),
+        0
+    );
+    assert!(
+        target
+            .collection::<bson::Document>("meta")
+            .find_one(doc! { "_id": "schema" })
+            .await
+            .unwrap()
+            .and_then(|meta| meta.get_document("rename_hop_copy").ok().cloned())
+            .is_none(),
+        "no copy marker"
+    );
+
+    legacy.drop().await.expect("drop legacy");
+    target.drop().await.expect("drop target");
+}
+
+#[tokio::test]
+#[ignore = "needs a live MongoDB (MONGO_URI)"]
+async fn two_boots_at_once_copy_once() {
+    let Some(uri) = common::mongo_uri() else {
+        return;
+    };
+    let client = mongodb::Client::with_uri_str(&uri).await.expect("mongo");
+    let suffix = new_id();
+    let legacy_name = format!("ddd_renamehop_test_legacy_{suffix}");
+    let target_name = format!("ddd_renamehop_test_target_{suffix}");
+    let legacy = client.database(&legacy_name);
+    seed_legacy(&legacy).await;
+
+    let (a, b) = tokio::join!(
+        copy_legacy_database(&client, &legacy_name, &target_name),
+        copy_legacy_database(&client, &legacy_name, &target_name),
+    );
+    let copies = [a.expect("first"), b.expect("second")]
+        .into_iter()
+        .filter(Option::is_some)
+        .count();
+    assert_eq!(copies, 1, "the advisory lock lets exactly one copy run");
+
+    legacy.drop().await.expect("drop legacy");
+    client
+        .database(&target_name)
+        .drop()
+        .await
+        .expect("drop target");
 }

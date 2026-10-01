@@ -187,13 +187,13 @@ fn refuse_if_newer(found: i32) -> anyhow::Result<()> {
 
 /// Identifies the lock holder in logs and in the stored lock. Not a security
 /// boundary — just enough to tell two processes apart.
-fn holder_id() -> String {
+pub(crate) fn holder_id() -> String {
     let host = std::env::var("HOSTNAME").unwrap_or_else(|_| "unknown-host".to_string());
     format!("{host}:{}", std::process::id())
 }
 
 /// Create `meta.schema` if it is missing, without touching an existing version.
-async fn ensure_meta_document(db: &Database) -> anyhow::Result<()> {
+pub(crate) async fn ensure_meta_document(db: &Database) -> anyhow::Result<()> {
     db.collection::<bson::Document>(super::META)
         .update_one(
             doc! { "_id": super::META_SCHEMA_ID },

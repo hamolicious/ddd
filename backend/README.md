@@ -140,6 +140,7 @@ annotated copy-me file; [`../dev-docs/resolved/OPERATIONS.md`](../dev-docs/resol
 | `MONGO_DATABASE` | `ddd` | GridFS attachment buckets live in the same database. |
 | `BIND_ADDR` | `0.0.0.0:8080` | The server is TLS-unaware; terminate TLS at the ingress. |
 | `APP_ORIGIN` | *(empty)* | Comma-separated allowlist, exact `scheme://host[:port]` — no paths, no wildcards. Empty = same-origin only. Used for CORS **and** as the mandatory WebSocket origin check (SPEC §4.3): a cookie-authenticated `/api/sync` upgrade with no `Origin` is refused outright. |
+| `RENAME_HOP_FROM` | *(empty)* | RENAME-HOP. Comma-separated origins this deployment used to be reached at, same format as `APP_ORIGIN`. Returned by `GET /api/auth/bootstrap` as `rename_hop_from`; a client loaded from one of them moves to `PUBLIC_URL`. See OPERATIONS.md § Rename hop. |
 | `PUBLIC_URL` | *(empty)* | The single origin clients reach this server at (`scheme://host[:port]`). Not an allowlist — `APP_ORIGIN` is *who may talk to me*, this is *what URL am I reached at*. Unset changes nothing; set, it narrows the CSP the Android shell's bundle carries (`index_csp`) from scheme-wide `connect-src` to this origin's `https`/`wss` pair. |
 | `COOKIE_SECURE` | `true` | Set `false` only for plain-http local dev. |
 | `LOG_FORMAT` | `json` | `json` (deployed) or `pretty` (local). |
@@ -181,7 +182,7 @@ destructive or administrative actions land in `audit_log`.
 
 | Method | Path | Behavior |
 |---|---|---|
-| `GET` | `/bootstrap` | Unauthenticated: `{needs_first_user, invite_required, public_url}` — what the sign-in screen should show. `public_url` is `PUBLIC_URL` (the deployment's canonical origin) or `null`; a client loaded from any other origin uses it to learn where the deployment lives. |
+| `GET` | `/bootstrap` | Unauthenticated: `{needs_first_user, invite_required, public_url, rename_hop_from}` — what the sign-in screen should show. `public_url` is `PUBLIC_URL` (the deployment's canonical origin) or `null`. `rename_hop_from` (RENAME-HOP) is `RENAME_HOP_FROM` as a list of origins, always present, `[]` when unset: a client moves to `public_url` only when its own origin is in that list. |
 | `POST` | `/register` | `{email, password, name?, invite?, bearer?}`. The **first** user ever becomes admin with no invite; after that an invite is mandatory and always grants a plain account. |
 | `POST` | `/login` | `{email, password, bearer?}` → session cookie, plus a bearer token when asked. |
 | `POST` | `/logout` | Revokes the session and clears the cookie (bearer sessions too). |

@@ -89,6 +89,10 @@ pub struct BootstrapState {
     /// rename hop: the old domain) uses it to learn where to move. It is
     /// already public — it is the address users type.
     pub public_url: Option<String>,
+    /// RENAME-HOP: remove in the cleanup release. `RENAME_HOP_FROM`: the origins
+    /// this deployment used to be reached at, always present (`[]` when unset).
+    /// A client moves to `public_url` only when its own origin is listed here.
+    pub rename_hop_from: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -417,6 +421,8 @@ pub async fn bootstrap_state(
         needs_first_user,
         invite_required: !needs_first_user,
         public_url: state.config.public_url.clone(),
+        // RENAME-HOP: remove in the cleanup release.
+        rename_hop_from: state.config.rename_hop_from.clone(),
     }))
 }
 
@@ -502,6 +508,7 @@ mod tests {
             needs_first_user: false,
             invite_required: true,
             public_url: None,
+            rename_hop_from: Vec::new(),
         };
         assert_eq!(
             serde_json::to_value(&unset).unwrap(),
@@ -509,15 +516,20 @@ mod tests {
                 "needs_first_user": false,
                 "invite_required": true,
                 "public_url": null,
+                "rename_hop_from": [],
             })
         );
         let set = BootstrapState {
             public_url: Some("https://ddd.example.com".to_string()),
+            rename_hop_from: vec!["https://life.example.com".to_string()],
             ..unset
         };
+        let json = serde_json::to_value(&set).unwrap();
+        assert_eq!(json["public_url"], "https://ddd.example.com");
+        // RENAME-HOP: remove in the cleanup release.
         assert_eq!(
-            serde_json::to_value(&set).unwrap()["public_url"],
-            "https://ddd.example.com"
+            json["rename_hop_from"],
+            serde_json::json!(["https://life.example.com"])
         );
     }
 
