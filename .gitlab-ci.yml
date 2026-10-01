@@ -15,9 +15,10 @@
 #   * `build` is replaced by `server-image`, so the pipeline says which build it is next to
 #     the shell jobs. Its Dockerfile is `backend/Dockerfile` with the repo root as context
 #     (see the header of `docker-compose.yaml`), not `./Dockerfile`.
-#   * `publish-image` / `deploy-image` — run automatically, but only for master and tags.
-#     A pipeline started by hand ("Run pipeline") on another branch builds the image and
-#     offers the manual jobs; it never publishes or deploys.
+#   * `publish-image` / `deploy-image` are replaced by `internal-publish` / `internal-deploy`
+#     (same jobs, via `extends`) — run automatically, but only for master and tags. A
+#     pipeline started by hand ("Run pipeline") on another branch builds the image and offers
+#     the manual jobs; it never publishes or deploys.
 include:
   - project: "gitlab-artifacts/ci"
     file: "/homelab.gitlab-ci.yml"
@@ -55,7 +56,8 @@ before_script:
   - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   - if: $CI_COMMIT_TAG
 
-# An included job cannot be renamed or removed, only switched off.
+# An included job cannot be renamed or removed, only switched off (and extended under
+# another name).
 build:
   rules:
     - when: never
@@ -67,11 +69,25 @@ server-image:
     - docker push $DEV_IMAGE
 
 publish-image:
+  rules:
+    - when: never
+
+deploy-image:
+  rules:
+    - when: never
+
+# The template's `publish-image` / `deploy-image` under the names this pipeline uses. `extends`
+# keeps their scripts and images; `needs`, `dependencies` and `rules` are replaced wholesale,
+# which is what rewires them to `server-image` and to each other.
+internal-publish:
+  extends: publish-image
   needs: [server-image]
   dependencies: [server-image]
   rules: *ships
 
-deploy-image:
+internal-deploy:
+  extends: deploy-image
+  needs: [internal-publish]
   rules:
     - if: $DEPLOY_HOMELAB != "true"
       when: never
