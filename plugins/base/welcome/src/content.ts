@@ -255,6 +255,8 @@ tags: [tour]
 # Keyboard and commands
 
 - **Ctrl/⌘ K** opens the command palette: every action, searchable
+- **Hard refresh (clear app cache)** in the palette reloads the app fresh from the server,
+  if it seems stuck on an old version. You stay signed in and keep your notes
 - Type **/** in **Edit** for things to insert
 - Settings → Keybindings changes any shortcut
 - Settings → Toolbar arranges the buttons in the top and bottom bars, separately for a

@@ -58,6 +58,7 @@ import {
 import { initKernel, type KernelRuntime } from "./boot/kernel-init.js";
 import { bootModeFor, safeModeFrom } from "./boot/safe-mode.js";
 import { contributeShellSection } from "./boot/ShellSection.js";
+import { contributeHardRefreshCommand } from "./boot/hard-refresh-command.js";
 import {
   shellOwnsSession,
   onShellUpdateReady,
@@ -299,6 +300,8 @@ async function boot(): Promise<void> {
       // and revert criteria are not testable without a visible version). After the
       // plugins, because it goes into the `settings` plugin's sections.
       await contributeShellSection(host).catch((error: unknown) => console.warn("[shell] the device section could not be added", error));
+      // "Hard refresh (clear app cache)" in the palette, once `commands` has activated.
+      await contributeHardRefreshCommand(host).catch((error: unknown) => console.warn("[app] the hard refresh command could not be added", error));
 
       // **Interactive.** The kernel is up, the projection is readable, and the plugin set
       // has activated (or failed, contained and reported — a workspace with a broken
