@@ -4,7 +4,7 @@ import "fake-indexeddb/auto";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { BATCH, migrateLegacyStorage, renamedDatabase, renamedKey } from "./rename-hop.js";
+import { BATCH, legacyDatabasesLeft, migrateLegacyStorage, renamedDatabase, renamedKey } from "./rename-hop.js";
 
 function memoryStorage(entries: Record<string, string> = {}): Storage {
   const map = new Map(Object.entries(entries));
@@ -145,12 +145,94 @@ describe("rename hop: legacy storage", () => {
     db.close();
   });
 
-  it("leaves the old database alone when the new one already exists", async () => {
+  it("keeps both, and reports the old one stranded, when the new one was started before any copy", async () => {
     const idb = new IDBFactory();
     await legacyReplica(idb, 3);
     (await openDb(idb, "ddd", 4, (d) => d.createObjectStore("docs", { keyPath: "id" }))).close();
-    await migrateLegacyStorage({ indexedDB: idb, localStorage: memoryStorage() });
+    const outcome = await migrateLegacyStorage({ indexedDB: idb, localStorage: memoryStorage(), warn: () => undefined });
     expect(await names(idb)).toEqual(["ddd", "life-manager"]);
+    expect([...outcome.stranded]).toEqual([["life-manager", "both-exist"]]);
+  });
+
+  it("reports nothing stranded after a clean copy", async () => {
+    const idb = new IDBFactory();
+    await legacyReplica(idb, 3);
+    const storage = memoryStorage();
+    const outcome = await migrateLegacyStorage({ indexedDB: idb, localStorage: storage });
+    expect(outcome.stranded.size).toBe(0);
+    expect(await legacyDatabasesLeft(idb)).toEqual([]);
+    // The verified-copy marker goes once the old database is gone (next boot).
+    expect(storage.getItem("ddd.rename-hop.copied:life-manager")).toBe("1");
+    await migrateLegacyStorage({ indexedDB: idb, localStorage: storage });
+    expect(storage.getItem("ddd.rename-hop.copied:life-manager")).toBeNull();
+  });
+
+  it("keeps the old database and reports it stranded when the copy fails (quota)", async () => {
+    const real = new IDBFactory();
+    await legacyReplica(real, 3);
+    const quota: IDBFactory = {
+      open: (name: string, version?: number) => {
+        if (name === "ddd" && version !== undefined) throw new DOMException("no space", "QuotaExceededError");
+        return real.open(name, version);
+      },
+      deleteDatabase: (name: string) => real.deleteDatabase(name),
+      databases: () => real.databases(),
+      cmp: (a: unknown, b: unknown) => real.cmp(a, b),
+    };
+    const storage = memoryStorage();
+    const warn = vi.fn();
+    const outcome = await migrateLegacyStorage({ indexedDB: quota, localStorage: storage, warn });
+    expect(await names(real)).toEqual(["life-manager"]);
+    expect([...outcome.stranded]).toEqual([["life-manager", "not-moved"]]);
+    expect(storage.getItem("ddd.rename-hop.copying:ddd")).toBeNull();
+    expect(warn).toHaveBeenCalled();
+  });
+
+  it("reports the old database stranded while another tab holds it open, and finishes the deletion later", async () => {
+    const idb = new IDBFactory();
+    await legacyReplica(idb, 3);
+    // An old tab: holds the old database and ignores the request to close it.
+    const oldTab = await openDb(idb, "life-manager", 4, () => undefined);
+    const storage = memoryStorage();
+    const outcome = await migrateLegacyStorage({ indexedDB: idb, localStorage: storage });
+    expect([...outcome.stranded]).toEqual([["life-manager", "not-moved"]]);
+    expect(await legacyDatabasesLeft(idb)).toEqual(["life-manager"]);
+    expect(storage.getItem("ddd.rename-hop.copied:life-manager")).toBe("1");
+
+    // A reload while it is still open: the copy is not redone, the deletion is retried.
+    const again = await migrateLegacyStorage({ indexedDB: idb, localStorage: storage });
+    expect([...again.stranded]).toEqual([["life-manager", "not-moved"]]);
+    const db = await openDb(idb, "ddd", 4, () => undefined);
+    expect(await request(db.transaction("docs").objectStore("docs").count())).toBe(3);
+    db.close();
+
+    oldTab.close();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(await legacyDatabasesLeft(idb)).toEqual([]);
+    const done = await migrateLegacyStorage({ indexedDB: idb, localStorage: storage });
+    expect(done.stranded.size).toBe(0);
+    expect(storage.getItem("ddd.rename-hop.copied:life-manager")).toBeNull();
+  });
+
+  it("probes the known names where databases() is missing, and never creates one by probing", async () => {
+    const real = new IDBFactory();
+    await legacyReplica(real, 3);
+    const queue = await openDb(real, "life-manager:attachments", 1, (d) => d.createObjectStore("waiting", { keyPath: "token" }));
+    await put(queue, "waiting", [{ token: "t1" }]);
+    queue.close();
+    (await openDb(real, "life-manager-search", 3, (d) => d.createObjectStore("chunks"))).close();
+    const unlisted = {
+      open: (name: string, version?: number) => real.open(name, version),
+      deleteDatabase: (name: string) => real.deleteDatabase(name),
+      cmp: (a: unknown, b: unknown) => real.cmp(a, b),
+    } as unknown as IDBFactory;
+
+    expect(await legacyDatabasesLeft(unlisted)).toEqual(["life-manager", "life-manager:attachments"]);
+    const outcome = await migrateLegacyStorage({ indexedDB: unlisted, localStorage: memoryStorage() });
+    expect(outcome.stranded.size).toBe(0);
+    expect(await names(real)).toEqual(["ddd", "ddd:attachments"]);
+    expect(await legacyDatabasesLeft(unlisted)).toEqual([]);
+    expect(await names(real)).toEqual(["ddd", "ddd:attachments"]);
   });
 
   it("starts again when a copy was cut short", async () => {
@@ -175,7 +257,9 @@ describe("rename hop: legacy storage", () => {
     } as unknown as Storage;
     const idb = { databases: () => Promise.reject(new Error("no listing")) } as unknown as IDBFactory;
     const caches = { keys: () => Promise.reject(new Error("no caches")), delete: vi.fn() };
-    await expect(migrateLegacyStorage({ localStorage: broken, indexedDB: idb, caches, warn })).resolves.toBeUndefined();
-    expect(warn).toHaveBeenCalledTimes(3);
+    const outcome = await migrateLegacyStorage({ localStorage: broken, indexedDB: idb, caches, warn });
+    expect(warn).toHaveBeenCalled();
+    // Neither listed nor probed: what cannot be told is never taken as gone.
+    expect(outcome.stranded.size).toBeGreaterThan(0);
   });
 });

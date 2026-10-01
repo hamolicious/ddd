@@ -115,7 +115,7 @@ void boot();
 
 async function boot(): Promise<void> {
   // RENAME-HOP: carry pre-rename storage over to the new names before anything opens it.
-  await migrateLegacyStorage({
+  const legacy = await migrateLegacyStorage({
     ...legacyStorageDeps(),
     onProgress: (done, total) => {
       paintKernelDefaultTokens(document.documentElement);
@@ -295,7 +295,7 @@ async function boot(): Promise<void> {
       );
 
       // RENAME-HOP: on the old domain, finish syncing here, then move to the canonical one.
-      moveToCanonicalDomain(runtime);
+      moveToCanonicalDomain(runtime, legacy);
 
       if (safeMode === "bare") {
         // No plugins at all: the kernel's own manager takes the mount (SPEC §6.1).

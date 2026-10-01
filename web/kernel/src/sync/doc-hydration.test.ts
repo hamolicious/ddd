@@ -12,6 +12,7 @@ import * as Y from "yjs";
 import {
   DocHydrator,
   TEXT_ROOT,
+  stateHolds,
   type DocHydratorOptions,
   type HydratedDoc,
 } from "./doc-hydration.js";
@@ -1037,5 +1038,119 @@ describe("unsent replicas of closed notes", () => {
     expect(await hydrator.localText(DOC)).toBe("mine\nserver\nlater\n");
     expect(persistence.states.get(DOC)).toMatchObject({ unsynced: true, version: "v2" });
     expect(await hydrator.unsentIds()).toEqual([DOC]);
+  });
+});
+
+/** RENAME-HOP: the receipt check the domain move waits for. Deleted with it. */
+describe("confirmReceived", () => {
+  const encode = (doc: Y.Doc): Uint8Array => Y.encodeStateAsUpdate(doc);
+
+  it("compares items and deletions, not only state vectors", () => {
+    const server = new Y.Doc();
+    server.getText(TEXT_ROOT).insert(0, "hello world");
+    const local = new Y.Doc();
+    Y.applyUpdate(local, encode(server));
+    expect(stateHolds(encode(server), encode(local))).toBe(true);
+
+    // The server ahead of this device is fine.
+    server.getText(TEXT_ROOT).insert(0, ">> ");
+    expect(stateHolds(encode(server), encode(local))).toBe(true);
+
+    // A deletion leaves the state vector alone, and must still count as unsent.
+    const deleted = new Y.Doc();
+    Y.applyUpdate(deleted, encode(server));
+    deleted.getText(TEXT_ROOT).delete(0, 3);
+    expect(Y.encodeStateVector(deleted)).toEqual(Y.encodeStateVector(server));
+    expect(stateHolds(encode(server), encode(deleted))).toBe(false);
+
+    local.getText(TEXT_ROOT).insert(0, "new ");
+    expect(stateHolds(encode(server), encode(local))).toBe(false);
+  });
+
+  /** A fixture whose REST answers come from the fake server's documents. */
+  async function restFixture(options: DocHydratorOptions = {}) {
+    let serverRef: Map<string, ServerDoc> | undefined;
+    const fetchImpl = vi.fn(async (url: string) => {
+      const id = decodeURIComponent(new URL(url).pathname.split("/").pop() ?? "");
+      const doc = serverRef?.get(id);
+      if (!doc) return new Response("", { status: 404 });
+      return new Response(Y.encodeStateAsUpdate(doc.doc) as unknown as BodyInit, { status: 200 });
+    });
+    const f = await fixture({ restBaseUrl: "http://127.0.0.1:8080/", fetchImpl: fetchImpl as unknown as typeof fetch, ...options });
+    serverRef = f.server;
+    return { ...f, fetchImpl };
+  }
+
+  it("is confirmed once the server holds every open document", async () => {
+    const { hydrator, serve, fetchImpl } = await restFixture();
+    const opening = hydrator.open(DOC);
+    await settle();
+    serve();
+    const handle = await opening;
+    handle.text.insert(0, "typed live\n");
+    serve();
+    const report = await hydrator.confirmReceived();
+    expect(report).toMatchObject({ confirmed: true, checked: 1, missing: [], failed: [] });
+    expect(fetchImpl.mock.calls[0]?.[0]).toContain("format=crdt");
+  });
+
+  it("finds a live edit the socket took but the server never applied, and re-sends it", async () => {
+    const { hydrator, socket, server, serve } = await restFixture();
+    const opening = hydrator.open(DOC);
+    await settle();
+    serve();
+    const handle = await opening;
+    handle.text.insert(0, "lost in flight\n");
+    // Handed to the socket, so nothing is pending — and the server never got it.
+    socket.sentBinary.splice(0);
+    expect(hydrator.pendingCount).toBe(0);
+
+    const first = await hydrator.confirmReceived({ repair: true });
+    expect(first).toMatchObject({ confirmed: false, missing: [DOC] });
+
+    // The repair re-subscribes; the server's step 1 is answered with everything it lacks.
+    await settle();
+    expect(socket.controlOfType("doc.subscribe").length).toBeGreaterThan(1);
+    socket.deliverBinary(server.get(DOC)!.step1());
+    serve();
+    expect(server.get(DOC)!.text.toString()).toBe("lost in flight\n");
+    expect((await hydrator.confirmReceived()).confirmed).toBe(true);
+  });
+
+  it("checks stored replicas that are not open, flagged synced or not", async () => {
+    const persistence = new MemoryDocPersistence();
+    const stale = new Y.Doc();
+    stale.getText(TEXT_ROOT).insert(0, "flag says synced, server says otherwise");
+    await persistence.save(OTHER, Y.encodeStateAsUpdate(stale), { unsynced: false });
+    const { hydrator } = await restFixture({ persistence });
+    const report = await hydrator.confirmReceived();
+    // OTHER is not on the fake server at all (404) but flagged synced: nothing to deliver.
+    expect(report.confirmed).toBe(true);
+    await persistence.save(OTHER, Y.encodeStateAsUpdate(stale), { unsynced: true });
+    expect(await hydrator.confirmReceived()).toMatchObject({ confirmed: false, missing: [OTHER] });
+  });
+
+  it("is not confirmed when the server cannot be asked, or something was typed meanwhile", async () => {
+    const { hydrator, serve, fetchImpl } = await restFixture();
+    const opening = hydrator.open(DOC);
+    await settle();
+    serve();
+    const handle = await opening;
+    handle.text.insert(0, "x");
+    serve();
+
+    fetchImpl.mockImplementationOnce(async () => new Response("", { status: 503 }));
+    expect(await hydrator.confirmReceived()).toMatchObject({ confirmed: false, failed: [DOC] });
+
+    const mark = hydrator.localEdits;
+    fetchImpl.mockImplementationOnce(async () => {
+      handle.text.insert(0, "y");
+      serve();
+      return new Response(Y.encodeStateAsUpdate(new Y.Doc()) as unknown as BodyInit, { status: 200 });
+    });
+    const report = await hydrator.confirmReceived();
+    expect(hydrator.localEdits).toBeGreaterThan(mark);
+    expect(report.quiet).toBe(false);
+    expect(report.confirmed).toBe(false);
   });
 });

@@ -14,7 +14,24 @@
  * - **Cache Storage**: the old caches are deleted; the service worker refills new ones.
  *
  * Never throws: a migration that fails leaves the old data where it was and the boot
- * carries on (a fresh replica re-downloads from the server).
+ * carries on (a fresh replica re-downloads from the server). What is left behind is
+ * reported ({@link MigrationOutcome.stranded}), and while any old database is still on the
+ * device the old domain never clears itself or moves (`rename-hop-move.ts`): that database
+ * may hold the only copy of an edit.
+ *
+ * The states a database pair can be found in at boot:
+ *
+ * | old | new | marker                 | what happens                                         |
+ * |-----|-----|------------------------|------------------------------------------------------|
+ * | yes | no  | —                      | copied, verified, old deleted                        |
+ * | yes | yes | `copying:<new>`        | a copy was cut short: new dropped, copied again      |
+ * | yes | yes | `copied:<old>`         | copy verified earlier, deletion was blocked: retried  |
+ * | yes | yes | none                   | the new one was started fresh before any copy (no    |
+ * |     |     |                        | listing, or a copy that failed): both kept, stranded |
+ * | no  | any | —                      | nothing to do                                        |
+ *
+ * Without `indexedDB.databases()` (older browsers) the known names are probed instead:
+ * opened without a version, with any upgrade aborted, so a probe never creates one.
  */
 
 /** RENAME-HOP: old localStorage key prefix → new. */
@@ -40,6 +57,38 @@ const LEGACY_CACHES: ReadonlySet<string> = new Set(["life-manager:api", "lm-shel
  * and the copy starts again.
  */
 const COPYING_KEY = (name: string): string => `ddd.rename-hop.copying:${name}`;
+/**
+ * RENAME-HOP: set once a copy is verified, until the old database is gone. Found with both
+ * still there, it means only the deletion is left (an old tab held the old one open).
+ */
+const COPIED_KEY = (legacy: string): string => `ddd.rename-hop.copied:${legacy}`;
+
+/**
+ * RENAME-HOP: every name the old build used, probed when `indexedDB.databases()` is
+ * missing. `life-manager:*` names a plugin outside this list made cannot be found then.
+ */
+const KNOWN_LEGACY: readonly string[] = [
+  LEGACY_DB,
+  `${LEGACY_DB_PREFIX}attachments`,
+  `${LEGACY_DB_PREFIX}folder`,
+  `${LEGACY_DB_PREFIX}obsidian-importer`,
+  LEGACY_SEARCH_DB,
+];
+
+/** RENAME-HOP: how long a probe or a deletion may wait (one queued behind a blocked deletion hears nothing). */
+export const PROBE_TIMEOUT_MS = 2_000;
+
+/** RENAME-HOP: why an old database is still on the device. */
+export type StrandedReason =
+  /** The copy failed (quota, a held-open database), or the old one could not be deleted yet. */
+  | "not-moved"
+  /** A new database was started fresh before the old one was copied: both are kept. */
+  | "both-exist";
+
+export interface MigrationOutcome {
+  /** Old databases still on this device (the disposable search index aside), and why. */
+  readonly stranded: ReadonlyMap<string, StrandedReason>;
+}
 
 /** Records per read and per write transaction: bounded memory on a database of hundreds of MB. */
 export const BATCH = 500;
@@ -67,7 +116,42 @@ export function renamedKey(key: string): string | undefined {
   return undefined;
 }
 
-export async function migrateLegacyStorage(deps: MigrateDeps = legacyStorageDeps()): Promise<void> {
+/** RENAME-HOP: is this an old database that may hold data (the search index never does)? */
+export function isLegacyDatabase(name: string): boolean {
+  return renamedDatabase(name) !== undefined;
+}
+
+/**
+ * RENAME-HOP: every database name on this origin — listed, or else probed among the known
+ * old and new names. A name that cannot be probed counts as present: unknown is never gone.
+ */
+export async function databaseNames(idb: IDBFactory): Promise<Set<string>> {
+  if (typeof idb.databases === "function") {
+    try {
+      const listed = await idb.databases();
+      return new Set(listed.map((db) => db.name).filter((name): name is string => typeof name === "string"));
+    } catch {
+      /* fall through to probing */
+    }
+  }
+  const candidates = new Set<string>();
+  for (const name of KNOWN_LEGACY) {
+    candidates.add(name);
+    const renamed = renamedDatabase(name);
+    if (renamed !== undefined) candidates.add(renamed);
+  }
+  const found = new Set<string>();
+  for (const name of candidates) if (await probe(idb, name)) found.add(name);
+  return found;
+}
+
+/** RENAME-HOP: the old databases (search index aside) still on this device. */
+export async function legacyDatabasesLeft(idb: IDBFactory = globalThis.indexedDB): Promise<string[]> {
+  return [...(await databaseNames(idb))].filter(isLegacyDatabase).sort();
+}
+
+export async function migrateLegacyStorage(deps: MigrateDeps = legacyStorageDeps()): Promise<MigrationOutcome> {
+  const stranded = new Map<string, StrandedReason>();
   const warn = deps.warn ?? ((message: string, cause?: unknown) => console.warn(`[rename-hop] ${message}`, cause ?? ""));
   try {
     migrateLocalStorage(deps.localStorage);
@@ -81,15 +165,25 @@ export async function migrateLegacyStorage(deps: MigrateDeps = legacyStorageDeps
     warn("old caches could not be deleted", cause);
   }
   const idb = deps.indexedDB;
-  if (!idb || typeof idb.databases !== "function") return;
+  if (!idb) return { stranded };
   try {
-    const run = (): Promise<void> => migrateDatabases(idb, deps, warn);
+    const run = (): Promise<void> => migrateDatabases(idb, deps, warn, stranded);
     // Two tabs booting at once must not both copy.
     if (deps.locks) await deps.locks.request("ddd:rename-hop", run);
     else await run();
   } catch (cause) {
     warn("IndexedDB could not be migrated", cause);
   }
+  // Whatever the steps above reported, the device has the last word: an old database it
+  // still lists is stranded, for whatever reason.
+  try {
+    const left = new Set(await legacyDatabasesLeft(idb));
+    for (const name of left) if (!stranded.has(name)) stranded.set(name, "not-moved");
+    for (const name of [...stranded.keys()]) if (!left.has(name)) stranded.delete(name);
+  } catch (cause) {
+    warn("could not tell which old databases are left", cause);
+  }
+  return { stranded };
 }
 
 /** RENAME-HOP: this page's real storage. */
@@ -124,21 +218,48 @@ function migrateLocalStorage(storage: Storage | undefined): void {
   }
 }
 
-async function migrateDatabases(idb: IDBFactory, deps: MigrateDeps, warn: (message: string, cause?: unknown) => void): Promise<void> {
-  const listed = await idb.databases();
-  const names = new Set(listed.map((db) => db.name).filter((name): name is string => typeof name === "string"));
+async function migrateDatabases(
+  idb: IDBFactory,
+  deps: MigrateDeps,
+  warn: (message: string, cause?: unknown) => void,
+  stranded: Map<string, StrandedReason>,
+): Promise<void> {
+  const names = await databaseNames(idb);
+  const marked = (key: string): boolean => (deps.localStorage?.getItem(key) ?? null) !== null;
+  // A verified copy whose old database has gone since: nothing left to remember.
+  forgetCopiedMarkers(deps.localStorage, names);
   if (names.has(LEGACY_SEARCH_DB)) await deleteDatabase(idb, LEGACY_SEARCH_DB);
 
   const work: { from: string; to: string }[] = [];
   for (const from of names) {
     const to = renamedDatabase(from);
     if (to === undefined) continue;
-    const interrupted = (deps.localStorage?.getItem(COPYING_KEY(to)) ?? null) !== null;
-    if (names.has(to)) {
-      if (!interrupted) continue; // RENAME-HOP: already on the new name: the old one is left alone.
-      await deleteDatabase(idb, to);
+    if (!names.has(to)) {
+      // RENAME-HOP: the new one is gone (site data cleared?): any old marker is stale.
+      deps.localStorage?.removeItem(COPIED_KEY(from));
+      work.push({ from, to });
+      continue;
     }
-    work.push({ from, to });
+    if (marked(COPYING_KEY(to))) {
+      // RENAME-HOP: a copy cut short. The half-made new one is dropped — but only if
+      // nothing holds it open, or the copy after it would wait on that tab forever.
+      if (!(await deleteDatabase(idb, to, { strict: true }))) {
+        warn(`"${to}" is held open by another tab; "${from}" is kept and copied later`);
+        stranded.set(from, "not-moved");
+        continue;
+      }
+      work.push({ from, to });
+      continue;
+    }
+    if (marked(COPIED_KEY(from))) {
+      // RENAME-HOP: copied and verified before; only the deletion is left.
+      await deleteDatabase(idb, from);
+      continue;
+    }
+    // RENAME-HOP: the new one was started before this one was copied. Either may hold the
+    // only copy of an edit, so neither is touched; the old domain stays put (stranded).
+    warn(`both "${from}" and "${to}" exist; keeping both`);
+    stranded.set(from, "both-exist");
   }
   if (work.length === 0) return;
 
@@ -156,15 +277,28 @@ async function migrateDatabases(idb: IDBFactory, deps: MigrateDeps, warn: (messa
         deps.onProgress?.(done, total);
       });
       db.close();
+      deps.localStorage?.setItem(COPIED_KEY(from), "1");
       deps.localStorage?.removeItem(COPYING_KEY(to));
       await deleteDatabase(idb, from);
     } catch (cause) {
       warn(`"${from}" could not be copied to "${to}"; keeping the old copy`, cause);
+      stranded.set(from, "not-moved");
       db.close();
       await deleteDatabase(idb, to).catch(() => undefined);
       deps.localStorage?.removeItem(COPYING_KEY(to));
     }
   }
+}
+
+function forgetCopiedMarkers(storage: Storage | undefined, names: ReadonlySet<string>): void {
+  if (!storage) return;
+  const prefix = COPIED_KEY("");
+  const stale: string[] = [];
+  for (let i = 0; i < storage.length; i += 1) {
+    const key = storage.key(i);
+    if (key?.startsWith(prefix) && !names.has(key.slice(prefix.length))) stale.push(key);
+  }
+  for (const key of stale) storage.removeItem(key);
 }
 
 const promised = <T>(request: IDBRequest<T>): Promise<T> =>
@@ -182,14 +316,60 @@ const finished = (tx: IDBTransaction): Promise<void> =>
 
 /**
  * Resolves once deleted — or once blocked: an old tab still holding it open keeps it until
- * that tab closes, and the deletion then completes on its own.
+ * that tab closes, and the deletion then completes on its own. `strict` resolves `false`
+ * when blocked instead (the deletion still completes later).
  */
-function deleteDatabase(idb: IDBFactory, name: string): Promise<void> {
+function deleteDatabase(idb: IDBFactory, name: string, options: { strict?: boolean } = {}): Promise<boolean> {
   return new Promise((resolve, reject) => {
+    // A deletion queued behind an earlier, still blocked one hears nothing at all until
+    // that one completes: waiting this long counts as blocked.
+    const timer = setTimeout(() => resolve(!options.strict), PROBE_TIMEOUT_MS);
+    const settle = (deleted: boolean): void => {
+      clearTimeout(timer);
+      resolve(deleted);
+    };
     const request = idb.deleteDatabase(name);
-    request.onsuccess = () => resolve();
-    request.onblocked = () => resolve();
-    request.onerror = () => reject(request.error ?? new Error(`"${name}" could not be deleted`));
+    request.onsuccess = () => settle(true);
+    request.onblocked = () => settle(!options.strict);
+    request.onerror = () => {
+      clearTimeout(timer);
+      reject(request.error ?? new Error(`"${name}" could not be deleted`));
+    };
+  });
+}
+
+/**
+ * RENAME-HOP: does `name` exist? Opened without a version and with any upgrade aborted, so
+ * probing never creates it. A probe that does not answer in time (a deletion pending
+ * behind another tab) counts as present: unknown is never "gone".
+ */
+function probe(idb: IDBFactory, name: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(true), PROBE_TIMEOUT_MS);
+    const done = (found: boolean): void => {
+      clearTimeout(timer);
+      resolve(found);
+    };
+    let request: IDBOpenDBRequest;
+    try {
+      request = idb.open(name);
+    } catch {
+      done(true);
+      return;
+    }
+    let created = false;
+    request.onupgradeneeded = () => {
+      created = true;
+      request.transaction?.abort();
+    };
+    request.onsuccess = () => {
+      request.result.close();
+      done(true);
+    };
+    request.onerror = (event) => {
+      event.preventDefault();
+      done(!created);
+    };
   });
 }
 

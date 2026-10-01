@@ -29,6 +29,12 @@ export interface AuthBootstrap {
    * (`rename-hop-move.ts`). Absent on a server from before the hop.
    */
   readonly public_url?: string | null;
+  /**
+   * RENAME-HOP: the old origins (`https://life.slayhouse.net`) a page moves away from. Only
+   * a page on one of these moves; any other origin (a LAN address, localhost) stays. Absent
+   * on a server from before the hop: none.
+   */
+  readonly rename_hop_from?: readonly string[];
 }
 
 interface UserView {
