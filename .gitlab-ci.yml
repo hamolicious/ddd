@@ -200,4 +200,9 @@ linux-desktop:
     name: "life-manager-desktop-$CI_COMMIT_SHORT_SHA"
     paths:
       - dist/
+    # The package registry (above) is where the files are published; the artifact is a
+    # convenience. The AppImage is over the instance's 100 MB artifact limit, so only the
+    # .deb rides along -- without this the job failed at the upload, after publishing.
+    exclude:
+      - dist/*.AppImage
     expire_in: 30 days
