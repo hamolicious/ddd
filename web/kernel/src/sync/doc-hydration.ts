@@ -774,8 +774,17 @@ export class DocHydrator {
       }
     }
     entry.subscribed = false;
-    // The Y.Doc stays in the LRU: reopening it is then free, and it is still the
-    // offline-editable copy. `#evict` is what eventually reclaims it.
+    entry.acked = false;
+    // Unsubscribed, the replica stops hearing what other clients write. Reopening it
+    // must wait for the handshake again, as a first open does: a short open (a splice
+    // of one line, then release) handed the replica as it was at the last release
+    // would plan its edit against text another client has since changed, and the
+    // merge keeps both lines — the other client's fold of a kanban column, and this
+    // one's unfold of the line as it used to be — with whichever lands last winning.
+    entry.synced = false;
+    // The Y.Doc stays in the LRU: reopening it is then cheap (a state vector and the
+    // diff since), and it is still the offline-editable copy. `#evict` is what
+    // eventually reclaims it.
     this.#evict();
   }
 

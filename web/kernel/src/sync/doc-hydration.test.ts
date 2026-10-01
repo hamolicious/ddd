@@ -321,6 +321,39 @@ describe("short opens (a folder move: open, splice, release)", () => {
     expect(socket.controlOfType("doc.subscribe")).toHaveLength(4);
   });
 
+  it("waits for the server's diff when a released replica is reopened", async () => {
+    // Two clients on one kanban board: the other folds a column (rewriting the
+    // `columns:` line) while this one holds the board's replica released in its LRU.
+    // The next short open here must see that line before it plans its own edit,
+    // or the merge ends up holding both versions of the line.
+    const { socket, hydrator } = await fixture();
+    const doc = new ServerDoc(DOC);
+    const server = strictServer(socket, doc);
+
+    const first = hydrator.open(DOC);
+    await settle();
+    server.serve();
+    (await first).release();
+    server.serve();
+    server.deliverAcks();
+
+    doc.text.insert(0, "folded by the other client");
+
+    let handed: string | undefined;
+    const reopened = hydrator.open(DOC).then((handle) => {
+      handed = handle.text.toString();
+      return handle;
+    });
+    await settle();
+    // Not yet: the replica is handed out only once the server has answered.
+    expect(handed).toBeUndefined();
+    server.serve();
+    const handle = await reopened;
+    expect(handed).toBe("folded by the other client");
+    expect(socket.controlOfType("doc.subscribe")).toHaveLength(2);
+    handle.release();
+  });
+
   it("still flushes offline edits on an ack for a subscription that is live", async () => {
     const { socket, hydrator } = await fixture();
     const doc = new ServerDoc(DOC);
