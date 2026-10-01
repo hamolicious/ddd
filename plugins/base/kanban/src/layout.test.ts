@@ -85,12 +85,28 @@ describe("order and moves", () => {
 
   it("ranks a dropped card between its neighbours, or renumbers when it must", () => {
     const ranked = [note("a", {}, { kanban: { rank: 1024 } }), note("b", {}, { kanban: { rank: 2048 } })];
-    expect([...planRanks(ranked, 1, "x")]).toEqual([["x", 1536]]);
-    expect([...planRanks(ranked, 0, "x")]).toEqual([["x", 0]]);
-    expect([...planRanks(ranked, 2, "x")]).toEqual([["x", 3072]]);
-    expect([...planRanks([], 0, "x")]).toEqual([["x", 1024]]);
+    expect([...planRanks(ranked, 1, ["x"])]).toEqual([["x", 1536]]);
+    expect([...planRanks(ranked, 0, ["x"])]).toEqual([["x", 0]]);
+    expect([...planRanks(ranked, 2, ["x"])]).toEqual([["x", 3072]]);
+    expect([...planRanks([], 0, ["x"])]).toEqual([["x", 1024]]);
+    // A block lands together, spread between its neighbours; renumbered as one when it must.
+    expect([...planRanks(ranked, 1, ["x", "y", "z"])]).toEqual([
+      ["x", 1280],
+      ["y", 1536],
+      ["z", 1792],
+    ]);
+    expect([...planRanks(ranked, 2, ["x", "y"])]).toEqual([
+      ["x", 3072],
+      ["y", 4096],
+    ]);
+    expect([...planRanks(ranked, 0, ["x", "y"])]).toEqual([
+      ["x", -1024],
+      ["y", 0],
+    ]);
+    const tight = [note("a", {}, { kanban: { rank: 1 } }), note("b", {}, { kanban: { rank: 1 } })];
+    expect([...planRanks(tight, 1, ["x", "y", "z"]).values()]).toEqual([1024, 2048, 3072, 4096, 5120]);
     const unranked = [note("a", {}), note("b", {}, { kanban: { rank: 5 } })];
-    expect([...planRanks(unranked, 1, "x")]).toEqual([
+    expect([...planRanks(unranked, 1, ["x"])]).toEqual([
       ["a", 1024],
       ["x", 2048],
       ["b", 3072],

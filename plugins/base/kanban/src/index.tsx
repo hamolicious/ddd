@@ -18,7 +18,7 @@
  */
 
 import type { Kernel } from "@kernel";
-import { addCommand } from "plugin:commands";
+import { addCommand, list as listCommands, run as runCommand } from "plugin:commands";
 import { notifyCreated } from "plugin:doc-events";
 import { addMode } from "plugin:document-surface";
 import { FmValueSelect, SavedSearch, encode } from "plugin:search";
@@ -27,7 +27,7 @@ import type { SearchSpec } from "plugin:search";
 import type { Looks } from "../../_shared/note-look.js";
 import { offerSavedView, type SavedViewAction } from "../../_shared/saved-view-mode.js";
 
-import { BOARD_ACTIONS } from "./actions.js";
+import { BOARD_ACTIONS, type DocumentAction } from "./actions.js";
 import { createBoard } from "./Board.js";
 import { BOARD_OPTIONS, CARD_TITLE, cardFields, noteText } from "./create.js";
 import { RANK_KEY, appendRanks, bornWith, sinceField, type Column, type Filters, type KanbanOptions } from "./layout.js";
@@ -102,7 +102,26 @@ export default function activate(kernel: Kernel): void {
     return id;
   };
 
-  const Board = createBoard({ kernel, looks, menu, addCard, fmValueSelect: FmValueSelect });
+  /** The commands that take documents, for a selection's menu: run once with every selected id. */
+  const documentActions = (): readonly DocumentAction[] =>
+    listCommands()
+      .filter((command) => command.takes === "documents" && (command.when?.() ?? true))
+      .map((command) => ({
+        id: command.id,
+        title: command.title,
+        run: (ids) => {
+          runCommand(command.id, ids).catch((cause: unknown) => {
+            kernel.log.error(`command "${command.id}" failed`, cause);
+            kernel.ui.notify({
+              id: "kanban.action-failed",
+              level: "error",
+              message: `${command.title} failed: ${cause instanceof Error ? cause.message : String(cause)}`,
+            });
+          });
+        },
+      }));
+
+  const Board = createBoard({ kernel, looks, menu, addCard, fmValueSelect: FmValueSelect, documentActions });
   offerSavedView(
     kernel,
     {

@@ -53,6 +53,18 @@
  * on this screen only, nothing is saved. A card added while a filter is on is born with its value, so it
  * stays in view.
  *
+ * **Cards can be selected together.** Dragging from anywhere on the board that is not a
+ * card draws a box; the cards it crosses are selected (Shift or Ctrl held, added to those
+ * already selected), and Shift- or Ctrl-click toggles one. The box is anchored to what it
+ * was started in — a column's list, or the board — so the board and its columns still
+ * scroll while it is drawn, by wheel or near an edge, and every card that passes through
+ * the box is swept up. A click on blank space, or Escape, lets the selection go. Dragging a
+ * selected card carries the whole selection: the lifted card wears their count, the gap is
+ * as tall as all of them, and they land as one block in the board's order (`planRanks`)
+ * — a sorted column places each where its sort says. The selection's menu (right-click a
+ * selected card, or the Actions button over the board) moves them all and runs every
+ * command that takes documents with all of them (`actions.ts`).
+ *
  * **Swimlanes**, when the board's settings name a field for them, stack the board in rows,
  * one per value of that field, each with the same columns (`lanes.ts`). Dropping a card
  * into another lane writes that field as well as the column's; a column's + in a lane
@@ -60,7 +72,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import type { ComponentType, PointerEvent as ReactPointerEvent, ReactElement, ReactNode } from "react";
+import type { ComponentType, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactElement, ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import type { DocumentRow, Kernel } from "@kernel";
@@ -73,7 +85,7 @@ import { NoteLabel, lookOf, lookStyle, useLookChanges, type Looks } from "../../
 import { LONG_PRESS_MS, target as mark } from "../../_shared/target.js";
 import { useFitToScreen, useVirtualList } from "../../_shared/virtual-list.js";
 
-import { boards, type BoardHandle } from "./actions.js";
+import { boards, selectionItems, type BoardHandle, type DocumentAction } from "./actions.js";
 import { excerpt, fieldText, type CardItem } from "./card.js";
 import { ColumnEditor } from "./ColumnEditor.js";
 import { FilterBar } from "./FilterBar.js";
@@ -116,6 +128,8 @@ const DRAG_THRESHOLD = 5;
 const LONG_PRESS_SLOP = 10;
 /** A card's height before any is measured: a one-line title and its spacing. */
 const CARD_ESTIMATE = 42;
+/** The space under each card's row (`pb-1.5`), in pixels. */
+const CARD_GAP = 6;
 /** A column is never shorter than this, so a crowded page scrolls rather than squeezing it. */
 const COLUMN_MIN = 320;
 /** What a swimlane's header and the gap between lanes take from a column's height. */
@@ -140,11 +154,28 @@ export interface BoardDeps {
   readonly addCard: (spec: SearchSpec, settings: KanbanOptions, column: Column, title: string, queued: number, filters: Filters) => Promise<string>;
   /** `search`'s value picker, for the filter bar (`FilterBar.tsx`). */
   readonly fmValueSelect: ComponentType<FmValueSelectProps>;
+  /** The commands that take documents, as of now: what a selection's menu runs. */
+  readonly documentActions: () => readonly DocumentAction[];
 }
+
+/** The box being drawn out over the board, in viewport pixels. */
+interface Box {
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+const modified = (event: { readonly shiftKey: boolean; readonly ctrlKey: boolean; readonly metaKey: boolean }): boolean =>
+  event.shiftKey || event.ctrlKey || event.metaKey;
 
 /** The card being carried, and where. */
 interface Lift {
   readonly row: DocumentRow;
+  /** Every card carried, in the board's order: the row alone, or the selection it is part of. */
+  readonly ids: readonly string[];
+  /** The gap's height: every carried card's row, as one block. */
+  readonly block: number;
   readonly x: number;
   readonly y: number;
   /** Where in the card it was grabbed. */
@@ -160,13 +191,18 @@ interface Lift {
   readonly slot: number;
 }
 
-export function createBoard({ kernel, looks, menu, addCard, fmValueSelect }: BoardDeps) {
+export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, documentActions }: BoardDeps) {
   return function BoardView({ spec, results, options, onOptionsChange, onOpen, editing }: SavedViewProps): ReactElement {
     const settings = kanbanOptions(options);
     const dress = looks();
     useLookChanges(dress);
     const [moves, setMoves] = useState<ReadonlyMap<string, Move>>(() => new Map());
     const [lift, setLift] = useState<Lift | undefined>(undefined);
+    /** The cards selected on the board, by id; and the box selecting them while it is drawn. */
+    const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
+    const selectedRef = useRef(selected);
+    selectedRef.current = selected;
+    const [marquee, setMarquee] = useState<Box | undefined>(undefined);
     const [error, setError] = useState<string | undefined>(undefined);
     const [board, setBoard] = useState<HTMLDivElement | null>(null);
     /** The board's height that ends at the bottom of the screen. */
@@ -218,6 +254,42 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect }: Boa
       laned && column.lane ? `${titleOf(column)} · ${laneTitle(column.lane, settings.lanes)}` : titleOf(column);
     /** A column in its lane, as a key: what the title field and the faded new cards belong to. */
     const cellOf = (column: Column): string => JSON.stringify([column.lane?.key ?? null, column.key ?? null]);
+    /** The selection as rows, in the board's order (column by column), each once. */
+    const selectedRows = ((): readonly DocumentRow[] => {
+      const seen = new Set<string>();
+      const out: DocumentRow[] = [];
+      for (const column of columns) {
+        for (const card of column.cards) {
+          if (!selected.has(card.id) || seen.has(card.id)) continue;
+          seen.add(card.id);
+          out.push(card);
+        }
+      }
+      return out;
+    })();
+    const liftIds = lift ? new Set(lift.ids) : undefined;
+    const clearSelection = (): void => {
+      selectedRef.current = new Set();
+      setSelected(new Set());
+    };
+    const toggleSelected = (id: string): void =>
+      setSelected((current) => {
+        const next = new Set(current);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        selectedRef.current = next;
+        return next;
+      });
+    // Escape lets the selection go, when nothing else (a drag, the box) is using it.
+    useEffect(() => {
+      if (selected.size === 0 || lift !== undefined || marquee !== undefined) return undefined;
+      const onKey = (event: KeyboardEvent): void => {
+        if (event.key !== "Escape" || event.defaultPrevented) return;
+        clearSelection();
+      };
+      window.addEventListener("keydown", onKey);
+      return () => window.removeEventListener("keydown", onKey);
+    }, [selected.size, lift, marquee]);
 
     // A pending move is done once the live row says the same.
     useEffect(() => {
@@ -376,34 +448,39 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect }: Boa
     // Where the gap is: under the pointer, or back where the card came from.
     const gapColumn = lift === undefined ? undefined : lift.over ?? lift.from;
     const gapSlot = lift === undefined ? undefined : lift.over === undefined ? lift.origin : lift.slot;
-    const signature = `${columns.map((column) => `${column.lane?.key ?? ""}/${column.key ?? ""}:${column.cards.map((card) => card.id).join(",")}`).join("|")}#${lift?.row.id ?? ""}@${gapColumn ?? ""}:${gapSlot ?? ""}`;
+    const signature = `${columns.map((column) => `${column.lane?.key ?? ""}/${column.key ?? ""}:${column.cards.map((card) => card.id).join(",")}`).join("|")}#${lift?.ids.join(",") ?? ""}@${gapColumn ?? ""}:${gapSlot ?? ""}`;
     const flip = useFlip(board, signature);
 
     /**
-     * Put `row` into `column` at `slot` among its other cards: the column's value if it
-     * changed, its lane's if that changed, and — when the board keeps its own order — ranks
-     * for the new place.
+     * Put `rows` into `column` at `slot` among its other cards, as one block in this order:
+     * each card's column value if that changed, its lane's if that changed, and — when the
+     * board keeps its own order — ranks for the new place. Cards that cannot move, or
+     * cannot enter the column's lane, stay where they are.
      */
-    const move = (row: DocumentRow, column: Column, slot: number): void => {
-      if (!movable(row, settings.group)) return;
-      // Into another lane: its value too, unless the card cannot leave its own.
-      const lane = laneChange(row, column, settings.lanes);
-      if (lane === null) return;
-      const others = column.cards.filter((card) => card.id !== row.id);
-      const same = column.cards.includes(row);
+    const moveAll = (rows: readonly DocumentRow[], column: Column, slot: number): void => {
+      const moving = rows.filter((row) => movable(row, settings.group) && laneChange(row, column, settings.lanes) !== null);
+      if (moving.length === 0) return;
+      const ids = new Set(moving.map((row) => row.id));
+      const here = (row: DocumentRow): boolean => column.cards.some((card) => card.id === row.id);
+      const others = column.cards.filter((card) => !ids.has(card.id));
       // A sorted column places cards itself: a drop there only changes the column.
       const sorted = column.def?.sort !== undefined;
-      if (same && (!order || sorted || column.cards.indexOf(row) === slot)) return;
-      const ranks = !order || sorted ? new Map<string, number>() : planRanks(others, slot, row.id);
+      const landing = [...others.slice(0, slot), ...moving, ...others.slice(slot)];
+      const unchanged = landing.length === column.cards.length && landing.every((card, at) => card.id === column.cards[at]?.id);
+      if (moving.every(here) && (!order || sorted || unchanged)) return;
+      const ranks = !order || sorted ? new Map<string, number>() : planRanks(others, slot, moving.map((row) => row.id));
       const planned = new Map<string, Move>();
       for (const [id, rank] of ranks) planned.set(id, { rank });
       // Into another column: its value, and when it got there. Into the same column of
       // another lane: only the lane's value.
-      if (!same) {
+      const now = new Date().toISOString();
+      for (const row of moving) {
+        if (here(row)) continue;
+        const lane = laneChange(row, column, settings.lanes);
         const entering = !holds(row, settings.group, column.key);
         planned.set(row.id, {
           ...planned.get(row.id),
-          ...(entering ? { group: { value: column.value }, since: new Date().toISOString() } : {}),
+          ...(entering ? { group: { value: column.value }, since: now } : {}),
           ...(lane ? { lane } : {}),
         });
       }
@@ -435,13 +512,14 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect }: Boa
         }
       }
       void Promise.all(writes).catch((cause: unknown) => {
-        kernel.log.error("could not move the card", cause);
+        kernel.log.error("could not move the cards", cause);
         setMoves((current) => {
           const next = new Map(current);
           for (const id of planned.keys()) next.delete(id);
           return next;
         });
-        setError(`Could not move “${row.title}”: ${cause instanceof Error ? cause.message : String(cause)}`);
+        const what = moving.length === 1 ? `“${moving[0]?.title ?? ""}”` : `${moving.length} cards`;
+        setError(`Could not move ${what}: ${cause instanceof Error ? cause.message : String(cause)}`);
       });
     };
 
@@ -453,7 +531,9 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect }: Boa
       rowOf: (id) => rows.find((row) => row.id === id),
       movable: (row) => movable(row, settings.group),
       reaches: (row, column) => laneChange(row, column, settings.lanes) !== null,
-      move,
+      move: moveAll,
+      selected: selectedRows,
+      documentActions: documentActions(),
       fold,
       add: (column) => setAdding(cellOf(column)),
       ...(canEdit ? { sort: openSort, edit: editColumn } : {}),
@@ -469,8 +549,8 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect }: Boa
     // --- the drag --------------------------------------------------------------------
 
     /** Read by the window listeners of a drag in flight, so they never act on stale state. */
-    const latest = useRef({ columns, rows, order, move, flip, lanesBy: settings.lanes });
-    latest.current = { columns, rows, order, move, flip, lanesBy: settings.lanes };
+    const latest = useRef({ columns, rows, order, moveAll, flip, lanesBy: settings.lanes });
+    latest.current = { columns, rows, order, moveAll, flip, lanesBy: settings.lanes };
     /** A finger's press, until it lifts or is abandoned. */
     const press = useRef<{ timer: ReturnType<typeof setTimeout> } | undefined>(undefined);
 
@@ -479,14 +559,15 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect }: Boa
      * whose middle is below the pointer. Layout positions (`offsetTop`), not boxes, so a
      * card mid-glide is where it is going.
      */
-    const hitAt = (x: number, y: number, id: string): { over: number | undefined; slot: number } => {
+    const hitAt = (x: number, y: number, id: string, ids: readonly string[]): { over: number | undefined; slot: number } => {
       const element = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-kanban-column]");
       const index = element?.dataset["kanbanColumn"];
       if (!element || index === undefined) return { over: undefined, slot: 0 };
       const column = latest.current.columns[Number(index)];
       const list = element.querySelector<HTMLElement>("[data-kanban-list]");
       if (!column) return { over: undefined, slot: 0 };
-      const others = column.cards.filter((card) => card.id !== id);
+      const carrying = new Set(ids);
+      const others = column.cards.filter((card) => !carrying.has(card.id));
       // A sorted column decides for itself: the gap goes where its sort puts the card.
       const carried = latest.current.rows.find((row) => row.id === id);
       // Another lane the card cannot move to is no place to drop it: the gap waits at home.
@@ -516,14 +597,34 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect }: Boa
       const box = card.getBoundingClientRect();
       const start = { x: event.clientX, y: event.clientY };
       const touch = event.pointerType === "touch";
+      // A selected card carries the whole selection; an unselected one goes alone, and the
+      // selection is let go.
+      const group = selectedRef.current.has(row.id) && selectedRows.length > 1 ? selectedRows : [row];
+      const ids = group.map((each) => each.id);
+      if (group.length === 1 && selectedRef.current.size > 0) clearSelection();
+      const carrying = new Set(ids);
+      /** The gap for the block: every carried card's row as drawn, a guess for one not drawn. */
+      const block = (): number => {
+        let total = 0;
+        for (const id of ids) {
+          const drawn = board?.querySelector<HTMLElement>(`[data-flip-id="${CSS.escape(id)}"]`);
+          total += drawn ? drawn.getBoundingClientRect().height : box.height + CARD_GAP;
+        }
+        return total - CARD_GAP;
+      };
+      // Its place among the cards of its column that are not carried.
+      const origin = from.cards.slice(0, from.cards.indexOf(row)).filter((each) => !carrying.has(each.id)).length;
       let lifted = false;
       let point = start;
       let frame = 0;
+      let tall = box.height;
 
       const place = (x: number, y: number): void => {
         point = { x, y };
         setLift({
           row,
+          ids,
+          block: tall,
           x,
           y,
           dx: start.x - box.left,
@@ -531,8 +632,8 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect }: Boa
           width: box.width,
           height: box.height,
           from: fromIndex,
-          origin: from.cards.indexOf(row),
-          ...hitAt(x, y, row.id),
+          origin,
+          ...hitAt(x, y, row.id, ids),
         });
       };
       // Near an edge, scroll the board sideways and the column under the pointer up or down.
@@ -552,6 +653,7 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect }: Boa
       };
       const lift = (): void => {
         lifted = true;
+        tall = block();
         document.body.style.setProperty("user-select", "none");
         document.body.style.setProperty("cursor", "grabbing");
         window.getSelection()?.removeAllRanges();
@@ -598,7 +700,7 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect }: Boa
         };
         window.addEventListener("click", swallow, { capture: true, once: true });
         setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 0);
-        const hit = landed ? hitAt(point.x, point.y, row.id) : { over: undefined, slot: 0 };
+        const hit = landed ? hitAt(point.x, point.y, row.id, ids) : { over: undefined, slot: 0 };
         const into = hit.over === undefined ? undefined : latest.current.columns[hit.over];
         // The card glides from where it was let go, into its slot or back to its own.
         latest.current.flip.remember(
@@ -608,7 +710,10 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect }: Boa
         setLift(undefined);
         // A long press let go where it started is not a move: `context-menu` opens the
         // card's menu for it.
-        if (into && Math.hypot(point.x - start.x, point.y - start.y) >= LONG_PRESS_SLOP) latest.current.move(row, into, hit.slot);
+        if (into && Math.hypot(point.x - start.x, point.y - start.y) >= LONG_PRESS_SLOP) {
+          const carried = ids.map((id) => latest.current.rows.find((each) => each.id === id)).filter((each): each is DocumentRow => each !== undefined);
+          latest.current.moveAll(carried, into, hit.slot);
+        }
       };
       const onUp = (): void => finish(true);
       const onCancel = (): void => finish(false);
@@ -629,7 +734,144 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect }: Boa
       window.addEventListener("keydown", onKey, true);
     };
 
-    const onClick = (row: DocumentRow) => (): void => onOpen(row.id);
+    /** A click opens the card; with Shift or Ctrl, it toggles the card in the selection. */
+    const clickCard = (row: DocumentRow, event: ReactMouseEvent<HTMLElement>): void => {
+      if (modified(event)) toggleSelected(row.id);
+      else onOpen(row.id);
+    };
+
+    // --- the box -------------------------------------------------------------------
+
+    /**
+     * A press on the board that is not on a card (nor a control) draws a box from there; the
+     * cards it crosses are selected. The box is anchored to the content it started in — a
+     * column's list, or the board — so scrolling moves the content through it, and a card
+     * swept up stays selected once scrolled out of view; one still in view and outside the
+     * box is let go (unless it was selected before, with Shift or Ctrl held). Near an edge,
+     * the board and the column under the pointer scroll by themselves.
+     */
+    const startMarquee = (event: ReactPointerEvent<HTMLDivElement>): void => {
+      if (event.button !== 0 || event.pointerType === "touch" || !board) return;
+      const from = event.target as HTMLElement;
+      if (from.closest("[data-card], button, input, select, textarea, a, label, [role='listbox']")) return;
+      const container = from.closest<HTMLElement>("[data-kanban-list]") ?? board;
+      const at = container.getBoundingClientRect();
+      const anchor = { x: event.clientX - at.left + container.scrollLeft, y: event.clientY - at.top + container.scrollTop };
+      const additive = modified(event);
+      const base: ReadonlySet<string> = additive ? new Set(selectedRef.current) : new Set();
+      const start = { x: event.clientX, y: event.clientY };
+      let point = start;
+      let drawing = false;
+      let frame = 0;
+      const area = board;
+
+      const anchorNow = (): { x: number; y: number } => {
+        const now = container.getBoundingClientRect();
+        return { x: now.left - container.scrollLeft + anchor.x, y: now.top - container.scrollTop + anchor.y };
+      };
+      const sweep = (): void => {
+        const a = anchorNow();
+        const left = Math.min(a.x, point.x);
+        const top = Math.min(a.y, point.y);
+        const right = Math.max(a.x, point.x);
+        const bottom = Math.max(a.y, point.y);
+        setMarquee({ left, top, width: right - left, height: bottom - top });
+        const next = new Set(selectedRef.current);
+        for (const drawn of area.querySelectorAll<HTMLElement>("[data-card]")) {
+          const id = drawn.dataset["flipId"];
+          if (id === undefined) continue;
+          const card = drawn.getBoundingClientRect();
+          const list = drawn.closest("[data-kanban-list]")?.getBoundingClientRect();
+          // Scrolled out of its column: keeps what it has. In view: in the box, or let go.
+          if (list && (card.bottom <= list.top || card.top >= list.bottom)) continue;
+          const inside = card.left < right && card.right > left && card.top < bottom && card.bottom > top;
+          if (inside) next.add(id);
+          else if (!base.has(id)) next.delete(id);
+        }
+        const current = selectedRef.current;
+        if (next.size !== current.size || [...next].some((id) => !current.has(id))) {
+          selectedRef.current = next;
+          setSelected(next);
+        }
+      };
+      const scroll = (): void => {
+        const bounds = area.getBoundingClientRect();
+        if (point.x < bounds.left + EDGE) area.scrollLeft -= SPEED;
+        else if (point.x > bounds.right - EDGE) area.scrollLeft += SPEED;
+        if (laned) {
+          if (point.y < bounds.top + EDGE) area.scrollTop -= SPEED;
+          else if (point.y > bounds.bottom - EDGE) area.scrollTop += SPEED;
+        }
+        // The column under the pointer's x, even with the pointer above or below its list.
+        const y = Math.min(Math.max(point.y, bounds.top + 1), bounds.bottom - 1);
+        const column = document.elementFromPoint(point.x, y)?.closest<HTMLElement>("[data-kanban-column]");
+        const list = column?.querySelector<HTMLElement>("[data-kanban-list]") ?? (container === area ? undefined : container);
+        const edge = list?.getBoundingClientRect();
+        if (list && edge) {
+          if (point.y < edge.top + EDGE) list.scrollTop -= SPEED;
+          else if (point.y > edge.bottom - EDGE) list.scrollTop += SPEED;
+        }
+        sweep();
+        frame = requestAnimationFrame(scroll);
+      };
+      const begin = (): void => {
+        drawing = true;
+        document.body.style.setProperty("user-select", "none");
+        document.body.style.setProperty("cursor", "crosshair");
+        window.getSelection()?.removeAllRanges();
+        frame = requestAnimationFrame(scroll);
+      };
+      const onMove = (moveEvent: PointerEvent): void => {
+        point = { x: moveEvent.clientX, y: moveEvent.clientY };
+        if (!drawing && Math.hypot(point.x - start.x, point.y - start.y) >= DRAG_THRESHOLD) begin();
+      };
+      const finish = (): void => {
+        cancelAnimationFrame(frame);
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", finish);
+        window.removeEventListener("pointercancel", finish);
+        window.removeEventListener("keydown", onKey, true);
+        if (!drawing) {
+          // A click on blank space lets the selection go.
+          if (!additive) clearSelection();
+          return;
+        }
+        document.body.style.removeProperty("user-select");
+        document.body.style.removeProperty("cursor");
+        setMarquee(undefined);
+        const swallow = (click: MouseEvent): void => {
+          click.stopPropagation();
+          click.preventDefault();
+        };
+        window.addEventListener("click", swallow, { capture: true, once: true });
+        setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 0);
+      };
+      const onKey = (keyEvent: KeyboardEvent): void => {
+        if (keyEvent.key !== "Escape" || !drawing) return;
+        keyEvent.preventDefault();
+        keyEvent.stopPropagation();
+        selectedRef.current = new Set(base);
+        setSelected(new Set(base));
+        finish();
+      };
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", finish);
+      window.addEventListener("pointercancel", finish);
+      window.addEventListener("keydown", onKey, true);
+    };
+
+    /** The selection's menu, from the Actions button: what the right-click on a selected card shows. */
+    const openSelection = (anchor: HTMLElement): void => {
+      const menus = menu();
+      const current = handle.current;
+      if (!menus || !current) return;
+      const items = selectionItems(current);
+      menus.open({
+        title: `${selectedRows.length} card${selectedRows.length === 1 ? "" : "s"}`,
+        anchor,
+        sections: [{ items: items.length > 0 ? items : [{ id: "none", label: "No actions available", disabled: true, run: () => undefined }] }],
+      });
+    };
 
     /** One column, `index` its place among every lane's columns (`columns`). */
     const renderColumn = (column: Column, index: number): ReactElement => {
@@ -637,7 +879,7 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect }: Boa
       // The carried card is out of its column — hidden, not removed: a finger's touch
       // events keep coming from the element it started on only while that is in the
       // page — and the gap stands where it will go.
-      const cards = lift ? column.cards.filter((card) => card.id !== lift.row.id) : column.cards;
+      const cards = liftIds ? column.cards.filter((card) => !liftIds.has(card.id)) : column.cards;
       const gapAt = gapColumn === index ? gapSlot : undefined;
       const color = column.def?.color;
       // No taller than the screen: the board's fit, less a lane's header when laned.
@@ -757,7 +999,17 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect }: Boa
               />
             </div>
           )}
-          <ColumnList column={column} lift={lift} gapAt={gapAt} dress={dress} items={settings.card} group={settings.group} onPointerDown={(event, row) => startDrag(event, row, column, index)} onClick={onClick}>
+          <ColumnList
+            column={column}
+            lift={lift}
+            gapAt={gapAt}
+            dress={dress}
+            items={settings.card}
+            group={settings.group}
+            selected={selected}
+            onPointerDown={(event, row) => startDrag(event, row, column, index)}
+            onClick={clickCard}
+          >
             {pending
               .filter((card) => card.key === cellOf(column))
               .map((card) => (
@@ -815,8 +1067,34 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect }: Boa
             {error}
           </p>
         )}
-        {fields.length > 0 && (
-          <FilterBar fields={fields} rows={results.rows} filters={filters} onFilter={filter} onClear={() => setChosen(new Map())} FmValueSelect={fmValueSelect} />
+        {(fields.length > 0 || selectedRows.length > 0) && (
+          <div className="kanban:flex kanban:flex-wrap kanban:items-center kanban:gap-x-4 kanban:gap-y-1.5">
+            {fields.length > 0 && (
+              <FilterBar fields={fields} rows={results.rows} filters={filters} onFilter={filter} onClear={() => setChosen(new Map())} FmValueSelect={fmValueSelect} />
+            )}
+            {selectedRows.length > 0 && (
+              <div className="kanban-selection kanban:flex kanban:items-center kanban:gap-1.5 kanban:text-xs" role="group" aria-label="Selected cards">
+                <span className="kanban:inline-flex kanban:h-7 kanban:items-center kanban:rounded-full kanban:border kanban:border-accent kanban:bg-accent-subtle kanban:px-2.5 kanban:font-medium kanban:tabular-nums kanban:compact:h-9">
+                  {selectedRows.length} selected
+                </span>
+                <button
+                  type="button"
+                  className="kanban:inline-flex kanban:h-7 kanban:min-h-0! kanban:items-center kanban:gap-1 kanban:rounded-full! kanban:border! kanban:border-border! kanban:bg-bg-raised! kanban:px-2.5! kanban:py-0! kanban:text-xs kanban:text-text kanban:shadow-1 kanban:transition-colors kanban:duration-150 kanban:hover:border-border-strong! kanban:compact:h-9"
+                  aria-haspopup="menu"
+                  onClick={(event) => openSelection(event.currentTarget)}
+                >
+                  Actions <span aria-hidden="true" className="kanban:text-[0.6rem] kanban:opacity-60">▾</span>
+                </button>
+                <button
+                  type="button"
+                  className="kanban:inline-flex kanban:h-7 kanban:min-h-0! kanban:items-center kanban:gap-1 kanban:rounded-full! kanban:border! kanban:border-transparent! kanban:bg-transparent! kanban:px-2! kanban:py-0! kanban:text-xs kanban:text-text-muted kanban:transition-colors kanban:duration-150 kanban:hover:border-border! kanban:hover:bg-bg-raised! kanban:hover:text-text kanban:compact:h-9"
+                  onClick={clearSelection}
+                >
+                  <span aria-hidden="true">×</span> Clear
+                </button>
+              </div>
+            )}
+          </div>
         )}
         {columns.length === 0 && (
           <p className="kanban:m-0 kanban:py-4 kanban:text-sm kanban:text-text-muted">
@@ -832,6 +1110,7 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect }: Boa
           {...mark("kanban/board", "")}
           className={`kanban-board kanban:flex kanban:min-w-0 kanban:items-start kanban:overflow-x-auto kanban:overscroll-x-contain kanban:pb-1 ${laned ? "kanban:flex-col kanban:gap-4 kanban:overflow-y-auto kanban:overscroll-y-contain" : "kanban:gap-3"}`}
           style={laned && fit !== undefined ? { maxHeight: fit } : undefined}
+          onPointerDown={startMarquee}
         >
           {laned ? lanes.map((lane, at) => renderLane(lane, starts[at] ?? 0)) : columns.map(renderColumn)}
           {!laned && addColumn}
@@ -845,6 +1124,7 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect }: Boa
           </p>
         )}
         {lift && <Lifted lift={lift} look={lookOf(dress, lift.row.id)} items={settings.card} />}
+        {marquee && <Marquee box={marquee} />}
       </div>
     );
   };
@@ -955,6 +1235,7 @@ function ColumnList({
   dress,
   items,
   group,
+  selected,
   onPointerDown,
   onClick,
   children,
@@ -965,8 +1246,9 @@ function ColumnList({
   readonly dress: Looks | undefined;
   readonly items: readonly CardItem[];
   readonly group: string;
+  readonly selected: ReadonlySet<string>;
   readonly onPointerDown: (event: ReactPointerEvent<HTMLElement>, row: DocumentRow) => void;
-  readonly onClick: (row: DocumentRow) => () => void;
+  readonly onClick: (row: DocumentRow, event: ReactMouseEvent<HTMLElement>) => void;
   readonly children?: ReactNode;
 }): ReactElement {
   const cards = column.cards;
@@ -977,15 +1259,22 @@ function ColumnList({
     // The box is the viewport, wherever the page has scrolled it.
     clipToWindow: false,
   });
-  const carriedAt = lift ? cards.findIndex((card) => card.id === lift.row.id) : -1;
-  const others = carriedAt === -1 ? cards.length : cards.length - 1;
+  // Carried cards are out of the layout: a card's slot is its index less those before it.
+  const carrying = lift ? new Set(lift.ids) : undefined;
+  const before: number[] = [];
+  let seen = 0;
+  for (const card of cards) {
+    before.push(seen);
+    if (carrying?.has(card.id)) seen += 1;
+  }
+  const others = cards.length - seen;
   return (
     <div data-kanban-list className="kanban:relative kanban:min-h-10 kanban:min-w-0 kanban:overflow-y-auto kanban:overscroll-y-contain">
       <ul ref={virtual.listRef} className="kanban:m-0 kanban:flex kanban:list-none kanban:flex-col kanban:p-0" style={{ paddingTop: virtual.before, paddingBottom: virtual.after }}>
         {cards.slice(virtual.first, virtual.end).map((row, offset) => {
           const at = virtual.first + offset;
-          const carried = at === carriedAt;
-          const slot = carriedAt !== -1 && carriedAt < at ? at - 1 : at;
+          const carried = carrying?.has(row.id) === true;
+          const slot = at - (before[at] ?? 0);
           return (
             <CardSlot
               key={row.id}
@@ -995,14 +1284,15 @@ function ColumnList({
               look={lookOf(dress, row.id)}
               items={items}
               carried={carried}
-              gapBefore={!carried && gapAt === slot ? lift?.height : undefined}
+              selected={selected.has(row.id)}
+              gapBefore={!carried && gapAt === slot ? lift?.block : undefined}
               draggable={movable(row, group)}
               onPointerDown={(event) => onPointerDown(event, row)}
-              onClick={onClick(row)}
+              onClick={(event) => onClick(row, event)}
             />
           );
         })}
-        {gapAt === others && lift && virtual.end === cards.length && <Gap height={lift.height} />}
+        {gapAt === others && lift && virtual.end === cards.length && <Gap height={lift.block} />}
       </ul>
       {children}
     </div>
@@ -1016,12 +1306,13 @@ function CardSlot({
   look,
   items,
   carried,
+  selected,
   gapBefore,
   draggable,
   onPointerDown,
   onClick,
 }: {
-  /** Its place among the column's cards, and among them without the carried one. */
+  /** Its place among the column's cards, and among them without the carried ones. */
   readonly index: number;
   readonly slot: number;
   readonly row: DocumentRow;
@@ -1029,10 +1320,12 @@ function CardSlot({
   readonly items: readonly CardItem[];
   /** Being carried: out of the layout, but still in the page. */
   readonly carried: boolean;
+  /** One of the cards selected on the board: ringed, and a `kanban/selection` for the menu. */
+  readonly selected: boolean;
   readonly gapBefore: number | undefined;
   readonly draggable: boolean;
   readonly onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
-  readonly onClick: () => void;
+  readonly onClick: (event: ReactMouseEvent<HTMLElement>) => void;
 }): ReactElement {
   return (
     <>
@@ -1044,14 +1337,17 @@ function CardSlot({
       >
         <button
           type="button"
-          className={`kanban-card kanban:flex kanban:w-full kanban:min-w-0 kanban:touch-manipulation kanban:items-stretch kanban:rounded kanban:border kanban:border-border kanban:px-2! kanban:py-1.5! kanban:text-left kanban:text-sm kanban:shadow-1 kanban:transition-opacity kanban:duration-150 ${look?.background ? "" : "kanban:bg-bg-raised!"} ${draggable ? "kanban:cursor-grab" : ""}`}
+          className={`kanban-card kanban:flex kanban:w-full kanban:min-w-0 kanban:touch-manipulation kanban:items-stretch kanban:rounded kanban:border kanban:px-2! kanban:py-1.5! kanban:text-left kanban:text-sm kanban:shadow-1 kanban:transition-[opacity,box-shadow] kanban:duration-150 ${look?.background ? "" : "kanban:bg-bg-raised!"} ${draggable ? "kanban:cursor-grab" : ""} ${
+            selected ? "kanban:border-accent kanban:ring-2 kanban:ring-accent kanban:ring-offset-1 kanban:ring-offset-bg-subtle" : "kanban:border-border"
+          }`}
           style={lookStyle(look)}
           title={row.title}
           aria-label={row.title}
+          data-selected={selected ? "" : undefined}
           onPointerDown={onPointerDown}
           onClick={onClick}
           // A long press is the drag's too: its menu opens when it is let go in place.
-          {...mark("lm/document", row.id, { label: row.title, types: ["kanban/card"], pressOnRelease: true })}
+          {...mark("lm/document", row.id, { label: row.title, types: selected ? ["kanban/card", "kanban/selection"] : ["kanban/card"], pressOnRelease: true })}
           // The drag is ours; the browser's own would draw its ghost over it.
           onDragStart={(event) => event.preventDefault()}
         >
@@ -1076,21 +1372,57 @@ function Lifted({
   readonly look: NoteLook | undefined;
   readonly items: readonly CardItem[];
 }): ReactElement {
+  const count = lift.ids.length;
+  const left = lift.x - lift.dx;
+  const top = lift.y - lift.dy;
+  return createPortal(
+    <>
+      {/* A block of cards: two more peek out behind the one in hand. */}
+      {count > 1 &&
+        [2, 1].map((depth) => (
+          <div
+            key={depth}
+            aria-hidden="true"
+            className="kanban:pointer-events-none kanban:fixed kanban:z-[999] kanban:rounded kanban:border kanban:border-border kanban:bg-bg-raised kanban:shadow-1"
+            style={{ left: left + depth * 4, top: top + depth * 5, width: lift.width, height: lift.height, transform: `rotate(${String(2 + depth * 2)}deg) scale(1.04)`, opacity: 1 - depth * 0.25 }}
+          />
+        ))}
+      <div
+        aria-hidden="true"
+        className={`kanban-lifted kanban:pointer-events-none kanban:fixed kanban:z-[1000] kanban:flex kanban:items-stretch kanban:overflow-hidden kanban:rounded kanban:border kanban:border-border-strong kanban:px-2 kanban:py-1.5 kanban:font-sans kanban:text-sm kanban:text-text kanban:shadow-2 ${look?.background ? "" : "kanban:bg-bg-raised"}`}
+        style={{
+          left,
+          top,
+          width: lift.width,
+          height: lift.height,
+          transform: "rotate(2deg) scale(1.04)",
+          ...lookStyle(look),
+        }}
+      >
+        <CardBody row={lift.row} items={items} look={look} />
+      </div>
+      {count > 1 && (
+        <span
+          aria-hidden="true"
+          className="kanban:pointer-events-none kanban:fixed kanban:z-[1001] kanban:flex kanban:h-6 kanban:min-w-6 kanban:items-center kanban:justify-center kanban:rounded-full kanban:bg-accent kanban:px-1.5 kanban:font-sans kanban:text-xs kanban:font-semibold kanban:text-accent-text kanban:shadow-2 kanban:tabular-nums"
+          style={{ left: left + lift.width - 10, top: top - 10 }}
+        >
+          {count}
+        </span>
+      )}
+    </>,
+    document.body,
+  );
+}
+
+/** The box being drawn out to select cards: a translucent accent rectangle over the page. */
+function Marquee({ box }: { readonly box: Box }): ReactElement {
   return createPortal(
     <div
       aria-hidden="true"
-      className={`kanban-lifted kanban:pointer-events-none kanban:fixed kanban:z-[1000] kanban:flex kanban:items-stretch kanban:overflow-hidden kanban:rounded kanban:border kanban:border-border-strong kanban:px-2 kanban:py-1.5 kanban:font-sans kanban:text-sm kanban:text-text kanban:shadow-2 ${look?.background ? "" : "kanban:bg-bg-raised"}`}
-      style={{
-        left: lift.x - lift.dx,
-        top: lift.y - lift.dy,
-        width: lift.width,
-        height: lift.height,
-        transform: "rotate(2deg) scale(1.04)",
-        ...lookStyle(look),
-      }}
-    >
-      <CardBody row={lift.row} items={items} look={look} />
-    </div>,
+      className="kanban-marquee kanban:pointer-events-none kanban:fixed kanban:z-[999] kanban:rounded-sm kanban:border kanban:border-accent kanban:bg-accent/15"
+      style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
+    />,
     document.body,
   );
 }

@@ -365,31 +365,34 @@ export function movable(row: DocumentRow, group: string): boolean {
 }
 
 /**
- * The ranks a drop writes: the moved card's, between its new neighbours in `cards` (the
- * column as shown, without the moved card) at `slot`; or, when a neighbour has no rank or
- * there is no room left between them, the whole column afresh, `RANK_STEP` apart.
+ * The ranks a drop writes: the moved cards' (`ids`, in the order they land, one card or a
+ * block of them), spread evenly between their new neighbours in `cards` (the column as
+ * shown, without the moved cards) at `slot`; or, when a neighbour has no rank or there is
+ * no room left between them, the whole column afresh, `RANK_STEP` apart.
  */
-export function planRanks(cards: readonly DocumentRow[], slot: number, id: string): ReadonlyMap<string, number> {
+export function planRanks(cards: readonly DocumentRow[], slot: number, ids: readonly string[]): ReadonlyMap<string, number> {
   const before = slot > 0 ? cards[slot - 1] : undefined;
   const after = slot < cards.length ? cards[slot] : undefined;
   const low = before === undefined ? undefined : rankOf(before);
   const high = after === undefined ? undefined : rankOf(after);
   const fits = (before === undefined || low !== undefined) && (after === undefined || high !== undefined);
-  if (fits) {
-    const rank =
+  const n = ids.length;
+  if (fits && n > 0) {
+    const ranks =
       low === undefined && high === undefined
-        ? RANK_STEP
+        ? ids.map((_, k) => RANK_STEP * (k + 1))
         : low === undefined
-          ? (high as number) - RANK_STEP
+          ? ids.map((_, k) => (high as number) - RANK_STEP * (n - k))
           : high === undefined
-            ? low + RANK_STEP
-            : (low + high) / 2;
-    // Room between them, and a number that writes back exactly.
-    if ((low === undefined || rank > low) && (high === undefined || rank < high) && Number.isFinite(rank)) {
-      return new Map([[id, rank]]);
-    }
+            ? ids.map((_, k) => low + RANK_STEP * (k + 1))
+            : ids.map((_, k) => low + ((high - low) / (n + 1)) * (k + 1));
+    // Room between them, each above the last, and numbers that write back exactly.
+    const room = ranks.every(
+      (rank, k) => Number.isFinite(rank) && (k === 0 ? low === undefined || rank > low : rank > (ranks[k - 1] as number)),
+    );
+    if (room && (high === undefined || (ranks[n - 1] as number) < high)) return new Map(ids.map((id, k) => [id, ranks[k] as number]));
   }
-  const sequence = [...cards.slice(0, slot).map((card) => card.id), id, ...cards.slice(slot).map((card) => card.id)];
+  const sequence = [...cards.slice(0, slot).map((card) => card.id), ...ids, ...cards.slice(slot).map((card) => card.id)];
   return new Map(sequence.map((card, index) => [card, (index + 1) * RANK_STEP]));
 }
 
