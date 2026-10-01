@@ -1,6 +1,6 @@
 {
   "id": "changes",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "name": "Changes",
   "description": "The open document's history in the side panel: every change and snapshot, to view, revert or restore.",
   "author": "Life Manager base distribution",

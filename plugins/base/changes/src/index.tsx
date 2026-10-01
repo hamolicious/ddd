@@ -73,6 +73,8 @@ export default function activate(kernel: Kernel): void {
         viewing={viewingOf(view)}
         isAdmin={kernel.session.isAdmin()}
         client={client}
+        documents={kernel.documents}
+        sync={kernel.sync}
         confirm={confirm}
         navigate={(path) => navigate(path)}
       />

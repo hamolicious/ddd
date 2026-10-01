@@ -1,16 +1,22 @@
 /**
  * The altbar panel: one document's history, newest first. Change groups (one author, no
  * long pause) and snapshots in a single timeline, each row with View and, for a change,
- * Revert, for a snapshot, Restore. Refresh sits above it; older changes page in with
- * "Show older". Snapshots are the server's: one is taken before every restore, none by
- * hand. A narrow column, so each entry is a short stack of lines, not a
+ * Revert, for a snapshot, Restore. Older changes page in with "Show older". Snapshots are
+ * the server's: one is taken before every restore, none by hand.
+ *
+ * **It is live.** The history is REST, but the document's row is in the local projection
+ * the sync socket keeps current (`documents.subscribe`, SPEC §4.1): every write to the
+ * note changes its row, and the panel reloads its history then — a moment later, so a
+ * burst of typing is one reload. While sync is not connected (and so the row cannot move),
+ * it polls instead, slowly. Nothing to refresh by hand. A narrow column, so each entry is a short stack of lines, not a
  * table row.
  */
 
 import { OfflineCopyNote } from "../../_shared/offline-copy.js";
 import { changesOfflineCopy } from "./offline.js";
-import { useCallback, useEffect, useState, type ReactElement, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
 
+import type { DocumentsApi, SyncApi } from "@kernel";
 import type { ConfirmRequest } from "plugin:context-menu";
 
 import {
@@ -40,6 +46,11 @@ const BUTTON =
   "chg:tap chg:inline-flex chg:shrink-0 chg:cursor-pointer chg:items-center chg:justify-center chg:rounded chg:border chg:border-border chg:bg-bg chg:p-0 chg:text-text chg:hover:border-border-strong chg:disabled:cursor-default chg:disabled:opacity-55";
 const DANGER = `${BUTTON} chg:border-danger! chg:text-danger!`;
 
+/** How long after the note's row moves the history is asked for again: a burst of typing is one reload. */
+const RELOAD_DELAY_MS = 400;
+/** How often the history is asked for while the socket is down. */
+const POLL_MS = 30_000;
+
 /** What the main view is showing, marked in the list. */
 export type Viewing =
   | { readonly kind: "snapshot"; readonly id: string }
@@ -53,6 +64,8 @@ export function ChangesPanel({
   documentId,
   viewing,
   client,
+  documents,
+  sync,
   confirm,
   navigate,
   isAdmin,
@@ -62,6 +75,10 @@ export function ChangesPanel({
   /** Admins get "Forget this note's history". */
   readonly isAdmin: boolean;
   readonly client: SnapshotsClient;
+  /** The local projection: the note's row, live, says when its history has grown. */
+  readonly documents: DocumentsApi;
+  /** Whether that row can move: polled instead while the socket is down. */
+  readonly sync: SyncApi;
   readonly confirm: (request: ConfirmRequest) => Promise<boolean>;
   readonly navigate: (path: string) => void;
 }): ReactElement {
@@ -96,6 +113,61 @@ export function ChangesPanel({
   // on the document, and the list has a new row.
   const viewingKey = viewing === undefined ? "" : viewing.kind === "snapshot" ? viewing.id : `${viewing.from}-${viewing.to}`;
   useEffect(load, [load, viewingKey]);
+
+  // Live: the note's row in the projection changes with every write to it (the sync
+  // socket carries them), and the history is reloaded a moment after. The first result
+  // is the row as it is, not news.
+  const latest = useRef(load);
+  latest.current = load;
+  useEffect(() => {
+    let live = true;
+    let close: (() => void) | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const soon = (): void => {
+      if (timer !== undefined) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = undefined;
+        if (live) latest.current();
+      }, RELOAD_DELAY_MS);
+    };
+    void documents
+      .subscribe({ filter: { cmp: { field: "id", op: "eq", value: { str: documentId } } }, includeDeleted: true, limit: 1 })
+      .then((subscription) => {
+        if (!live) {
+          subscription.close();
+          return;
+        }
+        const off = subscription.onChange(soon);
+        close = () => {
+          off();
+          subscription.close();
+        };
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+      if (timer !== undefined) clearTimeout(timer);
+      close?.();
+    };
+  }, [documents, documentId]);
+
+  // Not connected: the row cannot move, so the history is asked for now and then instead.
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const stop = (): void => {
+      if (timer !== undefined) clearInterval(timer);
+      timer = undefined;
+    };
+    const off = sync.subscribe((state) => {
+      const connected = state.status === "synced" || state.status === "syncing";
+      if (connected) stop();
+      else if (timer === undefined) timer = setInterval(() => latest.current(), POLL_MS);
+    });
+    return () => {
+      off();
+      stop();
+    };
+  }, [sync]);
 
   const run = (key: string, action: () => Promise<void>, done: string): void => {
     setBusy(key);
@@ -140,26 +212,11 @@ export function ChangesPanel({
         state={changesOfflineCopy}
         className="chg:m-0 chg:rounded chg:border chg:border-warning chg:px-2 chg:py-1 chg:text-sm chg:text-text-muted"
       />
-      <div className="chg:flex chg:items-center chg:gap-1">
-        <button
-          type="button"
-          className={BUTTON}
-          aria-label="Refresh"
-          title="Refresh"
-          onClick={() => {
-            setStatus(undefined);
-            load();
-          }}
-        >
-          <svg {...ICON}>
-            <path d="M20 11a8 8 0 0 0-14.6-4.5M4 13a8 8 0 0 0 14.6 4.5" />
-            <path d="M5 3v4h4M19 21v-4h-4" />
-          </svg>
-        </button>
-        <p className="chg:m-0 chg:min-w-0 chg:flex-1 chg:text-xs chg:text-text-muted" role="status">
+      {status !== undefined && (
+        <p className="chg:m-0 chg:min-w-0 chg:text-xs chg:text-text-muted" role="status">
           {status}
         </p>
-      </div>
+      )}
 
       {error === undefined ? null : (
         <p className="chg:m-0 chg:rounded chg:border chg:border-danger chg:p-2 chg:text-sm" role="alert">

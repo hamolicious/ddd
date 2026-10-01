@@ -24,17 +24,18 @@ test("a document's snapshots live in the altbar, and a restore asks first", asyn
   await expect(altbar).toBeVisible();
   await expect(altbar.getByRole("button", { name: "Changes" })).toHaveAttribute("aria-expanded", "true");
 
-  // The panel takes no snapshots itself: one posted through the API shows after Refresh.
+  // The panel takes no snapshots itself, and has nothing to refresh by hand: one posted
+  // through the API shows once the note's next write reaches the panel live.
   expect((await request.post(`${baseURL}/api/documents/${id}/snapshots`, { data: { reason: "manual" } })).ok()).toBe(true);
   await expect(altbar.getByRole("button", { name: "Take a snapshot now" })).toHaveCount(0);
-  await altbar.getByRole("button", { name: "Refresh" }).click();
+  await expect(altbar.getByRole("button", { name: "Refresh" })).toHaveCount(0);
   const list = altbar.getByRole("list", { name: "History, newest first" });
-  await expect(list.getByText("Taken by hand")).toBeVisible();
 
   const changed = await request.put(`${baseURL}/api/documents/${id}`, {
     data: { content: "# Snapshot me\n\nOverwritten.\n" },
   });
   expect(changed.ok()).toBe(true);
+  await expect(list.getByText("Taken by hand")).toBeVisible();
 
   // Cancel changes nothing; Restore puts the snapshot's text back.
   const restore = list.getByRole("listitem").filter({ hasText: "Taken by hand" }).first().getByRole("button", { name: /^Restore/ });
@@ -93,7 +94,7 @@ test("View shows a snapshot read only, detached from the current text", async ({
   const altbar = page.getByRole("complementary", { name: "Side panel" });
   if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
   expect((await request.post(`${baseURL}/api/documents/${id}/snapshots`, { data: { reason: "manual" } })).ok()).toBe(true);
-  await altbar.getByRole("button", { name: "Refresh" }).click();
+  // The write below reaches the panel live, and the snapshot shows with it.
   const changed = await request.put(`${baseURL}/api/documents/${id}`, { data: { content: "# Now\n\nDifferent.\n" } });
   expect(changed.ok()).toBe(true);
 
@@ -173,7 +174,8 @@ test("a change shows as a diff, reverts, and a conflicting revert says who was i
   expect(
     (await other.put(`/api/documents/${id}`, { data: { content: "# Plan\n\nstep one, done twice\nstep two\n" } })).ok(),
   ).toBe(true);
-  await altbar.getByRole("button", { name: "Refresh" }).click();
+  // Their change reaches the panel live.
+  await expect(list.getByRole("listitem").filter({ hasText: "twice" }).first()).toBeVisible();
 
   // Reverting the first change is refused, and says who changed it since.
   await page.getByRole("region", { name: "Change" }).getByRole("button", { name: "Revert this" }).click();
