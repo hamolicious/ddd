@@ -1,7 +1,7 @@
 # Graph Report - life-manager  (2026-10-01)
 
 ## Corpus Check
-- 880 files · ~987,573 words
+- 880 files · ~987,666 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 83 file(s) not represented in the graph (top: (none) 16, .toml 13, .xml 10)
 
@@ -11,7 +11,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `ec70e472`
+- Built from commit: `81399ef1`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -2419,11 +2419,11 @@ Nodes (25): @codemirror/commands, @codemirror/view, @lezer/highlight, ref_react_
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `react` connect `react` to `field-select.tsx`, `Unsubscribe`, `admin/src/index.tsx`, `Controls.tsx`, `note-look.tsx`, `document-surface/src/index.tsx`, `context-menu/src/index.tsx`, `Plugins.tsx`, `search/src/index.tsx`, `kanban/src/index.tsx`, `icons/src/index.tsx`, `SyntaxApi`, `ShellState`, `NoteSelect.tsx`, `fm-autocomplete/src/suggest.ts`, `useSearch.ts`, `doc-list/src/index.tsx`, `render.tsx`, `ref_kernel`, `alt-editor/src/index.tsx`, `context-menu/src/Menu.tsx`, `editor/src/index.tsx`, `tasks.ts`, `FmSelect.tsx`, `markdown/src/index.tsx`, `pipeline.test.ts`, `viewer/src/index.tsx`, `KeybindingsSection.tsx`, `saved-view-mode.tsx`, `DocumentMode`, `conditions.ts`, `ref_plugin_commands`, `Shell.tsx`, `shell.ts`, `ui.ts`, `Panel.tsx`, `doc-embed.tsx`, `icons/src/Picker.tsx`, `MarkdownSettings.tsx`, `emoji/src/index.tsx`, `boot/api.ts`, `ColumnEditor.tsx`, `router/src/index.tsx`, `Bars.tsx`, `timeline/src/layout.ts`, `toolbar/src/layout.ts`, `wikilinks/src/index.tsx`, `main.tsx`, `runtime.ts`, `AppFrame.tsx`, `package.json`, `kinds.ts`, `icons.tsx`, `folder-style/src/index.tsx`, `graph/src/settings.ts`, `results.ts`, `virtual-list.ts`, `commands/src/index.tsx`, `custom.ts`, `columns.ts`, `QueryBuilder`, `view.tsx`, `Board.tsx`, `folders/src/index.tsx`, `importmap.ts`, `host.ts`, `admin/src/api.ts`, `Users.tsx`, `offline-copy.tsx`, `fields.ts`, `attachments/src/index.tsx`, `slash-commands/src/index.tsx`, `Palette.tsx`, `themes/src/controller.ts`?**
-  _High betweenness centrality (0.135) - this node is a cross-community bridge._
+  _High betweenness centrality (0.140) - this node is a cross-community bridge._
 - **Why does `Display` connect `Query` to `host_fns.rs`, `shape.rs`, `renderer.ts`, `Date`, `ast.rs`, `graph/src/settings.ts`?**
-  _High betweenness centrality (0.133) - this node is a cross-community bridge._
+  _High betweenness centrality (0.132) - this node is a cross-community bridge._
 - **Why does `vitest` connect `vitest` to `protocol.ts`, `idb-store.ts`, `renderer.ts`, `shape.ts`, `search/src/index.tsx`, `useSearch.ts`, `ref_node_url`, `editor/src/index.tsx`, `syntax-highlight/src/index.tsx`, `markdown/src/index.tsx`, `saved-view-mode.tsx`, `engine.ts`, `runtime/index.ts`, `runtime/settings.ts`, `shell.ts`, `ProjectionStore`, `SurfaceView`, `boot/api.ts`, `router/src/index.tsx`, `toolbar/src/layout.ts`, `timeline/src/layout.ts`, `main.tsx`, `package.json`, `runtime.ts`, `bridge-fixtures.test.ts`, `graph/src/settings.ts`, `results.ts`, `links.ts`, `columns.ts`, `QueryBuilder`, `folders/src/index.tsx`, `admin/src/api.ts`, `fields.ts`, `sync.test.ts`, `Palette.tsx`, `splice.ts`, `ops.ts`, `zip.ts`, `context-menu/src/index.tsx`, `kanban/src/index.tsx`, `importmap.ts`, `runtime/documents.ts`, `ref_kernel`, `kernel-api/src/index.ts`, `doc-list/src/index.tsx`, `render.tsx`, `uploads.ts`, `bindings.ts`, `tasks.ts`, `viewer/src/index.tsx`, `_shared/regions.ts`, `NoticeCenter`, `Simulation`, `conditions.ts`, `emoji/src/index.tsx`, `react`, `folder-style/src/index.tsx`, `slash-commands/src/index.tsx`, `themes/src/controller.ts`, `local-folder/src/sync.ts`, `query/index.ts`, `NoteSelect.tsx`, `keys.ts`, `import.ts`, `icons/src/Picker.tsx`, `local-folder/src/index.tsx`, `src/regions.ts`, `target.ts`, `Plugins.tsx`, `fm-autocomplete/src/suggest.ts`, `pipeline.test.ts`, `hard-refresh-command.ts`, `extract.ts`, `wikilinks/src/index.tsx`, `editor-extension.ts`, `modes.test.ts`, `kinds.ts`, `resize.ts`, `virtual-list.ts`, `custom.ts`, `workspace-index.test.ts`, `Board.tsx`, `host.ts`, `controller.test.ts`?**
-  _High betweenness centrality (0.105) - this node is a cross-community bridge._
+  _High betweenness centrality (0.104) - this node is a cross-community bridge._
 - **What connects `note`, `bundle_version`, `min_bridge_version` to the rest of the system?**
   _3047 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `protocol.ts` be split into smaller, more focused modules?**

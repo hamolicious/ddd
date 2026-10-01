@@ -2718,8 +2718,8 @@
     "semantic_hash": ""
   },
   "plugins/base/README.md": {
-    "mtime": 1790856256.6806405,
-    "seen": 1790856536.163061,
+    "mtime": 1790857761.4825606,
+    "seen": 1790860137.5839078,
     "ast_hash": "dbf2a561252dd271313d840894f6da72",
     "semantic_hash": ""
   },
@@ -4236,9 +4236,9 @@
     "semantic_hash": ""
   },
   "desktop/src/main.rs": {
-    "mtime": 1790768381.0322676,
-    "seen": 1790787715.1712654,
-    "ast_hash": "5ae5a15e3055a48f36ca53b8a7724995",
+    "mtime": 1790859905.6106691,
+    "seen": 1790860137.5643377,
+    "ast_hash": "ae142d53095dd5630ebf4fc05840e7cc",
     "semantic_hash": ""
   },
   "desktop/tauri.conf.json": {
@@ -4248,9 +4248,9 @@
     "semantic_hash": ""
   },
   "desktop/README.md": {
-    "mtime": 1790768432.1988993,
-    "seen": 1790787715.188995,
-    "ast_hash": "5d2385d57d19545bf6ad2998050a8cae",
+    "mtime": 1790860085.3452444,
+    "seen": 1790860137.5834064,
+    "ast_hash": "70b8c7b2dcf4feaf04bd05372183b26c",
     "semantic_hash": ""
   },
   "desktop/icons/128x128.png": {
@@ -4842,20 +4842,20 @@
     "semantic_hash": ""
   },
   "plugins/base/kanban/manifest.json": {
-    "mtime": 1790856173.0720606,
-    "seen": 1790856536.1472282,
+    "mtime": 1790857761.4833505,
+    "seen": 1790860137.5706923,
     "ast_hash": "de726f96460860c69610c3e4a0b87f8e",
     "semantic_hash": ""
   },
   "plugins/base/kanban/src/Board.tsx": {
-    "mtime": 1790856961.2551093,
-    "seen": 1790856996.3782043,
+    "mtime": 1790857761.4834409,
+    "seen": 1790860137.570694,
     "ast_hash": "3b3438ec4401f1ca3af2fbb3215a1025",
     "semantic_hash": ""
   },
   "plugins/base/kanban/src/Settings.tsx": {
-    "mtime": 1790856173.1905773,
-    "seen": 1790856536.1473281,
+    "mtime": 1790857761.4836378,
+    "seen": 1790860137.5707564,
     "ast_hash": "7ef259f9a8387942685b4f8ce07151a9",
     "semantic_hash": ""
   },
@@ -4908,14 +4908,14 @@
     "semantic_hash": ""
   },
   "plugins/base/kanban/src/card.test.ts": {
-    "mtime": 1790856173.190489,
-    "seen": 1790856536.1473634,
+    "mtime": 1790857761.4837162,
+    "seen": 1790860137.5707877,
     "ast_hash": "ae1e03da905fcdfe144a6b39fbdfa10d",
     "semantic_hash": ""
   },
   "plugins/base/kanban/src/card.ts": {
-    "mtime": 1790856173.1903837,
-    "seen": 1790856536.1473644,
+    "mtime": 1790857761.4837933,
+    "seen": 1790860137.5707886,
     "ast_hash": "d26ee14efa9305accd0ee24ead3ffd44",
     "semantic_hash": ""
   },
@@ -5028,9 +5028,9 @@
     "semantic_hash": ""
   },
   ".gitlab-ci.yml": {
-    "mtime": 1790737720.9333928,
-    "seen": 1790787715.1883671,
-    "ast_hash": "e7d778ae21a4e80200b092d34a553825",
+    "mtime": 1790860085.390244,
+    "seen": 1790860137.5827534,
+    "ast_hash": "512673fff5297a5cde419fd9eb25e1af",
     "semantic_hash": ""
   },
   "plugins/base/viewer/src/ChildrenFooter.test.tsx": {

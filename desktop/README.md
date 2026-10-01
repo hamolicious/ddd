@@ -23,16 +23,14 @@ sudo pacman -S --needed webkit2gtk-4.1 libsoup3 gtk3 librsvg
 
 ## NVIDIA
 
-On the NVIDIA driver under Wayland the shell sets `__NV_DISABLE_EXPLICIT_SYNC=1` for
-itself, which keeps WebKitGTK on the GPU and stops the driver's explicit sync from killing
-the window ("Error 71 (Protocol error) dispatching to Wayland display"). Set that variable,
-or `WEBKIT_DISABLE_DMABUF_RENDERER`, yourself and the shell leaves both alone. Do not reach
-for `WEBKIT_DISABLE_DMABUF_RENDERER=1` unless nothing else works: it makes WebKitGTK 2.44 and
+On the NVIDIA driver the shell sets two variables for itself so WebKitGTK stays on the GPU:
+`WEBKIT_FORCE_DMABUF_RENDERER=1`, which lifts the block Debian's and Ubuntu's WebKitGTK
+(and so the AppImage's) put on NVIDIA, and under Wayland `__NV_DISABLE_EXPLICIT_SYNC=1`,
+which stops the driver's explicit sync from killing the window ("Error 71 (Protocol error)
+dispatching to Wayland display"). Set any of those, or `WEBKIT_DISABLE_DMABUF_RENDERER`,
+yourself and the shell leaves all of them alone. Do not reach for
+`WEBKIT_DISABLE_DMABUF_RENDERER=1` unless nothing else works: it makes WebKitGTK 2.44 and
 later render every frame on the CPU.
-
-The AppImage bundles the WebKitGTK of the image it is built on. Bookworm's 2.50 never
-reaches the GPU on NVIDIA, so it is built on Trixie (2.52), and needs a glibc at least as new
-as Trixie's (2.41) to run.
 
 ## Server
 

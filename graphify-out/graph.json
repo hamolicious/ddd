@@ -79710,7 +79710,7 @@
       "file_type": "code",
       "norm_label": "main()",
       "source_file": "desktop/src/main.rs",
-      "source_location": "L141"
+      "source_location": "L156"
     },
     {
       "id": "desktop_src_main_on_download",
@@ -79820,7 +79820,7 @@
       "file_type": "code",
       "norm_label": "work_around_webkit_nvidia()",
       "source_file": "desktop/src/main.rs",
-      "source_location": "L129"
+      "source_location": "L135"
     },
     {
       "id": "downloadevent",
@@ -110534,7 +110534,7 @@
       "node_kind": "heading",
       "norm_label": "run / package",
       "source_file": "desktop/README.md",
-      "source_location": "L48"
+      "source_location": "L46"
     },
     {
       "id": "desktop_readme_server",
@@ -110546,7 +110546,7 @@
       "node_kind": "heading",
       "norm_label": "server",
       "source_file": "desktop/README.md",
-      "source_location": "L37"
+      "source_location": "L35"
     },
     {
       "id": "desktop_readme_setup_arch",
@@ -182324,7 +182324,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "desktop/src/main.rs",
-      "source_location": "L142",
+      "source_location": "L157",
       "weight": 1.0
     },
     {
@@ -182336,7 +182336,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "desktop/src/main.rs",
-      "source_location": "L143",
+      "source_location": "L158",
       "weight": 1.0
     },
     {
@@ -182348,7 +182348,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "desktop/src/main.rs",
-      "source_location": "L204",
+      "source_location": "L219",
       "weight": 1.0
     },
     {
@@ -182360,7 +182360,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "desktop/src/main.rs",
-      "source_location": "L211",
+      "source_location": "L226",
       "weight": 1.0
     },
     {
@@ -182372,7 +182372,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "desktop/src/main.rs",
-      "source_location": "L216",
+      "source_location": "L231",
       "weight": 1.0
     },
     {
@@ -392475,7 +392475,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "desktop/README.md",
-      "source_location": "L37",
+      "source_location": "L35",
       "weight": 1.0
     },
     {
@@ -392486,7 +392486,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "desktop/README.md",
-      "source_location": "L48",
+      "source_location": "L46",
       "weight": 1.0
     },
     {
@@ -392827,7 +392827,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "desktop/src/main.rs",
-      "source_location": "L129",
+      "source_location": "L135",
       "weight": 1.0
     },
     {
@@ -392838,7 +392838,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "desktop/src/main.rs",
-      "source_location": "L141",
+      "source_location": "L156",
       "weight": 1.0
     },
     {
@@ -480184,5 +480184,5 @@
       "source_file": "plugins/base/README.md"
     }
   ],
-  "built_at_commit": "ec70e472943ddbb04b6ebfc2741faf477ed3cc8f"
+  "built_at_commit": "81399ef1e1608cfb65f1ce8f605df8feaa6afb31"
 }

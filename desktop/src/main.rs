@@ -114,27 +114,42 @@ fn on_download(event: DownloadEvent<'_>) -> bool {
     }
 }
 
-/// WebKitGTK's DMA-BUF renderer dies on NVIDIA under Wayland: the driver's explicit sync
-/// trips over WebKit's buffers and the compositor drops the connection ("Error 71
-/// (Protocol error) dispatching to Wayland display", then a blank or closed window).
-/// Turning the driver's explicit sync off for this process is the whole fix: WebKit keeps
-/// the GPU — the page rendered by the web process on it, frames passed as DMA-BUFs — and
-/// nothing is lost. The old workaround, `WEBKIT_DISABLE_DMABUF_RENDERER=1`, is far worse
-/// than it looks: since WebKitGTK 2.44 it makes the web process render every frame on the
-/// CPU, with no compositor at all, which is why the shell felt slow on NVIDIA.
+/// WebKitGTK on the NVIDIA driver, kept on the GPU. Two things stand in the way:
 ///
-/// Under X11 nothing is needed: the DMA-BUF import fails harmlessly ("Failed to create GBM
-/// buffer") and WebKit passes frames through shared memory, still rendered on the GPU.
-/// Only on NVIDIA under Wayland, and only when the user has not set either variable.
+/// * Under Wayland the driver's explicit sync trips over WebKit's DMA-BUFs and the
+///   compositor drops the connection ("Error 71 (Protocol error) dispatching to Wayland
+///   display", then a blank or closed window). `__NV_DISABLE_EXPLICIT_SYNC=1` for this
+///   process is the whole fix: the page is still rendered by the web process on the GPU
+///   and passed on as DMA-BUFs, and nothing is lost. Under X11 nothing is needed: the
+///   DMA-BUF import fails harmlessly ("Failed to create GBM buffer") and the frames go
+///   through shared memory, still rendered on the GPU.
+/// * Debian's WebKitGTK (so Ubuntu's, and the one the AppImage bundles) carries
+///   `disable-nvidia-dmabuf.patch`, which on an NVIDIA GL vendor string refuses hardware
+///   acceleration outright: no compositor, every frame on the CPU. The patch's own
+///   override is `WEBKIT_FORCE_DMABUF_RENDERER=1`; an unpatched build ignores it.
+///
+/// The old workaround here, `WEBKIT_DISABLE_DMABUF_RENDERER=1`, was far worse than it
+/// looked: since WebKitGTK 2.44 it means the same CPU rendering as the Debian patch, on
+/// every NVIDIA machine, which is why the shell felt slow. Only on NVIDIA, and only when
+/// the user has not spoken: any of the three variables set leaves all of them alone.
 fn work_around_webkit_nvidia() {
     const EXPLICIT_SYNC: &str = "__NV_DISABLE_EXPLICIT_SYNC";
-    const DMABUF: &str = "WEBKIT_DISABLE_DMABUF_RENDERER";
+    const FORCE_DMABUF: &str = "WEBKIT_FORCE_DMABUF_RENDERER";
+    const DISABLE_DMABUF: &str = "WEBKIT_DISABLE_DMABUF_RENDERER";
     let nvidia = std::path::Path::new("/proc/driver/nvidia").exists();
     let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some_and(|display| !display.is_empty());
-    let unset = std::env::var_os(EXPLICIT_SYNC).is_none() && std::env::var_os(DMABUF).is_none();
-    if nvidia && wayland && unset {
-        // SAFETY: first thing in `main`, before Tauri or anything else has spawned a thread.
-        unsafe { std::env::set_var(EXPLICIT_SYNC, "1") };
+    let unset = [EXPLICIT_SYNC, FORCE_DMABUF, DISABLE_DMABUF]
+        .iter()
+        .all(|var| std::env::var_os(var).is_none());
+    if !nvidia || !unset {
+        return;
+    }
+    // SAFETY: first thing in `main`, before Tauri or anything else has spawned a thread.
+    unsafe {
+        std::env::set_var(FORCE_DMABUF, "1");
+        if wayland {
+            std::env::set_var(EXPLICIT_SYNC, "1");
+        }
     }
 }
 

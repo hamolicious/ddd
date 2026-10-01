@@ -4236,9 +4236,9 @@
     "semantic_hash": ""
   },
   "desktop/src/main.rs": {
-    "mtime": 1790859905.6106691,
-    "seen": 1790860137.5643377,
-    "ast_hash": "ae142d53095dd5630ebf4fc05840e7cc",
+    "mtime": 1790862418.3610373,
+    "seen": 1790862524.15235,
+    "ast_hash": "b4bfc061a6892a13cf00c6c3bb412543",
     "semantic_hash": ""
   },
   "desktop/tauri.conf.json": {
@@ -4248,9 +4248,9 @@
     "semantic_hash": ""
   },
   "desktop/README.md": {
-    "mtime": 1790860085.3452444,
-    "seen": 1790860137.5834064,
-    "ast_hash": "70b8c7b2dcf4feaf04bd05372183b26c",
+    "mtime": 1790862408.3891072,
+    "seen": 1790862524.1753047,
+    "ast_hash": "1e62aa87aa63e6ad4f8b8c254423db5d",
     "semantic_hash": ""
   },
   "desktop/icons/128x128.png": {
@@ -5028,9 +5028,9 @@
     "semantic_hash": ""
   },
   ".gitlab-ci.yml": {
-    "mtime": 1790860085.390244,
-    "seen": 1790860137.5827534,
-    "ast_hash": "512673fff5297a5cde419fd9eb25e1af",
+    "mtime": 1790862408.4381068,
+    "seen": 1790862524.1745856,
+    "ast_hash": "dc7cf33d98ddd33949262688152fac78",
     "semantic_hash": ""
   },
   "plugins/base/viewer/src/ChildrenFooter.test.tsx": {

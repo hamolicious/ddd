@@ -162,13 +162,13 @@ android-apk:
     expire_in: 30 days
 
 # The Linux desktop shell (`desktop/`, Tauri). `mise run desktop-bundle`: a .deb and an
-# AppImage. An AppImage only runs on systems with a glibc at least as new as the one it
-# was built against, so older is better -- but it also bundles the image's webkit2gtk-4.1,
-# and Bookworm's (2.50) never renders on the GPU on NVIDIA, where Trixie's (2.52) does
-# (desktop/README.md, "NVIDIA"). Trixie it is.
+# AppImage. Bookworm for its webkit2gtk-4.1 -- and because an AppImage only runs on
+# systems with a glibc at least as new as the one it was built against, older is better.
+# The AppImage bundles that WebKitGTK, Debian's NVIDIA block included; the shell lifts it
+# at startup (desktop/README.md, "NVIDIA").
 linux-desktop:
   extends: .manual-shell
-  image: rust:1-trixie
+  image: rust:1-bookworm
   variables:
     # No FUSE in a CI container; linuxdeploy (itself an AppImage) must unpack itself instead.
     APPIMAGE_EXTRACT_AND_RUN: "1"
@@ -201,8 +201,8 @@ linux-desktop:
     paths:
       - dist/
     # The package registry (above) is where the files are published; the artifact is a
-    # convenience. The AppImage is over the instance's 100 MB artifact limit, so only the
-    # .deb rides along -- without this the job failed at the upload, after publishing.
+    # convenience. The AppImage sits at the instance's 100 MB artifact limit (over it,
+    # the job fails at the upload, after publishing), so only the .deb rides along.
     exclude:
       - dist/*.AppImage
     expire_in: 30 days
