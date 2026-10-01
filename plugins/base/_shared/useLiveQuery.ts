@@ -16,7 +16,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { DocumentQuery, DocumentQueryResult, DocumentsApi } from "@kernel";
+import type { DocumentQuery, DocumentQueryResult, DocumentsApi, PlanResult, QueryPlan } from "@kernel";
 
 export interface LiveQueryState {
   readonly rows: DocumentQueryResult["rows"];
@@ -65,6 +65,70 @@ export function useLiveQuery(documents: DocumentsApi, query: DocumentQuery): Liv
           loading: false,
           error: cause instanceof Error ? cause.message : String(cause),
         });
+      }
+    })();
+
+    return () => {
+      live = false;
+      close?.();
+    };
+  }, [documents, key]);
+
+  return state;
+}
+
+export interface LivePlanState {
+  readonly rows: PlanResult["rows"];
+  readonly total: number;
+  readonly hits: PlanResult["hits"];
+  readonly loading: boolean;
+  readonly error?: string;
+}
+
+const EMPTY_PLAN: LivePlanState = { rows: [], total: 0, hits: {}, loading: true };
+
+/**
+ * A live query plan (`documents.subscribePlan`): text, filter, folder relations and sort
+ * in one, with the text hits. The same contract as {@link useLiveQuery}; `undefined`
+ * asks for nothing.
+ */
+export function useLivePlan(documents: DocumentsApi, plan: QueryPlan | undefined): LivePlanState {
+  const key = plan === undefined ? "" : JSON.stringify(plan);
+  const stable = useRef<QueryPlan | undefined>(plan);
+  if ((stable.current === undefined ? "" : JSON.stringify(stable.current)) !== key) stable.current = plan;
+
+  const [state, setState] = useState<LivePlanState>(plan === undefined ? { ...EMPTY_PLAN, loading: false } : EMPTY_PLAN);
+
+  useEffect(() => {
+    const current = stable.current;
+    if (current === undefined) {
+      setState({ ...EMPTY_PLAN, loading: false });
+      return undefined;
+    }
+    let live = true;
+    let close: (() => void) | undefined;
+    setState((previous) => ({ ...previous, loading: true }));
+
+    void (async () => {
+      try {
+        const subscription = await documents.subscribePlan(current);
+        if (!live) {
+          subscription.close();
+          return;
+        }
+        const show = (result: PlanResult): void =>
+          setState({ rows: result.rows, total: result.total, hits: result.hits, loading: false });
+        show(subscription.result);
+        const off = subscription.onChange((result) => {
+          if (live) show(result);
+        });
+        close = () => {
+          off();
+          subscription.close();
+        };
+      } catch (cause) {
+        if (!live) return;
+        setState({ ...EMPTY_PLAN, loading: false, error: cause instanceof Error ? cause.message : String(cause) });
       }
     })();
 

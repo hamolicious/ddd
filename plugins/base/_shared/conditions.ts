@@ -131,6 +131,13 @@ export const CHILDREN_FIELD = "plugins.folders.children";
 export interface ConditionContext {
   /** `undefined` for a note not (yet) seen. */
   readonly childrenOf?: (id: string) => readonly string[] | undefined;
+  /**
+   * Emit `child_of` as the DSL's own node (`{"child_of": {"of", "deep"}}`), which the
+   * query engine joins over the folder tree itself — no `childrenOf` needed. Only for a
+   * filter that goes to `documents.query` / `queryPlan`: a row-by-row evaluation
+   * (`filters.matches`) cannot answer it.
+   */
+  readonly native?: boolean;
 }
 
 /** A node that matches no row: no document has an empty id. */
@@ -289,6 +296,7 @@ function buildTreeNode(clause: FilterClause, context: ConditionContext): FilterJ
   const id = clause.value.trim();
   if (id === "") return undefined;
   if (clause.op === "parent_of") return { contains: { field: CHILDREN_FIELD, value: { str: id } } };
+  if (context.native === true) return { child_of: { of: id, ...(clause.deep === true ? { deep: true } : {}) } };
   // A parent not seen yet, or with no children, has no children to match.
   const childrenOf = context.childrenOf ?? (() => undefined);
   const children = clause.deep === true ? descendants(id, childrenOf) : (childrenOf(id) ?? []);

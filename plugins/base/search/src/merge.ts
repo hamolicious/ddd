@@ -1,15 +1,14 @@
 /**
- * Merging results from several providers, and picking the line to show.
+ * Merging results from several providers (plugins' own sources, `addProvider`). The
+ * workspace's own ranking, and the line shown under a result, are the query engine's.
  *
- * **Scores from different providers are not comparable.** The local index returns
- * MiniSearch's BM25-ish numbers; the server returns Mongo `$text` order; a future
- * semantic provider would return cosine distances. Adding or averaging them produces a
+ * **Scores from different providers are not comparable.** One may return BM25-ish
+ * numbers, another an external service's order, a semantic one cosine distances. Adding or averaging them produces a
  * plausible-looking ranking that means nothing. So a provider's *ranking* is what is
  * trusted: each result set is converted to `1/(rank+1)` before merging, and a document
  * found by two providers keeps its best rank and records both attributions.
  *
- * The provider's seat (SPEC §6.5: the local index is seated first by default) breaks
- * ties, which is what makes the offline-correct provider the one whose opinion wins.
+ * The provider's seat (its `order`) breaks ties.
  */
 
 import type { SearchHit } from "@kernel";
@@ -77,93 +76,6 @@ export function mergeHits(results: readonly ProviderResult[], limit?: number): r
   });
   const hits = ordered.map((entry) => entry.hit);
   return limit === undefined ? hits : hits.slice(0, limit);
-}
-
-export interface SnippetRange {
-  readonly start: number;
-  readonly end: number;
-}
-
-export interface Snippet {
-  readonly text: string;
-  /** Offsets into `text` to highlight. Non-overlapping, ascending. */
-  readonly ranges: readonly SnippetRange[];
-  /**
-   * The **1-based line** of the materialized text this snippet came from, so a result
-   * can deep-link to it (`#/doc/<id>?line=42`) rather than only to the document.
-   *
-   * It is a line of `content` — the whole materialized string, frontmatter and `%%%`
-   * sections included — which is the same string the editor holds, so the number means
-   * the same thing on both sides. A result whose only match is *in* the frontmatter
-   * therefore links into the frontmatter, which is where the match is.
-   */
-  readonly line: number;
-}
-
-/**
- * The line to show under a result, with the matched terms located in it.
- *
- * It searches the whole materialized text, frontmatter and `%%%` sections included.
- * That is deliberate for now and worth knowing: the regions a viewer hides (SPEC §6.5)
- * are identified by *spans*, and `@kernel`'s `CoreApi.parseDocument` returns `fm`,
- * `plugins` and `title` without them — so stripping them here would mean
- * re-implementing the fence rules in TypeScript, which SPEC §2 spends a section
- * forbidding. A match in frontmatter is also a real match.
- */
-export function snippetFor(
-  content: string | undefined,
-  terms: readonly string[],
-  options: { readonly maxLength?: number } = {},
-): Snippet | undefined {
-  if (!content) return undefined;
-  const maxLength = options.maxLength ?? 180;
-  const needles = terms
-    .map((term) => term.trim().toLowerCase())
-    .filter((term) => term.length > 0);
-
-  const lines = content.split("\n");
-  // The *index* is what carries the line number; `find` alone would lose it.
-  let at = -1;
-  if (needles.length > 0) {
-    at = lines.findIndex((line) => {
-      const lower = line.toLowerCase();
-      return line.trim() !== "" && needles.some((needle) => lower.includes(needle));
-    });
-  }
-  if (at < 0) at = lines.findIndex((line) => line.trim() !== "");
-  const chosen = at < 0 ? undefined : lines[at];
-  if (chosen === undefined) return undefined;
-
-  const trimmed = chosen.trim();
-  const text = trimmed.length > maxLength ? `${trimmed.slice(0, maxLength - 1)}…` : trimmed;
-  return { text, ranges: locate(text, needles), line: at + 1 };
-}
-
-/** Every occurrence of every needle, merged into non-overlapping ascending ranges. */
-function locate(text: string, needles: readonly string[]): readonly SnippetRange[] {
-  const lower = text.toLowerCase();
-  const found: SnippetRange[] = [];
-  for (const needle of needles) {
-    let from = 0;
-    for (;;) {
-      const index = lower.indexOf(needle, from);
-      if (index === -1) break;
-      found.push({ start: index, end: index + needle.length });
-      from = index + needle.length;
-    }
-  }
-  found.sort((a, b) => a.start - b.start || a.end - b.end);
-
-  const merged: SnippetRange[] = [];
-  for (const range of found) {
-    const last = merged[merged.length - 1];
-    if (last && range.start <= last.end) {
-      merged[merged.length - 1] = { start: last.start, end: Math.max(last.end, range.end) };
-      continue;
-    }
-    merged.push(range);
-  }
-  return merged;
 }
 
 export { splitHighlights } from "../../_shared/highlights.js";

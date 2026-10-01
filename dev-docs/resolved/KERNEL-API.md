@@ -199,7 +199,7 @@ A cursor only pages the plan it came from. Snippet ranges are UTF-16 offsets.
 
 | Where | How |
 |---|---|
-| A frontend plugin | `query().filter("title", "text_contains", "a").sort("fm.key").run()` from `plugin:search` (5.0.0); `.subscribe()`, or `useQuery(q)` in React |
+| A frontend plugin | `query().filter("title", "text_contains", "a").sort("fm.key").run()` from `plugin:search` (4.11.0); `.subscribe()`, or `useQuery(q)` in React |
 | The kernel | `kernel.documents.queryPlan(plan)` / `subscribePlan(plan)` → `{ rows, total, nextCursor?, hits }` |
 | A backend plugin | `documents::run(Query::new().filter("title", Op::TextContains, "a").sort("fm.key"))` (SDK); the `query` host function |
 | HTTP | `POST /api/query` with the plan as the body (`?metadata_only=true`), bearer or cookie |

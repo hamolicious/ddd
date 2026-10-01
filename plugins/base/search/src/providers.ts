@@ -1,80 +1,30 @@
 /**
- * The search providers (SPEC §6.5): the host, and the two this plugin offers.
+ * Other search providers (SPEC §6.5): sources a plugin adds with `addProvider` — a
+ * semantic index, an external wiki.
  *
- * **The default provider is the local index**, and that is a correctness statement,
- * not a performance one: the workspace must be searchable offline (SPEC §4.1), so what
- * the search bar talks to by default is `kernel.documents.search`, which runs MiniSearch
- * in a Worker against the replicated projection. The server's `?search=` endpoint is a
- * *second* provider — useful for very large workspaces, and honest about needing a
- * network.
+ * **The workspace itself is not a provider any more.** Its text search is part of the
+ * query plan the kernel's engine answers (`results.ts`), on this device, offline too —
+ * and the server runs the same engine over the same rows, so there is nothing a second
+ * "on the server" provider could add. What runs here is only what other plugins
+ * registered; with none, nothing does.
  *
  * - **Every provider runs, and each one's outcome is reported.** A provider that throws
- *   (the server one, offline) is recorded as an error, never thrown — `merge.ts` explains
- *   why their scores are converted to ranks before merging.
+ *   is recorded as an error, never thrown, and marks the answer `partial`.
  * - **Nothing waits for the slowest.** Each provider's answer is reported as it lands
- *   (`onProgress`), so the device's results are on screen while the server is still
- *   being asked. Unanswered providers are simply absent from a progress report.
- * - **The server is not asked when it cannot answer.** While sync reports it unreachable
- *   the server provider fails at once, and otherwise it gives up after
- *   {@link SERVER_TIMEOUT_MS}: a network that is up but cannot reach the server hangs a
- *   request for as long as the OS lets it.
- * - **Providers run in registry order.** `addProvider` puts a provider in the registry
- *   (`api.ts`), which lists them by `order`. The local index has the lowest (0), so it
- *   runs first, and the first wins ties in the merge — which is what makes the
- *   offline-correct answer the default answer.
+ *   (`onProgress`). Unanswered providers are simply absent from a progress report.
+ * - **Providers run in registry order** (`order`, lowest first), and that position is the
+ *   merge's tie-breaker (`merge.ts`).
  */
 
-import type { Kernel, Registry, SearchHit } from "@kernel";
+import type { Kernel, Registry } from "@kernel";
 
 import type { SearchProvider } from "./api.js";
 
 import type { ProviderResult } from "./merge.js";
 import type { SearchEngine } from "./useSearch.js";
 
-/** How long the server provider waits before reporting itself failed. */
-export const SERVER_TIMEOUT_MS = 4000;
-
-/** Sync states in which the server is known not to answer. */
-const UNREACHABLE = new Set(["offline", "error", "auth-required"]);
-
-const OFFLINE_MESSAGE = "You are offline, or the server cannot be reached.";
-
-/** The engine over `providers`, after adding this plugin's own two to it. */
+/** The engine over the providers other plugins registered. */
 export function searchEngine(kernel: Kernel, providers: Registry<SearchProvider>): SearchEngine {
-  providers.add({
-    id: "local",
-    label: "On this device",
-    order: 0,
-    search: (query, options) => kernel.documents.search(query, options),
-  });
-
-  providers.add({
-    id: "server",
-    label: "On the server",
-    order: 10,
-    search: async (query, options) => {
-      if (UNREACHABLE.has(kernel.sync.state.status)) throw new Error(OFFLINE_MESSAGE);
-      const params = new URLSearchParams({ search: query, limit: String(options.limit ?? 50) });
-      // Metadata only: content comes from the local projection, which every client
-      // already has (SPEC §4.1). Asking for text the client can read locally is the
-      // definition of browsing over REST.
-      params.set("metadata_only", "true");
-      let response: Response;
-      try {
-        response = await kernel.session.fetch(`/documents?${params.toString()}`, {
-          signal: AbortSignal.timeout(SERVER_TIMEOUT_MS),
-        });
-      } catch (cause) {
-        if (cause instanceof DOMException && cause.name === "TimeoutError") throw new Error(OFFLINE_MESSAGE);
-        throw cause;
-      }
-      const body = (await response.json()) as { documents?: readonly { id: string }[] };
-      return (body.documents ?? []).map(
-        (row, index): SearchHit => ({ id: row.id, score: 1 / (index + 1), terms: [] }),
-      );
-    },
-  });
-
   return {
     run: (query, options, onProgress) => {
       const answered: (ProviderResult | undefined)[] = [];

@@ -1,59 +1,71 @@
 import { describe, expect, it } from "vitest";
 
-import type { DocumentQuery, DocumentRow, DocumentsApi } from "@kernel";
+import type { DocumentRow, DocumentsApi, QueryPlan } from "@kernel";
 
-import { resolveSearch } from "./results.js";
+import { EXCLUDE_MACHINE_DOCUMENTS } from "../../_shared/machine-docs.js";
+
+import { planFor, resolveSearch, sortTokens } from "./results.js";
 import { EMPTY_SPEC } from "./spec.js";
-import type { SearchEngine } from "./useSearch.js";
 
-const row = (id: string, updated: string): DocumentRow => ({ id, title: id, fm: {}, updated_at: updated }) as DocumentRow;
-const ROWS = [row("a", "2026-01-01"), row("b", "2026-03-01"), row("c", "2026-02-01")];
-
-/** Enough of `documents` for `resolveSearch`: `in` on ids, and one sort key. */
-function fakeDocuments(): { documents: DocumentsApi; queries: DocumentQuery[] } {
-  const queries: DocumentQuery[] = [];
+/** `queryPlan` recorded, answering with the given ids in order. */
+function fakeDocuments(ids: readonly string[]): { documents: DocumentsApi; plans: QueryPlan[] } {
+  const plans: QueryPlan[] = [];
   const documents = {
-    query: (query: DocumentQuery) => {
-      queries.push(query);
-      const filter = JSON.stringify(query.filter ?? {});
-      const ids = [...filter.matchAll(/"str":"(\w+)"/g)].map((match) => match[1]);
-      let rows = filter.includes('"in"') ? ROWS.filter((candidate) => ids.includes(candidate.id)) : [...ROWS];
-      const key = query.sort?.[0];
-      if (key) {
-        rows = rows.sort((x, y) => String(x[key.field as keyof DocumentRow]).localeCompare(String(y[key.field as keyof DocumentRow])));
-        if (key.direction === "desc") rows.reverse();
-      }
-      return Promise.resolve({ rows: rows.slice(0, query.limit ?? rows.length), total: rows.length });
+    queryPlan: (plan: QueryPlan) => {
+      plans.push(plan);
+      const rows = ids.map((id) => ({ id, title: id, fm: {} }) as unknown as DocumentRow);
+      return Promise.resolve({ rows, total: rows.length, hits: {} });
     },
   } as unknown as DocumentsApi;
-  return { documents, queries };
+  return { documents, plans };
 }
 
-const engine = (ranked: readonly string[]): SearchEngine => ({
-  run: () =>
-    Promise.resolve([
-      { providerId: "local", label: "Local", order: 0, hits: ranked.map((id, index) => ({ id, score: 10 - index, terms: [] })) },
-    ]),
+describe("a search as a plan", () => {
+  it("sorts by the search's sort, and breaks best-match ties by last updated", () => {
+    expect(sortTokens({ field: "title", direction: "asc" })).toEqual(["title"]);
+    expect(sortTokens({ field: "fm.due", direction: "desc" })).toEqual(["-fm.due"]);
+    expect(sortTokens({ field: "relevance", direction: "desc" })).toEqual(["relevance", "-updated_at"]);
+  });
+
+  it("asks for snippets only with text", () => {
+    expect(planFor("", undefined, { field: "updated_at", direction: "desc" }, 50)).toEqual({ sort: ["-updated_at"], limit: 50 });
+    expect(planFor("milk", undefined, { field: "relevance", direction: "desc" }, 10)).toMatchObject({ text: "milk", snippets: true });
+  });
 });
 
 describe("resolveSearch", () => {
-  it("is every document, last updated first, for the empty search", async () => {
-    const { documents } = fakeDocuments();
-    const rows = await resolveSearch(documents, engine([]), EMPTY_SPEC);
-    expect(rows.map((candidate) => candidate.id)).toEqual(["b", "c", "a"]);
+  it("is every document, last updated first, hiding machine documents, for the empty search", async () => {
+    const { documents, plans } = fakeDocuments(["b", "c", "a"]);
+    const rows = await resolveSearch(documents, EMPTY_SPEC);
+    expect(rows.map((row) => row.id)).toEqual(["b", "c", "a"]);
+    expect(plans[0]?.sort).toEqual(["-updated_at"]);
+    expect(plans[0]?.text).toBeUndefined();
+    expect(plans[0]?.filter).toEqual(EXCLUDE_MACHINE_DOCUMENTS);
   });
 
-  it("keeps the providers' rank for text, within what the query allows", async () => {
-    const { documents, queries } = fakeDocuments();
-    const rows = await resolveSearch(documents, engine(["c", "a"]), { ...EMPTY_SPEC, query: "x" });
-    expect(rows.map((candidate) => candidate.id)).toEqual(["c", "a"]);
-    expect(JSON.stringify(queries[0]?.filter)).toContain('"in"');
+  it("hands text to the engine and keeps its ranking", async () => {
+    const { documents, plans } = fakeDocuments(["c", "a"]);
+    const rows = await resolveSearch(documents, { ...EMPTY_SPEC, query: " x " });
+    expect(rows.map((row) => row.id)).toEqual(["c", "a"]);
+    expect(plans[0]).toMatchObject({ text: "x", sort: ["relevance", "-updated_at"] });
   });
 
-  it("sorts by the search's own sort, and finds nothing when the providers do", async () => {
-    const { documents } = fakeDocuments();
-    const sorted = await resolveSearch(documents, engine([]), { ...EMPTY_SPEC, sort: { field: "id", direction: "asc" } });
-    expect(sorted.map((candidate) => candidate.id)).toEqual(["a", "b", "c"]);
-    expect(await resolveSearch(documents, engine([]), { ...EMPTY_SPEC, query: "none" })).toEqual([]);
+  it("reads best match ascending from the bottom", async () => {
+    const { documents } = fakeDocuments(["c", "a"]);
+    const rows = await resolveSearch(documents, { ...EMPTY_SPEC, query: "x", sort: { field: "relevance", direction: "asc" } });
+    expect(rows.map((row) => row.id)).toEqual(["a", "c"]);
+  });
+
+  it("sends `is inside note` as the engine's own child_of", async () => {
+    const { documents, plans } = fakeDocuments([]);
+    await resolveSearch(documents, {
+      ...EMPTY_SPEC,
+      filter: {
+        combine: "and",
+        includeMachine: true,
+        clauses: [{ id: "1", field: "id", op: "child_of", value: "root", kind: "doc", deep: true }],
+      },
+    });
+    expect(plans[0]?.filter).toEqual({ child_of: { of: "root", deep: true } });
   });
 });

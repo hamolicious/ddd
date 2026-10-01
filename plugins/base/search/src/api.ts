@@ -22,14 +22,15 @@ import type { DocumentRow, QueryPlan, SearchHit } from "@kernel";
 import type { QueryBuilder, QueryState } from "./query.js";
 
 /**
- * A search backend. The default is the local index; the server is a fallback, and a plugin
- * may add its own (a semantic index, an external wiki) with `addProvider`. Providers run by
- * `order`, lowest first, and the first one wins ties when results are merged.
+ * A search source besides the workspace's own — a semantic index, an external wiki —
+ * added with `addProvider`. The workspace itself is searched by the query engine, as part
+ * of every search's plan. Providers run by `order`, lowest first, and the first one wins
+ * ties when results are merged.
  */
 export interface SearchProvider {
   readonly id: string;
   readonly label: string;
-  /** Lower runs first and wins ties; the local index is 0, the server 10. Default 100. */
+  /** Lower runs first and wins ties. Default 100. */
   readonly order?: number;
   readonly search: (
     query: string,
@@ -98,7 +99,7 @@ export interface SearchResults {
   /** More rows exist than are loaded: call `more`. */
   readonly hasMore: boolean;
   readonly loading: boolean;
-  /** A provider failed (the server one, offline): these rows come from this device. */
+  /** A provider another plugin added failed: these rows are the workspace's alone. */
   readonly partial: boolean;
   readonly error?: string;
   /** Load the next page. */
@@ -274,9 +275,9 @@ export interface Search {
   readonly FmValueSelect: ComponentType<FmValueSelectProps>;
   /**
    * A new query, written as a chain: `query().filter("title", "text_contains", "a").sort("fm.key").run()`.
-   * The shared core's query plan, answered by the kernel's engine. Since 5.0.0.
+   * The shared core's query plan, answered by the kernel's engine. Since 4.11.0.
    */
   readonly query: () => QueryBuilder;
-  /** A React hook: a query's answer, live. Since 5.0.0. */
+  /** A React hook: a query's answer, live. Since 4.11.0. */
   readonly useQuery: (source: QueryBuilder | QueryPlan | undefined) => QueryState;
 }

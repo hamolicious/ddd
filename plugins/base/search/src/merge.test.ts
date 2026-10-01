@@ -9,7 +9,7 @@
 import { describe, expect, it } from "vitest";
 
 import { documentPath } from "./spec.js";
-import { mergeHits, snippetFor, splitHighlights, type ProviderResult } from "./merge.js";
+import { mergeHits, splitHighlights, type ProviderResult } from "./merge.js";
 
 const provider = (
   providerId: string,
@@ -68,54 +68,6 @@ describe("mergeHits", () => {
 
   it("honours a limit", () => {
     expect(mergeHits([provider("local", 0, ["a", "b", "c"])], 2)).toHaveLength(2);
-  });
-});
-
-describe("snippetFor", () => {
-  const content = "---\ntitle: Groceries\n---\n\n# Groceries\n\n- [ ] buy milk and MILK again\n";
-
-  it("picks the first line containing a term and locates every occurrence", () => {
-    const snippet = snippetFor(content, ["milk"]);
-    expect(snippet?.text).toBe("- [ ] buy milk and MILK again");
-    expect(snippet?.ranges).toEqual([
-      { start: 10, end: 14 },
-      { start: 19, end: 23 },
-    ]);
-  });
-
-  it("falls back to the first non-empty line when nothing matched", () => {
-    expect(snippetFor(content, ["absent"])?.text).toBe("---");
-  });
-
-  /**
-   * The line number is what makes a result a deep link (`#/doc/<id>?line=7`) rather
-   * than a jump to the top of a long document. It counts lines of the **materialized
-   * text**, frontmatter and `%%%` sections included, because that is the string the
-   * editor holds — so the number means the same thing on both sides.
-   */
-  it("reports the 1-based line the snippet came from", () => {
-    expect(snippetFor(content, ["milk"])?.line).toBe(7);
-    expect(snippetFor(content, ["Groceries"])?.line).toBe(2);
-    // The fallback line is a line too, so an unmatched result still links somewhere sane.
-    expect(snippetFor(content, ["absent"])?.line).toBe(1);
-    expect(snippetFor("\n\n\nfirst real line\n", [])?.line).toBe(4);
-  });
-
-  it("returns nothing without content, which is the offline metadata-only case", () => {
-    expect(snippetFor(undefined, ["milk"])).toBeUndefined();
-    expect(snippetFor("", ["milk"])).toBeUndefined();
-  });
-
-  it("truncates long lines", () => {
-    const long = `x${"y".repeat(400)}`;
-    const snippet = snippetFor(long, [], { maxLength: 20 });
-    expect(snippet?.text).toHaveLength(20);
-    expect(snippet?.text.endsWith("…")).toBe(true);
-  });
-
-  it("merges overlapping term ranges", () => {
-    const snippet = snippetFor("abcabc", ["abca", "cab"]);
-    expect(snippet?.ranges).toEqual([{ start: 0, end: 5 }]);
   });
 });
 

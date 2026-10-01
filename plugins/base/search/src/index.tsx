@@ -2,7 +2,7 @@
  * `search` — searching the workspace, for every plugin that shows search results.
  *
  * - **The providers** (`providers.ts`): the registry other plugins add to with
- *   `addProvider`, and the two this plugin adds — the local index, first, and the server.
+ *   `addProvider`, for sources besides the workspace (whose own search is the plan's).
  * - **A search is a spec** (`spec.ts`): text, filter and sort, as one query string — the
  *   list's URL and a saved-search note hold the same one.
  * - **Resolving one** (`results.ts`): the providers find ids for the text, and a live
@@ -307,7 +307,7 @@ export default function activate(kernel: Kernel): void {
 
   active = {
     useResults: (spec, options) => useResultsWith(kernel.documents, engine, spec, options ?? {}),
-    resolve: (spec, options) => resolveSearch(kernel.documents, engine, spec, options ?? {}),
+    resolve: (spec, options) => resolveSearch(kernel.documents, spec, options ?? {}),
     save: saveSearch,
     SearchShell: Shell,
     SavedSearch: createSavedSearch({ SearchShell: Shell, open, update }),

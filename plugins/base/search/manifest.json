@@ -1,6 +1,6 @@
 {
   "id": "search",
-  "version": "4.10.0",
+  "version": "4.11.0",
   "name": "Search",
   "description": "Searching the workspace: providers, saved searches, and the search controls every view shows.",
   "author": "Life Manager base distribution",
@@ -8,7 +8,7 @@
   "x-tailwind": {
     "prefix": "search"
   },
-  "kernel": "^3.0",
+  "kernel": "^3.1",
   "dependencies": {
     "context-menu": "^2.0",
     "doc-events": "^1.0",
