@@ -1,11 +1,3 @@
-/// `filesystem` — the mapping work, which is where the bugs are (`BRIDGE.md` §4.2).
-///
-/// The share sheet, the picker and the temp directory are platform channels and cannot run
-/// on this gate at all (no device, no Android SDK — `CONTRACTS.md`). Everything that is not
-/// a platform channel *is* testable, and it is the part that decides behaviour: which
-/// `FileType` an `accept` list becomes, what MIME a name implies, what filename a
-/// `Content-Disposition` yields, where the size cap bites, and which frozen error code a
-/// non-200 from `GET /api/admin/export` turns into.
 library;
 
 import 'dart:convert';
@@ -21,7 +13,6 @@ import 'package:ddd_shell/bridge/bridge.dart';
 import 'package:ddd_shell/bridge/filesystem.dart';
 import 'package:ddd_shell/config.dart';
 
-/// One share that happened: what the sheet was handed.
 class _Shared {
   _Shared(this.file, this.mime, this.name);
 
@@ -148,7 +139,6 @@ void main() {
         ),
       );
 
-      // `..` flattens to `_`, so the file lands beside the others.
       expect(shared.single.file.parent.path, endsWith(kExportDirName));
       expect(shared.single.name, isNot(contains('/')));
     });
@@ -194,7 +184,6 @@ void main() {
 
       expect(files.single.toJson(), <String, Object?>{
         'name': 'photo.png',
-        // No MIME from the picker: the extension is the fallback.
         'mime': 'image/png',
         'size': 5,
         'data': base64Encode(<int>[1, 2, 3, 4, 5]),
@@ -226,7 +215,6 @@ void main() {
         envelope('importFile'),
       );
 
-      // A caller should not have to tell "no files" from "changed my mind".
       expect(picked['ok'], isTrue);
       expect(picked['result'], isEmpty);
       expect(imported['ok'], isTrue);
@@ -350,7 +338,6 @@ void main() {
       () async {
         await capability(client: answering(200, body: 'zip')).exportWorkspace();
 
-        // `now` is pinned to 2026-10-01T08:30:15Z in `capability()`.
         expect(shared.single.name, 'ddd-export-20261001-083015.zip');
       },
     );
@@ -458,8 +445,6 @@ void main() {
     test(
       'anything unrepresentable is FileType.any, never a narrower guess',
       () {
-        // A picker that hides the file the user came for is a dead end; one that shows too
-        // much is a nuisance.
         expect(pickerSelection(const <String>[]).type, FileType.any);
         expect(
           pickerSelection(<String>['application/x-weird']).type,
@@ -477,8 +462,6 @@ void main() {
     test('flattens separators, dotfiles and traversal', () {
       expect(safeFileName('a/b/c.md'), 'a_b_c.md');
       expect(safeFileName(r'a\b.md'), 'a_b.md');
-      // Every separator is gone, so the result names one file in one directory
-      // however many `..` segments the page put in it.
       expect(safeFileName('../../etc/passwd'), '_.._etc_passwd');
       expect(safeFileName('.hidden'), 'hidden');
       expect(safeFileName('   '), 'download');
@@ -486,7 +469,6 @@ void main() {
     });
 
     test('keeps the spaces a document title has', () {
-      // A share sheet's whole job is to show a name the user recognises.
       expect(safeFileName('Shopping list.md'), 'Shopping list.md');
     });
 

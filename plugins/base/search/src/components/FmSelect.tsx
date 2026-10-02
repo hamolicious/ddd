@@ -1,20 +1,3 @@
-/**
- * `FmKeySelect` and `FmValueSelect` — a frontmatter key, and a value of one, typed or
- * picked from what the workspace holds (`plugin:indexer`): the keys in use, most-used
- * first, and the values a key holds, commonest first, each with how many notes have it.
- *
- * The text is the value: typing a key or a value nobody has used yet is fine, and every
- * keystroke is an `onChange`. The list only suggests. Keys only machines write, and keys
- * holding maps, are not suggested.
- *
- * `FmValueSelect` with `multiple` is a comma-separated list ("work, home"): the list
- * suggests for the last item, and picking replaces it.
- *
- * A value that links a note (`doc://<id>`) is drawn as the note, as the folder tree draws
- * it, and found by its title or the notes above it too. Closed, the box shows a linked
- * note's title rather than the link.
- */
-
 import { useMemo, useState, useSyncExternalStore } from "react";
 import type { ComponentType, ReactElement } from "react";
 
@@ -32,24 +15,18 @@ export type FmIndex = Pick<WorkspaceIndex, "fmFields" | "fmValues" | "subscribe"
 
 interface Option {
   readonly value: string;
-  /** Shown instead of `value`: a built-in field's name. */
   readonly label?: string;
-  /** Muted, after it, most wanted first — how many notes, then what kind — each hidden before the one ahead of it when the row is narrow. */
   readonly extras: readonly string[];
-  /** Notes holding it. */
   readonly count?: number;
-  /** The note it links, when it is a `doc://` link. */
   readonly note?: { readonly id: string } & KnownNote;
 }
 
-/** The id a `doc://` link names; `undefined` for any other value. */
 export function linkedId(value: string): string | undefined {
   return value.startsWith(DOC_PREFIX) && value.length > DOC_PREFIX.length ? value.slice(DOC_PREFIX.length) : undefined;
 }
 
 const notesCount = (count: number): string => `${count.toLocaleString()} ${count === 1 ? "note" : "notes"}`;
 
-/** The kind most of a key's values are. */
 function commonest(kinds: FmField["kinds"]): PropertyKind | undefined {
   let best: PropertyKind | undefined;
   let most = 0;
@@ -62,7 +39,6 @@ function commonest(kinds: FmField["kinds"]): PropertyKind | undefined {
   return best;
 }
 
-/** The text after the last comma, and everything up to it (with the space after it). */
 export function lastItem(text: string): { readonly before: string; readonly item: string } {
   const comma = text.lastIndexOf(",");
   if (comma === -1) return { before: "", item: text };
@@ -71,11 +47,6 @@ export function lastItem(text: string): { readonly before: string; readonly item
   return { before: text.slice(0, comma + 1 + lead), item: rest.trimStart() };
 }
 
-/**
- * One option: its name, then its extras. The row is one line that wraps with the wrapped
- * part clipped, so when it is narrow the extras drop off from the last, and the name stays
- * (cut short with "…" only when it alone is too long).
- */
 function Row({ option, notes }: { readonly option: Option; readonly notes: NoteHooks }): ReactElement {
   return (
     <span className="search:flex search:h-[1.5em] search:min-w-0 search:flex-1 search:flex-wrap search:items-center search:gap-x-2 search:overflow-hidden search:leading-[1.5em]">
@@ -131,7 +102,6 @@ export function createFmSelects(
   function useValueOptions(fmKey: string, item: string): ComboboxOptions<Option> {
     const version = useVersion();
     const known = notes.useKnownNotes();
-    // Subscribed for the rows' looks.
     notes.useLooks();
     const options = useMemo(() => {
       const key = fmKey.trim();
@@ -146,10 +116,8 @@ export function createFmSelects(
           const note = id === undefined ? undefined : known.get(id);
           return {
             value,
-            // A linked note's place in the tree matters less than how many hold it.
             extras: note !== undefined && note.folder !== "" ? [notesCount(entry.count), note.folder] : [notesCount(entry.count)],
             count: entry.count,
-            // A link to a note this device does not know stays the link.
             ...(id !== undefined && note !== undefined ? { note: { id, ...note } } : {}),
           };
         })

@@ -1,8 +1,3 @@
-/**
- * Online and offline mixed: devices that drop off, keep editing, come back — alone,
- * together, over and over, and with frames still in flight when the wire goes.
- */
-
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 import { Peer } from "./peer.js";
@@ -47,7 +42,6 @@ describe("one offline, one online", () => {
     await alice.online();
 
     const text = await converged(w.rest, id, [alice, bob]);
-    // Alice deleted what she saw; what Bob added meanwhile she never saw, so it stays.
     expect(text).not.toContain("old one");
     expect(text).not.toContain("old two");
     eachExactlyOnce(text, ["# Fresh start\n", " (bob's addition)", "bob's new line\n"]);
@@ -139,7 +133,7 @@ describe("a flaky connection", () => {
       alice.latency(300);
       alice.append(id, `lost-in-flight ${n}\n`);
       await sleep(50);
-      alice.offline(); // the frame never left
+      alice.offline();
       alice.latency(0);
       await alice.online();
     }
@@ -180,7 +174,6 @@ describe("a flaky connection", () => {
     await blipper;
     await Promise.all([alice.online(), bob.online()]);
     eachExactlyOnce(await converged(w.rest, id, [alice, bob]), tokens);
-    // Proof the blips happened: each one cost a reconnect.
     expect(alice.connects + bob.connects).toBeGreaterThan(6);
   });
 
@@ -233,7 +226,6 @@ describe("closing the tab while offline", () => {
     const id = await w.note("# Two tabs\n\nbase\n");
     const tab1 = await w.device("tab1");
     await tab1.open(id);
-    // The second tab starts from what the first had stored: one device, one database.
     const tab2 = Peer.revive("tab2", tab1.baseUrl, tab1.token, tab1.persist());
     tab1.offline();
     tab1.append(id, "from tab one\n");

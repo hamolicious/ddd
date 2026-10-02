@@ -1,11 +1,3 @@
-/**
- * The `markdown.codeBlock` renderer: fenced code, coloured by its language's grammar.
- *
- * It draws plain text first and colours it once the grammar is loaded, so a block is
- * never blank while a grammar downloads. A language in the catalog that the user has
- * not installed gets a small "Highlight as …" button; one nobody knows stays plain.
- */
-
 import { Fragment, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 
 import type { MarkdownCodeBlockProps } from "plugin:markdown";

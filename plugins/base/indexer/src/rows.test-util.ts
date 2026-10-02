@@ -1,6 +1,5 @@
 import type { CoreMap, DocumentRow } from "@kernel";
 
-/** A projection row; `fm` is given rather than parsed, as the kernel would have. */
 export function row(id: string, content: string, fm: CoreMap = {}, extra: Partial<DocumentRow> = {}): DocumentRow {
   return {
     id,

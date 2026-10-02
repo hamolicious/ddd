@@ -1,18 +1,13 @@
-//! The owned projection row the engine keeps: what [`Row`] borrows from.
-
 use serde::{Deserialize, Serialize};
 
 use crate::date::Date;
 use crate::filter::Row;
 use crate::value::{Map, Value};
 
-/// One document's projection row (SPEC §4.1), owned.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Doc {
     pub id: String,
     pub title: String,
-    /// Materialized full text, `%%%` sections included. Empty when the row came
-    /// without it (a metadata-only read).
     #[serde(default)]
     pub content: String,
     #[serde(default)]
@@ -30,7 +25,6 @@ pub struct Doc {
 }
 
 impl Doc {
-    /// The borrowed view the filter evaluator reads.
     pub fn row(&self) -> Row<'_> {
         Row {
             id: &self.id,
@@ -45,9 +39,6 @@ impl Doc {
         }
     }
 
-    /// A projection row as JSON (`{ id, title, content?, fm, plugins, created_at?, … }`,
-    /// RFC 3339 timestamps), tolerantly: an unparseable date is absent, a field of the
-    /// wrong shape is empty. `None` only without an `id`.
     pub fn from_json(document: &serde_json::Value) -> Option<Doc> {
         let id = str_field(document, "id")?;
         Some(Doc {

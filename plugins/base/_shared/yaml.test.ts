@@ -1,11 +1,3 @@
-/**
- * The frontmatter scalar writer.
- *
- * Everything here is a case where an unquoted value parses back as the *wrong type*, and
- * a wrongly-typed `fm.title` is the quietest of them: the resolver falls through to the
- * body and the document looks almost right.
- */
-
 import { describe, expect, it } from "vitest";
 
 import { needsQuoting, yamlScalar } from "./yaml.js";
@@ -39,20 +31,14 @@ describe("yamlScalar", () => {
 
   it("doubles an apostrophe, the subset's one escape", () => {
     expect(yamlScalar("it's: fine")).toBe("'it''s: fine'");
-    // A leading quote character starts a construct, so it is quoted even alone.
     expect(yamlScalar("'quoted'")).toBe("'''quoted'''");
   });
 
   it("never lets a value become a second frontmatter line", () => {
-    // The injection this closes: a value can come from a document any workspace user
-    // can write, and creating a document writes it back. A single-quoted scalar has no
-    // newline escape, so quoting alone produced an unterminated quote plus an injected
-    // `title:` line the creating user never typed.
     expect(yamlScalar("home\ntitle: owned")).toBe('"home\\ntitle: owned"');
     expect(yamlScalar("a\rb")).toBe('"a\\rb"');
     expect(yamlScalar("a\tb")).toBe('"a\\tb"');
     expect(yamlScalar("ab")).toBe('"a\\u0001b"');
-    // Double-quoting means the double-quote and backslash escapes apply too.
     expect(yamlScalar('say "hi"\nthere')).toBe('"say \\"hi\\"\\nthere"');
     expect(yamlScalar("back\\slash\nx")).toBe('"back\\\\slash\\nx"');
     for (const value of ["home\ntitle: owned", "a\tb"]) {

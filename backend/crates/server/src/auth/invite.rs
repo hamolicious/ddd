@@ -1,11 +1,3 @@
-//! Invite tokens (SPEC §5.1): 7-day expiry, single-use, listable, revocable,
-//! **always non-admin** — an invite grants a plain account and nothing else, so
-//! the admin flag can only ever be set by an existing admin.
-//!
-//! `_id` is HMAC-SHA256(`SESSION_SECRET`, token); the raw token is shown exactly
-//! once, at creation. Rotating the secret therefore also invalidates every
-//! outstanding invite.
-
 use bson::{DateTime as BsonDateTime, doc};
 use mongodb::options::ReturnDocument;
 
@@ -14,7 +6,6 @@ use crate::domain::{Id, Invite};
 use crate::error::AppError;
 use crate::state::AppState;
 
-/// Derived invite lifecycle state, in precedence order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Status {
     Pending,
@@ -24,7 +15,6 @@ pub enum Status {
 }
 
 impl Status {
-    /// The wire string (`InviteView::status`).
     pub fn as_str(self) -> &'static str {
         match self {
             Status::Pending => "pending",
@@ -35,8 +25,6 @@ impl Status {
     }
 }
 
-/// Classify an invite. Revoked beats used beats expired — the strongest reason it
-/// cannot be redeemed.
 pub fn status(invite: &Invite, now: BsonDateTime) -> Status {
     if invite.revoked_at.is_some() {
         Status::Revoked
@@ -49,7 +37,6 @@ pub fn status(invite: &Invite, now: BsonDateTime) -> Status {
     }
 }
 
-/// Create an invite, returning the row and the raw token (shown once).
 pub async fn create(
     state: &AppState,
     created_by: &Id,
@@ -71,11 +58,8 @@ pub async fn create(
     Ok((invite, issued.token))
 }
 
-/// Most invites a single listing returns. Invites are never deleted (they stay
-/// listable and auditable), so an unbounded list would grow forever.
 pub const LIST_LIMIT: i64 = 500;
 
-/// The newest invites, newest first, capped at [`LIST_LIMIT`].
 pub async fn list(state: &AppState) -> Result<Vec<Invite>, AppError> {
     use futures::TryStreamExt;
 
@@ -89,8 +73,6 @@ pub async fn list(state: &AppState) -> Result<Vec<Invite>, AppError> {
     Ok(cursor.try_collect().await?)
 }
 
-/// Revoke a pending invite. Already-revoked is idempotent; already-used is a
-/// domain error (there is nothing left to revoke).
 pub async fn revoke(state: &AppState, id: &str) -> Result<Invite, AppError> {
     let invites = state.collections.invites();
     let existing = invites
@@ -115,24 +97,16 @@ pub async fn revoke(state: &AppState, id: &str) -> Result<Invite, AppError> {
         .return_document(ReturnDocument::After)
         .await?;
 
-    // Lost a race with a redemption between the read and the update.
     revoked.ok_or_else(|| {
         AppError::unprocessable("invite has already been used and cannot be revoked")
     })
 }
 
-/// Atomically claim an invite for a registration, before the user row exists.
-///
-/// Single-use is enforced by the conditional update, not by the read: two
-/// concurrent registrations with one token leave exactly one winner. Call
-/// [`mark_used_by`] once the user id is known, or [`release`] if the
-/// registration then fails.
 pub async fn claim(state: &AppState, token: &str, email: &str) -> Result<Invite, AppError> {
     let id = hash_token(&state.config.session_secret, token);
     let invites = state.collections.invites();
     let now = BsonDateTime::now();
 
-    // Read first, purely so the caller gets a precise reason.
     let existing = invites
         .find_one(doc! { "_id": &id })
         .await?
@@ -169,7 +143,6 @@ pub async fn claim(state: &AppState, token: &str, email: &str) -> Result<Invite,
     claimed.ok_or_else(|| AppError::unprocessable("invite has already been used"))
 }
 
-/// Attribute a claimed invite to the user that redeemed it.
 pub async fn mark_used_by(state: &AppState, id: &str, user_id: &Id) -> Result<(), AppError> {
     state
         .collections
@@ -179,8 +152,6 @@ pub async fn mark_used_by(state: &AppState, id: &str, user_id: &Id) -> Result<()
     Ok(())
 }
 
-/// Undo a [`claim`] whose registration failed, so a valid token is not burned by
-/// a duplicate-email attempt.
 pub async fn release(state: &AppState, id: &str) {
     let result = state
         .collections
@@ -229,7 +200,6 @@ mod tests {
         revoked.revoked_at = Some(now);
         assert_eq!(status(&revoked, now), Status::Revoked, "revoked beats used");
 
-        // An expired invite that was used still reads as used.
         let mut used_and_expired = invite(past);
         used_and_expired.used_at = Some(now);
         assert_eq!(status(&used_and_expired, now), Status::Used);

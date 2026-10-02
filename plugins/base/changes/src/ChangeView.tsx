@@ -1,14 +1,3 @@
-/**
- * One group of changes, read only: `#/doc/<id>/change/<from>/<to>`. Two ways to look:
- *
- * - **Changes**: what it did, as a diff. Each changed run of lines with a little unchanged
- *   text around it, removed lines struck in red, inserted lines in green.
- * - **Document then**: the whole note as it was right after it, rendered read only (from
- *   the server's nearest checkpoint, `dev-docs/resolved/HISTORY.md`).
- *
- * The banner offers the way back and Revert.
- */
-
 import { OfflineCopyNote } from "../../_shared/offline-copy.js";
 import { changesOfflineCopy } from "./offline.js";
 import { useEffect, useState, type ReactElement } from "react";
@@ -175,7 +164,6 @@ export function ChangeView({
   );
 }
 
-/** The confirmation Revert asks for, here and in the panel. */
 export function revertRequest(by: string, when: string, anchor: HTMLElement): ConfirmRequest {
   return {
     title: `Revert ${by}'s change from ${when}?`,

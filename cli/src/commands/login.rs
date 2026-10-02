@@ -1,7 +1,3 @@
-//! `ddd login` — trade an email and password for a bearer token, for the commands that
-//! read a workspace (`ddd query`). The password is read from standard input, so it never
-//! sits in shell history: `ddd login --server <url> --email <you>`, then type it.
-
 use std::io::BufRead;
 
 use anyhow::{Context, Result, bail};
@@ -11,7 +7,6 @@ use crate::server::Server;
 
 #[derive(Args)]
 pub struct LoginArgs {
-    /// The ddd server, e.g. https://notes.example.com.
     #[arg(long, env = "DDD_SERVER")]
     server: Option<String>,
     #[arg(long)]

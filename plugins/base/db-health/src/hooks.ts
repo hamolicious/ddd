@@ -1,9 +1,3 @@
-/**
- * Load over REST, show a table, run a mutation, reload. A failed load or mutation is a
- * *message*: these routes answer 403 to a non-admin and 401 to an expired session, and an
- * empty table in their place reads as "everything is healthy".
- */
-
 import { useCallback, useEffect, useState } from "react";
 
 export interface AsyncState<T> {
@@ -36,14 +30,12 @@ export function useAsync<T>(load: () => Promise<T>): AsyncState<T> {
     return () => {
       live = false;
     };
-    // `load` is a fresh closure every render; `token` is the real input.
   }, [token]);
 
   const reload = useCallback(() => setToken((value) => value + 1), []);
   return { data, loading, error, reload };
 }
 
-/** A mutation with its own in-flight key and error, so one failed row is one message. */
 export interface Mutation {
   readonly busy: string | undefined;
   readonly error: string | undefined;

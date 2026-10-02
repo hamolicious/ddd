@@ -1,16 +1,3 @@
-//! Hostile plugin packages (SPEC §6.2, `backend/HOST-ABI.md` §7.1).
-//!
-//! Every case here is an attack that a plugin installer which "just extracts the zip" would
-//! execute for the attacker, and the one check that stops it. They need no database and no
-//! router: the unit under test is [`plugininstall::zipcheck`], and the fixtures are real
-//! archives built with the `zip` crate under `CARGO_TARGET_TMPDIR`.
-//!
-//! The assertion that matters in all of them is the same, and it is not the error type: it
-//! is that **nothing exists outside the staging root afterwards**. A refusal that has
-//! already written the file is not a refusal.
-//!
-//! **Owner:** the `install-flow` builder.
-
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -20,7 +7,6 @@ use ddd_server::plugininstall::zipcheck::{self, ZipError};
 use ddd_server::plugins::PluginManifest;
 use zip::write::SimpleFileOptions;
 
-/// A throwaway directory per case.
 fn workspace(name: &str) -> PathBuf {
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!("zipcheck-{name}-{}", new_id()));
     fs::create_dir_all(&dir).expect("a workspace");
@@ -38,8 +24,6 @@ fn manifest_json(backend: bool) -> String {
     )
 }
 
-/// The smallest module the install flow accepts: a preamble plus an export section naming
-/// `ddd_abi_version`.
 fn wasm_with_abi_export() -> Vec<u8> {
     let mut module = vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
     let name = b"ddd_abi_version";
@@ -54,10 +38,8 @@ fn wasm_with_abi_export() -> Vec<u8> {
     module
 }
 
-/// One entry to put in a fixture archive.
 enum Entry {
     File(&'static str, Vec<u8>),
-    /// A symlink entry: the name, and what it points at.
     Symlink(&'static str, &'static str),
     Dir(&'static str),
 }
@@ -94,7 +76,6 @@ fn manifest_of(archive: &Path) -> PluginManifest {
     zipcheck::read_manifest(archive).expect("the manifest parses")
 }
 
-/// Nothing may exist outside `staging` — the assertion every refusal shares.
 fn assert_contained(staging: &Path, escape: &Path) {
     assert!(
         !escape.exists(),
@@ -191,8 +172,6 @@ fn an_absolute_entry_is_refused() {
         ),
         "unexpected refusal: {error}"
     );
-    // The staging root must not have grown an `etc/` either: an absolute name that is
-    // merely *stripped* rather than refused is the bug this asserts against.
     assert!(!staging.join("etc").exists());
 }
 
@@ -204,8 +183,6 @@ fn a_symlink_entry_is_refused_outright() {
         vec![
             Entry::File("manifest.json", manifest_json(false).into_bytes()),
             Entry::File("frontend/index.mjs", b"x".to_vec()),
-            // Inside `frontend/`, which is what makes it interesting: the static route
-            // resolves paths on disk, so a link out of the package would be *served*.
             Entry::Symlink("frontend/secrets", "/etc/passwd"),
         ],
     );
@@ -223,8 +200,6 @@ fn a_symlink_entry_is_refused_outright() {
 #[test]
 fn a_zip_bomb_is_stopped_while_streaming() {
     let dir = workspace("bomb");
-    // 60 MB of zeroes compresses to a few kilobytes and expands past the 50 MB cap. The
-    // cap is enforced on bytes written, so this stops mid-entry rather than on the header.
     let mut entries = vec![
         Entry::File("manifest.json", manifest_json(false).into_bytes()),
         Entry::File("frontend/index.mjs", b"x".to_vec()),
@@ -283,11 +258,8 @@ fn a_module_the_manifest_does_not_declare_is_refused() {
     let package = archive(
         &dir,
         vec![
-            // No `backend` in the manifest…
             Entry::File("manifest.json", manifest_json(false).into_bytes()),
             Entry::File("frontend/index.mjs", b"x".to_vec()),
-            // …so this is just a file with a suggestive name, and SPEC §6.2's rule is
-            // "reject entries outside `frontend/**` + declared wasm".
             Entry::File("backend.wasm", wasm_with_abi_export()),
         ],
     );
@@ -302,14 +274,6 @@ fn a_module_the_manifest_does_not_declare_is_refused() {
     assert!(!staging.join("backend.wasm").exists());
 }
 
-/// SPEC §6.2 says **reject** entries outside the allowlist, not "ignore them", so a stray
-/// file is an install error naming it rather than a silent omission.
-///
-/// The cost is deliberate and worth stating: a zip made by dragging a folder onto a
-/// Finder window (`__MACOSX/`, `.DS_Store`) or one that carries a `README.md` is refused
-/// with a message naming the entry. The alternative — extracting the allowlist and
-/// ignoring the rest — makes "what is in the package I approved?" unanswerable from the
-/// package, which is the wrong trade for a full-trust artifact (SPEC §6.1).
 #[test]
 fn an_entry_outside_the_allowlist_is_refused_even_when_it_is_harmless() {
     let dir = workspace("stray");
@@ -351,8 +315,6 @@ fn a_manifest_that_is_not_json_is_refused_without_extracting() {
     );
     let error = zipcheck::read_manifest(&package).expect_err("must be refused");
     assert!(matches!(error, ZipError::BadManifest(_)), "{error}");
-    // Nothing was staged, because nothing was extracted: the manifest is read from the
-    // archive in place.
     assert!(!dir.join("staging").exists());
 }
 
@@ -371,7 +333,6 @@ fn a_stable_file_is_waited_for_and_a_growing_one_times_out() {
     let path = dir.join("growing.zip");
     fs::write(&path, b"first").expect("write");
 
-    // Already stable: returns its size promptly.
     let len = zipcheck::wait_for_stable(
         &path,
         std::time::Duration::from_millis(50),
@@ -380,7 +341,6 @@ fn a_stable_file_is_waited_for_and_a_growing_one_times_out() {
     .expect("a stable file");
     assert_eq!(len, 5);
 
-    // Still being written: a copy in progress must not be handed to the installer.
     let growing = path.clone();
     let writer = std::thread::spawn(move || {
         for _ in 0..20 {
@@ -402,24 +362,8 @@ fn a_stable_file_is_waited_for_and_a_growing_one_times_out() {
     writer.join().expect("the writer thread");
 }
 
-/// The version string is a filesystem path component, and the manifest supplies it.
-///
-/// This is the *other* zip slip, and it went around every check in this module: the entry names
-/// were all legal (`manifest.json`, `frontend/**`), and the escape was in the directory the
-/// installer built out of `manifest.version` before extraction began —
-/// `<staging>/work/<id>/1.0.0-../../../../srv/web/evil.<ulid>`. `create_dir_all` made the
-/// literal `1.0.0-..` segment, `canonicalize` then resolved the `../../../..` upward, and every
-/// allowlisted entry landed outside the staging tree as the server process. With
-/// `PLUGINS_DIR`/`PLUGIN_STAGING_DIR` beside `WEB_DIST_DIR` (the Compose layout) a
-/// `frontend/evil.js` became a persistent same-origin script for every user that rejecting the
-/// package could not remove — and the inbox watcher reaches the same primitive with no admin
-/// click at all.
-///
-/// Two defences, tested separately because either alone would be enough and neither should be
-/// removed on the strength of the other.
 #[test]
 fn a_version_string_cannot_escape_the_staging_root() {
-    // 1. The validator refuses the version, so no such directory is ever built.
     for bad in [
         "1.0.0-../../../../srv/web/evil",
         "1.0.0+../evil",
@@ -432,8 +376,6 @@ fn a_version_string_cannot_escape_the_staging_root() {
         );
     }
 
-    // 2. And `extract` refuses a root with a `..` in it whatever built it, so a future caller
-    //    that constructs a path some other way cannot launder one through `canonicalize`.
     let dir = workspace("version-escape");
     let package = archive(
         &dir,

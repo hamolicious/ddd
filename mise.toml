@@ -1,27 +1,15 @@
 [tools]
 rust = "latest"
 
-# JDK for the Android build (`mise run shell-apk`). Pinned to 21, the newest LTS that
-# AGP 9 and Gradle 9.3 support: newer JDKs break the build (JDK 26's jlink rejects AGP's
-# java.base image). Raise it when Flutter's supported JDK range does.
 java = "temurin-21"
 
-# The Flutter SDK for the Android app (`app/`). Pinned because `app/pubspec.lock` was
-# resolved against this Dart SDK, and a minor bump can change the Android build (see
-# `app/README.md` § "Building the APK"). The full definition is needed because mise's
-# Flutter registry entry has no download URL or checksum of its own.
 flutter = { version = "3.47.5", checksum_expr = '"sha256:" + filter(fromJSON(body).releases, { #.archive endsWith filename })[0].sha256', platforms = { linux-x64 = { checksum_url = "https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json", url = "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_{{ version | trim_end(pat='-stable') }}-stable.tar.xz" }, macos-arm64 = { checksum_url = "https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json", url = "https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/flutter_macos_arm64_{{ version | trim_end(pat='-stable') }}-stable.zip" }, macos-x64 = { checksum_url = "https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json", url = "https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/flutter_macos_{{ version | trim_end(pat='-stable') }}-stable.zip" }, windows-x64 = { checksum_url = "https://storage.googleapis.com/flutter_infra_release/releases/releases_windows.json", url = "https://storage.googleapis.com/flutter_infra_release/releases/stable/windows/flutter_windows_{{ version | trim_end(pat='-stable') }}-stable.zip" } }, version_expr = 'fromJSON(body).releases | filter({ #.channel == "stable" }) | map({ replace(#.version, "-stable", "") }) | sortVersions()', version_list_url = "https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json" }
 
-# Every task reads `.env`. Copy `.env.example` to `.env` before your first run:
-# the server refuses to start without SESSION_SECRET.
 [env]
 _.file = { path = ".env", redact = true }
 
 [tasks.update-graph]
 description = "Update the knowledge graph (code + docs, LLM extraction) through OpenRouter with GRAPHIFY_TOKEN from .env"
-# OpenRouter speaks the OpenAI API, so graphify's `openai` backend reaches it through
-# OPENAI_BASE_URL. `extract` is incremental: only files changed since the last run are
-# sent. `label --missing-only` names any community the extraction left as "Community N".
 run = """
 #!/usr/bin/env bash
 set -euo pipefail
@@ -82,11 +70,6 @@ run = "scripts/graph-plugin"
 [tasks.dev]
 description = "Run the server against the compose Mongo (mongo in docker, server on the host), serving the built PWA + plugins"
 dir = "backend"
-# The paths are relative to `backend/`, where this task runs. The server's defaults are
-# relative to the working directory, so unset they would find nothing from here.
-#
-# WEB_DIST_DIR serves the last `mise run web-build` output on http://localhost:$PORT, the
-# same way production does. For live reloading use `mise run app` or `mise run dev-hot`.
 run = [
   "docker compose -f ../docker-compose.yaml up -d --wait mongo",
   """
@@ -102,10 +85,6 @@ run = [
 [tasks.dev-hot]
 description = "Hot reload ON :$PORT (8080) — Vite serves the app there (LAN-exposed) and proxies /api, /plugins and the socket to the Rust server on PORT+1"
 dir = "web"
-# One URL for every device: this machine, a phone's browser on the LAN
-# (http://<lan-ip>:$PORT), and an adb-reversed phone. The server is told to allow Vite's
-# origin on $PORT. The Android app serves its own bundle and never hot reloads; use the
-# phone's browser while iterating.
 run = [
   "docker compose -f ../docker-compose.yaml up -d --wait mongo",
   "npm install --no-audit --no-fund",
@@ -188,31 +167,22 @@ run = ["npm install --no-audit --no-fund", "npm run build:plugins"]
 
 [tasks.wasm-plugins]
 description = "Build every plugin's backend half (wasm32) into the installed layout next to its frontend half"
-# Runs after `plugins`, whose Vite build empties each plugin's output directory.
 depends = ["plugins"]
 run = "node web/scripts/build-wasm-plugins.mjs"
 
 [tasks.plugin-package]
 description = "Package a built plugin as an installable .zip (`mise run plugin-package doc-list`)"
-# Writes only what the installer accepts (manifest, the declared wasm module,
-# `frontend/**`); a plain `zip -r` can include stray files that make the install fail.
 depends = ["wasm-plugins"]
 run = "node web/scripts/package-plugin.mjs"
 
 [tasks.plugin-check]
 description = "Check the plugin SDK and every plugin backend half for wasm32 (they are excluded from the backend workspace)"
-# Not covered by `mise run check`: the SDK links Extism's host imports, so it only builds
-# for wasm32. The target is passed explicitly because Cargo reads `.cargo/config.toml`
-# from the working directory, not the manifest's.
 run = [
   "cargo fmt --manifest-path backend/crates/plugin-sdk/Cargo.toml --check",
   "cargo clippy --manifest-path backend/crates/plugin-sdk/Cargo.toml --all-targets --target wasm32-unknown-unknown -- -D warnings",
   "cargo fmt --manifest-path plugins/Cargo.toml --all --check",
   "cargo clippy --manifest-path plugins/Cargo.toml --workspace --all-targets --target wasm32-unknown-unknown -- -D warnings",
 ]
-
-# To unit-test a plugin's logic, put it in a plain crate beside the wasm glue and test it
-# on the host.
 
 [tasks.plugin-smoke]
 description = "Build the hello-world plugin and load it in a minimal Extism host (the ABI's end-to-end check)"
@@ -223,8 +193,6 @@ run = "cargo test -p ddd-server --test pluginhost_smoke"
 [tasks.web-build]
 description = "Build everything the server serves: the Wasm core, the contract, the PWA bundle (runtime layer + app + service worker), and the base plugins"
 dir = "web"
-# Depends on `wasm`: the app bundle imports the shared core from the gitignored
-# `kernel/src/wasm/pkg`, which would otherwise be missing or stale.
 depends = ["wasm"]
 run = [
   "npm install --no-audit --no-fund",
@@ -236,8 +204,6 @@ run = [
 [tasks.web-check]
 description = "Typecheck and unit-test the web tree: kernel contract, kernel runtime, PWA loader, base plugins"
 dir = "web"
-# Checks generated manifest types are current, then the plugin dependency graph
-# (versions satisfied, no cycles, static `plugin:` imports declared), then types and tests.
 run = [
   "npm install --no-audit --no-fund",
   "npm run check:generated",
@@ -259,8 +225,6 @@ run = [
 [tasks.shell-apk]
 description = "Build the Android debug APK — needs an Android SDK"
 dir = "app"
-# Run before shipping changes to `app/android/**`, `pubspec.yaml` or the Flutter pin.
-# ANDROID_HOME defaults to ~/Android/Sdk. The JDK comes from `[tools]` above.
 run = '''
 set -euo pipefail
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
@@ -285,8 +249,6 @@ run = "cargo tauri build"
 [tasks.desktop-install]
 description = "Build the Linux desktop shell and install it for this user: ~/.local/bin/ddd, its icons and its launcher entry"
 dir = "desktop"
-# The window icon is compiled into the binary from `icons/` (rendered from `brand/`);
-# the hicolor icons are what the launcher and the taskbar show.
 run = '''
 set -euo pipefail
 cargo build --release --locked

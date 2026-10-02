@@ -1,33 +1,3 @@
-//! Does a plugin written against `ddd-plugin-sdk` actually load and run?
-//!
-//! This suite answers that with a build and a call rather than an opinion, and it is the
-//! one M4 test that needs neither Mongo nor a router: a **minimal** Extism host, the real
-//! `hello-backend` module, and the real ABI types on both sides.
-//!
-//! What it pins, and why each one has been a real mistake in a plugin system before:
-//!
-//! 1. **The module instantiates with the host-function set registered by name.** A typo in
-//!    an import name is an instantiation failure with an opaque message; here it is a named
-//!    assertion.
-//! 2. **`ddd_abi_version` answers the version this server speaks.** The host's independent
-//!    re-check of a stale `.wasm` (SPEC §6.4) is only as good as the export being there.
-//! 3. **Input reaches the plugin and a value comes back through the envelope** (`ddd_call`
-//!    `echo`), so the JSON-in/JSON-out contract is verified end to end rather than assumed.
-//! 4. **Host functions work in both directions** — `ddd_cron` reads KV, writes KV and logs,
-//!    and the second run sees the first run's value.
-//! 5. **A plugin's refusal is a successful call with `ok: false`** (`ddd_call` on an unknown
-//!    function), which is the distinction the circuit breaker depends on.
-//!
-//! Run it after building the fixture:
-//!
-//! ```text
-//! mise run plugin-smoke      # builds plugins/examples/hello-backend, then runs this
-//! ```
-//!
-//! With no built fixture the suite **skips** with a message rather than failing, so a clean
-//! checkout of the Rust workspace stays green without the wasm toolchain — the same
-//! contract the Mongo-backed suites use for `MONGO_URI`.
-
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
@@ -35,14 +5,12 @@ use ddd_plugin_abi as abi;
 use extism::{Function, Manifest, PluginBuilder, UserData, ValType, Wasm};
 use serde_json::{Value, json};
 
-/// Where `mise run wasm-plugins` leaves the fixture.
 fn fixture() -> Option<PathBuf> {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../../plugins/target/wasm32-unknown-unknown/release/hello_backend.wasm");
     path.exists().then_some(path)
 }
 
-/// The miniature host: what every host function did, and the KV it wrote.
 #[derive(Debug, Default, Clone)]
 struct FakeHost {
     kv: BTreeMap<String, Value>,
@@ -50,15 +18,8 @@ struct FakeHost {
     calls: Vec<String>,
 }
 
-/// Extism's own `UserData` is the sharing mechanism — it already wraps the value in a
-/// reference-counted mutex, so a second layer of `Arc<Mutex<…>>` would only add a lock the
-/// test has to remember to take in the right order.
 type Shared = UserData<FakeHost>;
 
-/// One host function: read the JSON handle, answer with an envelope handle.
-///
-/// This is deliberately the same shape the real host uses (`crates/server/src/pluginhost/
-/// host_fns.rs`): one `i64` in, one `i64` out, a refusal is a value and never a trap.
 fn host_fn<F>(name: &'static str, shared: Shared, body: F) -> Function
 where
     F: Fn(&mut FakeHost, Value) -> Result<Value, abi::HostError> + Send + Sync + 'static,
@@ -93,8 +54,6 @@ where
     )
 }
 
-/// Every host function the ABI defines, so instantiation cannot fail on a missing import
-/// whatever the plugin happens to reference.
 fn functions(shared: &Shared) -> Vec<Function> {
     let mut functions = Vec::new();
 
@@ -132,9 +91,6 @@ fn functions(shared: &Shared) -> Vec<Function> {
         Ok(Value::Null)
     }));
 
-    // The rest answer `capability_denied`, which is exactly what the real host's erroring
-    // stubs do for a plugin without the capability (SPEC §6.2) — and `hello-backend`
-    // declares none of them, so this is the faithful behaviour, not a shortcut.
     for name in [
         abi::names::GET_DOCUMENT,
         abi::names::QUERY_DOCUMENTS,
@@ -156,12 +112,9 @@ fn functions(shared: &Shared) -> Vec<Function> {
     functions
 }
 
-/// Build the plugin, with the limits the real host applies.
 fn load(shared: &Shared) -> extism::Plugin {
     let path = fixture().expect("checked by the caller");
     let manifest = Manifest::new([Wasm::file(path)])
-        // No `allowed_hosts`: the PDK's built-in HTTP must refuse, because outbound
-        // requests are the *host's* business (allowlist, IP policy, pinning).
         .with_memory_max(u32::try_from(abi::limits::MEMORY_BYTES / (64 * 1024)).unwrap())
         .with_timeout(std::time::Duration::from_millis(
             abi::limits::CALL_TIMEOUT_MS,
@@ -174,7 +127,6 @@ fn load(shared: &Shared) -> extism::Plugin {
         .expect("the hello-backend module should instantiate")
 }
 
-/// Unwrap an envelope the way the real host does.
 fn value_of(raw: &str) -> Value {
     let envelope: Value = serde_json::from_str(raw).expect("the export answered with JSON");
     assert_eq!(
@@ -185,7 +137,6 @@ fn value_of(raw: &str) -> Value {
     envelope.get("value").cloned().unwrap_or(Value::Null)
 }
 
-/// A copy of what the host recorded, so assertions never hold its lock.
 fn snapshot(shared: &Shared) -> FakeHost {
     shared
         .get()
@@ -256,9 +207,6 @@ fn a_plugin_refusal_is_a_successful_call_with_an_error_envelope() {
         "depth": 1,
         "deadline_ms": 5000
     });
-    // The Extism call succeeds — that is the point. A refusal must not be a trap, or the
-    // instance would be poisoned and the circuit breaker would count a working plugin's
-    // honest "no" as a failure.
     let raw: String = plugin
         .call(abi::names::CALL, payload.to_string())
         .expect("a refusal is still a successful call");

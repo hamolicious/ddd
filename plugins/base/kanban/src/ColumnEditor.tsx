@@ -1,12 +1,3 @@
-/**
- * One column's settings, in a sheet opened from its header (`Board.tsx`): the value a card
- * in it holds, a label to show instead, a colour — a swatch, any colour from the picker, or
- * hex — whether it is folded, how its cards are sorted (a field either way, or the board's
- * order), and where it stands among the named columns. Nothing applies
- * until Save; "Remove column" takes it off the board (its cards stay, in a column of their
- * own value).
- */
-
 import { useEffect, useState } from "react";
 import type { ReactElement } from "react";
 
@@ -16,10 +7,8 @@ const INPUT = "kanban:tap-h kanban:min-w-0 kanban:rounded kanban:border kanban:b
 const LABEL = "kanban:flex kanban:flex-col kanban:gap-0.5 kanban:text-sm kanban:text-text-muted";
 const BUTTON = "kanban:tap-h kanban:cursor-pointer kanban:rounded kanban:border kanban:border-border-strong kanban:bg-bg-raised kanban:px-3 kanban:text-sm kanban:text-text kanban:disabled:cursor-default kanban:disabled:opacity-50";
 
-/** The folder styles' swatches: a column's colour matches a note's. */
 export const SWATCHES = ["#e03131", "#f76707", "#f59f00", "#2f9e44", "#0c8599", "#1971c2", "#6741d9", "#c2255c", "#868e96"];
 
-/** Any typed colour as `#rrggbb` (a `#rgb` expanded), or `undefined` for anything else. */
 export function normalizeColor(input: string): string | undefined {
   const hex = input.trim().replace(/^#/, "").toLowerCase();
   if (/^[0-9a-f]{6}$/.test(hex)) return `#${hex}`;
@@ -27,13 +16,8 @@ export function normalizeColor(input: string): string | undefined {
   return undefined;
 }
 
-/**
- * Any colour, beyond the swatches: the system picker, and a hex field applied as soon as
- * what is typed is a colour (marked while it is not one yet).
- */
 function AnyColor({ value, onChange }: { readonly value: string | undefined; readonly onChange: (color: string) => void }): ReactElement {
   const [draft, setDraft] = useState(value ?? "");
-  // A swatch picked elsewhere shows here, unless it is what is being typed.
   useEffect(() => {
     setDraft((current) => (normalizeColor(current) === value ? current : (value ?? "")));
   }, [value]);
@@ -72,18 +56,13 @@ function AnyColor({ value, onChange }: { readonly value: string | undefined; rea
 
 export interface ColumnEditorProps {
   readonly initial: ColumnDef;
-  /** Its place among the named columns, and how many places there are. */
   readonly position: number;
   readonly places: number;
-  /** Values other named columns already have. */
   readonly taken: readonly string[];
-  /** A column being added, not one being changed. */
   readonly adding: boolean;
-  /** What a column can sort by, and what "no sort" is called on this board. */
   readonly sortFields: readonly { readonly field: string; readonly label: string }[];
   readonly unsorted: string;
   readonly onSave: (def: ColumnDef, position: number) => void;
-  /** Absent for a column that is not named yet: there is nothing to remove. */
   readonly onRemove?: () => void;
   readonly onCancel: () => void;
 }

@@ -1,18 +1,3 @@
-//! `%%%` machine sections: the trailing, machine-owned region (SPEC §3.3, §3.4).
-//!
-//! Rules, byte-exact on both sides:
-//! - Only the **last contiguous run** of `%%% <id>` … `%%%` fences at the end of
-//!   the document counts. Anything earlier is body text.
-//! - An opening fence is exactly `%%% ` followed by a plugin id matching
-//!   `^[A-Za-z0-9_-]{1,64}$`; a closing fence is exactly `%%%`. Trailing
-//!   whitespace on a fence line means it is not a fence.
-//! - Blank lines are tolerated between sections of the run and after the final
-//!   closing fence; they belong to the run, not to the body.
-//! - One section per plugin id; format is YAML, **one key per line**.
-//! - Duplicate lines for the same key resolve **last occurrence wins** (this is
-//!   how per-key LWW is reconstructed on plain text). Two sections with the same
-//!   plugin id merge the same way, later section winning per key.
-
 use serde::{Deserialize, Serialize};
 
 use crate::diagnostics::{Diagnostic, DiagnosticKind};
@@ -21,43 +6,26 @@ use crate::limits::{MAX_MACHINE_SECTIONS, MAX_SECTION_BYTES, MAX_SECTION_KEYS, i
 use crate::value::{Map, Value};
 use crate::yaml;
 
-/// The closing fence line, byte-exact.
 pub(crate) const FENCE: &str = "%%%";
-/// The opening fence prefix, byte-exact.
 pub(crate) const FENCE_OPEN: &str = "%%% ";
 
-/// One parsed `%%% <plugin-id>` … `%%%` section.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MachineSection {
-    /// Plugin id from the opening fence.
     pub plugin_id: String,
-    /// Span of the whole section including both fence lines.
     pub span: Span,
-    /// Span of the YAML lines between the fences.
     pub body_span: Span,
-    /// Materialized keys (last occurrence wins).
     pub map: Map,
-    /// Dropped lines inside this section.
     pub diagnostics: Vec<Diagnostic>,
 }
 
-/// All machine sections of a document.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct Sections {
-    /// Sections in document order.
     pub sections: Vec<MachineSection>,
-    /// Span covering the whole trailing run (first opening fence → end of the
-    /// last closing fence). `None` when the document has no machine sections.
     pub run_span: Option<Span>,
-    /// Diagnostics not attributable to a single section (unterminated fence,
-    /// duplicate plugin id, section-count cap).
     pub diagnostics: Vec<Diagnostic>,
 }
 
 impl Sections {
-    /// Look a section up by plugin id. The **last** section wins when a
-    /// document contains the same plugin id twice, matching the
-    /// last-occurrence-wins rule; that is also the section a splice writes to.
     pub fn get(&self, plugin_id: &str) -> Option<&MachineSection> {
         self.sections
             .iter()
@@ -65,7 +33,6 @@ impl Sections {
             .find(|s| s.plugin_id == plugin_id)
     }
 
-    /// Materialize the `plugins` map stored in Mongo: plugin id → its keys.
     pub fn to_plugins_map(&self) -> Map {
         let mut out = Map::new();
         for section in &self.sections {
@@ -78,7 +45,6 @@ impl Sections {
                         existing.insert(key.clone(), value.clone());
                     }
                 }
-                // `or_insert_with` above guarantees a map.
                 _ => unreachable!("plugins entries are always maps"),
             }
         }
@@ -86,13 +52,10 @@ impl Sections {
     }
 }
 
-/// Parse the trailing machine-section run out of a (normalized) document.
 pub fn parse(text: &str) -> Sections {
     let lines = yaml::lines(text);
     let mut diagnostics = Vec::new();
 
-    // Walk backwards from the last non-blank line, pairing `%%%` with the
-    // nearest preceding `%%% <id>`.
     let mut cursor = lines.len();
     let mut pairs: Vec<(usize, usize)> = Vec::new();
     loop {
@@ -129,8 +92,6 @@ pub fn parse(text: &str) -> Sections {
     pairs.reverse();
 
     if pairs.is_empty() {
-        // An opening fence with no closing fence anywhere after it: not a run,
-        // but the tail of this document is metadata-sensitive.
         if let Some(open) = lines
             .iter()
             .rev()
@@ -216,23 +177,15 @@ pub fn parse(text: &str) -> Sections {
     }
 }
 
-/// Plugin id of an opening fence line, or `None` when the line is not one.
 pub(crate) fn open_fence_id(content: &str) -> Option<&str> {
     let id = content.strip_prefix(FENCE_OPEN)?;
     is_valid_key(id).then_some(id)
 }
 
-/// Span of the line defining `key` inside `section` (including its trailing
-/// newline) — the splice target for a single-key write (SPEC §3.3).
-///
-/// When the key occurs more than once, the **last** occurrence is returned.
 pub fn key_line_span(text: &str, section: &MachineSection, key: &str) -> Option<Span> {
     key_line_spans(text, section, key).pop()
 }
 
-/// Every line span defining `key` inside `section`, in document order. A key
-/// holding a block sequence spans its item lines too, so rewriting or removing
-/// it never strands an item.
 pub(crate) fn key_line_spans(text: &str, section: &MachineSection, key: &str) -> Vec<Span> {
     let body = section.body_span.slice(text);
     let body_lines = yaml::lines(body);
@@ -252,8 +205,6 @@ pub(crate) fn key_line_spans(text: &str, section: &MachineSection, key: &str) ->
         .collect()
 }
 
-/// Insertion point for a new key inside `section` (just before the closing
-/// fence).
 pub fn insert_point(section: &MachineSection) -> usize {
     section.body_span.end
 }

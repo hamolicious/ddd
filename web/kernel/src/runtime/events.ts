@@ -1,13 +1,3 @@
-/**
- * The event bus. Synchronous, in-page, ephemeral — see the contract in
- * `kernel-api/src/events.ts` for why it is deliberately the *second* choice after
- * documents.
- *
- * A listener that throws must not stop delivery to the others: plugins are
- * unsandboxed (SPEC §6.1) and one bad subscriber taking the bus down would take
- * the app with it. Throws are reported and swallowed.
- */
-
 import {
   KERNEL_EVENT_PREFIX,
   ContractViolationError,
@@ -25,12 +15,10 @@ export class EventBus {
 
   constructor(private readonly onListenerError?: (type: string, error: unknown) => void) {}
 
-  /** Emit as the kernel — the only origin allowed to use the reserved prefix. */
   emitKernel<P>(type: string, payload?: P): void {
     this.#dispatch(type, payload, { kind: "kernel" });
   }
 
-  /** Emit as a backend plugin half relaying through the socket (M4). */
   emitFromServer<P>(pluginId: string, type: string, payload?: P): void {
     this.#dispatch(type, payload, { kind: "server", plugin: pluginId });
   }

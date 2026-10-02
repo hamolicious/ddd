@@ -1,9 +1,3 @@
-/**
- * The results as a table (`ResultsTable.tsx`), its columns and height from the table's
- * settings (`columns.ts`). Its page size is its height, so the first screenful loads at
- * once and the rest as the box scrolls.
- */
-
 import type { ReactElement } from "react";
 
 import { splitHighlights } from "../../_shared/highlights.js";

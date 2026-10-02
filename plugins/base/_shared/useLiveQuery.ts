@@ -1,19 +1,3 @@
-/**
- * A live local query as a React hook.
- *
- * `kernel.documents.subscribe` is the whole reason this plugin needs no polling and no
- * REST browsing (SPEC §4.1, §4.2): the projection is in IndexedDB, the filter runs
- * through the shared Wasm evaluator, and the subscription re-runs only when a change can
- * alter the result. What the hook adds is the React-shaped part of that contract:
- *
- * - **One subscription per query**, closed on unmount or when the query changes. A leaked
- *   subscription is a re-render on every keystroke in every other document, forever.
- * - **The query is compared by value.** The caller builds a new object every render;
- *   comparing by identity would tear the subscription down and rebuild it each time.
- * - **An in-flight `subscribe` that resolves after unmount is closed immediately**, not
- *   left holding a listener on a dead component.
- */
-
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { DocumentQuery, DocumentQueryResult, DocumentsApi, PlanResult, QueryPlan } from "@kernel";
@@ -87,11 +71,6 @@ export interface LivePlanState {
 
 const EMPTY_PLAN: LivePlanState = { rows: [], total: 0, hits: {}, loading: true };
 
-/**
- * A live query plan (`documents.subscribePlan`): text, filter, folder relations and sort
- * in one, with the text hits. The same contract as {@link useLiveQuery}; `undefined`
- * asks for nothing.
- */
 export function useLivePlan(documents: DocumentsApi, plan: QueryPlan | undefined): LivePlanState {
   const key = plan === undefined ? "" : JSON.stringify(plan);
   const stable = useRef<QueryPlan | undefined>(plan);

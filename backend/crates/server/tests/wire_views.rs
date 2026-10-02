@@ -1,14 +1,3 @@
-//! The wire shape of every view, with no database in the picture.
-//!
-//! The M1 carry-over these pin: views serialized `bson::DateTime`, which
-//! `serde_json` renders as MongoDB extended JSON (`{"$date": {"$numberLong":
-//! "…"}}`). Clients — the PWA, the Flutter shell, scripts, the convergence
-//! harness — would each have had to special-case it, and PROTOCOL.md §2.1 forbids
-//! it outright. `domain::Timestamp` is the fix; these tests are what keeps a
-//! future field from quietly reintroducing the old shape.
-//!
-//! They need no `MONGO_URI`, so they run in a clean checkout.
-
 use bson::spec::BinarySubtype;
 use bson::{Binary, DateTime as BsonDateTime, doc};
 use ddd_server::domain::{
@@ -18,7 +7,6 @@ use ddd_server::domain::{
 use ddd_server::routes::documents::SnapshotView;
 use serde_json::{Value as Json, json};
 
-/// Millis chosen so the RFC 3339 rendering is unambiguous.
 const AT_MILLIS: i64 = 1_774_000_000_123;
 const AT_RFC3339: &str = "2026-03-20T09:46:40.123Z";
 
@@ -59,7 +47,6 @@ fn stored_document() -> Document {
     }
 }
 
-/// Recursively assert no extended-JSON marker survives anywhere in a response.
 fn assert_plain(value: &Json, path: &str) {
     match value {
         Json::Object(map) => {
@@ -90,8 +77,6 @@ fn timestamps_serialize_as_rfc3339_strings() {
         json!(AT_RFC3339),
         "a Timestamp is a string on the wire, not a {{$date}} object"
     );
-    // And it round-trips, which is what lets a client (or the harness) deserialize
-    // a view it was handed.
     let back: Timestamp = serde_json::from_value(json!(AT_RFC3339)).unwrap();
     assert_eq!(back.timestamp_millis(), AT_MILLIS);
     assert_eq!(back, timestamp);
@@ -109,7 +94,6 @@ fn document_view_is_plain_json_throughout() {
     assert_eq!(json["id"], json!(stored.id));
     assert_eq!(json["deleted"], json!(false));
 
-    // `fm`/`plugins` carry the shared core's value model as native JSON types.
     assert_eq!(json["fm"]["priority"], json!(3));
     assert_eq!(json["fm"]["ratio"], json!(1.5));
     assert_eq!(json["fm"]["flag"], json!(true));
@@ -118,12 +102,9 @@ fn document_view_is_plain_json_throughout() {
     assert_eq!(json["fm"]["nested"]["deep"], json!("value"));
     assert_eq!(json["plugins"]["calendar"]["uid"], json!("wire-1"));
 
-    // No CRDT bytes on the wire: the view has no such fields (that is the type's
-    // job), and a base64 blob would double the size of every list response.
     assert!(json.get("crdt").is_none());
     assert!(json.get("state_vector").is_none());
 
-    // A tombstoned row reports both the flag and the RFC 3339 instant.
     let mut trashed = stored_document();
     trashed.deleted_at = Some(BsonDateTime::from_millis(AT_MILLIS));
     trashed.deleted_by = Some("system".to_string());
@@ -133,9 +114,6 @@ fn document_view_is_plain_json_throughout() {
     assert_eq!(json["deleted_at"], json!(AT_RFC3339));
 }
 
-/// A live row and a `DocumentRow` from the list path must produce the *same* view,
-/// or `GET /api/documents/:id` and `GET /api/documents` would disagree about the
-/// same document.
 #[test]
 fn document_row_and_document_agree_on_the_view() {
     let stored = stored_document();
@@ -144,8 +122,6 @@ fn document_row_and_document_agree_on_the_view() {
     assert_eq!(from_document, from_row);
 }
 
-/// The view is also what the tests (and the convergence harness) deserialize, so
-/// the round trip has to hold.
 #[test]
 fn document_view_round_trips() {
     let view = DocumentView::from(stored_document());
@@ -176,8 +152,6 @@ fn attachment_view_is_plain_json() {
     assert_eq!(json["created_at"], json!(AT_RFC3339));
     assert_eq!(json["updated_at"], json!(AT_RFC3339));
     assert_eq!(json["revision"], json!(2));
-    // The GridFS handle is storage detail and the tombstone is not a client's
-    // business: neither is on the wire.
     assert!(json.get("gridfs_id").is_none());
     assert!(json.get("deleted_at").is_none());
 }
@@ -219,9 +193,6 @@ fn snapshot_view_is_plain_json() {
     assert_eq!(json["created_at"], json!(AT_RFC3339));
 }
 
-/// `materialized_to_json` is the bridge every view uses for `fm`/`plugins`. A
-/// stray BSON type that somehow reached a stored row must degrade to something
-/// printable rather than leak extended JSON.
 #[test]
 fn materialized_bridge_degrades_unexpected_bson() {
     let json = materialized_to_json(&doc! {

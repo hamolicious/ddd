@@ -1,25 +1,3 @@
-/**
- * A settings section (`settings.addSection`) that exists **only inside the Flutter shell** (SPEC §7): what
- * bridge this device speaks, what it can do natively, and which bundle is running.
- *
- * Three reasons it is worth the file rather than being a console log:
- *
- * 1. **"OTA update + revert" is an M5 acceptance criterion** (SPEC §9 M5) and neither the
- *    tester nor a user can confirm it without a visible version. `adb logcat` is not an
- *    answer for someone holding a phone.
- * 2. **Capability degradation is invisible by design.** A plugin's reminder silently
- *    becomes foreground-only when the bridge lacks `schedule`; this is the one screen that
- *    says which mode this device is in, and it reads the *methods*, never the advertised
- *    `capabilities` array (`app/BRIDGE.md` §3: presence of the method is the only gate).
- * 3. **A bundle/shell mismatch is a support question.** Naming both versions turns
- *    "the app is broken" into "this bundle wants bridge 2 and the shell speaks 1".
- *
- * It is contributed by the kernel rather than by a plugin, because it describes the
- * *device*, and a device that cannot load `settings` has bigger problems than this panel.
- * A plain browser never sees it: nothing is contributed at all there (SPEC §7's
- * "degrades gracefully" applied to a UI — the absent thing is the whole section).
- */
-
 import { useEffect, useState, type ReactNode } from "react";
 
 import { asPluginSync, type KernelHost } from "@kernel/runtime/index.js";
@@ -28,7 +6,6 @@ import { inShell, readShellManifest, shellInfo, type ShellManifestInfo } from ".
 
 export const SHELL_SECTION_ID = "shell";
 
-/** The part of `plugin:settings` this file uses; typed here so the app does not compile a plugin. */
 interface SettingsModule {
   readonly addSection?: (section: {
     readonly id: string;
@@ -39,15 +16,6 @@ interface SettingsModule {
   }) => () => void;
 }
 
-/**
- * Add the section to the `settings` plugin, in the shell only, once the plugins have
- * activated. Attributed to `kernel`, so the settings screen's "provided by" line tells the
- * truth. Without an active `settings` plugin there is nowhere to put it, and nothing happens.
- *
- * The module is imported by its specifier through a variable, like the loader does: the
- * app never bundles or type-checks against a plugin, and the import map hands back the
- * very instance the settings plugin activated with.
- */
 export async function contributeShellSection(host: KernelHost): Promise<void> {
   if (!inShell() || !host.plugins.active("settings")) return;
   const specifier = "plugin:settings";
@@ -69,9 +37,6 @@ function ShellSection({ host }: { readonly host: KernelHost }): ReactNode {
 
   useEffect(() => {
     let live = true;
-    // The *server's* newest bundle, which is a different question from the one this
-    // device is running — see `ShellInfo.bundleVersion`. Failing is normal (offline, or
-    // a non-admin server error) and must read as "unknown", never as an error dialog.
     host.session
       .fetch("/shell/manifest")
       .then((response) => response.json() as Promise<unknown>)
@@ -89,10 +54,6 @@ function ShellSection({ host }: { readonly host: KernelHost }): ReactNode {
   if (!info) return <p>This workspace is running in a browser, not in the app shell.</p>;
 
   const manifest = typeof served === "object" ? served : undefined;
-  // The support answer to "the app is broken": a bundle the server publishes may need a
-  // newer shell than this device has (`app/BRIDGE.md` §8). The updater refuses that
-  // update rather than installing it, which from the outside looks like "updates stopped
-  // arriving" — so say it here in words instead.
   const needsNewerShell =
     manifest?.minBridgeVersion !== undefined &&
     info.bridgeVersion !== undefined &&
@@ -114,12 +75,6 @@ function ShellSection({ host }: { readonly host: KernelHost }): ReactNode {
               : (manifest?.bundleVersion ?? "not published")
         }
       />
-      {/*
-        The one question a person actually has, and it needs **both** numbers: the
-        server's manifest names the newest bundle, `window.shell.bundleVersion` names
-        the one this device booted. With either missing the honest answer is silence
-        rather than a guess, which is why this row appears only when both are there.
-      */}
       {info.bundleVersion !== undefined && manifest?.bundleVersion !== undefined ? (
         <Fact
           label="Up to date"

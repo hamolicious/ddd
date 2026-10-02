@@ -1,21 +1,3 @@
-/**
- * The plugin config form, generated from the manifest's `config` schema (SPEC §6.2).
- *
- * Three rules, in the order they can hurt:
- *
- * 1. **A secret is write-only.** It is never returned by a read — the server sends
- *    `••••••••` and a "set" flag — so the field renders empty with "leave blank to keep the
- *    stored value", and an untouched secret is *dropped from the submission* rather than
- *    sent back. Sending the mask back would overwrite a real credential with eight bullets,
- *    and nothing would say so until the next cron run failed to authenticate.
- * 2. **The schema is the form.** Types, labels, descriptions, defaults, `required` and
- *    `select` options all come from the manifest; this file has no per-plugin knowledge and
- *    must never grow any.
- * 3. **The server validates.** `validate_value` runs per field on write and a 400 lands in
- *    the error strip. The `required` marks and `type=number` inputs here are affordances,
- *    not a second validator that could disagree.
- */
-
 import { useEffect, useMemo, useState } from "react";
 import type { ReactElement } from "react";
 
@@ -52,8 +34,6 @@ export function PluginConfigForm({
     [loaded.data, schema, placeholder],
   );
 
-  // Re-seed the draft whenever the server's answer changes, and only then: re-seeding on
-  // every render would fight the person typing.
   useEffect(() => {
     if (!loaded.data) return;
     const next: Record<string, unknown> = {};

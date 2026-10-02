@@ -1,10 +1,3 @@
-/**
- * The strip across the top of a read-only look at the past (a snapshot, a change): what
- * it is, the way back to the current version, and the one action that would make it
- * matter (Restore, Revert). Its own row of buttons on a phone, so the heading keeps the
- * width.
- */
-
 import type { ReactElement, ReactNode } from "react";
 
 const LINK =
@@ -17,7 +10,6 @@ export function DetachedBanner({
   currentHref,
   action,
 }: {
-  /** The landmark's name: "Snapshot", "Change". */
   readonly label: string;
   readonly title: string;
   readonly detail: ReactNode;

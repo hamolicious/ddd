@@ -1,21 +1,3 @@
-/**
- * The Trash view: the document list with two rules changed. (The all-documents page is
- * `table`'s `TablePage`.)
- *
- * **Trash is `includeDeleted` plus a filter, not another store** (SPEC §3.5): a
- * tombstoned document is an ordinary projection row with `deleted: true`, restorable for
- * 30 days, and purge is the server's job.
- *
- * **Trash sorts on `deleted_at`, in the engine.** It used to sort in this component
- * after the query, because the shared field space did not reach that root: the order
- * was then only correct over the page the query happened to return. `deleted_at` is a
- * fixed root of the DSL now (`core::filter::ast::FIXED_ROOTS`), so the sort key is just a
- * sort key, and the direction toggle is one query parameter.
- *
- * **Paged** (`_shared/pagination.ts`): a page of rows, and the next one loads by itself
- * as the end scrolls near.
- */
-
 import { useMemo, useState } from "react";
 import type { ReactElement } from "react";
 
@@ -25,7 +7,6 @@ import { LoadMore } from "../../_shared/LoadMore.js";
 import { limitFor, showingText, usePages } from "../../_shared/pagination.js";
 import { useLiveQuery } from "../../_shared/useLiveQuery.js";
 
-/** The filter that selects trashed documents (used with `includeDeleted: true`). */
 export const TRASHED_ONLY: FilterJson = { cmp: { field: "deleted", op: "eq", value: { bool: true } } };
 
 const buildSort = (field: string, direction: "asc" | "desc"): readonly SortKey[] => [{ field, direction }];
@@ -34,17 +15,7 @@ export interface TrashViewProps {
   readonly documents: DocumentsApi;
   readonly onOpen: (id: string) => void;
   readonly onRestore: (id: string) => Promise<void>;
-  /** From the server config; 30 by default (SPEC §3.5). */
   readonly retentionDays?: number;
-  /**
-   * The signed-in user's id, so `deleted_by` can be rendered as a sentence.
-   *
-   * The projection carries attribution as an id and nothing else, and there is no
-   * `@kernel` way to turn one into a name (the user list is an admin endpoint). "you"
-   * versus "someone else" is the whole of what this view can honestly say, and it is
-   * also the distinction that matters in a shared workspace (SPEC §5.4) — a 26-character
-   * ULID on screen said neither.
-   */
   readonly currentUserId?: string;
 }
 
@@ -145,10 +116,6 @@ export function TrashView({
   );
 }
 
-/**
- * Timestamps are shown, never compared: ordering is `seq` and the CRDT (PROTOCOL.md §5),
- * and this is a label.
- */
 function formatWhen(iso: string | null): string {
   if (!iso) return "unknown";
   const date = new Date(iso);

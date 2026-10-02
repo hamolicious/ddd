@@ -1,13 +1,3 @@
-/**
- * `compareRows` against `core::filter::evaluator::compare_rows`.
- *
- * Sorting is the one piece of query semantics the client implements itself
- * (web/CONTRACTS.md), so it is the one piece that can silently disagree with the
- * server. The corpus's `sorts` block is the same fixture
- * `backend/crates/core/tests/conformance.rs` checks the Rust side against, read
- * from the same file — so "the orders are identical" is a test, not a hope.
- */
-
 import { readFile } from "node:fs/promises";
 import { beforeAll, describe, expect, it } from "vitest";
 
@@ -31,7 +21,6 @@ interface SortCase {
   readonly order: readonly string[];
 }
 
-/** Fill the projection fields the corpus rows do not carry. */
 function projection(row: CorpusRow): ProjectionRow {
   return {
     ...row,
@@ -84,8 +73,6 @@ describe("compareRows against the shared-core corpus", () => {
     const failures: string[] = [];
     for (const testCase of sorts) {
       const keys = testCase.keys.map(parseSortKey);
-      // Shuffled first: a comparator that happens to agree with input order
-      // proves nothing.
       const shuffled = [...rows].reverse();
       const sorted = shuffled.sort((a, b) => compareRows(a, b, keys)).map((r) => r.id);
       if (sorted.join(",") !== [...testCase.order].join(",")) {
@@ -159,7 +146,6 @@ describe("compareRows", () => {
     const keys = [parseSortKey("fm.k")];
     const inserted = row("a", { fm: { k: { b: 1, a: 1 } } });
     const sorted = row("b", { fm: { k: { a: 1, b: 2 } } });
-    // Both maps start at key "a" with value 1; "b" decides, and 1 < 2.
     expect(compareRows(inserted, sorted, keys)).toBeLessThan(0);
   });
 
@@ -171,10 +157,6 @@ describe("compareRows", () => {
   });
 
   it("orders by `deleted_at`, the root the Trash view sorts on", () => {
-    // `FIXED_ROOTS` gained `deleted_at` in the M5 polish precisely so Trash could be
-    // sorted newest-first by the server's own field space (SPEC §6.5). Until this
-    // mirror followed, `-deleted_at` was insertion order here and tombstone order
-    // there: the same query, two orders, no error anywhere.
     const keys = [parseSortKey("-deleted_at")];
     const a = row("a", { deleted: true, deleted_at: "2026-01-01T00:00:00.000Z" });
     const b = row("b", { deleted: true, deleted_at: "2026-05-05T00:00:00.000Z" });
@@ -183,9 +165,6 @@ describe("compareRows", () => {
   });
 
   it("sorts a live document last on `deleted_at`, and never as null", () => {
-    // `deleted_at` is absent on a live row, and `FieldRef::Missing` sorts after every
-    // present value — which is what puts the live documents behind the tombstoned ones
-    // rather than in front of them.
     const keys = [parseSortKey("deleted_at")];
     const live = row("a", { deleted_at: null });
     const trashed = row("b", { deleted: true, deleted_at: "2026-01-01T00:00:00.000Z" });
@@ -194,13 +173,9 @@ describe("compareRows", () => {
   });
 
   it("treats roots the shared core does not know as missing", () => {
-    // `resolve_field` knows id/title/content/deleted/created_at/updated_at/deleted_at
-    // and fm/plugins — and nothing else, so neither side can order by these, and the
-    // client must not invent an order the server cannot reproduce.
     const keys = [parseSortKey("materialized_version")];
     const a = row("a", { materialized_version: "zzz" });
     const b = row("b", { materialized_version: "aaa" });
-    // By value, "a" would sort last; by the id tiebreaker it sorts first.
     expect(compareRows(a, b, keys)).toBeLessThan(0);
     expect(compareRows(b, a, keys)).toBeGreaterThan(0);
   });
@@ -208,8 +183,6 @@ describe("compareRows", () => {
 
 describe("compareStrings", () => {
   it("orders by UTF-8 bytes, not UTF-16 code units", () => {
-    // U+FF5E is one UTF-16 unit (0xFF5E); U+1F600 is a surrogate pair (0xD83D…).
-    // Naive `<` puts the emoji first; Rust's `str::cmp` does not.
     expect(compareStrings("～", "\u{1f600}")).toBeLessThan(0);
     expect("～" < "\u{1f600}").toBe(false);
   });

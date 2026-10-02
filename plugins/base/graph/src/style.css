@@ -1,5 +1,3 @@
-/* The two native controls the utilities cannot reach: range and switch, in the theme's accent. */
-
 .graph-range {
   accent-color: var(--ddd-accent);
   cursor: pointer;
@@ -10,7 +8,6 @@
   position: relative;
   flex: none;
   box-sizing: border-box;
-  /* The app sizes inputs as tap targets; this one draws its own. */
   width: 2rem;
   min-width: 0;
   height: 1.125rem;
@@ -56,8 +53,6 @@
   }
 }
 
-/* The local graph's buttons: slid out and faded until the pointer or focus is in the graph. */
-
 .graph-local-controls {
   opacity: 0;
   transform: translateX(0.75rem);
@@ -68,7 +63,6 @@
 }
 
 .graph-view:hover .graph-local-controls,
-/* Keyboard focus only: a clicked button keeps focus, and must not pin them in view. */
 .graph-view:has(:focus-visible) .graph-local-controls,
 .graph-local-controls[data-open] {
   opacity: 1;
@@ -76,7 +70,6 @@
   pointer-events: auto;
 }
 
-/* No hover to reveal them with: always there. */
 @media (hover: none) {
   .graph-local-controls {
     opacity: 1;

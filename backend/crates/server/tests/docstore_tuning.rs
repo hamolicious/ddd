@@ -1,18 +1,3 @@
-//! The operator-tunable docstore knobs actually reach the engine.
-//!
-//! The M1 carry-over: `MATERIALIZE_DEBOUNCE_MS`, `ROOM_IDLE_TIMEOUT_SECS`,
-//! `UPDATE_LOG_KEEP_BYTES`/`_COUNT`, `CRDT_*_THRESHOLD_BYTES` and
-//! `TRASH_RETENTION_DAYS` were validated in `Config` at boot — and then never
-//! handed to `MongoDocStore`, which read the module constants instead. Setting one
-//! changed nothing, silently, which is the worst possible failure mode for a
-//! tuning knob: an operator raising `UPDATE_LOG_KEEP_BYTES` after a resync
-//! incident would have seen no effect and no error.
-//!
-//! `DocStoreTuning` is now the constructor parameter (CONTRACTS.md, area docstore,
-//! M2 item 4). These tests assert the mapping field by field — a swapped pair in
-//! `from_config` type-checks perfectly — and then that the store *consults* the
-//! tuning rather than the constants.
-
 mod common;
 
 use std::time::Duration;
@@ -23,8 +8,6 @@ use ddd_server::docstore::{self, DocStore as _, DocStoreError, DocStoreTuning, M
 use ddd_server::domain::{Actor, new_id};
 use ddd_server::feed::ChangeFeed;
 
-/// Every knob, mapped from a config whose values differ from **every** default, so
-/// a field left reading its constant or crossed with its neighbour fails here.
 #[test]
 fn every_config_knob_maps_onto_the_tuning() {
     let config = common::test_config(
@@ -51,8 +34,6 @@ fn every_config_knob_maps_onto_the_tuning() {
         i64::from(config.trash_retention_days)
     );
 
-    // And none of them is the default, so the assertions above cannot be passing
-    // by coincidence.
     let defaults = DocStoreTuning::default();
     assert_ne!(tuning.max_document_bytes, defaults.max_document_bytes);
     assert_ne!(tuning.materialize_debounce, defaults.materialize_debounce);
@@ -70,8 +51,6 @@ fn every_config_knob_maps_onto_the_tuning() {
     assert_ne!(tuning.trash_retention_days, defaults.trash_retention_days);
 }
 
-/// The defaults are the documented spec values, so omitting every variable keeps
-/// the behaviour SPEC §3.5 and §4.3 describe.
 #[test]
 fn the_defaults_are_the_spec_values() {
     let defaults = DocStoreTuning::default();
@@ -83,7 +62,6 @@ fn the_defaults_are_the_spec_values() {
     assert_eq!(defaults.crdt_compact_threshold_bytes, 4 * 1024 * 1024);
     assert_eq!(defaults.crdt_alert_threshold_bytes, 8 * 1024 * 1024);
     assert_eq!(defaults.trash_retention_days, 30);
-    // The module constants stay the documented defaults.
     assert_eq!(
         defaults.materialize_debounce,
         docstore::MATERIALIZE_DEBOUNCE
@@ -111,12 +89,6 @@ fn the_defaults_are_the_spec_values() {
     );
 }
 
-/// A store built from a non-default tuning must *use* it.
-///
-/// `max_document_bytes` is the observable one: a store tuned to 2 KiB has to
-/// refuse a 3 KiB document, which the shared core's 1 MiB constant would wave
-/// through. `tuning()` echoing the struct back is the cheap half of the same
-/// check.
 #[tokio::test]
 #[ignore = "requires MONGO_URI"]
 async fn a_store_enforces_its_own_tuning() {
@@ -159,16 +131,12 @@ async fn a_store_enforces_its_own_tuning() {
         other => panic!("a tuned cap was not enforced: {other:?}"),
     }
 
-    // Under the cap the same store writes happily, so the limit is a limit and not
-    // a broken write path.
     let created = store
         .create(None, &"y".repeat(tuning.max_document_bytes), &Actor::System)
         .await
         .expect("a document at the cap is accepted");
     assert_eq!(store.text(&created.id).await.unwrap().len(), 2048);
 
-    // The room-idle timeout is the other knob with a directly observable effect:
-    // one second, so eviction happens inside a test rather than in ten minutes.
     tokio::time::sleep(Duration::from_millis(1100)).await;
     let evicted = store.evict_idle().await.expect("eviction");
     assert!(
@@ -176,15 +144,11 @@ async fn a_store_enforces_its_own_tuning() {
         "a room idle past the tuned timeout is evicted"
     );
     assert_eq!(store.stats().rooms, 0);
-    // Evicting is not losing: the text comes back from Mongo plus the update log.
     assert_eq!(store.text(&created.id).await.unwrap().len(), 2048);
 
     let _ = db.drop().await;
 }
 
-/// The update log is trimmed to the *tuned* retention, and correctness never
-/// depends on it (SPEC §3.5): the document still reads back after the log has been
-/// cut down to a handful of entries.
 #[tokio::test]
 #[ignore = "requires MONGO_URI"]
 async fn the_update_log_is_trimmed_to_the_tuned_retention() {
@@ -210,8 +174,6 @@ async fn the_update_log_is_trimmed_to_the_tuned_retention() {
         .create(None, "line 0\n", &Actor::System)
         .await
         .expect("create");
-    // Trimming runs every 32 appends (plus the periodic worker): `create` takes
-    // seq 1, so 31 replaces land exactly on the boundary.
     for n in 1..=31 {
         store
             .replace_text(&created.id, &format!("line {n}\n"), &Actor::System)
@@ -231,7 +193,6 @@ async fn the_update_log_is_trimmed_to_the_tuned_retention() {
     );
     assert!(kept >= 1, "the newest entry is never trimmed away");
 
-    // The document is intact: a trimmed log falls back to the stored `crdt` blob.
     assert_eq!(store.text(&created.id).await.unwrap(), "line 31\n");
 
     let _ = db.drop().await;

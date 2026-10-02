@@ -1,35 +1,3 @@
-/// `filesystem` — handing files to the user and taking files from them
-/// (SPEC §7: "v1 = `filesystem` (export/import)").
-///
-/// Four methods, two of them generic and two of them named operations:
-///
-/// | method | what it is |
-/// |---|---|
-/// | `filesystem.export` | the generic "save these bytes" the kernel's `capabilities.filesystem.export()` calls |
-/// | `filesystem.pick` | the generic file picker behind `capabilities.filesystem.pick()` |
-/// | `filesystem.exportWorkspace` | the admin export zip (SPEC §5.1), fetched natively and shared |
-/// | `filesystem.importFile` | `pick`, single file, for a UI that wants exactly one |
-///
-/// The generic pair is what the frozen web-side capability API is written against
-/// (`web/kernel-api/src/capabilities.ts`); the named pair is what M5's UI actually calls.
-/// Both are registered, because "export the workspace" is *not* expressible as
-/// `export(bytes)` from inside the page: the zip is a streamed multi-megabyte response
-/// from `GET /api/admin/export`, and routing it through JavaScript would mean holding the
-/// whole archive in the webview's heap. The shell streams it straight to a file instead.
-///
-/// **`exportWorkspace` is admin-only, server-side.** The export endpoint is under
-/// `/api/admin`, so a non-admin gets a 403 no matter what the bridge reports. The UI must
-/// gate the affordance on the user's admin flag, not on capability presence.
-///
-/// # Ports, and why they exist
-///
-/// The share sheet, the picker and the temp directory are all platform channels: on the
-/// gate (`mise run shell-test`, no device and no Android SDK) they cannot be called at all.
-/// Each is therefore reached through an injectable function — [SharePort], [PickPort],
-/// [TempDirPort] — whose default implementation is the real plugin. The mapping work, which
-/// is where the bugs live (which `FileType` an `accept` list becomes, what MIME a name
-/// implies, what filename a `Content-Disposition` yields, where the size cap bites), is
-/// pure and tested.
 library;
 
 import 'dart:convert';
@@ -44,21 +12,10 @@ import '../config.dart';
 import 'auth.dart';
 import 'bridge.dart';
 
-/// The largest file the shell will hand to the page.
-///
-/// It is a *heap* bound, not a policy: a picked file crosses the bridge as base64 inside a
-/// JSON envelope (`BRIDGE.md` §2), so the webview holds roughly 1.4× this in one string
-/// before the page has even decoded it. 25 MB matches `MAX_ATTACHMENT_BYTES`
-/// (SPEC §3.5), so anything the server would accept as an attachment can be imported, and
-/// anything larger fails with a message rather than an out-of-memory webview.
 const int kMaxImportBytes = 25 * 1024 * 1024;
 
-/// Where exports are staged before they are handed to the share sheet. One directory under
-/// the cache dir, so the OS may reclaim it and the next export can prune it wholesale.
 const String kExportDirName = 'ddd-export';
 
-/// A file the page wants saved. Exactly one of [text] and [base64] is set
-/// (`BRIDGE.md` §4.2).
 class ExportRequest {
   const ExportRequest({
     required this.name,
@@ -97,15 +54,8 @@ class ExportRequest {
   final String mime;
   final String? text;
 
-  /// Base64, because only JSON crosses the bridge (`BRIDGE.md` §2).
   final String? base64;
 
-  /// The bytes to write, decoded.
-  ///
-  /// A `data` that is not base64 is the page's bug, so it is [BridgeErrorCode.invalid] —
-  /// not `failed`. `base64Decode` throws [FormatException], which would otherwise reach
-  /// `dispatch` as an anonymous error and tell the caller nothing about which field was
-  /// wrong.
   List<int> bytes() {
     final String? encoded = base64;
     if (encoded == null) return utf8.encode(text ?? '');
@@ -117,7 +67,6 @@ class ExportRequest {
   }
 }
 
-/// What the page asked the picker for.
 class PickRequest {
   const PickRequest({this.accept = const <String>[], this.multiple = false});
 
@@ -132,14 +81,10 @@ class PickRequest {
     );
   }
 
-  /// MIME types and/or extensions, as the web `accept` attribute allows.
   final List<String> accept;
   final bool multiple;
 }
 
-/// One picked file, as the page receives it: `{ name, mime, size, data }` with `data`
-/// base64. The whole file comes across, because a native picker's file has no `File`
-/// object in the page's realm to read from later (`BRIDGE.md` §4.2).
 class PickedFile {
   const PickedFile({
     required this.name,
@@ -161,12 +106,6 @@ class PickedFile {
   };
 }
 
-/// One file the picker produced, before it is read and encoded.
-///
-/// A neutral shape rather than `file_picker`'s `PlatformFile`, for one reason that matters
-/// on the gate: `PlatformFile` is a `base` class tied to the plugin's platform channels, so
-/// a test cannot make one. Keeping the read lazy also means the size cap is enforced
-/// *before* the bytes exist, when the picker told us the size.
 class PickedSource {
   const PickedSource({
     required this.name,
@@ -177,30 +116,19 @@ class PickedSource {
 
   final String name;
 
-  /// What the picker reported, or `null` when it reported nothing. When it is `null` the
-  /// cap is enforced after reading instead — correct either way, cheaper when it is known.
   final int? size;
 
-  /// The picker's own MIME, when it has one. Android's pickers usually do not, so
-  /// [mimeForFileName] is the fallback.
   final String? mime;
 
   final Future<List<int>> Function() read;
 }
 
-/// Hands a file on disk to the platform's share/save sheet. `false` means the user
-/// dismissed it.
 typedef SharePort = Future<bool> Function(File file, String mime, String name);
 
-/// Opens the platform's file picker. An empty list means the user dismissed it
-/// (`BRIDGE.md` §4.2: dismissal is not an error).
 typedef PickPort = Future<List<PickedSource>> Function(PickRequest request);
 
-/// The directory exports are staged in. The cache dir, not documents: these files exist
-/// for the seconds between writing them and the share target reading them.
 typedef TempDirPort = Future<Directory> Function();
 
-/// The `filesystem` capability. Owned by the shell-bridge area.
 class FilesystemCapability {
   FilesystemCapability({
     required this.config,
@@ -220,7 +148,6 @@ class FilesystemCapability {
   final ShellConfig config;
   final AuthStore auth;
 
-  /// See [kMaxImportBytes].
   final int maxImportBytes;
 
   final http.Client _client;
@@ -259,11 +186,6 @@ class FilesystemCapability {
     });
   }
 
-  /// Write the bytes to a cache file and hand it to the Android share/save sheet.
-  ///
-  /// A cancelled sheet is [BridgeErrorCode.cancelled], not a failure. Cache files are
-  /// pruned on the next export — the share target may still be reading when this returns,
-  /// so deleting immediately is a race.
   Future<void> export(ExportRequest request) async {
     final File file = await _stage(
       safeFileName(request.name),
@@ -272,10 +194,6 @@ class FilesystemCapability {
     await _handOver(file, request.mime, safeFileName(request.name));
   }
 
-  /// The platform picker, mapped through [pickerSelection] and capped by [maxImportBytes].
-  ///
-  /// Dismissal resolves **empty**, never an error — that is what the web-side fallback
-  /// does, and a plugin should not have to tell "no files" from "cancelled".
   Future<List<PickedFile>> pick(PickRequest request) async {
     final List<PickedSource> sources = await _pick(request);
     final List<PickedFile> files = <PickedFile>[];
@@ -301,11 +219,6 @@ class FilesystemCapability {
     return files;
   }
 
-  /// `GET /api/admin/export` streamed to a temp file, then shared (SPEC §5.1: "the
-  /// no-Mongo disaster-recovery path").
-  ///
-  /// Streamed, not buffered: the response is a zip of every document. A 403 means the user
-  /// is not an admin and surfaces as [BridgeErrorCode.denied] so the page can say why.
   Future<void> exportWorkspace() async {
     final String? token = await auth.token();
     if (token == null) {
@@ -314,9 +227,6 @@ class FilesystemCapability {
     final Uri url = config.api('/admin/export');
     final http.StreamedResponse response;
     try {
-      // `bearerRequest`, not a hand-rolled header: it also refuses to follow redirects,
-      // which `dart:io` would otherwise follow *with the `Authorization` header attached*
-      // to whatever host the `Location` names (bridge/auth.dart).
       response = await _client.send(
         bearerRequest('GET', url, token)..headers['accept'] = 'application/zip',
       );
@@ -333,7 +243,6 @@ class FilesystemCapability {
     }
 
     if (response.statusCode != HttpStatus.ok) {
-      // Drained so the socket is returned to the pool rather than left half-read.
       final String body = await response.stream.bytesToString().catchError(
         (Object _) => '',
       );
@@ -351,11 +260,6 @@ class FilesystemCapability {
     await _handOver(file, 'application/zip', name);
   }
 
-  /// Prune the export directory, then write one file into it.
-  ///
-  /// Pruning happens *before* the write, not after the share: the share target may still be
-  /// reading the previous file when the sheet closes, and deleting it then is a race that
-  /// shows up as an empty file in another app.
   Future<File> _stage(
     String name,
     Future<void> Function(IOSink sink) write,
@@ -366,9 +270,7 @@ class FilesystemCapability {
     if (root.existsSync()) {
       try {
         await root.delete(recursive: true);
-      } on FileSystemException {
-        // A file another app still holds open is not a reason to fail this export.
-      }
+      } on FileSystemException {}
     }
     await root.create(recursive: true);
     final File file = File('${root.path}/$name');
@@ -397,11 +299,6 @@ class FilesystemCapability {
   void close() => _client.close();
 }
 
-/// Maps a non-200 from the export endpoint onto the frozen error vocabulary.
-///
-/// 401 and 403 are both [BridgeErrorCode.denied]: the export is admin-only (SPEC §5.1), so
-/// "not signed in" and "not an admin" are the same sentence to the user, and the page must
-/// gate the affordance on the admin flag rather than on this answer.
 BridgeException _httpFailure(int status, String body) {
   final String message = _errorMessage(body) ?? 'HTTP $status';
   return switch (status) {
@@ -418,8 +315,6 @@ BridgeException _httpFailure(int status, String body) {
   };
 }
 
-/// Pulls `error.message` out of the server's error body
-/// (`backend/crates/server/src/error.rs`), or `null` when the body is not one.
 String? _errorMessage(String body) {
   if (body.isEmpty) return null;
   try {
@@ -434,13 +329,6 @@ String? _errorMessage(String body) {
   return null;
 }
 
-/// What the `accept` list means to `file_picker`.
-///
-/// The web spells `accept` as MIME types, MIME wildcards and extensions, in any mixture;
-/// `file_picker` takes one [FileType] plus, for [FileType.custom], a list of dot-less
-/// extensions. The mapping is deliberately conservative: anything it cannot express becomes
-/// [FileType.any], because a picker that shows too much is a nuisance and a picker that
-/// hides the file the user came for is a dead end.
 ({FileType type, List<String>? extensions}) pickerSelection(
   List<String> accept,
 ) {
@@ -455,8 +343,6 @@ String? _errorMessage(String body) {
       if (parts[1] == '*') {
         families.add(parts[0]);
       } else {
-        // A concrete MIME is only usable if a known extension maps to it; `file_picker`
-        // has no MIME mode on Android.
         final String? extension = _extensionForMime[entry];
         if (extension != null) {
           extensions.add(extension);
@@ -491,16 +377,8 @@ String? _errorMessage(String body) {
   return (type: FileType.any, extensions: null);
 }
 
-/// A filename that cannot escape the directory it is written into, and cannot be a dotfile.
-///
-/// The name comes from the page, which is full-trust (SPEC §6.1) and therefore not to be
-/// trusted with a path. Separators, NUL and traversal all collapse to `_`; an empty result
-/// becomes `download`.
 String safeFileName(String name) {
   final String flattened = name
-      // Control characters go for a reason beyond tidiness: a newline in a name
-      // reaches `Content-Disposition` in whatever app receives the share, and a NUL
-      // truncates a path in every C API underneath `dart:io`.
       .replaceAll(RegExp('[\u0000-\u001f\u007f]'), '')
       .replaceAll(RegExp(r'[\\/]'), '_')
       .replaceAll(RegExp(r'^\.+'), '')
@@ -508,14 +386,9 @@ String safeFileName(String name) {
   if (flattened.isEmpty || flattened == '.' || flattened == '..') {
     return 'download';
   }
-  // Long enough for any sane title, short of every filesystem's per-name limit.
   return flattened.length <= 120 ? flattened : flattened.substring(0, 120);
 }
 
-/// The MIME a filename implies, for a picker that reported none.
-///
-/// `application/octet-stream` is the honest answer for anything unlisted: `nosniff` is on
-/// everywhere the page might render it, so a guess would be worse than an admission.
 String mimeForFileName(String name) {
   final int dot = name.lastIndexOf('.');
   if (dot < 0 || dot == name.length - 1) return 'application/octet-stream';
@@ -523,11 +396,6 @@ String mimeForFileName(String name) {
       'application/octet-stream';
 }
 
-/// The filename for a workspace export: the server's `Content-Disposition` when it gave
-/// one, otherwise a timestamped name.
-///
-/// The header's value is still run through [safeFileName] — it arrives over the network,
-/// and a server that says `filename="../../boot"` must not be believed.
 String exportFileName(String? contentDisposition, {required DateTime now}) {
   final String? fromHeader = _dispositionFilename(contentDisposition);
   if (fromHeader != null && fromHeader.isNotEmpty) {
@@ -548,9 +416,7 @@ String? _dispositionFilename(String? header) {
   if (extended != null) {
     try {
       return Uri.decodeComponent(extended.group(1)!.trim());
-    } on ArgumentError {
-      // A broken percent-escape is not worth failing an export over.
-    }
+    } on ArgumentError {}
   }
   final RegExpMatch? plain = RegExp(
     r'filename\s*=\s*"?([^";]+)"?',
@@ -559,8 +425,6 @@ String? _dispositionFilename(String? header) {
   return plain?.group(1)?.trim();
 }
 
-/// Extension → MIME, for [mimeForFileName]. Everything a ddd workspace actually
-/// exchanges: markdown, the export zip, attachments.
 const Map<String, String> _mimeForExtension = <String, String>{
   'md': 'text/markdown',
   'markdown': 'text/markdown',
@@ -588,9 +452,6 @@ const Map<String, String> _mimeForExtension = <String, String>{
   'webm': 'video/webm',
 };
 
-/// MIME → extension, for [pickerSelection]. Derived by hand from [_mimeForExtension]
-/// rather than inverted at runtime, because the inverse is ambiguous (`image/jpeg` has two)
-/// and the picker wants the spelling users see.
 const Map<String, String> _extensionForMime = <String, String>{
   'text/markdown': 'md',
   'text/x-markdown': 'md',
@@ -610,15 +471,6 @@ const Map<String, String> _extensionForMime = <String, String>{
   'image/svg+xml': 'svg',
 };
 
-// ---------------------------------------------------------------------------
-// The default ports: the real plugins.
-// ---------------------------------------------------------------------------
-
-/// [SharePort] backed by `share_plus`.
-///
-/// `ShareResultStatus.unavailable` counts as shared: Android only reports which action the
-/// user picked on recent versions, and treating "cannot tell" as a dismissal would report
-/// `cancelled` for a successful save.
 Future<bool> shareWithPlatformSheet(File file, String mime, String name) async {
   final ShareResult result = await SharePlus.instance.share(
     ShareParams(
@@ -629,7 +481,6 @@ Future<bool> shareWithPlatformSheet(File file, String mime, String name) async {
   return result.status != ShareResultStatus.dismissed;
 }
 
-/// [PickPort] backed by `file_picker`.
 Future<List<PickedSource>> pickWithPlatformPicker(PickRequest request) async {
   final ({FileType type, List<String>? extensions}) selection = pickerSelection(
     request.accept,
@@ -650,10 +501,6 @@ Future<List<PickedSource>> pickWithPlatformPicker(PickRequest request) async {
         (PlatformFile file) => PickedSource(
           name: file.name,
           size: file.lengthSync(),
-          // Android's SAF picker reports the MIME the *provider* declares, which is a
-          // better answer than the extension for a file that came out of another app's
-          // storage (`content://…/1234` has no extension at all). `mimeForFileName` stays
-          // as the fallback for the platforms and providers that report nothing.
           mime: _nonEmpty(file.xFile.mimeType),
           read: file.readAsBytes,
         ),

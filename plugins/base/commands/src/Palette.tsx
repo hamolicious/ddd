@@ -1,30 +1,3 @@
-/**
- * The command palette (`Mod+P`).
- *
- * **Keyboard-operable end to end**, which SPEC §8 lists as a requirement rather than
- * polish: the input takes focus on open, `ArrowUp`/`ArrowDown` move the active option,
- * `Home`/`End` jump, `Enter` runs, `Escape` closes, `Tab` is trapped inside the dialog,
- * and focus returns to whatever had it before. The list is a `listbox` with
- * `aria-activedescendant` (rather than moving DOM focus per row, which makes the input
- * lose its value to screen readers), and a polite live region announces the count.
- *
- * It renders through a portal into `document.body` because `shell-ui` owns the single
- * `kernel.ui.mount` (SPEC §6.4) — a plugin that wanted its own root would be taking a
- * mount point that is not its to take. The overlay is therefore a sibling of the app,
- * which is also what makes it survive a shell that re-renders underneath it.
- *
- * **On a phone it is a sheet as tall as the visible screen.** Android's soft keyboard
- * does not shrink the layout viewport, so `position: fixed; inset: 0` covers the area
- * behind the keyboard and the last options were unreachable underneath it. The height is
- * the app's `--ddd-viewport-height` (`web/app/src/boot/viewport.ts`), which the app frame
- * is sized from too — CSS, not React state: re-rendering the sheet on every viewport
- * event while the keyboard moved it made it flicker. For the same reason the active row
- * is kept in view by scrolling the list alone, never `scrollIntoView`, which pans the
- * visual viewport as well.
- *
- * **Back closes it** (`_shared/back.ts`): on a phone the back button is the way out.
- */
-
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, ReactElement, ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -40,13 +13,10 @@ export interface PaletteProps {
   readonly bindingFor: (commandId: string) => string | undefined;
   readonly onRun: (command: Command) => void;
   readonly onClose: () => void;
-  /** Draws a command's `icon` by name; without it no icons are drawn. */
   readonly renderIcon?: (name: string) => ReactNode;
   readonly initialQuery?: string;
-  /** Shown above the list when a binding is ambiguous (SPEC §6.5: conflicts are listed). */
   readonly conflictCount?: number;
   readonly onShowConflicts?: () => void;
-  /** Command ids the user ran, newest first: they lead the list. */
   readonly recent?: readonly string[];
 }
 
@@ -80,15 +50,12 @@ export function Palette({
   useEffect(() => {
     restoreTo.current = document.activeElement;
     inputRef.current?.focus();
-    // Focus goes back where it came from, or the palette is a keyboard dead end.
     return () => {
       const target = restoreTo.current;
       if (target instanceof HTMLElement && document.contains(target)) target.focus();
     };
   }, []);
 
-  // Escape closes wherever focus is: a key handler on the dialog alone missed it once
-  // focus had left the input (a click on the panel's padding drops it to <body>).
   useEffect(() => {
     const onEscape = (event: KeyboardEvent): void => {
       if (event.key !== "Escape") return;
@@ -103,7 +70,6 @@ export function Palette({
     setActive(0);
   }, [query]);
 
-  // Keep the active row in view without scrolling the page behind the overlay.
   useEffect(() => {
     const list = listRef.current;
     const option = list?.querySelector<HTMLElement>('[aria-selected="true"]');
@@ -151,7 +117,6 @@ export function Palette({
           run(results[clamped]?.item);
           return;
         case "Tab":
-          // A modal dialog with one focusable control: trapping Tab is one line.
           event.preventDefault();
           inputRef.current?.focus();
           return;
@@ -167,7 +132,6 @@ export function Palette({
   return createPortal(
     <div
       className="cmd-overlay commands:fixed commands:inset-0 commands:z-[1000] commands:flex commands:items-start commands:justify-center commands:bg-bg-overlay commands:px-2 commands:pb-2 commands:pt-12 commands:compact:p-0"
-      // A click on the backdrop dismisses; a click inside must not.
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) close();
       }}
@@ -178,8 +142,6 @@ export function Palette({
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
-        // A click on the panel's padding or list must not take focus off the input:
-        // the arrow keys, Enter and typing all go through it.
         onMouseDown={(event) => {
           if (event.target !== inputRef.current) event.preventDefault();
         }}
@@ -229,7 +191,6 @@ export function Palette({
                 }}
               >
                 {renderIcon && (
-                  // Every row keeps the slot, so titles line up whether or not they have an icon.
                   <span aria-hidden="true" className="commands:flex commands:w-4 commands:shrink-0 commands:justify-center commands:text-text-muted">
                     {command.icon !== undefined && renderIcon(command.icon)}
                   </span>
@@ -252,7 +213,6 @@ export function Palette({
           </p>
         )}
 
-        {/* Not shown; still announced, so a screen reader hears how many matched. */}
         <p className="commands:sr-only" role="status" aria-live="polite">
           {results.length} of {commands.length} commands
         </p>

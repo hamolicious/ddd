@@ -1,30 +1,7 @@
-/**
- * Two browsing behaviours that only exist once every layer is assembled, and that no
- * unit test can reach.
- *
- * **Machine-owned documents are hidden by default.** The kernel stores each user's
- * settings as a document marked `machine: true` (SPEC §6.4), which is the right design
- * and had one visible consequence nobody chose: the sidebar counted it, the document
- * list listed it, and the folder tree showed it as a note you could drag others into. The rule and its DSL clause are unit-tested against the real Wasm
- * evaluator (`plugins/base/_shared/machine-docs.test.ts`); what is only testable here
- * is that **three plugins agree** — the list, the sidebar count and the tree — and that
- * the toggle really brings the document back rather than merely existing.
- *
- * **`?line=N` moves the editor.** The parser is unit-tested
- * (`document-surface/src/line.test.ts`) and the search side builds the link
- * (`doc-list/src/search/hash.ts`), but "the editor actually scrolled" is a CodeMirror viewport
- * fact: it needs a real document long enough to scroll and a real layout to scroll in.
- *
- * **Search is the list, ranked.** Ctrl+Space focuses the list's search bar from
- * anywhere; the results obey the list's filters (machine documents stay hidden until
- * asked for) and clearing the search hands back the sort it interrupted.
- */
-
 import { expect, test } from "@playwright/test";
 
 import { createDocument, docRows, showSidebar, signIn, waitSynced } from "./helpers.js";
 
-/** A document marked the way the kernel marks its settings documents. */
 const MACHINE_DOC = [
   "---",
   "title: Machine owned thing",
@@ -35,7 +12,6 @@ const MACHINE_DOC = [
   "",
 ].join("\n");
 
-/** Long enough that line 300 cannot be on screen at the top of the document. */
 const LONG_DOC = [
   "---",
   "title: A long document",
@@ -61,34 +37,25 @@ test("a machine-owned document is out of the list, the count and the tree — un
   await signIn(page);
   await waitSynced(page);
 
-  // The ordinary document is there; the machine-owned one is not.
   await expect(page.getByRole("button", { name: "An ordinary note", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Machine owned thing", exact: true })).toHaveCount(0);
 
-  // The sidebar count agrees with the list — the two disagreeing is the bug this
-  // whole rule exists to fix, and it is the half a person actually notices.
   await showSidebar(page);
-  // The list is virtual, so it states its total rather than having it counted.
   const allDocuments = page.locator(".doclist-view", { hasText: "All documents" });
   const status = page.locator(".search-status");
   await expect(status).toHaveText(/^\d+ documents?$/);
   const listed = Number.parseInt((await status.textContent()) ?? "", 10);
   await expect(allDocuments.locator(".doclist-count")).toHaveText(String(listed));
 
-  // And the folder tree does not show it either. The ordinary note is there, so this is
-  // "the tree is built and lacks it", not "the tree is empty".
   const tree = page.getByRole("tree", { name: /folders/i });
   await expect(tree.getByRole("treeitem", { name: /An ordinary note/ }).first()).toBeVisible();
   await expect(tree.getByRole("treeitem", { name: /Machine owned thing/ })).toHaveCount(0);
 
-  // The toggle is a view default, not access control: asking brings it back.
   await page.getByRole("button", { name: /^Filters/ }).click();
   await page.getByRole("checkbox", { name: /show machine documents/i }).check();
   await expect(page.getByRole("button", { name: "Machine owned thing", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "An ordinary note", exact: true })).toBeVisible();
 
-  // Hidden or not, a direct link always worked — nothing here changed what the
-  // workspace holds or what a link resolves to.
   await page.goto(`/#/doc/${ordinary}`);
   await expect(page.getByRole("tablist", { name: /document mode/i })).toBeVisible();
 });
@@ -125,19 +92,16 @@ test("Ctrl+Space searches the list, which keeps its filters and its sort", async
   await expect(page.getByRole("button", { name: /^Sort by Best match$/ })).toBeVisible();
   await expect(page.locator(".search-status")).toHaveText(`1 result for “${needle}”`);
 
-  // The machine-document filter applies to results as it does to the list.
   await page.getByRole("button", { name: /^Filters/ }).click();
   await page.getByRole("checkbox", { name: /show machine documents/i }).check();
   await expect(page.getByRole("button", { name: "Quibble machine", exact: true })).toBeVisible();
   await expect(docRows(page)).toHaveCount(2);
   await page.getByRole("checkbox", { name: /show machine documents/i }).uncheck();
 
-  // A space between words survives the round trip through the URL.
   await search.fill(`${needle} `);
   await search.press("x");
   await expect(search).toHaveValue(`${needle} x`);
 
-  // Cleared: the plain list, in the order it had before.
   await search.fill("");
   await expect(page).toHaveURL(/#\/$/);
   await expect(page.getByRole("button", { name: /^Sort by Last updated$/ })).toBeVisible();
@@ -154,8 +118,6 @@ test("?line=N opens the editor at that line, and a second link moves it again", 
   await signIn(page);
   await waitSynced(page);
 
-  // No `?line=`: the document opens at the top, which is the behaviour a deep link
-  // must not become the default of.
   await page.goto(`/#/doc/${id}`);
   await page.getByRole("tab", { name: "Edit" }).click();
   const scroller = page.locator(".cm-scroller");
@@ -164,26 +126,17 @@ test("?line=N opens the editor at that line, and a second link moves it again", 
     expect(await scroller.evaluate((element) => element.scrollTop)).toBe(0);
   }).toPass();
 
-  // With one: the editor scrolls to it. The assertion is the viewport rather than the
-  // cursor because scrolling is the observable half — a cursor on a line nobody can
-  // see is exactly the failure this feature exists to prevent.
   await page.goto(`/#/doc/${id}?line=300`);
   await expect(async () => {
     expect(await scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
   }).toPass();
   const deep = await scroller.evaluate((element) => element.scrollTop);
 
-  // A **query-only** navigation, which is what following a second search result into
-  // the document already on screen is. The editor stays mounted, so this is the path
-  // through the surface's router subscription rather than through a fresh mount — and
-  // it was the one that silently did nothing while everything else worked.
   await page.goto(`/#/doc/${id}?line=5`);
   await expect(async () => {
     expect(await scroller.evaluate((element) => element.scrollTop)).toBeLessThan(deep);
   }).toPass();
 
-  // A line past the end is clamped, not an error: a deep link into a document that has
-  // since been shortened still opens it.
   await page.goto(`/#/doc/${id}?line=99999`);
   await expect(scroller).toBeVisible();
   await expect(page.getByRole("tab", { name: "Edit" })).toHaveAttribute("aria-selected", "true");

@@ -2,7 +2,6 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-// Base plugins deliberately have no node_modules. Vite is installed by web/.
 // @ts-expect-error -- TypeScript resolves this import from this plugin directory.
 import { build } from "vite";
 
@@ -40,11 +39,8 @@ describe("Tailwind plugin packaging", () => {
     expect(css).not.toContain("@layer");
     expect(css).not.toMatch(/(^|[,{\s])button\s*[{,:]/m);
     expect(css).toContain("var(--ddd-accent)");
-    // One spacing step is half a kernel space, so p-4 is two --ddd-space.
     expect(css).toMatch(/\.fixture\\:p-4\s*\{\s*padding:\s*calc\(calc\(var\(--ddd-space\)\s*\*\s*0?\.5\)\s*\*\s*4\)/);
     expect(css).toContain(".fixture\\:tap");
-    // Only the plugin's own prefix compiles: an unprefixed utility is another plugin's
-    // name and would be re-declared by every stylesheet that also used it.
     expect(css).not.toMatch(/(^|[},\s])\.hidden\s*\{/);
     const rootBlocks = css.match(/:root[^{}]*\{[^}]*\}/g) ?? [];
     expect(rootBlocks.join("\n").match(/--[^:]+:/g)?.length ?? 0).toBeLessThan(10);

@@ -1,9 +1,3 @@
-//! The `ddd reset-password --email …` break-glass path (SPEC §5.1).
-//!
-//! This is the recovery route when no admin can sign in. It needs the database,
-//! not an HTTP server, so it runs the whole command and exits — `main.rs` only
-//! forwards to [`reset_password`].
-
 use anyhow::{Context, anyhow};
 
 use super::{audit, reset};
@@ -11,11 +5,6 @@ use crate::config::Config;
 use crate::domain::Actor;
 use crate::state::AppState;
 
-/// Issue a one-time reset token for `email` and print it.
-///
-/// Prints to stdout on purpose: the operator running the command is the delivery
-/// channel. The token is never logged through `tracing` (log aggregation would
-/// then hold a live credential).
 pub async fn reset_password(config: Config, email: &str) -> anyhow::Result<()> {
     let state = AppState::new(config)
         .await

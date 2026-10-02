@@ -34,27 +34,17 @@ interface ImportedDocument {
   readonly attachmentId?: string;
 }
 
-/** What the import uses of `attachments` (a dependency). */
 export interface AttachmentsApi {
   readonly upload: typeof upload;
 }
 
-/** What it uses of `folders` (optional). */
 export type FoldersApi = Pick<Folders, "ensurePath" | "file">;
 
-/** The other plugins the import calls, passed in by `activate` (and by the tests). */
 export interface ImportServices {
   readonly attachments: AttachmentsApi;
-  /** Absent when `folders` is not installed: documents then land at the root. */
   readonly folders?: FoldersApi;
 }
 
-/**
- * Files each new document under the note for its vault folder — `Notes/Daily/Today.md`
- * goes inside "Daily", inside "Notes" — through `folders`, which creates the folder
- * notes the first time a folder is seen. Without `folders`, documents land at the
- * root. A document that cannot be filed is still imported, so it is logged, not failed.
- */
 function vaultFiler(kernel: Kernel, folders: FoldersApi | undefined): (id: string, vaultPath: string) => Promise<void> {
   if (!folders) return async () => undefined;
   const parents = new Map<string, Promise<string>>();

@@ -50,7 +50,6 @@ describe("visibleModes", () => {
   });
 
   it("keeps the registry's order and does not sort by `order` again", () => {
-    // The registry already sorted; the switch shows exactly what it hands over.
     const seated = [mode("late", { order: 500 }), mode("plain"), mode("early", { order: 0 })];
     expect(visibleModes(seated, row()).map((entry) => entry.id)).toEqual(["late", "plain", "early"]);
   });
@@ -104,7 +103,6 @@ describe("resolveModeId", () => {
   });
 
   it("falls back to the first seated visible mode when `read` is not wired in", () => {
-    // `write` has the lower `order` hint, but the seat order is what counts.
     const replaced = [mode("preview", { order: 5 }), mode("write", { order: 1 })];
     expect(resolveModeId("read", "read", replaced)).toBe("preview");
   });

@@ -1,13 +1,3 @@
-/**
- * The toolbar's built-in buttons for the shell's two columns: the ☰ at the start and the
- * altbar's button at the end, each on the side of the column it opens. Like every other
- * item, the user can move or hide them in Settings → Toolbar.
- *
- * Each renders nothing while its column has nothing in it: there is nothing to toggle.
- * Focus returns to the ☰ when the phone drawer closes because the shell remembers
- * whatever had focus when the drawer opened, not because it holds a ref to this button.
- */
-
 import type { ReactNode } from "react";
 
 import { altbarId, sidebarId, toggleAltbar, toggleSidebar } from "plugin:shell-ui";

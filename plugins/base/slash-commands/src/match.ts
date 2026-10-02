@@ -1,22 +1,9 @@
-/**
- * What the `/` menu shows for what was typed. Pure, so it is tested without an editor.
- */
-
 import type { SlashCommand } from "./api.js";
 
-/**
- * The query when the caret sits right after `/word`: the slash at the start of the line
- * or after a space (so `a/b` and URLs never open it), then letters, digits, `-` or `_`.
- * `undefined` when the menu should be closed.
- */
 export function slashQuery(beforeCaret: string): string | undefined {
   return /(?:^|\s)\/([\p{L}\p{N}_-]{0,32})$/u.exec(beforeCaret)?.[1];
 }
 
-/**
- * Best first: title starts with it, then a keyword does, then either contains it. Within
- * a rank, `commands` keeps its order: the registry's, by each command's `order`.
- */
 export function matchCommands(
   commands: readonly SlashCommand[],
   query: string,
@@ -43,7 +30,6 @@ export function matchCommands(
             : -1;
     if (rank >= 0) scored.push({ command, rank });
   }
-  // A stable sort: equal ranks stay in the order given.
   return scored
     .sort((a, b) => a.rank - b.rank)
     .slice(0, limit)

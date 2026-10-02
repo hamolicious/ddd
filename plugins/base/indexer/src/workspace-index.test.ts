@@ -9,7 +9,6 @@ const A = row("A", "# A\n[to b](doc://B) [to gone](doc://Z) [to trash](doc://T)\
   status: "open",
 });
 const B = row("B", "# B\nnothing out", { title: "B", status: "done", project: { phase: 2 } });
-// C is a folder holding A (and a child that does not exist).
 const C = row(
   "C",
   "![](doc://B)",
@@ -56,7 +55,6 @@ describe("WorkspaceIndex — connections", () => {
       { id: "A", kind: "link", count: 1 },
       { id: "C", kind: "embed", count: 1 },
     ]);
-    // T links to A but is in Trash; C refers to A from its frontmatter.
     expect(index.connections("A").incoming).toEqual([{ id: "C", kind: "frontmatter", key: "parent", count: 1 }]);
   });
 
@@ -117,9 +115,7 @@ describe("WorkspaceIndex — frontmatter", () => {
     expect(index.fmValues("status", { exclude: "B" })).toEqual([{ value: "open", count: 2 }]);
     const fields = index.fmFields({ exclude: "B" });
     expect(fields.find((field) => field.key === "status")).toMatchObject({ count: 2, kinds: { string: 2 } });
-    // B was the only document with `project`.
     expect(fields.some((field) => field.key.startsWith("project"))).toBe(false);
-    // Untouched without it.
     expect(index.fmFields().find((field) => field.key === "status")?.count).toBe(3);
   });
 });

@@ -1,5 +1,3 @@
-/** The timeline's settings: which fields start and end a note, what splits it into lanes, and the scale. */
-
 import type { ReactElement } from "react";
 
 import { FmKeySelect } from "plugin:search";

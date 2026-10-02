@@ -1,12 +1,3 @@
-/**
- * The body of a `modal` (and so of `confirm`): fields in a column, buttons in a row.
- *
- * **A form**, so Enter in a text field presses the default button the way it does in any
- * other dialog; the default button is the form's only `type="submit"`. Validation runs
- * when a non-dismiss button is chosen, marks each field it rejects, and moves focus to
- * the first of them; nothing resolves until every field passes.
- */
-
 import { useRef, useState } from "react";
 import type { ReactElement } from "react";
 
@@ -24,15 +15,12 @@ const OK: readonly ModalButton[] = [{ id: "ok", label: "OK", tone: "primary" }];
 const INPUT =
   "ctxmenu:tap-h ctxmenu:w-full ctxmenu:rounded ctxmenu:border ctxmenu:border-border ctxmenu:bg-bg ctxmenu:px-2 ctxmenu:text-base ctxmenu:text-text ctxmenu:aria-invalid:border-danger";
 
-// Important: the app styles every `button[type=submit]` in the accent colour, unlayered,
-// and the default button here is the form's submit.
 const TONES = {
   plain: "ctxmenu:border-border! ctxmenu:bg-bg-subtle! ctxmenu:text-text!",
   primary: "ctxmenu:border-accent! ctxmenu:bg-accent! ctxmenu:text-accent-text!",
   danger: "ctxmenu:border-danger! ctxmenu:bg-danger! ctxmenu:text-danger-text!",
 } as const;
 
-/** `confirm`'s request, as the modal it is. */
 export function confirmModal(request: ConfirmRequest): ModalRequest {
   const typed = request.typeToConfirm;
   return {
@@ -244,7 +232,6 @@ function initialValues(fields: readonly ModalField[]): Record<string, ModalValue
   return values;
 }
 
-/** Each rejected field's message, by id. */
 export function check(
   fields: readonly ModalField[],
   values: Readonly<Record<string, ModalValue>>,

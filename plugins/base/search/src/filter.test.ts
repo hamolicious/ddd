@@ -1,11 +1,3 @@
-/**
- * The filter builder against the DSL grammar in `backend/crates/core/README.md` §4.
- *
- * These tests are the cheap half of a contract the expensive half of which is the Rust
- * conformance corpus: the builder must only ever emit nodes that corpus covers. Every
- * case below names the grammar rule it is defending.
- */
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -108,12 +100,6 @@ describe("buildSort", () => {
     expect(buildSort("updated_at", "desc")).toEqual([{ field: "updated_at", direction: "desc" }]);
   });
 
-  /**
-   * The Trash view's sort key. It used to be impossible — `deleted_at` was outside the
-   * shared field space, so the rows were ordered in the component over whatever page
-   * came back — and the regression this pins is the silent one: if either engine loses
-   * the root again, the order is wrong rather than refused.
-   */
   it("sorts Trash by `deleted_at`, the root both engines now resolve", () => {
     expect(buildSort("deleted_at", "desc")).toEqual([{ field: "deleted_at", direction: "desc" }]);
     expect(isFieldPathShaped("deleted_at")).toBe(true);
@@ -122,17 +108,10 @@ describe("buildSort", () => {
 });
 
 describe("buildEffectiveFilter", () => {
-  /**
-   * The split between this and `buildFilter` is the point: `buildFilter` answers "what
-   * did the user ask for" (which decides between "no documents yet" and "nothing
-   * matches your filter"), and this answers "what goes on the wire".
-   */
   it("hides machine-owned documents when nothing else is filtered", () => {
     expect(buildEffectiveFilter({ combine: "and", clauses: [] })).toEqual(
       EXCLUDE_MACHINE_DOCUMENTS,
     );
-    // …while the user's own filter is still empty, so the empty state stays "no
-    // documents yet" rather than "nothing matches".
     expect(buildFilter({ combine: "and", clauses: [] })).toBeUndefined();
   });
 
@@ -150,22 +129,7 @@ describe("buildEffectiveFilter", () => {
   });
 });
 
-/**
- * `web/MOBILE-AUDIT.md`'s open question 5, settled.
- *
- * The claim: a row marked "this condition is not being applied" was applied anyway, and
- * the document list dropped to zero rows because of it. It was not true — the builder
- * has always dropped such a row — and the observation was the filter bar filling a
- * phone's first screen (audit item C-9) with the list below the fold, over an empty
- * state that said "No document matches **these conditions**" and so read as a claim the
- * conditions had run.
- *
- * Rather than record "we looked and it was fine", the property is pinned here: an
- * unusable row is worth exactly nothing to the query, alone or beside a good one, in
- * `and` and in `or`, with and without the machine-document exclusion.
- */
 describe("an unusable clause contributes nothing to the query (MOBILE-AUDIT Q5)", () => {
-  /** What the "Add condition" button produces: a field, an operator, an empty value. */
   const fresh = clause({ id: "fresh", value: "" });
 
   it("leaves the effective filter byte-identical to the draft without it", () => {
@@ -173,7 +137,6 @@ describe("an unusable clause contributes nothing to the query (MOBILE-AUDIT Q5)"
     const with_ = { combine: "and", clauses: [fresh] } as const;
     expect(buildEffectiveFilter(with_)).toEqual(buildEffectiveFilter(without));
     expect(buildEffectiveFilter(with_)).toEqual(EXCLUDE_MACHINE_DOCUMENTS);
-    // Not an `and` of one, not an `all` node: the exclusion and nothing else.
     expect(JSON.stringify(buildEffectiveFilter(with_))).toBe(
       JSON.stringify(EXCLUDE_MACHINE_DOCUMENTS),
     );
@@ -189,15 +152,12 @@ describe("an unusable clause contributes nothing to the query (MOBILE-AUDIT Q5)"
   });
 
   it("keeps the empty state truthful: no usable clause means the user filtered nothing", () => {
-    // `hasFilter` in `DocListView` is `buildFilter(...) !== undefined`, so this is what
-    // decides between "No documents yet" and "No document matches".
     expect(buildFilter({ combine: "and", clauses: [fresh] })).toBeUndefined();
   });
 
   it("is reported to the row, with a reason rather than a guess", () => {
     expect(invalidClauses({ combine: "and", clauses: [fresh] })).toEqual(["fresh"]);
     expect(clauseProblem(fresh)).toBe("Type a value to compare against.");
-    // Filled in and still refused — the two cases the old copy called "Incomplete".
     expect(clauseProblem(clause({ op: "text_contains", kind: "date", value: "2026-09-23" }))).toBe(
       "Text matching needs the text value type.",
     );
@@ -207,12 +167,6 @@ describe("an unusable clause contributes nothing to the query (MOBILE-AUDIT Q5)"
   });
 });
 
-/**
- * The mark and the query are one decision, not two that have to be kept in step.
- *
- * This is the guard that would have caught the bug Q5 suspected, whichever direction it
- * had drifted: a row silently dropped, or a row marked dead while the query carried it.
- */
 describe("clauseProblem is exactly the builder's own verdict", () => {
   const ops: readonly ClauseOp[] = [
     "eq", "ne", "lt", "lte", "gt", "gte",
@@ -243,7 +197,6 @@ describe("clauseProblem is exactly the builder's own verdict", () => {
       }
     }
     expect(disagreements).toBe(0);
-    // A matrix that never drops anything would pass the line above vacuously.
     expect(dropped).toBeGreaterThan(0);
   });
 
@@ -255,13 +208,8 @@ describe("clauseProblem is exactly the builder's own verdict", () => {
 });
 
 describe("appliedCount", () => {
-  /**
-   * The number on the folded "Filters" toggle: the conditions the query carries, so a
-   * half-typed row does not light a badge over a query with nothing in it.
-   */
   it("counts what the query carries, not what the boxes hold", () => {
     expect(appliedCount({ combine: "and", clauses: [] })).toBe(0);
-    // Showing machine documents is a filter like any other, so it counts.
     expect(appliedCount({ combine: "and", clauses: [], includeMachine: true })).toBe(1);
     expect(appliedCount({ combine: "and", clauses: [clause(), clause({ id: "b", value: "" })] })).toBe(1);
     expect(appliedCount({ combine: "and", clauses: [clause()], includeMachine: true })).toBe(2);

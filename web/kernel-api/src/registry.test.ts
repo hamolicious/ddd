@@ -14,7 +14,6 @@ interface Item {
 const make = () => createRegistry<Item>({ key: (i) => i.id, order: (i) => i.order ?? 100 });
 
 afterEach(() => {
-  // Registries are page-wide; keep one test's items out of the next.
   withdrawFromRegistries("header");
   withdrawFromRegistries("graph");
 });

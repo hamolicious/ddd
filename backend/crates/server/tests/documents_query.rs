@@ -1,20 +1,3 @@
-//! `GET /api/documents` — the filter DSL, sorting and pagination **over the
-//! router** (CONTRACTS.md, area http-routes, M2 item 1).
-//!
-//! The M1 suite covered the pure helpers (`sort_field_allowed`, `parse_sort_spec`,
-//! `clamp_limit`) and the docstore's own Mongo round trips, but nothing ran a
-//! filter through the whole path — query string → `Filter::from_json_str` →
-//! `filter::mongo::compile` → Mongo → projection → `DocumentView`. A filter that
-//! parsed and then compiled to a query selecting the wrong rows was invisible.
-//!
-//! So these tests assert the contract `crates/core/README.md` §4 states outright:
-//! **the compiler and the evaluator return the same rows.** One corpus is created
-//! through the API, read back once, and every case is then answered twice — by the
-//! server (compiled to Mongo) and by the shared core's evaluator over those same
-//! rows — and the two answers must be equal. A wrong compilation cannot pass by
-//! agreeing with a hand-written expectation, because the expectation is the other
-//! implementation.
-
 mod common;
 
 use axum::http::StatusCode;
@@ -23,10 +6,6 @@ use common::{
     urlencode,
 };
 
-/// The corpus. Deliberately heterogeneous — missing keys, a null, an empty list,
-/// ints next to a float, two documents with the same `fm.priority` — because that
-/// is what a shared workspace looks like and where the two engines disagree if
-/// they are going to (SPEC §4.2 "dynamic fields never error").
 const CORPUS: &[&str] = &[
     "---\n\
      title: Alpha\n\
@@ -96,11 +75,6 @@ const CORPUS: &[&str] = &[
      eta body text\n",
 ];
 
-/// Filter cases: `(name, wire JSON, titles it must select)`.
-///
-/// The expected titles are a second, independent check: without them a compiler
-/// and an evaluator that were *both* wrong in the same direction (say, both
-/// returning nothing) would agree and pass.
 const FILTER_CASES: &[(&str, &str, &[&str])] = &[
     (
         "all",
@@ -114,14 +88,11 @@ const FILTER_CASES: &[(&str, &str, &[&str])] = &[
         &["Alpha", "Beta", "Zeta"],
     ),
     (
-        // `ne` is "present and not eq" — Epsilon and Eta have no status at all
-        // and must not match (SPEC §4.2).
         "cmp ne str",
         r#"{"cmp":{"field":"fm.status","op":"ne","value":{"str":"open"}}}"#,
         &["Gamma", "Delta"],
     ),
     (
-        // Numbers are one type family: 2.5 participates in an int comparison.
         "cmp lt number",
         r#"{"cmp":{"field":"fm.priority","op":"lt","value":{"int":3}}}"#,
         &["Alpha", "Beta", "Delta"],
@@ -152,8 +123,6 @@ const FILTER_CASES: &[(&str, &str, &[&str])] = &[
         &["Gamma"],
     ),
     (
-        // `deleted` is derived from `deleted_at`, not stored — the compiler has to
-        // translate it.
         "cmp eq derived deleted",
         r#"{"cmp":{"field":"deleted","op":"eq","value":{"bool":false}}}"#,
         &["Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Eta"],
@@ -169,7 +138,6 @@ const FILTER_CASES: &[(&str, &str, &[&str])] = &[
         &["Alpha", "Beta", "Zeta"],
     ),
     (
-        // No implicit array matching, in either direction (SPEC §4.2).
         "cmp against a list never matches",
         r#"{"cmp":{"field":"fm.tags","op":"eq","value":{"str":"work"}}}"#,
         &[],
@@ -185,7 +153,6 @@ const FILTER_CASES: &[(&str, &str, &[&str])] = &[
         &["Epsilon"],
     ),
     (
-        // Vacuously true on Delta's empty list; false wherever the key is missing.
         "every",
         r#"{"every":{"field":"fm.tags","op":"ne","value":{"str":"work"}}}"#,
         &["Gamma", "Delta", "Epsilon"],
@@ -195,12 +162,7 @@ const FILTER_CASES: &[(&str, &str, &[&str])] = &[
         r#"{"missing":{"field":"fm.status"}}"#,
         &["Epsilon", "Eta"],
     ),
-    (
-        // `missing` and `is_null` are different questions: Gamma has the key.
-        "is_null",
-        r#"{"is_null":{"field":"fm.note"}}"#,
-        &["Gamma"],
-    ),
+    ("is_null", r#"{"is_null":{"field":"fm.note"}}"#, &["Gamma"]),
     (
         "exists includes null",
         r#"{"exists":{"field":"fm.note"}}"#,
@@ -277,8 +239,6 @@ const FILTER_CASES: &[(&str, &str, &[&str])] = &[
     ),
 ];
 
-/// Create the corpus and read it back once, as both wire views and shared-core
-/// rows.
 async fn corpus(app: &TestApp) -> (Vec<LocalRow>, Vec<(String, String)>) {
     for text in CORPUS {
         app.create_document(text).await;
@@ -320,7 +280,6 @@ fn sorted(mut ids: Vec<String>) -> Vec<String> {
     ids
 }
 
-/// Every accepted filter shape, answered by the server and by the shared core.
 #[tokio::test]
 #[ignore = "requires MONGO_URI"]
 async fn filter_results_match_the_shared_core_evaluator() {
@@ -355,11 +314,6 @@ async fn filter_results_match_the_shared_core_evaluator() {
     app.cleanup().await;
 }
 
-/// Sorting, including the `-field` / `field:desc` spellings and multi-key specs.
-///
-/// Every case sorts on a key **present on every row it orders** — either a fixed
-/// column or an `fm` path the filter requires. That is not incidental: see
-/// `missing_sort_keys_are_ordered_differently_by_the_two_engines` below.
 #[tokio::test]
 #[ignore = "requires MONGO_URI"]
 async fn sort_order_matches_the_shared_core_comparator() {
@@ -388,8 +342,6 @@ async fn sort_order_matches_the_shared_core_comparator() {
         assert_eq!(from_server.len(), CORPUS.len());
     }
 
-    // Multi-key, mixed directions, over an `fm` path — restricted to the rows that
-    // have the key so the divergence documented below stays out of it.
     let filter = r#"{"exists":{"field":"fm.priority"}}"#;
     for spec in [
         "-fm.priority,title",
@@ -433,10 +385,6 @@ fn titles_of_ordered(ids: &[String], titles: &[(String, String)]) -> Vec<String>
         .collect()
 }
 
-/// Rows that lack the sort key come **last in both directions**, from the server
-/// exactly as from the shared comparator: the server lists through the query engine
-/// (`query_index.rs`), which sorts with `compare_rows`, so the divergence this suite
-/// used to pin — Mongo sorting an absent field first ascending — is gone.
 #[tokio::test]
 #[ignore = "requires MONGO_URI"]
 async fn missing_sort_keys_sort_last_on_both_sides() {
@@ -471,9 +419,6 @@ async fn missing_sort_keys_sort_last_on_both_sides() {
     app.cleanup().await;
 }
 
-/// The same agreement on `deleted_at`, the one fixed root that can be absent and the
-/// one the Trash view sorts on: over `?trash=all`, live documents (no `deleted_at`)
-/// come last whichever way it is sorted.
 #[tokio::test]
 #[ignore = "requires MONGO_URI"]
 async fn deleted_at_sorts_live_documents_last_both_ways() {
@@ -482,7 +427,6 @@ async fn deleted_at_sorts_live_documents_last_both_ways() {
     };
     let (_rows, _titles) = corpus(&app).await;
 
-    // Two of the seven go to Trash, so the query has both kinds in it.
     let live = app.list("limit=100").await;
     let trashed: Vec<String> = live.ids().into_iter().take(2).collect();
     for id in &trashed {
@@ -513,8 +457,6 @@ async fn deleted_at_sorts_live_documents_last_both_ways() {
     app.cleanup().await;
 }
 
-/// Paging must be a partition of the single-page result: same rows, same order,
-/// no gaps, no repeats, and a final page without a cursor.
 #[tokio::test]
 #[ignore = "requires MONGO_URI"]
 async fn pagination_partitions_the_result_set() {
@@ -535,8 +477,6 @@ async fn pagination_partitions_the_result_set() {
         );
     }
 
-    // A filter travels with the cursor: paging a filtered query must not silently
-    // page the unfiltered one.
     let filter = r#"{"contains":{"field":"fm.tags","value":{"str":"work"}}}"#;
     let filtered = app
         .list(&format!(
@@ -553,8 +493,6 @@ async fn pagination_partitions_the_result_set() {
     app.cleanup().await;
 }
 
-/// `metadata_only` must drop `content` *at the projection*, and the row must
-/// otherwise be complete.
 #[tokio::test]
 #[ignore = "requires MONGO_URI"]
 async fn metadata_only_omits_content_but_nothing_else() {
@@ -585,7 +523,6 @@ async fn metadata_only_omits_content_but_nothing_else() {
             "materialized_version must survive"
         );
     }
-    // `fm` must survive too — it is what a list view renders.
     let zeta = lean
         .documents
         .iter()
@@ -597,8 +534,6 @@ async fn metadata_only_omits_content_but_nothing_else() {
     app.cleanup().await;
 }
 
-/// Everything the query string must refuse. A rejected query is a 400 with the
-/// standard envelope — never a 500, and never a silently unfiltered result.
 #[tokio::test]
 #[ignore = "requires MONGO_URI"]
 async fn refused_queries_are_400() {
@@ -624,8 +559,6 @@ async fn refused_queries_are_400() {
             ),
         ),
         (
-            // A fixed column has a schema type: a mismatch is a query bug, and
-            // both the evaluator and the compiler refuse it (SPEC §4.2).
             "type mismatch on a fixed column",
             format!(
                 "filter={}",
@@ -665,7 +598,6 @@ async fn refused_queries_are_400() {
         assert_eq!(response.error_code(), "bad_request", "`{name}`");
     }
 
-    // A clamped limit is not an error: 500 rows is the ceiling, not a refusal.
     app.get("/api/documents?limit=10000")
         .await
         .expect_status(StatusCode::OK);
@@ -673,8 +605,6 @@ async fn refused_queries_are_400() {
     app.cleanup().await;
 }
 
-/// The server-side search provider (`$text`) is reachable and bounded. The PWA
-/// searches locally (SPEC §4.2); this endpoint exists for scripts.
 #[tokio::test]
 #[ignore = "requires MONGO_URI"]
 async fn search_uses_the_text_index() {
@@ -698,9 +628,6 @@ async fn search_uses_the_text_index() {
     app.cleanup().await;
 }
 
-/// `POST /api/query`: a plan as the core's `Query` builder writes it — text, a
-/// filter row, a sort on a frontmatter key — answered with the rows, the total and
-/// why each matched; a plan the core refuses is a 400.
 #[tokio::test]
 #[ignore = "requires MONGO_URI"]
 async fn post_query_answers_a_built_plan() {

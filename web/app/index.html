@@ -9,19 +9,6 @@
     <meta name="theme-color" content="#ff6a00" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-
-    <!--
-      The server replaces the marker below with the import map for the blessed runtime
-      layer: inline, carrying the response's CSP nonce (SPEC §6.4, §8).
-
-      Inline is the only option — browsers never shipped an external import map — and it
-      must come before the app module, because a map is only consulted for resolutions
-      that happen after it is inserted.
-
-      In `vite dev` nothing replaces it: the dev server resolves the app's own imports
-      itself, and loader/importmap.ts installs a map over this bundle's modules before
-      the first plugin loads.
-    -->
     <!--DDD_IMPORT_MAP-->
   </head>
   <body>

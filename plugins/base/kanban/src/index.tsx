@@ -1,22 +1,3 @@
-/**
- * `kanban` — a saved search as a board, for the saved searches whose `type` is `kanban`.
- *
- * The columns are the values of a field (`fm.status` by default), in the order the
- * settings name and then the rest (`layout.ts`); the settings live in the note's own
- * `%%% kanban` section. Moving a card between columns sets that field on the note
- * (`Board.tsx`). Cards wear their `folders` colour and icon, and their menu comes from
- * `context-menu` — both optional dependencies; without `context-menu` the board has no
- * menus and "New board inside" is only a command.
- *
- * **"New board"** (a command, and "New board inside" in the folder tree) makes a board to
- * fill: one note, a saved search for the notes inside itself — the board is the note, its
- * tickets its children. Each column's **+** asks for a title and makes a ticket with it,
- * already in that column, filed where the board looks, at the bottom — without leaving
- * the board.
- *
- * No exports: it only contributes a document mode, a command and menu actions.
- */
-
 import type { Kernel } from "@kernel";
 import { addCommand, list as listCommands, run as runCommand } from "plugin:commands";
 import { notifyCreated } from "plugin:doc-events";
@@ -33,7 +14,6 @@ import { BOARD_OPTIONS, CARD_TITLE, cardFields, noteText } from "./create.js";
 import { RANK_KEY, appendRanks, bornWith, sinceField, type Column, type Filters, type KanbanOptions } from "./layout.js";
 import { KanbanSettings } from "./Settings.js";
 
-/** Cards loaded at a time: a board shows every column at once, so a large page. */
 const PAGE = 200;
 
 type RouterModule = typeof import("plugin:router");
@@ -51,15 +31,12 @@ export default function activate(kernel: Kernel): void {
       .then(then)
       .catch((cause: unknown) => kernel.log.warn(`${id} unavailable; ${without}`, cause));
   void optional<RouterModule>("router", (module) => (router = module), "a new board is not opened");
-  // Colours and icons, as the folder tree dresses each note; plain cards without `folders`.
   void optional<FoldersModule>("folders", (module) => (folders = module), "cards show without their look");
-  // The menu actions wait for `context-menu`; without it the board has no menus.
   const actions: SavedViewAction[] = [];
   void optional<MenuModule>(
     "context-menu",
     (module) => {
       menus = module;
-      // "Move to" on a card, a column's settings and sort on the column (`actions.ts`).
       module?.addAction([...actions, ...BOARD_ACTIONS]);
     },
     "the board has no menus",
@@ -67,11 +44,6 @@ export default function activate(kernel: Kernel): void {
   const looks = (): Looks | undefined => folders;
   const menu = (): MenuModule | undefined => menus;
 
-  /**
-   * A card titled `title` in `column` (and its swimlane), at its bottom, with what the
-   * board's search asks of every card and what the board is filtered to. Resolves to its id; the board stays on
-   * screen.
-   */
   const addCard = async (
     spec: SearchSpec,
     settings: KanbanOptions,
@@ -80,20 +52,14 @@ export default function activate(kernel: Kernel): void {
     queued: number,
     filters: Filters,
   ): Promise<string> => {
-    // Below the column's last card (in its lane), and below any added just before this one.
     const NEW = "\u0000new";
     const ranks = settings.order ? appendRanks(column.cards, queued, NEW) : new Map<string, number>();
-    // In a swimlane, the lane's value too.
     const fields = cardFields(spec, { field: settings.group, value: column.value }, column.lane && { field: settings.lanes, value: column.lane.value });
-    // Born in the column: it entered it now. The filter's values first: what the search
-    // asks of every card, and the column, win over them.
     const since = sinceField(settings.group);
     const fm = { ...bornWith(filters), ...fields.fm, ...(since ? { [since.slice(3)]: new Date().toISOString() } : {}) };
     const id = await kernel.documents.create({ text: noteText(title.trim() || CARD_TITLE, fm) });
-    // Its place in the column is this plugin's bookkeeping: in its `%%% kanban` section.
     const rank = ranks.get(NEW);
     if (rank !== undefined) await kernel.documents.splice.spliceSection(id, [{ key: RANK_KEY, value: rank }]);
-    // Cards without a rank sort after every ranked one: the column numbered afresh, so the new card is last.
     await Promise.all(
       [...ranks].filter(([card]) => card !== NEW).map(([card, value]) => kernel.documents.splice.spliceSection(card, [{ key: RANK_KEY, value }])),
     );
@@ -102,7 +68,6 @@ export default function activate(kernel: Kernel): void {
     return id;
   };
 
-  /** The commands that take documents, for a selection's menu: run once with every selected id. */
   const documentActions = (): readonly DocumentAction[] =>
     listCommands()
       .filter((command) => command.takes === "documents" && (command.when?.() ?? true))
@@ -141,13 +106,11 @@ export default function activate(kernel: Kernel): void {
       render: (props) => <Board {...props} />,
       settings: (props) => <KanbanSettings {...props} />,
       pageSize: () => PAGE,
-      // The columns are the board: shown with no cards in them.
       showsEmpty: true,
       starter: BOARD_OPTIONS,
     },
     {
       addMode,
-      // `SavedViewCommand.run` returns `unknown`; a command's returns `void | Promise<void>`.
       addCommand: (command) =>
         addCommand({
           ...command,
@@ -155,7 +118,6 @@ export default function activate(kernel: Kernel): void {
             await command.run();
           },
         }),
-      // Held until `context-menu` is known (above).
       addAction: (action) => {
         if (menus) menus.addAction(action);
         else actions.push(action);

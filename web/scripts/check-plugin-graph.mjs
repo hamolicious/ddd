@@ -1,25 +1,4 @@
 #!/usr/bin/env -S npx vite-node
-/**
- * Check the dependency graph of the plugins in this repository (`@kernel` 3.0) — the
- * failures the server would otherwise report only at load time, as a list of lines here.
- *
- * For every plugin in `plugins/base/` and `plugins/examples/`:
- *
- * 1. each id under `dependencies` and `optionalDependencies` is a plugin in the repo (or
- *    one a repo plugin stands in for with `provides`), and its version satisfies the range;
- * 2. the graph over both kinds of dependency has no cycle (both order the load);
- * 3. every static `import … from "plugin:<id>"` in the plugin's code — its `src/` and the
- *    `plugins/base/_shared` files it reaches — names a plugin listed under `dependencies`;
- * 4. no plugin statically imports an `optionalDependencies` id: an optional dependency is
- *    only ever reached with `kernel.plugins.optional(id)`, because a static import of an
- *    absent plugin fails the whole module. Type-only imports (`import type`) are erased and
- *    are allowed for either kind of dependency.
- *
- * Run through vite-node (it reads the kernel's own `satisfies` and manifest validator
- * from TypeScript): `npm run check:plugins` in `web/`, or
- * `npx vite-node scripts/check-plugin-graph.mjs [plugin-tree …]`. Exits 1 with one line
- * per problem.
- */
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
@@ -29,12 +8,10 @@ import { parsePluginRef, satisfies, validateManifest } from "../kernel-api/src/m
 
 const web = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repo = resolve(web, "..");
-/** The plugin trees to check: the arguments, or the repository's two. */
 const trees = process.argv.length > 2
   ? process.argv.slice(2).map((dir) => resolve(dir))
   : [join(repo, "plugins", "base"), join(repo, "plugins", "examples")];
 
-/** @type {Map<string, { dir: string, manifest: any }>} */
 const plugins = new Map();
 const problems = [];
 const say = (id, message) => problems.push(`${id}: ${message}`);
@@ -53,7 +30,6 @@ for (const tree of trees) {
   }
 }
 
-/** The version `id` answers with: its own, or the one a stand-in provides for it. */
 function candidates(id) {
   const found = [];
   const own = plugins.get(id);
@@ -65,7 +41,6 @@ function candidates(id) {
   return found;
 }
 
-// 1. Existence and ranges.
 for (const [id, { manifest }] of plugins) {
   for (const field of ["dependencies", "optionalDependencies"]) {
     for (const [dep, range] of Object.entries(manifest[field] ?? {})) {
@@ -75,7 +50,6 @@ for (const [id, { manifest }] of plugins) {
       }
       const options = candidates(dep);
       if (options.length === 0) {
-        // An optional dependency may name a plugin that lives outside this repository.
         if (field === "dependencies") say(id, `depends on "${dep}", which is not a plugin in this repository`);
         continue;
       }
@@ -87,7 +61,6 @@ for (const [id, { manifest }] of plugins) {
   }
 }
 
-// 2. Cycles, over both kinds of edge (resolved through `provides` to real plugins).
 {
   const edges = new Map();
   for (const [id, { manifest }] of plugins) {
@@ -97,7 +70,7 @@ for (const [id, { manifest }] of plugins) {
     }
     edges.set(id, [...targets].sort());
   }
-  const state = new Map(); // id → "visiting" | "done"
+  const state = new Map();
   const stack = [];
   const reported = new Set();
   const visit = (id) => {
@@ -120,7 +93,6 @@ for (const [id, { manifest }] of plugins) {
   for (const id of [...plugins.keys()].sort()) visit(id);
 }
 
-// 3 and 4. Static `plugin:` imports against the manifest.
 const IMPORT = /(?:^|[;\n])\s*(import|export)\s+(type\s+)?(?:[^'"`;]*?\s+from\s+)?["']([^"']+)["']/g;
 const SOURCE = /\.(?:[cm]?[jt]sx?)$/;
 
@@ -133,7 +105,6 @@ function resolveRelative(from, specifier) {
   return undefined;
 }
 
-/** Every file the plugin's code reaches through relative imports, from `src/` outwards. */
 function reachable(dir) {
   const src = join(dir, "src");
   if (!existsSync(src)) return [];
@@ -174,8 +145,6 @@ for (const [id, { dir, manifest }] of plugins) {
       const typeOnly = match[2] !== undefined;
       const where = relative(repo, file);
       if (target === id) {
-        // A shared helper may name its host's types (`_shared/text-mark.ts` → `plugin:editor`);
-        // a value import of yourself would be a second instance of your own module.
         if (!typeOnly) say(id, `${where} imports its own "plugin:${id}"; import the file instead`);
       } else if (typeOnly) {
         if (!required.has(target) && !optional.has(target)) {

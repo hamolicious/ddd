@@ -1,10 +1,3 @@
-/**
- * The manifest contract is one schema with two validators (PLUGIN-PROTOCOLS §9 step 1).
- * This runs the web half against the fixture corpus the server's half runs too
- * (`backend/crates/server/src/manifest_schema.rs`), and fails when the generated files are
- * older than the schema.
- */
-
 import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -50,7 +43,6 @@ describe("the manifest schema", () => {
   });
 
   it("has up-to-date generated files", () => {
-    // Exits non-zero, naming the stale file, when the schema moved without a regenerate.
     execFileSync(process.execPath, [join(repo, "web/scripts/gen-manifest.mjs"), "--check"], { stdio: "pipe" });
   });
 });

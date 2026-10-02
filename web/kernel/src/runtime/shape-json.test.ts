@@ -1,9 +1,3 @@
-/**
- * The `s.*` builders serialise: `toJSON()` is what a manifest's `backend.exports` declares
- * and the server validates backend calls with, and `shapeFromJSON` rebuilds a validator
- * from that JSON.
- */
-
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -72,10 +66,6 @@ describe("shapes as JSON", () => {
   });
 });
 
-/**
- * The shared shapes corpus (`backend/crates/core/corpus/shapes.json`): the Rust validator
- * that checks `backend.exports` and this one answer every case the same way.
- */
 describe("the shapes corpus", () => {
   const corpus = resolve(web, "../backend/crates/core/corpus/shapes.json");
   interface Case {

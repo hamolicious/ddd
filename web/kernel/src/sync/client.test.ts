@@ -1,11 +1,3 @@
-/**
- * `SyncClient`: the routing table, the reconnect loop, and the close codes
- * (PROTOCOL.md §§1.4, 7, 8; SPEC §5.3).
- *
- * The rule this file exists to protect is SPEC §5.3: **a 401 never clears local
- * data.** Everything else here is ordering and backoff bookkeeping.
- */
-
 import { afterEach, describe, expect, it } from "vitest";
 
 import { CloseCode, FrameType, type FeedBatch } from "../protocol.js";
@@ -24,7 +16,6 @@ afterEach(() => {
   MockSocket.reset();
 });
 
-/** Bootstrap that always answers "empty workspace, safe_seq 0". */
 const emptyBootstrapFetch = (async () =>
   new Response(
     [
@@ -86,7 +77,6 @@ function makeClient(
   return { client, store, states, scheduled, socket: () => MockSocket.last };
 }
 
-/** Start the client and let the handshake complete. */
 async function started(harness: Harness): Promise<MockSocket> {
   const starting = harness.client.start();
   MockSocket.last.open();
@@ -141,7 +131,6 @@ describe("handshake", () => {
     await settle();
 
     expect(socket.closedWith?.code).toBe(CloseCode.UnsupportedVersion);
-    // 4409 is terminal: only a reload (or an explicit reconnect) restarts it.
     expect(harness.scheduled).toHaveLength(0);
     expect(harness.client.status).toBe("error");
   });
@@ -209,8 +198,6 @@ describe("close codes", () => {
     expect((await store.checkpoint()).safeSeq).toBe(1);
     expect(harness.scheduled).toHaveLength(0);
 
-    // A successful re-login restarts the loop without losing anything, even right after
-    // another reconnect attempt (the throttle does not apply to signing back in).
     harness.client.reconnectNow();
     expect(MockSocket.instances).toHaveLength(2);
     MockSocket.last.serverClose(CloseCode.Unauthenticated, "still signed out");
@@ -221,7 +208,6 @@ describe("close codes", () => {
   });
 
   it("a connection refused before it opens asks whether the session is still valid", async () => {
-    // A refused upgrade (HTTP 401) reaches a browser as a plain failed connection.
     let verdict: "ok" | "unauthenticated" | "unreachable" = "unreachable";
     const harness = makeClient({ authProbe: () => Promise.resolve(verdict) });
     const socket = await started(harness);
@@ -230,13 +216,11 @@ describe("close codes", () => {
     harness.scheduled.splice(0).at(-1)?.run();
     await settle();
 
-    // Offline: the probe cannot reach the server either, so keep trying.
     MockSocket.last.serverClose(1006, "");
     await settle();
     expect(harness.client.status).toBe("offline");
     expect(harness.scheduled).toHaveLength(1);
 
-    // The session ended meanwhile: ask the person to sign in, and stop retrying.
     verdict = "unauthenticated";
     harness.scheduled.splice(0).at(-1)?.run();
     await settle();
@@ -274,7 +258,6 @@ describe("close codes", () => {
     await settle();
 
     expect(harness.scheduled).toHaveLength(1);
-    // A deploy drops every socket at once: full jitter over a short window.
     expect(harness.scheduled[0]!.delay).toBeLessThanOrEqual(5_000);
   });
 
@@ -330,7 +313,6 @@ describe("routing", () => {
     const harness = makeClient();
     const socket = await started(harness);
 
-    // Both frames land in the same tick: the queue is what keeps `seq` order.
     socket.deliver(batch({ rows: [feedRow({ id: "a", seq: 1 })], safe_seq: 1, complete: false }));
     socket.deliver(batch({ rows: [feedRow({ id: "b", seq: 2 })], safe_seq: 2, complete: false }));
     socket.deliver(batch({ safe_seq: 3, complete: true }));

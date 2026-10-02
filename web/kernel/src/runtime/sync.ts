@@ -1,12 +1,3 @@
-/**
- * `kernel.sync` over the M2 `SyncClient`. A read surface and a throttled
- * "reconnect now", nothing else — the reasoning is in `kernel-api/src/sync.ts`.
- *
- * The kernel has no DOM (a rule M2 established and M3 keeps for everything below
- * `runtime/`), so the *app* listens for `online`/`visibilitychange` and calls
- * `reconnectNow`; this class only forwards.
- */
-
 import type { SyncApi, SyncState, Unsubscribe } from "@kernel";
 
 import type { FeedState } from "../sync/feed-client.js";
@@ -20,7 +11,6 @@ export class SyncHost {
     this.#state = project(client.state);
   }
 
-  /** Called by the app from `SyncClientOptions.onState`. */
   update(state: FeedState): void {
     this.#state = project(state);
     for (const listener of [...this.#listeners]) listener(this.#state);
@@ -46,7 +36,6 @@ export class SyncHost {
   }
 }
 
-/** `FeedState` has `pending?`; the contract promises a number. */
 function project(state: FeedState): SyncState {
   return {
     status: state.status,

@@ -1,26 +1,3 @@
-/**
- * `?safe=bare` — the **minimal built-in plugin manager** of SPEC §6.1.
- *
- * The last line of the recovery story: no plugins are loaded, so nothing a plugin
- * did can affect this screen. It lists what is installed, shows why each entry would
- * or would not load in a normal boot, and offers the two exits.
- *
- * **What decides "would load" is the server's load resolution** (`@kernel` 3.0): the
- * enabled plugins in dependency order, and what was left out and why, as `GET
- * /api/plugins` ships it (`load`), with this client's own manifest and kernel-range check
- * on top (`clientCheck`). A list without one (a server older than 3.0) cannot say, and
- * the column says that rather than guessing.
- *
- * **The write path is admin-only, and it is the way back**: a disabled plugin gets an
- * *Enable* button, through the same server route the `admin` plugin's Plugins page uses,
- * so the server's admin check is the control here too; a non-admin sees the read-only
- * list and is told who can act. Enabling a plugin reloads every open client
- * (`plugins.changed`), this one included — which lands back here, in `?safe=bare`.
- *
- * This screen needs the kernel, React and the session, and nothing else — no plugin
- * code, no plugin UI. Confirmation is `window.confirm`.
- */
-
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { KERNEL_API_VERSION, type InstalledPlugin, type SessionUser } from "@kernel";
@@ -30,9 +7,7 @@ import { safeModeUrl } from "../boot/safe-mode.js";
 import { clientCheck } from "../loader/loader.js";
 
 export interface BareManagerProps {
-  /** The bearer token, for shells; a browser's session is its cookie. */
   readonly token?: string;
-  /** The signed-in user. Only an admin gets the write path. */
   readonly user?: SessionUser;
 }
 
@@ -42,7 +17,6 @@ export function BareManager({ token, user }: BareManagerProps): ReactNode {
   const admin = user?.isAdmin === true;
   const [list, setList] = useState<PluginList | undefined>();
   const [error, setError] = useState<string | undefined>();
-  /** The id an action is running for; one at a time on a recovery screen. */
   const [busy, setBusy] = useState<string | undefined>();
   const [notice, setNotice] = useState<string | undefined>();
   const [generation, setGeneration] = useState(0);
@@ -69,7 +43,6 @@ export function BareManager({ token, user }: BareManagerProps): ReactNode {
   const loading = new Set(load?.normal ?? []);
   const serverSkipped = new Map((load?.skipped ?? []).map((entry) => [entry.id, entry.reason]));
 
-  /** Why a plugin would not load in a normal boot, or `undefined` when it would. */
   const wouldNotLoad = (plugin: InstalledPlugin): string | undefined => {
     const id = plugin.manifest.id;
     if (plugin.state !== "enabled") return `it is ${plugin.state}`;
@@ -113,8 +86,6 @@ export function BareManager({ token, user }: BareManagerProps): ReactNode {
       {notice ? <p role="alert">{notice}</p> : null}
 
       {plugins ? (
-        // `data-label` on every cell, because at the compact breakpoint the kernel
-        // stylesheet drops the header row and stacks each plugin into a card.
         <div className="ddd-bare-scroll">
           <table className="ddd-bare-table">
             <thead>

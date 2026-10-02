@@ -1,42 +1,20 @@
-//! Per-IP and per-account login backoff (SPEC §5.2).
-//!
-//! In-process, because SPEC §8 pins the server to a single replica. The
-//! `login_attempts` collection — not this map — is the durable trail; losing the
-//! map on restart costs an attacker nothing they could not get by waiting.
-//!
-//! Shape: `max_attempts` failures inside `window` are free, then every further
-//! failure doubles a lockout ([`backoff_secs`]). A success clears the key.
-
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::error::AppError;
 
-/// First lockout, in seconds, once `max_attempts` is exceeded.
 pub const BACKOFF_BASE_SECS: u64 = 2;
-/// Ceiling on a single lockout.
 pub const MAX_BACKOFF_SECS: u64 = 3_600;
-/// Entries above this many trigger an opportunistic [`RateLimiter::sweep`], so
-/// the map cannot grow without bound even if nothing calls `sweep` on a timer.
 const SWEEP_THRESHOLD: usize = 4_096;
 
-/// What is being limited.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum RateKey {
-    /// Failed logins for an email address (per-account backoff).
     Account(String),
-    /// Failed logins from an IP (per-IP backoff).
     Ip(String),
-    /// A generic named bucket (password change, reset requests, uploads).
     Named { bucket: &'static str, key: String },
 }
 
-/// Seconds to lock a key out after `failures` failures.
-///
-/// Pure and total: the first `max_attempts` failures are free, the next one costs
-/// [`BACKOFF_BASE_SECS`], and each further failure doubles it up to
-/// [`MAX_BACKOFF_SECS`].
 pub fn backoff_secs(failures: u32, max_attempts: u32) -> u64 {
     if failures <= max_attempts {
         return 0;
@@ -64,7 +42,6 @@ impl Bucket {
         }
     }
 
-    /// `true` when nothing about this bucket still matters.
     fn is_stale(&self, now: Instant, window: Duration) -> bool {
         match self.blocked_until {
             Some(until) if until > now => false,
@@ -73,9 +50,6 @@ impl Bucket {
     }
 }
 
-/// In-process fixed-window counter with per-key backoff (single replica — SPEC
-/// §8 — so in-process is correct; the `login_attempts` collection keeps the
-/// audit trail).
 pub struct RateLimiter {
     inner: Arc<RateLimiterInner>,
 }
@@ -97,7 +71,6 @@ impl RateLimiter {
         }
     }
 
-    /// Check a key without consuming budget. `Err` carries the retry-after.
     pub fn check(&self, key: &RateKey) -> Result<(), RateLimited> {
         let now = Instant::now();
         let mut buckets = self.lock();
@@ -110,8 +83,6 @@ impl RateLimiter {
                 {
                     let remaining = until.duration_since(now);
                     return Err(RateLimited {
-                        // Round up: never tell a client to retry before the lock
-                        // actually lifts.
                         retry_after_secs: remaining.as_secs()
                             + u64::from(remaining.subsec_nanos() > 0),
                     });
@@ -126,7 +97,6 @@ impl RateLimiter {
         Ok(())
     }
 
-    /// Record a failure against a key (and start/extend its backoff).
     pub fn record_failure(&self, key: &RateKey) {
         let now = Instant::now();
         let window = self.inner.window;
@@ -141,8 +111,6 @@ impl RateLimiter {
             .entry(key.clone())
             .or_insert_with(|| Bucket::new(now));
 
-        // A fresh window starts only when the key is not currently locked out;
-        // otherwise waiting out one window would reset the escalation.
         let locked = bucket.blocked_until.is_some_and(|until| until > now);
         if !locked && now.duration_since(bucket.window_start) > window {
             bucket.failures = 0;
@@ -157,12 +125,10 @@ impl RateLimiter {
         }
     }
 
-    /// Clear a key's counters after a success.
     pub fn record_success(&self, key: &RateKey) {
         self.lock().remove(key);
     }
 
-    /// Drop expired windows; called on a timer so the map cannot grow unbounded.
     pub fn sweep(&self) {
         let now = Instant::now();
         let window = self.inner.window;
@@ -170,13 +136,10 @@ impl RateLimiter {
             .retain(|_, bucket| !bucket.is_stale(now, window));
     }
 
-    /// Number of tracked keys — for tests and the admin dashboard.
     pub fn tracked_keys(&self) -> usize {
         self.lock().len()
     }
 
-    /// A poisoned lock means a panic inside a critical section that only touches
-    /// counters; recovering is strictly better than taking the process down.
     fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<RateKey, Bucket>> {
         match self.inner.buckets.lock() {
             Ok(guard) => guard,
@@ -185,7 +148,6 @@ impl RateLimiter {
     }
 }
 
-/// A rejected request, with the seconds to wait.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RateLimited {
     pub retry_after_secs: u64,
@@ -221,7 +183,6 @@ mod tests {
     fn backoff_is_capped_and_never_overflows() {
         assert_eq!(backoff_secs(u32::MAX, 3), MAX_BACKOFF_SECS);
         assert_eq!(backoff_secs(60, 3), MAX_BACKOFF_SECS);
-        // The cap is reached, not exceeded.
         assert!(backoff_secs(30, 3) <= MAX_BACKOFF_SECS);
     }
 
@@ -303,8 +264,6 @@ mod tests {
         limiter.record_failure(&key);
         assert_eq!(limiter.tracked_keys(), 1);
 
-        // A zero-length window is already over, and 1 failure of 10 is not a
-        // lockout, so the entry carries no information.
         std::thread::sleep(Duration::from_millis(2));
         limiter.sweep();
         assert_eq!(limiter.tracked_keys(), 0);

@@ -13,28 +13,19 @@ import { newRuleId, resolveStyle, ruleLabel, textOn, type FolderStyle, type Rule
 export interface RulesProps {
   readonly rules: readonly Rule[];
   readonly onChange: (rules: readonly Rule[]) => void;
-  /** For each rule's preview: what a field it leaves unset shows. */
   readonly defaults: FolderStyle;
   readonly icons: Pick<Icons, "Icon" | "Picker"> | undefined;
   readonly notes: NoteSource;
-  /** Picks a condition's note: `search`'s, when it is enabled. */
   readonly NoteSelect?: ComponentType<NoteSelectLike>;
-  /** Picks a condition's property, and its value: `search`'s, when it is enabled. */
   readonly FmKeySelect?: ComponentType<FmKeySelectLike>;
   readonly FmValueSelect?: ComponentType<FmValueSelectLike>;
-  /** Properties and values to offer, from the indexer. */
   readonly suggestions?: Suggestions;
-  /** Opens the colour and icon editor for `rule`, called `label`, beside `anchor`. */
   readonly openLook: (rule: Rule, label: string, anchor: HTMLElement) => void;
 }
 
 const BUTTON =
   "folderstyle:tap-h folderstyle:cursor-pointer folderstyle:rounded folderstyle:border folderstyle:border-border-strong folderstyle:bg-bg-raised folderstyle:px-1.5 folderstyle:font-sans folderstyle:text-text folderstyle:disabled:cursor-default folderstyle:disabled:opacity-50";
 
-/**
- * The conditions are styled here, for `ConditionsEditor` carries only plain classes
- * (`folderstyle-clause` and so on): see its header.
- */
 const CONDITIONS =
   "folderstyle:flex folderstyle:flex-col folderstyle:gap-2 " +
   "folderstyle:[&_button]:tap-h folderstyle:[&_button]:cursor-pointer folderstyle:[&_button]:rounded folderstyle:[&_button]:border folderstyle:[&_button]:border-border-strong folderstyle:[&_button]:bg-bg-raised folderstyle:[&_button]:px-1.5 folderstyle:[&_button]:text-text " +
@@ -53,10 +44,6 @@ const CONDITIONS =
   "folderstyle:[&_.folderstyle-op-icon]:tap-h folderstyle:[&_.folderstyle-op-icon]:inline-flex folderstyle:[&_.folderstyle-op-icon]:min-w-[2ch] folderstyle:[&_.folderstyle-op-icon]:items-center folderstyle:[&_.folderstyle-op-icon]:justify-center folderstyle:[&_.folderstyle-op-icon]:px-1 folderstyle:[&_.folderstyle-op-icon]:font-mono folderstyle:[&_.folderstyle-op-icon]:text-text-muted folderstyle:[&_.folderstyle-op-icon]:whitespace-nowrap " +
   "folderstyle:[&_.folderstyle-note-results]:flex folderstyle:[&_.folderstyle-note-results]:flex-wrap folderstyle:[&_.folderstyle-note-results]:gap-1";
 
-/**
- * The rules, in order: the first a note matches wins, field by field. Each is folded to
- * its header until opened, but for one just added; which are open is not saved.
- */
 export function Rules({ rules, onChange, defaults, icons, notes, NoteSelect, FmKeySelect, FmValueSelect, suggestions, openLook }: RulesProps): ReactElement {
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
   const toggleFold = (id: string): void =>

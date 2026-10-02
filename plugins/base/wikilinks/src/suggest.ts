@@ -1,31 +1,14 @@
-/**
- * What to offer for the text before the caret. Pure, so it is tested without an editor.
- *
- * `[[` opens the list, and `![[` opens it to embed: what follows, up to the caret, is
- * matched against note titles. Titles that start with the typed text come first, then
- * ones with a word that does, then ones that contain it, then notes whose folder does.
- * Choosing one writes `[](doc://<id>)` (or `![](doc://<id>)`), link text left empty so
- * read mode draws the note's live title and a rename never leaves a stale label behind.
- * In the frontmatter it writes the bare `doc://<id>` instead — the form a property holds
- * when it points at a note (`blocked-by: doc://01J…`), which every reader of `fm` draws as
- * that note — and `![[` is just `[[` there, since a property cannot embed. Nothing is
- * offered in a fenced code block, or inside an inline code span on the caret's line.
- */
-
 export interface Note {
   readonly id: string;
   readonly title: string;
-  /** The folders above it, joined by ` / `; `""` at the root. */
   readonly folder: string;
 }
 
 export interface Suggestion extends Note {
-  /** What replaces the typed `[[partial`. */
   readonly insert: string;
 }
 
 export interface Suggestions {
-  /** How many characters before the caret a chosen suggestion replaces. */
   readonly replace: number;
   readonly embed: boolean;
   readonly items: readonly Suggestion[];
@@ -33,10 +16,8 @@ export interface Suggestions {
 
 export const MAX_SUGGESTIONS = 20;
 
-/** `[[` or `![[`, then anything but brackets, up to the caret. */
 const TYPED = /(!?)\[\[([^[\]\n]*)$/;
 
-/** The markdown a chosen note is written as; in the frontmatter, the value a property holds. */
 export function linkTo(id: string, embed: boolean, frontmatter = false): string {
   return frontmatter ? `doc://${id}` : `${embed ? "!" : ""}[](doc://${id})`;
 }
@@ -86,12 +67,10 @@ function rankOf(note: Note, typed: string): number {
   return -1;
 }
 
-/** An odd number of backticks before the `[[` on this line. */
 function inCodeSpan(lineBefore: string): boolean {
   return ((lineBefore.match(/`/g)?.length ?? 0) & 1) === 1;
 }
 
-/** The document opens with `---` and no closing `---` comes before the caret's line. */
 export function inFrontmatter(documentBeforeCaret: string): boolean {
   const text = documentBeforeCaret.startsWith("﻿") ? documentBeforeCaret.slice(1) : documentBeforeCaret;
   const lines = text.split("\n").map((line) => line.replace(/\r$/, ""));
@@ -99,7 +78,6 @@ export function inFrontmatter(documentBeforeCaret: string): boolean {
   return !lines.slice(1, -1).includes("---");
 }
 
-/** An odd number of ``` / ~~~ fence lines above the caret's line. */
 function inFence(documentBeforeCaret: string): boolean {
   let open: string | undefined;
   for (const line of documentBeforeCaret.split("\n").slice(0, -1)) {

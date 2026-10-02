@@ -1,5 +1,3 @@
-/** Import the Markdown documents in an Obsidian vault ZIP through public kernel APIs only. */
-
 import type { Kernel } from "@kernel";
 import { upload } from "plugin:attachments";
 import { addCommand } from "plugin:commands";
@@ -29,7 +27,6 @@ export default function activate(kernel: Kernel): void {
       if (archive.notes.length === 0 && archive.attachments.length === 0) {
         throw new Error("the ZIP contains no importable notes or attachments");
       }
-      // `folders` is optional: without it, documents land at the root.
       const folders = await kernel.plugins.optional<FoldersApi>("folders");
       const result = await importVault(kernel, { attachments: { upload }, folders }, archiveName, archive, (finished, total) => {
         kernel.ui.notify({

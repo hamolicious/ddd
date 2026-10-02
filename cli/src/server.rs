@@ -1,6 +1,3 @@
-//! Talking to a running ddd server: the unauthenticated routes (`/kernel.d.ts`,
-//! `/importmap.json`, plugin assets), and JSON calls with a bearer token (`ddd query`).
-
 use std::collections::BTreeMap;
 
 use anyhow::{Context, Result};
@@ -29,8 +26,6 @@ impl Server {
             .with_context(|| format!("GET {url}"))
     }
 
-    /// POST a JSON body, with a bearer token when given; the JSON answer. A refusal is an
-    /// error carrying the server's message.
     pub fn post_json(&self, path: &str, body: &Value, token: Option<&str>) -> Result<Value> {
         let url = format!("{}{path}", self.base);
         let mut request = ureq::post(&url)
@@ -56,8 +51,6 @@ impl Server {
         Ok(answer)
     }
 
-    /// Installed plugin id → the version the server loads, from the import map's
-    /// `plugin:<id>` entries (`/plugins/<id>/<version>/frontend/index.mjs?v=…`).
     pub fn plugin_versions(&self) -> Result<BTreeMap<String, String>> {
         let map: Value = serde_json::from_str(&self.get("/importmap.json")?)
             .context("/importmap.json is not JSON")?;

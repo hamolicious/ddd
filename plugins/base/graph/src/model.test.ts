@@ -12,7 +12,6 @@ function source() {
     row("B", "[a](doc://A)", { title: "Beta" }, { plugins: { folders: { children: ["A"] } } }),
     row("C", "[d](doc://D)", { title: "Gamma", parent: "doc://A" }),
     row("D", "end", { title: "Delta" }),
-    // A folder holding Beta (and so Alpha): no links, so an orphan in the graph.
     row("L", "alone", { title: "Work" }, { plugins: { folders: { children: ["B"] } } }),
     row("T", "[a](doc://A)", { title: "Trashed" }, { deleted: true }),
     row("S", "[a](doc://A)", { machine: true }),

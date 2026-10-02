@@ -1,17 +1,7 @@
-/**
- * Icon search over `index.json`: pure, so it is tested without a browser.
- *
- * Every word typed must match the icon somewhere: in its name, its category or a tag.
- * Among those, a name that *is* the query ranks first, then names starting with it, then
- * names containing it, then the rest; ties go alphabetically, which is the index's order.
- */
-
-/** `frontend/tabler/index.json`, as `build.mjs` writes it. */
 export interface IconIndex {
   readonly version: string;
   readonly categories: readonly string[];
   readonly suggested: readonly string[];
-  /** `[name, category index, space-separated tags]`, sorted by name. */
   readonly icons: readonly (readonly [string, number, string])[];
 }
 
@@ -27,10 +17,6 @@ const hit = (index: IconIndex, entry: readonly [string, number, string]): IconHi
   tags: entry[2] === "" ? [] : entry[2].split(" "),
 });
 
-/**
- * Best matches first. An empty query is every icon: the suggested ones first, in their
- * order, then the rest by name.
- */
 export function searchIcons(index: IconIndex, query: string, limit = Infinity): readonly IconHit[] {
   const words = query.toLowerCase().trim().split(/[\s]+/).filter(Boolean);
   if (words.length === 0) {

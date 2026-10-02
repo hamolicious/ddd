@@ -1,11 +1,3 @@
-/**
- * The condition builder against the DSL grammar in `backend/crates/core/README.md` §4.
- *
- * These tests are the cheap half of a contract the expensive half of which is the Rust
- * conformance corpus: the builder must only ever emit nodes that corpus covers. Every
- * case below names the grammar rule it is defending.
- */
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -37,7 +29,6 @@ describe("buildLiteral", () => {
     expect(buildLiteral("float", "1.5")).toEqual({ float: 1.5 });
     expect(buildLiteral("bool", "TRUE")).toEqual({ bool: true });
     expect(buildLiteral("date", "2026-01-01")).toEqual({ date: "2026-01-01" });
-    // `null` is the one bare string in the grammar.
     expect(buildLiteral("null", "")).toBe("null");
   });
 
@@ -52,7 +43,7 @@ describe("buildLiteral", () => {
     expect(buildLiteral("date", "2026-0")).toBeUndefined();
     expect(buildLiteral("date", "2026-02-30")).toBeUndefined();
     expect(buildLiteral("date", "2026-13-01")).toBeUndefined();
-    expect(buildLiteral("date", "2026-02-29")).toBeUndefined(); // 2026 is not a leap year
+    expect(buildLiteral("date", "2026-02-29")).toBeUndefined();
     expect(buildLiteral("date", "2028-02-29")).toEqual({ date: "2028-02-29" });
     expect(buildLiteral("date", "2026-09-23T10:00:00Z")).toEqual({ date: "2026-09-23T10:00:00Z" });
   });
@@ -67,11 +58,11 @@ describe("isFieldPathShaped", () => {
   });
 
   it("rejects what the core's path parser rejects", () => {
-    expect(isFieldPathShaped("fm")).toBe(false); // needs a key
-    expect(isFieldPathShaped("title.sub")).toBe(false); // fixed roots take one segment
+    expect(isFieldPathShaped("fm")).toBe(false);
+    expect(isFieldPathShaped("title.sub")).toBe(false);
     expect(isFieldPathShaped("unknown")).toBe(false);
-    expect(isFieldPathShaped("fm.a.b.c.d.e.f.g")).toBe(false); // 7 segments max
-    expect(isFieldPathShaped("fm.$where")).toBe(false); // cannot inject operator syntax
+    expect(isFieldPathShaped("fm.a.b.c.d.e.f.g")).toBe(false);
+    expect(isFieldPathShaped("fm.$where")).toBe(false);
     expect(isFieldPathShaped("")).toBe(false);
   });
 });
@@ -126,12 +117,9 @@ describe("buildClause", () => {
   });
 
   it("refuses combinations both engines refuse", () => {
-    // `text` against a non-string column.
     expect(buildClause(clause({ op: "text_contains", kind: "int", value: "3" }))).toBeUndefined();
-    // An ordering operator against a bool or null literal.
     expect(buildClause(clause({ op: "gt", kind: "bool", value: "true" }))).toBeUndefined();
     expect(buildClause(clause({ op: "lt", kind: "null", value: "" }))).toBeUndefined();
-    // An unparseable field path.
     expect(buildClause(clause({ field: "nope" }))).toBeUndefined();
   });
 
@@ -205,7 +193,6 @@ describe("the folder tree", () => {
     const shallow = { combine: "and" as const, clauses: [clause({ op: "child_of", value: "x" })] };
     expect(treeToWatch(shallow)).toEqual(["x"]);
     expect(treeToWatch({ ...shallow, clauses: [...shallow.clauses, clause({ id: "2", op: "child_of", value: "y", deep: true })] })).toBe("all");
-    // A deep row with no note yet asks for nothing.
     expect(treeToWatch({ combine: "and", clauses: [clause({ op: "child_of", value: "", deep: true })] })).toEqual([]);
   });
 

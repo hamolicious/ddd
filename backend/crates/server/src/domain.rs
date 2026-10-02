@@ -1,35 +1,8 @@
-//! Persisted domain types — the Mongo document shapes of SPEC §3.5.
-//!
-//! **FROZEN CONTRACT.** Every builder area reads and writes these; nobody
-//! changes a field name, a type, or a `serde` attribute without re-negotiating
-//! with every other area. Add new *optional* fields only.
-//!
-//! Conventions:
-//! - `_id` is a ULID string (client-mintable offline, SPEC §3.5).
-//! - Stored timestamps are `bson::DateTime` (millisecond precision, UTC); every
-//!   *view* uses [`Timestamp`], which serializes as an RFC 3339 string. Extended
-//!   JSON never reaches a client (PROTOCOL.md §2.1).
-//! - `*_by` holds a user id (or a plugin id prefixed `plugin:`) and means "last
-//!   applier the server saw", not authorship.
-
 use bson::{Binary, DateTime as BsonDateTime, Document as BsonDocument};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Error as _};
 
-/// A ULID, stored as its 26-character canonical string.
 pub type Id = String;
 
-// ---------------------------------------------------------------------------
-// Wire-format primitives
-// ---------------------------------------------------------------------------
-
-/// A timestamp **on the wire**: serialized as an RFC 3339 / ISO-8601 UTC string
-/// with millisecond precision, deserialized from the same.
-///
-/// Stored rows use `bson::DateTime`; every *view* uses this. The distinction is
-/// not cosmetic: `bson::DateTime` serializes through `serde_json` as MongoDB
-/// extended JSON (`{"$date": …}`), which no client should ever have to parse and
-/// which the sync protocol forbids outright (PROTOCOL.md §2.1). Converting at the
-/// view boundary makes that impossible to get wrong by accident.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Timestamp(BsonDateTime);
 
@@ -50,8 +23,6 @@ impl Timestamp {
         self.0
     }
 
-    /// The wire form. Falls back to the epoch for a value outside RFC 3339's
-    /// range (a corrupt row must not fail a whole response).
     pub fn to_rfc3339(self) -> String {
         self.0
             .try_to_rfc3339_string()
@@ -86,12 +57,6 @@ impl<'de> Deserialize<'de> for Timestamp {
     }
 }
 
-/// Convert a materialized `fm`/`plugins` sub-document to plain JSON.
-///
-/// These only ever hold the shared-core value model (SPEC §3.4) — the write path
-/// builds them with `core::value::map_to_bson` — but routing them through the
-/// core's own bridge means a stray `DateTime` or `Binary` that somehow reached a
-/// row degrades to a string instead of leaking extended JSON to clients.
 pub fn materialized_to_json(document: &BsonDocument) -> serde_json::Value {
     let mut object = serde_json::Map::with_capacity(document.len());
     for (key, value) in ddd_core::value::map_from_bson(document) {
@@ -100,18 +65,14 @@ pub fn materialized_to_json(document: &BsonDocument) -> serde_json::Value {
     serde_json::Value::Object(object)
 }
 
-/// Mint a new ULID string.
 pub fn new_id() -> Id {
     ulid::Ulid::generate().to_string()
 }
 
-/// `true` iff `id` is a syntactically valid ULID (clients mint their own).
 pub fn is_valid_id(id: &str) -> bool {
     ulid::Ulid::from_string(id).is_ok()
 }
 
-/// Who performed a write. Serialized as a string: `"<user-ulid>"`,
-/// `"plugin:<plugin-id>"`, `"system"`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Actor {
     User(Id),
@@ -120,7 +81,6 @@ pub enum Actor {
 }
 
 impl Actor {
-    /// The stored `*_by` string.
     pub fn as_stored(&self) -> String {
         match self {
             Actor::User(id) => id.clone(),
@@ -129,7 +89,6 @@ impl Actor {
         }
     }
 
-    /// The user id, when this actor is a user.
     pub fn user_id(&self) -> Option<&str> {
         match self {
             Actor::User(id) => Some(id),
@@ -138,63 +97,34 @@ impl Actor {
     }
 }
 
-// ---------------------------------------------------------------------------
-// documents
-// ---------------------------------------------------------------------------
-
-/// Collection `documents`. The CRDT state is authoritative; every other field is
-/// derived and may trail it (see `materialized_version`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Document {
     #[serde(rename = "_id")]
     pub id: Id,
-    /// Encoded Yjs state (update encoding v1, compacted).
     pub crdt: Binary,
-    /// State-vector cache, derivable from `crdt`, written in the same write.
     pub state_vector: Binary,
-    /// Materialized full text (all three regions).
     pub content: String,
-    /// Materialized title (indexed).
     pub title: String,
-    /// Materialized frontmatter.
     pub fm: BsonDocument,
-    /// Materialized `%%%` sections: plugin id → keys.
     pub plugins: BsonDocument,
-    /// State-vector hash of the CRDT state the materialized fields came from.
     pub materialized_version: String,
-    /// Any frontmatter line was dropped at parse.
     pub fm_parse_error: bool,
     pub created_at: BsonDateTime,
     pub created_by: Option<String>,
     pub updated_at: BsonDateTime,
     pub updated_by: Option<String>,
-    /// Tombstone (Trash). `Some` ⇒ the document is in Trash.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub deleted_at: Option<BsonDateTime>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub deleted_by: Option<String>,
-    /// Workspace-global change-feed sequence number (SPEC §4.1, PROTOCOL.md §2.2).
-    /// Rewritten on every materialization, tombstone and restore. `None` only on
-    /// rows written before the feed existed (migration backfills them).
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub feed_seq: Option<i64>,
 }
 
-/// A document row **without the CRDT blobs** — the shape every list, feed and
-/// bootstrap query reads out of Mongo.
-///
-/// It exists because `Document` is a promise the list path cannot keep: `crdt`
-/// and `state_vector` are 2–10× the plaintext and compacted only above 4 MiB
-/// (SPEC §3.5), so no query that returns many rows may read them. Those queries
-/// project them away, which used to mean handing back `Document` values with
-/// empty placeholder blobs — a type that lied. This one does not: if you hold a
-/// `DocumentRow`, there are no CRDT bytes to be had, and `DocStore::get`/
-/// `crdt_state` is where you go for them.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentRow {
     #[serde(rename = "_id")]
     pub id: Id,
-    /// Materialized full text. Empty when the query asked for metadata only.
     #[serde(default)]
     pub content: String,
     pub title: String,
@@ -218,8 +148,6 @@ pub struct DocumentRow {
 }
 
 impl DocumentRow {
-    /// The Mongo projection that yields exactly these fields. One definition, so
-    /// a new field cannot be added to the struct and forgotten in three queries.
     pub fn projection(include_content: bool) -> BsonDocument {
         let mut projection = bson::doc! {
             "title": 1, "fm": 1, "plugins": 1, "materialized_version": 1,
@@ -259,12 +187,6 @@ impl From<Document> for DocumentRow {
     }
 }
 
-/// The materialized projection of a document **as it goes out on the wire** —
-/// what `GET /api/documents` and `GET /api/documents/:id` return, and the same
-/// field set the change feed replicates (SPEC §4.1, PROTOCOL.md §2.1).
-///
-/// Timestamps are RFC 3339 strings and `fm`/`plugins` are plain JSON: no
-/// extended JSON reaches a client, ever.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentView {
     pub id: Id,
@@ -278,8 +200,6 @@ pub struct DocumentView {
     pub created_by: Option<String>,
     pub updated_at: Timestamp,
     pub updated_by: Option<String>,
-    /// `true` ⇒ in Trash (SPEC §3.5). Explicit so clients need no null-checking
-    /// convention to answer the question they actually ask.
     pub deleted: bool,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub deleted_at: Option<Timestamp>,
@@ -314,49 +234,32 @@ impl From<Document> for DocumentView {
     }
 }
 
-/// Collection `document_updates` — incremental Yjs updates, trimmed per document
-/// (never a capped collection; correctness never depends on retention).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentUpdate {
     #[serde(rename = "_id")]
     pub id: Id,
     pub document_id: Id,
-    /// Monotonic per-document sequence number.
     pub seq: i64,
-    /// Yjs update, encoding v1.
     pub update: Binary,
     pub created_at: BsonDateTime,
     pub created_by: Option<String>,
 }
 
-/// Collection `document_changes` — what each text-changing write did to the text, as
-/// hunks against the text before it (`changes.rs`). Kept `CHANGE_RETENTION_DAYS`; the
-/// history the Changes view reads and a revert rewinds through.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentChange {
     #[serde(rename = "_id")]
     pub id: Id,
     pub document_id: Id,
-    /// The update-log `seq` of the last write this change covers.
     pub seq: i64,
-    /// The first, when live typing was folded into one record (`dev-docs/resolved/HISTORY.md`);
-    /// absent for a single write.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub first_seq: Option<i64>,
-    /// When the first write was made.
     pub created_at: BsonDateTime,
-    /// When the last folded-in write was made; absent for a single write.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ended_at: Option<BsonDateTime>,
     pub created_by: Option<String>,
-    /// Against the text before `first_seq`.
     pub hunks: Vec<StoredHunk>,
-    /// Set on the change a revert wrote: the group it undid.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reverts: Option<RevertNote>,
-    /// Made while the author was offline, and carried over on reconnect.
-    /// `created_at` is then when it was made (the client's claim, kept in order);
-    /// `received_at` is when the server got it.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub offline: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -365,7 +268,6 @@ pub struct DocumentChange {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoredHunk {
-    /// Byte offset into the text before the change.
     pub pos: i64,
     pub removed: String,
     pub inserted: String,
@@ -378,7 +280,6 @@ pub struct RevertNote {
 }
 
 impl DocumentChange {
-    /// The pure form `changes.rs` works on.
     pub fn to_change(&self) -> crate::changes::Change {
         crate::changes::Change {
             first_seq: self.first_seq.unwrap_or(self.seq),
@@ -398,10 +299,6 @@ impl DocumentChange {
     }
 }
 
-/// Collection `document_history` — the **squashed tier**: one group of changes (one
-/// author, no long pause) older than `RAW_CHANGE_DAYS`, as its net hunks against the text
-/// before `from_seq`. The raw changes it replaces are deleted (`dev-docs/resolved/HISTORY.md`). Kept
-/// forever.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentHistory {
     #[serde(rename = "_id")]
@@ -412,18 +309,15 @@ pub struct DocumentHistory {
     pub started_at: BsonDateTime,
     pub ended_at: BsonDateTime,
     pub created_by: Option<String>,
-    /// Writes the group was made of.
     pub changes: i64,
     pub hunks: Vec<StoredHunk>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reverts: Option<RevertNote>,
-    /// Some of the writes were made offline.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub offline: bool,
 }
 
 impl DocumentHistory {
-    /// As one change ending at `to_seq`: what replay, diffs and revert work on.
     pub fn to_change(&self) -> crate::changes::Change {
         crate::changes::Change {
             first_seq: self.from_seq,
@@ -443,84 +337,56 @@ impl DocumentHistory {
     }
 }
 
-/// Collection `document_checkpoints` — the full text at a `seq`, written every
-/// `CHECKPOINT_EVERY_CHANGES` changes and when a document is created. Any point in time
-/// is rebuilt from the nearest one (`dev-docs/resolved/HISTORY.md`). Kept forever.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentCheckpoint {
     #[serde(rename = "_id")]
     pub id: Id,
     pub document_id: Id,
-    /// The text after every update up to and including this one.
     pub seq: i64,
     pub text: String,
     pub created_at: BsonDateTime,
 }
 
-/// Collection `document_snapshots` — per-document retention (last 20 + one per
-/// day for 30 days).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentSnapshot {
     #[serde(rename = "_id")]
     pub id: Id,
     pub document_id: Id,
-    /// Full encoded CRDT state at snapshot time.
     pub crdt: Binary,
-    /// Materialized text at snapshot time (so restore previews need no yrs).
     pub content: String,
     pub title: String,
     pub created_at: BsonDateTime,
     pub created_by: Option<String>,
-    /// Why it was taken: `quiescence` | `daily` | `manual` | `pre_restore`.
     pub reason: String,
 }
 
-/// Collection `deleted_ids` — the permanent graveyard. Consulted by every
-/// sync/create path so a long-offline client can never resurrect a document.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraveyardEntry {
     #[serde(rename = "_id")]
     pub id: Id,
     pub deleted_at: BsonDateTime,
     pub deleted_by: Option<String>,
-    /// Change-feed sequence number of the purge. Written once, never rewritten —
-    /// which is what lets the feed serve "everything since X" for *any* X without
-    /// an append-only feed collection (PROTOCOL.md §2.2). `None` on graveyard rows
-    /// written before the feed existed.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub feed_seq: Option<i64>,
 }
 
-// ---------------------------------------------------------------------------
-// users, sessions, invites
-// ---------------------------------------------------------------------------
-
-/// Collection `users`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     #[serde(rename = "_id")]
     pub id: Id,
-    /// Lowercased, trimmed. Unique index.
     pub email: String,
-    /// Display name; defaults to the email local part.
     pub name: String,
-    /// argon2id PHC string (SPEC §5.2).
     pub password_hash: String,
     pub is_admin: bool,
-    /// `false` after an admin deletes the user; attribution ids stay rendered as
-    /// "deleted user" (SPEC §5.1).
     pub is_active: bool,
     pub created_at: BsonDateTime,
     pub updated_at: BsonDateTime,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub last_login_at: Option<BsonDateTime>,
-    /// Invite this user registered with, when not the first user.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub invited_by: Option<Id>,
 }
 
-/// The user shape returned by `GET /api/auth/me` and the admin user list — never
-/// carries the password hash.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserView {
     pub id: Id,
@@ -547,20 +413,15 @@ impl From<User> for UserView {
     }
 }
 
-/// Collection `sessions`. Rolling: 30-day idle, 180-day absolute (SPEC §5.2).
-/// `_id` is the SHA-256 hex of the session token — the raw token is never stored.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Session {
     #[serde(rename = "_id")]
     pub id: String,
     pub user_id: Id,
-    /// `cookie` (browser) or `bearer` (shell).
     pub kind: SessionKind,
     pub created_at: BsonDateTime,
     pub last_seen_at: BsonDateTime,
-    /// Idle expiry; refreshed on use.
     pub expires_at: BsonDateTime,
-    /// Absolute expiry; never extended.
     pub absolute_expires_at: BsonDateTime,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub user_agent: Option<String>,
@@ -575,13 +436,10 @@ pub enum SessionKind {
     Bearer,
 }
 
-/// Collection `invites` — 7-day expiry, single-use, non-admin only (SPEC §5.1).
-/// `_id` is the SHA-256 hex of the invite token.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Invite {
     #[serde(rename = "_id")]
     pub id: String,
-    /// Optional pre-filled email; when set, registration must match it.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub email: Option<String>,
     pub created_at: BsonDateTime,
@@ -595,8 +453,6 @@ pub struct Invite {
     pub revoked_at: Option<BsonDateTime>,
 }
 
-/// Collection `password_resets` — one-time admin-issued reset links and the
-/// `ddd reset-password` CLI path (SPEC §5.1). `_id` is the token hash.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PasswordReset {
     #[serde(rename = "_id")]
@@ -609,37 +465,25 @@ pub struct PasswordReset {
     pub used_at: Option<BsonDateTime>,
 }
 
-/// Collection `login_attempts` — per-IP and per-account backoff input (SPEC §5.2).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoginAttempt {
     #[serde(rename = "_id")]
     pub id: Id,
-    /// Lowercased email as submitted (may not exist as a user).
     pub email: String,
     pub ip: Option<String>,
     pub succeeded: bool,
     pub created_at: BsonDateTime,
 }
 
-// ---------------------------------------------------------------------------
-// attachments
-// ---------------------------------------------------------------------------
-
-/// Collection `attachments` (SPEC §3.6). Bytes live in GridFS bucket
-/// [`crate::db::GRIDFS_BUCKET`], keyed by `gridfs_id`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Attachment {
     #[serde(rename = "_id")]
     pub id: Id,
     pub name: String,
-    /// Sniffed MIME type, not the client's claim.
     pub mime: String,
     pub size: u64,
-    /// Lowercase hex SHA-256 of the bytes.
     pub sha256: String,
-    /// Bumped on every replace; the `If-Match` value.
     pub revision: u32,
-    /// GridFS file id for the current revision.
     pub gridfs_id: bson::Bson,
     pub created_at: BsonDateTime,
     pub created_by: Option<String>,
@@ -651,7 +495,6 @@ pub struct Attachment {
     pub deleted_by: Option<String>,
 }
 
-/// Attachment metadata as returned by the API (`GET /api/attachments/:id/meta`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AttachmentView {
     pub id: Id,
@@ -683,31 +526,18 @@ impl From<Attachment> for AttachmentView {
     }
 }
 
-/// Collection `uploads` — a chunked upload on its way in (SPEC §3.6,
-/// `routes/uploads.rs`). The bytes received so far are already GridFS chunks of
-/// `gridfs_id`; the GridFS file record and the [`Attachment`] row are written when
-/// it completes. The row outlives completion (with `attachment_id` set) so a client
-/// that lost the answer can ask again, and is swept `expires_at` after its last use.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UploadSession {
     #[serde(rename = "_id")]
     pub id: Id,
-    /// Only this user may add to, finish, or cancel it.
     pub user_id: Id,
-    /// Sanitized filename.
     pub name: String,
-    /// Declared total size; the upload is complete when `offset` reaches it.
     pub size: u64,
-    /// Bytes received and stored so far.
     pub offset: u64,
-    /// The GridFS file id the chunks belong to.
     pub gridfs_id: bson::Bson,
-    /// The first bytes, kept for MIME sniffing at completion.
     pub head: Binary,
-    /// Create a wrapper document on completion. Clients file it themselves.
     #[serde(default)]
     pub wrapper: bool,
-    /// Set once completed.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub attachment_id: Option<Id>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -716,25 +546,14 @@ pub struct UploadSession {
     pub expires_at: BsonDateTime,
 }
 
-// ---------------------------------------------------------------------------
-// audit log, meta
-// ---------------------------------------------------------------------------
-
-/// Collection `audit_log` — destructive and administrative actions (SPEC §5.4).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditEntry {
     #[serde(rename = "_id")]
     pub id: Id,
-    /// Dotted action name, e.g. `document.delete`, `user.demote`,
-    /// `invite.revoke`, `attachment.delete`, `snapshot.restore`.
     pub action: String,
-    /// `actor.as_stored()`; `None` for unauthenticated paths.
     pub actor: Option<String>,
-    /// Type of the thing acted on: `document` | `user` | `invite` |
-    /// `attachment` | `session` | `plugin`.
     pub target_kind: String,
     pub target_id: Option<String>,
-    /// Free-form, action-specific detail. Never contains secrets.
     #[serde(default)]
     pub detail: BsonDocument,
     pub ip: Option<String>,
@@ -742,7 +561,6 @@ pub struct AuditEntry {
 }
 
 impl AuditEntry {
-    /// Build an entry with `id`/`created_at` filled in.
     pub fn new(
         action: impl Into<String>,
         actor: Option<&Actor>,
@@ -772,14 +590,12 @@ impl AuditEntry {
     }
 }
 
-/// Collection `meta`, single document `_id: "schema"` (SPEC §3.5 migrations).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SchemaMeta {
     #[serde(rename = "_id")]
     pub id: String,
     pub schema_version: i32,
     pub updated_at: BsonDateTime,
-    /// Set while a migration holds the advisory lock.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub migration_lock: Option<MigrationLock>,
 }

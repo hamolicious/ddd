@@ -1,17 +1,3 @@
-/**
- * The account section: who is signed in, changing the password, and signing out.
- *
- * **Sign-out is the one destructive local path** (SPEC §5.3): it clears the projection,
- * the hydrated replicas and the search index, which is what deletes the only copy of an
- * edit that never reached the server. So the button reads `kernel.sync.state.pending`
- * live, refuses while it is non-zero, and offers discarding only as a second, explicitly
- * labelled action. The kernel enforces the same rule — this UI exists so the user finds
- * out *before* clicking, not from an error afterwards.
- *
- * Changing the password signs every other device out (the server revokes the other
- * sessions), so the form says so before it is submitted rather than after.
- */
-
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 
 import type { Kernel } from "@kernel";
@@ -66,8 +52,6 @@ function PasswordForm({ kernel }: { readonly kernel: Kernel }): ReactNode {
       setConfirmation("");
       setDone(true);
     } catch (cause) {
-      // A wrong current password is a 422 here, deliberately not a 401 — so it must
-      // read as "that password is wrong", never as "you have been signed out".
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setBusy(false);
@@ -183,7 +167,6 @@ function SignOut({ kernel }: { readonly kernel: Kernel }): ReactNode {
   );
 }
 
-/** Unsynced local edits, live. `kernel.sync.subscribe` fires immediately. */
 function usePending(kernel: Kernel): number {
   const [pending, setPending] = useState(() => kernel.sync.state.pending);
   useEffect(() => kernel.sync.subscribe((state) => setPending(state.pending)), [kernel]);

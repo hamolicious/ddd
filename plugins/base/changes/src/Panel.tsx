@@ -1,17 +1,3 @@
-/**
- * The altbar panel: one document's history, newest first. Change groups (one author, no
- * long pause) and snapshots in a single timeline, each row with View and, for a change,
- * Revert, for a snapshot, Restore. Older changes page in with "Show older". Snapshots are
- * the server's: one is taken before every restore, none by hand.
- *
- * **It is live.** The history is REST, but the document's row is in the local projection
- * the sync socket keeps current (`documents.subscribe`, SPEC §4.1): every write to the
- * note changes its row, and the panel reloads its history then — a moment later, so a
- * burst of typing is one reload. While sync is not connected (and so the row cannot move),
- * it polls instead, slowly. Nothing to refresh by hand. A narrow column, so each entry is a short stack of lines, not a
- * table row.
- */
-
 import { OfflineCopyNote } from "../../_shared/offline-copy.js";
 import { changesOfflineCopy } from "./offline.js";
 import { useCallback, useEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
@@ -46,12 +32,9 @@ const BUTTON =
   "chg:tap chg:inline-flex chg:shrink-0 chg:cursor-pointer chg:items-center chg:justify-center chg:rounded chg:border chg:border-border chg:bg-bg chg:p-0 chg:text-text chg:hover:border-border-strong chg:disabled:cursor-default chg:disabled:opacity-55";
 const DANGER = `${BUTTON} chg:border-danger! chg:text-danger!`;
 
-/** How long after the note's row moves the history is asked for again: a burst of typing is one reload. */
 const RELOAD_DELAY_MS = 400;
-/** How often the history is asked for while the socket is down. */
 const POLL_MS = 30_000;
 
-/** What the main view is showing, marked in the list. */
 export type Viewing =
   | { readonly kind: "snapshot"; readonly id: string }
   | { readonly kind: "change"; readonly from: number; readonly to: number };
@@ -72,12 +55,9 @@ export function ChangesPanel({
 }: {
   readonly documentId: string;
   readonly viewing: Viewing | undefined;
-  /** Admins get "Forget this note's history". */
   readonly isAdmin: boolean;
   readonly client: SnapshotsClient;
-  /** The local projection: the note's row, live, says when its history has grown. */
   readonly documents: DocumentsApi;
-  /** Whether that row can move: polled instead while the socket is down. */
   readonly sync: SyncApi;
   readonly confirm: (request: ConfirmRequest) => Promise<boolean>;
   readonly navigate: (path: string) => void;
@@ -109,14 +89,9 @@ export function ChangesPanel({
     };
   }, [client, documentId]);
 
-  // Again whenever the main view moves: a revert or restore from its own page lands back
-  // on the document, and the list has a new row.
   const viewingKey = viewing === undefined ? "" : viewing.kind === "snapshot" ? viewing.id : `${viewing.from}-${viewing.to}`;
   useEffect(load, [load, viewingKey]);
 
-  // Live: the note's row in the projection changes with every write to it (the sync
-  // socket carries them), and the history is reloaded a moment after. The first result
-  // is the row as it is, not news.
   const latest = useRef(load);
   latest.current = load;
   useEffect(() => {
@@ -151,7 +126,6 @@ export function ChangesPanel({
     };
   }, [documents, documentId]);
 
-  // Not connected: the row cannot move, so the history is asked for now and then instead.
   useEffect(() => {
     let timer: ReturnType<typeof setInterval> | undefined;
     const stop = (): void => {
@@ -195,8 +169,6 @@ export function ChangesPanel({
       .finally(() => setBusy(undefined));
   };
 
-  // Snapshots older than the changes loaded so far wait for "Show older", so the
-  // timeline never jumps when a page arrives above them.
   const oldestLoaded = groups?.at(-1);
   const floor = nextBefore !== undefined && oldestLoaded ? Date.parse(oldestLoaded.started_at) : -Infinity;
   const entries: Entry[] = [

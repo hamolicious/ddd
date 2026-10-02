@@ -1,18 +1,6 @@
-/**
- * `QueryEngine`: one-shot queries, live subscriptions, and search.
- *
- * Filter evaluation runs through the **real Wasm core** here — a fake evaluator
- * would let a TypeScript reimplementation of the DSL sneak in through the back
- * door, which is the one thing web/CONTRACTS.md forbids this area. The store is
- * in-memory (sanctioned by `store/projection-store.ts`); IndexedDB is the other
- * area's business and needs a browser.
- */
-
 import { beforeAll, describe, expect, it } from "vitest";
 
 import type { CoreMap, FeedRow } from "../protocol.js";
-// The in-memory `ProjectionStore` the store area maintains for exactly this
-// purpose. Using theirs rather than a second copy means one fake to keep honest.
 import { MemoryProjectionStore } from "../store/testing.js";
 import type { CoreBindings, FilterJson } from "../wasm/index.js";
 import { coreArtifactExists, loadCoreForNode } from "../wasm/node-core.js";
@@ -54,7 +42,6 @@ function feedRow(
   };
 }
 
-/** Apply rows the way `FeedClient` does: rows plus the watermark, in one call. */
 async function apply(store: MemoryProjectionStore, rows: readonly FeedRow[]): Promise<void> {
   const safeSeq = Math.max(0, ...rows.map((row) => row.seq));
   await store.applyRows(rows, {
@@ -141,7 +128,6 @@ describe.skipIf(!available)("QueryEngine", () => {
     await flush();
     expect(emissions).toBe(0);
 
-    // …but a row already in the result still counts as touched when it changes.
     await apply(store, [feedRow("a", { title: "renamed", fm: { status: "open" } })]);
     await flush();
     expect(emissions).toBe(1);
@@ -180,7 +166,6 @@ describe.skipIf(!available)("QueryEngine", () => {
     expect(emissions).toBe(0);
   });
 
-  /** A folder note listing its children, as the `folders` plugin writes it. */
   const folder = (id: string, children: readonly string[]) =>
     feedRow(id, { plugins: { folders: { children: [...children] } } });
 
@@ -196,7 +181,6 @@ describe.skipIf(!available)("QueryEngine", () => {
     expect(await ids({ child_of: { of: "root" } } as FilterJson)).toEqual(["a", "sub"]);
     expect(await ids({ parent_of: { of: "b" } } as FilterJson)).toEqual(["sub"]);
 
-    // `c` itself does not change: only the folder that now lists it does.
     const live = await engine.subscribe({ filter: deep, sort: [{ field: "id", direction: "asc" }] });
     const seen: string[][] = [];
     live.onChange((result) => seen.push(result.rows.map((row) => row.id)));
@@ -285,7 +269,6 @@ describe.skipIf(!available)("QueryEngine", () => {
     expect((await index.stats()).documents).toBe(2);
     expect((await engine.searchDocuments("bravo")).map((hit) => hit.id)).toEqual(["b"]);
 
-    // A purge drops the row from the index too.
     await apply(store, [feedRow("b", { deleted: true, purged: true })]);
     await flush();
     expect(await engine.searchDocuments("bravo")).toEqual([]);
@@ -299,14 +282,13 @@ describe.skipIf(!available)("QueryEngine", () => {
 
     const first = new QueryEngine(store, core, new WasmEngineIndex({ core, persistence }));
     await first.warmUp();
-    await first.close(); // flushes the debounced persist
+    await first.close();
 
     const entry = await persistence.load();
     expect(entry?.version).toBe(SEARCH_INDEX_VERSION);
     expect(entry?.documents).toBe(1);
     expect(entry?.safeSeq).toBeGreaterThan(0);
 
-    // Second boot: open() deserializes, and the catch-up pass finds nothing to do.
     const reopened = new WasmEngineIndex({ core, persistence });
     await reopened.open();
     const stats = await reopened.stats();
@@ -334,7 +316,6 @@ describe.skipIf(!available)("QueryEngine", () => {
     const engine = new QueryEngine(store, core, index);
     await engine.warmUp();
 
-    // The stale entry is discarded (watermark back to 0) and the store re-indexed.
     expect((await index.stats()).documents).toBe(1);
     expect((await engine.searchDocuments("old")).map((hit) => hit.id)).toEqual(["a"]);
     await engine.close();

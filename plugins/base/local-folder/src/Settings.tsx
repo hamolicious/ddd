@@ -1,7 +1,3 @@
-/**
- * Settings → Local folder: which folder, how it is going, and the buttons to change it.
- */
-
 import { useEffect, useState } from "react";
 import type { ReactElement } from "react";
 

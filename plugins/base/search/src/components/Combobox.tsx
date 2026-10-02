@@ -1,13 +1,3 @@
-/**
- * A text box with a list under it: the part every picker here shares (`NoteSelect`,
- * `FmKeySelect`, `FmValueSelect`). The list is virtual (`_shared/virtual-list.ts`), so a
- * long one costs a screenful. Arrow keys move through it, Enter picks, Escape closes it.
- *
- * What the text means is the picker's: a search for a note, or the value itself. So is
- * what is listed: `useOptions` is a hook, called only while the list is open, so a picker
- * holds its live query or its index reads only then.
- */
-
 import { useEffect, useId, useState } from "react";
 import type { ReactElement, ReactNode } from "react";
 
@@ -15,36 +5,25 @@ import { useVirtualList } from "../../../_shared/virtual-list.js";
 
 export interface ComboboxOptions<T> {
   readonly options: readonly T[];
-  /** Still loading: said instead of "nothing matches". */
   readonly loading?: boolean;
 }
 
 export interface ComboboxProps<T> {
-  /** The accessible name of the box and the list. */
   readonly label: string;
   readonly placeholder?: string;
   readonly autoFocus?: boolean;
-  /** What the box shows. */
   readonly text: string;
   readonly onText: (text: string) => void;
   readonly open: boolean;
   readonly onOpenChange: (open: boolean) => void;
-  /** What to list; a hook, called while the list is open. Memoize `options`: a new array each render would never settle. */
   readonly useOptions: () => ComboboxOptions<T>;
   readonly keyOf: (option: T) => string;
   readonly renderOption: (option: T) => ReactNode;
   readonly onPick: (option: T) => void;
-  /** When nothing matches; "Nothing matches." by default. */
   readonly empty?: string;
-  /**
-   * The list always open, under the box in the page's flow rather than over what follows:
-   * for a sheet or a panel that is itself the picker. Escape is left to the host (to close
-   * the sheet).
-   */
   readonly inline?: boolean;
 }
 
-/** A row, before it is measured: the tap target. */
 const ROW_ESTIMATE = 44;
 
 export function Combobox<T>({
@@ -217,7 +196,6 @@ function OptionList<T>({
                 role="option"
                 aria-selected={at === active}
                 className="search:tap-h search:flex search:min-w-0 search:cursor-pointer search:items-center search:gap-2 search:rounded search:px-2 search:aria-selected:bg-accent-subtle"
-                // Before the box's blur closes the list.
                 onMouseDown={(event) => event.preventDefault()}
                 onMouseEnter={() => setActive(at)}
                 onClick={() => pick(option)}

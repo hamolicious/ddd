@@ -1,8 +1,3 @@
-/**
- * A modal's validation and `confirm`'s shape: what the buttons are, which one Enter
- * presses, and what has to be typed before a confirm goes through.
- */
-
 import { describe, expect, it } from "vitest";
 
 import type { ModalField } from "./api.js";

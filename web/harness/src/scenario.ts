@@ -1,14 +1,3 @@
-/**
- * Shared harness plumbing: simulated clients, randomized operation scripts, and
- * the two assertions that matter (SPEC §9 M2).
- *
- * The harness runs in Node against a real server + Mongo (`mise run dev`), driving
- * the *real* kernel code over a real WebSocket — a fake transport would prove
- * nothing about convergence.
- *
- * **FROZEN INTERFACE.**
- */
-
 import type * as Y from "yjs";
 
 import { deepEqual, harnessCore, ulidForIndex } from "./core.js";
@@ -17,20 +6,13 @@ import { authenticate, RestClient, type DocumentView } from "./rest.js";
 import { HarnessClient, sleep } from "./sim-client.js";
 
 export interface HarnessConfig {
-  /** Base URL of the server under test. */
   readonly baseUrl: string;
-  /** Credentials: the harness registers/logs in and uses bearer tokens. */
   readonly email: string;
   readonly password: string;
-  /** Number of simulated clients. */
   readonly clients: number;
-  /** Documents in the workspace (created if missing). */
   readonly documents: number;
-  /** Operations each client performs. */
   readonly operations: number;
-  /** Deterministic seed — a failing run must be replayable. */
   readonly seed: number;
-  /** Probability per operation of a partition (socket drop) or reconnect. */
   readonly chaos: {
     readonly dropSocket: number;
     readonly pauseMs: [number, number];
@@ -49,18 +31,14 @@ export const DEFAULT_CONFIG: HarnessConfig = {
   chaos: { dropSocket: 0.05, pauseMs: [10, 400], concurrentEditors: 3 },
 };
 
-/** A simulated client: a bearer session, a kernel `SyncClient`, and its replicas. */
 export interface SimulatedClient {
   readonly name: string;
   readonly token: string;
   connect(): Promise<void>;
   disconnect(code?: number): void;
   open(id: string): Promise<Y.Text>;
-  /** Apply one randomized text operation to an open document. */
   edit(id: string, rng: () => number): Promise<void>;
-  /** Wait until this client's replica of `id` matches `stateVector`. */
   awaitConvergence(id: string, timeoutMs: number): Promise<void>;
-  /** Text of a local replica, for the equality assertions. */
   textOf(id: string): string | undefined;
   close(): Promise<void>;
 }
@@ -70,17 +48,10 @@ export interface ConvergenceReport {
   readonly clients: number;
   readonly operations: number;
   readonly durationMs: number;
-  /** Documents where replicas disagreed — must be empty. */
   readonly divergent: readonly string[];
-  /**
-   * Documents where the server's materialized `title`/`fm`/`plugins` disagreed
-   * with the Wasm core's parse of the converged text — must be empty
-   * (SPEC §9 M2: "convergence + materialization equality").
-   */
   readonly materializationMismatches: readonly string[];
 }
 
-/** Deterministic PRNG (mulberry32) — same seed, same run. */
 export function rng(seed: number): () => number {
   let state = seed >>> 0;
   return () => {
@@ -92,7 +63,6 @@ export function rng(seed: number): () => number {
   };
 }
 
-/** Parse `--clients=4 --seed=7` style flags over {@link DEFAULT_CONFIG}. */
 export function parseArgs(argv: readonly string[] = process.argv.slice(2)): HarnessConfig {
   const config: Record<string, unknown> = { ...DEFAULT_CONFIG };
   for (const arg of argv) {
@@ -101,7 +71,6 @@ export function parseArgs(argv: readonly string[] = process.argv.slice(2)): Harn
     const [, key, value] = match as unknown as [string, string, string];
     const field = key.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase());
     const parsed = /^\d+(\.\d+)?$/.test(value) ? Number(value) : value;
-    // The chaos knobs live one level down; a top-level flag for them was silently ignored.
     if (field === "dropSocket" || field === "concurrentEditors") {
       config["chaos"] = { ...(config["chaos"] as HarnessConfig["chaos"]), [field]: parsed };
       continue;
@@ -111,36 +80,20 @@ export function parseArgs(argv: readonly string[] = process.argv.slice(2)): Harn
   return config as unknown as HarnessConfig;
 }
 
-/** Flags the frozen {@link HarnessConfig} has no field for (`--web=`, `--settle=`). */
 export function extraFlag(config: HarnessConfig, name: string): string | undefined {
   const value = (config as unknown as Record<string, unknown>)[name];
   return value === undefined ? undefined : String(value);
 }
 
-/** How long a document is given to settle before it counts as divergent. */
 export function settleTimeoutMs(config: HarnessConfig): number {
   const flag = extraFlag(config, "settleMs");
   return flag ? Number(flag) : 45_000;
 }
 
-/**
- * A short label distinguishing this run's markers from a previous run's on the same
- * (deterministically-named) documents. `--tag=` pins it; otherwise it is the clock,
- * which is the one thing about a run that must *not* be reproducible here.
- */
 export function runTag(config: HarnessConfig): string {
   return extraFlag(config, "tag") ?? Date.now().toString(36).slice(-5);
 }
 
-/**
- * Build `config.clients` simulated clients against a live server.
- * (Registers the first user if the workspace is empty — SPEC §5.1.)
- *
- * Each client gets its **own session**: the socket cap is per session (8,
- * PROTOCOL.md §1.3) and N real devices are N sessions, so sharing one token
- * would test something else. A failed extra login degrades to sharing the first
- * token rather than aborting the run.
- */
 export async function spawnClients(config: HarnessConfig): Promise<SimulatedClient[]> {
   const primary = await authenticate(config.baseUrl, config.email, config.password);
   const rest = new RestClient(config.baseUrl, primary);
@@ -172,17 +125,6 @@ export async function spawnClients(config: HarnessConfig): Promise<SimulatedClie
   return clients;
 }
 
-/**
- * Create `count` seed documents with deterministic ids (idempotent: an existing
- * id answers 409 and is reused). Returns the ids in creation order.
- *
- * `reset: true` also rewrites an existing document back to its seed text. The
- * convergence harness wants that: ids are deterministic, so consecutive runs share
- * documents, and a second run would otherwise inherit the first run's text — which
- * quietly breaks any per-run invariant about what the text should contain. The
- * rewrite goes through `PUT`, so it is one CRDT transaction with a minimal diff
- * (SPEC §5.1), not a delete and re-create: the id is never graveyarded.
- */
 export async function ensureDocuments(
   rest: RestClient,
   count: number,
@@ -218,15 +160,12 @@ export async function ensureDocuments(
   return ids;
 }
 
-/** Per-document detail behind a report: printed, journalled, never swallowed. */
 export interface DocumentVerdict {
   readonly id: string;
   readonly converged: boolean;
   readonly materializationEqual: boolean;
   readonly textLength: number;
-  /** Markers written by some client that are missing from the converged text. */
   readonly lostMarkers: readonly string[];
-  /** Markers appearing more than once — a merge that duplicated an op. */
   readonly duplicatedMarkers: readonly string[];
   readonly notes: readonly string[];
 }
@@ -237,10 +176,8 @@ export interface ConvergenceDetail {
   readonly serverSemanticsVersion: number | undefined;
 }
 
-/** The detail of the most recent {@link assertConvergence} call. */
 export let lastDetail: ConvergenceDetail | undefined;
 
-/** Assert every replica of every document is identical, and matches the server. */
 export async function assertConvergence(
   clients: readonly SimulatedClient[],
   documentIds: readonly string[],
@@ -252,8 +189,6 @@ export async function assertConvergence(
   const harnessClients = clients.filter((client): client is HarnessClient => client instanceof HarnessClient);
   const rest = new RestClient(config.baseUrl, clients[0]?.token);
 
-  // Everyone online, everything flushed: an offline client cannot converge, and
-  // a partition left open is a harness bug rather than a server failure.
   for (const client of harnessClients) {
     if (!client.connected) await client.connect();
     await client.flushPendingCreates();
@@ -296,9 +231,6 @@ export async function assertConvergence(
       for (const [name, value] of texts) notes.push(`${name}: ${value.length} chars, sha ${cheapHash(value)}`);
     }
 
-    // No update loss across reconnects: every marker any client ever wrote must
-    // appear exactly once in the converged text (see `ops.ts` for why that is a
-    // sound test).
     const present = markersIn(text);
     const counts = new Map<string, number>();
     for (const marker of present) counts.set(marker, (counts.get(marker) ?? 0) + 1);
@@ -314,8 +246,6 @@ export async function assertConvergence(
       }
     }
 
-    // Materialization equality: the server's derived projection versus the shared
-    // core's parse of the very same text (SPEC §9 M2).
     let materializationEqual = true;
     try {
       const view = await flushedView(rest, id);
@@ -376,12 +306,6 @@ export async function assertConvergence(
   };
 }
 
-/**
- * `GET /api/documents/:id` forces a materialization flush (read-your-writes,
- * SPEC §3.5), but the room may still be mid-debounce for an update that arrived
- * microseconds ago; one retry on a stale `materialized_version` keeps the
- * assertion about materialization *correctness* rather than about timing.
- */
 async function flushedView(rest: RestClient, id: string): Promise<DocumentView> {
   const first = await rest.getDocument(id);
   await sleep(50);
@@ -389,21 +313,6 @@ async function flushedView(rest: RestClient, id: string): Promise<DocumentView> 
   return second.materialized_version === first.materialized_version ? first : second;
 }
 
-/**
- * Does the **change feed** actually carry changes?
- *
- * Convergence and materialization equality are both provable without the feed
- * (the CRDT flows over document frames, and REST reads the projection directly),
- * so a feed that only ever announces *creations* passes both assertions while
- * leaving every client's offline mirror permanently stale — SPEC §4.1 says the
- * projection replicates over the change feed and is what makes every document
- * readable and searchable offline. This check closes that hole: for each document,
- * every client's feed-delivered row must eventually match the server's materialized
- * content.
- *
- * Returns the ids whose rows never caught up within `timeoutMs` (shared across all
- * documents, so a broken feed costs one timeout, not one per document).
- */
 export async function assertFeedFreshness(
   clients: readonly SimulatedClient[],
   documentIds: readonly string[],
@@ -415,10 +324,6 @@ export async function assertFeedFreshness(
   );
   const rest = new RestClient(config.baseUrl, clients[0]?.token);
 
-  // Only documents this run actually edited, and only clients that hold a replica of
-  // them: those are the clients the feed owes a row to. A *missing* row counts as
-  // stale — "the feed never mentioned a document you are editing" is the same
-  // failure as "the row is out of date", and the more likely one.
   const expected = new Map<string, { content: string; holders: HarnessClient[] }>();
   for (const id of documentIds) {
     const holders = harnessClients.filter((client) => client.textOf(id) !== undefined);
@@ -441,7 +346,6 @@ export async function assertFeedFreshness(
   return { stale: [...stale], checked: expected.size };
 }
 
-/** A short, stable digest for log lines (never a correctness check). */
 export function cheapHash(value: string): string {
   let hash = 0x811c9dc5;
   for (let index = 0; index < value.length; index += 1) {

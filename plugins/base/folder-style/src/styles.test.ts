@@ -76,7 +76,6 @@ describe("contrast / textOn", () => {
   it("picks whichever of black and white has the higher ratio", () => {
     for (const dark of ["#000000", "#1971c2", "#6741d9", "#c2255c"]) expect(textOn(dark)).toBe("#ffffff");
     for (const light of ["#ffffff", "#f59f00", "#2f9e44", "#868e96"]) expect(textOn(light)).toBe("#000000");
-    // A close call is still a call: 4.65 against black, 4.51 against white.
     expect(textOn("#e03131")).toBe("#000000");
   });
 });
@@ -139,7 +138,6 @@ describe("rules", () => {
       JSON.stringify({ name: "Work", when: { combine: "and", clauses: [] } }),
       JSON.stringify({ when: { combine: "and", clauses: [] } }),
     ]);
-    // A name being typed, trailing space and all, is the stored one.
     expect(sameRules([{ ...rules[0]!, name: "Work " }], [rules[0]!])).toBe(true);
   });
 

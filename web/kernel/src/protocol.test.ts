@@ -143,8 +143,6 @@ describe("the transport", () => {
   it("closes 4400 on a frame it cannot decode", async () => {
     const errors: Error[] = [];
     const frames: number[] = [];
-    // `onBinary` has to be present: the transport decodes inside an optional call,
-    // so a client with no binary handler never validates framing at all.
     const { socket } = await open({
       onBinary: (frame) => frames.push(frame.type),
       onError: (error) => errors.push(error),
@@ -178,12 +176,10 @@ describe("the transport", () => {
 
     vi.advanceTimersByTime(1_000);
     expect(socket.controlOfType("ping")).toHaveLength(1);
-    // A pong stops the deadline...
     socket.onmessage?.({ data: JSON.stringify({ t: "pong", ts: 1, server_time: "x" }) });
     vi.advanceTimersByTime(1_000);
     expect(errors).toHaveLength(0);
 
-    // ...and its absence declares the socket dead (PROTOCOL.md §5).
     vi.advanceTimersByTime(600);
     expect(errors.map((error) => error.message)).toContain(
       "no pong within the deadline; socket is dead",
@@ -204,12 +200,12 @@ describe("backoff bookkeeping", () => {
 
     state.markOpen();
     now = 10_000;
-    state.markClosed(true); // open, but not for long enough
+    state.markClosed(true);
     expect(state.attempt).toBe(1);
 
     state.markOpen();
     now = 200_000;
-    state.markClosed(false); // long enough, but never caught up
+    state.markClosed(false);
     expect(state.attempt).toBe(2);
 
     state.markOpen();

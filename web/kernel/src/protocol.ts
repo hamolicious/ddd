@@ -1,43 +1,16 @@
-/**
- * The `/api/sync` wire protocol, in TypeScript.
- *
- * **This file mirrors `backend/PROTOCOL.md` and nothing else.** It is the one
- * place in the client that knows the wire format; every other kernel module
- * imports its types from here. When the protocol document changes, this file
- * changes in the same commit — and where the two disagree, the document wins.
- *
- * Only the framing helpers (`encodeFrame` / `decodeFrame`) and the type guards
- * are implemented here: they are pure, tiny, and both the demo and the
- * convergence harness need them to be exactly right.
- */
-
-/** Protocol version — the `protocol` field of `welcome`. */
 export const PROTOCOL_VERSION = 1;
 
-/** The subprotocol every client must offer. */
 export const SUBPROTOCOL = `ddd.v${PROTOCOL_VERSION}`;
 
-/**
- * Bearer-token subprotocol prefix (native shells and tests — PROTOCOL.md §1.1).
- * The raw session token is appended verbatim.
- */
 export const BEARER_SUBPROTOCOL_PREFIX = "ddd.bearer.";
 
-/** Hard frame ceiling, both directions (SPEC §4.3). */
 export const MAX_FRAME_BYTES = 4 * 1024 * 1024;
 
-/** Default catch-up page size requested by `feed.subscribe`. */
 export const DEFAULT_BATCH_MAX_ROWS = 200;
 
-/** Default page size for `GET /api/sync/bootstrap`. */
 export const DEFAULT_BOOTSTRAP_LIMIT = 200;
 
-/** Sequence number of "I have nothing". */
 export const FEED_SEQ_NONE = 0;
-
-// ---------------------------------------------------------------------------
-// Binary frames (PROTOCOL.md §3.1)
-// ---------------------------------------------------------------------------
 
 export const FrameType = {
   SyncStep1: 0x01,
@@ -45,24 +18,16 @@ export const FrameType = {
   Update: 0x03,
   Awareness: 0x04,
   AwarenessQuery: 0x05,
-  /**
-   * An edit made while offline, with when it was made: 8 bytes of big-endian epoch
-   * milliseconds, then a Yjs update (encoding v1). Client → server, sent on reconnect
-   * before the state-vector exchange (PROTOCOL.md §3.7).
-   */
   History: 0x06,
 } as const;
 
 export type FrameType = (typeof FrameType)[keyof typeof FrameType];
 
-/** Frame types at or above this are reserved for M4 plugin channels; ignore unknown ones. */
 export const RESERVED_FRAME_TYPE_FLOOR = 0x10;
 
 export interface BinaryFrame {
   readonly type: number;
-  /** Document id (ULID). */
   readonly docId: string;
-  /** Opaque y-protocols payload. Never inspected by the transport. */
   readonly payload: Uint8Array;
 }
 
@@ -76,7 +41,6 @@ export class ProtocolError extends Error {
   }
 }
 
-/** Encode one binary frame: `[type][idLen][id][payload]`. */
 export function encodeFrame(frame: BinaryFrame): Uint8Array {
   const id = new TextEncoder().encode(frame.docId);
   if (id.length === 0 || id.length > 255) {
@@ -96,7 +60,6 @@ export function encodeFrame(frame: BinaryFrame): Uint8Array {
   return out;
 }
 
-/** Decode one binary frame. Throws `ProtocolError` on anything malformed. */
 export function decodeFrame(data: ArrayBuffer | Uint8Array): BinaryFrame {
   const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
   if (bytes.length < 3) {
@@ -110,10 +73,6 @@ export function decodeFrame(data: ArrayBuffer | Uint8Array): BinaryFrame {
   const docId = new TextDecoder().decode(bytes.subarray(2, 2 + idLen));
   return { type, docId, payload: bytes.subarray(2 + idLen) };
 }
-
-// ---------------------------------------------------------------------------
-// Close codes (PROTOCOL.md §7)
-// ---------------------------------------------------------------------------
 
 export const CloseCode = {
   Normal: 1000,
@@ -130,21 +89,14 @@ export const CloseCode = {
 
 export type CloseCode = (typeof CloseCode)[keyof typeof CloseCode];
 
-/** Codes that must stop the reconnect loop until a user action (PROTOCOL.md §8). */
 export const TERMINAL_CLOSE_CODES: readonly number[] = [
   CloseCode.Unauthenticated,
   CloseCode.OriginRefused,
   CloseCode.UnsupportedVersion,
 ];
 
-// ---------------------------------------------------------------------------
-// Shared value shapes
-// ---------------------------------------------------------------------------
-
-/** RFC 3339 / ISO-8601 UTC with millisecond precision. Never extended JSON. */
 export type Iso8601 = string;
 
-/** A value from the shared-core value model (SPEC §3.4). */
 export type CoreValue =
   | null
   | boolean
@@ -155,11 +107,6 @@ export type CoreValue =
 
 export type CoreMap = { readonly [key: string]: CoreValue };
 
-/**
- * The replicated projection of one document (SPEC §4.1, PROTOCOL.md §2.1).
- * `content` is absent when the subscription asked for metadata only, and when
- * the row is a purge notice.
- */
 export interface ProjectionRow {
   readonly id: string;
   readonly title: string;
@@ -175,18 +122,12 @@ export interface ProjectionRow {
   readonly deleted: boolean;
   readonly deleted_at: Iso8601 | null;
   readonly deleted_by: string | null;
-  /** `true` ⇒ permanently purged: drop the local row and any local replica. */
   readonly purged: boolean;
 }
 
-/** A projection row as it travels in the feed: with its sequence number. */
 export interface FeedRow extends ProjectionRow {
   readonly seq: number;
 }
-
-// ---------------------------------------------------------------------------
-// Server → client control messages (PROTOCOL.md §9)
-// ---------------------------------------------------------------------------
 
 export interface SessionInfo {
   readonly user_id: string;
@@ -218,19 +159,9 @@ export interface Welcome {
   readonly feed: FeedPosition;
   readonly limits: ConnectionLimits;
   readonly core_semantics_version: number;
-  /**
-   * The installed plugin set's version (`@kernel` 3.0). A client that was offline while a
-   * plugin was installed, updated, enabled or disabled compares it with the version it
-   * booted with and reloads. Absent on older servers.
-   */
   readonly plugins_version?: number | string;
 }
 
-/**
- * A plugin was installed, updated, enabled or disabled: the plugin set is now `version`.
- * Sent to every connected session; every client reloads (there is no hot reload). A
- * dropped one is recovered from `welcome.plugins_version` on reconnect.
- */
 export interface PluginsChanged {
   readonly t: "plugins.changed";
   readonly version: number | string;
@@ -289,13 +220,11 @@ export interface DocError {
   readonly code: DocErrorCode;
   readonly message: string;
   readonly retryable: boolean;
-  /** `"rest"` ⇒ hydrate over `GET /api/documents/:id?format=crdt` instead. */
   readonly hint?: "rest";
 }
 
 export interface DocResync {
   readonly t: "doc.resync";
-  /** Absent ⇒ every document this socket subscribes to. */
   readonly id?: string;
   readonly reason: "backpressure" | "log_gap" | "server_restart" | "contended";
 }
@@ -325,10 +254,6 @@ export type ServerControl =
   | ServerNotice
   | PluginsChanged;
 
-// ---------------------------------------------------------------------------
-// Client → server control messages
-// ---------------------------------------------------------------------------
-
 export interface FeedSubscribe {
   readonly t: "feed.subscribe";
   readonly since_seq: number;
@@ -343,7 +268,6 @@ export interface FeedUnsubscribe {
 export interface DocSubscribe {
   readonly t: "doc.subscribe";
   readonly id: string;
-  /** base64 of `Y.encodeStateVector(doc)`; omit when there is no local replica. */
   readonly sv?: string;
 }
 
@@ -363,10 +287,6 @@ export type ClientControl =
   | DocSubscribe
   | DocUnsubscribe
   | Ping;
-
-// ---------------------------------------------------------------------------
-// Bootstrap stream (PROTOCOL.md §4)
-// ---------------------------------------------------------------------------
 
 export interface BootstrapHeader {
   readonly type: "header";
@@ -392,10 +312,6 @@ export interface BootstrapFooter {
 
 export type BootstrapLine = BootstrapHeader | BootstrapRowLine | BootstrapFooter;
 
-// ---------------------------------------------------------------------------
-// Parsing and guards
-// ---------------------------------------------------------------------------
-
 const SERVER_CONTROL_TYPES = new Set<string>([
   "welcome",
   "feed.batch",
@@ -409,7 +325,6 @@ const SERVER_CONTROL_TYPES = new Set<string>([
   "plugins.changed",
 ]);
 
-/** `true` when `value` is a control message this client version understands. */
 export function isServerControl(value: unknown): value is ServerControl {
   return (
     typeof value === "object" &&
@@ -419,11 +334,6 @@ export function isServerControl(value: unknown): value is ServerControl {
   );
 }
 
-/**
- * Parse a text frame. Returns `undefined` for a syntactically valid control
- * message of an unknown type — forward compatibility with M4 plugin channels
- * (PROTOCOL.md §9: the client ignores what it does not know).
- */
 export function parseServerControl(text: string): ServerControl | undefined {
   let value: unknown;
   try {
@@ -437,17 +347,14 @@ export function parseServerControl(text: string): ServerControl | undefined {
   return isServerControl(value) ? value : undefined;
 }
 
-/** Serialize a client control message. */
 export function encodeControl(message: ClientControl): string {
   return JSON.stringify(message);
 }
 
-/** `true` when the close code must stop the reconnect loop. */
 export function isTerminalClose(code: number): boolean {
   return TERMINAL_CLOSE_CODES.includes(code);
 }
 
-/** A `HISTORY` payload: when the edit was made, then the update. */
 export function encodeHistory(madeAtMs: number, update: Uint8Array): Uint8Array {
   const out = new Uint8Array(8 + update.length);
   new DataView(out.buffer).setBigUint64(0, BigInt(Math.max(0, Math.floor(madeAtMs))));
@@ -455,7 +362,6 @@ export function encodeHistory(madeAtMs: number, update: Uint8Array): Uint8Array 
   return out;
 }
 
-/** The inverse of {@link encodeHistory}; `undefined` for a payload too short to hold a time. */
 export function decodeHistory(payload: Uint8Array): { madeAtMs: number; update: Uint8Array } | undefined {
   if (payload.length < 8) return undefined;
   const view = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);

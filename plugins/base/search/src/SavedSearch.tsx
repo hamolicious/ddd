@@ -1,12 +1,3 @@
-/**
- * A saved-search note on screen: `SearchShell` over its stored search, for a view plugin's
- * `document.mode` to draw its view in.
- *
- * The search can be changed here like the list's; the note changes only when "Update saved
- * search" is chosen, and an edit to the note from elsewhere replaces what is on screen.
- * Embedded, it is the results alone.
- */
-
 import { useEffect, useRef, useState } from "react";
 import type { ComponentType, ReactElement } from "react";
 
@@ -18,7 +9,6 @@ import { encodeSpec, parseSpec, sameSpec } from "./spec.js";
 export interface SavedSearchDeps {
   readonly SearchShell: ComponentType<SearchShellProps>;
   readonly open: (id: string, line?: number) => void;
-  /** Rewrite the note's stored search. */
   readonly update: (id: string, value: string) => void;
 }
 

@@ -71,7 +71,6 @@ describe("indexSuggestions", () => {
       { id: "1", title: "Work", folder: "" },
       { id: "2", title: "Homework", folder: "School" },
     ]);
-    // The same answer while the index has not moved, so a memo keyed on it holds.
     expect(source.notes()).toBe(source.notes());
     expect(source.look?.("1")).toEqual({ background: "#000000" });
   });

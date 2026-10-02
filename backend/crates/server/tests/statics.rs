@@ -1,27 +1,3 @@
-//! Router-level tests for the M3 static surface: the PWA, the import map, the SPA
-//! fallback and the plugin asset routes (area `server-static`, SPEC §6.4, §8).
-//!
-//! These drive the **assembled router** rather than the handlers, because almost
-//! everything that can go wrong here is a routing or header question: whether
-//! `/index.html` reaches the injection path or is served as a file, whether an unmatched
-//! GET becomes `index.html` or a 404, whether `/api/**` keeps returning JSON once a
-//! catch-all HTML fallback exists, and what `Cache-Control` each class of URL carries. The
-//! unit tests inside `routes/statics.rs` cover the pure parts (path resolution, the CSP
-//! string, the marker replacement); they cannot see any of the above.
-//!
-//! Each test builds its **own fixture tree** under `CARGO_TARGET_TMPDIR` — a fake
-//! `dist/` and a fake installed-plugin directory — so the cases are independent of
-//! whether anybody has run `mise run web-build`, and of each other. The plugin registry
-//! caches per directory, which is what makes that work.
-//!
-//! Like the other Mongo-backed suites these are `#[ignore]`d and skip when `MONGO_URI`
-//! is unset (the router needs an `AppState`, and `AppState::new` pings Mongo):
-//!
-//! ```text
-//! docker compose up -d --wait mongo
-//! MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p ddd-server --test statics -- --ignored
-//! ```
-
 mod common;
 
 use std::fs;
@@ -39,31 +15,10 @@ use tower::ServiceExt as _;
 
 use common::{ApiResponse, TEST_PASSWORD, mongo_uri, test_config};
 
-/// A string that must never reach a client. It lives in the fixture root — the parent of
-/// both served roots — so any answer containing it is a traversal that escaped.
 const SECRET: &str = "TOP-SECRET-OUTSIDE-THE-ROOT";
 
-/// The marker `web/app/index.html` carries; spelled here so a test fails if the constant
-/// and the real template ever disagree.
 const MARKER: &str = "<!--DDD_IMPORT_MAP-->";
 
-// ---------------------------------------------------------------------------
-// Fixture
-// ---------------------------------------------------------------------------
-
-/// A fake built bundle plus a fake installed-plugin directory.
-///
-/// ```text
-/// <root>/secret.txt                                  the file nothing may serve
-/// <root>/dist/index.html                             carries the marker
-/// <root>/dist/runtime-manifest.json
-/// <root>/dist/assets/app-abc123.js                   content-hashed
-/// <root>/dist/sw.js, icon.svg, manifest.webmanifest
-/// <root>/plugins/shell-ui/1.0.0/…                     the installed plugin
-/// <root>/plugins/shell-ui/0.9.0/…                     an older version, never served
-/// <root>/plugins/broken/1.0.0/manifest.json           invalid JSON  → a problem
-/// <root>/plugins/Bad_Id/1.0.0/manifest.json           invalid id    → a problem
-/// ```
 struct Fixture {
     root: PathBuf,
 }
@@ -160,30 +115,19 @@ fn write_plugin(plugins: &Path, id: &str, version: &str) {
     )
     .expect("plugin module");
     fs::write(dir.join("frontend/style.css"), ".ddd-shell {}\n").expect("plugin style");
-    // A plugin package is third-party content from our own origin: an SVG in it is the
-    // same stored-XSS vector as one in an attachment (SPEC §3.6).
     fs::write(
         dir.join("frontend/logo.svg"),
         "<svg xmlns=\"http://www.w3.org/2000/svg\"><script>alert(1)</script></svg>",
     )
     .expect("plugin svg");
-    // And an HTML file (a vendored viewer, a demo page) is the stronger case of the same
-    // rule: served inline it would be a scriptable document on this origin, outside the CSP
-    // every real document gets.
     fs::write(
         dir.join("frontend/docs.html"),
         "<!doctype html><title>demo</title>\n",
     )
     .expect("plugin html");
-    // Server-side halves and the manifest are in the package but are not browser assets.
     fs::write(dir.join("backend.wasm"), b"\0asm not really").expect("plugin wasm");
 }
 
-// ---------------------------------------------------------------------------
-// Harness
-// ---------------------------------------------------------------------------
-
-/// The router, plus a bearer token for the one authenticated route.
 struct StaticsApp {
     router: Router,
     token: String,
@@ -192,8 +136,6 @@ struct StaticsApp {
 }
 
 impl StaticsApp {
-    /// `None` ⇒ no `MONGO_URI`, skip the test. `configure` receives the shared test
-    /// config and points it at this test's fixture.
     async fn start(configure: impl FnOnce(&mut Config)) -> Option<StaticsApp> {
         let uri = mongo_uri()?;
         let database = format!("ddd_router_test_{}", new_id());
@@ -212,8 +154,6 @@ impl StaticsApp {
             database,
             client,
         };
-        // The first registration is the admin (SPEC §5.1); `/api/plugins` needs a
-        // session and nothing else here does.
         let response = app
             .request(
                 "POST",
@@ -274,7 +214,6 @@ impl StaticsApp {
         }
     }
 
-    /// An anonymous GET — everything on this surface except `/api/plugins`.
     async fn get(&self, uri: &str) -> ApiResponse {
         self.request("GET", uri, false, None).await
     }
@@ -293,17 +232,12 @@ fn header_value(response: &ApiResponse, name: &str) -> String {
         .to_string()
 }
 
-/// Every test that serves the bundle wires both roots the same way.
 fn with_fixture(fixture: &Fixture) -> impl FnOnce(&mut Config) + '_ {
     move |config: &mut Config| {
         config.web_dist_dir = Some(fixture.dist());
         config.plugins_dir = fixture.plugins();
     }
 }
-
-// ---------------------------------------------------------------------------
-// /importmap.json
-// ---------------------------------------------------------------------------
 
 #[tokio::test]
 #[ignore = "needs MONGO_URI"]
@@ -319,9 +253,6 @@ async fn the_import_map_is_exactly_what_the_build_emitted() {
     assert_eq!(header_value(&response, "cache-control"), "no-cache");
     assert_eq!(header_value(&response, "x-content-type-options"), "nosniff");
 
-    // Read straight from `runtime-manifest.json`, with no hard-coded fallback: a map
-    // naming chunks that do not exist is an app that boots and then fails on its first
-    // plugin, which is far harder to diagnose than an empty map.
     let imports = &response.json()["imports"];
     assert_eq!(imports["react"], "/runtime/react-pRvsLDve.js");
     assert_eq!(
@@ -330,8 +261,6 @@ async fn the_import_map_is_exactly_what_the_build_emitted() {
     );
     assert_eq!(imports["@kernel"], "/runtime/kernel-BdFAWC4t.js");
     assert_eq!(imports["yjs"], "/runtime/yjs-DFgAKIW1.js");
-    // Signed out: the runtime layer alone. The `plugin:<id>` entries name every
-    // installed plugin, which is what `/api/plugins` keeps behind a session.
     let object = imports.as_object().expect("imports is an object");
     assert_eq!(
         object.len(),
@@ -339,9 +268,6 @@ async fn the_import_map_is_exactly_what_the_build_emitted() {
         "the anonymous map names a plugin: {imports}"
     );
 
-    // Signed in: plus one `plugin:<id>` entry per loaded plugin (`@kernel` 3.0: a plugin
-    // module is imported by that specifier, so every importer shares one copy),
-    // versioned with its assets fingerprint.
     let response = app.get_authenticated("/importmap.json").await;
     response.expect_status(StatusCode::OK);
     let imports = &response.json()["imports"];
@@ -361,8 +287,6 @@ async fn the_import_map_is_exactly_what_the_build_emitted() {
 #[tokio::test]
 #[ignore = "needs MONGO_URI"]
 async fn the_import_map_is_empty_and_not_an_error_without_a_bundle() {
-    // API-only deployment (`WEB_DIST_DIR` unset): the route still answers, so the
-    // service worker and a curious operator get a defined result.
     let Some(app) = StaticsApp::start(|_| {}).await else {
         return;
     };
@@ -372,11 +296,6 @@ async fn the_import_map_is_empty_and_not_an_error_without_a_bundle() {
     app.cleanup().await;
 }
 
-// ---------------------------------------------------------------------------
-// index.html, the injection and the policy
-// ---------------------------------------------------------------------------
-
-/// The `nonce="…"` of the inline import map in a served page.
 fn inline_nonce(html: &str) -> String {
     let after = html
         .split_once("<script type=\"importmap\" nonce=\"")
@@ -403,8 +322,6 @@ async fn the_root_document_carries_the_map_and_a_matching_policy() {
         header_value(&response, "content-type"),
         "text/html; charset=utf-8"
     );
-    // The nonce is per response, so the document must never be cached — a cached CSP
-    // nonce is a CSP bypass, and it is also why `sw.js` must not precache this URL.
     assert_eq!(header_value(&response, "cache-control"), "no-store");
     assert_eq!(header_value(&response, "x-content-type-options"), "nosniff");
     assert_eq!(header_value(&response, "referrer-policy"), "same-origin");
@@ -417,8 +334,6 @@ async fn the_root_document_carries_the_map_and_a_matching_policy() {
     assert!(!html.contains(MARKER), "the marker was served as a comment");
     assert!(html.contains("/runtime/react-pRvsLDve.js"));
 
-    // The one inline script on the page is authorised by the nonce in the policy, and by
-    // nothing else: the policy has no `'unsafe-inline'` in `script-src`.
     let csp = header_value(&response, "content-security-policy");
     let nonce = inline_nonce(html);
     assert!(nonce.len() >= 20, "a guessable nonce is no nonce: {nonce}");
@@ -465,9 +380,6 @@ async fn index_html_is_never_served_as_a_file_from_any_spelling() {
     let Some(app) = StaticsApp::start(with_fixture(&fixture)).await else {
         return;
     };
-    // This is the exact bug the route was written to prevent: served as a file, the
-    // marker stays a comment, the import map never arrives, and the app dies with
-    // "Failed to resolve module specifier \"react\"".
     for uri in ["/index.html", "/./index.html", "//index.html"] {
         let response = app.get(uri).await;
         response.expect_status(StatusCode::OK);
@@ -491,8 +403,6 @@ async fn index_html_names_the_installed_plugins_only_to_a_session() {
     let Some(app) = StaticsApp::start(with_fixture(&fixture)).await else {
         return;
     };
-    // The inline import map is the page's; a signed-out visitor sees the login form and
-    // must not learn what is installed from it (the same rule as `/api/plugins`).
     let anonymous = app.get("/").await;
     anonymous.expect_status(StatusCode::OK);
     assert!(
@@ -509,10 +419,6 @@ async fn index_html_names_the_installed_plugins_only_to_a_session() {
     app.cleanup().await;
 }
 
-// ---------------------------------------------------------------------------
-// The SPA fallback
-// ---------------------------------------------------------------------------
-
 #[tokio::test]
 #[ignore = "needs MONGO_URI"]
 async fn client_side_routes_survive_a_reload() {
@@ -520,8 +426,6 @@ async fn client_side_routes_survive_a_reload() {
     let Some(app) = StaticsApp::start(with_fixture(&fixture)).await else {
         return;
     };
-    // The router is a plugin (SPEC §6.5), so every in-app URL is a client-side route and
-    // a reload of one has to reach the app rather than a 404.
     for uri in [
         "/doc/01JBQ0000000000000000000",
         "/doc/01JBQ0000000000000000000/edit",
@@ -576,10 +480,6 @@ async fn without_a_bundle_the_server_says_it_is_api_only() {
     app.cleanup().await;
 }
 
-// ---------------------------------------------------------------------------
-// Cache policy on the bundle
-// ---------------------------------------------------------------------------
-
 #[tokio::test]
 #[ignore = "needs MONGO_URI"]
 async fn hashed_assets_are_immutable_and_everything_else_revalidates() {
@@ -610,19 +510,12 @@ async fn hashed_assets_are_immutable_and_everything_else_revalidates() {
         );
     }
 
-    // The app's own icon is an SVG from our own build, not third-party content — but the
-    // allowlist is type-based, not origin-based, so it downloads too. That is deliberate:
-    // one rule, no exception that a plugin could grow into.
     let icon = app.get("/icon.svg").await;
     icon.expect_status(StatusCode::OK);
     assert_eq!(header_value(&icon, "content-disposition"), "attachment");
 
     app.cleanup().await;
 }
-
-// ---------------------------------------------------------------------------
-// Path traversal
-// ---------------------------------------------------------------------------
 
 #[tokio::test]
 #[ignore = "needs MONGO_URI"]
@@ -638,11 +531,8 @@ async fn traversal_out_of_the_plugin_root_is_refused() {
         "/plugins/shell-ui/1.0.0/%2e%2e%2f%2e%2e%2f%2e%2e%2fsecret.txt",
         "/plugins/shell-ui/1.0.0/..%2f..%2f..%2fsecret.txt",
         "/plugins/shell-ui/1.0.0/./../../../secret.txt",
-        // The id and version segments are validated before the path is: `..` is neither
-        // a plugin id nor a version.
         "/plugins/../../secret.txt",
         "/plugins/shell-ui/../../secret.txt",
-        // A directory is not a file.
         "/plugins/shell-ui/1.0.0/frontend",
     ] {
         let response = app.get(uri).await;
@@ -653,19 +543,6 @@ async fn traversal_out_of_the_plugin_root_is_refused() {
     app.cleanup().await;
 }
 
-/// `/plugins/:id/:version/*` is **unauthenticated by necessity** — a browser fetching an ES
-/// module sends no credentials — so it must serve only `frontend/**` (web/CONTRACTS.md, the
-/// M3 carry-over; `backend/CONTRACTS.md` decision 12).
-///
-/// The two files that must stay unreachable through it are the ones M4 started putting in
-/// the same directory: the **manifest**, which lists capabilities, config keys, declared
-/// hosts and routes, and the **backend module**, which is the plugin's server-side code. A
-/// reader of either learns what this server's plugins are trusted with without ever signing
-/// in. `/api/plugins` is the authenticated way to ask.
-///
-/// It holds by construction — `is_frontend_path` requires `frontend` as the first segment,
-/// before any path resolution — and this is the test that says so out loud, now that the
-/// installer really does write `backend.wasm` next to the frontend half.
 #[tokio::test]
 #[ignore = "needs MONGO_URI"]
 async fn the_manifest_and_the_backend_half_are_not_served_to_the_browser() {
@@ -677,10 +554,8 @@ async fn the_manifest_and_the_backend_half_are_not_served_to_the_browser() {
     for uri in [
         "/plugins/shell-ui/1.0.0/manifest.json",
         "/plugins/shell-ui/1.0.0/backend.wasm",
-        // Not reachable by walking out of `frontend/` either.
         "/plugins/shell-ui/1.0.0/frontend/../manifest.json",
         "/plugins/shell-ui/1.0.0/frontend/../backend.wasm",
-        // Nor by dressing the first segment up.
         "/plugins/shell-ui/1.0.0/%66rontend/../backend.wasm",
     ] {
         let response = app.get(uri).await;
@@ -691,8 +566,6 @@ async fn the_manifest_and_the_backend_half_are_not_served_to_the_browser() {
         );
     }
 
-    // The control: the frontend half of the same package is served, which is what makes
-    // the assertions above about the *allowlist* rather than about a missing directory.
     app.get("/plugins/shell-ui/1.0.0/frontend/index.mjs")
         .await
         .expect_status(StatusCode::OK);
@@ -705,10 +578,6 @@ async fn the_manifest_and_the_backend_half_are_not_served_to_the_browser() {
 #[ignore = "needs MONGO_URI"]
 async fn a_symlink_cannot_walk_out_of_the_plugin_root() {
     let fixture = Fixture::new("symlink");
-    // The lexical check cannot see this one: the URL has no `..` at all. Only
-    // canonicalize-and-re-check does, which is why both passes exist. (SPEC §6.2 rejects
-    // symlinks at install time as well; this is the serving-side half, and it is what
-    // protects a directory somebody dropped in by hand.)
     std::os::unix::fs::symlink(
         fixture.root.join("secret.txt"),
         fixture.plugins().join("shell-ui/1.0.0/frontend/escape.txt"),
@@ -731,9 +600,6 @@ async fn traversal_out_of_the_bundle_root_never_serves_the_file() {
     let Some(app) = StaticsApp::start(with_fixture(&fixture)).await else {
         return;
     };
-    // Unlike the plugin route this path ends at the SPA fallback, so the *status* is 200
-    // and the body is the app. The property under test is the one that matters: the file
-    // above the root is not in the response.
     for uri in [
         "/../secret.txt",
         "/..%2fsecret.txt",
@@ -750,10 +616,6 @@ async fn traversal_out_of_the_bundle_root_never_serves_the_file() {
     app.cleanup().await;
 }
 
-// ---------------------------------------------------------------------------
-// Plugin assets
-// ---------------------------------------------------------------------------
-
 #[tokio::test]
 #[ignore = "needs MONGO_URI"]
 async fn only_the_registered_plugin_at_its_registered_version_is_served() {
@@ -768,8 +630,6 @@ async fn only_the_registered_plugin_at_its_registered_version_is_served() {
         header_value(&module, "content-type"),
         "application/javascript; charset=utf-8"
     );
-    // The version is in the URL and the bytes behind it never change: this is the one
-    // route that earns a year-long immutable cache (SPEC §8).
     assert_eq!(
         header_value(&module, "cache-control"),
         "public, max-age=31536000, immutable"
@@ -785,22 +645,15 @@ async fn only_the_registered_plugin_at_its_registered_version_is_served() {
     );
     assert_eq!(header_value(&style, "content-disposition"), "");
 
-    // Only the highest version is in the registry; the older directory is on disk and
-    // must still 404, because two versions in one page would give two copies of one
-    // plugin's API to different dependents.
     app.get("/plugins/shell-ui/0.9.0/frontend/index.mjs")
         .await
         .expect_status(StatusCode::NOT_FOUND);
-    // Not installed at all. In M4 this is what keeps a *pending* install unfetchable
-    // before an admin approves it.
     app.get("/plugins/ghost/1.0.0/frontend/index.mjs")
         .await
         .expect_status(StatusCode::NOT_FOUND);
-    // A directory the registry refused for a bad manifest is not served either.
     app.get("/plugins/broken/1.0.0/manifest.json")
         .await
         .expect_status(StatusCode::NOT_FOUND);
-    // Malformed coordinates never reach the filesystem.
     for uri in [
         "/plugins/Shell-UI/1.0.0/frontend/index.mjs",
         "/plugins/shell-ui/1.0/frontend/index.mjs",
@@ -825,9 +678,6 @@ async fn an_svg_inside_a_plugin_package_downloads_instead_of_rendering() {
     };
     let response = app.get("/plugins/shell-ui/1.0.0/frontend/logo.svg").await;
     response.expect_status(StatusCode::OK);
-    // An `image/svg+xml` served inline from the app's own origin is stored XSS with
-    // access to the whole session — the SPEC §3.6 attachment rule, applied to plugin
-    // packages because they are third-party content too.
     assert_eq!(header_value(&response, "content-disposition"), "attachment");
     assert_eq!(header_value(&response, "x-content-type-options"), "nosniff");
     app.cleanup().await;
@@ -840,10 +690,6 @@ async fn an_html_file_inside_a_plugin_package_downloads_instead_of_rendering() {
     let Some(app) = StaticsApp::start(with_fixture(&fixture)).await else {
         return;
     };
-    // `serve_file` sends no CSP, so an inline HTML file from a plugin package would be a
-    // scriptable same-origin document *outside* the policy every real document in the app
-    // gets — `default-src`, `frame-ancestors` and `base-uri` all absent. A DOM-XSS sink in
-    // a vendored viewer would then be XSS on this origin, reachable by link.
     let response = app.get("/plugins/shell-ui/1.0.0/frontend/docs.html").await;
     response.expect_status(StatusCode::OK);
     assert_eq!(header_value(&response, "content-disposition"), "attachment");
@@ -858,10 +704,6 @@ async fn nothing_outside_the_frontend_directory_is_served() {
     let Some(app) = StaticsApp::start(with_fixture(&fixture)).await else {
         return;
     };
-    // The manifest names the plugin's capabilities and config keys, which is exactly what
-    // `GET /api/plugins` requires a session for ("not public information"); `backend.wasm`
-    // is server-side code. Both are in the package on disk and neither is a browser asset,
-    // so the public asset route does not serve them (SPEC §6.2's `frontend/**` layout).
     for uri in [
         "/plugins/shell-ui/1.0.0/manifest.json",
         "/plugins/shell-ui/1.0.0/backend.wasm",
@@ -871,24 +713,16 @@ async fn nothing_outside_the_frontend_directory_is_served() {
         let response = app.get(uri).await;
         assert_eq!(response.status, StatusCode::NOT_FOUND, "{uri} was served");
     }
-    // A URL with an empty `{*path}` does not match the asset route at all and lands on the
-    // SPA fallback, which answers 200 with `index.html` — the router's behaviour for every
-    // unmatched GET, and not a disclosure. What matters is that no package file is in it.
     let listing = app.get("/plugins/shell-ui/1.0.0/").await;
     assert!(
         !listing.text().contains("peerLibraries"),
         "the manifest leaked through the SPA fallback"
     );
-    // The module and its stylesheet still are.
     app.get("/plugins/shell-ui/1.0.0/frontend/index.mjs")
         .await
         .expect_status(StatusCode::OK);
     app.cleanup().await;
 }
-
-// ---------------------------------------------------------------------------
-// /api/plugins
-// ---------------------------------------------------------------------------
 
 #[tokio::test]
 #[ignore = "needs MONGO_URI"]
@@ -898,7 +732,6 @@ async fn the_installed_list_needs_a_session_and_reports_refusals() {
         return;
     };
 
-    // What is installed in a workspace is not public information.
     app.get("/api/plugins")
         .await
         .expect_status(StatusCode::UNAUTHORIZED);
@@ -912,22 +745,15 @@ async fn the_installed_list_needs_a_session_and_reports_refusals() {
     let plugin = &plugins[0];
     assert_eq!(plugin["manifest"]["id"], "shell-ui");
     assert_eq!(plugin["manifest"]["version"], "1.0.0");
-    // camelCase, deliberately and uniquely on this endpoint: this is `InstalledPlugin`
-    // from `web/kernel-api/src/manifest.ts`, consumed by the loader as-is. A `base_url`
-    // here is a loader that reads `undefined` and every plugin failing to load.
     assert_eq!(plugin["baseUrl"], "/plugins/shell-ui/1.0.0/");
     assert!(
         plugin["base"].as_bool().unwrap_or(false),
         "shell-ui is base"
     );
     assert_eq!(plugin["state"], "enabled");
-    // The manifest passes through untouched, `peerLibraries` spelling included, and
-    // unknown keys survive so an M3 server does not eat an M4 manifest's `capabilities`.
     assert_eq!(plugin["manifest"]["peerLibraries"]["react"], "^18.0.0");
     assert_eq!(plugin["manifest"]["x-tailwind"]["prefix"], "main");
 
-    // `load` (`@kernel` 3.0): what each boot loads, in order, what it skips, and the
-    // fingerprint `welcome.plugins_version` and `plugins.changed` carry.
     assert_eq!(body["load"]["normal"], json!(["shell-ui"]));
     assert_eq!(body["load"]["safe"], json!(["shell-ui"]));
     assert_eq!(body["load"]["skipped"], json!([]));
@@ -936,8 +762,6 @@ async fn the_installed_list_needs_a_session_and_reports_refusals() {
         assert!(body.get(gone).is_none(), "`{gone}` is gone in @kernel 3.0");
     }
 
-    // A bad directory disables one plugin and is reported — never fatal, and never
-    // silent, or the admin screen shows a mysteriously missing feature.
     let problems = body["problems"].as_array().expect("problems is an array");
     let rendered = serde_json::to_string(problems).expect("problems serialize");
     assert_eq!(problems.len(), 2, "expected two refusals: {rendered}");
@@ -946,7 +770,6 @@ async fn the_installed_list_needs_a_session_and_reports_refusals() {
         rendered.contains("broken"),
         "the invalid manifest: {rendered}"
     );
-    // An older version that *parsed* is not a problem — it is simply not the one served.
     assert!(
         !rendered.contains("0.9.0"),
         "a shadowed version is not a fault"
@@ -991,22 +814,14 @@ async fn disable_plugins_is_the_server_side_half_of_safe_mode() {
         "DISABLE_PLUGINS must say *why* the app is bare (SPEC §6.1)"
     );
 
-    // And the assets go with it: an installed module that is still on disk must not be
-    // loadable when the server has been told to boot without plugins.
     app.get("/plugins/shell-ui/1.0.0/frontend/index.mjs")
         .await
         .expect_status(StatusCode::NOT_FOUND);
 
-    // The app itself still boots — safe mode is a working app with no plugins, not an
-    // error page.
     app.get("/").await.expect_status(StatusCode::OK);
 
     app.cleanup().await;
 }
-
-// ---------------------------------------------------------------------------
-// /kernel.d.ts
-// ---------------------------------------------------------------------------
 
 #[tokio::test]
 #[ignore = "needs MONGO_URI"]
@@ -1027,8 +842,6 @@ async fn the_plugin_contract_is_served_as_text_to_anyone() {
         return;
     };
 
-    // Public on purpose (SPEC §6.4): a plugin author needs the contract before they
-    // have an account in anybody's workspace.
     let response = app.get("/kernel.d.ts").await;
     response.expect_status(StatusCode::OK);
     assert_eq!(

@@ -1,11 +1,3 @@
-//! `corpus/shapes.json` pins value validation against a shape (HOST-ABI §3.10): the server
-//! checks backend call payloads with `shape::validate`, the web kernel checks `checked()`
-//! calls with `shapeFromJSON` (`web/kernel-api/src/shape.ts`), and both suites run this
-//! same file, so the two cannot disagree on what fits.
-//!
-//! Each case is `{ name, shape, value, ok }`; only `ok` is compared, because the issue
-//! wording is each side's own.
-
 mod common;
 
 use ddd_core::shape::{Shape, validate};

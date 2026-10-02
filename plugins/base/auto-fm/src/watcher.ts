@@ -1,26 +1,3 @@
-/**
- * The part that writes: watches the notes changed most recently and adds the missing
- * properties to the ones this device changed.
- *
- * **It reads the local replica, so it works offline.** An edit on this device lands in the
- * local row at once (stamped with this user and the device's clock) and the live query
- * sees it there; the property is spliced into the note locally and syncs with the rest.
- *
- * **Only this device's changes.** Every device a person has open sees the same rows
- * change, and two of them adding the same key at once would leave it in the note twice.
- * So a change counts only when this user made it and this window has focus — the device
- * being typed on — or, for a new note, when the row is still the one this device made
- * (`materialized_version: "local"`).
- *
- * **"New" lasts a moment.** A note is often filed a beat after it is made (the folder it
- * goes in is another note's edit), so a note stays new for {@link NEW_FOR_MS} and is
- * looked at again as that settles; "is inside note" can then match it.
- *
- * **Never a key the note has.** Checked on the row that triggered it and again, fresh,
- * just before each write — the splice would otherwise replace the value a person typed a
- * moment before.
- */
-
 import type { DocumentRow, DocumentsApi, FilterJson, Unsubscribe } from "@kernel";
 
 import { buildConditions, treeToWatch } from "../../_shared/conditions.js";
@@ -29,38 +6,30 @@ import { EXCLUDE_MACHINE_DOCUMENTS, isMachineDocument } from "../../_shared/mach
 
 import { fieldValue, wanted, type AutoField } from "./fields.js";
 
-/** How many of the most recently changed notes are watched: edits arrive one note at a time. */
 const WATCHED = 25;
-/** How long a note counts as new, and when it is looked at again inside that. */
 export const NEW_FOR_MS = 15_000;
 const RECHECK_MS = [1_500, 5_000, 12_000];
-/** A note whose first change is this long after it was made is not being made now. */
 const CREATED_WITHIN_MS = 60_000;
 
 export interface WatcherOptions {
   readonly documents: Pick<DocumentsApi, "subscribe" | "query" | "get" | "splice">;
   readonly userId: string;
   readonly fields: () => readonly AutoField[];
-  /** Is this the device being used right now? */
   readonly active: () => boolean;
   readonly warn: (message: string, cause?: unknown) => void;
 }
 
 export interface Watcher {
-  /** The fields changed: watch the notes their conditions name. */
   refresh(): void;
   close(): void;
 }
 
 export function watch({ documents, userId, fields, active, warn }: WatcherOptions): Watcher {
   let closed = false;
-  /** `updated_at` last handled, per note; the first result is the baseline, not acted on. */
   const seen = new Map<string, string>();
   let baseline = true;
-  /** Notes made on this device, and when they were first seen. */
   const fresh = new Map<string, number>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
-  /** One run per note at a time; a change during one runs again after it. */
   const running = new Set<string>();
   const again = new Set<string>();
 
@@ -79,7 +48,6 @@ export function watch({ documents, userId, fields, active, warn }: WatcherOption
   const matches = async (field: AutoField, id: string): Promise<boolean> => {
     if (field.when.clauses.length === 0) return true;
     const filter = buildConditions(field.when, contextFrom(children));
-    // Conditions that build nothing match nothing: a half-made field must not touch every note.
     if (filter === undefined) return false;
     const only: FilterJson = { cmp: { field: "id", op: "eq", value: { str: id } } };
     const result = await documents.query({ filter: { and: [filter, only] }, limit: 1 });
@@ -98,7 +66,6 @@ export function watch({ documents, userId, fields, active, warn }: WatcherOption
       const now = new Date();
       for (const field of wanted(fields(), row.fm, isFresh(id))) {
         if (closed || !(await matches(field, id))) continue;
-        // Fresh, because the person may have typed the key since the row above.
         const current = await documents.get(id);
         if (current === undefined || !usable(current) || field.key.trim() in current.fm) continue;
         await documents.splice.setFrontmatterValue(id, field.key.trim(), fieldValue(field.value, now));
@@ -170,7 +137,6 @@ export function watch({ documents, userId, fields, active, warn }: WatcherOption
     stopTree();
     stopTree = watchChildren(documents, ids, (map) => {
       children = map;
-      // Filed a moment after it was made: the new notes may match now.
       for (const id of fresh.keys()) if (isFresh(id)) void fill(id);
     });
   };
@@ -188,12 +154,10 @@ export function watch({ documents, userId, fields, active, warn }: WatcherOption
   };
 }
 
-/** Rows whose frontmatter may be written: live, readable, a person's. */
 function usable(row: DocumentRow): boolean {
   return !row.deleted && !row.fm_parse_error && !isMachineDocument(row);
 }
 
-/** A note this user is making on this device right now. */
 function madeHere(row: DocumentRow, userId: string, active: () => boolean): boolean {
   if (row.created_by !== userId) return false;
   const age = Date.parse(row.updated_at) - Date.parse(row.created_at);

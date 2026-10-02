@@ -1,5 +1,3 @@
-//! `~/.config/ddd/desktop.toml`: the server, and the notes folder.
-
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
@@ -7,7 +5,6 @@ use serde::Deserialize;
 #[derive(Deserialize, Default)]
 pub struct Config {
     pub server_url: Option<String>,
-    /// The notes folder chosen in the app (`folder.rs`). Written by the app itself.
     pub folder: Option<String>,
 }
 
@@ -24,7 +21,6 @@ pub fn read() -> Option<Config> {
     toml::from_str(&text).ok()
 }
 
-/// Set or clear `folder`, keeping every other key (and the user's `server_url`) as it was.
 pub fn set_folder(folder: Option<&Path>) -> Result<(), String> {
     let path = path().ok_or("no home directory to keep the setting in")?;
     let mut table = std::fs::read_to_string(&path)

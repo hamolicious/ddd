@@ -1,33 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  Cleartext is off everywhere (`android:usesCleartextTraffic="false"` in the manifest) with
-  exactly two exceptions in a **release** build, and both of them are this app talking to
-  itself.
-
-  `127.0.0.1` and `localhost` are the **shell's own bundle server** (BRIDGE.md §6): the
-  active bundle is served from `http://127.0.0.1:41847`, which is a secure context by
-  specification but is still plain HTTP as far as Android's cleartext policy is concerned.
-  Without this entry the webview cannot load the app at all. This is not a development
-  convenience — it is required in release.
-
-  **Nothing else may be plain HTTP.** The bearer token (SPEC §5.2) rides every manifest,
-  bundle and admin-export request, and the login POST carries an email and a password; a
-  release build that could reach an http:// server would put all of it on the wire in the
-  clear, and an on-path attacker could also forge the bundle manifest — which is the input
-  to the updater's directory names and hashes. So production servers are HTTPS (SPEC §8:
-  "caddy — automatic HTTPS; secure origin is required"), and that is now guaranteed by the
-  platform rather than by the operator.
-
-  The emulator's route to a development host — `10.0.2.2`, how a debug build reaches
-  `mise run dev` on a laptop — lives in `src/debug/res/xml/` and `src/profile/res/xml/`,
-  which override this file for those build types only. `normalizeServerUrl`
-  (shell/login_screen.dart) accepts an explicitly typed `http://` URL, so keeping the
-  exemption out of release is what stops a user on a LAN where an RFC1918 address happens
-  to resolve from getting a working cleartext login.
-
-  `cleartextTrafficPermitted` is per-domain and does not inherit: every host that needs it
-  is listed, and nothing else in the app can fall back to HTTP.
--->
 <network-security-config>
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="false">127.0.0.1</domain>

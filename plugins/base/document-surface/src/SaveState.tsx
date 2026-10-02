@@ -1,17 +1,3 @@
-/**
- * The document header's save state: one icon opposite the title, from `kernel.sync`
- * (SPEC §6.4).
- *
- * `sync-status` owns the workspace indicator in the top bar; this one answers the
- * question a person asks *while writing* — "did that last sentence get out?" — which is
- * the `pending` count as much as the connection. There is no save button: an edit is a
- * CRDT update the moment it is typed. It sits on the surface rather than in one mode
- * because every mode can write (a task ticked in Read mode is an edit too).
- *
- * The icon is the glance; the words are its accessible name and tooltip, and the
- * `status` role announces a change.
- */
-
 import { useEffect, useState, type ReactNode } from "react";
 
 import type { Kernel } from "@kernel";
@@ -48,7 +34,6 @@ export function SaveState({ kernel }: { readonly kernel: Kernel }): ReactNode {
       data-status={state.status}
     >
       <svg aria-hidden="true" viewBox="0 0 24 24" width="1.15em" height="1.15em" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        {/* A cloud, and what is in it: a tick, an arrow going up, or a slash. */}
         <path d="M7 18h10.5a4 4 0 00.6-7.95A6 6 0 006.3 9.1 4.5 4.5 0 007 18z" />
         {tone === "saved" && <path d="M9.5 13.5l2 2 3.5-4" />}
         {tone === "busy" && (

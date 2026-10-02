@@ -1,12 +1,3 @@
-/**
- * tree-sitter capture names → the classes `style.css` colours.
- *
- * Grammars name captures with dotted scopes (`@function.method`, `@string.special.key`).
- * We colour a fixed set of them and let the rest fall back to their nearest known prefix,
- * so a grammar with a capture we have never heard of still gets the colour of its family
- * — or none, which is plain text and never wrong.
- */
-
 const KNOWN = new Set([
   "attribute",
   "comment",
@@ -33,7 +24,6 @@ const KNOWN = new Set([
   "variable.parameter",
 ]);
 
-/** The same captures under the other names grammars use for them. */
 const SYNONYMS: Readonly<Record<string, string>> = {
   boolean: "constant.builtin",
   character: "string",
@@ -50,7 +40,6 @@ const SYNONYMS: Readonly<Record<string, string>> = {
   symbol: "string.special",
 };
 
-/** `function.method.call` → `function`; `boolean` → `constant.builtin`; unknown → `undefined`. */
 export function captureClass(name: string): string | undefined {
   let scope = name;
   for (;;) {

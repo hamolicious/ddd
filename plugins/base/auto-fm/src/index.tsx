@@ -1,13 +1,3 @@
-/**
- * `auto-fm` — frontmatter properties added for you. In Settings you list properties
- * (`key: value`); each goes into notes you make, or also into notes you edit, and only
- * those that match its conditions when it has any. A note that already has the key keeps
- * what it has, whatever the value.
- *
- * All client-side and per-user (`fields.ts` for the rules, `watcher.ts` for the writing),
- * so it works offline like any other edit.
- */
-
 import { useEffect, useState, useSyncExternalStore, type ComponentType, type ReactElement } from "react";
 
 import type { CoreValue, Kernel, SettingsValue } from "@kernel";
@@ -36,7 +26,6 @@ import {
 import { watch, type Watcher } from "./watcher.js";
 
 const FIELDS_KEY = "fields";
-/** Typing a key is many changes; the setting takes the last. */
 const WRITE_DEBOUNCE_MS = 400;
 
 const INPUT =
@@ -44,10 +33,6 @@ const INPUT =
 const BUTTON =
   "autofm:tap-h autofm:cursor-pointer autofm:rounded autofm:border autofm:border-border-strong autofm:bg-bg-raised autofm:px-1.5 autofm:font-sans autofm:text-text";
 
-/**
- * The conditions are styled here, for `ConditionsEditor` carries only plain classes
- * (`autofm-clause` and so on): see its header.
- */
 const CONDITIONS =
   "autofm:flex autofm:flex-col autofm:gap-2 " +
   "autofm:[&_button]:tap-h autofm:[&_button]:cursor-pointer autofm:[&_button]:rounded autofm:[&_button]:border autofm:[&_button]:border-border-strong autofm:[&_button]:bg-bg-raised autofm:[&_button]:px-1.5 autofm:[&_button]:text-text " +
@@ -69,7 +54,6 @@ const CONDITIONS =
 
 export default function activate(kernel: Kernel): void {
   kernel.settings.defineSchema({
-    // Drawn by this plugin's own section, one JSON line per property.
     [FIELDS_KEY]: { type: "list", default: [] },
   });
 
@@ -80,8 +64,6 @@ export default function activate(kernel: Kernel): void {
     for (const listener of [...listeners]) listener();
   };
 
-  // Optional: `search`'s pickers for the property, its value and the conditions; without
-  // it, inputs that suggest from a list.
   let pickers:
     | {
         readonly NoteSelect: ComponentType<NoteSelectProps>;
@@ -104,7 +86,6 @@ export default function activate(kernel: Kernel): void {
     };
   };
 
-  // In memory at once, written after a pause; a stored value is taken unless a write is waiting.
   let fields = parseFields(kernel.settings.get(FIELDS_KEY));
   let timer: ReturnType<typeof setTimeout> | undefined;
   let writes: Promise<unknown> = Promise.resolve();
@@ -159,7 +140,6 @@ export default function activate(kernel: Kernel): void {
     watcher.close();
   };
 
-  // The indexer's module namespace is the index: `version` is its live binding.
   const index = (): ConditionIndex => indexer;
   const fallbackNotes = documentsNoteSource(kernel.documents);
   let lookups: { index: ConditionIndex | undefined; notes: NoteSource; suggestions: Suggestions | undefined } | undefined;
@@ -177,7 +157,6 @@ export default function activate(kernel: Kernel): void {
   const Section = (): ReactElement => {
     useSyncExternalStore(subscribe, () => version);
     const { notes, suggestions } = lookupsFor(index());
-    // Opened by hand, or just added; the rest show one line each.
     const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
     useEffect(() => flush, []);
     const replace = (id: string, patch: Partial<AutoField>): void =>
@@ -337,7 +316,6 @@ export default function activate(kernel: Kernel): void {
   };
 }
 
-/** What is waiting to be written, the watcher, and the settings section. */
 let stop: (() => void) | undefined;
 
 export function deactivate(): void {

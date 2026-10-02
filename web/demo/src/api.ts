@@ -1,16 +1,3 @@
-/**
- * REST calls and the session, for the demo page.
- *
- * **Bearer tokens, not cookies** (SPEC §5.2): the token is what the Flutter shell
- * will use, it is what the convergence harness uses, and exercising it here means
- * the path the shell depends on is the path that gets driven every day. The
- * server supports both from M1; the cookie path is what M3's real UI will use in
- * a browser.
- *
- * The token lives in `localStorage` because this page is a demo. A real client
- * keeps it in native secure storage (shell) or uses the cookie (browser).
- */
-
 const TOKEN_KEY = "ddd.demo.bearer";
 
 export interface User {
@@ -43,11 +30,9 @@ function rememberToken(token: string | undefined): void {
     if (token) localStorage.setItem(TOKEN_KEY, token);
     else localStorage.removeItem(TOKEN_KEY);
   } catch {
-    // Private-mode storage: the session lasts as long as the page does.
   }
 }
 
-/** One request against `/api`, with the error envelope unwrapped (backend/README.md). */
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = storedToken();
   const headers = new Headers(init.headers);
@@ -68,7 +53,6 @@ async function errorFrom(response: Response): Promise<Error> {
     const body = (await response.json()) as { error?: { code?: string; message?: string } };
     if (body.error?.message) message = `${body.error.code ?? response.status}: ${body.error.message}`;
   } catch {
-    // Not an error envelope (a proxy, or an empty body): the status line will do.
   }
   const error = new Error(message);
   error.name = response.status === 401 ? "Unauthorized" : "ApiError";
@@ -113,7 +97,6 @@ export async function logout(): Promise<void> {
   }
 }
 
-/** Create a document from its full text (SPEC §5.1: the server stamps timestamps). */
 export function createDocument(content: string): Promise<{ id: string }> {
   return api<{ id: string }>("/documents", {
     method: "POST",

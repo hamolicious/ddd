@@ -17,7 +17,6 @@ const ids = (seats: Seated<Placeable>) =>
   Object.fromEntries(Object.entries(seats).map(([seat, list]) => [seat, (list ?? []).map((item) => item.id)]));
 const same = (item: Placeable): Placeable => item;
 
-// In registry order, as the toolbar hands them over: the bell before the sync pill.
 const items: Placeable[] = [
   { id: "settings", side: "end" },
   { id: "admin", side: "end" },
@@ -58,8 +57,6 @@ describe("arrange", () => {
   });
 
   it("does not reorder unarranged items by any hint of their own", () => {
-    // The registry already sorted by `order`; `arrange` keeps whatever order it is
-    // handed rather than sorting a second time.
     const hinted = [
       { id: "late", side: "end", order: 900 },
       { id: "early", side: "end", order: 1 },
@@ -81,7 +78,6 @@ describe("arrange", () => {
   });
 
   it("ignores seats the profile does not have", () => {
-    // `bottom` is the phone's; on desktop the item goes to its own default seat.
     const arranged = arrange(items, same, "desktop", { seats: { bottom: ["custom"] }, hidden: [] });
     expect(ids(arranged)["top-start"]).toEqual(["custom"]);
   });

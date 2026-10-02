@@ -1,8 +1,3 @@
-/**
- * An (i) beside a label: the explanation opens in a popover beside it (a bottom sheet on
- * a phone), through `context-menu`, so the label itself stays one short line.
- */
-
 import type { ReactElement, ReactNode } from "react";
 
 import { useSheet } from "./hooks.js";

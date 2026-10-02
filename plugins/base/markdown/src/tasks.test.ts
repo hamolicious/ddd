@@ -16,7 +16,6 @@ const scan = (text: string, registry = BUILTINS) => scanTasks(processor.parse(te
 
 describe("buildTaskRegistry", () => {
   it("keeps the order it is handed and does not sort by `order` itself", () => {
-    // The registry sorts by `order`; this function shows exactly what it is handed.
     const registry = buildTaskRegistry([DONE, DROPPED, TODO, PARTIAL, { marker: "?", label: "Unclear", icon: "?" }]);
     expect(registry.states.map((state) => state.marker)).toEqual(["x", "-", " ", "/", "?"]);
   });
@@ -24,8 +23,6 @@ describe("buildTaskRegistry", () => {
   it("resolves off and on from the registry, not from hard-coded markers", () => {
     expect(BUILTINS.off?.marker).toBe(" ");
     expect(BUILTINS.on?.marker).toBe("x");
-    // A workspace that replaced the built-ins entirely still gets a sensible toggle:
-    // off = the first state that is not `done`, on = the first that is.
     const replaced = buildTaskRegistry([
       { marker: "o", label: "Open", icon: "o", order: 0 },
       { marker: "v", label: "Closed", icon: "v", order: 1, done: true },
@@ -78,9 +75,6 @@ describe("markerAt", () => {
   });
 
   it("requires a space or tab after the checkbox, exactly as GFM does", () => {
-    // `- [ ]` at end of line and `- [x]done` are not task items to any GFM renderer, so
-    // they are not task items here either — a divergence would render one thing in this
-    // app and another on GitHub.
     expect(markerAt("- [ ]", 0)).toBeNull();
     expect(markerAt("- [x]done", 0)).toBeNull();
   });
@@ -99,13 +93,11 @@ describe("scanTasks — the parser accepts any registered marker", () => {
   it("locates every marker in document order, registered or not", () => {
     const { locations } = scan(TEXT);
     expect(locations.map((location) => location.marker)).toEqual([" ", "x", "X", "/"]);
-    // Offsets point at the character between the brackets.
     for (const location of locations) expect(TEXT[location.offset]).toBe(location.marker);
   });
 
   it("marks only the markers a contribution claims as registered", () => {
     expect(scan(TEXT).locations.map((location) => location.registered)).toEqual([true, true, false, false]);
-    // Install a plugin that adds `[/]` and the same text parses it as a task.
     const withPartial = buildTaskRegistry([TODO, DONE, PARTIAL]);
     expect(scan(TEXT, withPartial).locations.map((location) => location.registered)).toEqual([
       true,
@@ -116,9 +108,6 @@ describe("scanTasks — the parser accepts any registered marker", () => {
   });
 
   it("records which markers remark-gfm already consumed", () => {
-    // GFM eats its own three — including `[X]`, which nothing registers — and leaves
-    // everything else as literal text in the paragraph. The renderer needs to know which,
-    // to decide whether to strip or to re-insert `[m] `.
     expect(scan(TEXT).locations.map((location) => location.consumedByGfm)).toEqual([true, true, true, false]);
   });
 
@@ -138,7 +127,6 @@ describe("scanTasks — the parser accepts any registered marker", () => {
 describe("resolveMarkerOffset — a click never writes to a guessed position", () => {
   const BODY = ["- [ ] milk", "- [ ] bread"].join("\n");
   const rescanIn = (text: string) => () => scan(text);
-  /** The second task ("bread") as the renderer captured it. */
   const bread = () => {
     const location = scan(BODY).locations[1];
     if (!location) throw new Error("fixture has two tasks");
@@ -150,10 +138,6 @@ describe("resolveMarkerOffset — a click never writes to a guessed position", (
   });
 
   it("does not tick the wrong checkbox when the document shifted underneath", () => {
-    // The regression this function exists for. `bread().offset` is 14, and in the shifted
-    // text offset 14 is *milk's* checkbox — same marker, so a plain offset check passes and
-    // the user's click lands on the wrong line. Identity is marker + line text, so it does
-    // not.
     const shifted = `# Heading\n\n${BODY}`;
     const resolved = resolveMarkerOffset(shifted, 0, bread(), 1, rescanIn(shifted));
     expect(resolved).not.toBeNull();
@@ -180,7 +164,6 @@ describe("resolveMarkerOffset — a click never writes to a guessed position", (
   });
 
   it("returns null when someone else already changed that task's state", () => {
-    // Writing " " here would silently undo their edit.
     const changed = ["- [ ] milk", "- [x] bread"].join("\n");
     expect(resolveMarkerOffset(changed, 0, bread(), 1, rescanIn(changed))).toBeNull();
   });
@@ -191,9 +174,6 @@ describe("resolveMarkerOffset — a click never writes to a guessed position", (
     if (!second) throw new Error("fixture has two tasks");
     expect(resolveMarkerOffset(twins, 0, second, 1, rescanIn(twins))).toBe(second.offset);
 
-    // Ordinal shifted, and marker + label cannot tell the two "milk" lines apart. Whichever
-    // it lands on, it lands on *a* checkbox reading "milk" in the state the user saw — so
-    // the write is always to a task indistinguishable from the one they clicked.
     const shifted = `- [ ] eggs\n${twins}`;
     const resolved = resolveMarkerOffset(shifted, 0, second, 1, rescanIn(shifted));
     expect(resolved).not.toBeNull();

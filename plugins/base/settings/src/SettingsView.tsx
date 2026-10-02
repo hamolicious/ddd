@@ -1,30 +1,3 @@
-/**
- * The settings screen: a list of contributed sections and the one that is open.
- *
- * Three things it does deliberately.
- *
- * **It owns no settings.** Every section is an `addSection` item rendered
- * through `kernel.ui.boundary` (SPEC §6.4), so a plugin whose settings UI throws loses
- * its own panel and nothing else.
- *
- * **The section is in the URL.** `/settings/:section` means a link to a specific
- * screen exists — which is what lets `themes` say "open the appearance settings" and
- * what makes the browser's back button work inside settings.
- *
- * **It says where settings live.** They are per-user documents in a shared workspace
- * (SPEC §6.4), so another user can read them. That sentence belongs on the screen
- * where somebody is about to type something into a settings field, not only in the
- * contract.
- *
- * **On a phone it is a list, then a section.** The eleven section names laid out in a
- * row were a 1 860 px horizontal strip inside a 374 px scroller with no scrollbar: two
- * and a half sections visible and no affordance saying the rest existed. Below the
- * compact breakpoint the list stacks and the two halves take turns — `data-view` on the
- * root is what the stylesheet reads to decide which — so a section gets the whole
- * screen and "All settings" goes back. The URL is unchanged either way, and on a wide
- * screen both halves are still side by side.
- */
-
 import { useMemo, type ReactNode } from "react";
 
 import type { Kernel, Registry, RegistryEntry } from "@kernel";
@@ -34,7 +7,6 @@ import { useRegistry } from "../../_shared/boundary.js";
 import { groupByBase, useBasePluginIds } from "./groups.js";
 import type { SettingsSection } from "./sections.js";
 
-/** The part of the router this view uses. */
 export interface RouterService {
   readonly navigate: (path: string) => void;
   readonly url: (path: string) => string;
@@ -43,13 +15,11 @@ export interface RouterService {
 export interface SettingsViewProps {
   readonly kernel: Kernel;
   readonly router: RouterService;
-  /** The sections registry, already in display order. */
   readonly sections: Registry<SettingsSection>;
   readonly params?: Readonly<Record<string, string>>;
 }
 
 export function SettingsView({ kernel, router, sections: host, params }: SettingsViewProps): ReactNode {
-  // The registry's order is the order shown; there is nothing to sort here.
   const sections = useRegistry(host);
 
   const groups = groupByBase(sections, useBasePluginIds(kernel));
@@ -57,8 +27,6 @@ export function SettingsView({ kernel, router, sections: host, params }: Setting
   const chosen = sections.find((entry) => entry.value.id === requested);
   const active =
     chosen ??
-    // An unknown section id falls back to the first rather than to an empty pane: the
-    // id may belong to a plugin that has not activated, or has been uninstalled.
     groups.base[0] ??
     groups.extensions[0];
 
@@ -84,8 +52,6 @@ export function SettingsView({ kernel, router, sections: host, params }: Setting
   );
 
   return (
-    // `section` only when the URL actually named one that exists — `/settings` on its
-    // own is the index, and on a wide screen both views render whichever this says.
     <div className="settings:mx-auto settings:max-w-[62rem] settings:p-4 settings:font-sans settings:text-text settings:compact:px-[calc(var(--ddd-space)+var(--ddd-safe-right))] settings:compact:pb-[calc(var(--ddd-space)+var(--ddd-safe-bottom))] settings:compact:pl-[calc(var(--ddd-space)+var(--ddd-safe-left))] settings:compact:pt-2" data-view={chosen ? "section" : "index"}>
       <header className="settings:[&_h1]:mb-2 settings:[&_h1]:mt-0 settings:[&_h1]:text-2xl settings:compact:[&_h1]:text-xl">
         <h1>Settings</h1>
@@ -110,9 +76,6 @@ export function SettingsView({ kernel, router, sections: host, params }: Setting
           </nav>
 
           <div className={`settings-pane settings:min-w-0 settings:compact:overflow-x-auto ${chosen ? "" : " settings:compact:hidden"}`}>
-            {/* The way back out of a drilled-in section. A real link, because it is a
-                real navigation — and hidden by the stylesheet on a screen wide enough
-                to show the list beside the section anyway. */}
             <a
               className="settings:mb-1 settings:hidden settings:min-h-[var(--ddd-tap-target)] settings:items-center settings:text-link settings:before:mr-1 settings:before:content-['‹'] settings:compact:inline-flex"
               href={router.url("/settings")}
@@ -140,9 +103,6 @@ function Section({
   readonly entry: RegistryEntry<SettingsSection>;
 }): ReactNode {
   const section = entry.value;
-  // Memoized per contribution: a new wrapper on every render is a different component
-  // type to React, which remounts the section and throws away whatever the user had
-  // half-typed into it.
   const Rendered = useMemo(
     () =>
       kernel.ui.boundary(section.component, {
@@ -158,8 +118,6 @@ function Section({
       {section.description ? (
         <p className="settings:mb-3 settings:mt-1 settings:text-text-muted">{section.description}</p>
       ) : null}
-      {/* No "provided by <plugin>" line: which plugin owns a section is an admin
-          question, and it was a second grey sentence under every heading. */}
       <Rendered />
     </section>
   );

@@ -6,8 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ddd_shell/bridge/bridge.dart';
 import 'package:ddd_shell/bridge/folder.dart';
 
-/// The capability over a real temporary directory; the picker, the permission prompt and
-/// the watcher are ports.
 void main() {
   late Directory sandbox;
   late Directory notes;

@@ -1,39 +1,3 @@
-/**
- * Plugin management: pending installs and their capability approval, the installed set, the
- * circuit breaker, uninstall, the generated config form (SPEC §6.2, §6.3), and how the
- * plugins depend on one another.
- *
- * # What this screen is for
- *
- * Installing a plugin is the most consequential thing an admin of this app can do, so the
- * screen is built around **the sentence SPEC §6.1 requires it to say**: a plugin's frontend
- * half runs unsandboxed in every user's session, with full access to the DOM, the workspace
- * and the signed-in credentials. `capabilities` gate the *server* host functions and the
- * native bridge — they are not a browser sandbox. That is not a disclaimer at the bottom; it
- * is the first thing above the approve button.
- *
- * # The five things with teeth
- *
- * - **Approval is explicit, and it is a capability decision.** Both install paths (upload
- *   here, a directory drop on the server) land *pending*, and nothing runs until an admin
- *   clicks approve. The capability list is shown in full — hosts spelled out, public routes
- *   labelled as reachable without signing in — and may be **narrowed** here. The one field
- *   that may be *extended* is `http.hosts`, because a plugin whose destination is
- *   admin-configured cannot know its host when it is packaged (`HOST-ABI.md` §7.2) — a
- *   feed importer given its URL by an operator is exactly that case.
- * - **An upgrade is an upload.** A package whose id is already installed lands pending too,
- *   so a new version goes past the capability screen rather than around it.
- * - **Uninstall keeps data by default.** KV and the plugin's in-document `%%%` sections
- *   survive, so a reinstall is lossless; the purge checkbox is the explicit, separately
- *   confirmed act that strips them.
- * - **The breaker is visible and resettable.** Five consecutive failures disable a plugin
- *   until someone looks at it (SPEC §6.3), and "re-enable" clears the counter — otherwise the
- *   next call would be refused and the button would look broken.
- * - **A secret is write-only.** See `PluginConfig.tsx`.
- *
- * The server authorizes every route underneath; hiding a button here is a courtesy.
- */
-
 import { useCallback, useMemo, useRef, useState } from "react";
 import type { ReactElement, ReactNode } from "react";
 
@@ -64,9 +28,6 @@ export function PluginsSection({
   readonly embedded?: boolean;
 }): ReactElement {
   const list = useAsync<PluginAdminList>(() => client.adminPlugins(), []);
-  // The M3 read-only view, used only as a fallback: if the management endpoint cannot answer
-  // (a server without the plugin host, or one that failed to reach Mongo), an admin should
-  // still be able to see what is installed rather than an error and nothing else.
   const installed = useAsync(() => client.plugins(), []);
 
   const pending = useMemo(
@@ -82,8 +43,6 @@ export function PluginsSection({
     () => pluginRelations(list.data?.plugins ?? [], installed.data?.load?.skipped ?? []),
     [list.data, installed.data],
   );
-  // Every change here also reloads the page (`plugins.changed`); reloading both lists
-  // covers the moment before that arrives.
   const reload = useCallback(() => {
     list.reload();
     installed.reload();
@@ -91,8 +50,6 @@ export function PluginsSection({
 
   return (
     <AdminSectionFrame id="plugins" title="Plugins" embedded={embedded}>
-      {/* Both halves always show: the recovery line is short, and it is what you need
-          when something is already broken. */}
       <div className="admin-callout">
         <p className="admin:m-0">
           <strong>Installing a plugin is an act of trust.</strong> Its frontend half runs
@@ -205,12 +162,7 @@ export function PluginsSection({
   );
 }
 
-/** The accent fill for the one button a card is for (Approve). */
 const PRIMARY = "admin:border-accent! admin:bg-accent! admin:text-accent-text!";
-
-// ---------------------------------------------------------------------------
-// Upload
-// ---------------------------------------------------------------------------
 
 function UploadPanel({
   client,
@@ -228,7 +180,6 @@ function UploadPanel({
   const cap = list?.limits.max_package_bytes;
   const busy = upload.busy !== undefined;
 
-  // Choosing is uploading: a package only lands pending, and approving it is the act.
   const send = (file: File | undefined): void => {
     if (!file || busy) return;
     setOutcome(undefined);
@@ -293,10 +244,6 @@ function UploadPanel({
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Pending: the approval screen
-// ---------------------------------------------------------------------------
 
 function PendingCard({
   client,
@@ -527,21 +474,6 @@ function PendingCard({
   );
 }
 
-/**
- * What the server's outbound IP policy will make of the hosts in the box — per host,
- * and only where there is something true to say.
- *
- * It replaces a single blanket sentence ("loopback, link-local, private and metadata
- * addresses stay blocked regardless") that was printed next to every added host. That
- * sentence was noise beside `example.com` and *wrong* beside `10.0.0.5`: an operator's
- * `PLUGIN_HTTP_ALLOW_CIDRS` is exactly what unblocks private ranges (SPEC §6.2), so
- * "regardless" promised something the server does not do. The metadata endpoints are
- * the only addresses that really are refused whatever the configuration, and now they
- * are the only ones the UI says so about.
- *
- * Notes are hints about the *literal that was typed*. The server resolves the name and
- * pins the address it got, and that is the enforcement; nothing here blocks approval.
- */
 function HostPolicyNotes({ hosts }: { readonly hosts: readonly string[] }): ReactElement | null {
   const notes = hosts
     .map((host) => ({ host, note: hostPolicyNote(host) }))
@@ -564,10 +496,6 @@ function HostPolicyNotes({ hosts }: { readonly hosts: readonly string[] }): Reac
     </ul>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Installed
-// ---------------------------------------------------------------------------
 
 function InstalledCard({
   client,
@@ -697,7 +625,6 @@ function InstalledCard({
         </p>
       )}
 
-      {/* A class, not `hidden`: the flex utility would win over the attribute. */}
       <div
         id={detailsId}
         className={`${open ? "admin:flex" : "admin:hidden"} admin:flex-col admin:gap-3 admin:border-t admin:border-border admin:pt-2`}
@@ -803,7 +730,6 @@ function InstalledCard({
   );
 }
 
-/** Label on the left, value on the right; one column of labels for the whole card. */
 function Facts({ rows }: { readonly rows: readonly (readonly [string, ReactNode])[] }): ReactElement {
   return (
     <dl className="admin:m-0 admin:grid admin:grid-cols-[minmax(6rem,9rem)_1fr] admin:gap-x-3 admin:gap-y-1.5 admin:text-sm">
@@ -843,9 +769,6 @@ function CronTable({
   return (
     <div className="admin-plugin-cron admin:flex admin:flex-col admin:gap-1">
       <span className="admin-note">In UTC; missed runs are skipped.</span>
-      {/* The one table in this plugin with no `.admin-table-scroll` parent, and six
-          columns to overflow with. It is invisible in a workspace whose plugins are all
-          frontend-only, which is why nothing caught it. */}
       <div className="admin-table-scroll">
         <table className="admin-table">
           <thead>
@@ -911,7 +834,6 @@ function CronTable({
   );
 }
 
-/** A backend half's cron and host-event counts, one line. */
 function Activity({ plugin }: { readonly plugin: PluginAdminView }): ReactElement {
   const metrics = plugin.metrics;
   return (
@@ -958,10 +880,6 @@ function PluginLogs({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Host
-// ---------------------------------------------------------------------------
-
 function HostSummary({ list }: { readonly list: PluginAdminList }): ReactElement {
   const { host, limits } = list;
   return (
@@ -999,10 +917,6 @@ function Stat({ label, value }: { readonly label: string; readonly value: ReactN
   );
 }
 
-// ---------------------------------------------------------------------------
-// Shared pieces
-// ---------------------------------------------------------------------------
-
 function PluginHead({ plugin }: { readonly plugin: PluginAdminView }): ReactElement {
   return (
     <>
@@ -1025,7 +939,6 @@ function PluginHead({ plugin }: { readonly plugin: PluginAdminView }): ReactElem
   );
 }
 
-/** The M3 read-only list, shown only when the management endpoint fails. */
 function ReadOnlyFallback({
   plugins,
   loading,
@@ -1079,7 +992,6 @@ function ReadOnlyFallback({
   );
 }
 
-/** One readable line per declared capability. Counts hide exactly what matters here. */
 export function describeCapabilities(
   capabilities: PluginCapabilities | undefined,
 ): readonly string[] {
@@ -1103,7 +1015,6 @@ export function describeCapabilities(
   return lines;
 }
 
-/** `hooks`, `cron` and `events` as one phrase. */
 export function describeBackend(plugin: PluginAdminView): string {
   const parts: string[] = [];
   if (plugin.hooks.length > 0) parts.push(`hooks ${plugin.hooks.join(", ")}`);
@@ -1133,7 +1044,6 @@ function formatRanges(ranges: Readonly<Record<string, string>> | undefined): str
   return entries.map(([name, range]) => `${name} ${range}`).join(", ");
 }
 
-/** Plugin ids, each in `<code>`, comma-separated; "none" for an empty list. */
 function IdList({ ids }: { readonly ids: readonly string[] }): ReactElement {
   if (ids.length === 0) return <>none</>;
   return (
@@ -1154,7 +1064,6 @@ const DEPENDENCY_STATUS: Readonly<Record<DependencyView["status"], string>> = {
   disabled: " (disabled)",
 };
 
-/** `context-menu ^2.0, header ^2.0`, flagging any the installed set cannot satisfy. */
 function DependencyList({ dependencies }: { readonly dependencies: readonly DependencyView[] }): ReactElement {
   if (dependencies.length === 0) return <>none</>;
   return (

@@ -1,8 +1,3 @@
-/// The envelope and the injected shim (`BRIDGE.md` §2–§4).
-///
-/// These are the tests that protect the ABI: a change to an error code, to the envelope
-/// keys, or to the member names the shim defines breaks the web side silently, because the
-/// two halves are compiled separately and never see each other.
 library;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -186,8 +181,6 @@ void main() {
 
       final String source = script(bridge);
 
-      // `version` is what the frozen web-side `detectBridge()` reads; `bridgeVersion` is
-      // the same number under the name M5 spells it (`BRIDGE.md` §3).
       expect(source, contains('version: V'));
       expect(source, contains('bridgeVersion: V'));
       expect(source, contains('"tok-123"'));
@@ -205,8 +198,6 @@ void main() {
           (Map<String, Object?> _) async => null,
         );
 
-      // The web side degrades on *absence*, never on an error (SPEC §7), so an
-      // unimplemented method must not appear on `window.shell` at all.
       expect(script(bare), contains('METHODS = []'));
       expect(script(full), contains('"filesystem.export"'));
     });

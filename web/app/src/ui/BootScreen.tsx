@@ -1,12 +1,3 @@
-/**
- * Boot and failure screens — the app before (or instead of) plugins.
- *
- * These are plain React with inline token-based styling and no dependency on any
- * plugin, because the moments they cover are exactly the ones where plugins are not
- * available: cold start, a bootstrap pass over 5 000 documents (SPEC §4.1 wants a
- * progress screen for it), and a boot that failed outright.
- */
-
 import type { ReactNode } from "react";
 
 import { safeModeUrl } from "../boot/safe-mode.js";
@@ -40,15 +31,6 @@ export function BootScreen({
   );
 }
 
-/**
- * A boot that could not finish.
- *
- * `offline` distinguishes the one failure that is not a fault: the server is
- * unreachable *and* this device has never completed a boot, so there is no remembered
- * session to open the local workspace as (see `boot/cache.ts`). Saying "could not
- * start" to someone whose only problem is a tunnel, without saying that reconnecting
- * fixes it, is how a working app looks broken.
- */
 export function BootFailure({
   error,
   offline,
@@ -79,11 +61,6 @@ export function BootFailure({
   );
 }
 
-/**
- * The browser floor of SPEC §8: import maps (Chrome 89+, Safari 16.4+). Below it,
- * "a readable failure message" — this one — rather than a stack trace from a module
- * specifier the browser cannot resolve.
- */
 export function UnsupportedBrowser(): ReactNode {
   return (
     <div className="ddd-boot" role="alert">
@@ -98,7 +75,6 @@ export function UnsupportedBrowser(): ReactNode {
   );
 }
 
-/** Feature detection for that floor. Cheap, and done before anything else. */
 export function supportsImportMaps(): boolean {
   return (
     typeof HTMLScriptElement !== "undefined" &&

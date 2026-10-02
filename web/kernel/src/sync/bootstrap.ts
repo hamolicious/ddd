@@ -1,14 +1,3 @@
-/**
- * Cold start: `GET /api/sync/bootstrap` (PROTOCOL.md §4, SPEC §4.1).
- *
- * Paged NDJSON, streamed, resumable. The client stores the `safe_seq` from the
- * first page and resumes the change feed there once the last page reports
- * `complete: true`; rows that changed during the pass are re-delivered by the
- * feed, which is harmless (rows are LWW by `seq`).
- *
- * **FROZEN INTERFACE.**
- */
-
 import {
   DEFAULT_BOOTSTRAP_LIMIT,
   PROTOCOL_VERSION,
@@ -19,11 +8,6 @@ import {
 } from "../protocol.js";
 import type { ProjectionStore, SyncCheckpoint } from "../store/projection-store.js";
 
-/**
- * A non-2xx bootstrap response. `status` is what the sync client branches on:
- * `401` is "re-authenticate" (never "clear local data" — SPEC §5.3), everything
- * else is a retry with backoff.
- */
 export class BootstrapHttpError extends Error {
   constructor(
     readonly status: number,
@@ -35,16 +19,11 @@ export class BootstrapHttpError extends Error {
 }
 
 export interface BootstrapOptions {
-  /** Endpoint; default `/api/sync/bootstrap`. */
   readonly url?: string;
-  /** Bearer token for shells/tests; browsers use the cookie. */
   readonly bearerToken?: string;
-  /** Rows per page (1..1000). */
   readonly limit?: number;
-  /** `all` (default) keeps Trash working offline (SPEC §6.5). */
   readonly trash?: "live" | "trashed" | "all";
   readonly includeContent?: boolean;
-  /** Injectable for tests and the Node harness. */
   readonly fetchImpl?: typeof fetch;
 }
 
@@ -58,7 +37,6 @@ export interface BootstrapProgress {
 export interface BootstrapResult {
   readonly safeSeq: number;
   readonly rows: number;
-  /** Ids dropped by the retain-only pass (PROTOCOL.md §4). */
   readonly removed: readonly string[];
 }
 
@@ -68,12 +46,10 @@ export class BootstrapClient {
     private readonly options: BootstrapOptions = {},
   ) {}
 
-  /** The checkpoint this pass resumes from and will overwrite when it completes. */
   checkpoint(): Promise<SyncCheckpoint> {
     return this.store.checkpoint();
   }
 
-  /** `?probe=1`: header only — "how far behind am I?" without downloading rows. */
   async probe(signal?: AbortSignal): Promise<BootstrapHeader> {
     const lines = await this.#request(this.requestUrl(null, true), signal);
     const header = lines.find(isHeader);
@@ -82,22 +58,6 @@ export class BootstrapClient {
     return header;
   }
 
-  /**
-   * Run a full pass: stream every page into the store, then drop local rows the
-   * pass never mentioned, then persist the pinned `safe_seq` with
-   * `bootstrapped: true`.
-   *
-   * Two orderings are load-bearing:
-   *
-   * 1. **The watermark is not advanced while the pass runs.** Rows go in as they
-   *    arrive, but `safeSeq` only moves to the pinned value once the last page
-   *    reports `complete`. A pass interrupted halfway therefore resumes as
-   *    another bootstrap rather than tailing the feed from a sequence number
-   *    whose rows were never stored.
-   * 2. **`retainOnly` runs before the checkpoint is written**, and only for a
-   *    pass that saw the whole workspace (`trash: "all"`). It is the sole
-   *    garbage-collection path in the client (PROTOCOL.md §4).
-   */
   async run(
     onProgress?: (progress: BootstrapProgress) => void,
     signal?: AbortSignal,
@@ -115,8 +75,6 @@ export class BootstrapClient {
       if (signal?.aborted) throw signal.reason ?? new Error("bootstrap aborted");
       const page = await this.page(cursor, signal);
       if (!pinned) {
-        // PROTOCOL.md §4: captured on the first page, echoed on every page. The
-        // first one is the one that counts.
         safeSeq = page.header.safe_seq;
         pinned = true;
       }
@@ -127,7 +85,6 @@ export class BootstrapClient {
         for (const row of page.rows) seen.add(row.id);
         await this.store.applyRows(page.rows, {
           ...before,
-          // Deliberately *not* `safeSeq`: see (1) above.
           safeSeq: before.safeSeq,
           updatedAt: Date.now(),
           coreSemanticsVersion,
@@ -153,10 +110,6 @@ export class BootstrapClient {
     return { safeSeq, rows, removed };
   }
 
-  /**
-   * One page. Exposed so the harness can measure page latency and so `run` stays
-   * a loop over a well-tested unit.
-   */
   async page(
     cursor: string | null,
     signal?: AbortSignal,
@@ -187,7 +140,6 @@ export class BootstrapClient {
     };
   }
 
-  /** Build the request URL for a page. Pure; unit-tested. */
   requestUrl(cursor: string | null, probe = false): string {
     const url = new URL(this.options.url ?? "/api/sync/bootstrap", baseUrl());
     url.searchParams.set("limit", String(this.options.limit ?? DEFAULT_BOOTSTRAP_LIMIT));
@@ -198,7 +150,6 @@ export class BootstrapClient {
     return url.toString();
   }
 
-  /** Fetch one NDJSON response and collect its lines. */
   async #request(url: string, signal?: AbortSignal): Promise<BootstrapLine[]> {
     const fetchImpl = this.options.fetchImpl ?? globalThis.fetch;
     if (!fetchImpl) throw new Error("no fetch implementation available for bootstrap");
@@ -209,8 +160,6 @@ export class BootstrapClient {
     const response = await fetchImpl(url, {
       method: "GET",
       headers,
-      // Browsers authenticate with the session cookie (SPEC §5.2); shells send
-      // the bearer token above. Both carriers, one request shape.
       credentials: "include",
       ...(signal ? { signal } : {}),
     });
@@ -228,7 +177,6 @@ export class BootstrapClient {
       }
       return lines;
     }
-    // Test doubles and non-streaming fetch polyfills: same NDJSON, one string.
     for (const text of (await response.text()).split("\n")) {
       const trimmed = text.trim();
       if (trimmed) lines.push(JSON.parse(trimmed) as BootstrapLine);
@@ -257,10 +205,6 @@ function isRow(line: BootstrapLine): line is BootstrapLine & { type: "row" } & F
   return line.type === "row";
 }
 
-/**
- * Split a byte stream into NDJSON lines. Free function because the harness
- * reuses it for the server's other streaming endpoints.
- */
 export async function* ndjson(
   body: ReadableStream<Uint8Array>,
   signal?: AbortSignal,

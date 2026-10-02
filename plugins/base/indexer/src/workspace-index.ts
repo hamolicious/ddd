@@ -1,18 +1,3 @@
-/**
- * The indexes, over every row of the projection.
- *
- * Two layers, split by cost:
- *
- * - **Per document, incremental.** `sync` is handed the whole projection on every change
- *   (a live query's result is the whole result) and re-extracts only the rows whose
- *   fingerprint moved — the scan of the text is the one thing worth not repeating.
- * - **Workspace-wide, lazy.** Stats, fields, values and backlinks are sums over the
- *   extracted entries, built on the first read after a change and kept until the next.
- *   Maintaining each one incrementally would be a subtract-then-add for every aggregate
- *   on every edit, which is where an index quietly drifts; a rebuild is a loop over a few
- *   thousand small records.
- */
-
 import type { CoreValue, DocumentId, DocumentRow } from "@kernel";
 import type {
   Connection,
@@ -58,15 +43,10 @@ export class WorkspaceIndex {
   #version = 0;
   #derived: Derived | undefined;
 
-  /** Goes up by one each time `sync` changes anything. */
   get version(): number {
     return this.#version;
   }
 
-  /**
-   * Bring the index level with `rows` — every row the projection has, Trash included.
-   * Returns whether anything changed.
-   */
   sync(rows: readonly DocumentRow[]): boolean {
     let changed = false;
     const seen = new Set<DocumentId>();
@@ -100,8 +80,6 @@ export class WorkspaceIndex {
     const { fields, tallies } = this.#derive();
     const own = this.#ownFields(scope.exclude);
     if (!own) return fields;
-    // Take the one document back out: a count down by one, a kind down by one, and a
-    // field gone when it was the only document with it.
     const out: FmField[] = [];
     for (const field of fields) {
       const value = own.get(field.key);
@@ -136,7 +114,6 @@ export class WorkspaceIndex {
     return [...counts.values()].sort(byCount).map(({ value, count }) => ({ value, count }));
   }
 
-  /** The live document's fields by key, for taking it back out; `undefined` when there is nothing to take. */
   #ownFields(id: DocumentId | undefined): (Map<string, CoreValue> & { machine: boolean }) | undefined {
     const data = id === undefined ? undefined : this.#entries.get(id)?.data;
     if (!data || data.deleted || data.fields.length === 0) return undefined;
@@ -170,7 +147,6 @@ export class WorkspaceIndex {
     const live = [...this.#entries.values()].map((entry) => entry.data).filter((data) => !data.deleted);
     const trashed = this.#entries.size - live.length;
 
-    // Fields: every key of every live document.
     const tallies = new Map<string, FieldTally>();
     for (const data of live) {
       for (const [key, value] of data.fields) {
@@ -190,7 +166,6 @@ export class WorkspaceIndex {
       .map(([key, tally]) => ({ key, count: tally.count, machineOnly: tally.human === 0, kinds: { ...tally.kinds } }))
       .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key));
 
-    // Backlinks, and which documents are connected at all (for orphans).
     const incoming = new Map<DocumentId, Connection[]>();
     const connected = new Set<DocumentId>();
     for (const data of live) {
@@ -269,7 +244,6 @@ export class WorkspaceIndex {
   }
 }
 
-/** One count per document per distinct value: a list holding `a` twice is one `a`. */
 function countValues(values: FieldTally["values"], value: CoreValue): void {
   const items: readonly CoreValue[] = Array.isArray(value) ? value : [value];
   const seen = new Set<string>();
@@ -292,11 +266,6 @@ function lastSegment(key: string): string {
   return key.slice(key.lastIndexOf(".") + 1);
 }
 
-/**
- * Each note's place in the folder tree, as the titles above it joined by " / " (`""` at
- * the root). The tree's own rules, in brief (`folders/src/hierarchy.ts`): the listing
- * note with the smallest id is the parent, and a loop is walked only once.
- */
 function folderTitles(live: readonly Extracted[]): (id: DocumentId) => string {
   const titles = new Map(live.map((data) => [data.id, data.title]));
   const parentOf = new Map<DocumentId, DocumentId>();

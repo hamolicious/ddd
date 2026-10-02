@@ -1,9 +1,3 @@
-/**
- * Document ids minted on the device (SPEC §3.5): a ULID — 48 bits of milliseconds, then
- * 80 random bits, in Crockford base 32. The server accepts them as they are, which is
- * what lets a note made offline keep its id when it reaches the server.
- */
-
 const ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
 export function mintUlid(now: number = Date.now()): string {

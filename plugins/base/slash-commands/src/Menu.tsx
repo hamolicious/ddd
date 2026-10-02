@@ -1,12 +1,3 @@
-/**
- * The `/` dropdown, drawn from `shell-ui`'s overlay spot.
- *
- * Fixed-position at the caret: under it, or above it when the space below is short (a
- * phone's keyboard takes the bottom half, so the visual viewport is what counts). Never
- * wider than the screen. Pointer presses are cancelled before they reach the editor, so
- * choosing with a tap does not take the editor's focus, and with it the menu, away.
- */
-
 import { useEffect, useRef, useSyncExternalStore, type ReactNode } from "react";
 
 import type { SlashController } from "./controller.js";

@@ -1,8 +1,3 @@
-//! Events: the server bus ([`emit`]) and the browsers ([`emit_client`]).
-//!
-//! Ephemeral, fire-and-forget, no replay. A client that was closed missed it — which is
-//! why state belongs in documents and events are for nudges (SPEC §1, §6.3).
-
 use serde::Serialize;
 
 use crate::abi::events::{EmitClientInput, EmitClientOutput, EmitInput, EmitOutput};
@@ -18,8 +13,6 @@ fn to_value<T: Serialize>(payload: &T) -> crate::Result<serde_json::Value> {
     })
 }
 
-/// Publish on the server bus. The host prefixes your plugin id: `emit("synced")` is
-/// published as `calendar:synced`, and is never delivered back to you.
 pub fn emit<T: Serialize>(event: &str, payload: &T) -> crate::Result<EmitOutput> {
     call_value(
         host::emit,
@@ -30,7 +23,6 @@ pub fn emit<T: Serialize>(event: &str, payload: &T) -> crate::Result<EmitOutput>
     )
 }
 
-/// Relay to every connected session, as `plugin:<your-id>:<event>`.
 pub fn emit_client<T: Serialize>(event: &str, payload: &T) -> crate::Result<EmitClientOutput> {
     call_value(
         host::emit_client,
@@ -42,7 +34,6 @@ pub fn emit_client<T: Serialize>(event: &str, payload: &T) -> crate::Result<Emit
     )
 }
 
-/// Relay to one user's sessions only.
 pub fn emit_client_to<T: Serialize>(
     user_id: &str,
     event: &str,

@@ -20,7 +20,6 @@ describe("the reload prompt", () => {
     expect(notices.at(-1)?.id).toBe(RELOAD_NOTICE_ID);
     expect(notices.at(-1)?.message).toBe("An update is available.");
 
-    // One Reload covers both: the waiting worker takes control and reloads.
     notices.at(-1)?.actions?.[0]?.run();
     expect(apply).toHaveBeenCalledOnce();
     expect(reloadPage).not.toHaveBeenCalled();

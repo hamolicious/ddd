@@ -1,12 +1,3 @@
-/**
- * Settings → Attachments: one row per file type. Pasted as Preview or Link, and, when
- * more than one viewer claims the type, which one shows it.
- *
- * The list is every type that has a paste setting (declared, or pasted since) or a
- * viewer. Live, because a first paste, a newly installed viewer, or a change on another
- * device can land while this screen is open.
- */
-
 import type { Kernel, SettingsValue } from "@kernel";
 import { useEffect, useState, type ReactNode } from "react";
 
@@ -34,7 +25,6 @@ export function FileTypeSettings({
   };
   const [values, setValues] = useState(read);
   const [problem, setProblem] = useState<string | undefined>(undefined);
-  // A viewer installed or removed while this screen is open changes the rows.
   const [, setViewerVersion] = useState(0);
   useEffect(() => viewers.subscribe(() => setViewerVersion((n) => n + 1)), [viewers]);
   useEffect(() => {

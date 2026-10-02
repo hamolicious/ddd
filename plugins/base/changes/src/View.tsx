@@ -1,13 +1,3 @@
-/**
- * One snapshot, read only: `#/doc/<id>/snapshot/<snapshot>`. A "detached head": the
- * document as it was then, under a banner that says so, with the way back to the
- * current version and the way to make this one current (Restore).
- *
- * Rendered by `markdown` **without a document id**, which is what makes it read-only:
- * task checkboxes and embed toggles only write when they know which document to write
- * to, and this text is not any document's current text.
- */
-
 import { OfflineCopyNote } from "../../_shared/offline-copy.js";
 import { changesOfflineCopy } from "./offline.js";
 import { useEffect, useState, type ReactElement } from "react";
@@ -23,7 +13,6 @@ import {
 } from "./api.js";
 import { DetachedBanner } from "./Banner.js";
 
-/** The part of `plugin:markdown` these pages draw with. */
 export type MarkdownApi = Pick<MarkdownRenderer, "render" | "bodyOf">;
 
 export const READER_CLASSES =

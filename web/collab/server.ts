@@ -1,14 +1,3 @@
-/**
- * The server a collaboration file drives: the real binary on its own port and its
- * own database, started through `app/e2e/server.mjs` so the prerequisites checks and
- * the environment are the E2E suite's, not a second copy of them.
- *
- * Each file owns one server because some scenarios **restart** it mid-test (edits made
- * while the server is down must still arrive), and a restart is only safe when nobody
- * else is using the process. `DDD_COLLAB_SERVER` points a run at a server you started
- * yourself instead; the restart scenarios then skip.
- */
-
 import { spawn, type ChildProcess } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,11 +6,8 @@ const web = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 export interface CollabServer {
   readonly url: string;
-  /** `false` for an external server: it cannot be restarted from here. */
   readonly owned: boolean;
-  /** Kill the process and wait for it to go. The database is kept. */
   stop(): Promise<void>;
-  /** Start it again on the same port and database, with `env` on top of the usual. */
   start(env?: Record<string, string>): Promise<void>;
   restart(env?: Record<string, string>): Promise<void>;
 }
@@ -96,7 +82,6 @@ async function waitHealthy(url: string, timeoutMs: number): Promise<void> {
       await response.arrayBuffer();
       if (response.ok) return;
     } catch {
-      // not up yet
     }
     if (Date.now() > deadline) throw new Error(`${url} was not healthy within ${timeoutMs} ms`);
     await new Promise((done) => setTimeout(done, 150));

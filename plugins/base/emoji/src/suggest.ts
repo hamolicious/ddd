@@ -1,31 +1,18 @@
-/**
- * What to suggest for the text before the caret. Pure, so it is tested without an editor.
- *
- * `:` followed by at least two shortcode characters, at the start of a word, opens the
- * list: `:ta` offers `:tada:`, `:taco:`, … Shortcodes that start with the typed text come
- * first, then ones that contain it, then emoji whose tags or description do. Choosing one
- * writes the whole `:shortcode:`. Nothing is offered in the frontmatter, in a fenced code
- * block, or inside an inline code span on the caret's line.
- */
-
 import type { Emoji, EmojiSet } from "./emojis.js";
 
 export interface Suggestion {
   readonly emoji: string;
   readonly name: string;
-  /** What replaces the typed `:partial`. */
   readonly insert: string;
 }
 
 export interface Suggestions {
-  /** How many characters before the caret a chosen suggestion replaces. */
   readonly replace: number;
   readonly items: readonly Suggestion[];
 }
 
 export const MAX_SUGGESTIONS = 20;
 
-/** `:` at the start of a word, then the shortcode typed so far, up to the caret. */
 const TYPED = /(?:^|[^\p{L}\p{N}_:]):([a-z0-9_+-]{2,})$/u;
 
 export function suggest(lineBeforeCaret: string, documentBeforeCaret: string, set: EmojiSet): Suggestions | undefined {
@@ -58,12 +45,10 @@ export function suggest(lineBeforeCaret: string, documentBeforeCaret: string, se
   };
 }
 
-/** An odd number of backticks before the caret on this line. */
 function inCodeSpan(lineBeforeCaret: string): boolean {
   return ((lineBeforeCaret.match(/`/g)?.length ?? 0) & 1) === 1;
 }
 
-/** The document opens with `---` and no closing `---` comes before the caret's line. */
 export function inFrontmatter(documentBeforeCaret: string): boolean {
   const text = documentBeforeCaret.startsWith("﻿") ? documentBeforeCaret.slice(1) : documentBeforeCaret;
   const lines = text.split("\n").map((line) => line.replace(/\r$/, ""));
@@ -71,7 +56,6 @@ export function inFrontmatter(documentBeforeCaret: string): boolean {
   return !lines.slice(1, -1).includes("---");
 }
 
-/** An odd number of ``` / ~~~ fence lines above the caret's line. */
 function inFence(documentBeforeCaret: string): boolean {
   let open: string | undefined;
   const lines = documentBeforeCaret.split("\n");

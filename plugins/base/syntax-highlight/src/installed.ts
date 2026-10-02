@@ -1,9 +1,3 @@
-/**
- * Which languages this user installed: a per-user setting, so it syncs. Installing on the
- * phone marks it installed on the laptop too, and each device fetches the grammar the
- * first time it needs it.
- */
-
 import type { Kernel, SettingsValue } from "@kernel";
 
 export const INSTALLED_KEY = "languages";

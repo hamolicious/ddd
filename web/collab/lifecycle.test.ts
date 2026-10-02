@@ -1,9 +1,3 @@
-/**
- * Notes coming and going around people who are editing them: made on a device
- * offline, made twice, trashed and deleted for good elsewhere, and the server itself
- * going away mid-edit.
- */
-
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 import { mintUlid } from "../harness/src/core.js";
@@ -137,14 +131,12 @@ describe("deleted for good (SYNC-DECISIONS §4)", () => {
       alice.offline();
       alice.append(id, "unsent\n");
       await w.rest.request("DELETE", `/api/documents/${id}`);
-      // Retention 0 and a start: the startup sweep purges everything in Trash.
       await w.server.restart({ TRASH_RETENTION_DAYS: "0" });
       await w.server.restart();
 
       await alice.online();
       await expect.poll(() => alice.docErrors(id).map((error) => error.code)).toContain("gone");
       expect(alice.text(id)).toBe("# Purge me\n\nunsent\n");
-      // The id is in the graveyard forever: it cannot be created again…
       const reuse = await w.rest
         .request("POST", "/api/documents", {
           headers: { "content-type": "application/json" },
@@ -153,7 +145,6 @@ describe("deleted for good (SYNC-DECISIONS §4)", () => {
         .then((response) => response.status)
         .catch((error: unknown) => (error instanceof HttpError ? error.status : -1));
       expect(reuse).toBeGreaterThanOrEqual(400);
-      // …but the text can be saved as a new note.
       const saved = await alice.create(alice.text(id));
       expect(await serverText(w.rest, saved)).toBe("# Purge me\n\nunsent\n");
     },

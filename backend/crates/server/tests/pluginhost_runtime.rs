@@ -1,35 +1,3 @@
-//! The **real** plugin host, end to end: `PluginHost` over a real `AppState`, a real
-//! MongoDB, and the real `hello-backend` module compiled to `wasm32-unknown-unknown`.
-//!
-//! `pluginhost_smoke.rs` answers "does a plugin built against the SDK load at all" with a
-//! *miniature* host and no database. This suite is the other half — everything that only
-//! exists in the real one:
-//!
-//! 1. **Activation is the ABI check, then publication.** A module whose `ddd_abi_version`
-//!    disagrees never runs a line of its own code, and a plugin is in the active map only
-//!    once every step succeeded.
-//! 2. **A capability that was not approved is an erroring stub, not a missing import**
-//!    (SPEC §6.2). The plugin can *probe* for one it does not have and read the code.
-//! 3. **The document host functions work through a plugin**, with `created_by` as the
-//!    ownership record (SPEC §3.3): `create_document` stamps `plugin:<id>`,
-//!    `rewrite_document` refuses a document the plugin did not create, and
-//!    `splice_section` writes only the caller's own `%%%` section — idempotently.
-//! 4. **A refusal is a successful call and a trap is not** — the distinction the circuit
-//!    breaker is built on — and five host-side failures in a row disable the plugin.
-//! 5. **The deadline is real.** A Wasm loop that never returns to the host is still
-//!    interrupted, because the epoch timer does not need the plugin's cooperation.
-//! 6. **The pool bounds concurrency**, and unloading waits for what is in flight.
-//!
-//! Like every other Mongo-backed suite here it **skips silently** when `MONGO_URI` is
-//! unset, and it also skips when the fixture has not been built, so a clean checkout with
-//! no wasm toolchain still tests green:
-//!
-//! ```text
-//! docker compose up -d --wait mongo
-//! mise run wasm-plugins
-//! MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p ddd-server --test pluginhost_runtime
-//! ```
-
 mod common;
 
 use std::collections::BTreeMap;
@@ -48,18 +16,12 @@ use ddd_server::plugins::{
 use ddd_server::state::AppState;
 use serde_json::{Value, json};
 
-/// Where `mise run wasm-plugins` leaves the fixture.
 fn fixture() -> Option<PathBuf> {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../../plugins/target/wasm32-unknown-unknown/release/hello_backend.wasm");
     path.exists().then_some(path)
 }
 
-/// One test's world: its own database, its own plugins directory, its own host.
-///
-/// The plugins directory is per-test because `PluginHost::activate` reads
-/// `<PLUGINS_DIR>/<id>/<version>/<module>` — the installed layout — so "install" here is a
-/// file copy, which is exactly what the installer's final rename produces.
 struct Harness {
     state: AppState,
     host: Arc<PluginHost>,
@@ -78,7 +40,6 @@ impl Harness {
 
         let mut config = common::test_config(uri.clone(), database.clone());
         config.plugins_dir = plugins_dir.clone();
-        // Short, so a deadline test does not hold the suite for five seconds.
         config.plugin_call_timeout = Duration::from_millis(1_500);
         config.plugin_cron_timeout = Duration::from_millis(2_500);
         config.plugin_max_instances = 2;
@@ -99,7 +60,6 @@ impl Harness {
         Some(harness)
     }
 
-    /// Put a module where the installer would have left it.
     fn install(&self, id: &str, version: &str, wasm: &std::path::Path) {
         let dir = self.plugins_dir.join(id).join(version);
         std::fs::create_dir_all(&dir).expect("a temp plugin directory");
@@ -112,7 +72,6 @@ impl Harness {
         let _ = std::fs::remove_dir_all(&self.plugins_dir);
     }
 
-    /// `ddd_call` with a function and payload, as a plugin dependent would.
     async fn invoke(&self, function: &str, payload: Value) -> Result<Option<Value>, CallFailure> {
         let invocation = Invocation::top_level(
             "hello-backend",
@@ -126,7 +85,6 @@ impl Harness {
         self.host.call_typed::<Value>(&self.state, invocation).await
     }
 
-    /// The raw outcome, for the cases where a refusal is the thing being asserted.
     async fn call(
         &self,
         function: &str,
@@ -145,7 +103,6 @@ impl Harness {
     }
 }
 
-/// A record the way the installer would have written it after an admin approved it.
 fn record(capabilities: PluginCapabilities) -> PluginRecord {
     record_with(capabilities, Vec::new(), Vec::new())
 }
@@ -177,7 +134,6 @@ fn record_with(
                 cron: vec!["0 6 * * *".to_string()],
                 routes,
                 events: Vec::new(),
-                // `echo` is callable, which is what lets the reentrancy check be reached.
                 exports: BTreeMap::from([(
                     "echo".to_string(),
                     ddd_server::plugins::BackendExport {
@@ -237,10 +193,6 @@ macro_rules! harness {
     };
 }
 
-// ---------------------------------------------------------------------------
-// Activation
-// ---------------------------------------------------------------------------
-
 #[tokio::test]
 async fn activation_reads_the_abi_version_and_the_export_list_before_publishing() {
     if skip() {
@@ -255,8 +207,6 @@ async fn activation_reads_the_abi_version_and_the_export_list_before_publishing(
         .expect("the fixture activates");
 
     assert_eq!(plugin.abi_version, abi::ABI_VERSION);
-    // The export list is read once, at activation, so no hot path asks — and so a hook is
-    // never *scheduled* for a plugin that cannot receive it.
     for export in [
         abi::names::ABI_VERSION,
         abi::names::INIT,
@@ -290,9 +240,6 @@ async fn activation_reads_the_abi_version_and_the_export_list_before_publishing(
     harness.cleanup().await;
 }
 
-/// A missing module is `Instantiate`, not a panic and not a published plugin. The frontend
-/// half of such a plugin is still served (SPEC §6.4's rule) — the host's job is to say which
-/// half is missing and carry on.
 #[tokio::test]
 async fn a_missing_module_fails_activation_without_publishing_anything() {
     if skip() {
@@ -313,9 +260,6 @@ async fn a_missing_module_fails_activation_without_publishing_anything() {
     harness.cleanup().await;
 }
 
-/// A plugin with no `backend` in its manifest is not an error worth a breaker entry: most
-/// plugins have no backend half — a plugin needs one only for cron, outbound HTTP or a
-/// webhook (SPEC §6.3), and today none of the base distribution does.
 #[tokio::test]
 async fn a_plugin_without_a_backend_half_is_simply_not_active() {
     if skip() {
@@ -335,10 +279,6 @@ async fn a_plugin_without_a_backend_half_is_simply_not_active() {
 
     harness.cleanup().await;
 }
-
-// ---------------------------------------------------------------------------
-// Calls, refusals and the envelope
-// ---------------------------------------------------------------------------
 
 #[tokio::test]
 async fn a_payload_reaches_the_plugin_and_a_value_comes_back() {
@@ -361,7 +301,6 @@ async fn a_payload_reaches_the_plugin_and_a_value_comes_back() {
     harness.cleanup().await;
 }
 
-/// The distinction the whole breaker rests on: the plugin answered, so the machinery worked.
 #[tokio::test]
 async fn a_plugin_refusal_is_a_successful_call_and_never_counts_on_the_breaker() {
     if skip() {
@@ -374,7 +313,6 @@ async fn a_plugin_refusal_is_a_successful_call_and_never_counts_on_the_breaker()
         .await
         .expect("activates");
 
-    // Ten refusals in a row — twice the configured threshold of three.
     for _ in 0..10 {
         let outcome = harness
             .call("nope", Value::Null)
@@ -393,8 +331,6 @@ async fn a_plugin_refusal_is_a_successful_call_and_never_counts_on_the_breaker()
         "a plugin is never disabled for correctly reporting that something is not there"
     );
 
-    // `call_typed` is the other view of the same call: there, a refusal *is* an error,
-    // carrying the plugin's own code.
     match harness.invoke("nope", Value::Null).await {
         Err(CallFailure::Refused(error)) => assert_eq!(error.code, abi::ErrorCode::NotFound),
         other => panic!("expected a forwarded refusal, got {other:?}"),
@@ -403,8 +339,6 @@ async fn a_plugin_refusal_is_a_successful_call_and_never_counts_on_the_breaker()
     harness.cleanup().await;
 }
 
-/// `NoExport` is the host's own routing decision, so it must not count on the breaker —
-/// otherwise a misconfigured hook would disable a healthy plugin.
 #[tokio::test]
 async fn an_export_the_module_does_not_have_is_not_a_plugin_failure() {
     if skip() {
@@ -438,19 +372,12 @@ async fn an_export_the_module_does_not_have_is_not_a_plugin_failure() {
     harness.cleanup().await;
 }
 
-// ---------------------------------------------------------------------------
-// Capabilities
-// ---------------------------------------------------------------------------
-
-/// SPEC §6.2: "Undeclared host functions are linked as **erroring stubs** (so optional use
-/// is possible; instantiation never fails on imports)." The plugin probes and reads a code.
 #[tokio::test]
 async fn an_unapproved_capability_is_an_erroring_stub_the_plugin_can_probe() {
     if skip() {
         return;
     }
     let harness = harness!();
-    // Approved: nothing at all.
     harness
         .host
         .activate(&harness.state, &record(PluginCapabilities::default()))
@@ -475,8 +402,6 @@ async fn an_unapproved_capability_is_an_erroring_stub_the_plugin_can_probe() {
         );
     }
 
-    // KV is ungated: it is the plugin's *own* namespace, and SPEC §6.3's archetype is a
-    // cron-and-KV plugin with no capabilities at all.
     assert_eq!(
         harness
             .invoke("probe", json!({ "host_fn": "kv_get" }))
@@ -488,8 +413,6 @@ async fn an_unapproved_capability_is_an_erroring_stub_the_plugin_can_probe() {
     harness.cleanup().await;
 }
 
-/// Read without write: the split has to be real, or `documents: ["read"]` would be
-/// decoration.
 #[tokio::test]
 async fn read_and_write_are_separate_grants() {
     if skip() {
@@ -536,12 +459,6 @@ async fn read_and_write_are_separate_grants() {
     harness.cleanup().await;
 }
 
-// ---------------------------------------------------------------------------
-// Documents: ownership, splices, idempotence
-// ---------------------------------------------------------------------------
-
-/// `created_by == "plugin:<id>"` **is** the machine-ownership record (SPEC §3.3), and
-/// `rewrite_document` is the thing that checks it.
 #[tokio::test]
 async fn a_plugin_owns_what_it_created_and_nothing_else() {
     if skip() {
@@ -572,7 +489,6 @@ async fn a_plugin_owns_what_it_created_and_nothing_else() {
         "the ownership record is the actor, not a new column"
     );
 
-    // Its own document: rewriting is legal.
     let rewritten = harness
         .invoke(
             "rewrite",
@@ -583,8 +499,6 @@ async fn a_plugin_owns_what_it_created_and_nothing_else() {
         .expect("a value");
     assert_eq!(rewritten["title"], json!("Standup (moved)"));
 
-    // A human's document is nobody's to rewrite — which is the intended outcome of using
-    // `created_by` as the record.
     let human = harness
         .state
         .docs
@@ -602,7 +516,6 @@ async fn a_plugin_owns_what_it_created_and_nothing_else() {
         Err(CallFailure::Refused(error)) => assert_eq!(error.code, abi::ErrorCode::Forbidden),
         other => panic!("expected forbidden, got {other:?}"),
     }
-    // And the text is untouched.
     assert!(
         harness
             .state
@@ -616,10 +529,6 @@ async fn a_plugin_owns_what_it_created_and_nothing_else() {
     harness.cleanup().await;
 }
 
-/// Two things at once, because they are the same guarantee: a splice touches only the
-/// caller's own `%%%` section, and an edit that writes what is already there writes
-/// **nothing** — which is what keeps an idempotent daily sync out of the CRDT history
-/// (SPEC §3.3, HOST-ABI.md §3.4).
 #[tokio::test]
 async fn a_splice_writes_only_its_own_section_and_only_when_something_changed() {
     if skip() {
@@ -657,14 +566,11 @@ async fn a_splice_writes_only_its_own_section_and_only_when_something_changed() 
     let text = harness.state.docs.text(&human.id).await.expect("the text");
     assert!(text.contains("%%% hello-backend"));
     assert!(text.contains("source_uid: abc@example.com"));
-    // The human's prose and the *other* plugin's section are both untouched: the caller's
-    // own section is the only thing a splice can reach.
     assert!(text.contains("- [ ] milk"));
     assert!(text.contains("%%% other-plugin"));
     assert!(text.contains("keep: me"));
     assert!(text.starts_with("---\ntitle: Groceries\n---"));
 
-    // The same edit again: no write, no CRDT history.
     let again = harness
         .invoke(
             "splice",
@@ -681,7 +587,6 @@ async fn a_splice_writes_only_its_own_section_and_only_when_something_changed() 
         "an idempotent sync must not change a byte"
     );
 
-    // A real change does write.
     let changed = harness
         .invoke(
             "splice",
@@ -695,12 +600,6 @@ async fn a_splice_writes_only_its_own_section_and_only_when_something_changed() 
     assert!(updated.contains("source_uid: def@example.com"));
     assert!(!updated.contains("abc@example.com"));
 
-    // **A literal null is a value, and this is the only test that proves it crosses the
-    // boundary.** `SectionEdit.value` is an `Option<Value>`, and serde folds a JSON `null`
-    // onto `None` — the same thing an absent field produces — so the wire form
-    // `HOST-ABI.md` and the ABI's own doc comment specify for "write `k: null`" arrived as
-    // "no value at all" and the host refused it with `invalid_argument`. The ABI test beside
-    // the type only ever serialized, which is exactly how a lossy read-back survives.
     let nulled = harness
         .invoke(
             "splice",
@@ -719,8 +618,6 @@ async fn a_splice_writes_only_its_own_section_and_only_when_something_changed() 
     harness.cleanup().await;
 }
 
-/// `get_document` forces a materialization flush, so a plugin that splices and re-reads
-/// inside one invocation sees its own write (SPEC §3.5's read-your-writes rule).
 #[tokio::test]
 async fn a_plugin_reads_its_own_write_back() {
     if skip() {
@@ -762,9 +659,6 @@ async fn a_plugin_reads_its_own_write_back() {
     harness.cleanup().await;
 }
 
-/// The per-`(plugin, document)` cap is the loop backstop of SPEC §6.3. It refuses the
-/// eleventh write to *one* document in a minute, and it is per document — a plugin importing
-/// a thousand events is not looping.
 #[tokio::test]
 async fn the_per_document_write_cap_stops_a_loop_without_stopping_a_sync() {
     if skip() {
@@ -785,7 +679,6 @@ async fn the_per_document_write_cap_stops_a_loop_without_stopping_a_sync() {
     let id = created["id"].as_str().expect("an id").to_string();
 
     let cap = abi::limits::MAX_WRITES_PER_DOCUMENT_PER_MINUTE;
-    // Each call is a *distinct* value, so none of them is skipped as a no-op.
     for n in 0..cap {
         harness
             .invoke("splice", json!({ "id": id, "key": "sequence", "value": n }))
@@ -810,7 +703,6 @@ async fn the_per_document_write_cap_stops_a_loop_without_stopping_a_sync() {
         other => panic!("expected limit_exceeded, got {other:?}"),
     }
 
-    // A different document has its own window: the cap is a loop breaker, not a budget.
     let other = harness
         .invoke("create", json!({ "text": "---\ntitle: Elsewhere\n---\n" }))
         .await
@@ -824,18 +716,11 @@ async fn the_per_document_write_cap_stops_a_loop_without_stopping_a_sync() {
         .await
         .expect("a different document is a different window");
 
-    // And a refused write is not a *plugin* failure: the breaker stays closed.
     assert_eq!(harness.host.breaker_state("hello-backend").failures(), 0);
 
     harness.cleanup().await;
 }
 
-// ---------------------------------------------------------------------------
-// KV
-// ---------------------------------------------------------------------------
-
-/// KV needs no capability and is namespaced by construction: the `_id` is
-/// `<plugin>:<key>`, and `:` is not in the key charset.
 #[tokio::test]
 async fn kv_round_trips_through_mongo_in_the_plugins_own_namespace() {
     if skip() {
@@ -866,14 +751,12 @@ async fn kv_round_trips_through_mongo_in_the_plugins_own_namespace() {
             .await
             .expect("ddd_cron");
 
-        // Read back through `ddd_call` (the plugin's own view)…
         assert_eq!(
             harness.invoke("runs", Value::Null).await.expect("runs"),
             Some(json!(expected))
         );
     }
 
-    // …and through Mongo (the host's view), where the namespace is visible in the `_id`.
     let row = harness
         .state
         .collections
@@ -891,20 +774,12 @@ async fn kv_round_trips_through_mongo_in_the_plugins_own_namespace() {
     harness.cleanup().await;
 }
 
-// ---------------------------------------------------------------------------
-// call_plugin
-// ---------------------------------------------------------------------------
-
-/// `dependencies` is what gates `call_plugin`, not a capability (HOST-ABI.md §3.10).
-/// An undeclared callee is `forbidden` even when it is loaded and healthy.
 #[tokio::test]
 async fn call_plugin_refuses_an_undeclared_dependency_and_refuses_reentrancy() {
     if skip() {
         return;
     }
     let harness = harness!();
-    // Declares itself as a callee, which is the only way to reach the reentrancy check
-    // through a single fixture — and a legitimate thing for a manifest to be wrong about.
     let deps = vec!["hello-backend".to_string()];
     harness
         .host
@@ -915,7 +790,6 @@ async fn call_plugin_refuses_an_undeclared_dependency_and_refuses_reentrancy() {
         .await
         .expect("activates");
 
-    // Not in `dependencies`: forbidden, before anything is looked up.
     match harness
         .invoke(
             "call",
@@ -930,8 +804,6 @@ async fn call_plugin_refuses_an_undeclared_dependency_and_refuses_reentrancy() {
         other => panic!("expected forbidden, got {other:?}"),
     }
 
-    // Declared, but it is itself: an Extism instance cannot re-enter itself, and that is a
-    // *different* refusal from being too deep.
     match harness
         .invoke(
             "call",
@@ -943,18 +815,11 @@ async fn call_plugin_refuses_an_undeclared_dependency_and_refuses_reentrancy() {
         other => panic!("expected reentrancy, got {other:?}"),
     }
 
-    // Neither refusal is the plugin's fault as far as the breaker is concerned.
     assert_eq!(harness.host.breaker_state("hello-backend").failures(), 0);
 
     harness.cleanup().await;
 }
 
-// ---------------------------------------------------------------------------
-// Limits: traps, deadlines, the breaker
-// ---------------------------------------------------------------------------
-
-/// A trap is a host-side failure: it poisons the instance, it is counted, and the *next*
-/// call still works because the poisoned instance was dropped rather than reused.
 #[tokio::test]
 async fn a_trap_is_counted_poisons_its_instance_and_does_not_break_the_next_call() {
     if skip() {
@@ -975,7 +840,6 @@ async fn a_trap_is_counted_poisons_its_instance_and_does_not_break_the_next_call
     assert!(err.counts_as_failure());
     assert_eq!(harness.host.breaker_state("hello-backend").failures(), 1);
 
-    // The instance was thrown away, not reset — so this call gets a fresh one and works.
     assert_eq!(
         harness
             .invoke("echo", json!("still here"))
@@ -992,8 +856,6 @@ async fn a_trap_is_counted_poisons_its_instance_and_does_not_break_the_next_call
     harness.cleanup().await;
 }
 
-/// Five in a row (three here — the threshold is configurable downward) disables the plugin,
-/// with **manual re-enable only** (SPEC §6.3). After that no call reaches an instance.
 #[tokio::test]
 async fn consecutive_failures_open_the_breaker_and_only_an_admin_closes_it() {
     if skip() {
@@ -1019,8 +881,6 @@ async fn consecutive_failures_open_the_breaker_and_only_an_admin_closes_it() {
         "{threshold} consecutive failures should have opened it"
     );
 
-    // Every further call is refused *without touching an instance*: a disabled plugin must
-    // not still cost a compile and 128 MB.
     let refused = harness
         .call("echo", json!("anyone there"))
         .await
@@ -1029,13 +889,10 @@ async fn consecutive_failures_open_the_breaker_and_only_an_admin_closes_it() {
         matches!(refused, PluginHostError::Disabled { .. }),
         "{refused}"
     );
-    // …and being refused by the breaker is not itself a countable failure.
     assert!(!refused.counts_as_failure());
 
-    // The breaker opening also unloads the plugin, so its record and its memory agree.
     assert!(harness.host.get_active("hello-backend").is_none());
 
-    // Manual re-enable: the admin's button. Nothing else closes it.
     harness.host.reset_breaker("hello-backend");
     assert_eq!(
         harness.host.breaker_state("hello-backend"),
@@ -1054,9 +911,6 @@ async fn consecutive_failures_open_the_breaker_and_only_an_admin_closes_it() {
     harness.cleanup().await;
 }
 
-/// The one case the host's own deadline logic cannot see: a Wasm loop that never returns to
-/// the host. Epoch interruption does not need the plugin's cooperation, which is why it is
-/// the thing that has to work.
 #[tokio::test]
 async fn a_wasm_loop_that_never_returns_is_still_interrupted() {
     if skip() {
@@ -1084,7 +938,6 @@ async fn a_wasm_loop_that_never_returns_is_still_interrupted() {
         "interrupted in {elapsed:?}, which is not close to the {budget:?} budget"
     );
 
-    // And the host is still usable: the spinning instance was dropped.
     assert_eq!(
         harness.invoke("echo", json!("alive")).await.expect("echo"),
         Some(json!("alive"))
@@ -1093,8 +946,6 @@ async fn a_wasm_loop_that_never_returns_is_still_interrupted() {
     harness.cleanup().await;
 }
 
-/// The log cap drops lines rather than failing the call: a plugin that logs too much is
-/// noisy, not broken.
 #[tokio::test]
 async fn the_log_cap_drops_lines_without_failing_the_call() {
     if skip() {
@@ -1121,12 +972,6 @@ async fn the_log_cap_drops_lines_without_failing_the_call() {
     harness.cleanup().await;
 }
 
-// ---------------------------------------------------------------------------
-// The pool
-// ---------------------------------------------------------------------------
-
-/// Extism calls are not reentrant, so a plugin's concurrency *is* its instance count — and
-/// two concurrent calls must both complete rather than one of them failing.
 #[tokio::test]
 async fn concurrent_calls_are_served_by_separate_instances() {
     if skip() {
@@ -1173,7 +1018,6 @@ async fn concurrent_calls_are_served_by_separate_instances() {
         "each call gets its own answer, not another call's"
     );
 
-    // The pool is bounded: two instances for six calls.
     assert!(
         harness.host.stats().instances <= harness.host.limits().max_instances,
         "the pool must not grow past its permit count, got {}",
@@ -1183,8 +1027,6 @@ async fn concurrent_calls_are_served_by_separate_instances() {
     harness.cleanup().await;
 }
 
-/// Unloading stops routing immediately and then waits for what is running — SPEC §6.3's
-/// "hot unload waits on in-flight calls (refcount)".
 #[tokio::test]
 async fn deactivating_stops_routing_and_then_waits() {
     if skip() {
@@ -1211,8 +1053,6 @@ async fn deactivating_stops_routing_and_then_waits() {
         .expect_err("nothing to route to");
     assert!(matches!(err, PluginHostError::NotActive(_)), "{err}");
 
-    // Deactivating something that was never active is not an error: uninstall is allowed to
-    // be idempotent.
     harness
         .host
         .deactivate("hello-backend")
@@ -1222,8 +1062,6 @@ async fn deactivating_stops_routing_and_then_waits() {
     harness.cleanup().await;
 }
 
-/// `DISABLE_PLUGINS=1` has to be a state the host is *in*, not a branch every caller
-/// remembers (SPEC §6.1). Nothing compiles, nothing activates, every call is `NotActive`.
 #[tokio::test]
 async fn safe_mode_makes_the_host_inert() {
     if skip() {
@@ -1244,32 +1082,12 @@ async fn safe_mode_makes_the_host_inert() {
     assert!(matches!(err, PluginHostError::NotActive(_)), "{err}");
     assert!(host.active().is_empty());
     assert_eq!(host.stats().active, 0);
-    // `reload` is a no-op rather than an error, so boot does not have to special-case it.
     assert!(host.reload(&state).await.is_empty());
 
     let client = mongodb::Client::with_uri_str(&uri).await.expect("client");
     let _ = client.database(&database).drop().await;
 }
 
-/// **One call's deadline must not be another call's trap.**
-///
-/// Extism cancellation is engine-wide — `CancelHandle::cancel()` does nothing but
-/// `engine.increment_epoch()`, and every store on that engine runs at `set_epoch_deadline(1)`.
-/// While all of a plugin's instances shared one compiled module they shared one engine, so the
-/// per-call watchdog was a plugin-wide weapon: a cron run hitting its 60 s budget trapped every
-/// other in-flight call of the same plugin at its next Wasm instruction. Those calls came back as
-/// `Trap` rather than `Timeout` (their own flags said nothing was wrong), their instances were
-/// poisoned mid-write, a user's route got a 502, and five such collateral traps disabled a
-/// healthy plugin.
-///
-/// So: start the call that will be cancelled **first**, then start a bounded one that is still
-/// running when the cancel fires, and require it to come back as anything other than a trap.
-///
-/// The ordering is what makes the window exist. Both calls share one budget
-/// (`plugin_call_timeout`, 1.5 s here), so the spinner is cancelled ~1.5 s after *it* started;
-/// launching the sibling two thirds of the way through that puts it mid-call at the moment of the
-/// cancel, with margin on both sides. A machine slow enough to change the arithmetic only widens
-/// the window, and the final guard fails loudly rather than passing vacuously if it ever closes.
 #[tokio::test]
 async fn a_timing_out_call_does_not_trap_its_siblings() {
     if skip() {
@@ -1285,7 +1103,6 @@ async fn a_timing_out_call_does_not_trap_its_siblings() {
     let budget = harness.host.limits().call_timeout;
     let started = std::time::Instant::now();
 
-    // The one that will be cancelled: an uninterruptible Wasm loop, so only the epoch ends it.
     let spinner = {
         let host = Arc::clone(&harness.host);
         let state = harness.state.clone();
@@ -1305,8 +1122,6 @@ async fn a_timing_out_call_does_not_trap_its_siblings() {
         })
     };
 
-    // Two thirds through the spinner's budget, start the sibling with enough work to outlast the
-    // remaining third.
     tokio::time::sleep(budget * 2 / 3).await;
     let victim = harness.call("busy", json!({ "steps": 1_200 })).await;
     let finished_at = std::time::Instant::now();
@@ -1317,8 +1132,6 @@ async fn a_timing_out_call_does_not_trap_its_siblings() {
         "the spinner should have hit its deadline: {spun:?}"
     );
 
-    // Without this the test could pass vacuously: a sibling that finished before the cancel was
-    // never exposed to it. `steps` is what to raise if this ever trips.
     assert!(
         finished_at > cancelled_at,
         "the sibling finished at {:?}, before the spinner was cancelled at {:?} — it was never \
@@ -1333,8 +1146,6 @@ async fn a_timing_out_call_does_not_trap_its_siblings() {
             !outcome.refused(),
             "the sibling call answered a refusal it had no reason to"
         ),
-        // A sibling that ran out of its *own* budget is not the bug — that is its deadline
-        // doing its job. A `Trap` is: nothing in `busy` traps.
         Err(PluginHostError::Timeout { .. }) => {}
         Err(other) => panic!(
             "a sibling call was collaterally killed by the spinner's cancel: {other} \
@@ -1342,8 +1153,6 @@ async fn a_timing_out_call_does_not_trap_its_siblings() {
         ),
     }
 
-    // The structural half of the same property, with no timing in it: the pool compiled a
-    // module per instance slot, which is what gives each instance an engine of its own.
     let stats = harness.host.pool_stats("hello-backend").expect("the pool");
     assert!(
         stats.compiles >= 2,
@@ -1354,15 +1163,6 @@ async fn a_timing_out_call_does_not_trap_its_siblings() {
     harness.cleanup().await;
 }
 
-/// `ddd_init` runs **once per instance**, including on the instance activation warmed.
-///
-/// `probe_abi_version` and `exports` leave a warm instance in the idle list, and they run
-/// *before* `set_init_payload`. While `acquire` decided by "did this call instantiate it", that
-/// instance was popped with `fresh == false` and skipped `ddd_init` entirely — so the very first
-/// invocation of every plugin ran on an uninitialised instance. HOST-ABI.md §4.1 promises the
-/// payload (with the approved capability set, so a plugin can degrade deliberately rather than
-/// discovering denials per call); a plugin caching it in a static saw its default until traffic
-/// forced a second instance, and an `ddd_init` refusal was unreachable there.
 #[tokio::test]
 async fn the_first_call_runs_on_an_initialised_instance() {
     if skip() {
@@ -1375,12 +1175,9 @@ async fn the_first_call_runs_on_an_initialised_instance() {
         .await
         .expect("activates");
 
-    // Activation warmed exactly one instance and nothing has been initialised yet.
     let before = harness.host.pool_stats("hello-backend").expect("the pool");
     assert_eq!(before.instances, 1, "activation warms one instance");
 
-    // The fixture's `ddd_init` records what it was told; `caps` reads it back. A call landing on
-    // an uninitialised instance would see nothing recorded.
     let answer = harness
         .invoke("caps", Value::Null)
         .await
@@ -1397,7 +1194,6 @@ async fn the_first_call_runs_on_an_initialised_instance() {
         "`ddd_init` must carry the *approved* capability set: {answer}"
     );
 
-    // Still one instance: this was the warm one, initialised on its way out of the pool.
     assert_eq!(
         harness
             .host

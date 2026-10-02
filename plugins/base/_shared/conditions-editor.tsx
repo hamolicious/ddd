@@ -1,48 +1,3 @@
-/**
- * The rows of a set of conditions (`conditions.ts`): "Match all/any", one row per
- * condition, and "Add condition". Used by `search`'s filter bar and `folder-style`'s
- * rules.
- *
- * **A row is chosen left to right, and builds what is right of it.** The comparison
- * first, then the value type it allows, then the sentence those make: the property, an
- * icon for the operation, and the value. The two choices always sit first and always
- * render — a type that does not apply is disabled, not removed — so picking a
- * comparison never moves the boxes the person is aiming at. The property is left out
- * for the folder comparisons, which are about the note itself; the value is left out
- * where there is none (`exists`, a `null` type).
- *
- * **Styled by its host.** Tailwind compiles each plugin's own `src/` with that plugin's
- * prefix, so a shared component cannot carry utility classes. It carries plain ones
- * instead, all starting with `classPrefix`, and the host styles them from its container
- * (`doclist:[&_.doclist-clause]:flex`):
- *
- * | Class | On |
- * |---|---|
- * | `-row` | the "Match" row and the button row |
- * | `-field` | each labelled input or select |
- * | `-grow` | the value field, which takes the spare width |
- * | `-checkbox` | the "not" and "including nested" toggles |
- * | `-flags` | the line under the row that holds them |
- * | `-op-icon` | the operation's symbol, between the property and the value |
- * | `-clauses` | the list of rows |
- * | `-clause`, `-clause-invalid` | one row, and one that produces nothing |
- * | `-clause-note` | why it produces nothing |
- * | `-icon-button` | the remove button |
- * | `-note-option` | a note in the picker (`note-picker.tsx`) |
- * | `-note-chosen`, `-note-folder` | the chosen note, and the notes above it |
- *
- * **A note value is chosen with `NoteSelect`** when the host passes one (`search`'s), and
- * with the picker here otherwise. Likewise the property box is `FmKeySelect` and the value
- * box `FmValueSelect` when passed, and an input over a `<datalist>` otherwise.
- *
- * **Suggestions come from the indexer** when the host has it (`conditions-index.ts`): the
- * property box offers every frontmatter key in use, the value box the values that key
- * holds, and choosing a known key sets the value type (and "list contains" for a list).
- *
- * **A row that produces nothing says why**, from `clauseProblem` — the same function the
- * builder answers to, so the mark and the filter cannot disagree.
- */
-
 import { useEffect, useId, useReducer, useState } from "react";
 import type { ComponentType, ReactElement, ReactNode } from "react";
 
@@ -68,30 +23,21 @@ import { NoteName, NotePicker, useNotes, type NoteSource } from "./note-picker.j
 export interface ConditionsEditorProps {
   readonly value: Conditions;
   readonly onChange: (value: Conditions) => void;
-  /** The start of every class name here; see the table above. */
   readonly classPrefix: string;
-  /** The notes "is inside note", "contains note" and a document value choose from; without it those are not offered. */
   readonly notes?: NoteSource;
-  /** Picks a note value: `search`'s `NoteSelect`. Without it, the picker in `note-picker.tsx`. */
   readonly NoteSelect?: ComponentType<NoteSelectLike>;
-  /** The property box: `search`'s `FmKeySelect`. */
   readonly FmKeySelect?: ComponentType<FmKeySelectLike>;
-  /** The value box: `search`'s `FmValueSelect`. */
   readonly FmValueSelect?: ComponentType<FmValueSelectLike>;
-  /** Properties and values to offer; without them, the fixed {@link FIELD_OPTIONS}. */
   readonly suggestions?: Suggestions;
-  /** More buttons, after "Add condition". */
   readonly actions?: ReactNode;
 }
 
-/** What this editor needs of `search`'s `NoteSelect`, so a shared file need not import it. */
 export interface NoteSelectLike {
   readonly value?: string;
   readonly onChange: (id: string) => void;
   readonly label?: string;
 }
 
-/** What this editor needs of `search`'s `FmKeySelect`. */
 export interface FmKeySelectLike {
   readonly value: string;
   readonly onChange: (key: string) => void;
@@ -101,7 +47,6 @@ export interface FmKeySelectLike {
   readonly label?: string;
 }
 
-/** What this editor needs of `search`'s `FmValueSelect`. */
 export interface FmValueSelectLike {
   readonly fmKey: string;
   readonly value: string;
@@ -111,7 +56,6 @@ export interface FmValueSelectLike {
   readonly label?: string;
 }
 
-/** The property box's text for a field path: a frontmatter key without its `fm.`. */
 function keyOfField(field: string): string {
   return field.startsWith("fm.") ? field.slice(3) : field;
 }
@@ -119,7 +63,6 @@ function keyOfField(field: string): string {
 interface OpEntry {
   readonly op: ClauseOp;
   readonly label: string;
-  /** The symbol drawn between the property and the value. */
   readonly icon: string;
 }
 
@@ -181,15 +124,9 @@ const KIND_LABELS: readonly { readonly kind: ValueKind; readonly label: string }
   { kind: "doc", label: "document" },
 ];
 
-/** Operators that ask about a list, and the ones that ask about one value. */
 const LIST_OPS: readonly ClauseOp[] = ["contains", "contains_any", "any", "every"];
 const SCALAR_OPS: readonly ClauseOp[] = ["eq", "ne"];
 
-/**
- * The value types a comparison takes, or `undefined` when it takes none: the folder
- * comparisons (a note) and the presence ones (nothing). Narrowed to what `clauseProblem`
- * accepts, so the list cannot offer a combination the row then refuses.
- */
 function kindsFor(op: ClauseOp): readonly ValueKind[] | undefined {
   if (TREE_OPS.includes(op) || VALUELESS_OPS.includes(op)) return undefined;
   if (TEXT_OPS.includes(op)) return ["str"];
@@ -197,10 +134,6 @@ function kindsFor(op: ClauseOp): readonly ValueKind[] | undefined {
   return VALUE_KINDS;
 }
 
-/**
- * A known property chosen: take its value type, and swap "is" for "list contains" (or
- * back) to fit what it holds. Anything else the person chose is left alone.
- */
 function fitToField(clause: FilterClause, option: FieldOption | undefined): Partial<FilterClause> {
   if (option === undefined) return {};
   const change: { kind?: ValueKind; op?: ClauseOp } = {};
@@ -213,10 +146,6 @@ function fitToField(clause: FilterClause, option: FieldOption | undefined): Part
   return change;
 }
 
-/**
- * A row after a change: a type the comparison does not take becomes one it does, and a
- * value that meant something else — a note id where text was, or the reverse — is cleared.
- */
 function settle(before: FilterClause, after: FilterClause): FilterClause {
   const allowed = kindsFor(after.op);
   const kind = allowed === undefined || allowed.includes(after.kind) ? after.kind : (allowed[0] as ValueKind);
@@ -239,15 +168,12 @@ export function ConditionsEditor({
   actions,
 }: ConditionsEditorProps): ReactElement {
   const fieldList = useId();
-  // The index moves on every edit anywhere; the lists follow it.
   const [, refresh] = useReducer((count: number) => count + 1, 0);
   useEffect(() => suggestions?.subscribe(refresh), [suggestions]);
   const fields = suggestions?.fields() ?? FIELD_OPTIONS;
-  // The fields that are not frontmatter, which the property box lists first by name.
   const builtIn = fields
     .filter((option) => !option.field.startsWith("fm."))
     .map((option) => ({ key: option.field, label: option.label }));
-  /** A field path from the property box's text: a built-in's name, or a frontmatter key. */
   const fieldOfKey = (key: string): string =>
     key === "" || builtIn.some((option) => option.key === key.trim()) ? key : `fm.${key}`;
   const problems = new Map(
@@ -481,12 +407,10 @@ export function ConditionsEditor({
   );
 }
 
-/** An example of what the value box takes. */
 function valuePlaceholder(clause: FilterClause): string {
   return clause.op === "contains_any" ? "work, home" : clause.kind === "date" ? "2026-09-23" : "Value";
 }
 
-/** A note: the picker until one is chosen, then the note as the tree draws it. */
 function NoteField({
   classPrefix: p,
   notes,
@@ -519,7 +443,6 @@ function NoteField({
   return (
     <span className={`${p}-field ${p}-grow`}>
       <button type="button" title="Choose another note" className={`${p}-note-chosen`} onClick={() => setPicking(true)}>
-        {/* Not known on this device, or the index is still building: say so, not the id. */}
         <NoteName title={note?.title ?? "Unknown note"} look={notes.look?.(value)} />
         {note !== undefined && note.folder !== "" && <span className={`${p}-note-folder`}> {note.folder}</span>}
       </button>

@@ -1,25 +1,3 @@
-/**
- * The blessed Tailwind preset for a ddd frontend plugin.
- *
- * There is intentionally no preflight and no cascade layer here. Plugin stylesheets
- * are linked after the app shell: preflight would restyle the whole application, and
- * layered utilities would lose to the shell's unlayered element rules. `@theme inline`
- * keeps the kernel-owned tokens live rather than writing global replacement values.
- *
- * **Every plugin gets its own class prefix** (`folders:flex`, `folders:compact:gap-1`).
- * Each plugin's stylesheet is compiled on its own and they all land in one document, so
- * unprefixed utilities are shared names: a stylesheet linked later that also emits
- * `.invisible` or `.m-0` re-declares it *after* an earlier plugin's `visible` or
- * `ml-auto`, and silently wins on that plugin's elements. With a prefix no two plugins
- * emit the same selector, and each stylesheet's own ordering is the whole story.
- */
-
-/**
- * The prefix a plugin's classes carry: `x-tailwind.prefix` from the manifest, or the
- * plugin id with everything but `a-z` removed (Tailwind accepts nothing else).
- *
- * @param {{ id: string, "x-tailwind"?: unknown }} manifest
- */
 export function tailwindPrefix(manifest) {
   const option = manifest["x-tailwind"];
   const chosen =
@@ -29,13 +7,10 @@ export function tailwindPrefix(manifest) {
   if (!/^[a-z]+$/.test(chosen)) {
     throw new Error(`${manifest.id}: Tailwind prefix "${chosen}" must be lowercase a-z only`);
   }
-  // The prefix also names the theme variables Tailwind emits (`--<prefix>-text-sm`), and
-  // `--ddd-*` is the kernel's token namespace: `ddd` would overwrite the app's theme.
   if (chosen === "ddd") throw new Error(`${manifest.id}: Tailwind prefix "ddd" is reserved`);
   return chosen;
 }
 
-/** @param {string} prefix `tailwindPrefix(manifest)`; `""` compiles unprefixed. */
 export const tailwindPreset = (prefix) => String.raw`
 @import "tailwindcss/theme.css" source(none)${prefix ? ` prefix(${prefix})` : ""};
 @import "tailwindcss/utilities.css" source(none);

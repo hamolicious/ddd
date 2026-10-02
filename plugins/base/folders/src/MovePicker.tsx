@@ -1,16 +1,3 @@
-/**
- * The destination picker: the keyboard-and-touch half of drag and drop.
- *
- * Drag and drop is a mouse gesture — HTML5 DnD does not fire from touch — so every move
- * has a second, pointer-free path that ends in the same list splices: the row's ⋯ menu,
- * a long-press, a right-click or the `M` key opens this inside a `context-menu` sheet,
- * and the picker is an ordinary list of buttons. It also moves many notes at once, for
- * the "Move to folder…" command the document list's Actions button runs.
- *
- * With `search` enabled the list is its `NoteSelect`, inline: notes drawn as the tree draws
- * them, nearest the current folder first.
- */
-
 import { useCallback, useMemo, useState } from "react";
 import type { ComponentType, ReactElement } from "react";
 
@@ -21,22 +8,13 @@ import { compareText } from "./tree.js";
 
 export interface MovePickerProps {
   readonly hierarchy: Hierarchy;
-  /** What is being moved: none of them, nor anything inside one, can be the destination. */
   readonly subjects: readonly { readonly id: string; readonly title: string }[];
-  /** The note to file under; `""` is the root. */
   readonly onChoose: (parent: string) => void;
-  /** `search`'s note picker, when it is enabled. */
   readonly NoteSelect?: ComponentType<NoteSelectProps>;
 }
 
-/**
- * Pick a destination from a filtered list of every note, each shown with the titles above
- * it. The root is always the first option and is never filtered away — "take this out of
- * every folder" is the one destination nobody can type the name of.
- */
 export function MovePicker({ hierarchy, subjects, onChoose, NoteSelect }: MovePickerProps): ReactElement {
   const [query, setQuery] = useState("");
-  // Marked only when every subject is already there.
   const parents = new Set(subjects.map((subject) => hierarchy.parentOf.get(subject.id) ?? ""));
   const current = parents.size === 1 ? [...parents][0] : undefined;
   const named = subjects.length === 1 ? (subjects[0]?.title ?? "it") : "them";
@@ -51,7 +29,6 @@ export function MovePicker({ hierarchy, subjects, onChoose, NoteSelect }: MovePi
     [hierarchy, ids],
   );
 
-  // None of them, nor anything inside one, can be the destination.
   const exclude = useCallback(
     (id: string): boolean => subjects.some((subject) => isWithin(hierarchy, id, subject.id)),
     [hierarchy, ids],

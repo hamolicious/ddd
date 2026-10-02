@@ -5,8 +5,6 @@ import type { DocumentsApi, PlanResult } from "@kernel";
 import { QueryError, bindDocuments, query } from "./query.js";
 
 describe("query()", () => {
-  // The same chain as the core's `query::builder` test: the two builders must write
-  // the same plan, byte for byte, or a query reads differently by language.
   it("writes the plan the Rust builder writes", () => {
     const plan = query()
       .text(" milk ")

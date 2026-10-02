@@ -1,15 +1,3 @@
-/**
- * Which notes each rule matches, kept live: one `kernel.documents.subscribe` per rule,
- * over the filter its conditions build (`_shared/conditions.ts`). A rule's query is
- * replaced only when its filter changes, so editing one rule leaves the others alone.
- *
- * "Is inside note" is built from that note's children, so the notes the rules name are
- * watched too (`watchChildren`), and a note filed into one rebuilds the rules that ask.
- *
- * A rule whose conditions build nothing — none yet, or none complete — matches nothing:
- * a half-made rule must not dress the whole tree.
- */
-
 import type { DocumentsApi, FilterJson, Unsubscribe } from "@kernel";
 
 import { buildConditions, treeToWatch } from "../../_shared/conditions.js";
@@ -18,7 +6,6 @@ import { contextFrom, watchChildren, type ChildrenMap } from "../../_shared/cond
 import type { FolderStyle, Rule } from "./styles.js";
 
 interface Watch {
-  /** The filter, as JSON: the same key is the same query. */
   readonly key: string;
   ids: ReadonlySet<string>;
   readonly close: () => void;
@@ -26,7 +13,6 @@ interface Watch {
 
 export interface RuleMatcher {
   set(rules: readonly Rule[]): void;
-  /** The looks of the rules `id` matches, in rule order. */
   matched(id: string): readonly FolderStyle[];
   close(): void;
 }
@@ -108,7 +94,6 @@ export function ruleMatcher(
       if (key !== parentsKey) {
         parentsKey = key;
         stopChildren();
-        // Calls back at once when there is nothing to watch, which rebuilds.
         stopChildren = watchChildren(documents, parents, (map) => {
           children = map;
           rebuild();

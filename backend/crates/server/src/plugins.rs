@@ -1,33 +1,3 @@
-//! The installed-plugin registry and the import map (SPEC §6.2, §6.4).
-//!
-//! **What this is in M3 and what it becomes in M4.** The server's job in the plugin
-//! system is "keep clients in step" (SPEC §2): it holds the installed set, resolves the
-//! shared-library versions once, and serves both to every client. M3 implements exactly
-//! that for the *frontend* halves, reading the installed set from a directory on disk.
-//! M4 adds the Extism host, the zip installer and the approval flow — and they write the
-//! same directory, so nothing here changes shape when they land.
-//!
-//! **The directory is the source of truth**, deliberately:
-//!
-//! ```text
-//! <PLUGINS_DIR>/<id>/<version>/manifest.json
-//! <PLUGINS_DIR>/<id>/<version>/frontend/index.mjs
-//! ```
-//!
-//! That layout is what makes `/plugins/<id>/<version>/…` immutable and cacheable forever
-//! (SPEC §8): the version is in the path, so a new version is a new URL and no cache
-//! ever has to be invalidated. It is also why the registry can be a cheap directory scan
-//! rather than a Mongo collection — in M3 there is nothing mutable about it, and in M4
-//! the `plugins` collection becomes the *approval* record while the directory stays the
-//! artifact store.
-//!
-//! **Only one version per plugin is ever served**: the highest. Two versions of one
-//! plugin in one page would give two copies of its API to different dependents.
-//!
-//! Errors here are *reported*, never fatal: a malformed manifest disables one plugin and
-//! logs why. A boot that refused to start because somebody dropped a bad zip into the
-//! plugins directory would be a worse failure than the one it prevents.
-
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::fs;
@@ -39,7 +9,6 @@ use tracing::{info, warn};
 
 use crate::config::Config;
 
-/// The base distribution (SPEC §6.5) — what `?safe=1` boots.
 pub const BASE_PLUGIN_IDS: &[&str] = &[
     "admin",
     "attachments",
@@ -81,39 +50,24 @@ pub const BASE_PLUGIN_IDS: &[&str] = &[
     "wikilinks",
 ];
 
-/// The `@kernel` contract version this server implements — what a manifest's `kernel`
-/// range is checked against at install (SPEC §6.4: "one `kernel` semver covers both the
-/// `@kernel` surface and the Wasm host ABI. … Server enforces at install").
-///
-/// Generated, like `KERNEL_API_VERSION` in `web/kernel-api/src/index.ts`, from the one
-/// `x-kernel-version` line in `schema/manifest.schema.json`, so the server and the client
-/// can no longer disagree about which plugins are installable.
 pub const KERNEL_VERSION: &str = crate::manifest_types::KERNEL_VERSION;
 
-/// The manifest's types are generated from `schema/manifest.schema.json`
-/// (`web/scripts/gen-manifest.mjs`); their methods stay here.
 pub use crate::manifest_types::{
     BackendExport, ConfigField, HttpCapability, PluginBackend, PluginCapabilities, PluginFrontend,
     PluginManifest,
 };
 
-/// Load resolution lives in its own module; these are its entry points.
 pub use crate::load::{
     LoadPlan, SkipReason, Skipped, effective_ids, fingerprint, module_url, plugin_imports,
     resolve_load,
 };
 
-/// Hook names a manifest's `backend.hooks` may contain (SPEC §6.3).
 pub const HOOK_NAMES: &[&str] = &["document.created", "document.changed", "document.deleted"];
 
-/// Methods a `backend.routes` declaration may use.
 pub const ROUTE_METHODS: &[&str] = &["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"];
 
-/// The `documents` capability's legal values (SPEC §6.2). A typo'd `"writes"` is refused
-/// at install rather than silently reading as "no write access requested".
 pub const DOCUMENT_RIGHTS: &[&str] = &["read", "write"];
 
-/// `^[a-z0-9][a-z0-9-]{0,63}$`, checked without a regex dependency.
 pub fn is_valid_plugin_id(id: &str) -> bool {
     let mut chars = id.chars();
     match chars.next() {
@@ -123,27 +77,11 @@ pub fn is_valid_plugin_id(id: &str) -> bool {
     id.len() <= 64 && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
-/// `1.2.3` with an optional `-prerelease` / `+build` tail.
-///
-/// **Every character is checked, not just the numeric core.** A version string is used
-/// verbatim as a filesystem path component — `<PLUGINS_DIR>/<id>/<version>/…`, the staging
-/// work directory, `pending_dir`, and the `/plugins/:id/:version/*` URL — so anything this
-/// function accepts must be a single, harmless path segment. Validating only the part before
-/// the first `-`/`+` (as an earlier version of this did) accepted
-/// `1.0.0-../../../../srv/web/evil`, and `fs::create_dir_all` + `canonicalize` in
-/// [`crate::plugininstall::zipcheck::extract`] then happily resolved it *out* of the staging
-/// tree: every allowlisted entry of the package (including arbitrary `frontend/**` files)
-/// landed in a directory of the attacker's choosing, as the server process, reachable
-/// without an admin click through the inbox watcher. The zip checks cannot catch that —
-/// they validate entry names *inside* the archive, not the root they are handed.
 pub fn is_valid_version(version: &str) -> bool {
-    // Bound the whole string: it becomes a directory name.
     if version.is_empty() || version.len() > 128 {
         return false;
     }
 
-    // Split the semver tails off in order: build metadata after the *first* `+`,
-    // pre-release after the first `-` of what remains.
     let (without_build, build) = match version.split_once('+') {
         Some((head, build)) => (head, Some(build)),
         None => (version, None),
@@ -162,9 +100,6 @@ pub fn is_valid_version(version: &str) -> bool {
         return false;
     }
 
-    // Dot-separated identifiers of ASCII alphanumerics and hyphens, each non-empty
-    // (semver 2.0.0 §9/§10). This is what keeps `/`, `\`, `.` runs, NUL and every other
-    // path-significant byte out of the tail.
     let identifiers_ok = |tail: &str| {
         !tail.is_empty()
             && tail.split('.').all(|identifier| {
@@ -178,7 +113,6 @@ pub fn is_valid_version(version: &str) -> bool {
     pre.is_none_or(identifiers_ok) && build.is_none_or(identifiers_ok)
 }
 
-/// Order two versions by their numeric triple; anything unparseable sorts lowest.
 pub fn compare_versions(a: &str, b: &str) -> Ordering {
     let triple = |v: &str| -> [u64; 3] {
         let core = v.split(['-', '+']).next().unwrap_or_default();
@@ -192,12 +126,10 @@ pub fn compare_versions(a: &str, b: &str) -> Ordering {
 }
 
 impl PluginManifest {
-    /// `true` when the package declares a backend half the host should load.
     pub fn has_backend(&self) -> bool {
         self.backend.is_some()
     }
 
-    /// The declared cron expressions, or an empty slice.
     pub fn cron(&self) -> &[String] {
         self.backend
             .as_ref()
@@ -205,7 +137,6 @@ impl PluginManifest {
             .unwrap_or_default()
     }
 
-    /// Config keys declared `secret: true`.
     pub fn secret_keys(&self) -> Vec<&str> {
         self.config
             .iter()
@@ -231,7 +162,6 @@ impl PluginCapabilities {
         self.documents.iter().any(|c| c == "write")
     }
 
-    /// Approved hosts, lowercased. Empty ⇒ `http_request` is an erroring stub.
     pub fn http_hosts(&self) -> Vec<String> {
         self.http
             .as_ref()
@@ -244,7 +174,6 @@ impl PluginCapabilities {
             .unwrap_or_default()
     }
 
-    /// The form the host hands a plugin ([`ddd_plugin_abi::Capabilities`]).
     pub fn to_abi(&self) -> ddd_plugin_abi::Capabilities {
         ddd_plugin_abi::Capabilities {
             documents: self.documents.clone(),
@@ -254,15 +183,6 @@ impl PluginCapabilities {
         }
     }
 
-    /// Is `granted` a legal approval of `self` (the request)?
-    ///
-    /// The rule, and the one exception: an approval may **narrow** anything, and may
-    /// **extend `http.hosts`**. A plugin whose destination is admin-configured cannot know
-    /// its host when it is packaged — a feed importer ships `hosts: []` and the
-    /// operator who enters a feed URL is the one who knows the host — and the alternative
-    /// is asking that operator to repackage a zip. Widening anything else (a `documents`
-    /// right, a public route the package never declared) is refused: those are the
-    /// package's own claims about itself.
     pub fn approval_is_legal(&self, granted: &PluginCapabilities) -> Result<(), String> {
         for right in &granted.documents {
             if !self.documents.iter().any(|requested| requested == right) {
@@ -288,9 +208,6 @@ impl PluginCapabilities {
                 ));
             }
         }
-        // The one widening. `hosts` may grow, but only for a package that asked for the
-        // `http` capability at all — granting HTTP to a plugin whose manifest never
-        // mentioned it is adding a capability, not widening one.
         if let Some(http) = granted.http.as_ref() {
             if self.http.is_none() {
                 return Err(
@@ -305,8 +222,6 @@ impl PluginCapabilities {
         Ok(())
     }
 
-    /// Every capability well-formedness rule of `HOST-ABI.md` §7.1 step 5, checked against
-    /// the manifest's own `backend.routes`.
     pub fn validate(&self, declared_routes: &[RouteSpec]) -> Result<(), String> {
         for right in &self.documents {
             if !DOCUMENT_RIGHTS.contains(&right.as_str()) {
@@ -331,9 +246,6 @@ impl PluginCapabilities {
     }
 }
 
-/// A `http.hosts` entry must be a bare host name: no scheme, no path, no port, no wildcard
-/// (HOST-ABI.md §3.11 matches hosts exactly, so a wildcard would silently match nothing and
-/// a `https://` prefix would never match at all).
 fn validate_host(host: &str) -> Result<(), String> {
     let host = host.trim();
     if host.is_empty() {
@@ -363,20 +275,14 @@ fn validate_host(host: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// One declared inbound route, parsed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RouteSpec {
-    /// Upper-case method.
     pub method: String,
-    /// Leading slash, no trailing slash, no `..`, no wildcards: a plugin's route table is
-    /// exact, so two plugins' routes can never overlap and a path cannot be smuggled.
     pub path: String,
-    /// Reachable without a session (`capabilities.public-routes`).
     pub public: bool,
 }
 
 impl RouteSpec {
-    /// Parse `"POST /webhook"`.
     pub fn parse(declaration: &str, public_routes: &[String]) -> Result<RouteSpec, String> {
         let mut parts = declaration.split_whitespace();
         let (Some(method), Some(path)) = (parts.next(), parts.next()) else {
@@ -393,8 +299,6 @@ impl RouteSpec {
                 "`{method}` is not a method a plugin route may declare ({ROUTE_METHODS:?})"
             ));
         }
-        // Exact paths only: no wildcards, no parameters. Two plugins' route tables can then
-        // never overlap, and a path cannot be smuggled past the dispatcher's prefix strip.
         if !path.starts_with('/') {
             return Err(format!("route path `{path}` must start with `/`"));
         }
@@ -428,27 +332,10 @@ impl RouteSpec {
     }
 }
 
-/// Parse every `backend.routes` declaration of a manifest, marking the public ones **as the
-/// package requested them**.
-///
-/// This is the *request*, which is what the install-time validation
-/// ([`PluginCapabilities::validate`]) and the pending approval screen need. Anything that
-/// decides whether a live route may be served without a session must use
-/// [`route_specs_granted`] instead: the admin is allowed to decline a public route, and
-/// declining it has to mean something.
 pub fn route_specs(manifest: &PluginManifest) -> Result<Vec<RouteSpec>, String> {
     route_specs_with_public(manifest, &manifest.capabilities.public_routes)
 }
 
-/// [`route_specs`], with `public` taken from what an admin **granted** rather than from what
-/// the package asked for.
-///
-/// The approval screen presents each requested public route as its own checkbox with the
-/// warning that "anyone who can reach this server can call them, with no session", and
-/// [`PluginCapabilities::approval_is_legal`] accepts a narrowed set. Deriving the live
-/// `public` flag from the manifest instead of the grant silently discarded that decision:
-/// an admin who unchecked `/webhook` and approved still got an unauthenticated webhook —
-/// the free outbound-request amplifier the dispatcher's own docs warn about.
 pub fn route_specs_granted(
     manifest: &PluginManifest,
     granted: &PluginCapabilities,
@@ -480,40 +367,16 @@ fn route_specs_with_public(
     Ok(specs)
 }
 
-// ---------------------------------------------------------------------------
-// The approval record (Mongo `plugins`)
-// ---------------------------------------------------------------------------
-
-/// Where a plugin is in its life cycle (SPEC §6.2).
-///
-/// `pending` is the state that matters: **both** install paths land there, and only an
-/// explicit admin click moves a plugin out of it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PluginState {
-    /// Installed on disk, not served, not loaded. Awaiting approval.
     Pending,
-    /// Approved by an admin: its frontend half is served and its backend half is active.
-    ///
-    /// The wire spelling is **`enabled`**, not `approved`, because that is the word
-    /// `web/kernel-api/src/manifest.ts` froze in M3 and the loader compares against
-    /// (`plugin.state !== "enabled"` ⇒ skip). Approval is the *transition*; enabled is the
-    /// state.
     Enabled,
-    /// Approved but switched off — by an admin, or by the circuit breaker.
     Disabled,
-    /// Approved but its backend half could not be activated. The frontend half is still
-    /// served: half a plugin is usually better than none, and the admin screen says which
-    /// half is missing.
     Failed,
 }
 
 impl PluginState {
-    /// `true` when the frontend half should be served to clients.
-    ///
-    /// **A pending plugin is not served** — that is what keeps an unapproved package's
-    /// code out of every user's session (SPEC §6.1's trust model: the frontend half runs
-    /// unsandboxed).
     pub fn is_served(self) -> bool {
         matches!(
             self,
@@ -521,7 +384,6 @@ impl PluginState {
         )
     }
 
-    /// `true` when the backend half should be running.
     pub fn is_active(self) -> bool {
         matches!(self, PluginState::Enabled)
     }
@@ -536,26 +398,13 @@ impl PluginState {
     }
 }
 
-/// The `plugins` collection: the **approval record**, while the directory stays the
-/// artifact store (the M3 note in `backend/CONTRACTS.md` promised exactly this split).
-///
-/// Deliberately **not** in `domain.rs`, unlike every other Mongo shape. `domain.rs` is a
-/// frozen file every area compiles against, and this record is coupled to the manifest
-/// types in *this* module — putting it there would mean a frozen file that imports the
-/// plugin subsystem, and a merge conflict for every builder. Announced as a deviation in
-/// `backend/CONTRACTS.md`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginRecord {
-    /// `_id` is `<id>` — one record per plugin, not per version: two versions of one
-    /// plugin are never served at once (see the registry's "one version per plugin"),
-    /// so the record tracks the installed one.
     #[serde(rename = "_id")]
     pub id: String,
     pub version: String,
     pub state: PluginState,
-    /// The manifest as installed, so the admin screen and the host do not re-read disk.
     pub manifest: PluginManifest,
-    /// What the admin approved. Empty until approval.
     #[serde(default)]
     pub capabilities_approved: PluginCapabilities,
     pub source: crate::plugininstall::InstallSource,
@@ -566,23 +415,16 @@ pub struct PluginRecord {
     pub approved_at: Option<crate::domain::Timestamp>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub approved_by: Option<String>,
-    /// Why it is off: `"admin"`, or the breaker's reason. Persisted so a restart does not
-    /// silently re-enable a plugin nobody has looked at.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub disabled_reason: Option<String>,
-    /// The last activation or call failure, for the admin screen.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_error: Option<String>,
-    /// Hex SHA-256 of `backend.wasm` as installed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub module_sha256: Option<String>,
-    /// One entry per `backend.cron` expression (SPEC §6.3: `last_run` persisted).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cron_state: Vec<crate::pluginhost::cron::CronState>,
 }
 
-/// One `plugin_kv` row. `_id` is `<plugin_id>:<key>`, which makes the namespace
-/// structural: there is no query a plugin could ask that reaches another's keys.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginKvEntry {
     #[serde(rename = "_id")]
@@ -593,30 +435,19 @@ pub struct PluginKvEntry {
     pub updated_at: crate::domain::Timestamp,
 }
 
-/// One `plugin_config` row (one per plugin, all keys together — an admin saves a form, not
-/// a field).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginConfigEntry {
     #[serde(rename = "_id")]
     pub plugin_id: String,
-    /// Key → plain value, or the sealed form for secrets
-    /// ([`crate::plugininstall::config::StoredValue`]).
     pub values: bson::Document,
     pub updated_at: crate::domain::Timestamp,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub updated_by: Option<String>,
 }
 
-// ---------------------------------------------------------------------------
-// Resolution (SPEC §6.1, §6.4) — shared by the installer and the import map
-// ---------------------------------------------------------------------------
-
-/// The one version of each peer library a set of plugins gets, for the import map.
 #[derive(Debug, Clone, Default)]
 pub struct Resolution {
-    /// Library → the single version every plugin will get.
     pub peer_versions: BTreeMap<String, String>,
-    /// Non-fatal notes for the admin screen.
     pub warnings: Vec<String>,
 }
 
@@ -628,21 +459,7 @@ pub enum ResolveError {
     PeerConflict { library: String, ranges: String },
 }
 
-/// Resolve the peer libraries over a set of manifests. (Load order is
-/// [`resolve_load`]'s, over `dependencies`.)
-///
-/// **One resolution, two consumers** (the promise M3 left open): the installer runs it to
-/// decide whether a package may be installed at all, and `/importmap.json` runs it to pick
-/// the one version of each blessed library every plugin gets. Import maps cannot change
-/// after load (SPEC §6.4), which is why the choice has to be made here, once, over the
-/// whole installed set, rather than per plugin at load time.
 pub fn resolve(manifests: &[PluginManifest]) -> Result<Resolution, ResolveError> {
-    // --- peer libraries ---------------------------------------------------
-    // One version of each library for every plugin, chosen here, because an import map
-    // cannot change after load (SPEC §6.4). The choice is the highest floor any declared
-    // range implies; if that version does not satisfy every range, no single version does
-    // within this range subset, and the install is refused rather than resolved to
-    // something half the plugins were not written against.
     let mut peer_ranges: BTreeMap<&str, Vec<(&str, &str)>> = BTreeMap::new();
     for manifest in manifests {
         for (library, range) in &manifest.peer_libraries {
@@ -696,7 +513,6 @@ pub fn resolve(manifests: &[PluginManifest]) -> Result<Resolution, ResolveError>
     })
 }
 
-/// The lowest version a range admits, as a numeric triple. `*` is `0.0.0`.
 fn range_floor(range: &str) -> Result<[u64; 3], ResolveError> {
     let range = range.trim();
     if range == "*" {
@@ -713,9 +529,6 @@ fn range_floor(range: &str) -> Result<[u64; 3], ResolveError> {
     })
 }
 
-/// `1`, `1.2` or `1.2.3` → `[1, 0, 0]` / `[1, 2, 0]` / `[1, 2, 3]`. Any prerelease or build
-/// tail is dropped: ordering prereleases is not in the supported subset, and pretending to
-/// would be worse than saying so.
 fn parse_partial(input: &str) -> Option<[u64; 3]> {
     let core = input.split(['-', '+']).next().unwrap_or_default();
     if core.is_empty() {
@@ -731,12 +544,6 @@ fn parse_partial(input: &str) -> Option<[u64; 3]> {
     Some(out)
 }
 
-/// Does `version` satisfy `range`?
-///
-/// The supported subset is `^x.y`, `^x.y.z`, `~x.y.z`, `x.y.z` and `*` — what every
-/// manifest in this repository uses. Anything else is a manifest error rather than a
-/// silently permissive match: "this range is not supported" is a fixable message, and a
-/// wrong `true` here loads a plugin against an API that has moved.
 pub fn satisfies(version: &str, range: &str) -> Result<bool, ResolveError> {
     let unsupported = || ResolveError::PeerConflict {
         library: range.to_string(),
@@ -764,7 +571,6 @@ pub fn satisfies(version: &str, range: &str) -> Result<bool, ResolveError> {
         _ => ('=', range),
     };
     let floor = parse_partial(bare).ok_or_else(unsupported)?;
-    // How many components the author wrote — `~1.2` and `~1.2.0` are not the same range.
     let written = bare
         .split(['-', '+'])
         .next()
@@ -776,9 +582,6 @@ pub fn satisfies(version: &str, range: &str) -> Result<bool, ResolveError> {
         return Ok(false);
     }
     Ok(match operator {
-        // Caret: the left-most non-zero component is pinned (so `^0.2.1` does not admit
-        // 0.3.0). This is npm/cargo semantics, and it is the one place where being
-        // approximately right would load a plugin against an API that has moved.
         '^' => {
             if floor[0] > 0 {
                 actual[0] == floor[0]
@@ -788,7 +591,6 @@ pub fn satisfies(version: &str, range: &str) -> Result<bool, ResolveError> {
                 actual[0] == 0
             }
         }
-        // Tilde: patch-level changes when a minor is written, minor-level when it is not.
         '~' => {
             if written >= 2 {
                 actual[0] == floor[0] && actual[1] == floor[1]
@@ -796,7 +598,6 @@ pub fn satisfies(version: &str, range: &str) -> Result<bool, ResolveError> {
                 actual[0] == floor[0]
             }
         }
-        // Exact, to the precision written: `1.0` means "any 1.0.x".
         _ => match written {
             1 => actual[0] == floor[0],
             2 => actual[0] == floor[0] && actual[1] == floor[1],
@@ -805,55 +606,25 @@ pub fn satisfies(version: &str, range: &str) -> Result<bool, ResolveError> {
     })
 }
 
-/// One entry of `GET /api/plugins`.
-///
-/// **camelCase on the wire**, unlike every other response this server produces. This
-/// type is not a REST resource of its own: it is `InstalledPlugin` from
-/// `web/kernel-api/src/manifest.ts`, i.e. a *kernel API type* that plugins and the
-/// loader consume directly, and the manifest it wraps is already camelCase
-/// (`peerLibraries`) because plugin authors write it by hand. One spelling on both
-/// sides beats a conversion layer that can drift — the first version of this endpoint
-/// shipped `base_url`, the loader read `baseUrl`, and every plugin failed to load with
-/// `Cannot read properties of undefined`.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstalledPlugin {
     pub manifest: PluginManifest,
-    /// Version-scoped, trailing slash: the loader resolves module paths against it.
     pub base_url: String,
-    /// M4: `enabled` unless a record says otherwise.
-    ///
-    /// **A pending package is never in `PLUGINS_DIR`** — that is the structural half of
-    /// "pending installs cannot be fetched before an admin approves them". The installer
-    /// extracts into `PLUGIN_STAGING_DIR/pending/<id>/<version>/`, which no route can
-    /// reach, and *approval* is the rename into the served root. So the directory alone is
-    /// enough to answer "may this be served", and Mongo is only consulted to demote an
-    /// entry to `disabled`/`failed` ([`Registry::apply_states`]) — a server that cannot
-    /// reach Mongo therefore serves the last approved set rather than nothing.
     pub state: PluginState,
     pub base: bool,
-    /// Short content fingerprint of the frontend assets (module + style). The loader
-    /// appends it as `?v=` so the version-scoped-immutable cache story survives a
-    /// rebuild that does not bump the version — the M4 integration's "stale immutable
-    /// module" trap. Same bytes ⇒ same URL ⇒ still cached forever; new bytes ⇒ new URL.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub assets_version: Option<String>,
-    /// Why a `disabled` plugin is off: `"admin"`, `replaced by \`<id>\`` (a `provides`
-    /// partner was enabled), or the circuit breaker's reason.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub disabled_reason: Option<String>,
 }
 
-/// `disabled_reason` for a plugin switched off because its `provides` partner was enabled.
 pub fn replaced_reason(by: &str) -> String {
     format!("{REPLACED_BY_PREFIX}`{by}`")
 }
 
-/// The prefix of [`replaced_reason`].
 pub const REPLACED_BY_PREFIX: &str = "replaced by ";
 
-/// Is `reason` a person's decision (or the installer's), as opposed to the circuit
-/// breaker's? No reason at all counts as a decision: nothing says otherwise.
 pub fn disabled_on_purpose(reason: Option<&str>) -> bool {
     match reason {
         None => true,
@@ -866,12 +637,6 @@ pub fn disabled_on_purpose(reason: Option<&str>) -> bool {
 }
 
 impl InstalledPlugin {
-    /// Does an admin want this plugin's frontend loaded?
-    ///
-    /// `enabled` and `failed` (its backend half would not start; the frontend is still
-    /// good) do. `disabled` does not — **unless the circuit breaker did it**: a trip is
-    /// about the backend half, and must not change the load set, or every open client would
-    /// reload over a misbehaving cron job ([`crate::load::fingerprint`]).
     pub fn wants_load(&self) -> bool {
         match self.state {
             PluginState::Enabled | PluginState::Failed => true,
@@ -881,7 +646,6 @@ impl InstalledPlugin {
     }
 }
 
-/// A plugin directory the registry refused, with the reason a human needs.
 #[derive(Debug, Clone, Serialize)]
 pub struct PluginProblem {
     pub path: String,
@@ -892,8 +656,6 @@ pub struct PluginProblem {
 pub struct Registry {
     plugins: Vec<InstalledPlugin>,
     problems: Vec<PluginProblem>,
-    /// The directory that was scanned. `None` on the default (empty) registry, which is
-    /// what `DISABLE_PLUGINS=1` returns — and what makes every asset route 404.
     root: Option<PathBuf>,
 }
 
@@ -906,17 +668,14 @@ impl Registry {
         &self.problems
     }
 
-    /// What each boot loads, in order, and what it skips ([`resolve_load`]).
     pub fn load_plan(&self) -> LoadPlan {
         resolve_load(&self.plugins)
     }
 
-    /// The `plugin:<id>` import-map entries for [`Registry::load_plan`].
     pub fn plugin_imports(&self) -> BTreeMap<String, String> {
         plugin_imports(&self.plugins, &self.load_plan())
     }
 
-    /// `plugins_version`: the fingerprint of the load set clients compare against.
     pub fn plugins_version(&self) -> String {
         fingerprint(&self.plugins, &self.load_plan())
     }
@@ -931,13 +690,6 @@ impl Registry {
             .find(|plugin| plugin.manifest.id == id && plugin.manifest.version == version)
     }
 
-    /// Every `peerLibraries` range any installed plugin declares, per library.
-    ///
-    /// M3 does not *resolve* these — one version of each library ships in the runtime
-    /// bundle, so there is nothing to choose. What it does do is make a mismatch
-    /// visible: `unsatisfied_peers` compares the declared ranges against the bundle
-    /// and the import-map route logs what it found, which is the difference between
-    /// "this plugin needs CodeMirror 7" and a blank screen.
     pub fn peer_ranges(&self) -> BTreeMap<&str, Vec<(&str, &str)>> {
         let mut out: BTreeMap<&str, Vec<(&str, &str)>> = BTreeMap::new();
         for plugin in &self.plugins {
@@ -950,28 +702,15 @@ impl Registry {
         out
     }
 
-    /// Demote entries the approval records say are `disabled` or `failed`, so
-    /// `/api/plugins` tells the loader the truth and the admin screen can explain a plugin
-    /// that is installed but not running.
-    ///
-    /// Additive by construction: a record that is missing leaves the scanned entry alone.
-    /// A plugin in the served directory with no record is an *adopted* M3 install
-    /// ([`crate::plugininstall::adopt_installed_directory`]), not an error.
     pub fn apply_states(&mut self, records: &[PluginRecord]) {
         for plugin in &mut self.plugins {
             let Some(record) = records
                 .iter()
                 .find(|record| record.id == plugin.manifest.id)
             else {
-                // An adopted M3 install: served, and nobody has said otherwise.
                 continue;
             };
             if record.version != plugin.manifest.version {
-                // The record describes a different version than the one on disk — a
-                // half-finished upgrade, or a directory an operator edited by hand. Leaving
-                // the scanned entry alone is the conservative answer: the served artifact is
-                // real, and demoting it on the strength of a record about another version
-                // would take a working app offline.
                 warn!(
                     plugin = %plugin.manifest.id,
                     on_disk = %plugin.manifest.version,
@@ -988,7 +727,6 @@ impl Registry {
         }
     }
 
-    /// Every manifest in the registry, for [`resolve`].
     pub fn manifests(&self) -> Vec<PluginManifest> {
         self.plugins
             .iter()
@@ -996,13 +734,6 @@ impl Registry {
             .collect()
     }
 
-    /// The manifests of the plugins that will actually be *loaded* — `enabled` only.
-    ///
-    /// The distinction matters for the import map: a `disabled` or `failed` plugin's
-    /// frontend half is still served (half a plugin beats none, and the admin screen needs
-    /// to explain it), but the loader skips it (`plugin.state !== "enabled"`), so its
-    /// `peerLibraries` ranges must not get a vote in a version every *loaded* plugin has to
-    /// live with.
     pub fn loaded_manifests(&self) -> Vec<PluginManifest> {
         self.plugins
             .iter()
@@ -1011,7 +742,6 @@ impl Registry {
             .collect()
     }
 
-    /// Libraries some plugin declares that the served import map does not provide.
     pub fn unsatisfied_peers(&self, provided: &BTreeMap<String, String>) -> Vec<String> {
         self.peer_ranges()
             .into_iter()
@@ -1024,8 +754,6 @@ impl Registry {
     }
 }
 
-/// Scan `dir` for installed plugins. Never fails: unreadable or malformed entries
-/// become [`PluginProblem`]s.
 pub fn scan(dir: &Path) -> Registry {
     let mut registry = Registry {
         root: Some(dir.to_path_buf()),
@@ -1035,8 +763,6 @@ pub fn scan(dir: &Path) -> Registry {
     let entries = match fs::read_dir(dir) {
         Ok(entries) => entries,
         Err(err) => {
-            // Not an error: a deployment with no plugins installed is a valid state,
-            // and so is one where the directory has not been built yet.
             registry.problems.push(PluginProblem {
                 path: dir.display().to_string(),
                 message: format!("cannot read the plugins directory: {err}"),
@@ -1045,7 +771,6 @@ pub fn scan(dir: &Path) -> Registry {
         }
     };
 
-    // id → (version, manifest, dir)
     let mut best: BTreeMap<String, (String, PluginManifest)> = BTreeMap::new();
 
     for entry in entries.flatten() {
@@ -1121,9 +846,6 @@ pub fn scan(dir: &Path) -> Registry {
     registry
 }
 
-/// 12-hex fingerprint of the frontend's served bytes (module, then style), or `None`
-/// when there is no frontend or a file is unreadable — an unreadable file will fail at
-/// load time with its own error; a missing `?v=` must not hide that behind a cache hit.
 fn frontend_assets_version(package_dir: &Path, manifest: &PluginManifest) -> Option<String> {
     use sha2::{Digest, Sha256};
     let frontend = manifest.frontend.as_ref()?;
@@ -1151,9 +873,6 @@ fn read_manifest(dir: &Path, id: &str, version: &str) -> Result<PluginManifest, 
     let manifest: PluginManifest =
         serde_json::from_value(value).map_err(|err| format!("manifest.json is invalid: {err}"))?;
 
-    // The path is the truth: a manifest claiming another id or version would be served
-    // under this URL and loaded under that name, and the loader would then check the
-    // wrong dependency.
     if manifest.id != id {
         return Err(format!(
             "manifest id `{}` does not match the directory `{id}`",
@@ -1167,8 +886,6 @@ fn read_manifest(dir: &Path, id: &str, version: &str) -> Result<PluginManifest, 
         ));
     }
     let Some(frontend) = manifest.frontend.as_ref() else {
-        // Backend-only plugins are legitimate (SPEC §6.3) but M3 serves nothing for
-        // them; reporting it as a problem would be noise once M4 exists.
         return Err("no frontend half (backend-only plugins arrive in M4)".to_string());
     };
     if !safe_relative_path(&frontend.module) {
@@ -1180,11 +897,6 @@ fn read_manifest(dir: &Path, id: &str, version: &str) -> Result<PluginManifest, 
     if !dir.join(&frontend.module).is_file() {
         return Err(format!("frontend.module `{}` is missing", frontend.module));
     }
-    // Browser assets live under `frontend/`, which is the package layout SPEC §6.2 fixes
-    // (its zip rules reject "entries outside `frontend/**` + declared wasm"). It is
-    // checked here as well as enforced by the serving route, so a package that spells it
-    // differently is reported at scan time with this message instead of loading in the
-    // client and 404-ing on its own module.
     if !is_frontend_asset(&frontend.module) {
         return Err(format!(
             "frontend.module `{}` is not under `frontend/`; only that directory is served",
@@ -1206,14 +918,11 @@ fn read_manifest(dir: &Path, id: &str, version: &str) -> Result<PluginManifest, 
     Ok(manifest)
 }
 
-/// `true` when a manifest-declared path is inside the served `frontend/` directory.
 fn is_frontend_asset(path: &str) -> bool {
     let mut segments = path.split('/').filter(|segment| !segment.is_empty());
     segments.next() == Some("frontend") && segments.next().is_some()
 }
 
-/// A manifest-declared path must stay inside the package: no absolute paths, no
-/// `..`, no backslashes (a Windows-authored zip), no drive letters.
 pub fn safe_relative_path(path: &str) -> bool {
     !path.is_empty()
         && !path.starts_with('/')
@@ -1224,30 +933,6 @@ pub fn safe_relative_path(path: &str) -> bool {
             .any(|segment| segment == ".." || segment == ".")
 }
 
-// ---------------------------------------------------------------------------
-// The import map (M4: peer-library resolution over the whole installed set)
-// ---------------------------------------------------------------------------
-
-/// What `/importmap.json` should serve, and what is wrong with it.
-///
-/// M3 served the runtime bundle's map and *checked* that every declared `peerLibraries`
-/// entry was present. This is the resolution SPEC §6.4 asks for — "the server resolves all
-/// installed plugins' ranges to single versions at install" — made visible at serve time
-/// as well, now that third-party plugins can be installed and each of them brings its own
-/// ranges:
-///
-/// - `imports` is what goes on the wire. It is the runtime bundle's map **unchanged**:
-///   plugin modules are loaded by URL, never by bare specifier, so no installed plugin ever
-///   adds an entry. Saying so explicitly is the point — "the import map includes the
-///   installed plugins" is a tempting and wrong reading of §6.4.
-/// - `chosen` is the one version of each library the installed set resolves to. The install
-///   flow refuses a package whose ranges cannot meet the others' (`resolve`), so this is
-///   informational — but it is what an operator needs when a plugin author asks "which
-///   CodeMirror am I getting".
-/// - `missing` is a library some loaded plugin declares that the bundle does not provide.
-///   An import map cannot change after load, so such a plugin will fail on its first bare
-///   import; the install flow refuses one when the bundle is known, and this is the
-///   backstop for a plugin adopted from disk or a bundle that changed underneath.
 #[derive(Debug, Clone, Default)]
 pub struct PeerResolution {
     pub imports: BTreeMap<String, String>,
@@ -1256,12 +941,6 @@ pub struct PeerResolution {
     pub warnings: Vec<String>,
 }
 
-/// Resolve the peer libraries of everything that will load, against what the runtime bundle
-/// provides.
-///
-/// Never fails: a conflict is a warning here, because the enforcement point is *install*
-/// (where an operator can still act) and a boot that refused to serve an import map would
-/// take the whole app down over one plugin.
 pub fn resolve_import_map(
     registry: &Registry,
     provided: &BTreeMap<String, String>,
@@ -1280,11 +959,6 @@ pub fn resolve_import_map(
             missing.push(format!("{library} (declared by {})", who.join(", ")));
             continue;
         }
-        // The range check the install flow makes, repeated here for the plugins that never went
-        // through it — adopted from disk, or installed against a bundle that has since been
-        // rebuilt with a new major. A warning rather than a refusal: the enforcement point is
-        // install, where an operator can still act, and refusing to serve an import map would
-        // take the whole app down over one plugin.
         let Some(version) = provided_versions.get(library) else {
             continue;
         };
@@ -1311,31 +985,12 @@ pub fn resolve_import_map(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Process-wide cache
-// ---------------------------------------------------------------------------
-
-/// The registry is read on first use and cached, **keyed by the directory it scanned**.
-///
-/// A process-wide map rather than a field on `AppState`: `state.rs` is a frozen contract
-/// (`backend/CONTRACTS.md`) and the sync layer already established this pattern for
-/// process-wide registries. `reload` exists because M4's installer has to invalidate it,
-/// and because it makes the scan testable.
-///
-/// The key matters. A single cached registry made the *first* `PLUGINS_DIR` any caller
-/// asked about the answer for every later one — invisible in a server process, which has
-/// one config, and fatal in a test binary, where every case points at its own fixture
-/// directory and would have been served the first case's plugins.
 static REGISTRY: OnceLock<RwLock<BTreeMap<PathBuf, Arc<Registry>>>> = OnceLock::new();
 
 fn cell() -> &'static RwLock<BTreeMap<PathBuf, Arc<Registry>>> {
     REGISTRY.get_or_init(|| RwLock::new(BTreeMap::new()))
 }
 
-/// The cached registry, scanning `config.plugins_dir` on first call.
-///
-/// `DISABLE_PLUGINS=1` returns an empty registry without touching the disk — the
-/// server-side half of safe mode (SPEC §6.1).
 pub fn registry(config: &Config) -> Arc<Registry> {
     if config.disable_plugins {
         return Arc::new(Registry::default());
@@ -1349,28 +1004,12 @@ pub fn registry(config: &Config) -> Arc<Registry> {
     reload(config)
 }
 
-/// Re-scan the plugins directory and replace the cache. Called at boot (so the log
-/// line appears before the first request) and by M4's installer.
 pub fn reload(config: &Config) -> Arc<Registry> {
     reload_with_records(config, &[])
 }
 
-/// [`reload`], with the approval records applied to the scan (M4).
-///
-/// The link the M4 scaffold left open: `reload` alone reports `enabled` for a directory
-/// whose record says `disabled`, because a directory scan cannot know. Every
-/// `plugininstall` action that changes what is served calls this
-/// ([`crate::plugininstall::refresh_registry`]), so `/api/plugins` and the static asset
-/// route agree with the `plugins` collection.
-///
-/// **An empty `records` slice is not "everything is disabled"** — it is "no records were
-/// read", which is also what a Mongo outage looks like. [`Registry::apply_states`] is
-/// additive for exactly that reason: an entry with no record keeps the state the scan gave
-/// it, so a server that cannot reach Mongo serves the last approved set rather than
-/// nothing.
 pub fn reload_with_records(config: &Config, records: &[PluginRecord]) -> Arc<Registry> {
     if config.disable_plugins {
-        // Safe mode: nothing is scanned, so nothing can be served or demoted.
         let empty = Arc::new(Registry::default());
         let mut guard = cell().write().expect("plugin registry lock poisoned");
         guard.insert(config.plugins_dir.clone(), Arc::clone(&empty));
@@ -1417,10 +1056,6 @@ mod tests {
         assert!(!is_valid_version(".."));
     }
 
-    /// The version is a filesystem path component (`<PLUGINS_DIR>/<id>/<version>/…`, the
-    /// staging work dir, `pending_dir`), so a tail that validates must still be one
-    /// harmless segment. Checking only the numeric core let a manifest walk out of the
-    /// staging tree and write the package's files anywhere the server process could.
     #[test]
     fn version_tails_cannot_escape_a_path_component() {
         assert!(!is_valid_version("1.0.0-../../../../srv/web/evil"));
@@ -1435,7 +1070,6 @@ mod tests {
         assert!(!is_valid_version("1.0.0-beta\0"));
         assert!(!is_valid_version(&format!("1.0.0-{}", "a".repeat(200))));
 
-        // And nothing that escapes survives being joined onto a root.
         for bad in ["1.0.0-../../etc", "1.0.0+../..", "../1.0.0"] {
             assert!(!is_valid_version(bad), "{bad} must be refused");
         }
@@ -1459,7 +1093,6 @@ mod tests {
         assert_eq!(compare_versions("1.0.0", "1.0.0"), Ordering::Equal);
     }
 
-    /// One entry as the scan would have produced it.
     fn installed(id: &str, peers: &[(&str, &str)], state: PluginState) -> InstalledPlugin {
         let peer_libraries: serde_json::Map<String, serde_json::Value> = peers
             .iter()
@@ -1483,9 +1116,6 @@ mod tests {
         }
     }
 
-    /// The M4 import-map contract (SPEC §6.4): one version per library over everything that
-    /// will *load*, the map itself untouched by the installed set, and a library the bundle
-    /// does not provide reported rather than silently resolved.
     #[test]
     fn the_import_map_resolves_one_version_per_library_over_the_loaded_set() {
         let mut registry = Registry::default();
@@ -1524,8 +1154,6 @@ mod tests {
             Some("6.4.0"),
             "the highest floor any loaded plugin requires is the one version they all get"
         );
-        // The disabled plugin is still *served* (half a plugin beats none), so its
-        // unsatisfiable library is reported…
         assert!(
             resolution
                 .missing
@@ -1534,12 +1162,8 @@ mod tests {
             "{:?}",
             resolution.missing
         );
-        // …but it gets no vote in a version the plugins that actually load have to live
-        // with, because the loader skips anything that is not `enabled`.
         assert!(!resolution.chosen.contains_key("@lezer/highlight"));
 
-        // And a genuine conflict is a warning here, never a refusal: the enforcement point
-        // is install, where an operator can still act.
         let mut conflicting = Registry::default();
         conflicting.plugins.push(installed(
             "a",
@@ -1553,9 +1177,6 @@ mod tests {
         ));
         let resolution = resolve_import_map(&conflicting, &provided, &versions);
         assert!(resolution.chosen.is_empty());
-        // The conflict, plus the per-plugin note that `b`'s `^7.0` cannot be met by the 6.26.3
-        // the bundle ships — the check HOST-ABI.md §7.1 step 4 asks for, made against a version
-        // rather than against the mere presence of the specifier.
         assert_eq!(resolution.warnings.len(), 2, "{:?}", resolution.warnings);
         assert!(
             resolution.warnings.iter().any(|warning| warning
@@ -1566,9 +1187,6 @@ mod tests {
         );
     }
 
-    /// A range the bundle satisfies produces no note; one it does not, does. The install flow
-    /// refuses the second outright — this is the boot-time backstop for a plugin adopted from
-    /// disk or a bundle rebuilt underneath an installed set.
     #[test]
     fn peer_ranges_are_checked_against_the_version_the_bundle_provides() {
         let provided = BTreeMap::from([(
@@ -1598,8 +1216,6 @@ mod tests {
         let warnings = resolve_import_map(&stale, &provided, &versions).warnings;
         assert_eq!(warnings.len(), 1, "{warnings:?}");
 
-        // No recorded version ⇒ no claim either way. A bundle built before the manifest
-        // carried versions must not start refusing plugins.
         assert!(
             resolve_import_map(&stale, &provided, &BTreeMap::new())
                 .warnings

@@ -1,21 +1,3 @@
-/**
- * `syntax-highlight` — fenced code, highlighted with tree-sitter grammars the user
- * installs when they want them.
- *
- * - Hosts languages: `addLanguage` (below) takes one from any plugin, and this plugin adds
- *   its own catalog the same way (`languages.json`, built into `frontend/languages/` by
- *   `build.mjs`).
- * - Adds a code block renderer to `plugin:markdown`, which replaces markdown's plain
- *   `<pre>` for every fence no fence renderer claims; and an extension to `plugin:editor`,
- *   which colours the same blocks while editing (SPEC §6.6: a syntax contributor pairs
- *   the two).
- * - Which languages are installed is a per-user setting; the bytes are fetched once per
- *   device and kept by the service worker.
- *
- * Nothing here is required by anything: without this plugin code is a plain `<pre>`, as
- * it always was.
- */
-
 import type { Kernel } from "@kernel";
 import { addExtension } from "plugin:editor";
 import { addCodeBlockRenderer } from "plugin:markdown";
@@ -36,11 +18,6 @@ export type { SyntaxApi, SyntaxLanguage } from "./api.js";
 export type { CustomLanguage, CustomUpload } from "./custom.js";
 export type { LoadState, Span } from "./engine.js";
 
-/**
- * Offer a language (or several) for code blocks. It shows in Settings, Code languages;
- * nothing is fetched until the user installs it. The same `id` replaces the earlier one.
- * Returns the function that takes it out again.
- */
 export const addLanguage: (items: SyntaxLanguage | readonly SyntaxLanguage[]) => () => void =
   languageRegistry.add;
 
@@ -50,11 +27,9 @@ interface CatalogEntry {
   readonly aliases?: readonly string[];
 }
 
-/** This module's URL; the grammars sit beside it. A variable, so Vite leaves `new URL` alone. */
 const base = import.meta.url;
 
 export default function activate(kernel: Kernel): void {
-  // The shipped catalog, added first so it resolves before anything added later.
   addLanguage(
     (catalog.languages as readonly CatalogEntry[]).map((entry) => ({
       id: entry.id,
@@ -71,7 +46,6 @@ export default function activate(kernel: Kernel): void {
   });
   const installed = createInstalled(kernel);
 
-  // Uploaded languages are added like any other, kept in step with the setting.
   const customContributions = new Map<string, { readonly key: string; dispose(): void }>();
   const syncCustom = (): void => {
     const current = new Map(custom.list().map((language) => [language.id, language]));
@@ -215,11 +189,6 @@ async function fetchServed(url: string): Promise<Uint8Array> {
   return new Uint8Array(await response.arrayBuffer());
 }
 
-/**
- * Drop a removed language's files from the service worker's caches, so removing one
- * gives the space back. Best effort: where there is no Cache Storage there is nothing
- * to drop, and the files are small enough that a failure costs nothing but space.
- */
 async function evict(urls: readonly string[]): Promise<void> {
   if (typeof caches === "undefined") return;
   try {
@@ -228,6 +197,5 @@ async function evict(urls: readonly string[]): Promise<void> {
       await Promise.all(urls.filter((url) => /^https?:/.test(url)).map((url) => cache.delete(url)));
     }
   } catch {
-    // Space, not correctness.
   }
 }

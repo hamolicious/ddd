@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { pageMapLacksPlugins } from "./importmap.js";
 
-/** A page whose one `<script type="importmap">` holds `map` (or no page map at all). */
 function servePage(map: unknown): void {
   const script = map === undefined ? null : { textContent: JSON.stringify(map) };
   vi.stubGlobal("document", { querySelector: () => script });

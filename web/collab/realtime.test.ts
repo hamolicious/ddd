@@ -1,8 +1,3 @@
-/**
- * Everyone online: people editing the same note at the same time. The network is
- * healthy here except where a test adds latency, so edits cross in flight.
- */
-
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 import { spliceFrontmatterValue } from "../harness/src/ops.js";
@@ -40,7 +35,6 @@ describe("two people, one note, at the same time", () => {
       bob.insertAfter(id, "three", ` b${round}`);
       await sleep(30);
     }
-    // And one word both of them rewrite while neither has seen the other's.
     alice.replace(id, "two", "TWO");
     bob.replace(id, "two", "deux");
     alice.latency(0);
@@ -91,7 +85,6 @@ describe("two people, one note, at the same time", () => {
     await bob.open(id);
     alice.latency(200);
     bob.latency(200);
-    // Values are spliced, never whole lines (SPEC §3.3), as the editor does.
     spliceFrontmatterValue(alice.yText(id), "status", "done");
     spliceFrontmatterValue(bob.yText(id), "owner", "bob");
     spliceFrontmatterValue(alice.yText(id), "priority", "2");
@@ -104,8 +97,6 @@ describe("two people, one note, at the same time", () => {
       .toMatchObject({ status: "done", owner: "bob" });
     const doc = await w.rest.getDocument(id);
     expect(doc.fm_parse_error).toBe(false);
-    // A same-key race may leave both values' characters ("23"); what it must never do
-    // is break the YAML or lose the key.
     expect(String(doc.fm["priority"])).toMatch(/^(2|3|23|32)$/);
   });
 });
@@ -126,7 +117,6 @@ describe("many devices", () => {
         for (let n = 0; n < 40; n += 1) {
           const token = `<${index}.${n}>`;
           tokens.push(token);
-          // At a random line start, so a token never lands inside another one.
           const text = device.text(id);
           const starts = [...text.matchAll(/\n/g)].map((match) => match.index + 1);
           device.insert(id, starts[Math.floor(Math.random() * starts.length)] ?? text.length, `${token}\n`);

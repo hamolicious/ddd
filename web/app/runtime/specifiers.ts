@@ -24,19 +24,15 @@
  */
 
 export const RUNTIME_SPECIFIERS = {
-  // The kernel contract itself: one copy, so `instanceof` works across plugins.
   "@kernel": "kernel.js",
 
-  // React 18 — the UI runtime.
   react: "react.js",
   "react/jsx-runtime": "react-jsx-runtime.js",
   "react-dom": "react-dom.js",
   "react-dom/client": "react-dom-client.js",
 
-  // The CRDT. `documents.open()` hands out `Y.Doc`s; a second Yjs cannot read them.
   yjs: "yjs.js",
 
-  // Extension-point-coupled: the `editor` point takes CodeMirror extensions.
   "@codemirror/state": "codemirror-state.js",
   "@codemirror/view": "codemirror-view.js",
   "@codemirror/commands": "codemirror-commands.js",
@@ -45,7 +41,6 @@ export const RUNTIME_SPECIFIERS = {
   "@lezer/highlight": "lezer-highlight.js",
   "y-codemirror.next": "y-codemirror.js",
 
-  // Extension-point-coupled: `markdown.remark` takes unified plugins.
   unified: "unified.js",
   "remark-parse": "remark-parse.js",
   "remark-gfm": "remark-gfm.js",
@@ -54,26 +49,10 @@ export const RUNTIME_SPECIFIERS = {
 
 export type RuntimeSpecifier = keyof typeof RUNTIME_SPECIFIERS;
 
-/** Every specifier, sorted — the app build externalizes exactly this set. */
 export const RUNTIME_SPECIFIER_NAMES: readonly string[] = Object.keys(RUNTIME_SPECIFIERS).sort();
 
-/** Where the build records specifier → hashed chunk URL, for the server. */
 export const RUNTIME_MANIFEST_FILE = "runtime-manifest.json";
 
-/**
- * The npm package a specifier's version comes from, or `undefined` when there is not one.
- *
- * The build records specifier → **version** alongside specifier → URL, because the server
- * cannot otherwise enforce the half of HOST-ABI.md §7.1 step 4 that matters: that a declared
- * `peerLibraries` range *intersects what the bundle provides*. Without a version it could only
- * check that the specifier exists, so a plugin declaring `"@codemirror/view": "^7"` installed
- * and activated cleanly on a server shipping 6.x and failed in the browser, against an API
- * that had changed under it.
- *
- * A subpath specifier resolves to its package (`react/jsx-runtime` → `react`); `@kernel` has
- * none — it is this repo's own contract, versioned by `KERNEL_API_VERSION` and already checked
- * through a manifest's `kernel` range.
- */
 export function packageOf(specifier: string): string | undefined {
   if (specifier === "@kernel") return undefined;
   const segments = specifier.split("/");

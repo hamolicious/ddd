@@ -1,30 +1,3 @@
-/*
- * The kernel's own stylesheet: the reset, the frame, the boot screens, the auth
- * gate, and the safe-mode manager. Nothing else.
- *
- * Every value comes from a kernel token (`--ddd-*`), which the runtime writes onto
- * `:root` before React renders — so a theme override reaches this file for free, and
- * a boot that never loaded a plugin is still legible in light and dark.
- *
- * Plugins bring their own `style.css`, linked on activation, and prefix their
- * classes (SPEC §6.4). The `ddd-` prefix here is the kernel's.
- */
-
-/*
- * Two device tokens the kernel publishes beside the theme tokens, because every
- * surface that fills the screen needs them and none of them can derive them alone.
- *
- * `--ddd-safe-*` — `index.html` sets `viewport-fit=cover`, which lays the page out under
- * the Android status bar and under the gesture bar. Anything anchored to a screen edge
- * (the navbar, the drawer, the palette, the bottom-most scroller) has to pay the inset
- * back or its first or last row is under system chrome. `env()` is 0 everywhere that
- * has no insets, including every desktop browser and Playwright, so these are free.
- *
- * `--ddd-viewport-height` — the visible height, kept current from `visualViewport` by
- * `boot/viewport.ts`. The default is what the app used before it existed, so a browser
- * without `visualViewport` and a test that never starts the tracker both behave exactly
- * as they did.
- */
 :root {
   --ddd-safe-top: env(safe-area-inset-top, 0px);
   --ddd-safe-right: env(safe-area-inset-right, 0px);
@@ -101,28 +74,15 @@ input {
   background: var(--ddd-bg);
 }
 
-/*
- * `<summary>` is a tap target and the global `button` rule above does not reach it.
- * Four of them ship in the base distribution — a notice's "Details", an audit row's
- * "Detail", and the query-language disclosure in both the document list and folder
- * contents — and every one measured 19–23 px tall.
- *
- * Sized with padding rather than `display: flex`, which would take the disclosure
- * triangle with it (no `::marker` is generated on a flex container).
- */
 summary {
   min-height: var(--ddd-tap-target);
   padding-block: calc((var(--ddd-tap-target) - 1.5em) / 2);
   cursor: pointer;
 }
 
-/* ---- frame ------------------------------------------------------------- */
-
 .ddd-frame {
   display: flex;
   flex-direction: column;
-  /* Not `100%`: on Android the layout viewport keeps its full height while the soft
-     keyboard covers the bottom of it (see `boot/viewport.ts`). */
   height: var(--ddd-viewport-height);
 }
 
@@ -163,9 +123,6 @@ summary {
   flex: 1 1 auto;
 }
 
-/* The strip's dismiss and action controls. A full tap target, not the tap target
-   minus 12 px: the strip is what the kernel draws when nothing else is holding the
-   mount — the bare recovery screen included — so these are the only controls on it. */
 .ddd-notice button {
   min-width: var(--ddd-tap-target);
   min-height: var(--ddd-tap-target);
@@ -178,7 +135,6 @@ summary {
   white-space: pre-wrap;
 }
 
-/* A notice's progress: a bar along the bottom of it, the label under the bar's end. */
 .ddd-notice-progress {
   flex: 1 0 100%;
   display: flex;
@@ -199,8 +155,6 @@ summary {
 .ddd-notice-progress > small {
   color: var(--ddd-text-muted);
 }
-
-/* ---- boot, auth, empty states ------------------------------------------ */
 
 .ddd-boot,
 .ddd-auth,
@@ -270,23 +224,6 @@ summary {
   text-decoration: underline;
 }
 
-/* ---- re-authentication (the 4401 overlay, SPEC §5.3) -------------------- */
-
-/*
- * An overlay, not a screen: the workspace stays mounted and readable underneath,
- * because a 401 says nothing about the local copy and clearing it is what this
- * flow exists to avoid. `color-mix` degrades to the fallback colour where it is
- * unsupported.
- */
-/*
- * Sized from the visible height and scrollable, not `inset: 0` + `place-items: center`.
- * Centred in the *layout* viewport, the password field sat behind the Android soft
- * keyboard, and `position: fixed` is anchored to that same layout viewport, so
- * scrolling could not rescue it either. `margin: auto` on the flex item keeps the
- * dialog centred when there is room and lets it scroll from its own top when there is
- * not — which `place-items: center` cannot do, because a centred grid item that
- * overflows overflows in *both* directions.
- */
 .ddd-reauth {
   position: fixed;
   top: 0;
@@ -321,8 +258,6 @@ summary {
   background: var(--ddd-bg-subtle);
 }
 
-/* ---- safe mode --------------------------------------------------------- */
-
 .ddd-bare {
   max-width: 60rem;
   margin: 0 auto;
@@ -332,8 +267,6 @@ summary {
     calc(var(--ddd-space) * 3 + var(--ddd-safe-left));
 }
 
-/* Five columns on a recovery screen. Safe mode is reached *because* something is
-   already wrong; it must not also be the screen that does not fit. */
 .ddd-bare-scroll {
   overflow-x: auto;
 }
@@ -352,9 +285,6 @@ summary {
   overflow-wrap: anywhere;
 }
 
-/* The two ways out, and the only controls above the table. They were 20 px tall on a
-   phone — inline links in a paragraph — on the screen someone reaches precisely
-   because the normal way in stopped working. */
 .ddd-bare header a {
   display: inline-flex;
   align-items: center;
@@ -366,8 +296,6 @@ summary {
   color: var(--ddd-text-muted);
 }
 
-/* The admin-only write path (PLUGIN-PROTOCOLS §7): Plug in, Roll back. Plain buttons in
-   kernel tokens, because there is no plugin UI on this screen to borrow one from. */
 .ddd-bare button {
   display: inline-flex;
   align-items: center;
@@ -399,15 +327,6 @@ summary {
   overflow: hidden;
 }
 
-/* ---- "This device" (shell-only settings section) ------------------------ */
-
-/*
- * `ShellSection.tsx` renders this `<dl>` and nothing styled it, so it fell back to a
- * browser-default definition list: indented `<dd>`s, no grid, and a server URL or a
- * bundle hash as one unwrapped line that pushed the whole settings pane sideways.
- * Same two-column shape as `settings`' own `.settings-facts`, so the one kernel-owned
- * section on that screen stops being the one that looks different.
- */
 .ddd-shell-facts {
   display: grid;
   grid-template-columns: max-content 1fr;
@@ -421,18 +340,9 @@ summary {
 
 .ddd-shell-facts dd {
   margin: 0;
-  /* A bundle hash and a server URL are both unbreakable words. */
   overflow-wrap: anywhere;
 }
 
-/* ---- compact: phones in both orientations ------------------------------ */
-
-/*
- * `plugins/base/_shared/compact.ts` owns this query and every stylesheet in the base
- * distribution opens its compact block with the same one. The second arm is what gives a
- * phone in landscape (844 × 390) the mobile layout instead of the desktop one; the
- * `pointer: coarse` on it is what keeps a short *desktop* window on the wide layout.
- */
 @media (max-width: 640px), (max-height: 480px) and (pointer: coarse) {
   .ddd-boot,
   .ddd-auth,
@@ -455,8 +365,6 @@ summary {
       calc(var(--ddd-space) + var(--ddd-safe-left));
   }
 
-  /* One card per plugin instead of a five-column table nobody can read: the header
-     row goes away and each cell carries its own label. */
   .ddd-bare-scroll {
     overflow-x: visible;
   }
@@ -501,7 +409,6 @@ summary {
     color: var(--ddd-text-muted);
   }
 
-  /* A cell that is only a button has no label to prefix. */
   .ddd-bare-table td.ddd-bare-actions::before {
     content: none;
   }

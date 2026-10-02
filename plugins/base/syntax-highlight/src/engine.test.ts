@@ -7,7 +7,6 @@ import { createEngine, spansOf } from "./engine.js";
 
 describe("spansOf", () => {
   it("lets the innermost capture colour a character", () => {
-    // "a\nb" — a string with an escape inside it.
     expect(
       spansOf(6, [
         { name: "string", from: 0, to: 6, pattern: 0 },

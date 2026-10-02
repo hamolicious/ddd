@@ -1,13 +1,3 @@
-/**
- * Two people in the real app, editing together: live, offline, reloading while
- * offline, and on a connection that keeps dropping. The protocol-level suite
- * (`web/collab/`) proves the server's side of each of these; this one proves the
- * app's own client — the editor binding, the device journal, the outbox — keeps up.
- *
- * "Two people" is two accounts in two browser contexts: the collaborator joins by an
- * invite the admin makes, as a real one would.
- */
-
 import {
   expect,
   test,
@@ -52,7 +42,6 @@ interface Person {
   readonly net: Awaited<ReturnType<typeof network>>;
 }
 
-/** Alice (the admin) and Bob (the collaborator), both signed in, both in Edit mode on `id`. */
 async function twoPeople(browser: Browser, baseURL: string, id: string) {
   const person = async (credentials: typeof ADMIN): Promise<Person> => {
     const context = await browser.newContext({ baseURL });
@@ -80,7 +69,6 @@ const editorText = async (page: Page) =>
   (await page.locator(".cm-content").innerText()).replace(/\s+/g, " ").trim();
 const flat = (text: string) => text.replace(/\s+/g, " ").trim();
 
-/** Server and every editor hold the same text; returns the server's. */
 async function allAgree(request: Parameters<typeof rawText>[0], baseURL: string, id: string, pages: Page[]) {
   const server = await rawText(request, baseURL, id);
   for (const page of pages) await expect.poll(() => editorText(page), { timeout: 20_000 }).toBe(flat(server));
@@ -181,8 +169,6 @@ test("a connection that keeps dropping while someone types: every word arrives, 
 }) => {
   const id = await createDocument(request, baseURL!, "# Flaky\n\n");
   const { alice, bob, close } = await twoPeople(browser, baseURL!, id);
-  // A second route on Alice's page, registered last so it wins: it passes the socket
-  // through and lets the test cut it without refusing the reconnect.
   const live = new Set<WebSocketRoute>();
   await alice.page.routeWebSocket(/\/api\/sync/, (ws) => {
     live.add(ws);
@@ -216,7 +202,6 @@ test("a note one person makes offline, the other edits once it arrives", async (
     await alice.page.keyboard.press("ControlOrMeta+p");
     await alice.page.getByRole("combobox", { name: /command/i }).fill("New document");
     await alice.page.keyboard.press("Enter");
-    // Alice was already on a note, so wait for the address to name the new one.
     await expect.poll(() => currentDocumentId(alice.page), { timeout: 20_000 }).not.toBe(seed);
     const id = currentDocumentId(alice.page);
     expect(id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);

@@ -1,22 +1,3 @@
-/**
- * The calendar view: a month grid of the search's notes, each on the day the view's date
- * field gives it (and across to its end field's day, when one is set).
- *
- * It asks for its own results rather than drawing the page's: the search narrowed to the
- * weeks on screen (`within`), so a month is complete however long the search's results
- * run. The month is screen state — ‹ and › move it, "Today" comes back — and not part of
- * the search, so a saved calendar always opens on this month.
- *
- * A day shows its first few notes and "+N more"; choosing a day lists all of them under
- * the grid. On a phone the cells are too small for titles, so each shows dots, and the
- * list under the grid is how its notes are read. Each note is marked as an `ddd/document`,
- * so right-clicking or long-pressing one opens its menu (`context-menu`'s).
- *
- * **A note looks like itself.** Its chip wears the colour and icon `folders` gives it — the
- * tree's look, as `markdown`'s links wear it — followed live; a phone's dot takes its
- * colour. Without `folders`, or for a note with no look, the chip is the accent tint.
- */
-
 import { useState } from "react";
 import type { ReactElement } from "react";
 
@@ -31,9 +12,7 @@ import { target as mark } from "../../_shared/target.js";
 
 import { calendarOptions, entriesByDay, gridClauses, monthGrid, shiftMonth, type Entry } from "./layout.js";
 
-/** Notes a day cell lists before "+N more". */
 const SHOWN = 3;
-/** Notes fetched for one grid: six weeks rarely hold more. */
 const PAGE = 500;
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -41,7 +20,6 @@ const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 export function createCalendar(search: () => Pick<Search, "useResults">, looks: () => Looks | undefined) {
   return function CalendarView({ spec, options, onOpen, embedded }: SavedViewProps): ReactElement {
     const dress = looks();
-    // Re-draw when a note's colour or icon changes in the tree.
     useLookChanges(dress);
     const settings = calendarOptions(options);
     const [month, setMonth] = useState(() => startOfMonth(new Date()));
@@ -58,7 +36,6 @@ export function createCalendar(search: () => Pick<Search, "useResults">, looks: 
 
     return (
       <div className="calendar-view calendar:flex calendar:min-w-0 calendar:flex-col calendar:gap-2 calendar:font-sans calendar:text-text">
-        {/* Clear of the search's cog over the top right (32px, and the shell's 12px gap beside it). */}
         <div className={`calendar:flex calendar:items-center calendar:gap-2 ${embedded ? "" : "calendar:pr-11"}`}>
           <h3 className="calendar:m-0 calendar:flex-1 calendar:text-base calendar:font-semibold" aria-live="polite">
             {month.toLocaleDateString(undefined, { month: "long", year: "numeric" })}
@@ -159,7 +136,6 @@ export function createCalendar(search: () => Pick<Search, "useResults">, looks: 
   };
 }
 
-/** Index of the first cell in the grid's last row: the cells before it get a bottom border. */
 const GRID_ROWS_LAST = 35;
 
 function DayList({

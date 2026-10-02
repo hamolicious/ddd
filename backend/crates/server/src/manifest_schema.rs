@@ -1,33 +1,12 @@
-//! Manifest validation: an interpreter over `schema/manifest.schema.json`, the one
-//! manifest source (PLUGIN-PROTOCOLS §9 step 1).
-//!
-//! The web kernel has the same interpreter (`web/kernel-api/src/manifest.ts`) over the same
-//! schema, and `schema/fixtures/manifests.json` pins that the two agree field for field. The
-//! schema is compiled in with `include_str!`, so a schema change reaches the server without
-//! a generator step; the *types* are generated (`manifest_types.rs`).
-//!
-//! It interprets exactly the subset the schema uses: `type`, `required`, `properties`,
-//! `additionalProperties`, `propertyNames`, `items`, `enum`, `minimum`, `$ref` and a fixed
-//! set of `format`s. Unknown top-level keys are allowed on purpose, so an older server
-//! still accepts a manifest written for a newer one; `x-*` is the author's own space. The
-//! one exception is `x-removed` (on any object node, including nested `$defs`): fields a
-//! past contract had and a major removed (`consumes`, `hot`, `backend.calls` in `@kernel`
-//! 3.0), refused with the message that names their replacement rather than silently
-//! ignored.
-
 use std::sync::OnceLock;
 
 use serde::Serialize;
 use serde_json::Value;
 
-/// The source schema, verbatim.
 pub const MANIFEST_SCHEMA_JSON: &str = include_str!("../../../../schema/manifest.schema.json");
 
-/// One thing wrong with a manifest, in the same shape the web validator reports.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ManifestProblem {
-    /// Dotted path into the manifest (`frontend.module`, `dependencies.router`); empty
-    /// for the manifest itself.
     pub field: String,
     pub message: String,
 }
@@ -40,14 +19,12 @@ fn schema() -> &'static Value {
     })
 }
 
-/// Every structural problem with `value` as a manifest. Empty means well-formed.
 pub fn validate_manifest(value: &Value) -> Vec<ManifestProblem> {
     let mut problems = Vec::new();
     check(schema(), value, "", &mut problems);
     problems
 }
 
-/// [`validate_manifest`], joined into one line for an error message.
 pub fn describe(problems: &[ManifestProblem]) -> String {
     problems
         .iter()
@@ -206,10 +183,6 @@ fn enum_message(node: &Value) -> String {
     format!("must be one of {}", allowed.join(", "))
 }
 
-/// The message for a string that fails `format`, or `None` when it passes.
-///
-/// Each format is a hand-written check with the same definition as its twin in
-/// `web/kernel-api/src/manifest.ts`; the fixture corpus keeps them honest.
 pub fn format_problem(format: &str, text: &str) -> Option<&'static str> {
     let ok = match format {
         "plugin-id" => crate::plugins::is_valid_plugin_id(text),
@@ -232,16 +205,12 @@ pub fn format_problem(format: &str, text: &str) -> Option<&'static str> {
     })
 }
 
-/// Split `editor@2.0.0` into `("editor", "2.0.0")` when both halves are well-formed: a
-/// plugin id and an exact semver version (the `provides` format).
 pub fn parse_plugin_ref(text: &str) -> Option<(&str, &str)> {
     let (id, version) = text.split_once('@')?;
     (crate::plugins::is_valid_plugin_id(id) && crate::plugins::is_valid_version(version))
         .then_some((id, version))
 }
 
-/// `*`, or an optional operator (`^ ~ = >= <= > <`) and one to three numeric components
-/// with an optional prerelease/build tail. Surrounding whitespace is not allowed.
 pub fn is_semver_range(range: &str) -> bool {
     if range == "*" {
         return true;
@@ -276,7 +245,6 @@ mod tests {
         problems: Vec<String>,
     }
 
-    /// The corpus both validators run: each fixture names the fields it expects problems on.
     #[test]
     fn the_shared_fixture_corpus_passes() {
         let fixtures: Vec<Fixture> =
@@ -292,8 +260,6 @@ mod tests {
             let mut want = fixture.problems.clone();
             want.sort();
             assert_eq!(got, want, "fixture `{}`", fixture.name);
-            // A manifest the validator accepts must also deserialize: the generated types
-            // and the schema describe one thing.
             if want.is_empty() {
                 serde_json::from_value::<crate::plugins::PluginManifest>(fixture.manifest)
                     .unwrap_or_else(|err| panic!("fixture `{}` deserializes: {err}", fixture.name));

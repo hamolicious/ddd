@@ -1,23 +1,3 @@
-/**
- * The two bars: seats that other plugins fill, and nothing of their own.
- *
- * Everything in a bar is an `addItem` item placed in a seat by the current profile's
- * layout (`layout.ts`): the item's own placement, overridden by the user's layout in
- * Settings → Toolbar. Admin, the notice bell (`notices`) and the sync pill
- * (`sync-status`) all arrive this way; the toolbar knows none of them.
- *
- * Which profile draws is the shell's mobile breakpoint:
- *
- * - **Desktop**: {@link TopBar} is the header (`<header>`, `<nav aria-label="Main">`),
- *   {@link BottomBar} a slim IDE-style status footer.
- * - **Phone**: {@link TopBar} is a thin strip, padded down to the safe-area inset, and
- *   {@link BottomBar} one row of big icon buttons within thumb reach, labels kept for
- *   screen readers.
- *
- * A bar with nothing in it draws nothing, except that the top one still holds the top
- * safe-area inset so the app never slides under a phone's status bar.
- */
-
 import type { ReactNode } from "react";
 
 import type { Kernel, Registry, RegistryEntry } from "@kernel";
@@ -29,10 +9,8 @@ import type { ArrangementStore } from "./arrangement.js";
 import { useArrangement, useProfile } from "./hooks.js";
 import { arrange, type SeatId, type Seated } from "./layout.js";
 
-/** What the error boundary names a failed item by. */
 const POINT = "toolbar.item";
 
-/** How an item draws, by which bar it sits in. */
 type Look = "header" | "footer" | "strip" | "dock";
 
 interface BarProps {
@@ -106,7 +84,6 @@ const SEAT_CLASS: Record<Look, { start: string; end: string }> = {
     start: "toolbar:m-0 toolbar:flex toolbar:min-w-0 toolbar:flex-1 toolbar:list-none toolbar:items-center toolbar:gap-0.5 toolbar:overflow-x-auto toolbar:p-0 toolbar:[scrollbar-width:none]",
     end: "toolbar:ml-auto toolbar:m-0 toolbar:flex toolbar:shrink-0 toolbar:list-none toolbar:items-center toolbar:gap-0.5 toolbar:p-0",
   },
-  // One row, every item an equal share of the width, big enough for a thumb.
   dock: {
     start: "toolbar:m-0 toolbar:flex toolbar:min-h-14 toolbar:list-none toolbar:items-stretch toolbar:overflow-x-auto toolbar:p-0 toolbar:text-2xl toolbar:[scrollbar-width:none]",
     end: "",
@@ -141,16 +118,12 @@ const ITEM_CLASS: Record<Look, { component: string; button: string; iconButton: 
     button: "toolbar:tap toolbar:gap-1 toolbar:px-2.5",
     iconButton: "",
   },
-  // Icons carry the strip; the label stays for screen readers.
   strip: {
     cell: "toolbar:flex toolbar:min-w-0 toolbar:items-center toolbar:shrink-0",
     component: "toolbar:flex toolbar:min-w-0 toolbar:items-center toolbar:shrink-0",
     button: "toolbar:tap toolbar:gap-1 toolbar:px-1.5 toolbar:[&_.toolbar-icon+_.toolbar-label]:sr-only",
     iconButton: "toolbar:w-[var(--ddd-tap-target)] toolbar:p-0!",
   },
-  // Slim: a plugin's own widget is held to the footer's height too (the sync pill is a
-  // full-size tap target elsewhere), except on a touch screen. Important, because the
-  // widget's own stylesheet loads after this one and would win a tie.
   footer: {
     cell: "toolbar:flex toolbar:min-w-0 toolbar:items-center toolbar:shrink-0",
     component: "toolbar:flex toolbar:min-w-0 toolbar:items-center toolbar:shrink-0 toolbar:not-touch:[&>*]:min-h-6! toolbar:not-touch:[&_button]:min-h-6! toolbar:not-touch:[&_button]:min-w-6! toolbar:not-touch:[&_button]:w-auto! toolbar:not-touch:[&_button]:px-1!",
@@ -182,8 +155,6 @@ function Item({
   if (item.component) {
     const Rendered = bounded(kernel, item.component, POINT, entry.pluginId);
     return (
-      // A plugin's own widget sizes itself; `data-kind` tells it from a button the
-      // toolbar renders, which wants its whole label or nothing.
       <li className={style.component} data-kind="component" data-plugin={entry.pluginId} data-look={look}>
         <Rendered />
       </li>

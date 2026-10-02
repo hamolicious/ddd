@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { bodyOf, bodyStart, openFenceId, regionsOf } from "./regions.js";
 
-/** Read a span back as text — the only readable way to assert on offsets. */
 const at = (text: string, span: { start: number; end: number } | null): string | null =>
   span === null ? null : text.slice(span.start, span.end);
 
@@ -35,8 +34,6 @@ describe("regionsOf — the SPEC §3.1 document", () => {
     const regions = regionsOf(DOC);
     expect(bodyOf(DOC)).toBe(at(DOC, regions.body));
     expect(bodyStart(DOC)).toBe(regions.body.start);
-    // The invariant the task-splice path depends on: a body offset plus the base is the
-    // document offset.
     expect(DOC.slice(bodyStart(DOC) + bodyOf(DOC).indexOf("[x]"), bodyStart(DOC) + bodyOf(DOC).indexOf("[x]") + 3),
     ).toBe("[x]");
   });
@@ -50,7 +47,6 @@ describe("frontmatter fence rules (SPEC §3.4)", () => {
 
   it("treats a fence with trailing whitespace as not a fence", () => {
     expect(regionsOf("--- \ntitle: x\n---\nbody").frontmatter).toBeNull();
-    // Closing fence with a trailing space: the block never closes, so there is none.
     expect(regionsOf("---\ntitle: x\n--- \nbody").frontmatter).toBeNull();
   });
 
@@ -81,7 +77,6 @@ describe("frontmatter fence rules (SPEC §3.4)", () => {
 describe("%%% run rules (SPEC §3.4)", () => {
   it("only the last contiguous run at the end counts", () => {
     const text = ["# Notes", "", "%%% not-a-section", "this is body text", "%%%", "", "more body", ""].join("\n");
-    // The run is not at the end, so every line of it is prose.
     expect(regionsOf(text).sections).toBeNull();
     expect(bodyOf(text)).toBe(text);
   });

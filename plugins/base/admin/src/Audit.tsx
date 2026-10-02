@@ -1,17 +1,3 @@
-/**
- * The audit log.
- *
- * This screen is the reason the shared-workspace decision is defensible (SPEC §5.4): any
- * user can delete any document, so "who deleted this, and when" is the entire
- * accountability story. It is therefore filterable by action, actor and target, and it
- * shows the `detail` document verbatim — a summarized audit log is a log you cannot answer
- * a question with.
- *
- * Paging is `_id`-cursor based (default 50, max 200) and **append-only in one direction**:
- * the server hands back `next_cursor`, so this page accumulates rather than pretending to
- * be random-access.
- */
-
 import { useState } from "react";
 import type { ReactElement } from "react";
 
@@ -31,9 +17,6 @@ export function AuditSection({
   const [action, setAction] = useState("");
   const [actor, setActor] = useState("");
   const [targetId, setTargetId] = useState("");
-  // Pages accumulate; the *last* page's cursor is the only one that says whether there is
-  // more. Keeping one `cursor` string would fall back to the first page's cursor once the
-  // last page returned none, and "Load more" would loop on the same rows forever.
   const [pages, setPages] = useState<readonly AuditPage[]>([]);
 
   const users = useAsync(() => client.users(), []);

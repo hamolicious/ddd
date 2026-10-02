@@ -1,13 +1,3 @@
-//! Minimal text splices (SPEC §3.3). The only supported way to write a
-//! frontmatter value or a machine-section key: compute the smallest text edit,
-//! never a parse→re-serialize→replace of a whole block.
-//!
-//! This module computes edits only. Applying them to the CRDT is the caller's
-//! job (server: the per-document actor; client: the kernel splice helper).
-//!
-//! Every returned list is disjoint and sorted by `range.start` descending, so a
-//! caller can apply the edits in order without re-offsetting.
-
 use serde::{Deserialize, Serialize};
 
 use crate::document::Span;
@@ -16,22 +6,12 @@ use crate::limits::{MAX_DOCUMENT_BYTES, is_valid_key};
 use crate::value::{Value, parse_value};
 use crate::{frontmatter, sections, yaml};
 
-/// One replace-range-with-text edit against the document text.
-/// Offsets are UTF-8 byte offsets into the text the edit was computed from;
-/// edits in a list are disjoint and sorted by `range.start` descending so they
-/// can be applied in order without re-offsetting.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TextEdit {
     pub range: Span,
     pub text: String,
 }
 
-/// Set (or insert) a top-level frontmatter key, touching only that key's value
-/// span. Creates the block, or the key line, when absent.
-///
-/// A key that cannot be written at all (it does not match
-/// `^[A-Za-z0-9_-]{1,64}$`, so the parser would drop it again) is
-/// [`CoreError::SpliceTargetMissing`].
 pub fn set_frontmatter_value(
     text: &str,
     key: &str,
@@ -53,9 +33,6 @@ pub fn set_frontmatter_value(
     }
 
     if let Some(span) = frontmatter::value_span(text, key) {
-        // `key:` with no same-line value starts its span right after the colon.
-        // This covers both an empty value and an expanded sequence; keep the
-        // canonical single space when replacing either one.
         let needs_space = text[..span.start].ends_with(':');
         let replacement = if needs_space {
             format!(" {serialized}")
@@ -75,8 +52,6 @@ pub fn set_frontmatter_value(
     }])
 }
 
-/// Remove a top-level frontmatter key line. No-op (empty edit list) when absent.
-/// A duplicated key is removed in full, every occurrence.
 pub fn remove_frontmatter_key(text: &str, key: &str) -> Result<Vec<TextEdit>, CoreError> {
     guard(text)?;
     let mut edits: Vec<TextEdit> = frontmatter::line_spans(text, key)
@@ -90,21 +65,12 @@ pub fn remove_frontmatter_key(text: &str, key: &str) -> Result<Vec<TextEdit>, Co
     Ok(edits)
 }
 
-/// One key write inside a `%%%` section. `None` value removes the key's line.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SectionLineEdit {
     pub key: String,
     pub value: Option<Value>,
 }
 
-/// Apply line edits to `plugin_id`'s machine section, creating the section (and
-/// the trailing run) when it does not exist yet. Only that plugin's section is
-/// ever touched.
-///
-/// Writes target the **last** section carrying `plugin_id` and the last line
-/// carrying each key, matching last-occurrence-wins; earlier duplicate lines for
-/// a written key are removed in the same splice ("the next write cleans up",
-/// SPEC §3.3). When `edits` names the same key twice, the last entry wins.
 pub fn splice_section(
     text: &str,
     plugin_id: &str,
@@ -116,7 +82,6 @@ pub fn splice_section(
         require_key(&edit.key)?;
     }
 
-    // Deduplicate by key, last entry wins, insertion order preserved.
     let mut ordered: Vec<&SectionLineEdit> = Vec::new();
     for edit in edits {
         match ordered.iter().position(|kept| kept.key == edit.key) {
@@ -143,7 +108,6 @@ pub fn splice_section(
     for edit in ordered {
         let mut spans = sections::key_line_spans(text, section, &edit.key);
         let last = spans.pop();
-        // Earlier duplicates of a key we are writing always go away.
         for range in spans {
             out.push(TextEdit {
                 range,
@@ -176,38 +140,21 @@ pub fn splice_section(
     Ok(out)
 }
 
-/// One change to a list value (frontmatter key or section key).
-///
-/// Lists are written as **block sequences**, one `  - item` line per item, so each
-/// action is a line insert or a line delete. Two replicas pushing at once insert two
-/// separate lines; two removing the same item delete the same span. The text CRDT
-/// merges both, where a rewritten `[a, b]` line would lose one side.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum ListAction {
-    /// Append an item.
     Push { value: Value },
-    /// Insert before the item at `index`; past the end appends.
     Insert { index: usize, value: Value },
-    /// Delete every item equal to `value`. A missing item is not an error.
     Remove { value: Value },
-    /// Delete the last item.
     Pop,
 }
 
-/// The edits a [`ListAction`] makes, and the item [`ListAction::Pop`] took off.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ListEdit {
     pub edits: Vec<TextEdit>,
     pub popped: Option<Value>,
 }
 
-/// Apply a [`ListAction`] to a top-level frontmatter key.
-///
-/// A key already in block form is edited one item line at a time. A key holding a
-/// flow list or a scalar is first rewritten into block form (a one-time whole-value
-/// replace — the only step that does not merge line by line). A missing key is
-/// created by push/insert; remove/pop on it are no-ops.
 pub fn frontmatter_list(text: &str, key: &str, action: &ListAction) -> Result<ListEdit, CoreError> {
     guard(text)?;
     require_key(key)?;
@@ -236,8 +183,6 @@ pub fn frontmatter_list(text: &str, key: &str, action: &ListAction) -> Result<Li
     Ok(region_list(text, inner, key, action))
 }
 
-/// Apply a [`ListAction`] to a key in `plugin_id`'s `%%%` section, creating the
-/// section when push/insert needs one. Same rules as [`frontmatter_list`].
 pub fn section_list(
     text: &str,
     plugin_id: &str,
@@ -264,10 +209,8 @@ pub fn section_list(
     Ok(region_list(text, section.body_span, key, action))
 }
 
-/// Indentation for items of a list that has none yet.
 const DEFAULT_INDENT: &str = "  ";
 
-/// The item a push/insert would create a missing list with.
 fn created_item(action: &ListAction) -> Option<&Value> {
     match action {
         ListAction::Push { value } | ListAction::Insert { value, .. } => Some(value),
@@ -275,7 +218,6 @@ fn created_item(action: &ListAction) -> Option<&Value> {
     }
 }
 
-/// Items are scalars: a nested item could not be written as one line.
 fn require_item(action: &ListAction) -> Result<(), CoreError> {
     match action {
         ListAction::Push { value }
@@ -290,23 +232,14 @@ fn require_item(action: &ListAction) -> Result<(), CoreError> {
     }
 }
 
-/// One occurrence of the key inside a region: its header line, and its item lines
-/// when it is already in block form.
 struct Occurrence {
-    /// Absolute span of the header line plus every item line.
     span: Span,
-    /// Absolute span of the header line alone.
     header: Span,
-    /// `Some` when the header has nothing after the colon (`key:`).
     block: Option<Vec<Item>>,
-    /// The inline value, when the header carries one.
     inline: Option<Value>,
 }
 
-/// One block-sequence item. Every item line has a terminator: a region (the
-/// frontmatter's inner span, a section's body) always ends before its closing fence.
 struct Item {
-    /// Absolute span of the whole line, terminator included.
     line: Span,
     indent: String,
     value: Option<Value>,
@@ -365,7 +298,6 @@ fn occurrences(text: &str, region: Span, key: &str) -> Vec<Occurrence> {
     out
 }
 
-/// The values a non-block occurrence holds, as list items.
 fn inline_items(value: Option<&Value>) -> Vec<Value> {
     match value {
         None | Some(Value::Null) => Vec::new(),
@@ -378,12 +310,6 @@ fn item_line(indent: &str, value: &Value) -> String {
     format!("{indent}- {}\n", value.to_yaml_inline())
 }
 
-/// `action` against the last occurrence of `key` inside `region` (frontmatter
-/// inner span or section body span).
-///
-/// Earlier occurrences (two replicas each creating the list at once) are folded
-/// into the last one: their lines go, and their items that the last one lacks are
-/// appended. That is "the next write cleans up" (SPEC §3.3) without losing an item.
 fn region_list(text: &str, region: Span, key: &str, action: &ListAction) -> ListEdit {
     let mut found = occurrences(text, region, key);
     let Some(last) = found.pop() else {
@@ -421,7 +347,6 @@ fn region_list(text: &str, region: Span, key: &str, action: &ListAction) -> List
     ListEdit { edits, popped }
 }
 
-/// A list already in block form: line inserts and deletes only.
 fn block_list(
     edits: &mut Vec<TextEdit>,
     last: &Occurrence,
@@ -432,7 +357,6 @@ fn block_list(
     let indent = items
         .first()
         .map_or(DEFAULT_INDENT.to_string(), |item| item.indent.clone());
-    // Where appended lines go: after the last item, or after the header.
     let tail = items.last().map_or(last.header.end, |item| item.line.end);
 
     let present: Vec<&Value> = items
@@ -478,8 +402,6 @@ fn block_list(
     }
 
     if !appended.is_empty() {
-        // After the last item's line — which a pop or remove may be deleting: the
-        // insert sits at that deletion's end, so the two edits stay disjoint.
         edits.push(TextEdit {
             range: Span::new(tail, tail),
             text: appended
@@ -491,8 +413,6 @@ fn block_list(
     popped
 }
 
-/// A key holding an inline value (flow list or scalar): rewrite it into block form
-/// with the action already applied. No change → no edit.
 fn rewrite_list(
     edits: &mut Vec<TextEdit>,
     key: &str,
@@ -530,8 +450,6 @@ fn rewrite_list(
     popped
 }
 
-/// The edit that adds a new `%%% plugin_id` section holding `body` to the end of
-/// the trailing run, creating the run when the document has none.
 fn new_section(text: &str, parsed: &sections::Sections, plugin_id: &str, body: &str) -> TextEdit {
     let fenced = format!("%%% {plugin_id}\n{body}%%%\n");
     match parsed.run_span {
@@ -556,8 +474,6 @@ fn new_section(text: &str, parsed: &sections::Sections, plugin_id: &str, body: &
     }
 }
 
-/// Remove a plugin's whole `%%%` section (uninstall-with-purge path). Every
-/// section carrying the id goes. No-op when the plugin has none.
 pub fn remove_section(text: &str, plugin_id: &str) -> Result<Vec<TextEdit>, CoreError> {
     guard(text)?;
     let parsed = sections::parse(text);
@@ -574,12 +490,6 @@ pub fn remove_section(text: &str, plugin_id: &str) -> Result<Vec<TextEdit>, Core
     Ok(edits)
 }
 
-/// Apply edits to a string. Reference implementation used by tests and by the
-/// REST full-text paths; CRDT callers apply the same edits transactionally.
-///
-/// Defensive: the edits are re-sorted (descending, longest range first at an
-/// equal start) and clamped to the text, so a caller cannot corrupt the text by
-/// passing them in another order.
 pub fn apply(text: &str, edits: &[TextEdit]) -> String {
     let mut ordered: Vec<&TextEdit> = edits.iter().collect();
     ordered.sort_by(|a, b| {

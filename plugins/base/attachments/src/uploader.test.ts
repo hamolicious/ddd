@@ -2,11 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { Throughput, formatBytes, formatTimeLeft, sendInChunks, type Fetch } from "./uploader.js";
 
-/**
- * `/api/uploads` in memory, with the server's rules: 409 for a chunk that is not where
- * the upload is, 404 for an upload it does not have. `trouble` breaks a request on
- * purpose, before the server sees it or after it acted but before the answer arrives.
- */
 function fakeServer(chunkSize = 4) {
   const sessions = new Map<string, { size: number; bytes: number[]; done?: string }>();
   let next = 0;
@@ -133,7 +128,6 @@ describe("sendInChunks", () => {
 
   it("carries on an upload it is given from where the server is", async () => {
     const server = fakeServer(4);
-    // An earlier visit got the first chunk up.
     server.sessions.set("u9", { size: 10, bytes: all(4) });
 
     const { value, sessions } = options({ uploadId: "u9" });
@@ -163,10 +157,8 @@ describe("sendInChunks", () => {
       return undefined;
     });
     const { value } = options();
-    // The lost answer looks like no connection: the caller's to retry.
     await expect(sendInChunks(server.fetch, file(10), "f.bin", value)).rejects.toMatchObject({ status: 0 });
 
-    // The retry picks the same upload up, past the chunk the server did store.
     const retry = options({ uploadId: "u1" });
     await sendInChunks(server.fetch, file(10), "f.bin", retry.value);
     expect(server.bytesOf("u1")).toEqual(all(10));
@@ -177,7 +169,6 @@ describe("sendInChunks", () => {
     const server = fakeServer(4);
     let rewound = false;
     server.breakWhen((method) => {
-      // The server lost the second chunk: it says so at completion.
       if (method === "POST" && !rewound && server.sessions.get("u1")?.bytes.length === 10) {
         rewound = true;
         const session = server.sessions.get("u1");
@@ -222,10 +213,10 @@ describe("Throughput", () => {
     speed.sample(0);
     expect(speed.secondsLeft(1000)).toBeUndefined();
     now = 1000;
-    speed.sample(1000); // 1000 B/s
+    speed.sample(1000);
     expect(speed.secondsLeft(5000)).toBeCloseTo(5);
     now = 2000;
-    speed.sample(3000); // 2000 B/s, smoothed toward it
+    speed.sample(3000);
     expect(speed.secondsLeft(1300)).toBeCloseTo(1);
     speed.reset();
     expect(speed.secondsLeft(1000)).toBeUndefined();

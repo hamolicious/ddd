@@ -1,28 +1,8 @@
-/**
- * `icons`' build step, run by the reference config after the module is built
- * (`_shared/vite.plugin-config.mjs`: a plugin's own `build.mjs`).
- *
- * Packs the icon set pinned in `tabler.json` next to the module:
- *
- * ```
- * frontend/tabler/
- * ├── index.json      every icon's name, category and tags, and the suggested few: for search
- * ├── <c>.json        the drawings of every icon whose name starts with `c`
- * └── LICENSE         Tabler's MIT licence, which travels with the drawings
- * ```
- *
- * Drawings are sharded by first character so a tree showing three icons downloads a
- * few shards, not the whole set; search needs only `index.json`. Every Tabler node is a
- * `<path>`, so a drawing is its paths: a `d` string, or `{ d, fill, … }` for the few that
- * carry attributes. Filled variants are separate icons named `<name>-filled`.
- */
-
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { extract, fetchTarball } from "../_shared/npm-tarball.mjs";
 
-/** @param {{ root: string, outDir: string, resolveFrom: string }} options */
 export default async function build({ root, outDir, resolveFrom }) {
   const pin = JSON.parse(readFileSync(join(root, "tabler.json"), "utf8"));
   const spec = `${pin.package}@${pin.version}`;
@@ -34,9 +14,7 @@ export default async function build({ root, outDir, resolveFrom }) {
   const filled = json("tabler-nodes-filled.json");
   const meta = json("icons.json");
 
-  /** name → drawing */
   const drawings = new Map();
-  /** [name, category index, tags] */
   const index = [];
   const categories = [];
   const categoryOf = (name) => {

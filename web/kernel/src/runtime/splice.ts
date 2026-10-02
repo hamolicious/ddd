@@ -1,91 +1,31 @@
-/**
- * The splice algorithm, in TypeScript, **as a faithful port of
- * `backend/crates/core/src/splice.rs`** and the span helpers it stands on
- * (`frontmatter.rs`, `sections.rs`, `yaml.rs`, `value.rs`).
- *
- * ## Why a port and not a Wasm call
- *
- * SPEC §2 says parity is "by construction": the kernel calls the shared Rust core
- * rather than reimplementing it. That is exactly what `runtime/core.ts` does for
- * parsing, title resolution and filter evaluation — and it is what this file would
- * do too, if the Wasm ABI exported the splice functions. It does not: `wasm.rs`
- * exports five functions (`parse_document`, `evaluate_filter`,
- * `core_semantics_version`, `normalize_date`, `resolve_title`) and none of them is a
- * splice, and `backend/crates/core/src/wasm.rs` + `kernel/src/wasm/**` belong to the
- * `wasm` area, not to this one (`web/CONTRACTS.md`).
- *
- * So the port is the *interim* state, and it is guarded rather than trusted:
- *
- * - `splice.test.ts` runs the **shared conformance corpus**
- *   (`backend/crates/core/corpus/splices.json`) — the same cases
- *   `crates/core/tests/` runs against the Rust implementation. A divergence fails
- *   `npm run test`, which is the only reason this is acceptable at all.
- * - The functions are written to mirror the Rust line-for-line, including its
- *   quirks (`value_span` taking the *first* colon on the line, blank lines joining a
- *   `%%%` run, the trailing-run rule). Where a difference is unavoidable it is
- *   commented with `PARITY:`.
- * - `documents.ts` is the only consumer, and it is the one place that will swap to
- *   `CoreBindings` when the ABI grows the four `plan_*` exports. Nothing else in the
- *   tree may call into here.
- *
- * ## Offsets
- *
- * Rust computes **UTF-8 byte** spans. `Y.Text` indexes **UTF-16 code units**
- * (`OffsetKind::Utf16`, SPEC §3.2), so a byte span would have to be converted
- * before it could be applied. This port sidesteps the conversion by computing in
- * JS-string indices throughout — every span it returns is already a `Y.Text` index.
- * The one place bytes still matter is the 1 MiB document cap, which is a *byte*
- * limit on both sides and is measured as such here.
- */
-
 import { KernelError, type FmValue, type TextEdit } from "@kernel";
 
-/**
- * One key write inside a `%%%` section — `core::splice::SectionLineEdit`, with its
- * `Option<Value>` kept intact: **`undefined` removes the key's line, `null` writes
- * the literal `null`.**
- *
- * The public shape (`SectionLineEdit` in `@kernel`) spells the same distinction with
- * an optional `remove` flag, because `FmValue` already contains `null` and one field
- * cannot mean both "write this" and "write nothing". `SpliceHost` maps between them
- * (see the note there). The conformance corpus exercises both cases.
- */
 export interface SectionKeyEdit {
   readonly key: string;
   readonly value?: FmValue;
 }
 
-/** `core::limits::MAX_DOCUMENT_BYTES` — a byte cap, enforced as one. */
 export const MAX_DOCUMENT_BYTES = 1024 * 1024;
-/** `core::limits::MAX_KEY_LEN`. */
 export const MAX_KEY_LEN = 64;
-/** `core::limits::MAX_MACHINE_SECTIONS`. */
 export const MAX_MACHINE_SECTIONS = 64;
 
-/** `core::error::CoreError`, as far as the splice paths can produce it. */
 export class SpliceError extends KernelError {}
 
-/** `core::limits::is_valid_key` — `^[A-Za-z0-9_-]{1,64}$`, byte-length capped. */
 export function isValidKey(key: string): boolean {
   if (key.length === 0 || utf8Length(key) > MAX_KEY_LEN) return false;
   for (let i = 0; i < key.length; i += 1) {
     const c = key.charCodeAt(i);
     const ok =
-      (c >= 0x30 && c <= 0x39) || // 0-9
-      (c >= 0x41 && c <= 0x5a) || // A-Z
-      (c >= 0x61 && c <= 0x7a) || // a-z
-      c === 0x5f || // _
-      c === 0x2d; // -
+      (c >= 0x30 && c <= 0x39) ||
+      (c >= 0x41 && c <= 0x5a) ||
+      (c >= 0x61 && c <= 0x7a) ||
+      c === 0x5f ||
+      c === 0x2d;
     if (!ok) return false;
   }
   return true;
 }
 
-// ---------------------------------------------------------------------------
-// The four public operations (core::splice)
-// ---------------------------------------------------------------------------
-
-/** `core::splice::set_frontmatter_value`. */
 export function setFrontmatterValue(text: string, key: string, value: FmValue): TextEdit[] {
   guard(text);
   requireKey(key);
@@ -99,8 +39,6 @@ export function setFrontmatterValue(text: string, key: string, value: FmValue): 
 
   const span = valueSpan(text, key);
   if (span !== undefined) {
-    // `key:` with no same-line value starts its span right after the colon.
-    // This covers both an empty value and an expanded sequence.
     const needsSpace = text.slice(0, span.start).endsWith(":");
     return [{ range: span, text: needsSpace ? ` ${serialized}` : serialized }];
   }
@@ -109,7 +47,6 @@ export function setFrontmatterValue(text: string, key: string, value: FmValue): 
   return [{ range: { start: at, end: at }, text: `${key}: ${serialized}\n` }];
 }
 
-/** `core::splice::remove_frontmatter_key`. Every occurrence goes. */
 export function removeFrontmatterKey(text: string, key: string): TextEdit[] {
   guard(text);
   return sortEdits(
@@ -117,7 +54,6 @@ export function removeFrontmatterKey(text: string, key: string): TextEdit[] {
   );
 }
 
-/** `core::splice::splice_section` — line edits into one plugin's own section. */
 export function spliceSection(
   text: string,
   pluginId: string,
@@ -127,7 +63,6 @@ export function spliceSection(
   requireKey(pluginId);
   for (const edit of edits) requireKey(edit.key);
 
-  // Deduplicate by key, last entry wins, insertion order preserved.
   const ordered: SectionKeyEdit[] = [];
   for (const edit of edits) {
     const index = ordered.findIndex((kept) => kept.key === edit.key);
@@ -151,7 +86,6 @@ export function spliceSection(
   for (const edit of ordered) {
     const spans = keyLineSpans(text, section, edit.key);
     const last = spans.pop();
-    // Earlier duplicates of a key we are writing always go away.
     for (const range of spans) out.push({ range, text: "" });
     const removal = isRemoval(edit);
     if (last !== undefined && !removal) {
@@ -169,7 +103,6 @@ export function spliceSection(
   return sortEdits(out);
 }
 
-/** `splice::new_section` — a new `%%% pluginId` section at the end of the run. */
 function newSection(text: string, parsed: ParsedSections, pluginId: string, body: string): TextEdit {
   const fenced = `%%% ${pluginId}\n${body}%%%\n`;
   if (parsed.runSpan !== undefined) {
@@ -184,18 +117,12 @@ function newSection(text: string, parsed: ParsedSections, pluginId: string, body
   return { range: { start: text.length, end: text.length }, text: `${separator}${fenced}` };
 }
 
-// ---------------------------------------------------------------------------
-// List actions (core::splice::{frontmatter_list, section_list})
-// ---------------------------------------------------------------------------
-
-/** `splice::ListAction`. */
 export type ListActionInput =
   | { readonly action: "push"; readonly value: FmValue }
   | { readonly action: "insert"; readonly index: number; readonly value: FmValue }
   | { readonly action: "remove"; readonly value: FmValue }
   | { readonly action: "pop" };
 
-/** `splice::ListEdit`. `popped` is `undefined` when nothing was popped. */
 export interface ListEdit {
   readonly edits: TextEdit[];
   readonly popped?: FmValue;
@@ -203,7 +130,6 @@ export interface ListEdit {
 
 const DEFAULT_INDENT = "  ";
 
-/** `core::splice::frontmatter_list`. */
 export function frontmatterList(text: string, key: string, action: ListActionInput): ListEdit {
   guard(text);
   requireKey(key);
@@ -219,7 +145,6 @@ export function frontmatterList(text: string, key: string, action: ListActionInp
   return regionList(text, block.inner, key, action);
 }
 
-/** `core::splice::section_list`. */
 export function sectionList(
   text: string,
   pluginId: string,
@@ -257,7 +182,6 @@ interface Occurrence {
   readonly span: Span;
   readonly header: Span;
   readonly block: readonly ListItem[] | undefined;
-  /** `undefined` for a block occurrence or an inline value that does not parse. */
   readonly inline: FmValue | undefined;
 }
 
@@ -312,7 +236,6 @@ function itemLine(indent: string, value: FmValue): string {
   return `${indent}- ${toYamlInline(value)}\n`;
 }
 
-/** `Value`'s `PartialEq`, over the JS value model. */
 function sameValue(left: FmValue | undefined, right: FmValue | undefined): boolean {
   if (left === right) return true;
   if (left === null || right === null || left === undefined || right === undefined) return false;
@@ -332,7 +255,6 @@ function sameValue(left: FmValue | undefined, right: FmValue | undefined): boole
 const includesValue = (list: readonly FmValue[], value: FmValue): boolean =>
   list.some((item) => sameValue(item, value));
 
-/** `splice::region_list`. */
 function regionList(text: string, region: Span, key: string, action: ListActionInput): ListEdit {
   const found = occurrences(text, region, key);
   const last = found.pop();
@@ -362,7 +284,6 @@ function regionList(text: string, region: Span, key: string, action: ListActionI
   return popped === undefined ? { edits: sortEdits(edits) } : { edits: sortEdits(edits), popped };
 }
 
-/** `splice::block_list` — line inserts and deletes only. */
 function blockList(
   edits: TextEdit[],
   last: Occurrence,
@@ -415,7 +336,6 @@ function blockList(
   return popped;
 }
 
-/** `splice::rewrite_list` — an inline value rewritten into block form. */
 function rewriteList(
   edits: TextEdit[],
   key: string,
@@ -449,7 +369,6 @@ function rewriteList(
   return popped;
 }
 
-/** `core::splice::remove_section` — every copy of the plugin's section. */
 export function removeSection(text: string, pluginId: string): TextEdit[] {
   guard(text);
   return sortEdits(
@@ -459,15 +378,6 @@ export function removeSection(text: string, pluginId: string): TextEdit[] {
   );
 }
 
-/**
- * `core::splice::apply` — the reference string applier. Used by tests and by any
- * caller holding plain text; CRDT callers apply the same edits transactionally
- * through `kernel.documents.splice.apply`.
- *
- * Defensive in the same way Rust's is: re-sorted descending (longest range first
- * at an equal start) and clamped, so a caller cannot corrupt the text by passing
- * the edits in another order.
- */
 export function applyEdits(text: string, edits: readonly TextEdit[]): string {
   const ordered = [...edits].sort(
     (a, b) => b.range.start - a.range.start || b.range.end - a.range.end,
@@ -481,14 +391,9 @@ export function applyEdits(text: string, edits: readonly TextEdit[]): string {
   return out;
 }
 
-/** `Option<Value>::None` — the edit removes the key's line. */
 function isRemoval(edit: SectionKeyEdit): boolean {
   return !("value" in edit) || edit.value === undefined;
 }
-
-// ---------------------------------------------------------------------------
-// yaml.rs — lines and keys
-// ---------------------------------------------------------------------------
 
 export interface Span {
   readonly start: number;
@@ -503,7 +408,6 @@ interface Line {
   readonly content: string;
 }
 
-/** `yaml::lines` — CRLF-tolerant, offsets in UTF-16 code units. */
 function splitLines(text: string): Line[] {
   const out: Line[] = [];
   let start = 0;
@@ -525,7 +429,6 @@ function splitLines(text: string): Line[] {
   return out;
 }
 
-/** `value::split_key` — the `key:` split, quote- and flow-aware. */
 function splitKey(text: string): [string, string] | undefined {
   let depth = 0;
   let quote: string | undefined;
@@ -555,7 +458,6 @@ function splitKey(text: string): [string, string] | undefined {
   return undefined;
 }
 
-/** `value::unquote_key`. */
 function unquoteKey(key: string): string {
   const k = key.trim();
   const double = doubleQuoted(k);
@@ -565,10 +467,6 @@ function unquoteKey(key: string): string {
   return k;
 }
 
-/**
- * `yaml::line_key` — the key of a well-formed `key: value` line, regardless of
- * whether its *value* parses. This is what every span lookup keys on.
- */
 function lineKey(content: string): string | undefined {
   const trimmed = content.trim();
   if (trimmed.length === 0 || trimmed.startsWith("#")) return undefined;
@@ -579,7 +477,6 @@ function lineKey(content: string): string | undefined {
   return isValidKey(key) ? key : undefined;
 }
 
-/** `yaml::expanded_value_end` — last item line of an indented top-level sequence. */
 function expandedValueEnd(lines: readonly Line[], header: number): Line | undefined {
   const line = lines[header];
   if (!line || line.content.startsWith(" ") || line.content.startsWith("\t")) return undefined;
@@ -604,13 +501,8 @@ function blockItemIndent(content: string): number | undefined {
   return indent;
 }
 
-// ---------------------------------------------------------------------------
-// frontmatter.rs — spans
-// ---------------------------------------------------------------------------
-
 const FM_FENCE = "---";
 
-/** `frontmatter::find_block` — `(outer, inner)`, or `undefined`. */
 export function findBlock(text: string): { outer: Span; inner: Span } | undefined {
   const lines = splitLines(text);
   const first = lines[0];
@@ -626,14 +518,6 @@ export function findBlock(text: string): { outer: Span; inner: Span } | undefine
   return undefined;
 }
 
-/**
- * `frontmatter::value_span` — the minimal splice target: the value of `key`, last
- * occurrence when duplicated, an empty span at end-of-line for an empty value.
- *
- * PARITY: the colon is located with a plain `indexOf(":")` on the line content,
- * exactly as Rust's `line.content.find(':')` does — *not* with `splitKey`. A line
- * whose key would need the quote-aware split is one `lineKey` has already rejected.
- */
 export function valueSpan(text: string, key: string): Span | undefined {
   const block = findBlock(text);
   if (!block) return undefined;
@@ -660,7 +544,6 @@ export function valueSpan(text: string, key: string): Span | undefined {
   return found;
 }
 
-/** `frontmatter::line_spans` — every line defining `key`, in document order. */
 export function frontmatterLineSpans(text: string, key: string): Span[] {
   const block = findBlock(text);
   if (!block) return [];
@@ -674,23 +557,16 @@ export function frontmatterLineSpans(text: string, key: string): Span[] {
     }));
 }
 
-/** `frontmatter::insert_point` — the start of the closing fence line. */
 export function frontmatterInsertPoint(text: string): number | undefined {
   return findBlock(text)?.inner.end;
 }
-
-// ---------------------------------------------------------------------------
-// sections.rs — the trailing `%%%` run
-// ---------------------------------------------------------------------------
 
 const SECTION_FENCE = "%%%";
 const SECTION_FENCE_OPEN = "%%% ";
 
 export interface MachineSectionSpans {
   readonly pluginId: string;
-  /** Both fence lines included. */
   readonly span: Span;
-  /** The YAML lines between the fences. */
   readonly bodySpan: Span;
 }
 
@@ -699,20 +575,12 @@ export interface ParsedSections {
   readonly runSpan: Span | undefined;
 }
 
-/** `sections::open_fence_id`. */
 function openFenceId(content: string): string | undefined {
   if (!content.startsWith(SECTION_FENCE_OPEN)) return undefined;
   const id = content.slice(SECTION_FENCE_OPEN.length);
   return isValidKey(id) ? id : undefined;
 }
 
-/**
- * `sections::parse`, spans only — no YAML values, because no splice needs them.
- *
- * The walk is the Rust one: from the last non-blank line backwards, pair each
- * closing `%%%` with the nearest preceding `%%% <id>`, stop at the first line that
- * breaks the run. Only that trailing run is machine data; anything earlier is body.
- */
 export function parseSections(text: string): ParsedSections {
   const lines = splitLines(text);
   let cursor = lines.length;
@@ -750,9 +618,6 @@ export function parseSections(text: string): ParsedSections {
 
   const sections: MachineSectionSpans[] = [];
   for (const [index, [open, close]] of pairs.entries()) {
-    // The section-count cap: sections past it are not parsed, so a splice aimed at
-    // one of them creates a fresh section instead of writing into text the
-    // *server's* parser has also dropped. Same behaviour, same reason.
     if (index >= MAX_MACHINE_SECTIONS) break;
     const openLine = lines[open] as Line;
     const closeLine = lines[close] as Line;
@@ -765,7 +630,6 @@ export function parseSections(text: string): ParsedSections {
   return { sections, runSpan };
 }
 
-/** `Sections::get` — the **last** section with this id is the one a splice writes. */
 export function lastSection(
   parsed: ParsedSections,
   pluginId: string,
@@ -777,10 +641,6 @@ export function lastSection(
   return undefined;
 }
 
-/**
- * `sections::key_line_spans` — every line defining `key` inside `section`. A key
- * holding a block sequence spans its item lines too.
- */
 export function keyLineSpans(
   text: string,
   section: MachineSectionSpans,
@@ -797,21 +657,6 @@ export function keyLineSpans(
     }));
 }
 
-// ---------------------------------------------------------------------------
-// value.rs — the canonical single-line serialization
-// ---------------------------------------------------------------------------
-
-/**
- * `Value::to_yaml_inline` — the canonical one-line form a splice writes.
- *
- * PARITY, numbers: Rust distinguishes `Int` from `Float`; JSON and JS do not, so an
- * integral `number` is written as an integer (which is what `Value::from_json`
- * does at the Wasm/REST boundary, so the two agree on the value model) and
- * everything else is written with a decimal point or exponent so it re-parses as a
- * float. Very large magnitudes are the one place the spellings can differ from
- * Rust's `{:?}` (`1e21` vs `1000000000000000000000`); both re-parse to the same
- * f64, and the projection round-trips through the server's parse either way.
- */
 export function toYamlInline(value: FmValue): string {
   if (value === null || value === undefined) return "null";
   if (typeof value === "boolean") return value ? "true" : "false";
@@ -820,8 +665,6 @@ export function toYamlInline(value: FmValue): string {
   if (Array.isArray(value)) {
     return `[${(value as readonly FmValue[]).map(toYamlInline).join(", ")}]`;
   }
-  // A map: flow mapping, keys in the order `BTreeMap` would give them (sorted), so
-  // two clients writing the same object produce the same line.
   const entries = Object.entries(value as Record<string, FmValue>).sort(([a], [b]) =>
     a < b ? -1 : a > b ? 1 : 0,
   );
@@ -837,10 +680,8 @@ function formatNumber(value: number): string {
   return text.includes(".") || text.includes("e") || text.includes("E") ? text : `${text}.0`;
 }
 
-/** `value::needs_quoting`. */
 function needsQuoting(s: string): boolean {
   if (s.length === 0 || s !== s.trim()) return true;
-  // Would it round-trip to a different type?
   const scalar = parseScalar(s);
   if (!(typeof scalar === "string" && scalar === s)) return true;
   for (let i = 0; i < s.length; i += 1) {
@@ -851,7 +692,6 @@ function needsQuoting(s: string): boolean {
   return "-?&*!|>%@`".includes(s[0] as string);
 }
 
-/** `value::quote_double`. */
 function quoteDouble(s: string): string {
   let out = '"';
   for (const c of s) {
@@ -867,14 +707,6 @@ function quoteDouble(s: string): string {
   return `${out}"`;
 }
 
-/**
- * `value::parse_value` — a scalar, flow sequence or flow mapping; `undefined` where
- * Rust rejects (the line would be dropped). Used by the list splices to read items.
- *
- * PARITY: the string-length and depth caps are not re-checked here; a value over
- * them is one the parser already dropped, and a list splice then treats it as an
- * item it cannot match, exactly as an unparseable item.
- */
 export function parseValue(raw: string, depth: number): FmValue | undefined {
   if (depth > 5) return undefined;
   const s = stripComment(raw.trim()).trim();
@@ -913,7 +745,6 @@ export function parseValue(raw: string, depth: number): FmValue | undefined {
   return parseScalar(s);
 }
 
-/** `value::split_flow` — top-level commas, nesting and quotes honoured. */
 function splitFlow(inner: string): string[] | undefined {
   const parts: string[] = [];
   if (inner.trim().length === 0) return parts;
@@ -948,11 +779,6 @@ function splitFlow(inner: string): string[] | undefined {
   return parts;
 }
 
-/**
- * `Value::parse_scalar`, enough of it to answer `needs_quoting`'s question: "does
- * this string re-parse as itself?". The typed result matters only insofar as
- * "string" vs "not a string" does, so ints and floats collapse to `number`.
- */
 function parseScalar(raw: string): string | number | boolean | null {
   const s = stripComment(raw.trim()).trim();
   if (s.length === 0) return null;
@@ -974,7 +800,6 @@ function parseScalar(raw: string): string | number | boolean | null {
   return s;
 }
 
-/** `value::strip_comment` — ` # …` outside quotes ends the scalar. */
 function stripComment(s: string): string {
   let quote: string | undefined;
   let i = 0;
@@ -1005,7 +830,6 @@ function doubleQuoted(s: string): string | undefined {
     else if (inner[i] === '"') return undefined;
     else i += 1;
   }
-  // A trailing backslash escaped the closing quote: the literal never closed.
   return i > inner.length ? undefined : inner;
 }
 
@@ -1091,18 +915,12 @@ function floatShape(s: string): boolean {
   return true;
 }
 
-// ---------------------------------------------------------------------------
-// helpers
-// ---------------------------------------------------------------------------
-
 function sortEdits(edits: TextEdit[]): TextEdit[] {
   edits.sort((a, b) => b.range.start - a.range.start || b.range.end - a.range.end);
   return edits;
 }
 
 function guard(text: string): void {
-  // `text.length` (UTF-16 units) never exceeds the UTF-8 byte length, so the cheap
-  // test settles most documents; the exact count is only paid near the limit.
   if (text.length > MAX_DOCUMENT_BYTES) {
     throw new SpliceError(`document text exceeds ${MAX_DOCUMENT_BYTES} bytes`, {
       limit: MAX_DOCUMENT_BYTES,
@@ -1120,8 +938,6 @@ function guard(text: string): void {
 
 function requireKey(key: string): void {
   if (!isValidKey(key)) {
-    // `CoreError::SpliceTargetMissing`: a key the parser would drop again is a key
-    // that cannot be written at all.
     throw new SpliceError(
       `"${key}" is not a writable key (^[A-Za-z0-9_-]{1,64}$)`,
       { key },
@@ -1131,8 +947,6 @@ function requireKey(key: string): void {
 
 function clamp(text: string, offset: number): number {
   const bounded = Math.max(0, Math.min(offset, text.length));
-  // Never split a surrogate pair — the JS-string analogue of Rust's
-  // `is_char_boundary` walk-back.
   if (bounded > 0 && isLowSurrogate(text.charCodeAt(bounded)) && isHighSurrogate(text.charCodeAt(bounded - 1))) {
     return bounded - 1;
   }

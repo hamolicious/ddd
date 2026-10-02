@@ -1,7 +1,3 @@
-/**
- * The render model: what rows the tree draws, in what order, at what depth.
- */
-
 import { describe, expect, it } from "vitest";
 
 import { buildHierarchy, type NoteRow } from "./hierarchy.js";

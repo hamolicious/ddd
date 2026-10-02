@@ -1,16 +1,3 @@
-/**
- * The board's settings, under the view picker: which field's values are the columns, which
- * one's (if any) are the swimlanes (`lanes.ts`), and
- * whether the board keeps its own order within them — each card's place, saved in its own
- * `%%% kanban` section, not a property — or follows the search's sort, in which case cards
- * change column but a column cannot be rearranged. Each column's own settings live on the column (its ⚙, `ColumnEditor.tsx`).
- *
- * **What a card shows** is a list here too (`card.ts`): the title, any property, the note's
- * text, top to bottom — each moved with ↑ ↓, hidden with the eye, removed with × (the title
- * can only be hidden). The last item shown cannot be hidden or removed: a card always says
- * something. Every property in the list is also a filter above the board (`Board.tsx`).
- */
-
 import { useState } from "react";
 import type { ReactElement } from "react";
 

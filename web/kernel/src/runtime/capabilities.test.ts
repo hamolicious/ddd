@@ -1,10 +1,3 @@
-/**
- * `kernel.capabilities`: bridge detection, and the rule that makes SPEC §7's
- * "browser fallback/degradation mandatory for every capability" real —
- * **degradation is per method**. A shell that implements `export` but not `pick`
- * must leave `pick` working, or every plugin has to feature-detect twice.
- */
-
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SUPPORTED_BRIDGE_VERSION } from "@kernel";
@@ -41,9 +34,6 @@ describe("no bridge", () => {
     const host = new CapabilitiesHost(undefined);
     expect(host.bridgeVersion).toBeUndefined();
     expect(host.notifications.supportsScheduled).toBe(false);
-    // This suite runs in Node, where there is no `document` and no `Notification`:
-    // the honest answer is "unavailable", which is exactly what a plugin needs to
-    // hear before offering the affordance. In a browser tab both are "fallback".
     expect(host.support("filesystem")).toBe("unavailable");
     expect(host.has("filesystem")).toBe(false);
   });
@@ -90,8 +80,6 @@ describe("with a bridge", () => {
       version: 1,
       filesystem: { export: () => Promise.resolve() },
     });
-    // `pick` is absent, so the browser input is used — in this environment there is
-    // no document, so the honest answer is a rejection, not a silent empty list.
     await expect(host.filesystem.pick()).rejects.toThrow(/unavailable/);
   });
 
@@ -127,7 +115,6 @@ describe("with a bridge", () => {
     expect(full.notifications.supportsScheduled).toBe(true);
     expect(await full.notifications.schedule({ title: "Reminder" }, 42)).toBe("sched-1");
     expect(scheduled).toEqual([[{ title: "Reminder" }, 42]]);
-    // A malformed entry is dropped, not propagated as a broken reminder.
     expect(await full.notifications.scheduled()).toEqual([{ id: "sched-1", at: 42 }]);
   });
 

@@ -1,9 +1,3 @@
-/**
- * The outbox (`dev-docs/resolved/SYNC-DECISIONS.md` §1–§2): creates, trashes and restores made while
- * the server cannot be reached wait in order, show at once, and go out on reconnect —
- * and a create sent twice, or an id someone else took, loses nothing.
- */
-
 import { describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 
@@ -175,7 +169,6 @@ describe("LocalRows", () => {
     await local.created(ID, "---\npath: work\n---\n# Train\n");
     expect(await store.get(ID)).toMatchObject({ title: "Train", fm: { path: "work" }, local: true, seq: 0, created_by: "me" });
     expect(await store.retainOnly(new Set())).toEqual([]);
-    // The server's row replaces it.
     await store.applyRows([{ ...feedRow({ id: ID, seq: 9 }), title: "Train" }], {
       safeSeq: 9,
       updatedAt: 0,

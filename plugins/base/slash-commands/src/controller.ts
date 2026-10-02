@@ -1,16 +1,3 @@
-/**
- * The `/` menu's state machine, over every text surface (`plugin:editor`).
- *
- * Each surface is watched through its own `subscribe`: after every change the text before
- * the caret is checked for `/word` (`match.ts`), and the menu opens, narrows or closes.
- * Keys are taken in the capture phase on the surface's element, before the editor sees
- * them, and only while the menu is open: ↑ / ↓ move, Enter or Tab choose, Escape
- * dismisses until the typed trigger changes.
- *
- * Choosing removes the typed `/word` first, then runs the command with a mark at that
- * spot, still inside the key press or tap, so a command may open a file picker.
- */
-
 import type { Kernel, Unsubscribe } from "@kernel";
 import type { TextSurface } from "plugin:editor";
 
@@ -32,7 +19,6 @@ export interface SlashController {
   choose(index: number): void;
   select(index: number): void;
   close(): void;
-  /** Stop watching every surface and take the key listeners off their elements. */
   dispose(): void;
 }
 
@@ -42,7 +28,6 @@ export function createController(
   commands: () => readonly SlashCommand[],
 ): SlashController {
   let current: MenuState | undefined;
-  /** Escape was pressed on this text: stay shut until it changes. */
   let dismissed: { surface: string; before: string } | undefined;
   const listeners = new Set<() => void>();
 
@@ -118,7 +103,6 @@ export function createController(
     }
   };
 
-  /** Surfaces being watched, and how to stop. Surfaces come and go with editors. */
   const attached = new Map<TextSurface, () => void>();
   const unwatch = watchSurfaces((all) => {
     for (const [surface, detach] of [...attached]) {

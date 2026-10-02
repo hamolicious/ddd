@@ -1,16 +1,3 @@
-/**
- * The runtime layer build: one chunk per blessed specifier (SPEC §6.4).
- *
- * Every entry is a one-line re-export module (`app/runtime/*.ts`). Rollup gives the
- * shared dependencies one copy each — `react-dom` and `react` end up pointing at the
- * *same* React chunk — which is the whole reason this build exists: the import map
- * can then hand the kernel and every plugin the identical module instance.
- *
- * `runtime-manifest.json` records specifier → emitted URL. The server reads it to
- * build `/importmap.json` and the inline map in `index.html`; without it the server
- * falls back to a built-in default and says so.
- */
-
 import { createRequire } from "node:module";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, sep } from "node:path";
@@ -26,17 +13,6 @@ import {
 
 const require = createRequire(import.meta.url);
 
-/**
- * Specifier → the version of the package this build actually resolved.
- *
- * Recorded so the server can check a plugin's `peerLibraries` *range* against it rather than
- * only checking that the specifier exists (HOST-ABI.md §7.1 step 4). Read from the resolved
- * package's own `package.json`, not from this repo's dependency ranges: a `^18.0.0` in
- * `package.json` is what was asked for, and what is in the chunk is what the browser gets.
- *
- * A package whose version cannot be read is left out rather than guessed at — the server
- * degrades to the presence check for that one library and says so.
- */
 function resolveVersions(): Record<string, string> {
   const versions: Record<string, string> = {};
   for (const specifier of Object.keys(RUNTIME_SPECIFIERS)) {
@@ -48,16 +24,10 @@ function resolveVersions(): Record<string, string> {
   return versions;
 }
 
-/** The `version` in a package's own `package.json`, or `undefined`. */
 function versionOf(pkg: string): string | undefined {
-  // The direct route, when the package exports its manifest.
   try {
     return readVersion(require.resolve(`${pkg}/package.json`));
   } catch {
-    // Most of the runtime layer (`@codemirror/*`, `@lezer/*`, `unified`, the `remark` set)
-    // ships an `exports` map with no `./package.json` entry, which makes the direct resolve
-    // throw. Resolving the package's *entry point* and walking up to the nearest
-    // `package.json` whose `name` matches is what works for those.
   }
   let dir: string;
   try {
@@ -72,9 +42,6 @@ function versionOf(pkg: string): string | undefined {
         name?: string;
         version?: string;
       };
-      // Stop only at the package's *own* manifest: a nested one (a bundled dependency, a
-      // `dist/package.json` with `{"type":"module"}` and nothing else) would report the wrong
-      // version, which is worse than reporting none.
       if (raw.name === pkg) return typeof raw.version === "string" ? raw.version : undefined;
     }
     const parent = dirname(dir);
@@ -91,7 +58,6 @@ function readVersion(manifest: string): string | undefined {
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 const outDir = here("./app/dist");
 
-/** Entry name → source file, and entry name → the specifier it serves. */
 const input: Record<string, string> = {};
 const specifierOf = new Map<string, string>();
 for (const [specifier, file] of Object.entries(RUNTIME_SPECIFIERS)) {
@@ -100,7 +66,6 @@ for (const [specifier, file] of Object.entries(RUNTIME_SPECIFIERS)) {
   specifierOf.set(name, specifier);
 }
 
-/** Write `runtime-manifest.json` from what Rollup actually emitted. */
 const manifestPlugin: Plugin = {
   name: "ddd-runtime-manifest",
   writeBundle(_options, bundle) {
@@ -124,7 +89,6 @@ const manifestPlugin: Plugin = {
 
 export default defineConfig({
   root: here("./app"),
-  // No `public/` copy here; the app build owns that.
   publicDir: false,
   resolve: {
     alias: [{ find: /^@kernel$/, replacement: here("./kernel-api/src/index.ts") }],
@@ -137,7 +101,6 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       input,
-      // Entry signatures must survive: these modules exist to be re-exported.
       preserveEntrySignatures: "allow-extension",
       output: {
         format: "es",

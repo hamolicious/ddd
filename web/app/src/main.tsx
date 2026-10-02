@@ -1,39 +1,3 @@
-/**
- * The PWA entry point: the boot sequence of SPEC §9 M3, in order, with every step
- * visible.
- *
- * ```
- * browser floor  →  service worker  →  auth gate  →  kernel init  →  plugin list
- *                →  import map  →  activation in dependency order  →  shell mounts
- * ```
- *
- * Four properties of this sequence are load-bearing:
- *
- * 1. **The auth gate comes before the kernel.** The kernel opens IndexedDB and a
- *    socket as the signed-in user; there is no "anonymous kernel" to hand a login
- *    form to, and plugins are served to authenticated clients only.
- * 2. **The kernel comes before the plugins, and boots fully offline.** By the time
- *    the first `activate()` runs, the projection is readable, the query engine is
- *    warm and sync is running or retrying. A plugin never has to ask "is the kernel
- *    ready".
- * 3. **The whole sequence survives having no network.** The two REST calls in it —
- *    `/auth/me` and `/plugins` — are `NetworkOnly` in the service worker by design, so
- *    each one falls back to what the last successful boot remembered (`boot/cache.ts`)
- *    instead of failing the boot. An offline reload opens the local workspace; it does
- *    not show "ddd could not start" (SPEC §4.1, §8).
- * 4. **A plugin failure is contained and reported once.** The frame renders either
- *    way; the aggregated notice says what broke (SPEC §6.4), and registry rejections and
- *    render failures land in the same notice centre rather than in the console alone.
- *
- * M5 adds a fifth, and it is the one with teeth: **inside the Flutter shell this sequence
- * reports its own outcome.** The shell has already written `failedBoots` to disk before
- * the webview loaded, and `shell.bootOk()` — sent here, after the plugin set has
- * activated — is the only thing that clears it (`app/BRIDGE.md` §7). Two consequences
- * worth stating: every early `return` on a failure path is a *silent* failed boot unless
- * it says so (hence `reportBootFailed`), and `bootOk` must not move earlier, because a
- * bundle that renders and then throws has not booted.
- */
-
 import { StrictMode, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
@@ -82,19 +46,9 @@ import "./styles.css";
 
 const found = document.getElementById("root");
 if (!found) throw new Error("index.html is missing #root");
-/** Narrowing does not survive into the closures below; this does. */
 const container: HTMLElement = found;
 const root: Root = createRoot(container);
 
-/**
- * Every render goes through one root boundary.
- *
- * React 18 unmounts the whole tree on an uncaught render error, and an unmounted root
- * is a white page: no notice strip, no in-place "plugin X failed" chip, and no link to
- * safe mode — so the user's only way out is knowing to type `?safe=bare` by hand.
- * `AppFrame` contains failures inside the plugin mount; this contains the frame itself,
- * so there is no render path left that can end in a blank document (SPEC §6.4).
- */
 const render = (node: ReactNode): void =>
   root.render(
     <StrictMode>
@@ -113,44 +67,19 @@ void boot();
 async function boot(): Promise<void> {
   if (!supportsImportMaps()) {
     render(<UnsupportedBrowser />);
-    // A webview too old for import maps is a shell problem, not a bundle problem: say so
-    // rather than letting the watchdog revert to a bundle that cannot run either.
     reportBootFailed("this webview does not support import maps");
     return;
   }
 
-  // Before the first render: the boot screen, the auth gate and a boot failure are
-  // all written in kernel tokens, and none of them has a kernel yet (SPEC §6.4 —
-  // the kernel ships the default light/dark token values).
   paintKernelDefaultTokens(document.documentElement);
-  // And `--ddd-viewport-height`, for the same reason and at the same moment: the auth
-  // gate is a form a soft keyboard covers, and it renders before any plugin exists.
   trackViewportHeight();
 
   const safeMode = safeModeFrom(location.search);
 
-  // Registered early so an update found mid-session still surfaces, but it never
-  // takes over on its own (see update.ts).
-  //
-  // **Not in the shell.** `sw.js` is deliberately excluded from the bundle
-  // (`app/BRIDGE.md` §5): the loopback origin already *is* the offline cache, and a worker
-  // installed there would fight the bundle updater for control of what the webview sees —
-  // two caches, two update stories, one of them invisible to the revert path. Registration
-  // would also just 404, since the local server serves only manifest-listed paths.
-  //
-  // The prompt is the one shared with a stale plugin list (`reload-prompt.ts`): a user is
-  // asked to reload once, whatever the reasons.
-  //
-  // A cookie shell (the desktop app) is served by the server like a tab and keeps the
-  // worker: it is its only offline cache.
   if (!shellOwnsSession()) {
     updates = registerServiceWorker((apply) => reloadPrompt.offerUpdate(apply));
   }
 
-  // The shell's half of the same story. A staged bundle is never applied to a running
-  // webview (`app/BRIDGE.md` §7 — the page holds IndexedDB handles, a socket and an
-  // activated plugin graph), so there is no "Reload" action to offer: promotion happens
-  // at the next launch, and the only honest instruction is to reopen the app.
   let shellUpdate: ShellUpdateReady | undefined;
   onShellUpdateReady((info) => {
     shellUpdate = info;
@@ -162,13 +91,10 @@ async function boot(): Promise<void> {
 
   const token = shellToken();
   let user: SessionUser | undefined;
-  /** True when the session came from the cache: the server was unreachable. */
   let offlineBoot = false;
   try {
     user = await me(token);
     if (user) rememberSession(user);
-    // The server answered "not signed in", which is the one authoritative way to learn
-    // the session is over. Anything remembered about it is now wrong.
     else forgetSession();
   } catch (error) {
     if (!(error instanceof OfflineError)) {
@@ -176,53 +102,27 @@ async function boot(): Promise<void> {
       reportBootFailed(`the session check failed: ${asError(error).message}`);
       return;
     }
-    // No server. Boot the local workspace as whoever was last signed in here; if the
-    // session has really expired, the socket answers `4401` and `ReauthOverlay` asks —
-    // over the top of a workspace that is still readable (SPEC §5.3).
     user = cachedSession();
     offlineBoot = user !== undefined;
     if (!user) {
       render(<BootFailure error={asError(error)} offline />);
-      // Nothing is wrong with the bundle: there is no server and nobody has ever signed
-      // in on this device. Reverting would not help, and the shell's own recovery screen
-      // is the wrong answer too — so this says why and leaves the counter to the watchdog
-      // only if the user never gets further.
       reportBootFailed("offline, and no session has been established on this device yet");
       return;
     }
   }
 
-  // A reset link (`#/reset/<token>`) is for someone who cannot sign in, so it shows the
-  // "set a new password" form whatever this device's session says.
   const resetToken = resetTokenFromHash();
 
   if (!user || resetToken) {
-    // **A booted bundle.** The kernel is not up — there is no session to build one with —
-    // but the sequence ran to completion and put a working login form on screen, which is
-    // the only correct thing to show for "the server says you are not signed in".
-    //
-    // Saying nothing here was the bug: the shell had already incremented `failedBoots`
-    // before the webview loaded, and only `bootOk()` clears it (`app/BRIDGE.md` §7). So a
-    // session that simply idled past its 30-day expiry (SPEC §5.2) produced a 25 s
-    // watchdog expiry mid-typing, a native "ddd could not start" over the login
-    // form, and — two launches later — a revert that quarantined a perfectly good bundle,
-    // permanently, for a failure that had nothing to do with it.
     reportBootOk();
     render(
       <AuthGate
-        // **In the shell, always ask for a bearer token** (SPEC §5.2): a cookie cannot
-        // survive the loopback origin, so a shell that logs in without this flag gets a
-        // `Set-Cookie` it will never send back and looks signed out on the next call.
-        // `token !== undefined` was the wrong test — on first run there is no token yet,
-        // which is exactly when the login form is shown.
         bearer={shellOwnsSession()}
         resetToken={resetToken}
         inviteToken={inviteTokenFromHash()}
         onSignedIn={(signedIn, issued) => {
           if (issued) rememberShellToken(issued);
           rememberSession(signedIn);
-          // A signed-out page was served without the plugin entries; reload for the map
-          // that has them rather than boot plugins nothing can resolve.
           if (pageMapLacksPlugins()) {
             location.reload();
             return;
@@ -243,20 +143,15 @@ async function boot(): Promise<void> {
       runtime = await initKernel({
         user: signedIn,
         ...(bearer ? { bearerToken: bearer } : {}),
-        // The shell's server; absent in a browser, where every default is the page
-        // origin already (`app/BRIDGE.md` §6).
         ...(server ? { serverBaseUrl: server } : {}),
         root: container,
         bootMode: bootModeFor(safeMode),
         logout: (options) => signOut(runtime, bearer, options),
         onPluginProblem: (problem) => reportPluginProblem(problem),
-        // `plugins.changed`: the sync client reloads the page (no hot reload, `@kernel` 3.0).
         onCoreUnavailable: (error) => console.warn("[wasm] core unavailable", error.message),
       });
       const host = runtime.host;
 
-      // The socket coming back is usually the server coming back — often on a new build —
-      // so that is when to look for a new worker (`update.ts`).
       let wasConnected = false;
       host.sync.api().subscribe((state) => {
         const connected = state.status === "syncing" || state.status === "synced";
@@ -264,50 +159,30 @@ async function boot(): Promise<void> {
         wasConnected = connected;
       });
 
-      // A problem reported while the kernel was still being built has no notice yet.
       notifyPluginProblems(host);
 
-      // An update that arrived before the kernel existed has no notice yet; this shows it.
       reloadPrompt.attach((notice) => host.notices.notify(notice));
       if (shellUpdate) notifyShellUpdate(host, shellUpdate);
 
       render(
         <AppFrame
           host={host}
-          // `shellOwnsSession()` and not just "we have a token": the re-auth overlay of SPEC §5.3
-          // must ask for a *bearer* token in the shell even on a launch that arrived here
-          // without one, because a cookie cannot survive the loopback origin.
           bearer={shellOwnsSession() || bearer !== undefined}
           onSignedIn={(_user, issued) => resumeSession(issued)}
         />,
       );
 
       if (safeMode === "bare") {
-        // No plugins at all: the kernel's own manager takes the mount (SPEC §6.1).
-        // The user decides whether the manager's write path shows (admin only, §7).
         host.mount.mount("kernel", <BareManager user={signedIn} {...(bearer ? { token: bearer } : {})} />);
-        // `?safe=bare` *is* a successful boot: the workspace is open and the built-in
-        // manager is on screen. Reverting a bundle that got this far would throw away the
-        // one screen from which a broken plugin can be disabled (`app/BRIDGE.md` §7).
         reportBootOk();
         return;
       }
 
       await activatePlugins(host, bearer, safeMode === "base", offlineBoot);
 
-      // Shell-only, and nothing is contributed in a browser: which bridge this device
-      // speaks, what it can do natively, and which bundle is running (SPEC §9 M5's OTA
-      // and revert criteria are not testable without a visible version). After the
-      // plugins, because it goes into the `settings` plugin's sections.
       await contributeShellSection(host).catch((error: unknown) => console.warn("[shell] the device section could not be added", error));
-      // "Hard refresh (clear app cache)" in the palette, once `commands` has activated.
       await contributeHardRefreshCommand(host).catch((error: unknown) => console.warn("[app] the hard refresh command could not be added", error));
 
-      // **Interactive.** The kernel is up, the projection is readable, and the plugin set
-      // has activated (or failed, contained and reported — a workspace with a broken
-      // plugin is still a booted bundle, and its second-attempt safe mode is what
-      // diagnoses that). This is the moment `app/BRIDGE.md` §7 clears `failedBoots` on,
-      // and the last line of the boot sequence on purpose.
       reportBootOk();
     } catch (error) {
       const failure = asError(error);
@@ -317,12 +192,6 @@ async function boot(): Promise<void> {
   }
 }
 
-/**
- * The shell staged a verified bundle. There is no "Reload" here and that is the whole
- * point: reloading re-runs the *current* bundle, because promotion happens at launch with
- * nothing running (`app/BRIDGE.md` §7). Offering a button that appears to update and does
- * not is worse than telling the truth.
- */
 function notifyShellUpdate(host: KernelHost, info: ShellUpdateReady): void {
   host.notices.notify({
     id: "kernel:shell-update-ready",
@@ -333,24 +202,10 @@ function notifyShellUpdate(host: KernelHost, info: ShellUpdateReady): void {
 }
 
 let runtime: KernelRuntime | undefined;
-/** The service-worker update flow, when there is one (not in the shell, not in dev). */
 let updates: UpdateFlow | undefined;
 
-/** The one reload prompt, shared by the service-worker update and a stale plugin list. */
 const reloadPrompt = new ReloadPrompt();
 
-/**
- * Every plugin problem the kernel detects — every error boundary that caught a render —
- * aggregated into **one**
- * notice, with the count in the message and the individual lines in the detail.
- *
- * It is one notice rather than one per problem for the reason SPEC §6.4 gives for
- * activation failures: a workspace with three broken plugins must not show three
- * modals. And it is a notice rather than a `console.warn` because the console is not a
- * user interface — a sidebar panel that throws at render shows its in-place chip, and
- * without this the user has no way to learn *which* plugin it was or that admin is
- * where to go next (SPEC §6.4: validation "rejects loudly").
- */
 const pluginProblems: string[] = [];
 
 function reportPluginProblem(problem: {
@@ -360,12 +215,9 @@ function reportPluginProblem(problem: {
 }): void {
   console.warn(`[plugin:${problem.pluginId}] ${problem.point}: ${problem.message}`);
   const line = `${problem.pluginId} — ${problem.point}: ${problem.message}`;
-  // The same component can throw on every re-render; the notice lists distinct problems.
   if (pluginProblems.includes(line)) return;
   pluginProblems.push(line);
   const host = runtime?.host;
-  // Before the kernel exists there is nowhere to put it; the list is replayed by
-  // `notifyPluginProblems` as soon as there is.
   if (host) notifyPluginProblems(host);
 }
 
@@ -375,7 +227,6 @@ function notifyPluginProblems(host: KernelHost): void {
   host.notices.notify({
     id: "kernel:plugin-problems",
     level: "warning",
-    // "in this session" is scoping trivia: a notice is always about this session.
     message: `${count} plugin problem${count === 1 ? "" : "s"}.`,
     detail: pluginProblems.join("\n"),
     actions: [
@@ -389,17 +240,6 @@ function notifyPluginProblems(host: KernelHost): void {
   });
 }
 
-/**
- * After a mid-session re-login (the 4401 path of SPEC §5.3): resume, without ever
- * touching local data.
- *
- * A cookie session just reconnects — the new cookie is already on the connection the
- * socket will make. A **shell** session comes back with a *new* bearer token, and the
- * kernel's `fetch` and the socket were both built with the old one, so the honest
- * move is to store it and reload: rebuilding the session carrier underneath a running
- * plugin set is how you get half the app authenticating and half not. The reload
- * re-reads IndexedDB; nothing is cleared either way.
- */
 function resumeSession(issued: string | undefined): void {
   if (issued !== undefined) {
     rememberShellToken(issued);
@@ -417,23 +257,15 @@ async function activatePlugins(
 ): Promise<void> {
   const { plugins, load } = await installedSet(host, bearer, offlineBoot);
   if (!load) {
-    // A list without a load resolution: cached by an older app, or served by a server from
-    // before `@kernel` 3.0. The order is the server's alone, so no plugin starts; the one
-    // reload prompt says so, and a reload while online fetches a list that has one. (An
-    // empty list already has its own notice.)
     if (plugins.length > 0) {
       console.warn("[loader] the plugin list has no load resolution; not activating plugins until a reload fetches one");
       reloadPrompt.askForStale();
     }
     return;
   }
-  // The server resolved both boot modes; the loader activates from the one this page is in.
   const order = baseOnly ? load.safe : load.normal;
   const loading = new Set(order);
 
-  // In development there is no server-injected map; build one over this bundle's own
-  // modules so a plugin's `import "react"` resolves to the same React, with a
-  // `plugin:<id>` entry for every plugin this boot loads.
   await installDevImportMap(plugins.filter((plugin) => loading.has(plugin.manifest.id)));
 
   const specifiers = importMapSpecifiers();
@@ -445,8 +277,6 @@ async function activatePlugins(
     host.notices.notify({
       id: "kernel:import-map-incomplete",
       level: "error",
-      // A build command is an instruction to whoever ships the app, not to whoever
-      // opened it. The console keeps it; the notice says what the reader can do.
       message: "Some plugins may not load. Reinstall or update the app.",
       detail: `The import map does not resolve: ${missing.join(", ")}.`,
     });
@@ -458,8 +288,6 @@ async function activatePlugins(
     kernelVersion: KERNEL_API_VERSION,
     order,
     serverSkipped: load.skipped,
-    // Offline, the cached map (in the cached `index.html`) and the cached list can come
-    // from different times: load only what both know about.
     ...(specifiers ? { available: (id: string) => specifiers.has(pluginSpecifier(id)) } : {}),
   });
 
@@ -473,16 +301,6 @@ async function activatePlugins(
   if (notice) host.notices.notify(notice);
 }
 
-/**
- * The installed set, from the server when it is reachable and from the last boot when
- * it is not.
- *
- * `GET /api/plugins` is `NetworkOnly` in the service worker (a cached API response is a
- * second copy of the workspace, `sw.ts`), so offline this is the only thing standing
- * between a synced workspace and an app with no user interface in it at all. The
- * remembered list points at `/plugins/<id>/<version>/…` URLs, which the service worker
- * *does* cache immutably (SPEC §8) — so the modules behind it are genuinely present.
- */
 async function installedSet(
   host: KernelHost,
   bearer: string | undefined,
@@ -514,17 +332,11 @@ async function installedSet(
   }
 }
 
-/**
- * Sign-out — the one destructive local path (SPEC §5.3). It blocks while edits are
- * unsynced unless the user has explicitly chosen to discard them, because clearing
- * the stores is what deletes the only copy.
- */
 async function signOut(
   current: KernelRuntime | undefined,
   bearer: string | undefined,
   options: LogoutOptions,
 ): Promise<void> {
-  // Every unsent change on the device, not only the open notes': sign-out deletes them.
   const pending = Math.max(current?.sync.pending ?? 0, (await current?.host.documents.unsentCount().catch(() => 0)) ?? 0);
   if (pending > 0 && !options.discardUnsynced) {
     throw new Error(
@@ -534,8 +346,6 @@ async function signOut(
   try {
     await logoutRequest(bearer);
   } catch (error) {
-    // Offline sign-out still clears this device (shared-device safety, SPEC §5.3); the
-    // server-side session expires on its own schedule.
     if (!(error instanceof OfflineError)) throw error;
   } finally {
     current?.host.settings.stop();
@@ -543,7 +353,6 @@ async function signOut(
     await current?.engine.close();
     await current?.store.clear();
     await deletePluginDatabases();
-    // Server screens' offline copies (`kernel.session.fetch`, dev-docs/resolved/SYNC-DECISIONS.md §9).
     await globalThis.caches?.delete("ddd:api").catch(() => false);
     rememberShellToken(undefined);
     forgetBootCache();
@@ -551,10 +360,6 @@ async function signOut(
   }
 }
 
-/**
- * Plugins that keep their own data on the device name its database `ddd:…`
- * (the files `attachments` holds while offline): it goes with the rest on sign-out.
- */
 async function deletePluginDatabases(): Promise<void> {
   try {
     const databases = (await indexedDB.databases?.()) ?? [];
@@ -562,23 +367,8 @@ async function deletePluginDatabases(): Promise<void> {
       if (name?.startsWith("ddd:")) indexedDB.deleteDatabase(name);
     }
   } catch {
-    // No listing in this browser: nothing more can be found to delete.
   }
 }
-
-/**
- * The bearer token, **for shells only**, and everything else about running inside one,
- * now lives in `boot/shell.ts` (SPEC §5.2, `app/BRIDGE.md` §6). It moved out of this file
- * in M5 because three other things needed the same knowledge — the API base, the socket
- * URL and `bootOk` — and a private helper at the bottom of the entry point could not be
- * shared or tested.
- *
- * The rule it enforces is unchanged and worth repeating here, where the session is built:
- * a browser never reads or writes a token. Its session is an HTTP-only cookie the page
- * cannot see, and a long-lived credential in web storage on an origin that runs
- * full-trust plugin code (SPEC §6.1) is readable by every plugin and by any DOM-XSS on
- * the page — which is exactly what the cookie path makes impossible.
- */
 
 const asError = (cause: unknown): Error =>
   cause instanceof Error ? cause : new Error(String(cause));

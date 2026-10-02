@@ -1,12 +1,3 @@
-/**
- * The change-feed client (PROTOCOL.md §2, SPEC §4.1).
- *
- * Every test here guards one of the four invariants in the module docs: the
- * watermark is the server's `safe_seq`, rows and watermark commit together,
- * `feed.reset` bootstraps *without* clearing, and `feed.resync` resumes at
- * `from_seq` with every local row intact.
- */
-
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { BootstrapClient } from "./bootstrap.js";
@@ -30,7 +21,6 @@ async function connected(): Promise<{ transport: SyncTransport; socket: MockSock
   const transport = new SyncTransport({
     url: "ws://127.0.0.1:8080/api/sync",
     socketFactory: MockSocket.factory,
-    // No heartbeat noise in these tests; liveness has its own coverage.
     heartbeatMs: 3_600_000,
   });
   transports.push(transport);
@@ -40,7 +30,6 @@ async function connected(): Promise<{ transport: SyncTransport; socket: MockSock
   return { transport, socket: MockSocket.last };
 }
 
-/** A bootstrap client whose fetch answers one complete page. */
 function bootstrapWith(
   store: MemoryProjectionStore,
   rows: FeedRow[],
@@ -185,7 +174,6 @@ describe("onBatch", () => {
     await feed.onBatch(
       batch({
         rows: [feedRow({ id: "a", seq: 60 }), feedRow({ id: "b", seq: 61 })],
-        // Sequence 56..59 are still in flight server-side: the watermark stays at 55.
         safe_seq: 55,
         head_seq: 61,
         complete: false,
@@ -220,8 +208,6 @@ describe("onBatch", () => {
   it("records a completed pass from seq 0 as a bootstrap", async () => {
     const store = new MemoryProjectionStore();
     const { transport } = await connected();
-    // A workspace small enough that the server never asks for a bootstrap: the
-    // catch-up from 0 *is* the full pass, and the next boot must not redo it.
     const feed = new FeedClient(transport, store, bootstrapWith(store, [], 0).bootstrap);
     feed.subscribe(0);
 
@@ -312,7 +298,6 @@ describe("recovery", () => {
     expect(socket.controlOfType("feed.subscribe").at(-1)?.since_seq).toBe(150);
     expect(store.cleared).toBe(0);
     expect(store.rows.has("a")).toBe(true);
-    // The watermark itself does not rewind — re-delivered rows are LWW by seq.
     expect((await store.checkpoint()).safeSeq).toBe(200);
   });
 
@@ -344,7 +329,6 @@ describe("recovery", () => {
     await feed.start(welcome());
 
     expect(feed.state.status).toBe("offline");
-    // The pass still landed: nothing has to be downloaded twice.
     expect(await store.checkpoint()).toMatchObject({ safeSeq: 7, bootstrapped: true });
   });
 });
@@ -399,12 +383,9 @@ describe("the store is the only writer", () => {
     await feed.onBatch(batch({ rows: [feedRow({ id: "a", seq: 2 })], safe_seq: 2 }));
 
     expect(spy).toHaveBeenCalledTimes(1);
-    // The rows are stamped with the semantics version that materialized them, so
-    // a client with a mismatched Wasm core can tell (PROTOCOL.md §1.4).
     expect(spy.mock.calls[0]?.[1]).toMatchObject({ safeSeq: 2, coreSemanticsVersion: 4 });
   });
 });
 
-/** `welcome` is typed; keep the helper honest about it. */
 const _typecheck: Welcome = welcome();
 void _typecheck;

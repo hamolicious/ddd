@@ -1,46 +1,31 @@
-/**
- * How the installed plugins relate: what each depends on, what depends on it, which
- * plugins answer to the same id (`provides`), and why the loader skipped it. Pure; the
- * plugin list renders it.
- */
-
 import type { PluginAdminView, SkippedPlugin } from "./api.js";
 
-/** One declared dependency and whether the installed set has it. */
 export interface DependencyView {
   readonly id: string;
   readonly range: string;
-  /** `"missing"`: nothing installed answers to the id. `"disabled"`: only disabled ones do. */
   readonly status: "ok" | "missing" | "disabled";
 }
 
 export interface PluginRelations {
   readonly dependsOn: readonly DependencyView[];
   readonly optional: readonly DependencyView[];
-  /** Plugins that list this one (or the id it stands in for), required or optional. */
   readonly neededBy: readonly string[];
-  /** The id this plugin stands in for, from `provides: "<id>@<version>"`. */
   readonly standsInFor?: string;
-  /** Other installed plugins answering to the same id. Only one of them can be enabled. */
   readonly conflictsWith: readonly string[];
-  /** Why the loader leaves it out, when it does. */
   readonly skipped?: SkippedPlugin;
 }
 
-/** `"editor@2.0.0"` → `"editor"`. */
 export function providedId(provides: string | undefined): string | undefined {
   if (!provides) return undefined;
   const at = provides.lastIndexOf("@");
   return at > 0 ? provides.slice(0, at) : provides;
 }
 
-/** The ids a plugin answers to: its own, and the one it stands in for. */
 function answersTo(plugin: PluginAdminView): readonly string[] {
   const provided = providedId(plugin.manifest.provides);
   return provided && provided !== plugin.id ? [plugin.id, provided] : [plugin.id];
 }
 
-/** Every installed (not pending) plugin's relations, by id. */
 export function pluginRelations(
   plugins: readonly PluginAdminView[],
   skipped: readonly SkippedPlugin[] = [],
@@ -96,7 +81,6 @@ export function pluginRelations(
   return result;
 }
 
-/** The skip reason in words, for the badge beside the detail sentence. */
 export function describeSkip(reason: SkippedPlugin["reason"]): string {
   switch (reason) {
     case "missing":

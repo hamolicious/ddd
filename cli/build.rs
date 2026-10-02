@@ -1,9 +1,3 @@
-//! Pins generated backend crates to the plugin SDK of the commit `ddd` is built from.
-//!
-//! `DDD_SDK_REV` set in the build environment wins (a CI job building from an archive has
-//! no `.git`); otherwise it is this checkout's `HEAD`. With neither, generated crates
-//! track the repository's default branch.
-
 use std::process::Command;
 
 fn main() {

@@ -1,20 +1,3 @@
-/**
- * The shared-core side of the harness: parsing the converged text with the *same*
- * Rust code the server runs (SPEC §2, "parity by construction"), so the
- * materialization-equality assertion of SPEC §9 M2 compares like with like.
- *
- * Two things live here that the assertion cannot do without:
- *
- * 1. **Loading the Wasm core in Node** — `loadCore()` is the kernel's own loader;
- *    Node hands it the `.wasm` bytes (the browser resolves them itself).
- * 2. **Date canonicalization.** The server canonicalizes every date-looking
- *    string when it materializes (`docstore::materialize_parsed` →
- *    `canonicalize_dates`, SPEC §3.4) so lexicographic sort is chronological.
- *    `parse_document` does **not**, so a raw client parse of `date: 2026-9-3`
- *    disagrees with the server's `2026-09-03`. The harness applies the core's own
- *    `normalizeDate` recursively before comparing.
- */
-
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
@@ -23,19 +6,11 @@ import { loadCore, type CoreBindings, type ParsedDocument } from "../../kernel/s
 const PKG = new URL("../../kernel/src/wasm/pkg/", import.meta.url);
 
 export interface HarnessCore extends CoreBindings {
-  /** A parse canonicalized exactly the way materialization canonicalizes it. */
   parseAsMaterialized(text: string): ParsedDocument;
 }
 
 let cached: Promise<HarnessCore> | undefined;
 
-/**
- * Load the Wasm core for the harness process.
- *
- * A missing package is a hard failure with the fix in the message: the
- * materialization half of the M2 gate cannot be faked, and silently skipping it
- * would turn a red gate green.
- */
 export function harnessCore(): Promise<HarnessCore> {
   cached ??= (async () => {
     let bytes: Uint8Array;
@@ -51,10 +26,6 @@ export function harnessCore(): Promise<HarnessCore> {
       );
     }
     const core = await loadCore(bytes);
-    // `normalizeDate` is part of `CoreBindings` now, so the harness uses the same
-    // binding every other caller does. It used to reach past the interface into the
-    // generated module for `normalize_date`, which meant this file — and only this
-    // file — knew how to canonicalize a date the way the server does.
     const normalizeDate = core.normalizeDate;
     return {
       ...core,
@@ -72,7 +43,6 @@ export function harnessCore(): Promise<HarnessCore> {
   return cached;
 }
 
-/** Recursively normalize date-looking strings, the way the server materializes. */
 export function canonicalizeDates(value: unknown, normalizeDate: (input: string) => string): unknown {
   if (typeof value === "string") return normalizeDate(value);
   if (Array.isArray(value)) return value.map((item) => canonicalizeDates(item, normalizeDate));
@@ -86,7 +56,6 @@ export function canonicalizeDates(value: unknown, normalizeDate: (input: string)
   return value;
 }
 
-/** Structural equality for the shared-core value model (null/bool/num/str/list/map). */
 export function deepEqual(left: unknown, right: unknown): boolean {
   if (left === right) return true;
   if (typeof left === "number" && typeof right === "number") {
@@ -106,13 +75,8 @@ export function deepEqual(left: unknown, right: unknown): boolean {
   return false;
 }
 
-// ---------------------------------------------------------------------------
-// Client-mintable ULIDs (SPEC §3.5: ids are minted offline, by the client)
-// ---------------------------------------------------------------------------
-
 const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
-/** Encode `value` as `length` Crockford base32 characters, most significant first. */
 function encodeBase32(value: number, length: number): string {
   let remaining = Math.floor(value);
   let out = "";
@@ -123,12 +87,6 @@ function encodeBase32(value: number, length: number): string {
   return out;
 }
 
-/**
- * A valid ULID from a deterministic stream: 10 characters of timestamp plus 16 of
- * randomness. Deterministic on purpose — re-running the perf seeder mints the
- * same 5 000 ids, so seeding is idempotent and a failing convergence run can be
- * replayed against the same documents.
- */
 export function mintUlid(random: () => number, timeMs = Date.UTC(2026, 8, 24)): string {
   let tail = "";
   for (let index = 0; index < 16; index += 1) {
@@ -137,7 +95,6 @@ export function mintUlid(random: () => number, timeMs = Date.UTC(2026, 8, 24)): 
   return encodeBase32(timeMs, 10) + tail;
 }
 
-/** The nth deterministic ULID of a run: stable across processes and machines. */
 export function ulidForIndex(index: number, salt = 0): string {
   let state = (index * 2654435761 + salt * 40503 + 1) >>> 0;
   const next = (): number => {

@@ -1,9 +1,3 @@
-/**
- * The hierarchy the tree draws, and the list writes a move makes. The repairs are what
- * the lists can say that a tree cannot — two parents, a loop, an id nobody has — and each
- * one has a test, because a tree widget would only ever show the symptom.
- */
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -71,8 +65,6 @@ describe("buildHierarchy", () => {
   });
 
   it("cuts a loop hanging below a real root too", () => {
-    // r → a, and a ↔ b: `b` claims `a` first (smaller id), which makes a loop; cutting it
-    // gives `a` to `r`, the reachable note that also lists it, rather than to the root.
     const tree = buildHierarchy([note("r", ["a"]), note("a", ["b"]), note("b", ["a"])]);
     expect(tree.parentOf.get("a")).toBe("r");
     expect(tree.parentOf.get("b")).toBe("a");
@@ -163,7 +155,6 @@ describe("planMove", () => {
       { note: "m", action: "remove", id: "a" },
       { note: "z", action: "remove", id: "a" },
     ]);
-    // Staying put still repairs the stray copy.
     expect(planMove(doubled, "a", "m")).toEqual([
       { note: "m", action: "remove", id: "a" },
       { note: "m", action: "push", id: "a" },

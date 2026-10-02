@@ -1,17 +1,3 @@
-/**
- * The timeline view: the search's notes along a horizontal time axis, bars from their
- * start field to their end field (points without one), split into lanes by a group field
- * (`layout.ts`).
- *
- * Like the calendar, it asks `search` for its own results, narrowed to the window on
- * screen, so a window is complete however long the search runs. The window's position is
- * screen state — ‹ and › move it, "Today" comes back — while the scale (days, weeks,
- * months) is a setting saved with the search.
- *
- * The axis scrolls sideways inside its box on a narrow screen: a column never gets too
- * narrow to read. Clicking a note opens it; right-clicking opens its menu (an `ddd/document`).
- */
-
 import { useMemo, useState } from "react";
 import type { ReactElement } from "react";
 
@@ -22,9 +8,7 @@ import { target as mark } from "../../_shared/target.js";
 
 import { layoutItems, shiftAnchor, timelineOptions, windowClauses, windowFor, type Item } from "./layout.js";
 
-/** Notes fetched for one window. */
 const PAGE = 500;
-/** A column's least width, so labels stay legible; the box scrolls beyond that. */
 const UNIT_PX = { day: 56, week: 72, month: 80, quarter: 80 } as const;
 const ROW_PX = 28;
 
@@ -35,7 +19,6 @@ export function createTimeline(search: () => Pick<Search, "useResults">) {
     const frame = windowFor(anchor, settings.scale);
     const clauses = windowClauses(settings, frame);
     const starting = search().useResults(spec, { pageSize: PAGE, within: clauses.starts });
-    // Without an end field the second search is the first again, and adds nothing.
     const spanning = search().useResults(spec, { pageSize: PAGE, within: clauses.spans ?? clauses.starts });
     const rows = useMemo(() => {
       const seen = new Set(starting.rows.map((row) => row.id));
@@ -61,7 +44,6 @@ export function createTimeline(search: () => Pick<Search, "useResults">) {
 
     return (
       <div className="timeline-view timeline:flex timeline:min-w-0 timeline:flex-col timeline:gap-2 timeline:font-sans timeline:text-text">
-        {/* Clear of the search's cog over the top right (32px, and the shell's 12px gap beside it). */}
         <div className={`timeline:flex timeline:items-center timeline:gap-2 ${embedded ? "" : "timeline:pr-11"}`}>
           <h3 className="timeline:m-0 timeline:flex-1 timeline:text-base timeline:font-semibold" aria-live="polite">
             {range}
@@ -80,7 +62,6 @@ export function createTimeline(search: () => Pick<Search, "useResults">) {
 
         <div className="timeline-box timeline:min-w-0 timeline:overflow-x-auto timeline:overflow-y-hidden timeline:rounded timeline:border timeline:border-border">
           <div className="timeline:relative" style={{ minWidth: width }}>
-            {/* Column lines and today, behind everything. */}
             <div aria-hidden="true" className="timeline:pointer-events-none timeline:absolute timeline:inset-0">
               {frame.units.map((unit) => (
                 <div

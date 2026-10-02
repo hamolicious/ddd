@@ -1,12 +1,3 @@
-/**
- * The tour: one short note per base feature, all inside the first one, "Welcome".
- *
- * Plain markdown, readable without any plugin, and user-facing: what to try, not how it
- * works. Ids are fixed (valid ULIDs), so seeding twice can never duplicate a note, and
- * the notes can link and embed each other by id.
- */
-
-/** Fixed ids: `0…0W` + a two-digit number. The marker is `…W00`. */
 const id = (n: number): string => `000000000000000000000000W${String(n).padStart(2, "0")}`.slice(-26);
 
 export const MARKER_ID = id(0);
@@ -28,7 +19,6 @@ export const IDS = {
 export interface TourNote {
   readonly id: string;
   readonly text: string;
-  /** The note it is filed inside, in the folder tree. */
   readonly parent?: string;
 }
 
@@ -292,7 +282,6 @@ seeded: true
   },
 ];
 
-/** Hidden (machine-owned): its existence means the tour was offered. */
 export const MARKER_TEXT = `---
 title: Welcome tour
 machine: true

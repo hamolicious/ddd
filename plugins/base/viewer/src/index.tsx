@@ -1,42 +1,3 @@
-/**
- * `viewer` — read mode (SPEC §6.5).
- *
- * One mode added with `document-surface`'s `addMode`, and three responsibilities inside it:
- *
- * - **Hide the machine regions.** The frontmatter block and the `%%%` sections are part
- *   of the text (SPEC §3.1) and must not be rendered as prose. Reading mode shows the
- *   body. The split itself is markdown's `bodyOf` — the byte-exact fence rules of SPEC
- *   §3.4 live in the shared Rust core, and a second implementation here is exactly the
- *   divergence SPEC §2 forbids.
- * - **Show the frontmatter's *contents* as a pretty header** above the body
- *   (`FmHeader.tsx`). Hiding the block is right about the text and was wrong about the
- *   information: the date, the tags and the folder are things a reader wants, and the
- *   only place they appeared was a sidebar panel that is a drawer on a phone. The
- *   header is display-only; edit mode is the way to change a value. Values are typed
- *   through `_shared/fm-display.ts` so any plugin that shows `fm` agrees on what a
- *   key is.
- * - **Honour `full-width: true`** in the frontmatter: the column fills the pane with
- *   15px gutters instead of the reading measure (`width.ts`). "Toggle full width" in the
- *   palette writes or removes that key on the document on screen.
- * - **List the notes filed inside it** in a footer after the body (`ChildrenFooter.tsx`),
- *   from `folders`' tree when that plugin is enabled.
- * - **Render an attachment wrapper document as a file preview** (SPEC §3.6). A wrapper
- *   is an ordinary document whose body embeds one `attachment://`, so this is a
- *   presentation decision, not a special object type. See `wrapper.ts`.
- *
- * It also serves `#/file/<id>`: the same file page for an attachment no document wraps
- * (Admin → Orphan files links there). Looking at a file creates nothing.
- *
- * It renders from `row.content` — the projection — so a document is readable offline
- * and before hydration finishes. The hydrated handle is only needed for editing.
- *
- * **Blobs are fetched through `kernel.session.fetch`, not put in a `src`.** A bare
- * `/api/attachments/<id>` in an `<img>` carries cookies in a browser and *nothing* in
- * the Flutter shell, which authenticates with a bearer token (SPEC §5.2) — the image
- * would silently 401 on Android only. Fetching and holding an object URL works under
- * both carriers and gives an honest "not available offline" state for free.
- */
-
 import { OFFLINE_COPY_HEADER, OfflineCopyNote, OfflineCopyState, offlineCopies } from "../../_shared/offline-copy.js";
 import type { Kernel } from "@kernel";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -58,7 +19,6 @@ import {
   type PreviewKind,
 } from "./wrapper.js";
 
-/** The part of `plugin:markdown` this plugin draws with. */
 type MarkdownApi = Pick<MarkdownRenderer, "render" | "bodyOf" | "renderAttachment" | "renderDocLink">;
 
 interface AttachmentMeta {
@@ -69,7 +29,6 @@ interface AttachmentMeta {
   readonly revision?: number;
 }
 
-/** Inline-preview budgets. Beyond them a file is a chip with actions, not a preview. */
 const MAX_INLINE_IMAGE_BYTES = 16 * 1024 * 1024;
 const MAX_INLINE_TEXT_BYTES = 256 * 1024;
 
@@ -77,7 +36,6 @@ const READER_CLASSES = "viewer:mx-auto viewer:w-full viewer:min-w-0 viewer:break
 
 export default async function activate(kernel: Kernel): Promise<void> {
   const markdown: MarkdownApi = { render, bodyOf, renderAttachment, renderDocLink };
-  // Optional: the footer of notes inside this one needs `folders`' tree.
   const tree: ChildrenSource | undefined = await kernel.plugins
     .optional<typeof import("plugin:folders")>("folders")
     .catch((cause: unknown) => {
@@ -92,9 +50,6 @@ export default async function activate(kernel: Kernel): Promise<void> {
     const fullWidth = isFullWidth(row.fm);
 
     if (text === undefined) {
-      // The projection carries `content` for every replicated document (SPEC §4.1), so
-      // this is the narrow window before the first sync completes — or a client that
-      // learned of the document from a link before its row arrived.
       return (
         <div className="viewer:max-w-[62ch] viewer:min-w-0 viewer:px-4 viewer:py-6 viewer:font-sans viewer:text-text-muted">
           <p>This document’s text has not reached this device yet.</p>
@@ -107,9 +62,6 @@ export default async function activate(kernel: Kernel): Promise<void> {
     }
 
     return (
-      // The column, not the article: the properties header and the body share one
-      // measure and one set of gutters, and `.viewer-body` keeps its own `max-width`
-      // and auto margins so nothing about the reading column moves.
       <div className="viewer:w-full viewer:min-w-0 viewer:font-sans viewer:text-text">
         <FmHeader fm={row.fm} fmParseError={row.fm_parse_error} renderDocLink={markdown.renderDocLink} fullWidth={fullWidth} />
         <article className={`${READER_CLASSES} ${columnClasses(fullWidth)}`}>{markdown.render(body ?? "", { documentId: id })}</article>
@@ -122,7 +74,6 @@ export default async function activate(kernel: Kernel): Promise<void> {
     id: "read",
     label: "Read",
     order: 0,
-    // An open book. `currentColor`, so it follows the switch's selected/idle colours.
     icon: (
       <svg aria-hidden="true" viewBox="0 0 24 24" width="1.15em" height="1.15em" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 7c-1.5-1.3-4-2-7.5-2v12c3.5 0 6 .7 7.5 2 1.5-1.3 4-2 7.5-2V5c-3.5 0-6 .7-7.5 2z" />
@@ -132,7 +83,6 @@ export default async function activate(kernel: Kernel): Promise<void> {
     component: Read,
   });
 
-  // Off removes the key rather than writing `false`: the default needs no line.
   addCommand({
     id: "viewer.toggleFullWidth",
     title: "Toggle full width",
@@ -158,7 +108,6 @@ export default async function activate(kernel: Kernel): Promise<void> {
     },
   });
 
-  // A bare file, by attachment id: the wrapper page without the wrapper.
   const File = ({ params }: { readonly params?: Readonly<Record<string, string>> }): ReactNode => {
     const id = params?.["id"] ?? "";
     if (!/^[A-Za-z0-9_-]+$/.test(id)) {
@@ -174,10 +123,6 @@ export default async function activate(kernel: Kernel): Promise<void> {
   addView({ id: "viewer.file", title: "File", component: File });
 }
 
-/**
- * markdown's `bodyOf` is another plugin's code. A throw from it must cost the reader the
- * hidden frontmatter, not the whole document.
- */
 function safeBodyOf(kernel: Kernel, markdown: MarkdownApi, text: string): string {
   try {
     return markdown.bodyOf(text);
@@ -186,10 +131,6 @@ function safeBodyOf(kernel: Kernel, markdown: MarkdownApi, text: string): string
     return text;
   }
 }
-
-// ---------------------------------------------------------------------------
-// the wrapper-document preview (SPEC §3.6)
-// ---------------------------------------------------------------------------
 
 type BlobState =
   | { readonly phase: "loading" }
@@ -210,10 +151,8 @@ function AttachmentPreview({
   readonly title: string;
 }): ReactNode {
   const [meta, setMeta] = useState<AttachmentMeta | undefined>(undefined);
-  // Offline, the page shows what was loaded before, and says so (dev-docs/resolved/SYNC-DECISIONS.md §9).
   const [offline] = useState(() => new OfflineCopyState());
 
-  // The caption's facts. The body loads the bytes itself, whichever body it is.
   useEffect(() => {
     let cancelled = false;
     offlineCopies((path, init) => kernel.session.fetch(path, init), offline)(
@@ -224,7 +163,6 @@ function AttachmentPreview({
         if (!cancelled) setMeta(resolved);
       })
       .catch(() => {
-        // The body says why; the caption just stays short.
       });
     return () => {
       cancelled = true;
@@ -233,8 +171,6 @@ function AttachmentPreview({
 
   const name = meta?.name ?? reference.label ?? title;
   const own = <OwnPreview kernel={kernel} reference={reference} name={name} />;
-  // An attachment renderer added to markdown (the `attachments` plugin's viewers) goes first; this
-  // plugin's own preview is what it falls back to, and what shows without one.
   let body: ReactNode = own;
   try {
     body = markdown.renderAttachment(reference.id, { placement: "page", alt: name, fallback: own }) ?? own;
@@ -257,9 +193,6 @@ function AttachmentPreview({
             {meta?.revision !== undefined ? ` · revision ${meta.revision}` : ""}
           </span>
           <span className="viewer:mt-1">
-            {/* A same-origin link, so the server's Content-Disposition decides whether
-                it opens or downloads — the allowlist of safe inline types is the
-                server's call, not this plugin's (SPEC §3.6). */}
             <a className="viewer:tap-h viewer:inline-flex viewer:items-center viewer:text-link viewer:focus-visible:outline-2 viewer:focus-visible:outline-offset-2 viewer:focus-visible:outline-focus" href={apiUrl(reference.id)} target="_blank" rel="noreferrer">
               Open the file
             </a>
@@ -270,7 +203,6 @@ function AttachmentPreview({
   );
 }
 
-/** The built-in preview: what a wrapper document shows with no attachment renderer. */
 function OwnPreview({
   kernel,
   reference,
@@ -322,9 +254,6 @@ function OwnPreview({
         setState({ phase: "skipped", reason: "the file is too long to preview inline" });
         return;
       }
-      // Audio and video are streamed from the API URL rather than a blob: the CSP of
-      // SPEC §8 allows `blob:` for `img-src` only, and `media-src` falls back to
-      // `default-src 'self'`. See the INTEGRATION note in this plugin's README section.
       if (kind === "audio" || kind === "video" || kind === "pdf") {
         setState({ phase: "ready", url: apiUrl(reference.id) });
         return;
@@ -421,11 +350,6 @@ function PreviewBody({
   }
 }
 
-/**
- * The API is same-origin, so `'self'` in the CSP covers it and the browser attaches the
- * session cookie. Used only for links and streamed media — never for the primary image
- * path, which goes through `session.fetch` so the shell's bearer token works too.
- */
 const apiUrl = (id: string): string => `/api/attachments/${encodeURIComponent(id)}`;
 
 function describe(error: unknown): string {

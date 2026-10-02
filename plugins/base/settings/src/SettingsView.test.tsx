@@ -1,11 +1,3 @@
-/**
- * The settings screen lists sections in the order its registry hands them over: by each
- * section's `order`, then by when it was added.
- *
- * Rendered to static markup: no DOM is needed to read the navigation list, and effects
- * (the base-plugin fetch) do not run.
- */
-
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 

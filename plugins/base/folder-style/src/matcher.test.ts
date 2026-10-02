@@ -5,7 +5,6 @@ import type { DocumentQuery, DocumentQueryResult, FilterJson } from "@kernel";
 import { ruleMatcher } from "./matcher.js";
 import type { Rule } from "./styles.js";
 
-/** `subscribe` over a fixed answer per filter; the test pushes changes through `emit`. */
 function fakeDocuments(answer: (filter: FilterJson | undefined) => readonly { id: string; plugins?: unknown }[]) {
   const open: { filter: FilterJson | undefined; listeners: Set<(result: DocumentQueryResult) => void>; closed: boolean }[] = [];
   const result = (filter: FilterJson | undefined) =>
@@ -74,7 +73,6 @@ describe("ruleMatcher", () => {
     let children = ["a"];
     const fake = fakeDocuments((filter) => {
       const text = JSON.stringify(filter);
-      // The watch on the parent itself.
       if (text.includes('"parent"')) return [{ id: "parent", plugins: { folders: { children } } }];
       return children.filter((child) => text.includes(`"${child}"`)).map((id) => ({ id }));
     });
@@ -94,7 +92,6 @@ describe("ruleMatcher", () => {
     const tree: Record<string, string[]> = { top: ["mid"], mid: ["leaf"] };
     const fake = fakeDocuments((filter) => {
       const text = JSON.stringify(filter);
-      // The watch over every note with children.
       if (text.includes('"exists"')) return Object.entries(tree).map(([id, children]) => ({ id, plugins: { folders: { children } } }));
       return ["mid", "leaf", "deeper"].filter((id) => text.includes(`"${id}"`)).map((id) => ({ id }));
     });

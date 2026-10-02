@@ -1,24 +1,4 @@
 #!/usr/bin/env node
-/**
- * Compose a plugin registry directory out of already-built plugins.
- *
- * **Why this exists.** In M3 the registry *is* the directory the server scans
- * (`PLUGINS_DIR`); enable/disable and the approval flow are M4 endpoints, and
- * `DISABLE_PLUGINS` is all-or-nothing (SPEC §6.1). So "disable the built-in editor and
- * enable `alt-editor` instead" — the M3 acceptance criterion — is expressed the only way
- * M3 can express it: a directory that contains the one and not the other. This script
- * builds that directory, and the acceptance test points a server at it.
- *
- * It copies rather than symlinks: the server refuses a symlinked plugin path
- * (`plugins.rs`, traversal hardening), and a test that quietly depended on symlinks
- * following would be testing the wrong server.
- *
- * ```
- * node web/scripts/compose-plugins.mjs <outDir> [--exclude=id,id] [--include-examples=id,id]
- * ```
- *
- * With no flags it is a copy of the base distribution.
- */
 
 import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";

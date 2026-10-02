@@ -144,15 +144,6 @@
         <div style="padding: 0.5rem 0.75rem; border-bottom: 1px solid var(--border)">
           <span id="open-title">no document open</span>
         </div>
-        <!--
-          `readonly` until a document is actually bound. Without it the textarea
-          accepts typing from first paint, with no `oninput` handler behind it and
-          nothing to write to: the keystrokes land nowhere, and the moment a
-          document does open, `bindTextarea` overwrites them with its text. A user
-          loses an edit they watched themselves make; an automated test that fills
-          this field before the open resolves believes it made an edit that never
-          existed. `openDocument` clears it once the Y.Text is bound.
-        -->
         <textarea id="text" spellcheck="false" readonly placeholder="Open a document to edit"></textarea>
       </section>
     </main>

@@ -1,17 +1,3 @@
-/// The native login screen (`BRIDGE.md` §4.1, SPEC §5.2).
-///
-/// Login is the one thing the shell does before it has a bundle, so every failure here is
-/// a failure with nothing to show it in. Three behaviours carry that weight and are worth
-/// pinning:
-///
-/// * **`token: true`, and a 200 without a token is a failure** — not a fall-through to the
-///   cookie the server also set. The webview is a different origin (`BRIDGE.md` §6), so
-///   there is no cookie jar worth having.
-/// * **The server URL is stored only on success**, so a typo never becomes the remembered
-///   server.
-/// * **The `APP_ORIGIN` pre-flight**, which is the single most likely cause of "signed in,
-///   never syncs" (`BRIDGE.md` §6) and the one thing an operator can act on if they are
-///   told about it while they are still looking at it.
 library;
 
 import 'dart:convert';
@@ -48,8 +34,6 @@ void main() {
 
   group('normalizeServerUrl', () {
     test('a bare host gets https, never http', () {
-      // The bearer token travels on every request (SPEC §5.2); guessing cleartext for
-      // someone is not the shell's decision to make.
       expect(
         normalizeServerUrl('ddd.example.com'),
         Uri.parse('https://ddd.example.com'),
@@ -57,8 +41,6 @@ void main() {
     });
 
     test('reduces everything to an origin', () {
-      // `ShellConfig.api()` resolves against this and `APP_ORIGIN` compares it; a
-      // remembered path would quietly produce `/app/api/…`.
       for (final String typed in <String>[
         '  https://ddd.example.com/  ',
         'https://ddd.example.com/app',
@@ -84,8 +66,6 @@ void main() {
       expect(normalizeServerUrl('   '), isNull);
       expect(normalizeServerUrl('ftp://ddd.example.com'), isNull);
       expect(normalizeServerUrl('https://'), isNull);
-      // `Uri.tryParse` would percent-escape this into `https://not%20a%20url` and report
-      // the result as "could not reach", which reads like a server outage, not a typo.
       expect(normalizeServerUrl('not a url'), isNull);
       expect(normalizeServerUrl('https://a b.com'), isNull);
     });
@@ -111,7 +91,6 @@ void main() {
       expect(jsonDecode(request().body), <String, Object?>{
         'email': 'a@b.co',
         'password': 'hunter2',
-        // The server accepts `token` as an alias of `bearer` (`routes/auth.rs`).
         'token': true,
       });
     });
@@ -135,7 +114,6 @@ void main() {
       expect(token, 'tok-123');
       expect(keystore[kTokenKey], 'tok-123');
       expect(keystore[kServerKey], 'https://ddd.example.com');
-      // The CORS layer answers this the way it will answer the webview.
       expect(seen.headers['origin'], kLoopbackOrigin.origin);
     });
 
@@ -276,7 +254,6 @@ void main() {
                 ),
           ),
         );
-        // A typo must never become the remembered server.
         expect(keystore, isEmpty);
       },
     );
@@ -309,8 +286,6 @@ void main() {
     );
 
     test('a missing APP_ORIGIN is a warning with a fix in it', () async {
-      // Signing in will work and syncing will not; an operator who is told this while they
-      // are still looking at the server can fix it in one restart.
       final Preflight check = await service(healthz())
           .preflight(Uri.parse('https://ddd.example.com'));
 
@@ -338,7 +313,6 @@ void main() {
       ).preflight(Uri.parse('https://ddd.example.com'));
 
       expect(check.reachable, isFalse);
-      // A reverse proxy in front of a different app looks exactly like this.
       expect(check.detail, contains('/healthz'));
     });
 
@@ -465,7 +439,6 @@ void main() {
         tester,
         MockClient((http.Request r) async {
           if (r.url.path == '/healthz') {
-            // Healthy, but no `Access-Control-Allow-Origin` for the shell.
             return http.Response('ok', 200, request: r);
           }
           logins++;
@@ -506,8 +479,6 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Sign in anyway'), findsOneWidget);
 
-      // Without this, "Sign in anyway" would carry over to a different server and skip its
-      // pre-flight entirely.
       await tester.enterText(find.byType(TextField).at(0), 'other.example.com');
       await tester.pumpAndSettle();
 

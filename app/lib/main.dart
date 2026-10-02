@@ -1,41 +1,3 @@
-/// The shell's entry point: the boot sequence of SPEC §9 M5, in order, with every step
-/// visible.
-///
-/// ```text
-/// keystore (token + server URL)
-///   ├─ no token ──────────────→ native login  (SPEC §5.2)
-///   └─ token
-///        ↓
-///      promote a staged bundle          (bundle/store.dart)
-///        ↓
-///      BootGuard.resolve                (shell/boot_guard.dart)
-///        ├─ firstRun         → download the first bundle, with progress
-///        ├─ loadBundle       → loopback server + webview            ← the normal path
-///        ├─ loadBundleSafeMode → the same, with ?safe=1   (attempt 2)
-///        ├─ revert           → swap to the previous bundle, then re-decide
-///        ├─ recovery         → native screen: retry, re-download, sign out
-///        └─ needsNewerShell  → native screen: "update the app"      (SPEC §7)
-///        ↓
-///      webview up → shell.bootOk() clears the failed-boot counter
-///        ↓
-///      prune, then check for an update in the background; stage it for the next launch
-/// ```
-///
-/// Four properties of this sequence are load-bearing.
-///
-/// 1. **The failed-boot counter is incremented before the webview loads**, and only the
-///    page's own `bootOk()` clears it. That is the entire auto-revert guarantee (SPEC §7),
-///    and it only works if nothing here defers the write. [BootGuard.resolve] persists the
-///    incremented pointer before it returns, and this file starts nothing until it has.
-/// 2. **An update is never applied to a running webview.** It is verified, staged, and
-///    promoted at the next launch (`bundle/updater.dart`). The running page is offered a
-///    restart; it is never swapped underneath.
-/// 3. **Nothing in this sequence requires the network except the first run.** A shell with a
-///    bundle and a token boots offline, which is half of M5's acceptance: the update check
-///    happens *after* the webview is up, and its failure is silent.
-/// 4. **Every failure lands on a native screen, never a blank webview.** A white rectangle
-///    is indistinguishable from a broken app, and the recovery path has to be reachable when
-///    the bundle is the thing that is broken.
 library;
 
 import 'dart:async';
@@ -60,7 +22,6 @@ Future<void> main() async {
   runApp(const ShellApp());
 }
 
-/// The root widget. Owns nothing but the theme and the boot future.
 class ShellApp extends StatelessWidget {
   const ShellApp({super.key});
 
@@ -81,12 +42,8 @@ class ShellApp extends StatelessWidget {
   );
 }
 
-/// Which screen the shell is on. Not the same thing as [BootAction]: `revert` never reaches
-/// a screen (it resolves to the bundle it reverted *to*), and `login` is not a boot decision
-/// at all — it is what happens when there is no token to decide anything with.
 enum _Phase { starting, login, firstRun, running, blocked }
 
-/// The sequence in the library docs, as a widget.
 class BootFlow extends StatefulWidget {
   const BootFlow({super.key});
 
@@ -98,31 +55,12 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
   final AuthStore _auth = AuthStore();
   ShellBridge _bridge = ShellBridge(log: _log);
 
-  /// Held rather than registered and dropped, for two reasons that both show up as the web
-  /// app quietly losing a capability it was promised (`BRIDGE.md` §4.3).
-  ///
-  /// The bootstrap script bakes `notifications.permission()`'s answer into the page as a
-  /// constant — it is synchronous on the web side — so [WebViewHost] has to be handed the
-  /// *same* instance whose [NotificationsCapability.initialize] asked the OS. A discarded
-  /// instance leaves every launch reporting `default`, and a page that sees `default`
-  /// forever is a page that re-prompts forever.
-  ///
-  /// It also survives a re-login onto a different server: reminders are local to the device,
-  /// so the OS permission and the registry of scheduled notifications are not the old
-  /// server's to lose. Only the handlers get rebuilt, onto the new bridge.
   final NotificationsCapability _notifications = NotificationsCapability();
 
-  /// The notes folder. One instance for the life of the app, like [_notifications]: the
-  /// folder and its watcher belong to the device, not to a server or a login.
   final FolderCapability _folder = FolderCapability();
 
-  /// One HTTP client for the whole login phase. [build] runs on every keystroke in the
-  /// server-URL field, and a [LoginService] constructed there would open — and never close —
-  /// a client per rebuild.
   late final LoginService _login = LoginService(auth: _auth);
 
-  /// The filesystem handlers currently on [_bridge], kept so the client they hold is closed
-  /// when they are replaced or the flow is disposed.
   FilesystemCapability? _filesystem;
 
   BundleStore? _store;
@@ -140,38 +78,15 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
   String? _notice;
   bool _noticeOffersRestart = false;
 
-  /// `boot.ok` arrived for the webview that is currently mounted. Guards the watchdog, the
-  /// prune and the background update check against running twice, and stops a late error
-  /// inside a bundle that *did* boot from being counted as a failed boot.
   bool _bootOk = false;
 
-  /// The watchdog was cancelled because the app left the foreground before the bundle
-  /// reported, and must be re-armed — from the start — when it comes back.
-  ///
-  /// Android throttles a background WebView's JavaScript and timers while a Dart `Timer`
-  /// keeps counting, so a user who launches the app and immediately switches away would
-  /// otherwise come back to a bundle the shell had already declared broken. Twice, and a
-  /// working bundle is quarantined and the device pinned to an older one.
   bool _watchdogSuspended = false;
 
-  /// When the manifest was last polled, for [kUpdateCheckInterval].
   DateTime? _lastUpdateCheck;
   bool _checkingForUpdate = false;
 
-  /// The staged version the running page has already been told about, so a foreground
-  /// poll that re-reports the same staged bundle does not bring the banner back after the
-  /// user dismissed it.
   String? _noticedStaged;
 
-  /// The server the handlers currently on [_bridge] were built for, or `null` before the
-  /// first registration.
-  ///
-  /// [ShellBridge.register] rejects a duplicate key and [_start] runs again on every login,
-  /// restart and retry, so registration has to happen at most once per bridge. But the
-  /// handlers *capture* the [ShellConfig] they were handed — `filesystem.exportWorkspace`
-  /// fetches `GET /api/admin/export` from it (`BRIDGE.md` §4.2) — so signing out and back
-  /// in against a **different** server must not leave them pointed at the old one with the
-  /// new one's bearer token. A changed URL gets a fresh bridge instead of a stale capture.
   Uri? _bridgeServer;
 
   @override
@@ -181,14 +96,6 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
     unawaited(_start());
   }
 
-  /// Two things happen at a foreground/background edge, and both of them are about the
-  /// difference between "the bundle is broken" and "nobody was looking".
-  ///
-  /// * **Backgrounding suspends the boot watchdog** and resuming re-arms it with a full
-  ///   duration. See [_watchdogSuspended].
-  /// * **Foregrounding polls the manifest** (throttled by [kUpdateCheckInterval]), which
-  ///   is the cadence SPEC §7's OTA half is designed around. A once-per-process check is
-  ///   not "on the next launch" on Android, where the process outlives the session.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
@@ -224,19 +131,12 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  // ───────────────────────────────── the sequence ─────────────────────────────────
-
-  /// One launch. Also one *re*-launch: "restart to apply an update", "try again" after a
-  /// failed boot, and the hand-off from the login screen all come back through here, because
-  /// promoting a staged bundle and re-deciding is exactly what a launch does.
   Future<void> _start() async {
     _watchdog?.cancel();
     _watchdog = null;
     _watchdogSuspended = false;
     _noticedStaged = null;
     _lastUpdateCheck = null;
-    // A launch promotes whatever was staged, so the signal from the last session is about
-    // a bundle that is either running now or gone.
     stagedBundleVersion.value = null;
     await _server?.stop();
     _server = null;
@@ -253,9 +153,6 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
       final Uri? server = await _auth.serverBaseUrl();
       final String? token = await _auth.token();
 
-      // Not an error, and not a decision the boot guard can make: the manifest endpoint is
-      // authenticated (`BRIDGE.md` §4.1), so with no token there is nothing to download a
-      // bundle with and nothing to show it in.
       if (server == null || token == null) {
         _to(_Phase.login);
         return;
@@ -296,8 +193,6 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
             offerRedownload: true,
           );
         case BootAction.revert:
-          // [BootGuard.resolve] follows a revert through to the bundle it lands on, so this
-          // is unreachable. If it is ever reached, say so rather than showing nothing.
           _block(
             'ddd could not start',
             'The shell reverted to an earlier version of the workspace app but could not '
@@ -311,17 +206,11 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
     }
   }
 
-  /// Start the loopback server on the planned bundle and mount the webview.
-  ///
-  /// The counter for this attempt is already persisted ([BootGuard.resolve]); from here on a
-  /// crash, an ANR or a bundle that never calls `bootOk()` all land on the same next launch.
   Future<void> _serve(BootPlan plan) async {
     final BundleStore store = _store!;
     final String version = plan.version!;
     final BundleManifest? manifest = await store.readManifest(version);
     if (manifest == null) {
-      // `resolve()` checks this too and escalates it into the revert path; reaching it here
-      // means the file went away in between.
       _block(
         'ddd could not start',
         'The installed workspace app ($version) has no manifest, so its files cannot be '
@@ -338,8 +227,6 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
     try {
       await server.start();
     } catch (error) {
-      // A port in use is the likely cause, and it is not something to paper over with a
-      // different port: the origin is origin-keyed storage (`BRIDGE.md` §6).
       _log('boot: the loopback server did not start: $error');
       _block(
         'ddd could not start',
@@ -350,31 +237,18 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
     }
     _server = server;
 
-    // Silence is a decision the shell has to make inside one launch, or the user has to
-    // kill the app twice to get to the revert (`BRIDGE.md` §7).
     _armWatchdog();
 
     final Uri index = server.indexUrl;
     _to(
       _Phase.running,
       pageUrl: plan.action == BootAction.loadBundleSafeMode
-          // SPEC §6.1: base plugins only. A bundle that boots this way has a broken
-          // plugin, not a broken bundle.
           ? index.replace(queryParameters: <String, String>{'safe': '1'})
           : index,
     );
 
-    // The revert is silent from inside the webview by construction: the page that would
-    // have reported the failure is the one that did not start, and the bundle now running
-    // is an *older* one that has no idea it was reinstated. So the shell says it.
-    //
-    // A plain first attempt carries no reason ([BootGuard.resolve] sets one only when a
-    // launch had to recover from something), so this strip appears exactly when something
-    // happened that the user would otherwise discover as "my app is older now".
     final String? reason = plan.reason;
     if (plan.action == BootAction.loadBundleSafeMode) {
-      // SPEC §6.1 safe mode, in words rather than in jargon: what the user needs to know
-      // is why their plugins are gone and that it is temporary, not which flag did it.
       _notify(
         'ddd did not finish starting last time, so it is running with plugins '
         'switched off. If it works now, a plugin is the problem.',
@@ -384,13 +258,6 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
     }
   }
 
-  /// Start (or restart) the countdown that turns silence into a failed boot.
-  ///
-  /// It measures *foreground* time only ([didChangeAppLifecycleState]): a webview whose
-  /// timers Android has throttled is not a webview that failed, and the auto-revert
-  /// guarantee is worth nothing if it fires on a bundle that was merely not being looked
-  /// at. Re-armed from the start rather than resumed, because a page that was frozen
-  /// part-way through boot needs the whole budget, not the remainder.
   void _armWatchdog() {
     if (_bootOk) return;
     _watchdog?.cancel();
@@ -404,8 +271,6 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
     });
   }
 
-  /// `boot.ok` — from the bridge handler, and from [WebViewHost] if it reports it too.
-  /// Idempotent, because both paths are legitimate and neither knows about the other.
   Future<void> _onBootOk() async {
     if (_bootOk) return;
     _bootOk = true;
@@ -416,20 +281,13 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
 
     final BundleStore? store = _store;
     if (store != null) {
-      // Only now: a bundle you might still have to revert to is worth more than the disk it
-      // occupies. Pruning also clears `.staging`, which is why it runs *before* the update
-      // check rather than beside it (`store.dart`).
       await store.prune(await store.readState());
     }
     unawaited(_checkForUpdate());
   }
 
-  /// The watchdog expired, or the page reported `boot.failed`.
   Future<void> _onBootFailed(String reason) async {
     if (_bootOk) {
-      // The bundle booted and then something inside it broke. That is the page's problem to
-      // report; reverting a bundle that reached `bootOk()` would be a worse app, not a
-      // better one (`boot_guard.dart`).
       _log('boot: reported after a successful boot, ignoring — $reason');
       return;
     }
@@ -447,18 +305,9 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
     );
   }
 
-  /// The background check (SPEC §7's OTA half). Runs after the webview is up, so it never
-  /// delays a boot, and its failure is silent — being offline is the normal case, not an
-  /// error to report.
-  ///
-  /// Called once per successful boot *and* on every foreground after that
-  /// ([didChangeAppLifecycleState]); [kUpdateCheckInterval] is what keeps "every
-  /// foreground" from meaning "every notification shade".
   Future<void> _checkForUpdate() async {
     final BundleUpdater? updater = _updater;
     final BundleStore? store = _store;
-    // Before `boot.ok` the bundle has not proved it runs, and `prune` has not cleared
-    // `.staging` yet — starting a download here would race the thing that deletes it.
     if (updater == null || store == null || !_bootOk) return;
     if (_checkingForUpdate) return;
     final DateTime now = DateTime.now();
@@ -477,10 +326,6 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
       case UpdateOutcome.staged:
         final String? pending = (await store.readState()).pending;
         if (!mounted) return;
-        // The page's own notice (`web/app/src/boot/shell.ts`): the kernel says "close and
-        // reopen ddd to finish it" in the app's own language, and a plugin that
-        // feature-detects the event can offer its own affordance. The native banner below
-        // stays, because a bundle that is mid-boot or broken has no notice centre.
         stagedBundleVersion.value = pending;
         if (_noticedStaged == pending) return;
         _noticedStaged = pending;
@@ -495,19 +340,12 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
           'to get it.',
         );
       case UpdateOutcome.corrupt:
-        // Loud in the log, quiet on screen: the running bundle is untouched, and there is
-        // nothing the user can do about a server whose bytes do not match its hashes.
         _log(
           'boot: the published bundle failed verification; keeping this one',
         );
       case UpdateOutcome.storageFailed:
-        // Same reasoning, different cause: the running bundle is untouched and the next
-        // check retries for free (the verified bytes are already on disk).
         _log('boot: the update could not be stored; keeping this bundle');
       case UpdateOutcome.quarantined:
-        // Not silent any more. A quarantine is permanent until the user clears it from
-        // the recovery screen, so a device that keeps refusing the version the server
-        // publishes would otherwise sit on an old bundle forever with nothing said.
         _log('boot: the published bundle is quarantined on this device');
       case UpdateOutcome.upToDate:
       case UpdateOutcome.unavailable:
@@ -515,35 +353,19 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
     }
   }
 
-  /// Sign-out from a native screen: the token goes, the server URL stays (the login screen
-  /// comes back pre-filled), and the bundle stays — it is public code, not user data, and
-  /// the next user of this device still needs something to log in *with*.
   Future<void> _signOut() async {
     await _auth.clearToken();
     await _start();
   }
 
-  // ───────────────────────────────── the bridge ─────────────────────────────────
-
-  /// Registered before any webview exists, so [ShellBridge.methods] is complete when the
-  /// bootstrap script is generated (`BRIDGE.md` §3: the page defines only what exists).
-  ///
-  /// `boot.ok` and `boot.failed` are registered here rather than in `bridge/`: they are the
-  /// shell's own handlers, not a capability, and they are what the auto-revert guarantee
-  /// rests on.
   void _register(ShellConfig config) {
     if (_bridgeServer == config.serverBaseUrl) return;
-    // A second server means a second set of handlers, and `register` refuses to overwrite
-    // a key. The old bridge is unreachable by then: `_start` has already torn the webview
-    // down through `_Phase.starting`, and [WebViewHost] reads `widget.bridge` on every
-    // dispatch rather than holding its own copy.
     if (_bridgeServer != null) _bridge = ShellBridge(log: _log);
     _bridgeServer = config.serverBaseUrl;
     _auth.registerOn(_bridge);
     _filesystem?.close();
     _filesystem = FilesystemCapability(config: config, auth: _auth)
       ..registerOn(_bridge);
-    // Re-registered onto the new bridge, but the same instance: see the field.
     _notifications.registerOn(_bridge);
     _folder.registerOn(_bridge);
     _bridge.register('boot', 'ok', (Map<String, Object?> _) async {
@@ -561,8 +383,6 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
     });
   }
 
-  // ───────────────────────────────── the screens ─────────────────────────────────
-
   void _to(_Phase phase, {Uri? pageUrl}) {
     if (!mounted) return;
     setState(() {
@@ -574,9 +394,6 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
     });
   }
 
-  /// Put one line above the running page. Never a dialog: what is underneath it is a
-  /// working app, and neither an update nor a revert is worth interrupting someone
-  /// mid-sentence for. Cleared by [_start], so a notice never outlives its launch.
   void _notify(String message, {bool offersRestart = false}) {
     if (!mounted) return;
     setState(() {
@@ -596,11 +413,6 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
     });
   }
 
-  /// Forget the installed bundle and download it again. The last resort on the recovery
-  /// screen: the pointer is cleared, so the next launch is a first run.
-  ///
-  /// Quarantines are cleared with it — they exist to stop an *automatic* loop, and the user
-  /// asking for this bundle again is not a loop.
   Future<void> _redownload() async {
     final BundleStore? store = _store;
     if (store == null) return;
@@ -631,11 +443,7 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
       child: WebViewHost(
         url: _pageUrl!,
         bridge: _bridge,
-        // The instance the bootstrap script reads `permission()` from, and the one whose
-        // `initialize()` the host awaits before generating it.
         notifications: _notifications,
-        // Both are already in hand from `_start`; passing them saves a keystore round trip
-        // per launch and removes a second source of truth for the server URL.
         auth: _auth,
         serverBaseUrl: _config?.serverBaseUrl,
         onBootOk: () => unawaited(_onBootOk()),
@@ -664,24 +472,6 @@ class _BootFlowState extends State<BootFlow> with WidgetsBindingObserver {
   };
 }
 
-/// The "update ready, restart to apply" strip (SPEC §7), and the page underneath it.
-///
-/// A banner rather than a dialog: the page below it is a working app, and interrupting
-/// someone mid-sentence to tell them about an update they cannot see is worse than waiting
-/// for their next launch.
-///
-/// **The shape of this subtree never changes** — always a `Scaffold`, always the same two
-/// slots, the page always the second — and that is not tidiness, it is the difference
-/// between a banner and a reload. Flutter matches children by position and runtime type, so
-/// returning the page bare when there is no notice and a `Scaffold` when there is would
-/// deactivate the [WebViewHost] element the instant a notice appeared: the `InAppWebView`
-/// is destroyed, a fresh one inflated, and the bundle reloads from `index.html`. The notice
-/// most likely to appear is "an update is ready", minutes into a session, while someone is
-/// typing — so the cost would be their caret, their scroll position and any uncommitted
-/// CodeMirror state, and then again when they tap "Later".
-///
-/// It is a widget of its own rather than a method so that property is testable without a
-/// webview: `test/shell/notice_overlay_test.dart` asserts the child's `State` survives.
 class NoticeOverlay extends StatelessWidget {
   const NoticeOverlay({
     required this.child,
@@ -691,10 +481,8 @@ class NoticeOverlay extends StatelessWidget {
     super.key,
   });
 
-  /// The line above the page, or `null` for none.
   final String? notice;
 
-  /// Offered as "Restart" when the notice is about a staged bundle.
   final VoidCallback? onRestart;
 
   final VoidCallback onDismiss;
@@ -731,9 +519,6 @@ class NoticeOverlay extends StatelessWidget {
   }
 }
 
-/// The blocking first download (SPEC §7: a device with no bundle has nothing to show until
-/// it has one). Progress is per file and per byte, because a first install is the whole PWA
-/// plus every plugin and a bare spinner for that long reads as a hang.
 class _FirstRunScreen extends StatefulWidget {
   const _FirstRunScreen({
     required this.updater,
@@ -765,11 +550,6 @@ class _FirstRunScreenState extends State<_FirstRunScreen> {
       _busy = true;
       _error = null;
     });
-    // [BundleUpdater.update] promises never to throw, and this screen is the one place
-    // where believing that without a net is unrecoverable: there is no bundle behind it,
-    // every button is gated on `_error != null`, and an exception escaping here leaves
-    // `_busy` true forever — a progress bar with no "Try again" and no "Sign out", whose
-    // only exit is force-stopping the app into the identical state.
     final UpdateOutcome outcome;
     try {
       outcome = await widget.updater.update(
@@ -791,8 +571,6 @@ class _FirstRunScreenState extends State<_FirstRunScreen> {
     switch (outcome) {
       case UpdateOutcome.staged:
       case UpdateOutcome.upToDate:
-        // A first run stages; the launch that follows promotes it. `upToDate` here means
-        // the pointer already named this version, which a re-entered first run can produce.
         widget.onInstalled();
       case UpdateOutcome.unavailable:
         setState(
@@ -858,9 +636,6 @@ class _FirstRunScreenState extends State<_FirstRunScreen> {
   static String _mb(int bytes) => (bytes / (1024 * 1024)).toStringAsFixed(1);
 }
 
-/// Every native screen the shell shows: starting, downloading, recovering, "update the app",
-/// and the hard failure. One widget, because they differ only in words and in which buttons
-/// are on them.
 class _ShellMessage extends StatelessWidget {
   const _ShellMessage({
     required this.title,
@@ -873,7 +648,6 @@ class _ShellMessage extends StatelessWidget {
   final String title;
   final String? detail;
 
-  /// 0…1 for the first-run download; `null` for an indeterminate or absent bar.
   final double? progress;
   final bool busy;
   final List<Widget> actions;
@@ -920,6 +694,4 @@ class _ShellMessage extends StatelessWidget {
   );
 }
 
-/// `adb logcat` is the only window into a launch that never reaches the webview, so the
-/// whole boot flow logs through one function.
 void _log(String message) => debugPrint('ddd shell: $message');

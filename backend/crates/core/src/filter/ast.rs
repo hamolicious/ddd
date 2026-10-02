@@ -1,16 +1,3 @@
-//! Filter AST and its JSON wire form.
-//!
-//! Wire form is tagged JSON, one object per node, e.g.
-//! ```json
-//! {"and": [
-//!   {"cmp": {"field": "fm.status", "op": "eq", "value": {"str": "open"}}},
-//!   {"contains": {"field": "fm.tags", "value": {"str": "work"}}},
-//!   {"missing": {"field": "fm.due"}}
-//! ]}
-//! ```
-//!
-//! The full grammar, with semantics, lives in `crates/core/README.md`.
-
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -18,39 +5,23 @@ use crate::date::Date;
 use crate::limits::{MAX_NESTING_DEPTH, is_valid_key};
 use crate::value::ValueType;
 
-/// Roots addressable on a projection row that are *not* stored under
-/// `fm`/`plugins`. Their types are fixed by the schema, so a type mismatch
-/// against one of them is a query bug rather than row data.
 pub(crate) const FIXED_ROOTS: [&str; 7] = [
     "id",
     "title",
     "content",
     "created_at",
     "updated_at",
-    // `deleted` is the boolean question ("is this in Trash"); `deleted_at` is the
-    // timestamp behind it, and it is a distinct field because it answers a distinct
-    // question — *when*. Trash is sorted newest-first (SPEC §6.5, the `doc-list`
-    // plugin's Trash view), and without this root that sort could only be done on the
-    // client after paging, because the server's sort keys are this field space.
-    // Absent on a live document, so `missing`/`exists` separate live from trashed just
-    // as `deleted` does.
     "deleted_at",
     "deleted",
 ];
-/// Roots whose contents are dynamic (materialized from document text).
 pub(crate) const DYNAMIC_ROOTS: [&str; 2] = ["fm", "plugins"];
-/// Maximum number of segments in a field path (root + nested keys).
 const MAX_PATH_SEGMENTS: usize = MAX_NESTING_DEPTH + 2;
 
-/// A dotted field path into a projection row: `title`, `content`, `updated_at`,
-/// `fm.<key>`, `fm.<key>.<key>`, `plugins.<plugin-id>.<key>`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub struct FieldPath(Vec<String>);
 
 impl FieldPath {
-    /// Parse a dotted path. Segments must be non-empty; `fm`/`plugins` roots may
-    /// nest, other roots must be a single segment.
     pub fn parse(input: &str) -> Result<FieldPath, FilterParseError> {
         let segments: Vec<&str> = input.split('.').collect();
         let root = segments[0];
@@ -83,12 +54,10 @@ impl FieldPath {
         &self.0
     }
 
-    /// Dotted text form (round-trips [`FieldPath::parse`]).
     pub fn as_dotted(&self) -> String {
         self.0.join(".")
     }
 
-    /// The first path segment: the projection root this path addresses.
     pub(crate) fn root(&self) -> &str {
         &self.0[0]
     }
@@ -114,8 +83,6 @@ impl std::fmt::Display for FieldPath {
     }
 }
 
-/// Comparison operators. Both sides must be the same type or the comparison is
-/// an error, never a silent false (SPEC §4.2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CompareOp {
@@ -128,7 +95,6 @@ pub enum CompareOp {
 }
 
 impl CompareOp {
-    /// `true` for the four ordering operators (everything but `eq`/`ne`).
     pub(crate) fn is_ordering(self) -> bool {
         matches!(
             self,
@@ -136,7 +102,6 @@ impl CompareOp {
         )
     }
 
-    /// The Mongo operator this maps to.
     #[cfg(feature = "mongo")]
     pub(crate) fn mongo(self) -> &'static str {
         match self {
@@ -150,20 +115,14 @@ impl CompareOp {
     }
 }
 
-/// String matching modes, explicit rather than regex.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TextMatch {
-    /// Case-insensitive substring.
     Contains,
-    /// Case-insensitive prefix.
     StartsWith,
-    /// Case-insensitive suffix.
     EndsWith,
 }
 
-/// A typed literal. The date type is explicit — a date literal never compares
-/// against a plain string, it compares against a parsed date.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Literal {
@@ -187,9 +146,6 @@ impl Literal {
         }
     }
 
-    /// Type *family* for the same-type rule: `int` and `float` are one numeric
-    /// family (as they are in Mongo's comparison bracketing), everything else is
-    /// its own family.
     pub(crate) fn family(&self) -> LiteralFamily {
         match self {
             Literal::Bool(_) => LiteralFamily::Bool,
@@ -210,74 +166,56 @@ pub(crate) enum LiteralFamily {
     Null,
 }
 
-/// The filter tree.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Filter {
-    /// Matches every row.
     All,
-    /// Matches nothing.
     None,
     And(Vec<Filter>),
     Or(Vec<Filter>),
     Not(Box<Filter>),
-    /// Scalar comparison; errors when the field's type differs from the literal's.
     Cmp {
         field: FieldPath,
         op: CompareOp,
         value: Literal,
     },
-    /// Scalar equality against any of `values` (same type as each other).
     In {
         field: FieldPath,
         values: Vec<Literal>,
     },
-    /// Field is a list containing exactly this scalar.
     Contains {
         field: FieldPath,
         value: Literal,
     },
-    /// Field is a list with at least one element matching the comparison.
     Any {
         field: FieldPath,
         op: CompareOp,
         value: Literal,
     },
-    /// Field is a list with every element matching the comparison.
     Every {
         field: FieldPath,
         op: CompareOp,
         value: Literal,
     },
-    /// Field is absent from the row (distinct from present-and-null).
     Missing {
         field: FieldPath,
     },
-    /// Field is present and null.
     IsNull {
         field: FieldPath,
     },
-    /// Field is present (any value, null included).
     Exists {
         field: FieldPath,
     },
-    /// Case-insensitive string match on a string field.
     Text {
         field: FieldPath,
         mode: TextMatch,
         value: String,
     },
-    /// The row is in note `of`'s children list; with `deep`, anywhere below it.
-    ///
-    /// A join, so only an evaluator that knows the folder tree can answer it
-    /// ([`crate::filter::evaluate_in`] with a [`crate::filter::Graph`]): the query
-    /// engine. Plain [`crate::filter::evaluate`] and the Mongo compiler refuse it.
     ChildOf {
         of: String,
         #[serde(default)]
         deep: bool,
     },
-    /// The row's children list holds note `of`.
     ParentOf {
         of: String,
     },
@@ -302,19 +240,15 @@ pub enum FilterParseError {
 }
 
 impl Filter {
-    /// Maximum AST depth accepted from clients.
     pub const MAX_DEPTH: usize = 16;
-    /// Maximum total node count accepted from clients.
     pub const MAX_NODES: usize = 256;
 
-    /// Parse the JSON wire form, enforcing depth/size limits.
     pub fn from_json_str(input: &str) -> Result<Filter, FilterParseError> {
         let value: serde_json::Value =
             serde_json::from_str(input).map_err(|e| FilterParseError::Json(e.to_string()))?;
         Filter::from_json(&value)
     }
 
-    /// Parse from an already-decoded JSON value.
     pub fn from_json(value: &serde_json::Value) -> Result<Filter, FilterParseError> {
         let filter: Filter =
             serde_json::from_value(value.clone()).map_err(|e| classify(&e.to_string()))?;
@@ -322,20 +256,16 @@ impl Filter {
         Ok(filter)
     }
 
-    /// Serialize to the JSON wire form.
     pub fn to_json(&self) -> serde_json::Value {
         serde_json::to_value(self).unwrap_or(serde_json::Value::Null)
     }
 
-    /// Validate depth, node count and field paths without evaluating.
     pub fn validate(&self) -> Result<(), FilterParseError> {
         let mut nodes = 0usize;
         walk(self, 1, &mut nodes)
     }
 }
 
-/// serde's error text is the only signal we get about *why* a literal failed;
-/// map the two cases the wire form can produce to precise errors.
 fn classify(message: &str) -> FilterParseError {
     if message.contains("ISO-8601") || message.contains("date out of supported range") {
         FilterParseError::InvalidDate(message.to_string())
@@ -380,7 +310,6 @@ fn walk(filter: &Filter, depth: usize, nodes: &mut usize) -> Result<(), FilterPa
     Ok(())
 }
 
-/// Sort direction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SortOrder {
@@ -388,8 +317,6 @@ pub enum SortOrder {
     Desc,
 }
 
-/// One sort key; `_id` is always appended as a tiebreaker by the query layer so
-/// cursor pagination is stable.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SortKey {
     pub field: FieldPath,
@@ -397,7 +324,6 @@ pub struct SortKey {
 }
 
 impl SortKey {
-    /// Parse the compact form `field` / `-field` / `field:desc`.
     pub fn parse(input: &str) -> Result<SortKey, FilterParseError> {
         let trimmed = input.trim();
         if let Some(rest) = trimmed.strip_prefix('-') {
@@ -501,7 +427,6 @@ mod tests {
             Filter::from_json_str(r#"{"in":{"field":"fm.n","values":[{"int":1},{"str":"a"}]}}"#)
                 .unwrap_err();
         assert_eq!(err, FilterParseError::MixedInTypes);
-        // int + float are one family, so this is fine.
         assert!(
             Filter::from_json_str(r#"{"in":{"field":"fm.n","values":[{"int":1},{"float":1.5}]}}"#)
                 .is_ok()

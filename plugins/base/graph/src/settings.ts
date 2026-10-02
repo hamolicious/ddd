@@ -1,12 +1,3 @@
-/**
- * The graph's per-user settings: the filters, display and forces behind the controls
- * panel, stored with `kernel.settings` so they follow the person to every device.
- *
- * A slider sends a value per pixel dragged, and each stored value is a CRDT write to the
- * settings document. So the view reads and changes a local copy at once, and the copy
- * is written a moment after the last change to each key.
- */
-
 import type { Kernel, SettingsSchema, SettingsValue } from "@kernel";
 
 import { DEFAULT_FILTER, type GraphFilter } from "./model.js";
@@ -19,7 +10,6 @@ export interface GraphSettings {
   readonly showEmbeds: boolean;
   readonly showFrontmatter: boolean;
   readonly arrows: boolean;
-  /** Grow a node with its number of links. */
   readonly sizeByLinks: boolean;
   readonly textFade: number;
   readonly nodeSize: number;
@@ -29,7 +19,6 @@ export interface GraphSettings {
   readonly repelForce: number;
   readonly linkForce: number;
   readonly linkDistance: number;
-  /** How many links out from the open note the local graph reaches. */
   readonly localDepth: number;
 }
 
@@ -108,10 +97,8 @@ export const forcesOf = (settings: GraphSettings): Forces => ({
 export interface SettingsStore {
   get(): GraphSettings;
   set<K extends keyof GraphSettings>(key: K, value: GraphSettings[K]): void;
-  /** Every key back to its default. */
   reset(): void;
   subscribe(listener: () => void): () => void;
-  /** Write every value still waiting on its timer, now: the plugin is stopping. */
   flush(): void;
 }
 
@@ -127,7 +114,6 @@ export function createSettingsStore(kernel: Kernel): SettingsStore {
   };
 
   kernel.settings.subscribe((values) => {
-    // A key this device is still about to write keeps its local value.
     const next = read(values, current, pending);
     if (!shallowEqual(next, current)) {
       current = next;
@@ -179,7 +165,6 @@ export function createSettingsStore(kernel: Kernel): SettingsStore {
   };
 }
 
-/** Stored values over `fallback`, each checked for the right type; `keep` keys stay as in `fallback`. */
 function read(
   values: Readonly<Record<string, SettingsValue>>,
   fallback: GraphSettings,

@@ -1,25 +1,3 @@
-/**
- * `local-folder` — every note as a Markdown file in a folder on this device, kept in step
- * both ways while the app runs.
- *
- * - `sync.ts` — the engine: one pass reconciles folder, index and notes.
- * - `mapping.ts` — where a note lives on disk (the Obsidian layout).
- * - `merge.ts` — line diffs and the three-way merge.
- * - `Settings.tsx` — the "Local folder" settings section.
- *
- * The folder itself comes from `kernel.capabilities.folder`: a real, watched path in both
- * shells, a File System Access handle in Chromium, nothing elsewhere. The choice is per
- * device and lives there, never in (synced) settings. Native shells ask once, with a
- * notice, whether to use a folder; a browser only offers it in settings.
- *
- * Only one tab keeps the folder at a time (`navigator.locks`), so two tabs cannot write
- * the same file from two copies of the index.
- *
- * `folders` (directories) and `attachments` (files other than notes) are optional: without
- * the first every note sits at the top of the folder, without the second new files in the
- * folder are not uploaded.
- */
-
 import type { FolderStatus, Kernel } from "@kernel";
 import { addSection } from "plugin:settings";
 
@@ -32,7 +10,6 @@ import { FolderSync, ForeignFolderError, replicaLoading, type SyncDeps, type Syn
 type FoldersModule = typeof import("plugin:folders");
 type AttachmentsModule = typeof import("plugin:attachments");
 
-/** The optional plugins, once `activate` has looked them up; `undefined` when not enabled. */
 let foldersModule: FoldersModule | undefined;
 let attachmentsModule: AttachmentsModule | undefined;
 
@@ -43,9 +20,7 @@ const RECONNECT_NOTICE = "local-folder.reconnect";
 const HELD_NOTICE = "local-folder.held";
 const CONFLICT_NOTICE = "local-folder.conflicts";
 const PAGE = 1000;
-/** A safety rescan; the shells also push changes as they happen. */
 const RESCAN_MS = { watched: 30_000, polled: 4_000 };
-/** How often a pass also asks the server whether attachments were replaced. */
 const FULL_EVERY_MS = 10 * 60_000;
 
 export type Phase = "unavailable" | "off" | "needs-permission" | "other-tab" | "syncing" | "idle" | "held" | "error";
@@ -60,7 +35,6 @@ export interface View {
   readonly conflicts: readonly string[];
 }
 
-/** The plugin's state, for the settings section. */
 export class Controller {
   #view: View;
   readonly #listeners = new Set<(view: View) => void>();
@@ -97,7 +71,6 @@ export class Controller {
     return this.kernel.capabilities.folder;
   }
 
-  /** At activation: pick up a folder chosen before, or ask once in a shell. */
   async boot(): Promise<void> {
     if (this.#view.phase === "unavailable") return;
     const status = await this.#folder.status().catch((): FolderStatus => ({ state: "none" }));
@@ -210,7 +183,6 @@ export class Controller {
         limit: 50,
       });
       cleanups.push(subscription.onChange(debounce(onChange, 500, cleanups)), () => subscription.close());
-      // Back online: uploads and downloads that waited can happen now.
       let status = this.kernel.sync.state.status;
       cleanups.push(
         this.kernel.sync.subscribe((state) => {
@@ -233,14 +205,12 @@ export class Controller {
       void begin();
       return;
     }
-    // Held for as long as this tab keeps the folder; released by `stop`.
     let release: () => void = () => undefined;
     const held = new Promise<void>((resolve) => (release = resolve));
     cleanups.push(() => release());
     void locks.request(LOCK_NAME, { ifAvailable: true }, async (lock) => {
       if (!lock) {
         this.#set({ phase: "other-tab" });
-        // Wait in line: when the other tab closes, this one takes over.
         void locks.request(LOCK_NAME, async () => {
           if (stopped) return;
           await begin();
@@ -260,7 +230,6 @@ export class Controller {
 
   #schedule(kind: "quick" | "full"): void {
     if (!this.#stop || !this.#sync) return;
-    // Mid first fill: wait. The switch to "synced" when it ends schedules a pass.
     if (replicaLoading(this.kernel.sync.state)) return;
     if (this.#running) {
       if (this.#again !== "full") this.#again = kind;
@@ -345,7 +314,6 @@ function rememberDismissed(): void {
   try {
     localStorage.setItem(DISMISSED_KEY, "1");
   } catch {
-    // Private mode: the notice comes back next launch, which is harmless.
   }
 }
 
@@ -363,7 +331,6 @@ async function sha256(bytes: Uint8Array): Promise<string> {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-/** The engine's dependencies, backed by the kernel. */
 function deps(kernel: Kernel): SyncDeps {
   const documents = kernel.documents;
   const folders = (): FoldersModule | undefined => foldersModule;
@@ -404,9 +371,6 @@ function deps(kernel: Kernel): SyncDeps {
       return out;
     },
     async known(id: string): Promise<"gone" | "unknown"> {
-      // A row means this device has the note, deleted or now outside the mirror. No row
-      // means the replica has not received it — or it was purged while this device was
-      // away, which keeps its file: the safe side.
       return (await documents.get(id)) ? "gone" : "unknown";
     },
     async updateNote(id, from, to) {
@@ -492,7 +456,6 @@ export default function activate(kernel: Kernel): void {
       kernel.log.warn(`${id} unavailable; the local folder works without it`, error);
       return undefined;
     });
-  // Look the optional plugins up first, so the first pass already files and uploads.
   void Promise.all([optional<FoldersModule>("folders"), optional<AttachmentsModule>("attachments")]).then(
     ([folders, attachments]) => {
       if (controller !== current) return;

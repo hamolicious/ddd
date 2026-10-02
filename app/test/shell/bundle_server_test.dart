@@ -1,15 +1,3 @@
-/// The loopback bundle server (`BRIDGE.md` §6).
-///
-/// This is the shell's attack surface: it is an HTTP server on a device where every other
-/// app can reach a loopback port, serving the origin that holds the workspace and the
-/// bearer token. Four rules make that safe, and all four are tested against a real
-/// `HttpServer` over a real socket rather than against a parsed URL — the hardening is in
-/// what the socket answers, not in what a helper returns.
-///
-/// 1. only paths in the **active manifest** are served — not "whatever is on disk";
-/// 2. only `Host: 127.0.0.1:<port>` is answered (DNS rebinding);
-/// 3. `nosniff` on everything, an explicit `Content-Type`, and `index_csp` on `index.html`;
-/// 4. nothing but `GET`/`HEAD`.
 library;
 
 import 'dart:convert';
@@ -19,8 +7,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ddd_shell/bundle/manifest.dart';
 import 'package:ddd_shell/shell/webview_host.dart';
 
-/// A port of its own, so this suite never races the shell's real [kLoopbackPort] or a
-/// second test file.
 const int _testPort = 41913;
 
 void main() {
@@ -44,8 +30,6 @@ void main() {
       await file.parent.create(recursive: true);
       await file.writeAsString(entry.value, flush: true);
     }
-    // On disk but not in the manifest: the bundle's own stored manifest, and a leftover
-    // from a previous version. Neither may be reachable.
     await File('${bundle.path}/manifest.json').writeAsString('{"secret":true}');
     await File('${bundle.path}/leftover.txt').writeAsString('stale');
 
@@ -117,8 +101,6 @@ void main() {
     });
 
     test('a file on disk but not in the manifest is a 404', () async {
-      // The bundle's own manifest lives in this directory; a "serve whatever is here"
-      // server would hand out `min_bridge_version` and every file hash on request.
       expect((await get('/manifest.json')).statusCode, HttpStatus.notFound);
       expect((await get('/leftover.txt')).statusCode, HttpStatus.notFound);
     });
@@ -134,8 +116,6 @@ void main() {
     });
 
     test('a file that changed underneath the bundle is refused', () async {
-      // The bundle was verified byte for byte before promotion, so a size that no longer
-      // matches is a file nobody hashed.
       await File('${bundle.path}/assets/app-1a2b3c.js')
           .writeAsString('console.log("tampered with")', flush: true);
 
@@ -146,17 +126,12 @@ void main() {
     });
 
     test('there is no SPA fallback — the allowlist is the hardening', () async {
-      // The `router` plugin routes on `location.hash`, so no in-app URL ever reaches the
-      // server as a path; answering unknown paths with `index.html` would only widen what
-      // is reachable.
       expect((await get('/doc/01J')).statusCode, HttpStatus.notFound);
     });
   });
 
   group('hardening', () {
     test('a foreign Host is refused (DNS rebinding)', () async {
-      // A page anywhere can point a name it controls at 127.0.0.1; the browser then sends
-      // that name as `Host`. Exact match, port included, and nothing else is answered.
       final HttpClientResponse response = await get(
         '/index.html',
         host: 'evil.example',
@@ -167,8 +142,6 @@ void main() {
     });
 
     test('`localhost:<port>` is not the origin either', () async {
-      // Origin-keyed storage is keyed on the *host string*: serving both spellings would
-      // hand the app two workspaces.
       expect(
         (await get('/index.html', host: 'localhost:$_testPort')).statusCode,
         HttpStatus.misdirectedRequest,
@@ -201,9 +174,6 @@ void main() {
     test(
       'index.html carries the manifest\'s CSP, and nothing else does',
       () async {
-        // The nonce in that policy matches the inline import map in those exact bytes
-        // (`BRIDGE.md` §5), which is why the manifest carries the policy and the shell does
-        // not compose one.
         final HttpClientResponse index = await get('/index.html');
         final HttpClientResponse asset = await get('/assets/app-1a2b3c.js');
 
@@ -225,9 +195,6 @@ void main() {
       expect(first.headers.value(HttpHeaders.cacheControlHeader), 'no-cache');
       await first.drain<void>();
 
-      // `no-cache`, not `no-store`: with an exact validator a revalidation is one 304 on a
-      // loopback socket, and the webview keeps its compiled JavaScript across the boot
-      // attempts of the revert state machine.
       final HttpClientResponse second = await get(
         '/index.html',
         headers: <String, String>{HttpHeaders.ifNoneMatchHeader: etag},
@@ -250,8 +217,6 @@ void main() {
 
   group('the origin', () {
     test('binds loopback only, and never the wildcard address', () async {
-      // Every app on the device can reach a loopback port; nothing off the device may
-      // reach this one.
       final List<NetworkInterface> interfaces = await NetworkInterface.list(
         includeLoopback: false,
       );
@@ -299,7 +264,6 @@ void main() {
         'index.html',
       );
       expect(BundleServer.requestedPath(Uri.parse('/')), 'index.html');
-      // Empty segments and `.` are dropped, so one file has one key in the allowlist.
       expect(
         BundleServer.requestedPath(Uri.parse('/assets//app.js')),
         'assets/app.js',
@@ -308,7 +272,6 @@ void main() {
         BundleServer.requestedPath(Uri.parse('/./assets/app.js')),
         'assets/app.js',
       );
-      // `?safe=1` is the second boot attempt (`BRIDGE.md` §7), not part of the path.
       expect(
         BundleServer.requestedPath(Uri.parse('/index.html?safe=1')),
         'index.html',
@@ -316,9 +279,6 @@ void main() {
     });
 
     test('a traversal cannot name a file outside the allowlist', () {
-      // `Uri.parse` has already removed dot segments by the time this runs, percent-encoded
-      // ones included, so a traversal collapses to a plain name — and a plain name is only
-      // served when the manifest lists it (the 404s above are the end-to-end proof).
       expect(BundleServer.requestedPath(Uri.parse('/../secret')), 'secret');
       expect(
         BundleServer.requestedPath(Uri.parse('/a/%2e%2e/secret')),
@@ -331,15 +291,10 @@ void main() {
     });
 
     test('a percent-encoded separator cannot smuggle a segment through', () {
-      // `/a%2Fb` decodes to the single segment `a/b`; passing that on would build a path
-      // with a directory in it that no manifest entry could have declared.
       expect(BundleServer.requestedPath(Uri.parse('/a%2Fb')), '');
     });
 
     test('a segment that is literally `..` is refused', () {
-      // Unreachable through `Uri.parse`, which normalizes first — but `requestedPath` is
-      // what builds a filesystem path, so it refuses one itself rather than trusting the
-      // parser to have done it.
       expect(
         BundleServer.requestedPath(Uri(pathSegments: <String>['..', 'secret'])),
         '',
@@ -383,7 +338,6 @@ void main() {
           isSameOrigin(Uri.parse('https://127.0.0.1:41847/a.js'), origin),
           isFalse,
         );
-        // The one that matters: a link in a note must not replace the app.
         expect(
           isSameOrigin(Uri.parse('https://example.com/'), origin),
           isFalse,

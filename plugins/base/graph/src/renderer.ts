@@ -1,30 +1,3 @@
-/**
- * The graph on a `<canvas>`: drawing, the camera, and the pointer.
- *
- * What makes it feel like Obsidian's, and where each piece lives:
- *
- * - The layout is live (`simulation.ts`): it runs while it is warm and the frame loop
- *   stops when it has cooled, so an idle graph costs nothing.
- * - Dragging a node pins it under the pointer and keeps the layout warm, so its
- *   neighbours follow on their springs; letting go releases it back to the forces.
- * - Hovering a node lights it, its links and its neighbours and fades everything else,
- *   eased over a few frames rather than switched.
- * - Labels fade in as you zoom in (`textFade` moves the threshold); the hovered node's
- *   neighbourhood is always labelled.
- * - Until the person pans or zooms, the camera follows the layout as it unfolds and
- *   keeps all of it in view. `focusOn` then glides in to one note once the layout has
- *   mostly settled — the full graph opened from a note's local graph lands on that note.
- * - When the graph changes — a link typed, or the local graph moving to another note —
- *   nodes that stay keep their place, new ones fade in beside their neighbours, and ones
- *   that leave fade out where they were. The local graph's camera follows its centre
- *   note (`setAnchor`), so a new centre glides to the middle.
- * - Wheel or pinch zooms about the pointer; dragging the background pans; a click (no
- *   drag) on a node opens it.
- *
- * Colours are the theme's tokens, read from the canvas's computed style whenever the
- * loop wakes, so switching theme repaints in the new palette.
- */
-
 import type { DocumentId } from "@kernel";
 
 import { groupOf, type Graph, type GraphNode } from "./model.js";
@@ -32,13 +5,9 @@ import type { SimNode, Simulation } from "./simulation.js";
 
 export interface Display {
   readonly arrows: boolean;
-  /** Grow a node with its number of links; off, every node is the same size. */
   readonly sizeByLinks: boolean;
-  /** −1…1: lower shows labels from further out. */
   readonly textFade: number;
-  /** 0.3…3: node radius multiplier. */
   readonly nodeSize: number;
-  /** 0.3…3: link width multiplier. */
   readonly linkThickness: number;
   readonly colorByFolder: boolean;
 }
@@ -53,7 +22,6 @@ export const DEFAULT_DISPLAY: Display = {
 };
 
 export interface CanvasEvents {
-  /** A node was clicked; `newTab` when a modifier or the middle button was held. */
   open(id: DocumentId, newTab: boolean): void;
 }
 
@@ -73,7 +41,6 @@ interface Camera {
   k: number;
 }
 
-/** Group colours: legible on both a light and a dark background. */
 const GROUP_COLOURS = ["#e0795b", "#d4a13c", "#7fae52", "#3fa7a0", "#5a8fd8", "#8f72d6", "#c966a8", "#9c8a78"];
 
 const MIN_ZOOM = 0.05;
@@ -82,15 +49,10 @@ const CLICK_SLOP = 4;
 const FADE_MS = 160;
 const DIMMED = 0.15;
 const LABEL_FONT = 12;
-/** How long a node takes to fade in when it joins the graph, and out when it leaves. */
 const APPEAR_MS = 350;
-/** Lower a label's zoom threshold as its connection count grows. */
 const CONNECTION_LABEL_LEAD = 0.12;
-/** `focusOn`: let the whole graph be seen unfolding for at least this long… */
 const FOCUS_DELAY_MS = 900;
-/** …and until the layout is this cool, so the note is near where it will rest. */
 const FOCUS_ALPHA = 0.25;
-/** How far in the glide ends: close enough to read the neighbours' labels. */
 const FOCUS_ZOOM = 1.6;
 
 interface Gesture {
@@ -119,25 +81,16 @@ export class GraphCanvas {
   #height = 0;
   #ratio = 1;
   #camera: Camera = { x: 0, y: 0, k: 1 };
-  /** The person has moved the camera: stop following the layout. */
   #steered = false;
-  /** A note to zoom to once the layout has settled enough to find it where it will stay. */
   #focusRequest: { readonly id: DocumentId; readonly at: number } | undefined;
-  /** The note the camera is gliding to and, while the layout still moves, following. */
   #zoomTo: DocumentId | undefined;
-  /** The local graph's centre: the camera keeps it in the middle. */
   #anchor: DocumentId | undefined;
-  /** When each node joined, for its fade in. */
   #born = new Map<DocumentId, number>();
-  /** Nodes that just left, drawn fading out where they were. */
   #ghosts: Array<{ readonly x: number; readonly y: number; readonly radius: number; readonly colour: string; readonly at: number }> = [];
-  /** Anything still fading in or out until then. */
   #fadesUntil = 0;
 
   #hover: SimNode | undefined;
-  /** The node the fade is about; kept while fading out after the pointer leaves. */
   #focus: SimNode | undefined;
-  /** 0 = nothing highlighted, 1 = fully highlighted. */
   #fade = 0;
 
   #gestures = new Map<number, Gesture>();
@@ -168,7 +121,6 @@ export class GraphCanvas {
       if (event.pointerType === "mouse" && this.#gestures.size === 0) this.#setHover(undefined);
     });
     this.#listen("wheel", (event) => this.#wheel(event), { passive: false });
-    // A middle click must not start the browser's autoscroll.
     this.#listen("mousedown", (event) => {
       if (event.button === 1) event.preventDefault();
     });
@@ -177,7 +129,6 @@ export class GraphCanvas {
     const repaint = (): void => this.wake();
     scheme?.addEventListener("change", repaint);
     this.#cleanup.push(() => scheme?.removeEventListener("change", repaint));
-    // Themes set tokens on the root element; a change there is a repaint.
     const observer = new MutationObserver(repaint);
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["style", "class", "data-ddd-scheme"] });
     this.#cleanup.push(() => observer.disconnect());
@@ -189,10 +140,6 @@ export class GraphCanvas {
     for (const cleanup of this.#cleanup) cleanup();
   }
 
-  /**
-   * New nodes and links. The simulation has already been handed them; `leaving` are the
-   * nodes it dropped, as they were, to fade out.
-   */
   setGraph(graph: Graph, leaving: readonly SimNode[] = []): void {
     const now = performance.now();
     const palette = (this.#palette ??= this.#readPalette());
@@ -210,7 +157,6 @@ export class GraphCanvas {
       (this.#neighbours.get(source) ?? this.#neighbours.set(source, new Set()).get(source)!).add(target);
       (this.#neighbours.get(target) ?? this.#neighbours.set(target, new Set()).get(target)!).add(source);
     }
-    // Stable colours: groups in name order, so a new folder does not reshuffle the rest.
     const groups = [...new Set(graph.nodes.filter((node) => !node.missing).map(groupOf))].filter(Boolean).sort();
     this.#groups = new Map(groups.map((group, index) => [group, GROUP_COLOURS[index % GROUP_COLOURS.length]!]));
     if (this.#hover && !this.#info.has(this.#hover.id)) this.#setHover(undefined);
@@ -223,30 +169,25 @@ export class GraphCanvas {
     this.wake();
   }
 
-  /** The local graph's centre note: the camera follows it, and a new one is glided to. */
   setAnchor(id: DocumentId | undefined): void {
     if (id === this.#anchor) return;
     this.#anchor = id;
-    // A new centre is a new view: follow again, even if the old one was panned.
     this.#steered = false;
     this.#stopFocus();
     this.wake();
   }
 
-  /** The note to ring: the one open, in the local graph. */
   setHighlight(id: DocumentId | undefined): void {
     this.#highlight = id;
     this.wake();
   }
 
-  /** Show the whole graph unfold, then zoom in on `id`. */
   focusOn(id: DocumentId): void {
     this.#focusRequest = { id, at: performance.now() };
     this.#zoomTo = undefined;
     this.wake();
   }
 
-  /** Follow the layout again, and zoom to show all of it. */
   recenter(): void {
     this.#steered = false;
     this.#stopFocus();
@@ -254,17 +195,12 @@ export class GraphCanvas {
     this.wake();
   }
 
-  /** Draw again, and keep drawing while anything is moving. */
   wake(): void {
     this.#palette = undefined;
     if (this.#frame !== undefined) return;
     this.#lastTime = performance.now();
     this.#frame = requestAnimationFrame((time) => this.#tick(time));
   }
-
-  // -------------------------------------------------------------------------
-  // The loop
-  // -------------------------------------------------------------------------
 
   #tick(time: number): void {
     this.#frame = undefined;
@@ -306,7 +242,6 @@ export class GraphCanvas {
     }
   }
 
-  /** Ease the camera toward a view of the whole layout; `true` while still easing. */
   #follow(elapsed: number): boolean {
     const nodes = this.#sim.nodes;
     if (nodes.length === 0 || this.#width === 0) return false;
@@ -322,14 +257,12 @@ export class GraphCanvas {
     }
     const pad = 48;
     const anchor = this.#anchor === undefined ? undefined : this.#sim.node(this.#anchor);
-    // Around the anchor when there is one: the view is about that note, so it is the middle.
     const middle = anchor ? { x: anchor.x, y: anchor.y } : { x: (x0 + x1) / 2, y: (y0 + y1) / 2 };
     const spanX = anchor ? 2 * Math.max(anchor.x - x0, x1 - anchor.x) : x1 - x0;
     const spanY = anchor ? 2 * Math.max(anchor.y - y0, y1 - anchor.y) : y1 - y0;
     const k = clamp(
       Math.min((this.#width - pad * 2) / Math.max(spanX, 1), (this.#height - pad * 2) / Math.max(spanY, 1)),
       MIN_ZOOM,
-      // A handful of notes should not be blown up to fill the screen.
       1.5,
     );
     const target = { x: middle.x, y: middle.y, k };
@@ -345,7 +278,6 @@ export class GraphCanvas {
     );
   }
 
-  /** Glide toward the `#zoomTo` note, where it is now; `true` while still gliding. */
   #track(elapsed: number): boolean {
     const node = this.#zoomTo === undefined ? undefined : this.#sim.node(this.#zoomTo);
     if (!node) {
@@ -354,7 +286,6 @@ export class GraphCanvas {
     }
     const camera = this.#camera;
     const k = Math.max(camera.k, FOCUS_ZOOM);
-    // Slower than following the layout: this is the move the person is meant to watch.
     const ease = 1 - Math.pow(0.03, elapsed / 1000);
     camera.x += (node.x - camera.x) * ease;
     camera.y += (node.y - camera.y) * ease;
@@ -367,7 +298,6 @@ export class GraphCanvas {
     return moving;
   }
 
-  /** The person took the camera: no zoom to a note is coming any more. */
   #stopFocus(): void {
     this.#focusRequest = undefined;
     this.#zoomTo = undefined;
@@ -397,12 +327,7 @@ export class GraphCanvas {
     };
   }
 
-  // -------------------------------------------------------------------------
-  // Drawing
-  // -------------------------------------------------------------------------
-
   #radius(node: SimNode): number {
-    // Never under ~2px on screen: zoomed right out, the graph is still dots, not dust.
     const grown = this.#display.sizeByLinks ? Math.sqrt(node.degree) * 2.2 : 0;
     return Math.max((4 + grown) * this.#display.nodeSize, 2 / this.#camera.k);
   }
@@ -414,7 +339,6 @@ export class GraphCanvas {
     return palette.node;
   }
 
-  /** How lit a node is: 1 in the hovered neighbourhood (or with nothing hovered). */
   #lit(id: DocumentId): boolean {
     const focus = this.#focus;
     return !focus || focus.id === id || Boolean(this.#neighbours.get(focus.id)?.has(id));
@@ -439,7 +363,6 @@ export class GraphCanvas {
       this.#ratio * (this.#height / 2 - y * k),
     );
 
-    // Links: the ordinary ones in one path, then the hovered node's on top.
     const width = Math.max(0.5 / k, 1 * this.#display.linkThickness);
     context.lineWidth = width;
     context.strokeStyle = palette.link;
@@ -492,7 +415,6 @@ export class GraphCanvas {
       if (this.#display.arrows) for (const [source, target] of lit) this.#arrow(source!, target!, width);
     }
 
-    // Nodes that just left, fading out; then the nodes.
     this.#ghosts = this.#ghosts.filter((ghost) => now - ghost.at < APPEAR_MS);
     for (const ghost of this.#ghosts) {
       context.globalAlpha = 1 - (now - ghost.at) / APPEAR_MS;
@@ -526,9 +448,6 @@ export class GraphCanvas {
       }
     }
 
-    // Labels: fade in with zoom; the hovered neighbourhood and the open note always.
-    // Labels hold their size on screen: zooming in spreads them apart rather than
-    // enlarging them, and zooming out fades them before they would shrink past legible.
     const fontSize = LABEL_FONT / Math.max(k, 0.6);
     context.font = `${fontSize}px ${palette.font}`;
     context.textAlign = "center";
@@ -555,7 +474,6 @@ export class GraphCanvas {
     context.globalAlpha = 1;
   }
 
-  /** 0 → 1 over a node's first moments in the graph. */
   #appear(id: DocumentId, now: number): number {
     const born = this.#born.get(id);
     return born === undefined ? 1 : Math.min(1, (now - born) / APPEAR_MS);
@@ -579,10 +497,6 @@ export class GraphCanvas {
     context.closePath();
     context.fill();
   }
-
-  // -------------------------------------------------------------------------
-  // Pointer
-  // -------------------------------------------------------------------------
 
   #listen<K extends keyof HTMLElementEventMap>(
     type: K,
@@ -641,7 +555,6 @@ export class GraphCanvas {
       moved: false,
     });
     if (this.#gestures.size === 2) {
-      // A second finger turns whatever the first was doing into a pinch.
       const [a, b] = [...this.#gestures.values()];
       this.#pinch = { distance: Math.hypot(a!.lastX - b!.lastX, a!.lastY - b!.lastY) };
       this.#release(a!);
@@ -662,7 +575,6 @@ export class GraphCanvas {
     gesture.lastY = point.y;
     if (!gesture.moved && Math.hypot(point.x - gesture.startX, point.y - gesture.startY) > CLICK_SLOP) {
       gesture.moved = true;
-      // Any hands-on move: the camera stays where the person puts it from now on.
       this.#steered = true;
       this.#stopFocus();
     }
@@ -673,7 +585,6 @@ export class GraphCanvas {
       const distance = Math.hypot(a!.lastX - b!.lastX, a!.lastY - b!.lastY);
       const middle = { x: (a!.lastX + b!.lastX) / 2, y: (a!.lastY + b!.lastY) / 2 };
       this.#zoomAt(middle, distance / Math.max(1, this.#pinch.distance));
-      // Both fingers moving together pan; halve so the two moves are one.
       this.#camera.x -= dx / 2 / this.#camera.k;
       this.#camera.y -= dy / 2 / this.#camera.k;
       this.#pinch.distance = distance;
@@ -712,7 +623,6 @@ export class GraphCanvas {
     else this.#setHover(this.#nodeAt(this.#local(event)));
   }
 
-  /** Let a dragged node go back to the forces. */
   #release(gesture: Gesture): void {
     if (!gesture.node) return;
     gesture.node.fx = undefined;
@@ -723,7 +633,6 @@ export class GraphCanvas {
 
   #wheel(event: WheelEvent): void {
     event.preventDefault();
-    // Pixels, lines or pages: a trackpad pinch arrives as a wheel with ctrlKey and small deltas.
     const scale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? this.#height : 1;
     const speed = event.ctrlKey ? 0.01 : 0.0015;
     this.#zoomAt(this.#local(event), Math.exp(-event.deltaY * scale * speed));
@@ -741,7 +650,6 @@ export class GraphCanvas {
   }
 }
 
-/** Label opacity while zooming: hubs become legible before sparsely connected notes. */
 export function labelZoomAlpha(zoom: number, textFade: number, degree: number): number {
   const baseThreshold = 0.9 * Math.pow(2, textFade * 1.5);
   const connectionLead = 1 + Math.log2(Math.max(0, degree) + 1) * CONNECTION_LABEL_LEAD;

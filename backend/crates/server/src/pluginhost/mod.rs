@@ -1,51 +1,3 @@
-//! The **Wasm plugin host** (SPEC §6.3): instantiation, invocation, limits, and the
-//! circuit breaker.
-//!
-//! # What a backend plugin is for
-//!
-//! Not a mirror of the client. Its niche is *cron while nobody's looking, outbound HTTP
-//! with secrets, inbound webhooks* — and authoring machine-owned documents. Everything a
-//! plugin can do from here is one of those four, and the host functions in [`host_fns`]
-//! are deliberately the smallest set that covers them.
-//!
-//! # The shape of one call
-//!
-//! ```text
-//!  cron tick / hook / HTTP route / call_plugin
-//!            │
-//!            ├─ breaker open?              → Unavailable, no instance touched
-//!            ├─ pool.acquire(plugin)       → an instantiated, warm module
-//!            ├─ spawn_blocking             → Extism calls block the thread
-//!            │    └─ plugin.call(export, json)
-//!            │          └─ host functions re-enter tokio via `Handle::block_on`
-//!            ├─ deadline / trap / refusal  → recorded on the breaker
-//!            └─ envelope out
-//! ```
-//!
-//! Two structural facts drive that shape and are worth stating once:
-//!
-//! - **Extism calls are synchronous and non-reentrant.** So a call runs on a blocking
-//!   thread ([`tokio::task::spawn_blocking`]), and an instance serves one call at a time
-//!   ([`pool`]). The host functions inside it are *also* synchronous, and they reach the
-//!   async world (Mongo, the sync hub) through a stored [`tokio::runtime::Handle`] —
-//!   documented in [`host_fns::HostContext`], because it is the one place where a
-//!   deadlock is imaginable and the rule ("never block on a task that needs this thread")
-//!   has to be visible.
-//! - **A plugin is hot-loaded and hot-unloaded** (SPEC §1). Activation compiles the
-//!   module once ([`extism::CompiledPlugin`]) and instantiation is cheap; unload waits on
-//!   in-flight calls through the pool's refcount rather than cancelling them mid-write.
-//!
-//! # Failure is a first-class outcome
-//!
-//! A refusal ([`abi::Envelope`] with `ok: false`) is a *successful* call: the host
-//! answered, the plugin was told why. A timeout, a trap or an unreadable answer is a
-//! failure, counted by [`breaker`]; five consecutive ones disable the plugin until an
-//! admin re-enables it. The distinction is
-//! [`abi::ErrorCode::is_plugin_fault`] — a plugin is never disabled for correctly
-//! reporting that a document does not exist.
-//!
-//! **Owner:** the `wasm-host` builder (`backend/CONTRACTS.md`).
-
 pub mod breaker;
 pub mod cron;
 pub mod hooks;
@@ -70,68 +22,35 @@ use host_fns::HostContext;
 use limits::{CallCounters, Deadline, PluginLimits, WriteLedger};
 use pool::PluginPool;
 
-/// The Extism namespace every host function lives in. Extism's own built-ins are in
-/// `extism:host/env`, so nothing here can shadow them — and in particular the PDK's
-/// `extism_pdk::http` is **not** this host's HTTP: `allowed_hosts` is left empty in the
-/// Extism manifest so that path refuses, and outbound requests go through
-/// [`host_fns`]'s `http_request`, which is the one with the allowlist, the IP policy and
-/// the pinning (SPEC §6.2).
 pub const HOST_NAMESPACE: &str = "extism:host/user";
 
-/// An activated backend half: everything the host needs to route a call to it, resolved
-/// once at activation so no hot path reads a manifest.
 #[derive(Debug, Clone)]
 pub struct ActivePlugin {
     pub id: String,
     pub version: String,
-    /// **Approved**, not requested (SPEC §6.2): the admin's decision is what gates.
     pub capabilities: abi::Capabilities,
-    /// `dependencies` and `optionalDependencies`, merged (id → range): the plugins this
-    /// one may `call_plugin`, and the versions it accepts.
     pub deps: BTreeMap<String, String>,
-    /// `provides`, parsed: the id and version this plugin also answers to, as a callee.
     pub provides: Option<(String, String)>,
-    /// `backend.exports`: the functions other plugins may call, with their shapes parsed.
     pub callable: BTreeMap<String, CallableExport>,
     pub hooks: Vec<abi::hooks::HookKind>,
     pub cron: Vec<String>,
     pub routes: Vec<RouteSpec>,
-    /// Server-bus events this plugin subscribes to (`backend.events`).
     pub events: Vec<String>,
-    /// Config keys the manifest declares, with the secret ones marked — the host needs
-    /// this to answer `config_get` without re-reading the manifest.
     pub config_keys: Vec<String>,
-    /// The declared `config` schema itself.
-    ///
-    /// **Added to the scaffold's field list** (announced in the report): `config_keys` alone
-    /// is not enough to answer `config_get`, which has to report *which declared keys have
-    /// no value* — and that needs the declaration, not a list of the ones that do. Keeping
-    /// the schema here is what lets the host answer without re-reading the record on every
-    /// call. `config_keys` stays: it is what `ddd_init` carries.
     pub config: BTreeMap<String, ConfigField>,
     pub wasm_path: PathBuf,
-    /// Hex SHA-256 of the module, logged at activation and stored on the record. The
-    /// answer to "is the running plugin the one I approved".
     pub module_sha256: String,
-    /// What the module's `ddd_abi_version` export reported.
     pub abi_version: u32,
-    /// Exports the module actually has, so a hook is never scheduled for a plugin that
-    /// cannot receive it.
     pub exports: Vec<String>,
 }
 
-/// One `backend.exports` entry, ready to check values against.
 #[derive(Debug, Clone, Default)]
 pub struct CallableExport {
-    /// What the payload must fit. `None`: anything.
     pub input: Option<ddd_core::shape::Shape>,
-    /// What the returned value must fit. `None`: anything.
     pub output: Option<ddd_core::shape::Shape>,
 }
 
 impl CallableExport {
-    /// Parse a manifest entry. A shape this build does not understand accepts anything,
-    /// as `shapeFromJSON` does on the web side.
     pub fn from_manifest(export: &crate::plugins::BackendExport) -> Self {
         let parse = |json: &Option<Value>| {
             json.as_ref().map(|json| {
@@ -147,8 +66,6 @@ impl CallableExport {
 }
 
 impl ActivePlugin {
-    /// `plugin:<id>` — the [`crate::domain::Actor`] every write of this plugin's is
-    /// attributed to, and the string `created_by` ownership is checked against.
     pub fn actor(&self) -> crate::domain::Actor {
         crate::domain::Actor::Plugin(self.id.clone())
     }
@@ -162,32 +79,17 @@ impl ActivePlugin {
     }
 }
 
-/// Why the host is invoking a plugin. Decides the export, the timeout and what a failure
-/// means.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CallKind {
-    /// Once per instance, at activation.
     Init,
     Hook(abi::hooks::HookKind),
-    /// `backend.cron[index]` fired.
-    Cron {
-        index: u32,
-    },
-    /// An inbound `/api/plugins/<id>/…` request.
+    Cron { index: u32 },
     Route,
-    /// `call_plugin` from `caller`.
-    Invoked {
-        caller: String,
-        function: String,
-    },
-    /// A server-bus event from `emitter`.
-    Event {
-        emitter: String,
-    },
+    Invoked { caller: String, function: String },
+    Event { emitter: String },
 }
 
 impl CallKind {
-    /// The Wasm export this kind lands on.
     pub fn export_name(&self) -> &'static str {
         match self {
             CallKind::Init => abi::names::INIT,
@@ -199,7 +101,6 @@ impl CallKind {
         }
     }
 
-    /// Cron gets the long budget; everything else gets the short one (SPEC §6.3).
     pub fn timeout(&self, limits: &PluginLimits) -> Duration {
         match self {
             CallKind::Cron { .. } => limits.cron_timeout,
@@ -207,7 +108,6 @@ impl CallKind {
         }
     }
 
-    /// A short label for logs and metrics (`kind="cron"`).
     pub fn label(&self) -> &'static str {
         match self {
             CallKind::Init => "init",
@@ -220,11 +120,6 @@ impl CallKind {
     }
 }
 
-/// One invocation, fully specified.
-///
-/// `deadline` and `stack` are what make a `call_plugin` chain safe: the deadline is
-/// **shared** by the whole chain (three nested calls do not get three timeouts), and the
-/// stack is what detects reentrancy and bounds depth (SPEC §6.3).
 #[derive(Debug, Clone)]
 pub struct Invocation {
     pub plugin_id: String,
@@ -232,15 +127,11 @@ pub struct Invocation {
     pub payload: Value,
     pub deadline: Deadline,
     pub depth: u32,
-    /// Plugin ids already on the call stack, outermost first.
     pub stack: Vec<String>,
-    /// The user whose action started the chain, when there is one — the audit trail for a
-    /// plugin route, and the default target for `emit_client`.
     pub user_id: Option<String>,
 }
 
 impl Invocation {
-    /// A top-level invocation: depth 0, a fresh deadline from the kind's budget.
     pub fn top_level(
         plugin_id: impl Into<String>,
         kind: CallKind,
@@ -265,21 +156,12 @@ impl Invocation {
         self
     }
 
-    /// The nested invocation `call_plugin` produces. `Err` when it would re-enter a
-    /// plugin already on the stack or exceed [`abi::limits::MAX_CALL_DEPTH`].
-    ///
-    /// The two refusals are *different* and are reported differently, because the fixes are
-    /// different. Reentrancy is a design mistake in the plugin graph — `a → b → a` can never
-    /// work, whatever the depth cap is, because an Extism instance cannot re-enter itself.
-    /// Depth is a budget: the same chain with one fewer hop would have run.
     pub fn nested(
         &self,
         target: &str,
         function: &str,
         payload: Value,
     ) -> Result<Self, abi::HostError> {
-        // Reentrancy before depth: `a → b → a` at depth 1 is still a cycle, and telling the
-        // author "too deep" would send them to fix the wrong thing.
         if self.stack.iter().any(|on_stack| on_stack == target) {
             return Err(abi::HostError::new(
                 abi::ErrorCode::Reentrancy,
@@ -315,8 +197,6 @@ impl Invocation {
                 function: function.to_string(),
             },
             payload,
-            // **Inherited, never fresh** (HOST-ABI.md §5): a three-deep chain does not get
-            // three timeouts, and the callee sees what is left in `deadline_ms`.
             deadline: self.deadline.inherited(),
             depth,
             stack,
@@ -324,7 +204,6 @@ impl Invocation {
         })
     }
 
-    /// The payload a callee's `ddd_call` receives, with the remaining budget in it.
     fn call_payload(&self) -> Value {
         match &self.kind {
             CallKind::Invoked { caller, function } => {
@@ -342,36 +221,21 @@ impl Invocation {
     }
 }
 
-/// What a completed call produced.
 #[derive(Debug, Clone)]
 pub struct CallOutcome {
-    /// The plugin's returned value; `None` for a void export.
     pub value: Option<Value>,
     pub duration: Duration,
-    /// Document writes the call made — recorded so the per-call cap is enforced and so a
-    /// cron run's effect is loggable in one line.
     pub writes: u32,
     pub logs: u32,
-    /// The plugin's own refusal, when it answered `{"ok": false, …}`.
-    ///
-    /// **Added to the scaffold's field list** (announced in the report). A refusal is a
-    /// *successful* call — the machinery worked and the plugin was heard — so it cannot be
-    /// the `Err` of [`PluginHost::call`], and [`PluginHostError`] deliberately has no
-    /// `Refused` variant. Without this field a cron run that refused every time would read
-    /// as a run that succeeded every time. [`PluginHost::call_typed`] turns it into an `Err`
-    /// for the callers that want that.
     pub refusal: Option<abi::HostError>,
 }
 
 impl CallOutcome {
-    /// `true` when the plugin answered with a refusal rather than a value.
     pub fn refused(&self) -> bool {
         self.refusal.is_some()
     }
 }
 
-/// Everything that can go wrong around a call. A *refusal by the plugin* is not here —
-/// that arrives as [`CallOutcome`] carrying an error envelope the caller interprets.
 #[derive(Debug, thiserror::Error)]
 pub enum PluginHostError {
     #[error("plugin `{0}` is not active")]
@@ -403,11 +267,6 @@ pub enum PluginHostError {
 }
 
 impl PluginHostError {
-    /// `true` when the failure should count toward the circuit breaker.
-    ///
-    /// `NotActive`, `NoExport` and `Disabled` must not: they are *the host's own* routing
-    /// decisions, and counting them would let a misconfigured hook disable a healthy
-    /// plugin.
     pub fn counts_as_failure(&self) -> bool {
         matches!(
             self,
@@ -419,7 +278,6 @@ impl PluginHostError {
         )
     }
 
-    /// The short label the `/metrics` failure series carries.
     pub fn label(&self) -> &'static str {
         match self {
             PluginHostError::NotActive(_) => "not_active",
@@ -436,17 +294,9 @@ impl PluginHostError {
         }
     }
 
-    /// The status an inbound plugin route answers with (HOST-ABI.md §4.4).
-    ///
-    /// Not derived from the [`AppError`] mapping, because two of these have no `AppError`
-    /// variant: a trap is **502** (the plugin is the upstream and it misbehaved) and a
-    /// deadline is **504** (the upstream took too long). Those are the honest codes for a
-    /// gateway, and inventing `AppError` variants for them would change a frozen file for
-    /// the sake of one route family.
     pub fn http_status(&self) -> axum::http::StatusCode {
         use axum::http::StatusCode;
         match self {
-            // Routing decisions: the plugin or its route is simply not there.
             PluginHostError::NotActive(_) | PluginHostError::NoExport { .. } => {
                 StatusCode::NOT_FOUND
             }
@@ -462,12 +312,6 @@ impl PluginHostError {
         }
     }
 
-    /// The same failure as the ABI sees it — what `call_plugin` forwards to a caller that
-    /// is itself a plugin.
-    ///
-    /// Deliberately lossy in one direction: a callee's *host-side* failure reaches the
-    /// caller as `unavailable`/`timeout`/`internal` and never as a message naming a file
-    /// path or a Wasmtime frame. The detail is in the server's log, where it belongs.
     pub fn as_host_error(&self) -> abi::HostError {
         match self {
             PluginHostError::NotActive(id) => abi::HostError::new(
@@ -517,10 +361,6 @@ impl PluginHostError {
 
 impl From<PluginHostError> for AppError {
     fn from(error: PluginHostError) -> Self {
-        // The two statuses `AppError` cannot express — 502 for a trap, 504 for a deadline —
-        // are produced by `routes::plugin_api`, which builds those responses directly from
-        // `http_status`. Everything that goes through `AppError` collapses to the nearest
-        // variant, and the message never leaks a Wasmtime frame or a module path.
         match error {
             PluginHostError::NotActive(_) | PluginHostError::NoExport { .. } => {
                 AppError::NotFound("plugin")
@@ -539,7 +379,6 @@ impl From<PluginHostError> for AppError {
     }
 }
 
-/// Aggregate state for `/readyz`, `/metrics` and the admin screen.
 #[derive(Debug, Clone, Default, serde::Serialize)]
 pub struct PluginHostStats {
     pub active: usize,
@@ -550,34 +389,22 @@ pub struct PluginHostStats {
     pub hooks_pending: usize,
 }
 
-/// The host: one per server process, holding the Wasmtime engine, the compiled modules,
-/// the instance pools and the breaker.
-///
-/// **Not a field on [`AppState`]** — that type is a frozen contract, and the sync hub and
-/// the plugin registry already established the process-wide-handle pattern for exactly
-/// this situation. [`PluginHost::get`] is the accessor.
 pub struct PluginHost {
     limits: PluginLimits,
     breaker: CircuitBreaker,
     write_ledger: Arc<WriteLedger>,
-    /// Published plugins. Removed from here *before* the pool is drained, so a deactivation
-    /// stops routing immediately and then waits — never the other way round.
     active: RwLock<BTreeMap<String, ActiveEntry>>,
     calls_in_flight: AtomicUsize,
     shutting_down: AtomicBool,
-    /// `DISABLE_PLUGINS=1`. Safe mode is a *state the host is in*, not a branch every
-    /// caller has to remember (SPEC §6.1).
     inert: bool,
 }
 
-/// One published plugin and the pool behind it.
 #[derive(Clone)]
 struct ActiveEntry {
     plugin: Arc<ActivePlugin>,
     pool: Arc<PluginPool>,
 }
 
-/// The one log line an unload produces, wherever the drain finished.
 fn report_unload(plugin_id: &str, stranded: usize) {
     if stranded > 0 {
         tracing::warn!(
@@ -589,20 +416,12 @@ fn report_unload(plugin_id: &str, stranded: usize) {
     }
 }
 
-/// One host per `AppState`, keyed the way the sync hub and the plugin registry already do
-/// it — by database name, so a test that boots a dozen throwaway states gets a dozen hosts
-/// and none of them sees another's plugins.
 fn hosts() -> &'static Mutex<HashMap<String, Arc<PluginHost>>> {
     static HOSTS: OnceLock<Mutex<HashMap<String, Arc<PluginHost>>>> = OnceLock::new();
     HOSTS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
 impl PluginHost {
-    /// The process-wide host, created on first use.
-    ///
-    /// Returns an inert host when `DISABLE_PLUGINS=1` (SPEC §6.1): every call answers
-    /// [`PluginHostError::NotActive`], nothing is compiled, and no cron fires. Safe mode
-    /// has to be a state the host can be *in*, not a branch every caller remembers.
     pub fn get(state: &AppState) -> Arc<PluginHost> {
         let key = state.db.name().to_string();
         let mut hosts = hosts().lock().expect("plugin host registry poisoned");
@@ -613,14 +432,6 @@ impl PluginHost {
         )
     }
 
-    /// The host for this state **if one already exists** — never creating one.
-    ///
-    /// [`PluginHost::get`] is the right accessor everywhere a call is about to be made:
-    /// creating the host is how the first one comes into being. `/readyz` is the case that
-    /// wants the other answer. A readiness probe runs every few seconds forever, it is
-    /// unauthenticated, and its job is to *report* state, not to bring any into existence —
-    /// a probe that instantiated the host would make "the plugin host is running" true by
-    /// asking the question.
     pub fn existing(state: &AppState) -> Option<Arc<PluginHost>> {
         let hosts = hosts().lock().expect("plugin host registry poisoned");
         hosts.get(state.db.name()).map(Arc::clone)
@@ -643,12 +454,6 @@ impl PluginHost {
         &self.limits
     }
 
-    /// Compile, instantiate once, check the ABI export, run `ddd_init`, and publish as
-    /// active.
-    ///
-    /// Order matters: the ABI check happens **before** `ddd_init`, so a module built
-    /// against another major never runs a line of its own code. A failure here leaves the
-    /// plugin inactive with the reason on its record — activation is never half-done.
     pub async fn activate(
         &self,
         state: &AppState,
@@ -662,9 +467,6 @@ impl PluginHost {
         }
 
         let Some(backend) = record.manifest.backend.as_ref() else {
-            // Not an error worth a breaker entry: most plugins have no backend half — a
-            // plugin needs one only for cron, outbound HTTP or a webhook (SPEC §6.3), and
-            // today none of the base distribution does.
             return Err(PluginHostError::NotActive(record.id.clone()));
         };
 
@@ -676,9 +478,6 @@ impl PluginHost {
             });
         }
 
-        // The *granted* public set, not the manifest's request: an admin may decline a
-        // public route at approval, and `route_specs` alone would hand the dispatcher a
-        // `public: true` the admin explicitly unchecked (`plugins::route_specs_granted`).
         let routes =
             crate::plugins::route_specs_granted(&record.manifest, &record.capabilities_approved)
                 .map_err(|message| PluginHostError::Instantiate {
@@ -691,8 +490,6 @@ impl PluginHost {
             .filter_map(|name| abi::hooks::HookKind::parse(name))
             .collect();
 
-        // Compiling is the expensive step, and it is synchronous: Wasmtime parses and
-        // codegens the whole module.
         let limits = self.limits;
         let path = wasm_path.clone();
         let id_for_compile = record.id.clone();
@@ -702,7 +499,6 @@ impl PluginHost {
         .await
         .map_err(|err| PluginHostError::Internal(anyhow::Error::new(err)))??;
 
-        // The stale-`.wasm` guard, before any of the plugin's own logic runs.
         let pool_for_probe = Arc::clone(&pool);
         let abi_version = tokio::task::spawn_blocking(move || pool_for_probe.probe_abi_version())
             .await
@@ -720,9 +516,6 @@ impl PluginHost {
             .await
             .map_err(|err| PluginHostError::Internal(anyhow::Error::new(err)))??;
 
-        // The approved set, not the requested one (SPEC §6.2): the admin's decision is what
-        // gates. Before approval `capabilities_approved` is empty, which is the correct
-        // answer for a plugin that is not enabled yet.
         let capabilities = record.capabilities_approved.to_abi();
         let config_keys = record.manifest.config.keys().cloned().collect::<Vec<_>>();
 
@@ -760,9 +553,6 @@ impl PluginHost {
             exports,
         });
 
-        // `ddd_init` runs per *instance*, so the payload is stored on the pool rather than
-        // called once here: the instance this activation warmed is not the only one that
-        // will ever serve a call (HOST-ABI.md §4.1).
         if plugin.has_export(abi::names::INIT) {
             let payload = serde_json::to_vec(&abi::InitPayload {
                 plugin_id: plugin.id.clone(),
@@ -775,8 +565,6 @@ impl PluginHost {
             pool.set_init_payload(Some(payload));
         }
 
-        // Publish last. Nothing can route to a half-activated plugin, because until this
-        // line it is not in the map.
         {
             let mut active = self.active.write().expect("plugin host map poisoned");
             active.insert(
@@ -787,8 +575,6 @@ impl PluginHost {
                 },
             );
         }
-        // A fresh activation starts with a clean breaker: an operator who reinstalled a
-        // plugin to fix it should not inherit the old build's failure count.
         self.breaker.reset(&plugin.id);
 
         tracing::info!(
@@ -800,12 +586,6 @@ impl PluginHost {
         Ok(plugin)
     }
 
-    /// Stop routing to a plugin and drop its instances **after in-flight calls finish**
-    /// (SPEC §6.3: "hot unload waits on in-flight calls (refcount)").
-    ///
-    /// Cancelling a call mid-write would leave a half-written document set with nobody to
-    /// finish it, so the wait is the point: unpublish first (so nothing new arrives), then
-    /// let what is running finish.
     pub async fn deactivate(&self, plugin_id: &str) -> Result<(), PluginHostError> {
         let Some(entry) = self.unpublish(plugin_id) else {
             return Ok(());
@@ -816,17 +596,6 @@ impl PluginHost {
         Ok(())
     }
 
-    /// Stop routing to a plugin **now** and let its instances drain on a task of their own.
-    ///
-    /// The half of [`PluginHost::deactivate`] that has to be immediate is the unpublish; the
-    /// drain is cleanup that waits up to the cron grace (60 s). Awaiting it is right when an
-    /// admin or the shutdown path asked for an unload and is willing to wait, and wrong when
-    /// the unload is a *side effect* of a failing call: a breaker that opens inside a nested
-    /// `call_plugin` runs on the caller's `spawn_blocking` thread, so awaiting the callee's
-    /// drain pinned that thread — and the caller's own pooled instance — for up to a minute
-    /// past the caller's 5 s budget. Nothing preempts it either: epoch interruption only traps
-    /// at Wasm instruction boundaries, and this is host code. One such chain could outlast the
-    /// 30 s shutdown grace of SPEC §8.
     pub fn deactivate_detached(&self, plugin_id: &str) {
         let Some(entry) = self.unpublish(plugin_id) else {
             return;
@@ -840,7 +609,6 @@ impl PluginHost {
         });
     }
 
-    /// Take a plugin out of the active map, so no further call can reach it.
     fn unpublish(&self, plugin_id: &str) -> Option<ActiveEntry> {
         self.active
             .write()
@@ -848,9 +616,6 @@ impl PluginHost {
             .remove(plugin_id)
     }
 
-    /// Activate every approved plugin with a backend half; used at boot and after an
-    /// install. Never fatal: a plugin that fails to activate is recorded and skipped, the
-    /// same rule the frontend loader follows (SPEC §6.4).
     pub async fn reload(&self, state: &AppState) -> Vec<(String, PluginHostError)> {
         if self.inert {
             tracing::warn!(
@@ -862,8 +627,6 @@ impl PluginHost {
         let records = match crate::plugininstall::records(state).await {
             Ok(records) => records,
             Err(err) => {
-                // Not fatal, and deliberately so: a server that will not boot because Mongo
-                // hiccuped while reading plugin records is worse than one with no plugins.
                 tracing::error!(error = %err, "plugin host: could not read the plugin records");
                 return Vec::new();
             }
@@ -874,9 +637,6 @@ impl PluginHost {
             if !record.state.is_active() || !record.manifest.has_backend() {
                 continue;
             }
-            // A plugin an operator (or the breaker) switched off stays off across a restart:
-            // `disabled_reason` is persisted precisely so a reboot is not an accidental
-            // re-enable.
             if let Some(reason) = record.disabled_reason.as_deref() {
                 self.breaker.open(&record.id, reason);
                 tracing::warn!(
@@ -909,21 +669,14 @@ impl PluginHost {
             .map(|entry| Arc::clone(&entry.plugin))
     }
 
-    /// The breaker state of one plugin, for the admin screen.
     pub fn breaker_state(&self, plugin_id: &str) -> BreakerState {
         self.breaker.state(plugin_id)
     }
 
-    /// Every plugin the breaker knows about — the admin screen's list.
     pub fn breaker_snapshot(&self) -> Vec<(String, BreakerState)> {
         self.breaker.snapshot()
     }
 
-    /// The one entry point for invoking a plugin.
-    ///
-    /// Everything else — cron, hooks, routes, `call_plugin` — builds an [`Invocation`] and
-    /// comes through here, so the breaker, the pool, the deadline, the metrics and the
-    /// logging exist once.
     pub async fn call(
         &self,
         state: &AppState,
@@ -942,8 +695,6 @@ impl PluginHost {
         })
     }
 
-    /// [`PluginHost::call`] plus envelope interpretation: the plugin's own refusal becomes
-    /// `Err`. What `call_plugin` and the route dispatcher want.
     pub async fn call_typed<T: serde::de::DeserializeOwned>(
         &self,
         state: &AppState,
@@ -963,7 +714,6 @@ impl PluginHost {
         }
     }
 
-    /// Breaker → pool → blocking thread → envelope. The one place any of that happens.
     async fn invoke(
         &self,
         state: &AppState,
@@ -977,16 +727,6 @@ impl PluginHost {
             });
         }
 
-        // The breaker is checked **first** — before the active map, and therefore long before
-        // an instance is touched. Two reasons, and the ordering is load-bearing for both:
-        //
-        // - A disabled plugin must not be instantiated at all, or "disabled" would still cost
-        //   a compile and 128 MB.
-        // - Opening the breaker also *unloads* the plugin, so after that it is not in the
-        //   active map. Looking there first would report `NotActive` — a 404 — for a plugin
-        //   that is disabled rather than absent, and "it is switched off" (503) and "there is
-        //   no such plugin" (404) are different answers a client acts on differently.
-        //   Uninstall is the case that really is absent, and it calls `forget`.
         if let BreakerState::Open { reason, .. } = self.breaker.state(&invocation.plugin_id) {
             return Err(PluginHostError::Disabled {
                 plugin: invocation.plugin_id.clone(),
@@ -1004,8 +744,6 @@ impl PluginHost {
 
         let export = invocation.kind.export_name();
         if !entry.plugin.has_export(export) {
-            // Not a breaker failure: this is the *host's* routing decision, and counting it
-            // would let a misconfigured hook disable a healthy plugin.
             return Err(PluginHostError::NoExport {
                 plugin: invocation.plugin_id.clone(),
                 export: export.to_string(),
@@ -1026,8 +764,6 @@ impl PluginHost {
             user_id: invocation.user_id.clone(),
             counters: CallCounters::default(),
             write_ledger: Arc::clone(&self.write_ledger),
-            // Captured here rather than inside the host functions: by the time one runs it is
-            // on a blocking thread, where `Handle::current()` would panic.
             runtime: tokio::runtime::Handle::current(),
         });
 
@@ -1075,9 +811,6 @@ impl PluginHost {
             }
         };
 
-        // A refusal is a **success** for the breaker: the plugin was reached and it answered.
-        // `ErrorCode::is_plugin_fault` is the split, and a plugin is never disabled for
-        // correctly reporting that a document does not exist (HOST-ABI.md §5).
         self.breaker.record_success(&invocation.plugin_id);
         if let Some(error) = envelope.error.as_ref() {
             tracing::warn!(
@@ -1104,12 +837,6 @@ impl PluginHost {
         Ok((envelope, outcome))
     }
 
-    /// Take an instance and run the export on a blocking thread.
-    ///
-    /// Two things have to happen on that thread and nowhere else: the Extism call itself
-    /// (synchronous), and every host function it makes (which `block_on` their async work).
-    /// The guard travels with the closure and comes back, so it is returned to the pool by
-    /// its own `Drop` whatever happened.
     async fn run_blocking(
         &self,
         entry: &ActiveEntry,
@@ -1127,7 +854,6 @@ impl PluginHost {
         result
     }
 
-    /// Count a host-side failure, and disable the plugin if it was the fifth in a row.
     async fn record_failure(&self, state: &AppState, plugin_id: &str, error: &PluginHostError) {
         metrics::counter!(
             crate::telemetry::names::PLUGIN_CALL_FAILURES,
@@ -1159,9 +885,6 @@ impl PluginHost {
                     "plugin host: circuit breaker opened; the plugin is disabled until an admin \
                      re-enables it"
                 );
-                // Persisted and audited, then unloaded. The order matters: a plugin whose
-                // record still says `enabled` would come back on the next restart, which is
-                // exactly the silent re-enable SPEC §6.3 refuses.
                 if let Err(err) = crate::plugininstall::disable(
                     state,
                     plugin_id,
@@ -1176,30 +899,20 @@ impl PluginHost {
                          updated; it will be active again after a restart"
                     );
                 }
-                // **Detached.** The unpublish is immediate — nothing new reaches the plugin
-                // from here on — but the drain waits up to the cron grace, and this runs on
-                // the *failing caller's* stack: for a nested `call_plugin` that is a
-                // `spawn_blocking` thread holding the caller's own pooled instance, and
-                // awaiting a callee's drain there turned a 5 s hook into a ~65 s one.
                 self.deactivate_detached(plugin_id);
             }
         }
     }
 
-    /// Clear a breaker after an admin re-enables a plugin.
     pub fn reset_breaker(&self, plugin_id: &str) {
         self.breaker.reset(plugin_id);
     }
 
-    /// Forget everything about a plugin — on uninstall, so a reinstall starts clean.
     pub fn forget(&self, plugin_id: &str) {
         self.breaker.forget(plugin_id);
         self.write_ledger.forget(plugin_id);
     }
 
-    /// One plugin's pool numbers — instances, in-flight calls, and how many modules were
-    /// compiled for it (one per instance slot, which is what gives each instance its own
-    /// engine). `None` when the plugin is not active.
     pub fn pool_stats(&self, plugin_id: &str) -> Option<crate::pluginhost::pool::PoolStats> {
         self.active
             .read()
@@ -1225,14 +938,10 @@ impl PluginHost {
             instances,
             calls_in_flight: self.calls_in_flight.load(Ordering::Relaxed),
             cron_jobs,
-            // The hook debouncer owns its own queue; it reports through
-            // `telemetry::names::PLUGIN_HOOKS_PENDING`.
             hooks_pending: 0,
         }
     }
 
-    /// Drop instances that have been idle too long, and age out the write ledger. Called
-    /// from the maintenance loop; 128 MB of idle plugin is worth reclaiming.
     pub fn maintain(&self) -> usize {
         let now = Instant::now();
         let evicted: usize = self
@@ -1246,8 +955,6 @@ impl PluginHost {
         evicted
     }
 
-    /// Refuse new calls, wait for in-flight ones, drop every instance. Called from
-    /// `main.rs` on SIGTERM before the document flush.
     pub async fn shutdown(&self, grace: Duration) {
         if self.inert {
             return;
@@ -1261,8 +968,6 @@ impl PluginHost {
             .cloned()
             .collect();
 
-        // Drained in parallel: the grace is a wall clock for the whole shutdown, not a
-        // budget each plugin gets in turn (SPEC §8's 30 s ceiling covers the flush too).
         let stranded: usize =
             futures::future::join_all(entries.iter().map(|entry| entry.pool.drain(grace)))
                 .await
@@ -1282,22 +987,10 @@ impl PluginHost {
     }
 }
 
-/// `<PLUGINS_DIR>/<id>/<version>/<module>` — where the installer puts a backend half.
-///
-/// The same layout [`crate::plugininstall::installed_dir`] writes and the M3 registry scans.
-/// Computed here rather than called through the installer so that activation has no reason
-/// to reach into the install flow; the layout itself is the contract (`backend/CONTRACTS.md`,
-/// "The installed layout").
-//
-// INTEGRATION (install-flow): if the installed layout ever changes, this and
-// `plugininstall::installed_dir` change together — they are the only two places that spell it.
 fn module_path(state: &AppState, id: &str, version: &str, module: &str) -> PathBuf {
     state.config.plugins_dir.join(id).join(version).join(module)
 }
 
-/// The two ways a `call_typed` can fail, kept apart because callers treat them
-/// differently: a plugin refusal is *data* (forward the code), a host failure is an
-/// incident (503, breaker, log).
 #[derive(Debug, thiserror::Error)]
 pub enum CallFailure {
     #[error("the plugin refused: {0}")]
@@ -1306,20 +999,11 @@ pub enum CallFailure {
     Host(#[from] PluginHostError),
 }
 
-/// Background workers the host owns: the cron scheduler, the hook debouncer, instance
-/// eviction, and the write-ledger sweep.
-///
-/// Held by `main.rs` for the process lifetime — dropping the handle stops cron.
 pub struct PluginHostWorkers {
     handles: Vec<tokio::task::JoinHandle<()>>,
 }
 
 impl PluginHostWorkers {
-    /// Stop every worker and wait briefly for them to notice.
-    ///
-    /// Aborted rather than signalled: all three are timer loops with nothing to flush, and
-    /// the thing that must not be interrupted — a call in flight — is waited on by
-    /// [`PluginHost::shutdown`] instead, through the pool's refcount.
     pub async fn shutdown(self) {
         for handle in &self.handles {
             handle.abort();
@@ -1330,15 +1014,8 @@ impl PluginHostWorkers {
     }
 }
 
-/// How often idle instances are reclaimed and the write ledger is aged out.
 const MAINTENANCE_INTERVAL: Duration = Duration::from_secs(30);
 
-/// Start the host's background workers. Called once from `main.rs` after
-/// [`PluginHost::reload`].
-///
-/// Three tasks, in the order they matter: cron (the reason backend plugins exist), the hook
-/// debouncer, and maintenance. Cron is started **after** `reload` by the caller, because a
-/// job firing against a half-activated set is the one bug nobody reproduces.
 pub fn spawn_workers(state: &AppState) -> PluginHostWorkers {
     let maintenance_state = state.clone();
     let maintenance = tokio::spawn(async move {
@@ -1367,11 +1044,6 @@ pub fn spawn_workers(state: &AppState) -> PluginHostWorkers {
     }
 }
 
-/// Fixtures the unit tests in this module tree share.
-///
-/// A [`crate::config::Config`] is thirty-odd fields and three of the modules here need one,
-/// so it is built once. Nothing in it touches a database — `PluginLimits::from_config` and
-/// the IP policy are the only things these tests exercise.
 #[cfg(test)]
 pub(crate) mod test_support {
     use super::*;
@@ -1445,7 +1117,6 @@ mod tests {
         assert_eq!(invocation.depth, 0);
         assert_eq!(invocation.stack, vec!["calendar".to_string()]);
         assert_eq!(invocation.kind.export_name(), abi::names::CRON);
-        // Cron gets the long budget; everything else gets the short one (SPEC §6.3).
         assert_eq!(
             invocation.kind.timeout(&PluginLimits::default()),
             Duration::from_millis(abi::limits::CRON_CALL_TIMEOUT_MS)
@@ -1456,8 +1127,6 @@ mod tests {
         );
     }
 
-    /// The whole chain shares one deadline: three nested calls do not get three timeouts,
-    /// and the callee is told what is left rather than being interrupted mid-write.
     #[test]
     fn a_chain_shares_one_deadline_and_counts_its_depth() {
         let first = top_level("calendar");
@@ -1491,8 +1160,6 @@ mod tests {
         assert_eq!(too_deep.code, abi::ErrorCode::LimitExceeded);
     }
 
-    /// `a → b → a` is a design mistake, not a budget problem — so it is `reentrancy` at any
-    /// depth, and the check runs before the depth one so the author is sent to the right fix.
     #[test]
     fn reentrancy_is_refused_before_depth_and_at_any_depth() {
         let first = top_level("calendar");
@@ -1519,8 +1186,6 @@ mod tests {
         );
     }
 
-    /// The callee is told how much of the shared budget is left, so it can refuse honestly
-    /// instead of being interrupted (HOST-ABI.md §4.5).
     #[test]
     fn a_callee_sees_the_remaining_budget_not_a_fresh_one() {
         let first = top_level("calendar");
@@ -1543,9 +1208,6 @@ mod tests {
         );
     }
 
-    /// The host's own routing decisions must not count on the breaker: a hook aimed at a
-    /// plugin that does not export it is a misconfiguration, and counting it would let one
-    /// disable a perfectly healthy plugin.
     #[test]
     fn only_host_side_failures_count_on_the_breaker() {
         assert!(!PluginHostError::NotActive("calendar".into()).counts_as_failure());
@@ -1602,8 +1264,6 @@ mod tests {
         );
     }
 
-    /// The gateway statuses of HOST-ABI.md §4.4. Two of them — 502 and 504 — have no
-    /// `AppError` variant, which is why the route builds its response from this directly.
     #[test]
     fn a_route_reports_the_gateway_status_for_each_failure() {
         use axum::http::StatusCode;
@@ -1660,8 +1320,6 @@ mod tests {
         }
     }
 
-    /// A host-side failure reaching a *plugin* caller must not carry a Wasmtime frame or a
-    /// module path — a plugin is not an operator.
     #[test]
     fn a_host_failure_forwarded_to_a_plugin_leaks_nothing() {
         let error = PluginHostError::Trap {

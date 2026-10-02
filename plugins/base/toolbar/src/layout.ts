@@ -1,24 +1,3 @@
-/**
- * Where each toolbar item goes: the user's layout first, the item's own placement and
- * the registry order (`order`, then when it was added) second.
- *
- * There are two **profiles**, one per kind of device, each with its own seats:
- *
- * - **desktop** — the header (`top-start`, `top-end`) and an IDE-style status footer
- *   (`bottom-start`, `bottom-end`).
- * - **mobile** — a thin top bar (`top-start`, `top-end`) and one row of big icon buttons
- *   along the bottom (`bottom`).
- *
- * A layout is one list of item ids per seat, plus `hidden`, stored in the user's settings
- * (flat lists, because settings values are YAML scalars one key per line). An id listed in
- * a seat goes there in that position, whatever the item asked for. An item listed nowhere
- * — a plugin installed after the user last arranged the bars — goes to its default seat
- * ({@link defaultSeat}), after the arranged items there, in the order it arrived, which is
- * the registry's order. Ids of items that no longer exist are skipped, so uninstalling a
- * plugin needs no cleanup. `hidden` names items the user took out; they keep their place,
- * so showing one again puts it back where it was.
- */
-
 import type { Placement } from "./api.js";
 
 export type Profile = "desktop" | "mobile";
@@ -32,7 +11,6 @@ export interface SeatInfo {
   readonly title: string;
 }
 
-/** Each profile's seats, in the order Settings lists them. */
 export const SEATS: Readonly<Record<Profile, readonly SeatInfo[]>> = {
   desktop: [
     { id: "top-start", title: "Header — left" },
@@ -59,7 +37,6 @@ export interface Placeable extends Placement {
   readonly mobile?: Placement;
 }
 
-/** The seat an item goes to in `profile` until the user moves it. */
 export function defaultSeat(profile: Profile, item: Placeable): SeatId {
   if (profile === "desktop") return `${item.bar ?? "top"}-${item.side ?? "start"}` as const;
   if ((item.mobile?.bar ?? "bottom") === "bottom") return "bottom";
@@ -83,7 +60,6 @@ export function arrange<T>(
   }
 
   const ranked = new Map<SeatId, { entry: T; index: number }[]>(seats.map((seat) => [seat, []]));
-  // Unranked items keep the order they arrived in: `entries` is registry order already.
   const unranked = new Map<SeatId, T[]>(seats.map((seat) => [seat, []]));
   for (const entry of entries) {
     const value = valueOf(entry);
@@ -102,10 +78,8 @@ export function arrange<T>(
   return result;
 }
 
-/** The settings key a profile's seat (or its `hidden` list) is stored under. */
 export const settingsKey = (profile: Profile, seat: SeatId | "hidden"): string => `${profile}-${seat}`;
 
-/** A layout read back from settings; anything malformed is ignored, not fatal. */
 export function readArrangement(profile: Profile, read: (key: string) => unknown): Arrangement {
   const ids = (value: unknown): string[] =>
     Array.isArray(value) ? value.filter((id): id is string => typeof id === "string") : [];
@@ -114,7 +88,6 @@ export function readArrangement(profile: Profile, read: (key: string) => unknown
   return { seats, hidden: ids(read(settingsKey(profile, "hidden"))) };
 }
 
-/** Hide `id` if it is shown, show it if it is hidden. */
 export function toggleHidden(arrangement: Arrangement, id: string): Arrangement {
   const hidden = arrangement.hidden.includes(id)
     ? arrangement.hidden.filter((other) => other !== id)
@@ -122,7 +95,6 @@ export function toggleHidden(arrangement: Arrangement, id: string): Arrangement 
   return { ...arrangement, hidden };
 }
 
-/** Move `id` one step within its seat (`delta` −1 or +1), or to the end of seat `to`. */
 export function move(
   current: Arrangement,
   id: string,

@@ -1,36 +1,3 @@
-//! `http_request` end to end: the host allowlist, the IP policy, resolve-then-pin, the
-//! per-hop redirect re-check and the response cap — driven by a real plugin against a real
-//! HTTP server (HOST-ABI.md §3.11, SPEC §6.2).
-//!
-//! This is the SSRF surface, so it is tested from the outside rather than by asserting about
-//! `address_allowed` alone (which `pluginhost/host_fns.rs` already does exhaustively as a
-//! unit). What only an end-to-end test can show:
-//!
-//! 1. **A host the manifest never declared is `blocked`, not `capability_denied`.** The
-//!    difference is the whole diagnostic value of those two codes: one means *my manifest is
-//!    wrong*, the other means *my URL is wrong*.
-//! 2. **The IP policy runs after resolution, on the resolved address.** `localhost` is an
-//!    allowed *name* here and still refused, because it resolves to loopback — which is the
-//!    check a naive "is the host in the list" implementation skips entirely.
-//! 3. **Every redirect hop repeats the check.** A 302 from an approved host to an
-//!    unapproved one is refused at the second hop, because a redirect is a destination
-//!    chosen by whoever we were just talking to.
-//! 4. **A body over the cap is `too_large` and never truncated.** Half an ICS feed makes
-//!    confidently wrong documents.
-//! 5. **`set-cookie` never reaches a plugin** — a plugin does not run a cookie jar — while
-//!    `authorization` on the way *out* is allowed, because outbound HTTP with secrets is the
-//!    reason backend plugins exist.
-//!
-//! Loopback is refused by default, so the fixture server is reachable only because the test
-//! sets `PLUGIN_HTTP_ALLOW_CIDRS` to `127.0.0.0/8` — which is exactly the operator escape
-//! hatch SPEC §6.2 describes, exercised rather than assumed.
-//!
-//! ```text
-//! docker compose up -d --wait mongo
-//! mise run wasm-plugins
-//! MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p ddd-server --test pluginhost_http
-//! ```
-
 mod common;
 
 use std::collections::BTreeMap;
@@ -60,11 +27,6 @@ fn fixture() -> Option<PathBuf> {
     path.exists().then_some(path)
 }
 
-// ---------------------------------------------------------------------------
-// The upstream the plugin fetches from
-// ---------------------------------------------------------------------------
-
-/// A tiny HTTP server on loopback, with one route per thing worth checking.
 async fn upstream() -> SocketAddr {
     let router = Router::new()
         .route(
@@ -74,8 +36,6 @@ async fn upstream() -> SocketAddr {
                     [
                         (header::CONTENT_TYPE, "text/calendar"),
                         (header::ETAG, "W/\"abc\""),
-                        // A plugin does not run a cookie jar: the host must drop this before
-                        // the plugin ever sees it.
                         (header::SET_COOKIE, "upstream=tracking"),
                     ],
                     "BEGIN:VCALENDAR\nEND:VCALENDAR\n",
@@ -101,7 +61,6 @@ async fn upstream() -> SocketAddr {
         .route(
             "/redirect/{*target}",
             get(|AxumPath(target): AxumPath<String>| async move {
-                // The target is a full URL, so a test can aim a redirect anywhere.
                 Response::builder()
                     .status(StatusCode::FOUND)
                     .header(header::LOCATION, target)
@@ -110,8 +69,6 @@ async fn upstream() -> SocketAddr {
                     .into_response()
             }),
         )
-        // The answer to a conditional GET: 3xx, no `Location`, no body. It is the whole
-        // reason a plugin stores `ETag`/`Last-Modified` between runs.
         .route(
             "/not-modified",
             get(|| async {
@@ -141,10 +98,6 @@ async fn upstream() -> SocketAddr {
     address
 }
 
-// ---------------------------------------------------------------------------
-// Harness
-// ---------------------------------------------------------------------------
-
 struct HttpHarness {
     state: AppState,
     host: Arc<PluginHost>,
@@ -155,8 +108,6 @@ struct HttpHarness {
 }
 
 impl HttpHarness {
-    /// `approved_hosts` is what an admin approved; `allow_loopback` is the operator's CIDR
-    /// escape hatch. Both are parameters because the interesting cases are the combinations.
     async fn start(approved_hosts: &[&str], allow_loopback: bool) -> Option<HttpHarness> {
         let uri = common::mongo_uri()?;
         let wasm = fixture()?;
@@ -174,8 +125,6 @@ impl HttpHarness {
         config.plugin_http_timeout = Duration::from_millis(1_200);
         config.plugin_http_max_response_bytes = 4 * 1024;
         if allow_loopback {
-            // The one deliberate widening: this is how a self-hosted LAN service becomes
-            // reachable (SPEC §6.2's "admin-configurable allowlist").
             config.plugin_http_allow_cidrs = vec!["127.0.0.0/8".parse().expect("a literal CIDR")];
         }
 
@@ -252,8 +201,6 @@ impl HttpHarness {
         format!("http://{}{path}", self.upstream)
     }
 
-    /// The same URL through the name `localhost` rather than the literal address, so the
-    /// *resolver* path is the one under test.
     fn localhost_url(&self, path: &str) -> String {
         format!("http://localhost:{}{path}", self.upstream.port())
     }
@@ -307,10 +254,6 @@ macro_rules! harness {
     };
 }
 
-// ---------------------------------------------------------------------------
-// The happy path, and what the host strips on the way back
-// ---------------------------------------------------------------------------
-
 #[tokio::test]
 async fn an_approved_host_on_a_deliberately_allowed_cidr_is_reachable() {
     if skip() {
@@ -336,9 +279,7 @@ async fn an_approved_host_on_a_deliberately_allowed_cidr_is_reachable() {
         "the reported byte count is the body the plugin received"
     );
 
-    // A header the plugin is meant to see.
     assert_eq!(answer["headers"]["etag"], json!("W/\"abc\""));
-    // And the one it must not: a plugin does not run a cookie jar.
     assert!(
         answer["headers"].get("set-cookie").is_none(),
         "set-cookie reached the plugin: {}",
@@ -348,9 +289,6 @@ async fn an_approved_host_on_a_deliberately_allowed_cidr_is_reachable() {
     harness.cleanup().await;
 }
 
-/// `authorization` is allowed on the way out — that is the point of the feature (SPEC §6.3:
-/// outbound HTTP with secrets) — while `host` is refused, because a request that names one
-/// host in the URL and another in the header would pass the allowlist and arrive elsewhere.
 #[tokio::test]
 async fn authorization_goes_out_and_host_is_refused() {
     if skip() {
@@ -385,20 +323,12 @@ async fn authorization_goes_out_and_host_is_refused() {
     harness.cleanup().await;
 }
 
-// ---------------------------------------------------------------------------
-// The allowlist and the IP policy
-// ---------------------------------------------------------------------------
-
-/// `capability_denied` means *the manifest never asked for `http`*; `blocked` means it did
-/// and **this destination** is refused. Collapsing the two is the single most confusing thing
-/// this ABI could do to a plugin author, so both are asserted here.
 #[tokio::test]
 async fn an_undeclared_host_is_blocked_and_no_http_at_all_is_capability_denied() {
     if skip() {
         return;
     }
 
-    // Approved for one host: a different one is `blocked`.
     let harness = harness!(&["127.0.0.1"], true);
     let blocked = refusal(harness.fetch("http://example.test/feed", json!({})).await);
     assert_eq!(blocked.code, abi::ErrorCode::Blocked);
@@ -406,26 +336,20 @@ async fn an_undeclared_host_is_blocked_and_no_http_at_all_is_capability_denied()
         blocked.detail.as_ref().and_then(|d| d["host"].as_str()),
         Some("example.test")
     );
-    // Not a plugin *failure* either — a wrong URL must not disable a plugin.
     assert_eq!(harness.host.breaker_state("hello-backend").failures(), 0);
     harness.cleanup().await;
 
-    // Approved for nothing at all: `capability_denied`, and the plugin can probe for it.
     let none = harness!(&[], true);
     let denied = refusal(none.fetch("http://example.test/feed", json!({})).await);
     assert_eq!(denied.code, abi::ErrorCode::CapabilityDenied);
     none.cleanup().await;
 }
 
-/// The check that a naive implementation skips: the name is in the list, and the **address
-/// it resolves to** is still refused. Without the operator's CIDR there is no way to reach
-/// loopback, whatever the host list says.
 #[tokio::test]
 async fn an_approved_name_that_resolves_to_a_refused_address_is_still_blocked() {
     if skip() {
         return;
     }
-    // `localhost` approved, loopback **not** in the CIDR allowlist.
     let harness = harness!(&["localhost"], false);
 
     let blocked = refusal(
@@ -449,16 +373,12 @@ async fn an_approved_name_that_resolves_to_a_refused_address_is_still_blocked() 
         "the refusal names the address it resolved to: {detail}"
     );
 
-    // And the literal form of the same address is refused too, so there is no shortcut
-    // around the resolver.
     let literal = refusal(harness.fetch(&harness.url("/feed"), json!({})).await);
     assert_eq!(literal.code, abi::ErrorCode::Blocked);
 
     harness.cleanup().await;
 }
 
-/// A scheme a plugin may not request. `file:` is the interesting one — it is what an SSRF
-/// attempt reaches for after the host list refuses it.
 #[tokio::test]
 async fn only_http_and_https_are_schemes_a_plugin_may_request() {
     if skip() {
@@ -484,13 +404,6 @@ async fn only_http_and_https_are_schemes_a_plugin_may_request() {
     harness.cleanup().await;
 }
 
-// ---------------------------------------------------------------------------
-// Redirects
-// ---------------------------------------------------------------------------
-
-/// A redirect is a destination chosen by whoever we were just talking to, so **every hop**
-/// repeats the allowlist and the IP policy. A check that only runs on the first URL is not a
-/// check.
 #[tokio::test]
 async fn a_redirect_to_an_unapproved_host_is_refused_at_the_hop() {
     if skip() {
@@ -498,7 +411,6 @@ async fn a_redirect_to_an_unapproved_host_is_refused_at_the_hop() {
     }
     let harness = harness!(&["127.0.0.1"], true);
 
-    // Hop one is approved; hop two is not.
     let target = "http://example.test/feed";
     let refused = refusal(
         harness
@@ -512,8 +424,6 @@ async fn a_redirect_to_an_unapproved_host_is_refused_at_the_hop() {
         "the refusal names the host the *redirect* aimed at"
     );
 
-    // A redirect that stays on an approved host is followed, and `final_url` says where it
-    // ended up.
     let allowed = harness.url("/feed");
     let answer = harness
         .fetch(&harness.url(&format!("/redirect/{allowed}")), json!({}))
@@ -533,15 +443,6 @@ async fn a_redirect_to_an_unapproved_host_is_refused_at_the_hop() {
     harness.cleanup().await;
 }
 
-/// **304 is not a redirect.** It was treated as one, because `StatusCode::is_redirection()`
-/// is every 3xx — so the hop loop looked for a `Location` that a 304 never carries and
-/// refused the response with `unavailable`.
-///
-/// The shape of the bug is why this test exists rather than a note: a plugin's *first*
-/// fetch has no validator to send and gets a 200, so everything looked right; the failure
-/// arrived on the second run, when the plugin did the cheapest and most correct thing it
-/// could and sent the `ETag` it had stored. The calendar plugin's conditional GET — SPEC
-/// §6.3's "cron while nobody's looking" done politely — was the exact case that broke.
 #[tokio::test]
 async fn a_conditional_get_answered_304_is_a_response_not_a_redirect() {
     if skip() {
@@ -565,19 +466,12 @@ async fn a_conditional_get_answered_304_is_a_response_not_a_redirect() {
     harness.cleanup().await;
 }
 
-// ---------------------------------------------------------------------------
-// Caps
-// ---------------------------------------------------------------------------
-
-/// Over the cap is `too_large`, **never** a truncated body: half an ICS feed would produce
-/// confidently wrong documents (HOST-ABI.md §2.3).
 #[tokio::test]
 async fn a_response_over_the_cap_is_refused_rather_than_truncated() {
     if skip() {
         return;
     }
     let harness = harness!(&["127.0.0.1"], true);
-    // The harness configured a 4 KiB cap.
     let cap = 4 * 1024;
 
     let under = harness
@@ -601,8 +495,6 @@ async fn a_response_over_the_cap_is_refused_rather_than_truncated() {
     harness.cleanup().await;
 }
 
-/// The outbound timeout is capped by what is left of the invocation, so a slow upstream
-/// cannot hold a plugin call open past its deadline.
 #[tokio::test]
 async fn a_slow_upstream_times_out_inside_the_invocations_budget() {
     if skip() {
@@ -619,8 +511,6 @@ async fn a_slow_upstream_times_out_inside_the_invocations_budget() {
         elapsed < Duration::from_secs(5),
         "the request should have been cut off well before the upstream's 30 s, took {elapsed:?}"
     );
-    // A timeout on an *outbound* request is the plugin's destination misbehaving, not the
-    // plugin failing — the invocation itself returned a refusal, which is a success.
     assert_eq!(harness.host.breaker_state("hello-backend").failures(), 0);
 
     harness.cleanup().await;

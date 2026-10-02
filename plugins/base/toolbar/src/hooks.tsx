@@ -10,10 +10,8 @@ export function useArrangement(store: ArrangementStore, profile: Profile): Arran
   return useSyncExternalStore(store.subscribe, get, get);
 }
 
-/** The shell's layout, live. */
 export const useShellLayout = () => useSyncExternalStore(subscribeLayout, layout, layout);
 
-/** Which profile this device is showing: the shell's mobile breakpoint decides. */
 export function useProfile(): Profile {
   return useShellLayout().compact ? "mobile" : "desktop";
 }

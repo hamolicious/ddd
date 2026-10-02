@@ -1,10 +1,3 @@
-//! `ddd plugin types` — what a plugin compiles against, fetched from the server it targets.
-//!
-//! A third-party plugin sees exactly what the server serves: `/kernel.d.ts`, and each
-//! dependency's generated `frontend/index.d.ts` (`declare module "plugin:<id>"`). Fetching
-//! them from the running server rather than copying them out of a checkout is what makes
-//! the type-check honest about the server the plugin will actually load in.
-
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -16,10 +9,8 @@ use crate::server::Server;
 
 #[derive(Args)]
 pub struct TypesArgs {
-    /// The plugin project (the directory holding manifest.json).
     #[arg(long, default_value = ".")]
     pub dir: PathBuf,
-    /// The ddd server the plugin targets, e.g. `https://notes.example.com`.
     #[arg(long, env = "DDD_SERVER")]
     pub server: Option<String>,
 }
@@ -33,9 +24,6 @@ pub fn run(args: TypesArgs) -> Result<()> {
     fetch(&args.dir, &Server::new(&server))
 }
 
-/// Write `types/kernel.d.ts` and `types/plugins/<id>.d.ts` for every dependency of the
-/// manifest in `dir`. A dependency the server does not have is reported, not fatal: the
-/// type-check will name it.
 pub fn fetch(dir: &Path, server: &Server) -> Result<()> {
     let manifest_path = dir.join("manifest.json");
     let manifest: Value = serde_json::from_str(

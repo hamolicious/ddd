@@ -7,7 +7,6 @@ import { EXCLUDE_MACHINE_DOCUMENTS } from "../../_shared/machine-docs.js";
 import { planFor, resolveSearch, sortTokens } from "./results.js";
 import { EMPTY_SPEC } from "./spec.js";
 
-/** `queryPlan` recorded, answering with the given ids in order. */
 function fakeDocuments(ids: readonly string[]): { documents: DocumentsApi; plans: QueryPlan[] } {
   const plans: QueryPlan[] = [];
   const documents = {

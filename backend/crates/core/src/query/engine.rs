@@ -1,9 +1,3 @@
-//! The query engine: the workspace's rows, their text index and the folder tree, and
-//! [`Engine::run`], which answers a [`Plan`] over them.
-//!
-//! The one stateful thing in this crate, and still deterministic: the same rows and
-//! the same plan give the same answer on the server and in the browser.
-
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -20,10 +14,8 @@ use crate::filter::{
 };
 use crate::value::Value;
 
-/// Where a note lists its children: the `folders` plugin's machine section.
 pub const DEFAULT_CHILDREN_FIELD: &str = "plugins.folders.children";
 
-/// What a children list may prefix an id with.
 const DOC_PREFIX: &str = "doc://";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,7 +24,6 @@ pub struct Engine {
     docs: HashMap<String, Doc>,
     text: TextIndex,
     children_field: FieldPath,
-    /// Parent → its children, read from each parent's own list.
     #[serde(skip)]
     children: HashMap<String, Vec<String>>,
 }
@@ -43,35 +34,27 @@ impl Default for Engine {
     }
 }
 
-/// One answer: a page of rows, and how many there are in all.
 #[derive(Debug, Clone)]
 pub struct Answer<'a> {
     pub rows: Vec<Found<'a>>,
-    /// Every match, before paging.
     pub total: usize,
-    /// Present while there is another page.
     pub next_cursor: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Found<'a> {
     pub doc: &'a Doc,
-    /// Present when the plan had text.
     pub hit: Option<Hit>,
 }
 
-/// Why a row matched the plan's text.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Hit {
     pub score: f64,
-    /// The indexed terms it matched, for highlighting.
     pub terms: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub snippet: Option<Snippet>,
 }
 
-/// An [`Answer`] by id, for a caller that has the rows already (the browser) or
-/// sends them on (the server): `{ ids, total, next_cursor?, hits: { id: Hit } }`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Page {
     pub ids: Vec<String>,
@@ -108,7 +91,6 @@ impl Engine {
         }
     }
 
-    /// Read children lists from another field than [`DEFAULT_CHILDREN_FIELD`].
     pub fn with_children_field(mut self, field: FieldPath) -> Engine {
         self.children_field = field;
         self.rebuild_tree();
@@ -127,7 +109,6 @@ impl Engine {
         self.docs.get(id)
     }
 
-    /// Add a row, or replace the one with its id.
     pub fn upsert(&mut self, doc: Doc) {
         self.text.upsert(&doc);
         let list = self.children_list(&doc);
@@ -145,7 +126,6 @@ impl Engine {
         }
     }
 
-    /// Take a row out (a purge); nothing happens for an unknown id.
     pub fn remove(&mut self, id: &str) {
         if self.docs.remove(id).is_some() {
             self.text.remove(id);
@@ -153,14 +133,10 @@ impl Engine {
         }
     }
 
-    /// The engine as JSON, to load again with [`Engine::from_json_str`] instead of
-    /// re-indexing every row.
     pub fn to_json_string(&self) -> String {
         serde_json::to_string(self).unwrap_or_default()
     }
 
-    /// `None` for anything [`Engine::to_json_string`] did not write, or wrote with
-    /// another index version: the caller rebuilds from the rows.
     pub fn from_json_str(input: &str) -> Option<Engine> {
         let mut engine: Engine = serde_json::from_str(input).ok()?;
         if engine.version != TEXT_INDEX_VERSION {
@@ -171,7 +147,6 @@ impl Engine {
         Some(engine)
     }
 
-    /// Answer a plan.
     pub fn run(&self, plan: &Plan) -> Result<Answer<'_>, QueryError> {
         plan.validate()?;
         let offset = match &plan.cursor {
@@ -257,8 +232,6 @@ impl Engine {
         })
     }
 
-    /// Does row `id` match the plan's filter and trash scope? Text and paging aside:
-    /// what a live query asks of a changed row to know whether to run again.
     pub fn admits(&self, plan: &Plan, id: &str) -> Result<bool, QueryError> {
         let Some(doc) = self.docs.get(id) else {
             return Ok(false);
@@ -312,7 +285,6 @@ impl Engine {
     }
 }
 
-/// No sort named: best match while there is text, then last updated.
 fn effective_sort(plan: &Plan, has_text: bool) -> Vec<Sort> {
     let updated = Sort::Field(SortKey {
         field: FieldPath::parse("updated_at").expect("a valid path"),
@@ -332,7 +304,6 @@ fn effective_sort(plan: &Plan, has_text: bool) -> Vec<Sort> {
         .collect()
 }
 
-/// The folder tree for one run, with each parent's set worked out once.
 struct RunGraph<'a> {
     engine: &'a Engine,
     cache: RefCell<HashMap<(String, bool), HashSet<String>>>,

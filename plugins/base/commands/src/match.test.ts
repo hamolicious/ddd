@@ -12,16 +12,10 @@ const COMMANDS = [
 ];
 
 describe("rankMatches", () => {
-  /**
-   * The palette opens on an empty query, where every score is 0 — so the tie-break is
-   * the whole ordering, and it is the ordering a user actually reads. Breaking on title
-   * alone interleaved the categories the rows are *labelled* with: "Admin › Browse
-   * snapshots", "Appearance › Change theme", "Admin › Create an invite".
-   */
   it("groups an unfiltered list by category, then title", () => {
     const order = rankMatches("", COMMANDS).map((entry) => entry.item.id);
     expect(order).toEqual([
-      "bare", // uncategorised sorts first
+      "bare",
       "admin.snapshots",
       "admin.invites",
       "themes.open",

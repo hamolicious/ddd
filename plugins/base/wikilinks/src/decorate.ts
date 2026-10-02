@@ -1,22 +1,9 @@
-/**
- * The `editor.extension`: each `doc://` link in the editor wears the linked note's title
- * above it, so `[](doc://01J…)` reads as the note it points at while writing — and so
- * does a bare `doc://01J…`, the form a frontmatter property holds.
- *
- * The title is a widget at the start of the link, drawn in a strip of padding the line
- * gains for it, so it sits over the link without covering the line above. Titles come
- * from the workspace index and follow renames live. Only links on screen are found, and
- * a click on a title opens the note when `router` is enabled.
- */
-
 import { StateEffect, type Extension, type Range } from "@codemirror/state";
 import { Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 
 import type { NoteIndex } from "./controller.js";
 
-/** One `doc://` link in the text. */
 export interface FoundLink {
-  /** Offset of the link's first character (`!`, `[` or `<`; `d` for a bare `doc://`). */
   readonly from: number;
   readonly id: string;
   readonly embed: boolean;
@@ -24,7 +11,6 @@ export interface FoundLink {
 
 const LINK = /(!?)\[[^\]\n]*\]\(doc:\/\/([^)\s]+)\)|<doc:\/\/([^>\s]+)>|(?<![\w(<])doc:\/\/([A-Za-z0-9_-]+)/g;
 
-/** Every `doc://` link in `text`, offsets relative to it. Pure. */
 export function linksIn(text: string): FoundLink[] {
   const found: FoundLink[] = [];
   for (const match of text.matchAll(LINK)) {
@@ -74,10 +60,8 @@ class TitleWidget extends WidgetType {
   }
 }
 
-/** The line has a title over it: room for one. */
 const roomy = Decoration.line({ class: "wikilinks-line wikilinks:pt-[0.9em]!" });
 
-/** Recompute: the index changed, so a title may have. */
 const refresh = StateEffect.define<null>();
 
 export function titleExtension(index: NoteIndex, open?: (id: string) => void): Extension {
@@ -97,7 +81,6 @@ export function titleExtension(index: NoteIndex, open?: (id: string) => void): E
         this.decorations = this.build();
         this.unsubscribe = index.subscribe(() => {
           reindex();
-          // Never dispatch inside another dispatch: the index can change mid-update.
           queueMicrotask(() => {
             if (!this.destroyed) this.view.dispatch({ effects: refresh.of(null) });
           });

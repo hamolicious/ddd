@@ -1,33 +1,3 @@
-//! The yrs storage engine: "one document = one Y.Doc, apply, materialize"
-//! (SPEC §9 M1, §3.2, §3.5).
-//!
-//! **FROZEN CONTRACT.** The [`DocStore`] trait is the only way any other module
-//! touches CRDT state. Routes, seeding and (in M2) the WebSocket layer all go
-//! through it. Nobody changes a method signature here without re-negotiating
-//! with every other area; the implementation behind it is free to change.
-//!
-//! Pinned compatibility decisions (SPEC §3.2) — client Yjs ↔ server yrs:
-//! - [`OFFSET_KIND`] = `OffsetKind::Utf16`; index-based ops corrupt multi-byte
-//!   text otherwise.
-//! - **Update encoding v1** everywhere: wire, stored blob, update log, REST.
-//! - GC settings identical on both sides ([`SKIP_GC`]).
-//! - The text lives in one root `Y.Text` named [`TEXT_ROOT`].
-//!
-//! Shape of the implementation (SPEC §3.5, §4.3):
-//!
-//! - A **room** per hot document holds the `Doc`, the cached text and the
-//!   per-document write lock. Every mutating method funnels through
-//!   [`MongoDocStoreInner::mutate`], so writes to one document are serialized
-//!   (the per-document actor) without any caller-side locking.
-//! - The synchronous path per applied update is: apply to the hot doc → append
-//!   to `document_updates` (durability + the M2 broadcast) → mark the room dirty.
-//! - [`MongoDocStoreInner::materialize_room`] is the *distinct* materialization
-//!   step: it rewrites `crdt`, `state_vector`, `content`, `title`, `fm`,
-//!   `plugins`, `materialized_version` and `fm_parse_error` **in one Mongo
-//!   write**, under optimistic concurrency on `materialized_version`. In M1 the
-//!   write path calls it synchronously; M2 only has to stop doing that and let
-//!   the debounce worker ([`MATERIALIZE_DEBOUNCE`]) pick the room up.
-
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
@@ -57,57 +27,27 @@ use crate::domain::{
 };
 use crate::telemetry::names;
 
-/// Name of the single root `Y.Text` holding the whole document text.
 pub const TEXT_ROOT: &str = "content";
-/// Offset kind, pinned to match Yjs.
 pub const OFFSET_KIND: OffsetKind = OffsetKind::Utf16;
-/// GC setting, pinned to match the client (`false` = GC enabled).
 pub const SKIP_GC: bool = false;
 
-// ---------------------------------------------------------------------------
-// Default engine tuning (SPEC §3.5, §4.3)
-//
-// These are the *defaults*. The live values come from `Config` through
-// [`DocStoreTuning`], which `MongoDocStore::new` takes — so `MATERIALIZE_DEBOUNCE_MS`,
-// `ROOM_IDLE_TIMEOUT_SECS`, `UPDATE_LOG_KEEP_*`, `CRDT_*_THRESHOLD_BYTES` and
-// `TRASH_RETENTION_DAYS` actually do something. The constants stay as the
-// documented defaults (and as what `DocStoreTuning::default()` yields, which is
-// what the unit tests use).
-// ---------------------------------------------------------------------------
-
-/// Materialization debounce window (SPEC §3.5).
 pub const MATERIALIZE_DEBOUNCE: Duration = Duration::from_millis(500);
-/// Rooms are evicted this long after their last use (SPEC §4.3).
 pub const ROOM_IDLE_TIMEOUT: Duration = Duration::from_secs(600);
-/// Per-document update-log retention, bytes (SPEC §3.5).
 pub const UPDATE_LOG_KEEP_BYTES: u64 = 1024 * 1024;
-/// Per-document update-log retention, entries (SPEC §3.5).
 pub const UPDATE_LOG_KEEP_COUNT: u32 = 200;
-/// A full-text checkpoint after this many changes (`dev-docs/resolved/HISTORY.md`).
 pub const CHECKPOINT_EVERY_CHANGES: u32 = 1000;
-/// Live typing by one person with pauses shorter than this is folded into one record…
 const COALESCE_GAP_MS: i64 = 2_000;
-/// …until the record spans this long: history stays precise to within it.
 const COALESCE_SPAN_MS: i64 = 10_000;
-/// Raw changes older than this many days are squashed into their groups.
 pub const RAW_CHANGE_DAYS: i64 = 30;
-/// Compact the `crdt` blob aggressively above this size (SPEC §3.5).
 pub const CRDT_COMPACT_THRESHOLD_BYTES: u64 = 4 * 1024 * 1024;
-/// Alert above this `crdt` size (SPEC §3.5).
 pub const CRDT_ALERT_THRESHOLD_BYTES: u64 = 8 * 1024 * 1024;
-/// A document sits in Trash this long before it is purged (SPEC §3.5).
 pub const TRASH_RETENTION_DAYS: i64 = 30;
-/// Default page size when a [`ListQuery`] does not set one.
 pub const DEFAULT_PAGE_LIMIT: u32 = 50;
-/// Hard page-size ceiling (the route clamps too).
 pub const MAX_PAGE_LIMIT: u32 = 500;
 
 const DAY_MS: i64 = 86_400_000;
-/// Trim the update log every N appends (plus the periodic worker).
 const TRIM_EVERY: i64 = 32;
 
-/// The yrs [`Options`] every document must be created with. Any `Doc` built
-/// outside this function is a compatibility bug.
 pub fn doc_options() -> Options {
     Options {
         offset_kind: OFFSET_KIND,
@@ -116,41 +56,22 @@ pub fn doc_options() -> Options {
     }
 }
 
-/// Create an empty document with the pinned options.
 pub fn new_doc() -> Doc {
     Doc::with_options(doc_options())
 }
 
-// ---------------------------------------------------------------------------
-// Types crossing the trait boundary
-// ---------------------------------------------------------------------------
-
-/// Operator-tunable engine knobs (SPEC §3.5, §4.3), read from [`crate::config::Config`].
-///
-/// A struct rather than eight constructor parameters: adding a knob then touches
-/// one type and one `from_config`, not every call site and every test.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DocStoreTuning {
-    /// Hard cap on document text (`MAX_DOCUMENT_BYTES`); the shared core's 1 MiB
-    /// cap is the ceiling, this may only lower it.
     pub max_document_bytes: usize,
-    /// Materialization debounce window (`MATERIALIZE_DEBOUNCE_MS`).
     pub materialize_debounce: Duration,
-    /// Idle-room eviction delay (`ROOM_IDLE_TIMEOUT_SECS`).
     pub room_idle_timeout: Duration,
-    /// Per-document update-log retention (`UPDATE_LOG_KEEP_BYTES` / `_COUNT`).
     pub update_log_keep_bytes: u64,
     pub update_log_keep_count: u32,
-    /// `crdt` blob thresholds (`CRDT_COMPACT_THRESHOLD_BYTES` / `_ALERT_`).
     pub crdt_compact_threshold_bytes: u64,
     pub crdt_alert_threshold_bytes: u64,
-    /// Days a tombstone sits in Trash before purge (`TRASH_RETENTION_DAYS`).
     pub trash_retention_days: i64,
-    /// A checkpoint after this many changes (`CHECKPOINT_EVERY_CHANGES`).
     pub checkpoint_every_changes: u32,
-    /// Raw changes older than this many days are squashed (`RAW_CHANGE_DAYS`).
     pub raw_change_days: i64,
-    /// How often the squash job runs (`HISTORY_SQUASH_INTERVAL_SECS`).
     pub history_squash_interval: Duration,
 }
 
@@ -173,8 +94,6 @@ impl Default for DocStoreTuning {
 }
 
 impl DocStoreTuning {
-    /// Take the validated values from `Config` (ops validates ranges and
-    /// cross-field rules at boot; nothing is re-checked here).
     pub fn from_config(config: &crate::config::Config) -> Self {
         Self {
             max_document_bytes: config.max_document_bytes,
@@ -192,8 +111,6 @@ impl DocStoreTuning {
     }
 }
 
-/// Everything materialized from a document's text in one pass (SPEC §3.5).
-/// Rewritten together, never inconsistent with each other.
 #[derive(Debug, Clone)]
 pub struct Materialized {
     pub content: String,
@@ -201,19 +118,15 @@ pub struct Materialized {
     pub fm: BsonDocument,
     pub plugins: BsonDocument,
     pub fm_parse_error: bool,
-    /// State-vector hash of the CRDT state this was derived from.
     pub materialized_version: String,
 }
 
-/// Run the shared core over `text` and convert to storage shapes.
-/// The single bridge between [`ddd_core`] and Mongo.
 pub fn materialize(text: &str, materialized_version: String) -> Materialized {
     let normalized = normalize_input(text);
     let parsed = parse_document(normalized.as_ref());
     materialize_parsed(&parsed, normalized.as_ref(), materialized_version)
 }
 
-/// Convert a parsed document to storage shapes (when the parse is already done).
 pub fn materialize_parsed(
     parsed: &ParsedDocument,
     text: &str,
@@ -229,8 +142,6 @@ pub fn materialize_parsed(
     }
 }
 
-/// Normalize every date-looking string to its canonical ISO-8601 form so
-/// lexicographic sort in Mongo is chronological (SPEC §3.4 "Dates").
 fn canonicalize_dates(map: &Map) -> Map {
     map.iter()
         .map(|(key, value)| (key.clone(), canonicalize_date_value(value)))
@@ -246,91 +157,57 @@ fn canonicalize_date_value(value: &Value) -> Value {
     }
 }
 
-/// `materialized_version` for a state vector: a short, stable hash.
 pub fn version_hash(state_vector: &[u8]) -> String {
     let digest = Sha256::digest(state_vector);
     hex::encode(&digest[..16])
 }
 
-/// What a write returns: enough for the response without re-reading Mongo.
 #[derive(Debug, Clone)]
 pub struct WriteOutcome {
     pub id: Id,
-    /// The document text after the write.
     pub content: String,
     pub title: String,
     pub materialized_version: String,
-    /// The Yjs update (encoding v1) this write produced — the M2 broadcast
-    /// payload; empty when the write was a no-op.
     pub update: Vec<u8>,
-    /// Per-document sequence number assigned to the update-log entry.
     pub seq: i64,
 }
 
-/// A CRDT-level read for `?format=crdt` and (M2) sync.
 #[derive(Debug, Clone)]
 pub struct CrdtState {
     pub id: Id,
-    /// Full encoded state, update encoding v1.
     pub state: Vec<u8>,
     pub state_vector: Vec<u8>,
 }
 
-/// Live engine counters for `/metrics` (SPEC §8).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct DocStoreStats {
-    /// Hot documents currently held in memory.
     pub rooms: usize,
-    /// Rooms with unflushed materialization.
     pub dirty_rooms: usize,
-    /// Documents whose `crdt` blob is above the compaction threshold.
     pub oversized_docs: usize,
 }
 
-/// Options for listing/querying, assembled by the documents route from the DSL.
 #[derive(Debug, Clone, Default)]
 pub struct ListQuery {
-    /// Compiled filter (already validated). `None` = no filter.
     pub filter: Option<BsonDocument>,
-    /// Compiled sort. `None` = `updated_at` descending.
     pub sort: Option<BsonDocument>,
-    /// Full-text search terms (server-side provider; the PWA searches locally).
     pub search: Option<String>,
-    /// Opaque pagination cursor from a previous page.
     pub cursor: Option<String>,
-    /// Page size; the route clamps it.
     pub limit: u32,
-    /// Which tombstone state to return.
     pub trash: TrashFilter,
-    /// `true` when the caller does not want `content` — the list views. The
-    /// megabyte strings are then left out of the Mongo projection instead of being
-    /// read and thrown away.
     pub metadata_only: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum TrashFilter {
-    /// Only live documents (`deleted_at` unset).
     #[default]
     Live,
-    /// Only tombstoned documents (the Trash view).
     Trashed,
-    /// Both.
     All,
 }
 
-/// One page of documents, as [`DocumentRow`]s — the projection, never the CRDT.
-///
-/// The type is the contract: `crdt` and `state_vector` are 2–10× the plaintext
-/// and compacted only above 4 MiB (SPEC §3.5), so no query returning many rows
-/// may read them, and a page therefore *cannot* carry them. `content` is
-/// additionally empty under [`ListQuery::metadata_only`]. Anything that needs CRDT
-/// bytes asks for one id at a time through
-/// [`DocStore::get`]/[`DocStore::crdt_state`].
 #[derive(Debug, Clone)]
 pub struct Page {
     pub documents: Vec<DocumentRow>,
-    /// Cursor for the next page; `None` when exhausted.
     pub next_cursor: Option<String>,
 }
 
@@ -352,12 +229,8 @@ pub enum DocStoreError {
     Contended(Id),
     #[error("snapshot {0} not found")]
     SnapshotNotFound(Id),
-    /// No checkpoint at or before `seq`, or the changes after it do not replay: the
-    /// history cannot say what the text was then.
     #[error("the history of {0} cannot be rebuilt at seq {1}")]
     HistoryGap(Id, i64),
-    /// A [`DocStore::splice`] closure declined to produce edits for the text it was shown.
-    /// The caller's own message, because only the caller knows what it was trying to write.
     #[error("the splice is not representable: {0}")]
     SpliceRefused(String),
     #[error("database error: {0}")]
@@ -368,41 +241,17 @@ pub enum DocStoreError {
     Other(#[from] anyhow::Error),
 }
 
-// ---------------------------------------------------------------------------
-// The trait
-// ---------------------------------------------------------------------------
-
-/// When an edit was made, for its history record (`dev-docs/resolved/HISTORY.md`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditTiming {
-    /// Now, as it arrives.
     Live,
-    /// Made while offline and carried over on reconnect. `made_at_ms` is the client's
-    /// claim (a `HISTORY` frame), kept between the previous change and now so a wrong
-    /// clock cannot reorder history; `None` when the client did not say (the
-    /// state-vector catch-up), and then it is stamped when it arrived.
     Offline { made_at_ms: Option<i64> },
 }
 
-/// Computes splice edits from a document's current text.
-///
-/// Called exactly once, with the room lock held — see [`DocStore::splice`] for why the
-/// contract is a closure rather than a precomputed edit list. `Err` carries a message for
-/// [`DocStoreError::SpliceRefused`].
 pub type SpliceFn<'a> =
     &'a (dyn Fn(&str) -> Result<Vec<ddd_core::splice::TextEdit>, String> + Send + Sync);
 
-/// CRDT-backed document storage.
-///
-/// Every mutating method is serialized per document by the implementation (the
-/// per-document actor of SPEC §4.3), so callers need no locking. Materialization
-/// is debounced internally; methods documented as "read-your-writes" force a
-/// flush first.
 #[async_trait]
 pub trait DocStore: Send + Sync + 'static {
-    /// Create a document from full text. `id` is client-mintable; `None` mints
-    /// one. Errors [`DocStoreError::AlreadyExists`] on a live id (→ 409) and
-    /// [`DocStoreError::Graveyarded`] on a purged id (→ 410).
     async fn create(
         &self,
         id: Option<Id>,
@@ -410,11 +259,6 @@ pub trait DocStore: Send + Sync + 'static {
         actor: &Actor,
     ) -> Result<WriteOutcome, DocStoreError>;
 
-    /// Create a document from a device's own encoded Yjs state (update encoding v1):
-    /// a note made offline. Starting from the device's CRDT, not its text, is what lets
-    /// the device's later edits merge instead of duplicating the text. `id` is required
-    /// (the device minted it). Same errors as [`DocStore::create`], plus
-    /// [`DocStoreError::MalformedUpdate`] for bytes that are not a usable document.
     async fn create_from_update(
         &self,
         id: Id,
@@ -422,9 +266,6 @@ pub trait DocStore: Send + Sync + 'static {
         actor: &Actor,
     ) -> Result<WriteOutcome, DocStoreError>;
 
-    /// Replace the whole text in one CRDT transaction (`PUT`, `PATCH`,
-    /// machine-owned rewrites). Computes a minimal diff against the current text
-    /// so unchanged regions keep their CRDT history.
     async fn replace_text(
         &self,
         id: &str,
@@ -432,30 +273,6 @@ pub trait DocStore: Send + Sync + 'static {
         actor: &Actor,
     ) -> Result<WriteOutcome, DocStoreError>;
 
-    /// Compute the shared core's splice edits (frontmatter values, `%%%` section lines)
-    /// **from the text as it is under the room lock**, then apply them in one transaction.
-    ///
-    /// # Why a closure and not an edit list
-    ///
-    /// A [`ddd_core::splice::TextEdit`] is a byte-offset span, and a byte offset is
-    /// only meaningful against the exact string it was computed from. The obvious API —
-    /// `text()` to read, compute the spans, `apply_edits()` to write — is two separate
-    /// acquisitions of the room lock with a window in between, and a concurrent CRDT write in
-    /// that window silently shifts every offset. Nothing downstream can catch it:
-    /// `edit_deltas` validates bounds, character boundaries and non-overlap, never that the
-    /// span still holds the text it was derived from. The observed failure was a plugin's
-    /// one-line `%%%` write landing over the tail of a human's prose, which is worse than
-    /// anything SPEC §11.2 accepts (that risk is losing *one machine value*, not user text).
-    ///
-    /// So the caller hands over the computation instead of its result. `compute` is called
-    /// **exactly once, with the lock held**, and its spans are applied to the very string it
-    /// was given. It must be pure: the shared core's splice helpers are, and everything a
-    /// plugin needs to decide (which keys change, where the fence is) is a function of that
-    /// text.
-    ///
-    /// Returning `Ok(vec![])` is "nothing to write" and is a clean no-op — no CRDT history,
-    /// no log entry, no timestamp churn. Returning `Err` is
-    /// [`DocStoreError::SpliceRefused`] with the caller's own message.
     async fn splice(
         &self,
         id: &str,
@@ -463,8 +280,6 @@ pub trait DocStore: Send + Sync + 'static {
         actor: &Actor,
     ) -> Result<WriteOutcome, DocStoreError>;
 
-    /// Apply an encoded Yjs update (encoding v1) — the M2 WebSocket path, and
-    /// already used by restore.
     async fn apply_update(
         &self,
         id: &str,
@@ -475,8 +290,6 @@ pub trait DocStore: Send + Sync + 'static {
             .await
     }
 
-    /// [`DocStore::apply_update`], saying when the edit was made: an offline edit
-    /// carried over on reconnect is recorded in history at its own time.
     async fn apply_update_as(
         &self,
         id: &str,
@@ -485,49 +298,32 @@ pub trait DocStore: Send + Sync + 'static {
         timing: EditTiming,
     ) -> Result<WriteOutcome, DocStoreError>;
 
-    /// Current document text (read-your-writes: forces a flush).
     async fn text(&self, id: &str) -> Result<String, DocStoreError>;
 
-    /// Materialized document (read-your-writes: forces a flush).
     async fn get(&self, id: &str) -> Result<Document, DocStoreError>;
 
-    /// Materialized document without forcing a flush; may trail the newest CRDT
-    /// state (`materialized_version` says so).
     async fn get_stale(&self, id: &str) -> Result<Document, DocStoreError>;
 
-    /// Full encoded CRDT state + state vector (`?format=crdt`).
     async fn crdt_state(&self, id: &str) -> Result<CrdtState, DocStoreError>;
 
-    /// Update containing everything `since` (a client state vector) is missing.
     async fn diff(&self, id: &str, since: &[u8]) -> Result<Vec<u8>, DocStoreError>;
 
-    /// One page of documents matching `query`.
     async fn list(&self, query: &ListQuery) -> Result<Page, DocStoreError>;
 
-    /// Number of documents matching `query` (ignores cursor/limit).
     async fn count(&self, query: &ListQuery) -> Result<u64, DocStoreError>;
 
-    /// Tombstone → Trash. Idempotent; the id is *not* graveyarded yet.
     async fn tombstone(&self, id: &str, actor: &Actor) -> Result<(), DocStoreError>;
 
-    /// Restore a tombstoned document out of Trash.
     async fn untombstone(&self, id: &str, actor: &Actor) -> Result<(), DocStoreError>;
 
-    /// Purge a tombstoned document: delete the row, keep the id in the graveyard
-    /// forever (SPEC §3.5).
     async fn purge(&self, id: &str, actor: &Actor) -> Result<(), DocStoreError>;
 
-    /// `true` when the id is in the graveyard.
     async fn is_graveyarded(&self, id: &str) -> Result<bool, DocStoreError>;
 
-    /// Take a snapshot now, whatever the policy says.
     async fn snapshot(&self, id: &str, reason: &str, actor: &Actor) -> Result<Id, DocStoreError>;
 
-    /// Snapshots for a document, newest first.
     async fn snapshots(&self, id: &str) -> Result<Vec<DocumentSnapshot>, DocStoreError>;
 
-    /// Recorded changes, newest first: those with `seq < before` when given, at most
-    /// `limit` of them.
     async fn changes(
         &self,
         id: &str,
@@ -535,15 +331,12 @@ pub trait DocStore: Send + Sync + 'static {
         limit: i64,
     ) -> Result<Vec<DocumentChange>, DocStoreError>;
 
-    /// Every unit of history (raw change or squashed group) from `from` on, oldest
-    /// first, each as one change ending at its last `seq`.
     async fn changes_since(
         &self,
         id: &str,
         from: i64,
     ) -> Result<Vec<crate::changes::Change>, DocStoreError>;
 
-    /// Squashed groups, newest first: those ending before `before` when given.
     async fn squashed(
         &self,
         id: &str,
@@ -551,19 +344,12 @@ pub trait DocStore: Send + Sync + 'static {
         limit: i64,
     ) -> Result<Vec<DocumentHistory>, DocStoreError>;
 
-    /// Run the history squash now instead of waiting for the job (tests, and operators
-    /// who lowered `RAW_CHANGE_DAYS`). Returns the number of groups written.
     async fn squash_history_now(&self) -> Result<usize, DocStoreError>;
 
-    /// Wipe a document's history (changes, squashed groups, checkpoints, snapshots) and
-    /// start it again from a checkpoint of the current text.
     async fn forget_history(&self, id: &str) -> Result<(), DocStoreError>;
 
-    /// The text as it was after update `seq`: the nearest checkpoint at or before it,
-    /// then the recorded changes up to it (at most `CHECKPOINT_EVERY_CHANGES` of them).
     async fn text_at(&self, id: &str, seq: i64) -> Result<String, DocStoreError>;
 
-    /// Mark the change written at `seq` as the revert of changes `from..=to`.
     async fn note_revert(
         &self,
         id: &str,
@@ -572,14 +358,12 @@ pub trait DocStore: Send + Sync + 'static {
         to: i64,
     ) -> Result<(), DocStoreError>;
 
-    /// One snapshot of a document, with its text.
     async fn snapshot_by_id(
         &self,
         id: &str,
         snapshot_id: &str,
     ) -> Result<DocumentSnapshot, DocStoreError>;
 
-    /// Restore a snapshot: one CRDT transaction replacing the full text.
     async fn restore_snapshot(
         &self,
         id: &str,
@@ -587,88 +371,55 @@ pub trait DocStore: Send + Sync + 'static {
         actor: &Actor,
     ) -> Result<WriteOutcome, DocStoreError>;
 
-    /// Force materialization of one document.
     async fn flush(&self, id: &str) -> Result<(), DocStoreError>;
 
-    /// Force materialization of every dirty document (shutdown path, SPEC §8).
     async fn flush_all(&self) -> Result<(), DocStoreError>;
 
-    /// Evict idle rooms after flushing them; called on a timer.
     async fn evict_idle(&self) -> Result<usize, DocStoreError>;
 
-    /// Engine counters for `/metrics`.
     fn stats(&self) -> DocStoreStats;
 }
 
-/// The Mongo-backed [`DocStore`] (SPEC §3.5). Owns the hot-document rooms, the
-/// update log, snapshots and the graveyard.
 #[derive(Clone)]
 pub struct MongoDocStore {
     inner: std::sync::Arc<MongoDocStoreInner>,
 }
 
-/// Internal state of [`MongoDocStore`]; private on purpose — nothing outside
-/// this file may reach into it.
 struct MongoDocStoreInner {
     collections: db::Collections,
     tuning: DocStoreTuning,
-    /// The workspace change feed (SPEC §4.1). Every write that changes the
-    /// projection allocates a sequence number here and commits it after the Mongo
-    /// write, which is what makes the feed's `safe_seq` meaningful
-    /// (PROTOCOL.md §2.2).
     feed: Arc<crate::feed::ChangeFeed>,
-    /// Hot-document registry. A `std::sync::Mutex` on purpose: it is only ever
-    /// held for map operations (never across an `.await`), which lets the
-    /// synchronous [`DocStore::stats`] read it.
     rooms: std::sync::Mutex<HashMap<Id, Arc<Room>>>,
-    /// Documents whose `crdt` blob is above the compaction threshold — a set, so
-    /// the gauge counts documents rather than flushes.
     oversized_docs: std::sync::Mutex<HashSet<Id>>,
 }
 
-/// One hot document: the per-document actor of SPEC §4.3.
 struct Room {
     id: Id,
     state: Mutex<RoomState>,
-    /// Epoch millis of the last use; drives idle eviction.
     last_touched_ms: AtomicI64,
-    /// Mirror of `RoomState::dirty` so `stats()` needs no async lock.
     dirty: AtomicBool,
 }
 
 struct RoomState {
     doc: Doc,
-    /// Cached current text — the materialization input.
     text: String,
-    /// Materialization is pending.
     dirty: bool,
-    /// Last update-log sequence number for this document.
     seq: i64,
-    /// `materialized_version` currently stored in Mongo: the optimistic
-    /// concurrency token of the materialization write.
     stored_version: String,
-    /// Last materialized title, so a no-op write can answer without a read.
     stored_title: String,
-    /// Actor of the most recent unflushed write.
     pending_actor: Option<String>,
-    /// Timestamp of the most recent unflushed write.
     pending_updated_at: Option<BsonDateTime>,
-    /// Changes recorded since the newest checkpoint.
     changes_since_checkpoint: u32,
-    /// When the newest change was made: history's times never go backwards.
     last_change_ms: i64,
-    /// The record live typing is being folded into, while the burst lasts.
     open_record: Option<OpenRecord>,
 }
 
-/// A change record still taking in live typing (`dev-docs/resolved/HISTORY.md`).
 struct OpenRecord {
     first_seq: i64,
     seq: i64,
     started_ms: i64,
     last_ms: i64,
     by: String,
-    /// The text before `first_seq`: the folded record's hunks are against it.
     before: String,
 }
 
@@ -695,19 +446,13 @@ impl MongoDocStore {
         }
     }
 
-    /// The tuning this store was built with.
     pub fn tuning(&self) -> DocStoreTuning {
         self.inner.tuning
     }
 
-    /// Start the background workers (debounced materialization flush, idle room
-    /// eviction, update-log trimming). Returns a handle that stops them on drop.
     pub fn spawn_workers(&self) -> DocStoreWorkers {
         let mut handles = Vec::new();
 
-        // Debounced materialization: in M1 the write path flushes synchronously,
-        // so this is the safety net for a flush that failed (and in M2 it
-        // becomes the only flush path).
         let store = self.clone();
         handles.push(tokio::spawn(async move {
             let mut ticker = tokio::time::interval(store.inner.tuning.materialize_debounce);
@@ -720,7 +465,6 @@ impl MongoDocStore {
             }
         }));
 
-        // Idle room eviction (SPEC §4.3: evict 10 min after last use, post-flush).
         let store = self.clone();
         handles.push(tokio::spawn(async move {
             let mut ticker = tokio::time::interval(Duration::from_secs(60));
@@ -735,7 +479,6 @@ impl MongoDocStore {
             }
         }));
 
-        // Trash purge (SPEC §3.5: 30 days, then the id stays in the graveyard).
         let store = self.clone();
         handles.push(tokio::spawn(async move {
             let mut ticker = tokio::time::interval(Duration::from_secs(3600));
@@ -750,8 +493,6 @@ impl MongoDocStore {
             }
         }));
 
-        // History squash (`dev-docs/resolved/HISTORY.md`): raw changes past `RAW_CHANGE_DAYS` become
-        // one record per group.
         let store = self.clone();
         handles.push(tokio::spawn(async move {
             let mut ticker = tokio::time::interval(store.inner.tuning.history_squash_interval);
@@ -770,13 +511,11 @@ impl MongoDocStore {
     }
 }
 
-/// Handle to the docstore's background tasks; aborts them on drop.
 pub struct DocStoreWorkers {
     handles: Vec<tokio::task::JoinHandle<()>>,
 }
 
 impl DocStoreWorkers {
-    /// Flush everything and stop the workers (graceful shutdown).
     pub async fn shutdown(self) {
         for handle in self.handles {
             handle.abort();
@@ -784,25 +523,12 @@ impl DocStoreWorkers {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Engine internals
-// ---------------------------------------------------------------------------
-
-/// What kind of text mutation a write performs.
 enum Mutation<'a> {
-    /// Replace the whole text (`create`, `PUT`, restore).
     SetText(&'a str),
-    /// Compute shared-core splice edits against the locked text, then apply them. There is
-    /// deliberately **no** variant that takes precomputed edits: a byte-offset span computed
-    /// outside this lock can no longer be trusted by the time it gets here (see
-    /// [`DocStore::splice`]).
     Splice(SpliceFn<'a>),
-    /// Apply an encoded Yjs update (encoding v1).
     Update(&'a [u8]),
 }
 
-/// The document-text cap actually enforced: the configured value, never above
-/// the shared core's hard cap (SPEC §3.5 "document text ≤ 1 MB").
 fn effective_limit(max_document_bytes: usize) -> usize {
     max_document_bytes.min(limits::MAX_DOCUMENT_BYTES)
 }
@@ -846,7 +572,6 @@ impl MongoDocStoreInner {
         rooms.values().cloned().collect()
     }
 
-    /// Get the hot room for `id`, loading it from Mongo when cold.
     async fn room(&self, id: &str) -> Result<Arc<Room>, DocStoreError> {
         if !is_valid_id(id) {
             return Err(DocStoreError::InvalidId(id.to_string()));
@@ -861,9 +586,6 @@ impl MongoDocStoreInner {
         Ok(room)
     }
 
-    /// Rebuild a document's `Doc` from the stored blob plus every retained
-    /// update-log entry. Applying a log entry twice is a CRDT no-op, so
-    /// correctness never depends on log retention (SPEC §3.5).
     async fn load_room(&self, id: &str) -> Result<Room, DocStoreError> {
         let stored = self
             .collections
@@ -909,7 +631,6 @@ impl MongoDocStoreInner {
             let txn = doc.transact();
             text_ref.get_string(&txn)
         };
-        // The log may have carried the document past its last materialization.
         let dirty = text != stored.content;
 
         let checkpoint_seq = self
@@ -958,7 +679,6 @@ impl MongoDocStoreInner {
         })
     }
 
-    /// The one write path: apply → log → materialize.
     async fn mutate(
         &self,
         id: &str,
@@ -969,11 +689,6 @@ impl MongoDocStoreInner {
         let room = self.room(id).await?;
         let mut state = room.state.lock().await;
 
-        // 1. Work out the resulting text first, so the size cap is enforced
-        //    before any CRDT state is touched (SPEC §3.5 limits).
-        //
-        //    This is also where a splice's edits are computed — inside the lock, from the
-        //    text step 3 will apply them to, so the offsets cannot be stale.
         let mut spliced: Vec<ddd_core::splice::TextEdit> = Vec::new();
         let candidate: String = match mutation {
             Mutation::SetText(text) => normalize_input(text).into_owned(),
@@ -982,8 +697,6 @@ impl MongoDocStoreInner {
                 ddd_core::splice::apply(&state.text, &spliced)
             }
             Mutation::Update(update) => {
-                // Apply to a scratch replica to learn the resulting text without
-                // risking a partial write on the hot doc.
                 let scratch = new_doc();
                 let scratch_text = scratch.get_or_insert_text(TEXT_ROOT);
                 {
@@ -1007,19 +720,6 @@ impl MongoDocStoreInner {
         };
         self.check_size(&candidate)?;
 
-        // 1a. A **genuine no-op**: no snapshot, no transaction, no log entry, no
-        //     materialization, no timestamp churn. Idempotent client retries and idempotent
-        //     plugin syncs land here (HOST-ABI.md §3.4: a daily sync that changes nothing must
-        //     produce no CRDT history at all).
-        //
-        //     Decided from the candidate text, *before* the transaction, because it cannot be
-        //     decided after one: `encode_diff_v1` over an empty transaction returns `[0, 0]`,
-        //     not an empty slice, so the `update.is_empty()` test further down never fired and
-        //     every no-op rewrite appended an update-log entry anyway.
-        //
-        //     `Update` is excluded and must be: a remote update whose text happens to match can
-        //     still carry structure other replicas need, and dropping it would stall their
-        //     convergence. Only the two text-rewriting mutations are decidable this way.
         if !matches!(mutation, Mutation::Update(_)) && candidate == state.text {
             return Ok(WriteOutcome {
                 id: room.id.clone(),
@@ -1031,7 +731,6 @@ impl MongoDocStoreInner {
             });
         }
 
-        // 3. Apply to the hot doc in one transaction.
         let text_ref = state.doc.get_or_insert_text(TEXT_ROOT);
         let before = {
             let txn = state.doc.transact();
@@ -1046,8 +745,6 @@ impl MongoDocStoreInner {
                     }
                 }
                 Mutation::Splice(_) => {
-                    // `spliced` was computed from `state.text` a few lines up, under this
-                    // same lock — the offsets are the ones that string actually has.
                     for delta in edit_deltas(&state.text, &spliced)? {
                         delta.apply(&mut txn, &text_ref);
                     }
@@ -1067,8 +764,6 @@ impl MongoDocStoreInner {
         };
 
         if update.is_empty() && text_after == state.text {
-            // A genuine no-op: no log entry, no materialization, no timestamp
-            // churn. Idempotent client retries land here.
             return Ok(WriteOutcome {
                 id: room.id.clone(),
                 content: state.text.clone(),
@@ -1079,15 +774,10 @@ impl MongoDocStoreInner {
             });
         }
 
-        // What this write did to the text, for the Changes view and revert. A splice
-        // knows its exact edits; anything else is diffed, one hunk per place it changed.
         let hunks = match mutation {
             Mutation::Splice(_) => crate::changes::hunks_from_edits(&state.text, &spliced),
             _ => crate::changes::hunks_between(&state.text, &text_after),
         };
-        // Live typing is folded into one record per short burst (`dev-docs/resolved/HISTORY.md`):
-        // one record per keystroke was ~500 a minute. REST writes, restores, reverts
-        // and offline edits are always records of their own.
         let foldable = matches!(mutation, Mutation::Update(_))
             && timing == EditTiming::Live
             && !hunks.is_empty();
@@ -1095,8 +785,6 @@ impl MongoDocStoreInner {
 
         state.text = text_after;
 
-        // 4. Append to the update log: durability for the applied update and the
-        //    M2 broadcast payload.
         let seq = state.seq + 1;
         self.append_update(&room.id, seq, &update, actor).await?;
         if !hunks.is_empty() {
@@ -1110,7 +798,6 @@ impl MongoDocStoreInner {
                     true,
                 ),
             };
-            // History stays in order even when a live edit and an offline one race.
             let made_at = made_at.max(state.last_change_ms);
             state.last_change_ms = made_at;
             let by = actor.as_stored();
@@ -1149,7 +836,6 @@ impl MongoDocStoreInner {
                 if state.changes_since_checkpoint >= self.tuning.checkpoint_every_changes {
                     self.write_checkpoint(&room.id, seq, &state.text).await?;
                     state.changes_since_checkpoint = 0;
-                    // A checkpoint sits on a record boundary: the next write starts afresh.
                     state.open_record = None;
                 }
             }
@@ -1164,8 +850,6 @@ impl MongoDocStoreInner {
         state.pending_actor = Some(actor.as_stored());
         state.pending_updated_at = Some(BsonDateTime::now());
 
-        // 5. Materialize. M1: synchronous. M2: drop this call and let the
-        //    debounce worker coalesce (the room is already marked dirty).
         let materialized = self.materialize_room(&room, &mut state).await?;
 
         if seq % TRIM_EVERY == 0 {
@@ -1183,9 +867,6 @@ impl MongoDocStoreInner {
         })
     }
 
-    /// The **distinct materialization step**: `crdt`, `state_vector`, `content`,
-    /// `title`, `fm`, `plugins`, `materialized_version` and `fm_parse_error`
-    /// rewritten together in **one** Mongo write (SPEC §3.5).
     async fn materialize_room(
         &self,
         room: &Arc<Room>,
@@ -1206,9 +887,6 @@ impl MongoDocStoreInner {
             tracing::warn!(document = %room.id, bytes = crdt_len, "crdt blob above alert threshold");
         }
         {
-            // `encode_state_as_update_v1` against an empty state vector *is* the
-            // compacted form, so every flush already writes the compacted blob;
-            // what is left to do is report the ones that stay large.
             let mut oversized = self.oversized_docs.lock().expect("oversized set poisoned");
             if crdt_len > self.tuning.crdt_compact_threshold_bytes {
                 oversized.insert(room.id.clone());
@@ -1219,10 +897,6 @@ impl MongoDocStoreInner {
 
         let materialized = materialize(&state.text, version_hash(&state_vector));
 
-        // The projection is changing, so the row needs a new feed sequence number
-        // (CONTRACTS.md docstore M2 item 1). Allocated *before* the write and
-        // committed only once it lands; the guard burns the number on any failure
-        // path below, which is what keeps `safe_seq` honest (PROTOCOL.md §2.2).
         let feed_allocation = self.feed.allocate(room.id.clone());
 
         let updated_at = state.pending_updated_at.unwrap_or_else(BsonDateTime::now);
@@ -1261,9 +935,6 @@ impl MongoDocStoreInner {
 
         if result.matched_count == 0 {
             metrics::counter!(names::MATERIALIZE_FAILURES).increment(1);
-            // Someone else moved the row out from under us. The applied update is
-            // already durable in the log, so dropping the room makes the next
-            // access rebuild from Mongo + log and converge — no data is lost.
             self.drop_room(&room.id);
             return Err(DocStoreError::Contended(room.id.clone()));
         }
@@ -1275,7 +946,6 @@ impl MongoDocStoreInner {
         state.pending_updated_at = None;
         room.dirty.store(false, Ordering::Relaxed);
 
-        // The row carries its new `feed_seq`: tell every connected client.
         feed_allocation.commit(crate::feed::FeedChangeKind::Upsert);
 
         metrics::histogram!(names::MATERIALIZE_LATENCY).record(started.elapsed().as_secs_f64());
@@ -1304,8 +974,6 @@ impl MongoDocStoreInner {
         Ok(())
     }
 
-    /// The squashed group `seq` falls strictly inside (`from_seq <= seq < to_seq`): a
-    /// point whose text no longer exists.
     async fn squashed_around(
         &self,
         id: &str,
@@ -1320,9 +988,6 @@ impl MongoDocStoreInner {
             .await?)
     }
 
-    /// Raw changes and squashed groups in `(after, upto]`, oldest first, each as one
-    /// change ending at its last `seq`. A raw change a squashed group already covers
-    /// (a squash that stopped between its two writes) is left out.
     async fn history_units(
         &self,
         id: &str,
@@ -1359,8 +1024,6 @@ impl MongoDocStoreInner {
             }
             let unit = change.to_change();
             if unit.first_seq <= after {
-                // A folded record that began before the starting point: replaying it from
-                // there would apply half of what it did.
                 return Err(DocStoreError::HistoryGap(id.to_string(), after));
             }
             units.push(unit);
@@ -1369,12 +1032,8 @@ impl MongoDocStoreInner {
         Ok(units)
     }
 
-    /// The text after update `seq`, from the newest checkpoint at or before it that is
-    /// not inside a squashed group.
     async fn text_at(&self, id: &str, seq: i64) -> Result<String, DocStoreError> {
         let gap = || DocStoreError::HistoryGap(id.to_string(), seq);
-        // Inside a squashed group or a folded burst of typing, the text at that exact
-        // update was never kept.
         let inside_folded = self
             .collections
             .document_changes()
@@ -1402,8 +1061,6 @@ impl MongoDocStoreInner {
         Err(gap())
     }
 
-    /// Squash raw changes older than `raw_change_days` into one record per closed group
-    /// (`dev-docs/resolved/HISTORY.md`). Returns the number of groups written.
     async fn squash_history(&self) -> Result<usize, DocStoreError> {
         let cutoff = now_ms() - self.tuning.raw_change_days * DAY_MS;
         let ids: Vec<String> = self
@@ -1438,8 +1095,6 @@ impl MongoDocStoreInner {
         let Some(last) = records.last() else {
             return Ok(0);
         };
-        // The change after the old ones: if it continues the newest group, that group is
-        // still open and waits for a later run.
         let next = self
             .collections
             .document_changes()
@@ -1506,7 +1161,6 @@ impl MongoDocStoreInner {
                 reverts,
                 offline,
             };
-            // 1. The squashed record (an upsert: a rerun after a crash rewrites it).
             let fields =
                 bson::to_document(&record).map_err(|err| DocStoreError::Bson(err.to_string()))?;
             let mut fields = fields;
@@ -1519,8 +1173,6 @@ impl MongoDocStoreInner {
                 )
                 .upsert(true)
                 .await?;
-            // 2. Checkpoints inside the group describe texts that no longer exist: one at
-            //    its end replaces them.
             let interior =
                 doc! { "document_id": id, "seq": { "$gte": group.from_seq, "$lt": group.to_seq } };
             if self
@@ -1544,7 +1196,6 @@ impl MongoDocStoreInner {
                     .delete_many(interior)
                     .await?;
             }
-            // 3. The raw changes it replaces.
             self.collections
                 .document_changes()
                 .delete_many(doc! { "document_id": id, "seq": { "$gte": group.from_seq, "$lte": group.to_seq } })
@@ -1590,8 +1241,6 @@ impl MongoDocStoreInner {
         Ok(())
     }
 
-    /// Fold the next write into the open record ending at `previous`. `false` when that
-    /// record is gone (history forgotten meanwhile): the caller writes a new one.
     async fn extend_change(
         &self,
         document_id: &str,
@@ -1623,7 +1272,6 @@ impl MongoDocStoreInner {
         Ok(result.matched_count == 1)
     }
 
-    /// The full text at `seq`: where rebuilding any point in time starts from.
     async fn write_checkpoint(
         &self,
         document_id: &str,
@@ -1644,8 +1292,6 @@ impl MongoDocStoreInner {
         Ok(())
     }
 
-    /// Trim the per-document update log to [`UPDATE_LOG_KEEP_COUNT`] entries and
-    /// [`UPDATE_LOG_KEEP_BYTES`] bytes. A normal collection, never capped.
     async fn trim_update_log(&self, document_id: &str) -> Result<(), DocStoreError> {
         let pipeline = vec![
             doc! { "$match": { "document_id": document_id } },
@@ -1671,9 +1317,6 @@ impl MongoDocStoreInner {
                 .max(0) as u64;
             kept += 1;
             bytes += size;
-            // `kept > 1` keeps the newest entry unconditionally: the per-document
-            // sequence numbers are derived from it at load, and a single update
-            // larger than the byte budget must not wipe the log.
             if kept > 1
                 && (kept > self.tuning.update_log_keep_count
                     || bytes > self.tuning.update_log_keep_bytes)
@@ -1722,7 +1365,6 @@ impl MongoDocStoreInner {
         Ok(snapshot_id)
     }
 
-    /// Purge every document whose Trash retention has run out (SPEC §3.5).
     async fn purge_expired_trash(&self) -> Result<usize, DocStoreError> {
         let cutoff =
             BsonDateTime::from_millis(now_ms() - self.tuning.trash_retention_days * DAY_MS);
@@ -1756,17 +1398,11 @@ impl MongoDocStoreInner {
         Ok(purged)
     }
 
-    /// Delete the row and everything derived from it, then graveyard the id
-    /// **forever** (SPEC §3.5).
     async fn purge_document(&self, id: &str, actor: &Actor) -> Result<(), DocStoreError> {
         if !is_valid_id(id) {
             return Err(DocStoreError::InvalidId(id.to_string()));
         }
 
-        // Refuse before the graveyard write: graveyarding an id that never
-        // existed would block it forever for no reason. The projection keeps the
-        // CRDT blob out of a read whose only job is "does this row exist" (and
-        // gives the audit entry below something to record).
         let Some(row) = self
             .collections
             .raw(db::DOCUMENTS)
@@ -1777,13 +1413,6 @@ impl MongoDocStoreInner {
             return Err(DocStoreError::NotFound(id.to_string()));
         };
 
-        // A purge is the one feed row that is written on `deleted_ids` rather than
-        // on `documents` — the `documents` row is about to stop existing. Purged
-        // rows are how a long-offline client learns to drop its local replica
-        // (PROTOCOL.md §2.1), so this number is not optional. `$set` rather than
-        // `$setOnInsert`: the guard above already returned `NotFound` unless the
-        // `documents` row exists, so this path runs at most once per id, and a
-        // graveyard row backfilled without a `feed_seq` still gets one.
         let feed_allocation = self.feed.allocate(id.to_string());
         self.collections
             .deleted_ids()
@@ -1804,7 +1433,6 @@ impl MongoDocStoreInner {
             .documents()
             .delete_one(doc! { "_id": id })
             .await?;
-        // The row really is gone now, so clients can be told.
         feed_allocation.commit(crate::feed::FeedChangeKind::Purged);
         self.collections
             .document_updates()
@@ -1832,11 +1460,6 @@ impl MongoDocStoreInner {
             .expect("oversized set poisoned")
             .remove(id);
 
-        // The point of no return gets an audit row (SPEC §5.4): a `document.delete`
-        // tombstone entry 30 days earlier does not record that the text, its whole
-        // update log and every snapshot were actually destroyed. Best effort — the
-        // deletion already happened, so a failed audit write is logged, never
-        // returned.
         let entry = AuditEntry::new(
             "document.purge",
             Some(actor),
@@ -1865,8 +1488,6 @@ impl MongoDocStoreInner {
     }
 }
 
-/// Mongo filter for a [`ListQuery`], combining the compiled DSL filter with the
-/// tombstone state and the optional text search.
 fn list_filter(query: &ListQuery) -> BsonDocument {
     let mut clauses = Vec::new();
     if let Some(filter) = &query.filter
@@ -1893,18 +1514,11 @@ fn list_filter(query: &ListQuery) -> BsonDocument {
     }
 }
 
-/// Deserialize a projected `documents` row into a [`DocumentRow`].
-///
-/// Every field `DocumentRow` can do without is `#[serde(default)]`, so a
-/// metadata-only projection (no `content`) deserializes as an empty string rather
-/// than failing — and there is nothing to fake, because the type promises no CRDT
-/// bytes in the first place.
 fn row_from_projection(row: BsonDocument) -> Result<DocumentRow, DocStoreError> {
     bson::from_document(row).map_err(|err| DocStoreError::Bson(err.to_string()))
 }
 
 impl MongoDocStore {
-    /// The shared tail of both create paths: a new document from a built `Y.Doc`.
     async fn insert_new(
         &self,
         id: Id,
@@ -1912,8 +1526,6 @@ impl MongoDocStore {
         actor: &Actor,
     ) -> Result<WriteOutcome, DocStoreError> {
         let inner = &self.inner;
-        // The graveyard is consulted by every create path: a long-offline client
-        // can never resurrect a purged document (SPEC §3.5 → HTTP 410).
         if inner
             .collections
             .deleted_ids()
@@ -1936,10 +1548,6 @@ impl MongoDocStore {
 
         let materialized = materialize(&stored_text, version_hash(&state_vector));
         let now = BsonDateTime::now();
-        // The row enters the change feed with the same write that creates it, so a
-        // client that is already subscribed sees it without a materialization pass
-        // (SPEC §4.1). The guard is committed only after the insert succeeds;
-        // dropping it on an error burns the number, which is legal (PROTOCOL.md §2.2).
         let feed_allocation = inner.feed.allocate(id.clone());
         let stored = Document {
             id: id.clone(),
@@ -1970,7 +1578,6 @@ impl MongoDocStore {
         feed_allocation.commit(crate::feed::FeedChangeKind::Upsert);
 
         inner.append_update(&id, 1, &update, actor).await?;
-        // History starts here: every point in time is rebuilt from a checkpoint.
         inner.write_checkpoint(&id, 1, &stored_text).await?;
         metrics::counter!(names::UPDATES_APPLIED).increment(1);
 
@@ -2057,8 +1664,6 @@ impl DocStore for MongoDocStore {
         let text = {
             let text_ref = doc.get_or_insert_text(TEXT_ROOT);
             let txn = doc.transact();
-            // Pending structs mean the update depends on edits it does not carry: not a
-            // whole document.
             if txn.store().pending_update().is_some() || txn.store().pending_ds().is_some() {
                 return Err(DocStoreError::MalformedUpdate(
                     "the state depends on edits it does not include".to_string(),
@@ -2066,8 +1671,6 @@ impl DocStore for MongoDocStore {
             }
             text_ref.get_string(&txn)
         };
-        // The device normalizes before it seeds; text that would change under
-        // normalization would materialize differently from the CRDT that holds it.
         if normalize_input(&text) != text {
             return Err(DocStoreError::MalformedUpdate(
                 "the text has a byte-order mark or carriage returns".to_string(),
@@ -2167,9 +1770,6 @@ impl DocStore for MongoDocStore {
             None => 0,
         };
 
-        // `_id` is appended as the tiebreaker so paging is deterministic.
-        // INTEGRATION (M2): offset paging is replaced by keyset paging on the
-        // sort key once the change feed exists.
         let mut sort = query
             .sort
             .clone()
@@ -2178,15 +1778,6 @@ impl DocStore for MongoDocStore {
             sort.insert("_id", 1);
         }
 
-        // Projection, not a typed `find` over `Document`: the `crdt` and
-        // `state_vector` blobs are 2-10x the plaintext and compacted only above
-        // 4 MiB (SPEC §3.5), and `limit + 1` rows are buffered before the response
-        // is built — a single `?limit=500` over large documents would be gigabytes
-        // of resident memory on a single-replica server (SPEC §8), i.e. an
-        // authenticated OOM. The page type is `DocumentRow`, which cannot carry
-        // them, so this exclusion cannot be forgotten. `metadata_only` drops
-        // `content` here too, rather than blanking it in the route after the bytes
-        // have already been read.
         let mut projection = doc! { "crdt": 0, "state_vector": 0 };
         if query.metadata_only {
             projection.insert("content", 0);
@@ -2234,15 +1825,9 @@ impl DocStore for MongoDocStore {
         if !is_valid_id(id) {
             return Err(DocStoreError::InvalidId(id.to_string()));
         }
-        // Flush first: a tombstoned document is still readable in Trash, so its
-        // materialized fields must not trail into the grave.
         if let Some(room) = self.inner.cached_room(id) {
             self.inner.flush_room(&room).await?;
         }
-        // A tombstone is a projection change: the row needs a fresh `feed_seq` or
-        // no client ever learns the document moved to Trash (CONTRACTS.md docstore
-        // M2 item 1). Allocate before the write, commit only if it matched — an
-        // idempotent re-delete matches nothing and burns the number.
         let feed_allocation = self.inner.feed.allocate(id.to_string());
         let result = self
             .inner
@@ -2258,7 +1843,6 @@ impl DocStore for MongoDocStore {
             )
             .await?;
         if result.matched_count == 0 {
-            // Either already tombstoned (idempotent) or truly absent.
             let exists = self
                 .inner
                 .collections
@@ -2279,9 +1863,6 @@ impl DocStore for MongoDocStore {
         if !is_valid_id(id) {
             return Err(DocStoreError::InvalidId(id.to_string()));
         }
-        // A restore is a projection change too, and `updated_by` is "the last
-        // applier the server saw" (SPEC §3.5) — which on a restore is whoever
-        // clicked restore, so the actor is recorded rather than discarded.
         let feed_allocation = self.inner.feed.allocate(id.to_string());
         let result = self
             .inner
@@ -2492,7 +2073,6 @@ impl DocStore for MongoDocStore {
     ) -> Result<WriteOutcome, DocStoreError> {
         let snapshot = self.snapshot_by_id(id, snapshot_id).await?;
 
-        // Keep the pre-restore state recoverable.
         self.snapshot(id, "pre_restore", actor).await?;
         self.replace_text(id, &snapshot.content, actor).await
     }
@@ -2526,9 +2106,6 @@ impl DocStore for MongoDocStore {
             if room.last_touched_ms.load(Ordering::Relaxed) > cutoff {
                 continue;
             }
-            // Flush before dropping the room (SPEC §4.3: evict post-flush). A
-            // room that cannot be flushed stays resident rather than losing its
-            // unmaterialized state.
             match self.inner.flush_room(&room).await {
                 Ok(()) => {
                     self.inner.drop_room(&room.id);
@@ -2560,10 +2137,6 @@ impl DocStore for MongoDocStore {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Pure helpers (unit-tested without Mongo)
-// ---------------------------------------------------------------------------
-
 fn now_ms() -> i64 {
     BsonDateTime::now().timestamp_millis()
 }
@@ -2575,15 +2148,11 @@ fn binary(bytes: Vec<u8>) -> Binary {
     }
 }
 
-/// A snapshot row's title: the shared core's, so `title:` in the frontmatter wins over
-/// the first line exactly as it does for the document itself. (A first-line shortcut
-/// here once titled every snapshot of such a document "title: …".)
 fn title_of(text: &str) -> String {
     let normalized = normalize_input(text);
     parse_document(normalized.as_ref()).title
 }
 
-/// One `Y.Text` splice, in **UTF-16 code units** (SPEC §3.2 `OffsetKind::Utf16`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct TextSplice {
     index: u32,
@@ -2606,8 +2175,6 @@ fn utf16_len(text: &str) -> u32 {
     text.encode_utf16().count() as u32
 }
 
-/// Minimal single-splice diff between two texts: common prefix and suffix are
-/// left alone so their CRDT history (and any concurrent edits) survive.
 fn text_delta(old: &str, new: &str) -> Option<TextSplice> {
     if old == new {
         return None;
@@ -2647,9 +2214,6 @@ fn common_suffix_len(a: &str, b: &str) -> usize {
     i
 }
 
-/// Convert shared-core [`TextEdit`](ddd_core::splice::TextEdit)s (UTF-8
-/// byte spans against `text`) into UTF-16 splices, ordered so that applying them
-/// in sequence keeps every remaining offset valid.
 fn edit_deltas(
     text: &str,
     edits: &[ddd_core::splice::TextEdit],
@@ -2712,10 +2276,6 @@ fn is_duplicate_key(err: &mongodb::error::Error) -> bool {
         _ => false,
     }
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
@@ -2781,7 +2341,6 @@ mod tests {
 
     #[test]
     fn text_delta_counts_utf16_units() {
-        // "😀" is one code point, two UTF-16 units, four UTF-8 bytes.
         let delta = text_delta("😀ab", "😀xb").unwrap();
         assert_eq!(delta.index, 2, "prefix must be measured in UTF-16 units");
         assert_eq!(delta.remove, 1);
@@ -2790,8 +2349,6 @@ mod tests {
 
     #[test]
     fn text_delta_never_splits_a_multibyte_char() {
-        // The two emoji share leading UTF-8 bytes; the prefix must back off to a
-        // character boundary.
         let delta = text_delta("😀", "😁").unwrap();
         assert_eq!(delta.index, 0);
         assert_eq!(delta.remove, 2);
@@ -2850,7 +2407,6 @@ mod tests {
 
     #[test]
     fn edit_deltas_reject_mid_character_offsets() {
-        // Byte 1 is inside the 4-byte emoji.
         assert!(edit_deltas("😀", &[edit(1, 4, "x")]).is_err());
     }
 
@@ -2936,11 +2492,6 @@ mod tests {
     }
 }
 
-/// Integration tests against a real MongoDB. Ignored by default; run with
-/// `MONGO_URI=mongodb://localhost:27017 cargo test -p ddd-server -- --ignored`.
-///
-/// These drive the full write path, so they also depend on the shared core's
-/// parser being implemented (`materialize` calls `parse_document`).
 #[cfg(test)]
 mod mongo_tests {
     use super::*;
@@ -3047,9 +2598,6 @@ mod mongo_tests {
         teardown(&store).await;
     }
 
-    /// A listed row must never carry CRDT bytes, and `metadata_only` must not read
-    /// `content` at all: a page of 500 full rows is megabytes of `crdt` plus
-    /// megabytes of text buffered in one request.
     #[tokio::test]
     #[ignore = "requires MONGO_URI"]
     async fn list_rows_carry_no_crdt_bytes() {
@@ -3072,9 +2620,6 @@ mod mongo_tests {
             .iter()
             .find(|d| d.id == created.id)
             .expect("the created document is listed");
-        // `DocumentRow` has no `crdt`/`state_vector` fields at all — the page type
-        // is what guarantees the blobs are not read, so there is nothing to assert
-        // beyond the materialized fields arriving.
         assert_eq!(row.title, "Listed", "materialized fields still arrive");
         assert!(row.content.contains("body"));
 
@@ -3097,7 +2642,6 @@ mod mongo_tests {
         teardown(&store).await;
     }
 
-    /// The purge is the point of no return; it must leave a trail (SPEC §5.4).
     #[tokio::test]
     #[ignore = "requires MONGO_URI"]
     async fn purging_writes_an_audit_entry() {

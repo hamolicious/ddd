@@ -27,8 +27,6 @@ describe("slashQuery", () => {
 });
 
 describe("matchCommands", () => {
-  // In the order the registry hands them over. `Date` carries an `order` hint: sorting by
-  // it is the registry's job, and this function leaves the given order be.
   const all = [
     command("Attach file", { keywords: ["upload"] }),
     command("Insert table"),

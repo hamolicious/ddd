@@ -1,17 +1,3 @@
-/**
- * The `/admin` route: the same sections the settings screen contributes, gathered behind
- * tabs so a direct link works.
- *
- * **Non-admins get a message, not a dead URL.** The route is registered for everyone —
- * someone pasting `#/admin/audit` into a chat should be told what is wrong — and the server
- * refuses every request underneath regardless of what this component renders. Hiding is a
- * courtesy; the 403 is the control.
- *
- * Tabs are a `tablist` with roving `tabindex`, arrow-key navigation and `aria-controls`, and
- * the active tab is in the URL (`#/admin/<section>`) so a reload and the back button both
- * behave.
- */
-
 import { OfflineCopyNote } from "../../_shared/offline-copy.js";
 import { adminOfflineCopy } from "./offline.js";
 import { useCallback } from "react";
@@ -27,7 +13,6 @@ export const ADMIN_SECTIONS = ["users", "invites", "audit", "plugins", "workspac
 
 export type AdminSectionId = (typeof ADMIN_SECTIONS)[number];
 
-/** Every admin section is also a settings section. */
 export type SettingsSectionId = AdminSectionId;
 export const SETTINGS_SECTIONS: readonly SettingsSectionId[] = ADMIN_SECTIONS;
 
@@ -49,17 +34,6 @@ export function isAdminSection(value: string): value is AdminSectionId {
   return (ADMIN_SECTIONS as readonly string[]).includes(value);
 }
 
-/**
- * The frame every admin section draws around itself — **with its heading on the
- * `/admin` route and without it inside settings**.
- *
- * Both places render the same component (that is the point of contributing each area
- * twice), but the settings shell already draws an `<h2>` with the section's title and
- * its description above it. Drawing the `<h3>` as well printed "Invites" twice, one
- * line apart, and nested two ARIA regions with the identical accessible name — which
- * is not just noise on screen, it is a screen reader announcing the same landmark
- * twice on the way into a form.
- */
 export function AdminSectionFrame({
   id,
   title,
@@ -164,7 +138,6 @@ export function AdminSectionBody({
   readonly section: SettingsSectionId;
   readonly client: AdminClient;
   readonly selfId: string;
-  /** True on the settings screen, which has already drawn this section's heading. */
   readonly embedded?: boolean;
 }): ReactElement {
   return (

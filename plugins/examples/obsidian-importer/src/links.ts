@@ -17,7 +17,6 @@ export interface WikilinkRewrite {
 }
 
 export interface FrontmatterWikilinkRewrite {
-  /** Changed top-level fields, ready for `planFrontmatterValue`. */
   readonly values: ReadonlyMap<string, FmValue>;
   readonly resolved: number;
   readonly unresolved: number;
@@ -29,7 +28,6 @@ interface ParsedWikilink {
   readonly label: string | undefined;
 }
 
-/** Convert Obsidian wikilinks to ddd's stable, id-addressed Markdown links. */
 export function rewriteWikilinks(
   text: string,
   sourcePath: string,
@@ -88,7 +86,6 @@ export function rewriteWikilinks(
   return { text: rewritten, edits, resolved, unresolved };
 }
 
-/** Resolve exact wikilink values recursively inside frontmatter lists and maps. */
 export function rewriteFrontmatterWikilinks(
   frontmatter: CoreMap,
   sourcePath: string,

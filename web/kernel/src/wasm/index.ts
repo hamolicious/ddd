@@ -1,18 +1,6 @@
-/**
- * The shared Rust core, in the browser (SPEC §2: "parity … by construction").
- *
- * The kernel never reimplements parsing, title resolution or filter evaluation
- * in TypeScript — it calls the same code the server calls. This module is the
- * only place that touches the generated Wasm package; everything else depends on
- * {@link CoreBindings}, which is also what tests fake.
- *
- * Filter *compilation* stays server-side (SPEC §4.2): the client evaluates.
- */
-
 import type { CoreMap, ProjectionRow } from "../protocol.js";
 import type { PlanPage, QueryPlan } from "../query/plan.js";
 
-/** What `parse_document` returns (the JSON of `ParsedDocument`'s public half). */
 export interface ParsedDocument {
   readonly title: string;
   readonly fm: CoreMap;
@@ -20,10 +8,8 @@ export interface ParsedDocument {
   readonly fm_parse_error: boolean;
 }
 
-/** The filter DSL wire form (SPEC §4.2; grammar in `backend/crates/core/README.md`). */
 export type FilterJson = { readonly [key: string]: unknown };
 
-/** The row shape `evaluate_filter` expects — the evaluator's `Row`. */
 export interface FilterRow {
   readonly id: string;
   readonly title: string;
@@ -32,39 +18,14 @@ export interface FilterRow {
   readonly plugins: CoreMap;
   readonly created_at?: string;
   readonly updated_at?: string;
-  /**
-   * The tombstone instant, **omitted** on a live document rather than sent as
-   * null: `deleted_at` is an addressable field of the DSL (M5 polish), so
-   * `missing`/`exists` can tell the two apart, and Mongo stores it unset. Sending
-   * `null` here would make the client answer `exists` where the server answers
-   * `missing` for every live row in the workspace.
-   */
   readonly deleted_at?: string;
   readonly deleted: boolean;
 }
 
-/**
- * **FROZEN INTERFACE.** The client-side surface of the shared core.
- *
- * It is the **whole** ABI now. `resolveTitle` and `normalizeDate` were the two exports
- * `wasm.rs` had and this file did not, and `web/CONTRACTS.md` listed the gap as open
- * under this area: `kernel.core.resolveTitle`/`normalizeDate` threw
- * `notImplemented`, and `harness/src/core.ts` reached past this interface into the
- * generated module to get at `normalize_date`. Both are closed here, and the closing
- * is the one kind of change this interface takes — additive, with the Rust side already
- * exporting what it adds.
- */
-/**
- * One query engine instance (`QueryEngine` in `wasm.rs`): it holds the rows, their
- * text index and the folder tree. Owned by whoever made it — `free()` it.
- */
 export interface CoreQueryEngine {
-  /** Add or replace rows; a `purged` row is taken out. */
   upsert(rows: readonly ProjectionRow[]): number;
   remove(ids: readonly string[]): void;
-  /** Answer a plan. Throws on a malformed or refused plan. */
   run(plan: QueryPlan): PlanPage;
-  /** The engine, saved, for {@link CoreBindings.queryEngine}. */
   toJson(): string;
   readonly size: number;
   free(): void;
@@ -73,27 +34,12 @@ export interface CoreQueryEngine {
 export interface CoreBindings {
   parseDocument(text: string): ParsedDocument;
   evaluateFilter(filter: FilterJson, row: FilterRow): boolean;
-  /** Mirrors `CORE_SEMANTICS_VERSION`; compared against `welcome`. */
   semanticsVersion(): number;
-  /**
-   * `fm.title` → first ATX heading → first non-empty line → `"Untitled"`, without a
-   * `parseDocument` round trip through JSON.
-   */
   resolveTitle(text: string): string;
-  /**
-   * `Date::normalize_str` — the canonical ISO-8601 form materialization writes
-   * (SPEC §3.4), so a value derived on this client sorts and compares the way the
-   * server's would. Returns the input unchanged when it is not a date.
-   */
   normalizeDate(input: string): string;
-  /**
-   * A query engine: empty, or loaded from `saved` (`CoreQueryEngine.toJson`). `undefined`
-   * only when `saved` cannot be loaded — rebuild from the rows. Since kernel 3.1.0.
-   */
   queryEngine(saved?: string): CoreQueryEngine | undefined;
 }
 
-/** Project a stored projection row into the evaluator's row shape. */
 export function filterRow(row: ProjectionRow): FilterRow {
   return {
     id: row.id,
@@ -110,13 +56,6 @@ export function filterRow(row: ProjectionRow): FilterRow {
 
 let cached: Promise<CoreBindings> | undefined;
 
-/**
- * Load and initialize the Wasm core. Idempotent; concurrent callers share one
- * instantiation.
- *
- * `init` is passed nothing in the browser (wasm-bindgen resolves the `.wasm`
- * next to the JS); the Node harness hands in the bytes via `initInput`.
- */
 export function loadCore(initInput?: BufferSource | WebAssembly.Module | URL | string): Promise<CoreBindings> {
   cached ??= (async () => {
     const mod = await import("@ddd/core-wasm");
@@ -156,7 +95,6 @@ function wrapEngine(engine: import("@ddd/core-wasm").QueryEngine): CoreQueryEngi
   };
 }
 
-/** Drop the cached instance (tests only). */
 export function resetCoreForTests(): void {
   cached = undefined;
 }

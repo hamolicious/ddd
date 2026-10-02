@@ -1,10 +1,3 @@
-//! `ddd query` — query a workspace's documents: the functional query API from a shell.
-//!
-//! The plan is built by the shared core's `Query` builder — the one the server, the
-//! browser and backend plugins use — so a query here means exactly what it means
-//! there. `--plan` prints it without contacting anything; otherwise it is posted to
-//! `<server>/api/query` with a bearer token (`ddd login`).
-
 use anyhow::{Context, Result, bail};
 use clap::Args;
 use ddd_core::Date;
@@ -16,54 +9,36 @@ use crate::server::Server;
 
 #[derive(Args)]
 pub struct QueryArgs {
-    /// Ranked full-text search.
     #[arg(long)]
     text: Option<String>,
-    /// A condition, `field:op[:value]` — `title:text_contains:a`, `fm.n:gt:3`,
-    /// `fm.due:missing`. Repeat for more; they combine with *and* (`--any` for *or*).
-    /// Values: `true`/`false`, numbers and `null` are typed; `date:2026-10-01`,
-    /// `doc:<id>` and `str:<text>` say what they are; anything else is text.
     #[arg(long = "filter", value_name = "FIELD:OP[:VALUE]")]
     filters: Vec<String>,
-    /// Combine the `--filter` conditions with *or*.
     #[arg(long)]
     any: bool,
-    /// Only notes in this note (its children list).
     #[arg(long, value_name = "ID")]
     child_of: Option<String>,
-    /// With `--child-of`: anywhere below it, not only directly in it.
     #[arg(long, requires = "child_of")]
     deep: bool,
-    /// Only notes whose children list holds this note.
     #[arg(long, value_name = "ID")]
     parent_of: Option<String>,
-    /// `fm.date`, `-updated_at`, `title:desc` or `relevance`. Repeat for tiebreaks.
     #[arg(long, value_name = "KEY")]
     sort: Vec<String>,
-    /// `live` (default), `trashed` or `all`.
     #[arg(long, value_parser = ["live", "trashed", "all"])]
     trash: Option<String>,
     #[arg(long)]
     limit: Option<u32>,
-    /// A previous page's `next_cursor`.
     #[arg(long)]
     cursor: Option<String>,
-    /// Show the line each text hit matched on.
     #[arg(long)]
     snippets: bool,
-    /// Leave the document text out of the answer.
     #[arg(long)]
     metadata_only: bool,
-    /// Print the plan and stop; no server needed.
     #[arg(long)]
     plan: bool,
-    /// Print the server's answer as JSON instead of a table.
     #[arg(long)]
     json: bool,
-    /// The ddd server, e.g. https://notes.example.com.
     #[arg(long, env = "DDD_SERVER")]
     server: Option<String>,
-    /// A bearer token from `ddd login`.
     #[arg(long, env = "DDD_TOKEN", hide_env_values = true)]
     token: Option<String>,
 }
@@ -151,7 +126,6 @@ fn build(args: &QueryArgs) -> Result<Plan> {
     query.build().context("the query is not valid")
 }
 
-/// `field:op[:value]` → one filter node.
 fn condition(raw: &str) -> Result<Filter> {
     let mut parts = raw.splitn(3, ':');
     let field = parts.next().unwrap_or_default();
@@ -172,7 +146,6 @@ fn condition(raw: &str) -> Result<Filter> {
     lower(field, op, &values, false).with_context(|| format!("`{raw}`"))
 }
 
-/// A typed value from the command line.
 fn literal(raw: &str) -> Result<Literal> {
     if let Some(date) = raw.strip_prefix("date:") {
         return Ok(Literal::Date(

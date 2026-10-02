@@ -43,8 +43,6 @@ describe("what it refuses", () => {
   });
 
   it("blocks relative and scheme-relative URLs", () => {
-    // Documents are id-addressed (`doc://<ulid>`), so a relative path has no meaning
-    // here and inheriting the page's scheme is not an allowlisted scheme.
     expect(classifyUrl("./notes.md")).toMatchObject({ kind: "blocked", reason: "relative URL" });
     expect(classifyUrl("/api/admin/export")).toMatchObject({ kind: "blocked", reason: "relative URL" });
     expect(classifyUrl("//evil.example/x")).toMatchObject({ kind: "blocked", reason: "scheme-relative URL" });

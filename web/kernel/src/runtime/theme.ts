@@ -1,15 +1,3 @@
-/**
- * Design tokens: the kernel's defaults, the resolved colour scheme, and the layer
- * stack `themes` overrides through (SPEC §6.4, §6.5).
- *
- * Layers, not a merged blob: a theme picker applies a layer and disposes it when
- * the user picks another one, and the kernel defaults are never lost. That is also
- * what makes a failed `themes` plugin merely *plain* instead of invisible.
- *
- * Tokens are written to the document element as CSS custom properties, with
- * `color-scheme` set alongside them so native form controls and scrollbars follow.
- */
-
 import {
   DEFAULT_DARK_TOKENS,
   DEFAULT_LIGHT_TOKENS,
@@ -22,38 +10,19 @@ import {
   type Unsubscribe,
 } from "@kernel";
 
-/** Where the colour-scheme preference is remembered. Not a setting: it must be readable before plugins load. */
 export const COLOR_SCHEME_STORAGE_KEY = "ddd.color-scheme";
 
-/**
- * Write the kernel's default tokens before anything else exists.
- *
- * The boot screen, the auth gate and a boot *failure* all render before there is a
- * kernel — and `app/src/styles.css` is written entirely in `--ddd-*` tokens, so
- * without this the login screen is unstyled text on the browser's default white,
- * in dark mode included. The alternative would be a second copy of the palette in
- * CSS, which is one drifting copy too many: {@link DEFAULT_LIGHT_TOKENS} and
- * {@link DEFAULT_DARK_TOKENS} are the contract (SPEC §6.4), so they are what gets
- * painted, by the same code path {@link ThemeController} uses afterwards.
- *
- * Idempotent, DOM-only, and safe to call before login: the stored preference is a
- * device setting (not a settings document), which is exactly why it lives in
- * `localStorage` under {@link COLOR_SCHEME_STORAGE_KEY}.
- */
 export function paintKernelDefaultTokens(target: HTMLElement): ColorScheme {
   const scheme = resolveScheme(readPreference());
   writeTokens(target, scheme, scheme === "dark" ? DEFAULT_DARK_TOKENS : DEFAULT_LIGHT_TOKENS);
   return scheme;
 }
 
-/** The one place tokens reach the DOM. */
 function writeTokens(target: HTMLElement, scheme: ColorScheme, tokens: ThemeTokens): void {
   for (const name of THEME_TOKEN_NAMES) {
     const value = tokens[name as ThemeTokenName];
     if (value !== undefined) target.style.setProperty(name, value);
   }
-  // `color-scheme` so native controls and scrollbars follow, and a data attribute
-  // so CSS (the kernel's or a plugin's) can branch without reading JS state.
   target.style.colorScheme = scheme;
   target.dataset["dddScheme"] = scheme;
 }
@@ -101,7 +70,6 @@ export class ThemeController {
       if (preference === "system") localStorage.removeItem(COLOR_SCHEME_STORAGE_KEY);
       else localStorage.setItem(COLOR_SCHEME_STORAGE_KEY, preference);
     } catch {
-      // Private mode: the preference lasts as long as the page does.
     }
     this.#paint();
   }

@@ -1,8 +1,3 @@
-/**
- * Read mode follows the note: an edit made anywhere else — another device, or another
- * mode on this one — shows in a reader already open, without reopening it.
- */
-
 import { expect, test } from "@playwright/test";
 
 import { ADMIN, createDocument, modeSwitch, openDocument, runCommand, signIn } from "./helpers.js";
@@ -10,8 +5,6 @@ import { ADMIN, createDocument, modeSwitch, openDocument, runCommand, signIn } f
 test("a reader open on one device shows an edit made on another", async ({ browser, request, baseURL }) => {
   const reader = await (await browser.newContext()).newPage();
   const writer = await (await browser.newContext()).newPage();
-  // Closed at the end: two more signed-in devices left open would act on what the next
-  // tests do (auto-fm adds its properties on every device that sees a note change).
   try {
     await signIn(reader, ADMIN);
     await signIn(writer, ADMIN);
@@ -52,13 +45,11 @@ test("a new note's reader shows the properties auto-fm adds", async ({ page }) =
   await page.getByRole("button", { name: "Add property" }).click();
   await page.getByLabel("Property", { exact: true }).last().fill("autostatus");
   await page.getByLabel("Value", { exact: true }).last().fill("fresh");
-  // Past the settings write's debounce.
   await page.waitForTimeout(1_000);
 
   await runCommand(page, "New document");
   await expect(modeSwitch(page)).toBeVisible();
   await page.getByRole("tab", { name: "Read" }).click();
-  // In the reader: the sidebar may list a note titled "Fresh" of another spec's.
   const reader = page.getByRole("tabpanel", { name: "Read" });
   await expect(reader.getByText("autostatus")).toBeVisible();
   await expect(reader.getByText("fresh", { exact: true })).toBeVisible();

@@ -1,33 +1,9 @@
-/**
- * Minimal runtime shape validation (SPEC §6.4: "schema = minimal runtime shape
- * validation, rejects loudly").
- *
- * Deliberately not a schema library. It answers one question — "does this value have
- * the fields the caller promised?" — with a path and an expectation per failure, and it
- * costs no dependency and no bundle weight. It validates *shape*, never semantics: an
- * item with an `id` of `""` is shape-valid and its host's problem.
- *
- * Opt-in since `@kernel` 3.0: a registry validates items when it is given a `shape`
- * (`createRegistry`), an exported function validates its arguments when it is wrapped in
- * `checked(s.fn([...]), impl)`, and a backend's `backend.exports` are checked by the
- * server with the same vocabulary (`backend/crates/core/src/shape.rs`, one corpus).
- *
- * **FROZEN.**
- */
-
 export interface ShapeIssue {
-  /** Dotted path into the contributed value; `""` is the value itself. */
   readonly path: string;
   readonly expected: string;
   readonly got: string;
 }
 
-/**
- * A shape as plain JSON: what a manifest's `backend.exports` declares, what the server
- * validates a backend call with, and what `shapeFromJSON` rebuilds a validator from. The
- * same vocabulary as `s.*`. A function's argument and result shapes are not part of it:
- * `s.fn([...], ret)` serialises as `"func"`.
- */
 export type ShapeJson =
   | "string"
   | "number"
@@ -43,45 +19,24 @@ export type ShapeJson =
   | { readonly object: Readonly<Record<string, ShapeJson>> }
   | { readonly optional: ShapeJson };
 
-/**
- * A shape check for values of `T`.
- *
- * `T` is documentation — there is deliberately no phantom field carrying it, so a
- * `Shape` built with `s.object({ icon: s.any() })` can still describe an item whose
- * type says `icon?: ReactNode`. Validation is a runtime floor (SPEC §6.4: *minimal*
- * shape validation); the compiler's opinion of an item comes from the host plugin's
- * exported types (`plugin:<id>`), not from the validator.
- *
- * The optional members are what the `s.*` builders add; a hand-built shape may omit them.
- */
 export interface Shape<T> {
   readonly name: string;
-  /** Empty array ⇒ valid. */
   check(value: unknown, path?: string): readonly ShapeIssue[];
-  /** The serialisable form. Absent on a hand-built shape, which then serialises as `any`. */
   toJSON?(): ShapeJson;
-  /** The TypeScript spelling generated declarations use; runtime ignores it. */
   readonly ts?: string;
-  /** One line of documentation for generated declarations. */
   readonly doc?: string;
 }
 
-/** What the `s.*` builders return: a {@link Shape} that can be annotated for code generation. */
 export interface BuiltShape<T> extends Shape<T> {
   toJSON(): ShapeJson;
-  /** The children, for code generation: object fields, the array/record/optional item, union members. */
   readonly parts?: {
     readonly fields?: Readonly<Record<string, BuiltShape<unknown>>>;
     readonly item?: BuiltShape<unknown>;
     readonly members?: readonly BuiltShape<unknown>[];
-    /** A function's argument shapes (`s.fn([...])`), in order. */
     readonly args?: readonly BuiltShape<unknown>[];
-    /** A function's result shape (`s.fn([...], ret)`). */
     readonly returns?: BuiltShape<unknown>;
   };
-  /** The same check, spelled `ts` in generated TypeScript: `s.func().as("(path: string) => void")`. */
   as(ts: string): BuiltShape<T>;
-  /** The same check, documented: the line becomes the field's doc comment. */
   describe(doc: string): BuiltShape<T>;
 }
 
@@ -125,11 +80,6 @@ export const number = (): BuiltShape<number> =>
   primitive("number", "number", (v) => typeof v === "number" && Number.isFinite(v));
 export const boolean = (): BuiltShape<boolean> => primitive("boolean", "boolean", (v) => typeof v === "boolean");
 
-/**
- * A function. As a check on a value it tests `typeof` only — a function's arguments cannot
- * be seen from outside it. `args` and `returns` are what {@link checked} validates when the
- * function is *called*: `checked(s.fn([s.string()], s.number()), impl)`.
- */
 export const func = <F extends (...args: never[]) => unknown>(
   args?: readonly Shape<unknown>[],
   returns?: Shape<unknown>,
@@ -149,10 +99,6 @@ export const func = <F extends (...args: never[]) => unknown>(
 const isThenable = (v: unknown): boolean =>
   (typeof v === "object" || typeof v === "function") && v !== null && typeof (v as { then?: unknown }).then === "function";
 
-/**
- * A promise, or anything with a `then` method. `inner` is the resolved value's shape, which
- * only {@link checked} can see (it awaits the result); as a check on a value it is `then` only.
- */
 export const promise = <T = unknown>(inner?: Shape<T>): BuiltShape<Promise<T>> =>
   make<Promise<T>>(
     "promise",
@@ -161,10 +107,6 @@ export const promise = <T = unknown>(inner?: Shape<T>): BuiltShape<Promise<T>> =
     inner !== undefined ? { item: inner as BuiltShape<unknown> } : undefined,
   );
 
-/**
- * A React component: a function, or an object produced by `memo`/`forwardRef`/
- * `lazy`. Checked structurally so the kernel never imports React at runtime.
- */
 export const component = <P = unknown>(): BuiltShape<(props: P) => unknown> =>
   primitive("component", "component", (v) => typeof v === "function" || (typeof v === "object" && v !== null));
 
@@ -227,11 +169,6 @@ type FieldsOf<F extends Record<string, Shape<unknown>>> = {
   -readonly [K in keyof F]: F[K] extends Shape<infer T> ? T : never;
 };
 
-/**
- * An object with the named fields. **Unknown keys are allowed** — a plugin may
- * carry its own extra data on a contribution, and a point that rejected extras
- * would make every point addition a breaking change for contributors.
- */
 export const object = <F extends Record<string, Shape<unknown>>>(fields: F): BuiltShape<FieldsOf<F>> =>
   make<FieldsOf<F>>(
     `{ ${Object.keys(fields).join(", ")} }`,
@@ -248,14 +185,12 @@ export const object = <F extends Record<string, Shape<unknown>>>(fields: F): Bui
     { fields: fields as unknown as Readonly<Record<string, BuiltShape<unknown>>> },
   );
 
-/** Convenience: the namespace spelling base plugins use (`s.object({ … })`). */
 export const s = {
   any: anyValue,
   string,
   number,
   boolean,
   func,
-  /** The same as `func`, spelled the way `checked(s.fn([...], ret), impl)` reads. */
   fn: func,
   promise,
   component,
@@ -267,7 +202,6 @@ export const s = {
   object,
 } as const;
 
-/** Rebuild a validator from a JSON shape (a manifest's `backend.exports`, a corpus case). */
 export function shapeFromJSON(json: ShapeJson): BuiltShape<unknown> {
   if (typeof json === "string") {
     switch (json) {
@@ -302,7 +236,6 @@ export function validate<T>(shape: Shape<T>, value: unknown): readonly ShapeIssu
   return shape.check(value, "");
 }
 
-/** One human-readable line per issue, for the error the kernel throws. */
 export function formatIssues(issues: readonly ShapeIssue[]): string {
   return issues
     .map((i) => `${i.path === "" ? "value" : i.path}: expected ${i.expected}, got ${i.got}`)

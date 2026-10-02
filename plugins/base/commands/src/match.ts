@@ -1,14 +1,3 @@
-/**
- * Palette matching: a subsequence match with a small, explainable score.
- *
- * Not a fuzzy-search library. The palette ranks tens of commands, all of whose titles
- * the user is half-remembering — "new doc" should find "New document" and "trash"
- * should find "Open Trash". Subsequence matching over `category + title` does that in
- * twenty lines, is stable (same query, same order, always), and has no dependency —
- * which matters because a plugin bundles everything outside the blessed runtime layer
- * (SPEC §6.4).
- */
-
 export interface Matchable {
   readonly id: string;
   readonly title: string;
@@ -18,17 +7,9 @@ export interface Matchable {
 export interface MatchResult<T extends Matchable> {
   readonly item: T;
   readonly score: number;
-  /** Indices in `title` that matched, for highlighting. */
   readonly hits: readonly number[];
 }
 
-/**
- * Score one candidate. Higher is better; `undefined` means no match.
- *
- * The ordering it encodes: a prefix of the title beats a word start, which beats a
- * scattered subsequence; matches in the title beat matches that only work by including
- * the category; shorter titles win ties.
- */
 export function scoreMatch(query: string, item: Matchable): MatchResult<Matchable> | undefined {
   const needle = query.trim().toLowerCase();
   if (needle === "") return { item, score: 0, hits: [] };
@@ -40,8 +21,6 @@ export function scoreMatch(query: string, item: Matchable): MatchResult<Matchabl
     return { item, score: bonus + direct.score - title.length / 100, hits: direct.hits };
   }
 
-  // Fall back to the category-qualified spelling ("admin users"), which is how people
-  // narrow a palette when several plugins contribute similar titles.
   if (item.category) {
     const combined = `${item.category} ${title}`.toLowerCase();
     const wide = subsequence(needle, combined);
@@ -50,22 +29,6 @@ export function scoreMatch(query: string, item: Matchable): MatchResult<Matchabl
   return undefined;
 }
 
-/**
- * Rank and sort. Ties break on **category**, then title, then id, so the list never
- * jitters.
- *
- * Category first is what makes the *unfiltered* palette readable, and that is the state
- * it opens in: every score is 0 for an empty query, so the tie-break is the whole
- * ordering. Breaking on title alone interleaved the categories the rows are labelled
- * with — "Admin › Browse snapshots", "Appearance › Change theme", "Admin › Create an
- * invite" — and made a list of twenty-one commands read as unsorted. Uncategorised
- * commands sort first, where a short list of bare titles is easiest to scan.
- *
- * `recency` (id → position, 0 the most recent) comes straight after the score: the
- * unfiltered palette opens with what the user ran last, newest first, and a query's
- * equally good matches put the recently used one on top. Commands never run keep the
- * order above, after them.
- */
 export function rankMatches<T extends Matchable>(
   query: string,
   items: readonly T[],
@@ -90,12 +53,6 @@ export function rankMatches<T extends Matchable>(
   return scored;
 }
 
-/**
- * Is `needle` a subsequence of `haystack`? Both already lower-cased.
- *
- * The score rewards consecutive characters and characters at word starts — the two
- * signals that separate "New document" from "Rename folder" for the query `nd`.
- */
 function subsequence(
   needle: string,
   haystack: string,

@@ -1,18 +1,3 @@
-//! `ddd plugin new` — a plugin project that builds with the base distribution's tooling
-//! and type-checks against the server it targets.
-//!
-//! ```text
-//! <id>/
-//! ├── manifest.json
-//! ├── package.json          build / check / types scripts
-//! ├── tsconfig.json
-//! ├── vite.config.mjs
-//! ├── src/index.tsx, src/style.css
-//! ├── tools/                the repository's reference Vite config, copied
-//! ├── types/                fetched from the server (`ddd plugin types`)
-//! └── backend/              with --backend: the Rust half
-//! ```
-
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
@@ -40,39 +25,25 @@ const BACKEND_LIB: &str = include_str!("../../../templates/plugin/backend/src/li
 
 #[derive(Args)]
 pub struct NewArgs {
-    /// The plugin id: lowercase letters, digits and dashes.
     pub id: String,
-    /// Where to create the project [default: ./<id>].
     #[arg(long)]
     pub dir: Option<PathBuf>,
-    /// Display name [default: the id, title-cased].
     #[arg(long)]
     pub name: Option<String>,
     #[arg(long)]
     pub description: Option<String>,
     #[arg(long)]
     pub author: Option<String>,
-    /// A plugin this one imports from, as `<id>@<range>`, or as `<id>` with --server (the
-    /// range is taken from the version that server has installed). Repeatable.
     #[arg(long = "dep", value_name = "ID[@RANGE]")]
     pub dependencies: Vec<String>,
-    /// Compile style.css with the Tailwind preset, under the plugin's class prefix.
     #[arg(long)]
     pub tailwind: bool,
-    /// Add a Rust backend half (cron, hooks, HTTP routes, outbound HTTP).
     #[arg(long)]
     pub backend: bool,
-    /// Take the plugin SDK from a local directory (a checkout's `backend/crates/plugin-sdk`)
-    /// instead of git.
     #[arg(long, value_name = "PATH", conflicts_with = "sdk_git")]
     pub sdk: Option<PathBuf>,
-    /// The git repository to take the plugin SDK from [default: the one `ddd` was built
-    /// from, at the commit it was built from].
     #[arg(long, value_name = "URL")]
     pub sdk_git: Option<String>,
-    /// The ddd server the plugin targets, e.g. `https://notes.example.com`. With
-    /// it, types/ is filled in now and bare `--dep <id>` ranges are resolved; without it,
-    /// nothing is fetched.
     #[arg(long, env = "DDD_SERVER")]
     pub server: Option<String>,
 }
@@ -145,8 +116,6 @@ pub fn run(args: NewArgs) -> Result<()> {
     Ok(())
 }
 
-/// `--dep` values as manifest entries. A bare id takes `^<major>.0` of the version the
-/// server has installed, which is what a new plugin almost always means.
 fn resolve_dependencies(args: &NewArgs, server: Option<&Server>) -> Result<Map<String, Value>> {
     let mut installed = None;
     let mut out = Map::new();
@@ -180,7 +149,6 @@ fn resolve_dependencies(args: &NewArgs, server: Option<&Server>) -> Result<Map<S
     Ok(out)
 }
 
-/// The `ddd-plugin-sdk` dependency, as a TOML inline table.
 fn sdk_dependency(args: &NewArgs) -> Result<String> {
     let table = if let Some(dir) = &args.sdk {
         let dir = dir
@@ -194,7 +162,6 @@ fn sdk_dependency(args: &NewArgs) -> Result<String> {
             None => json!({ "git": git }),
         }
     };
-    // JSON strings are valid TOML basic strings, so each value can be written as JSON.
     let fields: Vec<String> = table
         .as_object()
         .expect("an object literal")

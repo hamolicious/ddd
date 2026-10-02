@@ -1,16 +1,3 @@
-/**
- * `activate()` against a fake kernel: the registries, not the pipeline.
- *
- * The pipeline suites call `renderTree` directly, which is the right level for "does this
- * markdown become that tree". What they cannot show is the half SPEC §6.6 is actually
- * about — that the **registries** drive the parser. A marker becomes a checkbox because
- * some plugin called `addTaskState`, and the only way to prove that end to end is to add
- * one the way another plugin would and re-render.
- *
- * `plugin:commands` and `plugin:settings` are mocked so the test can read what markdown
- * added to them; the optional plugins come from the fake kernel's `plugins.optional`.
- */
-
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { isValidElement, type ReactNode } from "react";
 
@@ -47,10 +34,6 @@ import activate, {
   taskStates,
 } from "./index.js";
 
-// ---------------------------------------------------------------------------
-// the fake kernel
-// ---------------------------------------------------------------------------
-
 interface FakeKernel {
   readonly kernel: Kernel;
   readonly created: string[];
@@ -75,7 +58,6 @@ function fakeKernel(attachmentName = "Scan 1.pdf", optional: Record<string, unkn
       get: () => undefined,
     },
     ui: {
-      // The real one wraps in an error boundary; identity keeps the tree readable here.
       boundary: <P,>(component: P) => component,
       notify: (notice: { message: string }) => {
         notices.push(notice.message);
@@ -99,7 +81,6 @@ function fakeKernel(attachmentName = "Scan 1.pdf", optional: Record<string, unkn
   return { kernel, created, notices };
 }
 
-/** Removers for whatever a test added, run after it. */
 const removers: (() => void)[] = [];
 const keep = (remove: () => void): void => void removers.push(remove);
 
@@ -108,15 +89,12 @@ afterEach(() => {
   deactivate();
 });
 
-/** `true` when the rendered tree contains a component with this name. */
 function hasComponent(node: ReactNode, name: string): boolean {
   if (Array.isArray(node)) return node.some((child) => hasComponent(child as ReactNode, name));
   if (!isValidElement(node)) return false;
   if (typeof node.type === "function" && node.type.name === name) return true;
   return hasComponent((node.props as { children?: ReactNode }).children, name);
 }
-
-// ---------------------------------------------------------------------------
 
 describe("activate", () => {
   it("ships [ ] and [x] as default task states (SPEC §6.6)", async () => {
@@ -135,7 +113,6 @@ describe("activate", () => {
     await activate(fakeKernel().kernel);
     const command = (added.commands as Command[]).find((c) => c.id === "markdown.promoteToDocument");
     expect(command).toBeDefined();
-    // A palette entry that can only fail is worse than no entry.
     expect(command?.when?.()).toBe(false);
   });
 
@@ -225,7 +202,6 @@ describe("bodyOf and regions are part of the API", () => {
     await activate(fakeKernel().kernel);
     const tree = render(bodyOf(DOC), { documentId: "01JBQ2X4Y5Z6A7B8C9D0E1F2G3" });
     expect(hasComponent(tree, "AttachmentImage")).toBe(false);
-    // The `%%%` section's key never reaches the renderer.
     expect(JSON.stringify(tree)).not.toContain("calendar");
   });
 });

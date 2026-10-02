@@ -1,11 +1,3 @@
-/**
- * The sync indicator's wording. SPEC §6.5 makes it the only always-visible signal
- * that an edit has not reached the server, so the cases below are the promise, not
- * the styling: "synced" never appears while something is pending, offline says the
- * workspace is still usable, and an expired session says local data is intact
- * (SPEC §5.3).
- */
-
 import { describe, expect, it } from "vitest";
 
 import type { SyncState, SyncStatus } from "@kernel";

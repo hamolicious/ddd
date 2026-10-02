@@ -1,15 +1,3 @@
-/**
- * The single mount point (SPEC §6.4).
- *
- * The kernel owns the React root; a plugin hands it an element. **One holder at a
- * time** — normally `shell-ui` — because two plugins rendering "the app" into the
- * same node is not a layout, it is a race. A replacement shell is installed by
- * replacing the plugin, not by fighting over the node.
- *
- * The app renders {@link KernelOutlet} inside its own frame (notice strip, boot
- * errors), so the kernel's chrome survives a shell that never mounts anything.
- */
-
 import { useEffect, useState, type ReactNode } from "react";
 
 import { ContractViolationError, type Unsubscribe } from "@kernel";
@@ -21,7 +9,6 @@ export class MountPoint {
 
   constructor(readonly node: HTMLElement) {}
 
-  /** Who holds the mount, or `undefined` while nothing is mounted. */
   get holder(): string | undefined {
     return this.#holder;
   }
@@ -53,7 +40,6 @@ export class MountPoint {
     };
   }
 
-  /** Force the mount back to empty — a failed or unloaded holder (see `KernelHost.retract`). */
   release(pluginId: string): void {
     if (this.#holder !== pluginId) return;
     this.#holder = undefined;
@@ -66,7 +52,6 @@ export class MountPoint {
   }
 }
 
-/** Renders whatever holds the mount, and re-renders when that changes. */
 export function KernelOutlet({ mount }: { readonly mount: MountPoint }): ReactNode {
   const [element, setElement] = useState<ReactNode>(() => mount.current());
   useEffect(() => mount.subscribe(setElement), [mount]);

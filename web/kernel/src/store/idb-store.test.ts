@@ -1,12 +1,3 @@
-/**
- * IndexedDB projection store (SPEC §4.1, PROTOCOL.md §2.4), against
- * `fake-indexeddb`.
- *
- * The invariants under test are the ones whose failure loses a document
- * silently: the watermark never outruns the rows, rows are last-writer-wins by
- * `seq`, a purge deletes, and `retainOnly` is the only garbage collector.
- */
-
 import "fake-indexeddb/auto";
 
 import { beforeEach, describe, expect, it } from "vitest";
@@ -30,7 +21,6 @@ function checkpoint(safeSeq: number, overrides: Partial<SyncCheckpoint> = {}): S
   return { ...EMPTY_CHECKPOINT, safeSeq, updatedAt: 1, coreSemanticsVersion: 1, ...overrides };
 }
 
-/** ULID-shaped, lexicographically ordered ids. */
 function id(n: number): string {
   return `01J8ZQ0M3M4YQV0X0PTN${String(n).padStart(6, "0")}`;
 }
@@ -52,8 +42,6 @@ describe("applyRows", () => {
     expect(applied.applied).toEqual([id(1), id(2)]);
     expect((await store.get(id(1)))?.seq).toBe(10);
     expect(await store.checkpoint()).toMatchObject({ safeSeq: 11, coreSemanticsVersion: 1 });
-    // Same transaction, same database: the checkpoint is not a second write that
-    // could be lost on its own.
     const raw = await store.db.get(STORE_META, CHECKPOINT_KEY);
     expect((raw?.value as SyncCheckpoint).safeSeq).toBe(11);
   });
@@ -128,8 +116,6 @@ describe("applyRows", () => {
 
   it("never moves the watermark backwards", async () => {
     await store.applyRows([feedRow({ id: id(1), seq: 50 })], checkpoint(50));
-    // `feed.resync { from_seq }` re-subscribes lower down; the rows that come back
-    // must not rewind the resume point.
     await store.applyRows([feedRow({ id: id(2), seq: 51 })], checkpoint(20));
     expect((await store.checkpoint()).safeSeq).toBe(50);
   });
@@ -153,19 +139,9 @@ describe("applyRows", () => {
     );
     expect(changes).toHaveLength(1);
     expect(changes[0]).toMatchObject({ applied: [id(1), id(2)], purged: [], safeSeq: 2 });
-    // The row is readable by the time the listener runs.
     expect(await store.get(seenInStore[0] as string)).toBeDefined();
   });
 
-  /**
-   * Two tabs, one IndexedDB, two feed sockets (SPEC §4.3 allows eight).
-   *
-   * The second tab to apply a batch correctly declines to write rows the first already
-   * stored — and used to report nothing applied, so its live queries never re-ran. The
-   * data sat in the shared database, visible to a fresh `query()`, while every open
-   * list in that tab was frozen. A row committed by any tab is news to the readers in
-   * all of them.
-   */
   it("tells the other tabs about a batch, including one they declined to rewrite", async () => {
     const other = new IdbProjectionStore(store.name);
     await other.open();
@@ -173,16 +149,12 @@ describe("applyRows", () => {
     other.subscribe((change) => heard.push(change));
 
     await store.applyRows([feedRow({ id: id(1), seq: 7 })], checkpoint(7));
-    // BroadcastChannel delivery is a task, not a microtask.
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(heard).toHaveLength(1);
     expect(heard[0]).toMatchObject({ applied: [id(1)], safeSeq: 7 });
-    // And the row really is readable from the other connection.
     expect((await other.get(id(1)))?.seq).toBe(7);
 
-    // The second tab's own apply of the same batch is the no-op it should be: nothing
-    // written, nothing announced a second time.
     const applied = await other.applyRows([feedRow({ id: id(1), seq: 7 })], checkpoint(7));
     expect(applied.applied).toEqual([]);
     expect(applied.ignored).toEqual([id(1)]);
@@ -300,12 +272,10 @@ describe("clear", () => {
 describe("IdbDocPersistence", () => {
   it("keeps another tab's unsent edits when this tab saves", async () => {
     const persistence = new IdbDocPersistence(store);
-    // Both tabs start from the same document.
     const base = new Y.Doc();
     base.getText("content").insert(0, "base\n");
     const baseState = Y.encodeStateAsUpdate(base);
 
-    // Another tab edits offline and saves, then is closed.
     const other = new Y.Doc();
     Y.applyUpdate(other, baseState);
     const before = Y.encodeStateVector(other);
@@ -316,7 +286,6 @@ describe("IdbDocPersistence", () => {
       journal: [{ origin: "another-tab", at: 1_000, lastAt: 1_000, update: otherEdit }],
     });
 
-    // This tab, which never saw that edit, saves its own offline edit afterwards.
     const mine = new Y.Doc();
     Y.applyUpdate(mine, baseState);
     const mineBefore = Y.encodeStateVector(mine);
@@ -348,22 +317,17 @@ describe("IdbDocPersistence", () => {
     for (let index = 1; index <= 5; index++) {
       await persistence.save(id(index), new Uint8Array([index]));
     }
-    // Touch the oldest, so recency and insertion order disagree.
     await persistence.load(id(1));
 
     const evicted = await persistence.prune(2);
     expect(evicted).toHaveLength(3);
     expect(evicted).not.toContain(id(1));
     expect(evicted).not.toContain(id(5));
-    // The projection rows are untouched: the document stays readable offline,
-    // it is merely no longer editable offline.
     expect(await store.db.count(STORE_PROJECTION)).toBe(0);
   });
 
   it("never prunes a replica holding unsynced edits", async () => {
     const persistence = new IdbDocPersistence(store);
-    // The oldest replica is the one with the offline edit, and then the user browses
-    // four more documents — pure LRU would evict exactly the copy that matters.
     await persistence.save(id(1), new Uint8Array([1]), { unsynced: true });
     for (let index = 2; index <= 5; index++) {
       await persistence.save(id(index), new Uint8Array([index]));
@@ -376,10 +340,8 @@ describe("IdbDocPersistence", () => {
       state: new Uint8Array([1]),
       unsynced: true,
     });
-    // The budget still holds overall: one pinned replica plus one evictable one.
     expect(await store.db.count(STORE_DOCS)).toBe(2);
 
-    // Once the edits are acknowledged the flag goes, and so may the replica.
     await persistence.save(id(1), new Uint8Array([1]), { unsynced: false });
     expect(await persistence.prune(0)).toContain(id(1));
   });
@@ -389,7 +351,6 @@ describe("IdbDocPersistence", () => {
     await persistence.save(id(1), new Uint8Array([1]));
     await persistence.save(id(2), new Uint8Array([2]));
 
-    // `load` would make id(1) the most recent; `peek` must not.
     expect(await persistence.peek(id(1))).toEqual({ state: new Uint8Array([1]), unsynced: false });
     expect(await persistence.prune(1)).toEqual([id(1)]);
     expect(await persistence.peek(id(1))).toBeUndefined();
@@ -408,7 +369,6 @@ describe("rows and copies this device made (dev-docs/resolved/SYNC-DECISIONS.md 
     expect(await store.get(id(2))).toMatchObject({ local: true, seq: 5, title: "edited offline" });
     expect(changes[0]?.applied).toEqual([id(1)]);
 
-    // A bootstrap pass that never mentions the unsent note keeps it; the rest goes.
     expect(await store.retainOnly(new Set())).toEqual([id(2)]);
     expect(await store.get(id(1))).toBeDefined();
 
@@ -418,7 +378,6 @@ describe("rows and copies this device made (dev-docs/resolved/SYNC-DECISIONS.md 
     await store.putLocal([{ ...feedRow({ id: id(3), seq: 0 }) }]);
     await store.deleteLocal([id(3), id(1)]);
     expect(await store.get(id(3))).toBeUndefined();
-    // Only rows this device made up are deleted that way.
     expect(await store.get(id(1))).toBeDefined();
   });
 
@@ -447,7 +406,6 @@ describe("rows and copies this device made (dev-docs/resolved/SYNC-DECISIONS.md 
       { id: id(1), unsynced: true, version: "2026-09-27T10:00:00Z" },
       { id: id(2), unsynced: false, version: "2026-09-27T10:00:00Z" },
     ]);
-    // A later save by the open note keeps how current the copy is.
     await docs.save(id(2), Y.encodeStateAsUpdate(server), { unsynced: false });
     expect((await docs.list())[1]?.version).toBe("2026-09-27T10:00:00Z");
   });

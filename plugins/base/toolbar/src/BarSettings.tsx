@@ -1,16 +1,3 @@
-/**
- * "Toolbar" in Settings: two tabs, **Desktop** and **Phone**, one per profile, opening on
- * the one this device is showing. Within a tab: every seat of that profile's two bars,
- * each item with buttons to reorder it within its seat, a picker to move it to another
- * seat (top ↔ bottom, start ↔ end), and a button to hide it. A hidden item stays in the
- * list, dimmed, with its place kept, so it can always be shown again. Buttons rather
- * than drag and drop, so it works the same with a keyboard and on a phone.
- *
- * The first change in a tab saves the *whole* current layout of that profile, so after
- * it every item on screen is pinned where the user left it; an item installed later lands
- * in its own default seat, after them (`layout.ts`).
- */
-
 import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 import type { Registry } from "@kernel";
@@ -38,13 +25,11 @@ export function BarSettings({
   readonly items: Registry<ToolbarItem>;
   readonly store: ArrangementStore;
 }): ReactNode {
-  // Opens on the kind of device this is; after that the user's pick stands.
   const detected = useProfile();
   const [picked, setPicked] = useState<Profile | undefined>(undefined);
   const profile = picked ?? detected;
   const tabs = useRef<Partial<Record<Profile, HTMLButtonElement | null>>>({});
 
-  // Arrow keys move between tabs, as a tablist should.
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
     const index = PROFILES.indexOf(profile);
@@ -110,7 +95,6 @@ function ProfileLayout({
   const seats = arrange(items, (entry) => entry.value, profile, arrangement);
   const [error, setError] = useState<string | undefined>(undefined);
 
-  // Everything on screen, in screen order: the first change pins all of it.
   const shown: Arrangement = {
     seats: Object.fromEntries(
       SEATS[profile].map((seat) => [seat.id, (seats[seat.id] ?? []).map((entry) => entry.value.id)]),
@@ -150,7 +134,6 @@ function ProfileLayout({
                       className="toolbar:flex toolbar:flex-wrap toolbar:items-center toolbar:gap-2 toolbar:rounded toolbar:border toolbar:border-border toolbar:bg-bg-raised toolbar:py-1 toolbar:pl-3 toolbar:pr-1 toolbar:data-[hidden]:bg-bg-subtle"
                       data-hidden={hidden ? "" : undefined}
                     >
-                      {/* On a phone the name gets a line of its own, the controls the line under it. */}
                       <span className="toolbar:min-w-0 toolbar:flex-1 toolbar:truncate toolbar:compact:basis-full toolbar:in-data-[hidden]:text-text-muted toolbar:in-data-[hidden]:line-through">
                         {label}
                       </span>

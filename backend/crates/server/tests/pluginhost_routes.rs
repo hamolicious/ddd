@@ -1,30 +1,3 @@
-//! `/api/plugins/:id/*` — inbound HTTP into a backend plugin, through the **assembled
-//! router** (SPEC §5.1, HOST-ABI.md §4.4).
-//!
-//! The unit tests in `pluginhost/mod.rs` pin the status for each failure; this suite is
-//! about the things only the real router can show:
-//!
-//! 1. **Session-authenticated by default.** A declared route is 401 without a session, and
-//!    only a path the manifest *also* listed in `capabilities.public-routes` is open. That
-//!    default is the reason a "sync now" endpoint is not a free outbound-request amplifier.
-//! 2. **`cookie` and `authorization` never reach a plugin.** A plugin that could read this
-//!    app's session credential could impersonate its caller against the rest of the API, so
-//!    identity arrives as a `user` object instead.
-//! 3. **`set-cookie` never leaves one.** A plugin must not mint a session for this origin.
-//! 4. **A plugin's own refusal keeps its code**, so its 404 is a 404 and not a 500.
-//! 5. **An undeclared route, an unknown plugin and a traversal attempt** are each answered
-//!    distinctly, because "no such route" and "you tried to escape the namespace" are
-//!    different lines in a log.
-//!
-//! Skips silently without `MONGO_URI` or without the built fixture, like every other
-//! Mongo-backed suite here:
-//!
-//! ```text
-//! docker compose up -d --wait mongo
-//! mise run wasm-plugins
-//! MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p ddd-server --test pluginhost_routes
-//! ```
-
 mod common;
 
 use std::collections::BTreeMap;
@@ -47,7 +20,6 @@ fn fixture() -> Option<PathBuf> {
     path.exists().then_some(path)
 }
 
-/// A router with the fixture plugin activated and one registered admin session.
 struct RouteApp {
     router: axum::Router,
     token: String,
@@ -58,15 +30,10 @@ struct RouteApp {
 }
 
 impl RouteApp {
-    /// `public` is the subset of `routes` reachable without a session — requested *and*
-    /// granted, which is the ordinary case.
     async fn start(routes_declared: &[&str], public: &[&str]) -> Option<RouteApp> {
         RouteApp::start_with_grant(routes_declared, public, public).await
     }
 
-    /// [`RouteApp::start`] with the two capability sets given separately: what the package
-    /// **requested** and what an admin **granted**. The only thing that may open a route
-    /// without a session is the grant.
     async fn start_with_grant(
         routes_declared: &[&str],
         requested_public: &[&str],
@@ -204,14 +171,12 @@ impl RouteApp {
         (status, String::from_utf8_lossy(&bytes).to_string(), headers)
     }
 
-    /// A request with a session.
     async fn authed(&self, method: &str, uri: &str) -> (StatusCode, String, axum::http::HeaderMap) {
         self.send(
             Request::builder()
                 .method(method)
                 .uri(uri)
                 .header(header::AUTHORIZATION, format!("Bearer {}", self.token))
-                // Both of these must be invisible to the plugin.
                 .header(header::COOKIE, "ddd_session=secret-value")
                 .body(Body::empty())
                 .expect("a valid request"),
@@ -219,7 +184,6 @@ impl RouteApp {
         .await
     }
 
-    /// A request with no credentials at all.
     async fn anonymous(
         &self,
         method: &str,
@@ -262,8 +226,6 @@ macro_rules! app {
     };
 }
 
-/// The default is the security property: a declared route needs a session unless the
-/// manifest *also* listed it as public, and the admin saw that as the capability it is.
 #[tokio::test]
 async fn a_route_needs_a_session_unless_the_manifest_declared_it_public() {
     if skip() {
@@ -288,7 +250,6 @@ async fn a_route_needs_a_session_unless_the_manifest_declared_it_public() {
     assert_eq!(answer["public"], serde_json::json!(true));
     assert_eq!(answer["user"], Value::Null, "nobody was signed in");
 
-    // With a session the non-public route works, and the plugin is told who is calling.
     let (status, body, _) = app.authed("GET", "/api/plugins/hello-backend/status").await;
     assert_eq!(status, StatusCode::OK, "{body}");
     let answer: Value = serde_json::from_str(&body).expect("JSON");
@@ -300,22 +261,11 @@ async fn a_route_needs_a_session_unless_the_manifest_declared_it_public() {
     app.cleanup().await;
 }
 
-/// **The grant decides, not the request.** An admin who unchecks a requested public route at
-/// approval has to get a route that needs a session.
-///
-/// The approval screen presents each one as its own checkbox with the warning that "anyone who
-/// can reach this server can call them, with no session", and `approval_is_legal` accepts a
-/// narrowed set — but the dispatcher's `public` flag was computed from
-/// `manifest.capabilities.public_routes`, so the narrowing was silently discarded and the
-/// unauthenticated webhook the admin refused was live. Everything *else* on the active plugin
-/// (documents rights, `http.hosts`) already came from the approved set, which is what made this
-/// one look right.
 #[tokio::test]
 async fn a_public_route_the_admin_declined_needs_a_session() {
     if skip() {
         return;
     }
-    // The package asks for both to be public; the admin grants only `/open`.
     let app = match RouteApp::start_with_grant(
         &["GET /open", "GET /webhook"],
         &["/open", "/webhook"],
@@ -336,14 +286,11 @@ async fn a_public_route_the_admin_declined_needs_a_session() {
         "a public route the admin declined must not answer without a session: {body}"
     );
 
-    // The one they did grant is open, so this is a narrowing and not a blanket refusal.
     let (status, body, _) = app
         .anonymous("GET", "/api/plugins/hello-backend/open")
         .await;
     assert_eq!(status, StatusCode::OK, "{body}");
 
-    // And the declined route still works for a signed-in caller — it is a route, just not a
-    // public one. The plugin is told it is not public, too.
     let (status, body, _) = app
         .authed("GET", "/api/plugins/hello-backend/webhook")
         .await;
@@ -354,9 +301,6 @@ async fn a_public_route_the_admin_declined_needs_a_session() {
     app.cleanup().await;
 }
 
-/// Identity arrives as a `user` object; the *credential* does not arrive at all. A plugin
-/// that could read the cookie or the bearer header could impersonate its caller against
-/// every other route in the API.
 #[tokio::test]
 async fn the_session_credential_never_reaches_the_plugin() {
     if skip() {
@@ -382,15 +326,12 @@ async fn the_session_credential_never_reaches_the_plugin() {
         !headers.iter().any(|name| name == "authorization"),
         "the bearer token reached the plugin: {headers:?}"
     );
-    // The identity did arrive, through the one channel that is meant to carry it.
     assert_eq!(answer["user"], serde_json::json!(app.user_id));
-    // And the raw body never contains the secret either.
     assert!(!body.contains("secret-value"));
 
     app.cleanup().await;
 }
 
-/// A plugin must not mint a cookie for this origin — a cookie for this origin is a session.
 #[tokio::test]
 async fn a_plugin_cannot_set_a_cookie_on_this_origin() {
     if skip() {
@@ -404,15 +345,12 @@ async fn a_plugin_cannot_set_a_cookie_on_this_origin() {
         headers.get(header::SET_COOKIE).is_none(),
         "set-cookie must be stripped: {headers:?}"
     );
-    // A header a plugin *is* allowed to set comes through, so the strip is targeted rather
-    // than "drop everything".
     assert_eq!(
         headers
             .get("x-from-plugin")
             .and_then(|value| value.to_str().ok()),
         Some("yes")
     );
-    // Plugin output is bytes a third party chose, so it is never sniffed.
     assert_eq!(
         headers
             .get(header::X_CONTENT_TYPE_OPTIONS)
@@ -423,7 +361,6 @@ async fn a_plugin_cannot_set_a_cookie_on_this_origin() {
     app.cleanup().await;
 }
 
-/// A plugin's refusals are part of its HTTP contract: `not_found` means 404, not 500.
 #[tokio::test]
 async fn a_plugins_own_refusal_keeps_its_code() {
     if skip() {
@@ -448,8 +385,6 @@ async fn a_plugins_own_refusal_keeps_its_code() {
     app.cleanup().await;
 }
 
-/// Three different "no": an unknown plugin, a path the manifest never declared, and a
-/// method the manifest never declared for a path it did.
 #[tokio::test]
 async fn an_unknown_plugin_route_or_method_is_a_404() {
     if skip() {
@@ -460,7 +395,6 @@ async fn an_unknown_plugin_route_or_method_is_a_404() {
     for (method, uri) in [
         ("GET", "/api/plugins/no-such-plugin/status"),
         ("GET", "/api/plugins/hello-backend/undeclared"),
-        // Declared as GET only — the route table is (method, path), not path alone.
         ("POST", "/api/plugins/hello-backend/status"),
     ] {
         let (status, body, _) = app.authed(method, uri).await;
@@ -470,8 +404,6 @@ async fn an_unknown_plugin_route_or_method_is_a_404() {
     app.cleanup().await;
 }
 
-/// A traversal attempt is refused as one rather than 404ing quietly: the declared table can
-/// never contain a relative segment, so a request carrying one is someone probing.
 #[tokio::test]
 async fn a_traversal_attempt_is_refused_rather_than_silently_missed() {
     if skip() {
@@ -486,14 +418,11 @@ async fn a_traversal_attempt_is_refused_rather_than_silently_missed() {
         status == StatusCode::BAD_REQUEST || status == StatusCode::NOT_FOUND,
         "a traversal must never reach another route; got {status}: {body}"
     );
-    // Whatever the normalizer decided, it must not have produced a document listing.
     assert!(!body.contains("\"documents\""), "{body}");
 
     app.cleanup().await;
 }
 
-/// A plugin with no active backend half is 404, not 503: there is nothing here, and a retry
-/// could never work.
 #[tokio::test]
 async fn a_plugin_with_no_backend_half_answers_404() {
     if skip() {
@@ -501,7 +430,6 @@ async fn a_plugin_with_no_backend_half_answers_404() {
     }
     let app = app!(&["GET /status"], &[]);
 
-    // The M3 base distribution has no backend halves at all.
     let (status, _, _) = app.authed("GET", "/api/plugins/shell-ui/status").await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 

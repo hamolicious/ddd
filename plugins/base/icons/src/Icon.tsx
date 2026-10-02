@@ -4,7 +4,6 @@ import type { IconProps } from "./api.js";
 
 import { drawingNow, loadDrawing, type IconPath } from "./data.js";
 
-/** `stroke-linecap` → `strokeLinecap`: Tabler's attribute names, as React props. */
 const prop = (attribute: string): string =>
   attribute.replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase());
 
@@ -17,11 +16,6 @@ const paths = (drawing: readonly IconPath[]): ReactElement[] =>
     ),
   );
 
-/**
- * One icon, drawn in `currentColor`. Outline icons are strokes and `-filled` ones are
- * fills, the way Tabler's own components draw them. Until its shard arrives it holds its
- * space empty, so rows do not shift when it appears.
- */
 export function Icon({ name, size = "1em", className, title }: IconProps): ReactElement {
   const [drawing, setDrawing] = useState(() => drawingNow(name));
   useEffect(() => {

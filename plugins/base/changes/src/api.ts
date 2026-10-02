@@ -1,12 +1,6 @@
-/**
- * The snapshot and change routes (`routes/documents.rs`, `routes/changes.rs`), and how
- * their fields read to a person.
- */
-
 export interface SnapshotView {
   readonly id: string;
   readonly document_id: string;
-  /** The document's title when the snapshot was taken. */
   readonly title: string;
   readonly reason: string;
   readonly created_at: string;
@@ -14,12 +8,10 @@ export interface SnapshotView {
   readonly size: number;
 }
 
-/** One snapshot with its full text (frontmatter and all). */
 export interface SnapshotContent extends SnapshotView {
   readonly content: string;
 }
 
-/** A group of changes: one author, no long pause (`changes.rs`). Addressed by seq range. */
 export interface ChangeGroup {
   readonly from_seq: number;
   readonly to_seq: number;
@@ -27,17 +19,13 @@ export interface ChangeGroup {
   readonly ended_at: string;
   readonly by: string | null;
   readonly by_label: string;
-  /** Writes in the group. */
   readonly changes: number;
   readonly inserted_chars: number;
   readonly removed_chars: number;
   readonly inserted_excerpt: string;
   readonly removed_excerpt: string;
-  /** Set when this group is a revert: the group it undid. */
   readonly reverts?: { readonly from_seq: number; readonly to_seq: number };
-  /** Older history, kept as the group's net effect rather than every write. */
   readonly squashed: boolean;
-  /** Some of it was made offline and carried over on reconnect; the times are when it was made. */
   readonly offline: boolean;
 }
 
@@ -53,7 +41,6 @@ export interface ChangeDetail {
   readonly ended_at: string;
   readonly by_label: string;
   readonly changes: number;
-  /** The group's net effect, line by line, with unchanged lines around it. */
   readonly hunks: readonly {
     readonly before: string;
     readonly removed: string;
@@ -65,19 +52,13 @@ export interface ChangeDetail {
 export type ApiFetch = (path: string, init?: RequestInit) => Promise<Response>;
 
 export interface SnapshotsClient {
-  /** Newest first. */
   list(documentId: string): Promise<readonly SnapshotView[]>;
   get(documentId: string, snapshotId: string): Promise<SnapshotContent>;
-  /** Put a snapshot's text back; the server snapshots the current text first. */
   restore(documentId: string, snapshotId: string): Promise<void>;
-  /** Newest first; `before` is the previous page's `next_before`. */
   changes(documentId: string, before?: number): Promise<ChangesPage>;
   change(documentId: string, from: number, to: number): Promise<ChangeDetail>;
-  /** Undo a group as a new change. Refused (with the reason) when later changes overlap. */
   revert(documentId: string, from: number, to: number): Promise<void>;
-  /** The whole text as it was after update `seq`. */
   textAt(documentId: string, seq: number): Promise<string>;
-  /** Admin only: wipe the history; the text stays. */
   forget(documentId: string): Promise<void>;
 }
 
@@ -109,14 +90,12 @@ export function createSnapshotsClient(fetchApi: ApiFetch): SnapshotsClient {
 }
 
 const REASONS: Readonly<Record<string, string>> = {
-  // Snapshots from when the panel had a button for it; the API still takes the reason.
   manual: "Taken by hand",
   quiescence: "After a pause in editing",
   daily: "Daily",
   pre_restore: "Before a restore",
 };
 
-/** A known reason in words; an unknown one as its own name, spaced. */
 export function describeReason(reason: string): string {
   return REASONS[reason] ?? reason.replace(/_/g, " ");
 }
@@ -139,7 +118,6 @@ export function formatWhen(iso: string): string {
   return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
 }
 
-/** "10:32", "10:32–10:35", "Sep 26, 10:32–10:35" or across days, both dates. */
 export function formatRange(startIso: string, endIso: string): string {
   const start = new Date(startIso);
   const end = new Date(endIso);

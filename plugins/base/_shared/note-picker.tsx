@@ -1,17 +1,3 @@
-/**
- * Choosing a note: a filter box over every note, drawn as the folder tree draws them —
- * the note's colour and icon, its title, the notes above it — in a box of its own that
- * scrolls through a virtual list (`virtual-list.ts`), so a workspace of thousands costs a
- * screenful. And the chip that shows the note once chosen.
- *
- * Notes come from a {@link NoteSource}: synchronous, and live through `subscribe`, so a
- * title shows as soon as the index knows it rather than whenever it was first asked.
- *
- * Styled inline, on the kernel's tokens: a shared file gets no Tailwind classes (see
- * `conditions-editor.tsx`). Each option also carries `${classPrefix}-note-option`, for a
- * host that wants a hover.
- */
-
 import { useEffect, useMemo, useReducer, useState } from "react";
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 
@@ -23,11 +9,9 @@ import { useVirtualList } from "./virtual-list.js";
 export interface PickableNote {
   readonly id: string;
   readonly title: string;
-  /** The titles above it, joined by ` / `; `""` at the root or when not known. */
   readonly folder: string;
 }
 
-/** A note's colour and icon, as `ddd/folders.decoration` gives them. */
 export interface NoteLook {
   readonly background?: string;
   readonly color?: string;
@@ -35,22 +19,17 @@ export interface NoteLook {
 }
 
 export interface NoteSource {
-  /** Every note a person can pick, machine-owned ones left out. */
   notes(): readonly PickableNote[];
-  /** Fires when `notes` or `look` may answer differently. */
   subscribe(listener: () => void): Unsubscribe;
   look?(id: string): NoteLook | undefined;
 }
 
-/** Re-renders on every change `source` announces; returns its notes by id. */
 export function useNotes(source: NoteSource): ReadonlyMap<string, PickableNote> {
   const [version, bump] = useReducer((count: number) => count + 1, 0);
   useEffect(() => source.subscribe(bump), [source]);
-  // `version` is the dependency that says `notes()` moved.
   return useMemo(() => new Map(source.notes().map((note) => [note.id, note])), [source, version]);
 }
 
-/** A note's name as the tree draws it: on its pill, after its icon. */
 export function NoteName({ title, look }: { readonly title: string; readonly look: NoteLook | undefined }): ReactElement {
   const pill = look?.background !== undefined;
   return (
@@ -99,14 +78,12 @@ const MUTED: CSSProperties = {
   color: "var(--ddd-text-muted)",
 };
 
-/** How tall the list's box may grow before it scrolls. */
 const BOX_HEIGHT = "16rem";
 
 export interface NotePickerProps {
   readonly source: NoteSource;
   readonly onChoose: (id: string) => void;
   readonly classPrefix: string;
-  /** Focus the filter box on mount. */
   readonly autoFocus?: boolean;
 }
 
@@ -117,7 +94,6 @@ export function NotePicker({ source, onChoose, classPrefix: p, autoFocus = false
     const needle = query.trim().toLowerCase();
     const all = [...notes.values()];
     const matching = needle === "" ? all : all.filter((note) => note.title.toLowerCase().includes(needle) || note.folder.toLowerCase().includes(needle));
-    // Title matches before folder-only ones, then by where the note sits.
     const rank = (note: PickableNote): number => (needle !== "" && !note.title.toLowerCase().includes(needle) ? 1 : 0);
     return matching.sort(
       (a, b) =>
@@ -185,7 +161,6 @@ export function NotePicker({ source, onChoose, classPrefix: p, autoFocus = false
   );
 }
 
-/** A {@link NoteSource} over one live query of every human document, for a host without the index. */
 export function documentsNoteSource(documents: Pick<DocumentsApi, "subscribe">): NoteSource {
   let notes: readonly PickableNote[] = [];
   const listeners = new Set<() => void>();

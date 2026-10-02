@@ -1,44 +1,18 @@
-//! ISO-8601 dates (SPEC §3.4): normalized to a canonical form at
-//! materialization so lexicographic sort is correct, and an explicit type in
-//! the filter DSL.
-//!
-//! Canonical forms — and *only* these two — participate in date comparisons:
-//!
-//! ```text
-//! YYYY-MM-DD                    (DatePrecision::Date)
-//! YYYY-MM-DDTHH:MM:SS.sssZ      (DatePrecision::DateTime)
-//! ```
-//!
-//! Both are fixed-width and UTC-normalized, so byte-wise lexicographic order
-//! over canonical text equals chronological order. That is what makes the
-//! server (Mongo string comparison) and the client (in-memory comparison) agree
-//! by construction — see [`crate::filter`].
-
 use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 
-/// How precise a parsed date is. Comparisons between different precisions
-/// compare the instant; `Date` is treated as midnight UTC.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DatePrecision {
-    /// `YYYY-MM-DD`
     Date,
-    /// `YYYY-MM-DDTHH:MM:SSZ` (offsets normalized to UTC)
     DateTime,
 }
 
-/// A parsed, canonicalizable ISO-8601 date or datetime.
-///
-/// Serializes as its canonical string (`"2026-09-23"`), which is also the wire
-/// form of a date literal in the filter DSL.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Date {
-    /// Canonical text form: `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SS.sssZ`.
     canonical: String,
     precision: DatePrecision,
-    /// Milliseconds since the Unix epoch (UTC). Sort/compare key.
     epoch_millis: i64,
 }
 
@@ -50,18 +24,10 @@ pub enum DateError {
     OutOfRange,
 }
 
-/// Lowest representable instant: `0000-01-01T00:00:00.000Z`.
 const MIN_EPOCH_MILLIS: i64 = -62_167_219_200_000;
-/// Highest representable instant: `9999-12-31T23:59:59.999Z`.
 const MAX_EPOCH_MILLIS: i64 = 253_402_300_799_999;
 
 impl Date {
-    /// Parse an ISO-8601 date (`YYYY-MM-DD`) or datetime (RFC 3339, offsets
-    /// normalized to UTC). Anything else is [`DateError::Malformed`].
-    ///
-    /// Tolerances (documented, byte-identical on both sides): the date/time
-    /// separator may be `T`, `t` or a space; seconds may be omitted; a missing
-    /// offset means UTC; fractional seconds are truncated to milliseconds.
     pub fn parse(input: &str) -> Result<Date, DateError> {
         let s = input.trim();
         let bytes = s.as_bytes();
@@ -133,7 +99,6 @@ impl Date {
             if end == start || end - start > 9 {
                 return Err(DateError::Malformed);
             }
-            // Truncate (never round) to millisecond precision.
             let mut frac = rest[start..end].to_string();
             while frac.len() < 3 {
                 frac.push('0');
@@ -172,7 +137,6 @@ impl Date {
         Date::from_epoch_millis(epoch_millis)
     }
 
-    /// Parse from epoch milliseconds (UTC), always [`DatePrecision::DateTime`].
     pub fn from_epoch_millis(millis: i64) -> Result<Date, DateError> {
         if !(MIN_EPOCH_MILLIS..=MAX_EPOCH_MILLIS).contains(&millis) {
             return Err(DateError::OutOfRange);
@@ -193,8 +157,6 @@ impl Date {
         })
     }
 
-    /// Canonical text form. Lexicographic order over equal precision matches
-    /// chronological order.
     pub fn canonical(&self) -> &str {
         &self.canonical
     }
@@ -207,14 +169,10 @@ impl Date {
         self.epoch_millis
     }
 
-    /// `true` iff `input` parses as a date; used to decide whether a
-    /// frontmatter string participates in date comparisons.
     pub fn looks_like_date(input: &str) -> bool {
         Date::parse(input).is_ok()
     }
 
-    /// Normalize a date-ish string to canonical form, or return it unchanged
-    /// when it does not parse (materialization must never lose text).
     pub fn normalize_str(input: &str) -> String {
         match Date::parse(input) {
             Ok(date) => date.canonical,
@@ -223,14 +181,6 @@ impl Date {
     }
 }
 
-/// `true` iff `s` is already in one of the two canonical shapes.
-///
-/// This is the *participation test* for date comparisons against `fm` /
-/// `plugins` string values, and it is deliberately a pure shape check: the
-/// server's Mongo compiler can only express the same test as a regular
-/// expression ([`CANONICAL_SHAPE_REGEX`]), and evaluator/compiler result
-/// equality is the contract (SPEC §4.2). Materialization guarantees every real
-/// date reaching storage is canonical.
 pub(crate) fn is_canonical_shape(s: &str) -> bool {
     let b = s.as_bytes();
     let date_part = b.len() >= 10
@@ -259,8 +209,6 @@ pub(crate) fn is_canonical_shape(s: &str) -> bool {
     }
 }
 
-/// The Mongo-side equivalent of [`is_canonical_shape`]. Kept next to it so the
-/// two can never drift; the conformance corpus asserts they agree.
 #[cfg(feature = "mongo")]
 pub(crate) const CANONICAL_SHAPE_REGEX: &str =
     r"^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z)?$";
@@ -283,8 +231,6 @@ fn days_in_month(year: i32, month: u8) -> u8 {
     }
 }
 
-/// Howard Hinnant's `days_from_civil`: days since 1970-01-01 (proleptic
-/// Gregorian). Exact integer arithmetic, no dependency, identical everywhere.
 fn days_from_civil(year: i32, month: u8, day: u8) -> i64 {
     let y = i64::from(year) - i64::from(month <= 2);
     let era = if y >= 0 { y } else { y - 399 } / 400;
@@ -295,7 +241,6 @@ fn days_from_civil(year: i32, month: u8, day: u8) -> i64 {
     era * 146_097 + doe - 719_468
 }
 
-/// Inverse of [`days_from_civil`].
 fn civil_from_days(days: i64) -> (i32, u8, u8) {
     let z = days + 719_468;
     let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
@@ -317,9 +262,6 @@ impl PartialOrd for Date {
 }
 
 impl Ord for Date {
-    /// Chronological, with precision as the tiebreaker so `Ord` agrees with the
-    /// derived `Eq` — and so this ordering is *identical* to byte-wise
-    /// lexicographic ordering of the canonical forms, which is what Mongo does.
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.epoch_millis
             .cmp(&other.epoch_millis)

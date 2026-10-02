@@ -1,14 +1,3 @@
-/**
- * Smoke test for the generated Wasm package — the last step of `mise run wasm`.
- *
- * It imports the artifact the way Node has to (the `web` target resolves its
- * `.wasm` relative to `import.meta.url` in a browser; in Node we hand it the
- * bytes), then exercises each exported function once. A build that links but
- * traps on the first call is the failure this catches.
- *
- * Usage: `node web/scripts/wasm-smoke.mjs` (from anywhere).
- */
-
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 

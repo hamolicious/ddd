@@ -1,25 +1,3 @@
-/**
- * `SearchShell` — a search, shown: the controls (`FilterBar.tsx`) over the host's view,
- * fed by `useResults`. The all-documents page, a saved-search note and an embed of one are
- * all this component with different `controls`.
- *
- * - **`shown`**: the toolbar, as the all-documents page has it.
- * - **`folded`**: a cog over the top right of the results unfolds it — a saved search,
- *   whose search is already decided. The cog is `icons`' (an optional dependency; a ⚙
- *   without it), and "Update saved search" sits beside it when the search was changed.
- * - **`hidden`**: the results alone — an embed. A header click still sorts, on screen
- *   only: the reader is reading another note, not editing this one.
- *
- * **The view is the host's.** A view plugin passes `renderView`, and its settings as
- * `renderSettings` for the View panel; the shell knows nothing of either. The host's own
- * `document.mode` is already inside the kernel's error boundary.
- *
- * **Acting on results** — the Actions button, which hands every loaded row's id to the
- * commands that `takes: "documents"` — is the shell's, so every view gets it without
- * re-implementing it. A single result's menu is `context-menu`'s: a view marks each result
- * as an `ddd/document` (`_shared/target.ts`).
- */
-
 import { useMemo, useState } from "react";
 import type { ComponentType, ReactElement } from "react";
 
@@ -43,16 +21,11 @@ import type { SearchEngine } from "./useSearch.js";
 export interface SearchShellDeps {
   readonly kernel: Kernel;
   readonly engine: SearchEngine;
-  /** `context-menu`'s `open`: the sort menu. */
   readonly menu: Pick<ContextMenu, "open">;
-  /** `icons`, when it is there: the cog that unfolds a saved search's controls. */
   readonly icons: () => Pick<Icons, "Icon"> | undefined;
   readonly index: () => ConditionIndex | undefined;
-  /** The Actions menu over these ids, when a commands registry is wired. */
   readonly actions: () => ((ids: readonly string[], anchor: HTMLElement) => void) | undefined;
-  /** Picks the note for "is inside note" and the like. */
   readonly NoteSelect: ComponentType<NoteSelectProps>;
-  /** The property box, and the value box, of a condition. */
   readonly FmKeySelect: ComponentType<FmKeySelectProps>;
   readonly FmValueSelect: ComponentType<FmValueSelectProps>;
 }
@@ -76,7 +49,6 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
     showsEmpty,
   }: SearchShellProps): ReactElement {
     const [searchOpen, setSearchOpen] = useState(controls === "shown");
-    // An embed sorts on screen only.
     const [localSort, setLocalSort] = useState<SearchSort | undefined>(undefined);
     const shownSpec: SearchSpec = controls === "hidden" && localSort ? { ...spec, sort: localSort } : spec;
 
@@ -100,8 +72,6 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
       else onSpecChange({ ...spec, sort: next });
     };
 
-    // The sort in force, offered in the sort menu when it is not one of the fixed ones
-    // (a column header picked it).
     const known = [RELEVANCE, ...SORT_OPTIONS].some((option) => option.field === sort.field);
     const extraSorts: readonly FieldOption[] = known
       ? []
@@ -128,7 +98,6 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
 
     return (
       <section
-        // Embedded, the note around it already frames it: no padding of its own.
         className={`search-page search:flex search:flex-col search:font-sans search:text-text ${controls === "hidden" ? "search:gap-2" : "search:gap-3 search:p-4 search:compact:min-h-full search:compact:p-2"} search:[&_:focus-visible]:outline-2 search:[&_:focus-visible]:outline-offset-1 search:[&_:focus-visible]:outline-focus search:[&_button]:tap-h search:[&_button]:cursor-pointer search:[&_button]:rounded search:[&_button]:border search:[&_button]:border-border search:[&_button]:bg-bg-subtle search:[&_button]:px-2 search:[&_button]:text-inherit search:disabled:[&_button]:cursor-default search:disabled:[&_button]:opacity-55`}
         {...(heading !== undefined ? { "aria-label": heading } : { "aria-label": "Search results" })}
       >
@@ -187,10 +156,8 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
         )}
         <Busy on={results.loading} label={searching ? "Searching" : "Loading"} beside={controls === "folded"} />
         {results.rows.length === 0 && showsEmpty === true ? (
-          // A view whose frame means something with nothing in it: a board's columns.
           renderView(viewProps)
         ) : results.loading && results.rows.length === 0 ? (
-          // The first answer is on its way: room for it, and the spinner says why.
           <div className="search-empty search:min-h-16" />
         ) : results.rows.length === 0 ? (
           <p className="search-empty search:m-0 search:py-6 search:text-text-muted">
@@ -203,7 +170,6 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
         ) : (
           <>
             {renderView(viewProps)}
-            {/* Embedded, the count is noise unless it says the view is cut short. */}
             {(controls !== "hidden" || results.hasMore) && (
               <p className="search-status search:m-0 search:text-sm search:text-text-muted" role="status" aria-live="polite">
                 {statusText(results.rows.length, results.total, results.hasMore, text)}
@@ -217,11 +183,6 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
   };
 }
 
-/**
- * A spinner at the top right of the results while they load. It fades in only after a
- * moment, so a search that answers at once never flashes it, and fades out when done.
- * Absolutely placed, so it never moves anything; the live region carries the words.
- */
 function Busy({ on, label, beside = false }: { readonly on: boolean; readonly label: string; readonly beside?: boolean }): ReactElement {
   return (
     <div
@@ -233,18 +194,12 @@ function Busy({ on, label, beside = false }: { readonly on: boolean; readonly la
   );
 }
 
-/** The line under the results: the real total when it is known, else what was found. */
 function statusText(shown: number, total: number | undefined, more: boolean, text: string): string {
   if (total !== undefined) return `${total.toLocaleString()} document${total === 1 ? "" : "s"}`;
   const count = `${shown.toLocaleString()}${more ? "+" : ""}`;
   return `${count} result${shown === 1 && !more ? "" : "s"}${text === "" ? "" : ` for “${text}”`}`;
 }
 
-/**
- * A saved search's controls, folded behind a cog over the top right of the results: a
- * round, raised button, in the accent while the controls are open. "Update saved search"
- * (or "Save search") sits beside it while the search differs from what the note holds.
- */
 function SearchCog({
   open,
   onToggle,

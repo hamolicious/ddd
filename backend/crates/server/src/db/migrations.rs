@@ -1,6 +1,3 @@
-//! Ordered, idempotent migrations run at boot under an advisory lock
-//! (SPEC §3.5). The server refuses to start if the DB is newer than the binary.
-
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
@@ -13,22 +10,15 @@ use thiserror::Error;
 
 use crate::domain::{MigrationLock, SchemaMeta};
 
-/// Schema version this binary understands. Bump when adding a migration.
 pub const SCHEMA_VERSION: i32 = 3;
 
-/// How long a migration may hold the advisory lock before another process may
-/// steal it (a crashed migrator must not wedge the deployment forever).
 pub const LOCK_TTL_SECS: i64 = 300;
 
-/// How long a booting process waits for someone else's migration to finish
-/// before giving up. Deliberately shorter than a Kubernetes liveness budget:
-/// failing fast and restarting is better than a half-started server.
 const LOCK_WAIT_ATTEMPTS: u32 = 20;
 const LOCK_WAIT_INTERVAL: Duration = Duration::from_secs(3);
 
 type MigrationFuture<'a> = Pin<Box<dyn Future<Output = anyhow::Result<()>> + Send + 'a>>;
 
-/// One migration step. `run` must be idempotent.
 pub struct Migration {
     pub version: i32,
     pub name: &'static str,
@@ -50,7 +40,6 @@ pub enum MigrationError {
     },
 }
 
-/// What `run` did, for the boot log and `/readyz`.
 #[derive(Debug, Clone, Default)]
 pub struct MigrationReport {
     pub from_version: i32,
@@ -58,8 +47,6 @@ pub struct MigrationReport {
     pub applied: Vec<&'static str>,
 }
 
-/// The ordered migration list. **Append only** — never edit or reorder an
-/// existing entry.
 pub fn migrations() -> Vec<Migration> {
     vec![
         Migration {
@@ -80,7 +67,6 @@ pub fn migrations() -> Vec<Migration> {
     ]
 }
 
-/// Read the stored schema version (0 when the DB is empty).
 pub async fn current_version(db: &Database) -> anyhow::Result<i32> {
     let meta = db
         .collection::<SchemaMeta>(super::META)
@@ -90,7 +76,6 @@ pub async fn current_version(db: &Database) -> anyhow::Result<i32> {
     Ok(meta.map_or(0, |meta| meta.schema_version))
 }
 
-/// Apply every pending migration in order, under the advisory lock.
 pub async fn run(db: &Database) -> anyhow::Result<MigrationReport> {
     ensure_meta_document(db).await?;
 
@@ -105,16 +90,12 @@ pub async fn run(db: &Database) -> anyhow::Result<MigrationReport> {
         });
     }
 
-    // The closure reports back through a shared cell: `with_advisory_lock`'s
-    // signature is a frozen contract that only carries `Result<()>`.
     let applied: Arc<Mutex<Vec<&'static str>>> = Arc::new(Mutex::new(Vec::new()));
     let applied_out = Arc::clone(&applied);
 
     with_advisory_lock(db, &holder_id(), move |db| {
         let applied = Arc::clone(&applied);
         Box::pin(async move {
-            // Re-read inside the lock: another process may have migrated while
-            // we were waiting for it.
             let mut version = current_version(db).await?;
             refuse_if_newer(version)?;
 
@@ -156,7 +137,6 @@ pub async fn run(db: &Database) -> anyhow::Result<MigrationReport> {
     })
 }
 
-/// Acquire the advisory lock, run `body`, release it even on error.
 pub async fn with_advisory_lock<F>(db: &Database, holder: &str, body: F) -> anyhow::Result<()>
 where
     F: for<'a> FnOnce(&'a Database) -> MigrationFuture<'a> + Send,
@@ -165,8 +145,6 @@ where
 
     let result = body(db).await;
 
-    // Release unconditionally: a held lock outlives the process that took it,
-    // and the TTL is a backstop, not the plan.
     if let Err(err) = release_lock(db, holder).await {
         tracing::error!(error = %err, "releasing the migration lock failed; it will expire via its TTL");
     }
@@ -185,14 +163,11 @@ fn refuse_if_newer(found: i32) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Identifies the lock holder in logs and in the stored lock. Not a security
-/// boundary — just enough to tell two processes apart.
 fn holder_id() -> String {
     let host = std::env::var("HOSTNAME").unwrap_or_else(|_| "unknown-host".to_string());
     format!("{host}:{}", std::process::id())
 }
 
-/// Create `meta.schema` if it is missing, without touching an existing version.
 async fn ensure_meta_document(db: &Database) -> anyhow::Result<()> {
     db.collection::<bson::Document>(super::META)
         .update_one(
@@ -230,7 +205,6 @@ async fn acquire_lock(db: &Database, holder: &str) -> anyhow::Result<()> {
             .update_one(
                 doc! {
                     "_id": super::META_SCHEMA_ID,
-                    // Free, never taken, or abandoned past its TTL.
                     "$or": [
                         { "migration_lock": { "$exists": false } },
                         { "migration_lock": bson::Bson::Null },
@@ -290,17 +264,7 @@ async fn release_lock(db: &Database, holder: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// v1: create the collections and their validators. Indexes are handled
-/// separately by [`super::indexes`], which runs after migrations.
-///
-/// No JSON-schema validators are installed: the shapes in `domain.rs` are the
-/// contract, they change with the binary, and a stale server-side validator
-/// would reject writes from a *newer* binary mid-deploy. Creating the
-/// collections up front still buys something real — `/readyz`, the admin export
-/// and the orphan scan all read collections that may never have been written.
 async fn m001_initial_collections(db: &Database) -> anyhow::Result<()> {
-    // The M4 plugin collections are deliberately absent: they arrive with the
-    // plugin host (SPEC §9 M4).
     const COLLECTIONS: &[&str] = &[
         super::DOCUMENTS,
         super::DOCUMENT_UPDATES,
@@ -327,7 +291,6 @@ async fn m001_initial_collections(db: &Database) -> anyhow::Result<()> {
         }
         match db.create_collection(*name).await {
             Ok(()) => tracing::debug!(collection = name, "collection created"),
-            // Another process created it between the list and the create.
             Err(err) if is_namespace_exists(&err) => {}
             Err(err) => {
                 return Err(
@@ -340,23 +303,9 @@ async fn m001_initial_collections(db: &Database) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Give every pre-feed row a `feed_seq` (SPEC §4.1, PROTOCOL.md §2.2).
-///
-/// M1 stored documents with no sequence number at all, and `FeedRow::from_row`
-/// returns `None` for such a row — so an un-backfilled M1 workspace is not
-/// *wrong* on the feed, it is **invisible**: a client would bootstrap fine and
-/// then never see a single change. The numbers are handed out in the order the
-/// rows were last touched (`updated_at`, then `deleted_at` for graveyard rows),
-/// so the backfilled feed reads like the history it stands in for.
-///
-/// Idempotent by construction: only rows *missing* `feed_seq` are considered, and
-/// the counter starts above whatever the highest existing number is, so a
-/// half-finished run resumes without ever reusing a number.
 async fn m002_backfill_feed_seq(db: &Database) -> anyhow::Result<()> {
     use futures::TryStreamExt;
 
-    // Start above the high-water mark of both collections: a crashed earlier run
-    // may already have numbered part of the workspace.
     let mut next = highest_feed_seq(db, super::DOCUMENTS)
         .await?
         .max(highest_feed_seq(db, super::DELETED_IDS).await?)
@@ -387,9 +336,6 @@ async fn m002_backfill_feed_seq(db: &Database) -> anyhow::Result<()> {
 
         let count = ids.len();
         for id in ids {
-            // `$exists: false` in the filter as well as the scan: concurrent
-            // writers cannot appear under the advisory lock, but a resumed run
-            // must not renumber what a previous attempt already numbered.
             handle
                 .update_one(
                     doc! { "_id": &id, "feed_seq": { "$exists": false } },
@@ -407,7 +353,6 @@ async fn m002_backfill_feed_seq(db: &Database) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// The largest `feed_seq` in one collection, or 0 when there is none.
 async fn highest_feed_seq(db: &Database, collection: &str) -> anyhow::Result<i64> {
     let row = db
         .collection::<bson::Document>(collection)
@@ -421,11 +366,6 @@ async fn highest_feed_seq(db: &Database, collection: &str) -> anyhow::Result<i64
         .unwrap_or(0))
 }
 
-/// The collections `@kernel` 3.0 retired: `wiring` (the versioned port-wiring store) and
-/// `protocols` (the protocol-package registry and its namespace claims). Plugins now name
-/// each other by id in `dependencies`, so neither has anything left to record.
-///
-/// Idempotent: dropping a collection that does not exist is a no-op for the driver.
 async fn m003_drop_wiring_and_protocols(db: &Database) -> anyhow::Result<()> {
     for name in RETIRED_COLLECTIONS {
         db.collection::<bson::Document>(name)
@@ -436,10 +376,8 @@ async fn m003_drop_wiring_and_protocols(db: &Database) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// What [`m003_drop_wiring_and_protocols`] removes.
 pub const RETIRED_COLLECTIONS: &[&str] = &["wiring", "protocols"];
 
-/// Mongo error code 48 — `NamespaceExists`.
 fn is_namespace_exists(err: &mongodb::error::Error) -> bool {
     matches!(
         *err.kind,

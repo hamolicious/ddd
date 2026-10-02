@@ -1,39 +1,3 @@
-//! Zip hardening (SPEC §6.2): "manifest validated first; reject absolute paths/`..`/
-//! symlinks/entries outside `frontend/**` + declared wasm; caps on uncompressed size
-//! (50 MB), entry count, per-entry size; extract to temp, atomic rename".
-//!
-//! Treat every package as hostile input, because an uploaded zip is exactly that. The
-//! attacks this file exists to stop, and the check that stops each:
-//!
-//! | Attack | Check |
-//! |---|---|
-//! | `../../etc/cron.d/x` | every entry name is lexically validated *and* the resolved path is re-checked against the staging root |
-//! | `/etc/passwd` | absolute names refused |
-//! | a symlink to `/` | symlink entries refused outright (never followed, never created) |
-//! | zip bomb (42 KB → 4.5 PB) | uncompressed total, per-entry size and entry count caps, enforced **while** streaming, not from the header |
-//! | a manifest that lies about the wasm path | only `frontend/**` plus the manifest's declared `backend.module` may be in the archive at all |
-//! | a package for a different server | the manifest is parsed and validated before a single byte is written |
-//!
-//! Two details that are easy to get subtly wrong and are therefore spelled out:
-//!
-//! - **The caps are enforced on the bytes as they are written, never on the header.** A
-//!   zip's local header may claim any uncompressed size it likes; [`extract`] counts what
-//!   it actually copies and stops at the cap mid-entry. The header value is checked too,
-//!   but only as a cheap early refusal.
-//! - **An entry outside the allowlist is a refusal, not an omission.** SPEC §6.2 says
-//!   "reject … entries outside `frontend/**` + declared wasm", so a package carrying a
-//!   `README.md` or a Finder `__MACOSX/` sidecar fails to install with that entry named,
-//!   rather than being installed minus the file. It is the stricter reading, and the reason
-//!   for it is that a plugin is a full-trust artifact (SPEC §6.1): "what is in the package I
-//!   approved" must be answerable from the package.
-//! - **Nothing from the archive reaches the filesystem's metadata.** Permissions are not
-//!   copied (an `0o777` or setuid mode in a package is simply ignored), mtimes are not
-//!   restored, and directory entries are never created from the archive: parents are
-//!   created as files need them, so an empty directory in a package is silently dropped
-//!   rather than being a path to police.
-//!
-//! **Owner:** the `install-flow` builder.
-
 use std::fs;
 use std::io::{self, Read, Write};
 use std::path::{Component, Path, PathBuf};
@@ -44,25 +8,18 @@ use sha2::{Digest as _, Sha256};
 
 use crate::plugins::PluginManifest;
 
-/// Total compressed size of an uploaded package.
 pub const MAX_ARCHIVE_BYTES: u64 = abi::limits::MAX_PACKAGE_BYTES;
-/// Total uncompressed size (SPEC §6.2: 50 MB).
 pub const MAX_UNCOMPRESSED_BYTES: u64 = abi::limits::MAX_PACKAGE_UNCOMPRESSED_BYTES;
 pub const MAX_ENTRIES: usize = abi::limits::MAX_PACKAGE_ENTRIES;
 pub const MAX_ENTRY_BYTES: u64 = abi::limits::MAX_PACKAGE_ENTRY_BYTES;
 pub const MAX_MANIFEST_BYTES: u64 = abi::limits::MAX_MANIFEST_BYTES;
 pub const MAX_WASM_BYTES: u64 = abi::limits::MAX_BACKEND_WASM_BYTES;
 
-/// The file the manifest must be at, at the archive root.
 pub const MANIFEST_ENTRY: &str = "manifest.json";
-/// The only directory of browser assets that is extracted — and the only one the static
-/// route will ever serve (`web/CONTRACTS.md`, the M3 carry-over).
 pub const FRONTEND_PREFIX: &str = "frontend/";
 
-/// How often [`wait_for_stable`] samples a file's size.
 const STABLE_POLL: Duration = Duration::from_millis(250);
 
-/// The four bytes every WebAssembly module starts with, followed by version 1.
 const WASM_PREAMBLE: [u8; 8] = [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
 
 #[derive(Debug, thiserror::Error)]
@@ -95,25 +52,16 @@ pub enum ZipError {
     Io(#[from] std::io::Error),
 }
 
-/// What a validated, extracted package looks like on disk.
 #[derive(Debug)]
 pub struct ExtractedPackage {
-    /// The staging directory. Renamed into place by the caller, or removed on failure.
     pub dir: PathBuf,
     pub manifest: PluginManifest,
-    /// `<dir>/backend.wasm`, when the manifest declares one.
     pub backend_wasm: Option<PathBuf>,
-    /// Hex SHA-256 of the backend module — recorded so "is the running plugin the one I
-    /// approved" has an answer.
     pub backend_sha256: Option<String>,
     pub entries: usize,
     pub uncompressed_bytes: u64,
 }
 
-/// Read and parse `manifest.json` **without extracting anything**.
-///
-/// The first thing the pipeline does. A package for another kernel major, or with an id
-/// that is not a valid plugin id, is refused before its bytes reach the filesystem.
 pub fn read_manifest(archive: &Path) -> Result<PluginManifest, ZipError> {
     let len = fs::metadata(archive)?.len();
     if len > MAX_ARCHIVE_BYTES {
@@ -127,9 +75,6 @@ pub fn read_manifest(archive: &Path) -> Result<PluginManifest, ZipError> {
     let mut zip = zip::ZipArchive::new(io::BufReader::new(file))
         .map_err(|err| ZipError::NotZip(err.to_string()))?;
 
-    // The entry count is checked here, before the manifest, because a central directory
-    // with a million entries is itself the attack: refusing it costs one integer compare
-    // and saves the extraction loop from ever seeing it.
     if zip.len() > MAX_ENTRIES {
         return Err(ZipError::TooManyEntries { limit: MAX_ENTRIES });
     }
@@ -149,8 +94,6 @@ pub fn read_manifest(archive: &Path) -> Result<PluginManifest, ZipError> {
         });
     }
 
-    // `take` and not `entry.size()`: the header is the archive's claim about itself, and a
-    // 256 KiB claim in front of a gigabyte of JSON is a one-line denial of service.
     let mut raw = Vec::new();
     entry
         .by_ref()
@@ -164,8 +107,6 @@ pub fn read_manifest(archive: &Path) -> Result<PluginManifest, ZipError> {
         });
     }
 
-    // The schema first, so the error names the field (`frontend.module must be a relative
-    // path …`) rather than serde's line and column; the types second.
     let value: serde_json::Value =
         serde_json::from_slice(&raw).map_err(|err| ZipError::BadManifest(err.to_string()))?;
     let problems = crate::manifest_schema::validate_manifest(&value);
@@ -177,24 +118,11 @@ pub fn read_manifest(archive: &Path) -> Result<PluginManifest, ZipError> {
     serde_json::from_value(value).map_err(|err| ZipError::BadManifest(err.to_string()))
 }
 
-/// Extract the allowed entries into `staging`, enforcing every cap while streaming.
-///
-/// `staging` must be empty and on the same filesystem as `PLUGINS_DIR` — the install ends
-/// in a rename, and a cross-device rename is a copy that can be interrupted half-way.
-///
-/// **The root itself is checked, not only the entry names.** Every other guard in this
-/// module validates paths *inside* the archive; none of them can tell that the directory it
-/// was handed already points somewhere it should not. The caller builds that directory from
-/// manifest-controlled strings (`<staging>/work/<id>/<version>.<ulid>`), so a `..` that slips
-/// through id/version validation would otherwise be laundered into arbitrary writes by
-/// `create_dir_all` + `canonicalize` before the first entry is even read.
 pub fn extract(
     archive: &Path,
     staging: &Path,
     manifest: &PluginManifest,
 ) -> Result<ExtractedPackage, ZipError> {
-    // `..` only: `.` and a root are resolved harmlessly by `canonicalize`, and an operator
-    // is entitled to configure `./data/staging`.
     if staging
         .components()
         .any(|component| component == Component::ParentDir)
@@ -202,9 +130,6 @@ pub fn extract(
         return Err(ZipError::Traversal(staging.display().to_string()));
     }
     fs::create_dir_all(staging)?;
-    // Absolute from here on: every path comparison below is `starts_with`, and a relative
-    // root compared against a canonicalized candidate refuses everything, including the
-    // entries that are fine.
     let root = staging.canonicalize()?;
 
     let file = fs::File::open(archive)?;
@@ -223,14 +148,9 @@ pub fn extract(
             .map_err(|err| ZipError::NotZip(err.to_string()))?;
         let name = entry.name().to_string();
 
-        // A symlink is refused whatever it points at and wherever it sits — including one
-        // inside `frontend/`, because the static route resolves paths on disk and a link
-        // out of the package would be served (`web/CONTRACTS.md`).
         if entry.is_symlink() {
             return Err(ZipError::Symlink(name));
         }
-        // Directory entries are validated and then dropped: parents are created as files
-        // need them, so there is no second code path that makes directories.
         let is_dir = entry.is_dir();
         let lexical = name.trim_end_matches('/');
         check_entry_name(lexical)?;
@@ -259,9 +179,6 @@ pub fn extract(
             }
         }
 
-        // `create_new`: an archive with the same name twice must not have its second copy
-        // silently overwrite the first — the manifest the pipeline validated would then not
-        // be the manifest on disk.
         let mut out = match fs::File::options()
             .write(true)
             .create_new(true)
@@ -344,12 +261,6 @@ pub fn extract(
     })
 }
 
-/// Is this entry name allowed out of the archive?
-///
-/// Lexical half of the traversal defence: no absolute paths, no `..` or `.` segments, no
-/// backslashes or drive letters (a Windows-authored zip), no NUL, no leading `/`, and the
-/// name must be either `manifest.json`, under `frontend/`, or exactly the manifest's
-/// declared `backend.module`.
 pub fn entry_allowed(name: &str, manifest: &PluginManifest) -> bool {
     if check_entry_name(name.trim_end_matches('/')).is_err() {
         return false;
@@ -366,8 +277,6 @@ pub fn entry_allowed(name: &str, manifest: &PluginManifest) -> bool {
         .is_some_and(|backend| backend.module == name)
 }
 
-/// The lexical rules, with the error that names the reason — [`entry_allowed`] is the
-/// boolean skin over it, and [`extract`] wants the specific refusal for its log line.
 fn check_entry_name(name: &str) -> Result<(), ZipError> {
     if name.is_empty() {
         return Err(ZipError::Traversal(String::new()));
@@ -375,8 +284,6 @@ fn check_entry_name(name: &str) -> Result<(), ZipError> {
     if name.starts_with('/') || name.starts_with('\\') {
         return Err(ZipError::AbsolutePath(name.to_string()));
     }
-    // A Windows drive letter (`c:/x`) is absolute on the platform that wrote it, and the
-    // colon is not a character any legitimate plugin asset needs.
     if name.contains(':') || name.contains('\\') || name.contains('\0') {
         return Err(ZipError::Traversal(name.to_string()));
     }
@@ -389,9 +296,6 @@ fn check_entry_name(name: &str) -> Result<(), ZipError> {
     Ok(())
 }
 
-/// The second half: the resolved path must still be inside `root` after canonicalization.
-/// Belt and braces — the lexical check should already have caught it, and the one time it
-/// does not is the one that matters.
 pub fn inside_root(root: &Path, candidate: &Path) -> bool {
     let Ok(root) = std::path::absolute(root).and_then(|root| root.canonicalize()) else {
         return false;
@@ -400,8 +304,6 @@ pub fn inside_root(root: &Path, candidate: &Path) -> bool {
         return false;
     };
 
-    // Lexical normalization first: `..` is popped rather than resolved, so a candidate
-    // that climbs out fails here even if nothing on the path exists yet.
     let mut normalized = PathBuf::new();
     for component in candidate.components() {
         match component {
@@ -420,9 +322,6 @@ pub fn inside_root(root: &Path, candidate: &Path) -> bool {
         return false;
     }
 
-    // Then the filesystem's own answer, for the deepest ancestor that exists: if any
-    // component is a symlink out of the tree, this is what notices. (`extract` refuses
-    // symlink *entries*, so the only way one is here is if it was already on disk.)
     let mut probe = normalized.as_path();
     loop {
         if let Ok(real) = probe.canonicalize() {
@@ -435,20 +334,6 @@ pub fn inside_root(root: &Path, candidate: &Path) -> bool {
     }
 }
 
-/// Does this file look like a WebAssembly module that exports `name`?
-///
-/// A static scan of section 7 (exports) — no instantiation, no engine, no plugin code run.
-/// It is what makes HOST-ABI.md §7.1 step 7 ("the declared module … and its
-/// `ddd_abi_version` export") answerable at **install** time: the value that export returns
-/// still needs a running instance, and the host re-checks it at activation before running
-/// any of the plugin's own code. What this catches is the common, confusing case — a
-/// manifest that declares a backend half next to a `.wasm` that was built without the
-/// `abi_version!()` macro, or is not a module at all.
-///
-/// `Ok(false)` means "readable module, no such export"; an unreadable or truncated module
-/// is also `Ok(false)` rather than an error, because "this is not a plugin module" is the
-/// same answer for the caller and a parse error here would be an install failure with a
-/// message about LEB128.
 pub fn wasm_exports(path: &Path, name: &str) -> io::Result<bool> {
     let bytes = fs::read(path)?;
     if bytes.len() < WASM_PREAMBLE.len() || bytes[..WASM_PREAMBLE.len()] != WASM_PREAMBLE {
@@ -477,7 +362,6 @@ pub fn wasm_exports(path: &Path, name: &str) -> io::Result<bool> {
     Ok(false)
 }
 
-/// The export section is a vector of `(name, kind, index)`; only the names matter here.
 fn export_section_has(section: &[u8], wanted: &str) -> bool {
     let Some((count, mut cursor)) = read_leb128(section) else {
         return false;
@@ -494,7 +378,6 @@ fn export_section_has(section: &[u8], wanted: &str) -> bool {
         if section[cursor..end] == *wanted.as_bytes() {
             return true;
         }
-        // name, then one byte of kind and a LEB128 index.
         cursor = end + 1;
         let Some((_, used)) = read_leb128(&section[cursor.min(section.len())..]) else {
             return false;
@@ -504,7 +387,6 @@ fn export_section_has(section: &[u8], wanted: &str) -> bool {
     false
 }
 
-/// Unsigned LEB128, capped at five bytes (a 32-bit value) → `(value, bytes consumed)`.
 fn read_leb128(bytes: &[u8]) -> Option<(u64, usize)> {
     let mut value: u64 = 0;
     for (index, byte) in bytes.iter().take(5).enumerate() {
@@ -516,15 +398,6 @@ fn read_leb128(bytes: &[u8]) -> Option<(u64, usize)> {
     None
 }
 
-/// Wait until a file's size has been stable for `stable_for`, up to `timeout`.
-///
-/// What the directory watcher calls before touching a drop: a 20 MB zip being copied in is
-/// a valid zip for none of the seconds it takes to arrive, and "manifest.json is
-/// truncated" is a confusing way to learn that (SPEC §6.2: "the watcher waits for a stable
-/// file").
-///
-/// **Blocking**, deliberately: it sleeps on a thread. The watcher calls it inside
-/// `spawn_blocking`.
 pub fn wait_for_stable(
     path: &Path,
     stable_for: Duration,
@@ -557,7 +430,6 @@ pub fn wait_for_stable(
     }
 }
 
-/// Hex SHA-256 of a file — the module fingerprint on the record.
 pub fn sha256_file(path: &Path) -> std::io::Result<String> {
     let mut file = io::BufReader::new(fs::File::open(path)?);
     let mut hasher = Sha256::new();
@@ -574,10 +446,6 @@ pub fn sha256_file(path: &Path) -> std::io::Result<String> {
 
 #[cfg(test)]
 mod tests {
-    // The security cases live in `crates/server/tests/plugininstall_zip.rs`, where the
-    // archive fixtures are shared with the pipeline tests: building a hostile zip is the
-    // expensive part and both suites need the same ones. What stays here is the pure
-    // path algebra, which has no fixtures at all.
     use super::*;
 
     fn manifest(module: Option<&str>) -> PluginManifest {
@@ -600,15 +468,11 @@ mod tests {
         assert!(entry_allowed("frontend/assets/deep/style.css", &with_wasm));
         assert!(entry_allowed("backend.wasm", &with_wasm));
 
-        // Not declared, not extracted — even though the name is the conventional one.
         assert!(!entry_allowed("backend.wasm", &manifest(None)));
-        // Everything else in the archive is ignored rather than trusted.
         assert!(!entry_allowed("README.md", &with_wasm));
         assert!(!entry_allowed("frontend", &with_wasm));
         assert!(!entry_allowed("Frontend/index.mjs", &with_wasm));
         assert!(!entry_allowed(".git/config", &with_wasm));
-        // `@kernel` 3.0 has no protocol packages; a stale `protocols/` tree is ignored.
-        // A plugin's types ship as `frontend/index.d.ts`, like every other asset.
         assert!(!entry_allowed(
             "protocols/navbar.item/protocol.json",
             &with_wasm
@@ -646,8 +510,6 @@ mod tests {
         assert!(!inside_root(&root, &root.join("../escape")));
         assert!(!inside_root(&root, Path::new("/etc/passwd")));
         assert!(!inside_root(&root, &root.join("frontend/../../escape")));
-        // A root that does not exist can contain nothing: the answer is "no", never a
-        // panic and never an accidental `true`.
         assert!(!inside_root(
             Path::new("/nonexistent/ddd/staging"),
             Path::new("/nonexistent/ddd/staging/x")
@@ -665,20 +527,17 @@ mod tests {
         fs::write(&not_wasm, b"#!/bin/sh\n").expect("write");
         assert!(!wasm_exports(&not_wasm, "ddd_abi_version").expect("readable"));
 
-        // An empty module: the preamble and nothing else.
         let empty = dir.join("empty.wasm");
         fs::write(&empty, WASM_PREAMBLE).expect("write");
         assert!(!wasm_exports(&empty, "ddd_abi_version").expect("readable"));
 
-        // A hand-assembled module whose only section is an export section naming one
-        // function `ddd_abi_version` (function index 0).
         let mut module = WASM_PREAMBLE.to_vec();
         let name = b"ddd_abi_version";
-        let mut section = vec![1u8]; // one export
+        let mut section = vec![1u8];
         section.push(name.len() as u8);
         section.extend_from_slice(name);
-        section.push(0x00); // kind: function
-        section.push(0x00); // index 0
+        section.push(0x00);
+        section.push(0x00);
         module.push(7);
         module.push(section.len() as u8);
         module.extend_from_slice(&section);

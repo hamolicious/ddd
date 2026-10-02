@@ -1,28 +1,4 @@
 #!/usr/bin/env node
-/**
- * Build `web/kernel-api/dist/kernel.d.ts` — the single file SPEC §6.4 promises at
- * `/kernel.d.ts`, and the only thing a plugin author needs to type-check against
- * the kernel without installing this repository.
- *
- * How: `tsc --emitDeclarationOnly` over `kernel-api/src`, then flatten the emitted
- * files into one ambient `declare module "@kernel" { … }`.
- *
- * Why flatten rather than ship the directory: a plugin's tsconfig resolves the
- * bare specifier `@kernel` (that is what the import map serves at runtime), and an
- * ambient module declaration is the one shape that makes a bare specifier
- * resolvable from a single file with no `paths` entry, no `node_modules`, and no
- * package.json `exports`.
- *
- * The flattening is safe because of two invariants the contract holds itself to,
- * checked below rather than assumed:
- *
- * - every declaration name in `kernel-api/src` is unique across files, so
- *   concatenation cannot collide;
- * - the only cross-file references are relative type imports, which are dropped
- *   (the declarations they point at are in the same output), while imports of
- *   *external* packages — `react`, `yjs`, both import-map singletons — are kept and
- *   hoisted.
- */
 
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
@@ -43,7 +19,6 @@ execFileSync(process.execPath, [
   join(api, "tsconfig.build.json"),
 ], { stdio: "inherit", cwd: web });
 
-/** `index.d.ts` first: its re-exports are dropped, but its constants are not. */
 const files = readdirSync(types)
   .filter((name) => name.endsWith(".d.ts"))
   .sort((a, b) => (a === "index.d.ts" ? -1 : b === "index.d.ts" ? 1 : a.localeCompare(b)));
@@ -58,7 +33,6 @@ for (const name of files) {
   const source = readFileSync(join(types, name), "utf8");
   const kept = [];
   for (const line of source.split("\n")) {
-    // Re-exports and relative imports: the target declarations are in this bundle.
     if (/^export\s+(?:type\s+)?[{*].*from\s+["']\.[^"']*["'];?$/.test(line.trim())) continue;
     const importMatch = /^import\s+(?:type\s+)?.*from\s+["']([^"']+)["'];?$/.exec(line.trim());
     if (importMatch) {
@@ -80,7 +54,6 @@ for (const name of files) {
       }
       declared.set(identifier, name);
     }
-    // `declare` is illegal inside an already-ambient module body.
     kept.push(line.replace(/^(\s*export\s+)declare\s+/, "$1"));
   }
   const body = kept.join("\n").trim();

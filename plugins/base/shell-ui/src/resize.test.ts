@@ -1,9 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
-// This suite runs under node, where `localStorage` does not exist — which is also a
-// real browser condition the code guards (private windows). A minimal in-memory stand-in
-// lets the round-trip cases assert the storage path; the guard path is the corrupt-value
-// case below.
 beforeAll(() => {
   if (globalThis.localStorage) return;
   const store = new Map<string, string>();
@@ -41,7 +37,6 @@ describe("clampSidebarWidth", () => {
   });
 
   it("a viewport narrower than two minimums still yields a usable floor", () => {
-    // min wins over max: the sidebar stays grabbable rather than collapsing to 0.
     expect(clampSidebarWidth(500, 300)).toBe(SIDEBAR_MIN);
   });
 

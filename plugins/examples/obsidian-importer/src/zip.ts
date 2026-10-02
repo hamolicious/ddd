@@ -1,5 +1,3 @@
-/** A deliberately small ZIP reader for Obsidian vaults. No dependency is needed at runtime. */
-
 const CENTRAL_FILE = 0x02014b50;
 const END_OF_CENTRAL_DIRECTORY = 0x06054b50;
 const LOCAL_FILE = 0x04034b50;
@@ -14,23 +12,19 @@ const MAX_COMPRESSED_ATTACHMENT_BYTES = 100 * 1024 * 1024;
 const MAX_TOTAL_ATTACHMENT_BYTES = 2 * 1024 * 1024 * 1024;
 
 export interface VaultNote {
-  /** Vault-relative path, with `/` separators. */
   readonly path: string;
   readonly text: string;
 }
 
 export interface VaultAttachment {
-  /** Vault-relative path, with `/` separators. */
   readonly path: string;
   readonly size: number;
-  /** Inflate and checksum this entry only when it is ready to upload. */
   bytes(): Promise<Uint8Array>;
 }
 
 export interface VaultArchive {
   readonly notes: readonly VaultNote[];
   readonly attachments: readonly VaultAttachment[];
-  /** Obsidian configuration, trash, and operating-system metadata. */
   readonly skippedFiles: number;
 }
 
@@ -257,7 +251,6 @@ function safePath(raw: string): string {
 }
 
 function decodeName(bytes: Uint8Array, utf8: boolean): string {
-  // Obsidian emits UTF-8 names. ASCII is the portable subset for archives without bit 11.
   if (!utf8 && bytes.some((byte) => byte > 0x7f)) {
     throw new Error("ZIP contains a non-UTF-8 filename");
   }
@@ -290,7 +283,6 @@ function u32(view: DataView, offset: number): number {
   return view.getUint32(offset, true);
 }
 
-/** ZIP's CRC-32 (ISO-HDLC), kept exported so fixtures can be made without a ZIP dependency. */
 export function crc32(bytes: Uint8Array): number {
   let crc = 0xffffffff;
   for (const byte of bytes) {

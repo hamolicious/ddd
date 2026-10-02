@@ -1,15 +1,3 @@
-/**
- * `kernel.settings` end to end: the settings **document** of SPEC §6.4, over the
- * real query engine, the real Wasm parser and the real splice helper.
- *
- * The fake here is only the *server*: a `#materialize` that parses a document with
- * the shared core and pushes the row into the projection store, which is exactly
- * what the server does and the feed delivers (SPEC §3.5, §4.1). Everything the
- * settings host touches — the filter DSL, `plugins` materialization, the section
- * splice, the live local query — is the production code path, so this suite fails if
- * any of them stops agreeing about what a settings document is.
- */
-
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import * as Y from "yjs";
 
@@ -26,22 +14,15 @@ import { SettingsHost, SETTINGS_OWNER_KEY } from "./settings.js";
 const USER = "01J8ZUSER0000000000000000";
 const OTHER_USER = "01J8ZUSER0000000000000001";
 
-/** Two event-loop turns: enough for a store batch to reach a live query. */
 const settle = async (): Promise<void> => {
   for (let i = 0; i < 4; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
 };
 
-/**
- * A workspace with a server in it: documents are text, every write is
- * re-materialized by the shared core, and the row lands in the projection store the
- * way the change feed would deliver it.
- */
 class FakeWorkspace {
   readonly store = new MemoryProjectionStore();
   readonly engine: QueryEngine;
   readonly documents: DocumentsHost;
   readonly texts = new Map<string, string>();
-  /** Document id → the `created_by` the server stamped. */
   readonly creators = new Map<string, string>();
   readonly opened = new Map<string, OpenDocument>();
   creates = 0;
@@ -74,11 +55,6 @@ class FakeWorkspace {
     return this.texts.get(id) ?? "";
   }
 
-  /**
-   * A document arriving through the feed. `createdBy` is the server's attribution
-   * (`created_by`), which is what tells this user's settings document apart from one
-   * another user planted with the same `settings-owner` key.
-   */
   async seed(id: string, text: string, createdBy: string = USER): Promise<void> {
     this.texts.set(id, text);
     this.creators.set(id, createdBy);
@@ -117,7 +93,6 @@ class FakeWorkspace {
       const id = body.id ?? `01J8ZDOC${String(this.#ids).padStart(17, "0")}`;
       let content = body.content ?? "";
       if (body.state !== undefined) {
-        // The device's own CRDT state (PROTOCOL.md §3.8): the text is what it holds.
         const doc = new Y.Doc();
         Y.applyUpdate(doc, Uint8Array.from(atob(body.state), (char) => char.charCodeAt(0)));
         content = doc.getText("content").toString();
@@ -129,7 +104,6 @@ class FakeWorkspace {
     throw new Error(`unexpected API call ${init?.method ?? "GET"} ${path}`);
   }
 
-  /** What the server does after applying an update (SPEC §3.5), then the feed. */
   async #materialize(id: string): Promise<void> {
     const text = this.texts.get(id) ?? "";
     const parsed = this.core.parseDocument(text);
@@ -198,7 +172,6 @@ describe.skipIf(!coreArtifactExists())("per-user settings documents", () => {
     expect(parsed.fm["machine"]).toBe(true);
     expect(parsed.fm[SETTINGS_OWNER_KEY]).toBe(USER);
     expect(parsed.plugins["themes"]).toEqual({ theme: "solarized" });
-    // Machine-owned, but a human can read it: the body says what it is.
     expect(text).toContain("Per-user settings for alice@example.com");
     expect(themes.get("theme")).toBe("solarized");
     expect(workspace.creates).toBe(1);
@@ -261,7 +234,6 @@ describe.skipIf(!coreArtifactExists())("per-user settings documents", () => {
     const seen: unknown[] = [];
     themes.subscribe((values) => seen.push(values));
 
-    // Another device edits the same document; the feed delivers the new row.
     const id = host.documentId as string;
     await workspace.seed(id, workspace.text(id).replace("theme: solarized", "theme: nord"));
     await settle();
@@ -290,30 +262,20 @@ describe.skipIf(!coreArtifactExists())("per-user settings documents", () => {
     await settle();
 
     expect(host.documentIds).toEqual([first, second]);
-    // The canonical (lowest id) document wins per key — the same document a write
-    // targets — and keys only the duplicate holds still surface.
     expect(themes.all()).toEqual({ theme: "first", density: "cosy", extra: "yes" });
 
-    // The write consolidates into the canonical document rather than making a third…
     await themes.set("theme", "chosen");
     await settle();
     expect(workspace.creates).toBe(0);
     expect(core.parseDocument(workspace.text(first)).plugins["themes"]).toMatchObject({
       theme: "chosen",
     });
-    // …the duplicate's copy of that key is removed, so the value cannot come back…
     expect(core.parseDocument(workspace.text(second)).plugins["themes"]).toEqual({ extra: "yes" });
-    // …and the value read back is the value written. Reading `second` here was the
-    // bug: writes went to the lowest id while reads let the highest win, so every
-    // write was reverted by the next feed tick, permanently.
     expect(themes.get("theme")).toBe("chosen");
     expect(themes.all()).toEqual({ theme: "chosen", density: "cosy", extra: "yes" });
   });
 
   it("ignores a settings document another user planted with this user's owner key", async () => {
-    // The shared workspace means anybody can *write* `settings-owner`; only the server
-    // stamps `created_by`. A later ULID used to win every key, which handed one user
-    // control of another's settings — keybindings included — with no way to undo it.
     const mine = "01J8ZMINE000000000000000A";
     const planted = "01J8ZPLANTED0000000000000";
     await workspace.seed(
@@ -330,7 +292,6 @@ describe.skipIf(!coreArtifactExists())("per-user settings documents", () => {
     expect(host.documentIds).toEqual([mine]);
     expect(themes.get("theme")).toBe("mine");
 
-    // And a write still lands in the user's own document, not the planted one.
     await themes.set("theme", "chosen");
     await settle();
     expect(themes.get("theme")).toBe("chosen");
@@ -356,8 +317,6 @@ describe.skipIf(!coreArtifactExists())("per-user settings documents", () => {
     const id = host.documentId as string;
     await workspace.seed(id, workspace.text(id).replace("solarized", "nord"));
     await settle();
-    // No live query, so the cache is frozen at what it last saw. Sign-out clears
-    // everything anyway; what matters is that nothing throws after `stop()`.
     expect(themes.get("theme")).toBe("solarized");
   });
 });

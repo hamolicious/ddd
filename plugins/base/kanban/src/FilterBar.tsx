@@ -1,16 +1,3 @@
-/**
- * The filter bar above the board (`layout.ts`'s `filterRows`): a pill per property the
- * cards show, and one for the swimlane field. Idle, a pill names the property and the
- * values chosen ("Any" for none) — muted, or in the accent while any is chosen; each
- * chosen value has its own × to take it off. Clicked, the pill opens to `search`'s
- * `FmValueSelect` in place: a value typed, or picked from every value the workspace holds
- * for the property, commonest first, each with its note count.
- *
- * A pick, Enter, or leaving the pill with something typed toggles that value: added when
- * it was not chosen, taken off when it was. A card shows when it holds any of a pill's
- * values (`toggleValue`). Escape only closes it. "× Clear" lifts every filter.
- */
-
 import { useRef, useState } from "react";
 import type { ComponentType, ReactElement } from "react";
 
@@ -22,17 +9,13 @@ import { filterChoices, toggleValue, type Filters, type Scalar } from "./layout.
 const PILL =
   "kanban:relative kanban:inline-flex kanban:h-7 kanban:items-center kanban:gap-1 kanban:rounded-full! kanban:border! kanban:pl-2.5! kanban:pr-2! kanban:py-0! kanban:text-xs kanban:shadow-1 kanban:transition-colors kanban:duration-150 kanban:compact:h-9";
 const NAME = "kanban:text-[0.65rem] kanban:font-medium kanban:uppercase kanban:tracking-wide kanban:opacity-70";
-/** The picker's box and list, dressed as the pill's: the box bare inside it, the list hung under the whole pill. */
 const PICKER =
   "kanban:[&_.search-combobox]:static kanban:[&_.search-combobox]:w-36 kanban:[&_input]:h-full kanban:[&_input]:min-h-0! kanban:[&_input]:border-0! kanban:[&_input]:bg-transparent! kanban:[&_input]:p-0! kanban:[&_input]:font-sans kanban:[&_input]:text-xs! kanban:[&_input]:font-semibold kanban:[&_input]:text-text kanban:[&_input]:outline-none kanban:[&_input]:placeholder:font-normal kanban:[&_input]:placeholder:text-text-muted kanban:[&_.search-combobox>div]:right-auto kanban:[&_.search-combobox>div]:w-64 kanban:[&_.search-combobox>div]:max-w-[80vw]";
 
 export interface FilterBarProps {
-  /** The properties to filter by (`filterFields`). */
   readonly fields: readonly string[];
-  /** Every card loaded: what each property takes on the board. */
   readonly rows: readonly DocumentRow[];
   readonly filters: Filters;
-  /** The field's values now: none lifts its filter. */
   readonly onFilter: (field: string, values: readonly Scalar[]) => void;
   readonly onClear: () => void;
   readonly FmValueSelect: ComponentType<FmValueSelectProps>;
@@ -75,7 +58,6 @@ function FilterPill({
   Select,
 }: {
   readonly field: string;
-  /** The values cards on the board hold: typed exactly, one applies at once, as its own kind. */
   readonly choices: readonly Scalar[];
   readonly current: readonly Scalar[];
   readonly onChange: (values: readonly Scalar[]) => void;
@@ -85,11 +67,8 @@ function FilterPill({
   const active = current.length > 0;
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
-  /** The draft as the handlers see it: a pick's `onChange` lands before the click reaches the pill. */
   const typed = useRef("");
-  /** Closed already: the blur that follows must not apply the draft again. */
   const closed = useRef(true);
-  /** The click in flight is on one of the list's options. */
   const picking = useRef(false);
 
   const open = (): void => {
@@ -103,7 +82,6 @@ function FilterPill({
     setEditing(false);
   };
   const held = (text: string): Scalar | undefined => choices.find((choice) => String(choice) === text.trim());
-  /** Toggle `text`: a value a card holds as that value, anything else as typed; nothing changes nothing. */
   const apply = (text: string): void => {
     const trimmed = text.trim();
     if (trimmed !== "") onChange(toggleValue(current, held(trimmed) ?? trimmed));
@@ -163,14 +141,12 @@ function FilterPill({
   return (
     <div
       className={`${PILL} ${PICKER} kanban:border-accent! kanban:bg-bg! kanban:text-text kanban:shadow-2`}
-      // Before the box's own Escape, which would blur it and so apply the draft.
       onKeyDownCapture={(event) => {
         if (event.key !== "Escape") return;
         event.preventDefault();
         event.stopPropagation();
         close();
       }}
-      // After the box's own Enter, which picks the option under the cursor.
       onKeyDown={(event) => {
         if (event.key !== "Enter") return;
         event.preventDefault();

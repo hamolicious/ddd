@@ -1,8 +1,3 @@
-/**
- * Settings → Database health → Orphan files: icon actions, and each file opens on the
- * viewer's file page (`#/file/<id>`) without being put in any document.
- */
-
 import { expect, test } from "@playwright/test";
 
 import { ADMIN, signIn } from "./helpers.js";
@@ -14,7 +9,6 @@ test("an orphan file opens in the viewer, and Delete asks first", async ({ page 
   });
   await signIn(page, ADMIN);
 
-  // A file no document references.
   const name = `orphan-${Date.now()}.txt`;
   const id = await page.evaluate(async (fileName) => {
     const body = new FormData();
@@ -34,7 +28,6 @@ test("an orphan file opens in the viewer, and Delete asks first", async ({ page 
   await expect(page.getByText("left behind on purpose")).toBeVisible();
   await expect(page.locator("figcaption")).toContainText(name);
 
-  // Looking changed nothing: it is still an orphan.
   await page.goBack();
   const remove = page.getByRole("button", { name: `Delete ${name}` });
   await remove.click();
@@ -66,13 +59,11 @@ test("duplicate notes name what links to each copy, and the unused copy goes in 
   await page.goto("/#/settings/db-health");
   const group = page.getByRole("rowgroup").filter({ hasText: title });
   await expect(group).toContainText("2 copies");
-  // The copy another note links to names that note; the other is unused, so it goes.
   const older = group.getByRole("row").filter({ hasText: ids.older });
   const newer = group.getByRole("row").filter({ hasText: ids.newer });
   await expect(newer).toContainText("Links to the twin");
   await expect(older).toContainText("Unused, will be removed");
 
-  // Keeping the oldest instead takes the copy in use, and says so.
   const keep = page.getByLabel("Keep");
   await keep.selectOption({ label: "The oldest copy" });
   await expect(newer).toContainText("In use, will be removed");
@@ -82,6 +73,5 @@ test("duplicate notes name what links to each copy, and the unused copy goes in 
   await group.getByRole("button", { name: "Remove 1 copy" }).click();
   await expect(page.getByRole("dialog")).toContainText("Nothing uses them.");
   await page.getByRole("dialog").getByRole("button", { name: "Remove" }).click();
-  // One copy left: no longer a duplicate.
   await expect(group).toHaveCount(0);
 });

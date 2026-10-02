@@ -1,16 +1,3 @@
-/**
- * One hook, used by every admin section.
- *
- * Admin screens are all the same shape — load over REST, show a table, run a mutation,
- * reload — and the interesting part of that shape is the failure: these routes return 403
- * to a non-admin and 401 when a session expired, and both must render as a *message*.
- * An admin table that silently shows nothing on 403 is how someone concludes a workspace
- * lost its users.
- *
- * So `useAsync` has three states and no fourth, and a reload is an explicit token bump
- * rather than a dependency-array trick.
- */
-
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 
 import type { ConfirmRequest, ModalRequest, ModalResult, SheetRequest } from "plugin:context-menu";
@@ -19,7 +6,6 @@ export interface AsyncState<T> {
   readonly data: T | undefined;
   readonly loading: boolean;
   readonly error: string | undefined;
-  /** Re-run the loader. */
   readonly reload: () => void;
 }
 
@@ -47,14 +33,12 @@ export function useAsync<T>(load: () => Promise<T>, deps: readonly unknown[] = [
     return () => {
       live = false;
     };
-    // `load` is a fresh closure every render; `key` and `token` are the real inputs.
   }, [key, token]);
 
   const reload = useCallback(() => setToken((value) => value + 1), []);
   return { data, loading, error, reload };
 }
 
-/** A mutation with its own in-flight and error state, so one failed row is one message. */
 export interface Mutation {
   readonly busy: string | undefined;
   readonly error: string | undefined;
@@ -84,15 +68,9 @@ export function useMutation(onDone?: () => void): Mutation {
 export interface Dialogs {
   confirm(request: ConfirmRequest): Promise<boolean>;
   modal(request: ModalRequest): Promise<ModalResult | undefined>;
-  /** A popover beside `anchor` (a bottom sheet on a phone) whose body the caller draws. */
   openSheet(request: SheetRequest): void;
 }
 
-/**
- * "Are you sure?" and other questions before a destructive action: `context-menu`'s
- * `confirm` and `modal`, provided by `index.tsx`. The default is the browser's own
- * dialog, for a section rendered without the provider (a test).
- */
 export const DialogsContext = createContext<Dialogs>({
   confirm: (request) => Promise.resolve(window.confirm(request.title)),
   modal: (request) => {

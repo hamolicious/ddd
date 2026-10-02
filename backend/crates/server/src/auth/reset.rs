@@ -1,11 +1,3 @@
-//! One-time password resets (SPEC §5.1): the admin
-//! `POST /api/admin/users/:id/reset` link and the `ddd reset-password`
-//! break-glass CLI both land here.
-//!
-//! `_id` is HMAC-SHA256(`SESSION_SECRET`, token), so rotating the secret
-//! invalidates outstanding reset links too. There is no email delivery in v1 — the
-//! token is handed to the admin (or printed by the CLI) and passed on out of band.
-
 use bson::{DateTime as BsonDateTime, doc};
 use mongodb::options::ReturnDocument;
 
@@ -14,11 +6,8 @@ use crate::domain::{Actor, Id, PasswordReset, User};
 use crate::error::AppError;
 use crate::state::AppState;
 
-/// How long a reset token stays redeemable. Short by design: it is a credential
-/// travelling over a side channel.
 pub const TTL_HOURS: i64 = 24;
 
-/// Issue a reset token for `user_id`, invalidating any outstanding one.
 pub async fn issue(
     state: &AppState,
     user_id: &Id,
@@ -26,8 +15,6 @@ pub async fn issue(
 ) -> Result<(PasswordReset, String), AppError> {
     let resets = state.collections.password_resets();
 
-    // At most one live token per user: a freshly issued link must make an older
-    // one unusable, or two admins racing leaves a stale credential alive.
     resets
         .delete_many(doc! { "user_id": user_id, "used_at": null })
         .await?;
@@ -46,8 +33,6 @@ pub async fn issue(
     Ok((reset, issued.token))
 }
 
-/// Redeem a reset token, atomically marking it used. A second redemption of the
-/// same token fails.
 pub async fn consume(state: &AppState, token: &str) -> Result<PasswordReset, AppError> {
     let id = hash_token(&state.config.session_secret, token);
     let now = BsonDateTime::now();
@@ -62,16 +47,10 @@ pub async fn consume(state: &AppState, token: &str) -> Result<PasswordReset, App
         .return_document(ReturnDocument::After)
         .await?;
 
-    // One message for "unknown", "used" and "expired": a reset token is a
-    // credential, and distinguishing them tells a guesser which guesses landed.
     consumed
         .ok_or_else(|| AppError::unprocessable("reset token is invalid, expired, or already used"))
 }
 
-/// Set a user's password and log every one of their sessions out.
-///
-/// Shared by the admin reset redemption and the self-service change; the change
-/// route keeps the caller signed in by revoking separately.
 pub async fn apply_new_password(
     state: &AppState,
     user_id: &Id,
@@ -95,7 +74,6 @@ pub async fn apply_new_password(
     Ok(())
 }
 
-/// Look a user up by email for the CLI and the admin routes.
 pub async fn user_by_email(state: &AppState, email: &str) -> Result<Option<User>, AppError> {
     Ok(state
         .collections

@@ -1,42 +1,15 @@
-/**
- * The functional query API: a chain that writes a query plan.
- *
- * ```ts
- * import { query } from "plugin:search";
- *
- * const { rows, total } = await query()
- *   .filter("title", "text_contains", "a")
- *   .sort("fm.key")
- *   .limit(20)
- *   .run();
- * ```
- *
- * The plan is the shared core's (`backend/crates/core/README.md` §6) — the same one
- * the Rust SDK's `Query` builder writes, `POST /api/query` takes and the kernel's
- * engine answers — so a query reads the same in every language and answers the same
- * wherever it runs. The operators are the search's filter rows; each lowers to one
- * filter-DSL node exactly as the core's `query::lower` does.
- *
- * Every step returns a new builder, so a base query can be shared and extended. A
- * mistake (a malformed field, a value the operator cannot take) is kept and thrown
- * by {@link QueryBuilder.plan}, never half-applied.
- */
-
 import { useEffect, useState } from "react";
 
 import type { DocumentsApi, FilterJson, PlanResult, PlanSubscription, QueryPlan } from "@kernel";
 
 import { DOC_PREFIX, isFieldPathShaped, type ClauseOp } from "../../_shared/conditions.js";
 
-/** A value to compare with. Numbers are `int` when whole, `float` otherwise. */
 export type QueryValue =
   | string
   | number
   | boolean
   | null
-  /** A date or datetime, compared as one: `{ date: "2026-10-01" }`. */
   | { readonly date: string }
-  /** A link to a note, as properties hold it (`doc://<id>`): `{ doc: id }`. */
   | { readonly doc: string };
 
 export type QueryOp = ClauseOp;
@@ -67,7 +40,6 @@ const TEXT_MODES: Partial<Record<ClauseOp, string>> = {
   text_ends_with: "ends_with",
 };
 
-/** The tagged literal for a value. */
 function literal(value: QueryValue): unknown {
   if (value === null) return "null";
   switch (typeof value) {
@@ -83,7 +55,6 @@ function literal(value: QueryValue): unknown {
   }
 }
 
-/** One condition → one DSL node: the core's `query::lower`, in TypeScript. */
 function lower(field: string, op: QueryOp, values: readonly QueryValue[], deep: boolean): FilterJson {
   const one = (): QueryValue => {
     if (values.length !== 1) throw new QueryError(`\`${op}\` takes one value`);
@@ -136,7 +107,6 @@ function lower(field: string, op: QueryOp, values: readonly QueryValue[], deep: 
 
 let documents: DocumentsApi | undefined;
 
-/** The kernel's documents API, from `activate`. */
 export function bindDocuments(api: DocumentsApi | undefined): void {
   documents = api;
 }
@@ -148,18 +118,15 @@ export class QueryBuilder {
     this.#state = state;
   }
 
-  /** Ranked full-text search over titles, property values and text. */
   text(text: string): QueryBuilder {
     return this.#with({ text: text.trim() });
   }
 
-  /** A condition: `field op value`. Value-less operators (`missing`, `exists`, `is_null`) ignore it. */
   filter(field: string, op: QueryOp, value?: QueryValue): QueryBuilder {
     const values = VALUELESS.includes(op) || value === undefined ? [] : [value];
     return this.#condition(() => lower(field, op, values, false));
   }
 
-  /** A condition taking several values: `contains_any`. */
   filterValues(field: string, op: QueryOp, values: readonly QueryValue[]): QueryBuilder {
     return this.#condition(() => lower(field, op, values, false));
   }
@@ -176,42 +143,34 @@ export class QueryBuilder {
     return this.filter(field, "is_null");
   }
 
-  /** In note `id`; with `deep`, anywhere below it. */
   childOf(id: string, deep = false): QueryBuilder {
     return this.#condition(() => lower("", "child_of", [id], deep));
   }
 
-  /** Lists note `id` among its children. */
   parentOf(id: string): QueryBuilder {
     return this.#condition(() => lower("", "parent_of", [id], false));
   }
 
-  /** A filter-DSL node as it is. */
   where(filter: FilterJson): QueryBuilder {
     return this.#condition(() => filter);
   }
 
-  /** The conditions `group` adds, combined with *or*. */
   anyOf(group: (q: QueryBuilder) => QueryBuilder): QueryBuilder {
     return this.#group(group, (nodes) => ({ or: nodes }));
   }
 
-  /** None of the conditions `group` adds: `not (a or b …)`. */
   noneOf(group: (q: QueryBuilder) => QueryBuilder): QueryBuilder {
     return this.#group(group, (nodes) => ({ not: { or: nodes } }));
   }
 
-  /** Sort ascending by a field, after any earlier sort. */
   sort(field: string): QueryBuilder {
     return this.#sort(field, field);
   }
 
-  /** Sort descending by a field, after any earlier sort. */
   sortDesc(field: string): QueryBuilder {
     return this.#sort(field, `-${field}`);
   }
 
-  /** Best match first (while there is text), after any earlier sort. */
   sortRelevance(): QueryBuilder {
     return this.#with({ sort: [...this.#state.sort, "relevance"] });
   }
@@ -228,17 +187,14 @@ export class QueryBuilder {
     return this.#with({ offset });
   }
 
-  /** A previous result's `nextCursor`. */
   cursor(cursor: string): QueryBuilder {
     return this.#with({ cursor });
   }
 
-  /** Each text hit carries the line it matched on. */
   snippets(): QueryBuilder {
     return this.#with({ snippets: true });
   }
 
-  /** The plan, as JSON — for the kernel, `POST /api/query`, or a saved note. Throws a {@link QueryError}. */
   plan(): QueryPlan {
     const state = this.#state;
     if (state.error !== undefined) throw new QueryError(state.error);
@@ -257,12 +213,10 @@ export class QueryBuilder {
     };
   }
 
-  /** Answer it once, locally: rows, total, next cursor and text hits. */
   run(): Promise<PlanResult> {
     return need().queryPlan(this.plan());
   }
 
-  /** Answer it live, locally. */
   subscribe(): Promise<PlanSubscription> {
     return need().subscribePlan(this.plan());
   }
@@ -300,23 +254,16 @@ function need(): DocumentsApi {
   return documents;
 }
 
-/** A new, empty query: every live document, last updated first. */
 export function query(): QueryBuilder {
   return new QueryBuilder();
 }
 
 export interface QueryState {
-  /** The current answer; the last one while a new plan loads. */
   readonly result?: PlanResult;
   readonly loading: boolean;
-  /** The plan was refused, or the engine failed. */
   readonly error?: string;
 }
 
-/**
- * A React hook: the query's answer, live. Pass a builder or a plan; a new one with the
- * same content does not re-subscribe.
- */
 export function useQuery(source: QueryBuilder | QueryPlan | undefined): QueryState {
   let plan: QueryPlan | undefined;
   let planError: string | undefined;
@@ -351,7 +298,6 @@ export function useQuery(source: QueryBuilder | QueryPlan | undefined): QuerySta
       closed = true;
       subscription?.close();
     };
-    // `key` is the plan's content: a new object with the same content is the same query.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 

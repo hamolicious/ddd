@@ -1,5 +1,3 @@
-/** Durable upload identities for retrying the same vault after a refresh. */
-
 const DATABASE = "ddd:obsidian-importer";
 const STORE = "attachment-uploads";
 

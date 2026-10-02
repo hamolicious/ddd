@@ -1,27 +1,3 @@
-/**
- * The layout: a header spot, sidebar, one main region, the altbar opposite the
- * sidebar, and a footer spot under all of them. Everything inside them belongs
- * to another plugin, which is what makes this shell replaceable — a different shell
- * exports the same functions and nothing else has to change (SPEC §6.1).
- *
- * The properties that are requirements rather than styling:
- *
- * - **Landmarks and a skip link** (SPEC §8): `<aside>`, `<main>`, and a first-tab-stop
- *   link that moves focus into the main region. The `<header>` and its `<nav>` are the
- *   header contribution's to render.
- * - **The mobile breakpoint** (SPEC §6.5): below it the sidebar (and the altbar, from
- *   the other edge) is a drawer over a single pane, Escape closes it, focus moves into it when it opens and back to
- *   whatever opened it when it closes, and every control is at least
- *   `--ddd-tap-target` tall.
- * - **Every contributed component renders inside `kernel.ui.boundary`** (SPEC §6.4),
- *   so a panel that throws is a chip in the sidebar, not a blank application.
- * - **A view id the shell cannot resolve is a message, not an empty pane.** The
- *   router can legitimately select a view before the plugin that provides it has
- *   activated, and `main.view` is live, so the resolution has to happen at render.
- * - **Nothing here sorts.** Every registry hands its entries over in `order`, and the
- *   header and footer spots each show the most recent `setHeader` / `setFooter` only.
- */
-
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { Kernel, RegistryEntry } from "@kernel";
@@ -56,14 +32,11 @@ import {
 } from "./resize.js";
 import type { ShellState, ViewSelection } from "./state.js";
 
-/** The sidebar element's id — `sidebarId`, for a toggle's `aria-controls`. */
 export const SIDEBAR_ID = "shell-sidebar";
-/** The altbar element's id — `altbarId`. */
 export const ALTBAR_ID = "shell-altbar";
 
 const NO_VIEW: ShownView = { id: "", params: {} };
 
-/** Where each contributed component renders: what the error boundary names a failed item by. */
 const POINT = {
   header: "shell-ui.header",
   footer: "shell-ui.footer",
@@ -90,14 +63,11 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
   const main = useRef<HTMLElement>(null);
   const sidebar = useRef<HTMLElement>(null);
   const altbar = useRef<HTMLElement>(null);
-  // The toggle is the header's, so the shell cannot hold a ref to it: whatever had
-  // focus when the drawer opened is where focus goes back to.
   const opener = useRef<HTMLElement | null>(null);
   const drawer = shell.compact && shell.sidebarOpen;
   const altDrawer = shell.compact && shell.altbarOpen;
   const hasSidebar = panels.length > 0;
   const shown: ShownView = shell.view ?? NO_VIEW;
-  // Registry order; only `when` thins the list.
   const altPanels = altbarEntries.filter((entry) => accepts(kernel, entry, shown));
   const hasAltbar = altPanels.length > 0;
 
@@ -111,8 +81,6 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
     opener.current = null;
   }, [state]);
 
-  // Column widths: user-draggable on a desktop layout (drawers size themselves), and
-  // remembered per device (resize.ts). The altbar grows leftwards.
   const sidebarSize = useColumnWidth(sidebar, 1);
   const altbarSize = useColumnWidth(altbar, -1, ALTBAR_WIDTH_KEY);
 
@@ -123,7 +91,6 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
     document.title = title ? `${title} · ddd` : "ddd";
   }, [active]);
 
-  // A drawer is modal-ish: Escape closes it and focus goes back where it came from.
   const anyDrawer = drawer || altDrawer;
   useEffect(() => {
     if (!anyDrawer) return;
@@ -137,7 +104,6 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
     return () => document.removeEventListener("keydown", onKey);
   }, [anyDrawer, drawer, closeDrawer]);
 
-  // One seat each: the most recent `setHeader` / `setFooter` still in place.
   const header = headers[headers.length - 1];
   const footer = footers[footers.length - 1];
   const root = useRef<HTMLDivElement>(null);
@@ -146,12 +112,6 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
 
   return (
     <div ref={root} className="shell-root shellui:relative shellui:flex shellui:h-full shellui:overflow-hidden shellui:min-h-0 shellui:flex-col shellui:font-sans shellui:text-text" data-compact={shell.compact ? "" : undefined}>
-      {/*
-        A real anchor so it is the first tab stop and announces as a link — but the
-        click is handled here: `href="#shell-main"` would rewrite `location.hash`,
-        which is the router's address space (`#/doc/…`), and skipping to the content
-        would navigate away from it.
-      */}
       <a
         className="shellui:tap-h shellui:absolute shellui:left-[calc(var(--ddd-space)*0.5+var(--ddd-safe-left))] shellui:top-[calc(var(--ddd-space)*0.5+var(--ddd-safe-top))] shellui:z-30 shellui:inline-flex shellui:-translate-y-[200%] shellui:items-center shellui:rounded shellui:bg-bg-raised shellui:px-2 shellui:py-1.5 shellui:shadow-2 shellui:focus:translate-y-0"
         href="#shell-main"
@@ -192,8 +152,6 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
         {anyDrawer ? (
           <div
             className="shellui:absolute shellui:inset-0 shellui:z-15 shellui:bg-bg-overlay"
-            // Decoration: Escape and the toggle are the accessible ways out, and a
-            // focusable overlay would just be a tab stop that does nothing.
             aria-hidden="true"
             onClick={closeDrawer}
           />
@@ -244,7 +202,6 @@ export function Shell({ kernel, state }: ShellProps): ReactNode {
   );
 }
 
-/** A panel's `when` is another plugin's code: a throw hides that panel, nothing else. */
 function accepts(kernel: Kernel, entry: RegistryEntry<AltbarPanel>, view: ShownView): boolean {
   try {
     return entry.value.when?.(view) ?? true;
@@ -261,10 +218,6 @@ interface ColumnSize {
   readonly onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => void;
 }
 
-/**
- * A column's width. `direction` is which way a rightward drag moves its edge: `1` for
- * the sidebar (its edge is on its right), `-1` for the altbar (its edge is on its left).
- */
 function useColumnWidth(
   column: React.RefObject<HTMLElement | null>,
   direction: 1 | -1,
@@ -285,7 +238,6 @@ function useColumnWidth(
   );
   const onPointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
-      // Primary button only; a touch drag scrolls, and compact mode has no resizer.
       if (event.button !== 0) return;
       const handle = event.currentTarget;
       const startX = event.clientX;
@@ -312,12 +264,11 @@ function useColumnWidth(
     (event: React.KeyboardEvent<HTMLDivElement>) => {
       const current = column.current?.getBoundingClientRect().width ?? SIDEBAR_DEFAULT;
       if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-        // The arrow points where the edge goes.
         const delta = (event.key === "ArrowLeft" ? -KEYBOARD_STEP : KEYBOARD_STEP) * direction;
         apply(clampSidebarWidth(current + delta, innerWidth));
         event.preventDefault();
       } else if (event.key === "Home") {
-        apply(undefined); // back to the stylesheet's default
+        apply(undefined);
         event.preventDefault();
       }
     },
@@ -356,11 +307,6 @@ function OverlaySlot({
   return <Rendered />;
 }
 
-/**
- * Publish the footer's height on the shell root as `--shell-footer-height` (`0px` without
- * one), so something fixed to the bottom of the screen — `document-surface`'s mode
- * button — can clear it.
- */
 function useFooterHeight(
   root: React.RefObject<HTMLElement | null>,
   footer: React.RefObject<HTMLElement | null>,
@@ -433,10 +379,6 @@ function Panel({
   );
 }
 
-/**
- * A collapsible panel: a heading that toggles it, and its body. A panel with a menu opens
- * it from the heading's context menu — right-click, or a long press on touch.
- */
 function PanelFrame({
   kernel,
   pluginId,
@@ -469,7 +411,6 @@ function PanelFrame({
           aria-expanded={open}
           aria-controls={bodyId}
           onClick={onToggle}
-          // The heading's menu is whatever is offered for what it stands for.
           {...(target !== undefined ? mark(target.type, target.id ?? "", { label: title }) : {})}
         >
           <span className="shellui:w-[1em]" aria-hidden="true">
@@ -479,7 +420,6 @@ function PanelFrame({
           <span>{title}</span>
         </button>
       </h2>
-      {/* `hidden`, not unmounted: collapsing a panel must not throw away its state. */}
       <div id={bodyId} className="shellui:px-1 shellui:pb-1" hidden={!open}>
         {children}
       </div>
@@ -499,7 +439,6 @@ function AltPanel({
   readonly view: ShownView;
 }): ReactNode {
   const panel = entry.value;
-  // A key of its own, so a sidebar panel and an altbar panel may share an id.
   const key = `altbar:${panel.id}`;
   const open = state.panelOpen(key, panel.defaultOpen ?? true);
   const Rendered = bounded(kernel, panel.component, POINT.altbar, entry.pluginId);
@@ -546,8 +485,7 @@ function MissingView({
         <p>
           {registered === 0
             ? "No plugin has contributed a view yet."
-            : // "the sidebar" is behind ☰ on a phone; "the menu" is true on both.
-              "Pick a view from the menu."}
+            : "Pick a view from the menu."}
         </p>
       </div>
     );

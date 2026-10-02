@@ -1,12 +1,3 @@
-//! The notes folder: one directory the user chose, exposed to the page as the `folder`
-//! bridge capability (`app/BRIDGE.md` §4.5) and watched for changes.
-//!
-//! Every path from the page is relative and goes through [`resolve`], which refuses
-//! anything absolute or climbing out, and refuses a result that a symlink would carry
-//! outside the root. Writes land in `.ddd/tmp/` first and are renamed into place,
-//! so another program never sees half a file. Changes on disk reach the page as the
-//! `ddd-folder-changed` window event, debounced.
-
 use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
@@ -21,7 +12,6 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::config;
 
-/// The bridge's error envelope: `{ code, message }` with one of the frozen codes.
 #[derive(Debug, Serialize)]
 pub struct BridgeError {
     code: &'static str,
@@ -60,7 +50,6 @@ pub struct Folder {
 }
 
 impl Folder {
-    /// The folder from the config file, if it still exists.
     pub fn load() -> Self {
         let root = config::read()
             .and_then(|c| c.folder)
@@ -80,7 +69,6 @@ impl Folder {
             .ok_or_else(|| BridgeError::new("unsupported", "no folder is chosen"))
     }
 
-    /// (Re)start the watcher on the current root, or stop it when there is none.
     pub fn watch(&self, app: &AppHandle) {
         let mut slot = self.watcher.lock().unwrap();
         *slot = None;
@@ -101,7 +89,6 @@ impl Folder {
         }
         *slot = Some(watcher);
         let app = app.clone();
-        // Ends when the watcher is dropped (the sender goes with it).
         std::thread::spawn(move || {
             while let Ok(first) = rx.recv() {
                 let mut paths = BTreeSet::new();
@@ -139,7 +126,6 @@ fn relative(root: &Path, path: &Path) -> Option<String> {
     (!text.is_empty()).then_some(text)
 }
 
-/// A page-supplied relative path, made absolute under `root`.
 pub fn resolve(root: &Path, rel: &str) -> Result<PathBuf> {
     if rel.is_empty() || rel.contains('\0') || rel.contains('\\') {
         return Err(BridgeError::new(
@@ -162,7 +148,6 @@ pub fn resolve(root: &Path, rel: &str) -> Result<PathBuf> {
     if !any {
         return Err(BridgeError::new("invalid", "empty path"));
     }
-    // A symlink inside the folder must not lead outside it. Check the deepest part that exists.
     let canonical_root = root.canonicalize()?;
     let mut probe = out.as_path();
     while !probe.exists() {
@@ -255,7 +240,6 @@ pub async fn folder_list(folder: State<'_, Folder>) -> Result<Vec<Entry>> {
         for item in std::fs::read_dir(&dir)? {
             let item = item?;
             let path = item.path();
-            // Not followed: a link could lead anywhere, and loops forever.
             let meta = std::fs::symlink_metadata(&path)?;
             let Some(rel) = relative(&root, &path) else {
                 continue;
@@ -362,8 +346,6 @@ pub async fn folder_remove(folder: State<'_, Folder>, path: String) -> Result<()
     }
 }
 
-/// `window.shell` for the desktop page: a cookie-session bridge carrying `folder` only
-/// (`app/BRIDGE.md` §3). Injected into frames on the server's origin and nowhere else.
 pub fn bridge_script(origin: &str) -> String {
     let origin = serde_json::to_string(origin).expect("a string serializes");
     format!(

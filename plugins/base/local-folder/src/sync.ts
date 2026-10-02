@@ -1,36 +1,3 @@
-/**
- * The folder mirror's engine: one pass reads the folder, the index and the notes, and
- * brings the three into line. It never runs twice at once, and it is written against
- * {@link SyncDeps} rather than the kernel so the tests can drive it with fakes.
- *
- * ## State, kept in the folder
- *
- * `.ddd/index.json` maps each note id to its file and to the content hashes both
- * sides had when they last agreed; `.ddd/base/<id>.md` is that agreed text, the
- * base of a three-way merge. Keeping them in the folder is what makes a reinstall, or a
- * second device pointed at a synced copy, pick up where it left off instead of importing
- * everything as new notes.
- *
- * ## One pass
- *
- * 1. **Disk → app.** A file whose size or mtime moved is read and hashed; a changed one
- *    edits its note (a line diff, so the CRDT merges it with anything typed meanwhile),
- *    or merges three-way when the note changed too. A missing file whose bytes turn up
- *    elsewhere is a move or a rename; one that is gone sends its note to Trash. A new
- *    file becomes a note (or an attachment), filed in the note that owns its directory.
- * 2. **App → disk.** Every note is placed by `mapping.ts`; a changed note is written, a
- *    renamed or refiled one is moved, a deleted one's file is removed.
- *
- * A note in the index that this device has not received yet (`known` says `"unknown"`)
- * is **held**: its entry and its file are left exactly as they are until it arrives.
- * Reading "not in the replica" as "deleted" is how a cold start once removed the files of
- * every note still on its way, and re-imported each changed or moved one as a new note.
- *
- * Whatever step 1 just did to a note is **pinned** for a few seconds: the app's copy of
- * a title, a parent or the text lags an edit by a debounce, and without the pin step 2
- * would read the old value back and undo the user's change on disk.
- */
-
 import { applyEdits, merge3 } from "./merge.js";
 import {
   NOTE_EXT,
@@ -49,21 +16,14 @@ import type { FolderCapability, FolderEntry, SyncState, TextEdit } from "@kernel
 
 export const STATE_DIR = ".ddd";
 
-/**
- * Whether the replica is still in its first fill from the server (a cold start, or a
- * feed reset). No pass runs then: a pass would see most notes as not here yet. `known`
- * keeps such a pass from doing harm; this keeps it from running at all.
- */
 export function replicaLoading(state: Pick<SyncState, "bootstrap">): boolean {
   return state.bootstrap !== undefined && !state.bootstrap.complete;
 }
 const INDEX_PATH = `${STATE_DIR}/index.json`;
 const basePath = (id: string): string => `${STATE_DIR}/base/${id}${NOTE_EXT}`;
 
-/** How long a note the disk just changed is left where the disk put it. */
 const PIN_MS = 5_000;
 
-/** A pass that would trash more than this share of the mirror asks first. */
 const MASS_DELETE_SHARE = 0.5;
 const MASS_DELETE_MIN = 5;
 
@@ -71,45 +31,23 @@ export interface SyncNote {
   readonly id: string;
   readonly title: string;
   readonly content: string;
-  /** `""` at the root. */
   readonly parent: string;
-  /** Set on an attachment's wrapper note: the attachment id. */
   readonly attachment?: string;
 }
 
 export interface SyncDeps {
   readonly folder: FolderCapability;
-  /**
-   * Who the folder belongs to — the signed-in account, which also pins the server (ids
-   * are never shared between servers). A folder another account wrote is refused rather
-   * than merged into this workspace.
-   */
   readonly owner: string;
   notes(): Promise<readonly SyncNote[]>;
-  /**
-   * What this device knows of a note {@link notes} does not list: `"gone"` when its row
-   * is here and deleted or no longer mirrored; `"unknown"` when this device has no row
-   * for it — the replica has not received it yet (a cold start fills it from the
-   * server). An unknown note is never treated as deleted.
-   */
   known(id: string): Promise<"gone" | "unknown">;
-  /**
-   * Turn the note from `from` into `to`, as line edits the CRDT can merge. If the note is
-   * no longer `from` (typed into since), the change is merged into what it is now.
-   * Resolves with the note's text afterwards.
-   */
   updateNote(id: string, from: string, to: string): Promise<string>;
-  /** The edits that set `title` in the note's frontmatter. */
   titleEdits(text: string, title: string): readonly TextEdit[];
   resolveTitle(text: string): string;
   createNote(text: string): Promise<string>;
   trashNote(id: string): Promise<void>;
-  /** Put the note under `parent` (`""` root). */
   fileNote(id: string, parent: string): Promise<void>;
-  /** `undefined` when the upload cannot happen now (offline); tried again next pass. */
   upload(bytes: Uint8Array, name: string): Promise<{ id: string; attachment: string; revision: number } | undefined>;
   download(attachment: string): Promise<{ bytes: Uint8Array; revision: number } | undefined>;
-  /** `"conflict"` when the server's revision moved on; `undefined` when offline. */
   replace(
     attachment: string,
     bytes: Uint8Array,
@@ -125,13 +63,10 @@ interface Entry {
   id: string;
   kind: "note" | "file";
   path: string;
-  /** The directory a note with children owns. */
   dir?: string;
-  /** What is on disk, as last seen. */
   sha: string;
   size: number;
   mtimeMs: number;
-  /** The note's text hash both sides last agreed on (notes only). */
   appSha?: string;
   attachment?: string;
   revision?: number;
@@ -141,7 +76,6 @@ interface IndexFile {
   version: 1;
   owner: string;
   entries: Entry[];
-  /** Directories the mirror made, so it only ever removes its own. */
   dirs: string[];
 }
 
@@ -149,7 +83,6 @@ export interface PassReport {
   readonly written: number;
   readonly imported: number;
   readonly conflicts: readonly string[];
-  /** Files gone from disk that were left alone because there were too many. */
   readonly heldDeletes: number;
 }
 
@@ -162,7 +95,6 @@ export class ForeignFolderError extends Error {
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-/** What the server does to text on the way in (SPEC §3.1): no BOM, LF only. */
 export function normalizeText(text: string): string {
   return text.replace(/^﻿/, "").replace(/\r\n?/g, "\n");
 }
@@ -180,19 +112,16 @@ export class FolderSync {
 
   constructor(private readonly deps: SyncDeps) {}
 
-  /** Forget the cached index, e.g. after the folder changed. */
   reset(): void {
     this.#index = undefined;
     this.#pins.clear();
     this.#allowMassDelete = false;
   }
 
-  /** The user said the missing files really are gone: trash their notes on the next pass. */
   allowMassDelete(): void {
     this.#allowMassDelete = true;
   }
 
-  /** The user said the missing files should come back: write them again from the notes. */
   async restoreMissing(): Promise<void> {
     const index = await this.#loadIndex();
     const present = new Set((await this.deps.folder.list()).map((entry) => entry.path));
@@ -215,7 +144,6 @@ export class FolderSync {
         };
       }
     } catch {
-      // No index yet: a new folder, or one this plugin never wrote to.
     }
     index ??= { version: 1, owner: this.deps.owner, entries: [], dirs: [] };
     if (index.owner !== this.deps.owner) throw new ForeignFolderError(index.owner);
@@ -259,7 +187,6 @@ export class FolderSync {
     return this.deps.sha(encoder.encode(text));
   }
 
-  /** One pass. `full` also asks the server whether any attachment was replaced. */
   async run(full = false): Promise<PassReport> {
     const { deps } = this;
     const folder = deps.folder;
@@ -300,8 +227,6 @@ export class FolderSync {
       dirty = true;
     };
 
-    // ------------------------------------------------------------------ disk → app
-
     const claimed = new Set<string>();
     const missing: Entry[] = [];
     const changed: { entry: Entry; bytes: Uint8Array; sha: string; stat: FolderEntry }[] = [];
@@ -331,8 +256,6 @@ export class FolderSync {
       untracked.push({ path, bytes, sha: await deps.sha(bytes), stat });
     }
 
-    // Moves: a missing file whose bytes turned up somewhere new. Folder notes first, and
-    // shallow before deep, so a directory's owner has moved before its children look for it.
     const byDepth = <T extends { path: string }>(list: T[], folderFirst: (item: T) => boolean): T[] =>
       list.sort((a, b) => depth(a.path) - depth(b.path) || Number(folderFirst(b)) - Number(folderFirst(a)));
     const moves: { entry: Entry; to: (typeof untracked)[number] }[] = [];
@@ -354,7 +277,6 @@ export class FolderSync {
       }
     }
 
-    /** The note that owns `dir`, creating folder notes for directories the app has never seen. */
     const ensureDir = async (dir: string): Promise<string> => {
       const known = dirOwner.get(dir);
       if (known !== undefined) return known;
@@ -379,7 +301,6 @@ export class FolderSync {
     for (const { entry, to } of moves) {
       const note = byId.get(entry.id);
       if (!note) {
-        // Not arrived: the file stays where it went, unimported, until the note is here.
         if (held.has(entry.id)) continue;
         await removeEntry(entry);
         untracked.push(to);
@@ -390,14 +311,12 @@ export class FolderSync {
       let name = entry.kind === "note" ? splitExt(basename(to.path))[0] : basename(to.path);
       if (entry.dir !== undefined) {
         if (basename(to.path) === basename(oldPath) && dirname(to.path) !== entry.dir) {
-          // `Old/Old.md` → `New/Old.md`: the directory was renamed or moved, not the file.
           if (dirOwner.get(entry.dir) === entry.id) dirOwner.delete(entry.dir);
           entry.dir = dirname(to.path);
           dirOwner.set(entry.dir, entry.id);
           parentDir = dirname(entry.dir);
           name = basename(entry.dir);
         } else if (dirname(to.path) === entry.dir) {
-          // Renamed in place inside its own directory: still the directory's note.
           parentDir = dirname(entry.dir);
         } else {
           if (dirOwner.get(entry.dir) === entry.id) dirOwner.delete(entry.dir);
@@ -420,16 +339,14 @@ export class FolderSync {
     for (const { entry, bytes, sha, stat } of changed) {
       const note = byId.get(entry.id);
       if (!note) {
-        // Not arrived: the edit is merged once the note is here.
         if (held.has(entry.id)) continue;
-        // Edited on disk after the note went to Trash: it comes back as a new note.
         await removeEntry(entry);
         untracked.push({ path: entry.path, bytes, sha, stat });
         continue;
       }
       if (entry.kind === "file") {
         const result = await deps.replace(entry.attachment ?? "", bytes, basename(entry.path), entry.revision ?? 0);
-        if (result === undefined) continue; // offline: the stale stat keeps it "changed"
+        if (result === undefined) continue;
         if (result === "conflict") {
           const copy = conflictName(entry.path, new Date(deps.now()));
           await noteWrite(copy, bytes);
@@ -484,7 +401,6 @@ export class FolderSync {
         continue;
       }
       if (note && entry.kind === "note" && (await this.#textSha(note.content)) !== entry.appSha) {
-        // Deleted on disk, edited in the app: the edit wins and the file comes back below.
         await removeEntry(entry);
         continue;
       }
@@ -493,7 +409,6 @@ export class FolderSync {
     }
     if (!massDelete) this.#allowMassDelete = false;
 
-    // New files: folder notes (`Dir/Dir.md`) before what they hold.
     for (const file of byDepth(untracked, (f) => splitExt(basename(f.path))[0] === basename(dirname(f.path)))) {
       const isNote = file.path.endsWith(NOTE_EXT);
       const dir = dirname(file.path);
@@ -544,13 +459,10 @@ export class FolderSync {
       dirty = true;
     }
 
-    // ------------------------------------------------------------------ app → disk
-
     notes = await deps.notes();
     byId = new Map(notes.map((note) => [note.id, note]));
     const pins = new Map<string, Placement>();
     for (const id of [...this.#pins.keys()]) if (this.#pinned(id)) pins.set(id, this.#pins.get(id)!.place);
-    // A held note keeps its name, so a note placed meanwhile cannot take its file.
     for (const id of held) {
       const entry = byEntryId.get(id);
       if (entry && !byId.has(id)) pins.set(id, { path: entry.path, ...(entry.dir !== undefined ? { dir: entry.dir } : {}) });
@@ -565,7 +477,6 @@ export class FolderSync {
       pins,
     );
 
-    // Moves before writes, shallow first, so a directory exists before what goes in it.
     const ordered = [...places].sort(([, a], [, b]) => depth(a.path) - depth(b.path));
     for (const [id, place] of ordered) {
       const entry = byEntryId.get(id);
@@ -599,7 +510,7 @@ export class FolderSync {
         const stale = entry && full ? (await deps.revision(note.attachment)) !== entry.revision : false;
         if (entry && onDisk(entry.path) && !stale) continue;
         if (entry && !onDisk(entry.path) && heldDeletes > 0) continue;
-        if (!entry && onDisk(place.path)) continue; // taken by a file of the user's; next pass
+        if (!entry && onDisk(place.path)) continue;
         const fetched = await deps.download(note.attachment);
         if (!fetched) continue;
         const path = entry?.path ?? place.path;
@@ -624,7 +535,7 @@ export class FolderSync {
         dirty = true;
         continue;
       }
-      if (onDisk(place.path)) continue; // a file of the user's is there; it is imported first
+      if (onDisk(place.path)) continue;
       const stat = await noteWrite(place.path, encoder.encode(note.content));
       const created: Entry = {
         id,
@@ -641,7 +552,6 @@ export class FolderSync {
       dirty = true;
     }
 
-    // Notes deleted in the app (or no longer mirrored): their files go. Held ones stay.
     for (const entry of [...index.entries]) {
       if (byId.has(entry.id) || this.#pinned(entry.id) || held.has(entry.id)) continue;
       if (onDisk(entry.path)) {
@@ -651,7 +561,6 @@ export class FolderSync {
       await removeEntry(entry);
     }
 
-    // Directories this mirror made and no longer needs, deepest first, if they are empty.
     const wanted = new Set<string>();
     for (const place of places.values()) {
       for (let dir = dirname(place.path); dir !== ""; dir = dirname(dir)) wanted.add(dir);

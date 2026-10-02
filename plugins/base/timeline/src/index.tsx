@@ -1,17 +1,3 @@
-/**
- * `timeline` — a saved search's notes along a time axis, for the saved searches whose
- * `type` is `timeline`. "New timeline" (a command, and in the folder tree) makes one for the
- * notes inside it.
- *
- * Which fields place a note are its settings, in the note's `%%% timeline` section: when it starts
- * (`created_at`, `fm.date`, …), optionally when it ends — a bar rather than a point — and
- * optionally a field to split the notes into lanes (`fm.status`, `fm.project`), plus the
- * scale (`layout.ts`). The results come from `search` (`plugin:search`'s `useResults`, narrowed
- * to the window on screen), so every rule of the search applies as it does in the table.
- *
- * No exports: it only contributes a document mode, a command and menu actions.
- */
-
 import type { Kernel } from "@kernel";
 import { addCommand } from "plugin:commands";
 import { addAction } from "plugin:context-menu";
@@ -52,12 +38,10 @@ export default function activate(kernel: Kernel): void {
       order: 25,
       render: (props) => <Timeline {...props} />,
       settings: (props) => <TimelineSettings {...props} />,
-      // An empty stretch of time is still a timeline, with its own "nothing here" line.
       showsEmpty: true,
     },
     {
       addMode,
-      // `SavedViewCommand.run` returns `unknown`; a command's returns `void | Promise<void>`.
       addCommand: (command) =>
         addCommand({
           ...command,

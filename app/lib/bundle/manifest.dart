@@ -1,23 +1,9 @@
-/// The bundle manifest: types, parsing, and SHA-256 verification
-/// (SPEC §7: "the shell verifies before swapping").
-///
-/// The wire shape is `GET /api/shell/manifest`, defined in
-/// `backend/crates/server/src/routes/shell.rs` and frozen in `BRIDGE.md` §5. This file is
-/// the only place in the shell that knows those field names.
-///
-/// Verification is not a nicety here. The shell downloads executable code over the
-/// network and then *runs it as the app*; a truncated response, a proxy that rewrote a
-/// file, or a half-finished download must all fail closed, before anything is promoted.
-/// So: hash every file after writing it, compare against the manifest, and refuse the
-/// whole bundle if any single file disagrees (SPEC §7).
 library;
 
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 
-/// One file in the bundle. [path] is both the local path under the bundle directory and
-/// the URL path the loopback server answers with it.
 class BundleFile {
   const BundleFile({
     required this.path,
@@ -46,7 +32,6 @@ class BundleFile {
 
   final String path;
 
-  /// Lowercase hex.
   final String sha256;
   final int size;
 
@@ -57,8 +42,6 @@ class BundleFile {
   };
 }
 
-/// The manifest, parsed. Field names mirror the JSON exactly (`snake_case` on the wire,
-/// camelCase in Dart) — that mapping is the frozen part.
 class BundleManifest {
   const BundleManifest({
     required this.bundleVersion,
@@ -89,9 +72,6 @@ class BundleManifest {
               : throw ManifestException('a file entry is not an object'),
         )
         .toList(growable: false);
-    // `index.html` is what the webview is pointed at; a bundle without it is a bundle
-    // that cannot boot, and finding that out here is much cheaper than finding it out
-    // after the swap.
     if (!parsed.any((BundleFile file) => file.path == indexPath)) {
       throw ManifestException('no $indexPath in the manifest');
     }
@@ -111,19 +91,12 @@ class BundleManifest {
     return BundleManifest.fromJson(Map<String, Object?>.from(decoded));
   }
 
-  /// The document the webview loads, and the only synthesized path that must exist.
   static const String indexPath = 'index.html';
 
-  /// Content hash of the whole set; also the on-disk directory name. Always a
-  /// 64-character lowercase hex digest — see [isBundleVersion] for why that is enforced
-  /// rather than assumed.
   final String bundleVersion;
 
-  /// The shell refuses a bundle asking for a bridge it does not implement (`BRIDGE.md` §8).
   final int minBridgeVersion;
 
-  /// The `Content-Security-Policy` header the loopback server must send with
-  /// `index.html`; its nonce matches the inline import map in those bytes.
   final String indexCsp;
 
   final List<BundleFile> files;
@@ -131,7 +104,6 @@ class BundleManifest {
   int get totalBytes =>
       files.fold(0, (int sum, BundleFile file) => sum + file.size);
 
-  /// `true` when a shell implementing [bridgeVersion] may run this bundle.
   bool runsOnBridge(int bridgeVersion) => bridgeVersion >= minBridgeVersion;
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -144,7 +116,6 @@ class BundleManifest {
   };
 }
 
-/// A manifest the shell will not act on. Always fails closed: the active bundle stays.
 class ManifestException implements Exception {
   ManifestException(this.message);
 
@@ -154,34 +125,12 @@ class ManifestException implements Exception {
   String toString() => 'ManifestException: $message';
 }
 
-/// Lowercase hex SHA-256, the one spelling used everywhere in the shell.
 String sha256Hex(List<int> bytes) => sha256.convert(bytes).toString();
 
-/// `true` when [version] has the shape the server derives (`BRIDGE.md` §5): a lowercase
-/// hex `sha256`, 64 characters, nothing else.
-///
-/// **This is a path check, not a cosmetic one.** `bundle_version` is used verbatim as a
-/// directory name under the bundle root — `BundleStore.dirFor`, `stagingDir` — and those
-/// directories are handed to `Directory.delete(recursive: true)` and `Directory.rename`
-/// by `install()`. An unvalidated value therefore reaches the filesystem with the
-/// server's privileges over this app's private storage: `"../../shared_prefs"` deletes
-/// the keystore holding the bearer token, `".."` deletes the whole files directory, and
-/// `"state.json"` or `".staging"` collide with the store's own names. The file list is
-/// checked with [isSafeBundlePath] for exactly this reason; the id needs the same
-/// treatment and a stricter rule is available, because the server's derivation is frozen.
-///
-/// Every manifest, from the network *and* from a bundle's own `.ddd-manifest.json`, is
-/// parsed through [BundleManifest.fromJson], so this is the only gate needed.
 bool isBundleVersion(String version) => _bundleVersion.hasMatch(version);
 
 final RegExp _bundleVersion = RegExp(r'^[0-9a-f]{64}$');
 
-/// `true` when [path] is a relative, traversal-free, backslash-free forward-slash path.
-///
-/// Checked on the *manifest*, before anything is written, so a malicious or broken server
-/// cannot make the updater write outside the bundle directory. The rules match the
-/// server's `safe_relative_path`: no absolute paths, no `..`, no empty segments, no
-/// Windows separators, no NUL.
 bool isSafeBundlePath(String path) {
   if (path.isEmpty || path.startsWith('/') || path.contains('\\')) return false;
   if (path.contains('\u0000')) return false;
@@ -191,7 +140,6 @@ bool isSafeBundlePath(String path) {
   return true;
 }
 
-/// The result of verifying a downloaded bundle directory against its manifest.
 class VerificationResult {
   const VerificationResult({required this.checked, required this.problems});
 
@@ -199,17 +147,11 @@ class VerificationResult {
 
   final int checked;
 
-  /// Human-readable, one per offending file: missing, wrong size, wrong hash.
   final List<String> problems;
 
   bool get isValid => problems.isEmpty;
 }
 
-/// Verify one file's bytes against its manifest entry. Returns `null` when it matches, a
-/// problem description when it does not.
-///
-/// Size is checked first because it is free and catches the common failure (a truncated
-/// download) with a message that says so.
 String? verifyBytes(BundleFile file, List<int> bytes) {
   if (bytes.length != file.size) {
     return '${file.path}: expected ${file.size} bytes, got ${bytes.length}';

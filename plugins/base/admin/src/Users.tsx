@@ -1,22 +1,3 @@
-/**
- * Users and invites.
- *
- * The guard rails are the **server's**, and this UI must not pretend otherwise (SPEC §5.1):
- *
- * - **The last admin cannot be demoted or deleted.** The button is disabled when this
- *   client can tell — it counts active admins — but the server refuses regardless, and a
- *   refusal renders as its message. Disabling a control is a hint; the 422 is the rule.
- * - **Deleting a user is a soft delete.** Sessions, tokens and reset links die; the
- *   attribution ids stay, and every screen that shows an actor renders a vanished account
- *   as "deleted user" (`api.ts`). Nothing that user wrote is removed — this is a shared
- *   workspace (SPEC §5.4).
- * - **Invites are single-use and expire in 7 days**, and the **token is returned exactly
- *   once**. It is shown once, as a link, with a copy button, and never fetched again —
- *   the listing only has its hash.
- * - **A reset link is issued once too**, and it is the recovery path when someone cannot
- *   sign in. The CLI (`ddd reset-password`) is the break-glass below it.
- */
-
 import { useState } from "react";
 import type { ReactElement } from "react";
 
@@ -27,9 +8,7 @@ import { useAsync, useConfirm, useMutation } from "./hooks.js";
 
 export interface UsersSectionProps {
   readonly client: AdminClient;
-  /** The signed-in user's id, so "you" is marked and self-demotion is obvious. */
   readonly selfId: string;
-  /** Rendered inside settings, which has already drawn the heading. */
   readonly embedded?: boolean;
 }
 
@@ -300,11 +279,6 @@ export function InvitesSection({
   );
 }
 
-/**
- * Copy to clipboard, with the fallback that matters: `navigator.clipboard` needs a secure
- * context, and a token the user cannot copy is a token they have to retype from a
- * screenshot.
- */
 export function CopyButton({ value }: { readonly value: string }): ReactElement {
   const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
   return (
@@ -326,7 +300,6 @@ export function CopyButton({ value }: { readonly value: string }): ReactElement 
   );
 }
 
-/** Dismiss a shown-once link. */
 function DoneButton({ onClick }: { readonly onClick: () => void }): ReactElement {
   return (
     <button type="button" className="admin-icon-button" aria-label="Done" title="Done" onClick={onClick}>

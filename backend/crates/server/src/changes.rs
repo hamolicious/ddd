@@ -1,57 +1,26 @@
-//! Change history: what each write did to a document's **text**, kept so it can be
-//! read back and reverted (`dev-docs/resolved/HISTORY.md`).
-//!
-//! The update log (`document_updates`) is a sync buffer: binary Yjs updates, trimmed to
-//! a few hundred entries, and not invertible once compaction has dropped deleted content.
-//! So every write that changes the text also records its effect as **hunks** — at byte
-//! `pos` of the text before, `removed` was replaced by `inserted` — in
-//! `document_changes`, and a full-text **checkpoint** is written every
-//! `CHECKPOINT_EVERY_CHANGES` changes.
-//!
-//! Everything here is pure. What is built on it:
-//!
-//! - **Text at a point** ([`replay`]): the nearest checkpoint, then the changes after it,
-//!   forward. Every step checks the text holds what the change says it removed, so a gap
-//!   in the history is refused rather than guessed at.
-//! - **Revert** ([`revert_edits`]): the text just before and just after a group, diffed by
-//!   lines, each hunk carried forward through the later changes. A later change that
-//!   touched a hunk's text is a [`Conflict`]: the revert is refused, and the caller says
-//!   which change was in the way.
-//! - **Groups** ([`group`]): consecutive changes by one author, split where the author
-//!   changes or they paused for longer than [`GROUP_GAP_MS`].
-
 use similar::{DiffOp, TextDiff};
 
 use ddd_core::Span;
 use ddd_core::splice::TextEdit;
 
-/// A pause this long, or another author, starts a new group.
 pub const GROUP_GAP_MS: i64 = 2 * 60 * 1000;
 
-/// One contiguous replacement, against the text **before** the change.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hunk {
-    /// Byte offset into the text before.
     pub pos: usize,
     pub removed: String,
     pub inserted: String,
 }
 
-/// What one write (or a run of them folded together) did: its hunks against the text
-/// before `first_seq`, in ascending, non-overlapping order.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Change {
-    /// The first update this change covers; equal to `seq` for a single write.
     pub first_seq: i64,
-    /// The last update it covers.
     pub seq: i64,
     pub at_ms: i64,
     pub by: Option<String>,
     pub hunks: Vec<Hunk>,
 }
 
-/// The single hunk between two texts: common prefix and suffix trimmed. Exact for the
-/// one-place edits typing produces; a whole-text replace comes out as one wide hunk.
 pub fn diff_hunk(old: &str, new: &str) -> Option<Hunk> {
     if old == new {
         return None;
@@ -85,15 +54,10 @@ pub fn diff_hunk(old: &str, new: &str) -> Option<Hunk> {
     })
 }
 
-/// Every separate place `old` and `new` differ, each trimmed to the characters that
-/// changed. The common start and end go first, so the line diff only ever runs over the
-/// part that changed: for typing, a few characters.
 pub fn hunks_between(old: &str, new: &str) -> Vec<Hunk> {
     let Some(outer) = diff_hunk(old, new) else {
         return Vec::new();
     };
-    // Widen the changed middle to whole lines (the text around it is common to both), so
-    // the line diff compares complete lines on both sides.
     let start = old[..outer.pos].rfind('\n').map_or(0, |index| index + 1);
     let old_end = outer.pos + outer.removed.len();
     let suffix = old.len() - old_end;
@@ -112,7 +76,6 @@ pub fn hunks_between(old: &str, new: &str) -> Vec<Hunk> {
         .collect()
 }
 
-/// Hunks from a splice's edits (byte spans against `old`, any order).
 pub fn hunks_from_edits(old: &str, edits: &[TextEdit]) -> Vec<Hunk> {
     let mut hunks: Vec<Hunk> = edits
         .iter()
@@ -128,15 +91,12 @@ pub fn hunks_from_edits(old: &str, edits: &[TextEdit]) -> Vec<Hunk> {
     hunks
 }
 
-/// Why history could not be rewound: the text does not hold what a change inserted.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Gap {
     pub seq: i64,
 }
 
-/// The text before `change`, given the text after it.
 pub fn invert(after: &str, change: &Change) -> Result<String, Gap> {
-    // Where each hunk sits in the text *after*: its `pos` shifted by every earlier hunk.
     let mut shift: isize = 0;
     let mut placed = Vec::with_capacity(change.hunks.len());
     for hunk in &change.hunks {
@@ -162,8 +122,6 @@ pub fn invert(after: &str, change: &Change) -> Result<String, Gap> {
     Ok(text)
 }
 
-/// The text after `change`, given the text before it. Each hunk must find what it
-/// says it removed; anything else is a [`Gap`].
 pub fn apply_forward(before: &str, change: &Change) -> Result<String, Gap> {
     let mut text = before.to_string();
     for hunk in change.hunks.iter().rev() {
@@ -180,14 +138,12 @@ pub fn apply_forward(before: &str, change: &Change) -> Result<String, Gap> {
     Ok(text)
 }
 
-/// Replay `changes` (ascending by seq) forward from `text`.
 pub fn replay(text: &str, changes: &[Change]) -> Result<String, Gap> {
     changes.iter().try_fold(text.to_string(), |text, change| {
         apply_forward(&text, change)
     })
 }
 
-/// Rewind `current` through `changes` (ascending by seq), newest first.
 pub fn rewind(current: &str, changes: &[Change]) -> Result<String, Gap> {
     changes
         .iter()
@@ -195,7 +151,6 @@ pub fn rewind(current: &str, changes: &[Change]) -> Result<String, Gap> {
         .try_fold(current.to_string(), |text, change| invert(&text, change))
 }
 
-/// A group: consecutive changes by one author with no long pause between them.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Group {
     pub from_seq: i64,
@@ -208,7 +163,6 @@ pub struct Group {
     pub removed_chars: usize,
 }
 
-/// Group changes given **newest first**; groups come back newest first too.
 pub fn group(newest_first: &[Change], gap_ms: i64) -> Vec<Group> {
     let mut groups: Vec<Group> = Vec::new();
     for change in newest_first {
@@ -245,7 +199,6 @@ pub fn group(newest_first: &[Change], gap_ms: i64) -> Vec<Group> {
     groups
 }
 
-/// The net difference `before` → `after` as line-aligned hunks (against `before`).
 pub fn line_hunks(before: &str, after: &str) -> Vec<Hunk> {
     let diff = TextDiff::from_lines(before, after);
     let old: Vec<&str> = diff.iter_old_slices().collect();
@@ -282,7 +235,6 @@ pub fn line_hunks(before: &str, after: &str) -> Vec<Hunk> {
             removed: old[old_range].concat(),
             inserted: new[new_range].concat(),
         };
-        // Adjacent ops (a delete right before an insert) are one hunk to a person.
         match hunks.last_mut() {
             Some(last) if last.pos + last.removed.len() == hunk.pos => {
                 last.removed.push_str(&hunk.removed);
@@ -294,7 +246,6 @@ pub fn line_hunks(before: &str, after: &str) -> Vec<Hunk> {
     hunks
 }
 
-/// A later change touched text a revert needs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Conflict {
     pub seq: i64,
@@ -304,17 +255,11 @@ pub struct Conflict {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RevertError {
-    /// History cannot be rewound to this group (a write it does not know about).
     Gap(Gap),
-    /// A later change overlaps the group's text.
     Conflict(Conflict),
-    /// The group changed nothing that is still there to undo.
     Nothing,
 }
 
-/// The edits (byte spans against `current`) that undo a group of changes while keeping
-/// everything after it. `before` and `after` are the text just before and just after the
-/// group (rebuilt from a checkpoint); `later` is every change after it, ascending.
 pub fn revert_edits(
     current: &str,
     before: &str,
@@ -326,7 +271,6 @@ pub fn revert_edits(
         return Err(RevertError::Nothing);
     }
 
-    // Each hunk as a region of `after`: [start, end) holds what the group left there.
     let mut regions: Vec<(usize, usize, String)> = Vec::new();
     let mut shift: isize = 0;
     for hunk in &hunks {
@@ -335,7 +279,6 @@ pub fn revert_edits(
         shift += hunk.inserted.len() as isize - hunk.removed.len() as isize;
     }
 
-    // Carry every region forward through the later changes.
     for change in later {
         for region in regions.iter_mut() {
             let (start, end) = (region.0, region.1);
@@ -343,10 +286,8 @@ pub fn revert_edits(
             for hunk in &change.hunks {
                 let (h_start, h_end) = (hunk.pos, hunk.pos + hunk.removed.len());
                 let touches = if start == end {
-                    // Deleted text goes back here: only a removal spanning the spot is in the way.
                     h_start < start && h_end > start
                 } else if h_start == h_end {
-                    // An insertion strictly inside the region lands in its text.
                     h_start > start && h_start < end
                 } else {
                     h_start < end && h_end > start
@@ -367,8 +308,6 @@ pub fn revert_edits(
         }
     }
 
-    // Every region must still hold what the group left there; if not, the history the
-    // regions were carried through was not the whole story.
     let last_seq = later.last().map_or(0, |change| change.seq);
     let mut edits = Vec::with_capacity(regions.len());
     for ((start, end, text), hunk) in regions.into_iter().zip(&hunks) {
@@ -387,7 +326,6 @@ pub fn revert_edits(
     Ok(edits)
 }
 
-/// One hunk of a group's diff, with a little unchanged text on each side for reading.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShownHunk {
     pub before: String,
@@ -396,10 +334,8 @@ pub struct ShownHunk {
     pub after: String,
 }
 
-/// Lines of context kept on each side of a shown hunk.
 pub const CONTEXT_LINES: usize = 2;
 
-/// `line_hunks(before, after)` with context lines from `before`.
 pub fn shown_hunks(before: &str, after: &str) -> Vec<ShownHunk> {
     line_hunks(before, after)
         .into_iter()
@@ -465,7 +401,6 @@ mod tests {
             }
         );
         assert!(diff_hunk("same", "same").is_none());
-        // Never splits a character.
         let hunk = diff_hunk("aé", "aè").unwrap();
         assert_eq!((hunk.removed.as_str(), hunk.inserted.as_str()), ("é", "è"));
     }
@@ -502,7 +437,6 @@ mod tests {
 
     #[test]
     fn recorded_hunks_always_invert_exactly() {
-        // A small deterministic generator: random edits, multi-byte characters included.
         let mut seed: u64 = 0x5eed;
         let mut next = move |bound: usize| {
             seed = seed
@@ -572,15 +506,12 @@ mod tests {
             .collect();
         assert_eq!(replay(texts[0], &changes).unwrap(), texts[3]);
         assert_eq!(replay(texts[1], &changes[1..2]).unwrap(), texts[2]);
-        // Replaying onto the wrong text is a gap, not a guess: change 2 only inserts at
-        // the start, so it is change 3 that finds "one" missing.
         assert_eq!(replay("other\n", &changes[1..]), Err(Gap { seq: 3 }));
     }
 
     #[test]
     fn a_gap_in_history_is_refused_not_guessed() {
         let recorded = change(1, 0, "u", "a\n", "a\nb\n");
-        // Someone rewrote the text without a record: "b" is no longer where it was put.
         assert_eq!(rewind("a\nc\n", &[recorded]), Err(Gap { seq: 1 }));
     }
 
@@ -628,8 +559,8 @@ mod tests {
     #[test]
     fn reverting_a_group_keeps_later_edits_elsewhere() {
         let t0 = "title\n\npara one\n\npara two\n";
-        let t1 = "title\n\npara one, edited\n\npara two\n"; // the group
-        let t2 = "title\n\npara one, edited\n\npara two\n\npara three\n"; // later, elsewhere
+        let t1 = "title\n\npara one, edited\n\npara two\n";
+        let t2 = "title\n\npara one, edited\n\npara two\n\npara three\n";
         let later = vec![change(2, 1, "b", t1, t2)];
         let edits = revert_edits(t2, t0, t1, &later).unwrap();
         let reverted = ddd_core::splice::apply(t2, &edits);
@@ -640,7 +571,7 @@ mod tests {
     fn reverting_is_refused_when_a_later_change_touched_the_same_text() {
         let t0 = "a\nb\nc\n";
         let t1 = "a\nB\nc\n";
-        let t2 = "a\nBB\nc\n"; // later, same line
+        let t2 = "a\nBB\nc\n";
         let err = revert_edits(t2, t0, t1, &[change(2, 5, "b", t1, t2)]).unwrap_err();
         assert_eq!(
             err,

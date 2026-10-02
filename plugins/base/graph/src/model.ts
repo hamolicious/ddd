@@ -1,16 +1,3 @@
-/**
- * What the graph shows: nodes and links, read from `indexer`, filtered. Pure.
- *
- * A node is a live document, or — with `showMissing` — a `doc://` id that some note links
- * to and this device does not know (Obsidian's "unresolved" notes). Links come from each
- * document's **outgoing** connections only: an incoming connection is the same edge seen
- * from the other end, and reading both would draw it twice. Trashed targets are left out,
- * as the indexer leaves them out of backlinks.
- *
- * A link is directed and drawn once per (source, target), whatever mix of kinds makes it
- * up; `weight` is how many references it stands for.
- */
-
 import type { DocumentId } from "@kernel";
 
 import type { ConnectionKind, WorkspaceIndex } from "plugin:indexer";
@@ -19,9 +6,7 @@ export interface GraphNode {
   readonly id: DocumentId;
   readonly title: string;
   readonly folder: string;
-  /** No such document on this device: a link points at it and nothing more. */
   readonly missing: boolean;
-  /** Links to and from it, in the filtered graph — the whole of it, even in a local graph that shows fewer. */
   readonly degree: number;
 }
 
@@ -38,11 +23,8 @@ export interface Graph {
 }
 
 export interface GraphFilter {
-  /** Keep notes whose title or folder contains this, case-insensitively. Empty keeps all. */
   readonly search: string;
-  /** Keep notes with no link to or from another shown note. */
   readonly showOrphans: boolean;
-  /** Show link targets this device does not know. */
   readonly showMissing: boolean;
   readonly showEmbeds: boolean;
   readonly showFrontmatter: boolean;
@@ -56,7 +38,6 @@ export const DEFAULT_FILTER: GraphFilter = {
   showFrontmatter: true,
 };
 
-/** The two things the model reads from the indexer. */
 export type GraphSource = Pick<WorkspaceIndex, "documents" | "connections">;
 
 export function buildGraph(source: GraphSource, filter: GraphFilter = DEFAULT_FILTER): Graph {
@@ -78,7 +59,6 @@ export function buildGraph(source: GraphSource, filter: GraphFilter = DEFAULT_FI
       if (connection.kind === "frontmatter" && !filter.showFrontmatter) continue;
       if (connection.state === "trashed") continue;
       if (connection.state === "missing") {
-        // A missing note has no title to search; it follows the notes that link to it.
         if (!filter.showMissing) continue;
         missing.add(connection.id);
       } else if (!shown.has(connection.id)) {
@@ -123,12 +103,6 @@ export function buildGraph(source: GraphSource, filter: GraphFilter = DEFAULT_FI
   };
 }
 
-/**
- * The part of `graph` within `depth` links of `center`, following links both ways — the
- * local graph. `center` is always in it, even with no links and even when a filter would
- * have hidden it. Each node keeps its degree from `graph`: a note at the edge of the
- * neighbourhood is drawn as big as it is, not as big as the part of it that is shown.
- */
 export function neighbourhood(graph: Graph, center: DocumentId, depth: number, source?: GraphSource): Graph {
   const adjacent = new Map<DocumentId, DocumentId[]>();
   const add = (from: DocumentId, to: DocumentId): void => {
@@ -164,14 +138,12 @@ export function neighbourhood(graph: Graph, center: DocumentId, depth: number, s
   return { nodes, links };
 }
 
-/** A key that changes when the set of nodes or links does — not when a title does. */
 export function shapeKey(graph: Graph): string {
   const nodes = graph.nodes.map((node) => node.id).sort();
   const links = graph.links.map((link) => `${link.source}>${link.target}`).sort();
   return `${nodes.join(",")}|${links.join(",")}`;
 }
 
-/** The top-level folder, which is what "colour by folder" groups on. */
 export function groupOf(node: GraphNode): string {
   return node.folder.split(" / ")[0] ?? "";
 }

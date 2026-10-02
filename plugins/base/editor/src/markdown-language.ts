@@ -1,48 +1,13 @@
-/**
- * Markdown (plus frontmatter and `%%%` fences) syntax highlighting for the editor.
- *
- * ## Why this is a `StreamLanguage` and not `@lezer/markdown`
- *
- * A lezer grammar would be strictly better: it is the same parser `@codemirror/lang-markdown`
- * uses, it is incremental, and it agrees with the renderer's syntax by construction. The
- * problem is delivery, not desire.
- *
- * A base plugin may import **relative files and the blessed runtime layer** and nothing
- * else — `plugins/base/` has no `node_modules` and the reference build config
- * (`_shared/vite.plugin-config.mjs`) resolves nothing from one, by design: that is what
- * makes a plugin buildable anywhere. `@lezer/markdown` is in `web/package.json` and
- * `web/CONTRACTS.md` lists it as part of the blessed runtime layer — but it is in
- * **neither** `app/runtime/specifiers.ts` nor `RUNTIME_EXTERNALS`, so it is neither
- * importable as an external nor resolvable to bundle. (Same for
- * `@codemirror/lang-markdown`.) Recorded as an INTEGRATION item; the moment those two
- * lists gain the entry, this file collapses to a `MarkdownParser` plus one `styleTags`
- * call and the tokenizer below goes away.
- *
- * Until then: a line-oriented tokenizer over `@codemirror/language`'s `StreamLanguage`,
- * which *is* in the runtime layer. It is honest about what it is — a **highlighter**,
- * not a parser. It decides colours. It never decides what a document means: the
- * renderer's syntax comes from the `markdown` plugin's unified pipeline and the
- * frontmatter/`%%%` semantics come from the shared Rust core. A token boundary in the
- * wrong place costs one colour on one line.
- *
- * Token names are resolved by `@codemirror/language` straight against `@lezer/highlight`'s
- * `tags`, so `"heading2"` means `tags.heading2` with no mapping table in between.
- */
-
 import { HighlightStyle, StreamLanguage, syntaxHighlighting } from "@codemirror/language";
 import type { Extension } from "@codemirror/state";
 import { tags } from "@lezer/highlight";
 
 interface MarkdownState {
-  /** `true` once the first line has been seen — frontmatter opens only there. */
   started: boolean;
-  /** Inside the leading `---` block. */
   frontmatter: boolean;
-  /** The fence that opened the current code block (``` or ~~~), else `null`. */
   fence: string | null;
 }
 
-/** Frontmatter fence, and the `%%%` machine-section fences (SPEC §3.1). */
 const FM_FENCE = /^---$/;
 const MACHINE_FENCE = /^%%%(?: [A-Za-z0-9_-]{1,64})?$/;
 const FM_KEY = /^[A-Za-z0-9_-]{1,64}(?=:)/;
@@ -75,7 +40,6 @@ export const markdownLanguage = StreamLanguage.define<MarkdownState>({
       const firstLine = !state.started;
       state.started = true;
 
-      // --- frontmatter (SPEC §3.4: opens only on the literal first line) -----
       if (firstLine && stream.match(FM_FENCE)) {
         state.frontmatter = true;
         return "processingInstruction";
@@ -91,7 +55,6 @@ export const markdownLanguage = StreamLanguage.define<MarkdownState>({
         return "string";
       }
 
-      // --- fenced code -------------------------------------------------------
       if (state.fence) {
         const closing = new RegExp(`^ {0,3}${state.fence[0] === "`" ? "`" : "~"}{${state.fence.length},}\\s*$`);
         if (stream.match(closing)) {
@@ -104,9 +67,6 @@ export const markdownLanguage = StreamLanguage.define<MarkdownState>({
       const fence = stream.match(CODE_FENCE) as RegExpMatchArray | null;
       if (fence) {
         state.fence = fence[1] ?? "```";
-        // The info string (```ts) names the language the `markdown.fence` point
-        // dispatches on — worth its own colour. The body stays one monospace token
-        // here: colouring code is `syntax-highlight`'s `editor.extension`, over this.
         if (!stream.eol()) {
           stream.skipToEnd();
           return "labelName";
@@ -114,10 +74,8 @@ export const markdownLanguage = StreamLanguage.define<MarkdownState>({
         return "processingInstruction";
       }
 
-      // --- machine sections (SPEC §3.1) --------------------------------------
       if (stream.match(MACHINE_FENCE)) return "processingInstruction";
 
-      // --- block starts ------------------------------------------------------
       const heading = stream.match(ATX_HEADING) as RegExpMatchArray | null;
       if (heading) {
         stream.skipToEnd();
@@ -128,7 +86,6 @@ export const markdownLanguage = StreamLanguage.define<MarkdownState>({
       if (stream.match(TABLE_DELIMITER)) return "processingInstruction";
       if (stream.match(BLOCKQUOTE)) return "quote";
       if (stream.match(LIST_MARK)) {
-        // `- [ ] milk`: the marker is what `markdown.taskState` renders (SPEC §6.6).
         return "list";
       }
     }
@@ -143,7 +100,6 @@ export const markdownLanguage = StreamLanguage.define<MarkdownState>({
       return "monospace";
     }
 
-    // --- inline ---------------------------------------------------------------
     if (stream.match(TASK_MARK)) return "processingInstruction";
     if (stream.match(ESCAPE)) return "escape";
     if (stream.match(INLINE_CODE)) return "monospace";
@@ -153,8 +109,6 @@ export const markdownLanguage = StreamLanguage.define<MarkdownState>({
     if (stream.match(EMPHASIS)) return "emphasis";
     if (stream.match(STRIKETHROUGH)) return "strikethrough";
 
-    // Nothing claimed this character. Advancing is mandatory — a token function that
-    // returns without consuming anything is an infinite loop.
     stream.next();
     return null;
   },
@@ -164,7 +118,6 @@ export const markdownLanguage = StreamLanguage.define<MarkdownState>({
   },
 });
 
-/** Token-driven colours. Every value is a kernel theme token (SPEC §6.4). */
 const markdownStyle = HighlightStyle.define([
   { tag: tags.heading1, fontSize: "1.5em", fontWeight: "700", color: "var(--ddd-text)" },
   { tag: tags.heading2, fontSize: "1.3em", fontWeight: "700", color: "var(--ddd-text)" },
@@ -184,10 +137,7 @@ const markdownStyle = HighlightStyle.define([
   { tag: tags.comment, color: "var(--ddd-text-muted)", fontStyle: "italic" },
   { tag: tags.escape, color: "var(--ddd-text-muted)" },
   { tag: tags.contentSeparator, color: "var(--ddd-border-strong)" },
-  // Syntax marks stay visible but recede: this is a plain-text editor on purpose
-  // (SPEC §3.1 — the document *is* the markdown), not a WYSIWYG surface.
   { tag: tags.processingInstruction, color: "var(--ddd-text-muted)" },
 ]);
 
-/** The language plus its highlighting — one extension for the editor to install. */
 export const markdownSyntax: Extension = [markdownLanguage, syntaxHighlighting(markdownStyle)];

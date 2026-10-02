@@ -1,8 +1,3 @@
-/**
- * Inline SVG in `currentColor`, so the icons follow the button's text colour (danger red
- * included) in both themes. Decorative: the button carries the name.
- */
-
 import type { ReactElement } from "react";
 
 const common = {
@@ -17,7 +12,6 @@ const common = {
   strokeLinejoin: "round",
 } as const;
 
-/** A bin: delete, or move to the Trash. */
 export function TrashIcon(): ReactElement {
   return (
     <svg {...common}>
@@ -26,7 +20,6 @@ export function TrashIcon(): ReactElement {
   );
 }
 
-/** A magnifier: run a scan. */
 export function ScanIcon(): ReactElement {
   return (
     <svg {...common}>
@@ -36,7 +29,6 @@ export function ScanIcon(): ReactElement {
   );
 }
 
-/** Two arrows round: refresh. */
 export function RefreshIcon(): ReactElement {
   return (
     <svg {...common}>

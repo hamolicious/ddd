@@ -1,13 +1,3 @@
-/**
- * The workspace export.
- *
- * **The export is the no-Mongo recovery path**: a zip of every document as plain markdown.
- * It is fetched through the authenticated `fetch` rather than linked, because a bearer
- * session (the Flutter shell, SPEC §5.2) has no cookie for the browser to attach.
- *
- * Orphan and duplicate files and notes are the `db-health` plugin's.
- */
-
 import type { ReactElement } from "react";
 
 import { AdminSectionFrame } from "./AdminView.js";
@@ -102,7 +92,6 @@ export function ExportSection({
         disabled={mutation.busy === "export"}
         onClick={() =>
           mutation.run("export", async () => {
-            // Fetched, not linked: a bearer session has no cookie for the browser to attach.
             const blob = await client.exportWorkspace();
             const url = URL.createObjectURL(blob);
             const anchor = document.createElement("a");
@@ -111,7 +100,6 @@ export function ExportSection({
             document.body.append(anchor);
             anchor.click();
             anchor.remove();
-            // Revoked on the next tick: revoking synchronously can race the download start.
             setTimeout(() => URL.revokeObjectURL(url), 30_000);
           })
         }

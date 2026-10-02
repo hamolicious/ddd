@@ -1,16 +1,3 @@
-/**
- * `KernelHost` — the singletons behind `@kernel`, and the factory that hands each
- * plugin its own attributed view of them.
- *
- * There is exactly one host per page. `forPlugin(manifest)` is what the loader
- * calls immediately before `activate(kernel)`, and the object it returns is the
- * *only* thing a plugin ever touches: every call inside it carries the plugin's id
- * without the plugin supplying one, which is what makes attribution — of
- * settings, `%%%` sections, notices and log lines — a property of the kernel rather
- * than of plugin good manners. (Registry items are attributed by the loader's
- * activation marker, `attribution.ts`.)
- */
-
 import type { ComponentType, ReactNode } from "react";
 
 import {
@@ -43,16 +30,13 @@ import { SyncHost } from "./sync.js";
 import { ThemeController } from "./theme.js";
 
 export interface KernelHostOptions {
-  /** The node the app's React root renders into. */
   readonly root: HTMLElement;
   readonly engine: QueryEngine;
   readonly sync: SyncClient;
   readonly core: CoreBindings;
   readonly session: SessionHostOptions;
   readonly bootMode: BootMode;
-  /** A contributed component threw while rendering. */
   readonly onPluginProblem?: (problem: PluginProblem) => void;
-  /** How `kernel.plugins.optional` imports a module; tests inject one. */
   readonly importPlugin?: PluginImporter;
 }
 
@@ -64,7 +48,6 @@ export interface PluginProblem {
 }
 
 export class KernelHost {
-  /** The boot's plugin set behind every plugin's `kernel.plugins`; the loader fills it in. */
   readonly plugins: PluginsHost;
   readonly events: EventBus;
   readonly notices = new NoticeCenter();
@@ -97,8 +80,6 @@ export class KernelHost {
     this.settings = new SettingsHost({
       documents: this.documents,
       userId: options.session.user.id,
-      // Only so a human opening the settings document can tell whose it is; the
-      // kernel matches on `fm.settings-owner`, never on the label.
       userLabel: options.session.user.email || options.session.user.name || options.session.user.id,
     });
     this.capabilities = new CapabilitiesHost();
@@ -112,20 +93,10 @@ export class KernelHost {
     };
   }
 
-  /**
-   * Everything a plugin subscribed to or opened through its kernel, as disposers, so
-   * `retract` leaves nothing behind.
-   */
   readonly #bags = new Map<string, Set<() => void>>();
-  /**
-   * Which activation of each plugin is live. A resource that arrives for an older one —
-   * a `documents.subscribe` that resolves after the plugin was stopped — is released at
-   * once instead of outliving its owner.
-   */
   readonly #live = new Map<string, number>();
   #generation = 0;
 
-  /** The per-plugin `@kernel`. Built once per activation, just before `activate`. */
   forPlugin(manifest: PluginManifest): Kernel {
     const pluginId = manifest.id;
     const generation = ++this.#generation;
@@ -222,17 +193,10 @@ export class KernelHost {
     return run;
   }
 
-  /** How many kernel resources a plugin still holds: the leak check's number. */
   held(pluginId: string): number {
     return this.#bags.get(pluginId)?.size ?? 0;
   }
 
-  /**
-   * Withdraw everything a plugin registered — a failed activation, or `?safe=bare`
-   * teardown: every registry item it added, its event and host listeners, every
-   * subscription and open document, its notices and theme layers, its mount, and its
-   * stylesheet. What it built outside the kernel is its own `deactivate()`'s job.
-   */
   retract(pluginId: string): void {
     for (const dispose of [...(this.#bags.get(pluginId) ?? [])]) {
       try {

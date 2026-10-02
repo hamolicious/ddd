@@ -2,13 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { byProximity, distanceFrom } from "./proximity.js";
 
-//   root
-//   ├── a
-//   │   ├── a1
-//   │   │   └── a1x
-//   │   └── a2
-//   └── b
-//       └── b1
 const parents: Record<string, string> = { a: "", a1: "a", a1x: "a1", a2: "a", b: "", b1: "b" };
 const parentOf = (id: string): string | undefined => parents[id];
 

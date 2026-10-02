@@ -1,5 +1,3 @@
-//! The query engine end to end: plans in, pages out.
-
 use ddd_core::query::{Doc, Engine, Op, Plan, Query, QueryError, Trash};
 use ddd_core::{Date, Map, Value};
 
@@ -76,7 +74,6 @@ fn filter_then_sort_by_a_frontmatter_key() {
         .sort("fm.key")
         .build()
         .unwrap();
-    // `d` has no `key`: missing sorts last.
     assert_eq!(ids(&engine, &plan), ["b", "c", "a", "d"]);
 }
 
@@ -204,7 +201,6 @@ fn child_of_and_parent_of_walk_the_folder_tree() {
         .unwrap();
     assert_eq!(ids(&engine, &outside), ["c", "d", "root"]);
 
-    // Moving `b` out of the folder updates the tree.
     engine.upsert(with_children(
         doc("folder", "Folder", "", "2026-01-01"),
         &[],

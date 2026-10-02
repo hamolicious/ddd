@@ -1,38 +1,7 @@
-/**
- * `@kernel` — the entire public contract between the kernel and a plugin
- * (SPEC §6.4: "Types are the contract").
- *
- * This barrel is what the import map resolves `@kernel` to at runtime, what
- * `/kernel.d.ts` is generated from, and the only thing a plugin may import from
- * the host. A plugin that reaches into `@kernel/…` internals is depending on an
- * implementation that is free to change inside one kernel version.
- *
- * ```ts
- * import type { Kernel } from "@kernel";
- * import { addItem } from "plugin:toolbar";          // a dependency's exports
- *
- * export function greet(): string { return "hi"; }   // what dependents import
- *
- * export default function activate(kernel: Kernel) {
- *   addItem({ id: "hello.nav", side: "end", component: Hello });
- * }
- * ```
- *
- * **FROZEN.** One `kernel` semver covers this surface and the Wasm host ABI;
- * removals and signature changes are a major (SPEC §6.4). `dev-docs/resolved/KERNEL-API.md` is
- * the changelog.
- */
-
 import { MANIFEST_KERNEL_VERSION } from "./manifest.generated.js";
 
-/**
- * The contract version, generated from `x-kernel-version` in `schema/manifest.schema.json` —
- * the same line the server's `KERNEL_VERSION` comes from, so the install check and the boot
- * check cannot drift apart.
- */
 export const KERNEL_API_VERSION: string = MANIFEST_KERNEL_VERSION;
 
-/** Major of {@link KERNEL_API_VERSION} — what a manifest's `kernel` range is checked against. */
 export const KERNEL_API_MAJOR = Number.parseInt(KERNEL_API_VERSION, 10);
 
 export type {

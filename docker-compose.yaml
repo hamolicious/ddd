@@ -1,28 +1,3 @@
-# Local and self-hosted deployment. The image contains the server, the web app and
-# the base plugins, so `docker compose up --build` gives the complete app on
-# http://localhost:8080.
-#
-# First run:
-#   cp .env.example .env    # then put a real SESSION_SECRET in it
-#   docker compose up --build
-#
-# `mise run dev` uses only the `mongo` service and runs the server on the host,
-# which is why mongo's port is published on loopback.
-#
-# The `caddy` profile adds automatic HTTPS, which a real deployment needs: secure
-# cookies, the PWA and the Android app all require a secure origin.
-#
-#   DOMAIN=notes.example.com ACME_EMAIL=you@example.com \
-#     APP_ORIGIN=https://notes.example.com COOKIE_SECURE=true \
-#     TRUST_PROXY_HEADERS=true BIND_HOST=127.0.0.1 \
-#     docker compose --profile caddy up -d --build
-#
-# Keep `BIND_HOST=127.0.0.1` there: with `TRUST_PROXY_HEADERS=true` a client could
-# forge its IP unless the proxy is the only route in. See `deploy/Caddyfile`.
-#
-# `PORT` (default 8080) is the port the server listens on in the container, the
-# host port it is published on, and what the healthcheck and Caddy connect to.
-
 name: ddd
 
 services:
@@ -30,9 +5,6 @@ services:
     image: mongo:8
     restart: unless-stopped
     command: ["--bind_ip_all"]
-    # WiredTiger opens a file per collection/index and aborts the process when it
-    # runs out of descriptors. Docker's default soft limit (1024) is too low,
-    # e.g. for test suites that create a database per test.
     ulimits:
       nofile:
         soft: 64000
@@ -49,15 +21,11 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
-    # Loopback only: `mise run dev` connects from the host, nothing else should.
-    # There is no authentication on this mongo — do not bind it to 0.0.0.0.
     ports:
       - "127.0.0.1:${MONGO_PORT:-27017}:27017"
 
   server:
     build:
-      # The repository root: the image also builds `web/` and `plugins/`.
-      # `.dockerignore` keeps the context small.
       context: .
       dockerfile: backend/Dockerfile
     restart: unless-stopped
@@ -69,38 +37,23 @@ services:
       MONGO_DATABASE: ${MONGO_DATABASE:-ddd}
       PORT: 8081
       BIND_ADDR: 0.0.0.0:${PORT:-8080}
-      # Required, at least 32 bytes. Rotating it logs everyone out.
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required and must be at least 32 bytes}
       MAX_ATTACHMENT_BYTES: ${MAX_ATTACHMENT_BYTES:-104857600}
-      # Origin allowlist: CORS *and* the mandatory WebSocket origin check. The server
-      # allows its own http://localhost:${PORT} and http://127.0.0.1:${PORT} by itself,
-      # plus http://<host>:${PORT} for every host in APP_ORIGIN_HOSTS (a LAN address the
-      # phone opens). List anything else in full, e.g. https://${DOMAIN} behind caddy.
       APP_ORIGIN: ${APP_ORIGIN:-}
       APP_ORIGIN_HOSTS: ${APP_ORIGIN_HOSTS:-}
 
-      # Baked into the image; override only to point at a mounted directory.
       WEB_DIST_DIR: ${WEB_DIST_DIR:-/srv/web}
       PLUGINS_DIR: ${PLUGINS_DIR:-/srv/plugins}
       KERNEL_DTS_PATH: ${KERNEL_DTS_PATH:-/srv/kernel.d.ts}
-      # Safe mode: no plugins run. The way back in when a plugin breaks the app.
       DISABLE_PLUGINS: ${DISABLE_PLUGINS:-false}
-      # Compose runs over plain http on localhost; production keeps this true.
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
-      # false: the client IP is the connection's peer address and X-Forwarded-For is
-      # ignored. Set true only when a proxy (e.g. the caddy profile) is the only route
-      # to the server, or clients can forge their IP.
       TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-false}
       LOG_FORMAT: ${LOG_FORMAT:-json}
       RUST_LOG: ${RUST_LOG:-info,ddd_server=debug}
-      # Must stay below stop_grace_period.
       SHUTDOWN_GRACE_SECS: ${SHUTDOWN_GRACE_SECS:-30}
-    # BIND_HOST narrows where the host publishes it (127.0.0.1 behind the caddy profile).
     ports:
       - "${BIND_HOST:-0.0.0.0}:${PORT:-8080}:${PORT:-8080}"
     healthcheck:
-      # Liveness (never touches Mongo). `bash` rather than CMD-SHELL's dash:
-      # /dev/tcp is a bash feature, and the image ships no curl.
       test:
         - CMD
         - bash
@@ -110,13 +63,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
-    # Longer than SHUTDOWN_GRACE_SECS so the server's own watchdog is what ends
-    # the process, not docker's SIGKILL.
     stop_grace_period: 40s
 
-  # Automatic HTTPS in front of the server. Opt-in, because a plain
-  # `docker compose up` on a laptop wants http://localhost:8080 and has no domain to
-  # get a certificate for. The server stays TLS-unaware; Caddy terminates.
   caddy:
     image: caddy:2
     profiles: ["caddy"]
@@ -125,16 +73,8 @@ services:
       server:
         condition: service_healthy
     environment:
-      # The name the certificate is issued for; it must resolve to this host. The
-      # default is deliberately `localhost`, for which Caddy issues a certificate from
-      # its own local CA instead of calling ACME — so a mistyped invocation fails on a
-      # browser warning rather than by burning Let's Encrypt rate limit on a bad name.
-      # It cannot be `${DOMAIN:?…}`: Compose interpolates every service before it filters
-      # by profile, so a required variable here would break plain `docker compose up`.
       DOMAIN: ${DOMAIN:-localhost}
-      # Optional: an address for ACME expiry notices.
       ACME_EMAIL: ${ACME_EMAIL:-}
-      # Where the server listens (see the server's BIND_ADDR); the Caddyfile proxies to it.
       PORT: ${PORT:-8080}
     ports:
       - "80:80"

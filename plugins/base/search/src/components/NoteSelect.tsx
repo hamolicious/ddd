@@ -1,22 +1,3 @@
-/**
- * `NoteSelect` — picking one note: a text box, and under it every note, last updated
- * first, narrowed by what is typed. The value is the chosen note's id.
- *
- * Each note is drawn as the folder tree draws it — its colour and icon (`setNoteLooks`,
- * which `folders` calls), its title, the notes above it — in `Combobox`'s virtual list. The
- * notes are one live query, held only while the list is open.
- *
- * With `cwd`, the notes nearest it in the tree come first (`proximity.ts`), last updated
- * first among equals. That needs the tree, from `folders` as well; without it, `cwd` is
- * ignored.
- *
- * `exclude` leaves notes out (what is being moved, and what is inside it). `inline` keeps
- * the list open under the box, for a sheet that is the picker.
- *
- * Unfocused, the box shows the chosen note's title; focused, it is the text. With
- * `emptyLabel`, "no note" is a choice too: first in the list, and chosen as `""`.
- */
-
 import { useEffect, useMemo, useState } from "react";
 import type { ComponentType, ReactElement } from "react";
 
@@ -34,7 +15,6 @@ export type { NoteLooks } from "./notes.js";
 
 export interface NoteSelectDeps {
   readonly documents: DocumentsApi;
-  /** Titles, places and looks. */
   readonly notes: NoteHooks;
 }
 
@@ -50,7 +30,6 @@ const EVERY_NOTE: DocumentQuery = {
 };
 
 export function createNoteSelect({ documents, notes }: NoteSelectDeps): ComponentType<NoteSelectProps> {
-  /** The chosen note's title, kept up to date as the id changes. */
   function useTitle(id: string | undefined): string {
     const [title, setTitle] = useState("");
     useEffect(() => {
@@ -60,7 +39,6 @@ export function createNoteSelect({ documents, notes }: NoteSelectDeps): Componen
       }
       let live = true;
       void documents.get(id).then((row) => {
-        // Deleted, or not on this device yet: say so, not the id.
         if (live) setTitle(row === undefined ? "Unknown note" : row.title || "Untitled");
       });
       return () => {
@@ -70,7 +48,6 @@ export function createNoteSelect({ documents, notes }: NoteSelectDeps): Componen
     return title;
   }
 
-  /** Every note, last updated first (nearest `cwd` first, with it), narrowed by `query`. */
   function useNoteOptions(
     query: string,
     cwd: string | undefined,
@@ -90,7 +67,6 @@ export function createNoteSelect({ documents, notes }: NoteSelectDeps): Componen
           ? all
           : all.filter((note) => note.title.toLowerCase().includes(needle) || note.folder.toLowerCase().includes(needle));
       const parentOf = dressed?.parentOf;
-      // The live query is last updated first, and ties keep that order.
       const sorted = cwd !== undefined && parentOf !== undefined ? byProximity(matching, parentOf, cwd) : matching;
       return emptyLabel !== undefined && needle === "" ? [{ id: "", title: emptyLabel, folder: "" }, ...sorted] : sorted;
     }, [live.rows, known, query, cwd, emptyLabel, exclude, dressed, version]);
@@ -129,7 +105,6 @@ export function createNoteSelect({ documents, notes }: NoteSelectDeps): Componen
         useOptions={() => useNoteOptions(query, cwd, emptyLabel, exclude)}
         keyOf={(note) => note.id}
         renderOption={(note) => (
-          // Drawn only in the open list, where `useNoteOptions` has subscribed to the looks.
           note.id === "" ? (
             <span className="search:text-text-muted">{note.title}</span>
           ) : (

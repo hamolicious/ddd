@@ -1,45 +1,11 @@
-/**
- * The mode registry's pure logic, extracted so it can be unit-tested without a DOM,
- * a kernel or a React renderer.
- *
- * Everything here is a total function over plain data. The interesting rules — which
- * modes a document may show, which one wins, and how a per-document choice survives a
- * reload — are exactly the rules that are easiest to get wrong and hardest to notice,
- * because a wrong answer still renders *something*.
- *
- * `viewer` and `editor` are symmetric offers (SPEC §6.5): nothing below names either
- * of them. {@link DEFAULT_MODE_ID} is a *fallback* string, used only when no preference
- * exists and `read` happens to be installed — if it is not, the first visible
- * mode wins, which is how a workspace that replaced both base modes still opens a
- * document.
- *
- * Modes arrive **already in order**: the registry sorts by each mode's `order`, and
- * nothing here sorts them again.
- */
-
 import type { DocumentRow } from "@kernel";
 
 import type { DocumentMode } from "./api.js";
 
-/** The mode a fresh client prefers when nothing else says otherwise. */
 export const DEFAULT_MODE_ID = "read";
 
-/**
- * How many per-document mode choices are remembered. The memory is one settings
- * value — a YAML flow sequence in a settings document (SPEC §6.4) — so it is
- * deliberately small and deliberately lossy: it is a convenience, not state anything
- * depends on.
- */
 export const MODE_MEMORY_CAP = 100;
 
-/**
- * The modes that may show this document, in seat order.
- *
- * A `when` predicate that **throws** hides its mode and reports it. Fail-closed is
- * the right direction here: a contribution whose own guard crashes cannot be trusted
- * to render, and the surface always has the other modes to fall back to. The
- * alternative — showing it anyway — trades a missing tab for a broken pane.
- */
 export function visibleModes(
   modes: readonly DocumentMode[],
   row: DocumentRow | undefined,
@@ -57,12 +23,6 @@ export function visibleModes(
   });
 }
 
-/**
- * The first visible mode, in seat order, whose `prefer` claims this document.
- *
- * A `prefer` that throws claims nothing and is reported — the same fail-closed rule as
- * `when`, and cheaper here: losing a claim only means the user's default applies.
- */
 export function claimedModeId(
   visible: readonly DocumentMode[],
   row: DocumentRow | undefined,
@@ -80,17 +40,6 @@ export function claimedModeId(
   })?.id;
 }
 
-/**
- * Which mode to show, given the user's per-document choice, a mode's claim on the
- * document, the user's default, and what is actually registered and visible.
- *
- * Precedence: the document's remembered mode → the mode that claims it (`prefer`) →
- * the user's default → `read` → the first seated visible mode. The remembered mode
- * outranks the claim because it is the user's own choice for *this* document; the
- * claim outranks the default because the default is a guess about every document.
- * Every step is skipped when the named mode is not visible, so an uninstalled
- * `editor` degrades to reading rather than a blank pane.
- */
 export function resolveModeId(
   remembered: string | undefined,
   preferred: string | undefined,
@@ -103,11 +52,9 @@ export function resolveModeId(
   if (has(claimed)) return claimed;
   if (has(preferred)) return preferred;
   if (has(DEFAULT_MODE_ID)) return DEFAULT_MODE_ID;
-  // The first seat: `visible` is in the host's order, which the wiring decides.
   return visible[0]?.id;
 }
 
-/** The next mode in seat order, wrapping. `undefined` when nothing is wired in. */
 export function nextModeId(
   visible: readonly DocumentMode[],
   current: string | undefined,
@@ -117,16 +64,6 @@ export function nextModeId(
   return visible[(index + 1) % visible.length]?.id;
 }
 
-/**
- * Parse the remembered per-document modes out of a settings list.
- *
- * The stored form is one `"<document-id>=<mode-id>"` entry per document, because a
- * settings value is a flat YAML scalar or flow sequence (SPEC §6.4) — a nested map is
- * rejected by the settings surface, so the encoding is the price of storing this at
- * all. Insertion order is recency, oldest first.
- *
- * Total: an entry that is not a string, has no `=`, or has an empty half is dropped.
- */
 export function parseModeMemory(entries: unknown): Map<string, string> {
   const memory = new Map<string, string>();
   if (!Array.isArray(entries)) return memory;
@@ -137,14 +74,12 @@ export function parseModeMemory(entries: unknown): Map<string, string> {
     const id = entry.slice(0, separator).trim();
     const mode = entry.slice(separator + 1).trim();
     if (id.length === 0 || mode.length === 0) continue;
-    // A later entry for the same document wins and becomes the most recent.
     memory.delete(id);
     memory.set(id, mode);
   }
   return memory;
 }
 
-/** The settings-list form of {@link parseModeMemory}, capped to the most recent entries. */
 export function serializeModeMemory(
   memory: ReadonlyMap<string, string>,
   cap: number = MODE_MEMORY_CAP,
@@ -153,7 +88,6 @@ export function serializeModeMemory(
   return cap > 0 && entries.length > cap ? entries.slice(entries.length - cap) : entries;
 }
 
-/** Record a choice as the most recent one. Mutates and returns `memory`. */
 export function rememberMode(
   memory: Map<string, string>,
   documentId: string,

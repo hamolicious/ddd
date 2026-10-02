@@ -1,43 +1,3 @@
-/**
- * The sort and filter controls.
- *
- * It builds the **DSL JSON** (`filter.ts`), never a Mongo query and never a predicate
- * function — which is what makes the same filter usable by the local evaluator, by the
- * server, and by a saved view later on.
- *
- * Two deliberate choices about honesty:
- *
- * - **The generated JSON is visible.** A details/summary shows exactly what the controls
- *   produced. The filter language is documented and small (SPEC §4.2), so showing it is
- *   cheaper than inventing a second vocabulary for describing it, and it is how a user
- *   learns to write one by hand.
- * - **A clause that produces nothing is marked, with the reason.** A half-typed date, an
- *   empty value, a text operator pointed at a date — each produces no clause, and the
- *   row says which it is. The mark and the query come from one function
- *   (`clauseProblem`), so the row cannot claim to be ignored while the query carries it,
- *   or the reverse. That claim was doubted once (`web/MOBILE-AUDIT.md`, Q5) and is now
- *   pinned by `filter.test.ts` rather than argued.
- *
- * **One toolbar: the search bar, then the icons.** Search runs the providers
- * (`useSearch.ts`) and turns the list into ranked results; sort opens a `context-menu` of
- * fields ("Best match" joins them while a search is on), direction flips the order, and
- * the funnel unfolds every filter — "Show machine documents" included — with a badge
- * counting those applied. The View icon unfolds the view's own settings (`viewPanel`),
- * when it has any. While there are results, an icon opens the actions that run
- * on all of them (`onActions`), and while there is a search a bookmark saves it to a note
- * (`onSave`). While the filters are open the funnel stays lit in the accent
- * colour, so the button that folds them away is the obvious one.
- *
- * **On a phone the card docks to the bottom of the screen**, where a thumb is, and so
- * the filters unfold *upwards*, over the results. Focusing the search bar there slides
- * the three icons away so the field has the width; they slide back on blur. On a wide
- * screen the bar sits at the top at its full width and nothing moves.
- *
- * **The filters start folded**, on every screen: the list is what the page is for. The
- * funnel's badge counts the conditions applied (its accessible name says it too),
- * so a folded filter is never a silent one.
- */
-
 import { useId, useState } from "react";
 import type { ComponentType, ReactElement, ReactNode, RefObject } from "react";
 
@@ -63,33 +23,20 @@ export interface FilterBarProps {
   readonly sortField: string;
   readonly sortDirection: "asc" | "desc";
   readonly onSortChange: (field: string, direction: "asc" | "desc") => void;
-  /** `context-menu`'s `open`, for the sort field menu. */
   readonly menu: Pick<ContextMenu, "open">;
-  /** The search bar's text. Empty ⇒ the plain list. */
   readonly query: string;
   readonly onQueryChange: (query: string) => void;
-  /** The view's own settings, unfolded by the View button; no button when absent. */
   readonly viewPanel?: ReactNode;
-  /** The sort options beyond the fixed ones — the sort in force, when it is a column's. */
   readonly extraSorts?: readonly FieldOption[];
-  /** The search field, so the "Search documents" command can focus it. */
   readonly searchInput?: RefObject<HTMLInputElement>;
-  /** Present while there are results to act on: opens the actions menu beside `anchor`. */
   readonly onActions?: (anchor: HTMLElement) => void;
-  /** Present while there is a search to save: saves it to a note, or updates the note. */
   readonly onSave?: () => void;
-  /** The save button's name: "Save search" by default. */
   readonly saveLabel?: string;
-  /** Finds notes for "is inside note" / "contains note"; without it they are not offered. */
   readonly notes?: NoteSource;
-  /** Picks the note for those. */
   readonly NoteSelect?: ComponentType<NoteSelectLike>;
-  /** Picks a condition's property, and its value. */
   readonly FmKeySelect?: ComponentType<FmKeySelectLike>;
   readonly FmValueSelect?: ComponentType<FmValueSelectLike>;
-  /** Properties and values to offer, from the indexer. */
   readonly suggestions?: Suggestions;
-  /** The children "is inside note" resolves against, for the JSON shown. */
   readonly context?: ConditionContext;
 }
 
@@ -115,15 +62,11 @@ export function FilterBar({
   suggestions,
   context,
 }: FilterBarProps): ReactElement {
-  // The *effective* filter — what the list actually runs, machine-document exclusion
-  // included. Showing the user's clauses alone would make the disclosure a half-truth
-  // about the query, which is the one thing this control is for.
   const filter = buildEffectiveFilter(draft, context);
 
   const compact = useCompact();
   const panelId = useId();
   const viewPanelId = useId();
-  /** Which panel is unfolded under the toolbar: the filters, the view's, or none. */
   const [panel, setPanel] = useState<"filters" | "view" | undefined>(undefined);
   const expanded = panel === "filters";
   const setExpanded = (next: boolean | ((value: boolean) => boolean)): void =>
@@ -131,7 +74,6 @@ export function FilterBar({
       const open = typeof next === "function" ? next(current === "filters") : next;
       return open ? "filters" : current === "filters" ? undefined : current;
     });
-  // Only a phone slides the icons away; a wide toolbar has room for both.
   const [focused, setFocused] = useState(false);
   const tucked = compact && focused;
   const applied = appliedCount(draft);
@@ -139,8 +81,6 @@ export function FilterBar({
   return (
     <>
     {compact && panel !== undefined && (
-      // A dim over everything but the docked card while its filters are open; a tap on
-      // it folds them. Only on a phone, where the panel sits over the results.
       <div
         aria-hidden="true"
         className="search-filter-scrim search:fixed search:inset-0 search:z-[9] search:bg-black/30 search:transition-opacity search:duration-150 search:starting:opacity-0 search:motion-reduce:transition-none"
@@ -157,8 +97,6 @@ export function FilterBar({
         />
         <div
           className={`search-toolbar-icons search:flex search:shrink-0 search:gap-2 search:overflow-hidden search:-my-0.5 search:py-0.5 search:transition-[max-width,margin,padding,opacity] search:duration-200 search:ease-out search:motion-reduce:transition-none ${tucked ? "search:ml-0 search:max-w-0 search:px-0 search:opacity-0" : "search:ml-1 search:max-w-[22rem] search:px-0.5 search:opacity-100"}`}
-          // Tucked away under a focused search on a phone: out of the tab order and the
-          // accessibility tree too, not just out of sight.
           {...(tucked ? { inert: "" } : {})}
         >
         <SortControls
@@ -249,7 +187,6 @@ export function FilterBar({
         </div>
       )}
 
-      {/* Below the toolbar on a wide screen; above it, over the results, on a phone. */}
       <div className={`search-filter-panel ${expanded ? "search:flex" : "search:hidden"} search:flex-col search:gap-2 search:border-t search:border-border search:pt-2 search:compact:max-h-[60dvh] search:compact:overflow-y-auto search:compact:overscroll-contain search:compact:border-t-0 search:compact:border-b search:compact:pt-0 search:compact:pb-2`} id={panelId}>
       <div className="search-row">
         <label className="search-checkbox">
@@ -277,7 +214,6 @@ export function FilterBar({
           (draft.clauses.length > 0 || draft.includeMachine === true) && (
             <button
               type="button"
-              // Every filter, "Show machine documents" included: it is one of them.
               onClick={() =>
                 onDraftChange({
                   ...draft,
@@ -295,8 +231,6 @@ export function FilterBar({
 
       {filter !== undefined && (
         <details className="search-json search:text-sm search:text-text-muted search:[&>summary]:flex search:[&>summary]:min-h-[var(--ddd-tap-target)] search:[&>summary]:cursor-pointer search:[&>summary]:items-center search:[&>pre]:mt-1 search:[&>pre]:overflow-x-auto search:[&>pre]:rounded search:[&>pre]:bg-bg search:[&>pre]:p-2 search:[&>pre]:font-mono">
-          {/* A spec section number is a note to whoever builds this, not to whoever
-              uses it. What a reader wants to know is what the block below *is*. */}
           <summary>Show the filter as JSON</summary>
           <pre>{JSON.stringify(filter, null, 2)}</pre>
         </details>
@@ -318,13 +252,11 @@ function SortControls({
   searching,
   extra,
 }: {
-  /** Sorts beyond the fixed ones, offered after them. */
   readonly extra: readonly FieldOption[];
   readonly field: string;
   readonly direction: "asc" | "desc";
   readonly onChange: (field: string, direction: "asc" | "desc") => void;
   readonly menu: Pick<ContextMenu, "open">;
-  /** A search is on, so "Best match" is a sort. */
   readonly searching: boolean;
 }): ReactElement {
   const options = [...(searching ? [RELEVANCE] : []), ...SORT_OPTIONS, ...extra];
@@ -387,10 +319,6 @@ function SortControls({
   );
 }
 
-/**
- * The search bar. A real `type="search"` field — so a phone's keyboard shows a search
- * key and Escape clears it — with the magnifier drawn inside it rather than beside it.
- */
 function SearchField({
   query,
   onQueryChange,

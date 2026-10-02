@@ -1,30 +1,4 @@
 #!/usr/bin/env node
-/**
- * The server the app E2E suite drives: the **real** binary, serving the **real**
- * built bundle and a real plugin registry directory, over one origin.
- *
- * Why the suite owns its server instead of reusing `mise run dev`:
- *
- * - **Registration only works for the first user** (SPEC §5.1). Half the journeys
- *   ("register", "admin creates an invite", "a second user registers with it") are
- *   about the first-user transition, and they are only repeatable against a database
- *   that starts empty. So this drops the test database before every run.
- * - The import map, the CSP nonce, the service worker and the plugin URLs only exist
- *   on the real server (SPEC §6.4, §8). A Vite dev server would test a different
- *   application.
- * - The acceptance spec needs a *second* server over a *different* plugin directory
- *   (see `acceptance.spec.ts`), and that is only cheap if starting one is one call.
- *
- * Usage (Playwright's `webServer.command` runs the first form):
- *
- * ```
- * node app/e2e/server.mjs                       # port 8121, base plugins, fresh DB
- * DDD_E2E_PORT=8122 DDD_E2E_PLUGINS=/tmp/x  node app/e2e/server.mjs
- * ```
- *
- * Env: `DDD_E2E_PORT`, `DDD_E2E_DB`, `DDD_E2E_PLUGINS`, `DDD_E2E_KEEP_DB=1`,
- * `DDD_E2E_BINARY`, `DDD_MONGO_URI`.
- */
 
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -37,18 +11,6 @@ const repo = resolve(web, "..");
 const port = process.env["DDD_E2E_PORT"] ?? "8121";
 const database = process.env["DDD_E2E_DB"] ?? "ddd_e2e";
 
-/**
- * The default registry is **base plus `extra-task-states`**, not base alone.
- *
- * Two journeys need a plugin the base distribution does not contain. The custom
- * task-state one needs it by necessity: `[ ]` and `[x]` are `markdown`'s own default
- * contributions *and* the only two markers remark-gfm recognises, so clicking those
- * cannot distinguish "the registry decides marker semantics" (SPEC §6.6) from "GFM
- * does". `[/]` can only come from a contribution. The safe-mode journey needs a
- * *non-base* plugin to break, since `?safe=1` is defined as "base only".
- *
- * A workspace with one extra plugin installed is also simply the normal case.
- */
 const pluginsDir = process.env["DDD_E2E_PLUGINS"] ?? composeDefaultRegistry();
 
 function composeDefaultRegistry() {
@@ -88,14 +50,6 @@ for (const [what, path] of [
   process.exit(1);
 }
 
-/**
- * Drop the database so the first request really is a first-user registration.
- *
- * Through `docker compose exec` rather than a Mongo driver: `web/` has no Mongo
- * dependency and adding one to drop a database in a test launcher would be a poor
- * trade. A compose stack that is not running is a clear failure here rather than a
- * confusing one later.
- */
 if (process.env["DDD_E2E_KEEP_DB"] !== "1") {
   const drop = spawnSync(
     "docker",
@@ -127,26 +81,17 @@ const child = spawn(binary, ["serve"], {
   stdio: "inherit",
   env: {
     ...process.env,
-    // A fixed secret: these sessions live for the length of one test run, and a
-    // random one would only make a failed run harder to poke at by hand.
     SESSION_SECRET: "ddd-e2e-session-secret-0123456789abcdef",
     MONGO_URI: mongoUri,
     MONGO_DATABASE: database,
     BIND_ADDR: `127.0.0.1:${port}`,
-    // 127.0.0.1 as well as localhost: the socket's Origin check is exact (SPEC §4.3),
-    // and a test that navigates to one while the config names the other fails as a
-    // WebSocket that will not open.
     APP_ORIGIN: `${origin},http://127.0.0.1:${port}`,
-    // No TLS in front of the test server, so `Secure` cookies would never be stored.
     COOKIE_SECURE: "false",
     LOG_FORMAT: "text",
     RUST_LOG: process.env["RUST_LOG"] ?? "info",
     WEB_DIST_DIR: webDist,
     PLUGINS_DIR: pluginsDir,
     KERNEL_DTS_PATH: resolve(web, "kernel-api", "dist", "kernel.d.ts"),
-    // Materialization is debounced (SPEC §3.5). 500 ms is right in production and is
-    // dead time in a suite that asserts on `content` after an edit; 50 ms keeps the
-    // debounce real (it still coalesces a burst) without the waiting.
     MATERIALIZE_DEBOUNCE_MS: process.env["MATERIALIZE_DEBOUNCE_MS"] ?? "50",
   },
 });

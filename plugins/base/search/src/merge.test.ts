@@ -1,11 +1,3 @@
-/**
- * Provider merging and snippet extraction.
- *
- * The property under test is the one `merge.ts` argues for at length: a provider's
- * *ranking* is trusted, its absolute scores are not. A test that asserted "the higher
- * raw score wins" would lock in exactly the bug.
- */
-
 import { describe, expect, it } from "vitest";
 
 import { documentPath } from "./spec.js";
@@ -28,12 +20,10 @@ describe("mergeHits", () => {
   it("de-duplicates by id and records every provider that found the document", () => {
     const merged = mergeHits([provider("local", 0, ["a", "b"]), provider("server", 10, ["b", "c"])]);
     expect(merged.map((hit) => hit.id)).toEqual(["a", "b", "c"]);
-    // Best rank first: `server` put "b" at rank 0, `local` at rank 1.
     expect(merged.find((hit) => hit.id === "b")?.providers).toEqual(["server", "local"]);
   });
 
   it("ranks by position, not by the providers' incomparable raw scores", () => {
-    // `weird` returns huge raw scores but ranks `z` second; `local` ranks it first.
     const weird: ProviderResult = {
       providerId: "weird",
       label: "weird",
@@ -94,8 +84,6 @@ describe("documentPath", () => {
   });
 
   it("omits the query when there is no line to point at", () => {
-    // A metadata-only result (the offline server-provider case) has no content and so
-    // no snippet; the link still has to work, it just opens at the top.
     expect(documentPath("01J8Z")).toBe("/doc/01J8Z");
     expect(documentPath("01J8Z", 0)).toBe("/doc/01J8Z");
     expect(documentPath("01J8Z", -1)).toBe("/doc/01J8Z");

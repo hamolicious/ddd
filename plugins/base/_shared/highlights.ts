@@ -1,15 +1,8 @@
-/**
- * A search snippet's highlighted terms, split out for rendering: shared by `search` and the
- * views that show a result's matched line (the `table`).
- */
-
 export interface HighlightedText {
   readonly text: string;
-  /** Offsets into `text` to highlight, ascending and not overlapping. */
   readonly ranges: readonly { readonly start: number; readonly end: number }[];
 }
 
-/** Split `text` into alternating plain/highlighted pieces, for rendering. */
 export function splitHighlights<T extends HighlightedText>(
   snippet: T,
 ): readonly { readonly text: string; readonly hit: boolean }[] {

@@ -1,20 +1,3 @@
-/**
- * `kernel.capabilities.folder` — one user-chosen directory on this device (kernel 2.2.0).
- *
- * Three implementations behind one interface:
- *
- * - **Shell** (`window.shell.folder`, `app/BRIDGE.md` §4.5): a real path the shell
- *   remembers and watches. Changes arrive as the `ddd-folder-changed` window event.
- * - **Browser** (File System Access API, Chromium only): a directory handle kept in
- *   IndexedDB. The grant does not survive a reload on its own, so the state comes back as
- *   `needs-permission` until a click calls `reconnect()`. Nothing reports outside edits
- *   unless the experimental `FileSystemObserver` exists; callers rescan instead.
- * - **Unavailable**: everything else, including Firefox, Safari and WebKitGTK.
- *
- * Paths are checked here as well as in the shell, so a plugin bug cannot reach outside
- * the directory in a browser either.
- */
-
 import {
   CapabilityUnavailableError,
   type CapabilitySupport,
@@ -24,15 +7,10 @@ import {
 } from "@kernel";
 import { FOLDER_CHANGED_EVENT, type ShellFolder } from "./shell-bridge.js";
 
-/** An error carrying one of the bridge's codes (`app/BRIDGE.md` §2), whatever raised it. */
 export function folderError(code: string, message: string): Error & { code: string } {
   return Object.assign(new Error(message), { code });
 }
 
-/**
- * The segments of a relative path, or a thrown `invalid` error. Empty segments from a
- * doubled or trailing slash are dropped; `.`, `..` and absolute paths are refused.
- */
 export function pathSegments(path: string): string[] {
   if (typeof path !== "string" || path.length === 0) throw folderError("invalid", "empty path");
   if (path.startsWith("/") || path.includes("\\") || /^[a-zA-Z]:/.test(path) || path.includes("\0")) {
@@ -59,7 +37,6 @@ function subscribeWindow(listener: (paths: readonly string[]) => void): () => vo
   return () => window.removeEventListener(FOLDER_CHANGED_EVENT, handler);
 }
 
-/** Base64 without `Buffer`: the bridge is JSON-only. */
 export function toBase64(bytes: Uint8Array): string {
   let binary = "";
   for (let i = 0; i < bytes.length; i += 0x8000) {
@@ -75,7 +52,6 @@ export function fromBase64(data: string): Uint8Array {
   return bytes;
 }
 
-/** The capability where nothing can serve it. Every call rejects; `status` says `none`. */
 export class UnavailableFolder implements FolderCapability {
   readonly support: CapabilitySupport = "unavailable";
   readonly watches = false;
@@ -118,7 +94,6 @@ export class UnavailableFolder implements FolderCapability {
   }
 }
 
-/** The shell's folder. Every method is required: a half-implemented folder is none. */
 export class ShellFolderCapability implements FolderCapability {
   readonly support: CapabilitySupport = "native";
   readonly watches = true;
@@ -145,7 +120,6 @@ export class ShellFolderCapability implements FolderCapability {
     return { state: "ready", label: chosen.label };
   }
 
-  /** A shell never loses its grant; this is `status`. */
   reconnect(): Promise<FolderStatus> {
     return this.status();
   }
@@ -187,11 +161,6 @@ export class ShellFolderCapability implements FolderCapability {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Browser: the File System Access API
-// ---------------------------------------------------------------------------
-
-/** The slice of the File System Access API used here; lib.dom does not type all of it. */
 interface DirectoryHandle {
   readonly kind: "directory";
   readonly name: string;
@@ -237,11 +206,9 @@ export class BrowserFolder implements FolderCapability {
   #root: DirectoryHandle | undefined;
   #loaded = false;
 
-  /** `undefined` when this browser has no directory picker. */
   static create(): BrowserFolder | undefined {
     if (typeof window === "undefined" || typeof indexedDB === "undefined") return undefined;
     if (typeof (window as PickerWindow).showDirectoryPicker !== "function") return undefined;
-    // A cookie session is required too: the API does not exist in insecure contexts.
     if (!window.isSecureContext) return undefined;
     return new BrowserFolder();
   }
@@ -313,7 +280,6 @@ export class BrowserFolder implements FolderCapability {
           entries.push({ path, kind: "dir", size: 0, mtimeMs: 0 });
           await walk(handle, path);
         } else {
-          // A `.crswap` is Chromium's in-flight write; it is not the user's file.
           if (name.endsWith(".crswap")) continue;
           const file = await handle.getFile();
           entries.push({ path, kind: "file", size: file.size, mtimeMs: file.lastModified });
@@ -342,7 +308,6 @@ export class BrowserFolder implements FolderCapability {
   async write(path: string, bytes: Uint8Array): Promise<{ mtimeMs: number }> {
     const [dir, name] = await this.#parent(path, true);
     const handle = await dir.getFileHandle(name, { create: true });
-    // Chromium writes to a swap file and renames on `close()`: atomic from the outside.
     const writable = await handle.createWritable();
     await writable.write(bytes.slice().buffer as ArrayBuffer);
     await writable.close();

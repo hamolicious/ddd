@@ -1,21 +1,3 @@
-//! Full-text search: an inverted index over title, content and frontmatter values.
-//!
-//! The same index on both sides — natively on the server, in the browser's search
-//! worker as wasm — so a search ranks identically online and offline. It replaced
-//! MiniSearch (client) and Mongo `$text` (server), and keeps MiniSearch's behaviour
-//! where people would notice:
-//!
-//! - **Tokens** are runs of letters and digits, lowercased. Everything else separates.
-//! - **Fields** are boosted title ×3, frontmatter ×2, content ×1. Frontmatter is its
-//!   scalar values only, never its keys, so `status` does not match every document
-//!   that has a status.
-//! - **Each query term matches** exactly, as a prefix of a longer term (×0.375), or
-//!   within an edit distance of a fifth of its length (×0.45), the weights scaled down
-//!   by how far the match is.
-//! - **Scoring** is BM25+ (k 1.2, b 0.7, δ 0.5), summed over the query's terms, then
-//!   multiplied by how many of them matched, so a document holding every word beats
-//!   one that repeats a single word.
-
 use std::collections::{BTreeMap, HashMap};
 use std::ops::Bound;
 
@@ -24,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use super::doc::Doc;
 use crate::value::Value;
 
-/// The indexed fields, in posting order, and their boosts.
 const BOOSTS: [f64; FIELD_COUNT] = [3.0, 1.0, 2.0];
 const FIELD_COUNT: usize = 3;
 const TITLE: usize = 0;
@@ -36,56 +17,40 @@ const BM25_B: f64 = 0.7;
 const BM25_D: f64 = 0.5;
 const PREFIX_WEIGHT: f64 = 0.375;
 const FUZZY_WEIGHT: f64 = 0.45;
-/// A query term's edit budget, as a share of its length.
 const FUZZY_SHARE: f64 = 0.2;
 const MAX_FUZZY_DISTANCE: usize = 6;
-/// Longer tokens are cut: they are hashes and base64, not words anyone types.
 const MAX_TOKEN_CHARS: usize = 64;
-/// Query terms past this are ignored.
 const MAX_QUERY_TERMS: usize = 32;
-/// How deep frontmatter values are flattened.
 const MAX_FM_DEPTH: usize = 6;
 
-/// Bump when tokenizing or the stored shape changes: a persisted index with another
-/// version is rebuilt rather than loaded.
 pub const TEXT_INDEX_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TextIndex {
-    /// Slot → document id; `None` for a freed slot.
     slots: Vec<Option<String>>,
     free: Vec<u32>,
     #[serde(skip)]
     by_id: HashMap<String, u32>,
-    /// Per slot: each field's length in tokens.
     lengths: Vec<[u32; FIELD_COUNT]>,
-    /// Per slot: its distinct terms, to take its postings out again.
     doc_terms: Vec<Vec<String>>,
-    /// Sum of every live slot's field lengths.
     totals: [u64; FIELD_COUNT],
     live: u32,
-    /// Sorted, so a prefix is a range.
     terms: BTreeMap<String, Postings>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct Postings {
-    /// Slot → occurrences per field.
     docs: HashMap<u32, [u32; FIELD_COUNT]>,
-    /// Documents holding the term, per field.
     df: [u32; FIELD_COUNT],
 }
 
-/// One document a search found.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TextHit {
     pub id: String,
     pub score: f64,
-    /// The indexed terms it matched on, for highlighting.
     pub terms: Vec<String>,
 }
 
-/// The tokens of `text`, lowercased.
 pub fn tokenize(text: &str) -> impl Iterator<Item = String> + '_ {
     text.split(|c: char| !c.is_alphanumeric())
         .filter(|token| !token.is_empty())
@@ -98,7 +63,6 @@ pub fn tokenize(text: &str) -> impl Iterator<Item = String> + '_ {
         })
 }
 
-/// Frontmatter's scalar values, keys in order, as one string.
 fn flatten_fm(value: &Value, out: &mut Vec<String>, depth: usize) {
     if depth > MAX_FM_DEPTH {
         return;
@@ -123,7 +87,6 @@ impl TextIndex {
         TextIndex::default()
     }
 
-    /// Documents indexed.
     pub fn len(&self) -> usize {
         self.live as usize
     }
@@ -132,7 +95,6 @@ impl TextIndex {
         self.live == 0
     }
 
-    /// Add a document, or replace what is indexed for it.
     pub fn upsert(&mut self, doc: &Doc) {
         self.remove(&doc.id);
 
@@ -188,7 +150,6 @@ impl TextIndex {
         self.doc_terms[slot as usize] = owned;
     }
 
-    /// Take a document out; nothing happens for one that is not indexed.
     pub fn remove(&mut self, id: &str) {
         let Some(slot) = self.by_id.remove(id) else {
             return;
@@ -216,7 +177,6 @@ impl TextIndex {
         self.live -= 1;
     }
 
-    /// Rebuild what serialization leaves out. Call after deserializing.
     pub fn reindex(&mut self) {
         self.by_id = self
             .slots
@@ -226,7 +186,6 @@ impl TextIndex {
             .collect();
     }
 
-    /// Every document matching any of the query's terms, best first (ties by id).
     pub fn search(&self, query: &str) -> Vec<TextHit> {
         let mut query_terms: Vec<String> = Vec::new();
         for term in tokenize(query) {
@@ -302,12 +261,10 @@ impl TextIndex {
         hits
     }
 
-    /// The indexed terms a query term stands for, each with its weight.
     fn expand<'a>(&'a self, query_term: &str) -> Vec<(&'a String, f64)> {
         let mut out: Vec<(&String, f64)> = Vec::new();
         let length = query_term.chars().count();
 
-        // Exact, and every longer term it begins.
         for (term, _) in self
             .terms
             .range::<str, _>((Bound::Included(query_term), Bound::Unbounded))
@@ -358,7 +315,6 @@ impl TextIndex {
     }
 }
 
-/// Edit distance between `a` and `b` if it is at most `budget`.
 fn bounded_levenshtein(a: &[char], b: &[char], budget: usize) -> Option<usize> {
     let mut previous: Vec<usize> = (0..=b.len()).collect();
     let mut current = vec![0; b.len() + 1];

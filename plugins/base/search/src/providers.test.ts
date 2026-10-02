@@ -1,9 +1,3 @@
-/**
- * The search host runs the providers other plugins registered, in registry order — by
- * each one's `order`, lowest first — and reports each one's position as the merge
- * tie-breaker. The workspace's own search is the query plan's, not a provider.
- */
-
 import { describe, expect, it } from "vitest";
 
 import { createRegistry, type Kernel } from "@kernel";
@@ -43,7 +37,6 @@ describe("searchEngine", () => {
     const results = await engine.run("milk", {});
 
     expect(results.map((result) => result.providerId)).toEqual(["wiki", "semantic", "none"]);
-    // The position, 0 first, is what `merge.ts` breaks ties on.
     expect(results.map((result) => result.order)).toEqual([0, 1, 2]);
   });
 

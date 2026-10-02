@@ -1,84 +1,37 @@
-//! Load resolution (`@kernel` 3.0): which served plugins the client loads, in which order,
-//! and why the rest do not.
-//!
-//! A plugin names the plugins it uses in `dependencies` (id → semver range) and
-//! `optionalDependencies`. From that and the enabled set this module computes, once, on the
-//! server:
-//!
-//! - `normal`: the ids a normal boot loads, dependencies first;
-//! - `safe`: the same for `?safe=1`, over the base distribution only;
-//! - `skipped`: every wanted plugin of the normal boot that cannot load, with the reason.
-//!
-//! The rules:
-//!
-//! 1. **Candidates** are the plugins an admin wants loaded ([`InstalledPlugin::wants_load`]).
-//!    A disabled plugin is simply absent; it is not a problem.
-//! 2. **Effective ids.** A plugin answers to its own id and, with `provides: "x@1.2.0"`, to
-//!    `x` at version 1.2.0. Only one candidate may hold an effective id: the plugin whose
-//!    own id it is wins, else the lowest id; the others are skipped as `conflict`.
-//! 3. **Required dependencies.** Each must be held by a candidate (`missing` otherwise)
-//!    whose version — the provided one, for a stand-in — satisfies the range (`version`).
-//! 4. **Cascade.** A plugin whose required dependency is skipped is skipped too
-//!    (`dependency-skipped`).
-//! 5. **Order.** Kahn's algorithm, a layer at a time, each layer sorted by id, so the order
-//!    is deterministic. Optional dependencies that are present order before their
-//!    dependents, but never skip one: a cycle through an optional edge is broken by
-//!    dropping that edge. A cycle of required edges skips its members (`cycle`), and
-//!    whatever depends on them (`dependency-skipped`).
-//!
-//! Pure: the registry's plugins in, a [`LoadPlan`] out. Versions are checked with
-//! [`crate::plugins::satisfies`], the server's one semver implementation.
-
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
 
 use crate::plugins::{InstalledPlugin, satisfies};
 
-/// Why a wanted plugin does not load.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum SkipReason {
-    /// A required dependency is not installed, or not enabled.
     Missing,
-    /// A required dependency is there, at a version outside the range.
     Version,
-    /// In a cycle of required dependencies.
     Cycle,
-    /// A required dependency is itself skipped.
     DependencySkipped,
-    /// Another enabled plugin holds the same id (`provides`).
     Conflict,
 }
 
-/// One plugin that does not load, for `/api/plugins`'s `load.skipped`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Skipped {
     pub id: String,
     pub reason: SkipReason,
-    /// One sentence for the notice strip and the admin screen.
     pub detail: String,
 }
 
-/// `load` in `GET /api/plugins`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct LoadPlan {
-    /// Normal boot: ids in load order.
     pub normal: Vec<String>,
-    /// `?safe=1`: base plugins only, in load order.
     pub safe: Vec<String>,
-    /// Wanted by the normal boot, not loaded. Sorted by id.
     pub skipped: Vec<Skipped>,
 }
 
-/// The effective ids a plugin answers to, with the version each is checked at: its own,
-/// and the one it `provides`.
 fn effective(plugin: &InstalledPlugin) -> Vec<(String, String)> {
     effective_ids(&plugin.manifest)
 }
 
-/// The ids a manifest answers to, with the version each is checked at: its own id and
-/// version, and — for a stand-in — the id and version it `provides`.
 pub fn effective_ids(manifest: &crate::plugins::PluginManifest) -> Vec<(String, String)> {
     let mut out = vec![(manifest.id.clone(), manifest.version.clone())];
     if let Some((id, version)) = manifest
@@ -92,7 +45,6 @@ pub fn effective_ids(manifest: &crate::plugins::PluginManifest) -> Vec<(String, 
     out
 }
 
-/// The load order and skip list for every plugin in `plugins`.
 pub fn resolve_load(plugins: &[InstalledPlugin]) -> LoadPlan {
     let normal = resolve_set(plugins, false);
     let safe = resolve_set(plugins, true);
@@ -120,17 +72,14 @@ fn resolve_set(plugins: &[InstalledPlugin], base_only: bool) -> SetResolution {
         .collect();
     let mut skipped: BTreeMap<String, (SkipReason, String)> = BTreeMap::new();
 
-    // --- effective ids and conflicts ------------------------------------------------
     let mut claims: BTreeMap<String, Vec<(&str, String)>> = BTreeMap::new();
     for (id, plugin) in &candidates {
         for (effective_id, version) in effective(plugin) {
             claims.entry(effective_id).or_default().push((id, version));
         }
     }
-    // effective id → (holder, version it answers at)
     let mut holders: BTreeMap<String, (&str, String)> = BTreeMap::new();
     for (effective_id, mut claimants) in claims {
-        // The owner of the id first, then by id: `claimants` is already in id order.
         claimants.sort_by_key(|(holder, _)| (*holder != effective_id, *holder));
         let mut claimants = claimants.into_iter();
         let (winner, version) = claimants.next().expect("a claim has a claimant");
@@ -144,12 +93,8 @@ fn resolve_set(plugins: &[InstalledPlugin], base_only: bool) -> SetResolution {
         }
         holders.insert(effective_id, (winner, version));
     }
-    // A plugin that lost its own id or its `provides` is out entirely, so a holder that
-    // was skipped for a conflict under its *other* id holds nothing.
     holders.retain(|_, (holder, _)| !skipped.contains_key(*holder));
 
-    // --- required dependencies -------------------------------------------------------
-    // (dependent, provider) edges, required and optional, over the plugins still in.
     let mut required: Vec<(&str, &str)> = Vec::new();
     let mut optional: Vec<(&str, &str)> = Vec::new();
     for (id, plugin) in &candidates {
@@ -198,7 +143,6 @@ fn resolve_set(plugins: &[InstalledPlugin], base_only: bool) -> SetResolution {
             }
         }
         for (dependency, range) in &manifest.optional_dependencies {
-            // Present and in range: order before. Anything else: loads without it.
             if let Some((holder, version)) = holders.get(dependency)
                 && matches!(satisfies(version, range), Ok(true))
             {
@@ -207,7 +151,6 @@ fn resolve_set(plugins: &[InstalledPlugin], base_only: bool) -> SetResolution {
         }
     }
 
-    // --- cascade -------------------------------------------------------------------
     loop {
         let mut grew = false;
         for (dependent, provider) in &required {
@@ -227,7 +170,6 @@ fn resolve_set(plugins: &[InstalledPlugin], base_only: bool) -> SetResolution {
         }
     }
 
-    // --- order ---------------------------------------------------------------------
     let alive: BTreeSet<&str> = candidates
         .keys()
         .copied()
@@ -246,8 +188,6 @@ fn resolve_set(plugins: &[InstalledPlugin], base_only: bool) -> SetResolution {
     let optional_live = live(&optional);
     let alive: BTreeSet<String> = alive.into_iter().map(str::to_string).collect();
 
-    // Cycles of required edges first: their members, and everything downstream of them,
-    // never load, whatever the optional edges say.
     let (_, stuck) = kahn(&alive, &required_live, &[]);
     if !stuck.is_empty() {
         let cyclic = on_cycles(&stuck, &required_live);
@@ -280,9 +220,6 @@ fn resolve_set(plugins: &[InstalledPlugin], base_only: bool) -> SetResolution {
     }
 }
 
-/// Kahn's algorithm a sorted layer at a time. `soft` edges order when they can and are
-/// ignored when honouring them would stall (a cycle through an optional dependency).
-/// Returns the order and whatever could not be placed.
 fn kahn(
     nodes: &BTreeSet<String>,
     hard: &[(String, String)],
@@ -302,8 +239,6 @@ fn kahn(
             .cloned()
             .collect();
         if ready.is_empty() {
-            // Only soft edges can be holding this up once hard cycles are gone: let the
-            // lowest id that no hard edge holds go first, and carry on.
             if let Some(first) = remaining
                 .iter()
                 .find(|id| !waits_on(id, hard, &remaining))
@@ -322,7 +257,6 @@ fn kahn(
     (order, remaining)
 }
 
-/// The members of `stuck` that are on a cycle of `edges` (not merely downstream of one).
 fn on_cycles(stuck: &BTreeSet<String>, edges: &[(String, String)]) -> BTreeSet<String> {
     let next = |from: &str| -> Vec<&str> {
         edges
@@ -352,10 +286,6 @@ fn on_cycles(stuck: &BTreeSet<String>, edges: &[(String, String)]) -> BTreeSet<S
         .collect()
 }
 
-/// `plugin:<id>` import-map entries for everything either boot may load: each plugin's
-/// frontend module, versioned with its assets fingerprint, and for a stand-in also
-/// `plugin:<provided id>` → the same URL. The one way a plugin module is loaded, so every
-/// importer shares one instance of it.
 pub fn plugin_imports(plugins: &[InstalledPlugin], plan: &LoadPlan) -> BTreeMap<String, String> {
     let wanted: BTreeSet<&str> = plan
         .normal
@@ -374,7 +304,6 @@ pub fn plugin_imports(plugins: &[InstalledPlugin], plan: &LoadPlan) -> BTreeMap<
             continue;
         };
         for (effective_id, _) in effective(plugin) {
-            // The alias only for a stand-in that actually won its id in a normal boot.
             if effective_id != id && !normal.contains(id) {
                 continue;
             }
@@ -384,7 +313,6 @@ pub fn plugin_imports(plugins: &[InstalledPlugin], plan: &LoadPlan) -> BTreeMap<
     imports
 }
 
-/// `/plugins/<id>/<version>/frontend/index.mjs?v=<assets>`.
 pub fn module_url(plugin: &InstalledPlugin) -> Option<String> {
     let frontend = plugin.manifest.frontend.as_ref()?;
     let mut url = format!("{}{}", plugin.base_url, frontend.module);
@@ -395,10 +323,6 @@ pub fn module_url(plugin: &InstalledPlugin) -> Option<String> {
     Some(url)
 }
 
-/// The version clients compare to know they run the current plugin set: a short hash of
-/// every served plugin's `id@version#assets` and whether an admin wants it loaded, plus
-/// both load orders. A circuit-breaker trip changes none of these
-/// ([`InstalledPlugin::wants_load`]), so it never makes a client reload.
 pub fn fingerprint(plugins: &[InstalledPlugin], plan: &LoadPlan) -> String {
     use sha2::{Digest, Sha256};
     let mut hash = Sha256::new();
@@ -607,13 +531,10 @@ mod tests {
     #[test]
     fn optional_dependencies_order_but_never_skip() {
         let plan = resolve(vec![
-            // Present: orders before.
             p("a").opt("z", "*"),
             p("z"),
-            // Absent, or out of range: loads anyway.
             p("b").opt("nope", "*"),
             p("c").opt("z", "^9.0"),
-            // A cycle through an optional edge is broken, not skipped.
             p("x").dep("y", "*"),
             p("y").opt("x", "*"),
         ]);
@@ -662,7 +583,6 @@ mod tests {
             p("alt-editor").provides("editor@2.0.0").extra(),
             p("emoji").dep("editor", "^2.0"),
         ]);
-        // The owner of the id wins; the stand-in is the one skipped.
         assert_eq!(plan.normal, vec!["editor", "emoji"]);
         assert_eq!(reasons(&plan), vec![("alt-editor", SkipReason::Conflict)]);
     }
@@ -678,7 +598,6 @@ mod tests {
         ]);
         assert_eq!(plan.normal, vec!["acme", "router", "graph", "needs-acme"]);
         assert_eq!(plan.safe, vec!["router", "graph"]);
-        // `skipped` describes the normal boot, where everything loads.
         assert!(plan.skipped.is_empty());
     }
 

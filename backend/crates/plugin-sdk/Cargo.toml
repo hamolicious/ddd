@@ -6,22 +6,14 @@ edition = "2024"
 license = "MIT OR Apache-2.0"
 rust-version = "1.90"
 
-# Its own workspace on purpose. This crate is **wasm32-only** — it links Extism's
-# host imports — so it cannot be a member of `backend/Cargo.toml`, where
-# `cargo test --workspace --all-targets` builds host-target binaries and would fail
-# to link it. `mise run plugin-check` builds it for wasm32, which is the only
-# target it means anything on. See `backend/CONTRACTS.md`, area wasm-host.
 [workspace]
 
 [lib]
-# An rlib: plugins link it, it is not a plugin itself.
 crate-type = ["rlib"]
 
 [dependencies]
 extism-pdk = { version = "1.4.1", default-features = false }
 ddd-plugin-abi = { path = "../plugin-abi" }
-# The query builder (`documents::Query`): the same one the server and the browser use,
-# without Mongo (`default-features = false`).
 ddd-core = { path = "../core", default-features = false }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"

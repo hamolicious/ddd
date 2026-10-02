@@ -1,12 +1,3 @@
-/**
- * The graph, as a React component: the whole workspace in the main pane, or — given a
- * `center` — the open note's neighbourhood in the altbar.
- *
- * React owns the chrome (controls, counts, the list for screen readers); the canvas and
- * the simulation are plain objects made once per mount and fed from effects, so a
- * re-render never restarts the layout.
- */
-
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactElement } from "react";
 
@@ -21,15 +12,11 @@ import { displayOf, filterOf, forcesOf, type SettingsStore } from "./settings.js
 import { Simulation, type SimNode } from "./simulation.js";
 
 export interface GraphViewProps {
-  /** `plugin:indexer`: `ready`, `version`, `documents`, `connections` and `subscribe`. */
   readonly indexer: Pick<WorkspaceIndex, "ready" | "version" | "documents" | "connections" | "subscribe">;
   readonly store: SettingsStore;
   readonly open: (id: DocumentId, newTab: boolean) => void;
-  /** The local graph: this note and what is within `localDepth` links of it. */
   readonly center?: DocumentId;
-  /** Local graph only: go to the full graph. */
   readonly openGlobal?: () => void;
-  /** Full graph only: show it all, then zoom in to this note (and ring it). */
   readonly focus?: DocumentId;
 }
 
@@ -75,10 +62,8 @@ export function GraphView({ indexer, store, open, center, openGlobal, focus }: G
 
   const graph = useMemo(() => {
     if (!ready) return EMPTY;
-    // The local graph ignores "hide orphans": the note it is about is shown regardless.
     const whole = buildGraph(indexer, center ? { ...filter, showOrphans: true } : filter);
     return center ? neighbourhood(whole, center, Math.max(1, Math.round(settings.localDepth)), indexer) : whole;
-    // `version` is the index changing under the same `indexer`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, indexer, version, filter, center, settings.localDepth]);
 
@@ -115,7 +100,6 @@ export function GraphView({ indexer, store, open, center, openGlobal, focus }: G
     engine.current?.canvas.setAnchor(center);
   }, [center, focus]);
 
-  // Once the graph has its nodes, so the note is there to be found.
   useEffect(() => {
     if (focus && ready) engine.current?.canvas.focusOn(focus);
   }, [focus, ready]);
@@ -164,7 +148,6 @@ export function GraphView({ indexer, store, open, center, openGlobal, focus }: G
         </p>
       )}
 
-      {/* What the canvas shows, for a screen reader: every note, and a way to open it. */}
       <ul className="graph:sr-only">
         {graph.nodes
           .filter((node) => !node.missing)

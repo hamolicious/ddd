@@ -1,14 +1,3 @@
-/**
- * The offline-boot fallback: the two facts a reload with no network needs, and the one
- * distinction the boot sequence has to get right.
- *
- * This is unit-tested rather than driven end to end because the e2e suite blocks service
- * workers (`playwright.app.config.ts` — their immutable plugin cache makes rebuilds lie),
- * and without one there is no offline navigation to reload into. What *is* testable here is
- * the whole of the logic that was missing: "the server said no" and "there is no server"
- * must not be the same answer, and what the last good boot remembered has to survive.
- */
-
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { InstalledPlugin, SessionUser } from "@kernel";
@@ -38,7 +27,6 @@ const PLUGIN = {
   base: true,
 } as unknown as InstalledPlugin;
 
-/** The `Storage` surface `cache.ts` uses, in memory (the suite runs on `node`). */
 function installStorage(): void {
   const entries = new Map<string, string>();
   (globalThis as { localStorage?: unknown }).localStorage = {
@@ -74,15 +62,12 @@ describe("what the boot sequence remembers", () => {
     const load = { normal: ["shell-ui"], safe: ["shell-ui"], skipped: [{ id: "graph", reason: "needs indexer" }] };
     rememberPlugins([PLUGIN], load);
     expect(cachedLoad()).toEqual(load);
-    // An entry an older app wrote (version 1, with wiring) is ignored rather than trusted.
     localStorage.setItem("ddd.boot.plugins", JSON.stringify({ v: 1, plugins: [PLUGIN], wiring: { version: 3 } }));
     expect(cachedPlugins()).toBeUndefined();
     expect(cachedLoad()).toBeUndefined();
   });
 
   it("forgets the session without forgetting the plugin list", () => {
-    // A 401 means this session is over; it says nothing about what is installed, and the
-    // next offline boot still needs a list to activate.
     rememberSession(USER);
     rememberPlugins([PLUGIN]);
     forgetSession();
@@ -117,9 +102,6 @@ describe("what the boot sequence remembers", () => {
 
 describe("a server that answered vs no server at all", () => {
   it("maps a transport failure to OfflineError, not to a boot failure", async () => {
-    // `fetch` rejects only when the request never got an answer — no network, or the
-    // service worker's `NetworkOnly` route with nothing to reach. The boot sequence keys
-    // its entire offline path off this distinction.
     vi.stubGlobal("fetch", () => Promise.reject(new TypeError("Failed to fetch")));
     await expect(me()).rejects.toBeInstanceOf(OfflineError);
     await expect(installedPlugins()).rejects.toBeInstanceOf(OfflineError);

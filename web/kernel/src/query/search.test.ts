@@ -1,9 +1,3 @@
-/**
- * The local query engine's index: what it indexes, what it persists, and the worker
- * plumbing in front of it (SPEC §4.2). Ranking and matching themselves are the
- * shared core's, tested in Rust (`backend/crates/core/src/query/text.rs`).
- */
-
 import { beforeAll, describe, expect, it } from "vitest";
 
 import type { CoreMap, ProjectionRow } from "../protocol.js";
@@ -39,7 +33,6 @@ const row = (
   purged: false,
 });
 
-/** The ids a text search finds, best first. */
 async function find(index: EngineIndex, text: string, plan: QueryPlan = {}): Promise<readonly string[]> {
   return (await index.run({ text, sort: ["relevance"], ...plan })).ids;
 }
@@ -67,7 +60,6 @@ describe.skipIf(!available)("WasmEngineIndex", () => {
     const hits = await find(index, "mango");
     expect([...hits].sort()).toEqual(["content-hit", "fm-hit", "title-hit"]);
     expect(hits[0]).toBe("title-hit");
-    // Keys are not text: `status` matches no document.
     expect(await find(index, "status")).toEqual([]);
   });
 
@@ -134,7 +126,6 @@ describe.skipIf(!available)("WasmEngineIndex", () => {
 
     const pass = index.beginRebuild();
     pass.add([row("new", { content: "fresh" })]);
-    // Not visible yet: the old engine still answers.
     expect(await find(index, "obsolete")).toEqual(["old"]);
     pass.commit();
 
@@ -147,11 +138,6 @@ describe.skipIf(!available)("WasmEngineIndex", () => {
   });
 });
 
-/**
- * A loopback `Worker`: the same request/response envelopes the real worker
- * exchanges, dispatched to an in-process index. It proves the client half —
- * request/reply matching and the chunked rebuild — without a browser.
- */
 class LoopbackWorker implements Pick<Worker, "postMessage" | "addEventListener" | "terminate"> {
   readonly index: WasmEngineIndex;
   terminated = false;
@@ -247,7 +233,6 @@ describe.skipIf(!available)("WorkerSearchIndex", () => {
         yield* rows;
       })(),
     );
-    // 250-row chunks: three messages, not one.
     expect(worker.received - before).toBe(3);
     expect((await index.stats()).documents).toBe(600);
     expect((await find(index, "599"))[0]).toBe("d599");

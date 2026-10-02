@@ -1,12 +1,3 @@
-//! Conformance-corpus support: corpus loading, and a miniature Mongo-query
-//! interpreter used to prove `filter::mongo::compile` and
-//! `filter::evaluator::evaluate` agree on every corpus row (SPEC §4.2).
-//!
-//! The interpreter deliberately reproduces the Mongo behaviour the compiler has
-//! to defend against — implicit array traversal on comparison operators,
-//! `$eq: null` matching absent fields, type bracketing — so a missing guard in
-//! the compiler shows up as a parity failure rather than passing silently.
-
 #![allow(dead_code)]
 
 use std::cmp::Ordering;
@@ -14,7 +5,6 @@ use std::path::PathBuf;
 
 use bson::{Bson, Document as BsonDocument};
 
-/// Load one corpus file as JSON.
 pub fn corpus(name: &str) -> serde_json::Value {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("corpus");
@@ -25,11 +15,6 @@ pub fn corpus(name: &str) -> serde_json::Value {
         .unwrap_or_else(|e| panic!("corpus {} is not valid JSON: {e}", path.display()))
 }
 
-// ---------------------------------------------------------------------------
-// Mongo query interpreter
-// ---------------------------------------------------------------------------
-
-/// `true` when `doc` matches `query` under Mongo's find semantics.
 pub fn mongo_matches(doc: &BsonDocument, query: &BsonDocument) -> bool {
     query.iter().all(|(key, value)| match key.as_str() {
         "$and" => clauses(value).iter().all(|c| mongo_matches(doc, c)),
@@ -68,7 +53,6 @@ fn is_operator_doc(doc: &BsonDocument) -> bool {
     !doc.is_empty() && doc.keys().all(|key| key.starts_with('$'))
 }
 
-/// Evaluate an operator expression document against one (possibly absent) value.
 fn operators(found: Option<&Bson>, ops: &BsonDocument) -> bool {
     let mut regex: Option<(String, String)> = None;
     let mut result = true;
@@ -133,8 +117,6 @@ fn operators(found: Option<&Bson>, ops: &BsonDocument) -> bool {
     result
 }
 
-/// Mongo's implicit array traversal: a predicate matches if the value matches or
-/// any element of an array value matches.
 fn traverse(found: Option<&Bson>, predicate: &dyn Fn(&Bson) -> bool) -> bool {
     match found {
         None => false,
@@ -150,8 +132,6 @@ fn traverse(found: Option<&Bson>, predicate: &dyn Fn(&Bson) -> bool) -> bool {
     }
 }
 
-/// `$eq` semantics, including the special case that `$eq: null` also matches an
-/// absent field.
 fn eq_with_traversal(found: Option<&Bson>, expected: &Bson) -> bool {
     if matches!(expected, Bson::Null) && found.is_none() {
         return true;
@@ -162,7 +142,6 @@ fn eq_with_traversal(found: Option<&Bson>, expected: &Bson) -> bool {
 }
 
 fn type_matches(value: &Bson, wanted: &str) -> bool {
-    // `$type: "array"` is the one type that is never matched element-wise.
     if wanted == "array" {
         return matches!(value, Bson::Array(_));
     }
@@ -189,8 +168,6 @@ fn direct_type(value: &Bson, wanted: &str) -> bool {
     }
 }
 
-/// Mongo comparison with type bracketing: `None` when the two values are in
-/// different brackets, so ordering operators do not match across types.
 fn compare_bson(a: &Bson, b: &Bson) -> Option<Ordering> {
     fn number(value: &Bson) -> Option<f64> {
         match value {
@@ -224,8 +201,6 @@ fn compare_bson(a: &Bson, b: &Bson) -> Option<Ordering> {
     }
 }
 
-/// Resolve a dotted path. Intermediate segments traverse documents only, which
-/// is all the compiler's field paths need.
 fn resolve(doc: &BsonDocument, path: &str) -> Option<Bson> {
     let mut current = Bson::Document(doc.clone());
     for segment in path.split('.') {
@@ -237,10 +212,6 @@ fn resolve(doc: &BsonDocument, path: &str) -> Option<Bson> {
     Some(current)
 }
 
-// ---------------------------------------------------------------------------
-// Miniature regex engine
-// ---------------------------------------------------------------------------
-
 #[derive(Debug, Clone)]
 enum Node {
     Literal(char),
@@ -248,9 +219,6 @@ enum Node {
     Group(Vec<Node>, bool),
 }
 
-/// Match the subset of regex syntax the compiler emits: literals with `\`
-/// escapes, `[a-z0-9]` classes, `{n}` exact repetition, one optional group
-/// level, and the `^`/`$` anchors.
 pub fn regex_match(pattern: &str, haystack: &str, case_insensitive: bool) -> bool {
     let chars: Vec<char> = pattern.chars().collect();
     let mut index = 0usize;
@@ -341,7 +309,6 @@ fn parse_nodes(chars: &[char], index: &mut usize, nested: bool) -> (Vec<Node>, b
                 Node::Literal(other)
             }
         };
-        // `{n}` expands the atom in place; everything else appears once.
         let count = take_repetition(chars, index).unwrap_or(1);
         for _ in 0..count {
             nodes.push(atom.clone());

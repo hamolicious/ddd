@@ -1,19 +1,3 @@
-/**
- * What one document contributes to the indexes, read from its projection row.
- *
- * This is the expensive part — a pass over the text — so it runs once per changed
- * document and its result is kept (`workspace-index.ts`). Everything else is sums over
- * these.
- *
- * **Scanned, not parsed.** A remark parse per document would agree with read mode on
- * every edge case and cost a cold start of seconds on a large workspace; a line scan
- * agrees on everything a person writes on purpose. What it deliberately handles: fenced
- * code blocks and inline code are skipped (a `doc://` link shown as an example is not a
- * connection), the frontmatter and `%%%` sections are not body (`_shared/regions.ts`,
- * the same fences `markdown` uses). What it does not: an indented (four-space) code block
- * is scanned like prose, since four spaces is also how a nested list item is written.
- */
-
 import type { CoreMap, CoreValue, DocumentId, DocumentRow } from "@kernel";
 import type { ConnectionKind } from "./api.js";
 
@@ -32,13 +16,10 @@ export interface Extracted {
   readonly title: string;
   readonly deleted: boolean;
   readonly machine: boolean;
-  /** The ids its `%%% folders` section lists as children (the folder tree's own format). */
   readonly children: readonly DocumentId[];
-  /** Every frontmatter key, nested ones dotted (`flattenFm`); empty in Trash. */
   readonly fields: ReadonlyArray<readonly [string, CoreValue]>;
   readonly fmParseError: boolean;
   readonly updatedAt: string;
-  /** Deduplicated by (id, kind, key), in order of first appearance; no self-references. */
   readonly references: readonly Reference[];
   readonly attachments: readonly string[];
   readonly words: number;
@@ -46,11 +27,6 @@ export interface Extracted {
   readonly tasks: { readonly open: number; readonly done: number; readonly other: number };
 }
 
-/**
- * What decides whether a row needs extracting again. `updated_at` is in it because a
- * local edit keeps the row's `materialized_version` (the kernel lays the unsent text
- * over the synced row), and the length because it is free.
- */
 export function fingerprint(row: DocumentRow): string {
   return `${row.materialized_version}\u0000${row.updated_at}\u0000${row.deleted}\u0000${row.content?.length ?? -1}`;
 }
@@ -66,7 +42,6 @@ export function extract(row: DocumentRow): Extracted {
     fmParseError: row.fm_parse_error,
     updatedAt: row.updated_at,
   };
-  // Trash has no connections and no content stats: only the count needs the row.
   if (row.deleted) {
     return { ...base, fields: [], references: [], attachments: [], words: 0, characters: 0, tasks: { open: 0, done: 0, other: 0 } };
   }
@@ -79,34 +54,14 @@ export function extract(row: DocumentRow): Extracted {
   return { ...base, ...scanned, fields, references: references.list() };
 }
 
-// ---------------------------------------------------------------------------------------
-// The body
-
-/** An opening or closing code fence: three or more backticks or tildes, up to three spaces in. */
 const FENCE = /^ {0,3}(`{3,}|~{3,})/;
-/** A list item with a task marker; the marker is group 1. */
 const TASK = /^\s*(?:[-*+]|\d{1,9}[.)])\s+\[(.)\]/;
-/** An inline code span, opened and closed by the same number of backticks. */
 const INLINE_CODE = /(`+)[\s\S]*?\1/g;
-/**
- * `[text](doc://…)` and `![text](doc://…)`. The text may hold one level of nested
- * brackets (`[see [this]](doc://…)`), which covers what people type; the destination may
- * be wrapped in `<…>` and followed by a title.
- */
 const INLINE_LINK = /(!?)\[(?:[^[\]]|\[[^\]]*\])*\]\(\s*<?(doc:[^\s)>]*)/g;
-/** `<doc://…>` — a CommonMark autolink; any scheme qualifies. */
 const AUTOLINK = /<(doc:[^\s>]*)>/g;
-/** `[label]: doc://…` — a reference definition, at most three spaces in. */
 const REFERENCE_DEFINITION = /^ {0,3}\[[^\]]+\]:\s*<?(doc:[^\s>]*)/;
-/** A link destination (`](…)`) or an autolink (`<scheme:…>`): not words. */
 const DESTINATION = /\]\([^)]*\)|<[A-Za-z][A-Za-z0-9+.-]*:[^\s>]*>/g;
-/** A word: letters and digits, joined by an apostrophe or hyphen (`don't`, `e-mail`). */
 const WORD = /[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu;
-/**
- * An `attachment://` id anywhere in the body, links and embeds alike: a ULID, as the
- * server counts them — a file still waiting to upload (`attachment://waiting-…`) is not
- * one yet.
- */
 const ATTACHMENT = /attachment:(?:\/\/)?([0-9A-Za-z]{26})(?![0-9A-Za-z-])/g;
 
 function scanBody(body: string, references: ReferenceSet) {
@@ -120,7 +75,6 @@ function scanBody(body: string, references: ReferenceSet) {
 
     const opener = FENCE.exec(line)?.[1];
     if (fence !== null) {
-      // Closed by a run of the same character at least as long, and nothing else.
       if (opener && opener[0] === fence[0] && opener.length >= fence.length && line.trim() === opener) fence = null;
       continue;
     }
@@ -149,9 +103,6 @@ function scanBody(body: string, references: ReferenceSet) {
   return { attachments: [...attachments], words, characters: body.trim().length, tasks };
 }
 
-// ---------------------------------------------------------------------------------------
-// Frontmatter
-
 function frontmatterReferences(
   fields: ReadonlyArray<readonly [string, CoreValue]>,
   references: ReferenceSet,
@@ -164,14 +115,8 @@ function frontmatterReferences(
   }
 }
 
-/** Nesting cap, SPEC §3.4 — the parser never produces deeper, this only keeps a hand-built value finite. */
 const MAX_DEPTH = 5;
 
-/**
- * Every key of a frontmatter map with its value, a nested key as a dotted path from the
- * top (`project.status`) — the spelling the filter DSL uses after `fm.`. A map is yielded
- * itself and then its keys, so both `project` (a map) and `project.status` are fields.
- */
 export function flattenFm(fm: CoreMap): Array<readonly [string, CoreValue]> {
   const out: Array<readonly [string, CoreValue]> = [];
   const walk = (map: CoreMap, prefix: string, depth: number): void => {
@@ -189,15 +134,6 @@ function isMap(value: CoreValue): value is CoreMap {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// ---------------------------------------------------------------------------------------
-// Helpers
-
-/**
- * The id of a `doc:` destination, or `null`. Both spellings `markdown` accepts
- * (`doc://01J…` and `doc:01J…`), stopping at the first `/`, `?` or `#` so a fragment is
- * not part of the id — `markdown/src/schemes.ts`' `idFromScheme`, minus the URL
- * classification a scanner has already done by matching `doc:`.
- */
 export function docIdOf(destination: string): string | null {
   if (!destination.startsWith("doc:")) return null;
   let rest = destination.slice("doc:".length);
@@ -225,7 +161,6 @@ class ReferenceSet {
   }
 }
 
-/** `folders/src/hierarchy.ts`' `readChildren`: `plugins.folders.children`, strings only, once each. */
 function readChildren(plugins: DocumentRow["plugins"]): readonly DocumentId[] {
   const section = plugins["folders"];
   if (section === null || typeof section !== "object" || Array.isArray(section)) return [];

@@ -1,8 +1,3 @@
-/**
- * The viewer registry as `view.tsx` reads it: the registry is already in `order`, so the
- * first viewer claiming an extension is its default; `createViewers` sorts nothing itself.
- */
-
 import { describe, expect, it } from "vitest";
 
 import type { Kernel, RegistryEntry, SettingsValue } from "@kernel";
@@ -22,7 +17,6 @@ const viewer = (id: string, extensions: readonly string[], order?: number): Atta
   ...(order === undefined ? {} : { order }),
 });
 
-/** A registry in a fixed order, with a way to add one more at the end. */
 function host(seated: readonly RegistryEntry<AttachmentViewer>[]) {
   const items = [...seated];
   const listeners = new Set<(values: readonly AttachmentViewer[]) => void>();

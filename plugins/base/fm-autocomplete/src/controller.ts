@@ -1,30 +1,13 @@
-/**
- * The suggestion menu's state machine, over every text surface (`plugin:editor`).
- *
- * Each surface is watched through its own `subscribe`: after every change the text before
- * the caret is handed to `suggest.ts` (keys, or the typed key's values), and the menu
- * opens, narrows or closes. Keys are
- * taken in the capture phase on the surface's element, before the editor sees them, and
- * only while the menu is open: ↑ / ↓ move, Enter or Tab choose, Escape dismisses until
- * the typed text changes. The same shape as `slash-commands`' `/` menu, deliberately: the
- * two never open together (a `/word` is not a value anyone has), and they feel the same.
- *
- * A surface that does not offer `documentBeforeCaret` and `replaceBeforeCaret` gets no
- * suggestions — without the first there is no telling the frontmatter from the body.
- */
-
 import type { Kernel, Unsubscribe } from "@kernel";
 import type { TextSurface } from "plugin:editor";
 import type { WorkspaceIndex } from "plugin:indexer";
 
 import { suggest, type Suggestion } from "./suggest.js";
 
-/** What the menu reads from `plugin:indexer`. */
 export type IndexSource = Pick<WorkspaceIndex, "fmFields" | "fmValues" | "documents" | "subscribe">;
 
 export interface MenuState {
   readonly surface: TextSurface;
-  /** The caret's line when this was worked out. */
   readonly before: string;
   readonly replace: number;
   readonly items: readonly Suggestion[];
@@ -37,7 +20,6 @@ export interface MenuController {
   subscribe(listener: () => void): () => void;
   choose(index: number): void;
   select(index: number): void;
-  /** Stop watching every surface and take the key listeners off their elements. */
   dispose(): void;
 }
 
@@ -47,10 +29,8 @@ export function createController(
   watchSurfaces: (listener: (surfaces: readonly TextSurface[]) => void) => Unsubscribe,
 ): MenuController {
   let current: MenuState | undefined;
-  /** Escape was pressed on this text: stay shut until it changes. */
   let dismissed: { surface: string; before: string } | undefined;
   const listeners = new Set<() => void>();
-  /** Notes by id, for `doc://` values; rebuilt on first use after the index moves. */
   let notes: Map<string, { title: string; folder: string }> | undefined;
   const noteOf = (id: string): { title: string; folder: string } | undefined => {
     notes ??= new Map(indexer.documents().map((note) => [note.id, { title: note.title, folder: note.folder }]));
@@ -80,8 +60,6 @@ export function createController(
       if (current?.surface === surface || current === undefined) set(undefined);
       return;
     }
-    // Typing puts the best match first and selects it; a refresh under unchanged text (the
-    // index moved) keeps whatever was selected.
     const same = current?.surface === surface && current.before === before;
     const was = same ? current?.items[current.selected]?.insert : undefined;
     const keep = was === undefined ? -1 : found.items.findIndex((item) => item.insert === was);
@@ -125,9 +103,7 @@ export function createController(
     }
   };
 
-  /** Surfaces being watched, and how to stop. Surfaces come and go with editors. */
   const attached = new Map<TextSurface, () => void>();
-  // Every text surface mounted right now.
   const unwatch = watchSurfaces((all) => {
     for (const [surface, detach] of [...attached]) {
       if (all.includes(surface)) continue;
@@ -147,8 +123,6 @@ export function createController(
     }
   });
 
-  // The values change under an open menu when another note is edited, or this one's row
-  // catches up with what was just typed.
   const unfollow = indexer.subscribe(() => {
     notes = undefined;
     if (current) evaluate(current.surface);

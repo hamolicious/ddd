@@ -1,32 +1,3 @@
-//! `/api/documents` — the document REST surface (SPEC §5.1).
-//!
-//! REST serves scripts, integrations, plugins and initial loads; the PWA uses
-//! the WebSocket (M2) for everything interactive.
-//!
-//! | Method | Path | Behaviour |
-//! |---|---|---|
-//! | GET | `/api/documents` | list/query: `filter` (DSL), `search`, `sort`, `cursor`, `limit`, `trash` |
-//! | POST | `/api/query` | a query plan (`core::query::Plan`) as the body; the same answer, plus `total` and text `hits` |
-//! | POST | `/api/documents` | create from full text; existing id → 409, graveyarded id → 410 |
-//! | GET | `/api/documents/:id` | materialized JSON, forces a flush; `?format=crdt` returns CRDT state |
-//! | PUT | `/api/documents/:id` | replace full text in one CRDT transaction |
-//! | PATCH | `/api/documents/:id` | `{"content": …}` only — no `fm`/`plugins` patching |
-//! | DELETE | `/api/documents/:id` | tombstone → Trash (30 d) → purge; id → graveyard forever |
-//! | POST | `/api/documents/:id/restore` | out of Trash |
-//! | GET | `/api/documents/duplicates` | admin: live documents with the same title and text; never deletes |
-//! | GET | `/api/documents/:id/snapshots` | list snapshots |
-//! | GET | `/api/documents/:id/snapshots/:snapshot_id` | one snapshot, with its text |
-//! | GET, POST | `/api/documents/:id/changes…`, `/text?at=` | history, revert, text at a point (`changes.rs`) |
-//! | POST | `/api/documents/:id/snapshots/:snapshot_id/restore` | restore a snapshot |
-//!
-//! The Trash view is `GET /api/documents?trash=trashed` — a tombstoned document
-//! is still a document, so it needs no second listing endpoint.
-//!
-//! Listing and searching run on the query engine (`query_index.rs`), the same one
-//! the browser runs: `filter` is parsed by the shared core's DSL, `sort` goes through
-//! a whitelist ([`sort_field_allowed`]), and `search` is the engine's ranked text
-//! search. Mongo is only asked for the rows of the page, by id.
-
 use axum::extract::{Path, Query, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
@@ -47,46 +18,19 @@ use crate::error::{AppError, AppResult};
 use crate::query_index::QueryIndexError;
 use crate::state::AppState;
 
-/// Default and maximum page size for list queries.
 pub const DEFAULT_LIMIT: u32 = 50;
 pub const MAX_LIMIT: u32 = 500;
 
-/// Single-segment field paths that may be sorted on. `content` is deliberately
-/// absent (megabyte strings are not a sort key) and so is anything CRDT-shaped.
-///
-/// This list must stay a subset of the shared core's addressable roots
-/// ([`ddd_core::filter::ast::FieldPath`]), because every token also goes
-/// through `SortKey::parse`: `deleted_at` and `materialized_version` were once
-/// advertised here and always 400'd, since neither was a field of the projection
-/// the DSL addresses (SPEC §4.1).
-///
-/// `deleted_at` is now genuinely one of them — the cross-crate change that note
-/// asked for, made in `core::filter` (an addressable root, a `Row` field, a
-/// `Column::Date` in the Mongo compiler). It is what Trash sorts by: the view is
-/// "what did I delete, most recent first" (SPEC §6.5), and without a server-side
-/// sort key that order could only be imposed on a page *after* it came back, so
-/// the newest deletion was not reliably on the first page. `documents_deleted_at`
-/// already indexed the column for the Trash *filter*, so the sort is free.
-///
-/// `materialized_version` is still absent and stays absent: it is a state-vector
-/// hash, and ordering by it is ordering by noise.
 pub const SORTABLE_FIELDS: &[&str] = &["id", "title", "created_at", "updated_at", "deleted_at"];
 
-/// Roots whose sub-paths may be sorted on: materialized frontmatter and machine
-/// sections (`fm.due`, `plugins.calendar.start`).
 pub const SORTABLE_PREFIXES: &[&str] = &["fm", "plugins"];
 
-/// Maximum number of sort keys accepted in one query.
 pub const MAX_SORT_KEYS: usize = 3;
 
-/// Maximum number of segments in a sortable field path.
 pub const MAX_SORT_DEPTH: usize = 4;
 
-/// Longest accepted `search` string.
 pub const MAX_SEARCH_LEN: usize = 256;
 
-/// The only snapshot `reason` the API may write; the policy-driven reasons
-/// (`quiescence`, `daily`, `pre_restore`) belong to the docstore.
 pub const API_SNAPSHOT_REASON: &str = "manual";
 
 pub fn router() -> Router<AppState> {
@@ -114,37 +58,25 @@ pub fn router() -> Router<AppState> {
         )
 }
 
-// ---------------------------------------------------------------------------
-// Query / body shapes
-// ---------------------------------------------------------------------------
-
-/// `GET /api/documents` query string.
 #[derive(Debug, Default, Deserialize)]
 pub struct ListParams {
-    /// Filter DSL, JSON-encoded (SPEC §4.2). Invalid → 400.
     #[serde(default)]
     pub filter: Option<String>,
-    /// Server-side full-text search terms.
     #[serde(default)]
     pub search: Option<String>,
-    /// `field` / `-field` / `field:desc`, comma-separated.
     #[serde(default)]
     pub sort: Option<String>,
     #[serde(default)]
     pub cursor: Option<String>,
     #[serde(default)]
     pub limit: Option<u32>,
-    /// `live` (default) | `trashed` | `all`.
     #[serde(default)]
     pub trash: Option<String>,
-    /// When `true`, omit `content` from the rows (list views).
     #[serde(default)]
     pub metadata_only: bool,
 }
 
 impl ListParams {
-    /// Validate into a query [`Plan`], and whether the caller wants `content`: parse
-    /// the DSL, resolve the sort keys, clamp the limit.
     pub fn into_plan(self) -> AppResult<(Plan, bool)> {
         let filter = match self.filter.as_deref().map(str::trim) {
             None | Some("") => None,
@@ -199,18 +131,15 @@ pub struct ListResponse {
     pub documents: Vec<DocumentView>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_cursor: Option<String>,
-    /// Every match, before paging.
     pub total: usize,
 }
 
-/// `POST /api/query?metadata_only=` query string; the body is the plan.
 #[derive(Debug, Default, Deserialize)]
 pub struct QueryParams {
     #[serde(default)]
     pub metadata_only: bool,
 }
 
-/// `POST /api/query`: a page of rows, and why each matched the plan's text.
 #[derive(Debug, Serialize)]
 pub struct QueryResponse {
     pub documents: Vec<DocumentView>,
@@ -221,41 +150,29 @@ pub struct QueryResponse {
     pub hits: HashMap<String, Hit>,
 }
 
-/// `POST /api/documents`. `id` is client-mintable (offline creates).
 #[derive(Debug, Deserialize)]
 pub struct CreateRequest {
     #[serde(default)]
     pub id: Option<Id>,
-    /// The full document text: frontmatter + body + `%%%` sections.
     #[serde(default)]
     pub content: String,
-    /// Instead of `content`: the device's own encoded Yjs state (update encoding v1,
-    /// base64), for a note made offline. Needs `id`. Its later edits then merge into
-    /// this state instead of duplicating the text (PROTOCOL.md §3.8).
     #[serde(default)]
     pub state: Option<String>,
 }
 
-/// `PUT /api/documents/:id`.
 #[derive(Debug, Deserialize)]
 pub struct ReplaceRequest {
     pub content: String,
 }
 
-/// `PATCH /api/documents/:id`. Body-text-level only — **no `fm`/`plugins`
-/// patching** (SPEC §5.1); machines write via `%%%` splices.
 #[derive(Debug, Deserialize)]
 pub struct PatchRequest {
     pub content: String,
-    /// Anything else the caller sent. Captured rather than ignored so that a
-    /// `fm`/`plugins` patch attempt fails loudly instead of silently doing
-    /// nothing (SPEC §3.3).
     #[serde(flatten)]
     pub rest: serde_json::Map<String, serde_json::Value>,
 }
 
 impl PatchRequest {
-    /// Reject every field but `content`.
     pub fn validate(&self) -> AppResult<()> {
         if let Some(key) = self.rest.keys().next() {
             return Err(AppError::bad_request(format!(
@@ -267,13 +184,10 @@ impl PatchRequest {
     }
 }
 
-/// `GET /api/documents/:id` query string.
 #[derive(Debug, Default, Deserialize)]
 pub struct GetParams {
-    /// `crdt` returns the encoded CRDT state instead of materialized JSON.
     #[serde(default)]
     pub format: Option<String>,
-    /// Skip the read-your-writes flush (cheap read of possibly stale metadata).
     #[serde(default)]
     pub stale_ok: bool,
 }
@@ -291,13 +205,6 @@ pub struct SnapshotCreated {
     pub reason: String,
 }
 
-// ---------------------------------------------------------------------------
-// Pure helpers (unit-tested below)
-// ---------------------------------------------------------------------------
-
-/// `true` when `dotted` may be used as a sort key. The whitelist exists because
-/// sorting reaches Mongo directly: `title`/`updated_at`/`created_at`/`id` and any
-/// `fm.*` / `plugins.*` path, nothing else.
 pub fn sort_field_allowed(dotted: &str) -> bool {
     let mut segments = dotted.split('.');
     let Some(root) = segments.next() else {
@@ -315,8 +222,6 @@ pub fn sort_field_allowed(dotted: &str) -> bool {
         && rest.iter().all(|segment| !segment.is_empty())
 }
 
-/// The field name inside one sort token: `title`, `-title`, `title:desc` all
-/// yield `title`. Mirrors [`SortKey::parse`]'s accepted forms.
 pub fn sort_field_name(token: &str) -> &str {
     let token = token.trim();
     let token = token.strip_prefix('-').unwrap_or(token);
@@ -326,8 +231,6 @@ pub fn sort_field_name(token: &str) -> &str {
     }
 }
 
-/// Parse the comma-separated `sort` parameter, whitelisting every field before
-/// the shared core turns it into sort keys.
 pub fn parse_sort_spec(spec: &str) -> AppResult<Vec<SortKey>> {
     let tokens: Vec<&str> = spec
         .split(',')
@@ -335,8 +238,6 @@ pub fn parse_sort_spec(spec: &str) -> AppResult<Vec<SortKey>> {
         .filter(|token| !token.is_empty())
         .collect();
 
-    // Validate everything before parsing anything, so a rejected query does no
-    // work and the error names the first real problem.
     if tokens.len() > MAX_SORT_KEYS {
         return Err(AppError::bad_request(format!(
             "at most {MAX_SORT_KEYS} sort keys are accepted, got {}",
@@ -362,8 +263,6 @@ pub fn parse_sort_spec(spec: &str) -> AppResult<Vec<SortKey>> {
         .collect()
 }
 
-/// Clamp `limit` into `1..=MAX_LIMIT`; an explicit `0` is a client bug, not a
-/// request for nothing.
 pub fn clamp_limit(limit: Option<u32>) -> AppResult<u32> {
     match limit {
         None => Ok(DEFAULT_LIMIT),
@@ -372,7 +271,6 @@ pub fn clamp_limit(limit: Option<u32>) -> AppResult<u32> {
     }
 }
 
-/// `live` (default) | `trashed` | `all`.
 pub fn parse_trash(raw: Option<&str>) -> AppResult<TrashFilter> {
     match raw.map(str::trim) {
         None | Some("") | Some("live") => Ok(TrashFilter::Live),
@@ -384,7 +282,6 @@ pub fn parse_trash(raw: Option<&str>) -> AppResult<TrashFilter> {
     }
 }
 
-/// The API may only take `manual` snapshots.
 pub fn snapshot_reason(raw: Option<&str>) -> AppResult<&'static str> {
     match raw.map(str::trim) {
         None | Some("") | Some(API_SNAPSHOT_REASON) => Ok(API_SNAPSHOT_REASON),
@@ -394,7 +291,6 @@ pub fn snapshot_reason(raw: Option<&str>) -> AppResult<&'static str> {
     }
 }
 
-/// Reject a document id the docstore would reject anyway, before touching Mongo.
 pub(crate) fn check_id(id: &str) -> AppResult<()> {
     if is_valid_id(id) {
         Ok(())
@@ -405,7 +301,6 @@ pub(crate) fn check_id(id: &str) -> AppResult<()> {
     }
 }
 
-/// Enforce the document text cap with a clear error (SPEC §3.5).
 fn check_text_size(text: &str, limit: usize) -> AppResult<()> {
     if text.len() > limit {
         return Err(AppError::PayloadTooLarge {
@@ -416,8 +311,6 @@ fn check_text_size(text: &str, limit: usize) -> AppResult<()> {
     Ok(())
 }
 
-/// Map storage failures onto the HTTP contract of SPEC §5.1. Infrastructure
-/// failures stay wrapped so `error.rs` can keep them 500 and unlogged to clients.
 pub(crate) fn map_docstore(err: DocStoreError) -> AppError {
     match err {
         DocStoreError::NotFound(_) => AppError::NotFound("document"),
@@ -446,8 +339,6 @@ pub(crate) fn map_docstore(err: DocStoreError) -> AppError {
     }
 }
 
-/// Fetch the materialized document for a response. `stale_ok` skips the
-/// read-your-writes flush.
 async fn load_view(state: &AppState, id: &str, stale_ok: bool) -> AppResult<DocumentView> {
     let document = if stale_ok {
         state.docs.get_stale(id).await
@@ -457,10 +348,6 @@ async fn load_view(state: &AppState, id: &str, stale_ok: bool) -> AppResult<Docu
     .map_err(map_docstore)?;
     Ok(DocumentView::from(document))
 }
-
-// ---------------------------------------------------------------------------
-// Handlers
-// ---------------------------------------------------------------------------
 
 pub async fn list(
     State(state): State<AppState>,
@@ -480,9 +367,6 @@ pub async fn list(
     }))
 }
 
-/// `POST /api/query` — a [`Plan`] in, a page of documents out. The functional
-/// query surface for scripts and the CLI: everything `GET /api/documents` can ask,
-/// plus relevance sorting, folder relations and snippets.
 pub async fn query(
     State(state): State<AppState>,
     _user: AuthUser,
@@ -490,7 +374,6 @@ pub async fn query(
     Json(plan): Json<serde_json::Value>,
 ) -> AppResult<Json<QueryResponse>> {
     let mut plan = Plan::from_json(&plan).map_err(|err| AppError::bad_request(err.to_string()))?;
-    // The list route's ceiling: a page is at most `MAX_LIMIT` rows, however asked.
     plan.limit = Some(plan.limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT));
     let found = state
         .query
@@ -505,7 +388,6 @@ pub async fn query(
     }))
 }
 
-/// A wrong plan is the caller's 400; anything else is ours.
 pub(crate) fn map_query(err: QueryIndexError) -> AppError {
     match err {
         QueryIndexError::Query(err) => AppError::bad_request(err.to_string()),
@@ -587,8 +469,6 @@ pub async fn get_one(
                     (header::X_CONTENT_TYPE_OPTIONS, "nosniff".to_string()),
                     (header::CACHE_CONTROL, "private, no-store".to_string()),
                 ],
-                // The state vector travels in a header so a client can ask for a
-                // diff next time without decoding the whole state (M2 sync).
                 [("x-state-vector", state_vector)],
                 state_bytes.state,
             )
@@ -614,9 +494,6 @@ pub async fn replace(
         .replace_text(&id, &body.content, &user.actor())
         .await
         .map_err(map_docstore)?;
-    // A REST write is a CRDT write: every socket with this document open has to
-    // receive the diff, or its `Y.Doc` diverges from the server's for the life of
-    // the subscription (PROTOCOL.md §3.4).
     crate::routes::sync::publish_update(&state, &id, &outcome.update);
 
     Ok(Json(load_view(&state, &id, false).await?))
@@ -632,8 +509,6 @@ pub async fn patch(
     body.validate()?;
     check_text_size(&body.content, state.config().max_document_bytes)?;
 
-    // Content-only replace: the text *is* the document (SPEC §3.1), so `PATCH`
-    // and `PUT` differ only in what the client is allowed to send.
     let outcome = state
         .docs
         .replace_text(&id, &body.content, &user.actor())
@@ -644,7 +519,6 @@ pub async fn patch(
     Ok(Json(load_view(&state, &id, false).await?))
 }
 
-/// Tombstone (Trash). Audited (SPEC §5.4).
 pub async fn delete(
     State(state): State<AppState>,
     user: AuthUser,
@@ -652,8 +526,6 @@ pub async fn delete(
 ) -> AppResult<Response> {
     check_id(&id)?;
 
-    // Read the title first so the audit entry says what was deleted; a stale
-    // read is fine for a log line.
     let title = state.docs.get_stale(&id).await.map_err(map_docstore)?.title;
 
     state
@@ -678,7 +550,6 @@ pub async fn delete(
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
-/// Restore out of Trash. Audited.
 pub async fn restore(
     State(state): State<AppState>,
     user: AuthUser,
@@ -710,10 +581,6 @@ pub async fn restore(
     Ok(Json(view))
 }
 
-/// A snapshot row on the wire. `created_at` is a [`Timestamp`] (RFC 3339), not a
-/// `bson::DateTime`: the stored type serializes through `serde_json` as MongoDB
-/// extended JSON (`{"$date": …}`), and no client should ever parse that
-/// (PROTOCOL.md §2.1).
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SnapshotView {
     pub id: Id,
@@ -749,7 +616,6 @@ pub async fn list_snapshots(
     ))
 }
 
-/// A snapshot with the text it holds: what a read-only look at an earlier version needs.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SnapshotContentView {
     #[serde(flatten)]
@@ -813,8 +679,6 @@ pub async fn create_snapshot(
         .into_response())
 }
 
-/// Restore a snapshot: one CRDT transaction replacing the full text. Audited;
-/// warns when other users are subscribed (M2).
 pub async fn restore_snapshot(
     State(state): State<AppState>,
     user: AuthUser,
@@ -827,8 +691,6 @@ pub async fn restore_snapshot(
         )));
     }
 
-    // Who is watching, read *before* the write: a restore rewrites the whole text
-    // under any open editor (SPEC §3.5 asks for the warning).
     let subscribers = crate::routes::sync::document_subscribers(&state, &id);
 
     let outcome = state
@@ -836,9 +698,6 @@ pub async fn restore_snapshot(
         .restore_snapshot(&id, &snapshot_id, &user.actor())
         .await
         .map_err(map_docstore)?;
-    // Without this, a restore is invisible to every open editor: the projection row
-    // updates (so the doc list shows the restored text) while the editor keeps the
-    // pre-restore text and merges the user's next keystroke into it.
     crate::routes::sync::publish_update(&state, &id, &outcome.update);
     if subscribers > 0 {
         tracing::warn!(
@@ -866,34 +725,22 @@ pub async fn restore_snapshot(
     Ok(Json(view))
 }
 
-// ---------------------------------------------------------------------------
-// Duplicates
-// ---------------------------------------------------------------------------
-
-/// Live documents with the same title and the same text, under different ids.
 #[derive(Debug, Serialize)]
 pub struct DuplicateDocumentGroup {
     pub title: String,
-    /// Bytes of text, the same for every copy.
     pub size: u64,
-    /// Oldest first.
     pub documents: Vec<DuplicateDocument>,
 }
 
-/// One copy in a [`DuplicateDocumentGroup`].
 #[derive(Debug, Clone, Serialize)]
 pub struct DuplicateDocument {
     pub id: Id,
     pub created_at: Timestamp,
     pub updated_at: Timestamp,
-    /// How many *other* documents (trashed ones included) link here with `doc://`.
-    /// A copy at 0 can go without breaking a link.
     pub references: u32,
-    /// Those documents, the first [`MAX_REFERENCED_BY`].
     pub referenced_by: Vec<NoteRef>,
 }
 
-/// A document that uses a duplicate copy, so the admin can see *which* note it is.
 #[derive(Debug, Clone, Serialize)]
 pub struct NoteRef {
     pub id: Id,
@@ -901,10 +748,8 @@ pub struct NoteRef {
     pub trashed: bool,
 }
 
-/// How many referencing notes a duplicate copy lists; `references` is the full count.
 pub const MAX_REFERENCED_BY: usize = 10;
 
-/// A live document as the duplicate scan sees it.
 #[derive(Debug, Clone)]
 pub struct DocumentCopy {
     pub id: Id,
@@ -914,8 +759,6 @@ pub struct DocumentCopy {
     pub updated_at: Timestamp,
 }
 
-/// `GET /api/documents/duplicates` (admin). Read-only: deleting a copy is the usual
-/// `DELETE`, which only moves it to the Trash.
 pub async fn duplicates(
     State(state): State<AppState>,
     _admin: AdminUser,
@@ -951,7 +794,6 @@ pub async fn duplicates(
                     .unwrap_or_else(|_| Timestamp::from_millis(0)),
             });
         }
-        // Trashed documents still count as linking, as they do for orphan files.
         texts.push((
             NoteRef {
                 id: id.to_string(),
@@ -1015,8 +857,6 @@ pub async fn duplicates(
     ))
 }
 
-/// Documents grouped by exact title and text, keeping only groups of two or more.
-/// Groups are sorted by title; each group's copies oldest first, then by id.
 pub fn group_duplicate_documents(copies: Vec<DocumentCopy>) -> Vec<Vec<DocumentCopy>> {
     let mut groups: BTreeMap<(String, String), Vec<DocumentCopy>> = BTreeMap::new();
     for copy in copies {
@@ -1039,8 +879,6 @@ pub fn group_duplicate_documents(copies: Vec<DocumentCopy>) -> Vec<Vec<DocumentC
         .collect()
 }
 
-/// Every `doc://<id>` a text links to. Ids are matched loosely (`[A-Za-z0-9_-]`);
-/// the caller only counts the ones it is looking for.
 pub fn doc_refs(text: &str) -> Vec<&str> {
     const SCHEME: &str = "doc://";
     let mut found = Vec::new();
@@ -1099,9 +937,7 @@ mod tests {
         assert!(sort_field_allowed("updated_at"));
         assert!(sort_field_allowed("created_at"));
         assert!(sort_field_allowed("id"));
-        // Trash orders by deletion time (SPEC §6.5).
         assert!(sort_field_allowed("deleted_at"));
-        // Not sortable: huge text, unknown roots, empty.
         assert!(!sort_field_allowed("content"));
         assert!(!sort_field_allowed("crdt"));
         assert!(!sort_field_allowed("password_hash"));
@@ -1109,9 +945,6 @@ mod tests {
         assert!(!sort_field_allowed(""));
     }
 
-    /// The whitelist and the core's field space have to agree, or a field that
-    /// passes [`sort_field_allowed`] 400s one line later in `SortKey::parse` —
-    /// which is exactly how `deleted_at` used to be advertised-and-refused.
     #[test]
     fn every_advertised_sort_field_survives_the_core() {
         for field in SORTABLE_FIELDS {
@@ -1126,12 +959,10 @@ mod tests {
         assert!(sort_field_allowed("fm.due"));
         assert!(sort_field_allowed("fm.meta.rank"));
         assert!(sort_field_allowed("plugins.calendar.start"));
-        // Depth cap and empty segments.
         assert!(!sort_field_allowed("fm.a.b.c.d"));
         assert!(!sort_field_allowed("fm."));
         assert!(!sort_field_allowed("fm..due"));
         assert!(!sort_field_allowed(".fm.due"));
-        // A nested path under a non-nestable root stays rejected.
         assert!(!sort_field_allowed("title.length"));
         assert!(!sort_field_allowed("content.0"));
     }
@@ -1145,9 +976,6 @@ mod tests {
         assert_eq!(sort_field_name("  updated_at  "), "updated_at");
     }
 
-    /// Rejection happens before any [`SortKey::parse`] call, so this covers the
-    /// whitelist and the key cap without depending on the shared core landing.
-    /// The accepting path is exercised by the router integration tests.
     #[test]
     fn sort_spec_rejects_unlisted_fields_and_too_many_keys() {
         for spec in [
@@ -1243,8 +1071,6 @@ mod tests {
 
         for (err, expected) in cases {
             let mapped = map_docstore(err);
-            // `AppError::status()` is owned by ops; assert on the variant we
-            // chose so this test does not depend on their mapping landing.
             let got = match &mapped {
                 AppError::NotFound(_) => StatusCode::NOT_FOUND,
                 AppError::Conflict(_) => StatusCode::CONFLICT,

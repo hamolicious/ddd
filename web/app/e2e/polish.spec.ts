@@ -1,20 +1,3 @@
-/**
- * The UX sweep's regression net.
- *
- * Every test here pins something that was **wrong in a shipped build** and is cheap to
- * break again, because each one is a property nothing else in the suite asserts:
- *
- * - The journeys drive a desktop viewport, so nothing noticed that the navbar ran past
- *   a phone's screen and took the page's horizontal scroll with it.
- * - Nothing read a fold placeholder, a Trash attribution line, or the palette's
- *   *ordering*, so all three could say something wrong while every assertion passed.
- *
- * The mobile block uses 390 px — the narrowest mainstream phone, and the width SPEC
- * §6.5's breakpoint exists for. `documentElement.scrollWidth === clientWidth` is the
- * whole assertion for "nothing overflows": a page that scrolls sideways on a phone is
- * the symptom every one of those layout bugs produced.
- */
-
 import { expect, test, type WebSocketRoute } from "@playwright/test";
 
 import {
@@ -29,7 +12,6 @@ import {
   trashRow,
 } from "./helpers.js";
 
-/** Nothing on the page may push the document wider than the viewport. */
 async function noHorizontalScroll(page: import("@playwright/test").Page): Promise<void> {
   const overflow = await page.evaluate(() => {
     const root = document.documentElement;
@@ -52,8 +34,6 @@ test.describe("phone width (390px)", () => {
   test("the navbar fits, and its entries are reachable", async ({ page }) => {
     await signIn(page, ADMIN);
 
-    // What is left in the bar has to be a real tap target at phone width, not a label
-    // squeezed to nothing by the end group.
     for (const name of ["Settings", "Admin"]) {
       const control = page.getByRole("button", { name });
       await expect(control).toBeVisible();
@@ -77,9 +57,6 @@ test.describe("phone width (390px)", () => {
     await openDocument(page, id);
     await noHorizontalScroll(page);
 
-    // The settings section list is a row of long names ("Administration — Snapshots").
-    // As a grid item with the default `min-width: auto` it grew to their combined
-    // max-content width — 1 700 px — and its own `overflow-x` never fired.
     await page.goto("/#/settings");
     await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
     await noHorizontalScroll(page);
@@ -96,20 +73,12 @@ test.describe("phone width (390px)", () => {
 
     await page.keyboard.press("Escape");
     await expect(sidebar).toBeHidden();
-    // Focus goes back to the control that opened it, not to the top of the document.
     await expect(page.locator(".shell-sidebar-toggle")).toBeFocused();
   });
 });
 
 test.describe("copy and labels that were wrong", () => {
   test("a fold placeholder names the region it hides, and folds again once opened", async ({ page, request, baseURL }) => {
-    // A `%%%` section's owner is on the fence line the fold hides, so the chip is the
-    // one place left to say it. This test used to assert a *second* placeholder reading
-    // "⋯ frontmatter": the block was folded on open behind a per-user preference, and
-    // the label was the fix for it having said "machine data". The owner removed the
-    // behaviour instead (2026-09-25) — frontmatter is human-owned (SPEC §3.3) and edit
-    // mode is where it gets edited — so what is left to pin here is that exactly one
-    // region folds and it names its plugin. `frontmatter.spec.ts` owns the rest.
     const id = await createDocument(
       request,
       baseURL as string,
@@ -120,18 +89,15 @@ test.describe("copy and labels that were wrong", () => {
     await openDocument(page, id);
     await page.getByRole("tab", { name: "Edit" }).click();
 
-    // An icon, no words on screen; its name says which plugin's data it hides.
     const placeholders = page.locator(".cm-foldPlaceholder");
     await expect(placeholders).toHaveCount(1);
     await expect(placeholders.nth(0)).toHaveText("");
     await expect(placeholders.nth(0)).toHaveAttribute("aria-label", "Expand sweep-demo data");
 
-    // Still a fold, not just a label: clicking it puts the text back.
     await placeholders.nth(0).click();
     await expect(placeholders).toHaveCount(0);
     await expect(page.locator(".cm-content")).toContainText("key: value");
 
-    // And, opened, it can be put away again from the same place.
     await page.getByRole("button", { name: "Collapse sweep-demo data" }).click();
     await expect(placeholders).toHaveCount(1);
     await expect(page.locator(".cm-content")).not.toContainText("key: value");
@@ -154,23 +120,11 @@ test.describe("copy and labels that were wrong", () => {
     const trashed = page.locator(".doclist-item").filter({ hasText: "Trash attribution fixture" });
     await expect(trashed).toHaveCount(1);
     await expect(trashed).toContainText("by you");
-    // The id is still recoverable on hover; it is not what the line reads as.
     await expect(trashed).not.toContainText(/by 0[0-9A-HJKMNP-TV-Z]{25}/);
   });
 });
 
 test.describe("the folder tree", () => {
-  /**
-   * The tree is a roving-tabindex widget: the container is the only tab stop and arrows
-   * move the active row. Correct for navigating it, and it left the row's two action
-   * buttons unreachable by any key — `tabindex="-1"` like everything else in a row, and
-   * `display: none` until the row is active. Rename at least had F2. "New document in
-   * this folder" had no keyboard path at all, on a button the tree draws for you.
-   *
-   * So the assertion is a real `Tab` from the tree rather than a CSS check: a rule that
-   * merely *showed* the buttons without putting them in the tab order would still leave
-   * them unreachable, and would still pass a visibility test.
-   */
   test("puts the active row's actions in the tab order", async ({ page, request, baseURL }) => {
     const child = await createDocument(request, baseURL as string, "---\ntitle: Folder keyboard child\n---\n\nbody\n");
     await createDocument(
@@ -182,20 +136,14 @@ test.describe("the folder tree", () => {
     await signIn(page, ADMIN);
     await showSidebar(page);
 
-    // Focusing the tree activates its first row (that is the widget's own onFocus), so
-    // the actions Tab reaches are the ones the user can see highlighted.
     const tree = page.getByRole("tree", { name: /folders/i });
     await tree.focus();
     const active = tree.locator(".folders-node-active");
     await expect(active).toHaveCount(1);
 
-    // A row's operations live behind one modest ellipsis menu, which must remain
-    // keyboard reachable on the active row.
     await page.keyboard.press("Tab");
     await expect(active.getByRole("button", { name: "Note actions" })).toBeFocused();
 
-    // And a row that is not active stays out of the way — one tab stop per tree, plus
-    // the row the user is standing on, is the whole contract.
     const inactiveActions = tree.locator(".folders-node:not(.folders-node-active) .folders-actions button");
     for (const button of await inactiveActions.all()) {
       await expect(button).toHaveAttribute("tabindex", "-1");
@@ -204,16 +152,6 @@ test.describe("the folder tree", () => {
 });
 
 test.describe("the task state menu", () => {
-  /**
-   * A menu that takes focus has to give it back. Both of these were "the menu closed,
-   * and focus was on `<body>`" — the keyboard user ends up at the top of the document,
-   * several dozen tab stops from the task they were working on, with nothing on screen
-   * to say what happened.
-   *
-   * The right-click path is the one that matters: a context menu opened by pointer does
-   * not focus the control it targets, so the element to return to cannot be read from
-   * `document.activeElement` and has to come from the menu's own position in the DOM.
-   */
   test("hands focus back to the checkbox on Escape and on choosing a state", async ({
     page,
     request,
@@ -229,21 +167,16 @@ test.describe("the task state menu", () => {
     await openDocument(page, id);
 
     const box = page.locator(".md-task-box").first();
-    // `context-menu`'s popover: a dialog named for what it is the menu of.
     const menu = page.getByRole("dialog", { name: "Task state" });
 
     await box.click({ button: "right" });
     await expect(menu).toBeVisible();
-    // Focus really is inside the menu first — otherwise the assertion below would pass
-    // for a menu that never took focus at all.
     await expect(menu.getByRole("menuitemradio").first()).toBeFocused();
 
     await page.keyboard.press("Escape");
     await expect(menu).toHaveCount(0);
     await expect(box).toBeFocused();
 
-    // Choosing an item rewrites the marker, so the trigger re-renders underneath the
-    // focus call; it is still the control the user should be on.
     await box.click({ button: "right" });
     await expect(menu).toBeVisible();
     await menu.getByRole("menuitemradio", { name: "Done" }).click();
@@ -256,9 +189,6 @@ test.describe("the task state menu", () => {
     request,
     baseURL,
   }) => {
-    // The backdrop takes the click that closes the menu (`context-menu`'s `Menu.tsx`), so a
-    // click outside never also acts on whatever was under it, and focus goes back to the
-    // control the menu was for.
     const id = await createDocument(
       request,
       baseURL as string,
@@ -273,7 +203,6 @@ test.describe("the task state menu", () => {
     const menu = page.getByRole("dialog", { name: "Task state" });
     await expect(menu).toBeVisible();
 
-    // A click on the Edit tab, which would switch modes if it got through.
     const edit = page.getByRole("tab", { name: "Edit" });
     const at = await edit.boundingBox();
     if (!at) throw new Error("the Edit tab has no box");
@@ -299,21 +228,15 @@ test.describe("the command palette", () => {
     await page.keyboard.press("ControlOrMeta+p");
     const palette = page.getByRole("combobox", { name: /command/i });
     await expect(palette).toBeVisible();
-    // These ran `setMode` on nothing and looked like a broken app.
     await expect(page.getByRole("option", { name: /show document as/i })).toHaveCount(0);
     await page.keyboard.press("Escape");
 
-    // On a document they are exactly what the palette is for.
     await openDocument(page, id);
     await runCommand(page, /show document as: edit/i);
     await expect(page.getByRole("tab", { name: "Edit" })).toHaveAttribute("aria-selected", "true");
   });
 
   test("separates a row's category from its title in the accessible name", async ({ page }) => {
-    // The gap was `margin-right` on the category, which is invisible to the
-    // accessibility tree: every row announced as one run-together word
-    // ("Admin ›Browse snapshots"). The same markup builds the keybindings table, so
-    // both views were saying it.
     await signIn(page, ADMIN);
     await page.keyboard.press("ControlOrMeta+p");
     await expect(page.getByRole("combobox", { name: /command/i })).toBeVisible();
@@ -321,10 +244,6 @@ test.describe("the command palette", () => {
     const categorised = page.locator(".cmd-list [role=option]", { has: page.locator(".cmd-category") });
     expect(await categorised.count()).toBeGreaterThan(0);
     for (const row of await categorised.all()) {
-      // The *accessible name*, not `innerText`: the separator is generated content, which
-      // `innerText` does not return at all and the name computation does. That difference
-      // is the entire bug — the gap was styling the sighted reader could see and the name
-      // computation could not.
       await expect(row).toHaveAccessibleName(/\S\s›\s\S/);
     }
   });
@@ -334,8 +253,6 @@ test.describe("the command palette", () => {
     await page.keyboard.press("ControlOrMeta+p");
     await expect(page.getByRole("combobox", { name: /command/i })).toBeVisible();
 
-    // Every score is 0 for an empty query, so the tie-break *is* the ordering. Sorting
-    // on title alone interleaved the categories the rows are labelled with.
     const categories = await page.locator(".cmd-list [role=option] .cmd-category").allInnerTexts();
     expect(categories.length).toBeGreaterThan(5);
     const firstSeen = new Map<string, number>();
@@ -357,8 +274,6 @@ test.describe("the command palette closes", () => {
     const input = page.getByRole("combobox", { name: /command/i });
     await expect(input).toBeVisible();
 
-    // The list's own top padding: inside the palette, not an option and not focusable,
-    // so a click there used to drop focus to <body>, where Escape went unheard.
     const panel = page.getByRole("dialog", { name: "Command palette" });
     await panel.getByRole("listbox").click({ position: { x: 8, y: 1 } });
     await expect(panel).toBeVisible();
@@ -371,8 +286,6 @@ test.describe("the command palette closes", () => {
 
 test.describe("the sync status", () => {
   test("a dropped connection shows a steady red ✕ that reconnects", async ({ page }) => {
-    // `context.setOffline` leaves an open WebSocket connected, so cut the socket itself:
-    // drop the live one, then refuse every reconnect until the test lets them through.
     let refuse = false;
     let live: WebSocketRoute | undefined;
     await page.routeWebSocket(/\/api\/sync/, (ws) => {
@@ -392,8 +305,6 @@ test.describe("the sync status", () => {
     await expect(reconnect).toBeVisible({ timeout: 30_000 });
     await expect(reconnect).not.toHaveText(/retry/i);
 
-    // Steady through the kernel's reconnect attempts, which each pass through
-    // "connecting": the ✕ used to blink with every one of them.
     for (let i = 0; i < 8; i++) {
       await page.waitForTimeout(500);
       await expect(reconnect).toHaveCount(1);
@@ -415,36 +326,29 @@ test.describe("the toolbar", () => {
     const footer = page.getByRole("contentinfo");
 
     await page.goto("/#/settings/toolbar.layout");
-    // A wide screen opens on its own tab.
     await expect(page.getByRole("tab", { name: /^Desktop/ })).toHaveAttribute("aria-selected", "true");
     await expect(page.getByRole("heading", { name: "Header — right" })).toBeVisible();
 
-    // Settings moves to the header's left, and the bar follows without a reload.
     await page.getByRole("combobox", { name: "Move Settings to" }).selectOption({ label: "Header — left" });
     await expect(startSeat.getByRole("button", { name: "Settings" })).toBeVisible();
     await expect(endSeat.getByRole("button", { name: "Settings" })).toHaveCount(0);
 
-    // It is a per-user setting, so it survives a reload.
     await page.reload();
     await expect(startSeat.getByRole("button", { name: "Settings" })).toBeVisible();
 
-    // Down to the status bar along the bottom.
     await page.getByRole("combobox", { name: "Move Settings to" }).selectOption({ label: "Footer — right" });
     await expect(footer.locator('ul[data-seat="bottom-end"]').getByRole("button", { name: "Settings" })).toBeVisible();
     await expect(header.getByRole("button", { name: "Settings" })).toHaveCount(0);
 
-    // Hidden: gone from the bars, still listed in Settings so it can come back.
     await page.getByRole("button", { name: "Hide Admin" }).click();
     await expect(header.getByRole("button", { name: "Admin" })).toHaveCount(0);
     await page.getByRole("button", { name: "Show Admin" }).click();
     await expect(endSeat.getByRole("button", { name: "Admin" })).toBeVisible();
 
-    // The phone's layout is its own: nothing above touched it.
     await page.getByRole("tab", { name: /^Phone/ }).click();
     await expect(page.getByRole("heading", { name: "Bottom toolbar" })).toBeVisible();
     await expect(page.getByRole("combobox", { name: "Move Settings to" })).toHaveValue("bottom");
 
-    // And reset puts every desktop item back where its plugin asked to be.
     await page.getByRole("tab", { name: /^Desktop/ }).click();
     await page.getByRole("button", { name: "Reset desktop layout" }).click();
     await expect(endSeat.getByRole("button", { name: "Settings" })).toBeVisible();
@@ -468,8 +372,6 @@ test.describe("the toolbar", () => {
 
 test.describe("the settings list", () => {
   test("puts base plugins' sections first and extensions below a divider", async ({ page }) => {
-    // No shipped extension contributes a settings section, so report `themes` as one.
-    // `base` only decides safe mode and this grouping; the plugin still loads.
     await page.route("**/api/plugins", async (route) => {
       const response = await route.fetch();
       const body = (await response.json()) as {

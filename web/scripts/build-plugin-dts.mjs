@@ -1,22 +1,4 @@
 #!/usr/bin/env node
-/**
- * Build a plugin's `frontend/index.d.ts`: the types of what it exports, as the one ambient
- * module `declare module "plugin:<id>" { … }` (`@kernel` 3.0).
- *
- * Why: a plugin's named exports are its API (`import { addItem } from "plugin:toolbar"`).
- * Inside this repository the tsconfig maps `plugin:*` straight to the sources; anybody else
- * — an example plugin, a third party — compiles against this file, exactly as they compile
- * against `/kernel.d.ts` for `@kernel`. An ambient module is the shape that makes a bare
- * specifier resolvable from one file, with no `paths` entry and no `node_modules`.
- *
- * How: rollup + rollup-plugin-dts over `src/index.tsx`. Relative imports (the plugin's own
- * files, `plugins/base/_shared`) are inlined; every bare specifier — `@kernel`, React and
- * the rest of the runtime layer, other plugins' `plugin:<id>`, a bundled library — stays
- * an import, because at runtime each of those is somebody else's module.
- *
- * Used by `build-plugins.mjs` and `build-examples.mjs` after each Vite build, and on its own:
- * `node web/scripts/build-plugin-dts.mjs <plugin-dir> <out-dir>`.
- */
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
@@ -27,21 +9,12 @@ import { dts } from "rollup-plugin-dts";
 
 const web = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-/**
- * @param {object} options
- * @param {string} options.root    The plugin directory (contains manifest.json and src/).
- * @param {string} options.outDir  The built package directory; the file lands at `<outDir>/frontend/index.d.ts`.
- * @param {string} [options.entry] Default `<root>/src/index.tsx`.
- * @returns {Promise<string>} The path written.
- */
 export async function buildPluginDts({ root, outDir, entry }) {
   const manifest = JSON.parse(readFileSync(join(root, "manifest.json"), "utf8"));
   const input = entry ?? join(root, "src", "index.tsx");
   const warnings = [];
   const bundle = await rollup({
     input,
-    // Checked against the unresolved specifier: anything that is not a path is someone
-    // else's module at runtime, so its types stay an import too.
     external: (id) => !id.startsWith(".") && !isAbsolute(id),
     onwarn: (warning) => warnings.push(warning),
     plugins: [
@@ -54,7 +27,6 @@ export async function buildPluginDts({ root, outDir, entry }) {
   const { output } = await bundle.generate({ format: "es" });
   await bundle.close();
   for (const warning of warnings) {
-    // Circular imports inside one plugin are its own business; anything else is worth a line.
     if (warning.code !== "CIRCULAR_DEPENDENCY") console.warn(`  ${manifest.id} d.ts: ${warning.message}`);
   }
   const code = output.find((chunk) => chunk.type === "chunk")?.code ?? "export {};\n";
@@ -64,12 +36,10 @@ export async function buildPluginDts({ root, outDir, entry }) {
   return file;
 }
 
-/** The bundled declarations as the body of `declare module "plugin:<id>"`. */
 export function wrap(manifest, code) {
   const body = code
     .split("\n")
     .filter((line) => !line.startsWith("//# sourceMappingURL"))
-    // `declare` is illegal inside an already-ambient module body.
     .map((line) => line.replace(/^(export\s+)?declare\s+/, "$1"))
     .map((line) => (line.length > 0 ? `  ${line}` : line))
     .join("\n")

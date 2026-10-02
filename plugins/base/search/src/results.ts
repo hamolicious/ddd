@@ -1,29 +1,3 @@
-/**
- * Resolving a search: **one query plan** — text, filter, folder relations and sort — that
- * the kernel's query engine answers live (`documents.subscribePlan`), the same engine the
- * server runs. A result obeys the filter, hides machine documents and updates as the feed
- * arrives, exactly as the plain list does, and ranking, "best match", paging and snippets
- * all come from that one answer.
- *
- * Two filters, and the difference matters. What the *user* asked for decides which empty
- * state to show; what the query runs also hides machine-owned documents unless the search
- * asks for them (`_shared/machine-docs.ts`). "Is inside note" is the engine's own
- * `child_of` join, so nothing here watches the folder tree.
- *
- * **Paged.** A page is `pageSize` rows (the view decides: the table's is its height); the
- * next loads when `more` is called.
- *
- * **Other providers.** A plugin may add a search source (`addProvider`: a semantic index,
- * an external wiki). Their hits are what the engine did not find; they follow its
- * results, filtered by the same filter, and a provider that fails marks the answer
- * `partial` rather than blanking it.
- *
- * **Changing the search keeps the last answer on screen until the new one is in.** A new
- * text has no answer for a moment; handing that over would swap the view for an empty
- * state and back, shifting everything under it. While `loading`, the rows, total and
- * `hasMore` are the last settled ones instead.
- */
-
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { DocumentRow, DocumentsApi, FilterJson, QueryPlan } from "@kernel";
@@ -39,19 +13,14 @@ import { useSearch, type SearchEngine } from "./useSearch.js";
 
 export const DEFAULT_PAGE_SIZE = 50;
 
-/** How long the text waits for the next keystroke before it is searched. */
 const TEXT_DEBOUNCE_MS = 140;
 
-/** Folder relations go to the engine as its own `child_of` node. */
 const NATIVE: ConditionContext = { native: true };
 
-/** What `useResults` knows beyond the protocol's answer, for the page around a view. */
 export interface PageResults extends SearchResults {
-  /** The user's own filter is empty: "no documents yet" rather than "nothing matches". */
   readonly unfiltered: boolean;
 }
 
-/** The search's own filter, and every `within` condition besides. */
 function narrowed(effective: FilterJson | undefined, within: readonly SearchClause[] | undefined): FilterJson | undefined {
   const extra =
     within && within.length > 0
@@ -61,13 +30,11 @@ function narrowed(effective: FilterJson | undefined, within: readonly SearchClau
   return effective === undefined ? extra : { and: [effective, extra] };
 }
 
-/** The sort keys a search's sort means. "Best match" breaks its ties by last updated. */
 export function sortTokens(sort: SearchSort): readonly string[] {
   if (sort.field === RELEVANCE.field) return ["relevance", "-updated_at"];
   return [sort.direction === "desc" ? `-${sort.field}` : sort.field];
 }
 
-/** The plan a search means, for `limit` rows. */
 export function planFor(text: string, filter: FilterJson | undefined, sort: SearchSort, limit: number): QueryPlan {
   return {
     ...(text !== "" ? { text, snippets: true } : {}),
@@ -77,12 +44,10 @@ export function planFor(text: string, filter: FilterJson | undefined, sort: Sear
   };
 }
 
-/** "Best match" ascending is the ranking read from the bottom: the page, reversed. */
 function ordered<T>(rows: readonly T[], sort: SearchSort, searching: boolean): readonly T[] {
   return searching && sort.field === RELEVANCE.field && sort.direction === "asc" ? [...rows].reverse() : rows;
 }
 
-/** `value`, once it has stopped changing for `ms`. */
 function useDebounced<T>(value: T, ms: number): T {
   const [settled, setSettled] = useState(value);
   useEffect(() => {
@@ -112,7 +77,6 @@ export function useResults(
 
   const live = useLivePlan(documents, planFor(text, effective, sort, limit));
 
-  // Other providers: what they find that the engine did not, under the same filter.
   const found = useSearch(engine, text, { limit, debounceMs: 0 });
   const extraIds = useMemo(() => {
     const seen = new Set(live.rows.map((row) => row.id));
@@ -140,8 +104,6 @@ export function useResults(
   }, [live.rows, extra.rows, extraIds, sort, searching]);
 
   const loading = live.loading || extra.loading || typed !== text || (searching && found.running);
-  // `total` stays absent while there is text, as `SearchResults` promises: the view says
-  // "N results for …" then, and "N documents" for the plain list.
   const now = {
     rows,
     total: searching ? undefined : live.total + extra.rows.length,
@@ -165,11 +127,6 @@ export function useResults(
   };
 }
 
-/**
- * The search's rows once, outside React: the same plan as {@link useResults}, answered
- * once. Other providers are not asked: this is for a caller that wants the workspace's
- * answer (a command over a saved search's documents).
- */
 export async function resolveSearch(
   documents: DocumentsApi,
   spec: SearchSpec,
@@ -183,7 +140,6 @@ export async function resolveSearch(
   return ordered(result.rows, sort, text !== "");
 }
 
-/** Every loaded row's id, reported whenever they change. */
 export function useReportRendered(rows: readonly DocumentRow[], report?: (ids: readonly string[]) => void): void {
   const [last, setLast] = useState("");
   const rendered = rows.map((row) => row.id).join(",");

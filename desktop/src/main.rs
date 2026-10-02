@@ -1,17 +1,3 @@
-//! ddd on the Linux desktop: the server's PWA in a WebKitGTK window.
-//!
-//! Deliberately **not** a port of the Flutter shell (`app/`). Loaded straight from the
-//! server, the page is an ordinary browser tab (cookie session, service worker,
-//! IndexedDB). The `window.shell` injected here says `session: "cookie"`, so the page
-//! keeps all of that, and carries one native capability: `folder`, the notes folder
-//! (`folder.rs`, `app/BRIDGE.md` §4.5). The browser fallbacks for
-//! `kernel.capabilities.filesystem` cover the rest:
-//!
-//! * `export` is a blob `<a download>` → [`on_download`] asks where to save it;
-//! * `pick` is `<input type=file>` → WebKitGTK opens the native chooser by itself;
-//! * `exportWorkspace` is a `target=_blank` link to `/api/admin/export` → [`on_new_window`]
-//!   turns it into a download in the main webview, where the cookie authenticates it.
-
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod config;
@@ -26,7 +12,6 @@ use url::Url;
 const CONFIG_HINT: &str = "Set the server with `--server <url>`, the DDD_SERVER_URL \
 environment variable, or `server_url = \"https://…\"` in ~/.config/ddd/desktop.toml.";
 
-/// `--server` beats `DDD_SERVER_URL` beats the config file.
 fn server_url() -> Result<Url, String> {
     let mut args = std::env::args().skip(1);
     let mut from_args = None;
@@ -59,7 +44,6 @@ fn same_origin(a: &Url, b: &Url) -> bool {
     a.origin() == b.origin()
 }
 
-/// Everything off-origin goes to the system browser; the app window stays on the app.
 fn open_externally(app: &AppHandle, url: &Url) {
     if matches!(url.scheme(), "http" | "https" | "mailto")
         && let Err(e) = app.opener().open_url(url.as_str(), None::<&str>)
@@ -69,7 +53,6 @@ fn open_externally(app: &AppHandle, url: &Url) {
 }
 
 fn show_error(text: String) {
-    // Off the main thread: `Finished` arrives on the GTK loop, and nothing is waiting on this.
     std::thread::spawn(move || {
         rfd::MessageDialog::new()
             .set_level(rfd::MessageLevel::Error)
@@ -79,8 +62,6 @@ fn show_error(text: String) {
     });
 }
 
-/// `Requested`: ask where to save; cancelling cancels the download. Blocking is correct
-/// here — WebKit waits on the destination synchronously, and the dialog is modal anyway.
 fn on_download(event: DownloadEvent<'_>) -> bool {
     match event {
         DownloadEvent::Requested { destination, .. } => {
@@ -104,7 +85,6 @@ fn on_download(event: DownloadEvent<'_>) -> bool {
             path,
             ..
         } => {
-            // A cancelled dialog also lands here with no path; only a real attempt is news.
             if let Some(path) = path {
                 show_error(format!("Could not save {}.", path.display()));
             }
@@ -114,24 +94,6 @@ fn on_download(event: DownloadEvent<'_>) -> bool {
     }
 }
 
-/// WebKitGTK on the NVIDIA driver, kept on the GPU. Two things stand in the way:
-///
-/// * Under Wayland the driver's explicit sync trips over WebKit's DMA-BUFs and the
-///   compositor drops the connection ("Error 71 (Protocol error) dispatching to Wayland
-///   display", then a blank or closed window). `__NV_DISABLE_EXPLICIT_SYNC=1` for this
-///   process is the whole fix: the page is still rendered by the web process on the GPU
-///   and passed on as DMA-BUFs, and nothing is lost. Under X11 nothing is needed: the
-///   DMA-BUF import fails harmlessly ("Failed to create GBM buffer") and the frames go
-///   through shared memory, still rendered on the GPU.
-/// * Debian's WebKitGTK (so Ubuntu's, and the one the AppImage bundles) carries
-///   `disable-nvidia-dmabuf.patch`, which on an NVIDIA GL vendor string refuses hardware
-///   acceleration outright: no compositor, every frame on the CPU. The patch's own
-///   override is `WEBKIT_FORCE_DMABUF_RENDERER=1`; an unpatched build ignores it.
-///
-/// The old workaround here, `WEBKIT_DISABLE_DMABUF_RENDERER=1`, was far worse than it
-/// looked: since WebKitGTK 2.44 it means the same CPU rendering as the Debian patch, on
-/// every NVIDIA machine, which is why the shell felt slow. Only on NVIDIA, and only when
-/// the user has not spoken: any of the three variables set leaves all of them alone.
 fn work_around_webkit_nvidia() {
     const EXPLICIT_SYNC: &str = "__NV_DISABLE_EXPLICIT_SYNC";
     const FORCE_DMABUF: &str = "WEBKIT_FORCE_DMABUF_RENDERER";
@@ -144,7 +106,6 @@ fn work_around_webkit_nvidia() {
     if !nvidia || !unset {
         return;
     }
-    // SAFETY: first thing in `main`, before Tauri or anything else has spawned a thread.
     unsafe {
         std::env::set_var(FORCE_DMABUF, "1");
         if wayland {
@@ -182,8 +143,6 @@ fn main() {
             folder::folder_remove,
         ])
         .setup(move |app| {
-            // The server's pages may call the folder commands, and nothing else may: the
-            // origin is only known now, so the capability is built here, not in JSON.
             let origin = server.origin().ascii_serialization();
             let mut capability = CapabilityBuilder::new("server-folder")
                 .remote(format!("{origin}/*"))
@@ -205,12 +164,6 @@ fn main() {
 
             let mut window =
                 WebviewWindowBuilder::new(app, "main", WebviewUrl::External(server.clone()));
-            // A debug build (`mise run desktop-run`) links the system WebKitGTK, while the
-            // AppImage bundles its own, usually older, one. Sharing one data directory let
-            // the newer WebKit rewrite IndexedDB in a metadata format the older cannot read,
-            // and the installed app then died at boot with "Unable to establish IDB database
-            // file". WebKit upgrades these files but never downgrades them, so a dev build
-            // keeps its own webview data (cookies, IndexedDB, service worker) apart.
             if cfg!(debug_assertions) {
                 window =
                     window.data_directory(app.path().app_local_data_dir()?.join("dev-webview"));
@@ -222,7 +175,6 @@ fn main() {
                 .min_inner_size(480.0, 480.0)
                 .initialization_script(folder::bridge_script(&origin))
                 .on_navigation(move |url| {
-                    // `blob:`/`data:`/`about:` are the page's own (downloads, iframes).
                     if same_origin(url, &nav_origin)
                         || matches!(url.scheme(), "blob" | "data" | "about")
                     {
@@ -233,10 +185,6 @@ fn main() {
                 })
                 .on_new_window(move |url, _features| {
                     if same_origin(&url, &win_origin) && url.path().starts_with("/api/") {
-                        // The workspace export link (`target=_blank`). Navigating the main
-                        // webview to an `attachment` response starts a download without
-                        // leaving the page, and it carries the session cookie. Only `/api/`:
-                        // any other same-origin page would replace the running app.
                         if let Some(main) = win_handle.get_webview_window("main") {
                             let _ = main.navigate(url);
                         }

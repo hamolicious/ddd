@@ -1,8 +1,3 @@
-/// Scheduled-notification parameter decoding (`BRIDGE.md` §4.3).
-///
-/// The bridge carries **instants**, not wall-clock times, and **string ids**, not Android's
-/// ints. Both conversions live in `ScheduledNotification`, and both are the kind of thing
-/// that is wrong once and then wrong for every reminder on every device.
 library;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -88,8 +83,6 @@ void main() {
         },
       ).toJson();
 
-      // `atIso` is the bridge's canonical field; `at` (epoch ms) is what the frozen
-      // web-side capability API reads.
       expect(json['atIso'], '2026-10-01T08:30:00.000Z');
       expect(
         json['at'],

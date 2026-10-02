@@ -1,57 +1,23 @@
-//! Shapes: the `s.*` vocabulary of `@kernel` (`web/kernel-api/src/shape.ts`) as plain
-//! JSON, and the two questions asked of one.
-//!
-//! - [`validate`]: does this *value* fit the shape? The server asks it at the backend call
-//!   boundary (`backend.exports` input and output, HOST-ABI §3.10). Same rules as
-//!   `validate(shapeFromJSON(json), value)` on the web side; `corpus/shapes.json` is run
-//!   by both test suites so the two stay one definition.
-//! - [`fits`]: does one *shape* fit another (an offered shape where a needed one is
-//!   required)? Structural subtyping, kept for tooling.
-//!
-//! Pure data in, data out, like the rest of this crate.
-
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-/// A shape in the `s.*` vocabulary, as plain JSON: `"string"`, `{ "object": { … } }`, …
-///
-/// Variant order mirrors `shapeFromJSON`'s checks, so a malformed node with two keys is
-/// read the same way on both sides. Anything unrecognised is [`Shape::Unknown`], which
-/// accepts every value (`shapeFromJSON` falls back to `any` the same way).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Shape {
-    /// `string`, `number`, `boolean`, `func`, `promise`, `component`, `any`. Any other
-    /// string reads as `any`.
     Primitive(String),
-    Literal {
-        literal: Vec<Value>,
-    },
-    Union {
-        union: Vec<Shape>,
-    },
-    Array {
-        array: Box<Shape>,
-    },
-    Record {
-        record: Box<Shape>,
-    },
-    Optional {
-        optional: Box<Shape>,
-    },
-    Object {
-        object: BTreeMap<String, Shape>,
-    },
-    /// Not a shape this build understands: accepts anything.
+    Literal { literal: Vec<Value> },
+    Union { union: Vec<Shape> },
+    Array { array: Box<Shape> },
+    Record { record: Box<Shape> },
+    Optional { optional: Box<Shape> },
+    Object { object: BTreeMap<String, Shape> },
     Unknown(Value),
 }
 
-/// One reason a value does not fit, in the web validator's `ShapeIssue` form.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Issue {
-    /// Dotted path into the value (`items[2].title`); `""` is the value itself.
     pub path: String,
     pub expected: String,
     pub got: String,
@@ -69,7 +35,6 @@ impl std::fmt::Display for Issue {
 }
 
 impl Shape {
-    /// The shape's display name, as `@kernel` spells it (`string[]`, `{ a, b }`, `x?`).
     pub fn name(&self) -> String {
         match self {
             Shape::Primitive(name) => match name.as_str() {
@@ -98,7 +63,6 @@ impl Shape {
         }
     }
 
-    /// The fields of an object shape; `None` for anything else.
     pub fn fields(&self) -> Option<&BTreeMap<String, Shape>> {
         match self {
             Shape::Object { object } => Some(object),
@@ -107,8 +71,6 @@ impl Shape {
     }
 }
 
-/// JavaScript's `typeof`, as the web validator reports it (`null` and `array` split out;
-/// `undefined` for an absent field).
 fn type_name(value: Option<&Value>) -> &'static str {
     match value {
         None => "undefined",
@@ -121,11 +83,6 @@ fn type_name(value: Option<&Value>) -> &'static str {
     }
 }
 
-/// Every reason `value` does not fit `shape`. Empty means it fits.
-///
-/// JSON has no functions or promises, so `func` and `promise` never match a value;
-/// `component` matches any object (or array — JavaScript's `typeof` again). Unknown
-/// object keys are allowed, as on the web side.
 pub fn validate(value: &Value, shape: &Shape) -> Vec<Issue> {
     let mut issues = Vec::new();
     check(Some(value), shape, "", &mut issues);
@@ -148,7 +105,6 @@ fn child(path: &str, key: &str) -> String {
     }
 }
 
-/// JavaScript `===` over JSON values: numbers compare by value (`1` is `1.0`).
 fn strictly_equal(a: &Value, b: &Value) -> bool {
     match (a, b) {
         (Value::Number(a), Value::Number(b)) => a.as_f64() == b.as_f64(),
@@ -226,9 +182,6 @@ fn check(value: Option<&Value>, shape: &Shape, path: &str, out: &mut Vec<Issue>)
     }
 }
 
-/// Every reason offering `provided` where `needed` is required fails. Empty means it
-/// fits: extra keys are fine, a missing required key is not, and an optional key may be
-/// absent but must match when present.
 pub fn fits(provided: &Shape, needed: &Shape) -> Vec<String> {
     let mut problems = Vec::new();
     fits_at(provided, needed, "", &mut problems);
@@ -288,8 +241,6 @@ fn fits_at(provided: &Shape, needed: &Shape, path: &str, out: &mut Vec<String>) 
             _ => mismatch(out),
         },
         Shape::Union { union: members } => {
-            // A provided union fits when each of its members fits some needed member; a
-            // plain provided shape fits when it fits any member.
             let options: Vec<&Shape> = match provided {
                 Shape::Union { union } => union.iter().collect(),
                 other => vec![other],
@@ -305,7 +256,6 @@ fn fits_at(provided: &Shape, needed: &Shape, path: &str, out: &mut Vec<String>) 
         Shape::Primitive(name) => {
             let ok = match provided {
                 Shape::Primitive(offer) => offer == name,
-                // A literal of strings is a string, and so on.
                 Shape::Literal { literal } => literal.iter().all(|value| match name.as_str() {
                     "string" => value.is_string(),
                     "number" => value.is_number(),
@@ -368,7 +318,6 @@ mod tests {
         assert!(validate(&serde_json::json!(1), &shape(r#"{"tuple":["string"]}"#)).is_empty());
     }
 
-    /// Structural fitting, row by row.
     #[test]
     fn the_type_check_table() {
         let fits_ = |offer: &str, need: &str| fits(&shape(offer), &shape(need));

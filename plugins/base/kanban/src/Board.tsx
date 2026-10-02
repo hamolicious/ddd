@@ -1,77 +1,3 @@
-/**
- * The kanban view: the search's notes as cards in columns, one per value of the field the
- * view groups by (`layout.ts`).
- *
- * **Moving a card writes the note** — its field set to the column's value by one
- * frontmatter splice (`setFrontmatterValue`), or removed for the "No …" column — and it
- * works wherever the board is, embedded in another note included.
- *
- * **A drag lifts the card**, as the folder tree lifts a row: pointer-driven, not HTML5,
- * because the browser draws an HTML5 drag as a translucent ghost no style can make solid.
- * The card under the pointer is an opaque, shadowed, slightly tilted copy, and it leaves
- * its column: a gap opens where it will land — under the pointer, between the cards it
- * will sit between, in whichever column the pointer is over — and closes behind it. Let
- * go, and the card takes that place: its column's value and a rank between its new
- * neighbours (`planRanks`). With the board's order turned off, cards follow the search's
- * order, so the gap shows where that order puts the card, and a column cannot be
- * rearranged. Over no column, the gap waits where the card came from. Columns never
- * appear or vanish during any of it (`keepColumns`). Near an edge, the board and the
- * column scroll by themselves.
- * Escape puts it back. With a mouse the drag starts after a few pixels; with a finger,
- * after a long press — and a long press let go without moving opens the card's menu
- * (`context-menu`'s, which knows the card by its `data-ddd-press="release"`).
- *
- * **Everything glides.** The move shows at once, before the write lands (`withMoves`),
- * and the dropped card travels from the pointer into its slot while the cards around it
- * make room (`flip.ts`). If the write fails, the card goes back and the board says why.
- *
- * **Without a pointer**, the card's menu (right-click, or long press) has "Move to". A
- * card is an `ddd/document` and a `kanban/card`, a column a `kanban/column`, the board a
- * `kanban/board`; the menus are `context-menu`'s, and the board's own entries are
- * `actions.ts`'s, which reach this board through `boards`.
- *
- * **A column's settings are on the column.** While the search is open for editing — the
- * all-documents page, or a saved board after "Edit search"; never an embed — each column's
- * header has a ⚙ that opens its settings in a sheet (`ColumnEditor.tsx`) and a ⇅ that
- * sorts it — by a field either way, or the board's order — and an "Add column" tile ends
- * the board. A sorted column's header shows its sort as an arrow, its field on hover;
- * clicking it reverses the sort. In a sorted column the sort places cards: the gap shows
- * where, and a drop only changes the column.
- *
- * **Adding a card stays on the board.** A column's + opens a title field at its top; the
- * card goes to the column's bottom (`appendRanks`). Enter makes the card and leaves the field open for the next, Escape (or leaving it
- * empty) closes it. The new card shows at once, faded, until the note it made arrives.
- *
- * **No column is taller than the screen.** The board ends at the bottom of its scrolling
- * ancestor (`useFitToScreen`), never shorter than half a screen, and each column's cards
- * scroll in a box of their own, a virtual list (`useVirtualList`): only the cards on
- * screen are in the page, the rest is padding. A drag reads the cards drawn, each of which
- * knows its slot among the column's. With swimlanes the board itself scrolls its lanes.
- *
- * **A filter bar above the board** (`FilterBar.tsx`), one pill per property the cards
- * show (the board's settings) and one for the swimlane field, narrows the board to the
- * cards holding one of each pill's chosen values — on this screen only, nothing is saved.
- * Filtered on the swimlane field, the board shows exactly the chosen lanes. A card added
- * while a one-value filter is on is born with its value, so it stays in view.
- *
- * **Cards can be selected together.** Dragging from anywhere on the board that is not a
- * card draws a box; the cards it crosses are selected (Shift or Ctrl held, added to those
- * already selected), and Shift- or Ctrl-click toggles one. The box is anchored to what it
- * was started in — a column's list, or the board — so the board and its columns still
- * scroll while it is drawn, by wheel or near an edge, and every card that passes through
- * the box is swept up. A click on blank space, or Escape, lets the selection go. Dragging a
- * selected card carries the whole selection: the lifted card wears their count, the gap is
- * as tall as all of them, and they land as one block in the board's order (`planRanks`)
- * — a sorted column places each where its sort says. The selection's menu (right-click a
- * selected card, or the Actions button over the board) moves them all and runs every
- * command that takes documents with all of them (`actions.ts`).
- *
- * **Swimlanes**, when the board's settings name a field for them, stack the board in rows,
- * one per value of that field, each with the same columns (`lanes.ts`). Dropping a card
- * into another lane writes that field as well as the column's; a column's + in a lane
- * makes the card with the lane's value.
- */
-
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentType, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactElement, ReactNode, SyntheticEvent } from "react";
 import { createPortal } from "react-dom";
@@ -124,28 +50,15 @@ import {
   type Scalar,
 } from "./layout.js";
 
-/** A mouse press that travels this far is a drag, not a click. */
 const DRAG_THRESHOLD = 5;
-/** How long a finger must rest on a card before it lifts. */
-/** A touch that travels this far before a long press was a scroll. */
 const LONG_PRESS_SLOP = 10;
-/** A card's height before any is measured: a one-line title and its spacing. */
 const CARD_ESTIMATE = 42;
-/** The space under each card's row (`pb-1.5`), in pixels. */
 const CARD_GAP = 6;
-/** A column is never shorter than this, so a crowded page scrolls rather than squeezing it. */
 const COLUMN_MIN = 320;
-/** What a swimlane's header and the gap between lanes take from a column's height. */
 const LANE_CHROME = 56;
-/** How close to an edge, in pixels, the board starts scrolling on its own, and how fast. */
 const EDGE = 48;
 const SPEED = 14;
 
-/**
- * A sorted column's sort, folded to its arrow: the column's name is what the header is
- * for. Its field slides open beside the arrow on hover or keyboard focus; the tooltip
- * and the accessible name always carry it.
- */
 const SORT_NAME =
   "kanban:max-w-0 kanban:overflow-hidden kanban:text-ellipsis kanban:whitespace-nowrap kanban:opacity-0 kanban:transition-[max-width,opacity,margin] kanban:duration-150 kanban:group-hover:ml-0.5 kanban:group-hover:max-w-[7rem] kanban:group-hover:opacity-100 kanban:group-focus-visible:ml-0.5 kanban:group-focus-visible:max-w-[7rem] kanban:group-focus-visible:opacity-100 kanban:motion-reduce:transition-none";
 
@@ -153,15 +66,11 @@ export interface BoardDeps {
   readonly kernel: Kernel;
   readonly looks: () => Looks | undefined;
   readonly menu: () => Pick<ContextMenu, "open" | "openSheet"> | undefined;
-  /** A new card titled `title` at the bottom of `column`, born in it and with the filter's values (`create.ts`). */
   readonly addCard: (spec: SearchSpec, settings: KanbanOptions, column: Column, title: string, queued: number, filters: Filters) => Promise<string>;
-  /** `search`'s value picker, for the filter bar (`FilterBar.tsx`). */
   readonly fmValueSelect: ComponentType<FmValueSelectProps>;
-  /** The commands that take documents, as of now: what a selection's menu runs. */
   readonly documentActions: () => readonly DocumentAction[];
 }
 
-/** The box being drawn out over the board, in viewport pixels. */
 interface Box {
   readonly left: number;
   readonly top: number;
@@ -172,24 +81,18 @@ interface Box {
 const modified = (event: { readonly shiftKey: boolean; readonly ctrlKey: boolean; readonly metaKey: boolean }): boolean =>
   event.shiftKey || event.ctrlKey || event.metaKey;
 
-/** The card being carried, and where. */
 interface Lift {
   readonly row: DocumentRow;
-  /** Every card carried, in the board's order: the row alone, or the selection it is part of. */
   readonly ids: readonly string[];
-  /** The gap's height: every carried card's row, as one block. */
   readonly block: number;
   readonly x: number;
   readonly y: number;
-  /** Where in the card it was grabbed. */
   readonly dx: number;
   readonly dy: number;
   readonly width: number;
   readonly height: number;
-  /** The column it came from, and its place there. */
   readonly from: number;
   readonly origin: number;
-  /** The column under the pointer, by index, and the slot among its cards; `undefined` over none. */
   readonly over: number | undefined;
   readonly slot: number;
 }
@@ -201,30 +104,23 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
     useLookChanges(dress);
     const [moves, setMoves] = useState<ReadonlyMap<string, Move>>(() => new Map());
     const [lift, setLift] = useState<Lift | undefined>(undefined);
-    /** The cards selected on the board, by id; and the box selecting them while it is drawn. */
     const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
     const selectedRef = useRef(selected);
     selectedRef.current = selected;
     const [marquee, setMarquee] = useState<Box | undefined>(undefined);
     const [error, setError] = useState<string | undefined>(undefined);
     const [board, setBoard] = useState<HTMLDivElement | null>(null);
-    /** The board's height that ends at the bottom of the screen. */
     const fit = useFitToScreen(board, COLUMN_MIN);
-    /** The column whose title field is open, by key (`null`: the "No …" column). */
     const [adding, setAdding] = useState<string | undefined>(undefined);
-    /** Cards made here and not yet in the results: shown faded where they will appear. */
     const [pending, setPending] = useState<readonly { readonly key: string; readonly title: string; readonly id?: string; readonly token: number }[]>([]);
     const nextToken = useRef(0);
     const titleOf = (column: Column): string => columnTitle(column, settings.group);
-    /** Fold or unfold a column from the board: a named one's setting, naming it if it was not. */
     const fold = (column: Column, collapsed: boolean): void => {
       if (column.key === undefined) return;
       onOptionsChange(withKanban(withColumn(settings, column.key, { collapsed }), options));
     };
 
-    // Ranks in each card's `%%% kanban` section; off, the search's order.
     const order = settings.order;
-    /** The filter bar's choices, by field: only for the properties the cards show now. */
     const [chosen, setChosen] = useState<Filters>(() => new Map());
     const fields = filterFields(settings);
     const filters: Filters = new Map([...chosen].filter(([field]) => fields.includes(field)));
@@ -236,8 +132,6 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
         return next;
       });
     const rows = filterRows(withMoves(results.rows, settings, moves), filters);
-    // Columns seen while this board is on screen, for this grouping, stay.
-    // Lanes too, for this lane field.
     const kept = useRef<{ group: string; lanesBy: string; columns: KeptColumns; lanes: KeptColumns }>({
       group: settings.group,
       lanesBy: laneScope(settings.lanes, new Map()),
@@ -245,21 +139,16 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
       lanes: NO_KEPT,
     });
     if (kept.current.group !== settings.group) kept.current = { ...kept.current, group: settings.group, columns: NO_KEPT };
-    // Kept for this lane field and these filters: a lane a new filter empties goes (`laneScope`).
     const scope = laneScope(settings.lanes, filters);
     if (kept.current.lanesBy !== scope) kept.current = { ...kept.current, lanesBy: scope, lanes: NO_KEPT };
     const lanes = lanesFor(rows, settings, kept.current.columns, kept.current.lanes, filters.get(settings.lanes));
-    // Every lane's columns, one after another: a column's index is its place in this list.
     const columns = lanes.flatMap((lane) => lane.columns);
     kept.current.columns = keepColumns(columns, kept.current.columns);
     kept.current.lanes = keepLanes(lanes, kept.current.lanes);
     const laned = settings.lanes !== "" && columns.length > 0;
-    /** A column in its lane, where the column's name alone could be any lane's. */
     const placeOf = (column: Column): string =>
       laned && column.lane ? `${titleOf(column)} · ${laneTitle(column.lane, settings.lanes)}` : titleOf(column);
-    /** A column in its lane, as a key: what the title field and the faded new cards belong to. */
     const cellOf = (column: Column): string => JSON.stringify([column.lane?.key ?? null, column.key ?? null]);
-    /** The selection as rows, in the board's order (column by column), each once. */
     const selectedRows = ((): readonly DocumentRow[] => {
       const seen = new Set<string>();
       const out: DocumentRow[] = [];
@@ -285,7 +174,6 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
         selectedRef.current = next;
         return next;
       });
-    // Escape lets the selection go, when nothing else (a drag, the box) is using it.
     useEffect(() => {
       if (selected.size === 0 || lift !== undefined || marquee !== undefined) return undefined;
       const onKey = (event: KeyboardEvent): void => {
@@ -296,7 +184,6 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
       return () => window.removeEventListener("keydown", onKey);
     }, [selected.size, lift, marquee]);
 
-    // A pending move is done once the live row says the same.
     useEffect(() => {
       if (moves.size === 0) return;
       const done = [...moves].filter(([id, move]) => {
@@ -311,10 +198,6 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
       });
     }, [results.rows, moves, settings.group, settings.order, settings.lanes]);
 
-    /**
-     * A column's settings in a sheet: `column` to change (named or not yet), `undefined` to
-     * add one. Save puts it in place among the named columns; Remove takes it out.
-     */
     const editColumn = (column: Column | undefined, anchor: HTMLElement): void => {
       const sheets = menu();
       if (!sheets) return;
@@ -339,7 +222,6 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
             sortFields={sortFields()}
             unsorted={order ? "Board order (drag to arrange)" : "The search's order"}
             onSave={(def, position) => {
-              // A renamed column's old value goes too: its cards show under their own value.
               apply(placeColumn(named, at === -1 ? undefined : was, def, position), was !== undefined && was !== def.value ? was : undefined);
               close();
             }}
@@ -358,7 +240,6 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
     };
     const canEdit = editing === true && menu()?.openSheet !== undefined;
 
-    /** Fields a column can sort by: the fixed ones, then every property the cards hold. */
     const sortFields = (): readonly { readonly field: string; readonly label: string }[] => {
       const keys = new Set<string>();
       for (const row of results.rows) for (const key of Object.keys(row.fm)) keys.add(key);
@@ -366,7 +247,6 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
       const since = sinceField(settings.group);
       if (since) keys.delete(since.slice(3));
       return [
-        // Oldest first, ascending: the cards longest in the column at the top.
         ...(since ? [{ field: since, label: "Entered column" }] : []),
         { field: "title", label: "Title" },
         { field: "created_at", label: "Created" },
@@ -379,7 +259,6 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
       if (column.key === undefined) return;
       onOptionsChange(withKanban(withColumn(settings, column.key, { sort }), options));
     };
-    /** The column's sort, as a menu: what to sort by (or the board's order), and which way. */
     const openSort = (column: Column, anchor: HTMLElement): void => {
       const menus = menu();
       if (!menus) return;
@@ -427,7 +306,6 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
     const sortLabel = (sort: ColumnSort): string =>
       sortFields().find((choice) => choice.field === sort.field)?.label ?? sort.field.replace(/^fm\./, "");
 
-    // A card made here is done pending once the results hold it.
     useEffect(() => {
       if (!pending.some((card) => card.id !== undefined && results.rows.some((row) => row.id === card.id))) return;
       setPending((current) => current.filter((card) => card.id === undefined || !results.rows.some((row) => row.id === card.id)));
@@ -436,7 +314,6 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
     const submit = (column: Column, title: string): void => {
       const token = nextToken.current++;
       const key = cellOf(column);
-      // Cards still on their way to this column: each new one ranks below them.
       const queued = pending.filter((card) => card.key === key).length;
       setError(undefined);
       setPending((current) => [...current, { key, title, token }]);
@@ -450,25 +327,17 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
       );
     };
 
-    // Where the gap is: under the pointer, or back where the card came from.
     const gapColumn = lift === undefined ? undefined : lift.over ?? lift.from;
     const gapSlot = lift === undefined ? undefined : lift.over === undefined ? lift.origin : lift.slot;
     const signature = `${columns.map((column) => `${column.lane?.key ?? ""}/${column.key ?? ""}:${column.cards.map((card) => card.id).join(",")}`).join("|")}#${lift?.ids.join(",") ?? ""}@${gapColumn ?? ""}:${gapSlot ?? ""}`;
     const flip = useFlip(board, signature);
 
-    /**
-     * Put `rows` into `column` at `slot` among its other cards, as one block in this order:
-     * each card's column value if that changed, its lane's if that changed, and — when the
-     * board keeps its own order — ranks for the new place. Cards that cannot move, or
-     * cannot enter the column's lane, stay where they are.
-     */
     const moveAll = (rows: readonly DocumentRow[], column: Column, slot: number): void => {
       const moving = rows.filter((row) => movable(row, settings.group) && laneChange(row, column, settings.lanes) !== null);
       if (moving.length === 0) return;
       const ids = new Set(moving.map((row) => row.id));
       const here = (row: DocumentRow): boolean => column.cards.some((card) => card.id === row.id);
       const others = column.cards.filter((card) => !ids.has(card.id));
-      // A sorted column places cards itself: a drop there only changes the column.
       const sorted = column.def?.sort !== undefined;
       const landing = [...others.slice(0, slot), ...moving, ...others.slice(slot)];
       const unchanged = landing.length === column.cards.length && landing.every((card, at) => card.id === column.cards[at]?.id);
@@ -476,8 +345,6 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
       const ranks = !order || sorted ? new Map<string, number>() : planRanks(others, slot, moving.map((row) => row.id));
       const planned = new Map<string, Move>();
       for (const [id, rank] of ranks) planned.set(id, { rank });
-      // Into another column: its value, and when it got there. Into the same column of
-      // another lane: only the lane's value.
       const now = new Date().toISOString();
       for (const row of moving) {
         if (here(row)) continue;
@@ -528,7 +395,6 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
       });
     };
 
-    // What this board's entries in the menus act on (`actions.ts`), kept current.
     const handle = useRef<BoardHandle | undefined>(undefined);
     handle.current = {
       columns,
@@ -551,19 +417,10 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
       };
     }, [board]);
 
-    // --- the drag --------------------------------------------------------------------
-
-    /** Read by the window listeners of a drag in flight, so they never act on stale state. */
     const latest = useRef({ columns, rows, order, moveAll, flip, lanesBy: settings.lanes });
     latest.current = { columns, rows, order, moveAll, flip, lanesBy: settings.lanes };
-    /** A finger's press, until it lifts or is abandoned. */
     const press = useRef<{ timer: ReturnType<typeof setTimeout> } | undefined>(undefined);
 
-    /**
-     * The column under the pointer and the slot among its cards: before the first card
-     * whose middle is below the pointer. Layout positions (`offsetTop`), not boxes, so a
-     * card mid-glide is where it is going.
-     */
     const hitAt = (x: number, y: number, id: string, ids: readonly string[]): { over: number | undefined; slot: number } => {
       const element = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-kanban-column]");
       const index = element?.dataset["kanbanColumn"];
@@ -573,21 +430,16 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
       if (!column) return { over: undefined, slot: 0 };
       const carrying = new Set(ids);
       const others = column.cards.filter((card) => !carrying.has(card.id));
-      // A sorted column decides for itself: the gap goes where its sort puts the card.
       const carried = latest.current.rows.find((row) => row.id === id);
-      // Another lane the card cannot move to is no place to drop it: the gap waits at home.
       if (carried && laneChange(carried, column, latest.current.lanesBy) === null) return { over: undefined, slot: 0 };
       if (column.def?.sort && carried) return { over: Number(index), slot: sortedSlot(others, carried, column.def.sort) };
-      // A folded column has no list to aim into: a card dropped on it goes to its end.
       if (!list) return { over: Number(index), slot: others.length };
       if (!latest.current.order) {
-        // The search's order decides: the gap goes where that order puts the card.
         const rank = new Map(latest.current.rows.map((row, at) => [row.id, at]));
         const mine = rank.get(id) ?? Number.MAX_SAFE_INTEGER;
         const at = others.findIndex((card) => (rank.get(card.id) ?? 0) > mine);
         return { over: Number(index), slot: at === -1 ? others.length : at };
       }
-      // The cards drawn (a virtual list: those near the viewport), each knowing its slot.
       const top = list.getBoundingClientRect().top - list.scrollTop;
       const cards = [...list.querySelectorAll<HTMLElement>("[data-card]")];
       const hit = cards.find((card) => top + card.offsetTop + card.offsetHeight / 2 > y);
@@ -602,13 +454,10 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
       const box = card.getBoundingClientRect();
       const start = { x: event.clientX, y: event.clientY };
       const touch = event.pointerType === "touch";
-      // A selected card carries the whole selection; an unselected one goes alone, and the
-      // selection is let go.
       const group = selectedRef.current.has(row.id) && selectedRows.length > 1 ? selectedRows : [row];
       const ids = group.map((each) => each.id);
       if (group.length === 1 && selectedRef.current.size > 0) clearSelection();
       const carrying = new Set(ids);
-      /** The gap for the block: every carried card's row as drawn, a guess for one not drawn. */
       const block = (): number => {
         let total = 0;
         for (const id of ids) {
@@ -617,7 +466,6 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
         }
         return total - CARD_GAP;
       };
-      // Its place among the cards of its column that are not carried.
       const origin = from.cards.slice(0, from.cards.indexOf(row)).filter((each) => !carrying.has(each.id)).length;
       let lifted = false;
       let point = start;
@@ -641,7 +489,6 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
           ...hitAt(x, y, row.id, ids),
         });
       };
-      // Near an edge, scroll the board sideways and the column under the pointer up or down.
       const scroll = (): void => {
         const area = board?.getBoundingClientRect();
         if (board && area) {
@@ -665,7 +512,6 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
         place(point.x, point.y);
         frame = requestAnimationFrame(scroll);
       };
-      // Once a finger has lifted a card, the page must not scroll under it.
       const holdStill = (touchEvent: TouchEvent): void => {
         if (lifted) touchEvent.preventDefault();
       };
@@ -696,9 +542,6 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
         if (!lifted) return;
         document.body.style.removeProperty("user-select");
         document.body.style.removeProperty("cursor");
-        // The click that ends a drag lands on whatever is under the pointer; it is not a
-        // click on that thing. Only that one click: a drag that ends with none must not eat
-        // the next real one.
         const swallow = (click: MouseEvent): void => {
           click.stopPropagation();
           click.preventDefault();
@@ -707,14 +550,11 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
         setTimeout(() => window.removeEventListener("click", swallow, { capture: true }), 0);
         const hit = landed ? hitAt(point.x, point.y, row.id, ids) : { over: undefined, slot: 0 };
         const into = hit.over === undefined ? undefined : latest.current.columns[hit.over];
-        // The card glides from where it was let go, into its slot or back to its own.
         latest.current.flip.remember(
           row.id,
           new DOMRect(point.x - (start.x - box.left), point.y - (start.y - box.top), box.width, box.height),
         );
         setLift(undefined);
-        // A long press let go where it started is not a move: `context-menu` opens the
-        // card's menu for it.
         if (into && Math.hypot(point.x - start.x, point.y - start.y) >= LONG_PRESS_SLOP) {
           const carried = ids.map((id) => latest.current.rows.find((each) => each.id === id)).filter((each): each is DocumentRow => each !== undefined);
           latest.current.moveAll(carried, into, hit.slot);
@@ -739,22 +579,11 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
       window.addEventListener("keydown", onKey, true);
     };
 
-    /** A click opens the card; with Shift or Ctrl, it toggles the card in the selection. */
     const clickCard = (row: DocumentRow, event: ReactMouseEvent<HTMLElement>): void => {
       if (modified(event)) toggleSelected(row.id);
       else onOpen(row.id);
     };
 
-    // --- the box -------------------------------------------------------------------
-
-    /**
-     * A press on the board that is not on a card (nor a control) draws a box from there; the
-     * cards it crosses are selected. The box is anchored to the content it started in — a
-     * column's list, or the board — so scrolling moves the content through it, and a card
-     * swept up stays selected once scrolled out of view; one still in view and outside the
-     * box is let go (unless it was selected before, with Shift or Ctrl held). Near an edge,
-     * the board and the column under the pointer scroll by themselves.
-     */
     const startMarquee = (event: ReactPointerEvent<HTMLDivElement>): void => {
       if (event.button !== 0 || event.pointerType === "touch" || !board) return;
       const from = event.target as HTMLElement;
@@ -787,7 +616,6 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
           if (id === undefined) continue;
           const card = drawn.getBoundingClientRect();
           const list = drawn.closest("[data-kanban-list]")?.getBoundingClientRect();
-          // Scrolled out of its column: keeps what it has. In view: in the box, or let go.
           if (list && (card.bottom <= list.top || card.top >= list.bottom)) continue;
           const inside = card.left < right && card.right > left && card.top < bottom && card.bottom > top;
           if (inside) next.add(id);
@@ -807,7 +635,6 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
           if (point.y < bounds.top + EDGE) area.scrollTop -= SPEED;
           else if (point.y > bounds.bottom - EDGE) area.scrollTop += SPEED;
         }
-        // The column under the pointer's x, even with the pointer above or below its list.
         const y = Math.min(Math.max(point.y, bounds.top + 1), bounds.bottom - 1);
         const column = document.elementFromPoint(point.x, y)?.closest<HTMLElement>("[data-kanban-column]");
         const list = column?.querySelector<HTMLElement>("[data-kanban-list]") ?? (container === area ? undefined : container);
@@ -837,7 +664,6 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
         window.removeEventListener("pointercancel", finish);
         window.removeEventListener("keydown", onKey, true);
         if (!drawing) {
-          // A click on blank space lets the selection go.
           if (!additive) clearSelection();
           return;
         }
@@ -865,7 +691,6 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
       window.addEventListener("keydown", onKey, true);
     };
 
-    /** The selection's menu, from the Actions button: what the right-click on a selected card shows. */
     const openSelection = (anchor: HTMLElement): void => {
       const menus = menu();
       const current = handle.current;
@@ -878,16 +703,11 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
       });
     };
 
-    /** One column, `index` its place among every lane's columns (`columns`). */
     const renderColumn = (column: Column, index: number): ReactElement => {
       const hot = lift !== undefined && lift.over === index;
-      // The carried card is out of its column — hidden, not removed: a finger's touch
-      // events keep coming from the element it started on only while that is in the
-      // page — and the gap stands where it will go.
       const cards = liftIds ? column.cards.filter((card) => !liftIds.has(card.id)) : column.cards;
       const gapAt = gapColumn === index ? gapSlot : undefined;
       const color = column.def?.color;
-      // No taller than the screen: the board's fit, less a lane's header when laned.
       const capped = fit === undefined ? undefined : laned ? Math.max(COLUMN_MIN, fit - LANE_CHROME) : fit;
       if (column.def?.collapsed === true) {
         return (
@@ -994,7 +814,6 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
               +
             </button>
           </h3>
-          {/* The title field at the top, in reach of the +; the card it makes goes to the bottom. */}
           {adding === cellOf(column) && (
             <div className="kanban:shrink-0">
               <CardInput
@@ -1040,7 +859,6 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
       </button>
     ) : null;
 
-    /** A swimlane: its value as a header that stays in view while the board scrolls sideways, over its row of columns. */
     const renderLane = (lane: Lane, first: number): ReactElement => {
       const count = laneCount(lane);
       return (
@@ -1062,7 +880,6 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
         </section>
       );
     };
-    /** Where each lane's columns start in `columns`. */
     const starts = lanes.map((_, at) => lanes.slice(0, at).reduce((sum, lane) => sum + lane.columns.length, 0));
 
     return (
@@ -1135,10 +952,6 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
   };
 }
 
-/**
- * A new card's title, typed where the card will appear. Enter adds it and clears the field
- * for the next one; Enter on nothing, Escape, or leaving the field empty closes it.
- */
 function CardInput({
   label,
   onSubmit,
@@ -1151,7 +964,6 @@ function CardInput({
   const [title, setTitle] = useState("");
   return (
     <input
-      // Opened by a click on +: the field is what that click was for.
       autoFocus
       aria-label={label}
       placeholder="Card title — Enter to add"
@@ -1179,7 +991,6 @@ function CardInput({
   );
 }
 
-/** Where a carried card will land: a dashed slot its height, spaced below like a card's row. */
 function Gap({ height }: { readonly height: number }): ReactElement {
   return (
     <li
@@ -1190,14 +1001,6 @@ function Gap({ height }: { readonly height: number }): ReactElement {
   );
 }
 
-/**
- * What a card shows, top to bottom, as the board's settings say (`card.ts`): the title
- * with its icon and a property as "key value", both wrapped in full (a property that points
- * at a note shows that note as a link to it, its title and look), and the note's text
- * — its whole body, rendered as markdown (`CardText`). An item with nothing to show is
- * left out; a card whose items all come out empty falls back to its title, faded, so no
- * card is ever blank.
- */
 function CardBody({ row, items, look }: { readonly row: DocumentRow; readonly items: readonly CardItem[]; readonly look: NoteLook | undefined }): ReactElement {
   const lines = items
     .filter((item) => item.hidden !== true)
@@ -1236,38 +1039,21 @@ function CardBody({ row, items, look }: { readonly row: DocumentRow; readonly it
   );
 }
 
-/**
- * The note's body as `markdown` draws it, at the card's small size: block spacing and
- * heading sizes brought down from the reading column's, and the parts that could run wide
- * (code, tables, images) kept within the card. Tasks are live — ticked on the card, they
- * are written to the note — and a click on a task, a link or any other control inside the
- * text is that control's, not the card's: it neither opens the card nor starts a drag.
- */
 const CARD_TEXT_CLASSES =
-  // The card's own colour (its folder look, inline) over markdown's theme text: as the title.
   "kanban:min-w-0 kanban:w-full kanban:text-xs kanban:leading-snug kanban:opacity-90 kanban:[&_.md-root]:text-inherit kanban:[&_.md-root_blockquote]:text-inherit kanban:[&_.md-root_blockquote]:opacity-75 kanban:[&_.md-root_li.md-task-done]:text-inherit kanban:[&_.md-root_li.md-task-done]:opacity-60 kanban:[&_.md-root]:text-xs kanban:[&_.md-root]:leading-snug kanban:[&_.md-root>*+*]:mt-1 kanban:[&_.md-root_h1]:my-1 kanban:[&_.md-root_h1]:text-sm kanban:[&_.md-root_h1]:font-semibold kanban:[&_.md-root_h2]:my-1 kanban:[&_.md-root_h2]:text-sm kanban:[&_.md-root_h2]:font-semibold kanban:[&_.md-root_h3]:my-1 kanban:[&_.md-root_h3]:text-xs kanban:[&_.md-root_h3]:font-semibold kanban:[&_.md-root_h4]:my-1 kanban:[&_.md-root_h4]:text-xs kanban:[&_.md-root_h4]:font-semibold kanban:[&_.md-root_h5]:my-1 kanban:[&_.md-root_h5]:text-xs kanban:[&_.md-root_h5]:font-semibold kanban:[&_.md-root_h6]:my-1 kanban:[&_.md-root_h6]:text-xs kanban:[&_.md-root_h6]:font-semibold kanban:[&_.md-root_p]:my-0 kanban:[&_.md-root_ul]:my-0 kanban:[&_.md-root_ol]:my-0 kanban:[&_.md-root_blockquote]:my-0 kanban:[&_.md-root_blockquote]:border-l-2 kanban:[&_.md-root_blockquote]:pl-2 kanban:[&_.md-root_pre]:my-0 kanban:[&_.md-root_pre]:max-w-full kanban:[&_.md-root_pre]:overflow-x-auto kanban:[&_.md-root_pre]:rounded kanban:[&_.md-root_pre]:border kanban:[&_.md-root_pre]:border-border kanban:[&_.md-root_pre]:bg-bg-subtle kanban:[&_.md-root_pre]:p-1.5 kanban:[&_.md-root_code]:break-words kanban:[&_.md-root_code]:rounded-[3px] kanban:[&_.md-root_code]:bg-bg-subtle kanban:[&_.md-root_code]:px-[0.3em] kanban:[&_.md-root_code]:font-mono kanban:[&_.md-root_code]:text-[0.9em] kanban:[&_.md-root_pre_code]:bg-transparent kanban:[&_.md-root_pre_code]:p-0 kanban:[&_.md-root_img]:h-auto kanban:[&_.md-root_img]:max-w-full kanban:[&_.md-root_img]:rounded kanban:[&_.md-root_table]:my-0 kanban:[&_.md-root_table]:block kanban:[&_.md-root_table]:max-w-full kanban:[&_.md-root_table]:overflow-x-auto kanban:[&_.md-root_table]:border-collapse kanban:[&_.md-root_th]:border kanban:[&_.md-root_th]:border-border kanban:[&_.md-root_th]:px-1 kanban:[&_.md-root_th]:text-left kanban:[&_.md-root_td]:border kanban:[&_.md-root_td]:border-border kanban:[&_.md-root_td]:px-1 kanban:[&_.md-root_td]:text-left kanban:[&_.md-root_hr]:my-1";
 
-/**
- * A note a property points at, as `markdown` draws a link to it: its live title, colour
- * and icon. The pill wears a drop shadow here, on the card, so a note in the card's own
- * colour is still a thing of its own on it rather than a word in the same paint.
- */
 const CARD_LINK_CLASSES =
   "kanban:inline-flex kanban:max-w-full kanban:align-baseline kanban:[&>a]:max-w-full kanban:[&>a[style*=background]]:shadow-[0_1px_2px_rgba(0,0,0,0.35)]";
 
-/** Controls inside the rendered text: their clicks and presses stay theirs. */
 const CONTROL = "a, button, input, select, textarea, label, [role='button'], [role='checkbox']";
 
-/** A click or press on a control inside a card is that control's: it neither opens the card nor starts a drag. */
 function keepControl(event: SyntheticEvent<HTMLElement>): void {
   if ((event.target as Element).closest(CONTROL)) event.stopPropagation();
 }
 
 function CardText({ id, body }: { readonly id: string; readonly body: string }): ReactElement {
-  // Re-rendered when what is added to markdown changes (a directive, a task state).
   const [revision, setRevision] = useState(0);
   useEffect(() => onMarkdownChange(() => setRevision((at) => at + 1)), []);
-  // Parsing is the cost; the board redraws its cards on every move of a drag.
   const rendered = useMemo(() => renderMarkdown(body, { documentId: id }), [body, id, revision]);
   return (
     <span className={CARD_TEXT_CLASSES} onClick={keepControl} onPointerDown={keepControl}>
@@ -1276,13 +1062,6 @@ function CardText({ id, body }: { readonly id: string; readonly body: string }):
   );
 }
 
-/**
- * A column's cards in a box that scrolls, as a virtual list: only the cards near the
- * viewport are drawn, each a row knowing its index among the column's cards and its slot
- * among them without the carried one (what a drop is placed by). The gap stands before
- * the card at its slot, or after the last when the whole column is drawn; `children`
- * (cards on their way, the title field) follow the list.
- */
 function ColumnList({
   column,
   lift,
@@ -1311,10 +1090,8 @@ function ColumnList({
     count: cards.length,
     keyOf: (at) => cards[at]?.id ?? String(at),
     estimate: CARD_ESTIMATE,
-    // The box is the viewport, wherever the page has scrolled it.
     clipToWindow: false,
   });
-  // Carried cards are out of the layout: a card's slot is its index less those before it.
   const carrying = lift ? new Set(lift.ids) : undefined;
   const before: number[] = [];
   let seen = 0;
@@ -1367,15 +1144,12 @@ function CardSlot({
   onPointerDown,
   onClick,
 }: {
-  /** Its place among the column's cards, and among them without the carried ones. */
   readonly index: number;
   readonly slot: number;
   readonly row: DocumentRow;
   readonly look: NoteLook | undefined;
   readonly items: readonly CardItem[];
-  /** Being carried: out of the layout, but still in the page. */
   readonly carried: boolean;
-  /** One of the cards selected on the board: ringed, and a `kanban/selection` for the menu. */
   readonly selected: boolean;
   readonly gapBefore: number | undefined;
   readonly draggable: boolean;
@@ -1390,9 +1164,6 @@ function CardSlot({
         {...(carried ? { hidden: true } : { "data-card": "", "data-slot": slot, "data-flip-id": row.id })}
         className="kanban:shrink-0 kanban:pb-1.5 kanban:transition-opacity kanban:duration-200 kanban:starting:opacity-0"
       >
-        {/* A div, not a button: the note's text rendered on the card holds links and task
-            checkboxes of its own, which no button may contain. Enter and Space open it as a
-            button's would. */}
         <div
           role="button"
           tabIndex={0}
@@ -1410,9 +1181,7 @@ function CardSlot({
             event.preventDefault();
             event.currentTarget.click();
           }}
-          // A long press is the drag's too: its menu opens when it is let go in place.
           {...mark("ddd/document", row.id, { label: row.title, types: selected ? ["kanban/card", "kanban/selection"] : ["kanban/card"], pressOnRelease: true })}
-          // The drag is ours; the browser's own would draw its ghost over it.
           onDragStart={(event) => event.preventDefault()}
         >
           <CardBody row={row} items={items} look={look} />
@@ -1422,11 +1191,6 @@ function CardSlot({
   );
 }
 
-/**
- * The card being carried: opaque, raised and a little tilted, under the pointer where it
- * was grabbed. A portal, so no transformed or contained ancestor (an embed, the sidebar)
- * becomes the containing block of its `position: fixed`.
- */
 function Lifted({
   lift,
   look,
@@ -1441,7 +1205,6 @@ function Lifted({
   const top = lift.y - lift.dy;
   return createPortal(
     <>
-      {/* A block of cards: two more peek out behind the one in hand. */}
       {count > 1 &&
         [2, 1].map((depth) => (
           <div
@@ -1479,7 +1242,6 @@ function Lifted({
   );
 }
 
-/** The box being drawn out to select cards: a translucent accent rectangle over the page. */
 function Marquee({ box }: { readonly box: Box }): ReactElement {
   return createPortal(
     <div

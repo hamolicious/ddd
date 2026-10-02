@@ -1,30 +1,5 @@
-/**
- * The randomized edit repertoire: what a simulated client actually *does* to a
- * document (SPEC §9 M2 — "randomized concurrent text ops incl. frontmatter and
- * `%%%` edits").
- *
- * Two rules shape every operation, and they are the same rules the real client
- * must obey (SPEC §3.3):
- *
- * - **Frontmatter values are minimal splices.** Only the affected key's value
- *   span is replaced — never a parse → re-serialize → whole-block rewrite, which
- *   destroys comments and corrupts under concurrent edits.
- * - **`%%%` sections are line splices.** One YAML key per line; only the changed
- *   key's line is touched, so different keys merge cleanly and a same-key race
- *   resolves last-occurrence-wins.
- *
- * Body edits carry a **marker** — `{{client#n}}` — and the harness guarantees no
- * operation ever inserts into, or deletes part of, an existing marker. That makes
- * marker survival an exact test for update loss: after convergence, every marker
- * every client ever wrote must appear exactly once (SPEC §9 M2, "no update loss
- * across reconnects"). Concurrent inserts cannot split each other (neither
- * replica can address the other's unseen characters), and later inserts are
- * snapped clear of markers here.
- */
-
 import * as Y from "yjs";
 
-/** Root key of the single `Y.Text` in every document (PROTOCOL.md §3.2). */
 export const TEXT_ROOT = "content";
 
 export type OpKind =
@@ -35,15 +10,12 @@ export type OpKind =
   | "section-set"
   | "heading-rewrite";
 
-/** One applied operation, as recorded in the replay journal. */
 export interface OpRecord {
   readonly kind: OpKind;
   readonly client: string;
   readonly documentId: string;
-  /** The marker this op inserted, when it inserted one. */
   readonly marker?: string;
   readonly detail: string;
-  /** `false` when the op found nothing to do (e.g. no deletable span). */
   readonly applied: boolean;
 }
 
@@ -58,7 +30,6 @@ const OP_WEIGHTS: readonly (readonly [OpKind, number])[] = [
 
 const OP_TOTAL = OP_WEIGHTS.reduce((sum, [, weight]) => sum + weight, 0);
 
-/** Pick an operation kind from the weighted repertoire. */
 export function chooseOp(random: () => number): OpKind {
   let ticket = random() * OP_TOTAL;
   for (const [kind, weight] of OP_WEIGHTS) {
@@ -74,20 +45,10 @@ export function markerFor(client: string, counter: number): string {
   return `{{${client}#${counter}}}`;
 }
 
-/** Every marker occurrence in `text`, in order. */
 export function markersIn(text: string): string[] {
   return text.match(MARKER_PATTERN) ?? [];
 }
 
-// ---------------------------------------------------------------------------
-// Regions
-// ---------------------------------------------------------------------------
-
-/**
- * The three regions of a document (SPEC §3.1), located byte-exactly the way the
- * shared core locates them: frontmatter only if `---` is the literal first line,
- * machine sections only as the last contiguous run of `%%% <id>` fences.
- */
 export interface Regions {
   readonly fmStart: number;
   readonly fmEnd: number;
@@ -108,7 +69,6 @@ export function regions(text: string): Regions {
   };
 }
 
-/** Index just past the closing `---` line, or 0 when there is no frontmatter. */
 export function frontmatterEnd(text: string): number {
   if (!text.startsWith("---\n")) return 0;
   let cursor = 4;
@@ -116,18 +76,12 @@ export function frontmatterEnd(text: string): number {
     const lineEnd = indexOfLineEnd(text, cursor);
     const line = text.slice(cursor, lineEnd);
     if (line === "---") return Math.min(lineEnd + 1, text.length);
-    if (lineEnd >= text.length) return 0; // unterminated block: no frontmatter
+    if (lineEnd >= text.length) return 0;
     cursor = lineEnd + 1;
   }
   return 0;
 }
 
-/**
- * Start index of the trailing `%%%` run, or `text.length` when there is none.
- * A fence run qualifies only when everything from it to the end of the document
- * is fences and blank lines — the core's rule, and the reason a body edit that
- * eats the newline before `%%%` legitimately un-parses a section.
- */
 export function sectionsStartIndex(text: string): number {
   const lines = text.split("\n");
   let candidate = text.length;
@@ -146,7 +100,6 @@ export function sectionsStartIndex(text: string): number {
   return candidate;
 }
 
-/** `true` when `lines[from..]` is nothing but complete `%%% id`…`%%%` blocks and blanks. */
 function isFenceRun(lines: readonly string[], from: number): boolean {
   let index = from;
   while (index < lines.length) {
@@ -172,7 +125,6 @@ function isFenceRun(lines: readonly string[], from: number): boolean {
   return true;
 }
 
-/** Marker spans `[start, end)` in `text`. */
 export function markerSpans(text: string): (readonly [number, number])[] {
   const spans: (readonly [number, number])[] = [];
   for (const match of text.matchAll(MARKER_PATTERN)) {
@@ -182,7 +134,6 @@ export function markerSpans(text: string): (readonly [number, number])[] {
   return spans;
 }
 
-/** Move `index` out of any marker it falls inside (never into one). */
 export function safeInsertIndex(text: string, index: number): number {
   let cursor = Math.max(0, Math.min(index, text.length));
   for (const [start, end] of markerSpans(text)) {
@@ -191,11 +142,6 @@ export function safeInsertIndex(text: string, index: number): number {
   return cursor;
 }
 
-/**
- * The longest deletable span of at most `want` characters starting at or after
- * `index` and ending before `limit`, touching no marker. `undefined` when there
- * is nothing safe to delete.
- */
 export function safeDeleteSpan(
   text: string,
   index: number,
@@ -221,15 +167,6 @@ function indexOfLineEnd(text: string, from: number): number {
   return newline === -1 ? text.length : newline;
 }
 
-// ---------------------------------------------------------------------------
-// Splices (the two write disciplines of SPEC §3.3)
-// ---------------------------------------------------------------------------
-
-/**
- * Set a frontmatter key by replacing **only its value span**; a missing key is
- * added as one line before the closing `---`. Returns `false` when the document
- * has no frontmatter block to splice into.
- */
 export function spliceFrontmatterValue(text: Y.Text, key: string, value: string): boolean {
   const current = text.toString();
   const fmEnd = frontmatterEnd(current);
@@ -246,19 +183,12 @@ export function spliceFrontmatterValue(text: Y.Text, key: string, value: string)
       if (valueLength > 0) text.delete(valueStart, valueLength);
       text.insert(valueStart, value);
     } else {
-      // Insert before the closing `---` line, which is the last 4 characters of
-      // the block (`---\n`).
       text.insert(Math.max(0, fmEnd - 4), `${key}: ${value}\n`);
     }
   });
   return true;
 }
 
-/**
- * Set one YAML line inside the caller's `%%%` section (SPEC §3.3): replace that
- * key's line, or add it before the closing `%%%`. The whole section is appended
- * when the document has none.
- */
 export function spliceSectionLine(
   text: Y.Text,
   pluginId: string,
@@ -295,7 +225,6 @@ export function spliceSectionLine(
   });
 }
 
-/** Index of a line exactly equal to `line` at or after `from`, or -1. */
 function findLine(text: string, line: string, from: number): number {
   let cursor = Math.max(0, from);
   while (cursor <= text.length) {
@@ -310,10 +239,6 @@ function findLine(text: string, line: string, from: number): number {
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
-
-// ---------------------------------------------------------------------------
-// The repertoire
-// ---------------------------------------------------------------------------
 
 const WORDS = [
   "milk",
@@ -336,10 +261,6 @@ function pick<T>(items: readonly T[], random: () => number): T {
   return items[Math.floor(random() * items.length)] ?? (items[0] as T);
 }
 
-/**
- * Apply one randomized operation to `text`, as `client`. Deterministic for a
- * given `random` stream and document state.
- */
 export function applyOp(
   text: Y.Text,
   documentId: string,
@@ -433,17 +354,6 @@ function frontmatterValue(key: string, random: () => number, counter: number): s
     case "path":
       return `${pick(WORDS, random)}/${pick(WORDS, random)}`;
     case "date": {
-      // Three shapes on purpose, because materialization canonicalizes dates
-      // (SPEC §3.4) and the harness compares the server's `fm` against a *client*
-      // parse:
-      //   - a canonical date            → unchanged on both sides
-      //   - an offset datetime          → canonicalized to UTC by the server, so
-      //                                   the client parse must be too
-      //   - `2026-9-3`                  → **not** a date to the shared core (it
-      //                                   demands zero-padding), so it stays a
-      //                                   plain string
-      // A divergence in any of the three is a parity bug, and this is where it
-      // surfaces instead of in production sorting.
       const roll = random();
       const month = `0${1 + Math.floor(random() * 9)}`;
       const day = `1${Math.floor(random() * 9)}`;
@@ -458,11 +368,6 @@ function frontmatterValue(key: string, random: () => number, counter: number): s
   }
 }
 
-// ---------------------------------------------------------------------------
-// Seed documents
-// ---------------------------------------------------------------------------
-
-/** A realistic seed document: frontmatter, body with tasks, one `%%%` section. */
 export function seedDocumentText(index: number, random: () => number = () => 0.5): string {
   const title = `${pick(WORDS, random)} ${index}`;
   const folder = `${pick(WORDS, random)}/${pick(WORDS, random)}`;

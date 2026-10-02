@@ -1,11 +1,3 @@
-/**
- * The three keybinding rules of SPEC §6.5, pinned.
- *
- * "First registration wins on a conflict, and conflicts are listed" is the kind of rule
- * that quietly becomes "last wins" during a refactor, and nobody notices until two
- * plugins fight over `Mod+K` in someone else's workspace.
- */
-
 import { describe, expect, it } from "vitest";
 
 import { parseOverrides, resolveBindings, serializeOverrides } from "./bindings.js";
@@ -39,7 +31,6 @@ describe("resolveBindings", () => {
       parseOverrides(["other.cmd=Mod+K"]),
     );
     expect(resolved.byKeys.get("Mod+K")).toBe("other.cmd");
-    // The default lost its chord and gets nothing else — it is not silently re-homed.
     expect(resolved.byCommand.has("palette.open")).toBe(false);
     expect(resolved.conflicts[0]).toMatchObject({ winner: "other.cmd", userWon: true });
   });
@@ -80,9 +71,9 @@ describe("parseOverrides", () => {
   it("survives a human editing the settings document badly", () => {
     const parsed = parseOverrides([
       "good.cmd=Mod+K",
-      "=Mod+J", // no command
+      "=Mod+J",
       "no-equals-sign",
-      "bad.keys=Mod+A+B", // two keys in one chord
+      "bad.keys=Mod+A+B",
       42,
       null,
     ]);

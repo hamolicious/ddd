@@ -1,33 +1,16 @@
-/**
- * The `editor.extension`: colours the body of each fenced code block in the editor, in
- * the same grammar read mode uses.
- *
- * The editor's own markdown highlighter still marks a fence body as monospace; these
- * decorations sit on top of it and add the colour. Only fences on screen are parsed,
- * and a parse is cached by text, so scrolling back over a block costs nothing.
- */
-
 import { RangeSetBuilder, StateEffect, type Extension, type Text } from "@codemirror/state";
 import { Decoration, EditorView, ViewPlugin, type DecorationSet, type ViewUpdate } from "@codemirror/view";
 
 import type { SyntaxApi } from "./api.js";
 
-/** A fenced code block in the document: its info string and where its body is. */
 export interface Fence {
   readonly info: string;
-  /** Offset of the first body character (the line after the opening fence). */
   readonly from: number;
-  /** Offset just past the last body character (before the closing fence's newline). */
   readonly to: number;
 }
 
 const OPEN = /^ {0,3}(`{3,}|~{3,})(.*)$/;
 
-/**
- * Every fenced block, the way CommonMark finds them: the closing fence is the same
- * character, at least as long, with nothing after it. An unclosed fence runs to the end.
- * The leading `---` frontmatter block is skipped — a fence cannot open inside it.
- */
 export function fencesOf(doc: Text): Fence[] {
   const fences: Fence[] = [];
   let line = 1;
@@ -53,7 +36,6 @@ export function fencesOf(doc: Text): Fence[] {
   return fences;
 }
 
-/** Recompute: a grammar arrived, or the installed set changed. */
 const refresh = StateEffect.define<null>();
 
 const marks = new Map<string, Decoration>();
@@ -78,7 +60,6 @@ export function editorExtension(api: SyntaxApi): Extension {
         this.fences = fencesOf(view.state.doc);
         this.decorations = this.build();
         this.unsubscribe = api.subscribe(() => {
-          // Never dispatch inside another dispatch: a grammar can finish mid-update.
           queueMicrotask(() => {
             if (!this.destroyed) this.view.dispatch({ effects: refresh.of(null) });
           });

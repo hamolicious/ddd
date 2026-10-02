@@ -1,13 +1,3 @@
-//! `/api/admin/*` — admin-only (SPEC §5.1, §5.4). Every handler takes
-//! [`AdminUser`], so a non-admin gets 403 and an anonymous caller 401.
-//!
-//! Invariants enforced here, not in the client:
-//! - invites: 7-day expiry, single-use, listable, revocable, **non-admin only**;
-//! - the last admin can be neither deleted nor demoted;
-//! - deleting a user revokes their sessions and keeps attribution ids (rendered
-//!   "deleted user");
-//! - every action in this file writes an [`crate::domain::AuditEntry`].
-
 use std::io::{self, Write};
 
 use axum::body::Body;
@@ -28,11 +18,8 @@ use crate::domain::{AuditEntry, Id, Timestamp, User, UserView};
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 
-/// Page size for the audit log when the client does not ask.
 const AUDIT_DEFAULT_LIMIT: u32 = 50;
-/// Hard ceiling on an audit page.
 const AUDIT_MAX_LIMIT: u32 = 200;
-/// Chunk size the export streams in.
 const EXPORT_CHUNK_BYTES: usize = 64 * 1024;
 
 pub fn router() -> Router<AppState> {
@@ -50,25 +37,16 @@ pub fn router() -> Router<AppState> {
         .route("/stats", get(stats))
 }
 
-// ---------------------------------------------------------------------------
-// Invites
-// ---------------------------------------------------------------------------
-
 #[derive(Debug, Deserialize)]
 pub struct CreateInviteRequest {
-    /// Optional pre-filled email; when set, registration must match it.
     #[serde(default)]
     pub email: Option<String>,
 }
 
-/// The invite token is returned **once**, at creation.
 #[derive(Debug, Serialize)]
 pub struct CreateInviteResponse {
     pub invite: InviteView,
     pub token: String,
-    /// The link to hand the invitee: `<PUBLIC_URL>/#/invite/<token>`, which opens the
-    /// app's registration form with the token filled in. Only when `PUBLIC_URL` is
-    /// configured, as for [`PasswordResetResponse::url`].
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
 }
@@ -83,7 +61,6 @@ pub struct InviteView {
     pub used_at: Option<Timestamp>,
     pub used_by: Option<Id>,
     pub revoked_at: Option<Timestamp>,
-    /// Derived: `pending` | `used` | `revoked` | `expired`.
     pub status: String,
 }
 
@@ -123,7 +100,6 @@ pub async fn create_invite(
     meta: ClientMeta,
     Json(body): Json<CreateInviteRequest>,
 ) -> AppResult<Json<CreateInviteResponse>> {
-    // An email on the invite is a binding, not a hint: registration must match.
     let email = match body
         .email
         .as_deref()
@@ -188,34 +164,23 @@ pub async fn revoke_invite(
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
-// ---------------------------------------------------------------------------
-// Users
-// ---------------------------------------------------------------------------
-
 #[derive(Debug, Deserialize)]
 pub struct UpdateUserRequest {
-    /// Toggle the admin flag. The last admin cannot be demoted.
     #[serde(default)]
     pub is_admin: Option<bool>,
     #[serde(default)]
     pub name: Option<String>,
 }
 
-/// One-time reset link for a user (SPEC §5.1). The token is returned once.
 #[derive(Debug, Serialize)]
 pub struct PasswordResetResponse {
     pub user_id: Id,
     pub token: String,
     pub expires_at: Timestamp,
-    /// The link to hand the user: `<PUBLIC_URL>/#/reset/<token>`, which opens the app's
-    /// "set a new password" form. Only when `PUBLIC_URL` is configured: without it the
-    /// server has no name for itself that the user could reach, and the client builds
-    /// the link from the address it was loaded from instead.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
 }
 
-/// `<public_url>/#/<route>/<token>`. The token is URL-safe base64, so it needs no escaping.
 pub fn app_link(public_url: Option<&str>, route: &str, token: &str) -> Option<String> {
     public_url.map(|origin| format!("{}/#/{route}/{token}", origin.trim_end_matches('/')))
 }
@@ -251,8 +216,6 @@ pub async fn update_user(
 
     let mut changes = doc! { "updated_at": BsonDateTime::now() };
     let mut actions: Vec<&'static str> = Vec::new();
-    // Set when this request is the one that takes the admin flag away, so the
-    // invariant can be re-checked once the write has landed.
     let mut demoted_an_active_admin = false;
 
     if let Some(name) = body.name.as_deref().map(str::trim) {
@@ -270,14 +233,11 @@ pub async fn update_user(
         && is_admin != target.is_admin
     {
         if !target.is_active {
-            // A deleted account cannot be handed the admin flag; undeleting is
-            // not a v1 operation, so there is nothing sensible to toggle.
             return Err(AppError::unprocessable(
                 "cannot change the admin flag of a deleted account",
             ));
         }
         if !is_admin {
-            // The workspace must never end up with nobody who can administer it.
             ensure_not_last_admin(&state, &target, "demoted").await?;
             demoted_an_active_admin = true;
         }
@@ -290,8 +250,6 @@ pub async fn update_user(
     }
 
     if actions.is_empty() {
-        // Nothing to do; report the current state rather than inventing an
-        // audit entry for a no-op.
         return Ok(Json(UserView::from(target)));
     }
 
@@ -300,8 +258,6 @@ pub async fn update_user(
         .await?;
 
     if demoted_an_active_admin {
-        // Two admins demoting each other concurrently both passed the read above;
-        // the one that finds no admin left puts the flag back.
         undo_unless_an_admin_remains(&state, &id, doc! { "is_admin": true }, "demoted").await?;
     }
 
@@ -327,7 +283,6 @@ pub async fn update_user(
     Ok(Json(UserView::from(updated)))
 }
 
-/// Deactivates the user and revokes their sessions; attribution ids stay.
 pub async fn delete_user(
     State(state): State<AppState>,
     admin: AdminUser,
@@ -348,9 +303,6 @@ pub async fn delete_user(
         users
             .update_one(
                 doc! { "_id": &id },
-                // Attribution ids stay in documents and are rendered "deleted
-                // user" (SPEC §5.1); only the ability to sign in goes away. The
-                // admin flag goes with it so the last-admin count stays honest.
                 doc! { "$set": {
                     "is_active": false,
                     "is_admin": false,
@@ -360,9 +312,6 @@ pub async fn delete_user(
             .await?;
 
         if target.is_admin {
-            // Re-checked after the write, and rolled back if two admins deleted
-            // each other at once — before any session is revoked, so an undone
-            // deletion leaves the account exactly as it was.
             undo_unless_an_admin_remains(
                 &state,
                 &id,
@@ -373,11 +322,8 @@ pub async fn delete_user(
         }
     }
 
-    // Sessions *and* bearer tokens: both live in `sessions`, so one delete
-    // covers every carrier.
     let revoked = crate::auth::revoke_user_sessions(&state, &id).await?;
 
-    // An outstanding reset link would let the deleted account back in.
     state
         .collections
         .password_resets()
@@ -431,7 +377,6 @@ pub async fn create_password_reset(
         Some(&actor),
         audit::TARGET_USER,
         Some(target.id.clone()),
-        // The token itself is never written to the audit log.
         doc! { "email": &target.email, "expires_at": issued.expires_at },
         meta.ip,
     )
@@ -445,7 +390,6 @@ pub async fn create_password_reset(
     }))
 }
 
-/// Active admins other than `target_id`.
 async fn other_active_admins(state: &AppState, target_id: &str) -> Result<u64, AppError> {
     Ok(state
         .collections
@@ -458,13 +402,6 @@ async fn other_active_admins(state: &AppState, target_id: &str) -> Result<u64, A
         .await?)
 }
 
-/// Reject an operation that would leave the workspace with no active admin
-/// (SPEC §5.1), before any work is done. `verb` is used in the client-visible
-/// message.
-///
-/// This is only the fast, friendly half of the invariant: it is a read, and the
-/// write happens after it. [`undo_unless_an_admin_remains`] is the half that
-/// actually holds under concurrency.
 async fn ensure_not_last_admin(
     state: &AppState,
     target: &User,
@@ -481,22 +418,6 @@ async fn ensure_not_last_admin(
     Ok(())
 }
 
-/// Re-check "an active admin still exists" **after** a write that removed one,
-/// and undo the write when it no longer holds.
-///
-/// [`ensure_not_last_admin`] alone is a read-then-write with nothing in between:
-/// admins A and B deleting (or demoting) each other at the same moment both read
-/// "one other admin remains", both proceed, and the workspace is left with nobody
-/// who can administer it — with no supported way back, because registration needs
-/// an invite only an admin can mint and the break-glass
-/// `ddd reset-password` CLI issues a password reset, not an admin flag.
-/// Mongo here is standalone (SPEC §8 pins a single replica, and Compose runs a
-/// standalone mongod), so there is no multi-document transaction to wrap the pair
-/// in; instead whoever notices the empty result repairs the row it just changed.
-///
-/// Both racers can roll back — both keep the flag, both callers get 422 — which
-/// is the safe direction to fail in. `restore` is applied only while the account
-/// is still the one we changed.
 async fn undo_unless_an_admin_remains(
     state: &AppState,
     target_id: &str,
@@ -524,10 +445,6 @@ async fn undo_unless_an_admin_remains(
     )))
 }
 
-// ---------------------------------------------------------------------------
-// Audit log, export, stats
-// ---------------------------------------------------------------------------
-
 #[derive(Debug, Default, Deserialize)]
 pub struct AuditParams {
     #[serde(default)]
@@ -542,13 +459,6 @@ pub struct AuditParams {
     pub limit: Option<u32>,
 }
 
-/// One audit row on the wire.
-///
-/// `AuditEntry` is a *stored* shape: its `created_at` is a `bson::DateTime` and
-/// its `detail` is a raw BSON document, so serializing it directly put
-/// `{"$date": …}` (and `$oid`/`$binary` for anything a caller had put in
-/// `detail`) into an API response. Nothing in this protocol carries extended JSON
-/// (PROTOCOL.md §2.1), so the listing goes through this view instead.
 #[derive(Debug, Serialize)]
 pub struct AuditView {
     pub id: String,
@@ -618,8 +528,6 @@ pub async fn list_audit(
     {
         filter.insert("target_id", target);
     }
-    // Entry ids are ULIDs, so `_id` descending *is* newest-first and paginating
-    // on it is stable under concurrent writes (an offset would not be).
     if let Some(cursor) = params
         .cursor
         .as_deref()
@@ -634,7 +542,6 @@ pub async fn list_audit(
         .audit_log()
         .find(filter)
         .sort(doc! { "_id": -1 })
-        // One extra row answers "is there a next page?" without a count.
         .limit(i64::from(limit) + 1)
         .await?
         .try_collect()
@@ -654,9 +561,6 @@ pub async fn list_audit(
     }))
 }
 
-/// `GET /api/admin/export` — a zip of every document as plain markdown: the
-/// no-Mongo disaster-recovery path (SPEC §5.1). Streamed, never fully buffered;
-/// filenames derive from title + id and are sanitized.
 pub async fn export_documents(
     State(state): State<AppState>,
     admin: AdminUser,
@@ -673,8 +577,6 @@ pub async fn export_documents(
     )
     .await;
 
-    // Two hops so neither side blocks the other: an async producer reads Mongo,
-    // a blocking zipper compresses, and the response body pulls bytes out.
     let (entry_tx, entry_rx) = mpsc::channel::<(String, String)>(8);
     let (byte_tx, byte_rx) = mpsc::channel::<Result<Bytes, io::Error>>(4);
 
@@ -708,8 +610,6 @@ pub async fn export_documents(
         .into_response())
 }
 
-/// Read every live document's materialized text, newest id first, and hand
-/// `(filename, content)` pairs to the zipper.
 async fn stream_export_entries(
     collections: crate::db::Collections,
     entry_tx: mpsc::Sender<(String, String)>,
@@ -717,7 +617,6 @@ async fn stream_export_entries(
     let mut cursor = collections
         .raw(db::DOCUMENTS)
         .find(doc! { "deleted_at": null })
-        // The CRDT blobs are the one thing an export must not carry.
         .projection(doc! { "_id": 1, "title": 1, "content": 1 })
         .sort(doc! { "_id": 1 })
         .await?;
@@ -730,23 +629,18 @@ async fn stream_export_entries(
         let content = row.get_str("content").unwrap_or_default().to_string();
 
         let mut name = export_filename(title, &id);
-        // Distinct documents may share a title; the id suffix already differs,
-        // but be defensive about a collision after sanitization.
         if !used_names.insert(name.clone()) {
             name = format!("{id}.md");
             used_names.insert(name.clone());
         }
 
         if entry_tx.send((name, content)).await.is_err() {
-            // The client hung up.
             break;
         }
     }
     Ok(())
 }
 
-/// Compress entries into a zip, pushing chunks to `byte_tx`. Runs on a blocking
-/// thread: the `zip` crate is synchronous.
 fn write_export_zip(
     mut entry_rx: mpsc::Receiver<(String, String)>,
     byte_tx: mpsc::Sender<Result<Bytes, io::Error>>,
@@ -771,7 +665,6 @@ fn write_export_zip(
     inner.flush()
 }
 
-/// A `Write` sink that forwards buffered chunks into a tokio channel.
 struct ChannelWriter {
     tx: mpsc::Sender<Result<Bytes, io::Error>>,
     buffer: Vec<u8>,
@@ -797,7 +690,6 @@ impl Write for ChannelWriter {
     }
 }
 
-/// Bridge an mpsc receiver into the stream `Body::from_stream` wants.
 fn tokio_stream_from(
     rx: mpsc::Receiver<Result<Bytes, io::Error>>,
 ) -> impl futures::Stream<Item = Result<Bytes, io::Error>> {
@@ -807,7 +699,6 @@ fn tokio_stream_from(
     })
 }
 
-/// `<sanitized title>-<id>.md`, safe on every filesystem and free of traversal.
 fn export_filename(title: &str, id: &str) -> String {
     let mut slug = String::with_capacity(48);
     let mut last_was_dash = true;
@@ -832,8 +723,6 @@ fn export_filename(title: &str, id: &str) -> String {
     }
 }
 
-/// Workspace counters for the admin dashboard (documents, trashed, attachments,
-/// users, storage sizes).
 #[derive(Debug, Serialize)]
 pub struct AdminStats {
     pub documents: u64,
@@ -843,12 +732,8 @@ pub struct AdminStats {
     pub attachment_bytes: u64,
     pub users: u64,
     pub schema_version: i32,
-    /// Documents whose `crdt` blob stayed above `large_history_bytes` at their last
-    /// flush since the server started ("Large edit history" in the UI).
     pub oversized_documents: u64,
-    /// `CRDT_COMPACT_THRESHOLD_BYTES`: what counts as a large edit history.
     pub large_history_bytes: u64,
-    /// `CRDT_ALERT_THRESHOLD_BYTES`: above this the server logs a warning.
     pub history_alert_bytes: u64,
 }
 
@@ -909,7 +794,6 @@ async fn sum_attachment_bytes(state: &AppState) -> AppResult<u64> {
     let Some(row) = cursor.try_next().await? else {
         return Ok(0);
     };
-    // `$sum` yields an int32, int64 or double depending on the inputs.
     let bytes = match row.get("bytes") {
         Some(bson::Bson::Int64(value)) => *value,
         Some(bson::Bson::Int32(value)) => i64::from(*value),
@@ -939,9 +823,6 @@ mod tests {
 
     use super::*;
 
-    /// The export path is the disaster-recovery path: a zip that streams but does
-    /// not open is worse than no zip at all, so drive the real writer and read the
-    /// bytes back with a zip reader.
     #[test]
     fn export_zip_streams_a_readable_archive() {
         let (entry_tx, entry_rx) = mpsc::channel::<(String, String)>(8);
@@ -1027,7 +908,6 @@ mod tests {
         assert!(!name.contains('/') && !name.contains('\\'));
         assert!(name.ends_with(".md"));
 
-        // Non-ASCII titles degrade to the id rather than to mojibake.
         assert_eq!(export_filename("日本語", "ID1"), "ID1.md");
     }
 
@@ -1040,7 +920,6 @@ mod tests {
             params.limit.unwrap_or(AUDIT_DEFAULT_LIMIT),
             AUDIT_DEFAULT_LIMIT
         );
-        // A client asking for a million rows gets the ceiling.
         assert_eq!(1_000_000u32.clamp(1, AUDIT_MAX_LIMIT), AUDIT_MAX_LIMIT);
         assert_eq!(0u32.clamp(1, AUDIT_MAX_LIMIT), 1);
     }

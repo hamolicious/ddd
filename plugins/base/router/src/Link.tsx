@@ -1,16 +1,3 @@
-/**
- * The in-app link.
- *
- * It is a real `<a href="#/…">`, so middle-click, ⌘-click and "copy link address"
- * all behave, and a click with no modifier is routed through the History API
- * instead — one code path for navigation, whether it came from a link, a command or
- * the back button.
- *
- * `aria-current="page"` is set when the link points at the current path, which is
- * why the component subscribes: a nav list has to restyle itself when navigation
- * happens somewhere else.
- */
-
 import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
 
 import type { LinkProps } from "./api.js";
@@ -36,12 +23,9 @@ export function createLink(router: LinkRouter): (props: LinkProps) => ReactNode 
   }: LinkProps): ReactNode {
     const [path, setPath] = useState<string>(() => router.current());
     useEffect(() => router.onChange(setPath), []);
-    // Compared with the query included: two folder links differ only there.
     const active = current && fullPath(path) === fullPath(to);
 
     const onClick = (event: MouseEvent<HTMLAnchorElement>): void => {
-      // Anything that means "somewhere else" — a new tab, a new window, a download —
-      // stays the browser's business.
       if (event.defaultPrevented) return;
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       event.preventDefault();

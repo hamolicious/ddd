@@ -1,14 +1,3 @@
-/**
- * The shortcode menu's state machine, over every text surface (`plugin:editor`). The same shape as
- * `fm-autocomplete`'s and `slash-commands`' menus, deliberately, so the three feel alike
- * and never open together (none of them answers what the others do).
- *
- * After every change the text before the caret goes to `suggest.ts`. Keys are taken in the
- * capture phase on the surface's element, only while the menu is open: ↑ / ↓ move, Enter
- * or Tab choose, Escape dismisses until the typed text changes. Until the emoji set has
- * loaded there is nothing to suggest, and the menu stays shut.
- */
-
 import type { Unsubscribe } from "@kernel";
 import type { TextSurface } from "plugin:editor";
 
@@ -17,7 +6,6 @@ import { suggest, type Suggestion } from "./suggest.js";
 
 export interface MenuState {
   readonly surface: TextSurface;
-  /** The caret's line when this was worked out. */
   readonly before: string;
   readonly replace: number;
   readonly items: readonly Suggestion[];
@@ -30,7 +18,6 @@ export interface MenuController {
   subscribe(listener: () => void): () => void;
   choose(index: number): void;
   select(index: number): void;
-  /** Stop watching every surface and take the key listeners off their elements. */
   dispose(): void;
 }
 
@@ -39,7 +26,6 @@ export function createController(
   watchSurfaces: (listener: (surfaces: readonly TextSurface[]) => void) => Unsubscribe,
 ): MenuController {
   let current: MenuState | undefined;
-  /** Escape was pressed on this text: stay shut until it changes. */
   let dismissed: { surface: string; before: string } | undefined;
   const listeners = new Set<() => void>();
 
@@ -103,9 +89,7 @@ export function createController(
     }
   };
 
-  /** Surfaces being watched, and how to stop. Surfaces come and go with editors. */
   const attached = new Map<TextSurface, () => void>();
-  // Every text surface mounted right now (`plugin:editor`'s `onSurfacesChange`).
   const unwatch = watchSurfaces((all) => {
     for (const [surface, detach] of [...attached]) {
       if (all.includes(surface)) continue;

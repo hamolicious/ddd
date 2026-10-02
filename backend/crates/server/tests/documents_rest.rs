@@ -1,12 +1,3 @@
-//! `/api/documents` — the write and read rules of SPEC §5.1 over the router:
-//! create/409/410, `PATCH` being body-text-level **only**, the Trash partitions,
-//! the document-size cap, snapshots, and the wire format.
-//!
-//! These are the rules a client depends on and that the M1 suite could only
-//! assert on pure helpers: `PatchRequest::validate` was unit-tested, but nothing
-//! proved the handler calls it, or that a rejected patch is a 400 with the
-//! standard envelope rather than a 422 from axum's extractor.
-
 mod common;
 
 use axum::http::{StatusCode, header};
@@ -17,12 +8,6 @@ use serde_json::json;
 const ALPHA: &str =
     "---\ntitle: Alpha\nstatus: open\npriority: 1\ntags: [work]\n---\n\nalpha body\n";
 
-// ---------------------------------------------------------------------------
-// create
-// ---------------------------------------------------------------------------
-
-/// The id is client-mintable (offline creates); a second create of a live id is a
-/// 409 and of a purged id a 410 (SPEC §5.1, §3.5).
 #[tokio::test]
 #[ignore = "requires MONGO_URI"]
 async fn create_is_idempotent_by_id_and_honours_the_graveyard() {
@@ -62,9 +47,6 @@ async fn create_is_idempotent_by_id_and_honours_the_graveyard() {
         .await;
     bad.expect_status(StatusCode::BAD_REQUEST);
 
-    // Purge is not a REST verb (it is the Trash retention worker's job), so the
-    // graveyard is reached through the store — the point under test is that the
-    // *create route* consults it.
     app.state
         .docs
         .tombstone(&id, &Actor::System)
@@ -85,9 +67,6 @@ async fn create_is_idempotent_by_id_and_honours_the_graveyard() {
     app.cleanup().await;
 }
 
-/// The configured `MAX_DOCUMENT_BYTES` is the limit that is actually enforced —
-/// the harness sets 64 KiB, well under the shared core's 1 MiB ceiling, so a
-/// handler that used the constant instead of the config would accept this.
 #[tokio::test]
 #[ignore = "requires MONGO_URI"]
 async fn the_configured_document_cap_is_enforced() {
@@ -109,7 +88,6 @@ async fn the_configured_document_cap_is_enforced() {
     let detail = response.json()["error"]["detail"].clone();
     assert_eq!(detail["limit"], json!(limit));
 
-    // One byte under is fine.
     let ok = app
         .post_json("/api/documents", json!({ "content": "x".repeat(limit) }))
         .await;
@@ -118,13 +96,6 @@ async fn the_configured_document_cap_is_enforced() {
     app.cleanup().await;
 }
 
-// ---------------------------------------------------------------------------
-// PATCH
-// ---------------------------------------------------------------------------
-
-/// `PATCH` is body-text-level only. `fm` and `plugins` are *materialized* — they
-/// are written by editing the text, never as fields (SPEC §3.3, §5.1) — and an
-/// attempt must fail loudly rather than silently do nothing.
 #[tokio::test]
 #[ignore = "requires MONGO_URI"]
 async fn patch_replaces_content_and_refuses_everything_else() {
@@ -134,7 +105,6 @@ async fn patch_replaces_content_and_refuses_everything_else() {
     let id = app.create_document(ALPHA).await;
     let before = app.get(&format!("/api/documents/{id}")).await.json();
 
-    // The legitimate path: new text, and `fm`/`title` follow from it.
     let patched = app
         .patch_json(
             &format!("/api/documents/{id}"),
@@ -152,7 +122,6 @@ async fn patch_replaces_content_and_refuses_everything_else() {
     );
     assert_eq!(view["id"], before["id"], "PATCH never re-ids a document");
 
-    // Every other field is refused — including the ones that look harmless.
     for body in [
         json!({ "content": "x", "fm": { "title": "sneaky" } }),
         json!({ "content": "x", "plugins": { "calendar": { "uid": "1" } } }),
@@ -167,12 +136,10 @@ async fn patch_replaces_content_and_refuses_everything_else() {
         assert_eq!(response.error_code(), "bad_request", "{body}");
     }
 
-    // The refusals changed nothing.
     let after = app.get(&format!("/api/documents/{id}")).await.json();
     assert_eq!(after["content"], view["content"]);
     assert_eq!(after["title"], json!("Renamed"));
 
-    // Addressing rules are the same on every document route.
     app.patch_json("/api/documents/not-a-ulid", json!({ "content": "x" }))
         .await
         .expect_status(StatusCode::BAD_REQUEST);
@@ -186,8 +153,6 @@ async fn patch_replaces_content_and_refuses_everything_else() {
     app.cleanup().await;
 }
 
-/// `PUT` is the same text-level replace with a body the client is allowed to send
-/// wholesale, and it must agree with `PATCH` on the resulting document.
 #[tokio::test]
 #[ignore = "requires MONGO_URI"]
 async fn put_replaces_the_full_text() {
@@ -218,12 +183,6 @@ async fn put_replaces_the_full_text() {
     app.cleanup().await;
 }
 
-// ---------------------------------------------------------------------------
-// Trash
-// ---------------------------------------------------------------------------
-
-/// `trash=live|trashed|all` partition the workspace, and the Trash view is just a
-/// listing — a tombstoned document is still a document (SPEC §3.5).
 #[tokio::test]
 #[ignore = "requires MONGO_URI"]
 async fn trash_filters_partition_the_workspace() {
@@ -268,7 +227,6 @@ async fn trash_filters_partition_the_workspace() {
     let all = app.list("trash=all&sort=title&limit=100").await;
     assert_eq!(all.documents.len(), 3);
 
-    // Filters compose with the partition rather than replacing it.
     let filter = common::urlencode(r#"{"contains":{"field":"fm.tags","value":{"str":"keep"}}}"#);
     assert_eq!(
         app.list(&format!("filter={filter}&trash=live&limit=100"))
@@ -290,7 +248,6 @@ async fn trash_filters_partition_the_workspace() {
         2
     );
 
-    // A tombstoned document still reads, and deleting it again is idempotent.
     let fetched = app.get(&format!("/api/documents/{doomed}")).await;
     fetched.expect_status(StatusCode::OK);
     assert_eq!(fetched.json()["deleted"], json!(true));
@@ -298,7 +255,6 @@ async fn trash_filters_partition_the_workspace() {
         .await
         .expect_status(StatusCode::NO_CONTENT);
 
-    // Restore puts it back in the live partition with no tombstone left over.
     let restored = app
         .post_json(&format!("/api/documents/{doomed}/restore"), json!({}))
         .await;
@@ -311,7 +267,6 @@ async fn trash_filters_partition_the_workspace() {
     assert_eq!(app.list("trash=live&limit=100").await.documents.len(), 3);
     assert_eq!(app.list("trash=trashed&limit=100").await.documents.len(), 0);
 
-    // Both destructive actions are audited (SPEC §5.4).
     for action in ["document.delete", "document.restore"] {
         let entry = app
             .state
@@ -325,7 +280,6 @@ async fn trash_filters_partition_the_workspace() {
         assert_eq!(entry.actor.as_deref(), Some(app.user_id.as_str()));
     }
 
-    // Addressing rules again.
     app.delete("/api/documents/not-a-ulid")
         .await
         .expect_status(StatusCode::BAD_REQUEST);
@@ -336,14 +290,6 @@ async fn trash_filters_partition_the_workspace() {
     app.cleanup().await;
 }
 
-// ---------------------------------------------------------------------------
-// Wire format
-// ---------------------------------------------------------------------------
-
-/// Every timestamp on every response is an RFC 3339 string and `fm`/`plugins` are
-/// plain JSON — MongoDB extended JSON never reaches a client (PROTOCOL.md §2.1).
-/// This is the M1 carry-over: views used to serialize `bson::DateTime`, which
-/// `serde_json` renders as `{"$date": …}`.
 #[tokio::test]
 #[ignore = "requires MONGO_URI"]
 async fn responses_never_carry_extended_json() {
@@ -378,8 +324,6 @@ async fn responses_never_carry_extended_json() {
     assert_rfc3339(&view["created_at"], "created_at");
     assert_rfc3339(&view["updated_at"], "updated_at");
 
-    // `fm` carries the shared core's value model as native JSON types, so a client
-    // needs no decoding convention at all.
     assert_eq!(view["fm"]["priority"], json!(3));
     assert_eq!(view["fm"]["ratio"], json!(1.5));
     assert_eq!(view["fm"]["flag"], json!(true));
@@ -389,8 +333,6 @@ async fn responses_never_carry_extended_json() {
     assert_eq!(view["plugins"]["calendar"]["uid"], json!("wire-1"));
     assert_eq!(view["deleted"], json!(false));
 
-    // The list projection, the create response and the snapshot listing are the
-    // other three shapes a client reads.
     let listed = app.list("limit=10").await;
     assert_no_extended_json(&listed.raw, "GET /api/documents");
 
@@ -412,9 +354,6 @@ async fn responses_never_carry_extended_json() {
     assert_rfc3339(&first["created_at"], "snapshot created_at");
     assert_eq!(first["document_id"], json!(id));
 
-    // `/api/auth/me` and the admin listings are other areas' files, but they read
-    // the same `domain` views, so a regression there would show up as extended
-    // JSON here too.
     let me = app.get("/api/auth/me").await;
     me.expect_status(StatusCode::OK);
     assert_no_extended_json(me.text(), "GET /api/auth/me");
@@ -422,9 +361,6 @@ async fn responses_never_carry_extended_json() {
     users.expect_status(StatusCode::OK);
     assert_no_extended_json(users.text(), "GET /api/admin/users");
 
-    // The session, invite, audit and orphan shapes: every one of these carried a
-    // raw `bson::DateTime` (and the audit listing a whole raw BSON `detail`) until
-    // M2. They are in this scan so they cannot regress.
     let login = app
         .anonymous(
             "POST",
@@ -457,8 +393,6 @@ async fn responses_never_carry_extended_json() {
         .await;
     assert_no_extended_json(reset.text(), "POST /api/admin/users/:id/reset");
 
-    // The snapshot above and the tombstone below both wrote audit rows with a
-    // non-empty `detail`, which is where the `$`-prefixed keys used to come from.
     app.delete(&format!("/api/documents/{id}")).await;
     let audit = app.get("/api/admin/audit").await;
     audit.expect_status(StatusCode::OK);
@@ -482,8 +416,6 @@ async fn responses_never_carry_extended_json() {
     app.cleanup().await;
 }
 
-/// `?format=crdt` is not JSON at all: raw update-encoding-v1 bytes plus the state
-/// vector in a header (SPEC §3.2, §5.1).
 #[tokio::test]
 #[ignore = "requires MONGO_URI"]
 async fn crdt_format_returns_bytes_and_a_state_vector() {
@@ -514,8 +446,6 @@ async fn crdt_format_returns_bytes_and_a_state_vector() {
     app.cleanup().await;
 }
 
-/// Every document route needs a session; an anonymous request is a 401 and
-/// nothing else (SPEC §5.3 — a 401 means "re-authenticate", never "purge").
 #[tokio::test]
 #[ignore = "requires MONGO_URI"]
 async fn document_routes_require_a_session() {
@@ -539,7 +469,6 @@ async fn document_routes_require_a_session() {
     app.anonymous("DELETE", &format!("/api/documents/{id}"), None)
         .await
         .expect_status(StatusCode::UNAUTHORIZED);
-    // A bad token is the same answer as no token.
     app.request_as("GET", "/api/documents", Some("not-a-real-token"), None)
         .await
         .expect_status(StatusCode::UNAUTHORIZED);
@@ -547,8 +476,6 @@ async fn document_routes_require_a_session() {
     app.cleanup().await;
 }
 
-/// A note made offline arrives as the device's own CRDT state, so the device's later
-/// edits merge into it instead of repeating the text (PROTOCOL.md §3.8).
 #[tokio::test]
 #[ignore = "requires MONGO_URI"]
 async fn a_note_made_offline_is_created_from_the_device_state() {
@@ -577,7 +504,6 @@ async fn a_note_made_offline_is_created_from_the_device_state() {
     created.expect_status(StatusCode::CREATED);
     assert_eq!(created.json()["title"], json!("Offline"));
 
-    // A later offline edit on the device merges: the text is there once.
     let before = device.transact().state_vector();
     text.insert(&mut device.transact_mut(), 32, "and on the platform\n");
     let edit = device.transact().encode_state_as_update_v1(&before);
@@ -586,7 +512,6 @@ async fn a_note_made_offline_is_created_from_the_device_state() {
         .apply_update(&id, &edit, &Actor::System)
         .await
         .expect("edit");
-    // …and the create itself arriving twice (a lost response) changes nothing.
     app.post_json("/api/documents", json!({ "id": id, "state": encoded }))
         .await
         .expect_status(StatusCode::CONFLICT);
@@ -600,7 +525,6 @@ async fn a_note_made_offline_is_created_from_the_device_state() {
         "# Offline\n\nwritten on the train\nand on the platform\n",
     );
 
-    // Refused: no id, both fields, bytes that are not a document.
     app.post_json("/api/documents", json!({ "state": encoded }))
         .await
         .expect_status(StatusCode::BAD_REQUEST);

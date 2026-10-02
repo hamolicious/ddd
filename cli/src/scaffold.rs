@@ -1,8 +1,3 @@
-//! A project skeleton: a list of files, rendered from templates and written in one go.
-//!
-//! Templates use `{{key}}` placeholders. Only the keys passed in are replaced, so JSX and
-//! CSS braces in a template are left alone.
-
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -14,18 +9,14 @@ pub struct Scaffold {
 }
 
 impl Scaffold {
-    /// Add a file whose contents are already final.
     pub fn file(&mut self, path: impl Into<PathBuf>, contents: impl Into<String>) {
         self.files.push((path.into(), contents.into()));
     }
 
-    /// Add a file rendered from `template`.
     pub fn template(&mut self, path: impl Into<PathBuf>, template: &str, vars: &[(&str, &str)]) {
         self.file(path, render(template, vars));
     }
 
-    /// Write every file under `root`, which must not exist or be empty: a scaffold never
-    /// overwrites someone's work.
     pub fn write(&self, root: &Path) -> Result<()> {
         if root.exists() && fs::read_dir(root)?.next().is_some() {
             bail!("{} already exists and is not empty", root.display());

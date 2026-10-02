@@ -1,12 +1,3 @@
-/**
- * Base-distribution sections first, extensions after a divider.
- *
- * Which plugins are base is the server's answer (`GET /api/plugins`, the list the loader
- * boots from, `base: true` per plugin). It is cached per device so the grouping survives
- * offline; until it is known the list stays one group, which is also what a workspace
- * with no extension settings looks like.
- */
-
 import { useEffect, useState } from "react";
 
 import type { Kernel } from "@kernel";
@@ -18,7 +9,6 @@ export interface Grouped<T> {
   readonly extensions: readonly T[];
 }
 
-/** Split entries by whether their plugin is base; unknown means everything is base. */
 export function groupByBase<T extends { readonly pluginId: string }>(
   entries: readonly T[],
   baseIds: ReadonlySet<string> | undefined,
@@ -30,7 +20,6 @@ export function groupByBase<T extends { readonly pluginId: string }>(
   };
 }
 
-/** The ids of base plugins in `GET /api/plugins`'s body; `undefined` if it is not one. */
 export function baseIdsFrom(body: unknown): string[] | undefined {
   const plugins = (body as { plugins?: unknown } | null)?.plugins;
   if (!Array.isArray(plugins)) return undefined;
@@ -65,11 +54,9 @@ export function useBasePluginIds(kernel: Kernel): ReadonlySet<string> | undefine
         try {
           localStorage.setItem(CACHE_KEY, JSON.stringify(fresh));
         } catch {
-          // Per-device convenience only.
         }
       })
       .catch(() => {
-        // Offline or refused: the cached grouping (or none) stands.
       });
     return () => {
       cancelled = true;

@@ -1,24 +1,3 @@
-/// `folder` — one directory the user chose on this device, for the notes mirror
-/// (`BRIDGE.md` §4.5; the page side is `web/kernel/src/runtime/folder.ts`).
-///
-/// A real path, not a Storage Access Framework URI: the mirror is meant to be shared with
-/// other apps (a sync client, an editor), and only a path can be watched. That needs
-/// *all-files access* (`MANAGE_EXTERNAL_STORAGE`) on Android 11 and later, which [choose]
-/// asks for before it opens the picker.
-///
-/// | method | what it is |
-/// |---|---|
-/// | `folder.current` | the chosen folder, or `null` |
-/// | `folder.choose` | ask for access, then for a directory; remembered across launches |
-/// | `folder.forget` | forget it (the files stay) |
-/// | `folder.list` | every file and directory below it, recursively |
-/// | `folder.read` / `folder.write` | whole files, base64; writes are atomic |
-/// | `folder.move` / `folder.remove` | one file (or an empty directory) |
-///
-/// Every path is relative, `/`-separated, and refused with `invalid` when it is absolute,
-/// climbs out with `..`, or would leave the folder through a symlink. Changes made on disk
-/// are pushed to the page as the `ddd-folder-changed` window event ([folderChanges],
-/// dispatched by `shell/webview_host.dart`).
 library;
 
 import 'dart:async';
@@ -32,34 +11,25 @@ import 'package:watcher/watcher.dart';
 
 import 'bridge.dart';
 
-/// The `CustomEvent` name the page listens for (`BRIDGE.md` §4.5).
 const String kFolderChangedEvent = 'ddd-folder-changed';
 
-/// The mirror's own directory inside the folder; its changes are not news to the page.
 const String kFolderStateDir = '.ddd';
 
-/// Where writes are staged before the rename that makes them visible.
 const String kFolderTmpDir = '.ddd/tmp';
 
-/// Relative paths that changed on disk, debounced. `webview_host.dart` forwards them.
 final StreamController<List<String>> folderChanges =
     StreamController<List<String>>.broadcast();
 
-/// The script that tells the page about [paths].
 String folderChangedScript(List<String> paths) =>
     'window.dispatchEvent(new CustomEvent(${jsonEncode(kFolderChangedEvent)}, '
     '{ detail: { paths: ${jsonEncode(paths)} } }));';
 
-/// Opens the platform directory picker; `null` when dismissed.
 typedef DirectoryPickPort = Future<String?> Function();
 
-/// Asks for all-files access; `true` when it is granted.
 typedef StoragePermissionPort = Future<bool> Function();
 
-/// Where the chosen folder is remembered.
 typedef SettingsDirPort = Future<Directory> Function();
 
-/// Absolute paths that changed below [root], as the platform reports them.
 typedef WatchPort = Stream<String> Function(Directory root);
 
 Future<String?> pickWithPlatformPicker() =>
@@ -68,14 +38,12 @@ Future<String?> pickWithPlatformPicker() =>
 Future<bool> requestAllFilesAccess() async {
   if (await Permission.manageExternalStorage.isGranted) return true;
   if ((await Permission.manageExternalStorage.request()).isGranted) return true;
-  // Android 10 and older have no all-files access; the old storage permission is it.
   return (await Permission.storage.request()).isGranted;
 }
 
 Stream<String> watchWithPlatformWatcher(Directory root) =>
     DirectoryWatcher(root.path).events.map((WatchEvent event) => event.path);
 
-/// The `folder` capability. Owned by the shell-bridge area.
 class FolderCapability {
   FolderCapability({
     DirectoryPickPort? pickDirectory,
@@ -149,7 +117,6 @@ class FolderCapability {
   Future<File> _settingsFile() async =>
       File('${(await _settingsDir()).path}/folder.json');
 
-  /// The chosen folder, loaded once from settings and watched from then on.
   Future<Directory?> current() async {
     if (!_loaded) {
       _loaded = true;
@@ -208,7 +175,6 @@ class FolderCapability {
     return root;
   }
 
-  /// The segments of a page-supplied path, or `invalid`.
   static List<String> segments(Object? path) {
     if (path is! String ||
         path.isEmpty ||
@@ -228,7 +194,6 @@ class FolderCapability {
     return parts;
   }
 
-  /// [path] under the root, refusing one that a symlink would carry outside it.
   Future<String> _resolve(Object? path) async {
     final List<String> parts = segments(path);
     final Directory root = await _requireRoot();
@@ -288,7 +253,6 @@ class FolderCapability {
     return out;
   }
 
-  /// Write through a temporary file and a rename, so no reader sees half a file.
   Future<int> write(Object? path, List<int> bytes) async {
     final File target = File(await _resolve(path));
     await target.parent.create(recursive: true);
@@ -334,24 +298,20 @@ class FolderCapability {
     unawaited(_stopWatching());
     final Directory? root = _root;
     if (root == null) return;
-    _watching = _watch(root).listen(
-      (String path) {
-        if (!path.startsWith('${root.path}/')) return;
-        final String rel = path.substring(root.path.length + 1);
-        if (rel == kFolderStateDir || rel.startsWith('$kFolderStateDir/')) {
-          return;
-        }
-        _pending.add(rel);
-        _flush?.cancel();
-        _flush = Timer(debounce, () {
-          final List<String> paths = _pending.toList()..sort();
-          _pending.clear();
-          _changes.add(paths);
-        });
-      },
-      // A watcher that dies (the folder was unmounted) leaves the page's rescan timer.
-      onError: (Object _) {},
-    );
+    _watching = _watch(root).listen((String path) {
+      if (!path.startsWith('${root.path}/')) return;
+      final String rel = path.substring(root.path.length + 1);
+      if (rel == kFolderStateDir || rel.startsWith('$kFolderStateDir/')) {
+        return;
+      }
+      _pending.add(rel);
+      _flush?.cancel();
+      _flush = Timer(debounce, () {
+        final List<String> paths = _pending.toList()..sort();
+        _pending.clear();
+        _changes.add(paths);
+      });
+    }, onError: (Object _) {});
   }
 
   Future<void> _stopWatching() async {

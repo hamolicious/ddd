@@ -1,18 +1,3 @@
-/**
- * `graph` — every note and the links between them, as a live force-directed graph.
- *
- * - `model.ts` — nodes and links, from `indexer`'s documents and outgoing connections.
- * - `simulation.ts` — the physics: repel, springs, a pull to the middle.
- * - `renderer.ts` — the canvas: drawing, zoom and pan, drag, hover, click to open.
- * - `GraphView.tsx` / `Controls.tsx` — the view and its settings panel.
- * - `settings.ts` — filters, display and forces, stored per user.
- *
- * Two places to see it: the whole workspace at `#/graph` (the toolbar's button, the
- * palette, `Mod+G`), and the open note's neighbourhood as a panel in the altbar, whose
- * expand button opens the full graph zoomed in to that note (`#/graph?focus=<id>`). Both
- * follow the index, so a link typed into a note appears in the graph as it is typed.
- */
-
 import type { Kernel } from "@kernel";
 
 import { addCommand, addKeybinding } from "plugin:commands";
@@ -25,7 +10,6 @@ import { GraphView } from "./GraphView.js";
 import { createSettingsStore, settingsSchema, type SettingsStore } from "./settings.js";
 
 const VIEW = "graph.main";
-/** `document-surface`'s view: `#/doc/<id>`. */
 const DOCUMENT_VIEW = "document.surface";
 
 const ICON = (
@@ -37,7 +21,6 @@ const ICON = (
   </svg>
 );
 
-/** The settings store of the running activation, for `deactivate` to flush. */
 let liveStore: SettingsStore | undefined;
 
 export default function activate(kernel: Kernel): void {
@@ -56,7 +39,6 @@ export default function activate(kernel: Kernel): void {
   addView({
     id: VIEW,
     title: "Graph",
-    // `?focus=<id>`: opened from a note's local graph, it zooms in to that note.
     component: () => (
       <GraphView indexer={indexer} store={store} open={open} focus={query().get("focus") ?? undefined} />
     ),
@@ -108,7 +90,6 @@ export default function activate(kernel: Kernel): void {
   addKeybinding({ command: "graph.open", keys: "Mod+G" });
 }
 
-/** What the kernel does not withdraw: the settings writes still waiting on their timers. */
 export function deactivate(): void {
   liveStore?.flush();
   liveStore = undefined;

@@ -1,21 +1,3 @@
-/**
- * The handful of REST calls the app makes **before** the kernel exists: the auth
- * gate and the plugin list.
- *
- * Everything after boot goes through `kernel.session.fetch`. This file is the one
- * place that talks to the server without a kernel, and it is deliberately tiny.
- *
- * **Cookies, not bearer tokens** (SPEC §5.2): in a browser the session is an
- * HTTP-only cookie the page cannot read, which is the point. The Flutter shell (M5)
- * logs in with `bearer: true` and stores the token in native secure storage; that is
- * why `login()` takes the flag rather than hard-coding either.
- *
- * **The base is resolved, not hard-coded** (M5, `app/BRIDGE.md` §6). `"/api"` is right in
- * a browser and wrong in the shell, where the page origin is the loopback server holding
- * the downloaded bundle and the API lives on `window.shell.serverBaseUrl`. Every call
- * here went to a 404 in the shell until this was a function.
- */
-
 import type { InstalledPlugin, PluginLoad, SessionUser } from "@kernel";
 
 import { apiBase } from "./shell.js";
@@ -40,7 +22,6 @@ interface SessionResponse {
 
 export interface Signed {
   readonly user: SessionUser;
-  /** Present only for bearer clients (the shell). */
   readonly token?: string;
 }
 
@@ -55,16 +36,6 @@ export class ApiError extends Error {
   }
 }
 
-/**
- * The request never reached the server — no network, DNS, TLS, or the service worker's
- * `NetworkOnly` route rejecting because there is nothing to go to.
- *
- * It exists as its own type because the boot sequence has to tell it apart from a
- * server that answered: "the server says you are not signed in" is a login screen,
- * "there is no server right now" is the offline workspace (SPEC §4.1, §8). A bare
- * `TypeError: Failed to fetch` conflated the two, and the app showed "ddd
- * could not start" to a user who was simply on a train.
- */
 export class OfflineError extends Error {
   constructor(cause: unknown) {
     super("the server could not be reached", { cause });
@@ -72,24 +43,8 @@ export class OfflineError extends Error {
   }
 }
 
-/**
- * How long one pre-kernel call gets before it counts as "there is no server".
- *
- * **Shorter than the shell's 25 s boot watchdog on purpose** (`app/lib/config.dart`).
- * These two calls are the only network in the boot sequence, and without a deadline they
- * inherit the platform default — minutes, on a captive portal, a half-open TCP connection,
- * a VPN handshake, or a server that accepts and then stalls. The shell's watchdog would
- * fire first and declare a bundle broken that was merely waiting, which is the one
- * distinction the whole auto-revert guarantee rests on; two such launches revert and
- * quarantine a working bundle.
- *
- * A timeout is an [OfflineError] like any other transport failure, and that is the right
- * answer rather than a lenient one: it boots the local workspace from the cached session
- * and lets the socket re-auth when there is a network again (SPEC §4.1, §5.3).
- */
 const BOOT_REQUEST_TIMEOUT_MS = 10_000;
 
-/** `AbortSignal.timeout` where it exists; `undefined` in an older runtime (rule: degrade). */
 const deadline = (): AbortSignal | undefined =>
   typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function"
     ? AbortSignal.timeout(BOOT_REQUEST_TIMEOUT_MS)
@@ -104,10 +59,6 @@ async function call<T>(path: string, init: RequestInit = {}, token?: string): Pr
   const signal = init.signal ?? deadline();
   let response: Response;
   try {
-    // `same-origin` is deliberate on both paths: a browser sends its cookie, and the
-    // shell's cross-origin calls send none — the bearer header above is the whole
-    // credential there, and asking for cookies would need the server to allow
-    // credentialed CORS for nothing (SPEC §5.2).
     response = await fetch(`${apiBase()}${path}`, {
       credentials: "same-origin",
       ...init,
@@ -115,9 +66,6 @@ async function call<T>(path: string, init: RequestInit = {}, token?: string): Pr
       headers,
     });
   } catch (cause) {
-    // `fetch` rejects only for transport failures; every HTTP status resolves. An abort
-    // from the deadline above lands here too, which is what makes a stalled server an
-    // offline boot instead of a failed one.
     throw new OfflineError(cause);
   }
   if (!response.ok) throw await errorFrom(response);
@@ -136,7 +84,6 @@ async function errorFrom(response: Response): Promise<ApiError> {
       message = body.error.message;
     }
   } catch {
-    // Not an envelope; the status line is the best we have.
   }
   return new ApiError(response.status, code, message);
 }
@@ -148,10 +95,8 @@ const toUser = (view: UserView): SessionUser => ({
   isAdmin: view.is_admin ?? false,
 });
 
-/** Is this a fresh install (first user becomes admin) or invite-only? (SPEC §5.1) */
 export const authBootstrap = (): Promise<AuthBootstrap> => call<AuthBootstrap>("/auth/bootstrap");
 
-/** Spend a one-time reset token (from an admin's reset link) on a new password. */
 export async function redeemReset(token: string, newPassword: string): Promise<void> {
   await call<void>("/auth/password/reset", {
     method: "POST",
@@ -159,18 +104,10 @@ export async function redeemReset(token: string, newPassword: string): Promise<v
   });
 }
 
-/**
- * The token in a reset link, `#/reset/<token>`, when that is the address the app was
- * opened at. Read before any session exists: the link is for someone who cannot sign in.
- */
 export function resetTokenFromHash(hash: string = location.hash): string | undefined {
   return /^#\/reset\/([A-Za-z0-9_-]+)$/.exec(hash)?.[1];
 }
 
-/**
- * The token in an invite link, `#/invite/<token>`: opens registration with it filled in.
- * Only read when nobody is signed in on this device.
- */
 export function inviteTokenFromHash(hash: string = location.hash): string | undefined {
   return /^#\/invite\/([A-Za-z0-9_-]+)$/.exec(hash)?.[1];
 }
@@ -196,7 +133,6 @@ export async function register(
   return { user: toUser(session.user), ...(session.token ? { token: session.token } : {}) };
 }
 
-/** The signed-in user, or `undefined` on 401. Never throws for "not signed in". */
 export async function me(token?: string): Promise<SessionUser | undefined> {
   try {
     return toUser(await call<UserView>("/auth/me", {}, token));
@@ -209,33 +145,19 @@ export async function me(token?: string): Promise<SessionUser | undefined> {
 export const logoutRequest = (token?: string): Promise<void> =>
   call<void>("/auth/logout", { method: "POST" }, token);
 
-/** A plugin directory the server refused to load (admins only; empty for everyone else). */
 export interface PluginDirectoryProblem {
   readonly [key: string]: unknown;
 }
 
-/** What `GET /api/plugins` answers. `load` is absent on servers from before `@kernel` 3.0. */
 export interface PluginList {
   readonly plugins: readonly InstalledPlugin[];
   readonly problems?: readonly PluginDirectoryProblem[];
-  /** `DISABLE_PLUGINS=1` on the server (SPEC §6.1). */
   readonly disabled?: boolean;
-  /** The server's load resolution per boot mode: the order the loader activates in. */
   readonly load?: PluginLoad;
-  /** The plugin-set version, when the server sends one: what `plugins.changed` is compared with. */
   readonly version?: number | string;
 }
 
-/**
- * The installed plugins and their load resolution (`GET /api/plugins`, authenticated; see
- * `backend/CONTRACTS.md` area server-static).
- */
 export const installedPlugins = (token?: string): Promise<PluginList> => call<PluginList>("/plugins", {}, token);
 
-// ---------------------------------------------------------------------------
-// The bare manager's write path: admin-only, no kernel needed
-// ---------------------------------------------------------------------------
-
-/** `POST /api/admin/plugins/{id}/enable`. Every client reloads when it lands (`plugins.changed`). */
 export const enablePlugin = (id: string, token?: string): Promise<void> =>
   call<void>(`/admin/plugins/${encodeURIComponent(id)}/enable`, { method: "POST" }, token);

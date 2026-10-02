@@ -1,11 +1,3 @@
-/// The failed-boot / auto-revert state machine as a table (SPEC §7, `BRIDGE.md` §7).
-///
-/// Every row here is a launch. The two properties under test:
-///
-/// 1. the counter is incremented **in the plan that loads the webview** — the shell persists
-///    `plan.state` before the load, so a crash still counts;
-/// 2. two failures revert if there is anywhere to revert to, and reach a native screen if
-///    there is not. Never a third attempt at the same bundle, never a blank webview.
 library;
 
 import 'dart:io';
@@ -52,8 +44,6 @@ void main() {
         state: const BundleState(active: idB, previous: idA, failedBoots: 1),
       );
 
-      // A bundle that boots with `?safe=1` has a broken plugin, not a broken bundle
-      // (SPEC §6.1) — reverting would not fix it.
       expect(plan.action, BootAction.loadBundleSafeMode);
       expect(plan.state.failedBoots, 2);
     });
@@ -79,8 +69,6 @@ void main() {
 
         expect(plan.action, BootAction.recovery);
         expect(plan.loadsWebview, isFalse);
-        // Nothing is quarantined: it is the only bundle there is, and the user may still
-        // want to retry it after an update.
         expect(plan.state.quarantined, isEmpty);
       },
     );
@@ -144,7 +132,6 @@ void main() {
         ),
       );
 
-      // Promoting it would boot it, fail twice, revert, and find it pending again.
       expect(promoted.active, idA);
       expect(promoted.pending, isNull);
     });
@@ -156,12 +143,6 @@ void main() {
     });
   });
 
-  /// [BootGuard.resolve] is the table above plus the disk: it promotes, it notices a pointer
-  /// that disagrees with what is installed, it follows a revert through to the bundle it
-  /// lands on, and it persists the result *before* the caller loads anything.
-  ///
-  /// Each `resolve()` below is one launch of the app. Reading them in sequence is reading
-  /// what a user would experience.
   group('resolve', () {
     late Directory root;
     late BundleStore store;
@@ -194,8 +175,6 @@ void main() {
 
         expect(plan.action, BootAction.loadBundle);
         expect(plan.version, idB);
-        // Persisted before the load: the increment has to survive a crash that takes the
-        // process with it (SPEC §7).
         final BundleState state = await store.readState();
         expect(state.active, idB);
         expect(state.previous, idA);
@@ -204,37 +183,37 @@ void main() {
       },
     );
 
-    test('two launches without a boot.ok revert to the previous bundle', () async {
-      await placeBundle(store, FakeBundle(idA, bundleFiles()));
-      await placeBundle(store, FakeBundle(idB, bundleFiles(appChunk: 'boom')));
-      await store.writeState(const BundleState(active: idB, previous: idA));
+    test(
+      'two launches without a boot.ok revert to the previous bundle',
+      () async {
+        await placeBundle(store, FakeBundle(idA, bundleFiles()));
+        await placeBundle(
+          store,
+          FakeBundle(idB, bundleFiles(appChunk: 'boom')),
+        );
+        await store.writeState(const BundleState(active: idB, previous: idA));
 
-      // Launch one: the new bundle, normally.
-      final BootPlan first = await guard.resolve();
-      expect(first.action, BootAction.loadBundle);
-      expect(first.version, idB);
-      expect((await store.readState()).failedBoots, 1);
+        final BootPlan first = await guard.resolve();
+        expect(first.action, BootAction.loadBundle);
+        expect(first.version, idB);
+        expect((await store.readState()).failedBoots, 1);
 
-      // Launch two: the same bundle, in safe mode. A bundle that boots this way has a broken
-      // plugin, not a broken bundle (SPEC §6.1), so this attempt is the diagnostic.
-      final BootPlan second = await guard.resolve();
-      expect(second.action, BootAction.loadBundleSafeMode);
-      expect(second.version, idB);
-      expect((await store.readState()).failedBoots, 2);
+        final BootPlan second = await guard.resolve();
+        expect(second.action, BootAction.loadBundleSafeMode);
+        expect(second.version, idB);
+        expect((await store.readState()).failedBoots, 2);
 
-      // Launch three: out of attempts. Revert, quarantine, and boot what worked before.
-      final BootPlan third = await guard.resolve();
-      expect(third.action, BootAction.loadBundle);
-      expect(third.version, idA);
-      expect(third.reason, contains('failed 2 boots'));
-      final BundleState state = await store.readState();
-      expect(state.active, idA);
-      expect(state.quarantined, contains(idB));
-      // Reverting *to* something that just failed twice is not a recovery path.
-      expect(state.previous, isNull);
-      // The bundle it reverted to gets its own attempt counted.
-      expect(state.failedBoots, 1);
-    });
+        final BootPlan third = await guard.resolve();
+        expect(third.action, BootAction.loadBundle);
+        expect(third.version, idA);
+        expect(third.reason, contains('failed 2 boots'));
+        final BundleState state = await store.readState();
+        expect(state.active, idA);
+        expect(state.quarantined, contains(idB));
+        expect(state.previous, isNull);
+        expect(state.failedBoots, 1);
+      },
+    );
 
     test(
       'boot.ok clears the counter, so the next launch starts fresh',
@@ -261,9 +240,6 @@ void main() {
 
         await guard.bootFailed('the kernel threw before activating any plugin');
 
-        // The count means "launches that never reached boot.ok", and it was written once,
-        // before the load. Counting again here would double-count a watchdog expiry that the
-        // page then confirms.
         expect((await store.readState()).failedBoots, 1);
         expect(guard.lastFailureReason, contains('the kernel threw'));
       },
@@ -279,8 +255,6 @@ void main() {
 
         expect(plan.action, BootAction.recovery);
         expect(plan.loadsWebview, isFalse);
-        // Nothing is quarantined: it is the only bundle there is, and the user may still want
-        // to retry it after the server publishes a new one.
         expect((await store.readState()).quarantined, isEmpty);
       },
     );
@@ -295,11 +269,6 @@ void main() {
       expect(plan.action, BootAction.loadBundle);
       expect(plan.version, idA);
       expect(plan.reason, contains('bridge v2'));
-      // **Not quarantined.** Nothing is wrong with idB; this APK is too old for it, and
-      // that is a fact about the APK. Condemning it here is permanent — only the user
-      // finding "Download the app again" clears it — and `BundleUpdater.update` checks
-      // `quarantined` *before* the bridge gate, so re-installing a newer shell would still
-      // refuse the version the server publishes, forever and silently.
       expect((await store.readState()).quarantined, isEmpty);
     });
 
@@ -332,31 +301,26 @@ void main() {
       expect(plan.action, BootAction.loadBundle);
       expect(plan.version, idA);
       expect(plan.reason, contains('missing from disk'));
-      // The escalation borrows the failed-boot transition, not its verdict: this bundle
-      // never got to run, and the cause (cleared app data, a crashed install, a restored
-      // backup) says nothing about the bundle. Quarantining it would make the device
-      // permanently refuse to re-download the version the server publishes.
       expect((await store.readState()).quarantined, isEmpty);
     });
 
-    test('an installed bundle with no manifest is treated the same way', () async {
-      // The manifest is the loopback server's path allowlist and its CSP source
-      // (`BRIDGE.md` §6); without it the bundle cannot be served safely at all.
-      await placeBundle(store, FakeBundle(idA, bundleFiles()));
-      await placeBundle(store, FakeBundle(idB, bundleFiles(appChunk: idB)));
-      await store.manifestFile(idB).delete();
-      await store.writeState(const BundleState(active: idB, previous: idA));
+    test(
+      'an installed bundle with no manifest is treated the same way',
+      () async {
+        await placeBundle(store, FakeBundle(idA, bundleFiles()));
+        await placeBundle(store, FakeBundle(idB, bundleFiles(appChunk: idB)));
+        await store.manifestFile(idB).delete();
+        await store.writeState(const BundleState(active: idB, previous: idA));
 
-      final BootPlan plan = await guard.resolve();
+        final BootPlan plan = await guard.resolve();
 
-      expect(plan.action, BootAction.loadBundle);
-      expect(plan.version, idA);
-      expect(plan.reason, contains('no readable manifest'));
-    });
+        expect(plan.action, BootAction.loadBundle);
+        expect(plan.version, idA);
+        expect(plan.reason, contains('no readable manifest'));
+      },
+    );
 
     test('a missing bundle with nowhere to go lands on recovery, never on a first run', () async {
-      // A silent first run here would re-download over a pointer that might still have
-      // recovered, and it would look to the user like the app forgot everything.
       await store.writeState(const BundleState(active: 'v9-gone'));
 
       final BootPlan plan = await guard.resolve();

@@ -1,42 +1,3 @@
-/**
- * `folders` — a file tree where every folder is a note (SPEC §6.5).
- *
- * A note's children are listed in its own `%%% folders` section, under `children`, one id
- * per line. Any note can hold children; the parent of a note is whichever note lists it,
- * and a note nobody lists sits at the root. `hierarchy.ts` reads the lists and repairs
- * what they can say that a tree cannot (two parents, a loop); `tree.ts` turns that into
- * rows.
- *
- * **Every write is a list action on one note** (`kernel.documents.splice.sectionList`):
- * filing a note pushes or inserts one line into its new parent and removes one line from
- * its old one. Line-sized writes are what let two devices file notes into the same
- * folder at once and keep both — a whole-list rewrite would keep only the later one. A
- * move touches two notes and is not atomic across them; the new parent is written first,
- * so an interruption leaves the note in two lists (drawn once, repaired by its next move)
- * rather than in none.
- *
- * Only this plugin writes its section, so other plugins file notes through its exports
- * (`plugin:folders`: `file`, `fileNew`, `ensurePath`…): the Obsidian importer, and
- * anything else that makes notes in bulk. A note created through `doc-list` (or a saved
- * view) is announced through `plugin:doc-events`' `onCreated` and filed here — under the
- * `parent` its creator asked for, or the default location.
- *
- * Other plugins dress rows with `addDecoration`; `look` gives the same dress to a link to
- * the note elsewhere.
- *
- * ## Per-user state, all of it in settings
- *
- * | Key | What it is |
- * |---|---|
- * | `defaultLocation` | The note new notes are filed in; `""` for the root. |
- * | `fileLocation` | The note new file documents (attachment wrappers) are filed in; `""` for the root. |
- * | `collapsedFolders` | The notes this user closed. The negative is stored so an untouched tree is open. |
- * | `rootOrder` | This user's order for the notes at the root, set by dragging (`order.ts`). |
- *
- * Settings are per user and, as SPEC §6.4 states plainly, readable by other users of the
- * shared workspace. Note ids are not secrets and nothing else is kept here.
- */
-
 import { useEffect, useState } from "react";
 import type { ReactElement } from "react";
 
@@ -72,23 +33,12 @@ import {
 import { settledMoves, withPendingMoves, type PendingPlace } from "./pending.js";
 import { compareText } from "./tree.js";
 
-/** A workspace bigger than this needs paging in the tree; say so rather than truncate quietly. */
 const TREE_ROW_LIMIT = 20_000;
 
-/**
- * How many notes a delete sends to Trash at once. Small on purpose: each is a request,
- * and a wide fan-out competes with the user's own edits for the connection.
- */
 const DELETE_CONCURRENCY = 6;
 
-/**
- * How long a move is drawn ahead of the projection. The echo normally takes about a
- * second (the server's 500 ms materialization debounce plus the feed); offline, the
- * kernel's own local row lands within a quarter of that.
- */
 const PENDING_MOVE_TTL_MS = 15_000;
 
-/** Collapsing a note is a settings splice; a burst of clicks should not be a burst of them. */
 const SETTINGS_DEBOUNCE_MS = 400;
 
 export const SETTINGS_KEYS = {
@@ -98,23 +48,19 @@ export const SETTINGS_KEYS = {
   rootOrder: "rootOrder",
 } as const;
 
-/** `#/doc/<id>` → the id, for the commands that act on the note on screen. */
 const documentFromRoute = (route: string): string | undefined => {
   const [path] = route.split("?");
   const match = /^\/doc\/([^/]+)$/.exec(path ?? "");
   return match?.[1];
 };
 
-/** A note as copied (`copy`), or read for `duplicate`. */
 interface Copied {
   readonly id: string;
   readonly text: string;
   readonly title: string;
-  /** It lists children: the copy must not. */
   readonly parent: boolean;
 }
 
-/** A settings list of ids, cleaned: strings only, de-duplicated, order kept. */
 const readIds = (value: unknown): readonly string[] => {
   if (!Array.isArray(value)) return [];
   const out: string[] = [];
@@ -130,31 +76,23 @@ const sameIds = (left: readonly string[], right: readonly string[]): boolean =>
 export type { FolderDecoration, FolderLook, Folders, NoteLook } from "./api.js";
 export type FoldersApi = Folders;
 
-// The functions of the plugins this one depends on, grouped as they are read below.
-// `newDocument` rather than `createDocument`: it reports its own failures (offline, above all).
 const docs = { newDocument };
-/** `search`, an optional dependency: with it, the menus also offer a new saved search. */
 type SearchModule = typeof import("plugin:search");
 let search: SearchModule | undefined;
 const router = { navigate, current, onChange: onRouteChange };
 const menu = { open, openSheet, confirm, modal, close, openFor };
 
-/** Other plugins' colours and icons for rows. */
 const decorations = createRegistry<FolderDecoration>({
   key: (decoration) => decoration.id,
   order: (decoration) => decoration.order ?? 0,
   shape: FOLDER_DECORATION_SHAPE,
 });
 
-/** Dress note rows in the tree (and links to them elsewhere). Returns the function that takes it off again. */
 export const addDecoration: (items: FolderDecoration | readonly FolderDecoration[]) => () => void = decorations.add;
 
-/** Listeners for "the tree may have changed", the tree's own included. */
 const listeners = new Set<() => void>();
-/** Listeners for "a look may have changed". */
 const lookListeners = new Set<() => void>();
 
-/** The functions `activate` builds over the live tree. */
 let service: Omit<Folders, "onChange" | "onLookChange"> | undefined;
 
 const active = (): Omit<Folders, "onChange" | "onLookChange"> => {
@@ -162,17 +100,14 @@ const active = (): Omit<Folders, "onChange" | "onLookChange"> => {
   return service;
 };
 
-/** The note's parent id, `""` at the root, `undefined` for a note the tree does not know. */
 export function parentOf(id: string): string | undefined {
   return active().parentOf(id);
 }
 
-/** The notes filed under `id`, in the tree's order; `[]` for none. */
 export function childrenOf(id: string): readonly string[] {
   return active().childrenOf(id);
 }
 
-/** Fires when the tree may have changed: a note filed, moved, added or removed. */
 export function onChange(listener: () => void): Unsubscribe {
   listeners.add(listener);
   return () => {
@@ -180,22 +115,18 @@ export function onChange(listener: () => void): Unsubscribe {
   };
 }
 
-/** Put the note under `parent` (`""` for the root), before the child at `index` or last. Rejects a parent inside the note itself. */
 export function file(id: string, parent: string, index?: number): Promise<void> {
   return active().file(id, parent, index);
 }
 
-/** File a document just created where the person asked new ones of that kind to go. Does nothing when that is the root. */
 export function fileNew(id: string, kind: "note" | "file"): Promise<void> {
   return active().fileNew(id, kind);
 }
 
-/** The note's colour and icon, as the tree draws them. */
 export function look(id: string): NoteLook | undefined {
   return active().look(id);
 }
 
-/** Fires when any answer `look` gives may have changed. */
 export function onLookChange(listener: () => void): Unsubscribe {
   lookListeners.add(listener);
   return () => {
@@ -203,7 +134,6 @@ export function onLookChange(listener: () => void): Unsubscribe {
   };
 }
 
-/** The id of the note at that chain of titles from the root, creating the missing ones (without opening them). `[]` is the root, `""`. */
 export function ensurePath(titles: readonly string[]): Promise<string> {
   return active().ensurePath(titles);
 }
@@ -213,11 +143,9 @@ export default function activate(kernel: Kernel): void {
     .optional<SearchModule>("search")
     .then((module) => {
       search = module;
-      // Search's note picker draws notes as the tree does.
       if (module) stops.push(module.setNoteLooks({ look, onLookChange, parentOf, onChange }));
     })
     .catch((cause: unknown) => kernel.log.warn("search unavailable; no “New search” in the menus", cause));
-  /** A new saved search, filed under `parent` (`""` is the root) and opened. */
   const newSearch = (parent: string): void => {
     if (!search) return;
     search.save(search.parse(""), { parent }).catch((cause: unknown) =>
@@ -226,23 +154,14 @@ export default function activate(kernel: Kernel): void {
   };
 
   kernel.settings.defineSchema({
-    // Rendered by this plugin's own section (a note picker), declared for its default.
     [SETTINGS_KEYS.defaultLocation]: { type: "string", default: "" },
     [SETTINGS_KEYS.fileLocation]: { type: "string", default: "" },
-    // Bookkeeping, not preferences: rendered by the tree, declared for their defaults and
-    // so a reader of the settings document knows what wrote these lines.
     [SETTINGS_KEYS.collapsedFolders]: { type: "list", default: [] },
     [SETTINGS_KEYS.rootOrder]: { type: "list", default: [] },
   });
 
-  // ---------------------------------------------------------------------------
-  // Live state: one subscription, shared by the tree, the settings section and the service
-  // ---------------------------------------------------------------------------
-
-  /** What the projection says — `rows` is this with the moves in flight applied. */
   let projected: readonly NoteRow[] = [];
   let hierarchy: Hierarchy = buildHierarchy([]);
-  /** Moves written and not yet echoed by the projection (`pending.ts`). */
   const pendingMoves = new Map<string, PendingPlace>();
   const derive = (): void => {
     for (const id of settledMoves(projected, pendingMoves)) pendingMoves.delete(id);
@@ -252,25 +171,17 @@ export default function activate(kernel: Kernel): void {
   let loadError: string | undefined;
   let collapsed: ReadonlySet<string> = new Set(readIds(kernel.settings.get(SETTINGS_KEYS.collapsedFolders)));
   let rootOrder = readIds(kernel.settings.get(SETTINGS_KEYS.rootOrder));
-  /** A local order write in flight; adopting the stored value meanwhile would undo it. */
   let orderWriting = 0;
 
   const publish = (): void => {
     for (const listener of [...listeners]) listener();
   };
 
-  /** Where new documents of a kind go: a note id, or `""` for the root. */
   const locationFor = (kind: "note" | "file"): string => {
     const stored = kernel.settings.get<string>(kind === "file" ? SETTINGS_KEYS.fileLocation : SETTINGS_KEYS.defaultLocation);
     return typeof stored === "string" ? stored.trim() : "";
   };
 
-  /**
-   * Every settings write this plugin makes, one at a time. `kernel.settings.set` is a
-   * line splice into a document that has to be found (or created) first, and this plugin
-   * writes three keys from several places; queueing means it can never be the cause of
-   * two writes racing for the same section.
-   */
   let settingsWrites: Promise<unknown> = Promise.resolve();
   const writeSetting = (key: string, value: SettingsValue): Promise<void> => {
     const write = settingsWrites.then(
@@ -283,10 +194,6 @@ export default function activate(kernel: Kernel): void {
 
   void (async () => {
     try {
-      // One live query for the whole tree. **Machine-owned documents are excluded here**
-      // (`_shared/machine-docs.ts`), so the tree never offers to move, rename or file into
-      // one. That protects what the tree draws; the write path checks again
-      // (`refuseMachine`), because ids also arrive from URLs and other plugins' drags.
       const subscription = await kernel.documents.subscribe({
         filter: EXCLUDE_MACHINE_DOCUMENTS,
         limit: TREE_ROW_LIMIT,
@@ -323,7 +230,6 @@ export default function activate(kernel: Kernel): void {
     if (collapsedTimer !== undefined) clearTimeout(collapsedTimer);
     collapsedTimer = setTimeout(writeCollapsed, SETTINGS_DEBOUNCE_MS);
   };
-  // Unplugged or restarted mid-debounce: the write happens now rather than never (§6c).
   flushOnStop = () => {
     if (collapsedTimer === undefined) return;
     clearTimeout(collapsedTimer);
@@ -342,11 +248,8 @@ export default function activate(kernel: Kernel): void {
     }
   };
 
-  // Settings change under us: another tab, another device, or our own write coming back
-  // through sync. Guarded, because this is a convenience, not the feature.
   try {
     kernel.settings.subscribe(() => {
-      // A pending local write would be clobbered by adopting the remote value mid-flight.
       if (collapsedTimer === undefined) {
         collapsed = new Set(readIds(kernel.settings.get(SETTINGS_KEYS.collapsedFolders)));
       }
@@ -381,22 +284,9 @@ export default function activate(kernel: Kernel): void {
     };
   };
 
-  // ---------------------------------------------------------------------------
-  // Writes
-  // ---------------------------------------------------------------------------
-
-  /**
-   * **The write-path half of `_shared/machine-docs.ts`.** The tree never draws a
-   * machine-owned document, but ids reach the write path from elsewhere too — the
-   * "Move this note" command takes its id from the URL, a drop reads `text/plain` off a
-   * `DataTransfer` any plugin may have filled, and the service takes whatever it is given.
-   * Filing the kernel's settings document under a note would put app data in a person's
-   * tree, and writing a `%%% folders` section into one would edit text the kernel owns.
-   */
   const refuseMachine = async (id: string): Promise<void> => {
     if (id === "") return;
     const row = await kernel.documents.get(id);
-    // Only a *positive* answer refuses: a note too new for the projection is movable.
     if (row !== undefined && isMachineDocument(row)) {
       throw new Error("That document is maintained by the app, not by you, and cannot be filed in a folder.");
     }
@@ -411,22 +301,17 @@ export default function activate(kernel: Kernel): void {
         : { action: step.action, value: step.id },
     );
 
-  /** Put `id` under `parent` (`""`: the root), before `before` or last. */
   const file = async (id: string, parent: string, before?: string): Promise<void> => {
     await refuseMachine(id);
     await refuseMachine(parent);
     const writes = planMove(hierarchy, id, parent, before);
     if (writes.length === 0) return;
-    // Drawn where it is going from now, not a feed round trip from now (`pending.ts`).
     const place: PendingPlace = before === undefined ? { parent } : { parent, before };
     pendingMoves.set(id, place);
     derive();
     publish();
     try {
       for (const step of writes) await write(step);
-      // A move the projection never echoes must not be drawn forever: that would hide
-      // exactly the lost write it exists to paper over. After the grace period the
-      // projection is the truth again, whatever it says.
       setTimeout(() => {
         if (pendingMoves.get(id) !== place) return;
         pendingMoves.delete(id);
@@ -434,7 +319,6 @@ export default function activate(kernel: Kernel): void {
         publish();
       }, PENDING_MOVE_TTL_MS);
     } catch (cause) {
-      // Only if this is still the move on record: a later one owns the entry now.
       if (pendingMoves.get(id) === place) pendingMoves.delete(id);
       derive();
       publish();
@@ -447,12 +331,6 @@ export default function activate(kernel: Kernel): void {
     await kernel.documents.splice.setFrontmatterValue(id, "title", title);
   };
 
-  /**
-   * Send a note to Trash. `parent`: its children move up into its place first (spliced
-   * into its parent's list where it was, or to the root), and its own list is cleared so
-   * restoring it later does not claim them back. `trash`: its whole subtree goes, and
-   * every list is left as it is, so restoring them from Trash puts them back in place.
-   */
   const remove = async (id: string, mode: "parent" | "trash", options?: MoveProgress): Promise<number> => {
     await refuseMachine(id);
     const children = hierarchy.childrenOf.get(id) ?? [];
@@ -463,7 +341,6 @@ export default function activate(kernel: Kernel): void {
       if (parent !== "") {
         const raw = hierarchy.notes.get(parent)?.children ?? [];
         const at = raw.indexOf(id);
-        // Before `id`, in order: each insert lands where `id` was, pushing it along.
         for (const [offset, child] of children.entries()) {
           await write({ note: parent, action: "insert", id: child, index: at + offset });
         }
@@ -479,8 +356,6 @@ export default function activate(kernel: Kernel): void {
       doomed = [...doomed.slice(1).reverse(), id];
     }
 
-    // Through a small pool: one failure says nothing about the next, and the tree reports
-    // how far it got so "Try again" can finish the rest.
     let done = 0;
     const failures: string[] = [];
     options?.onProgress?.(0, doomed.length);
@@ -503,20 +378,13 @@ export default function activate(kernel: Kernel): void {
     if (failures.length > 0) {
       throw new Error(`deleted ${done - failures.length} of ${doomed.length}; ${failures.length} failed: ${failures[0] ?? ""}`);
     }
-    // The note on screen went to Trash: show the one it was in, or the list.
     const open = documentFromRoute(router.current());
     if (open !== undefined && doomed.includes(open)) router.navigate(parent === "" ? "/" : `/doc/${parent}`);
     return doomed.length;
   };
 
-  // ---------------------------------------------------------------------------
-  // The service (`ddd/folders`) and notes made elsewhere
-  // ---------------------------------------------------------------------------
-
-  /** Notes `ensurePath` made this session, before the projection has them: `parent \0 title`. */
   const made = new Map<string, Promise<string>>();
 
-  /** A note titled `title`, with nothing else in it, created without opening it. */
   const createNote = async (title: string): Promise<string> => {
     const front = kernel.documents.splice.planFrontmatterValue("", "title", title)[0]?.text ?? "";
     return kernel.documents.create({ text: front });
@@ -552,7 +420,6 @@ export default function activate(kernel: Kernel): void {
     return parent;
   };
 
-  // Looks change when a decoration says so, or when decorations come and go.
   const announceLook = (): void => {
     for (const listener of [...lookListeners]) listener();
   };
@@ -568,7 +435,6 @@ export default function activate(kernel: Kernel): void {
       }
     });
   };
-  // `subscribe` fires at once: that first call is the initial follow.
   stops.push(
     decorations.subscribe(() => {
       followLooks();
@@ -595,7 +461,6 @@ export default function activate(kernel: Kernel): void {
     look: (id) => lookOf(decorations.entries())(id),
   };
 
-  // A note `doc-list` (or a saved view) just made: under the parent its creator named, or the default.
   stops.push(onCreated((event) => {
     const parent = typeof event.parent === "string" ? event.parent : locationFor("note");
     if (parent === "") return;
@@ -604,15 +469,9 @@ export default function activate(kernel: Kernel): void {
     });
   }));
 
-  // ---------------------------------------------------------------------------
-  // Requests from outside the panel (commands, keybindings)
-  // ---------------------------------------------------------------------------
-
   const requestListeners = new Set<(request: TreeRequest) => void>();
   const request = (next: TreeRequest): void => {
     if (requestListeners.size === 0) {
-      // The panel is the only thing that knows what a dialog looks like. If no shell is
-      // drawing it, say so rather than failing silently.
       kernel.ui.notify({
         id: "folders.no-panel",
         level: "warning",
@@ -623,7 +482,6 @@ export default function activate(kernel: Kernel): void {
     for (const listener of [...requestListeners]) listener(next);
   };
 
-  /** The note on screen, as a request target — refused, with a notice, for app data. */
   const onScreen = async (then: (target: { id: string; title: string }) => void): Promise<void> => {
     const id = documentFromRoute(router.current());
     if (id === undefined) return;
@@ -639,14 +497,6 @@ export default function activate(kernel: Kernel): void {
     then({ id, title: hierarchy.notes.get(id)?.title ?? stored?.title ?? "this note" });
   };
 
-  // ---------------------------------------------------------------------------
-  // Contributions
-  // ---------------------------------------------------------------------------
-
-  /**
-   * The decorations, read for one render. `decorate` is another plugin's code on the
-   * tree's hottest path, so a throw costs that row its look and nothing else.
-   */
   const lookOf = (entries: ReturnType<typeof decorations.entries>) =>
     (id: string): FolderRowLook | undefined => {
       let background: string | undefined;
@@ -686,7 +536,6 @@ export default function activate(kernel: Kernel): void {
           };
     };
 
-  /** Each decoration's `onChange`, followed for as long as the tree is on screen. */
   const useDecorations = (): ReturnType<typeof decorations.entries> => {
     const entries = useRegistry(decorations);
     const [, setRevision] = useState(0);
@@ -710,7 +559,6 @@ export default function activate(kernel: Kernel): void {
   const TreeHost = (): ReactElement => {
     const live = useStore();
     const look = lookOf(useDecorations());
-    // The open note, whatever opened it: the tree reveals it.
     const [openDocument, setOpenDocument] = useState(() => documentFromRoute(router.current()));
     useEffect(() => router.onChange((route) => setOpenDocument(documentFromRoute(route))), []);
     return (
@@ -776,7 +624,6 @@ export default function activate(kernel: Kernel): void {
     order: 20,
     defaultOpen: true,
     component: TreeHost,
-    // The heading stands for the root, as blank space in the tree does: the same menu.
     target: { type: "folders/root" },
   });
 
@@ -790,11 +637,6 @@ export default function activate(kernel: Kernel): void {
 
   const onDocument = (): boolean => documentFromRoute(router.current()) !== undefined;
 
-  /**
-   * Many notes into one, for the document list's Actions button: the same picker as a
-   * single move, in its own sheet — the tree need not be on screen. One at a time, so two
-   * moves never race to splice the same list.
-   */
   const moveMany = (argument: unknown): void => {
     const ids = (Array.isArray(argument) ? argument : []).filter(
       (id): id is string => typeof id === "string" && hierarchy.notes.has(id),
@@ -834,15 +676,6 @@ export default function activate(kernel: Kernel): void {
     });
   };
 
-  // ---------------------------------------------------------------------------
-  // Duplicate, copy and paste
-  // ---------------------------------------------------------------------------
-
-  /**
-   * The note last copied, as its text was then: pasting after the original was edited or
-   * deleted still pastes what was copied. This device and this page only — it is not the
-   * system clipboard.
-   */
   let copied: Copied | undefined;
 
   const failed = (what: string) => (cause: unknown): undefined => {
@@ -864,12 +697,6 @@ export default function activate(kernel: Kernel): void {
     }
   };
 
-  /**
-   * A new note from a copied one, filed under `parent` (`""`: the root) before `before`.
-   * The copy is the note alone: its list of children is dropped, or each child would have
-   * two parents. Where the text names the note's own id (a view of the notes inside it),
-   * it names the copy instead.
-   */
   const pasteCopy = async (
     source: Copied,
     parent: string,
@@ -887,7 +714,6 @@ export default function activate(kernel: Kernel): void {
     return id;
   };
 
-  /** A copy of `id` beside it, titled "… (copy)". */
   const duplicate = async (id: string): Promise<string | undefined> => {
     const source = await snapshot(id);
     const parent = hierarchy.parentOf.get(id) ?? "";
@@ -901,7 +727,6 @@ export default function activate(kernel: Kernel): void {
     kernel.ui.notify({ id: "folders.copied", level: "info", message: `Copied ${copied.title}.` });
   };
 
-  /** Paste the copied note under `parent`, or where new notes go. */
   const paste = (parent: string = locationFor("note")): Promise<string | undefined> =>
     copied === undefined ? Promise.resolve(undefined) : pasteCopy(copied, parent);
 
@@ -971,11 +796,6 @@ export default function activate(kernel: Kernel): void {
       run: () => request({ kind: "fold", id: "", expanded: false }),
     },
     {
-      /*
-       * The keyboard-and-touch answer to "a note can only be moved by dragging". It reads
-       * the note id out of the route rather than asking `document-surface` for it:
-       * `folders` has no business knowing that modes exist — a URL is a URL.
-       */
       id: "folders.moveDocument",
       title: "Move this note to a folder",
       category: "Folders",
@@ -1009,11 +829,6 @@ export default function activate(kernel: Kernel): void {
     },
   ]);
 
-  // ---------------------------------------------------------------------------
-  // Menus (`plugin:context-menu`'s `addAction`): a note anywhere, and the root
-  // ---------------------------------------------------------------------------
-
-  /** A row of the tree itself, where renaming and moving happen in place. */
   const inTree = (target: Target): boolean => target.element.closest(".folders-tree") !== null;
   const noteTarget = (id: string): TreeTarget => ({ id, title: hierarchy.notes.get(id)?.title ?? "Untitled" });
 
@@ -1032,7 +847,6 @@ export default function activate(kernel: Kernel): void {
     await rename(id, next).catch((cause: unknown) => kernel.log.warn(`could not rename ${id}`, cause));
   };
 
-  /** With the tree on screen its own delete runs, with its choices and progress; else a plain one. */
   const deleteNote = async (id: string): Promise<void> => {
     if (requestListeners.size > 0) {
       request({ kind: "delete", target: noteTarget(id) });
@@ -1093,8 +907,6 @@ export default function activate(kernel: Kernel): void {
       },
     },
     {
-      // The same id as `doc-list`'s, added after it (folders depends on doc-list), so this
-      // one replaces it: it knows what happens to the notes inside.
       id: "document.trash",
       target: "ddd/document",
       order: 100,
@@ -1117,7 +929,6 @@ export default function activate(kernel: Kernel): void {
       id: "folders.root",
       target: "folders/root",
       items: (): MenuItem[] => [
-        // `""` is the root: filed there even when "New notes go to" names a note.
         { id: "new-note-root", label: "New note at the root", run: () => docs.newDocument({ parent: "" }) },
         ...(copied !== undefined
           ? [{ id: "paste-root", label: "Paste at the root", hint: copied.title, run: () => void paste("").catch(failed("paste it")) }]
@@ -1130,9 +941,7 @@ export default function activate(kernel: Kernel): void {
   ]);
 }
 
-/** A pending settings write `activate` started. */
 let flushOnStop: (() => void) | undefined;
-/** What `activate` subscribed to, undone on `deactivate`. */
 const stops: (() => void)[] = [];
 
 export function deactivate(): void {

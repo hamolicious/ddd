@@ -1,19 +1,3 @@
-/**
- * Pipeline tests: markdown text in, React element tree out.
- *
- * The tree is serialized by `show()` below rather than rendered to HTML. Two reasons, and
- * the second is the one that matters:
- *
- * - `react-dom/server` is not reachable from `plugins/base/**` (see `mdast.ts` on why the
- *   type-only packages are not in `web/tsconfig.json`'s `paths`), and the suites run in
- *   `environment: "node"` with no DOM at all, like every kernel suite.
- * - Rendering to HTML would *erase the assertion*. `<DocLink id="…">` and
- *   `<AttachmentImage>` are exactly what these tests are about — that a `doc://` link
- *   became the component that resolves a title from the projection, and not an `<a>` with
- *   a scheme the browser cannot follow. HTML would show the components' output; the
- *   element tree shows the decision.
- */
-
 import { describe, expect, it } from "vitest";
 import { createElement, isValidElement, type ReactNode } from "react";
 
@@ -35,11 +19,6 @@ const TODO: MarkdownTaskState = { marker: " ", label: "To do", icon: "☐", orde
 const DONE: MarkdownTaskState = { marker: "x", label: "Done", icon: "☑", order: 10, done: true };
 const PARTIAL: MarkdownTaskState = { marker: "/", label: "In progress", icon: "◐", order: 5 };
 
-// ---------------------------------------------------------------------------
-// harness
-// ---------------------------------------------------------------------------
-
-/** The runtime is a seam, not a dependency: nothing here touches IndexedDB or a socket. */
 const RUNTIME = {
   kernel: {
     log: { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} },
@@ -67,12 +46,6 @@ function registriesOf(options: Registries = {}): RenderRegistries {
   };
 }
 
-/**
- * Parse and render, the way `activate()` wires it together.
- *
- * `documentId` defaults to **undefined** so it stays out of most expectations; the tests
- * that care about it pass one.
- */
 function render(
   text: string,
   options: Registries & { readonly documentId?: string; readonly embeds?: RenderOptions["embeds"] } = {},
@@ -93,7 +66,6 @@ function render(
   );
 }
 
-/** Props worth showing: the ones a reviewer would check, in a stable order. */
 const SHOWN = [
   "id",
   "className",
@@ -117,7 +89,6 @@ const SHOWN = [
   "documentId",
 ] as const;
 
-/** Serialize a React element tree to an indented, diffable string. */
 function show(node: ReactNode, indent = ""): string {
   if (node === null || node === undefined || typeof node === "boolean") return "";
   if (typeof node === "string" || typeof node === "number") {
@@ -138,14 +109,11 @@ function show(node: ReactNode, indent = ""): string {
         ? (node.type.name || "Anonymous")
         : "";
 
-  // A Fragment has no name of its own; its children stand in for it.
   if (name === "") return show(children, indent);
 
   const attributes = SHOWN.filter((key) => props[key] !== undefined)
     .map((key) => {
       const value = props[key];
-      // Tailwind utilities are presentation details. Keep the renderer's stable semantic
-      // hooks in snapshots so a visual refactor does not rewrite every pipeline fixture.
       if (key === "className" && typeof value === "string") {
         const stable = value
           .split(/\s+/)
@@ -153,11 +121,7 @@ function show(node: ReactNode, indent = ""): string {
           .join(" ");
         return `${key}=${JSON.stringify(stable || value)}`;
       }
-      // An mdast node is identified by its type; printing the whole node would bury the
-      // assertion in position objects.
       if (key === "node") return `node=${JSON.stringify((value as { type: string }).type)}`;
-      // A React node as a prop (`DocLink`'s label) is shown as `<node>`, not as its
-      // internal representation — element internals are React's business, not a fixture's.
       if (typeof value === "object" && value !== null) {
         return isValidElement(value) || Array.isArray(value) ? `${key}=<node>` : `${key}=${JSON.stringify(value)}`;
       }
@@ -171,10 +135,6 @@ function show(node: ReactNode, indent = ""): string {
     ? `${indent}${open.slice(0, -1)} />\n`
     : `${indent}${open}\n${inner}${indent}</${name}>\n`;
 }
-
-// ---------------------------------------------------------------------------
-// the whole pipeline, once
-// ---------------------------------------------------------------------------
 
 describe("the pipeline, end to end", () => {
   const DOCUMENT = [
@@ -295,10 +255,6 @@ describe("the pipeline, end to end", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// the extension points
-// ---------------------------------------------------------------------------
-
 describe("markdown.directive", () => {
   const Note = (): ReactNode => null;
 
@@ -308,8 +264,6 @@ describe("markdown.directive", () => {
     });
     expect(tree).toContain('<Note label="Watch out" attributes={"kind":"warn"}');
     expect(tree).toContain('"body text"');
-    // The label paragraph is passed as `label` and *not also* left in the children, or
-    // every contributed component would render its own title twice.
     expect(tree.match(/Watch out/g)).toHaveLength(1);
   });
 
@@ -323,7 +277,6 @@ describe("markdown.directive", () => {
   });
 
   it("degrades an unregistered directive to its literal source (SPEC §6.6)", () => {
-    // The whole reason directives are the blessed syntax: no plugin, no mystery.
     expect(render(":::note[Hi]\nbody\n:::")).toBe(
       [
         '<div className="md-root">',
@@ -338,13 +291,11 @@ describe("markdown.directive", () => {
   });
 
   it("only reads a text directive at the start of a word", () => {
-    // `18:00` and `a:emoji` are prose, not directives.
     expect(render("Time: 18:00 - 20:30")).not.toContain("md-literal");
     expect(render("a:emoji here", { directives: { "text:emoji": Note } })).not.toContain("Note");
     expect(render("Time: 18:00")).toContain('"Time: 18:00"');
     expect(render("a :emoji here", { directives: { "text:emoji": Note } })).toContain("Note");
     expect(render("(:emoji)", { directives: { "text:emoji": Note } })).toContain("Note");
-    // `:x` right after a closing shortcode colon is glued too.
     expect(render(":tada:x", { directives: { "text:x": Note } })).not.toContain("Note");
   });
 
@@ -409,7 +360,6 @@ describe("markdown.component", () => {
 
 describe("markdown.remark", () => {
   it("applies a contributed plugin in order, before rendering", () => {
-    /** A transformer that rewrites every text node. Deliberately trivial and synchronous. */
     const shout = () => (tree: { children?: { type: string; value?: string }[] }) => {
       const visit = (node: { type: string; value?: string; children?: never[] }): void => {
         if (node.type === "text" && typeof node.value === "string") node.value = node.value.toUpperCase();
@@ -436,10 +386,6 @@ describe("markdown.remark", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// tasks
-// ---------------------------------------------------------------------------
-
 describe("task rendering", () => {
   it("renders a registered marker as a checkbox and strips the marker from the text", () => {
     const tree = render("- [/] partial", { tasks: [TODO, PARTIAL, DONE] });
@@ -449,15 +395,10 @@ describe("task rendering", () => {
   });
 
   it("renders an unregistered marker literally, even one remark-gfm consumed", () => {
-    // `[X]` is GFM's, not the registry's: GFM removed it from the paragraph, so it has to
-    // be put back or the document silently loses a character the author typed.
     const shouty = render("- [X] shouty");
-    // Inside the paragraph, not as a sibling of it: a bare string next to the item's
-    // paragraph would put the marker on its own line.
     expect(shouty).toContain('"[X] shouty"');
     expect(shouty).not.toContain("TaskCheckbox");
 
-    // `[?]` was never touched by GFM, so it is already in the text.
     const unclear = render("- [?] unclear");
     expect(unclear).toContain('"[?] unclear"');
     expect(unclear).not.toContain("TaskCheckbox");
@@ -475,8 +416,6 @@ describe("task rendering", () => {
   });
 
   it("renders every marker literally when nothing is registered", () => {
-    // The documented consequence of registry-driven semantics (SPEC §6.6): a client
-    // without the contributing plugin sees markers as text.
     const tree = render("- [ ] milk\n- [x] bread", { tasks: [] });
     expect(tree).not.toContain("TaskCheckbox");
     expect(tree).toContain('"[ ] milk"');
@@ -488,10 +427,6 @@ describe("task rendering", () => {
     expect(render("- outer\n  - [ ] nested")).toContain("<TaskCheckbox />");
   });
 });
-
-// ---------------------------------------------------------------------------
-// schemes, in the renderer
-// ---------------------------------------------------------------------------
 
 describe("links and images", () => {
   it("routes doc:// to the resolver, not to an href the browser cannot follow", () => {
@@ -508,7 +443,6 @@ describe("links and images", () => {
     const out = render(`![shot](attachment://${ULID})`, { attachment: Renderer });
     expect(out).toContain(`<Renderer id="${ULID}" alt="shot" />`);
     expect(out).not.toContain("<AttachmentImage");
-    // A link is still a chip: only embeds are the renderer's.
     expect(render(`[file](attachment://${ULID})`, { attachment: Renderer })).toContain("<AttachmentChip");
   });
 
@@ -523,7 +457,6 @@ describe("links and images", () => {
     expect(embedded).not.toContain("<p>");
     expect(render(`![](doc://${OTHER})`, { embeds: embeds(4) })).toContain(`<DocLink id="${OTHER}"`);
     expect(render(`![](doc://${OTHER})`, { embeds: embeds(1, [OTHER]) })).toContain(`<DocLink id="${OTHER}"`);
-    // No embeds configured at all: a link, as before.
     expect(render(`![](doc://${OTHER})`)).toContain(`<DocLink id="${OTHER}"`);
   });
 
@@ -563,8 +496,6 @@ describe("links and images", () => {
   it("resolves reference-style links through their definition, allowlist included", () => {
     expect(render("[a][ref]\n\n[ref]: https://example.com")).toContain('href="https://example.com"');
     expect(render("[a][ref]\n\n[ref]: javascript:alert(1)")).not.toContain("href");
-    // A reference with no definition never becomes a link node at all — remark leaves it
-    // as text, so there is nothing for the allowlist to refuse and nothing to click.
     expect(render("[a][missing]")).toContain('"[a][missing]"');
   });
 });
@@ -575,8 +506,6 @@ describe("raw HTML (SPEC §8: no passthrough in v1)", () => {
     (source: string) => {
       const tree = render(source);
       expect(tree).toContain("md-raw-html");
-      // The tags are a *string*, which is what `JSON.stringify` around them proves: React
-      // escapes a string child, so there is no element and no attribute to fire.
       expect(tree).toContain(JSON.stringify(source));
     },
   );
@@ -600,8 +529,6 @@ describe("robustness", () => {
   });
 
   it("renders an unknown node type from a remark plugin as its source", () => {
-    // Belt and braces for the escalated path: a plugin that invents a node type gets its
-    // source text shown rather than a hole in the document.
     const invent = () => (tree: { children: unknown[] }) => {
       tree.children = [{ type: "inventedThing", position: { start: { offset: 0 }, end: { offset: 5 } } }];
     };

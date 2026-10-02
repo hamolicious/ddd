@@ -1,25 +1,3 @@
-/**
- * Every file on its way to the server from this tab: sending them (`uploader.ts`), a
- * notice for each with a progress bar, and Pause, Resume and Cancel.
- *
- * A file is **queued** until one of {@link AT_ONCE} upload slots is free, then
- * **uploading**. Paused, it stops after nothing more than the chunk in flight and stays
- * paused, reload included, until resumed. Offline (the server did not answer), it waits
- * and is tried again when sync reconnects, or after a backoff when the server comes back
- * without the socket noticing. Any other failure takes the placeholder out and says why.
- *
- * Done, the placeholder becomes the file (`kinds.ts`'s `reference`); the editor's handle
- * on it first, then a search for its exact text in whichever document holds it
- * (`queue.ts` says why). If it was edited meanwhile, a notice says the file was uploaded
- * but not put in.
- *
- * Two tabs of the same device see the same kept files; a Web Lock per file keeps them
- * from sending the same one twice. The tab without the lock leaves it alone.
- *
- * Each notice says what the file is and where it goes (the document's title and folder),
- * and carries the bytes sent and the time left under its bar.
- */
-
 import type { Kernel, NoticeAction } from "@kernel";
 
 import type { EditorInsertion } from "plugin:editor";
@@ -28,48 +6,34 @@ import { reference } from "./kinds.js";
 import { QUEUE_LIMIT_BYTES, transfers, waiting, type TransferState, type WaitingUpload } from "./queue.js";
 import { Throughput, discardUpload, formatBytes, formatTimeLeft, sendInChunks, statusOf } from "./uploader.js";
 
-/** Files uploading at the same time. */
 const AT_ONCE = 2;
 
-/** Notices are redrawn at most this often per file while bytes are moving. */
 const REDRAW_MS = 250;
 
-/** Waits before trying an offline file again, when nothing else says to. */
 const BACKOFF_MS = [5_000, 15_000, 30_000, 60_000];
 
-/** How long the finished notice (a full bar) stays up. */
 const DONE_MS = 3_000;
 
 interface Item {
   entry: WaitingUpload;
   state: TransferState;
   sent: number;
-  /** Kept in IndexedDB, so it survives a reload. */
   kept: boolean;
   slot?: EditorInsertion;
   controller?: AbortController;
   readonly speed: Throughput;
-  /** Where the file goes, for its notice: `“Trip notes” in travel/2026`. */
   location?: string;
   failures: number;
   retry?: ReturnType<typeof setTimeout>;
   drawnAt: number;
   redraw?: ReturnType<typeof setTimeout>;
-  /** Takes its notice down. */
   dismiss?: () => void;
 }
 
 export interface Uploads {
-  /** Upload a file whose placeholder is already in the text. */
   add(entry: WaitingUpload, slot?: EditorInsertion): Promise<void>;
-  /** Pick up what was kept on this device (after a reload). */
   restore(): Promise<void>;
-  /** A connection is back: try every offline file now. */
   reconnected(): void;
-  /**
-   * The plugin is stopping: every timer cleared, every transfer aborted and let go of.
-   * What was kept on this device stays kept, and `restore` picks it up next time.
-   */
   dispose(): void;
 }
 
@@ -79,14 +43,12 @@ export function createUploads(kernel: Kernel): Uploads {
 
   const noticeId = (token: string): string => `attachments.upload.${token}`;
 
-  /** Share an item's state with the viewer (`view.tsx`) and redraw its notice. */
   const publish = (item: Item, force = true): void => {
-    if (items.get(item.entry.token) !== item) return; // Finished or let go meanwhile.
+    if (items.get(item.entry.token) !== item) return;
     transfers.set({ entry: item.entry, state: item.state, sent: item.sent });
     clearTimeout(item.redraw);
     const wait = item.drawnAt + REDRAW_MS - performance.now();
     if (!force && wait > 0) {
-      // Too soon: drawn at the end of the interval instead, so the last change still shows.
       item.redraw = setTimeout(() => publish(item), wait);
       return;
     }
@@ -117,7 +79,6 @@ export function createUploads(kernel: Kernel): Uploads {
     else if (state === "offline") actions.push({ label: "Try now", run: () => wake(item) });
     else actions.push({ label: "Pause", run: () => pause(entry.token) });
     actions.push({ label: "Cancel", run: () => void cancel(entry.token) });
-    // Through the address, not `router`'s API: this plugin depends on no plugin.
     actions.push({ label: "Open", run: () => void (location.hash = `/doc/${encodeURIComponent(entry.documentId)}`) });
 
     item.dismiss = kernel.ui.notify({
@@ -136,20 +97,17 @@ export function createUploads(kernel: Kernel): Uploads {
       item.location = `“${row.title.trim() || "Untitled"}”`;
       if (items.get(item.entry.token) === item) publish(item);
     } catch {
-      // No title to show: the notice still names the file.
     }
   };
 
   const persist = async (item: Item, change: Partial<Pick<WaitingUpload, "uploadId" | "paused">>): Promise<void> => {
     item.entry = { ...item.entry, ...change };
-    // Cancelled or finished meanwhile: writing it now would bring it back after a reload.
     if (!item.kept || items.get(item.entry.token) !== item) return;
     await waiting.add(item.entry).catch((error: unknown) => {
       kernel.log.debug("an upload's progress could not be kept on this device", error);
     });
   };
 
-  /** Stop tracking a file: no notice, nothing kept, nothing in the viewer. */
   const forget = async (item: Item): Promise<void> => {
     clearTimeout(item.retry);
     clearTimeout(item.redraw);
@@ -165,11 +123,6 @@ export function createUploads(kernel: Kernel): Uploads {
     for (const item of next.slice(0, Math.max(0, AT_ONCE - running))) run(item);
   };
 
-  /**
-   * Attempts per file, one after another: a resume straight after a pause waits for the
-   * paused attempt to let go of the file's lock, or it would find the lock taken and take
-   * this tab for another one.
-   */
   const attempts = new Map<string, Promise<void>>();
 
   const run = (item: Item): void => {
@@ -183,7 +136,6 @@ export function createUploads(kernel: Kernel): Uploads {
     });
   };
 
-  /** One go at sending a file. Never rejects: every outcome is a state or a notice. */
   const attempt = async (item: Item): Promise<void> => {
     if (items.get(item.entry.token) !== item || item.state !== "uploading") return;
     item.speed.reset();
@@ -193,7 +145,6 @@ export function createUploads(kernel: Kernel): Uploads {
 
     const work = async (): Promise<void> => {
       if (!(await holdsPlaceholder(item.entry).catch(() => true))) {
-        // The placeholder was deleted: nobody wants the file any more.
         if (item.entry.uploadId) discardUpload(fetch, item.entry.uploadId);
         await forget(item);
         return;
@@ -213,14 +164,13 @@ export function createUploads(kernel: Kernel): Uploads {
 
     try {
       await withLock(item.entry.token, work, () => {
-        // Another tab is sending it. This one lets go and leaves the file to that tab.
         clearTimeout(item.retry);
         items.delete(item.entry.token);
         transfers.end(item.entry.token);
         item.dismiss?.();
       });
     } catch (error) {
-      if (controller.signal.aborted) return; // Paused or cancelled: they said what happens next.
+      if (controller.signal.aborted) return;
       if (unreached(error)) {
         item.state = "offline";
         publish(item);
@@ -314,7 +264,6 @@ export function createUploads(kernel: Kernel): Uploads {
     pump();
   };
 
-  /** Is the placeholder still in its document? */
   const holdsPlaceholder = async (entry: WaitingUpload): Promise<boolean> => {
     const doc = await kernel.documents.open(entry.documentId);
     try {
@@ -324,7 +273,6 @@ export function createUploads(kernel: Kernel): Uploads {
     }
   };
 
-  /** Put `text` where a file's placeholder is, in whichever document holds it. */
   const replacePlaceholder = async (entry: WaitingUpload, text: string): Promise<boolean> => {
     const doc = await kernel.documents.open(entry.documentId);
     try {
@@ -394,10 +342,6 @@ export function createUploads(kernel: Kernel): Uploads {
   };
 }
 
-/**
- * Run `work` holding this file's Web Lock; `elsewhere` when another tab holds it. Without
- * the Web Locks API (an old WebView), just run it.
- */
 async function withLock(token: string, work: () => Promise<void>, elsewhere: () => void): Promise<void> {
   const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
   if (!locks) return work();
@@ -418,7 +362,6 @@ function describe(error: unknown): string {
   return String(error);
 }
 
-/** The server never answered: offline, or down. Worth keeping the file and trying later. */
 export function unreached(error: unknown): boolean {
   const status = statusOf(error);
   return status === 0 || status === 401 || (status !== undefined && status >= 500);

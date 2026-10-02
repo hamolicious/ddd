@@ -1,24 +1,3 @@
-/**
- * Chord parsing, normalization and formatting.
- *
- * Pure functions, no React, no kernel — which is the point: the one part of
- * keybindings that is easy to get subtly wrong (is `Ctrl+k` the same binding as
- * `Mod+K`? what does `Meta` mean on Linux?) is also the one part that can be pinned
- * by unit tests without a DOM.
- *
- * **The canonical spelling.** `Mod+Shift+K`: modifiers first in a fixed order
- * (`Mod`, `Ctrl`, `Meta`, `Shift`, `Alt`), then exactly one key, joined by `+`. A
- * *sequence* is chords separated by spaces (`g d`) — Vim-style prefixes, which is
- * why the resolver has to keep a pending prefix rather than matching one event.
- *
- * **`Mod` is the portable modifier** (SPEC §6.5 / `addKeybinding`): Cmd on Apple
- * platforms, Ctrl everywhere else. A contribution spelling `Ctrl+K` gets literal
- * Ctrl on a Mac, which is almost never what the author meant — so `Mod` is what the
- * base distribution contributes, and `normalizeChord` keeps both spellings distinct
- * rather than quietly folding one into the other.
- */
-
-/** Modifier order in the canonical spelling. */
 const MODIFIER_ORDER = ["Mod", "Ctrl", "Meta", "Shift", "Alt"] as const;
 
 export type Modifier = (typeof MODIFIER_ORDER)[number];
@@ -39,11 +18,6 @@ const MODIFIER_ALIASES: Readonly<Record<string, Modifier>> = {
   opt: "Alt",
 };
 
-/**
- * Key spellings that differ between `KeyboardEvent.key` and how a human writes a
- * binding. Everything not in here is passed through with its first letter upper-cased
- * for single characters and verbatim for named keys.
- */
 const KEY_ALIASES: Readonly<Record<string, string>> = {
   esc: "Escape",
   escape: "Escape",
@@ -70,13 +44,11 @@ const KEY_ALIASES: Readonly<Record<string, string>> = {
   plus: "+",
 };
 
-/** One parsed chord. `key` is `""` when the chord failed to parse. */
 export interface Chord {
   readonly modifiers: readonly Modifier[];
   readonly key: string;
 }
 
-/** Cmd on Apple platforms, Ctrl elsewhere. Read once per call; cheap and testable. */
 export function isApplePlatform(navigatorLike?: {
   platform?: string;
   userAgent?: string;
@@ -93,34 +65,22 @@ function canonicalKey(raw: string): string {
   if (trimmed === "") return "";
   const alias = KEY_ALIASES[trimmed.toLowerCase()];
   if (alias) return alias;
-  // A single character is case-insensitive as a *binding* — `Shift` is spelled out,
-  // never implied by capitalization, or `Mod+?` and `Mod+/` would be one binding on
-  // some layouts and two on others.
   if ([...trimmed].length === 1) return trimmed.toUpperCase();
-  // A named key (`F5`, `ArrowUp`, `AudioVolumeUp`) in whatever case it was written.
   const lower = trimmed.toLowerCase();
   if (/^f\d{1,2}$/.test(lower)) return `F${lower.slice(1)}`;
   return trimmed;
 }
 
-/** Sort and de-duplicate modifiers into the canonical order. */
 function orderModifiers(found: Iterable<Modifier>): readonly Modifier[] {
   const set = new Set(found);
   return MODIFIER_ORDER.filter((modifier) => set.has(modifier));
 }
 
-/**
- * Parse one chord. Returns `{key: ""}` for anything unusable (no key, two keys, an
- * unknown modifier) — the caller treats that as "not a binding" rather than throwing,
- * because the input can come from a plugin's manifest or a user's settings document.
- */
 export function parseChord(input: string): Chord {
   const parts = input
     .split("+")
     .map((part) => part.trim())
     .filter((part) => part.length > 0);
-  // `Mod++` means "Mod and the + key": the split above drops the empty part, so a
-  // trailing `+` in the original is re-attached here.
   if (/\+\s*$/.test(input.trimEnd()) && parts.length > 0) parts.push("+");
   if (parts.length === 0) return { modifiers: [], key: "" };
 
@@ -132,26 +92,19 @@ export function parseChord(input: string): Chord {
       modifiers.push(modifier);
       continue;
     }
-    if (key !== "") return { modifiers: [], key: "" }; // two keys in one chord
+    if (key !== "") return { modifiers: [], key: "" };
     key = canonicalKey(part);
   }
   if (key === "") return { modifiers: [], key: "" };
   return { modifiers: orderModifiers(modifiers), key };
 }
 
-/** The canonical spelling of a chord; `""` for an unparseable one. */
 export function formatChordCanonical(chord: Chord): string {
   if (chord.key === "") return "";
   return [...chord.modifiers, chord.key].join("+");
 }
 
-/**
- * Canonicalize a whole binding (chord or sequence). Returns `""` when any chord in
- * it is unusable, so an invalid binding can never half-register.
- */
 export function normalizeKeys(input: string): string {
-  // Whitespace separates *chords*, so `Ctrl + K` would otherwise read as a
-  // three-chord sequence. Space around a `+` belongs to the `+`, not to the sequence.
   const chords = input.trim().replace(/\s*\+\s*/g, "+").split(/\s+/).filter(Boolean);
   if (chords.length === 0) return "";
   const parsed = chords.map(parseChord);
@@ -159,17 +112,14 @@ export function normalizeKeys(input: string): string {
   return parsed.map(formatChordCanonical).join(" ");
 }
 
-/** Split a canonical binding into its chords. */
 export function chordsOf(keys: string): readonly string[] {
   return keys.trim().split(/\s+/).filter(Boolean);
 }
 
-/** A chord with no modifier other than Shift is a plain keystroke — see {@link isTypingTarget}. */
 export function isBareChord(chord: Chord): boolean {
   return chord.modifiers.every((modifier) => modifier === "Shift");
 }
 
-/** What the event's modifier keys spell, honouring the platform's `Mod`. */
 export function eventChord(
   event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "shiftKey" | "altKey"> & {
     readonly code?: string;
@@ -187,12 +137,8 @@ export function eventChord(
   if (event.shiftKey) modifiers.push("Shift");
   if (event.altKey) modifiers.push("Alt");
 
-  // An input method that owns a chord (IBus and fcitx switch layouts on Ctrl+Space)
-  // hands the page `Unidentified` for its key. The physical key still says which it
-  // was, and without it the chord could be neither pressed nor recorded.
   const raw =
     event.key === "Unidentified" || event.key === "Process" ? keyFromCode(event.code) : event.key;
-  // A modifier keydown on its own is not a chord; the resolver waits for a real key.
   if (["Control", "Meta", "Shift", "Alt", "CapsLock", "Dead"].includes(raw)) {
     return { modifiers: orderModifiers(modifiers), key: "" };
   }
@@ -200,7 +146,6 @@ export function eventChord(
   return { modifiers: orderModifiers(modifiers), key };
 }
 
-/** `KeyboardEvent.code` → the `key` an unmodified US layout gives it; `""` when unknown. */
 function keyFromCode(code: string | undefined): string {
   if (code === undefined || code === "") return "";
   if (code === "Space") return " ";
@@ -211,7 +156,6 @@ function keyFromCode(code: string | undefined): string {
   return code;
 }
 
-/** The canonical spelling of the chord an event produced; `""` for a modifier-only event. */
 export function eventKeys(
   event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "shiftKey" | "altKey"> & {
     readonly code?: string;
@@ -239,10 +183,6 @@ const KEY_SYMBOLS: Readonly<Record<string, string>> = {
   Space: "Space",
 };
 
-/**
- * How a binding is shown to a human. On Apple platforms the symbols people expect;
- * everywhere else the words, because `⌃⇧K` on Windows means nothing to anybody.
- */
 export function formatKeys(keys: string, apple = isApplePlatform()): string {
   const chords = chordsOf(keys);
   if (chords.length === 0) return "";
@@ -257,14 +197,6 @@ export function formatKeys(keys: string, apple = isApplePlatform()): string {
     .join(" ");
 }
 
-/**
- * Is the event happening inside something the user is typing into?
- *
- * A bare chord (nothing but Shift) must never steal a keystroke from an editor — the
- * `editor` plugin is a text surface and `N` is a letter there, not "new document".
- * Chords *with* a modifier are still delivered, which is what makes `Mod+K` work from
- * inside CodeMirror.
- */
 export function isTypingTarget(target: EventTarget | null): boolean {
   const element = target as (HTMLElement & { isContentEditable?: boolean }) | null;
   if (!element || typeof element.tagName !== "string") return false;

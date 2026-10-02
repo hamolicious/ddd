@@ -1,10 +1,3 @@
-/**
- * Chord normalization and the platform's `Mod`.
- *
- * These are the cases that make two spellings of one binding either agree or silently
- * diverge, which is the whole reason `keys.ts` exists as pure functions.
- */
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -34,8 +27,6 @@ describe("normalizeKeys", () => {
     expect(normalizeKeys("cmd+k")).toBe("Meta+K");
     expect(normalizeKeys("ctrl+k")).toBe("Ctrl+K");
     expect(normalizeKeys("option+k")).toBe("Alt+K");
-    // `Mod` and `Ctrl` are different bindings on an Apple platform, so they must stay
-    // different strings — folding them here is how a Mac user loses Ctrl+K forever.
     expect(normalizeKeys("mod+k")).not.toBe(normalizeKeys("ctrl+k"));
   });
 
@@ -85,7 +76,6 @@ describe("eventKeys", () => {
   });
 
   it("keeps the secondary modifier distinct", () => {
-    // Ctrl on a Mac is literally Ctrl; Meta on Linux is literally Meta.
     expect(eventKeys(event({ ctrlKey: true }), true)).toBe("Ctrl+K");
     expect(eventKeys(event({ metaKey: true }), false)).toBe("Meta+K");
   });
@@ -100,7 +90,6 @@ describe("eventKeys", () => {
   });
 
   it("reads the physical key when an input method hides the character", () => {
-    // IBus/fcitx own Ctrl+Space and report its key as Unidentified.
     expect(eventKeys(event({ key: "Unidentified", code: "Space", ctrlKey: true }), false)).toBe("Mod+Space");
     expect(eventKeys(event({ key: "Process", code: "KeyJ", ctrlKey: true }), false)).toBe("Mod+J");
     expect(eventKeys(event({ key: "Unidentified", code: "" }), false)).toBe("");

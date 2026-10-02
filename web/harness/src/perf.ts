@@ -1,32 +1,3 @@
-/**
- * The M2 performance gate (SPEC §9 M2): **5 000 documents, 3 concurrent
- * editors — cold boot and steady-state memory measured in an Android webview on
- * mid-range hardware.**
- *
- * This entrypoint measures the parts that can be measured from a workstation:
- *   - `GET /api/sync/bootstrap` wall clock and bytes for 5 000 documents
- *     (target: < 30 s on LAN, SPEC §4.1),
- *   - a **cold client**: a fresh socket whose `since_seq = 0` is answered with
- *     `feed.reset { bootstrap_required }`, bootstraps, and re-subscribes — the
- *     real first-run path, timed end to end,
- *   - feed catch-up latency after N changes,
- *   - per-update round-trip latency with 3 concurrent editors, **and whether
- *     every update was relayed to every peer**,
- *   - client heap in headless Chromium holding the whole projection,
- *   - server-side counters scraped from `/metrics`.
- *
- * **Deferred, on purpose:** the Android-webview numbers. Those are a hardware
- * measurement on mid-range hardware and belong to M5 (SPEC §9 M5 acceptance);
- * this harness prints the desktop-Chromium numbers the device run is compared
- * against. `--seed-only` stops after seeding.
- *
- * ```bash
- * mise run dev            # server + mongo
- * mise run web            # vite on :5173 (only needed for the memory number)
- * npm run harness:perf
- * ```
- */
-
 import { harnessCore } from "./core.js";
 import { protocolViolations, recordProtocolViolation, RestClient } from "./rest.js";
 import {
@@ -47,46 +18,33 @@ export interface PerfReport {
   readonly feedCatchupMs: number;
   readonly updateRoundTripMs: { readonly p50: number; readonly p95: number; readonly max: number };
   readonly serverMetrics: Readonly<Record<string, number>>;
-  /**
-   * Cold start through the real client path: connect → `feed.reset` →
-   * bootstrap → re-subscribe → `complete: true`. **Optional addition** to the
-   * frozen shape (see the note in `web/CONTRACTS.md` area web-harness).
-   */
   readonly coldBoot?: { readonly ms: number; readonly rows: number };
-  /** Relay accounting for the 3-concurrent-editor phase. Optional addition. */
   readonly relay?: {
     readonly sent: number;
     readonly delivered: number;
     readonly lost: number;
     readonly converged: boolean;
   };
-  /** Headless-Chromium client memory, or why it was skipped. Optional addition. */
   readonly clientMemory?: ClientMemoryReport;
 }
 
 export interface ClientMemoryReport {
   readonly measured: boolean;
   readonly skippedBecause?: string;
-  /** Rows the page fetched and retained. */
   readonly rows?: number;
-  /** In-page bootstrap wall clock (fetch + parse + IndexedDB write). */
   readonly bootstrapMs?: number;
-  /** `Performance.getMetrics` (CDP) after the projection is held. */
   readonly jsHeapUsedBytes?: number;
   readonly jsHeapTotalBytes?: number;
-  /** `performance.memory.usedJSHeapSize` — quantized, reported for comparability. */
   readonly performanceMemoryUsedBytes?: number;
   readonly documentsBytes?: number;
   readonly idbWriteMs?: number;
 }
 
-/** Targets from the SPEC, checked and printed rather than silently assumed. */
 export const TARGETS = {
   bootstrapMs: 30_000,
   updateRoundTripP95Ms: 500,
 } as const;
 
-/** Create `config.documents` documents (idempotent by deterministic ULID seed). */
 export async function seedWorkspace(config: HarnessConfig): Promise<string[]> {
   const rest = new RestClient(config.baseUrl, await tokenFor(config));
   const started = Date.now();
@@ -112,20 +70,17 @@ async function tokenFor(config: HarnessConfig): Promise<string> {
 }
 
 export async function run(config: HarnessConfig): Promise<PerfReport> {
-  await harnessCore(); // fail fast if the client core is not built
+  await harnessCore();
   const ids = await seedWorkspace(config);
   const token = await tokenFor(config);
   const rest = new RestClient(config.baseUrl, token);
 
-  // 1. Bootstrap as the server can serve it (the "< 30 s on LAN" target).
   const bootstrap = await rest.bootstrap({ limit: Number(extraFlag(config, "page") ?? 200) });
   console.error(
     `bootstrap: ${bootstrap.rows} rows, ${bootstrap.pages} pages, ` +
       `${(bootstrap.bytes / 1024 / 1024).toFixed(1)} MiB in ${bootstrap.ms} ms`,
   );
 
-  // 2. A cold client through the real path: since_seq 0 → feed.reset → bootstrap
-  //    → re-subscribe → complete.
   const cold = new HarnessClient({ name: "cold", token, baseUrl: config.baseUrl });
   const coldStarted = performance.now();
   await cold.connect();
@@ -133,8 +88,6 @@ export async function run(config: HarnessConfig): Promise<PerfReport> {
   const coldBoot = { ms: Math.round(performance.now() - coldStarted), rows: cold.projection.size };
   console.error(`cold client: ${coldBoot.rows} projection rows in ${coldBoot.ms} ms`);
 
-  // 3. Feed catch-up after N changes, measured by a client resuming from a
-  //    watermark it held before the changes.
   const changes = Number(extraFlag(config, "changes") ?? 25);
   const resumeFrom = cold.safeSeq;
   const random = rng(config.seed);
@@ -146,10 +99,6 @@ export async function run(config: HarnessConfig): Promise<PerfReport> {
     const view = await rest.getDocument(id);
     await rest.replaceDocument(id, `${view.content}\ncatchup ${touched.size}\n`);
   }
-  // Materialization is debounced (~500 ms) and the *feed row* is rewritten with it
-  // (SPEC §3.5), so the changes are not in the feed the instant `PUT` returns. Wait
-  // for the watermark to settle first; otherwise "catch-up" measures a client that
-  // had nothing to catch up on, which is how a meaningless zero gets reported.
   let settledAt = 0;
   for (let attempt = 0; attempt < 12; attempt += 1) {
     const probe = await rest.probeBootstrap();
@@ -168,8 +117,6 @@ export async function run(config: HarnessConfig): Promise<PerfReport> {
       [...touched].every((id) => (resumer.projection.get(id)?.seq ?? 0) > resumeFrom),
     Number(extraFlag(config, "catchupTimeoutMs") ?? 20_000),
   );
-  // A feed that never delivers the changes is a failure, not a slow number — but it
-  // must not cost the rest of the report, so it is recorded and the run continues.
   const feedCatchupMs = caughtUp ? Math.round(performance.now() - catchupStarted) : -1;
   if (!caughtUp) {
     const missing = [...touched].filter((id) => (resumer.projection.get(id)?.seq ?? 0) <= resumeFrom);
@@ -186,8 +133,6 @@ export async function run(config: HarnessConfig): Promise<PerfReport> {
   );
   await resumer.close();
 
-  // 4. Steady state: 3 concurrent editors on one document, every update checked
-  //    for relay to every peer.
   const editors = (await spawnClients({
     ...config,
     clients: config.chaos.concurrentEditors,
@@ -249,21 +194,6 @@ export async function run(config: HarnessConfig): Promise<PerfReport> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Client memory (headless Chromium)
-// ---------------------------------------------------------------------------
-
-/**
- * Hold the whole projection in a real browser and report the heap.
- *
- * It runs against the Vite dev origin (`DDD_WEB`, default `http://127.0.0.1:5173`)
- * because that origin proxies `/api` — so the fetch is same-origin, the `Origin`
- * allowlist behaves as in production, and IndexedDB is available. Rows are held in
- * a `Map` *and* written to one IndexedDB store, which is the shape SPEC §4.1
- * prescribes for the client mirror.
- *
- * Skipped (never faked) when the dev server or the Chromium download is missing.
- */
 export async function measureClientMemory(
   config: HarnessConfig,
   token: string,
@@ -322,7 +252,6 @@ export async function measureClientMemory(
         }
         const bootstrapMs = performance.now() - started;
 
-        // One IndexedDB store for the whole workspace (SPEC §4.1).
         const idbStarted = performance.now();
         await new Promise<void>((resolve, reject) => {
           const request = indexedDB.open("ddd-harness-memory", 1);
@@ -384,10 +313,6 @@ export async function measureClientMemory(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 function percentile(samples: readonly number[], fraction: number): number {
   if (samples.length === 0) return 0;
   const sorted = [...samples].sort((left, right) => left - right);
@@ -408,7 +333,6 @@ async function settle(predicate: () => boolean, timeoutMs: number): Promise<bool
   return predicate();
 }
 
-/** Print the numbers against their targets — the point of the exercise. */
 export function printReport(report: PerfReport): void {
   const verdict = (ok: boolean): string => (ok ? "PASS" : "MISS");
   const lines = [
@@ -442,9 +366,6 @@ function fmtMiB(bytes: number | undefined): string {
 }
 
 async function main(): Promise<void> {
-  // 5 000 documents is the gate (SPEC §9 M2), so that — not `DEFAULT_CONFIG`'s 25 —
-  // is the default here. `--documents=` still wins; `extraFlag` cannot tell a flag
-  // from a default, so the flag is looked for where it actually is.
   const parsed = parseArgs();
   const documentsGiven = process.argv.some((arg) => arg.startsWith("--documents="));
   const config: HarnessConfig = { ...parsed, documents: documentsGiven ? parsed.documents : 5_000 };
@@ -467,7 +388,6 @@ async function main(): Promise<void> {
     if (violations.some((violation) => violation.contractual)) process.exitCode = 1;
   }
   console.log(JSON.stringify(report, null, 2));
-  // Relay loss and divergence are correctness failures, not slow numbers.
   if ((report.relay?.lost ?? 0) > 0 || report.relay?.converged === false) process.exitCode = 1;
   if (process.argv.includes("--strict")) {
     if (report.bootstrap.ms >= TARGETS.bootstrapMs) process.exitCode = 1;
@@ -475,8 +395,6 @@ async function main(): Promise<void> {
   }
 }
 
-// See the note in `convergence.ts`: under `vite-node` the script path is not in
-// `process.argv`, so an `argv[1]`-based guard never fires.
 if (!process.env.VITEST && !process.env.DDD_HARNESS_NO_AUTORUN) {
   main()
     .catch((error: unknown) => {
@@ -484,7 +402,6 @@ if (!process.env.VITEST && !process.env.DDD_HARNESS_NO_AUTORUN) {
       process.exitCode = 1;
     })
     .finally(() => {
-      // Undici sockets and Chromium pipes can outlive the work; do not hang CI.
       setTimeout(() => process.exit(process.exitCode ?? 0), 500).unref();
     });
 }

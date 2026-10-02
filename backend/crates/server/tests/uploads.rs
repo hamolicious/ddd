@@ -1,8 +1,3 @@
-//! `/api/uploads` — chunked, resumable uploads (SPEC §3.6) over the router: a file
-//! sent in pieces becomes the same attachment a one-request upload makes, an
-//! out-of-place chunk says where to carry on, a lost chunk rewinds the upload to
-//! it, and an abandoned upload's chunks are swept.
-
 mod common;
 
 use axum::body::Body;
@@ -16,7 +11,6 @@ use sha2::{Digest as _, Sha256};
 
 const GRIDFS: usize = GRIDFS_CHUNK_BYTES as usize;
 
-/// A PNG by its magic number, then filler: long enough for three GridFS chunks.
 fn png_bytes() -> Vec<u8> {
     let mut bytes = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
     bytes.extend((0..GRIDFS * 2 + 1000).map(|i| (i % 251) as u8));
@@ -68,15 +62,12 @@ async fn a_file_sent_in_chunks_becomes_an_attachment() {
         .await
         .expect_status(StatusCode::OK);
 
-    // The same chunk again (an answer that never arrived): 409, and the upload
-    // says where it is.
     let again = patch(&app, &id, 0, &bytes[..first]).await;
     again.expect_status(StatusCode::CONFLICT);
     let status = app.get(&format!("/api/uploads/{id}")).await;
     status.expect_status(StatusCode::OK);
     assert_eq!(status.json()["offset"], first);
 
-    // Finishing early is refused.
     app.post_json(&format!("/api/uploads/{id}/complete"), json!({}))
         .await
         .expect_status(StatusCode::CONFLICT);
@@ -98,12 +89,10 @@ async fn a_file_sent_in_chunks_becomes_an_attachment() {
     let attachment_id = attachment["id"].as_str().expect("id").to_string();
     assert_eq!(body["reference"], format!("attachment://{attachment_id}"));
 
-    // The bytes read back through the ordinary download, byte for byte.
     let download = app.get(&format!("/api/attachments/{attachment_id}")).await;
     download.expect_status(StatusCode::OK);
     assert_eq!(download.body.as_ref(), bytes.as_slice());
 
-    // Completing again answers the same attachment rather than making another.
     let repeat = app
         .post_json(&format!("/api/uploads/{id}/complete"), json!({}))
         .await;
@@ -163,7 +152,6 @@ async fn chunks_must_fit_the_declared_size_and_the_grid() {
         return;
     };
 
-    // Over `MAX_ATTACHMENT_BYTES` (1 MiB in the harness): refused before a byte.
     let too_big = app
         .post_json(
             "/api/uploads",
@@ -177,11 +165,9 @@ async fn chunks_must_fit_the_declared_size_and_the_grid() {
 
     let bytes = png_bytes();
     let id = open(&app, "grid.png", bytes.len()).await;
-    // A chunk that is not the last must be whole GridFS chunks.
     patch(&app, &id, 0, &bytes[..GRIDFS + 1])
         .await
         .expect_status(StatusCode::BAD_REQUEST);
-    // Nor may one run past the declared size.
     let mut longer = bytes.clone();
     longer.push(0);
     patch(&app, &id, 0, &longer)
@@ -190,7 +176,6 @@ async fn chunks_must_fit_the_declared_size_and_the_grid() {
     patch(&app, &id, 0, &[])
         .await
         .expect_status(StatusCode::BAD_REQUEST);
-    // The whole file in one chunk is fine.
     patch(&app, &id, 0, &bytes)
         .await
         .expect_status(StatusCode::OK);
@@ -219,12 +204,10 @@ async fn cancelled_and_abandoned_uploads_leave_no_chunks() {
         .await
         .expect_status(StatusCode::NOT_FOUND);
 
-    // Abandoned: once it has expired, the sweep takes it and its chunks.
     let abandoned = open(&app, "abandoned.png", bytes.len()).await;
     patch(&app, &abandoned, 0, &bytes[..GRIDFS * 2])
         .await
         .expect_status(StatusCode::OK);
-    // A completed one keeps its bytes when swept: they are an attachment's now.
     let kept = open(&app, "kept.png", bytes.len()).await;
     patch(&app, &kept, 0, &bytes)
         .await

@@ -1,12 +1,3 @@
-/*
- * syntax-highlight. Every colour is a `--ddd-syntax-*` token a theme may set; unset, each
- * falls back to a mix of the kernel's own tokens, so highlighting follows the theme and
- * stays readable in light and dark without this file knowing which is on.
- *
- * The same classes colour read mode and the editor. In the editor the selectors also
- * reach into the span's children: CodeMirror may nest its own monospace span inside ours.
- */
-
 :root {
   --lmsh-keyword: var(--ddd-syntax-keyword, var(--ddd-accent));
   --lmsh-string: var(--ddd-syntax-string, color-mix(in srgb, var(--ddd-warning) 75%, var(--ddd-text)));
@@ -45,8 +36,6 @@
 .lmsh-variable-parameter, .cm-content .lmsh-variable-parameter * { font-style: italic; }
 .lmsh-operator, .lmsh-punctuation,
 .cm-content .lmsh-operator *, .cm-content .lmsh-punctuation * { color: var(--lmsh-punctuation); }
-
-/* Read mode: the block, drawn like markdown's own so installing a language changes colour only. */
 
 .lmsh-block {
   position: relative;
@@ -95,8 +84,6 @@
   font: 0.85rem var(--ddd-font-sans);
   color: var(--ddd-danger);
 }
-
-/* Settings → Code languages */
 
 .lmsh-settings {
   display: flex;
@@ -163,8 +150,6 @@
   opacity: 0.6;
   cursor: progress;
 }
-
-/* Settings → Code languages → Add your own */
 
 .lmsh-add {
   display: flex;

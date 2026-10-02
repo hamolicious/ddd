@@ -1,22 +1,5 @@
-/**
- * The harness's REST half: auth, documents, the bootstrap stream, `/metrics`.
- *
- * The harness talks to a **real** server (SPEC §9 M2), so everything here is
- * plain `fetch` against the routes of `backend/README.md`. Two deliberate
- * choices:
- *
- * - **Bearer sessions, one per simulated client.** Cookies would share a session
- *   across clients and the socket cap is per session (8, PROTOCOL.md §1.3);
- *   separate logins give separate sessions, which is what N real devices look
- *   like.
- * - **Timestamps are read as RFC 3339 strings** and never re-encoded. If a
- *   response ever carries `{"$date": …}` the harness fails loudly rather than
- *   coping (PROTOCOL.md §2.1).
- */
-
 import type { BootstrapHeader, BootstrapLine, FeedRow } from "../../kernel/src/protocol.js";
 
-/** `GET /api/documents/:id` — the materialized view (`domain::DocumentView`). */
 export interface DocumentView {
   readonly id: string;
   readonly title: string;
@@ -35,9 +18,7 @@ export interface DocumentView {
 }
 
 export interface CrdtState {
-  /** Full encoded CRDT state, update encoding v1. */
   readonly state: Uint8Array;
-  /** `x-state-vector`, decoded. */
   readonly stateVector: Uint8Array;
 }
 
@@ -59,22 +40,10 @@ export interface BootstrapOptions {
   readonly onPage?: (page: { readonly rows: number; readonly bytes: number }) => void;
 }
 
-/**
- * Protocol violations the harness *notices* while doing something else, collected
- * rather than thrown.
- *
- * The harness is the executable half of PROTOCOL.md §10's conformance checklist, so
- * it watches every response it already has in hand: extended JSON where an RFC 3339
- * string is required (§2.1), a `safe_seq` that moves between bootstrap pages (§4),
- * and so on. Collecting instead of throwing matters — a stray `$date` on an *auth*
- * route must not stop the run from testing convergence, which is exactly what an
- * exception here did. `contractual` violations fail the run; the rest are reported.
- */
 export interface ProtocolViolation {
   readonly where: string;
   readonly detail: string;
   readonly contractual: boolean;
-  /** How many times this violation was seen; the `detail` is the first sighting. */
   repeats: number;
 }
 
@@ -84,11 +53,6 @@ export function protocolViolations(): readonly ProtocolViolation[] {
   return violations;
 }
 
-/**
- * Record one violation. Repeats of the same `where` collapse into a count — a
- * broken invariant that fires on every page of every bootstrap should be one line
- * in the report, not two hundred.
- */
 export function recordProtocolViolation(where: string, detail: string, contractual = true): void {
   const existing = violations.find((candidate) => candidate.where === where);
   if (existing) {
@@ -98,7 +62,6 @@ export function recordProtocolViolation(where: string, detail: string, contractu
   violations.push({ where, detail, contractual, repeats: 1 });
 }
 
-/** Watch a response body for MongoDB extended JSON (PROTOCOL.md §2.1). */
 export function recordWireViolations(method: string, path: string, body: string): void {
   if (!body.includes('"$date"') && !body.includes('"$numberLong"')) return;
   const at = Math.max(0, body.indexOf('"$date"') - 60);
@@ -121,7 +84,6 @@ export class HttpError extends Error {
   }
 }
 
-/** A thin, honest client for the routes the harness needs. */
 export class RestClient {
   constructor(
     readonly baseUrl: string,
@@ -162,8 +124,6 @@ export class RestClient {
     return text === "" ? (undefined as T) : (JSON.parse(text) as T);
   }
 
-  // -- auth ----------------------------------------------------------------
-
   authState(): Promise<{ needs_first_user: boolean; invite_required: boolean }> {
     return this.json("GET", "/api/auth/bootstrap");
   }
@@ -194,9 +154,6 @@ export class RestClient {
     return session.token;
   }
 
-  // -- documents -----------------------------------------------------------
-
-  /** `POST /api/documents`. A 409 (id exists) resolves to `"exists"` — seeding is idempotent. */
   async createDocument(id: string, content: string): Promise<"created" | "exists"> {
     const response = await fetch(this.url("/api/documents"), {
       method: "POST",
@@ -235,17 +192,6 @@ export class RestClient {
     return this.json("GET", `/api/documents${query}`);
   }
 
-  // -- sync ----------------------------------------------------------------
-
-  /**
-   * `GET /api/sync/bootstrap?probe=1` — "how far behind am I, and what is
-   * `safe_seq`?" (PROTOCOL.md §4).
-   *
-   * The document says a probe "returns a single header line only"; the server
-   * actually sends a header *and* a footer, which is harmless but means the
-   * response is NDJSON rather than one JSON object. Parsed line-wise here, and
-   * flagged in the INTEGRATION notes — one of the two has to move.
-   */
   async probeBootstrap(): Promise<BootstrapHeader> {
     const response = await this.request("GET", "/api/sync/bootstrap?probe=1");
     const text = await response.text();
@@ -255,11 +201,6 @@ export class RestClient {
     return JSON.parse(first) as BootstrapHeader;
   }
 
-  /**
-   * Stream the whole bootstrap, page by page, counting wall clock and bytes.
-   * This is the measurement behind the "5 000 documents < 30 s on LAN" target
-   * (SPEC §4.1) as seen from outside the browser.
-   */
   async bootstrap(options: BootstrapOptions = {}): Promise<BootstrapMeasurement> {
     const limit = options.limit ?? 200;
     const trash = options.trash ?? "all";
@@ -296,12 +237,6 @@ export class RestClient {
             total = parsed.total;
             semantics = parsed.core_semantics_version;
           } else if (parsed.safe_seq !== safeSeq) {
-            // PROTOCOL.md §4: captured on the first page, echoed unchanged on every
-            // page — because the client resumes the feed from it and a *later*
-            // number would skip everything that changed during the pass. Reported,
-            // not thrown, and the smallest value seen is the one kept: resuming too
-            // early costs duplicate rows (harmless, LWW by seq), resuming too late
-            // loses documents.
             recordProtocolViolation(
               "GET /api/sync/bootstrap",
               `safe_seq changed between pages (page 0 said ${safeSeq}, page ${pages} said ${parsed.safe_seq}); ` +
@@ -346,9 +281,6 @@ export class RestClient {
     };
   }
 
-  // -- ops -----------------------------------------------------------------
-
-  /** `/metrics` as a flat name → number map (labels dropped, samples summed). */
   async metrics(): Promise<Record<string, number>> {
     const response = await fetch(this.url("/metrics"));
     if (!response.ok) return {};
@@ -356,12 +288,6 @@ export class RestClient {
   }
 }
 
-/**
- * Prometheus text 0.0.4 → `{ metric: number }`. Labels are dropped and samples
- * summed: the harness reports counters ("how many updates did the server
- * apply"), not per-label breakdowns. Histogram buckets are skipped; `_sum` and
- * `_count` are kept, which is what a latency report needs.
- */
 export function parseMetrics(text: string): Record<string, number> {
   const out: Record<string, number> = {};
   for (const raw of text.split("\n")) {
@@ -378,7 +304,6 @@ export function parseMetrics(text: string): Record<string, number> {
   return out;
 }
 
-/** Iterate the lines of an NDJSON response body without buffering the whole thing. */
 export async function* ndjsonLines(response: Response): AsyncGenerator<string> {
   const body = response.body;
   if (!body) throw new Error("response has no body to stream");
@@ -406,12 +331,6 @@ export function bytesToBase64(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString("base64");
 }
 
-/**
- * Get a usable bearer token, registering the first user if the workspace is
- * empty (SPEC §5.1: first user → admin, no invite). A workspace that already
- * requires invites and does not know these credentials is a setup error, and the
- * message says exactly what to do about it.
- */
 export async function authenticate(
   baseUrl: string,
   email: string,

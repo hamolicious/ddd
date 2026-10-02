@@ -1,13 +1,3 @@
-/**
- * `kernel.documents.splice` over a real `Y.Doc`: attribution, hydration
- * bookkeeping, and the one-transaction rule.
- *
- * `splice.test.ts` proves the *edits* match the shared core. This file proves the
- * kernel applies them the way SPEC §3.3 and §6.4 require: one transaction, the
- * calling plugin's section and no other, and a document opened for the write
- * released again afterwards.
- */
-
 import { describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 
@@ -17,7 +7,6 @@ import type { QueryEngine } from "../query/index.js";
 import type { SyncClient } from "../sync/client.js";
 import { DocumentsHost } from "./documents.js";
 
-/** A hydrated document, minus the socket. */
 class FakeOpen implements OpenDocument {
   readonly doc = new Y.Doc();
   readonly text: Y.Text;
@@ -62,7 +51,6 @@ describe("splice writes through the CRDT", () => {
     const documents = host(open).forPlugin("properties");
     await documents.splice.setFrontmatterValue(open, "title", "New");
     expect(open.text.toString()).toBe("---\ntitle: New\npath: home\n---\n\nbody\n");
-    // A document the caller owns is neither re-opened nor released by the kernel.
     expect(open.opens).toBe(0);
     expect(open.releases).toBe(0);
   });
@@ -95,7 +83,6 @@ describe("splice writes through the CRDT", () => {
     await documents.splice.removeFrontmatterKey(open, "a");
     expect(open.text.toString()).toBe("---\nb: 2\n---\n");
     expect(transactions).toBe(1);
-    // A stable, plugin-attributed origin: `y-codemirror.next` filters on it.
     expect(origins).toEqual(["splice:properties"]);
   });
 
@@ -158,9 +145,6 @@ describe("a plugin's section is its own", () => {
     expect(open.text.toString()).toBe("%%% a\ny: 2\n%%%\n");
   });
 
-  // The distinction `remove` was added for: the strict YAML subset of SPEC §3.4 has a
-  // `null` scalar, and before this a plugin had no way to write one — `value: null`
-  // was spelled for deletion and spent the only spelling JSON has for an explicit null.
   it("writes a literal null when `remove` is not set", async () => {
     const open = new FakeOpen("doc1", "%%% a\nx: 1\ny: 2\n%%%\n");
     await host(open)
@@ -177,17 +161,6 @@ describe("a plugin's section is its own", () => {
     expect(open.text.toString()).toBe("body\n\n%%% a\nx: null\n%%%\n");
   });
 
-  /**
-   * The one spelling whose meaning changed between kernel 1.0.0 and 1.1.0, and the only
-   * thing that can be done about it short of a major.
-   *
-   * `{ key, value: null }` used to delete the key's line and now writes `key: null`. The
-   * two are byte-identical on the way in, so the install gate cannot refuse the old one:
-   * `KERNEL_API_MAJOR` is still `1`, `"kernel": "^1.0"` still resolves, and a plugin
-   * written against 1.0.0 loads and then quietly accretes null lines where it meant to
-   * clear them. The write follows the *new* contract — that is what the contract says —
-   * and the author is told, at the call site, once.
-   */
   it("warns once per key when a null arrives without an explicit `remove`", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     try {
@@ -200,7 +173,6 @@ describe("a plugin's section is its own", () => {
       expect(warn).toHaveBeenCalledTimes(1);
       expect(warn.mock.calls[0]?.[0]).toContain("remove: true");
 
-      // An explicit `remove: false` is the author saying they meant the null.
       await splice.spliceSection(open, [{ key: "y", value: null, remove: false }]);
       expect(warn).toHaveBeenCalledTimes(1);
     } finally {
@@ -219,7 +191,6 @@ describe("the planners are pure", () => {
     expect(fm).toHaveLength(1);
     expect(section).toHaveLength(1);
     expect(open.text.toString()).toBe(text);
-    // `apply` is the caller's way to batch several plans into one transaction.
     let transactions = 0;
     open.doc.on("afterTransaction", () => {
       transactions += 1;

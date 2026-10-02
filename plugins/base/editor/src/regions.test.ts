@@ -10,7 +10,6 @@ import {
   type LineReader,
 } from "./regions.js";
 
-/** The slice a region covers — the readable way to assert on offsets. */
 const slice = (text: string, region: { start: number; end: number } | undefined): string | undefined =>
   region === undefined ? undefined : text.slice(region.start, region.end);
 
@@ -146,21 +145,14 @@ describe("foldableRegions", () => {
   });
 
   it("never offers the frontmatter block a fold range", () => {
-    // Owner ask, 2026-09-25: frontmatter is human-owned (SPEC §3.3) and edit mode is
-    // where it is edited, so it opens as plain text and stays that way. This is
-    // stronger than "not folded on open": absent from the answer means the fold
-    // service offers no range, so no gutter arrow, no `foldAll` and no contributed
-    // extension can collapse it either.
     const folds = foldableRegionsOf(documentRegions(DOC));
     expect(folds.some((region) => region.start === 0)).toBe(false);
     expect(documentRegions(DOC).frontmatter).toBeDefined();
 
-    // A document that is *only* frontmatter therefore folds nothing at all.
     expect(foldableRegions("---\ntitle: T\npath: p\n---\n")).toEqual([]);
   });
 
   it("skips a region that does not span a line break", () => {
-    // CodeMirror cannot fold within a line, and a fold with no handle just hides text.
     expect(foldableRegions("# b\n\n%%% a\n%%%\n").map((region) => region.start)).toEqual([5]);
     expect(foldableRegions("---\n")).toEqual([]);
   });
@@ -172,10 +164,6 @@ describe("foldableRegions", () => {
 
 describe("the line reader", () => {
   it("only visits the head and the tail, so the fold service is not O(document)", () => {
-    // The fold service runs on every viewport update, i.e. every keystroke. Before this,
-    // each miss materialized the whole document as a string and split it — a megabyte of
-    // copying per keystroke near the SPEC §3.5 cap. The scan is head-and-tail only, and
-    // this is what pins that: a reader that counts the lines it is asked for.
     const lines = ["---", "title: T", "---", ...Array.from({ length: 5_000 }, (_, i) => `body ${i}`), "%%% cal", "a: 1", "%%%", ""];
     const visited = new Set<number>();
     const source: LineReader = {
@@ -192,7 +180,6 @@ describe("the line reader", () => {
     const regions = regionsOf(source);
     expect(regions.frontmatter).toBeDefined();
     expect(regions.sections.map((section) => section.id)).toEqual(["cal"]);
-    // Head (3 lines) + tail (the run, its blank line, and the body line that ends it).
     expect(visited.size).toBeLessThan(20);
     expect([...visited].some((index) => index > 10 && index < lines.length - 10)).toBe(false);
   });

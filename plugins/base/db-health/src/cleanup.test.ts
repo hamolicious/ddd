@@ -4,7 +4,6 @@ import { allToRemove, copiesToRemove, type Strategy } from "./cleanup.js";
 
 const copy = (id: string, references: number) => ({ id, references });
 const ids = (copies: readonly { readonly id: string }[]) => copies.map((c) => c.id);
-// Oldest first, as the server sends them.
 const group = [copy("old", 0), copy("mid", 2), copy("new", 1)];
 
 describe("copiesToRemove", () => {

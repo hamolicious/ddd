@@ -209,7 +209,6 @@ describe("Obsidian folders", () => {
 
     await importVault(importingKernel, { attachments: { upload: vi.fn() }, folders: { ensurePath, file } } as unknown as ImportServices, "Vault", archive, () => undefined);
 
-    // One folder chain per vault folder, however many notes are in it.
     expect(ensurePath).toHaveBeenCalledTimes(1);
     expect(ensurePath).toHaveBeenCalledWith(["Notes", "Daily"]);
     expect(file.mock.calls).toEqual([

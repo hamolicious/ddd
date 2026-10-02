@@ -1,6 +1,2 @@
-# Every crate in this workspace is a Wasm plugin. Pinning the target here means
-# `cargo build --release` in this directory produces `.wasm` with no flags, and
-# rust-analyzer resolves the Extism host imports instead of reporting them as
-# link errors.
 [build]
 target = "wasm32-unknown-unknown"

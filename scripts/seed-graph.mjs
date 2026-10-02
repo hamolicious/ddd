@@ -1,25 +1,4 @@
 #!/usr/bin/env node
-/**
- * Fill a running workspace with randomly connected notes, for looking at the graph view.
- *
- * Every run makes a **new top-level folder note** (`graph-seed-<timestamp>`) holding one
- * note per cluster, so runs never collide and each shows in its own colour with "colour by
- * folder". Inside it, notes are wired so the graph has some structure:
- *
- * - most links go to notes that already have many (a few hubs emerge, like a real vault);
- * - notes come in loose clusters that link mostly among themselves;
- * - some links are embeds or a frontmatter `parent:`, a few point at notes that do not
- *   exist, and a few notes link nowhere (orphans).
- *
- * Ids are minted here (ULIDs), so a note's links are written in the one `POST` that creates
- * it: no second pass of edits.
- *
- * Usage:
- *   node scripts/seed-graph.mjs [--count 500] [--url http://localhost:8080]
- *                               [--email you@example.com] [--password …] [--seed 42]
- *
- * `--email`/`--password` default to `DDD_EMAIL`/`DDD_PASSWORD`, `--url` to `DDD_APP`.
- */
 
 import { randomBytes } from "node:crypto";
 
@@ -34,13 +13,8 @@ const random = mulberry32(Number(options.seed ?? Date.now()));
 if (!Number.isInteger(count) || count < 1) fail("--count must be a positive whole number");
 if (!email || !password) fail("sign-in needed: pass --email and --password, or set DDD_EMAIL and DDD_PASSWORD");
 
-// To the millisecond: two runs in the same second still get two folders.
 const stamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").replace(".", "-").slice(0, 19);
 const folder = `graph-seed-${stamp}`;
-
-// ---------------------------------------------------------------------------
-// The notes
-// ---------------------------------------------------------------------------
 
 const WORDS = [
   "atlas", "harbor", "lantern", "meadow", "orbit", "quartz", "river", "summit", "thistle", "willow",
@@ -67,7 +41,6 @@ for (const note of notes) {
   byCluster.get(note.cluster).push(note);
 }
 
-// Preferential attachment: a note is a target in proportion to (1 + links it already has).
 const weight = new Map(notes.map((note) => [note.id, 1]));
 function weightedPick(candidates) {
   let total = 0;
@@ -81,11 +54,10 @@ function weightedPick(candidates) {
 }
 
 for (const [index, note] of notes.entries()) {
-  if (random() < 0.03) continue; // an orphan, unless something links to it
+  if (random() < 0.03) continue;
   const outgoing = 1 + Math.floor(random() * random() * 5);
   const seen = new Set([note.id]);
   for (let i = 0; i < outgoing; i += 1) {
-    // Mostly inside its own cluster; now and then anywhere earlier in the run.
     const pool = random() < 0.95 ? byCluster.get(note.cluster) : notes.slice(0, Math.max(1, index));
     const target = weightedPick(pool);
     if (seen.has(target.id)) continue;
@@ -101,8 +73,6 @@ for (const [index, note] of notes.entries()) {
   if (random() < 0.02) note.missing = ulid();
 }
 
-// The folder notes: one for the run, one per cluster inside it (`folders`' own format:
-// a `%%% folders` section listing the children).
 const clusterNotes = Array.from({ length: clusterCount }, (_, index) => ({ id: ulid(), title: `cluster-${index + 1}` }));
 const folderNote = { id: ulid(), title: folder };
 const folderText = (title, children) =>
@@ -117,10 +87,6 @@ function text(note) {
   for (const target of note.embeds) lines.push("", `![${target.title}](doc://${target.id})`);
   return `${lines.join("\n")}\n`;
 }
-
-// ---------------------------------------------------------------------------
-// Sending them
-// ---------------------------------------------------------------------------
 
 const token = await signIn();
 let done = 0;
@@ -161,8 +127,6 @@ if (failed > 0) {
   process.exit(1);
 }
 
-// ---------------------------------------------------------------------------
-
 async function signIn() {
   const response = await fetch(`${baseUrl}/api/auth/login`, {
     method: "POST",
@@ -175,7 +139,6 @@ async function signIn() {
   return body.token;
 }
 
-/** A ULID: 48 bits of milliseconds, 80 random bits, Crockford base32. */
 function ulid() {
   const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
   let time = Date.now();
@@ -189,7 +152,6 @@ function ulid() {
   return out;
 }
 
-/** A small seeded PRNG, so `--seed` reproduces a layout of links. */
 function mulberry32(seed) {
   let state = seed >>> 0;
   return () => {

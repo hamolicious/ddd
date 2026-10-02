@@ -1,19 +1,3 @@
-/**
- * The sync-status pill: a coloured dot, or — while edits are unsynced — the unsynced
- * count in its place, in yellow (SPEC §6.5). When the connection is down a button joins
- * it: a red ✕ while offline, a red ↻ after a sync error, and clicking either reconnects.
- * A lapsed session shows Sign in instead.
- *
- * The dot has no visible word; the word ("Offline", "Synced") is in its `title` and in
- * its live region, which `aria-live="polite"` announces without stealing focus. The
- * count stays visible: it is the one fact a user must see before they close the tab,
- * and a colour cannot carry a number.
- *
- * **The slot has a fixed width.** Dot and count share one box wide enough for "999+",
- * so a bulk delete — hundreds of edits queued and drained in seconds — changes the digits
- * and nothing else; the header does not jostle as the count grows, shrinks and vanishes.
- */
-
 import { useEffect, useState, type ReactNode } from "react";
 
 import type { Kernel, SyncState } from "@kernel";
@@ -26,18 +10,8 @@ function useSyncState(kernel: Kernel): SyncState {
   return state;
 }
 
-/** How long the connection must stay down before the pill says so. */
 const DOWN_AFTER_MS = 1500;
 
-/**
- * The sync state as the pill shows it: steady rather than live.
- *
- * While disconnected the kernel retries on a backoff, so its status goes offline →
- * connecting → offline on every attempt; drawn as is, the ✕ blinked with each retry.
- * Here "down" (offline or error) only shows once it has lasted `DOWN_AFTER_MS` — so the
- * boot sequence, which starts at `offline`, never flashes it — and then holds through
- * the reconnect attempts until the kernel is actually syncing again.
- */
 function useSteadyState(state: SyncState): SyncState {
   const [down, setDown] = useState<"offline" | "error" | undefined>(undefined);
   const hard = state.status === "offline" || state.status === "error" ? state.status : undefined;
@@ -58,7 +32,6 @@ function useSteadyState(state: SyncState): SyncState {
   }, [connected, hard, down, state.status]);
 
   if (down) return state.status === down ? state : { ...state, status: down };
-  // Not down yet, or no longer: a failed attempt reads as still connecting.
   return hard ? { ...state, status: "connecting" } : state;
 }
 
@@ -78,11 +51,9 @@ export function SyncIndicator({ kernel }: { readonly kernel: Kernel }): ReactNod
             <span className="syncstatus:size-[0.6em] syncstatus:rounded-full syncstatus:bg-text-muted syncstatus:group-data-[tone=ok]:bg-success syncstatus:group-data-[tone=busy]:bg-accent syncstatus:group-data-[tone=warn]:bg-warning syncstatus:group-data-[tone=error]:bg-danger" aria-hidden="true" />
           )}
         </span>
-        {/* An icon alone on screen; the word stays in the live region so a change is still announced. */}
         <span className="sync-status-label syncstatus:sr-only">{status.label}</span>
       </span>
       {status.action === "reconnect" ? (
-        // Offline shows ✕, a failed sync shows ↻; either one is the way to try again.
         <button
           type="button"
           className="sync-status-retry syncstatus:tap-h syncstatus:inline-flex syncstatus:cursor-pointer syncstatus:items-center syncstatus:justify-center syncstatus:rounded syncstatus:border-0 syncstatus:bg-transparent syncstatus:p-0 syncstatus:text-danger syncstatus:hover:bg-bg-raised"
@@ -116,15 +87,12 @@ export function SyncIndicator({ kernel }: { readonly kernel: Kernel }): ReactNod
           type="button"
           className="syncstatus:tap-h syncstatus:inline-flex syncstatus:cursor-pointer syncstatus:items-center syncstatus:justify-center syncstatus:rounded syncstatus:border syncstatus:border-border-strong syncstatus:bg-transparent syncstatus:px-1.5 syncstatus:underline"
           onClick={() => {
-            // The kernel owns re-authentication; reloading is the one move a plugin
-            // can make that always lands on the auth gate without clearing anything.
             location.reload();
           }}
         >
           Sign in
         </button>
       ) : null}
-      {/* The whole sentence, for screen readers and for a hover that is not a tooltip race. */}
       <span className="syncstatus:sr-only">{status.detail}</span>
     </div>
   );

@@ -4,7 +4,6 @@ import { columnsFor, rowWindow } from "./virtual.js";
 
 describe("rowWindow", () => {
   it("draws the rows in view and the overscan either side", () => {
-    // Rows 10..19 are in view at 40 px each in a 400 px viewport.
     expect(rowWindow(400, 400, 40, 1000, 2)).toEqual({ first: 8, end: 22 });
   });
 

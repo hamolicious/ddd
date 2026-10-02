@@ -1,36 +1,3 @@
-//! Plugin configuration and secrets (SPEC §6.2: "manifest-declared `config` schema →
-//! admin-only UI → `plugin_config`, readable by the backend half; `secret: true` values
-//! are write-only in UI and encrypted at rest (`CONFIG_KEY`, falling back to a key derived
-//! from `SESSION_SECRET`)").
-//!
-//! # The key
-//!
-//! `CONFIG_KEY` (32 bytes, hex or base64) when set; otherwise HKDF-SHA256 over
-//! `SESSION_SECRET` with the fixed info string [`KEY_INFO`]. The fallback is what makes
-//! the feature work with no extra configuration, and it has a consequence that must be in
-//! the operator documentation rather than discovered:
-//!
-//! > **Rotating `SESSION_SECRET` without setting `CONFIG_KEY` makes every stored secret
-//! > unreadable** — the plugins keep running and `config_get` reports the key as missing,
-//! > so an admin re-enters them. `dev-docs/resolved/OPERATIONS.md` already says rotation "logs everyone
-//! > out"; this is the second sentence of that paragraph.
-//!
-//! # The cipher
-//!
-//! XChaCha20-Poly1305, random 192-bit nonce per write, and the **AAD binds the ciphertext
-//! to where it lives**: `plugin_id ‖ key ‖ version`. Copying a `plugin_config` row from one
-//! plugin to another — the obvious way to try to read someone's API key — fails to
-//! authenticate rather than decrypting.
-//!
-//! # What never happens
-//!
-//! A secret is never returned by an admin *read* (the UI gets `"••••"` and a `set` flag),
-//! never logged, never put in an error `detail`, and never pushed into a plugin at
-//! activation: it is pulled by `config_get`, so an instance that does not ask never holds
-//! it.
-//!
-//! **Owner:** the `install-flow` builder.
-
 use std::collections::BTreeMap;
 
 use base64::Engine as _;
@@ -52,38 +19,22 @@ use crate::state::AppState;
 
 use super::InstallError;
 
-/// HKDF `info` for the `SESSION_SECRET` fallback. Changing it invalidates every stored
-/// secret, so it is a constant with a version in it and never an ad-hoc string.
 pub const KEY_INFO: &[u8] = b"ddd/plugin-config/v1";
-/// Environment variable holding an explicit 32-byte key (hex or base64).
 pub const CONFIG_KEY_VAR: &str = "CONFIG_KEY";
-/// What the admin API returns in place of a stored secret.
 pub const SECRET_PLACEHOLDER: &str = "••••••••";
 
-/// The current [`SealedValue`] format, and the third component of the AAD.
 const SEAL_VERSION: u8 = 1;
-/// The AAD's field separator: a byte no key or plugin id may contain, so
-/// `("ab", "c")` and `("a", "bc")` cannot produce the same associated data.
 const AAD_SEPARATOR: u8 = 0x1f;
-/// Largest config value an admin may store. Generous for a URL or a token, small enough
-/// that `plugin_config` cannot become a document store.
 pub const MAX_CONFIG_VALUE_BYTES: usize = 8 * 1024;
-/// Largest number of keys one plugin's config may hold, whatever its manifest declares.
 pub const MAX_CONFIG_KEYS: usize = 64;
 
-/// A stored encrypted value. Versioned so the cipher can change without a migration
-/// guessing game.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SealedValue {
-    /// Format version; `1` is XChaCha20-Poly1305 with the AAD described above.
     pub v: u8,
-    /// Base64 nonce (24 bytes).
     pub nonce: String,
-    /// Base64 ciphertext ‖ tag.
     pub ct: String,
 }
 
-/// One stored config value: plaintext for a normal field, [`SealedValue`] for a secret.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum StoredValue {
@@ -91,7 +42,6 @@ pub enum StoredValue {
     Plain(serde_json::Value),
 }
 
-/// The key, derived once at boot.
 #[derive(Clone)]
 pub struct ConfigCipher {
     key: [u8; 32],
@@ -104,26 +54,18 @@ impl std::fmt::Debug for ConfigCipher {
 }
 
 impl ConfigCipher {
-    /// `CONFIG_KEY`, or HKDF over `SESSION_SECRET`.
     pub fn from_config(config: &Config) -> Result<Self, InstallError> {
         let mut key = [0u8; 32];
         match config.plugin_config_key.as_ref() {
-            // Exactly 32 bytes is what `CONFIG_KEY` is documented as, and then it is used
-            // as-is: an operator who generated a key and stored it in a secret manager
-            // expects the bytes they generated to be the key.
             Some(explicit) if explicit.as_bytes().len() == 32 => {
                 key.copy_from_slice(explicit.as_bytes());
             }
-            // Anything else — a longer passphrase, a shorter one that `Config` let through
-            // — is stretched rather than truncated or padded. Truncation silently discards
-            // entropy and padding silently adds none.
             Some(other) => derive(other.as_bytes(), &mut key)?,
             None => derive(config.session_secret.as_bytes(), &mut key)?,
         }
         Ok(ConfigCipher { key })
     }
 
-    /// Encrypt, binding the ciphertext to `plugin_id` and `key` through the AAD.
     pub fn seal(
         &self,
         plugin_id: &str,
@@ -143,8 +85,6 @@ impl ConfigCipher {
                     aad: &aad,
                 },
             )
-            // The message never carries the plaintext or the key: an encryption failure is
-            // a programming error, and this string ends up in a log.
             .map_err(|_| {
                 InstallError::Internal(anyhow::anyhow!("sealing a config value failed"))
             })?;
@@ -155,9 +95,6 @@ impl ConfigCipher {
         })
     }
 
-    /// Decrypt. A failure is **not** an error the plugin sees as a failure: the key is
-    /// reported as missing (see the rotation note in the module docs), with one warning
-    /// logged per plugin per boot rather than per call.
     pub fn open(
         &self,
         plugin_id: &str,
@@ -202,15 +139,12 @@ impl ConfigCipher {
     }
 }
 
-/// HKDF-SHA256 with no salt and [`KEY_INFO`] — the documented derivation, in one place so
-/// the two callers cannot drift.
 fn derive(ikm: &[u8], out: &mut [u8; 32]) -> Result<(), InstallError> {
     Hkdf::<Sha256>::new(None, ikm)
         .expand(KEY_INFO, out)
         .map_err(|_| InstallError::Internal(anyhow::anyhow!("deriving the config key failed")))
 }
 
-/// `plugin_id ‖ key ‖ version`, separated by a byte neither component may contain.
 fn aad(plugin_id: &str, key: &str) -> Vec<u8> {
     let mut aad = Vec::with_capacity(plugin_id.len() + key.len() + 3);
     aad.extend_from_slice(plugin_id.as_bytes());
@@ -221,18 +155,10 @@ fn aad(plugin_id: &str, key: &str) -> Vec<u8> {
     aad
 }
 
-/// The process-wide cipher, derived on first use.
-///
-/// Deliberately **not** cached. HKDF-SHA256 is one HMAC — cheaper than the Mongo round trip
-/// it always accompanies — and a cache would need a key, which is the trap `plugins::REGISTRY`
-/// documents: a single cached value made the first config the whole process ever saw the
-/// answer for every later one, invisible in a server with one config and fatal in a test
-/// binary where each case builds its own.
 pub fn cipher(config: &Config) -> Result<ConfigCipher, InstallError> {
     ConfigCipher::from_config(config)
 }
 
-/// What `config_get` returns to a plugin: every set value, secrets **decrypted**.
 pub async fn for_plugin(
     state: &AppState,
     plugin_id: &str,
@@ -257,9 +183,6 @@ pub async fn for_plugin(
                     values.insert(name.clone(), serde_json::Value::String(plaintext));
                 }
                 Err(err) => {
-                    // The rotation case (module docs): the plugin is told the key is not
-                    // set, which is a state it already handles, rather than being handed a
-                    // failure it cannot act on.
                     warn!(
                         plugin = %plugin_id, key = %name, error = %err,
                         "a stored plugin secret could not be decrypted; reporting it as unset"
@@ -270,12 +193,7 @@ pub async fn for_plugin(
             Some(StoredValue::Plain(value)) if !value.is_null() => {
                 values.insert(name.clone(), value.clone());
             }
-            // A `null` stored value and no value at all are the same thing here: the
-            // admin cleared the field.
             _ => match field.default.as_ref().filter(|_| !field.secret) {
-                // A declared default is a value, so the key is not "missing" — but a
-                // default is never applied to a secret (SPEC §6.2's write-only rule: a
-                // default secret would be a credential in a manifest).
                 Some(default) => {
                     values.insert(name.clone(), default.clone());
                 }
@@ -284,24 +202,9 @@ pub async fn for_plugin(
         }
     }
 
-    // Values stored for keys the manifest no longer declares are not returned: the schema
-    // is the contract, and an upgrade that dropped a key must not keep feeding it.
     Ok(abi::config::ConfigGetOutput { values, missing })
 }
 
-/// What the admin UI reads: the same values with secrets replaced by
-/// [`SECRET_PLACEHOLDER`] and a `set: true` flag.
-///
-/// The shape, which `plugins/base/admin` renders:
-///
-/// ```json
-/// { "plugin": "calendar",
-///   "schema": { "feed_url": { "type": "string", "required": true }, … },
-///   "values": { "feed_url": "https://…", "auth_header": "••••••••" },
-///   "set":    { "feed_url": true, "auth_header": true },
-///   "missing": ["folder"],
-///   "updated_at": "2026-09-24T06:00:00Z", "updated_by": "01HUSER…" }
-/// ```
 pub async fn for_admin(
     state: &AppState,
     plugin_id: &str,
@@ -316,9 +219,6 @@ pub async fn for_admin(
 
     for (name, field) in schema {
         let plain = match stored.get(name) {
-            // Stored sealed: masked whatever the schema now says. A field that used to be
-            // secret and is not any more must still not have its old value echoed — the
-            // admin re-enters it.
             Some(StoredValue::Sealed { .. }) => None,
             Some(StoredValue::Plain(value)) if !value.is_null() => Some(value.clone()),
             _ => {
@@ -328,8 +228,6 @@ pub async fn for_admin(
             }
         };
         set.insert(name.clone(), serde_json::Value::Bool(true));
-        // The one rule this loop exists for: a secret is write-only, so what goes over the
-        // wire is the mask (SPEC §6.2).
         let shown = match plain {
             Some(value) if !field.secret => value,
             _ => serde_json::Value::String(SECRET_PLACEHOLDER.to_string()),
@@ -348,10 +246,6 @@ pub async fn for_admin(
     }))
 }
 
-/// Write config values from the admin UI.
-///
-/// A secret submitted as [`SECRET_PLACEHOLDER`] means "unchanged" — otherwise every save
-/// of a form that displays a masked field would overwrite the real secret with the mask.
 pub async fn set(
     state: &AppState,
     plugin_id: &str,
@@ -371,8 +265,6 @@ pub async fn set(
     let mut changed: Vec<String> = Vec::new();
     let mut cleared: Vec<String> = Vec::new();
 
-    // Start from what is already stored, so a form that submits one field does not erase
-    // the rest — and so a secret left masked survives (below).
     for (name, value) in &stored {
         if schema.contains_key(name) {
             document.insert(name.clone(), to_bson(value)?);
@@ -386,8 +278,6 @@ pub async fn set(
             )));
         };
 
-        // Explicit clear: `null` removes the value rather than storing a null that every
-        // reader then has to special-case.
         if value.is_null() {
             document.remove(name);
             cleared.push(name.clone());
@@ -401,7 +291,6 @@ pub async fn set(
                 )));
             };
             if text == SECRET_PLACEHOLDER {
-                // The UI redisplayed the mask and the admin did not touch it.
                 continue;
             }
             if text.is_empty() {
@@ -429,9 +318,6 @@ pub async fn set(
         changed.push(name.clone());
     }
 
-    // Required keys are checked against the *result*, not the submission, so saving one
-    // field of a half-filled form is not blocked by another field nobody touched — but a
-    // save that would leave a required key empty is refused.
     for (name, field) in schema {
         if field.required && !document.contains_key(name) && field.default.is_none() {
             return Err(InstallError::Config(format!(
@@ -454,8 +340,6 @@ pub async fn set(
         .upsert(true)
         .await?;
 
-    // The audit entry records **which** keys changed and never what they changed to
-    // (SPEC §5.4 wants the action, §6.2 wants secrets write-only).
     state
         .audit(
             AuditEntry::new(
@@ -470,7 +354,6 @@ pub async fn set(
     Ok(())
 }
 
-/// Remove one key.
 pub async fn clear(
     state: &AppState,
     plugin_id: &str,
@@ -505,7 +388,6 @@ pub async fn clear(
     Ok(())
 }
 
-/// Delete a plugin's whole config — part of `uninstall --purge`.
 pub async fn purge(state: &AppState, plugin_id: &str) -> Result<u64, InstallError> {
     let deleted = state
         .collections
@@ -515,7 +397,6 @@ pub async fn purge(state: &AppState, plugin_id: &str) -> Result<u64, InstallErro
     Ok(deleted.deleted_count)
 }
 
-/// Type-check a submitted value against its declared field.
 pub fn validate_value(field: &ConfigField, value: &serde_json::Value) -> Result<(), String> {
     let label = field.label.clone();
     let name = label.as_deref().unwrap_or("the value");
@@ -561,15 +442,10 @@ pub fn validate_value(field: &ConfigField, value: &serde_json::Value) -> Result<
                 ))
             }
         }
-        // Unknown types are refused at **install** (`validate_manifest`), so reaching this
-        // means a manifest was edited on disk under a running server. Refusing the write
-        // is the conservative answer: storing a value nothing can interpret is worse.
         other => Err(format!("`{other}` is not a configuration field type")),
     }
 }
 
-/// The stored values for one plugin, keyed by name. An absent row is an empty map, not an
-/// error: "nothing configured yet" is the normal state of a freshly installed plugin.
 async fn load(
     state: &AppState,
     plugin_id: &str,
@@ -592,8 +468,6 @@ async fn load(
             Ok(stored) => {
                 out.insert(name.clone(), stored);
             }
-            // One unreadable row must not make the whole config unreadable: the plugin
-            // sees that key as unset, which is a state it handles.
             Err(err) => warn!(
                 plugin = %plugin_id, key = %name, error = %err,
                 "a stored plugin config value is unreadable"
@@ -672,8 +546,6 @@ mod tests {
             .seal("calendar", "auth_header", "s3cret")
             .expect("seals");
 
-        // Copying the row into another plugin's config, or under another key, fails to
-        // authenticate rather than decrypting.
         assert!(cipher.open("evil", "auth_header", &sealed).is_err());
         assert!(cipher.open("calendar", "feed_url", &sealed).is_err());
     }

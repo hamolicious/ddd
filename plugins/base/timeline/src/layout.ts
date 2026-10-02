@@ -1,20 +1,3 @@
-/**
- * The timeline's arithmetic, pure: the window of time on screen, and where each note sits
- * in it.
- *
- * - **Fields are the view's settings.** A note starts at its `start` field (`created_at`
- *   by default). With an `end` field it is a bar to that date — a date without a time is
- *   the whole day, so a one-day task is a day wide — and without one, or with an end that
- *   is missing or earlier, it is a point. With a `group` field the notes split into
- *   lanes by its value; a list value puts the note in each of its lanes, and notes without
- *   one share a lane at the bottom.
- * - **The window is the scale's.** Days show two weeks, weeks twelve, months a year,
- *   quarters three — always starting on a boundary, so a column is a day, a week, a month
- *   or a quarter.
- * - **Rows are packed.** In a lane, a note takes the first row where it does not overlap
- *   what is already there, with room kept after a point for its label.
- */
-
 import type { DocumentRow } from "@kernel";
 
 import {
@@ -38,9 +21,7 @@ export const SCALES: readonly { readonly id: Scale; readonly label: string }[] =
 
 export interface TimelineOptions {
   readonly start: string;
-  /** `""`: every note is a point. */
   readonly end: string;
-  /** `""`: one lane. */
   readonly group: string;
   readonly scale: Scale;
 }
@@ -52,7 +33,6 @@ export function timelineOptions(options: Readonly<Record<string, string>>): Time
   return { start: options["start"] || DEFAULTS.start, end: options["end"] ?? "", group: options["group"] ?? "", scale };
 }
 
-/** The view options for these settings over `options`; defaults are removed, not written. */
 export function withTimeline(
   settings: TimelineOptions,
   options: Readonly<Record<string, string>>,
@@ -78,7 +58,6 @@ export interface TimeWindow {
   readonly units: readonly Unit[];
 }
 
-/** The window around `anchor`: a little before it, most of it after. */
 export function windowFor(anchor: Date, scale: Scale): TimeWindow {
   const units: Unit[] = [];
   if (scale === "month") {
@@ -115,7 +94,6 @@ export function windowFor(anchor: Date, scale: Scale): TimeWindow {
   return { from, to: addDays(from, count * step), units };
 }
 
-/** Where ‹ and › move the anchor: about a third of a window. */
 export function shiftAnchor(anchor: Date, scale: Scale, by: number): Date {
   if (scale === "month") return addMonths(anchor, 3 * by);
   if (scale === "quarter") return addMonths(anchor, 12 * by);
@@ -124,18 +102,6 @@ export function shiftAnchor(anchor: Date, scale: Scale, by: number): Date {
 
 type Clauses = ReturnType<typeof rangeClauses>;
 
-/**
- * The two searches that fetch what a window can show, each a set of conditions all of
- * which hold (a search's `within` has no "or"):
- *
- * - `starts`: notes that start in the window — every point, and spans that begin here.
- * - `spans`: with an end field, notes that start before the window ends and end after it
- *   begins — a span that began any time before the window and is still running. Absent
- *   without an end field.
- *
- * Two bounded searches rather than one with only an upper bound: that one would fetch
- * every note with no end since the beginning of time, and fill its page with them.
- */
 export function windowClauses(settings: TimelineOptions, window: TimeWindow): { readonly starts: Clauses; readonly spans?: Clauses } {
   const starts = rangeClauses(settings.start, window.from, window.to);
   if (settings.end === "") return { starts };
@@ -147,21 +113,17 @@ export function windowClauses(settings: TimelineOptions, window: TimeWindow): { 
 export interface Item {
   readonly row: DocumentRow;
   readonly start: Date;
-  /** Exclusive; equal to `start` for a point. */
   readonly end: Date;
   readonly point: boolean;
-  /** Where it sits in the window, as fractions of its width. */
   readonly left: number;
   readonly right: number;
 }
 
 export interface Lane {
-  /** The group value; `undefined` for the notes without one (and for the single lane). */
   readonly name: string | undefined;
   readonly rows: readonly (readonly Item[])[];
 }
 
-/** Room a point keeps after it for its label, and a bar's least width, as fractions. */
 const POINT_ROOM = 0.14;
 const BAR_ROOM = 0.06;
 
@@ -174,7 +136,6 @@ function lanesOf(row: DocumentRow, group: string): readonly (string | undefined)
   return names.length === 0 ? [undefined] : [...new Set(names)];
 }
 
-/** The notes in the window, in lanes (named ones alphabetically, then the unnamed), rows packed. */
 export function layoutItems(rows: readonly DocumentRow[], settings: TimelineOptions, window: TimeWindow): readonly Lane[] {
   const span = window.to.getTime() - window.from.getTime();
   const fraction = (date: Date): number => (date.getTime() - window.from.getTime()) / span;

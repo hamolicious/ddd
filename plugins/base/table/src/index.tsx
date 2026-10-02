@@ -1,13 +1,3 @@
-/**
- * `table` — a saved search as a table: the note's title, then the columns chosen in the
- * View panel, a set number of rows at a time (`columns.ts`, `ResultsTable.tsx`).
- *
- * Added as a document mode for the saved searches whose `type` is `table`, or that have no
- * type (`_shared/saved-view.ts`); the settings live in the note's `%%% table` section.
- * `TablePage` and `save` are exported too (`plugin:table`), for the all-documents page,
- * which keeps the settings in its URL instead.
- */
-
 import type { ReactElement } from "react";
 
 import type { Kernel } from "@kernel";
@@ -33,12 +23,10 @@ type RouterModule = typeof import("plugin:router");
 let kernelRef: Kernel | undefined;
 let router: RouterModule | undefined;
 
-// A row's ⋯ button opens the row's menu, which is `context-menu`'s.
 const openMenu = (element: HTMLElement): void => {
   openFor(element);
 };
 
-/** A search shown as a table, for a page that is not a note; its settings are the caller's. */
 export function TablePage({ options, onOptionsChange, ...shell }: TablePageProps): ReactElement {
   return (
     <SearchShell
@@ -50,7 +38,6 @@ export function TablePage({ options, onOptionsChange, ...shell }: TablePageProps
   );
 }
 
-/** Save the search and the table's settings to a new note, and open it. Resolves to the note's id. */
 export async function save(
   spec: SearchSpec,
   options: Readonly<Record<string, string>>,
@@ -98,7 +85,6 @@ export default function activate(kernel: Kernel): void {
     },
     {
       addMode,
-      // `SavedViewCommand.run` returns `unknown`; a command's returns `void | Promise<void>`.
       addCommand: (command) =>
         addCommand({
           ...command,

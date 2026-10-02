@@ -1,63 +1,11 @@
-/**
- * The permanent regression net: **every route in the app, at 390 px, never scrolls the
- * page sideways.**
- *
- * The three mobile specs beside this one each own a group of surfaces and assert the
- * interactions on them. This one owns the single rule that has to hold everywhere and
- * that no group can enforce for another: a design rule from the brief — *the body never
- * scrolls horizontally; wide content scrolls inside its own container* — checked on
- * every registered `router.route`, so a plugin that reintroduces the defect fails here
- * even when nobody thought to extend that plugin's own spec.
- *
- * Three things make it a net rather than a formality:
- *
- * 1. **It checks three levels, because two were not enough.**
- *    `documentElement.scrollWidth <= clientWidth` was already true across the whole app
- *    when the audit ran — the body was held while `main#shell-main`, which *is* an
- *    `overflow: auto` box, scrolled instead. That is the same defect one level down, so
- *    the region is asserted too. And *that* is still not enough: the worst layout bug
- *    the audit found (B-1, a pasted URL stretching the reading pane to 659 px in a
- *    390 px viewport) shows up in neither number, because `.docsurface-pane` is an
- *    `overflow-x: auto` box as well — the page held, `main` held, and the article inside
- *    was 651 px wide with its `<h1>` running off the screen. Verified by putting that
- *    regression back into the served CSS: the first two checks passed it.
- *
- *    So the third check is the one that matters on a phone: **a block of text must fit
- *    the screen.** Headings, paragraphs and list items are what a person reads by
- *    scrolling *down*, and any of them wider than the viewport means reading sideways.
- *    A wide table or a long fenced line is exempt — scrolling those inside their own
- *    container is the sanctioned pattern and the brief says so.
- * 2. **It sweeps, it does not stop.** Every route is visited and every offender
- *    collected before the expectation runs, so one regression does not hide the other
- *    nine. The failure message names the route, the measured widths and the widest
- *    leaf elements that caused it.
- * 3. **The routes are discovered from the running app**, not typed out here: the
- *    settings sections come from the rendered nav and the admin sections from the
- *    rendered tablist, so a section contributed tomorrow is swept tomorrow without
- *    this file changing. Reading them from plugin source instead would mean importing
- *    another plugin's module into the suite, which is the thing plugins may not do.
- *
- * The document it sweeps is deliberately hostile: a 300-character URL, a long inline
- * code span and a table wider than the screen are what set `.docsurface-pane`'s
- * intrinsic minimum width to 659 px in a 390 px viewport. A sweep over empty documents
- * proves nothing about the page people paste links into.
- */
-
 import { devices, expect, test, type Page } from "@playwright/test";
 
 import { ADMIN, createDocument, modeSwitch, signIn } from "./helpers.js";
 
-/** SPEC §6.5's acceptance viewport: the phone the owner tests on. */
 const PHONE = { width: 390, height: 844 };
 
 test.use({ ...devices["Pixel 7"], viewport: PHONE });
 
-/**
- * Content chosen to break the layout if anything is allowed to size to its content:
- * an unbreakable 300-character token, an unbreakable inline-code span, a table wider
- * than the viewport, an unwrapped fence and a deeply indented list. Every one of these
- * is an ordinary thing to have in a note.
- */
 const HOSTILE = [
   "---",
   "title: Wide content",
@@ -91,13 +39,6 @@ interface Overflow {
   readonly offenders: readonly string[];
 }
 
-/**
- * Measure the document and the main region on whatever is currently rendered.
- *
- * Returns the failures rather than asserting, so the caller can finish the sweep and
- * report all of them at once. One pixel of slack on each: sub-pixel layout rounding
- * produces fractional differences on perfectly correct pages.
- */
 async function measure(page: Page, where: string): Promise<Overflow[]> {
   const result = await page.evaluate(() => {
     const describe = (element: HTMLElement): string => {
@@ -106,8 +47,6 @@ async function measure(page: Page, where: string): Promise<Overflow[]> {
     };
 
     const root = document.documentElement;
-    // The elements physically past the right edge, leaves only: a parent is wide
-    // because a child in it is, and naming the child is what points at the fix.
     const offenders = [...document.querySelectorAll<HTMLElement>("body *")]
       .filter((element) => {
         const box = element.getBoundingClientRect();
@@ -117,10 +56,6 @@ async function measure(page: Page, where: string): Promise<Overflow[]> {
       .map(describe)
       .slice(0, 8);
 
-    // Text a person reads by scrolling down. Anything here wider than the screen has
-    // to be read by scrolling sideways, which is the defect whatever box it sits in.
-    // `pre`, `table` and `code` are exempt: wide content scrolling inside its own
-    // container is the pattern the brief asks for, not a bug.
     const wideText = [...document.querySelectorAll<HTMLElement>("h1, h2, h3, h4, h5, h6, p, li")]
       .filter((element) => element.closest("pre, table, code") === null)
       .map((element) => ({ element, box: element.getBoundingClientRect() }))
@@ -157,15 +92,10 @@ async function measure(page: Page, where: string): Promise<Overflow[]> {
   return failures;
 }
 
-/** Go to a hash route, wait for the region to render, and measure it. */
 async function sweep(page: Page, routes: readonly string[]): Promise<Overflow[]> {
   const failures: Overflow[] = [];
   for (const route of routes) {
     await page.goto(`/#${route}`);
-    // The shell is up by this point (the first navigation activated the plugins);
-    // what varies is the view inside it, so wait on the region rather than on any one
-    // view's own markup. A view rendering from the local projection settles within a
-    // frame, and this is the cheapest way to be after that frame rather than in it.
     await expect(page.locator("main#shell-main")).toBeVisible();
     await page.waitForTimeout(250);
     failures.push(...(await measure(page, route)));
@@ -173,7 +103,6 @@ async function sweep(page: Page, routes: readonly string[]): Promise<Overflow[]>
   return failures;
 }
 
-/** Turn the collected failures into one readable message. */
 function report(failures: readonly Overflow[]): string {
   return failures
     .map((failure) => {
@@ -200,16 +129,10 @@ test.describe("every route at 390 px", () => {
       "/search",
       "/search?q=wide",
       `/doc/${id}`,
-      // A route no plugin claims, and a document id nothing resolves. The not-found
-      // view renders the id it could not find, which is the longest string on it.
       "/doc/01JZZZZZZZZZZZZZZZZZZZZZZZ",
       "/nothing-claims-this-route",
     ]);
 
-    // Edit mode is a *mode*, not a URL (it is remembered per document as a per-user
-    // setting), so the only way to sweep it is to switch to it. It is a different
-    // layout over the same hostile content and has to hold the page just as read mode
-    // does — CodeMirror's scroller is the usual way it does not.
     await page.goto(`/#/doc/${id}`);
     await expect(modeSwitch(page)).toBeVisible();
     await page.getByRole("button", { name: "Switch to Edit" }).click();
@@ -242,8 +165,6 @@ test.describe("every route at 390 px", () => {
     await page.goto("/#/admin");
     await expect(page.locator("main#shell-main")).toBeVisible();
 
-    // The tabs carry their own ids in the URL they navigate to; reading them off the
-    // rendered tablist keeps this in step with whatever `admin` ships.
     const sections = await page
       .getByRole("tab")
       .evaluateAll((tabs) =>
@@ -264,9 +185,6 @@ test.describe("every route at 390 px", () => {
     await signIn(page);
     const failures: Overflow[] = [];
 
-    // Not routes, but the three things that render *over* every route — and each was
-    // a separate off-screen defect in the audit (the drawer's tree, the palette sheet,
-    // and a notice panel clipped off the left edge).
     const drawer = page.locator(".shell-sidebar-toggle");
     await drawer.click();
     await expect(page.getByRole("complementary", { name: /sidebar/i })).toBeVisible();
@@ -291,8 +209,6 @@ test.describe("every route at 390 px", () => {
   });
 
   test("the auth gate holds the page", async ({ browser }) => {
-    // A context with no session: the gate is the first thing a phone ever renders,
-    // and it renders outside the shell, so `main#shell-main` does not exist yet.
     const context = await browser.newContext({ ...devices["Pixel 7"], viewport: PHONE });
     const page = await context.newPage();
     const failures: Overflow[] = [];
@@ -315,10 +231,6 @@ test.describe("every route at 390 px", () => {
     const page = await context.newPage();
     const failures: Overflow[] = [];
     try {
-      // `?safe=bare` is the kernel's own manager: no plugins, no shell — the screen a
-      // user reaches when everything else is broken, and so exactly the screen that
-      // must not need a horizontal scroll to be read. `signIn`'s waits do not apply
-      // here (there is no shell and no loader line); the gate is the same one.
       await page.goto("/?safe=bare");
       await page.locator("#email").fill(ADMIN.email);
       await page.locator("#password").fill(ADMIN.password);
@@ -327,9 +239,6 @@ test.describe("every route at 390 px", () => {
       await page.waitForTimeout(250);
       failures.push(...(await measure(page, "?safe=bare")));
 
-      // `?safe=1` is the base distribution with nothing else: a real shell, and the
-      // route every other test here sweeps, reached the way a recovering user reaches
-      // it.
       await page.goto("/?safe=1");
       await expect(page.locator("main")).toBeVisible();
       await page.waitForTimeout(500);

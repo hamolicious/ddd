@@ -1,10 +1,3 @@
-/**
- * What the condition editor suggests, from the indexer (`ddd/workspace-index`): the
- * frontmatter keys in use, the values each one holds, and the notes to pick for a
- * document value. All of it local and synchronous; a host without the index passes
- * nothing and the editor falls back to the fixed fields.
- */
-
 import type { Unsubscribe } from "@kernel";
 
 import type { FmField, PropertyKind, WorkspaceIndex } from "plugin:indexer";
@@ -12,24 +5,18 @@ import type { FmField, PropertyKind, WorkspaceIndex } from "plugin:indexer";
 import { DOC_PREFIX, FIELD_OPTIONS, type FieldOption, type ValueKind } from "./conditions.js";
 import type { NoteLook, NoteSource, PickableNote } from "./note-picker.js";
 
-/** The index as the conditions read it: a host's manifest `needs` these. */
 export type ConditionIndex = Pick<WorkspaceIndex, "fmFields" | "fmValues" | "documents" | "subscribe" | "version">;
 
 export interface Suggestions {
-  /** The fixed roots, then every frontmatter key a person wrote, most-used first. */
   fields(): readonly FieldOption[];
-  /** What `field` holds, most-used first; `[]` for anything but a frontmatter key. */
   values(field: string): readonly string[];
-  /** Fires whenever either answer may have changed. */
   subscribe(listener: () => void): Unsubscribe;
 }
 
-/** The fields the index cannot know: the projection's own columns. */
 const FIXED = FIELD_OPTIONS.filter((option) => !option.field.startsWith("fm."));
 
 const VALUE_LIMIT = 50;
 
-/** The most common of `kinds`, `undefined` for none. */
 function commonest(kinds: FmField["kinds"]): PropertyKind | undefined {
   let best: PropertyKind | undefined;
   let most = 0;
@@ -42,10 +29,6 @@ function commonest(kinds: FmField["kinds"]): PropertyKind | undefined {
   return best;
 }
 
-/**
- * The value type a field's conditions should compare with, from what it holds. A list
- * takes the kind of its items; strings that are all `doc://` links are documents.
- */
 export function inferKind(field: FmField, values: readonly { readonly value: unknown }[]): ValueKind | undefined {
   const kind = commonest(field.kinds);
   const scalars = values.map((entry) => entry.value).filter((value) => value !== null);
@@ -104,15 +87,10 @@ export function indexSuggestions(index: ConditionIndex): Suggestions {
   };
 }
 
-/**
- * Every note for the picker, from the index: offline, synchronous, live. `looks` dresses
- * them as the tree does, and its changes are announced with the index's.
- */
 export function indexNoteSource(
   index: Pick<ConditionIndex, "documents" | "subscribe" | "version">,
   looks?: { readonly look: (id: string) => NoteLook | undefined; readonly onChange: (listener: () => void) => Unsubscribe },
 ): NoteSource {
-  // Rebuilt only when the index moves, so the picker's memo holds between changes.
   let cached: { readonly version: number; readonly notes: readonly PickableNote[] } | undefined;
   return {
     notes: () => {

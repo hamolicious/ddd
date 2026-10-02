@@ -51,8 +51,6 @@ fi
 mapfile -t plugins < <(printf '%s\n' "${plugins[@]}" | sort -u)
 matches=()
 if [[ -n "$prefilter" ]]; then
-  # An exact name wins over substring matches (`editor` must not also offer
-  # `alt-editor`). Otherwise narrow the list before fzf sees it.
   for plugin in "${plugins[@]}"; do
     if [[ "${plugin,,}" == "${prefilter,,}" ]]; then
       matches=("$plugin")

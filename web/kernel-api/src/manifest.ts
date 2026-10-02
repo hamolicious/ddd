@@ -1,28 +1,9 @@
-/**
- * The plugin manifest (SPEC §6.2) and the loader's view of an installed plugin.
- *
- * The **server** is the authority: it validates manifests at install, resolves the
- * dependency graph and the `peerLibraries` ranges, and serves the result. The
- * loader re-validates independently anyway, for one reason given in SPEC §6.4: a
- * stale offline client must hard-skip a plugin built for a kernel it does not
- * implement, rather than activate it and fail in pieces.
- *
- * M3 uses the frontend half only. `backend`, `config` and most `capabilities`
- * entries are declared here because the shape is frozen now and enforced in M4.
- *
- * **FROZEN.**
- */
-
 import {
   MANIFEST_SCHEMA,
   type ManifestSchemaNode,
   type PluginManifest,
 } from "./manifest.generated.js";
 
-/**
- * The manifest's types are generated from `schema/manifest.schema.json`, the one source the
- * server's types come from too (`web/scripts/gen-manifest.mjs`).
- */
 export type {
   BackendExport,
   HttpCapability,
@@ -33,47 +14,23 @@ export type {
   PluginManifest,
 } from "./manifest.generated.js";
 
-/** `^[a-z0-9][a-z0-9-]{0,63}$` — also the URL segment under `/plugins/`. */
 export const PLUGIN_ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
-/** `1.2.3` with an optional prerelease/build tail. */
 export const PLUGIN_VERSION_PATTERN = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)*$/;
 
 export type PluginState = "enabled" | "disabled" | "pending" | "failed";
 
-/**
- * One entry of what the server tells the loader (`GET /api/plugins`).
- *
- * `baseUrl` is version-scoped — `/plugins/<id>/<version>/` — so every asset is
- * immutable and cacheable forever (SPEC §8), and a plugin upgrade is a new URL
- * rather than a cache invalidation.
- */
 export interface InstalledPlugin {
   readonly manifest: PluginManifest;
   readonly baseUrl: string;
   readonly state: PluginState;
-  /** `true` for the base distribution — what `?safe=1` boots (SPEC §6.1). */
   readonly base: boolean;
-  /**
-   * Short content fingerprint of the frontend assets, appended by the loader as `?v=`.
-   * Busts every cache layer when the served bytes change without a version bump (a
-   * rebuilt base distribution); same bytes keep the same URL, so "immutable, cached
-   * forever" stays true. Absent on older servers — URLs are then plain, as before.
-   */
   readonly assetsVersion?: string;
 }
 
-/**
- * The server's load resolution (`GET /api/plugins` → `load`): which plugins a boot
- * activates, in order, per boot mode, and which it leaves out and why.
- *
- * `normal` is a normal boot, `safe` is `?safe=1` (base plugins only). Both are in
- * dependency order: every plugin after its `dependencies` and `optionalDependencies`.
- */
 export interface PluginLoad {
   readonly normal: readonly string[];
   readonly safe: readonly string[];
-  /** A dependency missing, out of range, disabled, or in a cycle — and every dependent of one. */
   readonly skipped: readonly { readonly id: string; readonly reason: string }[];
 }
 
@@ -82,22 +39,12 @@ export interface ManifestProblem {
   readonly message: string;
 }
 
-/**
- * Structural validation of a manifest: an interpreter over the generated schema.
- *
- * The server runs the same interpreter over the same schema (`manifest_schema.rs`), and
- * `schema/fixtures/manifests.json` pins that both report the same fields. This is still the
- * client's own floor rather than a duplicate of the install-time checks (dependency
- * resolution, capability approval, zip hardening are all server-side): a stale offline
- * client re-checks what it was served (SPEC §6.4).
- */
 export function validateManifest(value: unknown): readonly ManifestProblem[] {
   const problems: ManifestProblem[] = [];
   check(MANIFEST_SCHEMA, value, "", problems);
   return problems;
 }
 
-/** The same as `validateManifest`, typed as a guard for callers that only need yes or no. */
 export function isManifest(value: unknown): value is PluginManifest {
   return validateManifest(value).length === 0;
 }
@@ -124,7 +71,6 @@ function check(raw: ManifestSchemaNode, value: unknown, path: string, problems: 
       for (const [key, entry] of Object.entries(value)) {
         if (entry === undefined) continue;
         const at = join(path, key);
-        // A field a past contract had and a major removed: refused, with what replaced it.
         const removed = node["x-removed"]?.[key];
         if (removed !== undefined) {
           push(at, removed);
@@ -175,10 +121,6 @@ function check(raw: ManifestSchemaNode, value: unknown, path: string, problems: 
   }
 }
 
-/**
- * The message for a string that fails `format`, or `undefined` when it passes. Each check
- * has the same definition as its twin in `manifest_schema.rs`.
- */
 export function formatProblem(format: string, text: string): string | undefined {
   switch (format) {
     case "plugin-id":
@@ -188,8 +130,6 @@ export function formatProblem(format: string, text: string): string | undefined 
     case "semver-range":
       return isSemverRange(text) ? undefined : "must be a semver range, e.g. ^1.0";
     case "relative-path":
-      // The server canonicalizes too; a client that trusted the manifest here would
-      // happily fetch `/plugins/x/1.0.0/../../etc/passwd`.
       return isSafeRelativePath(text) ? undefined : "must be a relative path inside the package, without `..`";
     case "plugin-ref":
       return parsePluginRef(text) ? undefined : "must be <plugin-id>@<version>, e.g. editor@2.0.0";
@@ -198,10 +138,6 @@ export function formatProblem(format: string, text: string): string | undefined 
   }
 }
 
-/**
- * `1.2.3` with an optional `-prerelease` / `+build` tail, **every character checked**: the
- * version is a path segment on the server (`<PLUGINS_DIR>/<id>/<version>/`).
- */
 export function isValidVersion(version: string): boolean {
   if (version.length === 0 || version.length > 128) return false;
   const plus = version.indexOf("+");
@@ -217,12 +153,10 @@ export function isValidVersion(version: string): boolean {
   return identifiers(pre) && identifiers(build);
 }
 
-/** `*`, or an optional `^ ~ = >= <= > <` and one to three numeric parts, with an optional tail. */
 export function isSemverRange(range: string): boolean {
   return range === "*" || /^(?:\^|~|>=|<=|=|>|<)?\d+(?:\.\d+){0,2}(?:[-+][0-9A-Za-z.+-]+)?$/.test(range);
 }
 
-/** Non-empty, not absolute, no backslash or drive letter, no `.` or `..` segment. */
 export function isSafeRelativePath(path: string): boolean {
   return (
     path.length > 0 &&
@@ -233,7 +167,6 @@ export function isSafeRelativePath(path: string): boolean {
   );
 }
 
-/** Split `editor@2.0.0` (a manifest's `provides`) into a plugin id and an exact version. */
 export function parsePluginRef(text: string): { readonly id: string; readonly version: string } | undefined {
   const at = text.indexOf("@");
   if (at === -1) return undefined;
@@ -242,15 +175,6 @@ export function parsePluginRef(text: string): { readonly id: string; readonly ve
   return PLUGIN_ID_PATTERN.test(id) && isValidVersion(version) ? { id, version } : undefined;
 }
 
-/**
- * Does `version` satisfy `range`? Supports exactly what manifests use: `*`,
- * `^x.y`, `^x.y.z`, `~x.y.z`, `>=x.y.z`, and an exact `x.y.z`.
- *
- * Deliberately not a semver library — a library in the kernel contract is a
- * library in every plugin's bundle, and this is 30 lines. The *server* does the
- * real resolution at install time (SPEC §6.2); this is the loader's boot-time
- * re-check of one version against one range.
- */
 export function satisfies(version: string, range: string): boolean {
   const spec = range.trim();
   if (spec === "" || spec === "*") return true;
@@ -274,7 +198,6 @@ export function satisfies(version: string, range: string): boolean {
 
   switch (operator?.[1]) {
     case "^":
-      // Caret on 0.x is the strict reading: 0.2.x and 0.3.x are incompatible.
       return wMajor === 0
         ? major === 0 && minor === wMinor && cmp >= 0
         : major === wMajor && cmp >= 0;
@@ -289,7 +212,6 @@ export function satisfies(version: string, range: string): boolean {
     case "<":
       return cmp < 0;
     default:
-      // A bare `1.2` means "any patch of 1.2"; a bare `1.2.3` is exact.
       return wanted.length === 3 ? cmp === 0 : major === wMajor && minor === wMinor;
   }
 }

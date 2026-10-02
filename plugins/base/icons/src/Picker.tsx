@@ -7,21 +7,12 @@ import { Icon } from "./Icon.js";
 import { searchIcons, type IconIndex } from "./search.js";
 import { columnsFor, rowWindow } from "./virtual.js";
 
-/** The smallest a cell gets, and every row's height, in pixels. */
 const CELL = 40;
-/** The grid's tallest: enough rows to browse, short enough to leave the rest of a sheet. */
 const VIEWPORT = 240;
 
 const CELL_CLASSES =
   "icons-choice icons:flex icons:h-full icons:min-h-0! icons:min-w-0! icons:cursor-pointer icons:items-center icons:justify-center icons:rounded icons:border icons:border-transparent icons:bg-transparent icons:p-0 icons:text-text icons:hover:border-border icons:hover:bg-bg-subtle icons:focus-visible:outline-2 icons:focus-visible:outline-focus";
 
-/**
- * A search box over every matching icon, in a grid that scrolls through all of them.
- *
- * Virtual: only the rows in view (and a few either side) are in the DOM, so six thousand
- * icons cost what forty do, and only the shards of the icons scrolled past are fetched.
- * Columns follow the grid's width.
- */
 export function Picker({ value, onChange, color }: IconPickerProps): ReactElement {
   const [index, setIndex] = useState<IconIndex | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -45,7 +36,6 @@ export function Picker({ value, onChange, color }: IconPickerProps): ReactElemen
     };
   }, []);
 
-  // The grid's width sets the columns: measured now, and again whenever it changes.
   const hasGrid = index !== undefined;
   useLayoutEffect(() => {
     const element = scroller.current;
@@ -56,7 +46,6 @@ export function Picker({ value, onChange, color }: IconPickerProps): ReactElemen
     return () => observer.disconnect();
   }, [hasGrid]);
 
-  // A new query starts from the top.
   useEffect(() => {
     if (scroller.current) scroller.current.scrollTop = 0;
     setScrollTop(0);
@@ -65,7 +54,6 @@ export function Picker({ value, onChange, color }: IconPickerProps): ReactElemen
   const hits = useMemo(() => (index ? searchIcons(index, query) : []), [index, query]);
   const columns = columnsFor(width, CELL);
   const rows = Math.ceil(hits.length / columns);
-  // A short result list gets a short grid; a long one scrolls inside `VIEWPORT`.
   const height = Math.min(VIEWPORT, Math.max(1, rows) * CELL);
   const { first, end } = rowWindow(scrollTop, height, CELL, rows);
 

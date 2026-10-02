@@ -30,7 +30,6 @@ const FIELDS: readonly FmField[] = [
 ];
 const index = { fmFields: () => FIELDS, fmValues: (key: string) => VALUES[key] ?? [] };
 
-/** Complete at the end of `doc` — the caret is after its last character. */
 function at(doc: string) {
   const line = doc.slice(doc.lastIndexOf("\n") + 1);
   return suggest(line, doc, index);
@@ -149,7 +148,6 @@ describe("suggest — note links", () => {
     const items = hubs('---\nhubs: ["doc://01CCC", "')?.items;
     expect(items?.[0]).toEqual({ label: "Driving", detail: "Hubs · 3 notes", insert: JSON.stringify("doc://01AAA") });
     expect(items?.[1]).toMatchObject({ label: "Dev env", detail: "1 note" });
-    // A note this device does not know stays as its link.
     expect(items?.[2]).toMatchObject({ label: "doc://01ZZZ" });
   });
 

@@ -1,8 +1,3 @@
-/**
- * `![](doc://…)` embeds another document's body, nested up to the user's `embedDepth`
- * (Settings → Markdown), with a document already shown above becoming a link.
- */
-
 import { expect, test } from "@playwright/test";
 
 import { ADMIN, createDocument, openDocument, signIn } from "./helpers.js";
@@ -35,7 +30,6 @@ test("embeds nest, stop at the configured depth, and stop in a cycle", async ({ 
 
   await setDepth(page, 4);
   const self = await createDocument(request, baseURL!, "# Self\n\nme again\n");
-  // A document embedding itself shows a link, not itself forever.
   await openDocument(page, self);
   await page.getByRole("tab", { name: "Edit" }).click();
   await page.locator(".cm-content").click();

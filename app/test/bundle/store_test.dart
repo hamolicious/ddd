@@ -1,8 +1,3 @@
-/// The pointer's pure transitions (`BRIDGE.md` §7).
-///
-/// [BundleState] is data with transitions precisely so the revert policy can be tested
-/// without a filesystem, a webview or a server. The invariant these tests pin down:
-/// **the shell never ends up pointing at a bundle that has already failed twice.**
 library;
 
 import 'dart:io';
@@ -49,7 +44,6 @@ void main() {
 
       expect(promoted.active, idB);
       expect(promoted.previous, idA);
-      // The new bundle gets its own two attempts.
       expect(promoted.failedBoots, 0);
     });
 
@@ -65,7 +59,6 @@ void main() {
       expect(reverted.active, idA);
       expect(reverted.failedBoots, 0);
       expect(reverted.quarantined, contains(idB));
-      // Reverting *to* something that just failed twice is not a recovery path.
       expect(reverted.previous, isNull);
       expect(reverted.canRevert, isFalse);
     });
@@ -83,12 +76,6 @@ void main() {
     test(
       'reverting without quarantine leaves the version installable again',
       () {
-        // The reverts that are not the bundle's fault: a shell too old for its
-        // `min_bridge_version`, a bundle directory that went missing under the pointer. A
-        // quarantine is permanent and only the user's own "Download the app again" clears
-        // it, so condemning a bundle that never got to run pins the device to an older one
-        // forever — `BundleUpdater.update` checks `quarantined` before the bridge gate, so
-        // even installing a newer APK does not undo it.
         const BundleState state = BundleState(
           active: idB,
           previous: idA,
@@ -105,9 +92,6 @@ void main() {
     );
 
     test('the quarantine list is capped, oldest first out', () {
-      // `bundle_version` is a content hash, so this list only ever grows, and it is
-      // rewritten into `state.json` on every launch. Ten is more history than any
-      // decision reads.
       BundleState state = const BundleState();
       for (int index = 0; index < kMaxQuarantined + 3; index += 1) {
         state = BundleState(
@@ -140,9 +124,6 @@ void main() {
     });
   });
 
-  /// The IO half: the pointer file, the swap, and reclaiming disk. A real temp directory,
-  /// because every one of these is about what survives a crash and a filesystem is the only
-  /// honest fake for that.
   group('BundleStore', () {
     late Directory root;
     late BundleStore store;
@@ -164,8 +145,6 @@ void main() {
       expect((await store.readState()).active, idB);
       expect((await store.readState()).failedBoots, 1);
 
-      // Half a write — the shape a crash would leave if the file were edited in place
-      // instead of renamed over.
       await store.stateFile.writeAsString('{"active": "v2", "fail');
 
       expect((await store.readState()).hasBundle, isFalse);
@@ -219,18 +198,10 @@ void main() {
 
         await store.install(idA);
 
-        // The copy that was just verified wins over the one that was merely already there.
         expect(
           store.fileIn(idA, 'assets/app-1a2b3c.js').readAsStringSync(),
           'fresh',
         );
-        // …and nothing is left behind: the old directory is renamed aside rather than
-        // deleted, so there is no instant at which the version exists nowhere. That
-        // matters because the destination is not always a spare copy — roll a deploy back
-        // and the server republishes the bundle this device holds as `previous`, i.e. its
-        // revert target. A process death inside a delete-then-rename window would leave
-        // `state.json` naming a directory that is gone, and the failure only surfaces much
-        // later as a revert that lands on the recovery screen.
         expect(
           Directory('${store.root.path}/$kStagingDirName/.replaced-$idA')
               .existsSync(),
@@ -242,8 +213,6 @@ void main() {
     test(
       'install refuses a version with nothing staged, and touches nothing',
       () async {
-        // The guard runs before the old directory is moved aside, so a caller that asks for
-        // a version it never downloaded cannot cost the device the copy it has.
         await placeBundle(
           store,
           FakeBundle(idA, bundleFiles(appChunk: 'kept')),
@@ -270,8 +239,6 @@ void main() {
       await placeBundle(store, FakeBundle(idA, bundleFiles()));
       expect(store.isInstalled(idA), isTrue);
 
-      // An installed bundle whose manifest was lost is *not* a bundle that can be served:
-      // the loopback server needs the path allowlist and the CSP out of it.
       await store.manifestFile(idA).delete();
       expect(store.isInstalled(idA), isTrue);
       expect(await store.readManifest(idA), isNull);
@@ -297,10 +264,7 @@ void main() {
         expect(store.isInstalled(idB), isTrue);
         expect(store.isInstalled(idC), isTrue);
         expect(store.isInstalled(idD), isTrue);
-        // `.staging` goes wholesale, which is why prune runs before a background update and
-        // never beside one (`store.dart`).
         expect(store.stagingDir('v5').existsSync(), isFalse);
-        // The pointer is not collateral damage.
         expect((await store.readState()).active, idC);
       },
     );

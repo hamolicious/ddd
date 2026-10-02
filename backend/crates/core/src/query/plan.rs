@@ -1,65 +1,34 @@
-//! A query as data: what [`super::Query`] builds and [`super::Engine::run`] answers.
-//!
-//! One JSON shape for every caller — the browser's worker, `POST /api/query`, a
-//! backend plugin's host call, a saved-search note — so a query built in one place
-//! runs unchanged in any other.
-//!
-//! ```json
-//! { "text": "milk",
-//!   "filter": {"and": [{"cmp": {"field": "fm.status", "op": "eq", "value": {"str": "open"}}},
-//!                      {"child_of": {"of": "01J…", "deep": true}}]},
-//!   "sort": ["relevance", "-updated_at"],
-//!   "trash": "live", "limit": 50, "cursor": "…", "snippets": true }
-//! ```
-//!
-//! Every field is optional; `{}` is "every live document, last updated first".
-
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::filter::{FieldPath, Filter, FilterParseError, SortKey, SortOrder};
 
-/// Rows per page when a plan names no `limit`.
 pub const DEFAULT_LIMIT: u32 = 50;
-/// The largest page a plan may ask for. Generous on purpose: the browser's kernel
-/// asks for every row of a local query. Servers clamp their own callers lower.
 pub const MAX_LIMIT: u32 = 1_000_000;
-/// Longest accepted search text, in bytes.
 pub const MAX_TEXT_BYTES: usize = 1024;
-/// Most sort keys in one plan.
 pub const MAX_SORT_KEYS: usize = 8;
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Plan {
-    /// Ranked full-text search. Empty: no text, every document is a candidate.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub text: String,
-    /// The filter DSL (`crates/core/README.md` §4), relation nodes included.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub filter: Option<Filter>,
-    /// Applied in order, then `id` ascending. Empty: best match while there is text,
-    /// else last updated first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sort: Vec<Sort>,
     #[serde(default, skip_serializing_if = "Trash::is_default")]
     pub trash: Trash,
-    /// Rows per page; [`DEFAULT_LIMIT`] when absent, at most [`MAX_LIMIT`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<u32>,
-    /// Opaque, from a previous answer's `next_cursor`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cursor: Option<String>,
-    /// Rows to skip, for a caller that pages by position (the kernel's `offset`).
-    /// Not with `cursor`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub offset: Option<u32>,
-    /// Each text hit carries the content line it matched on.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub snippets: bool,
 }
 
-/// Which documents a plan sees.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Trash {
@@ -83,8 +52,6 @@ impl Trash {
     }
 }
 
-/// One sort key. On the wire, the REST spelling: `"fm.date"`, `"-updated_at"`,
-/// `"title:desc"`, or `"relevance"` (the text's ranking; ignored without text).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "String", into = "String")]
 pub enum Sort {
@@ -147,14 +114,12 @@ pub enum PlanError {
 }
 
 impl Plan {
-    /// Parse and validate the JSON wire form.
     pub fn from_json_str(input: &str) -> Result<Plan, PlanError> {
         let plan: Plan = serde_json::from_str(input).map_err(|e| PlanError::Json(e.to_string()))?;
         plan.validate()?;
         Ok(plan)
     }
 
-    /// Parse and validate an already-decoded JSON value.
     pub fn from_json(value: &serde_json::Value) -> Result<Plan, PlanError> {
         let plan: Plan =
             serde_json::from_value(value.clone()).map_err(|e| PlanError::Json(e.to_string()))?;
@@ -187,13 +152,10 @@ impl Plan {
         Ok(())
     }
 
-    /// The page size this plan asks for.
     pub fn page_size(&self) -> usize {
         self.limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT) as usize
     }
 
-    /// What a cursor is bound to: the plan without its paging. A cursor from one query
-    /// handed to another is refused rather than silently paging the wrong list.
     pub(crate) fn fingerprint(&self) -> u64 {
         let unpaged = Plan {
             cursor: None,
@@ -206,7 +168,6 @@ impl Plan {
     }
 }
 
-/// FNV-1a: tiny, deterministic on both targets, and only ever a fingerprint.
 fn fnv1a(bytes: &[u8]) -> u64 {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
     for byte in bytes {
@@ -216,7 +177,6 @@ fn fnv1a(bytes: &[u8]) -> u64 {
     hash
 }
 
-/// `<offset>.<fingerprint>`, both hex.
 pub(crate) fn encode_cursor(offset: usize, fingerprint: u64) -> String {
     format!("{offset:x}.{fingerprint:x}")
 }

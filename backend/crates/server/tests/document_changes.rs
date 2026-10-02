@@ -1,7 +1,3 @@
-//! `/api/documents/:id/changes` — change history over the router: every text-changing
-//! write is recorded, grouped by author, shown as a diff, and revertable unless a later
-//! change touched the same text.
-
 mod common;
 
 use axum::http::StatusCode;
@@ -17,7 +13,6 @@ async fn changes_are_recorded_grouped_shown_and_reverted() {
     };
     let id = app.create_document("# Notes\n\nfirst line\n").await;
 
-    // Two writes by the signed-in user: one group.
     app.put_json(
         &format!("/api/documents/{id}"),
         json!({ "content": "# Notes\n\nfirst line\nsecond line\n" }),
@@ -31,7 +26,6 @@ async fn changes_are_recorded_grouped_shown_and_reverted() {
     .await
     .expect_status(StatusCode::OK);
 
-    // A later write by someone else, somewhere else: its own group.
     app.state
         .docs
         .replace_text(
@@ -66,7 +60,6 @@ async fn changes_are_recorded_grouped_shown_and_reverted() {
         json!("first line, edited\nsecond line\n")
     );
 
-    // Reverting the user's group keeps the plugin's later line.
     let reverted = app
         .post_json(
             &format!("/api/documents/{id}/changes/{from}/{to}/revert"),
@@ -79,7 +72,6 @@ async fn changes_are_recorded_grouped_shown_and_reverted() {
         json!("# Notes\n\nfirst line\n\nby a plugin\n")
     );
 
-    // The revert is itself a change, marked as one, and can be reverted in turn.
     let after = app
         .get(&format!("/api/documents/{id}/changes"))
         .await
@@ -142,8 +134,6 @@ async fn a_revert_is_refused_when_a_later_change_touched_the_same_text() {
     app.cleanup().await;
 }
 
-/// A checkpoint every `CHECKPOINT_EVERY_CHANGES` changes (3 in the test config), plus
-/// one at creation; every point in time rebuilds exactly; no automatic snapshots.
 #[tokio::test]
 #[ignore = "requires MONGO_URI"]
 async fn checkpoints_rebuild_every_point_in_time() {
@@ -160,7 +150,6 @@ async fn checkpoints_rebuild_every_point_in_time() {
         texts.push(next);
     }
 
-    // Creation is update 1; the seven edits are updates 2..=8.
     let checkpoints: Vec<i64> = {
         use futures::TryStreamExt;
         let mut cursor = app
@@ -195,9 +184,6 @@ async fn checkpoints_rebuild_every_point_in_time() {
     app.cleanup().await;
 }
 
-/// Past `RAW_CHANGE_DAYS`, raw changes squash into one record per group: the list shows
-/// the same groups, their edges and diffs still rebuild, a point inside one is refused,
-/// and a squashed group still reverts. Then forget history wipes all of it but the text.
 #[tokio::test]
 #[ignore = "requires MONGO_URI"]
 async fn old_history_squashes_and_can_be_forgotten() {
@@ -215,7 +201,6 @@ async fn old_history_squashes_and_can_be_forgotten() {
                 .expect_status(StatusCode::OK);
         }
     };
-    // Group A (the user, 3 writes), group B (a plugin, 1 write), group C (the user, 2).
     put("one\ntwo\n").await;
     put("one\ntwo\nthree\n").await;
     put("ONE\ntwo\nthree\n").await;
@@ -248,7 +233,6 @@ async fn old_history_squashes_and_can_be_forgotten() {
         .collect();
     assert_eq!(edges, vec![(6, 7), (5, 5), (2, 4)]);
 
-    // Age every change past the window, then squash.
     app.state
         .collections
         .document_changes()
@@ -268,7 +252,6 @@ async fn old_history_squashes_and_can_be_forgotten() {
         .await
         .unwrap();
     assert_eq!(raw_left, 0, "squashed raw changes are deleted");
-    // Running it again changes nothing.
     assert_eq!(
         app.state
             .docs
@@ -287,7 +270,6 @@ async fn old_history_squashes_and_can_be_forgotten() {
     assert!(groups.iter().all(|group| group["squashed"] == json!(true)));
     assert_eq!(groups[2]["changes"], json!(3));
 
-    // Group edges still rebuild; a point inside a squashed group does not.
     assert_eq!(
         text_at(&app, &id, 1).await.json()["content"],
         json!("one\n")
@@ -303,7 +285,6 @@ async fn old_history_squashes_and_can_be_forgotten() {
     text_at(&app, &id, 3)
         .await
         .expect_status(StatusCode::CONFLICT);
-    // Checkpoints only at edges: none inside a squashed group.
     let mut cursor = app
         .state
         .collections
@@ -327,7 +308,6 @@ async fn old_history_squashes_and_can_be_forgotten() {
         .await
         .json();
     assert_eq!(diff["changes"], json!(3));
-    // The plugin's squashed line reverts; everything else stays.
     app.post_json(
         &format!("/api/documents/{id}/changes/5/5/revert"),
         json!({}),
@@ -339,7 +319,6 @@ async fn old_history_squashes_and_can_be_forgotten() {
         json!("ONE\n2\nthree\nfour\n")
     );
 
-    // Forget history: only the text is left, and history starts again from it.
     app.post_json(&format!("/api/documents/{id}/history/forget"), json!({}))
         .await
         .expect_status(StatusCode::NO_CONTENT);

@@ -1,21 +1,3 @@
-/**
- * One collaborator: a session, the kernel's real {@link SyncTransport} over a real
- * WebSocket, and real `Y.Doc` replicas. It speaks the client half of
- * `backend/PROTOCOL.md` the way the app does, and nothing more clever:
- *
- * - the CRDT is the offline queue: edits land in the replica whatever the socket is
- *   doing, and the next subscribe's `SYNC_STEP1`/`SYNC_STEP2` carries what the server
- *   is missing (§3.3);
- * - a note made on the device is created from its CRDT state (§3.8), and a create
- *   answered `409` is checked against the server's state vector before it is claimed;
- * - a socket the server drops is reconnected, as the app's backoff does (§8), unless
- *   the test put the peer {@link Peer.offline | offline} on purpose.
- *
- * On top of that it can misbehave on command, which is what the suite is for:
- * {@link Peer.latency} delays both directions so edits cross in flight, and
- * {@link Peer.offline} cuts the socket with whatever was in flight still in it.
- */
-
 import * as Y from "yjs";
 
 import { FrameType, type BinaryFrame, type ServerControl, type Welcome } from "../kernel/src/protocol.js";
@@ -38,25 +20,19 @@ interface Replica {
   subscribed: boolean;
   sawStep1: boolean;
   ready?: { promise: Promise<void>; resolve: () => void; reject: (error: Error) => void };
-  /** Made on this device and not yet accepted by the server (§3.8). */
   pendingCreate: boolean;
-  /** The state vector the create was minted with: what "this note is ours" means. */
   seedSv?: Uint8Array;
   errors: DocErrorSeen[];
 }
 
-/** What survives closing the tab: the replicas and which of them wait to be created. */
 export interface PersistedPeer {
   readonly docs: readonly { id: string; state: Uint8Array; pendingCreate: boolean; seedSv?: Uint8Array }[];
 }
 
 export class Peer {
   readonly rest: RestClient;
-  /** A note made here whose id turned out to be someone else's: old id → new id. */
   readonly forks = new Map<string, string>();
-  /** Closes the server or the network caused (not the ones this peer asked for). */
   readonly closes: { code: number; reason: string }[] = [];
-  /** Sockets that got as far as `welcome`. */
   connects = 0;
   readonly errors: string[] = [];
   welcome: Welcome | undefined;
@@ -67,7 +43,6 @@ export class Peer {
   #reconnecting = false;
   #welcomeWaiter: ((welcome: Welcome) => void) | undefined;
   #latencyMs = 0;
-  /** Bumped on every socket, so a delayed frame never lands on the next one. */
   #epoch = 0;
 
   constructor(
@@ -82,14 +57,10 @@ export class Peer {
     return this.#transport?.state === "open" && this.welcome !== undefined;
   }
 
-  /** Delay every frame, both ways, by this long. Order is kept; nothing is dropped. */
   latency(ms: number): void {
     this.#latencyMs = ms;
   }
 
-  // -- connection -----------------------------------------------------------
-
-  /** Connect, create what waits to be created, and resubscribe every replica. */
   async online(timeoutMs = 20_000): Promise<void> {
     this.#wantOnline = true;
     await this.#sync(timeoutMs);
@@ -106,20 +77,16 @@ export class Peer {
       }
     }
     await this.flushCreates();
-    // `allSettled`: a note deleted for good answers `gone`, which is that note's
-    // outcome (see `docErrors`), not a failure to come online.
     await Promise.allSettled(
       [...this.#docs.values()].filter((r) => !r.pendingCreate).map((r) => this.#handshake(r)),
     );
   }
 
-  /** Cut the socket now, with whatever was in flight still in it, and stay off. */
   offline(): void {
     this.#wantOnline = false;
     this.#drop("collab: offline");
   }
 
-  /** Lose the socket as a flaky network does: the peer notices and reconnects. */
   blip(): void {
     this.#drop("collab: blip");
   }
@@ -171,7 +138,6 @@ export class Peer {
     this.#lost();
   }
 
-  /** The socket is gone: every handshake has to be redone, and maybe we reconnect. */
   #lost(): void {
     this.welcome = undefined;
     for (const replica of this.#docs.values()) {
@@ -196,16 +162,12 @@ export class Peer {
     }
   }
 
-  // -- documents ------------------------------------------------------------
-
-  /** Open a note: a replica, hydrated over the socket when online. */
   async open(id: string): Promise<Y.Text> {
     const replica = this.#replica(id);
     if (this.connected && !replica.pendingCreate) await this.#handshake(replica);
     return replica.text;
   }
 
-  /** Make a note on this device (§3.8). Online it is created at once; offline it waits. */
   async create(content: string, id: string = mintUlid(Math.random, Date.now())): Promise<string> {
     const replica = this.#replica(id);
     replica.pendingCreate = true;
@@ -215,7 +177,6 @@ export class Peer {
     return id;
   }
 
-  /** Send every waiting create. A `409` is ours only if the server holds our seed. */
   async flushCreates(): Promise<void> {
     for (const replica of [...this.#docs.values()]) {
       if (!replica.pendingCreate) continue;
@@ -232,7 +193,6 @@ export class Peer {
         continue;
       }
       if (status === 409) {
-        // Someone else's note has this id: ours becomes a new note, text and all.
         const fresh = mintUlid(Math.random, Date.now());
         this.#docs.delete(replica.id);
         const moved = this.#replica(fresh);
@@ -248,7 +208,6 @@ export class Peer {
     }
   }
 
-  /** Pretend the reply to this note's create was lost: the next flush sends it again. */
   loseCreateReply(id: string): void {
     this.#require(id).pendingCreate = true;
   }
@@ -290,14 +249,12 @@ export class Peer {
     this.insert(id, this.text(id).length, content);
   }
 
-  /** Insert right after the first occurrence of `anchor` (throws if it is not there). */
   insertAfter(id: string, anchor: string, content: string): void {
     const at = this.text(id).indexOf(anchor);
     if (at < 0) throw new Error(`${this.name}: "${anchor}" is not in ${id}`);
     this.insert(id, at + anchor.length, content);
   }
 
-  /** Replace the first occurrence of `find`, as a minimal delete + insert. */
   replace(id: string, find: string, replacement: string): void {
     const replica = this.#require(id);
     const at = replica.text.toString().indexOf(find);
@@ -308,11 +265,6 @@ export class Peer {
     });
   }
 
-  /**
-   * Type `content` one character per transaction, as a keyboard does: the caret is a
-   * relative position that stays after the last character typed, so other people's
-   * edits move it the way they move a real caret.
-   */
   async type(id: string, index: number, content: string, gapMs = 0): Promise<void> {
     const replica = this.#require(id);
     let caret = Y.createRelativePositionFromTypeIndex(replica.text, index, -1);
@@ -328,7 +280,6 @@ export class Peer {
     return this.#require(id).text;
   }
 
-  /** Nudge a document the way `doc.resync` does: a fresh `SYNC_STEP1`. */
   resync(id: string): void {
     const replica = this.#docs.get(id);
     if (replica && this.connected) {
@@ -336,7 +287,6 @@ export class Peer {
     }
   }
 
-  /** What IndexedDB would hold if the tab closed now. */
   persist(): PersistedPeer {
     return {
       docs: [...this.#docs.values()].map((replica) => ({
@@ -348,7 +298,6 @@ export class Peer {
     };
   }
 
-  /** Reopen from a {@link persist}: a new tab on the same device, still offline. */
   static revive(name: string, baseUrl: string, token: string, saved: PersistedPeer): Peer {
     const peer = new Peer(name, baseUrl, token);
     for (const doc of saved.docs) {
@@ -403,8 +352,6 @@ export class Peer {
     await withTimeout(replica.ready.promise, 15_000, `${this.name}: no handshake for ${replica.id}`);
   }
 
-  // -- the wire -------------------------------------------------------------
-
   #control(message: Parameters<SyncTransport["sendControl"]>[0]): void {
     this.#later(() => this.#transport?.sendControl(message));
   }
@@ -413,7 +360,6 @@ export class Peer {
     this.#later(() => this.#transport?.sendBinary(frame));
   }
 
-  /** Outbound: now, or after the latency — and only on the socket it was meant for. */
   #later(send: () => void): void {
     const epoch = this.#epoch;
     const go = () => {

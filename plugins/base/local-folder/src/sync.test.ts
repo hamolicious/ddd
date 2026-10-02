@@ -8,7 +8,6 @@ import { FolderSync, ForeignFolderError, replicaLoading, type SyncDeps, type Syn
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
-/** A folder in memory. Every write bumps a clock so mtimes differ like a real disk's. */
 class MemoryFolder implements FolderCapability {
   readonly support = "native" as const;
   readonly watches = true;
@@ -75,10 +74,8 @@ class MemoryFolder implements FolderCapability {
   }
 }
 
-/** Notes in memory, with a title rule close enough to the core's for these tests. */
 class Notes {
   readonly rows = new Map<string, { content: string; parent: string; trashed: boolean; attachment?: string }>();
-  /** Notes the server has that this device's replica has not received yet. */
   readonly notArrived = new Set<string>();
   #next = 100;
 
@@ -180,17 +177,7 @@ function setup(owner = "user-1") {
   return { folder, notes, attachments, sync, later };
 }
 
-/**
- * Regression: the rename hop (2026-10-02) moved the desktop app to a new origin, whose
- * replica started empty and filled from the server. local-folder ran its first pass at
- * boot, while the replica was still filling, and read "not in the replica" as "deleted":
- * it removed the files of notes that had not arrived, and re-imported every changed or
- * moved file of such a note as a new note — a duplicate of every one of them, the newer
- * copy mirrored as `<title> (2).md`. A note this device has not received yet is unknown,
- * not gone: its entry and its file are left alone until it arrives.
- */
 describe("FolderSync with a replica that has not caught up", () => {
-  /** Mirror three notes, then boot a fresh app whose replica has only some of them. */
   async function freshBoot(...notArrived: string[]) {
     const t = setup();
     t.notes.add("01A", "# Alpha\n\none\n");
@@ -379,7 +366,6 @@ describe("FolderSync", () => {
     expect(loose.parent).toBe("01A");
     expect(notes.title(loose.content)).toBe("Renamed");
     later();
-    // The new title is frontmatter in the note now, and the file gets it once.
     await sync.run();
     expect(folder.text("Home/Renamed.md")).toBe("---\ntitle: Renamed\n---\n# Loose\n");
     expect(await sync.run()).toMatchObject({ written: 0, imported: 0 });

@@ -1,13 +1,3 @@
-//! `call_plugin` — calling another backend half's `ddd_call` export.
-//!
-//! The callee must be in your manifest's `dependencies` (or `optionalDependencies`) at a
-//! version in range, and the function in the callee's `backend.exports`; the chain may be
-//! three deep; and a plugin already on the stack cannot be re-entered (SPEC §6.3). All are
-//! the host's checks, reported as
-//! [`Forbidden`](crate::ErrorCode::Forbidden) /
-//! [`LimitExceeded`](crate::ErrorCode::LimitExceeded) /
-//! [`Reentrancy`](crate::ErrorCode::Reentrancy).
-
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
@@ -15,7 +5,6 @@ use crate::abi::call::{CallPluginInput, CallPluginOutput};
 use crate::abi::{ErrorCode, HostError};
 use crate::host::{self, call_value};
 
-/// Call `function` on `plugin` and deserialize its answer.
 pub fn call<I: Serialize, O: DeserializeOwned>(
     plugin: &str,
     function: &str,

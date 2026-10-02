@@ -1,27 +1,3 @@
-//! Router-level tests for the M5 shell bundle manifest (area `server-bundle`, SPEC §7,
-//! `app/BRIDGE.md` §5).
-//!
-//! Three properties carry the milestone, and none of them is visible from a unit test:
-//!
-//! 1. **completeness** — everything the webview needs with no network is in `files`, at a
-//!    path the shell can fetch, with a hash that matches the bytes on disk. A manifest
-//!    that is missing one module produces a bundle that verifies, swaps, and then boots
-//!    into nothing;
-//! 2. **stability** — the same content yields the same `bundle_version` on a fresh
-//!    process, so a restart or a second replica does not hand every device a "new"
-//!    bundle to download;
-//! 3. **movement** — a rebuild *does* move it, or an update never ships.
-//!
-//! Each test builds its own fixture tree under `CARGO_TARGET_TMPDIR`, so the suite does
-//! not care whether anybody has run `mise run web-build`. Like the other router suites
-//! these are `#[ignore]`d and skip when `MONGO_URI` is unset (`AppState::new` pings
-//! Mongo):
-//!
-//! ```text
-//! docker compose up -d --wait mongo
-//! MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p ddd-server --test shell_bundle -- --ignored
-//! ```
-
 mod common;
 
 use std::collections::BTreeMap;
@@ -42,38 +18,10 @@ use tower::ServiceExt as _;
 
 use common::{ApiResponse, TEST_PASSWORD, mongo_uri, test_config};
 
-/// A file above both roots. Any manifest entry or response containing it is a traversal.
 const SECRET: &str = "TOP-SECRET-OUTSIDE-THE-ROOT";
 
-/// The marker `web/app/index.html` carries, spelled here so a drift fails a test.
 const MARKER: &str = "<!--DDD_IMPORT_MAP-->";
 
-// ---------------------------------------------------------------------------
-// Fixture
-// ---------------------------------------------------------------------------
-
-/// A fake built distribution and a fake installed-plugin directory, covering every class
-/// of file the real ones contain — including the ones that must **not** be in a bundle.
-///
-/// ```text
-/// <root>/secret.txt                           above both roots; never servable
-/// <root>/dist/index.html                      carries the marker    → synthesized
-/// <root>/dist/importmap.json                  a stale copy on disk  → synthesized
-/// <root>/dist/shell-bundle.json               min_bridge_version    → read, not shipped
-/// <root>/dist/runtime-manifest.json           the import map source
-/// <root>/dist/assets/app-abc123.js  (+ .map)  the app; the map is excluded
-/// <root>/dist/assets/core-abc123.wasm         the shared Rust core
-/// <root>/dist/runtime/react-abc.js            the blessed runtime layer
-/// <root>/dist/runtime/shared/dep-abc.js       nested, to exercise the walk
-/// <root>/dist/sw.js (+ .map)                  excluded: two caches, one revert path
-/// <root>/dist/icon.svg, manifest.webmanifest
-/// <root>/dist/.vite/manifest.json             excluded: build metadata
-/// <root>/dist/kernel.d.ts                     excluded: /kernel.d.ts is another route
-/// <root>/dist/plugins/shell-ui/1.0.0/…        excluded: the plugin route owns that URL
-/// <root>/dist/plugins/loader-shim.js          kept: two segments, not that route
-/// <root>/plugins/shell-ui/1.0.0/…             frontend/** is bundled; the rest is not
-/// <root>/plugins/agenda/2.1.0/…               a second plugin, nested assets
-/// ```
 struct Fixture {
     root: PathBuf,
 }
@@ -99,9 +47,6 @@ impl Fixture {
             ),
         )
         .expect("fixture index.html");
-        // A stale `importmap.json` on disk: the manifest must carry the *synthesized*
-        // rendering, not this, or the shell downloads a map generated before the last
-        // plugin install.
         fs::write(
             dist.join("importmap.json"),
             "{\"imports\":{\"stale\":\"x\"}}\n",
@@ -156,10 +101,6 @@ impl Fixture {
         )
         .expect("vite metadata");
 
-        // Two files whose *URL* another route answers, both reachable by dropping
-        // something in `web/app/public/`. Publishing either would hand the shell a hash
-        // the download cannot match, and one mismatch aborts the whole bundle — so every
-        // device would fail every update over a file nothing loads.
         fs::write(dist.join("kernel.d.ts"), "export {};\n").expect("shadowed dts");
         fs::create_dir_all(dist.join("plugins/shell-ui/1.0.0/frontend")).expect("shadowed dir");
         fs::write(
@@ -167,8 +108,6 @@ impl Fixture {
             "export default function spoof() {}\n",
         )
         .expect("shadowed plugin module");
-        // …and one that only *looks* shadowed: the plugin route needs an id, a version and
-        // a tail, so two segments fall through to the distribution and this is ours.
         fs::write(dist.join("plugins/loader-shim.js"), "export const s = 1;\n")
             .expect("real dist plugins file");
 
@@ -215,14 +154,8 @@ fn write_plugin(plugins: &Path, id: &str, version: &str) {
     fs::write(dir.join("frontend/style.css"), format!(".ddd-{id} {{}}\n")).expect("plugin style");
     fs::write(dir.join("frontend/assets/logo.png"), b"\x89PNG\r\n\x1a\n").expect("plugin asset");
     fs::write(dir.join("frontend/index.mjs.map"), "{}\n").expect("plugin map");
-    // Neither of these is a browser asset, and neither belongs on a device: the manifest
-    // lists capabilities and config keys, and `backend.wasm` is server-side code.
     fs::write(dir.join("backend.wasm"), b"\0asm not really").expect("plugin wasm");
 }
-
-// ---------------------------------------------------------------------------
-// Harness
-// ---------------------------------------------------------------------------
 
 struct ShellApp {
     router: Router,
@@ -318,8 +251,6 @@ impl ShellApp {
         self.request("GET", uri, false, None).await
     }
 
-    /// `GET /api/shell/manifest`, parsed through the published type — which is itself an
-    /// assertion: a renamed field fails to deserialize here.
     async fn manifest(&self) -> (ShellManifest, ApiResponse) {
         let response = self.get("/api/shell/manifest").await;
         response.expect_status(StatusCode::OK);
@@ -357,7 +288,6 @@ fn entries(manifest: &ShellManifest) -> BTreeMap<&str, (&str, u64)> {
         .collect()
 }
 
-/// The `nonce="…"` of the inline import map in a rendered document.
 fn inline_nonce(html: &str) -> String {
     let after = html
         .split_once("<script type=\"importmap\" nonce=\"")
@@ -370,16 +300,6 @@ fn inline_nonce(html: &str) -> String {
         .to_string()
 }
 
-// ---------------------------------------------------------------------------
-// Completeness
-// ---------------------------------------------------------------------------
-
-/// The manifest lists everything the webview needs offline, and every hash is the hash of
-/// the bytes the shell will actually receive.
-///
-/// This is the test the milestone rests on: the shell trusts `files` completely — it
-/// downloads exactly those paths, verifies exactly those hashes, and boots whatever
-/// resulted. A missing entry is an app that verifies clean and then renders nothing.
 #[tokio::test]
 #[ignore = "needs MONGO_URI"]
 async fn the_manifest_covers_the_whole_bundle_and_every_hash_matches() {
@@ -389,16 +309,12 @@ async fn the_manifest_covers_the_whole_bundle_and_every_hash_matches() {
     };
 
     let (manifest, response) = app.manifest().await;
-    // The shell polls this on every foreground: a cached manifest is an update the device
-    // never learns about.
     assert_eq!(header_value(&response, "cache-control"), "no-store");
     assert_eq!(header_value(&response, "x-content-type-options"), "nosniff");
     assert_eq!(manifest.min_bridge_version, 1);
 
     let listed = entries(&manifest);
 
-    // 1. The app shell, the runtime layer, the kernel assets and the plugin frontends —
-    //    everything an offline boot loads.
     for expected in [
         "index.html",
         "importmap.json",
@@ -423,9 +339,6 @@ async fn the_manifest_covers_the_whole_bundle_and_every_hash_matches() {
         );
     }
 
-    // 2. And nothing else. `sw.js` would fight the updater for control of the webview;
-    //    the plugin manifest and `backend.wasm` are not browser assets; source maps are
-    //    77 % of the bytes and only devtools fetch them; `.vite` is build metadata.
     for excluded in [
         "sw.js",
         "sw.js.map",
@@ -437,8 +350,6 @@ async fn the_manifest_covers_the_whole_bundle_and_every_hash_matches() {
         ".vite/manifest.json",
         "secret.txt",
         "../secret.txt",
-        // A dist file whose URL `statics::kernel_dts` answers from KERNEL_DTS_PATH — a
-        // different file, and one no webview ever loads.
         "kernel.d.ts",
     ] {
         assert!(
@@ -447,10 +358,6 @@ async fn the_manifest_covers_the_whole_bundle_and_every_hash_matches() {
         );
     }
 
-    // 2b. The dist tree also holds `plugins/shell-ui/1.0.0/frontend/index.mjs`, whose URL
-    //     belongs to the plugin asset route. The path is published exactly once, and the
-    //     bytes behind it are the installed plugin's — not the distribution's copy. (The
-    //     hash loop below proves it independently; this says which side must win.)
     let plugin_module = listed["plugins/shell-ui/1.0.0/frontend/index.mjs"];
     assert_eq!(
         plugin_module.0,
@@ -460,17 +367,12 @@ async fn the_manifest_covers_the_whole_bundle_and_every_hash_matches() {
         ),
         "the manifest published the distribution's shadowing copy, not the plugin's"
     );
-    // A `plugins/` path with only two segments is *not* claimed by that route, so it is
-    // ordinary bundle content and stays.
     assert!(listed.contains_key("plugins/loader-shim.js"));
     assert!(
         !response.text().contains(SECRET),
         "the manifest reached above its roots"
     );
 
-    // 3. Every hash and size is the hash and size of the bytes the shell will get. The
-    //    two synthesized paths come from `/api/shell/bundle/{path}`, everything else from
-    //    the public static route the updater uses (`BRIDGE.md` §5 step 1).
     for file in &manifest.files {
         let bytes = match file.path.as_str() {
             "index.html" | "importmap.json" => {
@@ -479,8 +381,6 @@ async fn the_manifest_covers_the_whole_bundle_and_every_hash_matches() {
                 served.body.to_vec()
             }
             path => {
-                // Fetched exactly as the updater fetches it, so a path in the manifest
-                // that no route answers fails here rather than on a device.
                 let served = app.anonymous(&format!("/{path}")).await;
                 assert_eq!(
                     served.status,
@@ -510,7 +410,6 @@ async fn the_manifest_covers_the_whole_bundle_and_every_hash_matches() {
         );
     }
 
-    // 4. Sorted, deduplicated, and the id is the hash of that canonical listing.
     let paths: Vec<&String> = manifest.files.iter().map(|file| &file.path).collect();
     let mut sorted = paths.clone();
     sorted.sort();
@@ -525,9 +424,6 @@ async fn the_manifest_covers_the_whole_bundle_and_every_hash_matches() {
     app.cleanup().await;
 }
 
-/// The manifest names every installed plugin and version — the information
-/// `GET /api/plugins` is authenticated to protect. The shell logs in natively first
-/// (`BRIDGE.md` §4.1), so it always has a token.
 #[tokio::test]
 #[ignore = "needs MONGO_URI"]
 async fn both_shell_routes_need_a_session() {
@@ -549,7 +445,6 @@ async fn both_shell_routes_need_a_session() {
         );
     }
 
-    // The control: with a token, all three answer.
     app.get("/api/shell/manifest")
         .await
         .expect_status(StatusCode::OK);
@@ -560,16 +455,6 @@ async fn both_shell_routes_need_a_session() {
     app.cleanup().await;
 }
 
-// ---------------------------------------------------------------------------
-// Stability and movement
-// ---------------------------------------------------------------------------
-
-/// Same bytes ⇒ same version, from a *different process state*: a second `AppState`, a
-/// second database, a second registry read, a cold cache.
-///
-/// This is what makes the shell's "do I already have this?" check work. A version that
-/// picked up a timestamp, a boot id or a server identity would hand every device a fresh
-/// multi-megabyte download after every restart and every deploy of an unchanged bundle.
 #[tokio::test]
 #[ignore = "needs MONGO_URI"]
 async fn the_version_survives_a_restart() {
@@ -578,7 +463,6 @@ async fn the_version_survives_a_restart() {
         return;
     };
     let (before, _) = first.manifest().await;
-    // Twice through the same process as well, which is the cached path.
     let (cached, _) = first.manifest().await;
     assert_eq!(before.bundle_version, cached.bundle_version);
     first.cleanup().await;
@@ -599,11 +483,6 @@ async fn the_version_survives_a_restart() {
     second.cleanup().await;
 }
 
-/// A rebuild moves it — a changed file, a new file, a removed file.
-///
-/// The counterpart to the test above, and the reason the cache is keyed on a
-/// `(path, size, mtime)` fingerprint rather than on a TTL: an update that ships one hour
-/// after the deploy is an update that looks broken.
 #[tokio::test]
 #[ignore = "needs MONGO_URI"]
 async fn a_rebuild_moves_the_version() {
@@ -613,7 +492,6 @@ async fn a_rebuild_moves_the_version() {
     };
     let (first, _) = app.manifest().await;
 
-    // A changed module: the common redeploy.
     fs::write(
         fixture.dist().join("assets/app-abc123.js"),
         "export const app = 2; // rebuilt\n",
@@ -625,7 +503,6 @@ async fn a_rebuild_moves_the_version() {
         "a changed file did not move the version"
     );
 
-    // A new chunk: the build split something.
     fs::write(
         fixture.dist().join("runtime/shared/new-chunk.js"),
         "export const n = 1;\n",
@@ -635,7 +512,6 @@ async fn a_rebuild_moves_the_version() {
     assert_ne!(second.bundle_version, third.bundle_version);
     assert_eq!(third.files.len(), second.files.len() + 1);
 
-    // A removal: the case a "hash of what we added" would miss entirely.
     fs::remove_file(fixture.dist().join("runtime/shared/new-chunk.js")).expect("remove");
     let (fourth, _) = app.manifest().await;
     assert_eq!(
@@ -643,8 +519,6 @@ async fn a_rebuild_moves_the_version() {
         "removing the added file should return to the previous version"
     );
 
-    // The template changing moves the synthesized `index.html`, its stable nonce, the
-    // policy that names the nonce, and therefore the version.
     fs::write(
         fixture.dist().join("index.html"),
         format!("<!doctype html>\n<html><head>\n{MARKER}\n</head><body>v2</body></html>\n"),
@@ -657,9 +531,6 @@ async fn a_rebuild_moves_the_version() {
     app.cleanup().await;
 }
 
-/// `min_bridge_version` comes from the bundle, not from this binary (`BRIDGE.md` §8), and
-/// it is **not** part of the content hash: bumping it is a statement about what the shell
-/// must implement, not a new set of bytes to download.
 #[tokio::test]
 #[ignore = "needs MONGO_URI"]
 async fn min_bridge_version_comes_from_the_bundle_and_is_not_the_content() {
@@ -685,13 +556,10 @@ async fn min_bridge_version_comes_from_the_bundle_and_is_not_the_content() {
         "min_bridge_version is not part of the downloadable content"
     );
 
-    // A missing file means "1" — a bundle built before M5, not a broken server.
     fs::remove_file(fixture.dist().join("shell-bundle.json")).expect("remove meta");
     let (third, _) = app.manifest().await;
     assert_eq!(third.min_bridge_version, 1);
 
-    // So does a malformed one: refusing to publish a manifest over a typo in one field
-    // would take every shell in the field offline.
     fs::write(fixture.dist().join("shell-bundle.json"), "{ not json").expect("break meta");
     let (fourth, _) = app.manifest().await;
     assert_eq!(fourth.min_bridge_version, 1);
@@ -699,26 +567,6 @@ async fn min_bridge_version_comes_from_the_bundle_and_is_not_the_content() {
     app.cleanup().await;
 }
 
-// ---------------------------------------------------------------------------
-// The real distribution
-// ---------------------------------------------------------------------------
-
-/// The same completeness property, against the **actual** built bundle — `web/app/dist`
-/// plus `plugins/base/dist` — rather than a fixture.
-///
-/// A fixture proves the algorithm; this proves the algorithm against what the build really
-/// emits: nested `runtime/shared/**` chunks, a `.wasm`, a `.vite` directory, a dozen plugin
-/// packages, and 4 MB of source maps that must not be in a phone's download. Every entry is
-/// re-hashed straight from disk, which is the check that cannot be satisfied by agreeing
-/// with itself.
-///
-/// Skipped — not failed — when the distribution has not been built, the same way the whole
-/// suite skips without `MONGO_URI`: a clean checkout must test green.
-///
-/// ```text
-/// mise run web-build && mise run plugins-build
-/// MONGO_URI=mongodb://127.0.0.1:27017 cargo test -p ddd-server --test shell_bundle -- --ignored
-/// ```
 #[tokio::test]
 #[ignore = "needs MONGO_URI"]
 async fn the_real_distribution_produces_a_complete_manifest() {
@@ -749,9 +597,6 @@ async fn the_real_distribution_produces_a_complete_manifest() {
     let (manifest, _) = app.manifest().await;
     let listed = entries(&manifest);
 
-    // 1. Everything on disk that is not excluded is listed. The walk here is the test's
-    //    own — a plain recursion — so a bug in the endpoint's walk shows up as a missing
-    //    entry rather than as two implementations agreeing.
     let mut on_disk: Vec<String> = Vec::new();
     collect(&dist, "", &mut on_disk);
     let mut plugin_count = 0usize;
@@ -784,8 +629,6 @@ async fn the_real_distribution_produces_a_complete_manifest() {
     );
 
     for path in &on_disk {
-        // The synthesized pair is "excluded" *as a file* precisely because it is published
-        // as a rendering — the on-disk `index.html` still carries the unreplaced marker.
         if is_synthesized(path) {
             assert!(
                 listed.contains_key(path.as_str()),
@@ -793,8 +636,6 @@ async fn the_real_distribution_produces_a_complete_manifest() {
             );
             continue;
         }
-        // A real distribution has no `plugins/` directory of its own, so a path with that
-        // prefix here came from a plugin root and cannot be shadowing anything.
         let shadowed =
             !path.starts_with("plugins/") && ddd_server::routes::shell::is_shadowed_dist_path(path);
         if ddd_server::routes::shell::is_excluded(path) || shadowed {
@@ -810,7 +651,6 @@ async fn the_real_distribution_produces_a_complete_manifest() {
         );
     }
 
-    // 2. Nothing is listed that is not on disk or synthesized.
     for file in &manifest.files {
         assert!(
             is_synthesized(&file.path) || on_disk.contains(&file.path),
@@ -819,7 +659,6 @@ async fn the_real_distribution_produces_a_complete_manifest() {
         );
     }
 
-    // 3. Every hash is the hash of the bytes on disk, read independently of the endpoint.
     for file in &manifest.files {
         if is_synthesized(&file.path) {
             let served = app.get(&format!("/api/shell/bundle/{}", file.path)).await;
@@ -838,7 +677,6 @@ async fn the_real_distribution_produces_a_complete_manifest() {
         assert_eq!(file.size, bytes.len() as u64, "{}", file.path);
     }
 
-    // 4. The three things a real bundle makes concrete.
     let real = entries(&manifest);
     assert!(
         real.keys().any(|path| path.ends_with(".wasm")),
@@ -870,14 +708,10 @@ async fn the_real_distribution_produces_a_complete_manifest() {
     app.cleanup().await;
 }
 
-/// The two paths `GET /api/shell/bundle/{path}` renders rather than copies
-/// (`BRIDGE.md` §5): the on-disk `index.html` still carries the unreplaced import-map
-/// marker, and `importmap.json` is generated from the installed plugin set.
 fn is_synthesized(path: &str) -> bool {
     path == "index.html" || path == "importmap.json"
 }
 
-/// Every file under `root`, as `prefix + relative path`. The test's own walk.
 fn collect(root: &Path, prefix: &str, out: &mut Vec<String>) {
     let Ok(read_dir) = fs::read_dir(root) else {
         return;
@@ -893,12 +727,6 @@ fn collect(root: &Path, prefix: &str, out: &mut Vec<String>) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// The synthesized files
-// ---------------------------------------------------------------------------
-
-/// The two files with no byte-stable static URL, and the nonce that ties them to
-/// `index_csp`.
 #[tokio::test]
 #[ignore = "needs MONGO_URI"]
 async fn the_synthesized_files_are_byte_stable_and_carry_the_published_nonce() {
@@ -918,9 +746,6 @@ async fn the_synthesized_files_are_byte_stable_and_carry_the_published_nonce() {
     );
     assert_eq!(header_value(&first, "cache-control"), "no-store");
     assert_eq!(header_value(&first, "x-content-type-options"), "nosniff");
-    // These bytes are for a downloader. A cookie-authenticated browser navigating here
-    // would otherwise render a scriptable same-origin document with no CSP at all (the
-    // policy travels in `index_csp`, for the loopback server to send).
     assert_eq!(header_value(&first, "content-disposition"), "attachment");
 
     let html = first.text();
@@ -929,9 +754,6 @@ async fn the_synthesized_files_are_byte_stable_and_carry_the_published_nonce() {
         html.contains("\"react\":\"/runtime/react-abc.js\""),
         "the import map is not inlined: {html}"
     );
-    // The nonce in the document, the nonce in the policy the shell will send, and the
-    // hash in the manifest are one consistent set. If the first two diverge the import
-    // map is blocked and every bare specifier fails to resolve.
     let nonce = inline_nonce(html);
     assert!(nonce.len() >= 20, "a guessable nonce is no nonce: {nonce}");
     assert!(
@@ -940,7 +762,6 @@ async fn the_synthesized_files_are_byte_stable_and_carry_the_published_nonce() {
         manifest.index_csp
     );
 
-    // The synthesized import map is the live one, not the stale copy sitting in `dist/`.
     let map = app.get("/api/shell/bundle/importmap.json").await;
     map.expect_status(StatusCode::OK);
     let parsed = map.json();
@@ -951,13 +772,6 @@ async fn the_synthesized_files_are_byte_stable_and_carry_the_published_nonce() {
         "the stale on-disk importmap.json was served: {parsed}"
     );
 
-    // And it is the *same* map the browser resolves against, byte for byte. The two are
-    // rendered by different modules (`statics::import_map` runs the M4 peer resolution
-    // over the installed set; this one renders the bundle's imports directly), and they
-    // happen to agree today because that resolution returns the provided map unchanged.
-    // If it ever stops doing so, a shell would boot plugins against a different runtime
-    // layer than every browser — silently, and only offline. Pinned here so that change
-    // has to be a deliberate one.
     let browser_map = app.anonymous("/importmap.json").await;
     browser_map.expect_status(StatusCode::OK);
     assert_eq!(
@@ -968,8 +782,6 @@ async fn the_synthesized_files_are_byte_stable_and_carry_the_published_nonce() {
     app.cleanup().await;
 }
 
-/// Only the two declared paths are served, and nothing about that route is a second
-/// traversal check to get wrong: every other bundle file already has a public URL.
 #[tokio::test]
 #[ignore = "needs MONGO_URI"]
 async fn the_bundle_route_serves_nothing_but_the_synthesized_pair() {
@@ -979,20 +791,17 @@ async fn the_bundle_route_serves_nothing_but_the_synthesized_pair() {
     };
 
     for uri in [
-        // Real files, reachable through their own public URLs — not through this one.
         "/api/shell/bundle/assets/app-abc123.js",
         "/api/shell/bundle/sw.js",
         "/api/shell/bundle/shell-bundle.json",
         "/api/shell/bundle/runtime-manifest.json",
         "/api/shell/bundle/plugins/shell-ui/1.0.0/manifest.json",
-        // Traversal, in the spellings axum's decoding can leave behind.
         "/api/shell/bundle/../../secret.txt",
         "/api/shell/bundle/..%2f..%2fsecret.txt",
         "/api/shell/bundle/%2e%2e%2fsecret.txt",
         "/api/shell/bundle/./index.html",
         "/api/shell/bundle//index.html",
         "/api/shell/bundle/index.html/",
-        // Not the allowlisted spelling.
         "/api/shell/bundle/INDEX.HTML",
         "/api/shell/bundle/index.htm",
     ] {
@@ -1009,14 +818,6 @@ async fn the_bundle_route_serves_nothing_but_the_synthesized_pair() {
     app.cleanup().await;
 }
 
-/// `index_csp` is SPEC §8's policy with exactly one deviation, and the browser-facing
-/// document is the reference.
-///
-/// The two documents now share one renderer (`statics::render_index_body`), but their
-/// *policies* are still built separately and must be: the shell's `connect-src` is not the
-/// browser's. So this test compares them directive by directive and names the one
-/// difference the loopback origin forces — with `PUBLIC_URL` unset, which is what the test
-/// config carries and what keeps that difference scheme-wide.
 #[tokio::test]
 #[ignore = "needs MONGO_URI"]
 async fn the_shell_policy_tracks_the_browser_policy() {
@@ -1036,8 +837,6 @@ async fn the_shell_policy_tracks_the_browser_policy() {
             .filter(|directive| !directive.is_empty())
             .map(|directive| {
                 let (name, value) = directive.split_once(' ').unwrap_or((directive, ""));
-                // The nonces differ by design: the browser's is 128 random bits per
-                // response, the bundle's is derived from the bytes it authorises.
                 let value = value
                     .split_whitespace()
                     .map(|source| {
@@ -1066,9 +865,6 @@ async fn the_shell_policy_tracks_the_browser_policy() {
     for (name, browser_value) in &browser_directives {
         let shell_value = &shell_directives[name];
         if name == "connect-src" {
-            // The one deviation, and it is forced: on the loopback origin every API call
-            // and the sync socket are cross-origin, and the server does not know which
-            // host the device reaches it by (`BRIDGE.md` §6).
             assert_eq!(shell_value, "'self' https: http: wss: ws:");
             continue;
         }
@@ -1081,13 +877,6 @@ async fn the_shell_policy_tracks_the_browser_policy() {
     app.cleanup().await;
 }
 
-// ---------------------------------------------------------------------------
-// Degenerate deployments
-// ---------------------------------------------------------------------------
-
-/// An API-only server has nothing for a shell to mirror, and says so rather than
-/// publishing an empty `files` (which the updater refuses anyway — a bundle with no
-/// `index.html` cannot boot).
 #[tokio::test]
 #[ignore = "needs MONGO_URI"]
 async fn without_a_bundle_the_manifest_is_unavailable() {
@@ -1103,9 +892,6 @@ async fn without_a_bundle_the_manifest_is_unavailable() {
     app.cleanup().await;
 }
 
-/// `DISABLE_PLUGINS=1` is the server-side half of safe mode (SPEC §6.1), and a shell
-/// updating against such a server gets exactly what a browser gets: the kernel, no
-/// plugins. Anything else would have the device boot modules the server refuses to serve.
 #[tokio::test]
 #[ignore = "needs MONGO_URI"]
 async fn safe_mode_produces_a_kernel_only_bundle() {
@@ -1128,27 +914,17 @@ async fn safe_mode_produces_a_kernel_only_bundle() {
             .all(|file| !file.path.contains("/frontend/")),
         "a bundle built with DISABLE_PLUGINS carried plugin modules"
     );
-    // The fixture's `dist/plugins/shell-ui/1.0.0/frontend/index.mjs` is the sharper half
-    // of that: with the registry empty it is no longer shadowed by a plugin root, and it
-    // is *still* not published — `statics::plugin_asset` answers that URL with a 404 under
-    // DISABLE_PLUGINS, so listing it would abort every update.
     assert!(
         !entries(&manifest).contains_key("plugins/shell-ui/1.0.0/frontend/index.mjs"),
         "a dist file on the plugin route's URL was published"
     );
-    // A two-segment `plugins/` path is ordinary bundle content and is unaffected.
     assert!(entries(&manifest).contains_key("plugins/loader-shim.js"));
-    // The app shell is still there: safe mode is a working app with no plugins, not an
-    // error page.
     assert!(entries(&manifest).contains_key("index.html"));
     assert!(entries(&manifest).contains_key("assets/app-abc123.js"));
 
     app.cleanup().await;
 }
 
-/// A symlink out of a root is not in the manifest — because it is not served either
-/// (`statics::resolve_within` canonicalizes and re-checks), and a manifest entry no route
-/// answers aborts every update.
 #[cfg(unix)]
 #[tokio::test]
 #[ignore = "needs MONGO_URI"]

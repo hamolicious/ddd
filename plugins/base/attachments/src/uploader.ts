@@ -1,18 +1,3 @@
-/**
- * Sending one file in chunks (`/api/uploads`, the server's `routes/uploads.rs`), so an
- * interrupted upload carries on from the last chunk the server kept instead of starting
- * again: after a dropped connection, a reload, or a pause.
- *
- * {@link sendInChunks} opens an upload on the server (or picks up the one it is given),
- * sends the chunks in order and completes it. When the server says it is somewhere else
- * (a 409: an answer lost on the way back, a chunk it found missing) it asks where, and
- * carries on from there; when the upload is gone (a 404: swept after a day unused) it
- * opens a new one. Anything else is the caller's to handle, an abort included.
- *
- * Also here: the time-left estimate ({@link Throughput}) and how sizes and durations are
- * written in the upload's notice.
- */
-
 export interface UploadResponse {
   readonly attachment: {
     readonly id: string;
@@ -36,18 +21,13 @@ interface Session {
 export type Fetch = (path: string, init?: RequestInit) => Promise<Response>;
 
 export interface SendOptions {
-  /** The upload to carry on with, if one was opened before. */
   readonly uploadId?: string;
   readonly signal: AbortSignal;
-  /** Ask the server to create the ordinary document that represents this file. */
   readonly wrapper?: boolean;
-  /** A new upload was opened on the server: keep its id, so a later attempt resumes it. */
   readonly onSession: (uploadId: string) => void | Promise<void>;
-  /** The server has `sent` bytes. */
   readonly onProgress: (sent: number) => void;
 }
 
-/** How many times the server may send it back or away before the upload gives up. */
 const MAX_RETRACES = 8;
 
 export async function sendInChunks(fetch: Fetch, blob: Blob, name: string, options: SendOptions): Promise<UploadResponse> {
@@ -109,7 +89,6 @@ export async function sendInChunks(fetch: Fetch, blob: Blob, name: string, optio
     }
   }
 
-  /** Where to carry on after a 409 (ask the server) or a 404 (a new upload, from 0). */
   async function relocate(error: unknown, current: Session): Promise<{ session: Session; offset: number }> {
     if (statusOf(error) === 409) {
       try {
@@ -124,9 +103,7 @@ export async function sendInChunks(fetch: Fetch, blob: Blob, name: string, optio
   }
 }
 
-/** Public service returned by the `attachments` plugin to declared dependents. */
 export interface AttachmentsApi {
-  /** Upload one file through the server's resumable chunk protocol. */
   upload(blob: Blob, name: string, options?: UploadOptions): Promise<UploadResponse>;
 }
 
@@ -138,7 +115,6 @@ export interface UploadOptions {
   readonly onProgress?: (sent: number) => void;
 }
 
-/** Bind the generic attachment service to the authenticated kernel fetch. */
 export function createAttachmentsApi(fetch: Fetch): AttachmentsApi {
   return {
     upload: (blob, name, options = {}) =>
@@ -152,7 +128,6 @@ export function createAttachmentsApi(fetch: Fetch): AttachmentsApi {
   };
 }
 
-/** Cancel an upload on the server. Best effort: one left behind is swept after a day. */
 export function discardUpload(fetch: Fetch, uploadId: string): void {
   fetch(`/uploads/${encodeURIComponent(uploadId)}`, { method: "DELETE" }).catch(() => undefined);
 }
@@ -161,11 +136,6 @@ export function statusOf(error: unknown): number | undefined {
   return (error as { status?: number } | null)?.status;
 }
 
-/**
- * Upload speed, smoothed over the last few chunks, and the time left at that speed.
- * Starts again after a pause or a lost connection ({@link reset}), since the time spent
- * waiting says nothing about the speed.
- */
 export class Throughput {
   #last: { readonly bytes: number; readonly at: number } | undefined;
   #rate = 0;
@@ -189,14 +159,12 @@ export class Throughput {
     this.#samples += 1;
   }
 
-  /** Seconds left for `remaining` bytes, or `undefined` until there is a speed to go by. */
   secondsLeft(remaining: number): number | undefined {
     if (this.#samples === 0 || this.#rate <= 0) return undefined;
     return remaining / this.#rate;
   }
 }
 
-/** `12.4 MB`, `980 KB`, `12 bytes`. */
 export function formatBytes(bytes: number): string {
   if (bytes < 1000) return `${String(bytes)} bytes`;
   const units = ["KB", "MB", "GB", "TB"];
@@ -209,7 +177,6 @@ export function formatBytes(bytes: number): string {
   return `${value >= 100 ? value.toFixed(0) : value.toFixed(1)} ${units[unit] ?? "TB"}`;
 }
 
-/** `a few seconds left`, `42 s left`, `3 min 20 s left`, `1 h 5 min left`. */
 export function formatTimeLeft(seconds: number): string {
   const whole = Math.ceil(seconds);
   if (whole < 5) return "a few seconds left";

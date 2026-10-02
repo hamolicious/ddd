@@ -1,16 +1,3 @@
-/**
- * The local query engine's index: the shared core's `QueryEngine` (wasm), holding
- * every projection row, their full-text index and the folder tree (SPEC §4.2).
- *
- * The same engine the server answers with, so filtering, ranking, relations and
- * sorting agree online and offline by construction. It runs in a Web Worker
- * (`worker-search.ts` / `search-worker.ts`), **persisted and incrementally
- * updated** — a warm start loads the saved engine and indexes only what the feed
- * moved since, never a cold-start main-thread rebuild.
- *
- * **FROZEN INTERFACE** (additive since kernel 3.1.0: `run` replaced `search`).
- */
-
 import type { ProjectionRow } from "../protocol.js";
 import { loadCore, type CoreBindings, type CoreQueryEngine } from "../wasm/index.js";
 import type { PlanPage, QueryPlan } from "./plan.js";
@@ -18,15 +5,9 @@ import type { PlanPage, QueryPlan } from "./plan.js";
 export interface SearchHit {
   readonly id: string;
   readonly score: number;
-  /** The indexed terms it matched, for highlighting. */
   readonly terms: readonly string[];
 }
 
-/**
- * `kernel.documents.search` options. The engine always matches prefixes and near
- * misses over title, frontmatter and content, so `prefix`, `fuzzy` and `fields` are
- * accepted and ignored.
- */
 export interface SearchOptions {
   readonly limit?: number;
   readonly prefix?: boolean;
@@ -37,54 +18,34 @@ export interface SearchOptions {
 
 export interface SearchStats {
   readonly documents: number;
-  /** Serialized index size in bytes, when known. */
   readonly bytes?: number;
   readonly builtAt?: number;
-  /** The projection watermark the index reflects. */
   readonly safeSeq: number;
 }
 
 export interface EngineIndex {
-  /** Load a persisted engine, or start an empty one. */
   open(): Promise<void>;
-  /** Add or replace rows. Called with every applied feed batch. */
   upsert(rows: readonly ProjectionRow[]): Promise<void>;
   remove(ids: readonly string[]): Promise<void>;
-  /** Answer a plan. Rejects on a malformed or refused plan. */
   run(plan: QueryPlan): Promise<PlanPage>;
-  /** Persist the engine plus its watermark. */
   persist(safeSeq: number): Promise<void>;
   stats(): Promise<SearchStats>;
-  /** Drop and rebuild from the store (only after `feed.reset`/schema change). */
   rebuild(rows: AsyncIterable<ProjectionRow>): Promise<void>;
   close(): Promise<void>;
 }
 
-/** The pre-3.1 name. */
 export type SearchIndex = EngineIndex;
 
-/** Bump when the persisted shape changes; a mismatch forces one rebuild. 2: the wasm engine. */
 export const SEARCH_INDEX_VERSION = 2;
 
-// ---------------------------------------------------------------------------
-// Persistence (the "no cold-start rebuild" half of SPEC §4.2)
-// ---------------------------------------------------------------------------
-
-/** What a persisted index looks like on disk. Opaque to callers. */
 export interface PersistedIndex {
   readonly version: number;
-  /** The projection watermark the serialized index reflects. */
   readonly safeSeq: number;
   readonly builtAt: number;
   readonly documents: number;
-  /** The engine as `CoreQueryEngine.toJson()` wrote it. */
   readonly index: string;
 }
 
-/**
- * Where a serialized index lives. IndexedDB in a browser or worker, memory in
- * tests and the Node harness.
- */
 export interface SearchPersistence {
   load(): Promise<PersistedIndex | undefined>;
   save(entry: PersistedIndex): Promise<void>;
@@ -92,7 +53,6 @@ export interface SearchPersistence {
   close?(): Promise<void>;
 }
 
-/** Test/harness persistence: survives `close()`, not the process. */
 export class MemorySearchPersistence implements SearchPersistence {
   #entry: PersistedIndex | undefined;
 
@@ -111,21 +71,11 @@ export class MemorySearchPersistence implements SearchPersistence {
   }
 }
 
-/** IndexedDB database holding the serialized search index. */
 export const SEARCH_DB_NAME = "ddd-search";
 export const SEARCH_DB_VERSION = 1;
 export const SEARCH_STORE = "index";
 export const SEARCH_ENTRY_KEY = "projection";
 
-/**
- * The browser/worker persistence.
- *
- * Its own database on purpose: the projection database (`store/idb-store.ts`) is
- * another area's schema, and a derived cache must never be able to force a
- * version bump — or a failed upgrade — on the store that holds the only local
- * copy of the workspace. A lost index costs one rebuild; a lost projection costs
- * a full bootstrap.
- */
 export class IdbSearchPersistence implements SearchPersistence {
   #db: Promise<IDBDatabase> | undefined;
 
@@ -185,27 +135,16 @@ export class IdbSearchPersistence implements SearchPersistence {
   }
 }
 
-// ---------------------------------------------------------------------------
-// The engine itself
-// ---------------------------------------------------------------------------
-
-/** An in-progress streaming rebuild (see {@link WasmEngineIndex.beginRebuild}). */
 export interface RebuildPass {
   add(rows: readonly ProjectionRow[]): void;
-  /** Install the new engine in place of the old one. */
   commit(): void;
 }
 
 export interface WasmEngineIndexOptions {
   readonly persistence?: SearchPersistence;
-  /** The shared core; loaded on `open()` when absent (the worker's case). */
   readonly core?: CoreBindings;
 }
 
-/**
- * The engine, in this thread. The worker wraps this same class behind a message
- * port, which is where it runs in the app; Node and the tests use it directly.
- */
 export class WasmEngineIndex implements EngineIndex {
   #engine: CoreQueryEngine | undefined;
   #core: CoreBindings | undefined;
@@ -224,7 +163,6 @@ export class WasmEngineIndex implements EngineIndex {
     const core = (this.#core ??= await loadCore());
     const entry = await this.#persistence?.load().catch(() => undefined);
     if (entry && entry.version === SEARCH_INDEX_VERSION) {
-      // The whole point of persistence: load, never re-index.
       const loaded = core.queryEngine(entry.index);
       if (loaded) {
         this.#engine = loaded;
@@ -234,7 +172,6 @@ export class WasmEngineIndex implements EngineIndex {
         return;
       }
     }
-    // Another version, or unreadable: the one sanctioned full rebuild.
     if (entry) await this.#persistence?.clear().catch(() => undefined);
     this.#engine = this.#fresh(core);
     this.#safeSeq = 0;
@@ -296,10 +233,6 @@ export class WasmEngineIndex implements EngineIndex {
     pass.commit();
   }
 
-  /**
-   * Streaming rebuild: the worker feeds pages as they arrive over the port instead of
-   * buffering the whole workspace. The half-built engine is invisible until `commit()`.
-   */
   beginRebuild(): RebuildPass {
     const core = this.#core;
     if (!core) throw new Error("the query engine is not open: call open() first");

@@ -1,14 +1,3 @@
-/// `NotificationsCapability` against a fake plugin (`BRIDGE.md` §4.3).
-///
-/// Everything `flutter_local_notifications` does is a platform channel, so the gate can
-/// never reach it (`CONTRACTS.md`: no device, no Android SDK). [NotificationPort] exists so
-/// the part that *decides* — which id, which instant, which tag, what `list()` says, what
-/// the permission tri-state resolves to — is testable without one, and that is the part
-/// every reminder on every device depends on.
-///
-/// The registry is a real file in a temp directory rather than a fake, because "a reminder
-/// scheduled last week is still listed after a restart" is the behaviour, and an in-memory
-/// double would assert the opposite of what ships.
 library;
 
 import 'dart:convert';
@@ -19,7 +8,6 @@ import 'package:ddd_shell/bridge/bridge.dart';
 import 'package:ddd_shell/bridge/notifications.dart';
 import 'package:ddd_shell/config.dart';
 
-/// What the plugin was asked to do, in order.
 class _Call {
   _Call(this.kind, {this.notification, this.androidId, this.tag});
 
@@ -34,10 +22,8 @@ class _Call {
 }
 
 class _FakePort implements NotificationPort {
-  /// What `requestNotificationsPermission()` answers. `null` is API < 33 — no prompt.
   bool? permissionPrompt = true;
 
-  /// What `areNotificationsEnabled()` answers.
   bool? enabled = true;
 
   final List<_Call> calls = <_Call>[];
@@ -127,9 +113,6 @@ void main() {
 
   group('permission', () {
     test('an un-asked device is `default`, not `denied`', () async {
-      // Android cannot tell "never asked" from "refused"; without the persisted bit a
-      // fresh install would report `denied` and a UI that only prompts from `default`
-      // would never prompt at all.
       port.enabled = false;
       final NotificationsCapability notifications = build();
 
@@ -155,14 +138,12 @@ void main() {
 
       expect(await build().request(), kPermissionDenied);
 
-      // A second launch reads the "has been asked" bit back out of the registry.
       final NotificationsCapability relaunched = build();
       await relaunched.initialize();
       expect(relaunched.permission, kPermissionDenied);
     });
 
     test('a platform with no runtime prompt asks the OS instead', () async {
-      // API < 33: `requestNotificationsPermission()` answers `null`.
       port
         ..permissionPrompt = null
         ..enabled = true;
@@ -235,7 +216,6 @@ void main() {
         }),
       );
 
-      // Same Android id both times, so the OS replaced it; one registry row, the newer.
       expect(port.ofKind('schedule'), hasLength(2));
       expect(notifications.pending, hasLength(1));
       expect(notifications.pending.single.title, 'second');
@@ -313,8 +293,6 @@ void main() {
 
         await notifications.cancel('r1');
 
-        // Android files a tagged notification under `(tag, id)`: cancelling by id alone
-        // would drop the alarm and leave a posted one sitting in the shade.
         expect(port.ofKind('cancel').single.androidId, nativeId('r1'));
         expect(port.ofKind('cancel').single.tag, 'doc:01J');
         expect(notifications.pending, isEmpty);
@@ -394,8 +372,6 @@ void main() {
         }),
       );
 
-      // The OS gives no "it fired" callback, so elapsed-means-fired is the only honest
-      // rule — and a row in the past is not pending either way.
       now = DateTime.utc(2026, 10, 3);
 
       expect(await notifications.list(), isEmpty);
@@ -487,7 +463,6 @@ void main() {
           now: () => now,
         );
 
-        // A device with no reminders is a degraded app; a launch that fails is not an app.
         await notifications.initialize();
         expect(notifications.permission, kPermissionDefault);
       },
@@ -519,8 +494,6 @@ class _ThrowingPort implements NotificationPort {
       throw StateError('unreachable');
 }
 
-/// `bridge..let(capability.registerOn)` reads better than a two-line temporary in a test
-/// that does it a dozen times.
 extension on ShellBridge {
   void let(void Function(ShellBridge bridge) register) => register(this);
 }

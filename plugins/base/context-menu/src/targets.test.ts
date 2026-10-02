@@ -1,11 +1,3 @@
-/**
- * Menus for marked elements: which targets a right-click finds, how their actions merge
- * into one menu, and when the browser keeps its own menu.
- *
- * The suite runs without a DOM, so elements are small stand-ins with the four things the
- * code reads: attributes, a parent, `closest` and `contains`.
- */
-
 import { describe, expect, it } from "vitest";
 
 import type { RegistryEntry } from "@kernel";

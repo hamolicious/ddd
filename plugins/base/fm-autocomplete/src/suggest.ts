@@ -1,68 +1,27 @@
-/**
- * What to suggest for the text before the caret. Pure, so it is tested without an editor.
- *
- * In a document's frontmatter, two things:
- *
- * - **Keys.** Typing `sta` at the start of a line offers the keys in use across the
- *   workspace (`indexer`'s `fmFields`) — top-level ones, since a nested key cannot be
- *   written on its own line; not ones only machine-owned documents use; and not ones this
- *   document already has above the caret. Choosing one writes `status: `, which is
- *   exactly where the value suggestions start.
- * - **Values.** Typing `status: o` offers the values `status` already holds across the
- *   workspace (`fmValues`), most-used first. A `doc://` value is shown by the note's
- *   title, with its folder, and matched by that title as well as by the link itself.
- *
- * It answers only on a line that is inside the frontmatter block — the document opens
- * with `---` and no closing `---` comes before the caret's line — and only for a
- * top-level `key: value` line, the one shape the strict YAML subset gives a value
- * (SPEC §3.4: no indentation, nesting only through flow collections). In a flow list,
- * `tags: [work, h`, it completes the item being typed and leaves out the ones already
- * there.
- *
- * Values stay shut when the typed value already is one of them: at that point Enter means
- * "next line", and a menu that took it would be in the way. A complete key stays offered,
- * because a key with no `: ` is not a line the parser can read, so Enter there means
- * "finish the key" far more often than "new line". A key needs one typed character: an
- * empty line is where Enter makes room, not where it picks a key.
- */
-
 import type { FmField, FmValueCount } from "plugin:indexer";
 
-/**
- * What the suggestions are drawn from, for one document: `indexer`'s answers with that
- * document left out, so what is half typed in it is never offered back.
- */
 export interface FieldIndex {
   fmFields(): readonly FmField[];
   fmValues(key: string): readonly FmValueCount[];
-  /** The note a `doc://` value points at, when it is known. */
   noteOf?(id: string): { readonly title: string; readonly folder: string } | undefined;
 }
 
-/** `doc://<id>`, the whole value: the id. */
 const DOC_LINK = /^doc:\/\/([A-Za-z0-9_-]+)$/;
 
 export interface Suggestion {
-  /** What the menu shows. */
   readonly label: string;
-  /** A quieter second line. */
   readonly detail: string;
-  /** What replaces the typed value. */
   readonly insert: string;
 }
 
 export interface Suggestions {
-  /** How many characters before the caret a chosen suggestion replaces. */
   readonly replace: number;
   readonly items: readonly Suggestion[];
 }
 
-/** At most this many rows. */
 export const MAX_SUGGESTIONS = 20;
 
-/** A top-level key, the separator, and the value typed so far. */
 const KEY_LINE = /^([A-Za-z0-9_-]{1,64}):[ \t]+(.*)$/;
-/** A key being typed: the start of a line, no `:` yet. */
 const KEY_PREFIX = /^[A-Za-z0-9_-]{1,64}$/;
 
 export function suggest(
@@ -87,7 +46,6 @@ function suggestKeys(typed: string, documentBeforeCaret: string, fields: readonl
     if (rank >= 0) ranked.push({ field, rank });
   }
   if (ranked.length === 0) return undefined;
-  // `fmFields` is most-used first, and the sort is stable, so that order holds within a rank.
   const items = ranked
     .sort((a, b) => a.rank - b.rank)
     .slice(0, MAX_SUGGESTIONS)
@@ -99,7 +57,6 @@ function suggestKeys(typed: string, documentBeforeCaret: string, fields: readonl
   return { replace: typed.length, items };
 }
 
-/** The keys already written in this frontmatter, above the caret's line. */
 function keysAbove(documentBeforeCaret: string): Set<string> {
   const lines = documentBeforeCaret.split("\n").slice(1, -1);
   const keys = new Set<string>();
@@ -144,7 +101,6 @@ function suggestValues(
   }
   if (ranked.length === 0) return undefined;
 
-  // `valuesOf` is most-used first, and the sort is stable, so that order holds within a rank.
   const items: Suggestion[] = ranked
     .sort((a, b) => a.rank - b.rank)
     .slice(0, MAX_SUGGESTIONS)
@@ -159,11 +115,6 @@ function suggestValues(
   return { replace: typed.partial.length, items };
 }
 
-/**
- * Is the caret inside the frontmatter block? The text up to the caret opens with `---`,
- * and no line before the caret's line closes it. An unclosed block counts: that is a
- * document whose frontmatter is being written right now.
- */
 export function inFrontmatter(documentBeforeCaret: string): boolean {
   const text = documentBeforeCaret.startsWith("﻿") ? documentBeforeCaret.slice(1) : documentBeforeCaret;
   const lines = text.split("\n").map((line) => line.replace(/\r$/, ""));
@@ -172,9 +123,7 @@ export function inFrontmatter(documentBeforeCaret: string): boolean {
 }
 
 interface Typed {
-  /** The raw text the completion replaces. */
   readonly partial: string;
-  /** Items already in a flow list, not offered again. */
   readonly taken: ReadonlySet<string>;
 }
 
@@ -195,14 +144,10 @@ function unquote(text: string): string {
   return text.slice(1, text.endsWith(quote) && text.length > 1 ? -1 : undefined);
 }
 
-/** Plain when it reads back as the same string; a flow list also forbids `,` `[` `]` `{` `}`. */
 const PLAIN = /^[\p{L}\p{N}_./(][\p{L}\p{N} _./()+-]*$/u;
-/** Would read back as something other than a string. */
 const RETYPES = /^(?:[-+]?(?:\d|\.\d)|(?:true|false|null|~)$)/i;
-/** An ISO date or date-time: a string to the parser either way, and nicer unquoted. */
 const ISO = /^\d{4}-\d{2}-\d{2}(?:T[\d:.]+(?:Z|[+-]\d{2}:\d{2})?)?$/;
 
-/** How a value is written so the frontmatter parser reads back exactly that value. */
 export function yamlScalar(value: string | number | boolean): string {
   if (typeof value !== "string") return String(value);
   if (ISO.test(value)) return value;

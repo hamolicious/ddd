@@ -36,7 +36,6 @@ describe("Obsidian vault ZIP reader", () => {
   });
 
   it("reads deflated notes", async () => {
-    // Raw DEFLATE for "hello" (the byte format used inside a method-8 ZIP entry).
     const compressed = Uint8Array.from([0xcb, 0x48, 0xcd, 0xc9, 0xc9, 0x07, 0x00]);
     await expect(readVaultArchive(zip([["Note.md", "hello", compressed]]))).resolves.toEqual({
       notes: [{ path: "Note.md", text: "hello" }],

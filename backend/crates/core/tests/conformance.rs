@@ -1,10 +1,3 @@
-//! The shared-core conformance corpus (SPEC §9 M1).
-//!
-//! Every rule in SPEC §3.4 and §4.2 has a table-driven case in `corpus/*.json`.
-//! This is the parity net for the Wasm build in M2: the same corpus, fed to the
-//! same crate compiled to `wasm32`, must produce the same answers — so the cases
-//! are data, never Rust, and the harness below is the only code.
-
 mod common;
 
 use std::collections::BTreeMap;
@@ -16,10 +9,6 @@ use ddd_core::filter::evaluator::{Row, compare_rows, evaluate};
 use ddd_core::filter::mongo;
 use ddd_core::splice::{self, ListAction, SectionLineEdit, TextEdit};
 use ddd_core::value::{Map, Value, map_to_bson};
-
-// ---------------------------------------------------------------------------
-// documents.json — parsing, fences, caps, title
-// ---------------------------------------------------------------------------
 
 #[test]
 fn document_corpus() {
@@ -92,8 +81,6 @@ fn document_corpus() {
             assert_eq!(&actual, expected, "{name}: diagnostics");
         }
 
-        // Determinism: the same input always yields the same parse, and parsing
-        // the normalized text agrees with parsing the raw text.
         assert_eq!(parsed, parse_document(input), "{name}: not deterministic");
         assert_eq!(
             parsed,
@@ -105,7 +92,6 @@ fn document_corpus() {
 
 #[test]
 fn hardening_caps_are_enforced() {
-    // Frontmatter block over the size cap: nothing is materialized.
     let filler: String = (0..3000)
         .map(|i| format!("k{i}: aaaaaaaaaaaaaaaaaaaaaaaa\n"))
         .collect();
@@ -114,20 +100,17 @@ fn hardening_caps_are_enforced() {
     assert!(parsed.fm.is_empty(), "oversized block materializes nothing");
     assert!(parsed.fm_parse_error);
 
-    // Key-count cap: the first 200 keys survive.
     let many: String = (0..250).map(|i| format!("k{i:03}: {i}\n")).collect();
     let parsed = parse_document(&format!("---\n{many}---\n"));
     assert_eq!(parsed.fm.len(), 200);
     assert!(parsed.fm_parse_error);
 
-    // String-value cap.
     let long = "x".repeat(8 * 1024 + 1);
     let parsed = parse_document(&format!("---\nbig: {long}\nok: 1\n---\n"));
     assert_eq!(parsed.fm.len(), 1);
     assert!(parsed.fm.contains_key("ok"));
     assert!(parsed.fm_parse_error);
 
-    // Array-item cap.
     let items: Vec<String> = (0..1001).map(|i| i.to_string()).collect();
     let parsed = parse_document(&format!("---\nbig: [{}]\nok: 1\n---\n", items.join(", ")));
     assert_eq!(parsed.fm.len(), 1);
@@ -137,7 +120,6 @@ fn hardening_caps_are_enforced() {
     assert_eq!(parsed.fm["big"].as_list().expect("list").len(), 1000);
     assert!(!parsed.fm_parse_error);
 
-    // Machine-section count cap.
     let sections: String = (0..70)
         .map(|i| format!("%%% p{i}\nk: {i}\n%%%\n"))
         .collect();
@@ -145,7 +127,6 @@ fn hardening_caps_are_enforced() {
     assert_eq!(parsed.sections.len(), 64);
     assert_eq!(parsed.plugins.len(), 64);
 
-    // Machine-section size cap.
     let body: String = (0..3000)
         .map(|i| format!("k{i}: aaaaaaaaaaaaaaaaaaaaaaaa\n"))
         .collect();
@@ -179,17 +160,12 @@ fn metadata_intersection_short_circuit() {
         body_middle
     ));
 
-    // An unterminated fence makes the whole document sensitive.
     let parsed = parse_document("body\n%%% p\nk: 1\n");
     assert!(ddd_core::document::edit_affects_metadata(
         &parsed,
         Span::new(1, 2)
     ));
 }
-
-// ---------------------------------------------------------------------------
-// dates.json
-// ---------------------------------------------------------------------------
 
 #[test]
 fn date_corpus() {
@@ -210,7 +186,6 @@ fn date_corpus() {
             case["epoch_millis"].as_i64().expect("epoch_millis"),
             "{input:?}: epoch"
         );
-        // Canonical output must itself re-parse to the same date.
         assert_eq!(Date::parse(date.canonical()).expect("re-parse"), date);
     }
 
@@ -234,8 +209,6 @@ fn date_corpus() {
         );
     }
 
-    // Chronological order == lexicographic order over canonical text. This is
-    // what lets Mongo compare stored date strings and still agree with us.
     let ordered: Vec<Date> = corpus["order"]
         .as_array()
         .expect("order array")
@@ -257,7 +230,6 @@ fn date_corpus() {
 fn canonical_shape_agrees_between_evaluator_and_compiler() {
     let corpus = common::corpus("dates.json");
     let shape = &corpus["canonical_shape"];
-    // The regex the compiler emits, read back out of a compiled query.
     let filter = Filter::from_json_str(
         r#"{"cmp":{"field":"fm.due","op":"gte","value":{"date":"0001-01-01"}}}"#,
     )
@@ -281,13 +253,11 @@ fn canonical_shape_agrees_between_evaluator_and_compiler() {
     for (list, expected) in [(&shape["yes"], true), (&shape["no"], false)] {
         for entry in list.as_array().expect("shape list") {
             let text = entry.as_str().expect("shape entry");
-            // Mongo side: the emitted regex.
             assert_eq!(
                 common::regex_match(&pattern, text, false),
                 expected,
                 "{text:?}: compiled regex guard"
             );
-            // Evaluator side: does the value participate in a date comparison?
             let fm: Map = BTreeMap::from([("due".to_string(), Value::Str(text.to_string()))]);
             let empty = Map::new();
             let row = Row {
@@ -309,10 +279,6 @@ fn canonical_shape_agrees_between_evaluator_and_compiler() {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// splices.json
-// ---------------------------------------------------------------------------
 
 #[test]
 fn splice_corpus() {
@@ -343,7 +309,6 @@ fn splice_corpus() {
             expected.sort_unstable();
             assert_eq!(actual, expected, "{name}: replaced slices");
         }
-        // Edits must be disjoint and ordered descending, so they apply in order.
         for window in edits.windows(2) {
             assert!(
                 window[0].range.start >= window[1].range.end,
@@ -358,7 +323,6 @@ fn splice_corpus() {
             "{name}: result"
         );
 
-        // Re-parsing the result never surprises the parser.
         let parsed = parse_document(&out);
         if let Some(expected) = case.get("list") {
             let key = case["op"]["key"].as_str().expect("key");
@@ -446,10 +410,6 @@ fn apply_op(text: &str, op: &serde_json::Value) -> Result<(Vec<TextEdit>, Option
     result.map(|edits| (edits, None)).map_err(|e| e.to_string())
 }
 
-// ---------------------------------------------------------------------------
-// filters.json — evaluator and Mongo compiler, proved equal on every row
-// ---------------------------------------------------------------------------
-
 struct CorpusRow {
     id: String,
     title: String,
@@ -458,8 +418,6 @@ struct CorpusRow {
     plugins: Map,
     created_at: Date,
     updated_at: Date,
-    /// The tombstone time. `Some` exactly when `deleted` — and the *only* place
-    /// the two may disagree would be a fixture bug, so it is derived, not read.
     deleted_at: Option<Date>,
     deleted: bool,
 }
@@ -479,7 +437,6 @@ impl CorpusRow {
         }
     }
 
-    /// The same row as it is stored in Mongo (SPEC §3.5 `documents`).
     fn bson(&self) -> bson::Document {
         let mut doc = bson::Document::new();
         doc.insert("_id", self.id.clone());
@@ -495,10 +452,6 @@ impl CorpusRow {
             "updated_at",
             bson::DateTime::from_millis(self.updated_at.epoch_millis()),
         );
-        // Unset on a live document, never written as null — that is what `tombstone`
-        // and `untombstone` (`$unset`) actually leave in the collection, and now that
-        // `deleted_at` is an addressable field the difference is observable:
-        // `missing`/`exists` would disagree with the evaluator against a null.
         if let Some(deleted_at) = self.deleted_at.as_ref() {
             doc.insert(
                 "deleted_at",
@@ -570,7 +523,6 @@ fn filter_corpus_evaluator_and_mongo_agree() {
             "{name}: compiled query {query:?} disagrees with the evaluator"
         );
 
-        // The wire form round-trips.
         assert_eq!(
             Filter::from_json(&filter.to_json()).expect("round-trip"),
             filter,
@@ -640,8 +592,6 @@ fn filter_corpus_sorting() {
             .collect();
         assert_eq!(actual, expected, "{name}: ordering");
 
-        // Reversing the input must not change the result: the comparator is a
-        // total order, id being the final tiebreaker.
         let mut reversed: Vec<&CorpusRow> = rows.iter().rev().collect();
         reversed.sort_by(|a, b| compare_rows(&a.row(), &b.row(), &keys));
         let reordered: Vec<&str> = reversed.iter().map(|row| row.id.as_str()).collect();
@@ -675,10 +625,6 @@ fn filter_corpus_sorting() {
         );
     }
 }
-
-// ---------------------------------------------------------------------------
-// helpers
-// ---------------------------------------------------------------------------
 
 fn map_to_json(map: &Map) -> serde_json::Value {
     serde_json::Value::Object(

@@ -1,12 +1,3 @@
-/**
- * Test-only helpers for the projection store and everything built on it.
- *
- * Not re-exported from `store/index.ts` and never imported by production code:
- * `web/CONTRACTS.md` says the sync client programs against `ProjectionStore`, and
- * this is the in-memory substitute that keeps that honest. The IndexedDB
- * implementation is tested against `fake-indexeddb` separately.
- */
-
 import * as Y from "yjs";
 
 import type { DocReplicaMeta, JournalEntry } from "../sync/doc-hydration.js";
@@ -21,7 +12,6 @@ import {
   type SyncCheckpoint,
 } from "./projection-store.js";
 
-/** A feed row with plausible defaults; override whatever the test cares about. */
 export function feedRow(overrides: Partial<FeedRow> & { id: string; seq: number }): FeedRow {
   return {
     title: `doc ${overrides.id}`,
@@ -42,16 +32,10 @@ export function feedRow(overrides: Partial<FeedRow> & { id: string; seq: number 
   };
 }
 
-/**
- * In-memory `ProjectionStore` with the same semantics the IndexedDB one
- * promises: LWW by `seq`, purge deletes, the watermark never moves backwards,
- * and listeners fire once per applied batch.
- */
 export class MemoryProjectionStore implements ProjectionStore {
   readonly rows = new Map<string, StoredRow>();
   #checkpoint: SyncCheckpoint = EMPTY_CHECKPOINT;
   readonly #listeners = new Set<StoreListener>();
-  /** Every batch that was applied, for ordering assertions. */
   readonly batches: Array<{ rows: readonly FeedRow[]; checkpoint: SyncCheckpoint }> = [];
   cleared = 0;
 
@@ -170,13 +154,6 @@ export class MemoryProjectionStore implements ProjectionStore {
   }
 }
 
-/**
- * In-memory `DocPersistence` (the `docs` store's contract), with call counts.
- *
- * Mirrors `IdbDocPersistence` in the two places where behaviour, not storage, is
- * the contract: `save` records the `unsynced` flag, and `prune` refuses to evict a
- * replica carrying it.
- */
 export class MemoryDocPersistence {
   readonly states = new Map<
     string,

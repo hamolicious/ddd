@@ -1,30 +1,3 @@
-/**
- * `search` — searching the workspace, for every plugin that shows search results.
- *
- * - **The providers** (`providers.ts`): the registry other plugins add to with
- *   `addProvider`, for sources besides the workspace (whose own search is the plan's).
- * - **A search is a spec** (`spec.ts`): text, filter and sort, as one query string — the
- *   list's URL and a saved-search note hold the same one.
- * - **Resolving one** (`results.ts`): the providers find ids for the text, and a live
- *   local query runs the filter and the sort over them.
- * - **`SearchShell`** (`SearchShell.tsx`) is a search on screen: the controls over the
- *   host's view. How results are drawn is the host's: the `table`, `kanban`, `calendar`
- *   and `timeline` plugins each draw their own.
- * - **Saved searches** (`saved.ts`): a note whose `saved-search` frontmatter holds a spec.
- *   `SavedSearch` is the shell for one; each view plugin's document mode claims the
- *   saved searches whose `type` names it and draws itself inside it.
- * - **The functional query API** (`query.ts`): `query().filter(…).sort(…).run()`,
- *   the shared core's query plan written as a chain, and `useQuery` for it live.
- * - **Components** (`components/`): the pieces other plugins build with — `NoteSelect`,
- *   `FmKeySelect` and `FmValueSelect`, boxes that pick a note, a frontmatter key and one of
- *   its values. `NoteSelect` draws each note as the folder tree does
- *   (`setNoteLooks`, which `folders` calls: it cannot be a dependency of this plugin,
- *   since `folders` optionally depends on this one).
- *
- * Everything is a named export of this module (`plugin:search`). `parse`, `encode`,
- * `savedSearchOf` and `addProvider` work at any time; the rest needs this plugin active.
- */
-
 import type { ComponentType, ReactElement } from "react";
 
 import type { DocumentRow, Kernel, Unsubscribe } from "@kernel";
@@ -95,20 +68,11 @@ type RouterModule = typeof import("plugin:router");
 type CommandsModule = typeof import("plugin:commands");
 type IconsModule = typeof import("plugin:icons");
 
-// ---------------------------------------------------------------------------
-// Available at any time
-// ---------------------------------------------------------------------------
-
-/** Add a search provider (or several). Returns the function that takes it out again. */
 export const addProvider: (items: SearchProvider | readonly SearchProvider[]) => () => void = providerRegistry.add;
 
 let noteLooks: NoteLooks | undefined;
 const looksListeners = new Set<() => void>();
 
-/**
- * How `NoteSelect` dresses notes: `folders`' `look` and `onLookChange`. Returns the function
- * that takes them away again. Since 4.5.0.
- */
 export function setNoteLooks(looks: NoteLooks): () => void {
   noteLooks = looks;
   for (const listener of [...looksListeners]) listener();
@@ -119,24 +83,17 @@ export function setNoteLooks(looks: NoteLooks): () => void {
   };
 }
 
-/** A search from its query string; junk parts are dropped. */
 export function parse(value: string): SearchSpec {
   return parseSpec(value);
 }
 
-/** The query string for a search; `""` for the default one. */
 export function encode(spec: SearchSpec): string {
   return encodeSpec(spec);
 }
 
-/** The search a saved-search note holds, as its query string; `undefined` for any other note. */
 export function savedSearchOf(row: DocumentRow): string | undefined {
   return savedSearchOfRow(row);
 }
-
-// ---------------------------------------------------------------------------
-// Bound to the kernel in `activate`
-// ---------------------------------------------------------------------------
 
 interface Active {
   readonly useResults: (spec: SearchSpec, options?: ResultsOptions) => SearchResults;
@@ -156,46 +113,38 @@ function need(): Active {
   return active;
 }
 
-/** A React hook: the search's results, live, a page at a time (50 by default). */
 export function useResults(spec: SearchSpec, options?: ResultsOptions): SearchResults {
   return need().useResults(spec, options);
 }
 
-/** The search's rows once, for a caller outside React. */
 export function resolve(spec: SearchSpec, options?: ResolveOptions): Promise<readonly DocumentRow[]> {
   return need().resolve(spec, options);
 }
 
-/** Save a search to a new note and open it. Resolves to the note's id. */
 export function save(spec: SearchSpec, options?: SaveSearchOptions): Promise<string> {
   return need().save(spec, options);
 }
 
-/** A search on screen: its controls over the host's view. */
 export function SearchShell(props: SearchShellProps): ReactElement {
   const Shell = need().SearchShell;
   return <Shell {...props} />;
 }
 
-/** A saved-search note on screen: the shell, with "Update saved search" when the search was changed. */
 export function SavedSearch(props: SavedSearchProps): ReactElement {
   const Saved = need().SavedSearch;
   return <Saved {...props} />;
 }
 
-/** A box that searches notes and picks one; the value is the note's id. */
 export function NoteSelect(props: NoteSelectProps): ReactElement {
   const Select = need().NoteSelect;
   return <Select {...props} />;
 }
 
-/** A frontmatter key, typed or picked from the keys in use. */
 export function FmKeySelect(props: FmKeySelectProps): ReactElement {
   const Select = need().FmKeySelect;
   return <Select {...props} />;
 }
 
-/** A value of one frontmatter key, typed or picked from the values it holds. */
 export function FmValueSelect(props: FmValueSelectProps): ReactElement {
   const Select = need().FmValueSelect;
   return <Select {...props} />;
@@ -203,8 +152,6 @@ export function FmValueSelect(props: FmValueSelectProps): ReactElement {
 
 export default function activate(kernel: Kernel): void {
   bindDocuments(kernel.documents);
-  // Optional: no router, no opening a result; no commands, no Actions menu; no icons, none
-  // in it. Nothing needs them before a click, so the lookups do not hold up activation.
   let router: RouterModule | undefined;
   let commands: CommandsModule | undefined;
   let icons: IconsModule | undefined;
@@ -218,14 +165,12 @@ export default function activate(kernel: Kernel): void {
   lookup<CommandsModule>("commands", (module) => (commands = module));
   lookup<IconsModule>("icons", (module) => (icons = module));
 
-  // The indexer's module namespace is the index: `version` is its live binding.
   const index = (): ConditionIndex => indexer;
 
   const engine = searchEngine(kernel, providerRegistry);
 
   const open = (id: string, line?: number): void => router?.navigate(documentPath(id, line));
 
-  /** The Actions menu: every command that takes documents, run with the results' ids. */
   const openActions = (ids: readonly string[], anchor: HTMLElement): void => {
     const registry = commands;
     const Icon = icons?.Icon;
@@ -284,7 +229,6 @@ export default function activate(kernel: Kernel): void {
     FmValueSelect,
   });
 
-  /** A new note holding the search, filed like any new document, then opened. */
   const saveSearch = async (spec: SearchSpec, options?: SaveSearchOptions): Promise<string> => {
     const title = options?.title ?? savedSearchTitle(spec.query);
     const id = await kernel.documents.create({ text: savedSearchNoteText(title, encodeSpec(spec), [options?.type ?? "table"]) });
@@ -293,7 +237,6 @@ export default function activate(kernel: Kernel): void {
     return id;
   };
 
-  /** Rewrite a saved search's one key: a splice, so nothing else in the note moves. */
   const update = (id: string, value: string): void => {
     void kernel.documents.splice.setFrontmatterValue(id, SAVED_SEARCH_KEY, value).catch((cause: unknown) => {
       kernel.log.error("could not update the saved search", cause);

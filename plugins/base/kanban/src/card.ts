@@ -1,14 +1,3 @@
-/**
- * What a card shows, pure: a list of items, top to bottom — the title, a property's value,
- * the note's text (its body, rendered as markdown) — each shown or hidden. The title alone by
- * default.
- *
- * Stored in the board's `card` option as a comma list a person can read: `title`,
- * `content`, or a field path (`fm.status`), each prefixed `!` when hidden —
- * `title,fm.status,!content`. At least one item is always shown: a list that would show
- * nothing is read as the default, and the settings never let the last one go.
- */
-
 import type { DocumentRow } from "@kernel";
 
 import { DOC_PREFIX } from "../../_shared/conditions.js";
@@ -28,7 +17,6 @@ export function itemKey(item: CardItem): string {
   return item.kind === "field" ? item.field : item.kind;
 }
 
-/** The items the `card` option names; the default when it names none to show. */
 export function parseCard(raw: string): readonly CardItem[] {
   const seen = new Set<string>();
   const items: CardItem[] = [];
@@ -49,21 +37,14 @@ export function serializeCard(items: readonly CardItem[]): string {
   return items.map((item) => `${item.hidden === true ? "!" : ""}${itemKey(item)}`).join(",");
 }
 
-/** A property's value as a card line: `""` when the note has none. */
 export function fieldText(row: DocumentRow, field: string): string {
   return fieldParts(row, field)
     .map((part) => (part.kind === "doc" ? `${DOC_PREFIX}${part.id}` : part.text))
     .join(", ");
 }
 
-/** A piece of a property's value on a card: a note it points at, or text. */
 export type FieldPart = { readonly kind: "doc"; readonly id: string } | { readonly kind: "text"; readonly text: string };
 
-/**
- * A property's value as the parts a card draws, in order: each `doc://<id>` — the whole
- * value, or an item of a list — is the note it points at, drawn as a link to it; anything
- * else is text. Empty when the note has none.
- */
 export function fieldParts(row: DocumentRow, field: string): readonly FieldPart[] {
   const key = field.slice("fm.".length);
   const value = fieldValue(row, field);
@@ -75,7 +56,6 @@ export function fieldParts(row: DocumentRow, field: string): readonly FieldPart[
   });
 }
 
-/** `doc://<id>`, the whole value: the id, or `undefined` for anything else. */
 function docLinkId(value: string): string | undefined {
   const text = value.trim();
   if (!text.startsWith(DOC_PREFIX)) return undefined;

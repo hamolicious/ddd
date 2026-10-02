@@ -1,62 +1,13 @@
-//! Write a ddd backend plugin in Rust.
-//!
-//! This crate is a thin, typed skin over the host ABI in
-//! [`ddd_plugin_abi`] (prose form: `backend/HOST-ABI.md`). It adds no
-//! behaviour of its own — every call is one Extism host call, every export is one Wasm
-//! export the host looks for by name — so nothing here can hide a capability check or a
-//! limit.
-//!
-//! # A whole plugin
-//!
-//! ```ignore
-//! use ddd_plugin_sdk as ddd;
-//!
-//! ddd::abi_version!();
-//!
-//! ddd::cron!(sync);
-//! fn sync(_schedule: ddd::abi::cron::CronPayload) -> ddd::Result<()> {
-//!     let url = ddd::config::require_string("feed_url")?;
-//!     let response = ddd::http::get(&url)?;
-//!     let body = response.error_for_status()?.text()?;
-//!     ddd::documents::create(&format!("---\ntitle: Imported\n---\n\n{body}"))?;
-//!     ddd::kv::set("last_sync", &_schedule.fired_at)?;
-//!     ddd::log::info("feed imported");
-//!     Ok(())
-//! }
-//! ```
-//!
-//! # The two rules worth internalising
-//!
-//! 1. **Share state through documents.** The backend writes documents; sync carries them
-//!    to every client, offline included, searchable and editable (SPEC §1). [`events`] is
-//!    for what genuinely cannot be a document, and [`kv`] is for high-frequency state no
-//!    human reads.
-//! 2. **Write your own section, or your own documents.** [`documents::splice_section`]
-//!    touches only your `%%%` section; [`documents::rewrite`] works only on documents you
-//!    created. There is no primitive that edits a human's prose, by design (SPEC §3.3).
-//!
-//! # Errors
-//!
-//! Every call returns [`Result`], whose error is a [`HostError`] carrying a stable
-//! [`ErrorCode`]. A capability you did not declare is not a trap and not a panic: it is
-//! `Err(ErrorCode::CapabilityDenied)`, so optional use is expressible (SPEC §6.2).
-
-#![deny(missing_docs)]
-
 pub use ddd_plugin_abi as abi;
 
 pub use abi::documents::{DocumentValue, SectionEdit};
 pub use abi::error::{ErrorCode, HostError};
 pub use abi::{Capabilities, Envelope, InitPayload, Origin};
 
-/// Re-exported Extism PDK, for the rare plugin that needs the raw layer (its own
-/// `plugin_fn` export, `extism_pdk::var`, a `Memory` trick).
 pub mod pdk {
     pub use extism_pdk::*;
 }
 
-/// Re-exported so the export macros can name `serde_json` without the plugin crate
-/// having to depend on it directly.
 pub use serde_json;
 
 pub mod config;
@@ -69,19 +20,10 @@ pub mod log;
 pub mod plugins;
 pub mod runtime;
 
-/// The result of every SDK call.
 pub type Result<T> = core::result::Result<T, HostError>;
 
-/// The ABI version this SDK speaks. [`abi_version!`] exports it.
 pub const ABI_VERSION: u32 = abi::ABI_VERSION;
 
-/// Export `ddd_abi_version` — **required** in every plugin with a backend half.
-///
-/// The host re-checks this at activation and refuses a module built against another ABI
-/// major, independently of the `kernel` range in the manifest. Two checks because they
-/// catch different mistakes: the manifest can lie, and a stale `.wasm` can outlive the
-/// manifest that describes it (SPEC §6.4, the same reasoning as the frontend loader's
-/// per-plugin bundle check).
 #[macro_export]
 macro_rules! abi_version {
     () => {
@@ -92,11 +34,6 @@ macro_rules! abi_version {
     };
 }
 
-/// Export `ddd_init` — optional one-time setup, called with [`InitPayload`] before any
-/// other export on that instance.
-///
-/// Instances are pooled and recycled, so this runs **once per instance**, not once per
-/// plugin: it is the place for cheap preparation, not for a migration.
 #[macro_export]
 macro_rules! init {
     ($handler:path) => {
@@ -107,7 +44,6 @@ macro_rules! init {
     };
 }
 
-/// Export `ddd_hook_document_created`.
 #[macro_export]
 macro_rules! hook_document_created {
     ($handler:path) => {
@@ -118,7 +54,6 @@ macro_rules! hook_document_created {
     };
 }
 
-/// Export `ddd_hook_document_changed`.
 #[macro_export]
 macro_rules! hook_document_changed {
     ($handler:path) => {
@@ -129,7 +64,6 @@ macro_rules! hook_document_changed {
     };
 }
 
-/// Export `ddd_hook_document_deleted`.
 #[macro_export]
 macro_rules! hook_document_deleted {
     ($handler:path) => {
@@ -140,8 +74,6 @@ macro_rules! hook_document_deleted {
     };
 }
 
-/// Export `ddd_cron` — every expression in `backend.cron` arrives here; dispatch on
-/// [`abi::cron::CronPayload::index`].
 #[macro_export]
 macro_rules! cron {
     ($handler:path) => {
@@ -152,7 +84,6 @@ macro_rules! cron {
     };
 }
 
-/// Export `ddd_http` — every route in `backend.routes` arrives here.
 #[macro_export]
 macro_rules! http_routes {
     ($handler:path) => {
@@ -167,8 +98,6 @@ macro_rules! http_routes {
     };
 }
 
-/// Export `ddd_call` — what `call_plugin` reaches, from a plugin that lists you in
-/// `dependencies`, for a function your manifest lists in `backend.exports`.
 #[macro_export]
 macro_rules! calls {
     ($handler:path) => {
@@ -183,7 +112,6 @@ macro_rules! calls {
     };
 }
 
-/// Export `ddd_event` — server-bus events this plugin subscribed to in `backend.events`.
 #[macro_export]
 macro_rules! events {
     ($handler:path) => {

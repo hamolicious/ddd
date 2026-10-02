@@ -1,18 +1,3 @@
-/**
- * Seeded chaos: devices of two people doing random things to a few shared notes —
- * editing (body, frontmatter splices, `%%%` lines, headings), dropping off, coming
- * back, blipping, lagging, closing the tab offline and reopening it, and making new
- * notes offline — then everyone comes back and every note must agree everywhere.
- *
- * The edits are the convergence harness's (`harness/src/ops.ts`): every body insert
- * carries a unique marker and no edit ever cuts into one, so "every marker exactly
- * once" is an exact test for a lost or doubled update.
- *
- * `DDD_COLLAB_SEEDS=20` runs more seeds; `DDD_COLLAB_SEED=7` runs just one. A failing
- * seed prints its journal and fails again the same way: the script is seeded, only
- * the network timing is real.
- */
-
 import { afterAll, beforeAll, expect, test } from "vitest";
 
 import { applyOp, chooseOp, markersIn, seedDocumentText } from "../harness/src/ops.js";
@@ -46,9 +31,7 @@ test.each(seeds)("seed %i: every note converges and no edit is lost or doubled",
     await w.device("bob-phone", BOB),
   ];
   for (const device of devices) for (const id of notes) await device.open(id);
-  /** Every marker written, by anyone, into any note. */
   const written = new Map<string, string[]>(notes.map((id) => [id, []]));
-  /** Notes made during the run, with the device that made them. */
   const madeBy = new Map<string, Peer>();
   const counters = new Map<string, number>();
 
@@ -71,7 +54,6 @@ test.each(seeds)("seed %i: every note converges and no edit is lost or doubled",
         log(`${step} ${device.name} latency ${ms}`);
         device.latency(ms);
       } else if (roll < 0.2) {
-        // Close the tab (maybe offline) and reopen it from what the device stored.
         const wasOnline = device.connected;
         log(`${step} ${device.name} reload (${wasOnline ? "online" : "offline"})`);
         const saved = device.persist();
@@ -102,7 +84,6 @@ test.each(seeds)("seed %i: every note converges and no edit is lost or doubled",
       if (step % 20 === 19) await sleep(50);
     }
 
-    // Everyone back, with a working link, and every note open everywhere.
     for (const device of devices) device.latency(0);
     await Promise.all(devices.map((device) => device.online()));
     const everything = [...notes, ...madeBy.keys()];

@@ -1,11 +1,3 @@
-/**
- * Cold start over `GET /api/sync/bootstrap` (PROTOCOL.md §4).
- *
- * The two things that must not regress: `safe_seq` is pinned on the *first* page
- * and only persisted once the pass completes, and `retainOnly` runs only for a
- * pass that actually saw the whole workspace.
- */
-
 import { describe, expect, it, vi } from "vitest";
 
 import { BootstrapClient, BootstrapHttpError, ndjson } from "./bootstrap.js";
@@ -39,7 +31,6 @@ function row(id: string, seq: number): FeedRow & { type: "row" } {
   return { type: "row", ...feedRow({ id, seq }) };
 }
 
-/** A fetch double that answers a scripted list of NDJSON bodies. */
 function scriptedFetch(bodies: string[], status = 200) {
   const calls: string[] = [];
   const impl = vi.fn(async (input: string | URL | Request) => {
@@ -103,7 +94,6 @@ describe("page", () => {
 describe("run", () => {
   it("streams every page, pins safe_seq from the first one, and GCs at the end", async () => {
     const store = new MemoryProjectionStore();
-    // A pre-existing row the pass never mentions: it must be collected.
     await store.applyRows([feedRow({ id: "stale", seq: 1 })], {
       safeSeq: 1,
       updatedAt: 0,
@@ -113,8 +103,6 @@ describe("run", () => {
 
     const { impl, calls } = scriptedFetch([
       page([header({ total: 3 }), row("a", 10), footer({ count: 1, next_cursor: "a", complete: false })]),
-      // A later page reporting a *different* safe_seq must not win: pinning is
-      // first-page-only (PROTOCOL.md §4).
       page([
         header({ total: 3, safe_seq: 999, cursor: "a" }),
         row("b", 11),
@@ -152,9 +140,6 @@ describe("run", () => {
     });
 
     await client.run();
-    // Every intermediate write kept safeSeq at its pre-pass value; only the final
-    // `setCheckpoint` moved it. A pass interrupted halfway therefore re-bootstraps
-    // instead of tailing from a seq whose rows were never stored.
     for (const batch of store.batches) expect(batch.checkpoint.safeSeq).toBe(0);
     expect((await store.checkpoint()).safeSeq).toBe(100);
   });

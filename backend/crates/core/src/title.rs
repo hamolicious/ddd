@@ -1,20 +1,6 @@
-//! Title resolution (SPEC §3.4), identical in server and kernel:
-//! `fm.title` → first ATX heading → first non-empty body line (truncated to 120
-//! characters) → `"Untitled"`.
-
 use crate::limits::{TITLE_FALLBACK_MAX_CHARS, UNTITLED};
 use crate::value::Map;
 
-/// Resolve a title from materialized frontmatter and body text.
-///
-/// `body` must be the body region only (frontmatter and `%%%` run excluded).
-/// `fm.title` counts only when it is a non-empty string after trimming — a
-/// non-string `title` value falls through to the body.
-///
-/// Both body-derived sources are truncated to
-/// [`TITLE_FALLBACK_MAX_CHARS`]: a body line is unbounded text and `title` is a
-/// materialized, indexed column. `fm.title` is already bounded by the
-/// string-value cap and is used verbatim.
 pub fn resolve(fm: &Map, body: &str) -> String {
     if let Some(title) = fm.get("title").and_then(|value| value.as_str()) {
         let trimmed = title.trim();
@@ -35,13 +21,6 @@ pub fn resolve(fm: &Map, body: &str) -> String {
     UNTITLED.to_string()
 }
 
-/// The first ATX heading (`#`…`######` followed by a space) in `body`, trimmed,
-/// with trailing `#` closing sequence removed.
-///
-/// The `#` run must start the line (leading whitespace disqualifies it, as in
-/// CommonMark only up to three spaces would be allowed — we require zero so the
-/// rule stays byte-exact and stateless) and must be followed by a space or tab.
-/// A heading with empty text is skipped, so this never returns `Some("")`.
 pub fn first_heading(body: &str) -> Option<&str> {
     for line in body.split('\n') {
         let line = line.strip_suffix('\r').unwrap_or(line);
@@ -54,8 +33,6 @@ pub fn first_heading(body: &str) -> Option<&str> {
             continue;
         }
         let text = rest.trim();
-        // Strip an ATX closing sequence: a trailing run of `#` preceded by
-        // whitespace (or the whole remainder being hashes).
         let stripped = text.trim_end_matches('#');
         let text = if stripped.len() == text.len() {
             text
@@ -72,14 +49,12 @@ pub fn first_heading(body: &str) -> Option<&str> {
     None
 }
 
-/// First non-empty, non-whitespace body line, trimmed.
 pub fn first_non_empty_line(body: &str) -> Option<&str> {
     body.split('\n')
         .map(|line| line.trim())
         .find(|line| !line.is_empty())
 }
 
-/// Truncate to at most `max_chars` characters (not bytes), on a char boundary.
 pub fn truncate_chars(input: &str, max_chars: usize) -> &str {
     match input.char_indices().nth(max_chars) {
         Some((offset, _)) => &input[..offset],
@@ -127,10 +102,8 @@ mod tests {
         assert_eq!(first_heading("####### Seven\n"), None);
         assert_eq!(first_heading("  # Indented\n"), None);
         assert_eq!(first_heading("# a#b\n"), Some("a#b"));
-        // An empty heading is skipped, so a later real heading still wins.
         assert_eq!(first_heading("# \n## Real\n"), Some("Real"));
         assert_eq!(first_heading("# \n"), None);
-        // With no usable heading the first non-empty body line is used verbatim.
         assert_eq!(resolve(&fm(&[]), "# \nplain line\n"), "#");
     }
 

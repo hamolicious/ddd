@@ -1,10 +1,3 @@
-//! Liveness and readiness (SPEC §8). Unauthenticated, cheap, never cached.
-//!
-//! The split matters operationally: `/healthz` answers "is this process alive"
-//! and must never depend on Mongo — a database blip should not make Kubernetes
-//! kill a server that is about to recover. `/readyz` answers "should traffic go
-//! here", and that one *does* depend on Mongo and on migrations having finished.
-
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
@@ -17,8 +10,6 @@ use serde::Serialize;
 
 use crate::state::AppState;
 
-/// A readiness probe that hangs is a readiness probe that lies. The ping is
-/// bounded well inside any sane probe timeout.
 const MONGO_PING_TIMEOUT: Duration = Duration::from_secs(2);
 
 pub fn router() -> Router<AppState> {
@@ -27,23 +18,16 @@ pub fn router() -> Router<AppState> {
         .route("/readyz", get(readyz))
 }
 
-/// Liveness: the process is up and the runtime responds. Never touches Mongo.
 pub async fn healthz() -> impl IntoResponse {
     (StatusCode::OK, "ok")
 }
 
-/// Readiness detail (SPEC §8: Mongo + migrations + plugin load, with details).
 #[derive(Debug, Serialize)]
 pub struct ReadyReport {
     pub ready: bool,
     pub mongo: CheckResult,
     pub migrations: CheckResult,
-    /// The frontend plugin registry: count, root, and anything it refused to load.
-    /// Informational — see [`check_plugins`] for why it never fails the probe.
     pub plugins: CheckResult,
-    /// The **backend** plugin host: how many modules are active, how many the circuit
-    /// breaker has open, how many cron schedules are armed. Informational for the same
-    /// reason `plugins` is — see [`check_plugin_host`].
     pub plugin_host: CheckResult,
     pub schema_version: i32,
     pub uptime_secs: u64,
@@ -98,7 +82,6 @@ impl CheckResult {
     }
 }
 
-/// Readiness: 200 when every check passes, 503 with the same body otherwise.
 pub async fn readyz(State(state): State<AppState>) -> (StatusCode, Json<ReadyReport>) {
     let mongo = check_mongo(&state).await;
     let migrations = check_migrations(&state);
@@ -155,33 +138,6 @@ fn check_migrations(state: &AppState) -> CheckResult {
     }
 }
 
-/// The frontend plugin registry (SPEC §8: "plugin load, with **details**").
-///
-/// M3 has no plugin *host* — that is M4 — but it does have a registry, and "the
-/// plugins did not load" is the most likely M3 misconfiguration: a `PLUGINS_DIR`
-/// that resolved somewhere empty ships a server whose clients boot into a shell
-/// with nothing in it. This check is how an operator sees that without reading the
-/// client's console.
-///
-/// **It never fails the probe, and that is deliberate.** `/readyz` answers "should
-/// traffic come here", and a server with an unbuilt plugin directory or one
-/// unparsable manifest serves every request it is asked to — including the API, the
-/// sync socket, and the other thirteen plugins. Failing readiness would take a
-/// working deployment out of rotation over a missing subdirectory, and
-/// `plugins::scan` says so in as many words where it records that case ("not an
-/// error: a deployment with no plugins installed is a valid state"). `DISABLE_PLUGINS=1`
-/// is likewise a supported recovery mode (SPEC §6.1), not a fault.
-///
-/// So the counts go in `detail`, and readiness stays a question about traffic.
-///
-/// **Counts, and nothing identifying.** `/readyz` is unauthenticated by design (above) and
-/// the documented Compose deployment proxies it straight through Caddy, so its body is
-/// world-readable. It used to carry the absolute `PLUGINS_DIR` and up to three manifest
-/// rejection strings — the server's filesystem layout and which plugin directories are
-/// malformed, handed to anyone who asks. That is reconnaissance, and this file is careful
-/// to keep exactly that kind of thing out of `/healthz`. The paths and messages are still
-/// available where they belong: a `WARN` at boot (`main.rs`) and the admin plugin view,
-/// both of which have an operator behind them.
 fn check_plugins(state: &AppState) -> CheckResult {
     if state.config.disable_plugins {
         return CheckResult::skipped("DISABLE_PLUGINS=1: no plugins are served");
@@ -197,29 +153,6 @@ fn check_plugins(state: &AppState) -> CheckResult {
     ))
 }
 
-/// The backend plugin host (SPEC §6.3): active modules, breaker state, armed cron.
-///
-/// The gap `backend/CONTRACTS.md` left open after M4 — the frontend registry's counts were
-/// on `/readyz` and the host's were only on `/metrics`. An operator looking at one
-/// unauthenticated endpoint to answer "did this deploy come up whole" could see the
-/// fourteen frontend halves and nothing about whether the backend halves compiled, and a
-/// plugin the circuit breaker had opened (SPEC §6.3: five consecutive failures) was
-/// invisible without a Prometheus query.
-///
-/// **Counts, and nothing identifying** — the same rule [`check_plugins`] documents at
-/// length. Which plugin the breaker opened, and why, are admin-authenticated facts
-/// (`GET /api/admin/plugins`, `.../logs`); this body is world-readable in the documented
-/// Compose deployment, so it carries numbers only.
-///
-/// **It never fails the probe**, also for the same reason. A breaker that opened on a
-/// misbehaving feed importer says nothing about whether this replica should receive
-/// traffic — it serves the API, the socket and every other plugin exactly as before, and
-/// taking it out of rotation would turn one broken plugin into an outage.
-/// `ddd_plugins_disabled` is the alert; this is the human-readable echo of it.
-///
-/// [`PluginHost::existing`] rather than `get`: a probe must not create the thing it
-/// reports on. A `None` means the host has not been built yet — pre-boot, or
-/// `DISABLE_PLUGINS=1`, which is a supported recovery mode and not a fault.
 fn check_plugin_host(state: &AppState) -> CheckResult {
     if state.config.disable_plugins {
         return CheckResult::skipped("DISABLE_PLUGINS=1: no backend plugins run");
@@ -247,13 +180,6 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
     }
 
-    /// The readiness contract end to end, against a real database.
-    ///
-    /// ```text
-    /// SESSION_SECRET=0123456789012345678901234567890123456789 \
-    /// MONGO_URI=mongodb://127.0.0.1:27017 MONGO_DATABASE=ddd_test \
-    ///   cargo test -p ddd-server -- --ignored readyz
-    /// ```
     #[tokio::test]
     #[ignore = "requires a reachable MongoDB"]
     async fn readyz_is_503_until_migrations_are_marked_complete() {
@@ -261,7 +187,6 @@ mod tests {
         let state = AppState::new(config).await.expect("state");
         let app = router().with_state(state.clone());
 
-        // Nothing has run migrations yet: not ready, and it says why.
         let response = app
             .clone()
             .oneshot(
@@ -302,10 +227,6 @@ mod tests {
         assert_eq!(report["ready"], true);
         assert_eq!(report["mongo"]["ok"], true);
         assert_eq!(report["migrations"]["ok"], true);
-        // The plugin check reports, it never gates: this test's `PLUGINS_DIR` is
-        // whatever the environment says and is usually not built, which is a valid
-        // deployment state and must not take the server out of rotation (SPEC §8;
-        // `plugins::scan` records an unreadable directory as a problem, not an error).
         assert_eq!(report["plugins"]["ok"], true);
         let plugin_detail = report["plugins"]["detail"]
             .as_str()
@@ -315,14 +236,10 @@ mod tests {
             plugin_detail.contains("plugins loaded") || plugin_detail.contains("DISABLE_PLUGINS"),
             "the plugin check must say what it found: {plugin_detail}"
         );
-        // Unauthenticated body: counts only. No filesystem paths, no manifest messages —
-        // see `check_plugins` for why.
         assert!(
             !plugin_detail.contains('/'),
             "/readyz must not disclose the plugin directory: {plugin_detail}"
         );
-        // The backend host reports alongside the frontend registry, on the same terms:
-        // counts only, and never a reason to take the replica out of rotation.
         assert_eq!(report["plugin_host"]["ok"], true);
         let host_detail = report["plugin_host"]["detail"]
             .as_str()

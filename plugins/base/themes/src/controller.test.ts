@@ -1,19 +1,3 @@
-/**
- * The controller's **late settings** behaviour.
- *
- * `apply.test.ts` covers what a theme paints. This file covers when: settings live in
- * a per-user document that replicates, so on a cold client it can arrive *after* this
- * plugin activates — `kernel.settings.start()` waits for the first local query, not
- * for the workspace bootstrap to finish. Everything the controller reads at activation
- * therefore has to be re-readable on a settings change, and the appearance preference
- * was the one that was not: the theme came back on a new device and the light/dark
- * choice silently did not, leaving a dark theme unused behind a light appearance.
- *
- * The fake kernel here is deliberately the smallest thing that can express that: a
- * settings store whose contents *appear later*, and a colour-scheme preference the
- * controller is supposed to push into.
- */
-
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -40,12 +24,10 @@ const MIDNIGHT: Theme = {
 
 interface FakeKernel {
   readonly kernel: Kernel;
-  /** Write a settings value the way a replicated document would: quietly, then notify. */
   arrive(values: Record<string, string>): void;
   preference(): ColorSchemePreference;
   scheme(): ColorScheme;
   appliedBackground(): string | undefined;
-  /** Simulate being offline: `settings.set` rejects the way it really does. */
   offline(down: boolean): void;
   stored(key: string): string | undefined;
 }
@@ -56,7 +38,6 @@ function fakeKernel(initial: Record<string, string> = {}): FakeKernel {
   const settingsListeners = new Set<() => void>();
   const schemeListeners = new Set<(scheme: ColorScheme) => void>();
   let preference: ColorSchemePreference = "system";
-  /** The device's own setting, which `system` resolves to. Light, as a fresh profile is. */
   const systemScheme: ColorScheme = "light";
   let layers: { scheme: ColorScheme; tokens: Partial<ThemeTokens> }[] = [];
 
@@ -67,9 +48,6 @@ function fakeKernel(initial: Record<string, string> = {}): FakeKernel {
     settings: {
       get: <T>(key: string): T | undefined => values.get(key) as T | undefined,
       set: async (key: string, value: unknown): Promise<void> => {
-        // Offline this is not a hypothetical: with no settings document yet the write
-        // goes through `documents.create` (REST), and with one it has to hydrate a
-        // document this client may never have opened.
         if (down) throw new TypeError("Failed to fetch");
         values.set(key, String(value));
         for (const listener of [...settingsListeners]) listener();
@@ -145,8 +123,6 @@ describe("ThemesController", () => {
   });
 
   it("adopts a stored appearance that arrives after activation", () => {
-    // The cold-client order: activate against an empty settings store, then the
-    // per-user document replicates in.
     const fake = fakeKernel();
     const controller = new ThemesController(fake.kernel, () => [MIDNIGHT]);
     controller.adoptStoredAppearance();
@@ -155,8 +131,6 @@ describe("ThemesController", () => {
     expect(fake.preference()).toBe("system");
     expect(fake.scheme()).toBe("light");
 
-    // This is the wiring `themes`' `activate()` installs: a settings change calls
-    // `reload()`.
     fake.kernel.settings.subscribe(() => controller.reload());
     fake.arrive({ colorScheme: "dark", themeDark: "midnight" });
 
@@ -171,9 +145,6 @@ describe("ThemesController", () => {
     const controller = new ThemesController(fake.kernel, () => [MIDNIGHT]);
     fake.kernel.settings.subscribe(() => controller.reload());
 
-    // The user picks light here; the settings document still says dark from another
-    // device. Adoption must not fight a deliberate local choice made *after* it, so
-    // the write goes through the controller and the stored value follows.
     void controller.setAppearance("light");
     expect(fake.preference()).toBe("light");
 
@@ -182,12 +153,6 @@ describe("ThemesController", () => {
   });
 
   describe("a choice made while the server is unreachable", () => {
-    /**
-     * The suite runs on `node` (`web/vite.config.ts`), where there is no web storage —
-     * `prefs.ts` catches that and simply has no fallback, which is correct in production
-     * and useless here, because the device-local half is exactly what is under test. So
-     * the minimum `Storage` surface it uses, in memory.
-     */
     beforeEach(() => {
       const entries = new Map<string, string>();
       (globalThis as { localStorage?: unknown }).localStorage = {
@@ -203,11 +168,6 @@ describe("ThemesController", () => {
     });
 
     it("survives a reload and syncs when sync returns, instead of being reverted", async () => {
-      // The workspace already carries an older choice from another device. The user goes
-      // offline and picks a different one: the write cannot land, so it is kept on the
-      // device *and remembered as unsent*. Nothing about that may demote the store —
-      // which is what used to happen, and it made the next reload silently restore the
-      // stale synced value.
       const fake = fakeKernel({ themeDark: "warm-night", colorScheme: "dark" });
       const first = new ThemesController(fake.kernel, () => [MIDNIGHT]);
       first.adoptStoredAppearance();
@@ -222,31 +182,22 @@ describe("ThemesController", () => {
         "warm-night",
       );
 
-      // The reload: a brand-new controller over the same device and the same (stale)
-      // settings document. The user's choice has to win.
       const second = new ThemesController(fake.kernel, () => [MIDNIGHT]);
       second.refresh();
       expect(second.selection.dark).toBe("midnight");
       expect(second.durable).toBe(false);
 
-      // Sync comes back: the pending write lands on its own and the device copy goes.
       fake.offline(false);
       await second.flushPending();
       expect(fake.stored("themeDark")).toBe("midnight");
       expect(second.durable).toBe(true);
 
-      // And a later choice goes straight to settings — the failure was per write, not a
-      // session-long demotion.
       await second.select("midnight");
       expect(fake.stored("themeDark")).toBe("midnight");
       expect(second.durable).toBe(true);
     });
 
     it("still adopts the stored appearance after a failed write", async () => {
-      // `adoptStoredAppearance` used to return early whenever the store had been
-      // demoted, so one offline moment meant the light/dark choice was ignored for the
-      // rest of the session while the theme was honoured — a dark theme sitting unused
-      // behind a light appearance.
       const fake = fakeKernel();
       const controller = new ThemesController(fake.kernel, () => [MIDNIGHT]);
       fake.offline(true);

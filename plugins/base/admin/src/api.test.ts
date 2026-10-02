@@ -1,12 +1,3 @@
-/**
- * The pure helpers in `api.ts`.
- *
- * `describeActor` is the one with a rule behind it rather than a format: deleting a user
- * keeps the attribution id (SPEC §5.1), so every id that no longer resolves has to render as
- * something a human can read, and `plugin:<id>`/`system` actors must not be mistaken for
- * people.
- */
-
 import { describe, expect, it, vi } from "vitest";
 
 import type { PluginCapabilities } from "@kernel";
@@ -108,16 +99,6 @@ describe("formatWhen", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// M4: the plugin-management client
-// ---------------------------------------------------------------------------
-
-/**
- * A recording `fetch`, so the assertions are about **the request** — the path, the method and
- * the body — which is the whole contract between this file and
- * `crates/server/src/routes/plugin_api.rs`. A wrong path here is a 404 an admin reads as
- * "the feature does not work".
- */
 function recorder(response: unknown = {}) {
   const calls: { path: string; init?: RequestInit }[] = [];
   const fetchApi = vi.fn(async (path: string, init?: RequestInit) => {
@@ -146,7 +127,6 @@ describe("the plugin management client", () => {
     expect(calls[0]?.path).toBe("/admin/plugins");
     expect(init?.method).toBe("POST");
     expect(init?.body).toBeInstanceOf(FormData);
-    // Setting content-type strips the multipart boundary the browser generates.
     expect(init?.headers).toBeUndefined();
     const form = init?.body as FormData;
     expect((form.get("package") as File).name).toBe("my-plugin-1.2.0.zip");
@@ -159,7 +139,6 @@ describe("the plugin management client", () => {
     await client.approvePlugin("calendar", "1.0.0");
     expect(calls[0]?.path).toBe("/admin/plugins/calendar/1.0.0/approve");
     expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({ capabilities: granted });
-    // No capabilities ⇒ an empty body, which the server reads as "exactly what was requested".
     expect(JSON.parse(String(calls[1]?.init?.body))).toEqual({});
   });
 
@@ -305,8 +284,6 @@ describe("approvalProblems — narrow anything, extend only http.hosts", () => {
     expect(approvalProblems({ documents: ["read"] }, { documents: ["write"] })).toHaveLength(1);
     expect(approvalProblems({}, { notifications: true })).toHaveLength(1);
     expect(approvalProblems({}, { "public-routes": ["/hook"] })).toHaveLength(1);
-    // Granting HTTP to a package that never asked for it is adding a capability, not
-    // widening one.
     expect(approvalProblems({}, { http: { hosts: ["a.test"] } })).toHaveLength(1);
   });
 
@@ -349,12 +326,6 @@ describe("hostPolicyNote", () => {
     expect(hostPolicyNote("")).toBeUndefined();
   });
 
-  /**
-   * The one claim the old blanket sentence got right, and the reason the new text does
-   * not repeat "regardless" for anything else: `address_allowed` checks
-   * `METADATA_ADDRESSES` *before* it consults `PLUGIN_HTTP_ALLOW_CIDRS`, so these are
-   * the only destinations no operator configuration can open.
-   */
   it("calls a cloud metadata endpoint unreachable whatever the configuration", () => {
     for (const host of [
       "169.254.169.254",
@@ -368,11 +339,6 @@ describe("hostPolicyNote", () => {
     }
   });
 
-  /**
-   * And the claim it got wrong: private and loopback ranges are default-deny, not
-   * always-deny — `PLUGIN_HTTP_ALLOW_CIDRS` is the documented way a self-hosted LAN
-   * service becomes reachable (SPEC §6.2), so the note has to name it.
-   */
   it("calls loopback and private ranges blocked *unless* the operator allowlisted them", () => {
     for (const host of ["localhost", "app.localhost", "127.0.0.1", "::1", "0.0.0.0"]) {
       expect(hostPolicyNote(host)?.kind).toBe("loopback");

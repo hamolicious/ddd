@@ -1,24 +1,3 @@
-/**
- * The folder tree as a file manager — verified against what the **server** ends up
- * holding, not against what the panel says it did.
- *
- * A folder is a note: its children are listed in its own `%%% folders` section, one id
- * per line. So every verb here is a write with a shape as well as a result: a move is one
- * line added to the new parent's list and one line removed from the old one, and the note
- * being moved is **not written at all**. Each test reads the raw text over REST and checks
- * both halves — the lists say the right thing, and every other byte (a comment, the key
- * order, another plugin's section) is where it was.
- *
- * Named `zz-` so it runs last. The suite shares one workspace and one account
- * (`playwright.app.config.ts`), and this file adds a few dozen notes to it; several
- * earlier specs assert on workspace-wide counts, so arriving before them would make this
- * file's setup their flake.
- *
- * Each test starts from an empty workspace (everything else to Trash): the tree is
- * virtual and draws only the rows on screen, so a test's notes must not depend on how
- * many the specs before it left at the root.
- */
-
 import { expect, test, type APIRequestContext, type Locator, type Page } from "@playwright/test";
 
 import {
@@ -33,11 +12,6 @@ import {
   waitSynced,
 } from "./helpers.js";
 
-/**
- * A fixture note, written by hand so the byte-for-byte assertions can be exact: a
- * comment, a blank line inside the block and another plugin's section are what a
- * careless rewrite would lose. `children` makes it a folder.
- */
 function fixture(title: string, children: readonly string[] = []): string {
   const lines = [
     "---",
@@ -59,13 +33,11 @@ function fixture(title: string, children: readonly string[] = []): string {
   return `${lines.join("\n")}\n`;
 }
 
-/** The ids a note's `%%% folders` section lists, in order. */
 function childrenIn(text: string): string[] {
   const section = /%%% folders\n([\s\S]*?)%%%/.exec(text)?.[1] ?? "";
   return [...section.matchAll(/^ {2}- (\S+)$/gm)].map((match) => match[1] as string);
 }
 
-/** A unique title per test: one workspace, and titles are what the tree shows. */
 function unique(tag: string): string {
   return `${tag}-${Math.random().toString(36).slice(2, 8)}`;
 }
@@ -76,10 +48,6 @@ function tree(page: Page): Locator {
 
 const exact = (title: string): RegExp => new RegExp(`^${title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`);
 
-/**
- * The row for a note, by its exact title. `has:` is given a **page-rooted** locator:
- * Playwright re-roots it at each candidate row.
- */
 function row(page: Page, title: string): Locator {
   return tree(page)
     .locator('[role="treeitem"]')
@@ -87,7 +55,6 @@ function row(page: Page, title: string): Locator {
     .first();
 }
 
-/** Open a row's ⋯ menu (hover-gated, so the pointer goes into the row first). */
 async function actions(page: Page, title: string): Promise<Locator> {
   await row(page, title).hover();
   await row(page, title).getByRole("button", { name: "Note actions" }).click();
@@ -96,11 +63,6 @@ async function actions(page: Page, title: string): Promise<Locator> {
   return sheet;
 }
 
-/**
- * Drag one row onto another with real pointer events: the tree's own drags are pointer
- * driven (a lifted copy under the pointer), so this is a press, two moves and a release.
- * `position` picks the part of the row: its top or bottom edge means "next to it".
- */
 async function drag(page: Page, source: Locator, target: Locator, position?: { x: number; y: number }): Promise<void> {
   await source.hover();
   await page.mouse.down();
@@ -110,7 +72,6 @@ async function drag(page: Page, source: Locator, target: Locator, position?: { x
   await page.mouse.up();
 }
 
-/** Open the sidebar and wait for the tree to have finished its first query. */
 async function openTree(page: Page): Promise<Locator> {
   await page.goto("/");
   await showSidebar(page);
@@ -119,7 +80,6 @@ async function openTree(page: Page): Promise<Locator> {
   return panel;
 }
 
-/** Fail the test if anything opens a native dialog: rename is inline, never a prompt. */
 function refuseNativeDialogs(page: Page): void {
   page.on("dialog", (dialog) => {
     void dialog.dismiss();
@@ -127,7 +87,6 @@ function refuseNativeDialogs(page: Page): void {
   });
 }
 
-/** Poll a note's list until it says `expected`, then return the whole text. */
 async function listed(
   request: APIRequestContext,
   baseURL: string,
@@ -141,10 +100,6 @@ async function listed(
 test.beforeEach(async ({ request, baseURL }) => {
   await trashAllDocuments(request, baseURL as string);
 });
-
-// ---------------------------------------------------------------------------
-// Moving notes
-// ---------------------------------------------------------------------------
 
 test("a note dragged onto another's top edge goes before it, and only the parent's list changes", async ({
   page,
@@ -165,7 +120,6 @@ test("a note dragged onto another's top edge goes before it, and only the parent
   await expect(row(page, third)).toBeVisible();
   expect(await order()).toEqual([first, second, third]);
 
-  // Pick `third` up and carry it to the top edge of `first`: a line, not an outline.
   const target = row(page, first);
   await row(page, third).hover();
   await page.mouse.down();
@@ -184,10 +138,8 @@ test("a note dragged onto another's top edge goes before it, and only the parent
 
   const [a, b, c] = ids as [string, string, string];
   expect(await listed(request, base, parent, [c, a, b])).toBe(fixture(parentTitle, [c, a, b]));
-  // The notes themselves were not written to.
   for (const [index, id] of ids.entries()) expect(await rawText(request, base, id)).toBe(texts[index]);
 
-  // And a reload draws the same order.
   await page.reload();
   await showSidebar(page);
   await expect.poll(order).toEqual([third, first, second]);
@@ -215,9 +167,7 @@ test("dragging a note into another files it last there, with everything under it
   await drag(page, row(page, movingTitle), row(page, destTitle));
   await waitSynced(page);
 
-  // One line added to the destination, after what was there; nothing else in it moved.
   expect(await listed(request, base, dest, [bystander, moving])).toBe(fixture(destTitle, [bystander, moving]));
-  // The moved note and its own list are untouched, so its child came along.
   expect(await rawText(request, base, moving)).toBe(before.moving);
   expect(await rawText(request, base, bystander)).toBe(before.bystander);
   await expect(row(page, movingTitle)).toHaveAttribute("aria-level", "2");
@@ -243,8 +193,6 @@ test("dropping a note on the root takes it out of its parent's list, and nothing
   const leaf = row(page, title);
   await expect(leaf).toBeVisible();
 
-  // While a drag is in flight the tree pins a "move to the root" strip to the bottom of
-  // its on-screen slice, so the target is reachable however tall the tree has grown.
   const box = await leaf.boundingBox();
   if (!box) throw new Error("the row has no box");
   await leaf.hover();
@@ -281,17 +229,12 @@ test("a note nobody lists is a row at the root, and clicking any row opens it", 
   await expect(row(page, folderTitle)).toHaveAttribute("aria-level", "1");
   await expect(row(page, childTitle)).toHaveAttribute("aria-level", "2");
 
-  // A folder is a note: clicking it opens it; the chevron is what folds it.
   await row(page, folderTitle).click();
   await expect(page).toHaveURL(new RegExp(`#/doc/${folder}`));
   await expect(row(page, childTitle)).toBeVisible();
   await tree(page).getByRole("button", { name: `Collapse ${folderTitle}` }).click();
   await expect(row(page, childTitle)).toHaveCount(0);
 });
-
-// ---------------------------------------------------------------------------
-// Renaming, creating and deleting
-// ---------------------------------------------------------------------------
 
 test("a note is renamed inline, and a new note made inside it is listed there", async ({
   page,
@@ -315,7 +258,6 @@ test("a note is renamed inline, and a new note made inside it is listed there", 
   await field.press("Enter");
   await expect(row(page, renamed)).toBeVisible();
   await waitSynced(page);
-  // One value splice: the title line, and nothing else.
   await expect.poll(async () => await rawText(request, base, id), { timeout: 20_000 }).toContain(`title: ${renamed}`);
   expect(await rawText(request, base, id)).toBe(fixture(name).replace(`title: ${name}`, `title: ${renamed}`));
 
@@ -377,7 +319,6 @@ test("deleting a note can keep what is inside it, in its place in the parent", a
   await page.getByRole("dialog").getByRole("button", { name: "Move to Trash" }).click();
   await waitSynced(page);
 
-  // The child took the deleted note's place; the note itself is in Trash with no list.
   await listed(request, base, parent, [before, leaf, after]);
   expect(childrenIn(await rawText(request, base, doomed))).toEqual([]);
   expect(await rawText(request, base, leaf)).toBe(leafText);
@@ -409,7 +350,6 @@ test("deleting a note can send everything inside it to Trash too, restorable in 
   await expect(row(page, folderTitle)).toHaveCount(0);
   await expect(row(page, childTitle)).toHaveCount(0);
 
-  // Lists are left as they were, so restoring puts the child back inside its folder.
   expect(await rawText(request, base, folder)).toBe(folderText);
   await page.goto("/#/trash");
   for (const title of [folderTitle, childTitle]) {
@@ -481,10 +421,6 @@ test("a note folds and unfolds recursively: alt-click, the menu, and Shift+arrow
   await expect(row(page, low)).toHaveCount(0);
 });
 
-// ---------------------------------------------------------------------------
-// Where a new note lands — two plugins that cannot call each other
-// ---------------------------------------------------------------------------
-
 test('"New notes go to" decides where a new note is filed', async ({ page, request, baseURL }) => {
   const base = baseURL as string;
   const homeTitle = unique("inbox");
@@ -493,7 +429,6 @@ test('"New notes go to" decides where a new note is filed', async ({ page, reque
   await signIn(page, ADMIN);
   refuseNativeDialogs(page);
 
-  // `doc-list` announces the note it made; `folders` hears it and files it.
   await page.goto("/#/settings/folders");
   const picker = page.getByLabel("New notes go to");
   await expect(picker).toBeVisible();
@@ -505,7 +440,6 @@ test('"New notes go to" decides where a new note is filed', async ({ page, reque
   await waitSynced(page);
   await listed(request, base, home, [filed]);
 
-  // Back to the root: the next note is in nobody's list.
   await page.goto("/#/settings/folders");
   await page.getByLabel("New notes go to").selectOption("");
   await runCommand(page, "New document");
@@ -517,10 +451,6 @@ test('"New notes go to" decides where a new note is filed', async ({ page, reque
   await expect(tree(page).locator('[role="treeitem"][aria-level="1"]').filter({ hasText: "Untitled" }).first()).toBeVisible();
   expect(childrenIn(await rawText(request, base, home))).toEqual([filed]);
 });
-
-// ---------------------------------------------------------------------------
-// The phone: the same moves, with no drag to make them with
-// ---------------------------------------------------------------------------
 
 test("at 390 px a note is moved through the sheet, and the panel holds the page", async ({
   page,
@@ -541,8 +471,6 @@ test("at 390 px a note is moved through the sheet, and the panel holds the page"
   await openTree(page);
   await expect(row(page, title)).toBeVisible();
 
-  // A phone has no ⋯ on a row: a long press opens its menu, as a sheet. A right-click is
-  // the same `contextmenu` event.
   const sheet = async (): Promise<Locator> => {
     await row(page, title).click({ button: "right" });
     const menu = page.getByRole("dialog");
@@ -558,8 +486,6 @@ test("at 390 px a note is moved through the sheet, and the panel holds the page"
   await listed(request, base, to, [id]);
   await listed(request, base, from, []);
 
-  // The sheet is portalled out of the sidebar on purpose — `shell-ui` declares
-  // `container-type: inline-size` there, which traps a `position: fixed` panel.
   await sheet();
   const overflow = await page.evaluate(() => ({
     scrollWidth: document.documentElement.scrollWidth,
@@ -577,9 +503,6 @@ test("at 390 px a note is moved through the sheet, and the panel holds the page"
 
 test("refuses to file a machine-owned document into a folder", async ({ page, request, baseURL }) => {
   const base = baseURL as string;
-  // `machine: true` is what makes a document machine-owned (`_shared/machine-docs.ts`). A
-  // probe rather than the *real* settings document, so a regression cannot wipe this
-  // account's stored preferences for every spec that runs after.
   const original = "---\ntitle: Not yours to move\nmachine: true\n---\n\nprobe\n";
   const id = await createDocument(request, base, original);
   const destTitle = unique("machine-dest");
@@ -590,7 +513,6 @@ test("refuses to file a machine-owned document into a folder", async ({ page, re
   await expect(row(page, destTitle)).toBeVisible();
   await expect(row(page, "Not yours to move")).toHaveCount(0);
 
-  // The route reaches it anyway: the command reads the id out of the URL.
   await openDocument(page, id);
   await runCommand(page, "Move this note to a folder");
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -599,16 +521,6 @@ test("refuses to file a machine-owned document into a folder", async ({ page, re
   expect(await rawText(request, base, id)).toBe(original);
 });
 
-// ---------------------------------------------------------------------------
-// The same note, moved again and again
-// ---------------------------------------------------------------------------
-
-/**
- * Every move of a note the client has held before must reach the server. The bug this
- * pins lost every second move of the same document: a move's `UPDATE` went out after an
- * unsubscribe the server had not seen yet. Moves now write the parents, so the hops run
- * between two parents that are both held open by the tree's own writes.
- */
 test("a note moved back and forth lands every move, by drag and by menu", async ({ page, request, baseURL }) => {
   const base = baseURL as string;
   const title = unique("Hops between folders");
@@ -649,7 +561,6 @@ test("a note moved back and forth lands every move, by drag and by menu", async 
     await how(to);
     await waitSynced(page);
     const [into, outOf, anchorInto, anchorOut] = to === aTitle ? [a, b, anchorA, anchorB] : [b, a, anchorB, anchorA];
-    // The new parent is written first, then the old one: poll both.
     await listed(request, base, into, [anchorInto, id]);
     await listed(request, base, outOf, [anchorOut]);
     await expect(row(page, title)).toBeVisible();
@@ -673,12 +584,10 @@ test("a note takes a background and an icon from its menu, keeps them on reload 
   await openTree(page);
   await expect(row(page, name)).toBeVisible();
 
-  // `folder-style`'s entry, which `folders` lists without knowing who offered it.
   await (await actions(page, name)).getByRole("menuitem", { name: "Color and icon…" }).click();
   const sheet = page.getByRole("dialog");
   await sheet.getByRole("button", { name: "#1971c2" }).click();
 
-  // With nothing typed the grid holds every icon, but draws only the rows in view.
   const grid = sheet.getByRole("listbox", { name: "Icons" });
   await expect(sheet.getByRole("status").filter({ hasText: /^[\d,]+ icons$/ })).toBeVisible();
   const total = Number((await grid.getByRole("option").first().getAttribute("aria-setsize")) ?? "0");
@@ -707,7 +616,6 @@ test("a note takes a background and an icon from its menu, keeps them on reload 
   await showSidebar(page);
   await dressed(name);
 
-  // Looks are kept by note id, so a rename keeps it with nothing to follow.
   await (await actions(page, name)).getByRole("menuitem", { name: /^Rename/ }).click();
   const rename = page.getByRole("textbox", { name: `Rename ${name}` });
   await rename.fill(renamed);

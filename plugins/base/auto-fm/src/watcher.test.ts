@@ -28,7 +28,6 @@ function row(id: string, fm: CoreMap, over: Partial<DocumentRow> = {}): Document
   };
 }
 
-/** The recent-changes query, a store to read back from, and every write made. */
 function fake(initial: readonly DocumentRow[]) {
   const rows = new Map(initial.map((each) => [each.id, each]));
   let emit: ((rows: readonly DocumentRow[]) => void) | undefined;
@@ -128,7 +127,6 @@ describe("the watcher", () => {
     await settle();
     const made = row("new", {}, { materialized_version: "local" });
     store.change(made);
-    // Between the change and the write, the person types the key.
     store.change({ ...made, fm: { status: "mine" } });
     await settle();
     await settle();

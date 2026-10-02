@@ -1,23 +1,11 @@
-/**
- * Line diffs for the folder mirror: the edits that turn one text into another, and a
- * three-way merge for a note changed on disk and in the app at once.
- *
- * Lines keep their `\n`, so joining them gives the text back byte for byte. The diff trims
- * the common head and tail first and runs a longest-common-subsequence table only over
- * what is left; a middle too big for the table is treated as one replaced block, which is
- * still a correct diff, just a coarse one.
- */
-
 import type { TextEdit } from "@kernel";
 
-/** Base lines `[start, end)` replaced by `lines`. */
 export interface Hunk {
   readonly start: number;
   readonly end: number;
   readonly lines: readonly string[];
 }
 
-/** Past this many table cells the middle is one hunk (about 16 MB of `Uint32Array`). */
 const TABLE_LIMIT = 4_000_000;
 
 export function splitLines(text: string): string[] {
@@ -26,7 +14,6 @@ export function splitLines(text: string): string[] {
   return lines;
 }
 
-/** The hunks that turn `a` into `b`, in order, non-overlapping. */
 export function diffLines(a: readonly string[], b: readonly string[]): Hunk[] {
   let head = 0;
   while (head < a.length && head < b.length && a[head] === b[head]) head += 1;
@@ -41,7 +28,6 @@ export function diffLines(a: readonly string[], b: readonly string[]): Hunk[] {
     return [{ start: head, end: head + aMid.length, lines: bMid }];
   }
 
-  // lcs[i][j] = LCS length of aMid[i..] and bMid[j..], row-major.
   const cols = bMid.length + 1;
   const lcs = new Uint32Array((aMid.length + 1) * cols);
   for (let i = aMid.length - 1; i >= 0; i -= 1) {
@@ -79,10 +65,6 @@ export function diffLines(a: readonly string[], b: readonly string[]): Hunk[] {
   return hunks;
 }
 
-/**
- * The text edits, in `from`'s character offsets, that turn `from` into `to` — one per
- * changed run of lines, so a CRDT merges them with concurrent edits elsewhere in the note.
- */
 export function textEdits(from: string, to: string): TextEdit[] {
   if (from === to) return [];
   const a = splitLines(from);
@@ -94,7 +76,6 @@ export function textEdits(from: string, to: string): TextEdit[] {
   }));
 }
 
-/** Apply edits (in the original's offsets) to a plain string. */
 export function applyEdits(text: string, edits: readonly TextEdit[]): string {
   let out = text;
   for (const edit of [...edits].sort((x, y) => y.range.start - x.range.start)) {
@@ -105,11 +86,6 @@ export function applyEdits(text: string, edits: readonly TextEdit[]): string {
 
 export type MergeResult = { readonly clean: true; readonly text: string } | { readonly clean: false };
 
-/**
- * Three-way merge by lines. Changes to different lines both land; the same change on both
- * sides lands once; different changes to the same or touching lines are a conflict, and
- * the caller keeps both copies rather than guessing.
- */
 export function merge3(base: string, ours: string, theirs: string): MergeResult {
   if (ours === theirs) return { clean: true, text: ours };
   if (ours === base) return { clean: true, text: theirs };
@@ -125,7 +101,6 @@ export function merge3(base: string, ours: string, theirs: string): MergeResult 
   let cursor = 0;
   let k = 0;
   while (k < tagged.length) {
-    // Group every hunk that overlaps or touches the running span.
     const group = [tagged[k]!];
     let start = tagged[k]!.hunk.start;
     let end = tagged[k]!.hunk.end;

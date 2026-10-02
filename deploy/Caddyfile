@@ -1,52 +1,14 @@
-# TLS termination for the self-host Compose stack (SPEC §8).
-#
-# Used by the `caddy` profile in `docker-compose.yaml`:
-#
-#   DOMAIN=notes.example.com ACME_EMAIL=you@example.com \
-#     APP_ORIGIN=https://notes.example.com COOKIE_SECURE=true \
-#     TRUST_PROXY_HEADERS=true BIND_HOST=127.0.0.1 \
-#     docker compose --profile caddy up -d --build
-#
-# Why a proxy at all: Secure cookies, the installable PWA, `navigator.storage.persist()`
-# and the Flutter bridge all require a secure origin, and the server is deliberately
-# TLS-unaware (one fewer thing to get wrong, and Kubernetes terminates at the ingress).
-#
-# Three settings on the server side have to agree with this file, or the failure is
-# opaque:
-#
-#   APP_ORIGIN=https://<DOMAIN>   the WebSocket upgrade is refused with 403 *before*
-#                                 authentication otherwise — the page
-#                                 loads and never syncs.
-#   COOKIE_SECURE=true            a Secure cookie over http is silently dropped.
-#   TRUST_PROXY_HEADERS=true      without it every client shares one login-rate bucket
-#                                 and audit rows record the proxy's address (SPEC §5.2).
-#                                 Only ever set it when this proxy is the *only* route
-#                                 to the server — see BIND_HOST above.
-
 {$DOMAIN} {
 	tls {$ACME_EMAIL}
 
 	encode zstd gzip
 
-	# HSTS. Caddy already redirects http→https; this is the half that stops the first
-	# request of the next visit from going out in plaintext at all.
 	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
 
-	# Everything else — the app shell, the import map, plugin modules, /api, /api/sync —
-	# is one origin by design: the page, its plugins and its socket must not be split
-	# across hosts (the import map's URLs are relative, and the socket is origin-checked).
-	#
-	# No `header_up Host` games: Caddy forwards Host, X-Forwarded-For and
-	# X-Forwarded-Proto by default, which is exactly what TRUST_PROXY_HEADERS reads.
-	# The one port, `PORT` in docker-compose.yaml.
 	reverse_proxy server:{$PORT:8080} {
-		# The WebSocket carries the change feed and per-document CRDT sync; a read
-		# timeout would drop an idle-but-live editor. The protocol's own heartbeat
-		# (every 25 s) is what detects a dead peer.
 		transport http {
 			read_timeout 0
 		}
-		# A streamed bootstrap of a large workspace must not be buffered (SPEC §4.1).
 		flush_interval -1
 	}
 

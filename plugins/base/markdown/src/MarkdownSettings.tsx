@@ -1,10 +1,3 @@
-/**
- * Settings → Markdown: how deep `![](doc://…)` embeds nest.
- *
- * One number. 0 turns embedding off (every `![](doc://…)` is a link); the ceiling keeps
- * a chain of embeds from building a page nobody can scroll.
- */
-
 import type { Kernel, SettingsValue } from "@kernel";
 import { useEffect, useId, useState, type ReactNode } from "react";
 
@@ -12,7 +5,6 @@ export const EMBED_DEPTH_KEY = "embedDepth";
 export const DEFAULT_EMBED_DEPTH = 4;
 export const MAX_EMBED_DEPTH = 10;
 
-/** A stored value as a usable depth: whole, 0 to {@link MAX_EMBED_DEPTH}, else the default. */
 export function clampEmbedDepth(value: SettingsValue | undefined): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_EMBED_DEPTH;
   return Math.min(Math.max(Math.round(value), 0), MAX_EMBED_DEPTH);

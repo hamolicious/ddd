@@ -1,20 +1,3 @@
-//! `/api/documents/:id/changes` — a document's change history (`changes.rs`).
-//!
-//! | Method | Path | Behaviour |
-//! |---|---|---|
-//! | GET | `/api/documents/:id/changes?before=&limit=` | groups, newest first |
-//! | GET | `/api/documents/:id/changes/:from/:to` | one group's diff, with context |
-//! | POST | `/api/documents/:id/changes/:from/:to/revert` | undo that group as a new edit |
-//! | GET | `/api/documents/:id/text?at=<seq>` | the whole text as it was after `seq` |
-//! | POST | `/api/documents/:id/history/forget` | admin: wipe the history, keep the text |
-//!
-//! Every point in time is rebuilt from the nearest checkpoint (`dev-docs/resolved/HISTORY.md`), so
-//! none of this rewinds from today: a years-old change costs what last week's does.
-//!
-//! A group is addressed by the `seq` range it covers. Groups are computed here, not
-//! stored: they are a way of reading the history, and the gap that splits them is a
-//! presentation choice.
-
 use std::collections::{HashMap, HashSet};
 
 use axum::Json;
@@ -30,11 +13,8 @@ use crate::error::{AppError, AppResult};
 use crate::routes::documents::{check_id, map_docstore};
 use crate::state::AppState;
 
-/// Changes read per page before grouping. A page is cut at a group boundary, so a
-/// group is never split across pages unless it alone is longer than this.
 const FETCH: i64 = 1000;
 const DEFAULT_GROUPS: usize = 30;
-/// How much of what a group inserted and removed is shown in the list.
 const EXCERPT_CHARS: usize = 120;
 
 #[derive(Debug, Deserialize)]
@@ -50,21 +30,15 @@ pub struct ChangeGroupView {
     pub started_at: Timestamp,
     pub ended_at: Timestamp,
     pub by: Option<String>,
-    /// A person's name (else their email), `plugin <id>`, `system` or `deleted user`.
     pub by_label: String,
-    /// Writes in the group.
     pub changes: usize,
     pub inserted_chars: usize,
     pub removed_chars: usize,
-    /// The start of what was typed and what was deleted, in order.
     pub inserted_excerpt: String,
     pub removed_excerpt: String,
-    /// When this group is one revert: the group it undid.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reverts: Option<RevertedRange>,
-    /// Older history, kept as the group's net effect rather than every write.
     pub squashed: bool,
-    /// Some of it was made offline and carried over on reconnect.
     pub offline: bool,
 }
 
@@ -77,7 +51,6 @@ pub struct RevertedRange {
 #[derive(Debug, Serialize)]
 pub struct ChangesPage {
     pub groups: Vec<ChangeGroupView>,
-    /// Pass as `before` for older groups; absent at the start of the history.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_before: Option<i64>,
 }
@@ -91,7 +64,6 @@ pub async fn list_changes(
     check_id(&id)?;
     let limit = params.limit.unwrap_or(DEFAULT_GROUPS).clamp(1, 200);
 
-    // The raw tier, grouped here.
     let records = state
         .docs
         .changes(&id, params.before, FETCH)
@@ -100,7 +72,6 @@ pub async fn list_changes(
     let full_page = records.len() as i64 == FETCH;
     let newest_first: Vec<Change> = records.iter().map(DocumentChange::to_change).collect();
     let mut raw_groups = changes::group(&newest_first, changes::GROUP_GAP_MS);
-    // The oldest group of a full page may continue on the next one: leave it for then.
     if full_page && raw_groups.len() > 1 {
         raw_groups.pop();
     }
@@ -109,7 +80,6 @@ pub async fn list_changes(
     let mut drafts: Vec<Draft> = raw_groups
         .into_iter()
         .map(|group| {
-            // Oldest first, so the excerpt reads in the order it was typed.
             let members: Vec<&DocumentChange> = (group.from_seq..=group.to_seq)
                 .filter_map(|seq| by_seq.get(&seq).copied())
                 .collect();
@@ -130,7 +100,6 @@ pub async fn list_changes(
         })
         .collect();
 
-    // The squashed tier: already grouped.
     let squashed = state
         .docs
         .squashed(&id, params.before, limit as i64 + 1)
@@ -212,18 +181,14 @@ pub async fn list_changes(
     }))
 }
 
-/// A group on its way to the list, from either tier.
 struct Draft {
     group: changes::Group,
-    /// In order: a raw group's members' hunks, or a squashed group's net ones.
     hunks: Vec<StoredHunk>,
     reverts: Option<RevertNote>,
     squashed: bool,
     offline: bool,
 }
 
-/// What was typed (or deleted), in order: separate places are separate pieces joined by
-/// " … "; keystrokes in one place run together.
 fn pieces(hunks: &[StoredHunk], pick: fn(&StoredHunk) -> &str) -> String {
     let mut out: Vec<String> = Vec::new();
     let mut last_end: Option<i64> = None;
@@ -258,7 +223,6 @@ pub struct ChangeDetail {
     pub by: Option<String>,
     pub by_label: String,
     pub changes: usize,
-    /// The group's net effect, line by line, with a little context.
     pub hunks: Vec<ShownHunkView>,
 }
 
@@ -278,8 +242,6 @@ pub async fn get_change(
 
     let first = group.first().expect("load_group returns a non-empty group");
     let last = group.last().expect("load_group returns a non-empty group");
-    // A squashed group is one unit standing for the writes it was made of: its record
-    // knows when it started and how many there were.
     let squashed = state
         .collections
         .document_history()
@@ -326,8 +288,6 @@ pub async fn revert_change(
         .map_err(map_docstore)?;
     let after = state.docs.text_at(&id, to).await.map_err(map_docstore)?;
 
-    // A dry run first, for a refusal that can name who was in the way; the write below
-    // recomputes under the room lock, from the text it actually applies to.
     let current = state.docs.text(&id).await.map_err(map_docstore)?;
     if let Err(error) = changes::revert_edits(&current, &before, &after, &later) {
         return Err(refusal(&state, error).await?);
@@ -350,7 +310,6 @@ pub async fn revert_change(
         .note_revert(&id, outcome.seq, from, to)
         .await
         .map_err(map_docstore)?;
-    // Open editors see the revert as they see any other write.
     crate::routes::sync::publish_update(&state, &id, &outcome.update);
 
     state
@@ -370,7 +329,6 @@ pub async fn revert_change(
     Ok(Json(DocumentView::from(document)))
 }
 
-/// The group `from..=to` and every change after it, both oldest first.
 async fn load_group(
     state: &AppState,
     id: &str,
@@ -395,8 +353,6 @@ async fn load_group(
     Ok((group, later))
 }
 
-/// Wipe a document's history: changes, squashed groups, checkpoints and snapshots. The
-/// text stays. For the "I pasted a secret" case; audited.
 pub async fn forget_history(
     State(state): State<AppState>,
     admin: AdminUser,
@@ -485,7 +441,6 @@ fn excerpt(text: &str) -> String {
     }
 }
 
-/// Names for the user ids among `actors`: the display name, else the email.
 async fn labels(
     state: &AppState,
     actors: impl IntoIterator<Item = String>,

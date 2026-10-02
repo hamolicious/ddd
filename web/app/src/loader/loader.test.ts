@@ -1,22 +1,3 @@
-/**
- * The loader's failure rules (SPEC §6.4, `@kernel` 3.0) — the part of boot that decides
- * whether one broken plugin is a notice or a blank app:
- *
- * - plugins activate in the server's order (`load.normal` / `load.safe`), and are imported
- *   **only** by their `plugin:<id>` specifier;
- * - an import or `activate()` throw marks the plugin **failed**, withdraws what it
- *   registered, and **skips every plugin that depends on it**, transitively (those are
- *   never even imported);
- * - the loader re-validates every manifest itself, so a stale offline client refuses a
- *   plugin its bundle cannot honour instead of failing in pieces;
- * - registry items added while a plugin is imported or activated are attributed to it;
- * - the outcome is **one** aggregated notice.
- *
- * The host is faked, except for its `plugins` member, which is the real `PluginsHost`:
- * `loadPlugins` touches `forPlugin`, `plugins` and `retract`, the real `KernelHost` needs a
- * DOM and a sync client, and what is under test is the loader's bookkeeping.
- */
-
 import { describe, expect, it, vi } from "vitest";
 
 import { KERNEL_API_VERSION, createRegistry, type InstalledPlugin, type Kernel, type PluginManifest } from "@kernel";
@@ -30,7 +11,6 @@ interface Recorded {
   readonly retracted: string[];
 }
 
-/** The members of `KernelHost` the loader uses, and nothing else. */
 function fakeHost(): Recorded {
   const forPlugin: string[] = [];
   const retracted: string[] = [];
@@ -227,7 +207,6 @@ describe("a plugin that fails", () => {
         detail: 'depends on "settings", which did not load (it failed: boom)',
       },
     ]);
-    // An optional dependency failing does not take the dependent down.
     expect(report.activated).toEqual(["core", "icons", "graph"]);
     expect(imported).not.toContain("plugin:header");
   });
@@ -368,7 +347,6 @@ describe("the aggregated notice (SPEC §6.4)", () => {
     expect(notice?.message).toContain("1 plugin failed");
     expect(notice?.detail).toContain("b: boom");
     expect(notice?.detail).toContain("c: ");
-    // A deliberately disabled plugin is not a problem to report, nor counted.
     expect(notice?.detail).not.toContain("d: ");
     expect(notice?.message).toContain("1 skipped");
     expect(notice?.actions?.[0]?.label).toBe("Open admin");

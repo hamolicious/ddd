@@ -59,11 +59,9 @@ describe("swimlanes", () => {
     expect(laneChange(a, web!.columns[1]!, settings.lanes)).toBeUndefined();
     expect(laneChange(a, api!.columns[0]!, settings.lanes)).toEqual({ value: "API" });
     expect(laneChange(a, none!.columns[0]!, settings.lanes)).toEqual({ value: undefined });
-    // A list value stays in its lanes; a board without lanes changes none.
     expect(laneChange(rows[4]!, api!.columns[0]!, settings.lanes)).toBeNull();
     expect(laneChange(rows[4]!, web!.columns[1]!, settings.lanes)).toBeUndefined();
     expect(laneChange(a, lanesFor(rows, kanbanOptions({}))[0]!.columns[0]!, "")).toBeUndefined();
-    // Nor can a nested key be written.
     expect(laneChange(note("x", { p: { q: "r" } }), { key: "s", value: "s", cards: [], lane: { key: "s", value: "s" } }, "fm.p.q")).toBeNull();
   });
 
@@ -83,10 +81,8 @@ describe("swimlanes", () => {
     const lanes = lanesFor(filterRows(rows, filters), settings, NO_KEPT, kept, filters.get("fm.team"));
     expect(lanes.map((lane) => lane.key)).toEqual(["API", "web"]);
     expect(lanes[1]?.columns.map((column) => ids(column.cards))).toEqual([["a", "e"], ["d"], []]);
-    // A chosen value no card holds is still its lane, to drop into or add to.
     const ghost = lanesFor(filterRows(rows, new Map([["fm.team", ["design"]]])), settings, NO_KEPT, kept, ["design"]);
     expect(ghost.map((lane) => [lane.key, lane.value, laneCount(lane)])).toEqual([["design", "design", 0]]);
-    // No lane filter: as before.
     expect(lanesFor(rows, settings, NO_KEPT, NO_KEPT, []).map((lane) => lane.key)).toEqual(["API", "ops", "web", undefined]);
   });
 
@@ -95,7 +91,6 @@ describe("swimlanes", () => {
     expect(laneScope("fm.team", new Map())).toBe(none);
     expect(laneScope("fm.team", new Map([["fm.status", ["todo"]]]))).not.toBe(none);
     expect(laneScope("fm.other", new Map())).not.toBe(none);
-    // The order the filters were chosen in, or a value's type, is no change.
     expect(laneScope("fm.team", new Map<string, readonly Scalar[]>([["a", [1]], ["b", ["x"]]]))).toBe(laneScope("fm.team", new Map([["b", ["x"]], ["a", ["1"]]])));
   });
 });

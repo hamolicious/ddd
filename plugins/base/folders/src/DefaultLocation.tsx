@@ -1,16 +1,3 @@
-/**
- * "New notes go to" / "Files go to" — a note picker for a default location.
- *
- * The note it names may be gone (deleted, or not synced to this device yet). A picker
- * that silently dropped the stored value would file the next note at the root without
- * saying so, so a value that matches nothing is kept in the list, marked, and left
- * selected until someone changes it. New notes land at the root meanwhile.
- *
- * With `search` enabled the note is found by searching for it (`NoteSelect`); without it,
- * a `<select>` rather than a tree: it is one tab stop, it is a native picker on a phone,
- * and at 390 px it cannot overflow the pane.
- */
-
 import { useId, useState } from "react";
 import type { ComponentType, ReactElement } from "react";
 
@@ -18,28 +5,15 @@ import type { NoteSelectProps } from "plugin:search";
 
 export interface DefaultLocationProps {
   readonly label: string;
-  /** One quiet line under the control. */
   readonly hint: string;
-  /** Every note, with the titles from the root down to it, in the order to list them. */
   readonly notes: readonly { readonly id: string; readonly path: readonly string[] }[];
-  /** The stored note id; `""` for the root. */
   readonly value: string;
-  /**
-   * Store the choice. **Resolves when it is stored and rejects when it is not** — this
-   * control shows the difference, so a caller that swallows the failure makes it lie.
-   */
   readonly onChange: (id: string) => Promise<void>;
-  /** `search`'s note picker, when it is enabled. */
   readonly NoteSelect?: ComponentType<NoteSelectProps>;
 }
 
 export function DefaultLocation({ label, hint, notes, value, onChange, NoteSelect }: DefaultLocationProps): ReactElement {
   const id = useId();
-  /*
-   * Optimistic, and reverted on failure. A settings write is a CRDT splice into a
-   * document that may have to be created first, so it can fail: offline at the wrong
-   * moment is enough.
-   */
   const [pending, setPending] = useState<string | undefined>(undefined);
   const [problem, setProblem] = useState<string | undefined>(undefined);
   const current = pending ?? value;
@@ -51,7 +25,6 @@ export function DefaultLocation({ label, hint, notes, value, onChange, NoteSelec
       .catch((cause: unknown) => {
         setProblem(`That could not be saved: ${cause instanceof Error ? cause.message : String(cause)}`);
       })
-      // Either way the stored value takes over again.
       .finally(() => setPending(undefined));
   };
 

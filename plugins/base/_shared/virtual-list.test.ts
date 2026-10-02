@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import { contentEnd, fitHeight, layoutRows, rowAt, rowSpan, scrollDelta, visibleBand, visibleHeight } from "./virtual-list.js";
 
-/** 1000 rows of 40 px. */
 const even = layoutRows(1000, () => 40);
 
 describe("layoutRows", () => {
@@ -31,7 +30,6 @@ describe("rowAt", () => {
 
 describe("rowSpan", () => {
   it("draws the rows in view and the overscan either side", () => {
-    // Rows 10..19 are in view.
     expect(rowSpan(even, 400, 800, 2)).toEqual({ first: 8, end: 22 });
   });
 
@@ -52,7 +50,6 @@ describe("rowSpan", () => {
   });
 
   it("follows rows of different heights", () => {
-    // 10 rows of 100 px, then 40 px rows from 1000 px on.
     const mixed = layoutRows(100, (index) => (index < 10 ? 100 : 40));
     expect(rowSpan(mixed, 950, 1100, 0)).toEqual({ first: 9, end: 13 });
   });
@@ -75,7 +72,6 @@ describe("scrollDelta", () => {
 
 describe("fitHeight", () => {
   it("fills what the rest of the ancestor leaves", () => {
-    // An 800 px sidebar holding 300 px of other panels and a 1000 px box.
     expect(fitHeight(800, 1300, 1000, 100)).toBe(500);
   });
 
@@ -106,19 +102,14 @@ describe("contentEnd", () => {
     expect(contentEnd(500, [{ margin: 0, others: [100, 540], after: 0 }])).toBe(540);
   });
 
-  // The phone layout that made the kanban board taller than the screen: the search page is
-  // a flex item held to the pane's height (`min-height: 100%`), its 4000 px board
-  // overflowing it. Its box ends at 702; its content ends at the board.
   it("follows content out of an ancestor shrunk below it", () => {
     const boardEnd = 4156;
     const end = contentEnd(boardEnd, [
-      { margin: 0, others: [], after: 0 }, // the view around the board
-      { margin: 0, others: [140], after: 8 }, // the search page: the filter bar above
-      { margin: 0, others: [], after: 80 }, // the pane: room for the mode button
+      { margin: 0, others: [], after: 0 },
+      { margin: 0, others: [140], after: 8 },
+      { margin: 0, others: [], after: 80 },
     ]);
     expect(end).toBe(4244);
-    // Fitted against that, the board ends at the bottom of a 692 px pane whose content
-    // starts at 90, rather than keeping its 4058 px.
     expect(fitHeight(692, end - 90, 4058, 320)).toBe(692 - (end - 90 - 4058));
     expect(692 - (end - 90 - 4058)).toBeLessThan(692);
   });

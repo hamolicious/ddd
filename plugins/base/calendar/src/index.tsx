@@ -1,18 +1,3 @@
-/**
- * `calendar` — a saved search's notes on a month grid, for the saved searches whose `type`
- * is `calendar`. "New calendar" (a command, and in the folder tree) makes one for the notes
- * inside it.
- *
- * Which field dates a note is its setting, in the note's `%%% calendar` section: a calendar of
- * `created_at`, of `fm.date`, of `fm.due` — with an optional end field for notes that run
- * over several days (`layout.ts`). The results come from `search` itself (`plugin:search`'s
- * `useResults`, narrowed to the weeks on screen), so the filter, text and machine-document
- * rules are the same as every other view's. Each note wears the colour and icon `folders`
- * gives it (`plugin:folders` `look`, an optional dependency), as it does in the tree and in links.
- *
- * No exports: it only contributes a document mode, a command and menu actions.
- */
-
 import type { Kernel } from "@kernel";
 import { addCommand } from "plugin:commands";
 import { addAction } from "plugin:context-menu";
@@ -30,7 +15,6 @@ type RouterModule = typeof import("plugin:router");
 type FoldersModule = typeof import("plugin:folders");
 
 let router: RouterModule | undefined;
-// Colours and icons, as the folder tree dresses each note; plain chips without `folders`.
 let folders: FoldersModule | undefined;
 
 export default function activate(kernel: Kernel): void {
@@ -65,12 +49,10 @@ export default function activate(kernel: Kernel): void {
       order: 10,
       render: (props) => <Calendar {...props} />,
       settings: (props) => <CalendarSettings {...props} />,
-      // An empty month is still a month.
       showsEmpty: true,
     },
     {
       addMode,
-      // `SavedViewCommand.run` returns `unknown`; a command's returns `void | Promise<void>`.
       addCommand: (command) =>
         addCommand({
           ...command,

@@ -1,7 +1,3 @@
-//! The admin duplicate views over the router: files with the same name and bytes
-//! (`/api/attachments/duplicates`) and live documents with the same title and text
-//! (`/api/documents/duplicates`), each copy with its reference count.
-
 mod common;
 
 use axum::body::Body;

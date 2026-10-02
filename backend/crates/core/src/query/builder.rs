@@ -1,21 +1,3 @@
-//! The chainable way to write a [`Plan`]:
-//!
-//! ```
-//! use ddd_core::query::{Op, Query};
-//!
-//! let plan = Query::new()
-//!     .filter("title", Op::TextContains, "a")
-//!     .sort("fm.key")
-//!     .limit(20)
-//!     .build()
-//!     .unwrap();
-//! assert_eq!(plan.sort.len(), 1);
-//! ```
-//!
-//! Top-level conditions combine with *and*; [`Query::any_of`] groups some with *or*,
-//! [`Query::none_of`] negates a group. The operators are the search's filter rows
-//! (`plugins/base/_shared/conditions.ts`), and each lowers to one filter-DSL node.
-
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
@@ -25,7 +7,6 @@ use super::plan::{Plan, Sort, Trash};
 use crate::date::Date;
 use crate::filter::{CompareOp, FieldPath, Filter, Literal, SortOrder, TextMatch};
 
-/// A filter row's operator.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Op {
@@ -35,26 +16,17 @@ pub enum Op {
     Lte,
     Gt,
     Gte,
-    /// A list field holds the value.
     Contains,
-    /// A list field holds at least one of the values.
     ContainsAny,
-    /// Some element of a list field equals the value.
     Any,
-    /// Every element of a list field equals the value.
     Every,
     TextContains,
     TextStartsWith,
     TextEndsWith,
-    /// No value.
     Missing,
-    /// No value.
     Exists,
-    /// No value.
     IsNull,
-    /// The value is a note id; the field is ignored.
     ChildOf,
-    /// The value is a note id; the field is ignored.
     ParentOf,
 }
 
@@ -103,7 +75,6 @@ impl Op {
         }
     }
 
-    /// Takes no value.
     pub fn is_valueless(self) -> bool {
         matches!(self, Op::Missing | Op::Exists | Op::IsNull)
     }
@@ -162,8 +133,6 @@ impl From<Date> for Literal {
     }
 }
 
-/// One filter row → one DSL node. `values` is one literal for most operators, any
-/// number for `contains_any`, and is ignored by the value-less ones.
 pub fn lower(field: &str, op: Op, values: &[Literal], deep: bool) -> Result<Filter, QueryError> {
     let one = || -> Result<&Literal, QueryError> {
         match values {
@@ -264,8 +233,6 @@ pub fn lower(field: &str, op: Op, values: &[Literal], deep: bool) -> Result<Filt
     })
 }
 
-/// Builds a [`Plan`]. A mistake (a malformed field, a value the operator cannot take)
-/// is kept and returned by [`Query::build`], so a chain never needs a `?` per step.
 #[derive(Debug, Clone, Default)]
 pub struct Query {
     plan: Plan,
@@ -278,13 +245,11 @@ impl Query {
         Query::default()
     }
 
-    /// Ranked full-text search.
     pub fn text(mut self, text: impl Into<String>) -> Query {
         self.plan.text = text.into().trim().to_string();
         self
     }
 
-    /// A condition: `field op value`.
     pub fn filter(self, field: &str, op: Op, value: impl Into<Literal>) -> Query {
         let values = if op.is_valueless() {
             Vec::new()
@@ -294,7 +259,6 @@ impl Query {
         self.condition(lower(field, op, &values, false))
     }
 
-    /// A condition taking several values: `contains_any`.
     pub fn filter_values<V: Into<Literal>>(
         self,
         field: &str,
@@ -317,44 +281,36 @@ impl Query {
         self.condition(lower(field, Op::IsNull, &[], false))
     }
 
-    /// In note `id`; with `deep`, anywhere below it.
     pub fn child_of(self, id: &str, deep: bool) -> Query {
         self.condition(lower("", Op::ChildOf, &[id.into()], deep))
     }
 
-    /// Holds note `id` among its children.
     pub fn parent_of(self, id: &str) -> Query {
         self.condition(lower("", Op::ParentOf, &[id.into()], false))
     }
 
-    /// A filter-DSL node as it is.
     pub fn where_filter(self, filter: Filter) -> Query {
         self.condition(Ok(filter))
     }
 
-    /// The conditions `group` adds, combined with *or*.
     pub fn any_of(self, group: impl FnOnce(Query) -> Query) -> Query {
         let inner = group(Query::new());
         self.group(inner, Filter::Or)
     }
 
-    /// None of the conditions `group` adds: `not (a or b …)`.
     pub fn none_of(self, group: impl FnOnce(Query) -> Query) -> Query {
         let inner = group(Query::new());
         self.group(inner, |nodes| Filter::Not(Box::new(Filter::Or(nodes))))
     }
 
-    /// Sort ascending by a field path, after any earlier sort.
     pub fn sort(self, field: &str) -> Query {
         self.sort_key(Sort::field(field, SortOrder::Asc))
     }
 
-    /// Sort descending by a field path, after any earlier sort.
     pub fn sort_desc(self, field: &str) -> Query {
         self.sort_key(Sort::field(field, SortOrder::Desc))
     }
 
-    /// Best match first (while there is text), after any earlier sort.
     pub fn sort_relevance(self) -> Query {
         self.sort_key(Ok(Sort::Relevance))
     }
@@ -374,7 +330,6 @@ impl Query {
         self
     }
 
-    /// Each text hit carries the line it matched on.
     pub fn snippets(mut self) -> Query {
         self.plan.snippets = true;
         self

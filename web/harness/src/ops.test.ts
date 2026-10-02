@@ -1,12 +1,3 @@
-/**
- * Unit tests for the parts of the harness that must be right *before* it is
- * pointed at a server: the edit repertoire's splice discipline (SPEC §3.3), the
- * marker invariant that makes update-loss detectable, region location, the
- * deterministic id/RNG plumbing, and the `/metrics` parser.
- *
- * No server, no Wasm: `npm run test` stays runnable in a clean checkout.
- */
-
 import { describe, expect, it } from "vitest";
 import * as Y from "yjs";
 
@@ -56,13 +47,12 @@ describe("regions", () => {
   it("locates frontmatter only when `---` is the literal first line", () => {
     expect(SAMPLE.slice(frontmatterEnd(SAMPLE))).toBe("\n# Groceries\n\n- [ ] milk\n\n%%% calendar\nsource-uid: abc123\nrevision: 1\n%%%\n");
     expect(frontmatterEnd("no frontmatter here")).toBe(0);
-    expect(frontmatterEnd("---\ntitle: x\n")).toBe(0); // unterminated block
+    expect(frontmatterEnd("---\ntitle: x\n")).toBe(0);
   });
 
   it("locates the trailing `%%%` run and nothing earlier", () => {
     expect(sectionsStartIndex(SAMPLE)).toBe(SAMPLE.indexOf("%%% calendar"));
     expect(sectionsStartIndex("body only\n")).toBe("body only\n".length);
-    // A fence-looking line with body after it is body, not a section run.
     const notASection = "%%% calendar\nkey: 1\n%%%\n\nmore body\n";
     expect(sectionsStartIndex(notASection)).toBe(notASection.length);
   });
@@ -160,7 +150,6 @@ describe("marker safety (the update-loss invariant)", () => {
   });
 
   it("concurrent replicas converge byte-identically and keep both sets of markers", () => {
-    // Not a network test — just the CRDT contract the harness leans on.
     const left = new Y.Doc();
     const right = new Y.Doc();
     left.getText(TEXT_ROOT).insert(0, SAMPLE);

@@ -1,11 +1,3 @@
-/**
- * Lazy hydration, the LRU, and offline editing (SPEC §4.1, PROTOCOL.md §3).
- *
- * The scenario that matters most is the last one in this file: open a document,
- * lose the socket, keep typing, reconnect — and have the server end up with the
- * text without anyone replaying a remembered frame.
- */
-
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as Y from "yjs";
 
@@ -31,12 +23,6 @@ afterEach(() => {
   MockSocket.reset();
 });
 
-/**
- * A transport wired to a hydrator the way `SyncClient` wires it: binary frames
- * straight through, `doc.subscribed` / `doc.error` routed to their handlers.
- * The hydrator does not register itself, so the routing table is part of what
- * these tests exercise.
- */
 function makeTransport(): { transport: SyncTransport; attach: (hydrator: DocHydrator) => void } {
   let attached: DocHydrator | undefined;
   const transport = new SyncTransport(
@@ -70,11 +56,6 @@ async function connect(transport: SyncTransport): Promise<MockSocket> {
   return MockSocket.last;
 }
 
-/**
- * A hydrator wired to a live mock socket, with the server half of the handshake
- * automated: the client's `SYNC_STEP1` is answered with a `SYNC_STEP2`, and its
- * updates are applied to a server-side Y.Doc, exactly as the sync route does.
- */
 async function fixture(options: DocHydratorOptions = {}, docs: string[] = [DOC]) {
   MockSocket.reset();
   const { transport, attach } = makeTransport();
@@ -83,7 +64,6 @@ async function fixture(options: DocHydratorOptions = {}, docs: string[] = [DOC])
   attach(hydrator);
   const server = new Map(docs.map((id) => [id, new ServerDoc(id)]));
 
-  /** Play the server: ack the subscribe, answer step 1, apply updates. */
   const serve = (): void => {
     for (const frame of socket.sentBinary.splice(0)) {
       const doc = server.get(frame.docId);
@@ -123,7 +103,6 @@ describe("open", () => {
     const subscribe = socket.controlOfType("doc.subscribe");
     expect(subscribe).toHaveLength(1);
     expect(subscribe[0]?.id).toBe(DOC);
-    // Nothing local yet, so no state vector is offered (PROTOCOL.md §3.3).
     expect(subscribe[0]?.sv).toBeUndefined();
     expect(handle.phase).toBe("live");
     expect(handle.text.toString()).toBe("# Groceries\n");
@@ -160,8 +139,6 @@ describe("open", () => {
     expect(socket.controlOfType("doc.unsubscribe")).toHaveLength(0);
     second.release();
     expect(socket.controlOfType("doc.unsubscribe").map((m) => m.id)).toEqual([DOC]);
-    // The replica stays in memory: reopening it is free, and it is still the
-    // offline-editable copy.
     expect(hydrator.openIds).toEqual([DOC]);
   });
 
@@ -176,7 +153,6 @@ describe("open", () => {
 
     expect(a).toBe(b);
     expect(socket.controlOfType("doc.subscribe")).toHaveLength(1);
-    // Two references: the first release must not unsubscribe.
     a.release();
     expect(socket.controlOfType("doc.unsubscribe")).toHaveLength(0);
     b.release();
@@ -190,7 +166,7 @@ describe("open", () => {
     await persistence.save(DOC, Y.encodeStateAsUpdate(local));
 
     MockSocket.reset();
-    const { transport } = makeTransport(); // never connected
+    const { transport } = makeTransport();
     const hydrator = new DocHydrator(transport, { persistence, syncTimeoutMs: 50 });
 
     const handle = await hydrator.open(DOC);
@@ -200,20 +176,9 @@ describe("open", () => {
   });
 
   it("refuses to open a never-hydrated document with no socket", async () => {
-    // SPEC §4.1, the sentence the test above is the other half of: "editable offline =
-    // documents you've opened"; an unopened document is **read-only offline until
-    // reconnect". There is no replica on disk here, so the `Y.Doc` this would hand back
-    // is not the document — it is an empty one sharing its id.
-    //
-    // Returning it as `live` is worse than it sounds: the projection row is still full
-    // of text, so the reader sees a populated read view, switches to edit, finds an
-    // empty box, and is invited to type into a replica that is not the document. The
-    // merge on reconnect is not lossy — Yjs keeps the insert — but it lands in a
-    // document the user never saw. Refusing is what lets `document-surface` say
-    // "editing is unavailable, reading works from the replicated copy".
     MockSocket.reset();
     const persistence = new MemoryDocPersistence();
-    const { transport } = makeTransport(); // never connected
+    const { transport } = makeTransport();
     const hydrator = new DocHydrator(transport, { persistence, syncTimeoutMs: 50 });
 
     const errors: DocError[] = [];
@@ -228,7 +193,6 @@ describe("open", () => {
     expect(errors).toHaveLength(1);
     expect(errors[0]?.message).toMatch(/not editable until reconnect/);
 
-    // Nothing is left half-open: a later attempt (online) starts clean.
     await expect(hydrator.open(DOC)).rejects.toThrow(/cannot be hydrated while offline/);
     expect(MockSocket.instances).toHaveLength(0);
   });
@@ -251,13 +215,6 @@ describe("open", () => {
 });
 
 describe("short opens (a folder move: open, splice, release)", () => {
-  /**
-   * The server as `routes/sync.rs` actually behaves, which `fixture`'s `serve` is too
-   * polite to: it reads the client's frames **in the order they were sent**, drops a
-   * frame for a document this socket is not subscribed to, and queues `doc.subscribed`
-   * apart from document frames — so the ack can reach the client after the client has
-   * already unsubscribed. `deliverAcks` is that late control queue.
-   */
   function strictServer(socket: MockSocket, doc: ServerDoc) {
     const log: Array<{ control: ClientControl } | { frame: BinaryFrame }> = [];
     const send = socket.send.bind(socket);
@@ -279,7 +236,7 @@ describe("short opens (a folder move: open, splice, release)", () => {
             if (item.control.t === "doc.unsubscribe") subscribed = false;
             continue;
           }
-          if (!subscribed) continue; // "dropping a frame for a document this socket has not subscribed to"
+          if (!subscribed) continue;
           if (item.frame.type === FrameType.SyncStep1) socket.deliverBinary(doc.step2(item.frame.payload));
           else doc.apply(item.frame);
         }
@@ -299,9 +256,6 @@ describe("short opens (a folder move: open, splice, release)", () => {
   }
 
   it("lands every write when the subscribe ack arrives after the unsubscribe", async () => {
-    // The folder tree bug: every second move of the same document was lost. The first
-    // move's late ack marked the released replica subscribed, so the second move sent
-    // no `doc.subscribe` and its `UPDATE` went to a server that dropped it.
     const { socket, hydrator } = await fixture();
     const doc = new ServerDoc(DOC);
     const server = strictServer(socket, doc);
@@ -322,10 +276,6 @@ describe("short opens (a folder move: open, splice, release)", () => {
   });
 
   it("waits for the server's diff when a released replica is reopened", async () => {
-    // Two clients on one kanban board: the other folds a column (rewriting the
-    // `columns:` line) while this one holds the board's replica released in its LRU.
-    // The next short open here must see that line before it plans its own edit,
-    // or the merge ends up holding both versions of the line.
     const { socket, hydrator } = await fixture();
     const doc = new ServerDoc(DOC);
     const server = strictServer(socket, doc);
@@ -345,7 +295,6 @@ describe("short opens (a folder move: open, splice, release)", () => {
       return handle;
     });
     await settle();
-    // Not yet: the replica is handed out only once the server has answered.
     expect(handed).toBeUndefined();
     server.serve();
     const handle = await reopened;
@@ -384,7 +333,7 @@ describe("editing", () => {
     serve();
 
     expect(server.get(DOC)!.text.toString()).toBe("hello world");
-    expect(socket.binaryOfType(FrameType.Update)).toHaveLength(0); // drained by serve()
+    expect(socket.binaryOfType(FrameType.Update)).toHaveLength(0);
     expect(hydrator.pendingCount).toBe(0);
   });
 
@@ -427,7 +376,6 @@ describe("editing", () => {
 
     expect(hydrator.pendingCount).toBe(2);
     expect(pendings.at(-1)).toBe(2);
-    // Durability does not depend on the in-memory queue: the replica is on disk.
     expect(persistence.states.has(DOC)).toBe(true);
   });
 
@@ -444,18 +392,15 @@ describe("editing", () => {
     handle.text.insert(0, "online text\n");
     serve();
 
-    // Partition: socket dies, the user keeps typing.
     socket.serverClose(1001, "network gone");
     hydrator.onDisconnected();
     handle.text.insert(handle.text.length, "offline line\n");
     expect(hydrator.pendingCount).toBe(1);
 
-    // Meanwhile the server has an edit of its own — a real reconnect has to merge.
     server.get(DOC)!.text.insert(server.get(DOC)!.text.length, "server line\n");
 
     const reconnected = await connect(transport);
     hydrator.resubscribeAll();
-    // The re-subscribe carries the state vector, so the server's answer is a diff.
     expect(reconnected.controlOfType("doc.subscribe").at(-1)?.sv).toBeTypeOf("string");
 
     for (const frame of reconnected.sentBinary.splice(0)) {
@@ -465,7 +410,6 @@ describe("editing", () => {
         server.get(DOC)!.apply(frame);
       }
     }
-    // The client answers the server's step 1 with everything it lacks.
     reconnected.deliverBinary(server.get(DOC)!.step1());
     for (const frame of reconnected.sentBinary.splice(0)) server.get(DOC)!.apply(frame);
 
@@ -488,9 +432,9 @@ describe("editing", () => {
     hydrator.onDisconnected();
     now.mockReturnValue(10_000);
     handle.text.insert(0, "a");
-    now.mockReturnValue(11_500); // within the merge window: the same entry
+    now.mockReturnValue(11_500);
     handle.text.insert(1, "b");
-    now.mockReturnValue(60_000); // a new entry
+    now.mockReturnValue(60_000);
     handle.text.insert(2, "c");
     expect(hydrator.pendingCount).toBe(3);
 
@@ -507,7 +451,6 @@ describe("editing", () => {
     reconnected.deliverBinary(server.get(DOC)!.step1());
     const sent = reconnected.sentBinary.splice(0);
     const kinds = sent.map((frame) => frame.type);
-    // The journal goes first; the diff after it is the safety net.
     expect(kinds.filter((kind) => kind === FrameType.History)).toHaveLength(2);
     const lastHistory = kinds.lastIndexOf(FrameType.History);
     const firstStep2 = kinds.indexOf(FrameType.SyncStep2);
@@ -539,7 +482,6 @@ describe("editing", () => {
     expect(persistence.states.get(DOC)?.unsynced).toBe(true);
     expect(persistence.states.get(DOC)?.journal?.map((entry) => entry.at)).toEqual([20_000]);
 
-    // A new page: a new hydrator over the same local store, back online.
     now.mockReturnValue(90_000);
     const second = await fixture({ persistence, persistDebounceMs: 0 });
     second.server.get(DOC)!.apply({ type: FrameType.Update, docId: DOC, payload: first.server.get(DOC)!.step2(new Uint8Array([0])).payload });
@@ -575,7 +517,6 @@ describe("editing", () => {
     expect(socket.binaryOfType(FrameType.SyncStep1)).toHaveLength(1);
 
     socket.sentBinary.splice(0);
-    // No id ⇒ every subscribed document (PROTOCOL.md §3.5).
     hydrator.onResync({ t: "doc.resync", reason: "server_restart" });
     expect(socket.binaryOfType(FrameType.SyncStep1)).toHaveLength(1);
   });
@@ -646,7 +587,6 @@ describe("the LRU", () => {
 
     expect(hydrator.openIds).toEqual([OTHER, THIRD]);
     expect(hydrator.openIds).not.toContain(DOC);
-    // Evicted from memory, not from disk: it is still editable offline.
     expect(persistence.states.has(DOC)).toBe(true);
   });
 
@@ -655,7 +595,7 @@ describe("the LRU", () => {
     const opening = hydrator.open(DOC);
     await settle();
     serve();
-    await opening; // held: never released
+    await opening;
 
     await openAndRelease(hydrator, socket, serve, OTHER);
     await openAndRelease(hydrator, socket, serve, THIRD);
@@ -675,7 +615,6 @@ describe("the LRU", () => {
     handle.text.insert(0, "unsent");
     handle.release();
 
-    // Opening a second document would normally evict the first one.
     await hydrator.open(OTHER).catch(() => undefined);
 
     expect(hydrator.openIds).toContain(DOC);
@@ -712,9 +651,6 @@ describe("purge and recovery", () => {
   });
 
   it("offers the text of a persisted replica that is not open", async () => {
-    // The shape of the real loss: edits made offline are merged into the `docs`
-    // blob, then the tab is reloaded — so the replica is on disk with no in-memory
-    // handle when the purge row for that document finally arrives.
     const persistence = new MemoryDocPersistence();
     const offline = new Y.Doc();
     offline.getText(TEXT_ROOT).insert(0, "the only copy of my edit");
@@ -736,8 +672,6 @@ describe("purge and recovery", () => {
   });
 
   it("reports a persisted replica of unknown state as unsynced", async () => {
-    // A record written before the flag existed: the store cannot say, so the
-    // hydrator offers recovery rather than deleting silently.
     const persistence = new MemoryDocPersistence();
     const stale = new Y.Doc();
     stale.getText(TEXT_ROOT).insert(0, "unknown provenance");
@@ -795,7 +729,6 @@ describe("purge and recovery", () => {
     await settle();
 
     expect(persistence.states.get(DOC)?.unsynced).toBe(true);
-    // Pinned, so the LRU cannot take it however small the budget is.
     expect(await persistence.prune(0)).toEqual([]);
     expect(persistence.states.has(DOC)).toBe(true);
   });
@@ -830,7 +763,6 @@ describe("the oversize escape hatch", () => {
       hint: "rest",
     });
     await settle();
-    // Answer the re-subscribe so `open()` can settle.
     for (const frame of socket.sentBinary.splice(0)) {
       if (frame.type === FrameType.SyncStep1) {
         socket.deliverBinary({
@@ -847,16 +779,10 @@ describe("the oversize escape hatch", () => {
     expect(url).toContain("format=crdt");
     expect(handle.text.toString()).toBe("a document too large for one frame");
     expect(socket.controlOfType("doc.subscribe").at(-1)?.sv).toBeTypeOf("string");
-    // The notice is still surfaced — the hydrator recovers, it does not hide.
     expect(errors.map((error) => error.code)).toEqual(["too_large"]);
   });
 
   it("does not hydrate over REST for a write refused as too large", async () => {
-    // `too_large` with no `hint` is the *other* cause: the server refused a write
-    // whose result would exceed MAX_DOCUMENT_BYTES (SPEC §3.5). Its state is
-    // unchanged, so downloading the whole document proves nothing — and on a
-    // document near the cap it is a megabyte of pointless traffic per keystroke
-    // burst.
     const fetchImpl = vi.fn(async () => new Response(new Uint8Array(), { status: 200 }));
     const errors: DocError[] = [];
     const { hydrator, serve } = await fixture({
@@ -879,7 +805,6 @@ describe("the oversize escape hatch", () => {
     await settle();
 
     expect(fetchImpl).not.toHaveBeenCalled();
-    // The UI can still tell what happened, and the document stays usable.
     expect(errors.map((error) => error.code)).toEqual(["too_large"]);
     expect(handle.phase).toBe("live");
   });
@@ -896,7 +821,6 @@ describe("robustness", () => {
     expect(() =>
       socket.deliverBinary({ type: FrameType.Update, docId: OTHER, payload: new Uint8Array([1]) }),
     ).not.toThrow();
-    // 0x10 and up are reserved for M4 plugin channels: ignored, never fatal.
     expect(() =>
       socket.deliverBinary({ type: 0x11, docId: DOC, payload: new Uint8Array([1]) }),
     ).not.toThrow();
@@ -955,11 +879,9 @@ describe("notes made on this device (dev-docs/resolved/SYNC-DECISIONS.md §1)", 
     expect(handle.phase).toBe("live");
     expect(handle.text.toString()).toBe("# Train notes\n");
     handle.text.insert(handle.text.length, "more\n");
-    // Not on the server yet: nothing subscribed, the edit waits.
     expect(socket.controlOfType("doc.subscribe")).toHaveLength(0);
     expect(hydrator.pendingCount).toBeGreaterThan(0);
 
-    // The server creates it from the seed; then the handshake carries the rest, once.
     Y.applyUpdate(server.get(DOC)!.doc, seed);
     hydrator.created(DOC);
     await settle();
@@ -989,16 +911,13 @@ describe("unsent replicas of closed notes", () => {
     const persistence = new MemoryDocPersistence();
     const { socket, hydrator, server, serve } = await fixture({ persistence, persistDebounceMs: 0 }, [DOC, OTHER]);
     server.get(DOC)!.text.insert(0, "base\n");
-    // A replica with an edit the server never got (the tab was closed offline)…
     const local = new Y.Doc();
     Y.applyUpdate(local, Y.encodeStateAsUpdate(server.get(DOC)!.doc));
     local.getText(TEXT_ROOT).insert(5, "edited offline\n");
     await persistence.save(DOC, Y.encodeStateAsUpdate(local), { unsynced: true });
-    // …and one that is only a cached copy.
     await persistence.save(OTHER, Y.encodeStateAsUpdate(new Y.Doc()), { unsynced: false });
 
     const sending = hydrator.sendUnsynced();
-    // The server's own step 1 follows every subscribe (routes/sync.rs), before its step 2.
     let answered = 0;
     for (let i = 0; i < 6; i++) {
       await settle();

@@ -1,17 +1,3 @@
-/**
- * The picker: one `ddd/settings.section` item with the appearance control and a theme list per
- * scheme.
- *
- * It is two radio groups and a swatch, and the only thing worth explaining is the
- * layout choice: themes are grouped by the scheme they declare, and the group that is
- * not currently painted says so. That is the honest presentation of the model — a
- * dark theme cannot show up while the light appearance is active — and it is what
- * makes `system` usable instead of surprising.
- *
- * Swatches are rendered from the theme's tokens over the kernel defaults, so a theme
- * is previewed exactly as it will paint, including the tokens it does not set.
- */
-
 import { useEffect, useId, useState, type ReactNode } from "react";
 
 import type { ColorScheme, Kernel, Registry } from "@kernel";
@@ -21,7 +7,6 @@ import type { ThemesController } from "./controller.js";
 
 export interface ThemePickerProps {
   readonly kernel: Kernel;
-  /** Every installed theme (the `addTheme` registry). */
   readonly themes: Registry<Theme>;
   readonly controller: ThemesController;
 }
@@ -34,15 +19,6 @@ export function ThemePicker({ kernel, themes: host, controller }: ThemePickerPro
   const group = useId();
 
   useEffect(() => host.subscribe(setThemes), [host]);
-  // Re-read the *preference*, not just the resolved scheme.
-  //
-  // `appearance` is local state so the radio responds to a click without waiting for a
-  // round trip, but it must not become the only story: the preference also changes
-  // from outside this component — another tab, a command, and above all the per-user
-  // settings document being adopted after this section first rendered (a cold client
-  // whose settings arrive after `themes` activated). Left alone, the control then
-  // claims "Match my system" while the app is painting the stored dark appearance,
-  // which is the one thing a preference control must never do.
   useEffect(
     () =>
       kernel.ui.onColorScheme((next) => {
@@ -59,8 +35,6 @@ export function ThemePicker({ kernel, themes: host, controller }: ThemePickerPro
       }),
     [controller],
   );
-  // `revision` exists to re-render on a selection made elsewhere (a command, another
-  // tab, a sync update); reading it here is what makes that dependency explicit.
   void revision;
 
   return (
@@ -183,7 +157,6 @@ function SchemeGroup({
   );
 }
 
-/** A miniature of the palette: background, text, border, accent. */
 function Swatch({ tokens }: { readonly tokens: Record<string, string> | undefined }): ReactNode {
   const style = tokens
     ? {

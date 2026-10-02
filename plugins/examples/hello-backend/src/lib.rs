@@ -1,29 +1,7 @@
-//! The smallest legal backend plugin, and the host's fixture.
-//!
-//! It exists to answer one question with a build rather than an opinion: *does a plugin
-//! written against `ddd-plugin-sdk` compile to `wasm32-unknown-unknown` and load
-//! in the server's Extism host?* `crates/server/tests/pluginhost_smoke.rs` builds this
-//! crate, instantiates it with the real host-function set, and calls every export;
-//! `crates/server/tests/pluginhost_runtime.rs` loads it in the **real** host and drives the
-//! limits, the breaker and the capability gates through it.
-//!
-//! It is also the shortest thing to read when you are about to write a real one — up to
-//! `dispatch`, which is a test harness rather than an example: everything after `"runs"`
-//! exists so the host's tests can reach a code path they otherwise could not, and the
-//! comment on each says which one.
-
 use ddd_plugin_sdk as ddd;
 
-// Required of every backend half. The host refuses a module without it.
 ddd::abi_version!();
 
-/// What `ddd_init` was told, remembered **per instance** in a static.
-///
-/// The realistic shape of the pattern HOST-ABI.md §4.1 exists for: a plugin caches the approved
-/// capability set once and degrades deliberately, rather than discovering denials per call. It is
-/// also what makes "`ddd_init` ran on this instance" observable to a host test — the host used to
-/// skip it on the instance activation warmed, so the first call of every plugin saw this as
-/// `None` and a real plugin silently ran with its defaults.
 static INITIALISED: std::sync::Mutex<Option<ddd::abi::Capabilities>> = std::sync::Mutex::new(None);
 
 ddd::init!(init);
@@ -41,8 +19,6 @@ fn init(payload: ddd::InitPayload) -> ddd::Result<()> {
 
 ddd::cron!(tick);
 fn tick(schedule: ddd::abi::cron::CronPayload) -> ddd::Result<()> {
-    // KV needs no capability, so this works in a plugin with none at all — the
-    // cron-and-KV plugin SPEC §6.3 names as the archetype.
     let runs: u64 = ddd::kv::get::<u64>("runs")?.unwrap_or(0) + 1;
     ddd::kv::set("runs", &runs)?;
     ddd::log::info(&format!(
@@ -55,15 +31,9 @@ fn tick(schedule: ddd::abi::cron::CronPayload) -> ddd::Result<()> {
 ddd::calls!(dispatch);
 fn dispatch(call: ddd::abi::call::CallPayload) -> ddd::Result<serde_json::Value> {
     match call.function.as_str() {
-        // The smoke test asserts on this: it proves input reaches the plugin and a value
-        // comes back through the envelope.
         "echo" => Ok(call.payload),
         "runs" => Ok(serde_json::json!(ddd::kv::get::<u64>("runs")?.unwrap_or(0))),
 
-        // What `ddd_init` left behind on *this* instance. The host test for "the first call runs
-        // on an initialised instance" reads this; a plugin that got no `ddd_init` reports
-        // `initialised: false` and an empty grant, which is exactly the silent degradation the
-        // promise exists to prevent.
         "caps" => {
             let recorded = INITIALISED.lock().ok().and_then(|slot| slot.clone());
             Ok(serde_json::json!({
@@ -79,11 +49,6 @@ fn dispatch(call: ddd::abi::call::CallPayload) -> ddd::Result<serde_json::Value>
             }))
         }
 
-        // ---- from here on: paths the host's own tests need to reach ----
-
-        // What does a capability the plugin does not have actually *return*? SPEC §6.2
-        // says a refusal, never a trap, and this reports the code so a test can assert it
-        // rather than inferring it from a crash.
         "probe" => {
             let target = call.payload.get("host_fn").and_then(|v| v.as_str());
             let code = match target {
@@ -115,8 +80,6 @@ fn dispatch(call: ddd::abi::call::CallPayload) -> ddd::Result<serde_json::Value>
             Ok(serde_json::json!(code))
         }
 
-        // The write paths, so the host's document host functions are exercised by a real
-        // plugin rather than by a unit test calling them directly.
         "create" => {
             let text = call
                 .payload
@@ -157,8 +120,6 @@ fn dispatch(call: ddd::abi::call::CallPayload) -> ddd::Result<serde_json::Value>
             }))
         }
 
-        // Outbound HTTP, so the host's allowlist, IP policy, pinning, redirect re-check and
-        // response cap can be driven from the outside rather than asserted about.
         "fetch" => {
             let url = require_str(&call.payload, "url")?;
             let mut headers = ddd::abi::JsonMap::new();
@@ -173,13 +134,10 @@ fn dispatch(call: ddd::abi::call::CallPayload) -> ddd::Result<serde_json::Value>
                 "headers": response.0.headers,
                 "body_bytes": response.0.body_bytes,
                 "final_url": response.0.final_url,
-                // A test asserting on the *stripped* headers needs the names, and one
-                // asserting on the body needs the text.
                 "body": response.text().unwrap_or_default(),
             }))
         }
 
-        // `call_plugin`'s three refusals need a plugin that makes the call.
         "call" => {
             let plugin = require_str(&call.payload, "plugin")?;
             let function = require_str(&call.payload, "function")?;
@@ -195,8 +153,6 @@ fn dispatch(call: ddd::abi::call::CallPayload) -> ddd::Result<serde_json::Value>
             Ok(value)
         }
 
-        // The log-line cap: 150 lines against a cap of 100, so a test can see that the
-        // extra ones are dropped and the call still succeeds.
         "log_flood" => {
             for line in 0..150u32 {
                 ddd::log::info(&format!("flood {line}"));
@@ -204,14 +160,8 @@ fn dispatch(call: ddd::abi::call::CallPayload) -> ddd::Result<serde_json::Value>
             Ok(serde_json::json!("logged"))
         }
 
-        // A trap. `panic = "abort"` in this workspace's release profile turns it into an
-        // `unreachable`, which is what the host must count on the breaker and what must
-        // poison the instance rather than being reused.
         "trap" => panic!("hello-backend was asked to trap"),
 
-        // A Wasm loop that never returns to the host — the only case the host's own
-        // deadline logic cannot see, and therefore the one that proves the epoch
-        // interruption works. `black_box` keeps the optimiser from removing it.
         "spin" => {
             let mut spun = 0u64;
             loop {
@@ -219,15 +169,6 @@ fn dispatch(call: ddd::abi::call::CallPayload) -> ddd::Result<serde_json::Value>
             }
         }
 
-        // Bounded work with many Wasm instruction boundaries in it, for the host test that
-        // a *sibling* call timing out must not trap this one.
-        //
-        // Extism cancellation is engine-wide (`engine.increment_epoch()` trips every store on
-        // it), so while all of a plugin's instances shared one engine, one call hitting its
-        // deadline trapped every other call of the same plugin at its next instruction — mid
-        // write, misreported as a trap rather than a timeout, and counted on the breaker. A
-        // test for that needs a call that is *still running* when the sibling is cancelled and
-        // that finishes cleanly if nothing interferes; `steps` is how long it runs.
         "busy" => {
             let steps = call
                 .payload
@@ -236,8 +177,6 @@ fn dispatch(call: ddd::abi::call::CallPayload) -> ddd::Result<serde_json::Value>
                 .unwrap_or(200);
             let mut spun = 0u64;
             for step in 0..steps {
-                // A host call per step, so the loop is interruptible at many points and its
-                // duration is dominated by real work rather than by the optimiser.
                 let _: Option<u64> = ddd::kv::get("runs")?;
                 for _ in 0..50_000u32 {
                     spun = std::hint::black_box(spun.wrapping_add(step));
@@ -253,8 +192,6 @@ fn dispatch(call: ddd::abi::call::CallPayload) -> ddd::Result<serde_json::Value>
     }
 }
 
-/// The error code of a call, or `"ok"` — so a test can assert on a refusal instead of on a
-/// message.
 fn code_of<T>(result: ddd::Result<T>) -> &'static str {
     match result {
         Ok(_) => "ok",
@@ -279,16 +216,12 @@ ddd::http_routes!(route);
 fn route(
     request: ddd::abi::http::HttpRouteRequest,
 ) -> ddd::Result<ddd::abi::http::HttpRouteResponse> {
-    // `/refuse` answers with a refusal rather than a status, so the host's route dispatcher
-    // can be checked on the path where a plugin's own error code becomes the HTTP status.
     if request.path == "/refuse" {
         return Err(ddd::HostError::new(
             ddd::ErrorCode::NotFound,
             "hello-backend has nothing at /refuse",
         ));
     }
-    // A response a plugin is not allowed to send: `set-cookie` must be stripped on the way
-    // out, or a plugin could mint a session for this origin.
     if request.path == "/cookie" {
         let mut headers = ddd::abi::JsonMap::new();
         headers.insert(
@@ -312,8 +245,6 @@ fn route(
             "path": request.path,
             "public": request.public,
             "user": request.user.map(|user| user.id),
-            // The host strips `cookie` and `authorization` on the way in; echoing the header
-            // names back is how a test sees that they are gone.
             "headers": request.headers.keys().cloned().collect::<Vec<_>>(),
         }),
     ))
@@ -321,7 +252,6 @@ fn route(
 
 ddd::hook_document_changed!(on_changed);
 fn on_changed(event: ddd::abi::hooks::DocumentEvent) -> ddd::Result<()> {
-    // `origin` is never this plugin — the host does not deliver a plugin its own changes.
     ddd::log::debug(&format!(
         "document {} changed at seq {} ({:?})",
         event.id, event.seq, event.origin

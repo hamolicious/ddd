@@ -1,35 +1,3 @@
-//! `/api/uploads` — chunked, resumable uploads (SPEC §3.6).
-//!
-//! The one-request upload (`POST /api/attachments`) starts again from nothing when
-//! the connection drops. This one sends a file in chunks, each its own request, so
-//! an interrupted upload carries on from the last chunk the server kept — after a
-//! reconnect, a reload, or a pause.
-//!
-//! | Method | Path | Behaviour |
-//! |---|---|---|
-//! | POST | `/api/uploads` | `{name, size, wrapper?}` → a session: `{id, size, offset, chunk_size}` |
-//! | GET | `/api/uploads/:id` | the session, so a client can resume from `offset` |
-//! | PATCH | `/api/uploads/:id?offset=n` | the next chunk, raw bytes; `offset` must be where the server is (else 409) |
-//! | POST | `/api/uploads/:id/complete` | once `offset == size`: the attachment, answered as `POST /api/attachments` does |
-//! | DELETE | `/api/uploads/:id` | cancel; the chunks go |
-//!
-//! **Where the bytes go.** Straight into the attachments GridFS bucket, as chunks
-//! of the file the upload will become: a chunk of the request is cut into GridFS
-//! chunks of [`GRIDFS_CHUNK_BYTES`], which is why every chunk but the last must be
-//! a whole number of them ([`CHUNK_BYTES`] is). Completing writes the GridFS file
-//! record, so the bytes are never copied. A chunk sent twice replaces its own
-//! GridFS chunks; completing checks every one is there exactly once before the
-//! file exists, and sends the client back to the first missing byte if not.
-//!
-//! The rules of `/api/attachments` hold: `MAX_ATTACHMENT_BYTES` (checked against
-//! the declared size before a byte is sent, `0` is no cap), the MIME type sniffed
-//! from the bytes, the SHA-256 computed by the server.
-//!
-//! A session is its user's only, and is swept with its chunks
-//! [`SESSION_IDLE`] after it was last written to ([`sweep_expired`], from the
-//! maintenance loop). A completed one stays until then too, so a client whose
-//! `complete` answer was lost gets the same answer again.
-
 use std::time::Duration;
 
 use axum::body::Bytes;
@@ -56,13 +24,10 @@ use crate::routes::attachments::{
 use crate::state::AppState;
 use crate::telemetry::names;
 
-/// The largest chunk a `PATCH` may carry: 16 GridFS chunks, just under 4 MiB.
 pub const CHUNK_BYTES: u64 = 16 * GRIDFS_CHUNK_BYTES as u64;
 
-/// How long a session lives after it was last written to.
 pub const SESSION_IDLE: Duration = Duration::from_secs(24 * 60 * 60);
 
-/// Bytes kept for MIME sniffing (the same window `/api/attachments` uses).
 const SNIFF_BYTES: usize = 512;
 
 pub fn router() -> Router<AppState> {
@@ -70,21 +35,13 @@ pub fn router() -> Router<AppState> {
         .route("/", post(create))
         .route("/{id}", get(status).patch(append).delete(cancel))
         .route("/{id}/complete", post(complete))
-        // A chunk is buffered whole (it is at most `CHUNK_BYTES`); anything larger
-        // is refused before it is read.
         .layer(DefaultBodyLimit::max(CHUNK_BYTES as usize))
 }
-
-// ---------------------------------------------------------------------------
-// Shapes
-// ---------------------------------------------------------------------------
 
 #[derive(Debug, Deserialize)]
 pub struct CreateUpload {
     pub name: String,
     pub size: u64,
-    /// Create a wrapper document on completion, as `?wrapper=true` does on
-    /// `POST /api/attachments`.
     #[serde(default)]
     pub wrapper: bool,
 }
@@ -94,11 +51,8 @@ pub struct UploadView {
     pub id: Id,
     pub name: String,
     pub size: u64,
-    /// Bytes the server has; the next `PATCH` starts here.
     pub offset: u64,
-    /// The largest chunk to send. Every chunk but the last must be exactly this.
     pub chunk_size: u64,
-    /// Set once completed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub attachment_id: Option<Id>,
 }
@@ -121,11 +75,6 @@ pub struct AppendParams {
     pub offset: u64,
 }
 
-// ---------------------------------------------------------------------------
-// Handlers
-// ---------------------------------------------------------------------------
-
-/// `POST /api/uploads` — open a session.
 pub async fn create(
     State(state): State<AppState>,
     user: AuthUser,
@@ -162,7 +111,6 @@ pub async fn create(
     Ok((StatusCode::CREATED, Json(UploadView::from(&session))).into_response())
 }
 
-/// `GET /api/uploads/:id` — where the upload is.
 pub async fn status(
     State(state): State<AppState>,
     user: AuthUser,
@@ -172,7 +120,6 @@ pub async fn status(
     Ok(Json(UploadView::from(&session)))
 }
 
-/// `PATCH /api/uploads/:id?offset=n` — the next chunk.
 pub async fn append(
     State(state): State<AppState>,
     user: AuthUser,
@@ -218,8 +165,6 @@ pub async fn append(
             session.size
         )));
     }
-    // Every chunk but the last is whole GridFS chunks, so each one starts on a
-    // GridFS chunk boundary and can be cut without reading its neighbours.
     if end < session.size && !len.is_multiple_of(u64::from(GRIDFS_CHUNK_BYTES)) {
         return Err(AppError::bad_request(format!(
             "every chunk but the last must be a multiple of {GRIDFS_CHUNK_BYTES} bytes"
@@ -243,8 +188,6 @@ pub async fn append(
         )
         .await?;
     if moved.matched_count == 0 {
-        // Another request for the same bytes got there first. What it wrote is what
-        // this one wrote; the client asks where the upload is and carries on.
         return Err(AppError::Conflict(format!(
             "upload {id} moved while this chunk was stored; ask where it is and continue"
         )));
@@ -255,7 +198,6 @@ pub async fn append(
     Ok(Json(view))
 }
 
-/// `POST /api/uploads/:id/complete` — make the attachment.
 pub async fn complete(
     State(state): State<AppState>,
     user: AuthUser,
@@ -263,7 +205,6 @@ pub async fn complete(
 ) -> AppResult<Response> {
     let session = load_session(&state, &user, &id).await?;
 
-    // Asked again after an answer that never arrived: the same answer.
     if let Some(attachment_id) = &session.attachment_id {
         let attachment = state
             .collections
@@ -287,8 +228,6 @@ pub async fn complete(
     let sha256 = match verify_chunks(&state, &session).await? {
         Verified::Complete { sha256 } => sha256,
         Verified::MissingFrom(byte) => {
-            // A chunk went missing (a lost race, an interrupted write): rewind to it,
-            // and the client sends the rest again.
             state
                 .collections
                 .uploads()
@@ -303,8 +242,6 @@ pub async fn complete(
         }
     };
 
-    // The GridFS file record makes the chunks a file. Its `_id` is the session's
-    // `gridfs_id`, so a second `complete` racing this one fails here, not later.
     let files = state.collections.raw(GRIDFS_FILES);
     let inserted = files
         .insert_one(doc! {
@@ -350,8 +287,6 @@ pub async fn complete(
     Ok(created(view, document_id))
 }
 
-/// `DELETE /api/uploads/:id` — cancel. The chunks go; a completed upload's
-/// attachment stays (deleting that is `DELETE /api/attachments/:id`).
 pub async fn cancel(
     State(state): State<AppState>,
     user: AuthUser,
@@ -362,9 +297,6 @@ pub async fn cancel(
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
-/// Remove sessions not written to for [`SESSION_IDLE`], and the chunks of any
-/// that never completed. Called from the maintenance loop; a failure is logged,
-/// and the next pass tries again.
 pub async fn sweep_expired(state: &AppState) {
     let result: AppResult<()> = async {
         let mut expired = state
@@ -383,17 +315,12 @@ pub async fn sweep_expired(state: &AppState) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 async fn load_session(state: &AppState, user: &AuthUser, id: &str) -> AppResult<UploadSession> {
     if !is_valid_id(id) {
         return Err(AppError::bad_request(format!(
             "invalid upload id `{id}`: expected a ULID"
         )));
     }
-    // Someone else's session is as absent as a missing one.
     state
         .collections
         .uploads()
@@ -402,7 +329,6 @@ async fn load_session(state: &AppState, user: &AuthUser, id: &str) -> AppResult<
         .ok_or(AppError::NotFound("upload"))
 }
 
-/// Drop a session, and its bytes unless an attachment now owns them.
 async fn remove_session(state: &AppState, session: &UploadSession) -> AppResult<()> {
     if session.attachment_id.is_none() {
         let owned = state
@@ -412,8 +338,6 @@ async fn remove_session(state: &AppState, session: &UploadSession) -> AppResult<
             .await?
             .is_some();
         if !owned {
-            // Not `discard_blob`: a session that never completed has chunks and,
-            // usually, no file record, which the driver's delete reports as an error.
             state
                 .collections
                 .raw(GRIDFS_CHUNKS)
@@ -434,8 +358,6 @@ async fn remove_session(state: &AppState, session: &UploadSession) -> AppResult<
     Ok(())
 }
 
-/// Store `bytes` (starting at `offset`, a GridFS chunk boundary) as GridFS
-/// chunks, replacing any earlier copy of the same ones.
 async fn write_chunks(
     state: &AppState,
     gridfs_id: &Bson,
@@ -466,15 +388,10 @@ async fn write_chunks(
 }
 
 enum Verified {
-    Complete {
-        sha256: String,
-    },
-    /// The first byte not stored.
+    Complete { sha256: String },
     MissingFrom(u64),
 }
 
-/// Walk the chunks in order: each `n` present once, each the right length. Hashes
-/// the bytes on the way, and removes a duplicate a lost race left behind.
 async fn verify_chunks(state: &AppState, session: &UploadSession) -> AppResult<Verified> {
     let chunk = u64::from(GRIDFS_CHUNK_BYTES);
     let expected = session.size.div_ceil(chunk);
@@ -489,7 +406,6 @@ async fn verify_chunks(state: &AppState, session: &UploadSession) -> AppResult<V
     while let Some(row) = cursor.try_next().await? {
         let n = u64::try_from(row.get_i32("n").unwrap_or(-1)).unwrap_or(u64::MAX);
         if n + 1 == next {
-            // The same chunk twice: identical bytes from the same file, so one goes.
             if let Ok(id) = row.get_object_id("_id") {
                 chunks.delete_one(doc! { "_id": id }).await?;
             }

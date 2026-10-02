@@ -1,8 +1,3 @@
-/**
- * Admin → Users: row actions are icon buttons, and a reset link is a real link that
- * opens a "set a new password" form on the sign-in screen.
- */
-
 import { expect, test } from "@playwright/test";
 
 import { ADMIN, signIn } from "./helpers.js";
@@ -10,7 +5,6 @@ import { ADMIN, signIn } from "./helpers.js";
 test("a reset link from Admin → Users sets a new password", async ({ page, browser, request, baseURL }) => {
   await signIn(page, ADMIN);
 
-  // A user to reset, registered with an invite.
   const email = `reset-${Date.now()}@e2e.test`;
   const invite = await page.evaluate(async () => {
     const response = await fetch("/api/admin/invites", {
@@ -32,7 +26,6 @@ test("a reset link from Admin → Users sets a new password", async ({ page, bro
   await expect(page.getByRole("button", { name: `Delete ${email}` })).toBeVisible();
   await expect(page.getByText("Everyone signed in can read")).toHaveCount(0);
 
-  // Both actions ask first; cancelling either changes nothing.
   await reset.click();
   const ask = page.getByRole("dialog", { name: `Make a reset link for ${email}?` });
   await ask.getByRole("button", { name: "Cancel" }).click();
@@ -49,7 +42,6 @@ test("a reset link from Admin → Users sets a new password", async ({ page, bro
   const link = (await page.locator(".admin-secret code").textContent())!.trim();
   expect(link).toMatch(/#\/reset\/[A-Za-z0-9_-]+$/);
 
-  // Someone else's browser, signed out.
   const other = await browser.newContext();
   const visitor = await other.newPage();
   await visitor.goto(link);
@@ -72,7 +64,6 @@ test("the users table lines up, and the admin box is labelled on a phone", async
   await page.goto("/#/admin/users");
   const row = page.locator(".admin-table tbody tr").first();
   await expect(row).toBeVisible();
-  // Every cell in a row starts and ends on the same lines: no cell is taller than its row.
   const heights = await row.evaluate((tr) =>
     [...tr.children].map((cell) => Math.round((cell as HTMLElement).getBoundingClientRect().height)),
   );

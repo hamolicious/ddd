@@ -1,12 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
 
-/**
- * The one end-to-end smoke of SPEC §8: register → create → edit → reload →
- * offline edit → reconnect → converge, driven against the demo page.
- *
- * It needs a running server (`mise run dev`) and browsers
- * (`npx playwright install chromium`); the Vite dev server is started here.
- */
 export default defineConfig({
   testDir: "./demo/e2e",
   fullyParallel: false,

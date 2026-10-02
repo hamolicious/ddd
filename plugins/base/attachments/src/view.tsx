@@ -1,23 +1,3 @@
-/**
- * Showing a file: the attachment renderer this plugin adds to `plugin:markdown`.
- *
- * It finds the file's extension from its metadata, asks the viewers added with
- * `addViewer` who shows that type (the user's pick in Settings → Attachments, else the
- * first in `order`), fetches the bytes once, and hands them over. With no viewer for the
- * type, or no bytes (offline and never fetched), it draws what `markdown` would have:
- * the `fallback`.
- *
- * Bytes are fetched over `kernel.session.fetch` and shown from an object URL, never from
- * the API URL: the Android shell authenticates with a bearer token a `src` cannot carry
- * (SPEC §5.2). One URL per attachment for the life of the page, like `markdown`'s cache,
- * so a re-render never flickers.
- *
- * **A file not uploaded yet** (`attachment://waiting-<token>`, `queue.ts`) is shown from
- * this device — uploading now, or kept until a connection returns: the same viewer, the
- * local bytes, and a line saying which. Without `frame`: downloading or promoting a file the server does not have
- * would only fail. On a device that does not hold it, it is a chip saying so.
- */
-
 import { OFFLINE_COPY_HEADER } from "../../_shared/offline-copy.js";
 import type { Kernel, Registry, SettingsValue } from "@kernel";
 import { useEffect, useState, useSyncExternalStore, type ComponentType, type ReactNode } from "react";
@@ -41,22 +21,14 @@ interface FileBytes {
 }
 
 export interface Viewers {
-  /** Every viewer claiming `extension`, the default first. */
   candidates(extension: string): readonly AttachmentViewer[];
-  /** The one that shows `extension` now, with its owner for error attribution. */
   resolve(extension: string): { readonly viewer: AttachmentViewer; readonly pluginId: string } | undefined;
-  /** Every extension some viewer claims. */
   extensions(): readonly string[];
   subscribe(listener: () => void): () => void;
 }
 
-/** What `createViewers` reads from the viewer registry. */
 export type ViewerSource = Pick<Registry<AttachmentViewer>, "get" | "entries" | "subscribe">;
 
-/**
- * The added viewers, by extension. `host` is already in `order`, so the first viewer
- * claiming an extension is the default for it; nothing is sorted here.
- */
 export function createViewers(
   kernel: Kernel,
   host: ViewerSource,
@@ -72,7 +44,6 @@ export function createViewers(
   try {
     kernel.settings.subscribe(notify);
   } catch {
-    // Choices made elsewhere show after a reload instead.
   }
 
   return {
@@ -98,7 +69,6 @@ export function createAttachmentView(kernel: Kernel, viewers: Viewers): Componen
   const bytes = new Map<string, Promise<FileBytes | null>>();
   const bounded = new WeakMap<ComponentType<AttachmentViewerProps>, ComponentType<AttachmentViewerProps>>();
 
-  /** A failure is not cached: offline now is not offline forever. */
   const cached = <T,>(cache: Map<string, Promise<T | null>>, id: string, load: () => Promise<T>) => {
     const hit = cache.get(id);
     if (hit) return hit;
@@ -139,7 +109,6 @@ export function createAttachmentView(kernel: Kernel, viewers: Viewers): Componen
     version += 1;
   });
 
-  /** One object URL per waiting file for the life of the page, so a re-render never flickers. */
   const urls = new Map<string, string>();
   const urlOf = (entry: WaitingUpload): string => {
     let url = urls.get(entry.token);
@@ -150,7 +119,6 @@ export function createAttachmentView(kernel: Kernel, viewers: Viewers): Componen
     return url;
   };
 
-  /** On its way from this tab, else kept on this device (another tab has it), else not here. */
   const findWaiting = async (token: string): Promise<Found | null> => {
     const now = transfers.get(token);
     if (now) return { entry: now.entry, state: now.state, sent: now.sent };
@@ -169,7 +137,6 @@ export function createAttachmentView(kernel: Kernel, viewers: Viewers): Componen
         });
       };
       look();
-      // It moves from uploading to waiting when the upload finds no connection.
       const off = onQueueChange(look);
       return () => {
         live = false;
@@ -185,7 +152,6 @@ export function createAttachmentView(kernel: Kernel, viewers: Viewers): Componen
       );
     }
     if (!found) {
-      // Pasted on another device, which has not uploaded it yet.
       const name = alt?.replace(/^Uploading (.*?)(?: when back online)?…$/, "$1") || "A file";
       return (
         <span className="attachments:inline-flex attachments:items-center attachments:gap-1 attachments:rounded-lg attachments:border attachments:border-dashed attachments:border-border attachments:bg-bg-subtle attachments:px-2 attachments:py-1 attachments:text-text-muted">
@@ -295,7 +261,6 @@ interface Found {
   readonly sent: number;
 }
 
-/** Under a file that is not on the server yet: how far it has got. */
 function noteFor({ entry, state, sent }: Found): string {
   const share = entry.blob.size > 0 ? Math.floor((sent / entry.blob.size) * 100) : 0;
   switch (state) {

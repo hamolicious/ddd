@@ -1,13 +1,3 @@
-/**
- * Theme application, against a stand-in for `kernel.ui.tokens` that layers exactly
- * the way `kernel/src/runtime/theme.ts` does.
- *
- * The two properties worth a test are the two that break silently in a browser: a
- * theme must override *only* the tokens it names (so no theme can make text
- * invisible), and switching themes must remove the previous layer (so the old
- * palette does not show through wherever the new one is silent).
- */
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -29,7 +19,6 @@ interface Layer {
   readonly tokens: Partial<ThemeTokens>;
 }
 
-/** The same layer semantics as the kernel's `ThemeController`, minus the DOM. */
 function stubTokens(): ThemeTokensApi & { layers: readonly Layer[]; applyCalls: number } {
   const layers: Layer[] = [];
   const state = {
@@ -113,7 +102,6 @@ describe("ThemeApplier", () => {
     const applied = resolve(tokens.layers, "light");
     expect(applied["--ddd-bg"]).toBe("#fdfaf5");
     expect(applied["--ddd-accent"]).toBe("#9a5b16");
-    // Everything the theme is silent about stays the kernel's legible default.
     for (const name of THEME_TOKEN_NAMES) {
       if (name === "--ddd-bg" || name === "--ddd-accent") continue;
       expect(applied[name]).toBe(DEFAULT_LIGHT_TOKENS[name]);
@@ -142,8 +130,6 @@ describe("ThemeApplier", () => {
     expect(tokens.layers).toHaveLength(1);
     const applied = resolve(tokens.layers, "light");
     expect(applied["--ddd-bg"]).toBe("#f7f4ee");
-    // `warm` also set the accent; `paper` does not, so the *kernel* default must be
-    // back — not the accent of the theme the user just switched away from.
     expect(applied["--ddd-accent"]).toBe(DEFAULT_LIGHT_TOKENS["--ddd-accent"]);
   });
 

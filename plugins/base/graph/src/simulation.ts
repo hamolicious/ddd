@@ -1,19 +1,3 @@
-/**
- * A force-directed layout: the physics that makes the graph settle, and wobble when a
- * node is dragged. The same model as d3-force, written out so this plugin bundles
- * nothing:
- *
- * - **repel** — every node pushes every other away (Barnes–Hut over a quadtree, so a
- *   few thousand notes stay cheap);
- * - **link** — a spring on each link toward `linkDistance`, weaker on busy nodes so a hub
- *   does not drag its whole neighbourhood into a knot;
- * - **center** — a pull toward the origin, which keeps separate islands on screen.
- *
- * `alpha` is the temperature: every force is scaled by it and it decays toward
- * `alphaTarget`, so the layout cools and stops. Any change heats it back up. Pure apart
- * from `Math.random` for the jitter that separates coincident nodes.
- */
-
 import type { DocumentId } from "@kernel";
 
 export interface SimNode {
@@ -22,7 +6,6 @@ export interface SimNode {
   y: number;
   vx: number;
   vy: number;
-  /** Pinned (while dragged): the node is held here and its velocity ignored. */
   fx: number | undefined;
   fy: number | undefined;
   degree: number;
@@ -34,13 +17,9 @@ export interface SimLink {
 }
 
 export interface Forces {
-  /** 0–1: how hard every node is pulled toward the middle. */
   readonly center: number;
-  /** 0–20: how hard nodes push one another away. */
   readonly repel: number;
-  /** 0–1: how stiff the links are. */
   readonly link: number;
-  /** 30–500: the length a link settles at. */
   readonly linkDistance: number;
 }
 
@@ -50,7 +29,6 @@ const ALPHA_MIN = 0.001;
 const ALPHA_DECAY = 1 - Math.pow(ALPHA_MIN, 1 / 300);
 const VELOCITY_DECAY = 0.4;
 const THETA2 = 0.81;
-/** Below this, repulsion is clamped: two nodes on top of each other must not fling apart. */
 const DISTANCE_MIN2 = 1;
 
 export class Simulation {
@@ -69,16 +47,10 @@ export class Simulation {
     return this.#byId.get(id);
   }
 
-  /** Still moving enough to be worth another frame. */
   get running(): boolean {
     return this.alpha >= ALPHA_MIN || this.alphaTarget > 0;
   }
 
-  /**
-   * Replace the graph, keeping every node that stays where it is. A new node starts next
-   * to a neighbour that is already placed, so a link typed into a note grows a node out
-   * of it rather than out of the middle of the screen.
-   */
   setGraph(
     nodes: ReadonlyArray<{ readonly id: DocumentId; readonly degree: number }>,
     links: ReadonlyArray<{ readonly source: DocumentId; readonly target: DocumentId }>,
@@ -101,7 +73,6 @@ export class Simulation {
       if (source && target && source !== target) this.links.push({ source, target });
     }
 
-    // Place the new nodes: beside a placed neighbour when there is one, else on a spiral.
     const neighbours = new Map<SimNode, SimNode[]>();
     for (const { source, target } of this.links) {
       (neighbours.get(source) ?? neighbours.set(source, []).get(source)!).push(target);
@@ -116,7 +87,6 @@ export class Simulation {
         node.x = anchor.x + Math.cos(angle) * distance;
         node.y = anchor.y + Math.sin(angle) * distance;
       } else {
-        // Phyllotaxis: evenly spread, no two on top of each other.
         const radius = 10 * Math.sqrt(0.5 + spiral);
         const angle = spiral * Math.PI * (3 - Math.sqrt(5));
         node.x = radius * Math.cos(angle);
@@ -126,7 +96,6 @@ export class Simulation {
     }
   }
 
-  /** Heat the layout up to at least `alpha`. */
   reheat(alpha = 0.3): void {
     this.alpha = Math.max(this.alpha, alpha);
   }
@@ -160,12 +129,10 @@ export class Simulation {
       let dx = target.x + target.vx - source.x - source.vx || jiggle();
       let dy = target.y + target.vy - source.y - source.vy || jiggle();
       const length = Math.sqrt(dx * dx + dy * dy);
-      // d3's default: a link is as stiff as its less-connected end allows.
       const stiffness = strength / Math.max(1, Math.min(source.degree, target.degree));
       const pull = ((length - distance) / length) * alpha * stiffness;
       dx *= pull;
       dy *= pull;
-      // The busier end moves less.
       const bias = source.degree / (source.degree + target.degree || 1);
       target.vx -= dx * bias;
       target.vy -= dy * bias;
@@ -195,19 +162,13 @@ function jiggle(): number {
   return (Math.random() - 0.5) * 1e-6;
 }
 
-// ---------------------------------------------------------------------------
-// Barnes–Hut
-// ---------------------------------------------------------------------------
-
 interface Quad {
   x0: number;
   y0: number;
   size: number;
-  /** Sum of the charges below, and their centre. */
   charge: number;
   cx: number;
   cy: number;
-  /** A leaf holds nodes (more than one only when they coincide). */
   nodes: SimNode[] | undefined;
   children: (Quad | undefined)[] | undefined;
 }
@@ -237,7 +198,6 @@ function insert(quad: Quad, node: SimNode, depth: number): void {
       return;
     }
     const first = quad.nodes[0]!;
-    // Coincident, or deep enough that splitting further is pointless: share the leaf.
     if ((first.x === node.x && first.y === node.y) || depth > 32) {
       quad.nodes.push(node);
       return;
@@ -301,7 +261,6 @@ function applyRepulsion(quad: Quad, node: SimNode, strength: number): void {
   const dy = quad.cy - node.y;
   let d2 = dx * dx + dy * dy;
 
-  // Far enough away: treat the whole quad as one charge at its centre.
   if (quad.children && (quad.size * quad.size) / THETA2 < d2) {
     if (d2 < DISTANCE_MIN2) d2 = Math.sqrt(DISTANCE_MIN2 * d2);
     node.vx += (dx * strength * quad.charge) / d2;

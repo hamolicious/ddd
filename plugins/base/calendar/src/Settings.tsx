@@ -1,5 +1,3 @@
-/** The calendar's settings: which field places a note on a day, and which ends it. */
-
 import type { ReactElement } from "react";
 
 import { FmKeySelect } from "plugin:search";

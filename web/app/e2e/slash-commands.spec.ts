@@ -1,8 +1,3 @@
-/**
- * The `/` menu (`slash-commands`) over the CodeMirror editor's `text.surface`, and
- * `attachments`' `/attach` opening the real file picker.
- */
-
 import { expect, test } from "@playwright/test";
 
 import { ADMIN, createDocument, openDocument, rawText, signIn } from "./helpers.js";
@@ -18,14 +13,12 @@ test("/attach opens the file picker and uploads where it was typed", async ({ pa
 
   const menu = page.getByRole("listbox", { name: "Commands" });
 
-  // Inside a word it stays shut.
   await page.locator(".cm-line", { hasText: "before" }).click();
   await page.keyboard.press("End");
   await page.keyboard.type(" a/b");
   await expect(menu).toHaveCount(0);
   for (let i = 0; i < 4; i += 1) await page.keyboard.press("Backspace");
 
-  // At the start of a word it opens, narrows, and Escape shuts it.
   await page.keyboard.type(" /att");
   await expect(menu.getByRole("option", { name: /Attach file/ })).toBeVisible();
   await page.keyboard.press("Escape");

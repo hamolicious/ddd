@@ -1,9 +1,3 @@
-/**
- * Route matching is the router's whole contract, and every rule in it is a decision
- * somebody will otherwise re-litigate: what counts as the same path, which pattern
- * wins, and what happens to a URL nobody claimed.
- */
-
 import { describe, expect, it } from "vitest";
 
 import type { Route } from "./api.js";
@@ -51,8 +45,6 @@ describe("fullPath", () => {
   });
 
   it("distinguishes two addresses that match the same route", () => {
-    // What the change notification is deduped on: `/folder?path=a` and
-    // `/folder?path=b` are one route and two different screens.
     expect(fullPath("#/folder?path=a")).not.toBe(fullPath("#/folder?path=b"));
     expect(matchRoutes([{ path: "/folder", view: "folders" }], "#/folder?path=a")?.view).toBe(
       "folders",
@@ -121,8 +113,6 @@ describe("matchRoutes", () => {
   });
 
   it("breaks a tie between equally specific patterns by list order, not `order`", () => {
-    // `routes` arrives already sorted by the router's registry (`order`, then insertion);
-    // `matchRoutes` itself keeps whatever order it is handed.
     const tie: readonly Route[] = [
       route("/x/:a", "first", 200),
       route("/x/:a", "second", 10),

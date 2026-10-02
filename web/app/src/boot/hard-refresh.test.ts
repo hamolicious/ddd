@@ -101,7 +101,6 @@ describe("hard refresh", () => {
       warn: t.warn,
     };
     await hardRefresh(deps);
-    // Every cache was attempted, the failed one included.
     expect(t.caches.delete).toHaveBeenCalledTimes(t.names.length);
     expect(forget).toHaveBeenCalledOnce();
     expect(t.warn).toHaveBeenCalledTimes(3);

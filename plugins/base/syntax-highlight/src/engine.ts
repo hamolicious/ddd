@@ -1,26 +1,9 @@
-/**
- * tree-sitter, loaded lazily: nothing is fetched until a code block in an installed
- * language is on screen, and then only the runtime and that one grammar.
- *
- * Everything served comes from this plugin's own package, next to the module
- * (`build.mjs`), so it is same-origin (the CSP allows nothing else) and the service
- * worker keeps it after the first fetch: an installed language highlights offline.
- *
- * The runtime itself is a separate chunk, imported on first use, so a user who never
- * installs a language never downloads it.
- *
- * Parsing is synchronous and on the main thread. Code blocks are small, a parse is
- * cheap, and results are cached by text, so a re-render of an unchanged block costs a
- * map lookup.
- */
-
 import type { Language, Parser, Query } from "web-tree-sitter";
 
 import type { SyntaxLanguage } from "./api.js";
 
 import { captureClass } from "./captures.js";
 
-/** A run of text and the class it is coloured with. Sorted, never overlapping. */
 export interface Span {
   readonly from: number;
   readonly to: number;
@@ -29,28 +12,17 @@ export interface Span {
 
 export type LoadState = "loading" | "ready" | "failed";
 
-/** Longer than this and a block stays plain: highlighting is a nicety, not a cost. */
 export const MAX_HIGHLIGHT_LENGTH = 100_000;
 const CACHE_ENTRIES = 256;
 
-/** The directory this module was served from; `new URL` on a variable so Vite leaves it alone. */
 const served = import.meta.url;
 
 export interface Engine {
-  /** Where `id` is: absent (never asked for), loading, ready or failed. */
   state(id: string): LoadState | undefined;
-  /** Fetch the runtime (once) and the grammar. Resolves when it can highlight. */
   load(language: SyntaxLanguage): Promise<void>;
-  /** Spans for `code`, or `undefined` while the language is not ready. */
   highlight(code: string, id: string): readonly Span[] | undefined;
-  /**
-   * Load a grammar and compile its query without keeping either: what an upload is
-   * checked with before it is saved. Rejects with tree-sitter's own message.
-   */
   check(grammar: Uint8Array, highlights: string): Promise<void>;
-  /** Drop a loaded language, so the next `load` fetches it again (it was replaced). */
   forget(id: string): void;
-  /** Fires whenever a language finishes loading, or fails to. */
   subscribe(listener: () => void): () => void;
 }
 
@@ -60,7 +32,6 @@ interface Loaded {
 }
 
 export interface EngineOptions {
-  /** What relative URLs resolve against: the served module, unless a test says otherwise. */
   readonly base?: string;
   readonly fetchBytes?: (url: string) => Promise<Uint8Array>;
 }
@@ -82,7 +53,6 @@ export function createEngine({ base = served, fetchBytes = defaultFetch }: Engin
       await treeSitter.Parser.init({ locateFile: () => new URL("tree-sitter.wasm", base).href });
       return { parser: new treeSitter.Parser(), Language: treeSitter.Language, Query: treeSitter.Query };
     });
-    // A failed runtime fetch (offline, first time) should be retried by the next load.
     runtime.catch(() => {
       runtime = undefined;
     });
@@ -187,15 +157,9 @@ export interface Capture {
   readonly name: string;
   readonly from: number;
   readonly to: number;
-  /** Index of the query pattern that matched; the lower one wins a tie. */
   readonly pattern: number;
 }
 
-/**
- * Flatten nested captures into runs. The innermost capture colours a character (an
- * escape inside a string), and of two captures on the same node the earlier pattern
- * wins — tree-sitter's own highlighter's rule, which the queries are written for.
- */
 export function spansOf(length: number, captures: readonly Capture[]): Span[] {
   const classes: string[] = [];
   const indexOf = new Map<string, number>();
@@ -224,7 +188,6 @@ export function spansOf(length: number, captures: readonly Capture[]): Span[] {
   return spans;
 }
 
-/** Relative to the served module; absolute URLs (and `attachment://`) as they are. */
 function resolveUrl(url: string, base: string): string {
   return /^[a-z][a-z0-9+.-]*:/i.test(url) ? url : new URL(url, base).href;
 }

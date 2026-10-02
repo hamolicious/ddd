@@ -1,12 +1,3 @@
-/**
- * The service-worker build. Runs **last**, after the app and runtime bundles exist,
- * because its precache list is read from what they emitted.
- *
- * Workbox is bundled into the worker (a service worker cannot use an import map), and
- * the output is a single `dist/sw.js` at the scope root — a worker served from
- * `/assets/` could only control `/assets/`.
- */
-
 import { readdirSync, statSync } from "node:fs";
 import { join, posix, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,14 +7,8 @@ import { defineConfig, type Plugin } from "vite";
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 const outDir = here("./app/dist");
 
-/** Extensions worth precaching: the app shell, its assets, the runtime layer. */
 const PRECACHE = new Set([".html", ".js", ".css", ".svg", ".webmanifest", ".woff2"]);
 
-/**
- * Files that must never be precached: the worker itself, build metadata, and
- * **`index.html`** — the server rewrites it per request (import map + CSP nonce), so the
- * shell is a network-first runtime cache instead. See the navigation route in `sw.ts`.
- */
 const EXCLUDE = new Set(["sw.js", "sw.js.map", "runtime-manifest.json", "index.html"]);
 
 function collect(dir: string, root = dir): string[] {
@@ -44,11 +29,6 @@ function collect(dir: string, root = dir): string[] {
   return out;
 }
 
-/**
- * `virtual:ddd-precache`. Every URL is either content-hashed or `index.html`, so only
- * the latter needs a revision — and it gets the build's own timestamp, which is what
- * makes a new deploy produce a new worker.
- */
 const precachePlugin: Plugin = {
   name: "ddd-precache",
   resolveId(id) {

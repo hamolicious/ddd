@@ -1,11 +1,3 @@
-/**
- * The message protocol between {@link WorkerSearchIndex} and the search worker.
- *
- * Internal to `query/` — it is not part of the kernel's public surface and may
- * change whenever both halves change together. Everything crossing the port is
- * structured-cloneable: projection rows, ids, plain option objects.
- */
-
 import type { ProjectionRow } from "../protocol.js";
 import type { PlanPage, QueryPlan } from "./plan.js";
 import type { SearchStats } from "./search.js";
@@ -17,12 +9,6 @@ export type SearchRequest =
   | { readonly op: "run"; readonly plan: QueryPlan }
   | { readonly op: "persist"; readonly safeSeq: number }
   | { readonly op: "stats" }
-  /**
-   * A rebuild streams: `first` starts a fresh index, each message carries a page
-   * of rows, and `last` installs it. An `AsyncIterable` cannot be posted, and
-   * buffering 5 000 rows of up to 1 MiB into one message to avoid the chunking
-   * would defeat the point of doing this off the main thread (SPEC §9 M2).
-   */
   | {
       readonly op: "rebuild";
       readonly rows: readonly ProjectionRow[];

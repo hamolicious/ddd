@@ -1,15 +1,3 @@
-/**
- * Settings → Database health: orphan files, duplicate files and duplicate notes.
- *
- * **Everything is flagged, nothing is deleted automatically** (SPEC §3.6). Each check
- * reads *materialized text*, so references held in plugins' `%%%` sections count, and a
- * trashed note still counts as using its files: restoring it must not find them gone.
- * Each duplicate copy names the notes that use it. A bulk removal keeps one copy of every
- * group by a chosen rule (`cleanup.ts`) and previews, row by row, what it takes; only
- * "unused" cannot break a note. A note goes to the Trash; a file is deleted for good,
- * after a confirmation.
- */
-
 import { useState, type ReactElement, type ReactNode } from "react";
 
 import type { ConfirmRequest } from "plugin:context-menu";
@@ -125,7 +113,6 @@ function Orphans({
               {rows.map(({ attachment }) => (
                 <tr key={attachment.id}>
                   <th scope="row">
-                    {/* The viewer's file page: look before deleting. */}
                     <a
                       className={LINK}
                       href={`#/file/${encodeURIComponent(attachment.id)}`}
@@ -183,7 +170,6 @@ function Duplicates({ client, confirm }: { readonly client: HealthClient; readon
   const notesToGo = allToRemove(noteGroups, (group) => group.documents, strategy);
   const total = filesToGo.length + notesToGo.length;
 
-  /** Files are deleted, notes go to the Trash; one at a time, after one confirmation. */
   const remove = (key: string, anchor: HTMLElement, fileCopies: readonly Copy[], noteCopies: readonly Copy[]): void => {
     const count = fileCopies.length + noteCopies.length;
     const inUse = [...fileCopies, ...noteCopies].filter((copy) => copy.references > 0).length;
@@ -381,7 +367,6 @@ const fileCopy = (file: { readonly attachment: { readonly id: string }; readonly
 
 const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
-/** One duplicate group: a heading row naming what is duplicated, then its copies. */
 function Group({
   label,
   detail,
@@ -392,7 +377,6 @@ function Group({
 }: {
   readonly label: string;
   readonly detail: string;
-  /** How many copies the chosen strategy removes from this group. */
   readonly removing: number;
   readonly busy: boolean;
   readonly onRemove: (anchor: HTMLElement) => void;
@@ -420,7 +404,6 @@ function Group({
   );
 }
 
-/** Which notes use a copy, as links, and whether the chosen strategy removes it. */
 function UsedBy({
   count,
   notes,

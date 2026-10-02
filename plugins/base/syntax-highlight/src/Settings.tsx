@@ -1,11 +1,3 @@
-/**
- * Settings → Code languages: every language on offer, installed or not, with its
- * download size. Installing one here is the same as the button on a code block.
- *
- * Below the list, a form for bringing your own: any tree-sitter grammar compiled to
- * `.wasm`, and a `highlights.scm` query for it.
- */
-
 import { useEffect, useId, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 
 import { aliasesFrom } from "./custom.js";
@@ -13,7 +5,6 @@ import type { SyntaxApi } from "./api.js";
 
 const base = import.meta.url;
 
-/** `index.json`'s sizes for the built-in catalog; contributed languages carry their own. */
 function useCatalogSizes(): Readonly<Record<string, number>> {
   const [sizes, setSizes] = useState<Readonly<Record<string, number>>>({});
   useEffect(() => {
@@ -119,7 +110,6 @@ export function SyntaxSettings({ api }: { readonly api: SyntaxApi }): ReactNode 
   );
 }
 
-/** Upload a grammar of your own. Checked here first; saved only if it loads. */
 function AddLanguage({ api }: { readonly api: SyntaxApi }): ReactNode {
   const id = useId();
   const [name, setName] = useState("");
@@ -128,7 +118,6 @@ function AddLanguage({ api }: { readonly api: SyntaxApi }): ReactNode {
   const [grammar, setGrammar] = useState<File | undefined>(undefined);
   const [highlights, setHighlights] = useState<File | undefined>(undefined);
   const [state, setState] = useState<{ readonly busy?: boolean; readonly problem?: string; readonly done?: string }>({});
-  // The file inputs are reset by remounting them once a language is added.
   const [round, setRound] = useState(0);
 
   const suggestedId = name.trim().toLowerCase().replace(/[^a-z0-9_+#-]+/g, "-").replace(/^[^a-z]+|-+$/g, "");

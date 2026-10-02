@@ -1,28 +1,3 @@
-//! The workspace's query engine on the server (`core::query::Engine`), kept current
-//! from the change feed.
-//!
-//! **The same engine the browser runs**, so a query answers identically online and
-//! offline: filter, full-text ranking, folder relations and sort all happen here,
-//! in memory, never in Mongo. Mongo stays the store; this is an index over it. One
-//! workspace per server (SPEC §8: `replicas: 1`) keeps that index bounded.
-//!
-//! # Staying current: catch up to `safe_seq` before answering
-//!
-//! The engine remembers the feed watermark it has applied. Every query first reads
-//! `rows_since(applied)` — the same gapless read a syncing client does
-//! (`feed.rs`) — and applies it, so a write that returned before the query started
-//! is always in the answer (read-your-writes), with no background task to lag
-//! behind. When nothing changed the read returns before touching Mongo. At boot,
-//! [`QueryIndex::warm`] does the first, full catch-up so the first request does
-//! not pay for it.
-//!
-//! # Answers are ids; rows come from Mongo
-//!
-//! The engine pages ids; [`QueryIndex::rows`] then reads those rows from Mongo in
-//! one `$in`, in the engine's order, so every caller still gets the stored row
-//! (`created_by`, `materialized_version`, …) and `metadata_only` still keeps the
-//! text off the wire.
-
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
@@ -37,7 +12,6 @@ use crate::feed::{ChangeFeed, FEED_BATCH_MAX_ROWS, FeedError, FeedRow};
 
 #[derive(Debug, Error)]
 pub enum QueryIndexError {
-    /// The plan itself is wrong: a 400 / `InvalidArgument`.
     #[error(transparent)]
     Query(#[from] QueryError),
     #[error(transparent)]
@@ -50,8 +24,6 @@ pub struct QueryIndex {
     feed: Arc<ChangeFeed>,
     collections: Collections,
     engine: RwLock<Engine>,
-    /// The feed watermark the engine reflects. Held across a catch-up, so two
-    /// queries never apply the same page twice.
     applied: tokio::sync::Mutex<i64>,
 }
 
@@ -61,7 +33,6 @@ impl std::fmt::Debug for QueryIndex {
     }
 }
 
-/// A page of stored rows, in the engine's order.
 #[derive(Debug)]
 pub struct RowPage {
     pub rows: Vec<DocumentRow>,
@@ -78,8 +49,6 @@ impl QueryIndex {
         })
     }
 
-    /// The first, full catch-up, logged. Errors are logged and left for the first
-    /// query to retry.
     pub async fn warm(&self) {
         let started = std::time::Instant::now();
         match self.catch_up().await {
@@ -97,7 +66,6 @@ impl QueryIndex {
         }
     }
 
-    /// Apply every feed row up to the current `safe_seq`.
     pub async fn catch_up(&self) -> Result<(), FeedError> {
         let mut applied = self.applied.lock().await;
         loop {
@@ -118,18 +86,15 @@ impl QueryIndex {
         }
     }
 
-    /// Read the engine as it stands, without catching up.
     pub fn read<R>(&self, read: impl FnOnce(&Engine) -> R) -> R {
         read(&self.engine.read().expect("query engine poisoned"))
     }
 
-    /// Answer a plan with ids, current to the feed.
     pub async fn run(&self, plan: &Plan) -> Result<Page, QueryIndexError> {
         self.catch_up().await?;
         Ok(self.read(|engine| engine.run(plan).map(|answer| answer.page()))?)
     }
 
-    /// Answer a plan with the stored rows.
     pub async fn rows(
         &self,
         plan: &Plan,
@@ -140,8 +105,6 @@ impl QueryIndex {
         Ok(RowPage { rows, page })
     }
 
-    /// The stored rows for `ids`, in that order. A row purged since the engine
-    /// answered is left out.
     async fn fetch(
         &self,
         ids: &[String],
@@ -166,8 +129,6 @@ impl QueryIndex {
     }
 }
 
-/// One feed row into the engine: a purge takes the document out, anything else
-/// replaces it.
 fn apply(engine: &mut Engine, row: FeedRow) {
     if row.purged {
         engine.remove(&row.id);

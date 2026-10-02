@@ -1,9 +1,3 @@
-/**
- * The server's admin-only health endpoints (`/api/attachments/orphans`,
- * `/api/attachments/duplicates`, `/api/documents/duplicates`) and the two deletions the
- * view offers. All reads; nothing here deletes on its own.
- */
-
 export interface AttachmentView {
   readonly id: string;
   readonly name: string;
@@ -15,46 +9,36 @@ export interface AttachmentView {
   readonly updated_at: string;
 }
 
-/** A note that uses a duplicate copy. */
 export interface NoteRef {
   readonly id: string;
   readonly title: string;
   readonly trashed: boolean;
 }
 
-/** A file no document references. */
 export interface OrphanView {
   readonly attachment: AttachmentView;
   readonly flagged_at: string;
 }
 
-/** Files with the same name and bytes. */
 export interface DuplicateFileGroup {
   readonly name: string;
   readonly sha256: string;
   readonly size: number;
-  /** Oldest first. */
   readonly files: readonly {
     readonly attachment: AttachmentView;
-    /** Documents (trashed ones included) that reference this copy. */
     readonly references: number;
-    /** The first few of them. */
     readonly referenced_by: readonly NoteRef[];
   }[];
 }
 
-/** Live documents with the same title and text. */
 export interface DuplicateDocumentGroup {
   readonly title: string;
   readonly size: number;
-  /** Oldest first. */
   readonly documents: readonly {
     readonly id: string;
     readonly created_at: string;
     readonly updated_at: string;
-    /** Other documents (trashed ones included) that link here with `doc://`. */
     readonly references: number;
-    /** The first few of them. */
     readonly referenced_by: readonly NoteRef[];
   }[];
 }
@@ -64,13 +48,10 @@ export interface HealthClient {
   scanOrphans(): Promise<readonly OrphanView[]>;
   duplicateFiles(): Promise<readonly DuplicateFileGroup[]>;
   duplicateDocuments(): Promise<readonly DuplicateDocumentGroup[]>;
-  /** Permanent. */
   deleteAttachment(id: string): Promise<void>;
-  /** Moves the document to the Trash. */
   trashDocument(id: string): Promise<void>;
 }
 
-/** `fetch` relative to `/api`: `kernel.session.fetch`, which carries either session kind. */
 export type ApiFetch = (path: string, init?: RequestInit) => Promise<Response>;
 
 export function createHealthClient(fetchApi: ApiFetch): HealthClient {
@@ -109,7 +90,6 @@ export function formatWhen(iso: string | null | undefined): string {
   return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
 }
 
-/** `0` → "Nothing", `1` → "1 note", `3` → "3 notes". */
 export function usedBy(count: number): string {
   return count === 0 ? "Nothing" : `${count} note${count === 1 ? "" : "s"}`;
 }

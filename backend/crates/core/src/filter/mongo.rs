@@ -1,21 +1,3 @@
-//! Compile the DSL to a Mongo query (server only, `mongo` feature).
-//!
-//! Mongo's implicit-array matching and type bracketing are explicitly *not* the
-//! contract (SPEC §4.2) — the compiler must emit queries whose results match
-//! [`crate::filter::evaluator`] exactly, using `$type` guards and `$elemMatch`
-//! where the DSL's semantics differ from Mongo's defaults.
-//!
-//! The three places Mongo has to be argued with:
-//!
-//! 1. **Implicit array traversal.** `{f: {$gt: 5}}` matches `f: [1, 9]`. Every
-//!    scalar comparison therefore carries `{f: {$not: {$type: "array"}}}`.
-//! 2. **`$ne` / `null` matching absent fields.** `ne` compiles to
-//!    "present and not `eq`", and `eq null` to `$type: "null"`, so `missing` and
-//!    `null` stay distinct.
-//! 3. **Dates are stored as canonical strings** in `fm`/`plugins` (SPEC §3.4),
-//!    so a date comparison is a string comparison gated on the canonical shape
-//!    regex — the same participation test the evaluator applies.
-
 use bson::{Bson, Document as BsonDocument, doc};
 use thiserror::Error;
 
@@ -34,21 +16,14 @@ pub enum CompileError {
     NotSortable(String),
 }
 
-/// A predicate that matches nothing. `_id` always exists, so this is both always
-/// false and index-friendly.
 fn never() -> BsonDocument {
     doc! { "_id": { "$exists": false } }
 }
 
-/// A predicate that matches everything.
 fn always() -> BsonDocument {
     BsonDocument::new()
 }
 
-/// Compile a filter to the `find` query document.
-///
-/// The caller is responsible for adding the tombstone predicate
-/// (`deleted_at: null` or the Trash variant) — the DSL never implies it.
 pub fn compile(filter: &Filter) -> Result<BsonDocument, CompileError> {
     match filter {
         Filter::All => Ok(always()),
@@ -92,15 +67,11 @@ pub fn compile(filter: &Filter) -> Result<BsonDocument, CompileError> {
             Column::Dynamic | Column::Date => {
                 Ok(doc! { stored_path(field)?: { "$exists": false } })
             }
-            // Always-present projection columns.
             Column::Str => Ok(doc! { stored_path(field)?: { "$exists": false } }),
             Column::Deleted => Ok(never()),
         },
         Filter::IsNull { field } => match column(field) {
             Column::Deleted => Ok(never()),
-            // `$type` traverses arrays element-wise, so `[null]` would match on
-            // the server while the evaluator — which sees a `List`, not a `Null` —
-            // says no. Same guard every other dynamic-field branch carries.
             Column::Dynamic => {
                 let path = stored_path(field)?;
                 Ok(doc! { "$and": [
@@ -115,22 +86,16 @@ pub fn compile(filter: &Filter) -> Result<BsonDocument, CompileError> {
             _ => Ok(doc! { stored_path(field)?: { "$exists": true } }),
         },
         Filter::Text { field, mode, value } => compile_text(field, *mode, value),
-        // A join over the folder tree: the query engine's, never a Mongo query.
         Filter::ChildOf { .. } => Err(CompileError::Unsupported("child_of".to_string())),
         Filter::ParentOf { .. } => Err(CompileError::Unsupported("parent_of".to_string())),
     }
 }
 
-/// Which kind of projection column a path addresses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Column {
-    /// `id`, `title`, `content` — always a string.
     Str,
-    /// `created_at`, `updated_at`, `deleted_at` — always a BSON date.
     Date,
-    /// `deleted` — derived from `deleted_at`.
     Deleted,
-    /// `fm.*`, `plugins.*` — materialized from document text, any type.
     Dynamic,
 }
 
@@ -156,8 +121,6 @@ fn compile_cmp(
         )));
     }
     if op == CompareOp::Ne {
-        // "present and not eq" — see the evaluator; `$ne` alone would match
-        // documents where the field is absent.
         let eq = compile_cmp(field, CompareOp::Eq, literal)?;
         return Ok(match column(field) {
             Column::Deleted => doc! { "$nor": [eq] },
@@ -180,21 +143,16 @@ fn compile_cmp(
             other => Err(type_mismatch(&name, other)),
         },
         Column::Deleted => match literal {
-            Literal::Bool(wanted) => {
-                // `deleted` is derived: a tombstoned document has `deleted_at`.
-                Ok(if *wanted {
-                    doc! { "deleted_at": { "$ne": Bson::Null } }
-                } else {
-                    doc! { "deleted_at": { "$eq": Bson::Null } }
-                })
-            }
+            Literal::Bool(wanted) => Ok(if *wanted {
+                doc! { "deleted_at": { "$ne": Bson::Null } }
+            } else {
+                doc! { "deleted_at": { "$eq": Bson::Null } }
+            }),
             other => Err(type_mismatch(&name, other)),
         },
         Column::Dynamic => {
             let path = stored_path(field)?;
             match literal {
-                // The array guard matters here too: without it `eq null` matches
-                // an array containing null on the server but not in the evaluator.
                 Literal::Null => Ok(doc! { "$and": [
                     { path.clone(): { "$not": { "$type": "array" } } },
                     { path: { "$type": "null" } },
@@ -216,7 +174,6 @@ fn compile_cmp(
     }
 }
 
-/// `any` / `contains`: at least one element of an array field matches.
 fn compile_any(
     field: &FieldPath,
     op: CompareOp,
@@ -238,7 +195,6 @@ fn compile_any(
     Ok(doc! { path: { "$elemMatch": element_predicate(op, literal) } })
 }
 
-/// `every`: no element fails the comparison, and the field is an array.
 fn compile_every(
     field: &FieldPath,
     op: CompareOp,
@@ -264,8 +220,6 @@ fn compile_every(
     ] })
 }
 
-/// The per-element predicate used inside `$elemMatch`. `ne` is the negation of
-/// `eq`, matching the evaluator.
 fn element_predicate(op: CompareOp, literal: &Literal) -> BsonDocument {
     match (op, literal) {
         (CompareOp::Ne, _) => doc! { "$not": element_predicate(CompareOp::Eq, literal) },
@@ -340,10 +294,6 @@ fn escape_regex(input: &str) -> String {
     out
 }
 
-/// Compile sort keys to a Mongo sort document, in order.
-///
-/// The caller appends `_id` as the final tiebreaker (the evaluator's
-/// `compare_rows` does the same).
 pub fn compile_sort(sort: &[SortKey]) -> Result<BsonDocument, CompileError> {
     let mut out = BsonDocument::new();
     for key in sort {
@@ -360,11 +310,6 @@ pub fn compile_sort(sort: &[SortKey]) -> Result<BsonDocument, CompileError> {
     Ok(out)
 }
 
-/// Map a DSL field path to its stored Mongo path (e.g. `fm.due` → `fm.due`,
-/// `updated_at` → `updated_at`, `id` → `_id`).
-///
-/// `deleted` maps to `deleted_at`, the column that backs it; the boolean
-/// translation happens in [`compile`].
 pub fn stored_path(field: &crate::filter::ast::FieldPath) -> Result<String, CompileError> {
     let segments = field.segments();
     match segments[0].as_str() {
@@ -444,9 +389,6 @@ mod tests {
 
     #[test]
     fn null_and_missing_stay_distinct() {
-        // Both null predicates carry the array guard: `$type` traverses arrays
-        // element-wise, so `fm.a: [null]` would otherwise match here and not in
-        // the evaluator (which sees a `List`, never a `Null`).
         let guarded_null = doc! { "$and": [
             { "fm.a": { "$not": { "$type": "array" } } },
             { "fm.a": { "$type": "null" } },
@@ -482,7 +424,6 @@ mod tests {
                 { "fm.due": { "$gte": "2026-01-01" } },
             ] }
         );
-        // The schema columns are real BSON dates.
         let query = compile(&filter(
             r#"{"cmp":{"field":"created_at","op":"lt","value":{"date":"2026-01-01"}}}"#,
         ))

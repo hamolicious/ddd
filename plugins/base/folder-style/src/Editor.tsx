@@ -4,7 +4,6 @@ import type { Icons } from "plugin:icons";
 
 import { normalizeColor, resolveStyle, textOn, type FolderStyle } from "./styles.js";
 
-/** A starting point, not a limit: the colour field takes any hex. */
 const SWATCHES = [
   "#e03131",
   "#f76707",
@@ -24,18 +23,13 @@ const LEGEND_CLASSES =
   "folderstyle:mb-1 folderstyle:p-0 folderstyle:text-[0.9em] folderstyle:text-text-muted";
 
 export interface EditorProps {
-  /** The note's title, for the preview. */
   readonly name: string;
   readonly initial: FolderStyle | undefined;
-  /** Applied at once, so the tree behind the sheet shows it; `undefined` clears that field. */
   readonly onChange: (change: { background?: string | undefined; icon?: string | undefined }) => void;
-  /** `undefined` when no icon set is wired: the sheet is then background only. */
   readonly icons: Pick<Icons, "Icon" | "Picker"> | undefined;
-  /** What an unset field shows instead, in the preview: the defaults, for a note. */
   readonly fallback?: FolderStyle;
 }
 
-/** Every change applies as it is made; the sheet closes the usual ways (Escape, outside). */
 export function Editor({ name, initial, onChange, icons, fallback = {} }: EditorProps): ReactElement {
   const [background, setBackground] = useState(initial?.background);
   const [icon, setIcon] = useState(initial?.icon);
@@ -55,7 +49,6 @@ export function Editor({ name, initial, onChange, icons, fallback = {} }: Editor
 
   return (
     <div className="folder-style-editor folderstyle:flex folderstyle:flex-col folderstyle:gap-3">
-      {/* The row as the tree will draw it. */}
       <p className="folderstyle:m-0">
         <span
           className={`folder-style-preview folderstyle:inline-flex folderstyle:items-center folderstyle:gap-1 folderstyle:leading-[1.4] folderstyle:font-medium ${shown?.background !== undefined ? "folderstyle:rounded folderstyle:px-1.5" : ""}`}

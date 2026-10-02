@@ -1,13 +1,3 @@
-/**
- * The notes filed inside this one, under everything the note says.
- *
- * The tree is `folders`' (an optional plugin): without it, or for a note with nothing
- * inside, there is no footer at all. The list follows the tree live — a note filed or
- * moved elsewhere shows up or goes at once — and each entry is the same link the body
- * draws for `[](doc://…)`: its title, colour and icon. Each is also marked `ddd/document`, so
- * its menu is a note's menu wherever it is right-clicked.
- */
-
 import { useCallback, useSyncExternalStore, type ReactNode } from "react";
 
 import type { Folders } from "plugin:folders";
@@ -28,14 +18,11 @@ export function ChildrenFooter({
   fullWidth = false,
 }: {
   readonly id: string;
-  /** A rule between the body and the list; `false` when the note has no body to divide from. */
   readonly divided?: boolean;
-  /** The note's `full-width` flag: the list shares the body's column. */
   readonly fullWidth?: boolean;
   readonly folders: ChildrenSource;
   readonly renderDocLink: (documentId: string) => ReactNode;
 }): ReactNode {
-  // A string snapshot: the same children are the same answer, however the tree rebuilt.
   const snapshot = useCallback(() => folders.childrenOf(id).join("\n") || NO_CHILDREN, [folders, id]);
   const joined = useSyncExternalStore(folders.onChange, snapshot, snapshot);
   if (joined === NO_CHILDREN) return null;

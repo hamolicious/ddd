@@ -1,9 +1,3 @@
-/**
- * The graph's settings panel, floating over the top-right corner the way Obsidian's does:
- * closed to a gear, open to four collapsible sections — Filters, Groups, Display, Forces.
- * Every change applies live; `settings.ts` stores it a moment later.
- */
-
 import { useEffect, useId, useRef, useState } from "react";
 import type { ReactElement, ReactNode } from "react";
 
@@ -96,12 +90,6 @@ interface LocalControlsProps {
   readonly openGlobal: (() => void) | undefined;
 }
 
-/**
- * The local graph's controls: a cog that opens the depth slider, and the way out to the
- * whole graph. Out of the way until wanted: they slide in while the pointer is over the
- * graph or keyboard focus is inside it, and slide back out (closing the slider) when it leaves —
- * `.graph-local-controls` in `style.css`. A device with no hover shows them always.
- */
 export function LocalControls({ store, settings, openGlobal }: LocalControlsProps): ReactElement {
   const [open, setOpen] = useState(false);
   const panelId = useId();
@@ -111,7 +99,6 @@ export function LocalControls({ store, settings, openGlobal }: LocalControlsProp
     const view = root.current?.closest(".graph-view");
     if (!view) return undefined;
     const leave = (event: PointerEvent): void => {
-      // A keyboard user tabbing about in it keeps it open; a mouse leaving closes it.
       if (event.pointerType === "mouse" && !view.querySelector(":focus-visible")) setOpen(false);
     };
     const blur = (event: FocusEvent): void => {

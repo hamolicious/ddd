@@ -1,11 +1,3 @@
-/**
- * The table's settings, in the search's View panel: how many rows it shows at a time, and which
- * columns follow the title. The chosen columns are chips, in order, each movable and
- * removable; one field adds another, suggesting the fixed columns and every property in
- * use (`search`'s `FmKeySelect`, as the filter's property field has it) and taking any
- * other key typed.
- */
-
 import { useState } from "react";
 import type { ReactElement } from "react";
 
@@ -28,12 +20,10 @@ export function TableSettingsPanel({ options: viewOptions, onOptionsChange, fiel
   const table = tableFromOptions(viewOptions);
   const onChange = (next: TableSettings): void => onOptionsChange(tableOptions(next, viewOptions));
   const [typed, setTyped] = useState("");
-  // The fixed columns not shown yet; the property box lists every key in use itself.
   const builtIn = FIXED_COLUMNS.filter((column) => !table.columns.includes(column.field)).map((column) => ({
     key: column.field,
     label: column.label,
   }));
-  /** What was typed, as a column: a fixed one by its field or its name, or a property key. */
   const typedColumn =
     builtIn.find((column) => column.key === typed.trim() || column.label === typed.trim())?.key ?? columnForKey(typed);
   const setColumns = (columns: readonly string[]): void => onChange({ ...table, columns });
@@ -78,7 +68,6 @@ export function TableSettingsPanel({ options: viewOptions, onOptionsChange, fiel
               placeholder="Property, e.g. status"
               onChange={setTyped}
               onPick={(key) => {
-                // Picked from the list: added at once, no "Add" needed.
                 const column = builtIn.some((choice) => choice.key === key) ? key : columnForKey(key);
                 if (column === undefined || table.columns.includes(column)) return;
                 setColumns([...table.columns, column]);

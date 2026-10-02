@@ -1,28 +1,3 @@
-/**
- * The M2 demo page: login, a live document list served by the **local** query
- * engine, full-text search, and a textarea bound to one hydrated `Y.Text`.
- *
- * It is deliberately plain TypeScript with no framework — its job is to prove the
- * kernel works end to end (and to be the thing the Playwright smoke drives:
- * register → create → edit → reload → offline edit → reconnect → converge, SPEC
- * §8). The real UI is a plugin distribution, in M3.
- *
- * Two properties this page is built to demonstrate, because they are the point of
- * SPEC §4:
- *
- * 1. **Nothing renders from the network.** The list and the search box read the
- *    IndexedDB projection through `QueryEngine`; the socket's only job is to keep
- *    that store fresh. Load once, then pull the plug: the workspace is still
- *    browsable and searchable, and documents you had open stay editable.
- * 2. **Edits are splices.** The textarea sends the minimal insert/delete pair, not
- *    a whole-text replacement, so two clients editing one document merge instead
- *    of clobbering (SPEC §3.2, §3.3).
- *
- * This file is *wiring only*: every behaviour it needs is a kernel call. While a
- * kernel stub is unimplemented the page still renders and reports the error it
- * got, which is exactly the signal a builder wants.
- */
-
 import * as Y from "yjs";
 
 import { IdbProjectionStore } from "@kernel/store/index.js";
@@ -68,10 +43,6 @@ function notice(message: string | undefined): void {
   ui.notice.hidden = !message;
 }
 
-// ---------------------------------------------------------------------------
-// Kernel wiring
-// ---------------------------------------------------------------------------
-
 const store = new IdbProjectionStore();
 let engine: QueryEngine | undefined;
 let client: SyncClient | undefined;
@@ -79,11 +50,6 @@ let live: Subscription | undefined;
 let openDoc: { id: string; text: Y.Text; release: () => void } | undefined;
 let coreSemantics: number | undefined;
 
-/**
- * Stand-in for a core that failed to load (`mise run wasm` never run). Everything
- * that does not need Rust semantics — the list, sorting, search — keeps working;
- * anything that would silently diverge from the server refuses loudly instead.
- */
 function unavailableCore(reason: string): CoreBindings {
   const fail = (): never => {
     throw new Error(`the shared Wasm core is unavailable (${reason}); run \`mise run wasm\``);
@@ -120,19 +86,13 @@ async function boot(): Promise<void> {
 
   engine = new QueryEngine(store, core, createSearchIndex());
   engine.onError((error) => log("query engine", error));
-  // A debugging handle, not an API: poke at the kernel from the devtools console
-  // (`ddd.engine.run({})`, `ddd.store.count()`). The demo is the only place this
-  // exists — M3's kernel exposes `@kernel` to plugins instead.
   Object.assign(globalThis, { ddd: { store, engine, get client() { return client; } } });
-  // Start indexing before anyone types; a warm index means search is instant and
-  // a cold one is built in the worker, not on this thread (SPEC §4.2).
   engine.warmUp().catch((error: unknown) => log("search index", error));
 
   await refresh();
   await connect();
 }
 
-/** Open (or reopen) the live query behind the list. */
 async function refresh(): Promise<void> {
   if (!engine) return;
   const text = ui.search.value.trim();
@@ -172,24 +132,9 @@ async function connect(): Promise<void> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Rendering
-// ---------------------------------------------------------------------------
-
-/**
- * What the *browser* thinks of the network, which is not the same thing as what
- * the socket has noticed yet.
- *
- * A socket carrying no traffic does not fail the instant the network drops: the
- * client finds out through its own heartbeat, up to `heartbeat_secs` plus the pong
- * timeout later (PROTOCOL.md §5) — tens of seconds of the page claiming `synced`
- * with no network. `navigator.onLine` knows immediately, so it wins.
- */
 let browserOffline = typeof navigator !== "undefined" && navigator.onLine === false;
 
 function renderState(state: FeedState): void {
-  // `auth-required` and `error` are more specific than "the network is down" and
-  // are not fixed by it coming back, so they still show through.
   const status =
     browserOffline && state.status !== "auth-required" && state.status !== "error"
       ? "offline"
@@ -200,30 +145,18 @@ function renderState(state: FeedState): void {
   ui.status.dataset["status"] = status;
   ui.seq.textContent = `seq ${state.safeSeq}`;
   if (state.status === "auth-required") {
-    // SPEC §5.3: a 401 never clears local data — it asks for a password.
     notice("Your session expired. Sign in again; nothing local was discarded.");
   }
   const welcome = client?.welcome;
   if (welcome && coreSemantics !== undefined && welcome.core_semantics_version !== coreSemantics) {
-    // PROTOCOL.md §1.4: keep syncing, stop trusting the local parse.
     notice(
       `This client parses documents differently from the server (core v${coreSemantics} vs v${welcome.core_semantics_version}). Reload to update.`,
     );
   }
 }
 
-/** Titles by id, so the delegated click handler can name the document it opens. */
 const rowTitles = new Map<string, string>();
 
-/**
- * Render the list by **reconciling against the existing rows**, keyed by id.
- *
- * `replaceChildren` with a fresh `<li>` per row was simpler and wrong: the list is
- * live (it re-runs on every feed batch and sorts by `-updated_at`), so a rebuild
- * can land between a click's hit-test and its mouse event, and the click opens
- * whichever document now occupies that pixel. Reusing the node for an id means the
- * row under the pointer is the same node before and after an update.
- */
 function renderDocs(rows: readonly ProjectionRow[], total: number): void {
   ui.count.textContent = `${total} docs`;
 
@@ -249,7 +182,6 @@ function renderDocs(rows: readonly ProjectionRow[], total: number): void {
       item.append(document.createTextNode(""), document.createElement("small"));
     }
 
-    // Only touch what actually changed, so unrelated rows do not flicker.
     const label = item.firstChild as Text;
     if (label.data !== title) label.data = title;
     const meta = item.lastElementChild as HTMLElement;
@@ -262,7 +194,6 @@ function renderDocs(rows: readonly ProjectionRow[], total: number): void {
       item.setAttribute("aria-selected", selected);
     }
 
-    // Move into place only when it is not already there.
     if (cursor === item) {
       cursor = item.nextElementSibling;
     } else {
@@ -273,18 +204,11 @@ function renderDocs(rows: readonly ProjectionRow[], total: number): void {
   for (const stale of existing.values()) stale.remove();
 }
 
-// One delegated listener rather than one per row: a per-row closure would capture
-// a stale title, and rebinding it on every render is exactly what reconciliation
-// is avoiding.
 ui.docs.addEventListener("click", (event) => {
   const item = (event.target as Element | null)?.closest("li[data-id]");
   const id = item?.getAttribute("data-id");
   if (id) void openDocument(id, rowTitles.get(id) ?? id);
 });
-
-// ---------------------------------------------------------------------------
-// One open document
-// ---------------------------------------------------------------------------
 
 async function openDocument(id: string, title: string): Promise<void> {
   openDoc?.release();
@@ -292,10 +216,6 @@ async function openDocument(id: string, title: string): Promise<void> {
   ui.text.value = "";
   ui.text.readOnly = true;
   ui.openTitle.textContent = `${title} (${id})`;
-  // The id of the open document, as an attribute rather than only inside display
-  // text: it is what the smoke keys off, and parsing it back out of a
-  // human-readable label is how a test ends up asserting against the wrong
-  // document.
   ui.openTitle.dataset["docId"] = id;
   try {
     const hydrated = await client!.open(id);
@@ -304,23 +224,14 @@ async function openDocument(id: string, title: string): Promise<void> {
     ui.text.readOnly = false;
     log(`opened ${id}`);
   } catch (error) {
-    // SPEC §4.1: a document you have never opened is read-only offline. Show the
-    // projection text so the page is still useful, and say why it is not editable.
     const row = await engine?.get(id);
     ui.text.value = row?.content ?? "";
     ui.openTitle.textContent = `${title} (${id}) — read-only`;
     log(`open ${id} failed`, error);
   }
-  // Repaint the selection without disturbing the live subscription.
   if (live) renderDocs(live.result.rows, live.result.total);
 }
 
-/**
- * The crudest possible two-way binding: whole-value on the way in, a single
- * minimal splice on the way out. CodeMirror + `y-codemirror.next` replaces this
- * in M3; the point here is that edits travel as **splices**, not as
- * replace-the-world writes, so concurrent edits merge (SPEC §3.2, §3.3).
- */
 function bindTextarea(text: Y.Text): void {
   ui.text.value = text.toString();
   text.observe(() => {
@@ -352,10 +263,6 @@ function bindTextarea(text: Y.Text): void {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Events
-// ---------------------------------------------------------------------------
-
 ui.login.addEventListener("submit", (event) => {
   event.preventDefault();
   void signIn(false);
@@ -382,11 +289,6 @@ async function signIn(asNewAccount: boolean): Promise<void> {
 
 ui.logout.addEventListener("click", () => {
   void (async () => {
-    // SPEC §5.3: "logout with unsynced changes warns and blocks until synced or
-    // explicitly discarded". Logout is the one action that clears local data, so
-    // the pending count has to be consulted *before* anything is released — the
-    // edits live in the `docs` store this handler is about to wipe, and once it is
-    // gone there is nothing to sync and nothing to export.
     const pending = client?.pending ?? 0;
     if (pending > 0) {
       const discard = globalThis.confirm(
@@ -408,8 +310,6 @@ ui.logout.addEventListener("click", () => {
 
     openDoc?.release();
     openDoc = undefined;
-    // Back to "nothing open": the pane must not look editable once the replica it
-    // was bound to is gone.
     ui.text.readOnly = true;
     ui.text.value = "";
     ui.text.oninput = null;
@@ -423,8 +323,6 @@ ui.logout.addEventListener("click", () => {
     } catch (error) {
       log("logout", error);
     }
-    // SPEC §5.3: logout — and only logout — clears local data. That includes the
-    // derived search index: it holds document text too (shared-device safety).
     await engine?.close();
     await store.clear().catch((error: unknown) => log("clear", error));
     await clearSearchIndex();
@@ -439,7 +337,6 @@ async function clearSearchIndex(): Promise<void> {
   try {
     await index.rebuild(
       (async function* () {
-        // Nothing: a rebuild from no rows is an empty index.
       })(),
     );
     await index.persist(0);
@@ -449,9 +346,6 @@ async function clearSearchIndex(): Promise<void> {
 }
 
 ui.create.addEventListener("click", () => {
-  // Synchronously, before the first await: otherwise the currently-open document
-  // stays editable across the create, and an edit made in that window is applied
-  // to the *old* document and then wiped when the new one binds.
   ui.text.readOnly = true;
   void (async () => {
     const stamp = new Date().toISOString();
@@ -472,16 +366,12 @@ ui.search.addEventListener("input", () => {
   searchTimer = setTimeout(() => void refresh(), 150);
 });
 
-// Reconnect on regaining connectivity (PROTOCOL.md §8).
 addEventListener("online", () => {
   browserOffline = false;
   log("back online");
   void connect();
 });
 addEventListener("offline", () => {
-  // Only the flag: repainting from a synthesised `FeedState` here used to report
-  // `seq 0` (losing the real watermark from the pill) and was overwritten by the
-  // kernel's next publish anyway, which still said `synced`.
   browserOffline = true;
   log("offline");
   renderState(client?.state ?? { status: "offline", safeSeq: 0, headSeq: 0 });
@@ -492,10 +382,6 @@ addEventListener("beforeunload", () => {
   client?.stop();
 });
 
-// ---------------------------------------------------------------------------
-// Offline app shell (SPEC §8) — hand-written because M2 adds no dependencies.
-// ---------------------------------------------------------------------------
-
 function registerServiceWorker(): void {
   if (!("serviceWorker" in navigator)) return;
   navigator.serviceWorker.register("/sw.js").then(
@@ -503,10 +389,6 @@ function registerServiceWorker(): void {
     (error: unknown) => log("offline shell", error),
   );
 }
-
-// ---------------------------------------------------------------------------
-// Boot
-// ---------------------------------------------------------------------------
 
 void (async () => {
   await boot();
@@ -516,6 +398,5 @@ void (async () => {
       notice("No account exists yet — fill in an email and password and press Create account.");
     }
   } catch {
-    // Offline, or the server is down: the page runs on local data either way.
   }
 })();

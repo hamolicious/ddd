@@ -1,35 +1,4 @@
 #!/usr/bin/env node
-/**
- * Build the **backend halves** of plugins into the installed layout.
- *
- * ```
- * plugins/base/dist/<id>/<version>/
- * ├── manifest.json     ← build-plugins.mjs (the frontend half)
- * ├── frontend/…        ← build-plugins.mjs
- * └── backend.wasm      ← this script
- * ```
- *
- * The two halves are built by two scripts because they are built by two toolchains, and
- * they land in one directory because that directory *is* the installed plugin (SPEC §6.2)
- * — the same shape M4's zip installer extracts into. Run both, in either order:
- *
- * ```
- * mise run plugins        # frontend halves  (Vite)
- * mise run wasm-plugins   # backend halves   (cargo, wasm32-unknown-unknown)
- * ```
- *
- * A plugin whose manifest has no `backend` is skipped, silently and correctly: most
- * plugins have no backend half — since the calendar's removal (2026-09-24) **no plugin in
- * `plugins/base/` has one**, and this script installs nothing there. It still builds the
- * `examples/` fixtures, and it is still what installs the backend half of the next plugin
- * that grows one.
- *
- * Usage: `node web/scripts/build-wasm-plugins.mjs [id …] [--debug] [--examples] [--prebuilt]`
- *
- * `--prebuilt` skips the cargo invocation and only copies artifacts that are already in
- * `plugins/target/<target>/<profile>/` — how the container build installs them, where the
- * Rust toolchain is a different stage from node.
- */
 
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
@@ -45,16 +14,10 @@ const distRoot = join(baseDir, "dist");
 const argv = process.argv.slice(2);
 const debug = argv.includes("--debug");
 const withExamples = argv.includes("--examples");
-// `--prebuilt`: cargo has already run; only install the artifacts into the layout. For a
-// container build, where the Rust toolchain lives in one stage and node in another, and
-// installing cargo next to node purely to re-run a build that already happened would add
-// a toolchain to the image for nothing. The artifacts are still verified to exist, so a
-// stale or missing one fails here rather than shipping a plugin with no backend half.
 const prebuilt = argv.includes("--prebuilt");
 const requested = argv.filter((arg) => !arg.startsWith("--"));
 const profile = debug ? "debug" : "release";
 
-/** The crate name a `Cargo.toml` declares, without a TOML parser. */
 const crateName = (cargoToml) => {
   const text = readFileSync(cargoToml, "utf8");
   const match = /^\s*name\s*=\s*"([^"]+)"/m.exec(text);
@@ -62,7 +25,6 @@ const crateName = (cargoToml) => {
   return match[1];
 };
 
-/** `hello-backend` → `hello_backend.wasm`. */
 const artifactName = (crate) => `${crate.replaceAll("-", "_")}.wasm`;
 
 const targets = [];
@@ -94,9 +56,6 @@ for (const name of readdirSync(baseDir).sort()) {
   });
 }
 
-// The example/fixture plugins have no installed layout to write — the host's smoke test
-// reads them straight out of `plugins/target`. They are built here so one command gets a
-// working `mise run plugin-smoke`.
 if (withExamples || requested.length === 0) {
   const examplesDir = join(pluginsRoot, "examples");
   if (existsSync(examplesDir)) {
@@ -154,8 +113,6 @@ for (const target of targets) {
     console.log(`= ${target.crate} -> ${artifact} (fixture, not installed)`);
     continue;
   }
-  // The frontend build owns `emptyOutDir`, so it must run first if both run; copying into
-  // an existing directory is why this is a copy and not a move.
   mkdirSync(join(target.outDir, dirname(target.module)), { recursive: true });
   const destination = join(target.outDir, target.module);
   copyFileSync(artifact, destination);

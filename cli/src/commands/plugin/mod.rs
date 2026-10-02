@@ -1,5 +1,3 @@
-//! `ddd plugin …` — plugin projects outside the base distribution.
-
 mod new;
 mod types;
 
@@ -7,9 +5,7 @@ use clap::Subcommand;
 
 #[derive(Subcommand)]
 pub enum PluginCommand {
-    /// Scaffold a new plugin project, ready to build and type-check.
     New(new::NewArgs),
-    /// Refresh `types/` (kernel.d.ts and the dependencies' exports) from a server.
     Types(types::TypesArgs),
 }
 
@@ -22,7 +18,6 @@ impl PluginCommand {
     }
 }
 
-/// `^[a-z0-9][a-z0-9-]{0,63}$` — the manifest schema's `plugin-id` format.
 pub fn is_valid_plugin_id(id: &str) -> bool {
     let mut chars = id.chars();
     id.len() <= 64

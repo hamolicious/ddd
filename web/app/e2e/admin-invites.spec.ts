@@ -1,8 +1,3 @@
-/**
- * Admin → Invites: an invite is shown as a link that opens registration with the token
- * filled in, and its row actions are icon buttons.
- */
-
 import { expect, test } from "@playwright/test";
 
 import { ADMIN, signIn } from "./helpers.js";
@@ -18,7 +13,6 @@ test("an invite link from Admin → Invites registers a new account", async ({ p
   await expect(page.getByText("A lost token cannot be recovered")).toHaveCount(0);
   await expect(page.getByRole("button", { name: /^Revoke invite for / }).first()).toBeVisible();
 
-  // Someone else's browser, signed out.
   const other = await browser.newContext();
   const visitor = await other.newPage();
   await visitor.goto(link);
@@ -50,7 +44,6 @@ test("revoking an invite asks first, in a modal", async ({ page }) => {
   await expect(pending.locator(".admin-status-pending")).toBeVisible();
   const revoke = pending.getByRole("button", { name: /^Revoke invite for / });
 
-  // Cancel leaves it alone, and focus goes back to the button.
   await revoke.click();
   const modal = page.getByRole("dialog", { name: /^Revoke the invite for / });
   await expect(modal).toBeVisible();
@@ -60,7 +53,6 @@ test("revoking an invite asks first, in a modal", async ({ page }) => {
   await expect(revoke).toBeFocused();
   await expect(pending.locator(".admin-status-pending")).toBeVisible();
 
-  // Escape is a cancel too.
   await revoke.click();
   await expect(modal).toBeVisible();
   await page.keyboard.press("Escape");

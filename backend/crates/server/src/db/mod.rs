@@ -1,7 +1,3 @@
-//! Mongo connection, collection handles, boot-time schema work.
-//!
-//! Collection names live here as constants — no string literals anywhere else.
-
 pub mod indexes;
 pub mod migrations;
 
@@ -35,39 +31,22 @@ pub const ATTACHMENTS: &str = "attachments";
 pub const UPLOADS: &str = "uploads";
 pub const AUDIT_LOG: &str = "audit_log";
 pub const META: &str = "meta";
-/// Reserved for M4 (plugin host); indexes are not created before then.
 pub const PLUGINS: &str = "plugins";
 pub const PLUGIN_KV: &str = "plugin_kv";
 pub const PLUGIN_CONFIG: &str = "plugin_config";
 
-/// GridFS bucket holding attachment bytes (SPEC §3.6).
 pub const GRIDFS_BUCKET: &str = "attachments";
-/// The bucket's two collections. Named here because chunked uploads
-/// (`routes/uploads.rs`) write chunks and the file record themselves.
 pub const GRIDFS_FILES: &str = "attachments.files";
 pub const GRIDFS_CHUNKS: &str = "attachments.chunks";
-/// Size of one GridFS chunk: the driver's default, stated so that chunked uploads
-/// can cut the same chunks the driver does.
 pub const GRIDFS_CHUNK_BYTES: u32 = 255 * 1024;
 
-/// `_id` of the single `meta` document holding the schema version.
 pub const META_SCHEMA_ID: &str = "schema";
 
-/// How long to wait for a usable server before giving up at boot. Short enough
-/// that a misconfigured `MONGO_URI` fails the deploy quickly, long enough for a
-/// compose stack whose mongo is still electing itself.
 const SERVER_SELECTION_TIMEOUT: Duration = Duration::from_secs(10);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-/// Single replica, one process: a modest pool is plenty and keeps Mongo's
-/// connection accounting readable.
 const MAX_POOL_SIZE: u32 = 32;
 const MIN_POOL_SIZE: u32 = 1;
 
-/// Connect to Mongo and verify the connection with a ping.
-///
-/// `mongodb::Client` connects lazily, so the ping is the difference between
-/// "started" and "actually able to serve" — we do it here so a bad URI is a boot
-/// failure rather than a stream of 500s.
 pub async fn connect(config: &Config) -> anyhow::Result<(Client, Database)> {
     let mut options = ClientOptions::parse(&config.mongo_uri)
         .await
@@ -91,8 +70,6 @@ pub async fn connect(config: &Config) -> anyhow::Result<(Client, Database)> {
     Ok((client, db))
 }
 
-/// `admin.ping` — the cheapest round trip that proves the server answers.
-/// Shared by boot and `/readyz`.
 pub async fn ping(client: &Client) -> anyhow::Result<()> {
     client
         .database("admin")
@@ -102,7 +79,6 @@ pub async fn ping(client: &Client) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Run migrations then ensure indexes. Called once at boot, before serving.
 pub async fn init_schema(db: &Database) -> anyhow::Result<()> {
     let report = migrations::run(db).await?;
     if report.applied.is_empty() {
@@ -121,7 +97,6 @@ pub async fn init_schema(db: &Database) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Typed collection handles. Cheap to construct (clones the `Database` handle).
 #[derive(Clone)]
 pub struct Collections {
     db: Database,
@@ -200,7 +175,6 @@ impl Collections {
         self.db.collection(META)
     }
 
-    /// GridFS bucket for attachment bytes.
     pub fn gridfs(&self) -> mongodb::gridfs::GridFsBucket {
         self.db.gridfs_bucket(
             mongodb::options::GridFsBucketOptions::builder()
@@ -210,7 +184,6 @@ impl Collections {
         )
     }
 
-    /// Untyped handle, for ad-hoc aggregations.
     pub fn raw(&self, name: &str) -> Collection<bson::Document> {
         self.db.collection(name)
     }

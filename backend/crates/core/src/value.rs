@@ -1,21 +1,11 @@
-//! The value model shared by frontmatter, machine sections and the filter DSL.
-//!
-//! Strict YAML subset (SPEC §3.4): block mappings, flow sequences, top-level
-//! frontmatter block sequences, and scalars typed string / int / float / bool /
-//! null. Dates stay [`Value::Str`] at parse time and are normalized to canonical
-//! form at materialization ([`crate::date`]).
-
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
 use crate::limits::{MAX_ARRAY_ITEMS, MAX_NESTING_DEPTH, MAX_STRING_VALUE_BYTES, is_valid_key};
 
-/// Ordered string-keyed map. BTreeMap so serialization is deterministic on both
-/// sides (materialized `fm` / `plugins` must be byte-comparable).
 pub type Map = BTreeMap<String, Value>;
 
-/// A parsed frontmatter / machine-section value.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Value {
@@ -28,7 +18,6 @@ pub enum Value {
     Map(Map),
 }
 
-/// The type tag used for the DSL's "same-type comparisons only" rule (SPEC §4.2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ValueType {
@@ -43,8 +32,6 @@ pub enum ValueType {
 }
 
 impl Value {
-    /// Type tag of this value. `Date` is never returned here — dates are typed
-    /// only in the DSL, where the comparison literal carries the date type.
     pub fn value_type(&self) -> ValueType {
         match self {
             Value::Null => ValueType::Null,
@@ -104,15 +91,6 @@ impl Value {
         matches!(self, Value::Null)
     }
 
-    /// Parse one scalar from its YAML text form, per the strict subset:
-    /// `null`/`~`/empty → Null, `true`/`false` → Bool, integer → Int,
-    /// float → Float, quoted or otherwise → Str (quotes stripped, escapes
-    /// handled for double quotes only).
-    ///
-    /// Total and infallible: anything unrecognized becomes a string. Flow
-    /// collections are *not* handled here — the block parsers use the internal
-    /// strict value parser for those, and an unterminated quote is a dropped
-    /// line there rather than a literal string (see `crate::yaml`).
     pub fn parse_scalar(raw: &str) -> Value {
         let s = strip_comment(raw.trim()).trim();
         if s.is_empty() {
@@ -133,8 +111,6 @@ impl Value {
         if int_shape(s) {
             return match s.parse::<i64>() {
                 Ok(i) => Value::Int(i),
-                // Out of i64 range: keep it numeric rather than silently
-                // turning a number into a string.
                 Err(_) => match s.parse::<f64>() {
                     Ok(f) if f.is_finite() => Value::Float(f),
                     _ => Value::Str(s.to_string()),
@@ -150,8 +126,6 @@ impl Value {
         Value::Str(s.to_string())
     }
 
-    /// Serialize back to the canonical single-line YAML form used by section
-    /// line splices (SPEC §3.3). Never emits block scalars.
     pub fn to_yaml_inline(&self) -> String {
         match self {
             Value::Null => "null".to_string(),
@@ -186,7 +160,6 @@ impl Value {
         }
     }
 
-    /// Convert to `serde_json::Value` (REST representation, wasm boundary).
     pub fn to_json(&self) -> serde_json::Value {
         match self {
             Value::Null => serde_json::Value::Null,
@@ -205,8 +178,6 @@ impl Value {
         }
     }
 
-    /// Convert from `serde_json::Value`. Objects become [`Value::Map`],
-    /// arrays [`Value::List`]; numbers become Int when integral.
     pub fn from_json(value: &serde_json::Value) -> Value {
         match value {
             serde_json::Value::Null => Value::Null,
@@ -233,31 +204,15 @@ impl Value {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Strict value parsing (internal): scalars plus flow collections, with caps.
-// ---------------------------------------------------------------------------
-
-/// Why a value was rejected. Mapped to a [`crate::diagnostics::Diagnostic`] by
-/// the line parser.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ValueReject {
-    /// Nesting deeper than [`MAX_NESTING_DEPTH`].
     Depth,
-    /// Flow collection with more than [`MAX_ARRAY_ITEMS`] entries.
     ArrayItems,
-    /// String scalar longer than [`MAX_STRING_VALUE_BYTES`].
     StringBytes,
-    /// A YAML feature outside the supported subset.
     Unsupported(&'static str),
-    /// Not a parseable value in the strict subset (unbalanced quote/bracket…).
     Malformed(&'static str),
 }
 
-/// Parse one value in the strict subset: a scalar, a flow sequence `[…]`, or a
-/// flow mapping `{…}`. `depth` starts at 1 for a top-level value.
-///
-/// Stricter than [`Value::parse_scalar`]: an unterminated quote or bracket is a
-/// rejection (the line is dropped and recorded) rather than a literal string.
 pub(crate) fn parse_value(raw: &str, depth: usize) -> Result<Value, ValueReject> {
     if depth > MAX_NESTING_DEPTH {
         return Err(ValueReject::Depth);
@@ -296,7 +251,6 @@ pub(crate) fn parse_value(raw: &str, depth: usize) -> Result<Value, ValueReject>
             if !is_valid_key(&key) {
                 return Err(ValueReject::Malformed("invalid key in flow mapping"));
             }
-            // Duplicate keys inside one flow mapping: last wins.
             map.insert(key, parse_value(value, depth + 1)?);
         }
         return Ok(Value::Map(map));
@@ -304,7 +258,6 @@ pub(crate) fn parse_value(raw: &str, depth: usize) -> Result<Value, ValueReject>
 
     check_unsupported(s)?;
 
-    // Quoted scalars must terminate; a mid-edit broken quote is a dropped line.
     if s.starts_with('"') && double_quoted(s).is_none() {
         return Err(ValueReject::Malformed("unterminated double-quoted string"));
     }
@@ -344,8 +297,6 @@ fn check_unsupported(s: &str) -> Result<(), ValueReject> {
     }
 }
 
-/// Split a flow-collection interior on top-level commas, honouring nesting and
-/// quoting. A single trailing comma is tolerated.
 fn split_flow(inner: &str) -> Result<Vec<&str>, ValueReject> {
     let mut parts = Vec::new();
     if inner.trim().is_empty() {
@@ -399,8 +350,6 @@ fn split_flow(inner: &str) -> Result<Vec<&str>, ValueReject> {
     Ok(parts)
 }
 
-/// Split `key: value` at the first top-level `:` that is followed by a space or
-/// ends the text. Returns `None` when there is no such colon.
 pub(crate) fn split_key(text: &str) -> Option<(&str, &str)> {
     let bytes = text.as_bytes();
     let mut depth = 0i32;
@@ -436,7 +385,6 @@ pub(crate) fn split_key(text: &str) -> Option<(&str, &str)> {
     None
 }
 
-/// Strip matching quotes off a key, if present.
 pub(crate) fn unquote_key(key: &str) -> String {
     let k = key.trim();
     if let Some(inner) = double_quoted(k) {
@@ -448,9 +396,6 @@ pub(crate) fn unquote_key(key: &str) -> String {
     k.to_string()
 }
 
-/// Remove a trailing ` # comment` from an unquoted scalar. `#` only starts a
-/// comment at the start of the value or after whitespace, and never inside
-/// quotes.
 pub(crate) fn strip_comment(s: &str) -> &str {
     let bytes = s.as_bytes();
     let mut quote: Option<u8> = None;
@@ -485,8 +430,6 @@ fn double_quoted(s: &str) -> Option<&str> {
     if bytes.len() < 2 || bytes[0] != b'"' || bytes[bytes.len() - 1] != b'"' {
         return None;
     }
-    // The closing quote must not itself be escaped, and no unescaped quote may
-    // appear in between.
     let inner = &s[1..s.len() - 1];
     let ib = inner.as_bytes();
     let mut i = 0usize;
@@ -498,7 +441,6 @@ fn double_quoted(s: &str) -> Option<&str> {
         }
     }
     if i > ib.len() {
-        // Trailing backslash escaped the closing quote.
         return None;
     }
     Some(inner)
@@ -510,7 +452,6 @@ fn single_quoted(s: &str) -> Option<&str> {
         return None;
     }
     let inner = &s[1..s.len() - 1];
-    // Inner single quotes must be doubled.
     let ib = inner.as_bytes();
     let mut i = 0usize;
     while i < ib.len() {
@@ -587,7 +528,6 @@ fn needs_quoting(s: &str) -> bool {
     if s.is_empty() || s != s.trim() {
         return true;
     }
-    // Would round-trip to a different type?
     match Value::parse_scalar(s) {
         Value::Str(ref t) if t == s => {}
         _ => return true,
@@ -607,8 +547,6 @@ fn needs_quoting(s: &str) -> bool {
 }
 
 fn format_float(f: f64) -> String {
-    // `{:?}` gives the shortest representation that round-trips, and always
-    // keeps a decimal point or exponent so the value re-parses as a float.
     let text = format!("{f:?}");
     if text.contains('.') || text.contains('e') || text.contains('E') {
         text
@@ -654,7 +592,6 @@ fn float_shape(s: &str) -> bool {
             if int_part.is_empty() {
                 return false;
             }
-            // No dot and no exponent means it is an integer, not a float.
             if exponent.is_none() {
                 return false;
             }
@@ -669,7 +606,6 @@ fn float_shape(s: &str) -> bool {
     }
 }
 
-/// Convert a materialized map to `bson` for storage / Mongo queries.
 #[cfg(feature = "mongo")]
 pub fn map_to_bson(map: &Map) -> bson::Document {
     let mut out = bson::Document::new();
@@ -679,7 +615,6 @@ pub fn map_to_bson(map: &Map) -> bson::Document {
     out
 }
 
-/// Convert a value to `bson`.
 #[cfg(feature = "mongo")]
 pub fn value_to_bson(value: &Value) -> bson::Bson {
     match value {
@@ -693,8 +628,6 @@ pub fn value_to_bson(value: &Value) -> bson::Bson {
     }
 }
 
-/// Convert a stored `bson` document back to a [`Map`] (used when evaluating the
-/// DSL over rows read out of Mongo).
 #[cfg(feature = "mongo")]
 pub fn map_from_bson(doc: &bson::Document) -> Map {
     doc.iter()
@@ -718,8 +651,6 @@ fn value_from_bson(value: &bson::Bson) -> Value {
                 .map(|d| d.canonical().to_string())
                 .unwrap_or_default(),
         ),
-        // Anything outside the shared value model degrades to a string so the
-        // conversion stays total.
         other => Value::Str(other.to_string()),
     }
 }

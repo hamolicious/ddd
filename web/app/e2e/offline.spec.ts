@@ -1,22 +1,8 @@
-/**
- * Offline editing, end to end: the promise of SPEC §4.1 and `dev-docs/resolved/HISTORY.md`, checked
- * the way a person would meet it.
- *
- * "Offline" here is both halves of the wire: `context.setOffline` stops HTTP, and the
- * sync socket is cut and refused by `routeWebSocket` (`setOffline` alone leaves an open
- * WebSocket connected). `network.online()` lets both back and nudges a reconnect.
- *
- * What each test asserts is the user's outcome: the text on the server, the text on
- * every device, the history's times, and what the screen said in between.
- */
-
 import { expect, test, type Page } from "@playwright/test";
 
 import { ADMIN, createDocument, openDocument, rawText, signIn, waitSynced } from "./helpers.js";
 import { network, typeAfter, typeAtEnd, workerInControl } from "./network.js";
 
-// Offline boot is the service worker's job, and the suite blocks workers by default
-// (`playwright.app.config.ts`, to keep plugin builds fresh between tests).
 test.use({ serviceWorkers: "allow" });
 test.setTimeout(150_000);
 
@@ -48,7 +34,6 @@ test("an edit made offline reaches the server on reconnect, with the time it was
   const madeAt = Date.now();
   await typeAtEnd(page, "written with no signal");
   await expect(unsynced(page)).toBeVisible();
-  // The edit stays on this device while the wire is down.
   await page.waitForTimeout(4_000);
   expect(await rawText(request, baseURL!, id)).not.toContain("written with no signal");
 
@@ -56,7 +41,6 @@ test("an edit made offline reaches the server on reconnect, with the time it was
   await expect.poll(() => rawText(request, baseURL!, id), { timeout: 20_000 }).toContain("written with no signal");
   await expect(unsynced(page)).toHaveCount(0);
 
-  // History says it was made offline, when it was made, not when it arrived.
   const history = await changes(page, id);
   const offline = history.groups.find((group) => group.inserted_excerpt.includes("no signal"));
   expect(offline?.offline).toBe(true);
@@ -78,10 +62,8 @@ test("an offline edit survives closing the tab: it syncs from the next visit, ti
   await net.offline();
   const madeAt = Date.now();
   await typeAtEnd(page, "\nstove");
-  // Past the local save's debounce.
   await page.waitForTimeout(1_500);
 
-  // A new visit, still offline: the app starts from the device and the edit is there.
   await page.reload();
   await expect(page.getByRole("banner")).toBeVisible({ timeout: 30_000 });
   await page.goto(`/#/doc/${id}`);
@@ -114,7 +96,6 @@ test("two devices edit the same note offline: both edits survive, everywhere", a
     await signIn(pageB, ADMIN);
     await openDocument(pageA, id);
     await openDocument(pageB, id);
-    // Both devices need the note on them to edit it offline.
     await pageA.getByRole("tab", { name: /^Edit/ }).click();
     await pageB.getByRole("tab", { name: /^Edit/ }).click();
     await expect(pageA.locator(".cm-content")).toContainText("evening");
@@ -124,7 +105,6 @@ test("two devices edit the same note offline: both edits survive, everywhere", a
     await netB.offline();
     await typeAfter(pageA, "morning", ": run");
     await typeAfter(pageB, "evening", ": read");
-    // And one line both of them changed, at the same place.
     await typeAfter(pageA, "Plan", " A");
     await typeAfter(pageB, "Plan", " B");
     await pageA.waitForTimeout(1_000);
@@ -137,7 +117,6 @@ test("two devices edit the same note offline: both edits survive, everywhere", a
       .toMatch(/morning: run[\s\S]*evening: read/);
     const server = await rawText(request, baseURL!, id);
     expect(server).toMatch(/# Plan( A B| B A)/);
-    // Every device ends up with exactly the server's text.
     await expect(pageA.locator(".cm-content")).toContainText("evening: read", { timeout: 20_000 });
     await expect(pageB.locator(".cm-content")).toContainText("morning: run", { timeout: 20_000 });
     const text = async (page: Page) => (await page.locator(".cm-content").innerText()).replace(/\s+/g, " ").trim();
@@ -184,10 +163,6 @@ test("a device that was offline catches up on edits made meanwhile, and sends it
   }
 });
 
-// ---------------------------------------------------------------------------
-// Edge cases
-// ---------------------------------------------------------------------------
-
 test("two tabs of one browser, both editing offline: neither tab's edit is lost", async ({
   context,
   request,
@@ -214,12 +189,10 @@ test("two tabs of one browser, both editing offline: neither tab's edit is lost"
   await one.waitForTimeout(1_500);
   await typeAtEnd(two, "\nfrom tab two");
   await two.waitForTimeout(1_500);
-  // Tab one is closed while still offline: its edit only exists on this device now.
   await one.close();
 
   await netTwo.online();
   await expect.poll(() => rawText(request, baseURL!, id), { timeout: 20_000 }).toContain("from tab two");
-  // Reopening the note on this device must not have dropped tab one's edit.
   const three = await context.newPage();
   await three.goto(`/#/doc/${id}`);
   await waitSynced(three);
@@ -247,9 +220,7 @@ test("a note trashed elsewhere while this device edits it offline: kept there, s
   expect(trashed.ok()).toBe(true);
 
   await net.online();
-  // The edit is kept, in Trash…
   await expect.poll(() => rawText(request, baseURL!, id), { timeout: 20_000 }).toContain("written after it was trashed");
-  // …and the person is told, with a way back.
   const bell = page.getByRole("button", { name: /notice/i }).first();
   const panel = page.getByRole("group", { name: "Notices" });
   await expect(async () => {
@@ -277,7 +248,6 @@ test("an offline edit that pushes a note over the size limit", async ({ page, co
   await net.offline();
   await page.locator(".cm-content").click();
   await page.keyboard.press("ControlOrMeta+End");
-  // ~1.1 MB: over MAX_DOCUMENT_BYTES (1 MB).
   await page.keyboard.insertText("x".repeat(1_100_000));
   await page.waitForTimeout(1_500);
   await net.online().catch(() => undefined);
@@ -288,15 +258,12 @@ test("an offline edit that pushes a note over the size limit", async ({ page, co
   const status = await page.locator("[role=status][aria-live=polite]").first().getAttribute("title").catch(() => null);
   const notice = await page.getByRole("button", { name: /notice/i }).first().getAttribute("aria-label").catch(() => null);
   console.log(`[too-large] server bytes=${server.length} alerts=${JSON.stringify(alerts)} status=${status} notice=${notice}`);
-  // The server must not have taken it (the limit holds)...
   expect(server.length).toBeLessThan(1_000_000);
-  // ...the person is told, and the status does not claim it is saved...
   const bell = page.getByRole("button", { name: /notice/i }).first();
   if ((await bell.getAttribute("aria-expanded")) !== "true") await bell.click();
   await expect(page.getByText(/over the size limit/)).toBeVisible();
   await expect(page.getByRole("status", { name: /everything is saved to the server/i })).toHaveCount(0);
   await expect(unsynced(page)).toBeVisible();
-  // ...and trimming it saves again, and clears the notice.
   await page.locator(".cm-content").click();
   await page.keyboard.press("ControlOrMeta+a");
   await page.keyboard.insertText("# Big\n\ntrimmed back down\n");
@@ -314,7 +281,6 @@ test("server-only screens show what they last loaded, marked as possibly out of 
   const id = await createDocument(request, baseURL!, "# History offline\n\ntext\n");
   const net = await network(page, context);
   await signIn(page, ADMIN);
-  // Load them once while online.
   await page.goto("/#/admin/users");
   const admin = page.locator("#shell-main");
   await expect(admin.getByText(ADMIN.email).first()).toBeVisible({ timeout: 20_000 });
@@ -325,21 +291,17 @@ test("server-only screens show what they last loaded, marked as possibly out of 
   await expect(altbar.getByRole("button", { name: "Refresh" })).toBeVisible();
   await net.offline();
 
-  // The Changes panel: asked again offline, it shows the last answer and says so.
   await altbar.getByRole("button", { name: "Refresh" }).click();
   await expect(altbar.getByText(/You are offline\. This is what was loaded/)).toBeVisible({ timeout: 20_000 });
   await expect(altbar.getByRole("alert")).toHaveCount(0);
 
-  // Admin → Users: the list, marked.
   await page.goto("/#/admin/users");
   await expect(admin.getByText(/You are offline\. This is what was loaded/)).toBeVisible({ timeout: 20_000 });
   await expect(admin.getByText(ADMIN.email).first()).toBeVisible();
 
-  // A screen never loaded on this device still says it needs the server.
   await page.goto("/#/admin/audit");
   await expect(admin.getByRole("alert").first()).toBeVisible({ timeout: 20_000 });
 
-  // Back online, the mark goes.
   await net.online();
   await page.goto("/#/admin/users");
   await expect(admin.getByText(ADMIN.email).first()).toBeVisible({ timeout: 20_000 });
@@ -367,16 +329,13 @@ test("a note made offline: editable at once, in the list, and on the server afte
   await page.keyboard.press("ControlOrMeta+a");
   await page.keyboard.type(`# ${title}\n\nno signal here\n`);
   await expect(unsynced(page)).toBeVisible();
-  // In the list already, under its title.
   await page.goto("/#/");
   await expect(page.getByRole("button", { name: title, exact: true })).toBeVisible({ timeout: 20_000 });
-  // Not on the server yet (asked with the suite's own session, over REST).
   expect((await request.post(`${baseURL}/api/auth/login`, { data: ADMIN })).ok()).toBe(true);
   expect((await request.get(`${baseURL}/api/documents/${id}`)).status()).toBe(404);
 
   await net.online();
   await expect.poll(() => rawText(request, baseURL!, id!), { timeout: 30_000 }).toContain("no signal here");
-  // Once, not twice.
   expect((await rawText(request, baseURL!, id!)).split("no signal here").length).toBe(2);
   await expect(unsynced(page)).toHaveCount(0, { timeout: 20_000 });
 });
@@ -395,19 +354,15 @@ test("a session that expired while offline: sign in again, and the offline edit 
   await net.offline();
   await typeAtEnd(page, "\nday two, no signal");
   await page.waitForTimeout(1_000);
-  // Meanwhile the session ends on the server (signed out elsewhere, or it expired).
   const out = await context.request.post(`${baseURL}/api/auth/logout`);
   expect(out.status()).toBeLessThan(500);
 
-  // Let the wire back: the session is gone, so the app must ask to sign in again.
   await net.release();
   await page.getByRole("button", { name: "Offline. Reconnect" }).click({ timeout: 2_000 }).catch(() => undefined);
   const dialog = page.getByRole("dialog", { name: "Your session expired" });
   await expect(dialog).toBeVisible({ timeout: 30_000 });
-  // It knows who was signed in, says nothing local was lost, and asks for the password.
   await expect(dialog.getByLabel("Email")).toHaveValue(ADMIN.email);
   await expect(page.getByText(/local edits have not reached the server/).first()).toBeVisible();
-  // Someone who cannot sign in again can still keep what did not sync.
   const download = page.waitForEvent("download");
   await dialog.getByRole("button", { name: "Save my unsent changes to a file" }).click();
   const file = await download;
@@ -415,7 +370,6 @@ test("a session that expired while offline: sign in again, and the offline edit 
   const saved = await (await import("node:fs/promises")).readFile((await file.path())!, "utf8");
   expect(saved).toContain("day two, no signal");
   expect(saved).toContain("# Long trip");
-  // The note, and the settings document (Edit mode is remembered there, offline too).
   await expect(dialog.getByText(/^Saved \d+ notes? to a file\.$/)).toBeVisible();
   await dialog.getByLabel("Password").fill(ADMIN.password);
   await dialog.getByRole("button", { name: /sign in/i }).click();
@@ -437,7 +391,6 @@ test("trash, restore and any note's edits, offline: shown at once, sent on recon
   const net = await network(page, context);
   await signIn(page, ADMIN);
   await expect(page.getByRole("button", { name: trashTitle, exact: true })).toBeVisible();
-  // Every note gets an editable copy on the device while online (dev-docs/resolved/SYNC-DECISIONS.md §7).
   await expect
     .poll(
       () =>
@@ -459,15 +412,12 @@ test("trash, restore and any note's edits, offline: shown at once, sent on recon
     .toBe(true);
   await net.offline();
 
-  // Move to Trash: gone from the list at once.
-  // A note the folder tree knows: `folders`' Delete, which asks first.
   await page.getByRole("button", { name: `Actions for ${trashTitle}` }).first().click();
   await page.getByRole("menuitem", { name: "Delete" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Move to Trash" }).click();
   await expect(page.getByRole("button", { name: trashTitle, exact: true })).toHaveCount(0);
   await expect(page.locator("#shell-main").getByRole("alert")).toHaveCount(0);
 
-  // A note this device never opened: editable offline, and a new title shows in the list.
   await page.goto(`/#/doc/${editId}`);
   await page.getByRole("tab", { name: /^Edit/ }).click();
   await expect(page.locator(".cm-content")).toContainText("never opened here");
@@ -477,7 +427,6 @@ test("trash, restore and any note's edits, offline: shown at once, sent on recon
   await page.goto("/#/");
   await expect(page.getByRole("button", { name: `${editTitle} (renamed)`, exact: true })).toBeVisible({ timeout: 20_000 });
 
-  // The theme still switches.
   await page.goto("/#/settings/themes");
   await page.getByRole("radio", { name: "Dark" }).check();
   await expect(page.getByText("Showing dark")).toBeVisible();
@@ -533,7 +482,6 @@ test("several files pasted offline all wait, and all go in on reconnect", async 
 
   await page.locator(".cm-content").click();
   await page.keyboard.press("ControlOrMeta+End");
-  // Three in one paste, then one more on its own.
   await paste(["a.txt", "b.txt", "c.txt"]);
   for (const name of ["a", "b", "c"]) {
     await expect(page.locator(".cm-content")).toContainText(new RegExp(`Uploading ${name}\\.txt…\\]\\(attachment://waiting-[0-9a-f]{8}\\)`), { timeout: 20_000 });
@@ -597,7 +545,6 @@ test("an image pasted offline is shown from the device while it waits", async ({
 
   await page.locator(".cm-content").click();
   await page.keyboard.press("ControlOrMeta+End");
-  // A 1×1 PNG.
   const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
   await page.locator(".cm-content").evaluate((editor, base64) => {
     const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
@@ -607,7 +554,6 @@ test("an image pasted offline is shown from the device while it waits", async ({
   }, png);
   await expect(page.locator(".cm-content")).toContainText(/attachment:\/\/waiting-[0-9a-f]{8}/, { timeout: 20_000 });
 
-  // Read mode draws the picture from the device, and says it has not gone up yet.
   await page.getByRole("tab", { name: /^Read/ }).click();
   const read = page.getByRole("tabpanel", { name: "Read" });
   await expect(read.locator("[data-waiting-upload] img")).toHaveAttribute("src", /^blob:/);

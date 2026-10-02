@@ -1,22 +1,3 @@
-/**
- * The results, as a table: the title, then the columns the search chose (`columns.ts`).
- *
- * **It is a box `rows` rows tall** and scrolls the rest inside itself, so a search embedded
- * in a note takes the room of its first rows rather than the whole result set. The height
- * is measured, not guessed: once the `rows`-th row has been drawn, the box stops at its
- * bottom edge, whatever the rows' heights (a search result carries a snippet line). With
- * no more rows than that, the box is just the table.
- *
- * **Virtual inside the box** (`_shared/virtual-list.ts`, which finds the box as its scroll
- * parent): only the rows in view are in the DOM, with spacer rows standing in for the
- * rest. The next page loads a box-height before the end is reached (`LoadMore` rooted in
- * the box).
- *
- * **A header sorts.** Clicking a column's header sorts by it — every column is a field
- * path, and so a sort key — and clicking it again flips the direction. The "Match"
- * column is the exception: a search result's matched line, which nothing sorts on.
- */
-
 import { useLayoutEffect, useState } from "react";
 import type { ReactElement, ReactNode } from "react";
 
@@ -29,27 +10,20 @@ import { MATCH_COLUMN, cellText, columnLabel, columnOption } from "./columns.js"
 import { LoadMore } from "../../_shared/LoadMore.js";
 import type { SearchSnippet as Snippet } from "plugin:search";
 
-/** The shortest the box is held to by the screen: the header and a couple of rows. */
 const MIN_BOX = 120;
 
 export interface ResultsTableProps {
   readonly rows: readonly DocumentRow[];
-  /** The columns after the title, as field paths. */
   readonly columns: readonly string[];
-  /** How many rows the box shows at a time. */
   readonly rowLimit: number;
-  /** The matched line under a search result's title. */
   readonly snippetOf: (row: DocumentRow) => Snippet | undefined;
   readonly renderSnippet: (snippet: Snippet) => ReactNode;
   readonly sortField: string;
   readonly sortDirection: "asc" | "desc";
   readonly onSort: (field: string, direction: "asc" | "desc") => void;
   readonly onOpen: (id: string, line?: number) => void;
-  /** Open the menu of the row `button` is in (`context-menu`'s `openFor`), beside the button. */
   readonly onRowMenu: (button: HTMLElement) => void;
-  /** A row with an action in flight. */
   readonly busy?: string | undefined;
-  /** More rows exist: load them as the end nears. */
   readonly more?: { readonly busy: boolean; readonly onMore: () => void } | undefined;
 }
 
@@ -74,19 +48,13 @@ export function ResultsTable({
     count: rows.length,
     keyOf: (index) => rows[index]?.id ?? String(index),
     estimate: withSnippets ? 72 : 40,
-    // The box is the viewport, wherever the page has scrolled it (an embed half off screen).
     clipToWindow: false,
   });
   const capped = rows.length > rowLimit || more !== undefined;
-  // Never taller than what its scrolling ancestor shows (on a phone, `rowLimit` rows are
-  // several screens): a box taller than the screen is scrolled by the page, not by itself,
-  // and the rows it hears scroll are then never the ones on screen.
   const screen = useScrollerHeight(box);
   const limit = capped ? (height ?? 40 + rowLimit * (withSnippets ? 72 : 40)) : undefined;
   const maxHeight = screen === undefined ? limit : Math.min(limit ?? Infinity, Math.max(MIN_BOX, screen));
 
-  // Stop the box at the bottom of the `rowLimit`-th row, once it has been drawn. Guarded,
-  // so a settled height is not set again; a row scrolled out of the DOM keeps the last one.
   useLayoutEffect(() => {
     if (!box) return;
     if (!capped) {
@@ -160,15 +128,10 @@ export function ResultsTable({
                 {...mark("ddd/document", row.id, { label: row.title })}
                 className="search-item table:border-b table:border-border table:last:border-b-0"
               >
-                {/* `max-w-0` with `w-full`: the title takes the room the other columns leave,
-                    and truncates in it, so a long one cannot push the ⋯ off a phone. */}
                 <td className="table:w-full table:min-w-0 table:max-w-0 table:px-2 table:py-1 table:align-top">
                   <button
                     type="button"
                     className="search-open table:flex table:min-h-[calc(var(--ddd-tap-target)/2)] table:max-w-full table:items-center table:overflow-hidden table:text-ellipsis table:whitespace-nowrap table:border-0! table:bg-transparent! table:p-0! table:text-left table:text-base table:text-link table:compact:min-h-[var(--ddd-tap-target)]"
-                    // Draggable so the `folders` tree can be dropped onto: a bare
-                    // `text/plain` document id, the only thing two plugins can agree on
-                    // without importing each other (SPEC §6.1).
                     draggable
                     onDragStart={(event) => {
                       event.dataTransfer.setData("text/plain", row.id);

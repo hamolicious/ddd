@@ -1,19 +1,3 @@
-//! Filter evaluation over a projection row. The same code runs on the server
-//! (over rows read from Mongo) and in the client kernel over IndexedDB rows
-//! (SPEC §4.2) — so the local query engine and the server agree by construction.
-//!
-//! Two rules make evaluator/Mongo-compiler equality provable:
-//!
-//! 1. **Dynamic fields never error.** A value under `fm`/`plugins` whose type
-//!    differs from the literal's simply does not match, exactly as Mongo's
-//!    comparison bracketing behaves. Heterogeneous workspaces are normal.
-//! 2. **Fixed columns error.** `id`/`title`/`content` are strings, `deleted` is
-//!    a bool, `created_at`/`updated_at`/`deleted_at` are dates — their types are
-//!    schema-fixed,
-//!    so a mismatch is a query bug: [`EvalError::TypeMismatch`] here, and
-//!    `CompileError::Unsupported` on the server (→ 400). Neither side silently
-//!    answers.
-
 use std::cmp::Ordering;
 
 use thiserror::Error;
@@ -24,32 +8,23 @@ use crate::filter::ast::{
 };
 use crate::value::{Map, Value, ValueType};
 
-/// The projection row (SPEC §4.1): what replicates to clients and what filters
-/// address. Borrowed so evaluation never allocates a row.
 #[derive(Debug, Clone, Copy)]
 pub struct Row<'a> {
     pub id: &'a str,
     pub title: &'a str,
-    /// Materialized full text (plain), including `%%%` sections.
     pub content: &'a str,
     pub fm: &'a Map,
     pub plugins: &'a Map,
     pub created_at: Option<&'a Date>,
     pub updated_at: Option<&'a Date>,
-    /// When this document was tombstoned. `None` on a live document — the same
-    /// absence Mongo stores (the field is unset, never written as null), so
-    /// `missing` and `exists` agree on both sides.
     pub deleted_at: Option<&'a Date>,
     pub deleted: bool,
 }
 
-/// Result of resolving a field path against a row: present-with-value, or
-/// genuinely absent (the `missing` vs `null` distinction, SPEC §4.2).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum FieldRef<'a> {
     Missing,
     Present(&'a Value),
-    /// Projection scalars that are not stored in `fm`/`plugins`.
     Str(&'a str),
     Bool(bool),
     Date(&'a Date),
@@ -71,27 +46,15 @@ pub enum EvalError {
     NeedsGraph,
 }
 
-/// Evaluate a filter against one row.
-///
-/// Errors (rather than returning false) only on row-independent query bugs: a
-/// type mismatch against a fixed projection column, or an operator that cannot
-/// apply to the addressed kind of field. The server rejects those with 400; row
-/// data never produces an error.
 pub fn evaluate(filter: &Filter, row: &Row<'_>) -> Result<bool, EvalError> {
     evaluate_in(filter, row, None)
 }
 
-/// The folder tree, for the relation nodes (`child_of`, `parent_of`): a join the
-/// row alone cannot answer. The query engine (`crate::query`) implements it.
 pub trait Graph {
-    /// `id` is in `of`'s children list; with `deep`, anywhere below `of`.
     fn is_child(&self, id: &str, of: &str, deep: bool) -> bool;
-    /// `id`'s children list holds `of`.
     fn is_parent(&self, id: &str, of: &str) -> bool;
 }
 
-/// [`evaluate`], with the folder tree for the relation nodes. Without one they are
-/// [`EvalError::NeedsGraph`].
 pub fn evaluate_in(
     filter: &Filter,
     row: &Row<'_>,
@@ -154,7 +117,6 @@ pub fn evaluate_in(
     }
 }
 
-/// Resolve a field path against a row.
 pub fn resolve_field<'a>(row: &Row<'a>, field: &FieldPath) -> FieldRef<'a> {
     let segments = field.segments();
     match field.root() {
@@ -190,15 +152,12 @@ fn walk<'a>(map: &'a Map, segments: &[String]) -> FieldRef<'a> {
     FieldRef::Present(current)
 }
 
-/// Compare a resolved field against a literal with one operator, applying the
-/// same-type rule. `Missing` fields never match (except via `missing`).
 pub fn compare(
     field_name: &str,
     found: FieldRef<'_>,
     op: CompareOp,
     literal: &Literal,
 ) -> Result<bool, EvalError> {
-    // Checked before the row is consulted, so the verdict is row-independent.
     if op.is_ordering() && matches!(literal.family(), LiteralFamily::Null | LiteralFamily::Bool) {
         return Err(EvalError::NotApplicable {
             field: field_name.to_string(),
@@ -208,8 +167,6 @@ pub fn compare(
         return Ok(false);
     }
     if op == CompareOp::Ne {
-        // `ne` is exactly "present and not `eq`" — see README. This keeps it the
-        // complement of `eq` on both sides without a second set of type rules.
         return Ok(!compare(field_name, found, CompareOp::Eq, literal)?);
     }
 
@@ -232,8 +189,6 @@ pub fn compare(
             }),
         },
         FieldRef::Date(date) => match literal {
-            // Stored as a BSON date: the instant is what Mongo compares, so
-            // precision is not part of the comparison here.
             Literal::Date(wanted) => Ok(satisfies(
                 op,
                 date.epoch_millis().cmp(&wanted.epoch_millis()),
@@ -248,8 +203,6 @@ pub fn compare(
     }
 }
 
-/// Dynamic (`fm`/`plugins`) comparison: type families must match, and a
-/// mismatch is simply "no match".
 fn compare_dynamic(op: CompareOp, value: &Value, literal: &Literal) -> bool {
     match literal {
         Literal::Null => matches!((op, value), (CompareOp::Eq, Value::Null)),
@@ -273,10 +226,6 @@ fn compare_dynamic(op: CompareOp, value: &Value, literal: &Literal) -> bool {
                 _ => false,
             }
         }
-        // A date literal against stored text: only a *canonical* date string
-        // participates, and the comparison is byte-wise over canonical forms —
-        // which is exactly what the Mongo compiler emits (a shape regex plus a
-        // string comparison). See `crates/core/README.md`.
         Literal::Date(wanted) => match value {
             Value::Str(actual) if date::is_canonical_shape(actual) => {
                 satisfies(op, actual.as_str().cmp(wanted.canonical()))
@@ -316,7 +265,6 @@ fn list_match(
     }
     match resolve_field(row, field) {
         FieldRef::Missing => Ok(false),
-        // Fixed columns are never lists; asking is a query bug.
         FieldRef::Str(_) | FieldRef::Bool(_) | FieldRef::Date(_) => {
             Err(EvalError::NotApplicable { field: name })
         }
@@ -330,7 +278,6 @@ fn list_match(
                 ListMode::Every => items.iter().all(element),
             })
         }
-        // Not a list: no implicit array matching, in either direction.
         FieldRef::Present(_) => Ok(false),
     }
 }
@@ -361,27 +308,6 @@ fn text_match(
     })
 }
 
-/// Total ordering of two rows by sort keys, used by the client-side query engine
-/// (the server sorts in Mongo). Missing values sort last in both directions.
-///
-/// `id` ascending is always the final tiebreaker — the same one the query layer
-/// appends to the Mongo sort — so client and server orderings are identical **over
-/// rows that all carry the sort key**.
-///
-/// **They are not identical over rows that do not, and that is a parked decision rather
-/// than an oversight.** Mongo sorts an absent field as Null, the lowest BSON type, so it
-/// comes *first* ascending; this comparator puts it last in both directions. Closing the
-/// gap means either making `Missing` rank below `Null` here (and in
-/// `web/kernel/src/query/filter.ts`, which mirrors this function line by line, in the same
-/// commit) or emitting an `$ifNull` sort projection from `filter::mongo::compile_sort`.
-/// `crates/server/tests/documents_query.rs` asserts the current behaviour of *both* sides
-/// so that it stays a decision.
-///
-/// The one place it reaches a user-facing sort is `deleted_at`: it is the only fixed root
-/// that can be absent and it is an advertised sort key (`SORTABLE_FIELDS`, the Trash
-/// order). Ascending over `?trash=all` splits live from tombstoned documents to opposite
-/// ends depending on who ordered them; descending — what the Trash view sends — agrees,
-/// because the present values lead either way.
 pub fn compare_rows(a: &Row<'_>, b: &Row<'_>, sort: &[SortKey]) -> Ordering {
     for key in sort {
         let ordering = compare_by_key(a, b, key);
@@ -392,14 +318,11 @@ pub fn compare_rows(a: &Row<'_>, b: &Row<'_>, sort: &[SortKey]) -> Ordering {
     a.id.cmp(b.id)
 }
 
-/// One key of [`compare_rows`], with no `id` tiebreak: for a caller that mixes field
-/// keys with its own (the query engine's relevance).
 pub fn compare_by_key(a: &Row<'_>, b: &Row<'_>, key: &SortKey) -> Ordering {
     let left = resolve_field(a, &key.field);
     let right = resolve_field(b, &key.field);
     match (left == FieldRef::Missing, right == FieldRef::Missing) {
         (true, true) => Ordering::Equal,
-        // Missing last, regardless of direction.
         (true, false) => Ordering::Greater,
         (false, true) => Ordering::Less,
         (false, false) => {
@@ -418,8 +341,6 @@ fn order_fields(left: FieldRef<'_>, right: FieldRef<'_>) -> Ordering {
         (FieldRef::Bool(a), FieldRef::Bool(b)) => a.cmp(&b),
         (FieldRef::Date(a), FieldRef::Date(b)) => a.cmp(b),
         (FieldRef::Present(a), FieldRef::Present(b)) => order_values(a, b),
-        // Mixed kinds only happen across different roots, which cannot occur for
-        // one sort key; keep it total anyway.
         _ => Ordering::Equal,
     }
 }
@@ -524,7 +445,6 @@ mod tests {
             )
             .unwrap()
         );
-        // int/float are one numeric family.
         assert!(
             evaluate(
                 &filter(r#"{"cmp":{"field":"fm.n","op":"lt","value":{"float":5.5}}}"#),
@@ -573,7 +493,6 @@ mod tests {
             )
             .unwrap()
         );
-        // Different type: not equal, and the field is present, so `ne` matches.
         assert!(
             evaluate(
                 &filter(r#"{"cmp":{"field":"fm.n","op":"ne","value":{"str":"1"}}}"#),
@@ -581,7 +500,6 @@ mod tests {
             )
             .unwrap()
         );
-        // Missing never matches, not even `ne`.
         assert!(
             !evaluate(
                 &filter(r#"{"cmp":{"field":"fm.zz","op":"ne","value":{"str":"x"}}}"#),
@@ -599,7 +517,6 @@ mod tests {
         )]);
         let plugins = Map::new();
         let r = row(&fm, &plugins);
-        // No implicit array matching.
         assert!(
             !evaluate(
                 &filter(r#"{"cmp":{"field":"fm.tags","op":"eq","value":{"str":"work"}}}"#),
@@ -659,7 +576,6 @@ mod tests {
             )
             .unwrap()
         );
-        // A non-date string never participates in a date comparison.
         assert!(
             !evaluate(
                 &filter(r#"{"cmp":{"field":"fm.other","op":"gte","value":{"date":"2026-01-01"}}}"#),
@@ -667,7 +583,6 @@ mod tests {
             )
             .unwrap()
         );
-        // Precision is part of equality.
         assert!(!evaluate(&filter(r#"{"cmp":{"field":"fm.due","op":"eq","value":{"date":"2026-09-23T00:00:00Z"}}}"#), &r).unwrap());
     }
 
@@ -769,7 +684,6 @@ mod tests {
             field: FieldPath::parse("fm.n").unwrap(),
             order: SortOrder::Desc,
         }];
-        // Missing stays last in descending order too.
         assert_eq!(compare_rows(&a, &b, &desc), Ordering::Less);
     }
 }

@@ -1,48 +1,23 @@
-//! The strict-subset YAML line machinery shared by [`crate::frontmatter`] and
-//! [`crate::sections`] (SPEC §3.4).
-//!
-//! Values are normally parsed one physical line at a time. Frontmatter additionally
-//! accepts one deliberately narrow continuation form: an empty top-level key followed
-//! by an indented block sequence. Each item is still parsed independently, so a broken
-//! item is dropped without changing how any later top-level line is interpreted.
-//!
-//! Consequences, deliberate and documented in `README.md`:
-//! - Nested mappings still come from *flow* collections (`{…}` / `[…]`), never
-//!   from indentation.
-//! - Block sequences are supported only as a top-level frontmatter value. Machine
-//!   sections remain one key per line.
-
 use crate::date::Date;
 use crate::diagnostics::{Diagnostic, DiagnosticKind};
 use crate::limits::{MAX_ARRAY_ITEMS, is_valid_key};
 use crate::value::{Map, Value, ValueReject, parse_value, split_key, unquote_key};
 
-/// One physical line of a document, with byte offsets into the source text.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Line<'t> {
-    /// 0-based line index.
     pub index: usize,
-    /// Byte offset of the first byte of the line content.
     pub start: usize,
-    /// Byte offset one past the last content byte (before `\r\n` / `\n`).
     pub end: usize,
-    /// Byte offset one past the line terminator (== `end` on the last line
-    /// when the text does not end with a newline).
     pub full_end: usize,
-    /// Line content without its terminator (a trailing `\r` is excluded).
     pub content: &'t str,
 }
 
 impl Line<'_> {
-    /// 1-based document line number, for diagnostics.
     pub fn number(&self) -> u32 {
         u32::try_from(self.index + 1).unwrap_or(u32::MAX)
     }
 }
 
-/// Split text into lines with byte offsets. CRLF-tolerant: a trailing `\r` is
-/// treated as part of the terminator, so span lookups work on un-normalized
-/// text too.
 pub(crate) fn lines(text: &str) -> Vec<Line<'_>> {
     let mut out = Vec::new();
     let bytes = text.as_bytes();
@@ -85,13 +60,12 @@ pub(crate) fn lines(text: &str) -> Vec<Line<'_>> {
     out
 }
 
-/// What one line turned out to be.
 pub(crate) enum LineOutcome {
-    /// Blank line or full-line comment: skipped silently.
     Skip,
-    /// A well-formed `key: value` pair.
-    Pair { key: String, value: Value },
-    /// Dropped, with the reason.
+    Pair {
+        key: String,
+        value: Value,
+    },
     Reject {
         kind: DiagnosticKind,
         key: Option<String>,
@@ -99,7 +73,6 @@ pub(crate) enum LineOutcome {
     },
 }
 
-/// Parse one line of a frontmatter block or a `%%%` section body.
 pub(crate) fn parse_line(content: &str) -> LineOutcome {
     let trimmed = content.trim();
     if trimmed.is_empty() {
@@ -179,8 +152,6 @@ pub(crate) fn parse_line(content: &str) -> LineOutcome {
     }
 }
 
-/// The key of a line, when the line is a well-formed `key: value` pair —
-/// regardless of whether its *value* parses. Used by the splice span lookups.
 pub(crate) fn line_key(content: &str) -> Option<String> {
     let trimmed = content.trim();
     if trimmed.is_empty() || trimmed.starts_with('#') || content.starts_with([' ', '\t']) {
@@ -191,26 +162,16 @@ pub(crate) fn line_key(content: &str) -> Option<String> {
     is_valid_key(&key).then_some(key)
 }
 
-/// Result of parsing a whole block body, one key per line.
 pub(crate) struct BlockParse {
     pub map: Map,
     pub diagnostics: Vec<Diagnostic>,
-    /// `true` when at least one line was dropped or a cap was hit. Duplicate
-    /// keys do **not** set this: last-occurrence-wins is a defined resolution
-    /// rule (SPEC §3.3), not an error.
     pub had_error: bool,
 }
 
-/// Parse the body of a `%%%` section, including top-level indented block
-/// sequences (one item per line, so list splices merge line by line).
-///
-/// `first_line` is the 1-based document line number of `inner`'s first line so
-/// diagnostics carry document coordinates. `max_keys` is the applicable cap.
 pub(crate) fn parse_block_lines(inner: &str, first_line: u32, max_keys: usize) -> BlockParse {
     parse_lines(inner, first_line, max_keys, true)
 }
 
-/// Parse frontmatter, including top-level indented block sequences.
 pub(crate) fn parse_frontmatter_lines(inner: &str, first_line: u32, max_keys: usize) -> BlockParse {
     parse_lines(inner, first_line, max_keys, true)
 }
@@ -287,9 +248,6 @@ fn parse_lines(
     }
 }
 
-/// A valid top-level key whose value is physically empty (`key:`). Comments after
-/// the colon are intentionally not continuation syntax: preserving them while a
-/// multi-line value is replaced would be ambiguous.
 pub(crate) fn empty_value_key(content: &str) -> Option<String> {
     if content.starts_with([' ', '\t']) {
         return None;
@@ -302,9 +260,6 @@ pub(crate) fn empty_value_key(content: &str) -> Option<String> {
     is_valid_key(&key).then_some(key)
 }
 
-/// Collect consecutive indented `- value` lines after an empty top-level key.
-/// Shared with the list splices, which need each item's line as well as its value.
-/// Returns `(parsed items, physical lines consumed, diagnostics)`.
 fn block_sequence(
     source: &[Line<'_>],
     start: usize,
@@ -348,9 +303,6 @@ fn block_sequence(
     (items, used, diagnostics)
 }
 
-/// An indented block-sequence item. Indentationless YAML sequences stay unsupported:
-/// requiring indentation keeps a stray top-level `- item` from attaching to the key
-/// above it after a mid-edit deletion.
 pub(crate) fn block_item(content: &str) -> Option<(usize, &str)> {
     let indent = content.len() - content.trim_start_matches([' ', '\t']).len();
     if indent == 0 {
@@ -363,7 +315,6 @@ pub(crate) fn block_item(content: &str) -> Option<(usize, &str)> {
     rest.strip_prefix("- ").map(|value| (indent, value))
 }
 
-/// Last line in the expanded value owned by the top-level key at `header`, if any.
 pub(crate) fn expanded_value_end<'s, 't>(
     source: &'s [Line<'t>],
     header: usize,
@@ -403,10 +354,6 @@ fn reject_detail(reject: ValueReject) -> (DiagnosticKind, &'static str) {
     }
 }
 
-/// Rewrite every date-shaped string to its canonical form (SPEC §3.4: dates are
-/// normalized *at materialization* so lexicographic sort is correct). Applied
-/// recursively so dates inside flow collections normalize too. The document
-/// text is never touched — only the materialized value.
 pub(crate) fn normalize_dates(value: &mut Value) {
     match value {
         Value::Str(text) => {
@@ -485,7 +432,6 @@ mod tests {
             ]))
         );
         assert_eq!(parsed.map.get("ok"), Some(&Value::Int(1)));
-        // Indentation outside a sequence is still dropped.
         assert!(parsed.had_error);
         assert_eq!(parsed.diagnostics.len(), 1);
     }

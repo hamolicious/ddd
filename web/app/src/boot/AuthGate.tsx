@@ -1,15 +1,3 @@
-/**
- * The auth gate: the only screen that exists before the kernel.
- *
- * It is part of the app rather than a plugin because plugins are served *to
- * authenticated clients* — a login screen that needed a plugin to render could not
- * be reached by anyone who is not already logged in.
- *
- * Registration is invite-only past the first user (SPEC §5.1), and the first user
- * becomes admin; `/api/auth/bootstrap` says which case this is, so the form can ask
- * for an invite token only when one is actually required.
- */
-
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 
 import type { SessionUser } from "@kernel";
@@ -23,11 +11,8 @@ export function AuthGate({
   inviteToken,
 }: {
   readonly onSignedIn: (user: SessionUser, token?: string) => void;
-  /** Shells authenticate with a bearer token (SPEC §5.2); browsers use the cookie. */
   readonly bearer?: boolean;
-  /** Opened from a reset link (`#/reset/<token>`): ask for a new password first. */
   readonly resetToken?: string;
-  /** Opened from an invite link (`#/invite/<token>`): register, with the token filled in. */
   readonly inviteToken?: string;
 }): ReactNode {
   const [state, setState] = useState<AuthBootstrap | undefined>();
@@ -42,7 +27,6 @@ export function AuthGate({
     authBootstrap()
       .then((bootstrap) => {
         setState(bootstrap);
-        // A workspace with no users at all can only be registered into.
         if (bootstrap.needs_first_user && !resetToken) setMode("register");
       })
       .catch((cause: unknown) => setError(describe(cause)));
@@ -60,7 +44,6 @@ export function AuthGate({
     setError(undefined);
     redeemReset(resetToken ?? "", password)
       .then(() => {
-        // The link is spent: take it out of the address so a reload does not ask again.
         history.replaceState(null, "", location.pathname + location.search);
         setMode("sign-in");
         setNotice("Your password is changed. Sign in with it.");
@@ -123,7 +106,6 @@ export function AuthGate({
         : login(email, password, bearer ?? false);
     attempt
       .then((signed) => {
-        // A spent invite link is not a view: leave the workspace at its start.
         if (inviteToken) history.replaceState(null, "", location.pathname + location.search);
         onSignedIn(signed.user, signed.token);
       })
@@ -196,7 +178,6 @@ export function AuthGate({
 
 function describe(cause: unknown): string {
   if (cause instanceof ApiError) {
-    // 429 carries the backoff of SPEC §5.2; saying so beats "request failed".
     return cause.status === 429
       ? `Too many attempts. ${cause.message}`
       : cause.message;

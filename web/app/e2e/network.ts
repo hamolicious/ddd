@@ -1,16 +1,7 @@
-/**
- * The network and the keyboard, as the offline and collaboration specs need them.
- *
- * "Offline" is both halves of the wire: `context.setOffline` stops HTTP, and the sync
- * socket is cut and refused by `routeWebSocket` (`setOffline` alone leaves an open
- * WebSocket connected). `network.online()` lets both back and nudges a reconnect.
- */
-
 import { expect, type BrowserContext, type Page, type WebSocketRoute } from "@playwright/test";
 
 import { waitSynced } from "./helpers.js";
 
-/** Both halves of the wire, cut and restored together. */
 export async function network(page: Page, context: BrowserContext) {
   let refuse = false;
   const live = new Set<WebSocketRoute>();
@@ -23,7 +14,6 @@ export async function network(page: Page, context: BrowserContext) {
     ws.connectToServer();
   });
   return {
-    /** Cut the wire; resolves once the app says so, and returns how long that took. */
     async offline(): Promise<number> {
       refuse = true;
       const cut = Date.now();
@@ -35,7 +25,6 @@ export async function network(page: Page, context: BrowserContext) {
       console.log(`[offline] the app showed offline after ${noticed} ms`);
       return noticed;
     },
-    /** Let the wire back without waiting for the app to say it is synced. */
     async release(): Promise<void> {
       refuse = false;
       await context.setOffline(false);
@@ -44,14 +33,12 @@ export async function network(page: Page, context: BrowserContext) {
       refuse = false;
       await context.setOffline(false);
       const reconnect = page.getByRole("button", { name: "Offline. Reconnect" });
-      // The app often reconnects on its own first; the button is then gone.
       if (await reconnect.isVisible()) await reconnect.click({ timeout: 2_000 }).catch(() => undefined);
       await waitSynced(page);
     },
   };
 }
 
-/** Wait until the service worker controls the page: only then can it start offline. */
 export async function workerInControl(page: Page): Promise<void> {
   await page.evaluate(() => navigator.serviceWorker.ready);
   if (!(await page.evaluate(() => Boolean(navigator.serviceWorker.controller)))) {
@@ -61,7 +48,6 @@ export async function workerInControl(page: Page): Promise<void> {
   await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
 }
 
-/** Put the caret at the end of the note in Edit mode and type. */
 export async function typeAtEnd(page: Page, text: string): Promise<void> {
   const edit = page.getByRole("tab", { name: /^Edit/ });
   if ((await edit.getAttribute("aria-selected")) !== "true") await edit.click();
@@ -72,7 +58,6 @@ export async function typeAtEnd(page: Page, text: string): Promise<void> {
   await page.keyboard.type(text);
 }
 
-/** Put the caret at the very start of the body line matching `after` and type. */
 export async function typeAfter(page: Page, after: string, text: string): Promise<void> {
   const edit = page.getByRole("tab", { name: /^Edit/ });
   if ((await edit.getAttribute("aria-selected")) !== "true") await edit.click();

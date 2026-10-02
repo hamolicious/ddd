@@ -1,22 +1,3 @@
-/**
- * One simulated client: a bearer session, the kernel's real {@link SyncTransport}
- * over a real WebSocket, real `Y.Doc` replicas, and an in-memory stand-in for the
- * IndexedDB projection mirror (Node has no IndexedDB; the LWW-by-`seq` rules of
- * PROTOCOL.md §2.1 are applied identically).
- *
- * Everything on the wire goes through `kernel/src/protocol.ts` and
- * `kernel/src/sync/transport.ts` — the same code the browser runs. A faked
- * transport would prove nothing about convergence, which is the whole point of
- * this harness (`web/CONTRACTS.md`, area web-harness).
- *
- * The recovery moves are the protocol's, not invented here:
- * `feed.reset` → REST bootstrap then re-subscribe at the pinned `safe_seq`;
- * `feed.resync` → re-subscribe at `from_seq`, keeping every row;
- * `doc.resync` → a fresh `SYNC_STEP1` per document;
- * `doc.error { too_large, hint: "rest" }` → hydrate over REST, re-subscribe with
- * the resulting state vector.
- */
-
 import * as Y from "yjs";
 
 import {
@@ -32,21 +13,13 @@ import { applyOp, chooseOp, markersIn, TEXT_ROOT, type OpKind, type OpRecord } f
 import { bytesToBase64, RestClient } from "./rest.js";
 import type { SimulatedClient } from "./scenario.js";
 
-/** Origin tag for remotely-applied updates, so the local handler ignores them. */
 const REMOTE = Symbol("remote");
 
 export interface SimClientOptions {
   readonly name: string;
   readonly token: string;
   readonly baseUrl: string;
-  /**
-   * Per-run tag mixed into this client's markers. Document ids are deterministic,
-   * so two runs edit the same documents; without a tag, run 2's `{{c1#1}}` collides
-   * with run 1's leftover and "every marker appears exactly once" reports a
-   * duplicate that is really just history.
-   */
   readonly tag?: string;
-  /** Subscribe to the workspace change feed as well as documents. */
   readonly feed?: boolean;
   readonly log?: (line: string) => void;
 }
@@ -58,7 +31,6 @@ export interface ClientStats {
   updatesReceived: number;
   step1Sent: number;
   step2Sent: number;
-  /** Local transactions produced while the socket was down (the offline queue). */
   offlineUpdates: number;
   docResyncs: number;
   feedResets: number;
@@ -74,14 +46,11 @@ interface DocEntry {
   readonly doc: Y.Doc;
   readonly text: Y.Text;
   subscribed: boolean;
-  /** Resolved when `doc.subscribed` + the server's `SYNC_STEP1` have arrived. */
   ready?: { promise: Promise<void>; resolve: () => void; reject: (error: Error) => void };
   sawServerStep1: boolean;
-  /** Markers this client wrote into this document, in order. */
   markers: string[];
   opCount: number;
   queuedWhileOffline: number;
-  /** Created locally while offline and not yet POSTed to the server. */
   pendingCreate: boolean;
 }
 
@@ -106,9 +75,7 @@ export class HarnessClient implements SimulatedClient {
     errors: [],
   };
 
-  /** The client's projection mirror: LWW by `seq` (PROTOCOL.md §2.1). */
   readonly projection = new Map<string, FeedRow>();
-  /** The persisted resume point: the server's `safe_seq`, never `max(seq)` seen. */
   safeSeq = 0;
   headSeq = 0;
   feedComplete = false;
@@ -140,8 +107,6 @@ export class HarnessClient implements SimulatedClient {
   opsOn(id: string): number {
     return this.#docs.get(id)?.opCount ?? 0;
   }
-
-  // -- connection ----------------------------------------------------------
 
   async connect(): Promise<void> {
     if (this.connected) return;
@@ -185,15 +150,6 @@ export class HarnessClient implements SimulatedClient {
     }
   }
 
-  /**
-   * Drop the socket — a partition.
-   *
-   * The default code is **4000**, not `1001`: the WebSocket API only lets a client
-   * close with `1000` or `3000–4999` (undici raises `InvalidAccessError` on
-   * anything else, and browsers agree), and `4000` is unused by PROTOCOL.md §7. A
-   * failure here must never take the run down, so it is caught: the point of a
-   * partition is that the socket goes away, not how politely.
-   */
   disconnect(code = 4000): void {
     try {
       this.#transport?.close(code, "harness partition");
@@ -233,21 +189,12 @@ export class HarnessClient implements SimulatedClient {
     for (const waiter of waiters) waiter.reject(error);
   }
 
-  // -- documents -----------------------------------------------------------
-
-  /** Open a document for editing: hydrate lazily over the socket (SPEC §4.1). */
   async open(id: string): Promise<Y.Text> {
     const entry = this.#entry(id);
     if (this.connected && !entry.pendingCreate) await this.#subscribeAndWait(entry, 15_000);
     return entry.text;
   }
 
-  /**
-   * Mint a document **offline**: a client-side ULID and a local replica, with no
-   * server round trip (SPEC §3.5 "client-mintable offline"). The create is
-   * flushed by {@link flushPendingCreates} on reconnect — M2 has no create
-   * message on the socket, so that flush is a REST `POST`.
-   */
   createOffline(id: string, text: string): Y.Text {
     const entry = this.#entry(id);
     entry.pendingCreate = true;
@@ -258,17 +205,12 @@ export class HarnessClient implements SimulatedClient {
     return entry.text;
   }
 
-  /** POST every offline-created document, then hydrate it from the server. */
   async flushPendingCreates(): Promise<string[]> {
     const flushed: string[] = [];
     for (const entry of [...this.#docs.values()]) {
       if (!entry.pendingCreate) continue;
       const text = entry.text.toString();
       await this.rest.createDocument(entry.id, text);
-      // The server minted its own CRDT history for this text. Drop the local
-      // replica rather than merging two independent histories of the same
-      // characters (that would duplicate the text), and re-hydrate from the
-      // server — the markers are already on the server side.
       entry.doc.destroy();
       this.#docs.delete(entry.id);
       const fresh = this.#entry(entry.id);
@@ -280,17 +222,14 @@ export class HarnessClient implements SimulatedClient {
     return flushed;
   }
 
-  /** Apply one randomized operation (`ops.ts`) to an open document. */
   async edit(id: string, rng: () => number): Promise<void> {
     this.editSync(id, rng);
   }
 
-  /** The name markers carry: the client plus this run's tag. */
   get markerName(): string {
     return this.options.tag ? `${this.name}-${this.options.tag}` : this.name;
   }
 
-  /** The synchronous form, which also returns what it did (for the journal). */
   editSync(id: string, rng: () => number, kind: OpKind = chooseOp(rng)): OpRecord {
     const entry = this.#entry(id);
     entry.opCount += 1;
@@ -304,12 +243,6 @@ export class HarnessClient implements SimulatedClient {
     return entry ? entry.text.toString() : undefined;
   }
 
-  /**
-   * Wait until this client's replica of `id` is byte-identical to the server's
-   * CRDT state. Both directions have to flow: the server's reads come over the
-   * socket, and the client's writes are pushed by the `SYNC_STEP1`/`SYNC_STEP2`
-   * handshake a (re)subscribe performs.
-   */
   async awaitConvergence(id: string, timeoutMs: number): Promise<void> {
     const entry = this.#docs.get(id);
     if (!entry) throw new Error(`${this.name} has no replica of ${id}`);
@@ -329,7 +262,6 @@ export class HarnessClient implements SimulatedClient {
         throw new ConvergenceTimeout(this.name, id, local ?? "", server);
       }
       if (!nudged && Date.now() > deadline - (timeoutMs * 2) / 3) {
-        // One state-vector resync, the universal recovery move (PROTOCOL.md §3.5).
         this.#sendStep1(entry);
         nudged = true;
       }
@@ -337,7 +269,6 @@ export class HarnessClient implements SimulatedClient {
     }
   }
 
-  /** The server's text for `id`, decoded from its CRDT state (never materialized). */
   async #serverText(id: string): Promise<string> {
     const { state } = await this.rest.crdtState(id);
     const doc = new Y.Doc();
@@ -369,8 +300,6 @@ export class HarnessClient implements SimulatedClient {
         this.#send({ type: FrameType.Update, docId: id, payload: update });
         this.stats.updatesSent += 1;
       } else {
-        // Offline queue: the CRDT *is* the queue. Nothing is sent; the next
-        // subscribe's SYNC_STEP2 carries everything the server is missing.
         entry.queuedWhileOffline += 1;
         this.stats.offlineUpdates += 1;
       }
@@ -391,7 +320,6 @@ export class HarnessClient implements SimulatedClient {
     );
   }
 
-  /** Send `doc.subscribe` once per socket per document, tracking its handshake. */
   #beginSubscribe(entry: DocEntry): void {
     if (!this.connected) return;
     if (entry.ready) return;
@@ -407,9 +335,6 @@ export class HarnessClient implements SimulatedClient {
 
   #sendSubscribe(entry: DocEntry): void {
     if (!this.connected) return;
-    // Always send `sv`: with an empty state vector the server answers
-    // `SYNC_STEP2` with everything it has, which is the no-local-replica path of
-    // PROTOCOL.md §3.3 in one round trip.
     const sv = bytesToBase64(Y.encodeStateVector(entry.doc));
     this.#transport?.sendControl({ t: "doc.subscribe", id: entry.id, sv });
   }
@@ -442,8 +367,6 @@ export class HarnessClient implements SimulatedClient {
     this.stats.step1Sent += 1;
   }
 
-  // -- inbound -------------------------------------------------------------
-
   #onControl(message: ServerControl): void {
     switch (message.t) {
       case "welcome": {
@@ -456,8 +379,6 @@ export class HarnessClient implements SimulatedClient {
       }
       case "feed.batch": {
         this.#applyFeedRows(message.rows);
-        // The watermark is the server's `safe_seq`, never the largest `seq` seen
-        // (PROTOCOL.md §2.2) — storing `max(seq)` skips slower commits forever.
         this.safeSeq = Math.max(this.safeSeq, message.safe_seq);
         this.headSeq = Math.max(this.headSeq, message.head_seq);
         if (message.complete) this.feedComplete = true;
@@ -508,13 +429,12 @@ export class HarnessClient implements SimulatedClient {
   #applyFeedRows(rows: readonly FeedRow[]): void {
     for (const row of rows) {
       this.stats.feedRows += 1;
-      // PROTOCOL.md §2.1: every timestamp on the feed is an RFC 3339 string.
       if (typeof row.updated_at !== "string" || typeof row.created_at !== "string") {
         const violation = `feed row ${row.id} carries a non-string timestamp (extended JSON?)`;
         if (!this.stats.errors.includes(violation)) this.stats.errors.push(violation);
       }
       const stored = this.projection.get(row.id);
-      if (stored && stored.seq >= row.seq) continue; // LWW by seq; older rows ignored
+      if (stored && stored.seq >= row.seq) continue;
       if (row.purged) {
         this.projection.delete(row.id);
         const entry = this.#docs.get(row.id);
@@ -578,12 +498,11 @@ export class HarnessClient implements SimulatedClient {
         return;
       }
       case FrameType.Awareness: {
-        // Relayed opaquely, never parsed (SPEC §3.2). Counted, and nothing else.
         this.stats.awarenessRelayed += 1;
         return;
       }
       default:
-        return; // unknown types ≥ 0x10 are ignored (PROTOCOL.md §3.1)
+        return;
     }
   }
 }
@@ -607,7 +526,6 @@ export function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Race a promise against a deadline, clearing the timer either way. */
 export async function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {

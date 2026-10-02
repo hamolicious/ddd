@@ -1,17 +1,3 @@
-/**
- * `kernel.documents` over the M2 substrate: reads from the local projection and
- * the query engine, writes through the CRDT (open documents) or REST (create,
- * delete, restore).
- *
- * The splice helpers are the part with teeth. SPEC §3.3 forbids parse →
- * re-serialize → replace anywhere near frontmatter, and SPEC §11.2 calls the
- * kernel helper "mandatory discipline" — so the edits are computed by the splice
- * algorithm of `core::splice`, faithfully ported in `runtime/splice.ts` and pinned
- * to the Rust implementation by the shared conformance corpus. The port is the
- * interim state until the Wasm ABI exports the four `plan_*` functions; that file's
- * header says exactly what has to change and who owns it.
- */
-
 import {
   KernelError,
   type CreateDocumentInput,
@@ -54,15 +40,6 @@ import {
   type SectionKeyEdit,
 } from "./splice.js";
 
-/**
- * The public `SectionLineEdit` onto the algorithm's `Option<Value>`.
- *
- * `remove: true` is `None` — the key's line goes. Everything else is `Some(value)`
- * and is written literally, `null` included, which is the whole reason `remove`
- * exists: `FmValue` already contains `null`, so one field cannot mean both "write
- * this" and "write nothing", and the strict YAML subset of SPEC §3.4 has a `null`
- * scalar that a plugin is entitled to store in its own section.
- */
 const sectionEdits = (pluginId: string, edits: readonly SectionLineEdit[]): SectionKeyEdit[] =>
   edits.map((edit) => {
     if (edit.remove === true) return { key: edit.key };
@@ -70,21 +47,6 @@ const sectionEdits = (pluginId: string, edits: readonly SectionLineEdit[]): Sect
     return { key: edit.key, value: edit.value };
   });
 
-/**
- * The one spelling whose meaning changed between kernel 1.0.0 and 1.1.0.
- *
- * Under 1.0.0 `{ key, value: null }` **removed** the key's line; under 1.1.0 it writes the
- * YAML `null` and removal is `remove: true`. The two are byte-identical on the way in, so
- * nothing can refuse the old one — and `KERNEL_API_MAJOR` is still `1`, so a plugin built
- * against 1.0.0 installs, passes the loader's boot re-check, and then quietly accretes
- * `key: null` lines where it meant to clear them. A warning is what is left: it names the
- * change at the call site that made it, which is the only place an author can act on it.
- * `dev-docs/resolved/KERNEL-API.md`'s 1.1.0 entry records why this shipped as a minor and what would
- * make it a major.
- *
- * Once per plugin and key. A splice inside a render loop must not turn a migration note
- * into a flood.
- */
 const warnedBareNulls = new Set<string>();
 
 function warnAboutBareNull(pluginId: string, key: string): void {
@@ -98,7 +60,6 @@ function warnAboutBareNull(pluginId: string, key: string): void {
   );
 }
 
-/** `fetch` against `/api`, carrying whatever this session authenticates with. */
 export type ApiFetch = (path: string, init?: RequestInit) => Promise<Response>;
 
 export interface DocumentsHostOptions {
@@ -106,38 +67,15 @@ export interface DocumentsHostOptions {
   readonly sync: SyncClient;
   readonly api: ApiFetch;
   readonly notices?: NoticeCenter;
-  /** Signed-in user, stamped on rows this device writes before the server does. */
   readonly userId?: string;
-  /** The shared core's parser, for those rows' title and frontmatter. */
   readonly parse?: (text: string) => ParsedDocument;
 }
 
-/** How long after a connection the offline copies start being refreshed. */
 const COPIES_DELAY_MS = 2_000;
 
-/** How long after offline edits are sent a trash elsewhere is still news. */
 const TRASHED_WATCH_MS = 30_000;
 
-/**
- * The splice helpers, per plugin.
- *
- * Three properties hold for every method here, and they are the reason this class
- * exists at all rather than plugins doing their own text surgery:
- *
- * 1. **The plugin id is the kernel's.** `spliceSection` takes no plugin id: it is
- *    always the id this facade was built with (SPEC §3.3 — a plugin writing another
- *    plugin's section is how per-key LWW stops working).
- * 2. **Read, compute and write happen in one synchronous run** over the live
- *    `Y.Text`. Offsets are computed against the text as it is at that instant and
- *    applied before control returns to the event loop, so a remote update cannot
- *    land in between and invalidate them. Every `await` in the flow is *before* the
- *    read (hydrating the document), never between the read and the write.
- * 3. **One transaction per splice**, tagged with a stable origin
- *    (`splice:<plugin-id>`), so `y-codemirror.next` can recognise a write it did not
- *    originate and an `editor` can decide whether its `Y.UndoManager` tracks it.
- */
 export class SpliceHost implements DocumentSpliceApi {
-  /** Transaction origin for every write this facade makes. */
   readonly origin: string;
 
   constructor(
@@ -191,29 +129,14 @@ export class SpliceHost implements DocumentSpliceApi {
     return sectionList(text, this.pluginId, key, action);
   }
 
-  /**
-   * Pure. `value: null` writes the literal `null` — the same thing
-   * {@link setFrontmatterValue} does with it, because this method's contract is
-   * "the edits `setFrontmatterValue` would apply". Removing a key is
-   * {@link removeFrontmatterKey}.
-   */
   planFrontmatterValue(text: string, key: string, value: FmValue | null): readonly TextEdit[] {
     return setFrontmatterValue(text, key, value);
   }
 
-  /** Pure. `remove: true` deletes the key's line; every other edit writes its value. */
   planSection(text: string, edits: readonly SectionLineEdit[]): readonly TextEdit[] {
     return spliceSection(text, this.pluginId, sectionEdits(this.pluginId, edits));
   }
 
-  /**
-   * Hydrate if needed, then read → plan → apply without yielding.
-   *
-   * A document handed in as an id is opened for the write and released again: a
-   * folder drag or a properties edit on a list row must not leave a hydrated replica
-   * behind holding a server subscription. A document handed in as an `OpenDocument`
-   * belongs to its opener, so it is neither re-opened nor released.
-   */
   async #write(target: SpliceTarget, plan: (text: string) => readonly TextEdit[]): Promise<void> {
     if (typeof target !== "string") {
       this.#applyPlan(target, plan);
@@ -240,10 +163,6 @@ export class SpliceHost implements DocumentSpliceApi {
     this.apply(target, edits, this.origin);
   }
 
-  /**
-   * Applying edits needs no Rust: highest offset first, one transaction, so the
-   * offsets computed against the pre-edit text stay valid as they are applied.
-   */
   apply(target: OpenDocument, edits: readonly TextEdit[], origin?: unknown): void {
     if (edits.length === 0) return;
     const ordered = [...edits].sort((a, b) => b.range.start - a.range.start);
@@ -257,10 +176,6 @@ export class SpliceHost implements DocumentSpliceApi {
   }
 }
 
-/**
- * The shared half of `kernel.documents`: one instance per client, wrapped in a
- * per-plugin facade so `splice` can attribute writes to the calling plugin.
- */
 export class DocumentsHost {
   readonly outbox: Outbox;
   readonly local: LocalRows;
@@ -284,7 +199,6 @@ export class DocumentsHost {
       notices: this.#notices,
       online: () => this.#online(),
       createNote: (text) => this.create({ text }),
-      // A queued create is counted by its note; trash and restore have none.
       onChange: (ops) => options.sync.docs.setQueued?.(ops.filter((op) => op.kind !== "create").length),
     });
     this.copies = new OfflineCopies({
@@ -295,10 +209,6 @@ export class DocumentsHost {
     });
   }
 
-  /**
-   * Before the socket opens: notes made offline in an earlier session are held back from
-   * subscribing until the server has created them (it would answer `not_found`).
-   */
   async start(): Promise<void> {
     const ops = await this.outbox.ops().catch(() => []);
     this.options.sync.docs.setQueued(ops.filter((op) => op.kind !== "create").length);
@@ -306,29 +216,16 @@ export class DocumentsHost {
     this.copies.start();
   }
 
-  /**
-   * After every (re)connect: the queued creates, trashes and restores, in order; then
-   * edits made offline in notes that are not open now.
-   */
   async afterConnect(): Promise<void> {
     await this.outbox.drain().catch(() => undefined);
     await this.options.sync.docs.sendUnsynced().catch(() => undefined);
-    // The offline copies are background work: not in the first moments after sign-in,
-    // while the person is starting to use the page.
     setTimeout(() => void this.copies.refresh().catch(() => undefined), COPIES_DELAY_MS);
   }
 
-  /** A local edit the server has not got: shown in the list straight away. */
   onLocalEdit(id: string, text: string): void {
     this.local.edited(id, text);
   }
 
-  /**
-   * Offline edits to `id` were just sent. If the note was moved to Trash elsewhere
-   * meanwhile, say so: the edits are kept there, and nothing else would tell anyone
-   * (`dev-docs/resolved/SYNC-DECISIONS.md` §3). The feed may bring the trash a moment later, so it
-   * is watched for a while.
-   */
   onOfflineEditsSent(id: string): void {
     const store = this.options.sync.store;
     let done = false;
@@ -367,18 +264,12 @@ export class DocumentsHost {
     void check();
   }
 
-  /** Notes with unsent changes, open or not, plus queued trash and restore. */
   async unsentCount(): Promise<number> {
     const notes = await this.options.sync.docs.unsentIds().catch(() => []);
     const queued = (await this.outbox.ops().catch(() => [])).filter((op) => op.kind !== "create");
     return notes.length + queued.length;
   }
 
-  /**
-   * Everything on this device the server has not got, as one Markdown file: each note
-   * with unsent changes in full, then any queued trash or restore. The way out when the
-   * person cannot sign in again (`dev-docs/resolved/SYNC-DECISIONS.md` §6). `count` is the notes.
-   */
   async exportUnsent(): Promise<{ readonly count: number; readonly text: string }> {
     const docs = this.options.sync.docs;
     const store = this.options.sync.store;
@@ -405,7 +296,6 @@ export class DocumentsHost {
     return { count, text: [header, ...parts].join("\n---\n\n") };
   }
 
-  /** Worth asking the server now; otherwise changes wait in the outbox. */
   #online(): boolean {
     const status = this.options.sync.state.status;
     return status !== "offline" && status !== "auth-required" && status !== "error";
@@ -441,7 +331,6 @@ export class DocumentsHost {
   }
 
   async open(id: DocumentId): Promise<OpenDocument> {
-    // Made offline in another tab: not on the server yet, so not to be subscribed.
     if (!this.options.sync.docs?.openIds?.includes(id)) {
       const row = await Promise.resolve()
         .then(() => this.options.sync.store.get(id))
@@ -452,12 +341,6 @@ export class DocumentsHost {
     return hydrated;
   }
 
-  /**
-   * Create a note. The device mints the id and builds the note's CRDT state, and the
-   * server creates the note from that state (SPEC §3.5, PROTOCOL.md §3.8). Online, this
-   * resolves once the server has it; offline, at once — the note is on this device,
-   * editable, and in the list, and it is sent on reconnect (`dev-docs/resolved/SYNC-DECISIONS.md` §1).
-   */
   async create(input: CreateDocumentInput): Promise<DocumentId> {
     const id = input.id ?? mintUlid();
     const text = normalizeText(input.text);
@@ -484,7 +367,6 @@ export class DocumentsHost {
     return id;
   }
 
-  /** Move to Trash; offline, shown at once and sent on reconnect. */
   async delete(id: DocumentId): Promise<void> {
     await this.#trash(id, true);
   }
@@ -526,7 +408,6 @@ export class DocumentsHost {
   }
 }
 
-/** What the server does to text on the way in (SPEC §3.1): no byte-order mark, LF only. */
 function normalizeText(text: string): string {
   return text.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
 }

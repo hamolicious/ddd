@@ -1,7 +1,3 @@
-/**
- * `graph` in the real app: the workspace graph draws the notes `indexer` knows and the
- * links between them, opens a note, and the open note's neighbourhood shows in the altbar.
- */
 import { expect, test } from "@playwright/test";
 
 import { ADMIN, createDocument, openDocument, signIn, waitSynced } from "./helpers.js";
@@ -23,11 +19,9 @@ test("the graph shows notes and links, and opens a note", async ({ page, request
   expect(box?.width).toBeGreaterThan(200);
   expect(box?.height).toBeGreaterThan(200);
 
-  // The list behind the canvas, for a screen reader, has both notes and the link count.
   await expect(page.getByRole("button", { name: "Graph hub, 1 link" })).toBeAttached();
   await expect(page.getByRole("button", { name: "Graph target, 1 link" })).toBeAttached();
 
-  // Search in the settings panel narrows the graph to what matches.
   await page.getByRole("button", { name: "Graph settings" }).click();
   await page.getByRole("searchbox", { name: /Show notes whose title/ }).fill("Graph t");
   await expect(page.getByRole("img", { name: "Graph of 1 notes and 0 links" })).toBeVisible();
@@ -40,21 +34,17 @@ test("the graph shows notes and links, and opens a note", async ({ page, request
     await page.screenshot({ path: `${process.env["GRAPH_SHOTS"]}/global.png` });
   }
 
-  // The list is visually hidden; a keyboard user reaches it and presses Enter.
   const hubButton = page.getByRole("button", { name: "Graph hub, 1 link" });
   await hubButton.focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(new RegExp(`#/doc/${hub}$`));
 
-  // The local graph, in the altbar beside the open note.
   await openDocument(page, target);
   await page.getByRole("button", { name: "Show the side panel" }).click();
   const local = page.getByRole("img", { name: /within 1 links of this one/ });
   await expect(local).toBeAttached();
 
-  // Its buttons wait out of sight until the pointer is over it.
   const cog = page.getByRole("button", { name: "Local graph settings" });
-  // The fade is on the controls' wrapper; the button's own opacity is always 1.
   const controls = page.locator(".graph-local-controls");
   await page.mouse.move(5, 400);
   await expect(controls).toHaveCSS("opacity", "0");
@@ -64,25 +54,21 @@ test("the graph shows notes and links, and opens a note", async ({ page, request
   const depth = page.getByRole("slider");
   await expect(depth).toBeVisible();
   if (process.env["GRAPH_SHOTS"]) await page.screenshot({ path: `${process.env["GRAPH_SHOTS"]}/local-open.png` });
-  // Leaving the graph closes the slider and sends the buttons away again.
   await page.mouse.move(5, 400);
   await expect(depth).toHaveCount(0);
   await expect(controls).toHaveCSS("opacity", "0");
 
-  // Opening a note from the local graph moves the same graph to it: no remount.
   const canvasBefore = await local.elementHandle();
   await page.locator(".graph-view").getByRole("button", { name: "Graph hub, 1 link" }).focus();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(new RegExp(`#/doc/${hub}$`));
   expect(await canvasBefore!.evaluate((element) => element.isConnected)).toBe(true);
-  // The folder tree follows: the note opened from the graph is the selected row.
   await expect(page.getByRole("treeitem", { name: /Graph hub/ })).toHaveAttribute("aria-selected", "true");
   if (process.env["GRAPH_SHOTS"]) {
     await page.waitForTimeout(1500);
     await page.screenshot({ path: `${process.env["GRAPH_SHOTS"]}/local-moved.png` });
   }
 
-  // Expanding it opens the whole graph, zooming in to the note it was about.
   await local.hover();
   await page.getByRole("button", { name: "Open the full graph" }).click();
   await expect(page).toHaveURL(new RegExp(`#/graph\\?focus=${hub}$`));

@@ -1,23 +1,3 @@
-/**
- * The typed client over `/api/admin/*` and the two admin-facing corners of the document
- * and attachment APIs.
- *
- * **The server authorizes; this file only asks.** Every route here returns 403 to a
- * non-admin, so nothing in this plugin is a security control — hiding a button is a
- * courtesy to the user, and the client is written so that a 403 surfaces as an error
- * message rather than as an empty table that looks like "no users".
- *
- * Shapes mirror the Rust response types (`crates/server/src/routes/admin.rs`,
- * `attachments.rs`, `documents.rs`) and are **snake_case**, because that is what the wire
- * carries everywhere except `/api/plugins` — which is `InstalledPlugin` from
- * `kernel-api/src/manifest.ts` and camelCase, since a plugin manifest is written by hand
- * (`backend/CONTRACTS.md`, area server-static). That inconsistency is deliberate upstream,
- * so it is named here rather than smoothed over.
- *
- * Timestamps are RFC 3339 strings, never extended JSON: the server has a test that scans
- * whole response bodies for `$date`/`$oid`, so anything arriving here is a plain string.
- */
-
 import type { InstalledPlugin, ManifestProblem, PluginCapabilities, PluginManifest } from "@kernel";
 
 export type ApiFetch = (path: string, init?: RequestInit) => Promise<Response>;
@@ -41,15 +21,12 @@ export interface InviteView {
   readonly used_at: string | null;
   readonly used_by: string | null;
   readonly revoked_at: string | null;
-  /** `pending` | `used` | `revoked` | `expired`, derived by the server. */
   readonly status: string;
 }
 
 export interface CreatedInvite {
   readonly invite: InviteView;
-  /** Returned exactly once, at creation. */
   readonly token: string;
-  /** `<PUBLIC_URL>/#/invite/<token>`; absent when the server has no `PUBLIC_URL`. */
   readonly url?: string;
 }
 
@@ -57,20 +34,13 @@ export interface PasswordResetIssued {
   readonly user_id: string;
   readonly token: string;
   readonly expires_at: string;
-  /** `<PUBLIC_URL>/#/reset/<token>`; absent when the server has no `PUBLIC_URL`. */
   readonly url?: string;
 }
 
-/**
- * A reset link at the address this app was loaded from, for a server without
- * `PUBLIC_URL`. Right in a browser; in the Android app the address is the phone's own,
- * so set `PUBLIC_URL` on a server whose admins use the app.
- */
 export function resetLinkHere(token: string): string {
   return `${location.origin}${location.pathname}#/reset/${token}`;
 }
 
-/** An invite link at the address this app was loaded from; see `resetLinkHere`. */
 export function inviteLinkHere(token: string): string {
   return `${location.origin}${location.pathname}#/invite/${token}`;
 }
@@ -99,30 +69,23 @@ export interface AdminStats {
   readonly attachment_bytes: number;
   readonly users: number;
   readonly schema_version: number;
-  /** Documents whose edit history is over `large_history_bytes`, since the server started. */
   readonly oversized_documents: number;
-  /** `CRDT_COMPACT_THRESHOLD_BYTES` on the server. Absent from an older server. */
   readonly large_history_bytes?: number;
-  /** `CRDT_ALERT_THRESHOLD_BYTES` on the server: it logs a warning above this. */
   readonly history_alert_bytes?: number;
 }
 
-/** Why a wanted plugin does not load (`load.rs` `SkipReason`, kebab-case on the wire). */
 export type SkipReason = "missing" | "version" | "cycle" | "dependency-skipped" | "conflict";
 
-/** One plugin the loader leaves out, and why. `detail` is one sentence for people. */
 export interface SkippedPlugin {
   readonly id: string;
   readonly reason: SkipReason;
   readonly detail: string;
 }
 
-/** `load` in `GET /api/plugins`: what each boot loads, in order, and what it skips. */
 export interface PluginLoadView {
   readonly normal: readonly string[];
   readonly safe: readonly string[];
   readonly skipped: readonly SkippedPlugin[];
-  /** The fingerprint `plugins.changed` carries. */
   readonly version: string;
 }
 
@@ -130,41 +93,20 @@ export interface InstalledPluginsResponse {
   readonly plugins: readonly InstalledPlugin[];
   readonly problems: readonly { readonly path: string; readonly message: string }[];
   readonly disabled: boolean;
-  /** Absent on a server older than `@kernel` 3.0. */
   readonly load?: PluginLoadView;
 }
 
-// ---------------------------------------------------------------------------
-// M4: plugin management (`/api/admin/plugins/*`)
-// ---------------------------------------------------------------------------
-
-/**
- * These shapes mirror `crates/server/src/routes/plugin_api.rs` — **snake_case**, like the
- * rest of `/api/admin`, with one deliberate exception inherited from the manifest:
- * `capabilities["public-routes"]` keeps its hyphen, because that is what a plugin author
- * writes in `manifest.json` and what SPEC §6.2 froze. The manifest itself is served exactly
- * as it was written, so anything nested under `manifest` is manifest spelling
- * (`peerLibraries`), not wire spelling.
- */
 export type PluginLifecycleState = "pending" | "enabled" | "disabled" | "failed";
 
 export interface PluginCronState {
   readonly index: number;
   readonly expression: string;
   readonly last_run?: string;
-  /** `"ok"`, or the error code of the last failure. */
   readonly last_status?: string;
   readonly runs: number;
   readonly failures: number;
 }
 
-/**
- * The circuit breaker, as the server can see it (SPEC §6.3).
- *
- * `open` means the host turned the plugin off after repeated failures and it stays off until
- * an admin re-enables it; `by_admin` means a person did. The distinction decides what the
- * button says, so the two are separate flags rather than one enum with a nullable reason.
- */
 export interface PluginBreakerState {
   readonly open: boolean;
   readonly reason: string | null;
@@ -183,20 +125,16 @@ export interface PluginMetrics {
 export interface PluginRouteSpec {
   readonly method: string;
   readonly path: string;
-  /** Reachable without a session — the capability that deserves the loudest label. */
   readonly public: boolean;
 }
 
-/** One field of a manifest's `config` schema (SPEC §6.2). */
 export interface PluginConfigSchemaField {
   readonly type: string;
-  /** Write-only in this UI, encrypted at rest. */
   readonly secret?: boolean;
   readonly label?: string;
   readonly description?: string;
   readonly default?: unknown;
   readonly required?: boolean;
-  /** For `select`. */
   readonly options?: readonly string[];
 }
 
@@ -215,9 +153,7 @@ export interface PluginAdminView {
   readonly served: boolean;
   readonly active: boolean;
   readonly manifest: PluginManifest;
-  /** What the package asked for — the list an approval screen must show. */
   readonly capabilities_requested: PluginCapabilities;
-  /** What an admin granted. Empty until approval. */
   readonly capabilities_approved: PluginCapabilities;
   readonly capabilities_differ: boolean;
   readonly source: PluginInstallSource;
@@ -282,16 +218,8 @@ export interface PluginInstallOutcome {
 export interface PluginConfigView {
   readonly plugin_id: string;
   readonly schema: PluginConfigSchema;
-  /**
-   * Key → stored value, every `secret: true` one replaced by {@link secret_placeholder}.
-   * A key with no stored value is **absent**, which is what {@link normalizeConfigValues}
-   * reads as "not set" — so this is deliberately not `Record<string, unknown>` with holes
-   * filled in. Read it through that function rather than indexing it directly.
-   */
   readonly values: unknown;
-  /** Key → `true` when a value is stored. A masked secret looks the same either way. */
   readonly set?: Readonly<Record<string, boolean>>;
-  /** Declared keys with nothing stored and no usable default. */
   readonly missing?: readonly string[];
   readonly updated_at?: string | null;
   readonly updated_by?: string | null;
@@ -309,7 +237,6 @@ export interface PluginEvent {
 export interface PluginLogView {
   readonly plugin_id: string;
   readonly events: readonly PluginEvent[];
-  /** The ring is per-process; the audit log is the durable record. */
   readonly ephemeral: boolean;
   readonly capacity: number;
 }
@@ -349,15 +276,10 @@ export interface AdminClient {
 
 
   plugins(): Promise<InstalledPluginsResponse>;
-  /** The zip of every document as plain markdown — the no-Mongo recovery path. */
   exportWorkspace(): Promise<Blob>;
 
-  // ---- M4: plugin management ----
-  /** Every plugin record: state, capabilities requested vs granted, cron, breaker. */
   adminPlugins(): Promise<PluginAdminList>;
-  /** Upload a package. It lands **pending** — approval is a separate, explicit act. */
   uploadPlugin(file: File): Promise<PluginInstallOutcome>;
-  /** Approve a pending install with a capability set (omit ⇒ exactly what was requested). */
   approvePlugin(
     id: string,
     version: string,
@@ -366,11 +288,9 @@ export interface AdminClient {
   rejectPlugin(id: string, version: string): Promise<void>;
   enablePlugin(id: string): Promise<void>;
   disablePlugin(id: string, note?: string): Promise<void>;
-  /** `purge` is SPEC §6.2's explicit checkbox: KV **and** the plugin's `%%%` sections. */
   uninstallPlugin(id: string, purge: boolean): Promise<void>;
   pluginConfig(id: string): Promise<PluginConfigView>;
   savePluginConfig(id: string, values: Readonly<Record<string, unknown>>): Promise<PluginConfigView>;
-  /** Run one declared cron expression now, without moving the schedule. */
   runPluginCron(id: string, index: number): Promise<CronRunResult>;
   pluginLogs(id: string, limit?: number): Promise<PluginLogView>;
 
@@ -418,10 +338,6 @@ export function createAdminClient(fetchApi: ApiFetch): AdminClient {
 
     adminPlugins: () => json<PluginAdminList>("/admin/plugins"),
     uploadPlugin: (file) => {
-      // `FormData`, not a JSON body: a package is up to 25 MB and the server streams it to a
-      // staging file. Content-Type is deliberately *not* set — the browser has to add the
-      // multipart boundary, and setting it by hand is the classic way to make every upload
-      // fail with "malformed multipart body".
       const body = new FormData();
       body.append("package", file, file.name);
       return json<PluginInstallOutcome>("/admin/plugins", { method: "POST", body });
@@ -458,31 +374,11 @@ export function createAdminClient(fetchApi: ApiFetch): AdminClient {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Plugin config values
-// ---------------------------------------------------------------------------
-
-/** One config key as the form holds it. */
 export interface ConfigValueState {
-  /** The value to show. A secret is always the placeholder, never the real thing. */
   readonly value: unknown;
-  /** `true` when the server has a value stored for this key. */
   readonly set: boolean;
 }
 
-/**
- * Read `PluginConfigView.values` into one predictable shape.
- *
- * The server hands back whatever `plugininstall::config::for_admin` produced, and the two
- * plausible spellings are `{ key: value }` and `{ key: { value, set } }`. Accepting both is
- * cheap here and the alternative is a form that silently renders `[object Object]` in every
- * field the day the other spelling ships.
- *
- * INTEGRATION (install-flow): pinning `for_admin`'s return shape in `HOST-ABI.md` — the
- * `{ value, set }` form, since "is it set" is exactly what a masked secret field has to know —
- * would let this function lose half its body. Until then it is deliberately tolerant, and
- * `api.test.ts` pins both readings.
- */
 export function normalizeConfigValues(
   values: unknown,
   schema: PluginConfigSchema,
@@ -507,9 +403,6 @@ export function normalizeConfigValues(
     }
 
     if (field?.secret === true) {
-      // A secret is never readable, so the only honest thing to render is the mask. `set`
-      // is what the UI actually needs: "leave blank to keep the stored value" only makes
-      // sense when there is one.
       result[key] = { value: set ? placeholder : "", set };
       continue;
     }
@@ -518,14 +411,6 @@ export function normalizeConfigValues(
   return result;
 }
 
-/**
- * The values to submit: only what the admin changed, with an untouched secret dropped.
- *
- * A secret field that still holds the placeholder means "unchanged" — submitting it would
- * overwrite the real credential with `••••••••`, which is the single most likely way for this
- * screen to destroy something irrecoverable. It is therefore handled here, in a pure
- * function, and not in a component's event handler.
- */
 export function configSubmission(
   draft: Readonly<Record<string, unknown>>,
   schema: PluginConfigSchema,
@@ -550,7 +435,6 @@ export function configSubmission(
       continue;
     }
     if (raw === "" && field.required !== true) {
-      // An emptied optional field clears the key rather than storing an empty string.
       submission[key] = null;
       continue;
     }
@@ -559,14 +443,6 @@ export function configSubmission(
   return submission;
 }
 
-/**
- * What an approval is allowed to change (`HOST-ABI.md` §7.2, and the server re-checks it):
- * it may **narrow** anything and may **extend only `http.hosts`**.
- *
- * Returned as messages rather than a boolean so the screen can say which field is the
- * problem before the request is sent — the server's refusal is the control, this is the
- * courtesy.
- */
 export function approvalProblems(
   requested: PluginCapabilities | undefined,
   granted: PluginCapabilities,
@@ -597,7 +473,6 @@ export function approvalProblems(
   return problems;
 }
 
-/** A `http.hosts` entry: a bare host name, matched exactly (`HOST-ABI.md` §3.11). */
 export function isBareHost(host: string): boolean {
   const value = host.trim();
   if (value === "") return false;
@@ -606,33 +481,13 @@ export function isBareHost(host: string): boolean {
   return /^[A-Za-z0-9.-]+$/.test(value);
 }
 
-/**
- * What the server's outbound IP policy will make of one `http.hosts` entry —
- * `undefined` when it is an ordinary public name and there is nothing to say.
- *
- * The approval screen used to print one blanket sentence, "Loopback, link-local,
- * private and metadata addresses stay blocked regardless", next to *any* added host.
- * It was wrong twice over: wrong for `example.com`, where there was nothing to warn
- * about and the sentence read as a threat; and wrong for `10.0.0.5`, because the
- * operator's `PLUGIN_HTTP_ALLOW_CIDRS` is exactly the knob that unblocks private
- * ranges (SPEC §6.2: "admin-configurable allowlist"), so "regardless" was a promise
- * the server does not keep. The one range it *does* keep is the cloud metadata
- * addresses, which `address_allowed` refuses before it consults the allowlist at all.
- *
- * This is a **hint about a literal**, deliberately, and never a verdict. The server
- * resolves the name and pins the address it got (`resolve_pinned`); a name this
- * function calls ordinary can still resolve into a refused range, and that refusal is
- * the enforcement. Nothing here gates the approve button.
- */
 export type HostPolicyNote =
   | { readonly kind: "metadata"; readonly message: string }
   | { readonly kind: "loopback"; readonly message: string }
   | { readonly kind: "private"; readonly message: string }
   | { readonly kind: "internal-name"; readonly message: string };
 
-/** The cloud metadata addresses `address_allowed` refuses ahead of the allowlist. */
 const METADATA_LITERALS = new Set(["169.254.169.254", "169.254.170.2", "100.100.100.200"]);
-/** Names that resolve to a metadata endpoint on the providers that publish one. */
 const METADATA_NAMES = new Set(["metadata.google.internal", "metadata", "instance-data"]);
 
 export function hostPolicyNote(host: string): HostPolicyNote | undefined {
@@ -685,8 +540,6 @@ function isLoopbackLiteral(value: string): boolean {
 }
 
 function isPrivateLiteral(value: string): boolean {
-  // IPv6 unique-local (fc00::/7) and link-local (fe80::/10), enough of them to
-  // recognise what somebody would actually type.
   if (/^f[cd][0-9a-f]{0,2}:/.test(value) || /^fe[89ab][0-9a-f]?:/.test(value)) return true;
   const octets = ipv4Octets(value);
   if (octets === undefined) return false;
@@ -700,7 +553,6 @@ function isPrivateLiteral(value: string): boolean {
   );
 }
 
-/** The four octets of a dotted-quad literal, or `undefined` for anything else. */
 function ipv4Octets(value: string): readonly number[] | undefined {
   const parts = value.split(".");
   if (parts.length !== 4) return undefined;
@@ -708,7 +560,6 @@ function ipv4Octets(value: string): readonly number[] | undefined {
   return octets.every((octet) => octet >= 0 && octet <= 255) ? octets : undefined;
 }
 
-/** `"a.test, b.test"` → `["a.test", "b.test"]`, blanks dropped. */
 export function parseHostList(raw: string): readonly string[] {
   return raw
     .split(/[,\s]+/)
@@ -716,7 +567,6 @@ export function parseHostList(raw: string): readonly string[] {
     .filter((value) => value !== "");
 }
 
-/** Only the parameters that are set; an empty `action=` would filter on the empty string. */
 export function auditParams(query: AuditQuery): string {
   const params = new URLSearchParams();
   if (query.action?.trim()) params.set("action", query.action.trim());
@@ -728,7 +578,6 @@ export function auditParams(query: AuditQuery): string {
   return encoded === "" ? "" : `?${encoded}`;
 }
 
-/** Human-readable bytes. Binary units, because that is what the storage numbers mean. */
 export function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return "—";
   if (bytes < 1024) return `${bytes} B`;
@@ -742,20 +591,12 @@ export function formatBytes(bytes: number): string {
   return `${value.toFixed(value < 10 ? 1 : 0)} ${units[unit]}`;
 }
 
-/** A timestamp for display. Never for ordering — that is `seq` and the CRDT. */
 export function formatWhen(iso: string | null | undefined): string {
   if (!iso) return "—";
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
 }
 
-/**
- * Attribution that a deleted account keeps.
- *
- * Deleting a user soft-deletes the row and keeps the attribution id (SPEC §5.1), so an
- * id that no longer resolves to an active account renders as "deleted user" rather than a
- * raw ULID — and `plugin:<id>` and `system` actors are labelled as what they are.
- */
 export function describeActor(actor: string | null | undefined, users: readonly UserView[]): string {
   if (!actor) return "—";
   if (actor === "system") return "system";
@@ -765,5 +606,4 @@ export function describeActor(actor: string | null | undefined, users: readonly 
   return user.is_active ? user.email : `${user.email} (deleted)`;
 }
 
-/** Problems the loader found in a manifest, for the read-only plugin list. */
 export type PluginManifestProblem = ManifestProblem;

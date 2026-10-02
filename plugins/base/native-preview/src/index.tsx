@@ -1,30 +1,6 @@
-/**
- * `native-preview` — viewers for every file type a browser can show by itself.
- *
- * Five viewers added with `plugin:attachments`' `addViewer`, each a plain
- * element around the object URL `attachments` hands over: `<img>`, `<video>`, `<audio>`,
- * an `<iframe>` for PDF (the browser's own PDF viewer) and a `<pre>` for plain text.
- * Nothing is decoded or parsed here, so what shows is whatever the browser supports: a
- * codec it lacks gets the "cannot play" message, not a broken player.
- *
- * Which viewer shows a type is the viewers' `order` (these have the default, 100): a
- * viewer with a lower `order` takes the types it claims over, and the user can switch
- * back per type.
- *
- * **SVG is not here** (SPEC §3.6: a stored-XSS vector), and neither is HTML: those are
- * files a browser would *run*, not preview.
- *
- * **PDF needs `frame-src blob:`** in the app's CSP (`statics.rs`, `shell.rs`). The
- * frame gets a URL for the bytes re-typed as `application/pdf`, so whatever the file
- * claims to be, the browser only ever opens it with its PDF viewer. A browser without
- * one (Android's WebView) says so through `navigator.pdfViewerEnabled`, and gets a
- * message instead of an empty frame.
- */
-
 import { addViewer, type AttachmentViewer, type AttachmentViewerProps } from "plugin:attachments";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
-/** Beyond this, a text file shows its start and says so. */
 const MAX_TEXT_BYTES = 256 * 1024;
 
 const FRAME =
@@ -83,7 +59,6 @@ function Audio({ file, url }: AttachmentViewerProps): ReactNode {
 }
 
 function Pdf({ file, blob, placement }: AttachmentViewerProps): ReactNode {
-  // Re-typed, whatever the server said: the frame must only ever get the PDF viewer.
   const url = useMemo(() => URL.createObjectURL(new Blob([blob], { type: "application/pdf" })), [blob]);
   useEffect(() => () => URL.revokeObjectURL(url), [url]);
 
@@ -117,7 +92,6 @@ function Text({ file, blob, placement }: AttachmentViewerProps): ReactNode {
 
   return (
     <span className="nativepreview:flex nativepreview:w-full nativepreview:flex-col nativepreview:gap-1">
-      {/* A block `<span>`, not a `<pre>`: an inline embed sits inside a paragraph. */}
       <span
         className={`nativepreview:m-0 nativepreview:block nativepreview:overflow-auto nativepreview:whitespace-pre-wrap nativepreview:break-words nativepreview:rounded nativepreview:border nativepreview:border-border nativepreview:bg-bg-subtle nativepreview:p-2 nativepreview:font-mono nativepreview:text-sm nativepreview:leading-[1.5] nativepreview:text-text ${
           placement === "page" ? "nativepreview:max-h-[75vh]" : "nativepreview:max-h-[40vh]"

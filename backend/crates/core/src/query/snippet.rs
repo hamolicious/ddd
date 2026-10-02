@@ -1,20 +1,11 @@
-//! The line a text hit is shown by: the first content line holding one of its terms,
-//! with every occurrence located for highlighting.
-//!
-//! **Offsets are UTF-16 code units**, because the reader is a browser slicing a
-//! JavaScript string; for ASCII they are byte offsets too.
-
 use serde::{Deserialize, Serialize};
 
-/// Longest snippet, in characters; a longer line is cut and ends in `…`.
 pub const SNIPPET_MAX_CHARS: usize = 180;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Snippet {
     pub text: String,
-    /// Ascending, non-overlapping, in UTF-16 code units into `text`.
     pub ranges: Vec<Range>,
-    /// The 1-based line of the content it came from.
     pub line: usize,
 }
 
@@ -24,8 +15,6 @@ pub struct Range {
     pub end: usize,
 }
 
-/// The snippet for `content` and the terms a search matched; `None` for empty content.
-/// With no line holding a term, the first non-empty line, unhighlighted.
 pub fn snippet_for(content: &str, terms: &[String]) -> Option<Snippet> {
     let needles: Vec<Vec<char>> = terms
         .iter()
@@ -62,8 +51,6 @@ pub fn snippet_for(content: &str, terms: &[String]) -> Option<Snippet> {
     })
 }
 
-/// Lowercase one char to one char, so positions in the folded text are positions in
-/// the original.
 fn fold(text: &str) -> Vec<char> {
     text.chars()
         .map(|c| c.to_lowercase().next().unwrap_or(c))
@@ -80,7 +67,6 @@ fn find(haystack: &[char], needle: &[char], from: usize) -> Option<usize> {
 fn locate(text: &str, needles: &[Vec<char>]) -> Vec<Range> {
     let chars: Vec<char> = text.chars().collect();
     let folded = fold(text);
-    // char index → UTF-16 offset
     let mut utf16 = Vec::with_capacity(chars.len() + 1);
     let mut offset = 0;
     for c in &chars {

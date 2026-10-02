@@ -37,7 +37,6 @@ describe("the board", () => {
       order: "none",
     });
     expect(kanbanOptions({ order: "none" }).order).toBe(false);
-    // An older board named the property it kept the rank in: on, all the same.
     expect(kanbanOptions({ order: "fm.pos" }).order).toBe(true);
     expect(withKanban(kanbanOptions({ order: "fm.pos" }), { order: "fm.pos" })).toEqual({});
     expect(splitColumns(" todo, doing ,, todo,done ")).toEqual(["todo", "doing", "done"]);
@@ -90,7 +89,6 @@ describe("order and moves", () => {
     expect([...planRanks(ranked, 0, ["x"])]).toEqual([["x", 0]]);
     expect([...planRanks(ranked, 2, ["x"])]).toEqual([["x", 3072]]);
     expect([...planRanks([], 0, ["x"])]).toEqual([["x", 1024]]);
-    // A block lands together, spread between its neighbours; renumbered as one when it must.
     expect([...planRanks(ranked, 1, ["x", "y", "z"])]).toEqual([
       ["x", 1280],
       ["y", 1536],
@@ -125,7 +123,6 @@ describe("order and moves", () => {
       ["b", 2048],
       ["new", 4096],
     ]);
-    // Laid out again, the new card is at the bottom of its column.
     const [column] = columnsFor(
       [...mixed, note("new", {})].map((row) => ({ ...row, fm: { status: "x" }, plugins: { kanban: { rank: appendRanks(mixed, 0, "new").get(row.id) } } })) as DocumentRow[],
       kanbanOptions({}),
@@ -170,7 +167,6 @@ describe("the filter bar", () => {
     expect(filterChoices(rows, "fm.priority")).toEqual([2, 10]);
     expect(filterChoices(rows, "fm.tags")).toEqual(["p", "q"]);
     expect(filterChoices(rows, "fm.none")).toEqual([]);
-    // The swimlane field, first, even when the cards do not show it.
     expect(filterFields(kanbanOptions({ card: "title,fm.project", lanes: "fm.team" }))).toEqual(["fm.team", "fm.project"]);
     expect(filterFields(kanbanOptions({ card: "title,fm.team", lanes: "fm.team" }))).toEqual(["fm.team"]);
   });
@@ -186,7 +182,6 @@ describe("the filter bar", () => {
     expect(filterRows(rows, new Map([["fm.project", ["Beta"]]])).map((row) => row.id)).toEqual(["a", "c"]);
     expect(filterRows(rows, new Map<string, readonly Scalar[]>([["fm.project", ["Beta"]], ["fm.priority", [10]]])).map((row) => row.id)).toEqual(["c"]);
     expect(filterRows(rows, new Map([["fm.tags", ["q"]]])).map((row) => row.id)).toEqual(["b"]);
-    // Several values of one field: any of them.
     expect(filterRows(rows, new Map([["fm.project", ["alpha", "Beta"]]])).map((row) => row.id)).toEqual(["a", "b", "c"]);
     expect(filterRows(rows, new Map<string, readonly Scalar[]>([["fm.project", ["alpha", "Beta"]], ["fm.priority", [2, "10"]]])).map((row) => row.id)).toEqual(["a", "c"]);
   });

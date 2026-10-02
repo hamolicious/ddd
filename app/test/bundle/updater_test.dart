@@ -1,11 +1,3 @@
-/// The OTA algorithm, end to end, against a fake server and a real temp directory
-/// (SPEC §7; `BRIDGE.md` §5; SPEC §9 M5 acceptance: "OTA update + revert").
-///
-/// The invariant every test here defends is one sentence: **nothing is promoted that has not
-/// been verified byte for byte, and nothing that fails verification changes the device's
-/// state at all.** A shell that gets this wrong runs code the server did not publish, or
-/// bricks itself out of a working bundle — and neither is visible from inside the webview,
-/// because the webview is the thing that would be broken.
 library;
 
 import 'dart:io';
@@ -52,8 +44,6 @@ void main() {
 
   String logText() => log.join('\n');
 
-  // ─────────────────────────────── a fresh install ───────────────────────────────
-
   group('a fresh install', () {
     test(
       'downloads every file, verifies it and stages it for the next launch',
@@ -68,13 +58,10 @@ void main() {
 
         expect(outcome, UpdateOutcome.staged, reason: logText());
 
-        // The pointer: staged, not active. Updates are applied at the next launch, never to a
-        // running webview (`BRIDGE.md` §7).
         final BundleState state = await store.readState();
         expect(state.pending, idA);
         expect(state.active, isNull);
 
-        // The bytes: installed under the content hash, staging gone.
         for (final MapEntry<String, String> entry in v1.files.entries) {
           expect(
             store.fileIn(idA, entry.key).readAsStringSync(),
@@ -84,16 +71,12 @@ void main() {
         }
         expect(store.stagingDir(idA).existsSync(), isFalse);
 
-        // The manifest travels with the bundle, so `min_bridge_version` and `index_csp` are
-        // known offline on every later launch.
         final BundleManifest? stored = await store.readManifest(idA);
         expect(stored, isNotNull);
         expect(stored!.bundleVersion, idA);
         expect(stored.indexCsp, "default-src 'self'");
         expect(stored.files.length, v1.files.length);
 
-        // Progress reaches 100%: the first install is a blocking screen and a bar that stops
-        // at 90% is a bar that reads as a hang.
         expect(progress.first.filesDone, 0);
         expect(progress.last.filesDone, v1.files.length);
         expect(progress.last.fraction, 1.0);
@@ -105,9 +88,6 @@ void main() {
 
       await updater.update();
 
-      // `BRIDGE.md` §5: the manifest names the installed plugin set, and the synthesized
-      // documents are rendered per bundle version; the static routes are public because
-      // `import()` cannot send an Authorization header.
       expect(http.bearers, <String>[
         '/api/shell/manifest Bearer test-token',
         '/api/shell/bundle/index.html Bearer test-token',
@@ -128,15 +108,12 @@ void main() {
     });
   });
 
-  // ─────────────────────────────── the delta update ───────────────────────────────
-
   group('a delta update', () {
     test('downloads only the files whose hash changed', () async {
       final FakeBundle v1 = FakeBundle(idA, bundleFiles());
       await placeBundle(store, v1);
       await store.writeState(const BundleState(active: idA));
 
-      // A redeploy: a new chunk and a new document, the same plugin and the same runtime.
       final Map<String, String> next = bundleFiles(
         appChunk: 'console.log("v2")',
       );
@@ -151,8 +128,6 @@ void main() {
         '/api/shell/bundle/index.html',
         '/assets/app-1a2b3c.js',
       ]);
-      // The unchanged files are still *there* — a delta that forgets to copy them produces
-      // a bundle that cannot boot offline.
       expect(
         store
             .fileIn(idB, 'plugins/shell-ui/1.0.0/frontend/index.mjs')
@@ -175,7 +150,6 @@ void main() {
         );
         await placeBundle(store, v1);
         await placeBundle(store, v2);
-        // The device reverted to v1 but v2's bytes are still on disk.
         await store.writeState(const BundleState(active: idA, previous: idB));
 
         http.publish(
@@ -184,7 +158,6 @@ void main() {
         http.clearLog();
 
         expect(await updater.update(), UpdateOutcome.staged, reason: logText());
-        // Everything v3 needs is in v1 or v2; only the per-version documents are fetched.
         expect(http.downloads, isEmpty);
       },
     );
@@ -192,9 +165,6 @@ void main() {
     test(
       'a file whose bytes changed under the same path is never reused',
       () async {
-        // The pathological case a content-addressed *directory* does not protect against: a
-        // path that keeps its name and changes its bytes, which is exactly what `index.html`
-        // does on every deploy.
         final FakeBundle v1 = FakeBundle(idA, bundleFiles());
         await placeBundle(store, v1);
         await store.writeState(const BundleState(active: idA));
@@ -224,27 +194,25 @@ void main() {
     });
   });
 
-  // ─────────────────────────── verification failures ───────────────────────────
-
   group('verification', () {
-    test('a file whose sha256 does not match rejects the whole bundle', () async {
-      final FakeBundle v1 = FakeBundle(idA, bundleFiles());
-      http.publish(v1);
-      // Same length, different bytes: the size check cannot catch this one, and it is the
-      // shape a rewriting proxy or a corrupted cache produces.
-      http.replies['/assets/app-1a2b3c.js'] = FakeReply.text(
-        'console.log("XX")',
-      );
+    test(
+      'a file whose sha256 does not match rejects the whole bundle',
+      () async {
+        final FakeBundle v1 = FakeBundle(idA, bundleFiles());
+        http.publish(v1);
+        http.replies['/assets/app-1a2b3c.js'] = FakeReply.text(
+          'console.log("XX")',
+        );
 
-      final UpdateOutcome outcome = await updater.update();
+        final UpdateOutcome outcome = await updater.update();
 
-      expect(outcome, UpdateOutcome.corrupt);
-      expect(logText(), contains('sha256'));
-      // Never a partial install: no directory, no pointer, nothing to promote.
-      expect(store.isInstalled(idA), isFalse);
-      expect(store.stagingDir(idA).existsSync(), isFalse);
-      expect((await store.readState()).pending, isNull);
-    });
+        expect(outcome, UpdateOutcome.corrupt);
+        expect(logText(), contains('sha256'));
+        expect(store.isInstalled(idA), isFalse);
+        expect(store.stagingDir(idA).existsSync(), isFalse);
+        expect((await store.readState()).pending, isNull);
+      },
+    );
 
     test(
       'a truncated file is rejected by size, with a message that says so',
@@ -321,14 +289,11 @@ void main() {
       await placeBundle(store, FakeBundle(idA, bundleFiles()));
       await store.writeState(const BundleState(active: idA));
 
-      // Offline.
       expect(await updater.update(), UpdateOutcome.unavailable);
-      // A captive portal.
       http.replies['/api/shell/manifest'] = FakeReply.text(
         '<html>Sign in</html>',
       );
       expect(await updater.update(), UpdateOutcome.unavailable);
-      // A 401 — the token expired; re-auth is the page's business, not the updater's.
       http.replies['/api/shell/manifest'] = FakeReply.text('{}', status: 401);
       expect(await updater.update(), UpdateOutcome.unavailable);
 
@@ -345,24 +310,17 @@ void main() {
     });
   });
 
-  // ─────────────────────── interrupted downloads: resume, restart ───────────────────────
-
   group('an interrupted download', () {
     test(
       'resumes: files an earlier run finished are not fetched again',
       () async {
         final FakeBundle v1 = FakeBundle(idA, bundleFiles());
         http.publish(v1);
-        // The connection dies after the manifest and the first two files.
         http.failAfter = 3;
 
         expect(await updater.update(), UpdateOutcome.corrupt);
-        // Staging survives a failed *file* only if the bundle survived; it did not, so this
-        // run leaves nothing behind. That is the strict reading of "never a partial install".
         expect(store.stagingDir(idA).existsSync(), isFalse);
 
-        // Now the same bundle, with two of its files already verified in staging — the shape a
-        // process that was killed (rather than a request that failed) leaves behind.
         final Directory staging = store.stagingDir(idA);
         for (final String path in <String>[
           'index.html',
@@ -389,7 +347,6 @@ void main() {
       final FakeBundle v1 = FakeBundle(idA, bundleFiles());
       http.publish(v1);
 
-      // Half of `index.html`, plus the `.part` an aborted stream would leave.
       final Directory staging = store.stagingDir(idA);
       await staging.create(recursive: true);
       await File('${staging.path}/index.html')
@@ -404,8 +361,6 @@ void main() {
         store.fileIn(idA, 'index.html').readAsStringSync(),
         v1.files['index.html'],
       );
-      // The stray `.part` does not travel into the installed bundle: the loopback server
-      // serves only manifest paths, and an unlisted file in there is waste at best.
       expect(
         File('${store.dirFor(idA).path}/runtime/react.js.part').existsSync(),
         isFalse,
@@ -414,8 +369,6 @@ void main() {
 
     test('a staged file that was tampered with after its own check is caught before the swap', () async {
       final FakeBundle v1 = FakeBundle(idA, bundleFiles());
-      // Every file verifies individually, and then one of them is wrong on disk. Only the
-      // second pass over the staged bytes catches this.
       final Directory staging = store.stagingDir(idA);
       await staging.create(recursive: true);
       for (final MapEntry<String, String> entry in v1.files.entries) {
@@ -434,20 +387,12 @@ void main() {
     });
   });
 
-  // ────────────────────────────── carrying the token ──────────────────────────────
-
   group('the bearer token', () {
     test('is never carried through a redirect', () async {
       http.publish(FakeBundle(idA, bundleFiles()));
 
       expect(await updater.update(), UpdateOutcome.staged, reason: logText());
 
-      // `package:http`'s `IOClient` leaves `followRedirects` at `true`, and dart:io then
-      // copies every header of the original request — `Authorization` included — onto
-      // whatever host the `Location` names. One 301 from the configured server (an
-      // operator moving the deployment, an SSO proxy bouncing an unrecognised request)
-      // would hand a 30-day-idle workspace credential (SPEC §5.2) to a third party, with
-      // nothing reported. The server never legitimately redirects `/api`.
       expect(http.followRedirects['/api/shell/manifest'], isFalse);
       expect(http.followRedirects['/api/shell/bundle/index.html'], isFalse);
       expect(http.followRedirects['/assets/app-1a2b3c.js'], isFalse);
@@ -467,8 +412,6 @@ void main() {
     });
   });
 
-  // ───────────────────────────── the device says no ─────────────────────────────
-
   group('a device that cannot store the update', () {
     test(
       'reports storageFailed rather than throwing out of update()',
@@ -483,22 +426,15 @@ void main() {
         );
         http.publish(FakeBundle(idA, bundleFiles()));
 
-        // `update()` is documented as never throwing, and the first-run screen believes it:
-        // an exception there leaves a progress bar with no "Try again" and no "Sign out",
-        // whose only exit is force-stopping the app into the identical state.
         expect(
           await broken.update(),
           UpdateOutcome.storageFailed,
           reason: logText(),
         );
-        // The bytes landed; only the pointer naming them did not, so the next check finds
-        // them on disk and stages them for free.
         expect(failing.isInstalled(idA), isTrue);
       },
     );
   });
-
-  // ────────────────────────── the gates: bridge, quarantine ──────────────────────────
 
   group('the min-bridge gate', () {
     test('a bundle needing a newer bridge is not downloaded at all', () async {
@@ -509,7 +445,6 @@ void main() {
 
       expect(await updater.update(), UpdateOutcome.needsNewerShell);
       expect(http.downloads, isEmpty);
-      // The shell that is installed keeps running: the *bundle* is fine, this app is old.
       expect((await store.readState()).active, idA);
       expect(logText(), contains('needs bridge v2'));
     });
@@ -542,8 +477,6 @@ void main() {
     );
 
     test('a pending version the server has rolled back is dropped', () async {
-      // The device staged v2, the server went back to v1 before the next launch. Promoting
-      // v2 now would move the device *off* what the server publishes.
       await placeBundle(store, FakeBundle(idA, bundleFiles()));
       await store.writeState(const BundleState(active: idA, pending: idB));
       http.publish(FakeBundle(idA, bundleFiles()));
@@ -568,8 +501,6 @@ void main() {
       },
     );
   });
-
-  // ──────────────────────────────── URL resolution ────────────────────────────────
 
   group('fileUrl', () {
     test('sends the synthesized documents to the shell route and the rest to their own', () {
@@ -599,9 +530,6 @@ void main() {
         client: http,
       );
 
-      // `ShellConfig.serverBaseUrl` is documented as an origin (`config.dart`); this pins
-      // what the resolution does if an operator types a path anyway, so the behaviour is a
-      // decision rather than a surprise.
       expect(
         onPath.fileUrl('assets/app.js').toString(),
         'https://ddd.test/assets/app.js',
@@ -611,8 +539,6 @@ void main() {
   });
 }
 
-/// A store whose pointer cannot be written — a device that filled up during the download,
-/// which is exactly the case the updater is otherwise careful about.
 class _UnwritableStore extends BundleStore {
   _UnwritableStore(super.root);
 

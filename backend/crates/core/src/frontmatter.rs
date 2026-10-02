@@ -1,12 +1,3 @@
-//! Frontmatter: the leading `---` YAML block, human-owned (SPEC §3.3, §3.4).
-//!
-//! Fence rules are byte-exact on both sides: the block opens only if `---` is
-//! the literal first line, and closes at the next line that is exactly `---`.
-//! If it never closes, there is no frontmatter at all.
-//!
-//! "Literal" means literal: a fence line with trailing whitespace is not a
-//! fence. Body parsing is per-line and stateless — see [`crate::yaml`].
-
 use serde::{Deserialize, Serialize};
 
 use crate::diagnostics::{Diagnostic, DiagnosticKind};
@@ -15,25 +6,15 @@ use crate::limits::{MAX_FRONTMATTER_BYTES, MAX_FRONTMATTER_KEYS};
 use crate::value::Map;
 use crate::yaml;
 
-/// The fence line, byte-exact.
 pub(crate) const FENCE: &str = "---";
 
-/// Result of parsing one frontmatter block.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct Frontmatter {
-    /// Materialized keys. Keys failing `^[A-Za-z0-9_-]{1,64}$` are dropped.
     pub map: Map,
-    /// `true` when at least one line was dropped or a cap was hit.
     pub had_error: bool,
-    /// Dropped lines, in document order.
     pub diagnostics: Vec<Diagnostic>,
 }
 
-/// Locate the frontmatter block in a (normalized) document.
-///
-/// Returns `(outer, inner)`: `outer` covers both fence lines and the trailing
-/// newline of the closing fence; `inner` covers only the YAML lines between
-/// them. `None` when the document does not open with `---` or never closes it.
 pub fn find_block(text: &str) -> Option<(Span, Span)> {
     let lines = yaml::lines(text);
     let first = lines.first()?;
@@ -51,10 +32,6 @@ pub fn find_block(text: &str) -> Option<(Span, Span)> {
     None
 }
 
-/// Parse the YAML lines of a frontmatter block.
-///
-/// `inner` is the text between the fences; `first_line` is the 1-based document
-/// line number of its first line, so diagnostics carry document coordinates.
 pub fn parse_block(inner: &str, first_line: u32) -> Frontmatter {
     if inner.len() > MAX_FRONTMATTER_BYTES {
         return Frontmatter {
@@ -76,13 +53,6 @@ pub fn parse_block(inner: &str, first_line: u32) -> Frontmatter {
     }
 }
 
-/// Convenience: locate and parse in one call.
-///
-/// When the first line is `---` but the block never closes, there is no
-/// frontmatter (spans are `None`) and an [`DiagnosticKind::UnterminatedFence`]
-/// diagnostic is recorded — which is also what tells
-/// [`crate::document::edit_affects_metadata`] that the tail of this document is
-/// metadata-sensitive.
 pub fn parse(text: &str) -> (Option<(Span, Span)>, Frontmatter) {
     match find_block(text) {
         Some((outer, inner)) => {
@@ -114,13 +84,6 @@ pub fn parse(text: &str) -> (Option<(Span, Span)>, Frontmatter) {
     }
 }
 
-/// Span of the *value* of `key` inside the frontmatter block — the minimal
-/// splice target for UI edits (SPEC §3.3: never parse→re-serialize→replace).
-///
-/// Returns `None` when there is no frontmatter or the key is absent. Only
-/// top-level keys are addressable. When the key occurs more than once the
-/// **last** occurrence is returned (last-occurrence-wins, SPEC §3.3). An empty
-/// value yields an empty span at the end of the line.
 pub fn value_span(text: &str, key: &str) -> Option<Span> {
     let (_, inner) = find_block(text)?;
     let block_lines = yaml::lines(inner.slice(text));
@@ -133,7 +96,6 @@ pub fn value_span(text: &str, key: &str) -> Option<Span> {
         let line_end = inner.start + line.end;
         let colon = line.content.find(':')?;
         let after = line_start + colon + 1;
-        // First non-space byte after the colon, then trim the trailing run.
         let rest = &text[after..line_end];
         let lead = rest.len() - rest.trim_start_matches([' ', '\t']).len();
         let trail = rest.len() - rest.trim_end_matches([' ', '\t']).len();
@@ -147,14 +109,10 @@ pub fn value_span(text: &str, key: &str) -> Option<Span> {
     found
 }
 
-/// Span of the whole `key: value` line, including its trailing newline. Used
-/// when a key is removed entirely. Last occurrence when duplicated.
 pub fn line_span(text: &str, key: &str) -> Option<Span> {
     line_spans(text, key).pop()
 }
 
-/// Every line span defining `key`, in document order. Removal touches all of
-/// them so a duplicated key genuinely disappears.
 pub(crate) fn line_spans(text: &str, key: &str) -> Vec<Span> {
     let Some((_, inner)) = find_block(text) else {
         return Vec::new();
@@ -173,7 +131,6 @@ pub(crate) fn line_spans(text: &str, key: &str) -> Vec<Span> {
         .collect()
 }
 
-/// Insertion point for a new key: the start of the closing fence line.
 pub(crate) fn insert_point(text: &str) -> Option<usize> {
     find_block(text).map(|(_, inner)| inner.end)
 }

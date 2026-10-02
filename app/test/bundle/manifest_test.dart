@@ -1,8 +1,3 @@
-/// Manifest parsing and verification (`BRIDGE.md` §5).
-///
-/// The rule every test here defends: **fail closed**. A manifest the shell does not fully
-/// understand, or a file whose bytes do not hash to what the server said, must stop the
-/// update — not produce a bundle that is swapped in and then cannot boot.
 library;
 
 import 'dart:convert';
@@ -13,8 +8,6 @@ import 'package:ddd_shell/bundle/manifest.dart';
 const String emptySha =
     'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
 
-/// A `bundle_version` in the shape the server derives (`BRIDGE.md` §5) — and the shape the
-/// parser now insists on, because the value ends up as a directory name.
 const String testBundleId =
     'b1f3aa0000000000000000000000000000000000000000000000000000000000';
 
@@ -103,15 +96,6 @@ void main() {
     });
 
     test('refuses a bundle_version that is not a 64-hex digest', () {
-      // `bundle_version` becomes a directory name under the bundle root, and that
-      // directory is handed to `Directory.delete(recursive: true)` and `Directory.rename`
-      // by `BundleStore.install`. A hostile server that also serves bytes matching its own
-      // hashes passes every other check in the shell, so this parse is the only thing
-      // between `"../../shared_prefs"` and the deletion of the keystore holding the bearer
-      // token — and between `".."` and the deletion of the whole files directory.
-      //
-      // The reserved names are the other half: the store keeps `state.json` and `.staging`
-      // directly under the same root.
       for (final String version in <String>[
         '../../shared_prefs',
         '..',

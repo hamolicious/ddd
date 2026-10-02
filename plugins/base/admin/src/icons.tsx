@@ -1,9 +1,3 @@
-/**
- * The admin screens' icons: inline SVG in `currentColor`, so they follow the button's
- * text colour (danger red included) in both themes. Decorative: the button carries the
- * name, as `aria-label` and `title`.
- */
-
 import type { ReactElement } from "react";
 
 const common = {
@@ -18,7 +12,6 @@ const common = {
   strokeLinejoin: "round",
 } as const;
 
-/** A key: issue a password reset link. */
 export function KeyIcon(): ReactElement {
   return (
     <svg {...common}>
@@ -28,7 +21,6 @@ export function KeyIcon(): ReactElement {
   );
 }
 
-/** A bin: delete. */
 export function TrashIcon(): ReactElement {
   return (
     <svg {...common}>
@@ -37,7 +29,6 @@ export function TrashIcon(): ReactElement {
   );
 }
 
-/** A struck circle: revoke. */
 export function RevokeIcon(): ReactElement {
   return (
     <svg {...common}>
@@ -47,7 +38,6 @@ export function RevokeIcon(): ReactElement {
   );
 }
 
-/** Two sheets: copy. */
 export function CopyIcon(): ReactElement {
   return (
     <svg {...common}>
@@ -57,7 +47,6 @@ export function CopyIcon(): ReactElement {
   );
 }
 
-/** A tick: copied. */
 export function CheckIcon(): ReactElement {
   return (
     <svg {...common}>
@@ -66,7 +55,6 @@ export function CheckIcon(): ReactElement {
   );
 }
 
-/** A cross: dismiss. */
 export function CloseIcon(): ReactElement {
   return (
     <svg {...common}>
@@ -75,7 +63,6 @@ export function CloseIcon(): ReactElement {
   );
 }
 
-/** A power symbol: enable / disable. */
 export function PowerIcon(): ReactElement {
   return (
     <svg {...common}>
@@ -85,7 +72,6 @@ export function PowerIcon(): ReactElement {
   );
 }
 
-/** A chevron: expand (it turns when open). */
 export function ChevronIcon(): ReactElement {
   return (
     <svg {...common}>
@@ -94,7 +80,6 @@ export function ChevronIcon(): ReactElement {
   );
 }
 
-/** A triangle: run now. */
 export function PlayIcon(): ReactElement {
   return (
     <svg {...common}>
@@ -103,7 +88,6 @@ export function PlayIcon(): ReactElement {
   );
 }
 
-/** A box with an arrow out: upload a package. */
 export function UploadIcon(): ReactElement {
   return (
     <svg {...common}>
@@ -113,7 +97,6 @@ export function UploadIcon(): ReactElement {
   );
 }
 
-/** An i in a circle: more about this. */
 export function InfoIcon(): ReactElement {
   return (
     <svg {...common}>

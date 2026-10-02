@@ -1,19 +1,3 @@
-/**
- * **Contract parity against `app/bridge_fixtures/`** — the half of the M5 bridge contract
- * that this repository can actually check.
- *
- * `capabilities.test.ts` proves the shim's *rules* (degrade per method, never after an
- * error). This suite proves the shim's *bytes*: that what `kernel.capabilities` puts on
- * the wire is, key for key, the envelope `app/BRIDGE.md` froze and the Dart side is
- * written against. The two halves compile separately and never see each other, so without
- * a shared artefact "we agree on the envelope" is a claim. Here it is a test — and the
- * same JSON is meant to fail a Dart test the moment either side renames a field.
- *
- * Nothing here asserts anything about how the *shell* behaves; that is `app/test/`'s job
- * against the same files. What this suite owns is the web side of every boundary:
- * detection, the outgoing params, the incoming result, and the frozen name lists.
- */
-
 import { afterEach, describe, expect, it } from "vitest";
 
 import { SUPPORTED_BRIDGE_VERSION } from "@kernel";
@@ -82,9 +66,6 @@ describe("the fixture set", () => {
   });
 
   it("agrees with the bundle about which bridge major this is", () => {
-    // Three constants, one number. `BRIDGE_VERSION` is what the bundle *speaks*,
-    // `SUPPORTED_BRIDGE_VERSION` is the ceiling `detectBridge` enforces, and the fixture
-    // is what the Dart side is written against (`kBridgeVersion`).
     expect(BRIDGE_VERSION).toBe(index.bridgeVersion);
     expect(SUPPORTED_BRIDGE_VERSION).toBe(index.bridgeVersion);
     expect(index.handler).toBe("ddd_shell_v1");
@@ -125,8 +106,6 @@ describe("every envelope in every case file", () => {
       expect(typeof request.id).toBe("string");
       expect(typeof request.capability).toBe("string");
       expect(typeof request.method).toBe("string");
-      // `params` is always an object when present, and an absent one means `{}` —
-      // never a scalar, never an array (`BRIDGE.md` §2).
       const params = request.params;
       if (params !== undefined) {
         expect(typeof params).toBe("object");
@@ -142,7 +121,6 @@ describe("every envelope in every case file", () => {
     expect(typeof response.id).toBe("string");
     expect(typeof response.ok).toBe("boolean");
     if (response.ok) {
-      // `result` is present even when it is `null`: a handler that answers must answer.
       expect(Object.keys(response)).toContain("result");
       expect(response.error).toBeUndefined();
     } else {
@@ -167,8 +145,6 @@ describe("every envelope in every case file", () => {
   });
 
   it("keeps instants and bytes in the two spellings the boundary allows", () => {
-    // ISO-8601 in, epoch ms out, and the shim is the only thing that converts. A
-    // fixture whose two spellings disagreed would hide a real off-by-a-timezone.
     for (const entry of notifications.cases) {
       const atIso = fixtureParams(entry)["atIso"];
       if (typeof atIso === "string" && entry.atMs !== undefined) {
@@ -181,7 +157,6 @@ describe("every envelope in every case file", () => {
         expect(Date.parse(row.atIso as string)).toBe(row.at);
       }
     }
-    // Bytes are base64 and never a `Uint8Array` (`BRIDGE.md` §2, rule 1).
     const bytes = fixtureCase(filesystem, "export bytes as base64").bytes;
     expect(bytes).toBeDefined();
     expect(btoa(bytes?.utf8 ?? "")).toBe(bytes?.base64);
@@ -239,8 +214,6 @@ describe("what the shim sends", () => {
       multiple: params["multiple"] as boolean,
     });
     expect(seen).toEqual([params]);
-    // The picked file arrives whole, because a native picker's file has no `File`
-    // object in this realm to re-read later (`BRIDGE.md` §4.2).
     expect(files.map((file) => ({ name: file.name, mime: file.mime, size: file.size }))).toEqual(
       (entry.response.result as { name: string; mime: string; size: number }[]).map((row) => ({
         name: row.name,
@@ -274,8 +247,6 @@ describe("what the shim sends", () => {
       entry.atMs ?? 0,
     );
     expect(id).toBe(entry.response.result);
-    // The kernel API is epoch ms; `atIso` is the shell's spelling and the *shell*
-    // converts (`BRIDGE.md` §4.3). What must match is the instant.
     expect(seen[0]?.[1]).toBe(Date.parse(params["atIso"] as string));
   });
 });
@@ -289,8 +260,6 @@ describe("what the shim reads back", () => {
       notifications: {
         schedule: () => Promise.resolve("x"),
         cancel: () => Promise.resolve(),
-        // `list` is the `BRIDGE.md` spelling; `scheduled` is the frozen kernel one, and
-        // the shim accepts either (they are the same handler).
         list: () => Promise.resolve(rows),
       },
     });
@@ -298,8 +267,6 @@ describe("what the shim reads back", () => {
       rows.map((row) => ({ id: row.id, at: row.at })),
     );
 
-    // A shell that sent only the canonical `atIso` is understood rather than dropped:
-    // dropping it would read to a user as "my reminders vanished".
     const isoOnly = new CapabilitiesHost({
       version: 1,
       notifications: {
@@ -323,10 +290,6 @@ describe("what the shim reads back", () => {
   });
 
   it("treats every fixture error as a real failure and never retries in the browser", async () => {
-    // Rule 3 of `BRIDGE.md` §3, read off the fixtures: a defined method that fails is a
-    // failure. Falling back here would open a second save dialog or fire a second
-    // notification. The browser fallback in this environment rejects with
-    // /unavailable/, so a leaked fallback would change the message.
     const cancelled = fixtureCase(filesystem, "export cancelled at the share sheet");
     const cancelHost = new CapabilitiesHost({
       version: 1,
@@ -413,8 +376,6 @@ describe("the detection rule (BRIDGE.md §3)", () => {
       if (entry.serverBaseUrl !== undefined) {
         const resolved = shellServerBaseUrl(readShellBridge());
         expect(resolved).toBe(entry.serverBaseUrl ?? undefined);
-        // The one thing every caller does with it: prefix a rooted path. A base that
-        // was ignored has to leave the path alone so a browser keeps working.
         expect(shellUrl("/api/admin/export", readShellBridge())).toBe(
           `${entry.serverBaseUrl ?? ""}/api/admin/export`,
         );
@@ -428,8 +389,6 @@ describe("the injected surface", () => {
     expect(windowShell.injected.methods).toEqual(index.methods);
     expect(windowShell.injected.capabilities).toEqual(index.capabilities);
     expect(windowShell.injected.version).toBe(index.bridgeVersion);
-    // Both spellings, equal — `version` is what the committed kernel reads and
-    // `bridgeVersion` is the name `BRIDGE.md` uses (§3).
     expect(windowShell.injected.bridgeVersion).toBe(windowShell.injected.version);
   });
 
@@ -437,24 +396,17 @@ describe("the injected surface", () => {
     const functions = new Set(windowShell.injected.functions);
     const aliases = Object.entries(index.jsAliases);
 
-    // Every registered method is reachable from JavaScript under *some* declared
-    // spelling. Three of them are flat (`bootOk`, `bootFailed`, `setBearerToken`),
-    // because the boot sequence reads them before a capability object means anything,
-    // and `notifications.scheduled` is the frozen kernel name for `notifications.list`.
     for (const method of index.methods) {
       const spellings = [method, ...aliases.filter(([, to]) => to === method).map(([from]) => from)];
       expect(`${method} → ${spellings.some((name) => functions.has(name))}`).toBe(`${method} → true`);
     }
 
-    // And nothing is injected that no method answers: an extra member is either a
-    // capability nobody registered or a spelling the Dart side forgot to alias.
     for (const member of functions) {
       const known = index.methods.includes(member) || member in index.jsAliases;
       expect(`${member} → ${known}`).toBe(`${member} → true`);
     }
 
     for (const [, target] of aliases) expect(index.methods).toContain(target);
-    // `boot` is the one capability with no nested spelling at all (`BRIDGE.md` §3).
     expect(functions.has("boot.ok")).toBe(false);
     expect(functions.has("bootOk")).toBe(true);
   });
@@ -468,8 +420,6 @@ describe("the injected surface", () => {
     }
     expect(host.notifications.supportsScheduled).toBe(true);
     expect(host.filesystem.exportWorkspace).toBeDefined();
-    // `auth` is app-boot plumbing and deliberately not a feature a plugin can reach
-    // (`BRIDGE.md` §4.1); `boot` is the shell talking to itself.
     for (const name of index.capabilities.filter((c) => !index.pluginFacing.includes(c))) {
       expect(name === "auth" || name === "boot").toBe(true);
       expect((host as unknown as Record<string, unknown>)[name]).toBeUndefined();
@@ -477,7 +427,6 @@ describe("the injected surface", () => {
   });
 });
 
-/** A `window.shell` with a stub for every function the fixture says is injected. */
 function buildInjectedBridge(): Record<string, unknown> {
   const bridge: Record<string, unknown> = {
     version: windowShell.injected.version,
@@ -520,21 +469,13 @@ describe("the manifest (BRIDGE.md §5)", () => {
 
   it("lists the synthesized files and excludes the service worker", () => {
     const paths = manifest.valid.files.map((file) => file.path);
-    // The two rendered-per-bundle files are part of the bundle and come from
-    // `/api/shell/bundle/{path}`; everything else is a plain static route.
     for (const synthesized of manifest.synthesized) expect(paths).toContain(synthesized);
-    // `sw.js` is excluded on purpose: the loopback origin already *is* the offline
-    // cache, and a worker there would fight the updater for what the webview sees.
     expect(manifest.excluded).toContain("sw.js");
     for (const excluded of manifest.excluded) expect(paths).not.toContain(excluded);
-    // A bundle with no `index.html` is a bundle that cannot boot.
     expect(paths).toContain("index.html");
   });
 
   it("agrees with the CSP the shell will send for index.html", () => {
-    // The nonce in `index_csp` has to match the inline import map in the rendered
-    // `index.html` (`BRIDGE.md` §5), and the policy is SPEC §8's with `wasm-unsafe-eval`
-    // added — the shared core is Wasm.
     expect(manifest.valid.index_csp).toMatch(/script-src [^;]*'nonce-[A-Za-z0-9+/_-]+'/);
     expect(manifest.valid.index_csp).toContain("'wasm-unsafe-eval'");
     expect(manifest.valid.index_csp).toContain("object-src 'none'");
@@ -542,8 +483,6 @@ describe("the manifest (BRIDGE.md §5)", () => {
   });
 
   it("marks a path unsafe whenever it could escape the bundle directory", () => {
-    // The web side never writes these paths — the Dart store does — but the rule is
-    // shared data, so a disagreement about what "unsafe" means shows up here too.
     for (const path of manifest.unsafePaths) {
       const unsafe =
         path.length === 0 ||
