@@ -2580,27 +2580,21 @@
     "semantic_hash": ""
   },
   "app/BRIDGE.md": {
-    "mtime": 1790897228.196206,
-    "seen": 1790897350.8024414,
-    "ast_hash": "ec83b225cbf89f03f675b016564dd27c",
-    "semantic_hash": ""
-  },
-  "app/CONTRACTS.md": {
-    "mtime": 1790886404.4588099,
-    "seen": 1790886835.68662,
-    "ast_hash": "bcc54fb32b6f4590a98a836ff7e76804",
+    "mtime": 1790963787.9354372,
+    "seen": 1790963827.7735598,
+    "ast_hash": "798f81e0560514454096d9723b69b91c",
     "semantic_hash": ""
   },
   "app/README.md": {
-    "mtime": 1790963488.3137681,
-    "seen": 1790963508.6775117,
-    "ast_hash": "0798351150e8fd358e2b1ceaae078a97",
+    "mtime": 1790963689.976993,
+    "seen": 1790963827.7735612,
+    "ast_hash": "9d40818af9c1d6ab434bed4a8b37c9ab",
     "semantic_hash": ""
   },
   "app/TESTPLAN.md": {
-    "mtime": 1790887318.3409832,
-    "seen": 1790887437.2090082,
-    "ast_hash": "a8eba5754e397a0311e796670410eb34",
+    "mtime": 1790963787.94458,
+    "seen": 1790963827.7735622,
+    "ast_hash": "8fd0df279131790405f12922e6da4830",
     "semantic_hash": ""
   },
   "app/analysis_options.yaml": {
@@ -2663,34 +2657,28 @@
     "ast_hash": "e99a99b5cc82a168fc557eb23b8d5a96",
     "semantic_hash": "e99a99b5cc82a168fc557eb23b8d5a96"
   },
-  "backend/CONTRACTS.md": {
-    "mtime": 1790897228.196206,
-    "seen": 1790897350.8029282,
-    "ast_hash": "1bb44957c26f0727016699b51a32536b",
-    "semantic_hash": ""
-  },
   "backend/HOST-ABI.md": {
-    "mtime": 1790886404.4626563,
-    "seen": 1790886835.686931,
-    "ast_hash": "4df0a0282f346d9cfb4f9571c967bf5b",
+    "mtime": 1790963780.0538023,
+    "seen": 1790963827.7739606,
+    "ast_hash": "f1b9d6e5017971759f589f702543af7b",
     "semantic_hash": ""
   },
   "backend/PERF.md": {
-    "mtime": 1790886404.4628706,
-    "seen": 1790886835.686932,
-    "ast_hash": "9787a45d759f64b8b3c43a0bc7f6f1c6",
+    "mtime": 1790963772.455852,
+    "seen": 1790963827.7739618,
+    "ast_hash": "b6fa9bdfd9fc6236bd1e0de90ace34bd",
     "semantic_hash": ""
   },
   "backend/PROTOCOL.md": {
-    "mtime": 1790897228.1972063,
-    "seen": 1790897350.8030276,
-    "ast_hash": "71fe9c808d221f1825a962c49a94d630",
+    "mtime": 1790963758.009434,
+    "seen": 1790963827.7739627,
+    "ast_hash": "15a74f60609ee51bb72a0f8e80951776",
     "semantic_hash": ""
   },
   "backend/README.md": {
-    "mtime": 1790963210.1399662,
-    "seen": 1790963228.7557538,
-    "ast_hash": "109bf28366845b72b72961ec2f908218",
+    "mtime": 1790963689.9781108,
+    "seen": 1790963827.7739637,
+    "ast_hash": "449db4bd4ce3d54aca8faf1849286095",
     "semantic_hash": ""
   },
   "backend/crates/core/README.md": {
@@ -2700,9 +2688,9 @@
     "semantic_hash": ""
   },
   "docker-compose.yaml": {
-    "mtime": 1790886404.4737635,
-    "seen": 1790886835.6871321,
-    "ast_hash": "f8718c655e5bc0e3d776d0be017c326c",
+    "mtime": 1790963792.7274802,
+    "seen": 1790963827.7741375,
+    "ast_hash": "8028f8df66a4b6ba2247f7426801f991",
     "semantic_hash": ""
   },
   "plugins/base/README.md": {
@@ -2717,22 +2705,10 @@
     "ast_hash": "1f3341d9c966ce19340e60c4a26a5602",
     "semantic_hash": ""
   },
-  "web/CONTRACTS.md": {
-    "mtime": 1790886404.5925152,
-    "seen": 1790886835.6872566,
-    "ast_hash": "75d1e5e8cbd28a1879bde22187475b3b",
-    "semantic_hash": ""
-  },
-  "web/MOBILE-AUDIT.md": {
-    "mtime": 1790886404.5925152,
-    "seen": 1790886835.6872578,
-    "ast_hash": "95015a88f6da389f063221a1ca49882f",
-    "semantic_hash": ""
-  },
   "web/README.md": {
-    "mtime": 1790963488.3127248,
-    "seen": 1790963508.6783605,
-    "ast_hash": "67af3bc51b9715e89c568e59f7b0c0cd",
+    "mtime": 1790963694.591033,
+    "seen": 1790963827.7743237,
+    "ast_hash": "185304accf49c5e46f54d97d6a6bac8c",
     "semantic_hash": ""
   },
   "web/app/index.html": {
