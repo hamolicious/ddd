@@ -876,9 +876,9 @@
     "semantic_hash": ""
   },
   "backend/crates/server/src/routes/attachments.rs": {
-    "mtime": 1790944229.5189328,
-    "seen": 1790944654.0764797,
-    "ast_hash": "62d787344bbbb04f50a7d69d3afe41b0",
+    "mtime": 1790946574.7336514,
+    "seen": 1790947329.691968,
+    "ast_hash": "669c6ee32b1e3e92020299d00404e0ed",
     "semantic_hash": ""
   },
   "backend/crates/server/src/routes/auth.rs": {
@@ -888,9 +888,9 @@
     "semantic_hash": ""
   },
   "backend/crates/server/src/routes/documents.rs": {
-    "mtime": 1790944229.5329328,
-    "seen": 1790944654.0765514,
-    "ast_hash": "da78025148f8272b07425503a8bd3a1d",
+    "mtime": 1790946574.9700758,
+    "seen": 1790947329.6920412,
+    "ast_hash": "a21faae21901b7839c86b61093618786",
     "semantic_hash": ""
   },
   "backend/crates/server/src/routes/health.rs": {
@@ -5622,9 +5622,9 @@
     "semantic_hash": ""
   },
   "backend/crates/server/tests/duplicates.rs": {
-    "mtime": 1790944309.3153672,
-    "seen": 1790944654.0770695,
-    "ast_hash": "14b0b50cc8ed933124d411719791571e",
+    "mtime": 1790946590.8303454,
+    "seen": 1790947329.6926277,
+    "ast_hash": "5d5685786fb37d5ba9b20a4d661e7210",
     "semantic_hash": ""
   },
   "plugins/base/db-health/manifest.json": {
@@ -5640,15 +5640,15 @@
     "semantic_hash": ""
   },
   "plugins/base/db-health/src/Health.tsx": {
-    "mtime": 1790944970.9354365,
-    "seen": 1790945310.1233644,
-    "ast_hash": "655c2768fbc77435d221e79c066a2129",
+    "mtime": 1790946816.1745422,
+    "seen": 1790947329.698131,
+    "ast_hash": "4ad4d057e580e09503b0531be4870607",
     "semantic_hash": ""
   },
   "plugins/base/db-health/src/api.ts": {
-    "mtime": 1790944759.661197,
-    "seen": 1790945310.1233652,
-    "ast_hash": "1a12da8c2d07990722fa81ff774ba5ea",
+    "mtime": 1790946634.0822816,
+    "seen": 1790947329.6981328,
+    "ast_hash": "856cd38a72e46333ca23f76c3530787f",
     "semantic_hash": ""
   },
   "plugins/base/db-health/src/hooks.ts": {
@@ -5670,9 +5670,21 @@
     "semantic_hash": ""
   },
   "web/app/e2e/db-health.spec.ts": {
-    "mtime": 1790944970.9355454,
-    "seen": 1790945310.1325665,
-    "ast_hash": "532eac5d9cfd2d39831335b95f563f77",
+    "mtime": 1790946739.9677985,
+    "seen": 1790947329.7112873,
+    "ast_hash": "82cb4864fb39d93c97cbe199b4169216",
+    "semantic_hash": ""
+  },
+  "plugins/base/db-health/src/cleanup.test.ts": {
+    "mtime": 1790946634.0540566,
+    "seen": 1790947329.698134,
+    "ast_hash": "06619fecbdf04ed50fd1301158f42c50",
+    "semantic_hash": ""
+  },
+  "plugins/base/db-health/src/cleanup.ts": {
+    "mtime": 1790946634.0521703,
+    "seen": 1790947329.6981351,
+    "ast_hash": "c32227bc9d1c118e7a1c40d6bf54feda",
     "semantic_hash": ""
   }
 }

@@ -43,7 +43,7 @@ use sha2::{Digest as _, Sha256};
 use crate::auth::{AdminUser, AuthUser};
 use crate::domain::{Attachment, AttachmentView, AuditEntry, Id, Timestamp, is_valid_id, new_id};
 use crate::error::{AppError, AppResult};
-use crate::routes::documents::map_docstore;
+use crate::routes::documents::{MAX_REFERENCED_BY, NoteRef, map_docstore};
 use crate::state::AppState;
 use crate::telemetry::names;
 
@@ -202,6 +202,8 @@ pub struct DuplicateFile {
     /// How many documents (trashed ones included) reference this copy. A copy at 0
     /// can go without breaking a note.
     pub references: u32,
+    /// Those documents, the first [`MAX_REFERENCED_BY`].
+    pub referenced_by: Vec<NoteRef>,
 }
 
 /// The bytes after a successful stream into GridFS.
@@ -1071,25 +1073,30 @@ async fn find_duplicates(state: &AppState) -> AppResult<Vec<DuplicateGroup>> {
         return Ok(Vec::new());
     }
 
-    let mut references: BTreeMap<Id, u32> = groups
+    let mut references: BTreeMap<Id, Vec<NoteRef>> = groups
         .iter()
         .flatten()
-        .map(|attachment| (attachment.id.clone(), 0))
+        .map(|attachment| (attachment.id.clone(), Vec::new()))
         .collect();
     let mut documents = state
         .collections
         .raw(crate::db::DOCUMENTS)
         .find(doc! {})
-        .projection(doc! { "content": 1 })
+        .projection(doc! { "title": 1, "content": 1, "deleted_at": 1 })
         .await?;
     while let Some(row) = documents.try_next().await? {
-        if let Ok(content) = row.get_str("content") {
-            // A document counts once, however often it embeds the file.
-            let ids: BTreeSet<&str> = attachment_refs(content).into_iter().collect();
-            for reference in ids {
-                if let Some(count) = references.get_mut(reference) {
-                    *count += 1;
-                }
+        let (Ok(id), Ok(content)) = (row.get_str("_id"), row.get_str("content")) else {
+            continue;
+        };
+        // A document counts once, however often it embeds the file.
+        let ids: BTreeSet<&str> = attachment_refs(content).into_iter().collect();
+        for reference in ids {
+            if let Some(using) = references.get_mut(reference) {
+                using.push(NoteRef {
+                    id: id.to_string(),
+                    title: row.get_str("title").unwrap_or_default().to_string(),
+                    trashed: matches!(row.get("deleted_at"), Some(value) if *value != Bson::Null),
+                });
             }
         }
     }
@@ -1104,9 +1111,13 @@ async fn find_duplicates(state: &AppState) -> AppResult<Vec<DuplicateGroup>> {
                 size: first.size,
                 files: files
                     .into_iter()
-                    .map(|attachment| DuplicateFile {
-                        references: references.get(&attachment.id).copied().unwrap_or(0),
-                        attachment,
+                    .map(|attachment| {
+                        let using = references.remove(&attachment.id).unwrap_or_default();
+                        DuplicateFile {
+                            references: using.len() as u32,
+                            referenced_by: using.into_iter().take(MAX_REFERENCED_BY).collect(),
+                            attachment,
+                        }
                     })
                     .collect(),
             }

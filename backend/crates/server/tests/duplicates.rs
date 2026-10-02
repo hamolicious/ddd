@@ -59,7 +59,10 @@ async fn same_name_and_bytes_are_one_group_with_reference_counts() {
         .collect();
     assert_eq!(ids, [first.as_str(), second.as_str()], "oldest first");
     assert_eq!(files[0]["references"], 0);
+    assert_eq!(files[0]["referenced_by"], json!([]));
     assert_eq!(files[1]["references"], 1);
+    assert_eq!(files[1]["referenced_by"][0]["title"], "Uses it");
+    assert_eq!(files[1]["referenced_by"][0]["trashed"], false);
 
     app.cleanup().await;
 }
@@ -99,6 +102,7 @@ async fn same_title_and_text_are_duplicate_documents_outside_the_trash() {
     );
     assert_eq!(documents[0]["references"], 0);
     assert_eq!(documents[1]["references"], 1, "a document counts once");
+    assert_eq!(documents[1]["referenced_by"][0]["title"], "Index");
 
     app.cleanup().await;
 }

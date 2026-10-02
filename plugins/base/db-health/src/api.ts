@@ -15,6 +15,13 @@ export interface AttachmentView {
   readonly updated_at: string;
 }
 
+/** A note that uses a duplicate copy. */
+export interface NoteRef {
+  readonly id: string;
+  readonly title: string;
+  readonly trashed: boolean;
+}
+
 /** A file no document references. */
 export interface OrphanView {
   readonly attachment: AttachmentView;
@@ -31,6 +38,8 @@ export interface DuplicateFileGroup {
     readonly attachment: AttachmentView;
     /** Documents (trashed ones included) that reference this copy. */
     readonly references: number;
+    /** The first few of them. */
+    readonly referenced_by: readonly NoteRef[];
   }[];
 }
 
@@ -45,6 +54,8 @@ export interface DuplicateDocumentGroup {
     readonly updated_at: string;
     /** Other documents (trashed ones included) that link here with `doc://`. */
     readonly references: number;
+    /** The first few of them. */
+    readonly referenced_by: readonly NoteRef[];
   }[];
 }
 

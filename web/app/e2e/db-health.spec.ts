@@ -43,7 +43,7 @@ test("an orphan file opens in the viewer, and Delete asks first", async ({ page 
   await expect(link).toHaveCount(0);
 });
 
-test("duplicate notes list each copy with its links, and one goes to the Trash", async ({ page }) => {
+test("duplicate notes name what links to each copy, and the unused copy goes in one click", async ({ page }) => {
   await signIn(page, ADMIN);
   const title = `Twin ${Date.now()}`;
   const ids = await page.evaluate(async (heading) => {
@@ -64,12 +64,14 @@ test("duplicate notes list each copy with its links, and one goes to the Trash",
   }, title);
 
   await page.goto("/#/settings/db-health");
-  const rows = page.getByRole("row").filter({ hasText: title });
-  await expect(rows).toHaveCount(2);
-  await expect(rows.filter({ hasText: ids.newer })).toContainText("1 note");
-  await expect(rows.filter({ hasText: ids.older })).toContainText("Nothing");
+  const group = page.getByRole("rowgroup").filter({ hasText: title });
+  await expect(group).toContainText("2 copies");
+  // The copy another note links to names that note; the other is unused, so it can go.
+  await expect(group.getByRole("row").filter({ hasText: ids.newer })).toContainText("Links to the twin");
+  await expect(group.getByRole("row").filter({ hasText: ids.older })).toContainText("Unused, safe to remove");
 
-  await page.getByRole("button", { name: `Move this copy of ${title} to the Trash` }).first().click();
-  await page.getByRole("dialog").getByRole("button", { name: "Move to Trash" }).click();
-  await expect(rows).toHaveCount(0);
+  await group.getByRole("button", { name: "Remove 1 unused copy" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Remove" }).click();
+  // One copy left: no longer a duplicate.
+  await expect(group).toHaveCount(0);
 });

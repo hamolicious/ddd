@@ -889,7 +889,20 @@ pub struct DuplicateDocument {
     /// How many *other* documents (trashed ones included) link here with `doc://`.
     /// A copy at 0 can go without breaking a link.
     pub references: u32,
+    /// Those documents, the first [`MAX_REFERENCED_BY`].
+    pub referenced_by: Vec<NoteRef>,
 }
+
+/// A document that uses a duplicate copy, so the admin can see *which* note it is.
+#[derive(Debug, Clone, Serialize)]
+pub struct NoteRef {
+    pub id: Id,
+    pub title: String,
+    pub trashed: bool,
+}
+
+/// How many referencing notes a duplicate copy lists; `references` is the full count.
+pub const MAX_REFERENCED_BY: usize = 10;
 
 /// A live document as the duplicate scan sees it.
 #[derive(Debug, Clone)]
@@ -908,7 +921,7 @@ pub async fn duplicates(
     _admin: AdminUser,
 ) -> AppResult<Json<Vec<DuplicateDocumentGroup>>> {
     let mut live = Vec::new();
-    let mut texts: Vec<(Id, String)> = Vec::new();
+    let mut texts: Vec<(NoteRef, String)> = Vec::new();
     let mut rows = state
         .collections
         .raw(crate::db::DOCUMENTS)
@@ -922,10 +935,11 @@ pub async fn duplicates(
             continue;
         };
         let trashed = matches!(row.get("deleted_at"), Some(value) if *value != bson::Bson::Null);
+        let title = row.get_str("title").unwrap_or_default().to_string();
         if !trashed {
             live.push(DocumentCopy {
                 id: id.to_string(),
-                title: row.get_str("title").unwrap_or_default().to_string(),
+                title: title.clone(),
                 content: content.to_string(),
                 created_at: row
                     .get_datetime("created_at")
@@ -938,7 +952,14 @@ pub async fn duplicates(
             });
         }
         // Trashed documents still count as linking, as they do for orphan files.
-        texts.push((id.to_string(), content.to_string()));
+        texts.push((
+            NoteRef {
+                id: id.to_string(),
+                title,
+                trashed,
+            },
+            content.to_string(),
+        ));
     }
 
     let groups = group_duplicate_documents(live);
@@ -950,12 +971,15 @@ pub async fn duplicates(
         .flatten()
         .map(|copy| copy.id.as_str())
         .collect();
-    let mut references: BTreeMap<&str, u32> = BTreeMap::new();
+    let mut references: BTreeMap<&str, Vec<&NoteRef>> = BTreeMap::new();
     for (from, text) in &texts {
-        let linked: BTreeSet<&str> = doc_refs(text).into_iter().filter(|id| id != from).collect();
+        let linked: BTreeSet<&str> = doc_refs(text)
+            .into_iter()
+            .filter(|id| *id != from.id)
+            .collect();
         for id in linked {
             if let Some(candidate) = candidates.get(id) {
-                *references.entry(candidate).or_default() += 1;
+                references.entry(candidate).or_default().push(from);
             }
         }
     }
@@ -968,11 +992,22 @@ pub async fn duplicates(
                 size: copies[0].content.len() as u64,
                 documents: copies
                     .iter()
-                    .map(|copy| DuplicateDocument {
-                        id: copy.id.clone(),
-                        created_at: copy.created_at,
-                        updated_at: copy.updated_at,
-                        references: references.get(copy.id.as_str()).copied().unwrap_or(0),
+                    .map(|copy| {
+                        let using = references
+                            .get(copy.id.as_str())
+                            .map(Vec::as_slice)
+                            .unwrap_or_default();
+                        DuplicateDocument {
+                            id: copy.id.clone(),
+                            created_at: copy.created_at,
+                            updated_at: copy.updated_at,
+                            references: using.len() as u32,
+                            referenced_by: using
+                                .iter()
+                                .take(MAX_REFERENCED_BY)
+                                .map(|note| (*note).clone())
+                                .collect(),
+                        }
                     })
                     .collect(),
             })
