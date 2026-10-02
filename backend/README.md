@@ -138,15 +138,15 @@ is the annotated copy-me file and covers every variable below.
 | Variable | Default | Notes |
 |---|---|---|
 | `WEB_DIST_DIR` | *(unset)* | The built PWA (`mise run web-build`). Unset = API only, which is what `mise run app` expects (Vite serves the app and proxies `/api`). |
-| `PLUGINS_DIR` | | Installed plugins, one directory per plugin per version. `mise run plugins` writes the base set to `plugins/base/dist`. |
-| `KERNEL_DTS_PATH` | | The generated plugin contract, served at `/kernel.d.ts` (`mise run kernel-dts`). |
+| `PLUGINS_DIR` | `plugins/base/dist` | Installed plugins, one directory per plugin per version. `mise run plugins` writes the base set to `plugins/base/dist`. |
+| `KERNEL_DTS_PATH` | `web/kernel-api/dist/kernel.d.ts` | The generated plugin contract, served at `/kernel.d.ts` (`mise run kernel-dts`). |
 | `DISABLE_PLUGINS` | `false` | Server-side safe mode: every client is told the plugin list is empty. Client equivalents: `?safe=1` (base plugins only), `?safe=bare`. |
 
 ### Plugin host
 
 | Variable | Default | Notes |
 |---|---|---|
-| `PLUGIN_STAGING_DIR` | | Where uploads are extracted and held pending. Must be a sibling of `PLUGINS_DIR`, never a child. |
+| `PLUGIN_STAGING_DIR` | `$PLUGINS_DIR.staging` | Where uploads are extracted and held pending. Must be a sibling of `PLUGINS_DIR`, never a child. |
 | `PLUGIN_INBOX_DIR` | *(unset)* | Drop `my-plugin-1.2.0.zip` here to install it as pending. Unset = no watcher. |
 | `CONFIG_KEY` | derived from `SESSION_SECRET` | Encrypts `secret: true` plugin config at rest (32 bytes, hex or base64; `openssl rand -hex 32`). **Set it explicitly**: if it is derived, rotating `SESSION_SECRET` makes every stored plugin secret unreadable. |
 | `PLUGIN_CALL_TIMEOUT_MS` | `5000` | Resource limits; can only be lowered. |

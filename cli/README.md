@@ -11,7 +11,7 @@ cargo install --path cli        # puts `ddd` on your PATH
 ## Commands
 
 ```bash
-ddd plugin new reading-list --dep header@^2.0 --tailwind --backend
+ddd plugin new reading-list --dep toolbar@^1.1 --tailwind --backend
 ddd plugin types --server https://notes.example.com   # run inside a plugin project
 ddd login --server https://notes.example.com          # prints a bearer token
 ddd query --filter title:text_contains:a --sort fm.date
