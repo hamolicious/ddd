@@ -43,6 +43,8 @@ import { useMemo, type ReactNode } from "react";
 
 import { fmDisplayRows, type FmDisplayRow } from "../../_shared/fm-display.js";
 
+import { FULL_WIDTH_KEY, columnClasses } from "./width.js";
+
 export interface FmHeaderProps {
   /** The document's materialized frontmatter, from the projection row. */
   readonly fm?: Readonly<Record<string, CoreValue>>;
@@ -50,6 +52,8 @@ export interface FmHeaderProps {
   readonly fmParseError?: boolean;
   /** A `doc://` value as a link to its note (`markdown`'s `renderDocLink`). */
   readonly renderDocLink?: (documentId: string) => ReactNode;
+  /** The note's `full-width` flag: the header shares the body's column. */
+  readonly fullWidth?: boolean;
 }
 
 /** `doc://<id>`, the whole value: the id, or `undefined` for anything else. */
@@ -57,8 +61,9 @@ function docLinkId(value: string): string | undefined {
   return /^doc:\/\/([A-Za-z0-9_-]+)$/.exec(value.trim())?.[1];
 }
 
-export function FmHeader({ fm, fmParseError, renderDocLink }: FmHeaderProps): ReactNode {
-  const rows = useMemo(() => fmDisplayRows(fm), [fm]);
+export function FmHeader({ fm, fmParseError, renderDocLink, fullWidth = false }: FmHeaderProps): ReactNode {
+  // `full-width` is how the note is laid out, not something it says: not a property.
+  const rows = useMemo(() => fmDisplayRows(fm).filter((row) => row.key !== FULL_WIDTH_KEY), [fm]);
 
   // Nothing to say, and nothing wrong: no header. The `fm_parse_error` case is
   // deliberately not folded into this test — a block whose only line was unreadable
@@ -66,7 +71,7 @@ export function FmHeader({ fm, fmParseError, renderDocLink }: FmHeaderProps): Re
   if (rows.length === 0 && !fmParseError) return null;
 
   return (
-    <div className="viewer-properties viewer:text-base viewer:mx-auto viewer:w-full viewer:min-w-0 viewer:max-w-[72ch] viewer:px-4 viewer:pt-4 viewer:compact:px-4 viewer:compact:pt-4">
+    <div className={`viewer-properties viewer:text-base viewer:mx-auto viewer:w-full viewer:min-w-0 viewer:pt-4 viewer:compact:pt-4 ${columnClasses(fullWidth)}`}>
       {rows.length > 0 ? (
         <table className="viewer-properties-list viewer:mb-2 viewer:w-full viewer:table-fixed viewer:border-collapse viewer:border-0 viewer:text-sm">
           <tbody>

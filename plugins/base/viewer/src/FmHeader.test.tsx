@@ -23,4 +23,11 @@ describe("FmHeader", () => {
       "data-note",
     );
   });
+
+  it("keeps the full-width flag out of the properties, and takes the wide column", () => {
+    const html = renderToStaticMarkup(<FmHeader fm={{ "full-width": true, status: "draft" }} fullWidth />);
+    expect(html).not.toContain("full-width");
+    expect(html).toContain("viewer:px-[15px]");
+    expect(renderToStaticMarkup(<FmHeader fm={{ "full-width": true }} />)).toBe("");
+  });
 });

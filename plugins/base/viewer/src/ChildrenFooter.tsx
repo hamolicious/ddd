@@ -14,6 +14,8 @@ import type { Folders } from "plugin:folders";
 
 import { target } from "../../_shared/target.js";
 
+import { columnClasses } from "./width.js";
+
 export type ChildrenSource = Pick<Folders, "childrenOf" | "onChange">;
 
 const NO_CHILDREN = "";
@@ -23,10 +25,13 @@ export function ChildrenFooter({
   folders,
   renderDocLink,
   divided = true,
+  fullWidth = false,
 }: {
   readonly id: string;
   /** A rule between the body and the list; `false` when the note has no body to divide from. */
   readonly divided?: boolean;
+  /** The note's `full-width` flag: the list shares the body's column. */
+  readonly fullWidth?: boolean;
   readonly folders: ChildrenSource;
   readonly renderDocLink: (documentId: string) => ReactNode;
 }): ReactNode {
@@ -38,7 +43,7 @@ export function ChildrenFooter({
 
   return (
     <footer
-      className="viewer-children viewer:mx-auto viewer:w-full viewer:min-w-0 viewer:max-w-[72ch] viewer:px-4 viewer:pb-6 viewer:compact:pb-4"
+      className={`viewer-children viewer:mx-auto viewer:w-full viewer:min-w-0 viewer:pb-6 viewer:compact:pb-4 ${columnClasses(fullWidth)}`}
       aria-labelledby={`viewer-children-${id}`}
     >
       <div className={divided ? "viewer:border-t viewer:border-border viewer:pt-3" : ""}>

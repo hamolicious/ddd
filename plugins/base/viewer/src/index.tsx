@@ -15,6 +15,8 @@
  *   header is display-only; edit mode is the way to change a value. Values are typed
  *   through `_shared/fm-display.ts` so any plugin that shows `fm` agrees on what a
  *   key is.
+ * - **Honour `full-width: true`** in the frontmatter: the column fills the pane with
+ *   15px gutters instead of the reading measure (`width.ts`).
  * - **List the notes filed inside it** in a footer after the body (`ChildrenFooter.tsx`),
  *   from `folders`' tree when that plugin is enabled.
  * - **Render an attachment wrapper document as a file preview** (SPEC §3.6). A wrapper
@@ -45,6 +47,7 @@ import { addView } from "plugin:shell-ui";
 
 import { ChildrenFooter, type ChildrenSource } from "./ChildrenFooter.js";
 import { FmHeader } from "./FmHeader.js";
+import { columnClasses, isFullWidth } from "./width.js";
 import {
   formatBytes,
   previewKindFor,
@@ -68,7 +71,7 @@ interface AttachmentMeta {
 const MAX_INLINE_IMAGE_BYTES = 16 * 1024 * 1024;
 const MAX_INLINE_TEXT_BYTES = 256 * 1024;
 
-const READER_CLASSES = "viewer:mx-auto viewer:w-full viewer:min-w-0 viewer:max-w-[72ch] viewer:break-words viewer:px-4 viewer:py-6 viewer:text-base viewer:leading-[1.65] viewer:compact:py-4 viewer:compact:leading-[1.7] viewer:[&>:first-child]:mt-0 viewer:[&_h1]:mb-2 viewer:[&_h1]:mt-6 viewer:[&_h1]:text-2xl viewer:[&_h1]:leading-tight viewer:compact:[&_h1]:text-xl viewer:[&_h2]:mb-2 viewer:[&_h2]:mt-6 viewer:[&_h2]:text-xl viewer:[&_h2]:leading-tight viewer:compact:[&_h2]:text-lg viewer:[&_h3]:mb-2 viewer:[&_h3]:mt-6 viewer:[&_h3]:text-lg viewer:[&_h3]:leading-tight viewer:compact:[&_h3]:text-base viewer:[&_h4]:mb-2 viewer:[&_h4]:mt-6 viewer:[&_h4]:leading-tight viewer:[&_p]:mb-3 viewer:[&_p]:mt-0 viewer:[&_ul]:mb-3 viewer:[&_ol]:mb-3 viewer:[&_blockquote]:mb-3 viewer:[&_blockquote]:border-l-[3px] viewer:[&_blockquote]:border-border-strong viewer:[&_blockquote]:pl-3 viewer:[&_blockquote]:text-text-muted viewer:[&_pre]:mb-3 viewer:[&_pre]:max-w-full viewer:[&_pre]:overflow-x-auto viewer:[&_pre]:rounded viewer:[&_pre]:border viewer:[&_pre]:border-border viewer:[&_pre]:bg-bg-subtle viewer:[&_pre]:p-2 viewer:[&_table]:mb-3 viewer:[&_table]:block viewer:[&_table]:max-w-full viewer:[&_table]:overflow-x-auto viewer:[&_table]:border-collapse viewer:[&_a]:break-words viewer:[&_a]:text-link viewer:[&_code]:break-words viewer:[&_code]:rounded-[3px] viewer:[&_code]:bg-bg-subtle viewer:[&_code]:px-[0.3em] viewer:[&_code]:py-[0.1em] viewer:[&_code]:font-mono viewer:[&_code]:text-[0.9em] viewer:[&_pre_code]:bg-transparent viewer:[&_pre_code]:p-0 viewer:[&_img]:h-auto viewer:[&_img]:max-w-full viewer:[&_img]:rounded viewer:[&_th]:border viewer:[&_th]:border-border viewer:[&_th]:px-2 viewer:[&_th]:py-1 viewer:[&_th]:text-left viewer:[&_td]:border viewer:[&_td]:border-border viewer:[&_td]:px-2 viewer:[&_td]:py-1 viewer:[&_td]:text-left viewer:[&_hr]:border-0 viewer:[&_hr]:border-t viewer:[&_hr]:border-border";
+const READER_CLASSES = "viewer:mx-auto viewer:w-full viewer:min-w-0 viewer:break-words viewer:py-6 viewer:text-base viewer:leading-[1.65] viewer:compact:py-4 viewer:compact:leading-[1.7] viewer:[&>:first-child]:mt-0 viewer:[&_h1]:mb-2 viewer:[&_h1]:mt-6 viewer:[&_h1]:text-2xl viewer:[&_h1]:leading-tight viewer:compact:[&_h1]:text-xl viewer:[&_h2]:mb-2 viewer:[&_h2]:mt-6 viewer:[&_h2]:text-xl viewer:[&_h2]:leading-tight viewer:compact:[&_h2]:text-lg viewer:[&_h3]:mb-2 viewer:[&_h3]:mt-6 viewer:[&_h3]:text-lg viewer:[&_h3]:leading-tight viewer:compact:[&_h3]:text-base viewer:[&_h4]:mb-2 viewer:[&_h4]:mt-6 viewer:[&_h4]:leading-tight viewer:[&_p]:mb-3 viewer:[&_p]:mt-0 viewer:[&_ul]:mb-3 viewer:[&_ol]:mb-3 viewer:[&_blockquote]:mb-3 viewer:[&_blockquote]:border-l-[3px] viewer:[&_blockquote]:border-border-strong viewer:[&_blockquote]:pl-3 viewer:[&_blockquote]:text-text-muted viewer:[&_pre]:mb-3 viewer:[&_pre]:max-w-full viewer:[&_pre]:overflow-x-auto viewer:[&_pre]:rounded viewer:[&_pre]:border viewer:[&_pre]:border-border viewer:[&_pre]:bg-bg-subtle viewer:[&_pre]:p-2 viewer:[&_table]:mb-3 viewer:[&_table]:block viewer:[&_table]:max-w-full viewer:[&_table]:overflow-x-auto viewer:[&_table]:border-collapse viewer:[&_a]:break-words viewer:[&_a]:text-link viewer:[&_code]:break-words viewer:[&_code]:rounded-[3px] viewer:[&_code]:bg-bg-subtle viewer:[&_code]:px-[0.3em] viewer:[&_code]:py-[0.1em] viewer:[&_code]:font-mono viewer:[&_code]:text-[0.9em] viewer:[&_pre_code]:bg-transparent viewer:[&_pre_code]:p-0 viewer:[&_img]:h-auto viewer:[&_img]:max-w-full viewer:[&_img]:rounded viewer:[&_th]:border viewer:[&_th]:border-border viewer:[&_th]:px-2 viewer:[&_th]:py-1 viewer:[&_th]:text-left viewer:[&_td]:border viewer:[&_td]:border-border viewer:[&_td]:px-2 viewer:[&_td]:py-1 viewer:[&_td]:text-left viewer:[&_hr]:border-0 viewer:[&_hr]:border-t viewer:[&_hr]:border-border";
 
 export default async function activate(kernel: Kernel): Promise<void> {
   const markdown: MarkdownApi = { render, bodyOf, renderAttachment, renderDocLink };
@@ -84,6 +87,7 @@ export default async function activate(kernel: Kernel): Promise<void> {
     const text = row.content;
     const body = useMemo(() => (text === undefined ? undefined : safeBodyOf(kernel, markdown, text)), [text]);
     const wrapper = useMemo(() => (body === undefined ? undefined : wrapperAttachmentOf(body)), [body]);
+    const fullWidth = isFullWidth(row.fm);
 
     if (text === undefined) {
       // The projection carries `content` for every replicated document (SPEC §4.1), so
@@ -105,9 +109,9 @@ export default async function activate(kernel: Kernel): Promise<void> {
       // measure and one set of gutters, and `.viewer-body` keeps its own `max-width`
       // and auto margins so nothing about the reading column moves.
       <div className="viewer:w-full viewer:min-w-0 viewer:font-sans viewer:text-text">
-        <FmHeader fm={row.fm} fmParseError={row.fm_parse_error} renderDocLink={markdown.renderDocLink} />
-        <article className={READER_CLASSES}>{markdown.render(body ?? "", { documentId: id })}</article>
-        {tree ? <ChildrenFooter id={id} folders={tree} renderDocLink={markdown.renderDocLink} divided={body?.trim() !== ""} /> : null}
+        <FmHeader fm={row.fm} fmParseError={row.fm_parse_error} renderDocLink={markdown.renderDocLink} fullWidth={fullWidth} />
+        <article className={`${READER_CLASSES} ${columnClasses(fullWidth)}`}>{markdown.render(body ?? "", { documentId: id })}</article>
+        {tree ? <ChildrenFooter id={id} folders={tree} renderDocLink={markdown.renderDocLink} divided={body?.trim() !== ""} fullWidth={fullWidth} /> : null}
       </div>
     );
   };
