@@ -16,7 +16,6 @@ crates/server      axum app: routes, docstore, feed, auth, db, telemetry,
                    pluginhost/ (the Wasm runtime), plugininstall/ (the install flow)
 PROTOCOL.md        the /api/sync wire protocol, authoritative for server and client
 HOST-ABI.md        the Wasm host ABI, authoritative for backend plugin authors
-CONTRACTS.md       file ownership and frozen signatures per area
 PERF.md            measured performance results
 ```
 

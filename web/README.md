@@ -306,6 +306,3 @@ Notable specs in `app/e2e/`:
 
 Service workers are blocked in this suite: their immutable plugin cache would serve stale
 builds.
-
-Interfaces, file ownership and contribution rules for this tree are in
-[`CONTRACTS.md`](CONTRACTS.md).
