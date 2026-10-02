@@ -1,36 +1,12 @@
 # `web/` — ddd kernel and PWA
 
-The client half of ddd: the offline-first substrate of **M2** (projection store,
-sync client, local query engine, the shared Rust core as Wasm) and the microkernel
-frontend of **M3** (the `@kernel` contract, the plugin loader, the PWA).
-
-**M4 changed nothing here in contract terms** — no `@kernel` surface was added and no
-signature moved. What it added is the management half of `admin`, plus two proof plugins in
-`../plugins/base/` (`calendar`, whose backend half cronned an ICS feed into machine-owned
-documents, and `agenda`, pure frontend with no backend and no capabilities). **Both were
-removed on 2026-09-24** at the owner's direction; they are in git history and nothing here
-refers to them. The build scripts they exercised are unchanged and still the path any
-plugin takes: `build:plugins` builds frontend halves, `build-wasm-plugins.mjs` builds
-backend halves into the same installed layout, `package-plugin.mjs` writes the installable
-`.zip`.
-
-**The core-improvements wave (2026-09-25) changed nothing here in contract terms either** —
-no `@kernel` surface moved and no plugin declared a new dependency. What a user sees is
-different in four places, all inside `../plugins/base/`: task lists are indented once
-rather than twice (one `--md-gutter` token; the 44 px checkbox overhangs its column
-instead of widening it); frontmatter is **unfoldable** in edit mode and rendered as a
-typed properties header in read mode; `folders` is a real drag-and-drop file tree, with
-pathless documents as rows at its root and a touch/keyboard sheet for every move a drag
-can make; and two settings that existed but were reachable from no screen — "Open
-documents in" and "New notes go to" — now have one. Every metadata write in all of it is
-still a line splice (SPEC §3.3), which is what `app/e2e/zz-folder-tree.spec.ts` checks by
-byte-comparing the stored text.
-
-**The app is `app/`.** `demo/` is the M2 page, kept exactly as it was: it is the surface
-the SPEC §8 Playwright smoke drives and a fixture for the harnesses, not the product.
+The client half of ddd: the offline-first kernel (projection store, sync client, local
+query engine, the shared Rust core compiled to Wasm), the `@kernel` plugin contract, the
+plugin loader and the PWA. Everything visible in the app is a plugin in
+`../plugins/base/`.
 
 ```
-kernel-api/src/          the @kernel contract — FROZEN, and what /kernel.d.ts is built from
+kernel-api/src/          the @kernel contract (frozen); /kernel.d.ts is generated from it
 kernel/src/protocol.ts   the /api/sync wire protocol, mirroring ../backend/PROTOCOL.md
 kernel/src/store/        IndexedDB projection store (one store, the whole workspace)
 kernel/src/sync/         change feed, lazy document hydration, reconnect policy
@@ -39,154 +15,161 @@ kernel/src/wasm/         bindings to the shared Rust core; pkg/ is generated
 kernel/src/runtime/      the implementation of @kernel over all of the above
 app/                     the PWA: boot, auth gate, plugin loader, safe mode, service worker
 app/runtime/             one re-export module per blessed runtime-layer specifier
-app/e2e/                 the M3 journeys + safe mode + the M3 acceptance test
-demo/                    the M2 page (harness fixture; the smoke's surface)
-demo/e2e/                the SPEC §8 Playwright smoke, plus two-browser live collaboration
-harness/                 convergence and performance harnesses (SPEC §9 M2 gate)
-../plugins/base/         the base distribution — the visible app (SPEC §6.5)
-../plugins/examples/     third-party plugins, built against /kernel.d.ts only
+app/e2e/                 Playwright suite for the real app
+collab/                  collaboration suite (see collab/README.md)
+demo/                    a minimal sync demo page, used as a fixture by the smoke test and harnesses
+demo/e2e/                Playwright smoke + two-browser live collaboration against the demo
+harness/                 convergence and performance harnesses
+../plugins/base/         the base distribution — the visible app
+../plugins/examples/     third-party example plugins, built against /kernel.d.ts only
 ```
+
+The app is `app/`. `demo/` is not the product.
 
 ## The two `@kernel`s
 
-`@kernel` (exact) is the **public plugin contract** in `kernel-api/`; `@kernel/…` is kernel
-internals in `kernel/src/`. Plugins may import only the first. One semver covers the
-`@kernel` surface and the Wasm ABI (SPEC §6.4), and
+- `@kernel` (exact) is the **public plugin contract** in `kernel-api/`. Plugins may import
+  only this.
+- `@kernel/…` is kernel internals in `kernel/src/`.
+
+One semver covers the `@kernel` surface and the Wasm ABI.
 `kernel/src/runtime/contract-parity.ts` fails the typecheck if the contract and the
 internals drift apart.
 
 ## Running it
 
+Prerequisites for `mise run wasm`: the `wasm32-unknown-unknown` target and a
+`wasm-bindgen-cli` whose version matches `backend/crates/core/Cargo.toml` **exactly**.
+
 ```bash
-cd ..                      # repo root
+rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli --version <version from backend/crates/core/Cargo.toml>
+```
+
+Make sure the rustup `cargo`/`rustc` are the ones on `PATH`; a distro-packaged Rust
+usually has no wasm target and no `rustup` to add one.
+
+From the repo root:
+
+```bash
 cp .env.example .env       # then put a real SESSION_SECRET in it
-mise run dev               # mongo in docker + the Rust server on :8080
-mise run wasm              # build the shared core to Wasm (once, and after core changes)
-mise run web               # the M2 demo page on :5173
-mise run web-build         # kernel.d.ts + the PWA bundle + the base plugins
-mise run app               # the real app on :5174, /api and /plugins proxied to :8080
+mise run web-build         # Wasm core + kernel.d.ts + PWA bundle + base plugins
+mise run dev               # mongo in docker + the server on :8080, serving the built app
 ```
 
-To have the **server** serve the app (production shape: one origin, the nonced import map,
-immutable plugin URLs), build once and point it at the output:
+| Task | What it runs |
+|---|---|
+| `mise run dev` | Mongo + the server on `:8080`, serving the last `web-build` output (one origin, real CSP, nonced import map, service worker). |
+| `mise run app` | The app with live reload on `:5174` (Vite), proxying `/api`, `/plugins`, `/importmap.json`, `/kernel.d.ts` and the socket to the server. |
+| `mise run dev-hot` | Live reload on `:$PORT` (8080), LAN-exposed, with the server on `PORT+1`. Use it to iterate from a phone's browser. Extra hosts go in `APP_ORIGIN_HOSTS`. |
+| `mise run web` | The demo page on `:5173`. |
+| `mise run wasm` | Builds `backend/crates/core` (feature `wasm`) into `kernel/src/wasm/pkg/`. Rerun after core changes. |
+| `mise run web-build` | `wasm`, then `kernel:dts`, `build:app`, `build:plugins`. |
+| `mise run web-check` | Generated-file check, plugin graph check, typecheck, unit tests. |
 
-```bash
-mise run web-build
-# in .env
-WEB_DIST_DIR=web/app/dist
-PLUGINS_DIR=plugins/base/dist
-APP_ORIGIN=http://localhost:8080     # its own origin, or the socket is refused with 403
-```
+### Configuration
 
-The dev server proxies `/api` **including the WebSocket**, so the browser sees one
-origin: cookies, the `Origin` allowlist and the sync socket all behave the way they
-will in production. Point it elsewhere with `DDD_SERVER=http://host:port` — and note
-that the **harness and the Playwright config read the same variable**, so a server
-on a non-default port needs it exported for Vite *and* for whatever drives the
-browser, or the page loads and every `/api` call 404s.
+The server reads these from `.env` (see `.env.example` for the full list):
 
-`APP_ORIGIN` on the server must list the Vite origin (`http://localhost:5173`), or
-the WebSocket upgrade is refused with **403** before it authenticates
-(PROTOCOL.md §1.2). `.env.example` ships with only `:8080` in it.
+| Variable | Purpose |
+|---|---|
+| `WEB_DIST_DIR` | Built PWA (`web/app/dist`). Set it and the server serves the app; unset, the server is API-only (right for `mise run app`). |
+| `PLUGINS_DIR` | Installed plugins (`plugins/base/dist`). |
+| `KERNEL_DTS_PATH` | The generated contract served at `/kernel.d.ts`. |
+| `APP_ORIGIN` | Origins allowed to open the sync socket. |
+| `DISABLE_PLUGINS` | Server-side safe mode: every client gets an empty plugin list. |
 
-`mise run wasm` needs the `wasm32-unknown-unknown` target and a `wasm-bindgen`
-whose version matches `backend/crates/core/Cargo.toml` exactly. With a
-rustup-managed toolchain that is `rustup target add wasm32-unknown-unknown` plus
-`cargo install wasm-bindgen-cli --version <that version>`; make sure the rustup
-`cargo`/`rustc` are the ones on `PATH` (a distro-packaged Rust generally ships no
-wasm target and no `rustup` to add one).
+Gotchas:
+
+- **`APP_ORIGIN` must list the page's origin**, or the WebSocket upgrade is refused with
+  **403** before it authenticates: the page loads and never syncs. When the server serves
+  the app itself, that is its own origin (e.g. `http://localhost:8080`); for the demo it is
+  `http://localhost:5173`.
+- **Relative paths resolve against the server's working directory.** `mise run dev` runs in
+  `backend/` and passes `../web/app/dist` etc. explicitly. With wrong paths the server
+  silently finds nothing, which looks like "plugins failed to load".
+- **The Vite dev servers proxy `/api` including the WebSocket**, so cookies, the origin
+  allowlist and the socket behave as in production. Point them at another server with
+  `DDD_SERVER=http://host:port`. The harnesses read `DDD_SERVER` too; the demo Playwright
+  config and the perf harness read the page origin from `DDD_WEB`
+  (default `http://127.0.0.1:5173`). Export them for everything involved, or every `/api`
+  call 404s.
+
+### npm scripts (in `web/`)
 
 | Command | What it does |
 |---|---|
-| `npm run typecheck` | `tsc --noEmit` — the gate. Passes without ever building the Wasm package. |
-| `npm run test` | Vitest unit tests: protocol framing, backoff, the IndexedDB store, feed and hydration clients, sort semantics, search, **and the shared-core parity suite** read straight out of `backend/crates/core/corpus/` (it self-skips, reporting why, until `mise run wasm` has run). |
-| `npm run dev` / `build` / `preview` | Vite. |
-| `npm run e2e` | Playwright against the **M2 demo**: the SPEC §8 smoke and two-browser live collaboration. Needs a server and `npx playwright install chromium`; skips with a message when `/api` is unreachable. |
-| `npm run e2e:app` | Playwright against the **real app** (`playwright.app.config.ts`): the M3 journeys, browsing, safe mode, and the M3 acceptance test. Starts its own server — see below. |
-| `npm run harness:convergence` | N simulated clients, randomized ops/partitions → convergence + materialization equality. `--seed=N` replays; `--clients=`/`--operations=`/`--journal=` are the other knobs. |
-| `npm run harness:perf` | 5 000 documents: bootstrap, catch-up, round-trip and client-heap numbers. Recorded in [`../backend/PERF.md`](../backend/PERF.md). |
-| `mise run wasm` | Builds `backend/crates/core` (feature `wasm`) into `kernel/src/wasm/pkg/`. |
-| `npm run kernel:dts` | Generates `kernel-api/dist/kernel.d.ts` — the file the server serves at `/kernel.d.ts`. |
-| `npm run build:app` | Runtime layer → app bundle → service worker, in that order (each reads the previous one's output). |
+| `npm run typecheck` | `tsc --noEmit`. Passes without building the Wasm package. |
+| `npm run test` | Vitest unit tests, including the shared-core parity suite read from `backend/crates/core/corpus/` (self-skips until `mise run wasm` has run). |
+| `npm run test:collab` | The collaboration suite (`collab/README.md`). |
+| `npm run dev` / `build` / `preview` | Vite, for the demo page. |
+| `npm run dev:app` | Vite, for the app. |
+| `npm run build:app` | Runtime layer → app bundle → service worker, in that order. |
 | `npm run build:plugins` | `plugins/base/*` → `plugins/base/dist/<id>/<version>/`, the layout the server serves. |
-| `node scripts/build-examples.mjs` | The same, for `plugins/examples/*`. |
-| `node scripts/compose-plugins.mjs <dir> [--exclude=…] [--include-examples=…]` | Builds a registry directory out of already-built plugins. How a plugin gets "disabled" before M4. |
+| `npm run kernel:dts` | Generates `kernel-api/dist/kernel.d.ts`. |
+| `npm run check:generated` | Fails if generated manifest types are stale. |
+| `npm run check:plugins` | Checks the plugin dependency graph: versions, cycles, declared imports. |
+| `npm run e2e` | Playwright against the demo. Needs a running server and `npx playwright install chromium`; skips when `/api` is unreachable. |
+| `npm run e2e:app` | Playwright against the real app. Starts its own server — see below. |
+| `npm run harness:convergence` | N simulated clients with random ops and partitions; checks convergence and materialization equality. `--seed=N` replays; also `--clients=`, `--operations=`, `--journal=`. |
+| `npm run harness:perf` | 5 000 documents: bootstrap, catch-up, round-trip and client heap. Results in [`../backend/PERF.md`](../backend/PERF.md). |
+| `node scripts/build-examples.mjs` | Builds `plugins/examples/*` into `plugins/examples/dist/`. |
+| `node scripts/compose-plugins.mjs <dir> [--exclude=…] [--include-examples=…]` | Builds a registry directory from already-built plugins. |
 
 ## How the app boots
 
-`app/src/main.tsx` is the whole sequence, and the order is load-bearing:
+`app/src/main.tsx` runs these steps in order:
 
-1. **Browser floor, then tokens.** An import-map-less browser gets a readable message
-   (SPEC §8). Then the kernel's default light/dark tokens are painted onto
-   `:root` *before React* — the boot screen, the auth gate and the boot-failure screen
-   are written in `--ddd-*`, and they render before any plugin (or the theme layer) exists.
-2. **Session.** `GET /api/auth/me`; no session ⇒ the auth gate. A cookie session for a
-   browser, a bearer token for the Flutter shell (SPEC §5.2) — and the token is read and
-   stored **only** inside the shell, because a browser's credential is the HTTP-only cookie
-   and an origin that runs full-trust plugin code is no place to keep a readable one. A
-   **401 never clears local data** — mid-session it raises a re-auth overlay over the
-   still-mounted workspace, and only an explicit logout clears the stores.
+1. **Browser check, then tokens.** A browser without import maps gets a readable message.
+   The kernel's default light/dark `--ddd-*` tokens are painted before React, so the boot,
+   auth and failure screens are styled before any plugin loads.
+2. **Session.** `GET /api/auth/me`; no session shows the auth gate. Browsers use the
+   HTTP-only cookie; the Flutter shell uses a bearer token, stored only inside the shell.
+   - **A 401 never clears local data.** Mid-session it shows a re-auth overlay over the
+     still-mounted workspace. Only an explicit logout clears the stores.
+   - **Offline boot works.** `/auth/me` and `/plugins` are never cached by the service
+     worker; instead each falls back to what the last successful boot remembered
+     (`app/src/boot/cache.ts`). An expired session is reported by the socket (`4401`).
+3. **Kernel.** `initKernel` opens the IndexedDB projection, starts sync and the query
+   engine, loads the Wasm core and starts settings, so `kernel.settings.get()` is
+   synchronous inside `activate()`.
+4. **Frame, then plugins.** The shell appears while plugins behind it are still arriving.
+   **Every registry host must subscribe** (`useRegistry`): a component that reads
+   `registry.get()` once will miss anything registered later.
+5. **Import map.** In production the server injects it with the response's CSP nonce; under
+   Vite, `app/src/loader/importmap.ts` installs one. Either way there is exactly one React,
+   one Yjs, one `@kernel`, and a `plugin:<id>` entry per plugin.
+6. **Load in dependency order.** `GET /api/plugins` returns the order (`load.normal`, or
+   `load.safe` for `?safe=1`). The loader imports each module, links its `style.css` and
+   calls `activate(kernel)`.
 
-   **With no server this step does not fail.** `/auth/me` (and `/plugins`, in step 6) are
-   `NetworkOnly` in the service worker on purpose — a cached API response is a second,
-   silently-wrong copy of the workspace — so each falls back to what the last successful boot
-   remembered (`app/src/boot/cache.ts`): the session user, and the installed plugin list. An
-   offline reload therefore opens the local workspace rather than a boot-failure screen,
-   which is the whole point of SPEC §4.1/§8. If the session really has expired, the socket
-   says so with `4401` and the re-auth overlay appears over a workspace that is still
-   readable. Only a server that actually answered 401 forgets the remembered session.
-3. **Kernel.** `initKernel` opens the IndexedDB projection, starts the sync client and the
-   query engine, loads the Wasm core, and `await host.settings.start()` — that last one is
-   what makes `kernel.settings.get()` synchronous inside `activate()`.
-4. **Frame, then plugins.** `AppFrame` renders *before* `activatePlugins`. `shell-ui` takes
-   the single `kernel.ui.mount` inside its own `activate()`, so **the shell appears while
-   the plugins behind it are still arriving** — deliberately, because one slow plugin must
-   not hold the whole app behind a boot screen. The consequence is a rule, not a caveat:
-   *every host of a registry has to be live.* A component that reads
-   `registry.get()` once at first render and never subscribes (`useRegistry` does) will be
-   permanently missing whatever landed after it. (This is what `app/e2e/helpers.ts`'s `pluginsActivated()` waits
-   for, and how two such bugs were found.)
-5. **Import map.** In production the server injects it into `index.html` with the response's
-   CSP nonce; in `vite dev` there is no server injection, so `app/src/loader/importmap.ts`
-   installs one over this bundle's own modules before the first plugin is imported. Either
-   way there is exactly one React, one Yjs and one `@kernel`, and a `plugin:<id>` entry per
-   plugin in the load set.
-6. **Load, in dependency order.** `GET /api/plugins` carries the server's order
-   (`load.normal`, or `load.safe` for `?safe=1`); the loader imports each module by its
-   `plugin:<id>` specifier, links its `style.css` and calls `activate(kernel)`.
+### Failures and safe mode
 
-Failure is contained at every step (SPEC §6.4): an `activate()` throw marks that plugin
-failed, withdraws what it registered (its items in every host's registry, its
-subscriptions, its mount), **skips all transitive dependents**, and produces **one
-aggregated notice**; a render-time throw becomes an in-place "plugin X failed" chip from the
-kernel's error boundary, *and* a line in the notices.
+- An `activate()` throw marks that plugin failed, withdraws everything it registered,
+  **skips all transitive dependents**, and produces **one aggregated notice**.
+- A render-time throw becomes an in-place "plugin X failed" chip plus a notice.
+- The whole mount sits in an app-level error boundary, so a broken shell never leaves a
+  white page.
+- `host.notices` is drawn by whoever holds the mount: `shell-ui`'s bell normally, the
+  kernel's own strip when nothing is mounted or the holder crashed. **A replacement shell
+  that takes the mount must draw notices.**
 
-**One rendering of those notices, not two.** `host.notices` is the single list, and
-whoever holds the mount draws it: `shell-ui`'s bell while a shell is up (it opens itself
-for a notice that arrives *after* it mounted — what was already on the list at boot gets
-the badge, not a panel that springs open on every reload), the kernel's own strip when
-nothing is mounted, when the holder threw while rendering, **and in `?safe=bare`, where
-the kernel's own `BareManager` holds the mount and draws no notices at all**. Both drew it
-at once until the polish pass, which put every notice on screen twice and made "dismiss"
-something you had to do in two places — and the first cut of the fix keyed on "something
-holds the mount", which blanked the strip on the recovery screen. The consequence for a
-replacement shell is worth knowing: taking the mount means taking that job. The mount as a
-whole sits inside
-one more boundary that the app owns, because the per-contribution wrappers cannot cover the
-shell's own render or a contributed `icon` (a `ReactNode` is not a component) — and an
-uncaught render error unmounts the React root, which is a white page with no way out. The
-ways out are `?safe=1` (base distribution only), `?safe=bare` (no plugins — the kernel's own
-plugin manager), and `DISABLE_PLUGINS=1` server-side.
+Ways out:
+
+| | Effect |
+|---|---|
+| `?safe=1` | Base distribution only. |
+| `?safe=bare` | No plugins; the kernel's own plugin manager. |
+| `DISABLE_PLUGINS=1` (server) | Every client gets an empty plugin list; the backend plugin host stops too. |
 
 ## Writing a plugin
 
 A plugin is one ES module with a default `activate(kernel)`, plus a manifest. It is
-installed **once, on the server**, and every client falls in step — there is no client
-rebuild and no client-side registration (SPEC §1).
+installed **once, on the server**, and every client picks it up: no client rebuild, no
+client-side registration.
 
-`plugins/examples/alt-editor` is the reference third-party plugin, and it is deliberately
-the smallest interesting one: a replacement `edit` mode, a textarea bound to the
-document's `Y.Text`. Copy it.
+Start by copying `plugins/examples/alt-editor`: a replacement `edit` mode, a textarea bound
+to the document's `Y.Text`.
 
 ```
 my-plugin/
@@ -200,142 +183,130 @@ my-plugin/
 {
   "id": "my-plugin",            // must equal the directory name
   "version": "1.0.0",
-  "kernel": "^3.0",             // checked at install *and* re-checked by the loader at boot
+  "kernel": "^3.0",             // checked at install and again by the loader at boot
   "dependencies": { "document-surface": "^2.0" },  // what you import as `plugin:<id>`
   "peerLibraries": { "react": "^18.0.0", "yjs": "^13.0.0" },
   "frontend": { "module": "frontend/index.mjs", "style": "frontend/style.css" }
 }
 ```
 
-Four rules, each of them a consequence of how loading works rather than a style
-preference:
+Rules:
 
-- **`@kernel` is the only contract.** Types come from `/kernel.d.ts` (generated by
-  `npm run kernel:dts`). `plugins/examples/tsconfig.json` points `@kernel` at that
-  *generated file* rather than at `kernel-api/src`, which is what makes "builds against
-  `kernel.d.ts` only" a checked claim — if the generator drops something the examples use,
-  that config fails and `web/tsconfig.json` does not.
-- **Reach another plugin through its specifier, never its files.** `import { addMode } from
-  "plugin:document-surface"`, and list the plugin under `dependencies`; an optional one goes
-  under `optionalDependencies` and is reached only with `await kernel.plugins.optional(id)`.
-  Types come from the plugin's generated `frontend/index.d.ts` (`declare module
-  "plugin:<id>"`). Anything you want others to use is a named export of your
-  `src/index.tsx`. `alt-editor` shows the shape of that.
-- **The blessed runtime layer and other plugins stay external** (`react`, `react-dom`,
-  `yjs`, `@kernel`, the CodeMirror and unified/remark rows, every `plugin:<id>`). `plugins/base/_shared/vite.plugin-config.mjs` is the
-  reference build config and already does this; bundling any of them gives the plugin its
-  own React or its own Yjs, and the failure reads as a kernel bug. Anything *outside* that
-  list you bundle normally — that is allowed, and the cost is bundle size, not correctness.
-- **Metadata writes are splices, never rewrites** (SPEC §3.3): `kernel.documents.splice.*`
-  for frontmatter values and for your own `%%%` section. A parse → re-serialize → replace
-  round trip destroys comments and key order and corrupts under concurrent edits.
+- **`@kernel` is the only contract.** Types come from `/kernel.d.ts`
+  (`npm run kernel:dts`). `plugins/examples/tsconfig.json` points `@kernel` at that
+  generated file, so the examples prove they build against it alone.
+- **Reach another plugin through its specifier, never its files.**
+  `import { addMode } from "plugin:document-surface"`, and list it under `dependencies`.
+  Optional ones go under `optionalDependencies` and are reached only with
+  `await kernel.plugins.optional(id)`. Types come from that plugin's generated
+  `frontend/index.d.ts`. Export what others should use as named exports of `src/index.tsx`.
+- **Keep the runtime layer and other plugins external**: `react`, `react-dom`, `yjs`,
+  `@kernel`, the CodeMirror and unified/remark packages, and every `plugin:<id>`.
+  `plugins/base/_shared/vite.plugin-config.mjs` is the reference build config. Bundling any
+  of them gives the plugin its own React or Yjs, and the failure looks like a kernel bug.
+  Bundle anything else freely.
+- **Metadata writes are splices, never rewrites.** Use `kernel.documents.splice.*` for
+  frontmatter values and your own `%%%` section. Parse → re-serialize → replace destroys
+  comments and key order and corrupts concurrent edits.
 
-Build and serve it:
+### Build and serve it
+
+For local development, compose a registry directory and point the server at it:
 
 ```bash
-node scripts/build-examples.mjs                      # plugins/examples/* -> examples/dist
+node scripts/build-examples.mjs                      # plugins/examples/* -> plugins/examples/dist
 node scripts/compose-plugins.mjs /tmp/reg \
-    --exclude=editor --include-examples=alt-editor   # a registry directory
-PLUGINS_DIR=/tmp/reg  cargo run -- serve             # the directory *is* the registry in M3
+    --exclude=editor --include-examples=alt-editor
+PLUGINS_DIR=/tmp/reg cargo run -- serve              # from backend/
 ```
 
-In M3 the registry is the directory the server scans; enable/disable and the approval flow
-are M4 endpoints, so composing a directory is how you swap a plugin out. That is exactly
-what the acceptance test does.
+To install on a running server, package it with `mise run plugin-package <id>` and install
+the `.zip` as an admin, or drop it into `PLUGIN_INBOX_DIR`. New packages are pending until
+an admin approves them.
 
-> **Rebuilding a plugin without bumping its version?** Plugin URLs are version-scoped and
-> served `immutable` (SPEC §8), so a browser that already loaded `1.0.0` keeps serving its
-> cached copy from disk — no reload fixes it. Bump the version, or use a fresh profile (a
-> Playwright context is one). This is the intended production behaviour and a real
-> development trap; it is also what made a set of stale scaffold-stub plugins look like a
-> plugin bug during integration.
+> **Rebuilt a plugin without bumping its version?** Plugin URLs are version-scoped and
+> served `immutable`, so a browser that already loaded `1.0.0` keeps its cached copy and no
+> reload fixes it. Bump the version or use a fresh browser profile.
 
-## The shape of things
+## Design notes
 
-- **The projection replicates; CRDTs hydrate lazily.** Every document is readable
-  and searchable offline from one IndexedDB store (~1× the size of the notes);
-  full `Y.Doc`s are fetched when a document is opened, LRU-capped at ~20 (SPEC
-  §4.1). An unopened document is read-only offline until reconnect.
-- **The resume point is the server's `safe_seq`**, stored in the same transaction
-  as the rows it describes — never the highest `seq` seen. The reasoning is in
-  [`../backend/PROTOCOL.md`](../backend/PROTOCOL.md) §2.2, and getting it wrong
-  loses documents silently.
-- **Parsing and filtering are Rust.** `kernel/src/wasm` calls the same code the
-  server calls, so offline and online behaviour agree by construction (SPEC §2).
-  Filter *compilation* to Mongo stays server-side.
-- **A 401 never clears local data** (SPEC §5.3). Only an explicit logout does.
-- **Recovery is re-derivation, not replay.** Every "something went wrong" path in
-  the protocol resolves to one of two moves: re-subscribe the feed from a
-  watermark, or send a state vector and take the diff.
-- **The kernel is minimal and the UI is plugins.** The kernel knows one domain model — a
-  document is text — and extension-point names are opaque strings to it. Every visible
-  thing, including the shell, is a replaceable contribution (SPEC §6.1).
-- **One copy of React, Yjs and `@kernel`**, served through an import map the server
-  generates (SPEC §6.4). The app bundle externalizes them exactly like a plugin does; two
-  copies would break hooks, context and `instanceof` across every plugin boundary.
-- **A failing plugin is contained**: an error boundary per contribution, transitive
-  dependents skipped, one aggregated notice, and `?safe=1` / `?safe=bare` as the way out.
+- **The projection replicates; CRDTs hydrate lazily.** Every document is readable and
+  searchable offline from one IndexedDB store (about 1× the size of the notes). Full
+  `Y.Doc`s are fetched when a document is opened, LRU-capped at about 20. A document never
+  opened is read-only offline until reconnect.
+- **The resume point is the server's `safe_seq`**, stored in the same transaction as the
+  rows it describes, never the highest `seq` seen. Getting this wrong loses documents
+  silently; see [`../backend/PROTOCOL.md`](../backend/PROTOCOL.md) §2.2.
+- **Parsing and filtering are Rust.** `kernel/src/wasm` calls the same code as the server,
+  so offline and online behaviour agree. Filter compilation to Mongo stays server-side.
+- **Recovery is re-derivation, not replay:** re-subscribe the feed from a watermark, or
+  send a state vector and take the diff.
+- **The kernel is minimal and the UI is plugins.** The kernel knows one model (a document
+  is text); extension-point names are opaque strings to it. Every visible thing, including
+  the shell, is a replaceable contribution.
+- **One copy of React, Yjs and `@kernel`**, via the server-generated import map. Two copies
+  would break hooks, context and `instanceof` across plugin boundaries.
 
 ## Wire protocol
 
-[`../backend/PROTOCOL.md`](../backend/PROTOCOL.md) is authoritative for everything
-on the socket and the bootstrap stream, and this side implements it independently
-from the server. Where an implementation and that document disagree, **the document
-is the bug report**; where the document and [`../SPEC.md`](../SPEC.md) disagree, the
-SPEC wins. Its §10 is a conformance checklist, and the harness is its executable
-half — `harness/src/rest.ts` watches the wire and reports violations rather than
-asserting on them one at a time.
+[`../backend/PROTOCOL.md`](../backend/PROTOCOL.md) is authoritative for the socket and the
+bootstrap stream; this side implements it independently of the server. If the code and
+PROTOCOL.md disagree, treat it as a bug; if PROTOCOL.md and [`../SPEC.md`](../SPEC.md)
+disagree, the SPEC wins. PROTOCOL.md §10 is a conformance checklist;
+`harness/src/rest.ts` watches the wire and reports violations.
 
-## Running the gates against a server
+## Tests against a server
 
-Both harnesses and the Playwright suite need credentials, and they **share one dev
-account by default** (`harness@example.com`): whichever runs first on an empty
-workspace registers it, and everything after logs in. That matters because
-registration past the first user is invite-only (SPEC §5.1) — with different
-default accounts, the first tool to run would claim the first-user slot and lock
-the others out of that database permanently.
+### Credentials
 
-Override with `DDD_EMAIL`/`DDD_PASSWORD` (harness, also honoured by the smoke) or
-`DDD_SMOKE_EMAIL`/`DDD_SMOKE_PASSWORD` (Playwright only). Pointed at a workspace
-whose first user is somebody else, both fail with the refusal the server gave
-rather than a bare timeout.
+The harnesses and the demo Playwright suite **share one dev account**
+(`harness@example.com`): whichever runs first on an empty workspace registers it, the rest
+log in. Registration past the first user is invite-only, so separate defaults would lock
+each other out.
 
-## The M3 end-to-end suite
+- `DDD_EMAIL` / `DDD_PASSWORD`: harness and smoke.
+- `DDD_SMOKE_EMAIL` / `DDD_SMOKE_PASSWORD`: Playwright smoke only.
+- `DDD_INVITE=<token>`: let the harness register on a workspace that already has users.
+
+Against a workspace whose first user is someone else, they fail with the server's refusal.
+
+### App end-to-end suite
 
 ```bash
-cd ..                             # repo root
+# from the repo root
 docker compose up -d --wait mongo
 cargo build --manifest-path backend/Cargo.toml --bin ddd
-mise run web-build                # bundle + base plugins + kernel.d.ts
+mise run web-build
 node web/scripts/build-examples.mjs
 cd web && npm run e2e:app
 ```
 
-It owns its server (`app/e2e/server.mjs`), because half the journeys are about the
-first-user transition — register, then an admin invite, then a second user — and those are
-only repeatable against a database that starts empty, so it **drops its test database
-before every run**. The registry it serves is the base distribution plus
-`extra-task-states`: `[ ]` and `[x]` are `markdown`'s own contributions *and* the only two
-markers remark-gfm recognises, so a custom `[/]` is the only way to test that marker
-semantics come from the registry (SPEC §6.6), and `?safe=1` needs a *non-base* plugin to
-break.
+The suite starts its own server (`app/e2e/server.mjs`) and **drops its test database before
+every run**, because several journeys test the first-user flow. Its registry is the base
+distribution plus the `extra-task-states` example.
 
-| Spec | What it covers |
+| Variable | Effect |
 |---|---|
-| `journeys.spec.ts` | Register → welcome documents → create from the palette → edit in CodeMirror and watch the list follow → toggle a task and set a plugin-contributed state → drag between folders and assert the raw text was **spliced** (comment, key order and `%%%` section byte-identical) → a date through the properties panel → offline search and offline read → two browsers live → a theme that survives a reload → Trash and restore → an invite a second user registers with. |
-| `safe-mode.spec.ts` | Sabotages an installed plugin's module *on disk*, then: a normal boot degrades with one aggregated notice, `?safe=1` boots past it, `?safe=bare` reaches the kernel's own manager, and restoring the file recovers. Each step in a fresh context, because plugin URLs are immutable. |
-| `browsing.spec.ts` | The two browsing behaviours that only exist assembled: a machine-owned document (`machine: true`) staying out of the list, the sidebar count *and* the folder tree until the toggle asks for it — three plugins that have to agree — and `#/doc/<id>?line=N` scrolling the editor, including on a query-only navigation into the document already open. |
-| `acceptance.spec.ts` | **SPEC §9 M3's acceptance criterion.** Composes a registry of base-minus-`editor` plus `plugins/examples/alt-editor`, starts a second server over it, and shows the app working with `document.mode`'s `edit` provided by the separately-authored plugin — same tab, same command, same keybinding, and no CodeMirror in the page. |
-| `polish.spec.ts`, `mobile-*.spec.ts` | What the two polish waves fixed, and the 390 px zero-overflow net across every route, every settings section and every admin section. A UI that scrolls the page sideways on a phone fails here. |
-| `frontmatter.spec.ts` | Read mode's properties header (typed, ordered, display-only, nothing at all without frontmatter), edit mode showing the raw block **unfolded** with the `%%%` section still collapsed, and the "Open documents in" setting. `fm_parse_error` is asserted **in both modes, exactly once per mode** — the rule fails in two directions, and both have been seen: twice on one screen, and nowhere at all. Its last test mutates shared per-user state and restores it by polling the *server's* copy — an optimistic select that loses its write leaves every later spec opening documents in the wrong mode. |
-| `list-alignment.spec.ts` | Where list text actually lands, measured: a task's row starts at the body text margin, its text lines up with a bullet's, and the step is one gutter at every depth. Plus the document list not moving under a condition that was refused. |
-| `zz-folder-tree.spec.ts` | The folder tree as a file manager, checked against the **stored text**: a folder move re-prefixes every document inside it by one splice each and leaves a bystander byte-identical; a drop on Root removes the `path` line and nothing else; a folder is created empty, renamed inline and filled; delete goes to the parent by splice or to Trash and restores intact; the same move happens at 390 px through the sheet, because HTML5 drag and drop does not fire from touch; and a machine-owned document is refused a folder, because the tree's query excluding one never protected the write. It fails if anything opens a native dialog. **`zz-` so it runs last:** it adds documents to the shared workspace, and earlier specs assert on workspace-wide counts. |
+| `DDD_APP` | Use a server you started. The database is then not dropped, so use a fresh server for repeatable runs. |
+| `DDD_E2E_PORT` | Port (default `8121`). |
+| `DDD_E2E_DB` | Database name (default `ddd_e2e`). |
+| `DDD_E2E_PLUGINS` | Registry directory instead of the composed default. |
+| `DDD_E2E_KEEP_DB=1` | Don't drop the database. |
+| `DDD_E2E_BINARY` | Server binary (default `backend/target/debug/ddd`). |
 
-Notes for running it: `DDD_APP` points the suite at a server you started yourself (and
-`webServer` then reuses it — which also means the database is *not* dropped, so a
-repeatable run wants a fresh server). `DDD_E2E_PORT`, `DDD_E2E_DB`, `DDD_E2E_PLUGINS` and
-`DDD_E2E_KEEP_DB=1` tune the launcher. Service workers are blocked in this suite: they add
-nothing to these journeys and their immutable plugin cache makes rebuilds lie.
+Notable specs in `app/e2e/`:
 
-Interfaces, file ownership and the rules for filling this scaffold in are in
+| Spec | Covers |
+|---|---|
+| `journeys.spec.ts` | Register, create, edit, tasks, folders (asserting raw text was spliced), properties, offline search and read, two browsers live, themes, Trash, invites. |
+| `safe-mode.spec.ts` | A plugin broken on disk: degraded boot with one notice, `?safe=1`, `?safe=bare`, recovery. |
+| `acceptance.spec.ts` | Base minus `editor` plus `plugins/examples/alt-editor`: the app works with a separately-authored editor. |
+| `mobile-*.spec.ts` | No horizontal overflow at 390 px across every route, settings and admin section. |
+| `collab.spec.ts` | Two accounts in two browsers (see `collab/README.md`). |
+| `zz-folder-tree.spec.ts`, `zzz-pagination.spec.ts` | Prefixed to run last: they add documents to the shared workspace, which would break other specs' counts and first-page assertions. |
+
+Service workers are blocked in this suite: their immutable plugin cache would serve stale
+builds.
+
+Interfaces, file ownership and contribution rules for this tree are in
 [`CONTRACTS.md`](CONTRACTS.md).
