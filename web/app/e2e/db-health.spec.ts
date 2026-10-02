@@ -66,11 +66,21 @@ test("duplicate notes name what links to each copy, and the unused copy goes in 
   await page.goto("/#/settings/db-health");
   const group = page.getByRole("rowgroup").filter({ hasText: title });
   await expect(group).toContainText("2 copies");
-  // The copy another note links to names that note; the other is unused, so it can go.
-  await expect(group.getByRole("row").filter({ hasText: ids.newer })).toContainText("Links to the twin");
-  await expect(group.getByRole("row").filter({ hasText: ids.older })).toContainText("Unused, safe to remove");
+  // The copy another note links to names that note; the other is unused, so it goes.
+  const older = group.getByRole("row").filter({ hasText: ids.older });
+  const newer = group.getByRole("row").filter({ hasText: ids.newer });
+  await expect(newer).toContainText("Links to the twin");
+  await expect(older).toContainText("Unused, will be removed");
 
-  await group.getByRole("button", { name: "Remove 1 unused copy" }).click();
+  // Keeping the oldest instead takes the copy in use, and says so.
+  const keep = page.getByLabel("Keep");
+  await keep.selectOption({ label: "The oldest copy" });
+  await expect(newer).toContainText("In use, will be removed");
+  await expect(older).not.toContainText("will be removed");
+
+  await keep.selectOption({ label: "Every copy in use" });
+  await group.getByRole("button", { name: "Remove 1 copy" }).click();
+  await expect(page.getByRole("dialog")).toContainText("Nothing uses them.");
   await page.getByRole("dialog").getByRole("button", { name: "Remove" }).click();
   // One copy left: no longer a duplicate.
   await expect(group).toHaveCount(0);

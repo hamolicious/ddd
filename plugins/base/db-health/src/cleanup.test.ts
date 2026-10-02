@@ -1,24 +1,36 @@
 import { describe, expect, it } from "vitest";
 
-import { allRemovable, removableCopies } from "./cleanup.js";
+import { allToRemove, copiesToRemove, type Strategy } from "./cleanup.js";
 
 const copy = (id: string, references: number) => ({ id, references });
+const ids = (copies: readonly { readonly id: string }[]) => copies.map((c) => c.id);
+// Oldest first, as the server sends them.
+const group = [copy("old", 0), copy("mid", 2), copy("new", 1)];
 
-describe("removableCopies", () => {
-  it("removes every unused copy when another copy is used", () => {
-    expect(removableCopies([copy("a", 0), copy("b", 1), copy("c", 0)]).map((c) => c.id)).toEqual(["a", "c"]);
+describe("copiesToRemove", () => {
+  it.each<[Strategy, string[]]>([
+    ["unused", ["old"]],
+    ["oldest", ["mid", "new"]],
+    ["newest", ["old", "mid"]],
+    ["most-used", ["old", "new"]],
+  ])("%s", (strategy, expected) => {
+    expect(ids(copiesToRemove(group, strategy))).toEqual(expected);
   });
 
-  it("keeps the oldest when no copy is used", () => {
-    expect(removableCopies([copy("old", 0), copy("new", 0)]).map((c) => c.id)).toEqual(["new"]);
+  it("keeps the oldest when no copy is used, under unused", () => {
+    expect(ids(copiesToRemove([copy("old", 0), copy("new", 0)], "unused"))).toEqual(["new"]);
   });
 
-  it("removes nothing when every copy is used", () => {
-    expect(removableCopies([copy("a", 1), copy("b", 2)])).toEqual([]);
+  it("breaks a most-used tie towards the oldest", () => {
+    expect(ids(copiesToRemove([copy("old", 1), copy("new", 1)], "most-used"))).toEqual(["new"]);
+  });
+
+  it("never touches a group of one", () => {
+    expect(copiesToRemove([copy("only", 0)], "oldest")).toEqual([]);
   });
 
   it("collects across groups", () => {
-    const groups = [{ copies: [copy("a", 0), copy("b", 1)] }, { copies: [copy("c", 1), copy("d", 1)] }];
-    expect(allRemovable(groups, (group) => group.copies).map((c) => c.id)).toEqual(["a"]);
+    const groups = [{ copies: group }, { copies: [copy("a", 1), copy("b", 1)] }];
+    expect(ids(allToRemove(groups, (g) => g.copies, "unused"))).toEqual(["old"]);
   });
 });

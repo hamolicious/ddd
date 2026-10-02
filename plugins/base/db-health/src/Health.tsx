@@ -4,11 +4,13 @@
  * **Everything is flagged, nothing is deleted automatically** (SPEC §3.6). Each check
  * reads *materialized text*, so references held in plugins' `%%%` sections count, and a
  * trashed note still counts as using its files: restoring it must not find them gone.
- * Each duplicate copy says how many notes point at it, so the copy at "Nothing" is the one
- * that can go. A note goes to the Trash; a file is deleted for good, after a confirmation.
+ * Each duplicate copy names the notes that use it. A bulk removal keeps one copy of every
+ * group by a chosen rule (`cleanup.ts`) and previews, row by row, what it takes; only
+ * "unused" cannot break a note. A note goes to the Trash; a file is deleted for good,
+ * after a confirmation.
  */
 
-import type { ReactElement, ReactNode } from "react";
+import { useState, type ReactElement, type ReactNode } from "react";
 
 import type { ConfirmRequest } from "plugin:context-menu";
 
@@ -19,7 +21,7 @@ import {
   type HealthClient,
   type NoteRef,
 } from "./api.js";
-import { allRemovable, removableCopies } from "./cleanup.js";
+import { STRATEGIES, allToRemove, copiesToRemove, type Strategy } from "./cleanup.js";
 import { useAsync, useMutation } from "./hooks.js";
 import { RefreshIcon, ScanIcon, TrashIcon } from "./icons.js";
 
@@ -46,6 +48,10 @@ const GROUP_HEAD =
   "dbhealth:flex dbhealth:flex-wrap dbhealth:items-center dbhealth:justify-between dbhealth:gap-2";
 const SAFE =
   "dbhealth:mt-0.5 dbhealth:block dbhealth:w-fit dbhealth:rounded dbhealth:bg-accent-subtle dbhealth:px-1 dbhealth:text-xs";
+const AT_RISK =
+  "dbhealth:mt-0.5 dbhealth:block dbhealth:w-fit dbhealth:rounded dbhealth:border dbhealth:border-danger dbhealth:px-1 dbhealth:text-xs dbhealth:text-danger";
+const FIELD =
+  "dbhealth:flex dbhealth:items-center dbhealth:gap-1 dbhealth:text-sm dbhealth:[&_select]:tap-h dbhealth:[&_select]:rounded dbhealth:[&_select]:border dbhealth:[&_select]:border-border dbhealth:[&_select]:bg-bg dbhealth:[&_select]:px-1 dbhealth:[&_select]:text-text";
 const NOTE_LIST =
   "dbhealth:m-0 dbhealth:list-none dbhealth:p-0 dbhealth:whitespace-normal";
 
@@ -162,13 +168,7 @@ function Orphans({
   );
 }
 
-function Duplicates({
-  client,
-  confirm,
-}: {
-  readonly client: HealthClient;
-  readonly confirm: Confirm;
-}): ReactElement {
+function Duplicates({ client, confirm }: { readonly client: HealthClient; readonly confirm: Confirm }): ReactElement {
   const files = useAsync(() => client.duplicateFiles());
   const notes = useAsync(() => client.duplicateDocuments());
   const reload = (): void => {
@@ -176,40 +176,36 @@ function Duplicates({
     notes.reload();
   };
   const mutation = useMutation(reload);
+  const [strategy, setStrategy] = useState<Strategy>("unused");
   const fileGroups = files.data ?? [];
   const noteGroups = notes.data ?? [];
-  const spareFiles = allRemovable(fileGroups, (group) =>
-    group.files.map(fileCopy),
-  );
-  const spareNotes = allRemovable(noteGroups, (group) => group.documents);
-  const spare = spareFiles.length + spareNotes.length;
+  const filesToGo = allToRemove(fileGroups, (group) => group.files.map(fileCopy), strategy);
+  const notesToGo = allToRemove(noteGroups, (group) => group.documents, strategy);
+  const total = filesToGo.length + notesToGo.length;
 
-  /** Unused files are deleted, unused notes go to the Trash; one at a time, in order. */
-  const removeSpare = (
-    key: string,
-    anchor: HTMLElement,
-    filesToGo: readonly { readonly id: string }[],
-    notesToGo: readonly { readonly id: string }[],
-  ): void => {
-    const parts = [
-      filesToGo.length > 0
-        ? `${filesToGo.length} file${filesToGo.length === 1 ? "" : "s"} will be deleted for good`
-        : "",
-      notesToGo.length > 0
-        ? `${notesToGo.length} note${notesToGo.length === 1 ? "" : "s"} will go to the Trash`
-        : "",
+  /** Files are deleted, notes go to the Trash; one at a time, after one confirmation. */
+  const remove = (key: string, anchor: HTMLElement, fileCopies: readonly Copy[], noteCopies: readonly Copy[]): void => {
+    const count = fileCopies.length + noteCopies.length;
+    const inUse = [...fileCopies, ...noteCopies].filter((copy) => copy.references > 0).length;
+    const what = [
+      fileCopies.length > 0 ? `${plural(fileCopies.length, "file")} will be deleted for good` : "",
+      noteCopies.length > 0 ? `${plural(noteCopies.length, "note")} will go to the Trash` : "",
     ].filter(Boolean);
     void confirm({
-      title: `Remove ${filesToGo.length + notesToGo.length} unused cop${filesToGo.length + notesToGo.length === 1 ? "y" : "ies"}?`,
-      description: `Nothing uses them, and a copy of each stays. ${parts.join("; ")}.`,
+      title: `Remove ${count} cop${count === 1 ? "y" : "ies"}?`,
+      description:
+        `${what.join("; ")}. A copy of each stays. ` +
+        (inUse > 0
+          ? `${inUse} of them ${inUse === 1 ? "is" : "are"} still used: the notes using ${inUse === 1 ? "it" : "them"} will show a missing file or a broken link.`
+          : "Nothing uses them."),
       confirmLabel: "Remove",
       danger: true,
       anchor,
     }).then((ok) => {
       if (!ok) return;
       mutation.run(key, async () => {
-        for (const file of filesToGo) await client.deleteAttachment(file.id);
-        for (const note of notesToGo) await client.trashDocument(note.id);
+        for (const file of fileCopies) await client.deleteAttachment(file.id);
+        for (const note of noteCopies) await client.trashDocument(note.id);
       });
     });
   };
@@ -218,32 +214,32 @@ function Duplicates({
     <section className={PART} aria-labelledby="dbhealth-duplicates">
       <h3 id="dbhealth-duplicates">Duplicates</h3>
       <p className={NOTE}>
-        Files with the same name and contents, and notes with the same title and
-        text, stored more than once. A copy nothing uses is safe to remove while
-        another copy stays.
+        Files with the same name and contents, and notes with the same title and text, stored more
+        than once. A copy nothing uses is safe to remove while another copy stays.
       </p>
       <Failure error={files.error ?? notes.error ?? mutation.error} />
       <div className={ACTIONS}>
-        <button
-          type="button"
-          aria-label="Refresh duplicates"
-          title="Refresh"
-          onClick={reload}
-        >
+        <button type="button" aria-label="Refresh duplicates" title="Refresh" onClick={reload}>
           <RefreshIcon />
         </button>
-        {spare > 0 && (
-          <button
-            type="button"
-            className={TEXT_BUTTON}
-            disabled={mutation.busy !== undefined}
-            onClick={(event) =>
-              removeSpare("all", event.currentTarget, spareFiles, spareNotes)
-            }
-          >
-            Remove all unused copies ({spare})
-          </button>
-        )}
+        <label className={FIELD}>
+          <span>Keep</span>
+          <select value={strategy} onChange={(event) => setStrategy(event.currentTarget.value as Strategy)}>
+            {STRATEGIES.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          className={`${TEXT_BUTTON} ${DANGER}`}
+          disabled={total === 0 || mutation.busy !== undefined}
+          onClick={(event) => remove("all", event.currentTarget, filesToGo, notesToGo)}
+        >
+          Remove {total} cop{total === 1 ? "y" : "ies"}
+        </button>
       </div>
 
       <h4>Files</h4>
@@ -255,72 +251,52 @@ function Duplicates({
         <Table head={["Copy", "Used by", "Actions"]}>
           {fileGroups.map((group) => {
             const copies = group.files.map(fileCopy);
-            const removable = new Set(
-              removableCopies(copies).map((copy) => copy.id),
-            );
+            const going = copiesToRemove(copies, strategy);
+            const goingIds = new Set(going.map((copy) => copy.id));
             return (
               <Group
                 key={`${group.name}/${group.sha256}`}
                 label={group.name}
                 detail={`${copies.length} copies · ${formatBytes(group.size)} each`}
-                removable={removable.size}
+                removing={going.length}
                 busy={mutation.busy !== undefined}
-                onRemove={(anchor) =>
-                  removeSpare(
-                    group.sha256,
-                    anchor,
-                    copies.filter((copy) => removable.has(copy.id)),
-                    [],
-                  )
-                }
+                onRemove={(anchor) => remove(group.sha256, anchor, going, [])}
               >
-                {group.files.map(
-                  ({ attachment, references, referenced_by }, index) => (
-                    <tr key={attachment.id}>
-                      <th scope="row">
-                        <a
-                          className={LINK}
-                          href={`#/file/${encodeURIComponent(attachment.id)}`}
-                        >
-                          Copy {index + 1}
-                          {index === 0 ? " (oldest)" : ""}
-                        </a>
-                        <span className={HINT}>uploaded {formatWhen(attachment.created_at)}</span>
-                        <span className={HINT}>{attachment.id}</span>
-                      </th>
-                      <td data-label="Used by">
-                        <UsedBy
-                          count={references}
-                          notes={referenced_by}
-                          removable={removable.has(attachment.id)}
-                        />
-                      </td>
-                      <td>
-                        <DeleteButton
-                          label={`Delete copy ${index + 1} of ${group.name}`}
-                          title="Delete this copy"
-                          busy={mutation.busy === attachment.id}
-                          onClick={(anchor) => {
-                            void confirm({
-                              title: `Delete copy ${index + 1} of ${group.name} permanently?`,
-                              description:
-                                references > 0
-                                  ? `${usedBy(references)} use this copy and will show a missing file. It cannot be recovered.`
-                                  : "Nothing uses this copy. It cannot be recovered.",
-                              danger: true,
-                              anchor,
-                            }).then((ok) => {
-                              if (ok)
-                                mutation.run(attachment.id, () =>
-                                  client.deleteAttachment(attachment.id),
-                                );
-                            });
-                          }}
-                        />
-                      </td>
-                    </tr>
-                  ),
-                )}
+                {group.files.map(({ attachment, references, referenced_by }, index) => (
+                  <tr key={attachment.id}>
+                    <th scope="row">
+                      <a className={LINK} href={`#/file/${encodeURIComponent(attachment.id)}`}>
+                        Copy {index + 1}
+                        {index === 0 ? " (oldest)" : ""}
+                      </a>
+                      <span className={HINT}>uploaded {formatWhen(attachment.created_at)}</span>
+                      <span className={HINT}>{attachment.id}</span>
+                    </th>
+                    <td data-label="Used by">
+                      <UsedBy count={references} notes={referenced_by} going={goingIds.has(attachment.id)} />
+                    </td>
+                    <td>
+                      <DeleteButton
+                        label={`Delete copy ${index + 1} of ${group.name}`}
+                        title="Delete this copy"
+                        busy={mutation.busy === attachment.id}
+                        onClick={(anchor) => {
+                          void confirm({
+                            title: `Delete copy ${index + 1} of ${group.name} permanently?`,
+                            description:
+                              references > 0
+                                ? `${usedBy(references)} use this copy and will show a missing file. It cannot be recovered.`
+                                : "Nothing uses this copy. It cannot be recovered.",
+                            danger: true,
+                            anchor,
+                          }).then((ok) => {
+                            if (ok) mutation.run(attachment.id, () => client.deleteAttachment(attachment.id));
+                          });
+                        }}
+                      />
+                    </td>
+                  </tr>
+                ))}
               </Group>
             );
           })}
@@ -336,32 +312,22 @@ function Duplicates({
         <Table head={["Copy", "Linked from", "Actions"]}>
           {noteGroups.map((group) => {
             const title = group.title || "Untitled";
-            const removable = new Set(
-              removableCopies(group.documents).map((copy) => copy.id),
-            );
+            const going = copiesToRemove(group.documents, strategy);
+            const goingIds = new Set(going.map((copy) => copy.id));
+            const key = group.documents[0]?.id ?? title;
             return (
               <Group
-                key={group.documents[0]?.id ?? title}
+                key={key}
                 label={title}
                 detail={`${group.documents.length} copies · ${formatBytes(group.size)} of text`}
-                removable={removable.size}
+                removing={going.length}
                 busy={mutation.busy !== undefined}
-                onRemove={(anchor) =>
-                  removeSpare(
-                    `notes/${group.documents[0]?.id ?? title}`,
-                    anchor,
-                    [],
-                    group.documents.filter((copy) => removable.has(copy.id)),
-                  )
-                }
+                onRemove={(anchor) => remove(`notes/${key}`, anchor, [], going)}
               >
                 {group.documents.map((document, index) => (
                   <tr key={document.id}>
                     <th scope="row">
-                      <a
-                        className={LINK}
-                        href={`#/doc/${encodeURIComponent(document.id)}`}
-                      >
+                      <a className={LINK} href={`#/doc/${encodeURIComponent(document.id)}`}>
                         Copy {index + 1}
                         {index === 0 ? " (oldest)" : ""}
                       </a>
@@ -369,11 +335,7 @@ function Duplicates({
                       <span className={HINT}>{document.id}</span>
                     </th>
                     <td data-label="Linked from">
-                      <UsedBy
-                        count={document.references}
-                        notes={document.referenced_by}
-                        removable={removable.has(document.id)}
-                      />
+                      <UsedBy count={document.references} notes={document.referenced_by} going={goingIds.has(document.id)} />
                     </td>
                     <td>
                       <DeleteButton
@@ -391,10 +353,7 @@ function Duplicates({
                             danger: true,
                             anchor,
                           }).then((ok) => {
-                            if (ok)
-                              mutation.run(document.id, () =>
-                                client.trashDocument(document.id),
-                              );
+                            if (ok) mutation.run(document.id, () => client.trashDocument(document.id));
                           });
                         }}
                       />
@@ -410,26 +369,31 @@ function Duplicates({
   );
 }
 
-const fileCopy = (file: {
-  readonly attachment: { readonly id: string };
+interface Copy {
+  readonly id: string;
   readonly references: number;
-}) => ({
+}
+
+const fileCopy = (file: { readonly attachment: { readonly id: string }; readonly references: number }): Copy => ({
   id: file.attachment.id,
   references: file.references,
 });
+
+const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 /** One duplicate group: a heading row naming what is duplicated, then its copies. */
 function Group({
   label,
   detail,
-  removable,
+  removing,
   busy,
   onRemove,
   children,
 }: {
   readonly label: string;
   readonly detail: string;
-  readonly removable: number;
+  /** How many copies the chosen strategy removes from this group. */
+  readonly removing: number;
   readonly busy: boolean;
   readonly onRemove: (anchor: HTMLElement) => void;
   readonly children: ReactNode;
@@ -443,14 +407,9 @@ function Group({
               <strong className="dbhealth:break-words">{label}</strong>
               <span className={HINT}>{detail}</span>
             </span>
-            {removable > 0 && (
-              <button
-                type="button"
-                className={TEXT_BUTTON}
-                disabled={busy}
-                onClick={(event) => onRemove(event.currentTarget)}
-              >
-                Remove {removable} unused cop{removable === 1 ? "y" : "ies"}
+            {removing > 0 && (
+              <button type="button" className={TEXT_BUTTON} disabled={busy} onClick={(event) => onRemove(event.currentTarget)}>
+                Remove {removing} cop{removing === 1 ? "y" : "ies"}
               </button>
             )}
           </span>
@@ -461,38 +420,40 @@ function Group({
   );
 }
 
-/** Which notes use a copy, as links; "Nothing" and whether it can go when none do. */
+/** Which notes use a copy, as links, and whether the chosen strategy removes it. */
 function UsedBy({
   count,
   notes,
-  removable,
+  going,
 }: {
   readonly count: number;
   readonly notes: readonly NoteRef[];
-  readonly removable: boolean;
+  readonly going: boolean;
 }): ReactElement {
-  if (count === 0) {
-    return (
-      <span>
-        Nothing
-        {removable && <span className={SAFE}>Unused, safe to remove</span>}
-      </span>
-    );
-  }
   return (
-    <ul className={NOTE_LIST}>
-      {notes.map((note) => (
-        <li key={note.id}>
-          <a className={LINK} href={`#/doc/${encodeURIComponent(note.id)}`}>
-            {note.title || "Untitled"}
-          </a>
-          {note.trashed && <span className={HINT}>in the Trash</span>}
-        </li>
-      ))}
-      {count > notes.length && (
-        <li className={HINT}>and {count - notes.length} more</li>
+    <>
+      {count === 0 ? (
+        <span>Nothing</span>
+      ) : (
+        <ul className={NOTE_LIST}>
+          {notes.map((note) => (
+            <li key={note.id}>
+              <a className={LINK} href={`#/doc/${encodeURIComponent(note.id)}`}>
+                {note.title || "Untitled"}
+              </a>
+              {note.trashed && <span className={HINT}>in the Trash</span>}
+            </li>
+          ))}
+          {count > notes.length && <li className={HINT}>and {count - notes.length} more</li>}
+        </ul>
       )}
-    </ul>
+      {going &&
+        (count === 0 ? (
+          <span className={SAFE}>Unused, will be removed</span>
+        ) : (
+          <span className={AT_RISK}>In use, will be removed</span>
+        ))}
+    </>
   );
 }
 
