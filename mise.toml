@@ -1,36 +1,19 @@
 [tools]
 rust = "latest"
 
-# The JDK the Android build runs on (`mise run shell-apk`). Pinned to an LTS, and pinned
-# *down* from whatever the machine has, because the Android toolchain is the constraint:
-#
-#   * AGP's `JdkImageTransform` rebuilds a `java.base` module from the platform's
-#     `core-for-system-modules.jar` and feeds it to `jlink`. JDK 26's jlink refuses it —
-#     "cannot find the build signature in the java.base specified on module path" — and the
-#     build dies in a *dependency's* `compileDebugJavaWithJavac` with no mention of the JDK.
-#   * Flutter states a supported JDK range, and 26 is years past it. `flutter build` warns
-#     ("Newer than known valid Java version") and carries on into exactly that failure.
-#
-# 21 is the newest LTS that AGP 9 and Gradle 9.3 both support. Nothing else in this repo is
-# Java, so pinning it here costs nothing elsewhere. Raise it when Flutter's supported range
-# does, not when a newer JDK merely exists.
+# JDK for the Android build (`mise run shell-apk`). Pinned to 21, the newest LTS that
+# AGP 9 and Gradle 9.3 support: newer JDKs break the build (JDK 26's jlink rejects AGP's
+# java.base image). Raise it when Flutter's supported JDK range does.
 java = "temurin-21"
 
-# M5: the Flutter shell (SPEC §7, `app/`). **Pinned**, unlike `rust`, for two reasons: the
-# Dart SDK version is what `app/pubspec.yaml`'s resolved dependency set was solved against,
-# and a minor Flutter bump can change generated Gradle config under an Android build (see
-# `app/README.md` § "Building the APK").
-#
-# The definition is spelled out rather than left to `flutter = "3.47.5"` because mise's
-# registry entry for Flutter is an `http` backend with no built-in URL/checksum templates:
-# this is what actually resolves a version to a tarball and verifies it. It lives here, at
-# the repo root, so `mise run shell-test` works from anywhere in the tree (`app/mise.toml`
-# used to hold it, which meant the tool existed only when your shell was inside `app/`).
+# The Flutter SDK for the Android app (`app/`). Pinned because `app/pubspec.lock` was
+# resolved against this Dart SDK, and a minor bump can change the Android build (see
+# `app/README.md` § "Building the APK"). The full definition is needed because mise's
+# Flutter registry entry has no download URL or checksum of its own.
 flutter = { version = "3.47.5", checksum_expr = '"sha256:" + filter(fromJSON(body).releases, { #.archive endsWith filename })[0].sha256', platforms = { linux-x64 = { checksum_url = "https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json", url = "https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_{{ version | trim_end(pat='-stable') }}-stable.tar.xz" }, macos-arm64 = { checksum_url = "https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json", url = "https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/flutter_macos_arm64_{{ version | trim_end(pat='-stable') }}-stable.zip" }, macos-x64 = { checksum_url = "https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json", url = "https://storage.googleapis.com/flutter_infra_release/releases/stable/macos/flutter_macos_{{ version | trim_end(pat='-stable') }}-stable.zip" }, windows-x64 = { checksum_url = "https://storage.googleapis.com/flutter_infra_release/releases/releases_windows.json", url = "https://storage.googleapis.com/flutter_infra_release/releases/stable/windows/flutter_windows_{{ version | trim_end(pat='-stable') }}-stable.zip" } }, version_expr = 'fromJSON(body).releases | filter({ #.channel == "stable" }) | map({ replace(#.version, "-stable", "") }) | sortVersions()', version_list_url = "https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json" }
 
-# `.env` is read for every task, so `mise run dev` sees the same SESSION_SECRET /
-# MONGO_URI the compose stack does. Copy `.env.example` to `.env` before your
-# first run — the server refuses to start without SESSION_SECRET (SPEC §5.2).
+# Every task reads `.env`. Copy `.env.example` to `.env` before your first run:
+# the server refuses to start without SESSION_SECRET.
 [env]
 _.file = { path = ".env", redact = true }
 
@@ -99,18 +82,11 @@ run = "scripts/graph-plugin"
 [tasks.dev]
 description = "Run the server against the compose Mongo (mongo in docker, server on the host), serving the built PWA + plugins"
 dir = "backend"
-# The three M3 paths are passed explicitly and spelled relative to **this task's**
-# directory. The defaults in `config.rs` (`plugins/base/dist`,
-# `web/kernel-api/dist/kernel.d.ts`) are relative to the process's working directory, and
-# this task runs in `backend/` — so unset they would resolve to `backend/plugins/…` and
-# silently find nothing, which looks exactly like "the plugins failed to load".
+# The paths are relative to `backend/`, where this task runs. The server's defaults are
+# relative to the working directory, so unset they would find nothing from here.
 #
-# `WEB_DIST_DIR` makes http://localhost:$PORT serve the last `mise run web-build` output,
-# import map and all. `mise run app` is still the live-reloading way to work on the app
-# (Vite on :5174, proxying /api, /plugins, /importmap.json and the socket here) — what
-# this adds is the *production* path on the same machine: one origin, the real CSP, the
-# real nonced import map, the real service worker. A missing bundle is not an error: the
-# route says what to build.
+# WEB_DIST_DIR serves the last `mise run web-build` output on http://localhost:$PORT, the
+# same way production does. For live reloading use `mise run app` or `mise run dev-hot`.
 run = [
   "docker compose -f ../docker-compose.yaml up -d --wait mongo",
   """
@@ -126,12 +102,10 @@ run = [
 [tasks.dev-hot]
 description = "Hot reload ON :$PORT (8080) — Vite serves the app there (LAN-exposed) and proxies /api, /plugins and the socket to the Rust server on PORT+1"
 dir = "web"
-# One URL for every device: the PC, the phone's browser (http://<this-machine's-LAN-ip>:$PORT),
-# and an adb-reversed phone all get live-reloading source. The Rust server hides on PORT+1.
-# The page's origin is Vite's, not the server's, so the server is told to allow it (and
-# every APP_ORIGIN_HOSTS host) on $PORT explicitly; its own loopback origins it derives.
-# The shell APP still serves its own downloaded bundle — it never hot reloads; use the
-# phone's Chrome against this port when iterating.
+# One URL for every device: this machine, a phone's browser on the LAN
+# (http://<lan-ip>:$PORT), and an adb-reversed phone. The server is told to allow Vite's
+# origin on $PORT. The Android app serves its own bundle and never hot reloads; use the
+# phone's browser while iterating.
 run = [
   "docker compose -f ../docker-compose.yaml up -d --wait mongo",
   "npm install --no-audit --no-fund",
@@ -198,7 +172,7 @@ dir = "web"
 run = ["npm install --no-audit --no-fund", "npm run dev"]
 
 [tasks.app]
-description = "Run the M3 PWA dev server (the real app; proxies /api, /plugins and the socket to the Rust server)"
+description = "Run the PWA dev server (the real app; proxies /api, /plugins and the socket to the Rust server)"
 dir = "web"
 run = ["npm install --no-audit --no-fund", "npm run dev:app"]
 
@@ -213,41 +187,23 @@ dir = "web"
 run = ["npm install --no-audit --no-fund", "npm run build:plugins"]
 
 [tasks.wasm-plugins]
-description = "M4: build every plugin's backend half (wasm32) into the installed layout next to its frontend half"
-# Ordered after `plugins` on purpose: the Vite build owns `emptyOutDir` for
-# `plugins/base/dist/<id>/<version>`, so a `backend.wasm` written before it is deleted by
-# it. `depends` makes that order explicit instead of a note in a README.
+description = "Build every plugin's backend half (wasm32) into the installed layout next to its frontend half"
+# Runs after `plugins`, whose Vite build empties each plugin's output directory.
 depends = ["plugins"]
 run = "node web/scripts/build-wasm-plugins.mjs"
 
 [tasks.plugin-package]
-description = "M4: package a built plugin as the installable .zip of SPEC §6.2 (`mise run plugin-package doc-list`)"
-# Packages the *built* directory (`plugins/base/dist/<id>/<version>`), which is already the
-# installed layout, and writes exactly the allowlist the installer accepts — manifest,
-# declared wasm module, `frontend/**`. A `zip -r` of the same directory is not equivalent:
-# the installer rejects any entry outside that set by design (SPEC §6.2), so a stray file
-# from a build tool fails the install naming a file the author did not know was there.
-#
-# `wasm-plugins`, not `plugins`: it depends on `plugins` itself and adds the backend
-# halves *after* the Vite build, which owns `emptyOutDir` for those directories. Depending
-# on `plugins` alone deleted the `backend.wasm` this task then could not find.
+description = "Package a built plugin as an installable .zip (`mise run plugin-package doc-list`)"
+# Writes only what the installer accepts (manifest, the declared wasm module,
+# `frontend/**`); a plain `zip -r` can include stray files that make the install fail.
 depends = ["wasm-plugins"]
 run = "node web/scripts/package-plugin.mjs"
 
 [tasks.plugin-check]
-description = "M4: check the plugin SDK and every plugin backend half for wasm32 (they are excluded from the backend workspace)"
-# `mise run check` covers `backend/`, and deliberately cannot cover these: the SDK links
-# Extism's host imports, so a host-target build fails at link time.
-#
-# `--target wasm32-unknown-unknown` is spelled out rather than left to the
-# `.cargo/config.toml` in each directory. Cargo discovers config files from the *current
-# working directory* upward — not from the manifest's directory — so a `--manifest-path`
-# invocation from the repo root never reads `plugins/.cargo/config.toml` and silently
-# checks the host target instead, which is the opposite of what this task is for.
-#
-# `cargo fmt` is likewise not scoped by `--manifest-path` alone: its `--all` form walks the
-# whole workspace it resolves, and from the repo root that reached into
-# `backend/crates/server/src/pluginhost/**`. Both fmt lines run with an explicit `dir`.
+description = "Check the plugin SDK and every plugin backend half for wasm32 (they are excluded from the backend workspace)"
+# Not covered by `mise run check`: the SDK links Extism's host imports, so it only builds
+# for wasm32. The target is passed explicitly because Cargo reads `.cargo/config.toml`
+# from the working directory, not the manifest's.
 run = [
   "cargo fmt --manifest-path backend/crates/plugin-sdk/Cargo.toml --check",
   "cargo clippy --manifest-path backend/crates/plugin-sdk/Cargo.toml --all-targets --target wasm32-unknown-unknown -- -D warnings",
@@ -255,19 +211,11 @@ run = [
   "cargo clippy --manifest-path plugins/Cargo.toml --workspace --all-targets --target wasm32-unknown-unknown -- -D warnings",
 ]
 
-# REMOVED (2026-09-24): `plugin-test` ran the host-target unit suite of `calendar-ics`, the
-# pure parser crate beside the calendar plugin's wasm glue. The calendar plugin is gone and
-# so is that crate, and `plugins/` now holds exactly one member — `examples/hello-backend`,
-# a `cdylib` linking Extism's host imports, which *cannot* be tested on the host target.
-# There is nothing left for this task to run, and a task that resolves to zero tests is
-# worse than no task: it reports green.
-#
-# The pattern it enforced is still the right one and is documented in `backend/HOST-ABI.md`:
-# put a plugin's real logic in a plain crate beside the wasm glue and unit-test it on the
-# host. Bring this task back with the first plugin that has such a crate.
+# To unit-test a plugin's logic, put it in a plain crate beside the wasm glue and test it
+# on the host (see `backend/HOST-ABI.md`).
 
 [tasks.plugin-smoke]
-description = "M4: build the hello-world plugin and load it in a minimal Extism host (the ABI's end-to-end check)"
+description = "Build the hello-world plugin and load it in a minimal Extism host (the ABI's end-to-end check)"
 depends = ["wasm-plugins"]
 dir = "backend"
 run = "cargo test -p ddd-server --test pluginhost_smoke"
@@ -275,11 +223,8 @@ run = "cargo test -p ddd-server --test pluginhost_smoke"
 [tasks.web-build]
 description = "Build everything the server serves: the Wasm core, the contract, the PWA bundle (runtime layer + app + service worker), and the base plugins"
 dir = "web"
-# `wasm` first, and as a dependency rather than a documented prerequisite: the app bundle
-# imports the shared core through a Vite alias into `kernel/src/wasm/pkg`, which is a
-# gitignored build artifact — so in a fresh checkout `build:app` fails to resolve it, and
-# in a stale one it silently bundles a core older than `backend/crates/core`. This is the
-# same order `backend/Dockerfile` builds in.
+# Depends on `wasm`: the app bundle imports the shared core from the gitignored
+# `kernel/src/wasm/pkg`, which would otherwise be missing or stale.
 depends = ["wasm"]
 run = [
   "npm install --no-audit --no-fund",
@@ -291,12 +236,8 @@ run = [
 [tasks.web-check]
 description = "Typecheck and unit-test the web tree: kernel contract, kernel runtime, PWA loader, base plugins"
 dir = "web"
-# The generated files first: the manifest types from `schema/manifest.schema.json`. Stale
-# output fails here, naming the file, before anything is compiled against it. Then the
-# plugin dependency graph (`scripts/check-plugin-graph.mjs`): every dependency exists at a
-# satisfying version, no cycles, every static `plugin:` import is a declared dependency and
-# no optional one is imported statically. The typecheck then follows `plugin:*` into each
-# dependency's source.
+# Checks generated manifest types are current, then the plugin dependency graph
+# (versions satisfied, no cycles, static `plugin:` imports declared), then types and tests.
 run = [
   "npm install --no-audit --no-fund",
   "npm run check:generated",
@@ -306,20 +247,8 @@ run = [
 ]
 
 [tasks.shell-test]
-description = "M5: the Flutter shell gate — format, analyze and unit-test app/"
+description = "Format-check, analyze and unit-test the Flutter app (app/); no Android SDK needed"
 dir = "app"
-# The gate for `app/`, and the exact analogue of `mise run check` + `mise run test` for
-# `backend/`. Three things in one task because all three have to hold before a shell change
-# is worth reviewing, and none of them needs an Android SDK, an emulator or a device:
-# `flutter analyze` and `flutter test` run on the host Dart VM.
-#
-# `dart format --set-exit-if-changed` is first for the same reason `cargo fmt --check` is
-# first in `check`: it is the cheapest failure and the one most likely to produce a diff that
-# hides the real change.
-#
-# `flutter pub get` is included rather than assumed: `pubspec.lock` is committed, and a fresh
-# checkout has no `.dart_tool`, so without it the first run of this task fails with a
-# missing-package error that looks like a broken pubspec.
 run = [
   "flutter pub get",
   "dart format --output=none --set-exit-if-changed lib test",
@@ -328,16 +257,10 @@ run = [
 ]
 
 [tasks.shell-apk]
-description = "M5: build the Android debug APK (the milestone's build gate) — needs an Android SDK"
+description = "Build the Android debug APK — needs an Android SDK"
 dir = "app"
-# The gate `shell-test` deliberately is not: it compiles Dart *and* every plugin's Android
-# half, which is where a toolchain mismatch actually shows up. Run it before shipping a
-# change to `app/android/**`, `pubspec.yaml`, or the Flutter pin.
-#
-# `ANDROID_HOME` is defaulted rather than required because `android/local.properties`
-# (gitignored, written once — see `app/README.md`) already carries `sdk.dir`; the export is
-# for the plugins that read the environment instead. The JDK comes from `[tools]` above, and
-# that pin is load-bearing: see the comment there.
+# Run before shipping changes to `app/android/**`, `pubspec.yaml` or the Flutter pin.
+# ANDROID_HOME defaults to ~/Android/Sdk. The JDK comes from `[tools]` above.
 run = '''
 set -euo pipefail
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
@@ -391,7 +314,7 @@ echo "installed ~/.local/bin/ddd"
 '''
 
 [tasks.harness]
-description = "Convergence harness against a running server (SPEC §9 M2)"
+description = "Convergence harness against a running server"
 dir = "web"
 run = "npm run harness:convergence --"
 
@@ -456,7 +379,7 @@ description = "Tail the server logs"
 run = "docker compose logs -f server"
 
 [tasks.backup]
-description = "Dump the database (documents + GridFS attachments) to ./backups — see dev-docs/resolved/OPERATIONS.md"
+description = "Dump the database (documents + GridFS attachments) to ./backups"
 run = '''
 set -euo pipefail
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"

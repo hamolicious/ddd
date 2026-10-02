@@ -1,9 +1,6 @@
-# Local / self-host deployment (SPEC §8).
-#
-# Production is Kubernetes, explicitly single-replica; this file is the
-# local + self-host path. Since M3 the image contains the PWA bundle and the base
-# plugin distribution as well as the binary, so `docker compose up --build` gives a
-# complete app on http://localhost:8080 — no Vite, no separate frontend deploy.
+# Local and self-hosted deployment. The image contains the server, the web app and
+# the base plugins, so `docker compose up --build` gives the complete app on
+# http://localhost:8080.
 #
 # First run:
 #   cp .env.example .env    # then put a real SESSION_SECRET in it
@@ -12,22 +9,19 @@
 # `mise run dev` uses only the `mongo` service and runs the server on the host,
 # which is why mongo's port is published on loopback.
 #
-# The `caddy` profile adds automatic HTTPS in front of the server, which a real
-# self-host deployment needs — Secure cookies, the PWA and the Flutter bridge all
-# require a secure origin (SPEC §8):
+# The `caddy` profile adds automatic HTTPS, which a real deployment needs: secure
+# cookies, the PWA and the Android app all require a secure origin.
 #
 #   DOMAIN=notes.example.com ACME_EMAIL=you@example.com \
 #     APP_ORIGIN=https://notes.example.com COOKIE_SECURE=true \
 #     TRUST_PROXY_HEADERS=true BIND_HOST=127.0.0.1 \
 #     docker compose --profile caddy up -d --build
 #
-# `BIND_HOST=127.0.0.1` there is not decoration: `TRUST_PROXY_HEADERS=true` lets a
-# request pick its own client IP, so it is only safe while the proxy is the *only* route
-# in. See `deploy/Caddyfile`.
+# Keep `BIND_HOST=127.0.0.1` there: with `TRUST_PROXY_HEADERS=true` a client could
+# forge its IP unless the proxy is the only route in. See `deploy/Caddyfile`.
 #
-# The port is defined once: `PORT` (default 8080) is where the server listens inside the
-# container, the host port it is published on, what the healthcheck and the caddy
-# upstream talk to, and the port of the loopback origins the server allows by itself.
+# `PORT` (default 8080) is the port the server listens on in the container, the
+# host port it is published on, and what the healthcheck and Caddy connect to.
 
 name: ddd
 
@@ -37,8 +31,8 @@ services:
     restart: unless-stopped
     command: ["--bind_ip_all"]
     # WiredTiger opens a file per collection/index and aborts the process when it
-    # runs out of descriptors. Docker's default soft limit (1024) is reached by the
-    # M2 test suites, which create a throwaway database per test.
+    # runs out of descriptors. Docker's default soft limit (1024) is too low,
+    # e.g. for test suites that create a database per test.
     ulimits:
       nofile:
         soft: 64000
@@ -62,10 +56,8 @@ services:
 
   server:
     build:
-      # The repository root, not `backend/`: since M3 the image also builds the PWA
-      # bundle, the base plugins and the plugin contract out of `web/` and `plugins/`
-      # (see the header of `backend/Dockerfile`). `.dockerignore` is what keeps that
-      # context small.
+      # The repository root: the image also builds `web/` and `plugins/`.
+      # `.dockerignore` keeps the context small.
       context: .
       dockerfile: backend/Dockerfile
     restart: unless-stopped
@@ -77,37 +69,31 @@ services:
       MONGO_DATABASE: ${MONGO_DATABASE:-ddd}
       PORT: 8081
       BIND_ADDR: 0.0.0.0:${PORT:-8080}
-      # Required, >= 32 bytes, no default (SPEC §5.2). Rotating it logs everyone out.
+      # Required, at least 32 bytes. Rotating it logs everyone out.
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required and must be at least 32 bytes}
       MAX_ATTACHMENT_BYTES: ${MAX_ATTACHMENT_BYTES:-104857600}
       # Origin allowlist: CORS *and* the mandatory WebSocket origin check. The server
       # allows its own http://localhost:${PORT} and http://127.0.0.1:${PORT} by itself,
       # plus http://<host>:${PORT} for every host in APP_ORIGIN_HOSTS (a LAN address the
-      # phone opens). Anything else — behind the caddy profile, https://${DOMAIN} — is
-      # listed in full here (PROTOCOL.md §1.2).
+      # phone opens). List anything else in full, e.g. https://${DOMAIN} behind caddy.
       APP_ORIGIN: ${APP_ORIGIN:-}
       APP_ORIGIN_HOSTS: ${APP_ORIGIN_HOSTS:-}
 
-      # ---- M3: the static surface (SPEC §6.4, §8) ----
-      # The image bakes all three (see `backend/Dockerfile`); these only need overriding
-      # to point at a mounted directory, which is what M4's plugin installer will want.
+      # Baked into the image; override only to point at a mounted directory.
       WEB_DIST_DIR: ${WEB_DIST_DIR:-/srv/web}
       PLUGINS_DIR: ${PLUGINS_DIR:-/srv/plugins}
       KERNEL_DTS_PATH: ${KERNEL_DTS_PATH:-/srv/kernel.d.ts}
-      # Server-side safe mode (SPEC §6.1): every client is told the plugin list is empty,
-      # which is the way back in when an installed plugin breaks the app for everyone.
+      # Safe mode: no plugins run. The way back in when a plugin breaks the app.
       DISABLE_PLUGINS: ${DISABLE_PLUGINS:-false}
       # Compose runs over plain http on localhost; production keeps this true.
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
-      # No reverse proxy in M1 (see the header of this file): the client IP is
-      # the connection's peer address and X-Forwarded-For is ignored, so a client
-      # cannot pick its own per-IP login bucket (SPEC §5.2) or forge the `ip` on
-      # audit entries (SPEC §5.4). Flip to true only once something like the
-      # caddy block below is the *only* route to the server.
+      # false: the client IP is the connection's peer address and X-Forwarded-For is
+      # ignored. Set true only when a proxy (e.g. the caddy profile) is the only route
+      # to the server, or clients can forge their IP.
       TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-false}
       LOG_FORMAT: ${LOG_FORMAT:-json}
       RUST_LOG: ${RUST_LOG:-info,ddd_server=debug}
-      # Must stay below stop_grace_period (SPEC §8: exit within 30 s).
+      # Must stay below stop_grace_period.
       SHUTDOWN_GRACE_SECS: ${SHUTDOWN_GRACE_SECS:-30}
     # BIND_HOST narrows where the host publishes it (127.0.0.1 behind the caddy profile).
     ports:
@@ -128,7 +114,7 @@ services:
     # the process, not docker's SIGKILL.
     stop_grace_period: 40s
 
-  # Automatic HTTPS in front of the server (SPEC §8). Opt-in, because a plain
+  # Automatic HTTPS in front of the server. Opt-in, because a plain
   # `docker compose up` on a laptop wants http://localhost:8080 and has no domain to
   # get a certificate for. The server stays TLS-unaware; Caddy terminates.
   caddy:
