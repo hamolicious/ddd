@@ -24,7 +24,6 @@ Released APKs are attached to GitHub Releases.
 | [`BRIDGE.md`](BRIDGE.md) | The contract: message envelope, `window.shell`, the server manifest, the loopback origin, the revert state machine. Authoritative. |
 | [`CONTRACTS.md`](CONTRACTS.md) | File ownership, environment and integration notes |
 | [`TESTPLAN.md`](TESTPLAN.md) | The manual on-device test script (soft-keyboard editing, offline boot, OTA update, revert, notifications, file dialogs) |
-| [`../SPEC.md`](../SPEC.md) §7 | The design behind the shell |
 
 ## Layout
 

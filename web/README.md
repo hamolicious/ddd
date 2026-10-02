@@ -251,8 +251,7 @@ an admin approves them.
 
 [`../backend/PROTOCOL.md`](../backend/PROTOCOL.md) is authoritative for the socket and the
 bootstrap stream; this side implements it independently of the server. If the code and
-PROTOCOL.md disagree, treat it as a bug; if PROTOCOL.md and [`../SPEC.md`](../SPEC.md)
-disagree, the SPEC wins. PROTOCOL.md §10 is a conformance checklist;
+PROTOCOL.md disagree, treat it as a bug. PROTOCOL.md §10 is a conformance checklist;
 `harness/src/rest.ts` watches the wire and reports violations.
 
 ## Tests against a server

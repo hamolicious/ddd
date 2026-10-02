@@ -1,8 +1,8 @@
 # `plugins/base/` — the base distribution
 
-The visible app: 38 plugins that ship with the server. They are
-[installed like any other plugin](../../SPEC.md#62-package-manifest-capabilities), can each be
-replaced or removed, and get no privilege the kernel does not give every plugin.
+The visible app: 38 plugins that ship with the server. They are installed like any other
+plugin, can each be replaced or removed, and get no privilege the kernel does not give every
+plugin.
 
 This directory is also the reference for writing a plugin. To scaffold a new standalone
 plugin project, use the `ddd` CLI (`ddd plugin new`, see [`cli/`](../../cli/README.md)).
