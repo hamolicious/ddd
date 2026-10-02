@@ -8,8 +8,8 @@
 //!   [`INLINE_SAFE_TYPES`]. `image/svg+xml` is **never** served inline.
 //! - Replace requires `If-Match: <revision>`; mismatch → 409 so the client can
 //!   offer keep-server / overwrite / keep-both. Identical `sha256` auto-resolves.
-//! - Deletion is explicit; orphans are only *flagged* (admin view), never
-//!   auto-deleted.
+//! - Deletion is explicit; orphans and duplicates are only *flagged* (admin
+//!   views), never auto-deleted.
 //!
 //! | Method | Path | Behaviour |
 //! |---|---|---|
@@ -20,11 +20,12 @@
 //! | DELETE | `/api/attachments/:id` | explicit deletion, audited |
 //! | GET | `/api/attachments` | admin listing |
 //! | GET/POST | `/api/attachments/orphans[/scan]` | admin orphan view; never deletes |
+//! | GET | `/api/attachments/duplicates` | admin view of same-name, same-bytes files; never deletes |
 //!
 //! A file can also arrive in chunks, resumably: `/api/uploads` (`uploads.rs`), which
 //! ends in the same row and the same answer as `POST /api/attachments`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use axum::body::Body;
 use axum::extract::multipart::MultipartError;
@@ -124,6 +125,7 @@ pub fn router() -> Router<AppState> {
         .route("/{id}/meta", get(meta))
         .route("/orphans", get(orphans))
         .route("/orphans/scan", post(scan_orphans))
+        .route("/duplicates", get(duplicates))
         // Uploads are streamed and capped by `MAX_ATTACHMENT_BYTES` below, not by
         // the JSON body limit the `/api` router applies. This inner layer wins
         // because it runs closer to the handler.
@@ -181,6 +183,25 @@ pub struct UploadParams {
 pub struct OrphanView {
     pub attachment: AttachmentView,
     pub flagged_at: Timestamp,
+}
+
+/// Files with the same name and the same bytes (`sha256`), under different ids.
+#[derive(Debug, Serialize)]
+pub struct DuplicateGroup {
+    pub name: String,
+    pub sha256: String,
+    pub size: u64,
+    /// Oldest first.
+    pub files: Vec<DuplicateFile>,
+}
+
+/// One copy in a [`DuplicateGroup`].
+#[derive(Debug, Serialize)]
+pub struct DuplicateFile {
+    pub attachment: AttachmentView,
+    /// How many documents (trashed ones included) reference this copy. A copy at 0
+    /// can go without breaking a note.
+    pub references: u32,
 }
 
 /// The bytes after a successful stream into GridFS.
@@ -569,6 +590,15 @@ pub async fn scan_orphans(
     Ok(Json(find_orphans(&state).await?))
 }
 
+/// `GET /api/attachments/duplicates` — same name, same bytes, different ids (admin).
+/// Read-only, like the orphan view: which copy goes is the admin's call.
+pub async fn duplicates(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+) -> AppResult<Json<Vec<DuplicateGroup>>> {
+    Ok(Json(find_duplicates(&state).await?))
+}
+
 // ---------------------------------------------------------------------------
 // Pure helpers (unit-tested below)
 // ---------------------------------------------------------------------------
@@ -622,6 +652,30 @@ pub fn wrapper_document_text(attachment: &AttachmentView) -> String {
 /// `attachment://<ulid>`.
 pub fn attachment_reference(id: &str) -> String {
     format!("{ATTACHMENT_SCHEME}{id}")
+}
+
+/// Live attachments grouped by name and `sha256`, keeping only groups of two or more.
+/// Groups are sorted by name, then hash; each group's files oldest first, then by id.
+pub fn group_duplicates(attachments: Vec<AttachmentView>) -> Vec<Vec<AttachmentView>> {
+    let mut groups: BTreeMap<(String, String), Vec<AttachmentView>> = BTreeMap::new();
+    for attachment in attachments {
+        groups
+            .entry((attachment.name.clone(), attachment.sha256.clone()))
+            .or_default()
+            .push(attachment);
+    }
+    groups
+        .into_values()
+        .filter(|files| files.len() > 1)
+        .map(|mut files| {
+            files.sort_by(|a, b| {
+                a.created_at
+                    .cmp(&b.created_at)
+                    .then_with(|| a.id.cmp(&b.id))
+            });
+            files
+        })
+        .collect()
 }
 
 /// Every `attachment://<ulid>` id referenced by a document's materialized text.
@@ -1000,6 +1054,66 @@ async fn find_orphans(state: &AppState) -> AppResult<Vec<OrphanView>> {
         .collect())
 }
 
+/// [`group_duplicates`] over every live attachment, with each copy's reference count
+/// from the documents' materialized text (trashed documents count, as for orphans).
+async fn find_duplicates(state: &AppState) -> AppResult<Vec<DuplicateGroup>> {
+    let mut live = Vec::new();
+    let mut attachments = state
+        .collections
+        .attachments()
+        .find(doc! { "deleted_at": Bson::Null })
+        .await?;
+    while let Some(attachment) = attachments.try_next().await? {
+        live.push(AttachmentView::from(attachment));
+    }
+    let groups = group_duplicates(live);
+    if groups.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut references: BTreeMap<Id, u32> = groups
+        .iter()
+        .flatten()
+        .map(|attachment| (attachment.id.clone(), 0))
+        .collect();
+    let mut documents = state
+        .collections
+        .raw(crate::db::DOCUMENTS)
+        .find(doc! {})
+        .projection(doc! { "content": 1 })
+        .await?;
+    while let Some(row) = documents.try_next().await? {
+        if let Ok(content) = row.get_str("content") {
+            // A document counts once, however often it embeds the file.
+            let ids: BTreeSet<&str> = attachment_refs(content).into_iter().collect();
+            for reference in ids {
+                if let Some(count) = references.get_mut(reference) {
+                    *count += 1;
+                }
+            }
+        }
+    }
+
+    Ok(groups
+        .into_iter()
+        .map(|files| {
+            let first = &files[0];
+            DuplicateGroup {
+                name: first.name.clone(),
+                sha256: first.sha256.clone(),
+                size: first.size,
+                files: files
+                    .into_iter()
+                    .map(|attachment| DuplicateFile {
+                        references: references.get(&attachment.id).copied().unwrap_or(0),
+                        attachment,
+                    })
+                    .collect(),
+            }
+        })
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1017,6 +1131,25 @@ mod tests {
             updated_at: crate::domain::Timestamp::from_millis(0),
             updated_by: None,
         }
+    }
+
+    #[test]
+    fn duplicates_need_the_same_name_and_bytes() {
+        let at = |id: &str, name: &str, sha: &str, created: i64| AttachmentView {
+            id: id.to_string(),
+            sha256: sha.to_string(),
+            created_at: crate::domain::Timestamp::from_millis(created),
+            ..view(name, "image/png")
+        };
+        let groups = group_duplicates(vec![
+            at("B", "a.png", "11", 2),
+            at("A", "a.png", "11", 1),
+            at("C", "a.png", "22", 3),
+            at("D", "b.png", "11", 4),
+        ]);
+        assert_eq!(groups.len(), 1);
+        let ids: Vec<&str> = groups[0].iter().map(|file| file.id.as_str()).collect();
+        assert_eq!(ids, ["A", "B"], "oldest first");
     }
 
     #[test]

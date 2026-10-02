@@ -13,6 +13,7 @@
 //! | PATCH | `/api/documents/:id` | `{"content": …}` only — no `fm`/`plugins` patching |
 //! | DELETE | `/api/documents/:id` | tombstone → Trash (30 d) → purge; id → graveyard forever |
 //! | POST | `/api/documents/:id/restore` | out of Trash |
+//! | GET | `/api/documents/duplicates` | admin: live documents with the same title and text; never deletes |
 //! | GET | `/api/documents/:id/snapshots` | list snapshots |
 //! | GET | `/api/documents/:id/snapshots/:snapshot_id` | one snapshot, with its text |
 //! | GET, POST | `/api/documents/:id/changes…`, `/text?at=` | history, revert, text at a point (`changes.rs`) |
@@ -33,13 +34,13 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use base64::Engine as _;
 use bson::doc;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use ddd_core::filter::ast::{Filter, SortKey};
 use ddd_core::query::{Hit, Plan, Sort, Trash};
 use serde::{Deserialize, Serialize};
 
-use crate::auth::AuthUser;
+use crate::auth::{AdminUser, AuthUser};
 use crate::docstore::{DocStoreError, TrashFilter};
 use crate::domain::{AuditEntry, DocumentView, Id, Timestamp, is_valid_id};
 use crate::error::{AppError, AppResult};
@@ -91,6 +92,7 @@ pub const API_SNAPSHOT_REASON: &str = "manual";
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", get(list).post(create))
+        .route("/duplicates", get(duplicates))
         .route(
             "/{id}",
             get(get_one).put(replace).patch(patch).delete(delete),
@@ -864,9 +866,197 @@ pub async fn restore_snapshot(
     Ok(Json(view))
 }
 
+// ---------------------------------------------------------------------------
+// Duplicates
+// ---------------------------------------------------------------------------
+
+/// Live documents with the same title and the same text, under different ids.
+#[derive(Debug, Serialize)]
+pub struct DuplicateDocumentGroup {
+    pub title: String,
+    /// Bytes of text, the same for every copy.
+    pub size: u64,
+    /// Oldest first.
+    pub documents: Vec<DuplicateDocument>,
+}
+
+/// One copy in a [`DuplicateDocumentGroup`].
+#[derive(Debug, Clone, Serialize)]
+pub struct DuplicateDocument {
+    pub id: Id,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
+    /// How many *other* documents (trashed ones included) link here with `doc://`.
+    /// A copy at 0 can go without breaking a link.
+    pub references: u32,
+}
+
+/// A live document as the duplicate scan sees it.
+#[derive(Debug, Clone)]
+pub struct DocumentCopy {
+    pub id: Id,
+    pub title: String,
+    pub content: String,
+    pub created_at: Timestamp,
+    pub updated_at: Timestamp,
+}
+
+/// `GET /api/documents/duplicates` (admin). Read-only: deleting a copy is the usual
+/// `DELETE`, which only moves it to the Trash.
+pub async fn duplicates(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+) -> AppResult<Json<Vec<DuplicateDocumentGroup>>> {
+    let mut live = Vec::new();
+    let mut texts: Vec<(Id, String)> = Vec::new();
+    let mut rows = state
+        .collections
+        .raw(crate::db::DOCUMENTS)
+        .find(doc! {})
+        .projection(
+            doc! { "title": 1, "content": 1, "created_at": 1, "updated_at": 1, "deleted_at": 1 },
+        )
+        .await?;
+    while let Some(row) = futures::TryStreamExt::try_next(&mut rows).await? {
+        let (Ok(id), Ok(content)) = (row.get_str("_id"), row.get_str("content")) else {
+            continue;
+        };
+        let trashed = matches!(row.get("deleted_at"), Some(value) if *value != bson::Bson::Null);
+        if !trashed {
+            live.push(DocumentCopy {
+                id: id.to_string(),
+                title: row.get_str("title").unwrap_or_default().to_string(),
+                content: content.to_string(),
+                created_at: row
+                    .get_datetime("created_at")
+                    .map(|at| (*at).into())
+                    .unwrap_or_else(|_| Timestamp::from_millis(0)),
+                updated_at: row
+                    .get_datetime("updated_at")
+                    .map(|at| (*at).into())
+                    .unwrap_or_else(|_| Timestamp::from_millis(0)),
+            });
+        }
+        // Trashed documents still count as linking, as they do for orphan files.
+        texts.push((id.to_string(), content.to_string()));
+    }
+
+    let groups = group_duplicate_documents(live);
+    if groups.is_empty() {
+        return Ok(Json(Vec::new()));
+    }
+    let candidates: BTreeSet<&str> = groups
+        .iter()
+        .flatten()
+        .map(|copy| copy.id.as_str())
+        .collect();
+    let mut references: BTreeMap<&str, u32> = BTreeMap::new();
+    for (from, text) in &texts {
+        let linked: BTreeSet<&str> = doc_refs(text).into_iter().filter(|id| id != from).collect();
+        for id in linked {
+            if let Some(candidate) = candidates.get(id) {
+                *references.entry(candidate).or_default() += 1;
+            }
+        }
+    }
+
+    Ok(Json(
+        groups
+            .iter()
+            .map(|copies| DuplicateDocumentGroup {
+                title: copies[0].title.clone(),
+                size: copies[0].content.len() as u64,
+                documents: copies
+                    .iter()
+                    .map(|copy| DuplicateDocument {
+                        id: copy.id.clone(),
+                        created_at: copy.created_at,
+                        updated_at: copy.updated_at,
+                        references: references.get(copy.id.as_str()).copied().unwrap_or(0),
+                    })
+                    .collect(),
+            })
+            .collect(),
+    ))
+}
+
+/// Documents grouped by exact title and text, keeping only groups of two or more.
+/// Groups are sorted by title; each group's copies oldest first, then by id.
+pub fn group_duplicate_documents(copies: Vec<DocumentCopy>) -> Vec<Vec<DocumentCopy>> {
+    let mut groups: BTreeMap<(String, String), Vec<DocumentCopy>> = BTreeMap::new();
+    for copy in copies {
+        groups
+            .entry((copy.title.clone(), copy.content.clone()))
+            .or_default()
+            .push(copy);
+    }
+    groups
+        .into_values()
+        .filter(|copies| copies.len() > 1)
+        .map(|mut copies| {
+            copies.sort_by(|a, b| {
+                a.created_at
+                    .cmp(&b.created_at)
+                    .then_with(|| a.id.cmp(&b.id))
+            });
+            copies
+        })
+        .collect()
+}
+
+/// Every `doc://<id>` a text links to. Ids are matched loosely (`[A-Za-z0-9_-]`);
+/// the caller only counts the ones it is looking for.
+pub fn doc_refs(text: &str) -> Vec<&str> {
+    const SCHEME: &str = "doc://";
+    let mut found = Vec::new();
+    for (index, _) in text.match_indices(SCHEME) {
+        let rest = &text[index + SCHEME.len()..];
+        let len = rest
+            .bytes()
+            .take_while(|byte| byte.is_ascii_alphanumeric() || *byte == b'_' || *byte == b'-')
+            .count();
+        if len > 0 {
+            found.push(&rest[..len]);
+        }
+    }
+    found
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn copy(id: &str, title: &str, content: &str, created: i64) -> DocumentCopy {
+        DocumentCopy {
+            id: id.to_string(),
+            title: title.to_string(),
+            content: content.to_string(),
+            created_at: Timestamp::from_millis(created),
+            updated_at: Timestamp::from_millis(created),
+        }
+    }
+
+    #[test]
+    fn duplicate_documents_need_the_same_title_and_text() {
+        let groups = group_duplicate_documents(vec![
+            copy("b", "Plan", "# Plan\nsteps", 2),
+            copy("a", "Plan", "# Plan\nsteps", 1),
+            copy("c", "Plan", "# Plan\nother steps", 3),
+            copy("d", "Other", "# Plan\nsteps", 4),
+            copy("e", "Alone", "x", 5),
+        ]);
+        assert_eq!(groups.len(), 1);
+        let ids: Vec<&str> = groups[0].iter().map(|copy| copy.id.as_str()).collect();
+        assert_eq!(ids, ["a", "b"], "oldest first");
+    }
+
+    #[test]
+    fn doc_refs_finds_every_link() {
+        assert_eq!(
+            doc_refs("see [a](doc://01ABC) and doc://x_y-z. not doc:// alone"),
+            ["01ABC", "x_y-z"]
+        );
+    }
 
     #[test]
     fn sortable_single_segment_fields() {

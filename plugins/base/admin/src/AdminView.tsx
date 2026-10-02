@@ -20,10 +20,10 @@ import type { KeyboardEvent as ReactKeyboardEvent, ReactElement, ReactNode } fro
 import type { AdminClient } from "./api.js";
 import { AuditSection } from "./Audit.js";
 import { PluginsSection } from "./Plugins.js";
-import { ExportSection, OrphansSection } from "./Storage.js";
+import { DuplicatesSection, ExportSection, OrphansSection } from "./Storage.js";
 import { InvitesSection, UsersSection } from "./Users.js";
 
-export const ADMIN_SECTIONS = ["users", "invites", "audit", "orphans", "plugins", "workspace"] as const;
+export const ADMIN_SECTIONS = ["users", "invites", "audit", "orphans", "duplicates", "plugins", "workspace"] as const;
 
 export type AdminSectionId = (typeof ADMIN_SECTIONS)[number];
 
@@ -36,6 +36,7 @@ const LABELS: Readonly<Record<AdminSectionId, string>> = {
   invites: "Invites",
   audit: "Audit log",
   orphans: "Orphan files",
+  duplicates: "Duplicates",
   plugins: "Plugins",
   workspace: "Workspace",
 };
@@ -199,6 +200,8 @@ function SectionBody({
       return <AuditSection client={client} embedded={embedded} />;
     case "orphans":
       return <OrphansSection client={client} embedded={embedded} />;
+    case "duplicates":
+      return <DuplicatesSection client={client} embedded={embedded} />;
     case "plugins":
       return <PluginsSection client={client} embedded={embedded} />;
     default:

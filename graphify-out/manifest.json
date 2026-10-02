@@ -876,9 +876,9 @@
     "semantic_hash": ""
   },
   "backend/crates/server/src/routes/attachments.rs": {
-    "mtime": 1790886404.4675252,
-    "seen": 1790886835.6706688,
-    "ast_hash": "519039d87d454541bcbde64d765c7f52",
+    "mtime": 1790944229.5189328,
+    "seen": 1790944654.0764797,
+    "ast_hash": "62d787344bbbb04f50a7d69d3afe41b0",
     "semantic_hash": ""
   },
   "backend/crates/server/src/routes/auth.rs": {
@@ -888,9 +888,9 @@
     "semantic_hash": ""
   },
   "backend/crates/server/src/routes/documents.rs": {
-    "mtime": 1790886404.4676504,
-    "seen": 1790886835.670743,
-    "ast_hash": "f1466409c2a3bccd8b40042efb2131e6",
+    "mtime": 1790944229.5329328,
+    "seen": 1790944654.0765514,
+    "ast_hash": "da78025148f8272b07425503a8bd3a1d",
     "semantic_hash": ""
   },
   "backend/crates/server/src/routes/health.rs": {
@@ -1116,9 +1116,9 @@
     "semantic_hash": ""
   },
   "plugins/base/admin/src/AdminView.tsx": {
-    "mtime": 1790886404.5840466,
-    "seen": 1790886835.6721354,
-    "ast_hash": "cd703658b075e08978a5a60149acd830",
+    "mtime": 1790944347.0479562,
+    "seen": 1790944654.079832,
+    "ast_hash": "e0f5681ea823ee09ce727b695a3ec193",
     "semantic_hash": ""
   },
   "plugins/base/admin/src/Audit.tsx": {
@@ -1140,9 +1140,9 @@
     "semantic_hash": ""
   },
   "plugins/base/admin/src/Storage.tsx": {
-    "mtime": 1790886404.5841138,
-    "seen": 1790886835.6722739,
-    "ast_hash": "594cf8405265d7adb8511458907601bd",
+    "mtime": 1790944347.0490346,
+    "seen": 1790944654.0800033,
+    "ast_hash": "dd5e90c60c440641e78dbd44365b0a1b",
     "semantic_hash": ""
   },
   "plugins/base/admin/src/Users.tsx": {
@@ -1158,9 +1158,9 @@
     "semantic_hash": ""
   },
   "plugins/base/admin/src/api.ts": {
-    "mtime": 1790723903.4868925,
-    "seen": 1790727220.2592635,
-    "ast_hash": "949bd3cedff72525fd477c20e58e6ad3",
+    "mtime": 1790944347.0477452,
+    "seen": 1790944654.0800688,
+    "ast_hash": "51569fd1f873e8ead3c5527b8c24ae28",
     "semantic_hash": ""
   },
   "plugins/base/admin/src/hooks.ts": {
@@ -1170,9 +1170,9 @@
     "semantic_hash": ""
   },
   "plugins/base/admin/src/index.tsx": {
-    "mtime": 1790805532.4846008,
-    "seen": 1790805689.3383546,
-    "ast_hash": "520dc55026044d35c6b72ea0fda9f232",
+    "mtime": 1790944347.0485063,
+    "seen": 1790944654.0801349,
+    "ast_hash": "3c313adbb96455e92c17a1092f4126f6",
     "semantic_hash": ""
   },
   "plugins/base/commands/manifest.json": {
@@ -5625,6 +5625,12 @@
     "mtime": 1790938658.177631,
     "seen": 1790938770.3050284,
     "ast_hash": "e21ae27b71734ab0726dae87f1f5cc08",
+    "semantic_hash": ""
+  },
+  "backend/crates/server/tests/duplicates.rs": {
+    "mtime": 1790944309.3153672,
+    "seen": 1790944654.0770695,
+    "ast_hash": "14b0b50cc8ed933124d411719791571e",
     "semantic_hash": ""
   }
 }
