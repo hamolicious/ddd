@@ -1188,9 +1188,9 @@
     "semantic_hash": ""
   },
   "plugins/base/commands/src/Palette.tsx": {
-    "mtime": 1790938471.714907,
-    "seen": 1790938605.1431773,
-    "ast_hash": "c93d52b7bd367470622f319fefb01c0b",
+    "mtime": 1790938672.9488466,
+    "seen": 1790938770.3048296,
+    "ast_hash": "cd297e4f7b51ef97631a1fc0fe393af9",
     "semantic_hash": ""
   },
   "plugins/base/commands/src/bindings.test.ts": {
@@ -1206,9 +1206,9 @@
     "semantic_hash": ""
   },
   "plugins/base/commands/src/index.tsx": {
-    "mtime": 1790938471.7118993,
-    "seen": 1790938605.1433084,
-    "ast_hash": "be4b300d189ff093a52f15853a4964b1",
+    "mtime": 1790938683.0211132,
+    "seen": 1790938770.3049462,
+    "ast_hash": "6abdac64b3ddf4d1cb5bd254de14242f",
     "semantic_hash": ""
   },
   "plugins/base/commands/src/keys.test.ts": {
@@ -1224,16 +1224,16 @@
     "semantic_hash": ""
   },
   "plugins/base/commands/src/match.test.ts": {
-    "mtime": 1790290753.8422835,
-    "seen": 1790384127.0428708,
-    "ast_hash": "77b6000619aac9f1956fbded00b34f32",
-    "semantic_hash": "77b6000619aac9f1956fbded00b34f32"
+    "mtime": 1790938668.862961,
+    "seen": 1790938770.3050241,
+    "ast_hash": "4cf019be8ac0cf6325e7f44c225df13b",
+    "semantic_hash": ""
   },
   "plugins/base/commands/src/match.ts": {
-    "mtime": 1790290341.3733275,
-    "seen": 1790384127.0428712,
-    "ast_hash": "f0eb250b6e273a86b72c972866777320",
-    "semantic_hash": "f0eb250b6e273a86b72c972866777320"
+    "mtime": 1790938658.1894977,
+    "seen": 1790938770.3050256,
+    "ast_hash": "38d58eee8ee5efa780b17a1c56e49f0e",
+    "semantic_hash": ""
   },
   "plugins/base/doc-list/manifest.json": {
     "mtime": 1790886404.5854993,
@@ -5637,6 +5637,18 @@
     "mtime": 1790938398.214399,
     "seen": 1790938605.153774,
     "ast_hash": "5a46758482ae7317a3aa0f278be026a6",
+    "semantic_hash": ""
+  },
+  "plugins/base/commands/src/recent.test.ts": {
+    "mtime": 1790938658.179631,
+    "seen": 1790938770.305027,
+    "ast_hash": "932ac33973f297486ba4324baec8b8e4",
+    "semantic_hash": ""
+  },
+  "plugins/base/commands/src/recent.ts": {
+    "mtime": 1790938658.177631,
+    "seen": 1790938770.3050284,
+    "ast_hash": "e21ae27b71734ab0726dae87f1f5cc08",
     "semantic_hash": ""
   }
 }

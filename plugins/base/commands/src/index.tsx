@@ -65,6 +65,7 @@ import {
   type ResolvedBindings,
 } from "./bindings.js";
 import { createKeybindingsSection } from "./KeybindingsSection.js";
+import { RECENT_STORAGE_KEY, parseRecent, pushRecent } from "./recent.js";
 import {
   eventKeys,
   isApplePlatform,
@@ -307,6 +308,30 @@ export default function activate(kernel: Kernel): void {
   );
 
   // ---------------------------------------------------------------------------
+  // Recently run (`recent.ts`): what the user ran from the palette or a key, per device.
+  // Storage can be missing or full (private windows); the palette then just forgets.
+  // ---------------------------------------------------------------------------
+
+  let recent = ((): readonly string[] => {
+    try {
+      return parseRecent(localStorage.getItem(RECENT_STORAGE_KEY));
+    } catch {
+      return [];
+    }
+  })();
+
+  const recordRun = (id: string): void => {
+    // Opening the palette is how every other command is reached, not one of them.
+    if (id === "commands.openPalette") return;
+    recent = pushRecent(recent, id);
+    try {
+      localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(recent));
+    } catch {
+      // Kept for this session only.
+    }
+  };
+
+  // ---------------------------------------------------------------------------
   // Dispatch
   // ---------------------------------------------------------------------------
 
@@ -342,6 +367,7 @@ export default function activate(kernel: Kernel): void {
     if (commandId !== undefined && !takesArgument(commandId)) {
       clearPending();
       event.preventDefault();
+      recordRun(commandId);
       void api.run(commandId).catch((cause: unknown) => {
         kernel.log.error(`command "${commandId}" failed`, cause);
       });
@@ -430,7 +456,9 @@ export default function activate(kernel: Kernel): void {
               api.closePalette();
               openSettings("commands.keybindings");
             }}
+            recent={recent}
             onRun={(command) => {
+              recordRun(command.id);
               void api.run(command.id).catch((cause: unknown) => {
                 kernel.log.error(`command "${command.id}" failed`, cause);
               });

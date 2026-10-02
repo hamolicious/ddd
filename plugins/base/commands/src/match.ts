@@ -60,8 +60,17 @@ export function scoreMatch(query: string, item: Matchable): MatchResult<Matchabl
  * with — "Admin › Browse snapshots", "Appearance › Change theme", "Admin › Create an
  * invite" — and made a list of twenty-one commands read as unsorted. Uncategorised
  * commands sort first, where a short list of bare titles is easiest to scan.
+ *
+ * `recency` (id → position, 0 the most recent) comes straight after the score: the
+ * unfiltered palette opens with what the user ran last, newest first, and a query's
+ * equally good matches put the recently used one on top. Commands never run keep the
+ * order above, after them.
  */
-export function rankMatches<T extends Matchable>(query: string, items: readonly T[]): readonly MatchResult<T>[] {
+export function rankMatches<T extends Matchable>(
+  query: string,
+  items: readonly T[],
+  recency: ReadonlyMap<string, number> = new Map(),
+): readonly MatchResult<T>[] {
   const scored: MatchResult<T>[] = [];
   for (const item of items) {
     const result = scoreMatch(query, item);
@@ -69,6 +78,9 @@ export function rankMatches<T extends Matchable>(query: string, items: readonly 
   }
   scored.sort((a, b) => {
     if (a.score !== b.score) return b.score - a.score;
+    const leftUsed = recency.get(a.item.id) ?? Number.POSITIVE_INFINITY;
+    const rightUsed = recency.get(b.item.id) ?? Number.POSITIVE_INFINITY;
+    if (leftUsed !== rightUsed) return leftUsed < rightUsed ? -1 : 1;
     const left = a.item.category ?? "";
     const right = b.item.category ?? "";
     if (left !== right) return left < right ? -1 : 1;

@@ -32,6 +32,7 @@ import { createPortal } from "react-dom";
 import { useBackToClose } from "../../_shared/back.js";
 import { formatKeys } from "./keys.js";
 import { rankMatches } from "./match.js";
+import { recencyIndex } from "./recent.js";
 import type { Command } from "./api.js";
 
 export interface PaletteProps {
@@ -45,7 +46,11 @@ export interface PaletteProps {
   /** Shown above the list when a binding is ambiguous (SPEC §6.5: conflicts are listed). */
   readonly conflictCount?: number;
   readonly onShowConflicts?: () => void;
+  /** Command ids the user ran, newest first: they lead the list. */
+  readonly recent?: readonly string[];
 }
+
+const NO_RECENT: readonly string[] = [];
 
 export function Palette({
   commands,
@@ -56,6 +61,7 @@ export function Palette({
   initialQuery = "",
   conflictCount = 0,
   onShowConflicts,
+  recent = NO_RECENT,
 }: PaletteProps): ReactElement {
   const [query, setQuery] = useState(initialQuery);
   const [active, setActive] = useState(0);
@@ -67,7 +73,8 @@ export function Palette({
   const leave = useBackToClose(onClose);
   const close = useCallback(() => leave(onClose), [leave, onClose]);
 
-  const results = useMemo(() => rankMatches(query, commands), [query, commands]);
+  const recency = useMemo(() => recencyIndex(recent), [recent]);
+  const results = useMemo(() => rankMatches(query, commands, recency), [query, commands, recency]);
   const clamped = results.length === 0 ? 0 : Math.min(active, results.length - 1);
 
   useEffect(() => {

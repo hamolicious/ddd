@@ -35,6 +35,25 @@ describe("rankMatches", () => {
     expect(order[0]).toBe("doc-list.new");
   });
 
+  it("opens with the recently run commands first, newest first", () => {
+    const recency = new Map([
+      ["doc-list.new", 0],
+      ["themes.open", 1],
+    ]);
+    const order = rankMatches("", COMMANDS, recency).map((entry) => entry.item.id);
+    expect(order).toEqual(["doc-list.new", "themes.open", "bare", "admin.snapshots", "admin.invites", "commands.keybindings"]);
+  });
+
+  it("lets recency break a tie between matches but never beat a better match", () => {
+    const tied = [
+      { id: "one", title: "Open one" },
+      { id: "two", title: "Open two" },
+    ];
+    expect(rankMatches("open", tied, new Map([["two", 0]]))[0]?.item.id).toBe("two");
+    const order = rankMatches("new doc", COMMANDS, new Map([["themes.open", 0]])).map((entry) => entry.item.id);
+    expect(order[0]).toBe("doc-list.new");
+  });
+
   it("is stable: the same query gives the same order", () => {
     const once = rankMatches("e", COMMANDS).map((entry) => entry.item.id);
     const again = rankMatches("e", [...COMMANDS].reverse()).map((entry) => entry.item.id);
