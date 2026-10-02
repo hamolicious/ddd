@@ -7,7 +7,7 @@ Markdown with frontmatter, and every note can be queried like a database row.
 - **Real-time collaboration.** Every note is a CRDT, so several people and devices can edit it at once.
 - **Saved searches as views.** Turn any search into a table, kanban board, calendar or timeline.
 - **Linked notes.** `[[wikilinks]]`, embeds, backlinks, and a graph of the whole workspace.
-- **Everything is a plugin.** The editor, the sidebar, the boards: all 38 parts of the app are
+- **Everything is a plugin.** The editor, the sidebar, the boards: all systems are
   plugins you can replace or remove, and you can write your own.
 - **Your files stay yours.** Export everything as Markdown, mirror your notes into a folder on
   disk, or bring in an Obsidian vault with the example importer plugin.
@@ -47,16 +47,16 @@ Workspace can also export every note as Markdown, without history or attachments
 
 ddd works in any modern browser and can be installed from there as an app. There are also:
 
-| App | What it adds | Get it |
-| --- | --- | --- |
-| [Android](app/README.md) | Boots offline from a verified copy of the app, notifications with the app closed | APK on the [Releases](../../releases) page |
-| [Linux desktop](desktop/README.md) | Mirrors your notes to a folder of Markdown files, native file dialogs | `.deb` and AppImage on the Releases page |
-| [`ddd` CLI](cli/README.md) | Scaffolds plugins, queries your notes from a terminal | Binary on the Releases page |
+| App                                | What it adds                                                                     | Get it                                     |
+| ---------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------ |
+| [Android](app/README.md)           | Boots offline from a verified copy of the app, notifications with the app closed | APK on the [Releases](../../releases) page |
+| [Linux desktop](desktop/README.md) | Mirrors your notes to a folder of Markdown files, native file dialogs            | `.deb` and AppImage on the Releases page   |
+| [`ddd` CLI](cli/README.md)         | Scaffolds plugins, queries your notes from a terminal                            | Binary on the Releases page                |
 
 ## Writing plugins
 
 A plugin is a frontend bundle, and optionally a sandboxed WebAssembly backend, described by a
-`manifest.json`. Admins install it from a `.zip` in Settings → Plugins.
+`manifest.json`.
 
 ```bash
 ddd plugin new my-plugin --dep toolbar@^1.1
@@ -81,13 +81,13 @@ mise run dev-hot        # the same, with live reload
 mise run test           # the server's tests
 ```
 
-| Directory | What's in it |
-| --- | --- |
-| [`backend/`](backend/README.md) | The server (Rust): API, sync, plugin host. Also the shared core, which compiles to WebAssembly for the browser. |
-| [`web/`](web/README.md) | The browser app: offline store, sync client, plugin loader |
-| [`plugins/`](plugins/base/README.md) | The built-in plugins and examples |
-| [`app/`](app/README.md) | The Android app (Flutter) |
-| [`desktop/`](desktop/README.md) | The Linux desktop app (Tauri) |
-| [`cli/`](cli/README.md) | The `ddd` command-line tool |
-| [`schema/`](schema) | JSON schemas, including the plugin manifest |
-| [`brand/`](brand/README.md) | The logo and icons |
+| Directory                            | What's in it                                                                                                    |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| [`backend/`](backend/README.md)      | The server (Rust): API, sync, plugin host. Also the shared core, which compiles to WebAssembly for the browser. |
+| [`web/`](web/README.md)              | The browser app: offline store, sync client, plugin loader                                                      |
+| [`plugins/`](plugins/base/README.md) | The built-in plugins and examples                                                                               |
+| [`app/`](app/README.md)              | The Android app (Flutter)                                                                                       |
+| [`desktop/`](desktop/README.md)      | The Linux desktop app (Tauri)                                                                                   |
+| [`cli/`](cli/README.md)              | The `ddd` command-line tool                                                                                     |
+| [`schema/`](schema)                  | JSON schemas, including the plugin manifest                                                                     |
+| [`brand/`](brand/README.md)          | The logo and icons                                                                                              |
