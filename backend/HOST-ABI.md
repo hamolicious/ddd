@@ -1,7 +1,7 @@
 # The backend-plugin host ABI
 
-**Status:** M4 scaffold, 2026-09-24. Authoritative for the boundary between the server's
-Wasm host and a backend plugin (SPEC §6.2, §6.3).
+The contract between the server's Wasm host and a backend plugin.
+
 **Type form:** [`backend/crates/plugin-abi`](crates/plugin-abi) — every schema below is a
 serde type there, used by *both* sides. This document and that crate change in the same
 commit: the document is authoritative for **behaviour**, the crate for **shape**.
@@ -9,20 +9,15 @@ commit: the document is authoritative for **behaviour**, the crate for **shape**
 skin over all of it; [`plugins/examples/hello-backend`](../plugins/examples/hello-backend)
 is the smallest complete example and the host's own smoke-test fixture.
 
-Where this document and [`../SPEC.md`](../SPEC.md) disagree, **the SPEC wins and this
-document is the bug report** (two places below say where they deliberately differ, and
-why).
-
 ---
 
 ## 1. What a backend plugin is for
 
-Its genuine niche (SPEC §6.3): **cron while nobody's looking, outbound HTTP with secrets,
-inbound webhooks** — and authoring machine-owned documents. It is *not* a mirror of the
+Its niche: **cron while nobody's looking, outbound HTTP with secrets, inbound webhooks** — and authoring machine-owned documents. It is *not* a mirror of the
 client: reads and queries exist so a job can find what it wrote, not so a plugin can
 implement a UI on the server.
 
-**The preferred pattern is documents** (SPEC §1). When the two halves of a plugin share
+**The preferred pattern is documents.** When the two halves of a plugin share
 state, the backend writes *documents*; the existing sync carries them to every client,
 offline included, searchable and editable like everything else. `emit_client`, `emit` and
 KV are for what genuinely cannot be a document.
@@ -52,8 +47,8 @@ plugin with an empty `allowed_hosts`, because outbound requests must go through
 
 ### 2.2 A refusal is a value, never a trap
 
-SPEC §6.2: *"Undeclared host functions are linked as **erroring stubs** (so optional use is
-possible; instantiation never fails on imports)."* Therefore:
+Host functions a plugin has no capability for are linked as **erroring stubs**, so optional
+use is possible and instantiation never fails on imports. Therefore:
 
 - **All 13 host functions are always linked**, whatever the plugin's capabilities. An
   unapproved one returns `{"ok": false, "error": {"code": "capability_denied", …}}`.
@@ -78,7 +73,7 @@ plain JSON — never extended JSON.
 
 ## 3. Host functions
 
-Names are exactly SPEC §6.3's, plus `log` (§3.13, and the reason it exists is there).
+`log` (§3.12) is the one host function that is purely a debugging aid.
 
 | Function | Capability | Input → Output |
 |---|---|---|
@@ -97,9 +92,9 @@ Names are exactly SPEC §6.3's, plus `log` (§3.13, and the reason it exists is 
 | [`http_request`](#311-http_request) | `http.hosts` | `HttpRequestInput` → `HttpResponseOutput` |
 | [`log`](#312-log) | none | `LogInput` → `null` |
 
-**Why KV, config, events and `call_plugin` are ungated.** SPEC §6.2's example of the
-capability system working is *"a cron-and-KV plugin can't silently read the workspace"* —
-so KV and config, which are the plugin's **own** namespace, need no grant; `call_plugin` is
+**Why KV, config, events and `call_plugin` are ungated.** The capability system exists so
+that, for example, a cron-and-KV plugin cannot silently read the workspace. KV and config
+are the plugin's **own** namespace, so they need no grant; `call_plugin` is
 gated by the caller's `dependencies` and the callee's `backend.exports` instead; and `emit_client` reaches only sessions of this
 workspace's users with a payload the plugin already has.
 
@@ -125,7 +120,7 @@ workspace's users with a payload the plugin already has.
 - `metadata_only: true` omits `content` — the cheap read for a job that only needs `fm` or
   its own section across thousands of documents.
 - Forces a materialization flush, so a plugin that splices and re-reads inside one call
-  sees its own write (SPEC §3.5's read-your-writes rule).
+  sees its own write (read-your-writes).
 - Tombstoned documents are returned with `deleted: true`. A graveyarded id is `gone`; an
   unknown id is `not_found`.
 - **`created_by` is the machine-ownership record.** `plugin:<id>` means that plugin created
@@ -148,7 +143,7 @@ Errors: `capability_denied`, `invalid_argument` (not a ULID), `not_found`, `gone
 { "documents": [ … ], "next_cursor": "eyJ…" }
 ```
 
-- **The filter language is ours, not Mongo's** (SPEC §4.2). It is parsed by the shared core
+- **The filter language is ddd's own, not Mongo's.** It is parsed by the shared core
   (`core::filter`) and answered by the server's query engine (`core::query`, the one the
   browser runs too); client JSON never reaches Mongo, so a plugin cannot smuggle an
   operator. `search` is the engine's ranked text search.
@@ -195,7 +190,7 @@ relations (`child_of`, `parent_of`), relevance sorting, snippets and the total.
                       "snippet": { "text": "…", "ranges": [{ "start": 4, "end": 11 }], "line": 3 } } } }
 ```
 
-- The plan is `crates/core/README.md` §6. `limit` is clamped to 200 like §3.2.
+- The plan is described in `crates/core/README.md` §7. `limit` is clamped to 200 like §3.2.
 - A cursor only pages the plan it came from; another plan's cursor is `invalid_argument`.
 
 Errors: `capability_denied`, `invalid_argument`, `too_large`, `unavailable`.
@@ -210,7 +205,7 @@ Errors: `capability_denied`, `invalid_argument`, `too_large`, `unavailable`.
 { "id": "01J8ZQ…", "title": "Standup", "materialized_version": "9f2c…", "changed": true }
 ```
 
-- The document is **machine-owned** (SPEC §3.3): `created_by` is `plugin:<caller>`, and the
+- The document is **machine-owned**: `created_by` is `plugin:<caller>`, and the
   owner may later rewrite it wholesale.
 - `id` may be supplied so a retry after a timeout is idempotent — the second attempt gets
   `already_exists` instead of creating a duplicate. A graveyarded id is `gone` and must
@@ -233,32 +228,28 @@ Errors: `capability_denied`, `invalid_argument`, `already_exists`, `gone`, `too_
 { "id": "01J8ZQ…", "materialized_version": "9f2c…", "edits_applied": 2, "changed": true }
 ```
 
-**This is the only way a plugin may write inside a document a human owns** (SPEC §3.3), and
-the section is **always the caller's own**:
-
-> **Deliberate deviation from the SPEC's literal signature.** SPEC §6.3 spells it
-> `splice_section(id, plugin_id, yaml_line_edits)`. The host supplies `plugin_id` from the
-> calling instance, so it is **not on the wire**. A plugin that could name the section could
-> write into another plugin's machine data, which is exactly the boundary the per-plugin
-> section exists to draw.
+**This is the only way a plugin may write inside a document a human owns**, and the section
+is **always the caller's own**: the host supplies the plugin id from the calling instance, so
+it is **not on the wire**. A plugin that could name the section could write into another
+plugin's machine data, which is exactly the boundary the per-plugin section exists to draw.
 
 - Line splices, one key per line, via `core::splice::splice_section` — so concurrent writes
-  to different keys merge cleanly, and a same-key race resolves last-occurrence-wins
-  (SPEC §3.3, §11.2). **Never** a whole-section rewrite.
+  to different keys merge cleanly, and a same-key race resolves last-occurrence-wins.
+  **Never** a whole-section rewrite.
 - `value` and `remove` are separate fields: `{"key":"k","value":null}` writes `k: null`,
   `{"key":"k","remove":true}` deletes the line.
-- Values must be scalars or flow sequences (the strict YAML subset of SPEC §3.4). A nested
+- Values must be scalars or flow sequences (the strict YAML subset, `crates/core/README.md`
+  §2). A nested
   map is `invalid_argument` — it is not representable one-key-per-line.
 - Keys must match `^[A-Za-z0-9_-]{1,64}$`.
 - An edit whose value already matches writes nothing (`edits_applied` reflects that), so an
   idempotent sync produces no CRDT history.
 - The whole decision — which keys differ, where the fence is, which byte spans to replace —
   is made **inside the document's lock**, against the text the write lands on. A byte offset
-  only means something against the string it was computed from, so computing the spans from a
-  text read a moment earlier let a concurrent human edit slide them: the plugin's one-line
-  value landed over the tail of somebody's prose. That is well past what SPEC §11.2 accepts,
-  which is losing one machine *value*. The same holds for the uninstall purge, which removes
-  whole sections.
+  only means something against the string it was computed from, so spans computed from an
+  earlier read could let a concurrent human edit shift them and land a machine value over
+  someone's prose. A same-key race may lose one machine *value*, never human text. The same
+  holds for the uninstall purge, which removes whole sections.
 
 Errors: `capability_denied`, `invalid_argument`, `not_found`, `gone`, `too_large`,
 `limit_exceeded`, `unavailable`.
@@ -269,9 +260,8 @@ Errors: `capability_denied`, `invalid_argument`, `not_found`, `gone`, `too_large
 { "id": "01J8ZQ…", "text": "---\ntitle: Standup (moved)\n…" }
 ```
 
-Answers `WriteDocumentOutput`. Legal **only** when `created_by == "plugin:<caller>"`
-(SPEC §3.3: machine-owned documents "may be wholly authored/rewritten by their owning
-plugin"); anything else is `forbidden`. Applied as one CRDT transaction against the live
+Answers `WriteDocumentOutput`. Legal **only** when `created_by == "plugin:<caller>"`:
+a machine-owned document may be wholly rewritten by its owning plugin; anything else is `forbidden`. Applied as one CRDT transaction against the live
 document, so a concurrent human edit merges rather than vanishing.
 
 There is deliberately **no `delete_document`**: see §8.
@@ -286,8 +276,8 @@ There is deliberately **no `delete_document`**: see §8.
 
 Namespaced by the calling plugin — the namespace is not a parameter, so there is no query a
 plugin could ask that reaches another's keys. **This is where high-frequency machine state
-belongs** (SPEC §3.3): a sync cursor, an ETag, a `last_seen`. Uninstall retains KV by
-default so a reinstall is lossless (SPEC §6.2).
+belongs**: a sync cursor, an ETag, a `last_seen`. Uninstall retains KV by default so a
+reinstall is lossless (§7.3).
 
 Keys: `^[A-Za-z0-9._:-]{1,256}$`. Caps in §5.
 
@@ -301,8 +291,8 @@ Errors: `invalid_argument`, `too_large`, `limit_exceeded`, `unavailable`.
   "missing": ["folder"] }
 ```
 
-Admin-entered configuration, **secrets decrypted** — that is the point of the feature
-(SPEC §6.2: outbound HTTP with secrets is why backend plugins exist). `key` narrows to one
+Admin-entered configuration, **secrets decrypted** — that is the point of the feature:
+outbound HTTP with secrets is why backend plugins exist. `key` narrows to one
 entry; the answer is always a map, so one typed accessor covers both.
 
 `missing` lists declared keys with no value, so a plugin can report "not configured" rather
@@ -317,8 +307,8 @@ The two are different facts and the plugin cannot tell them apart from a result 
 second means a config key silently reads as unset forever.
 
 A value that is stored but cannot be **decrypted** is reported as *missing*, with a server
-log line. That is the `SESSION_SECRET`-rotated-without-`CONFIG_KEY` case (`dev-docs/resolved/OPERATIONS.md`,
-secret rotation): the honest answer to the plugin is "not configured", so it degrades the
+log line. That is what happens when `SESSION_SECRET` is rotated without `CONFIG_KEY` set:
+the honest answer to the plugin is "not configured", so it degrades the
 way it already knows how while an admin re-enters the value.
 
 Secrets are **pulled, never pushed** (they are not in `ddd_init`), never logged by the host,
@@ -350,14 +340,14 @@ Relayed to connected browsers over the sync socket as
   "payload": { … }, "at": "2026-09-24T06:00:01Z" }
 ```
 
-which an M2/M3 client ignores (PROTOCOL.md §9: *"Unknown `t` values: the client ignores
-them (forward compatibility with M4 plugin channels)"*) and an M4 kernel delivers as
-`kernel.events` type **`plugin:<id>:<event>`** with origin `{kind: "server", plugin: "<id>"}`
-— the shape `web/kernel-api/src/events.ts` already declares.
+which the kernel delivers as `kernel.events` type **`plugin:<id>:<event>`** with origin
+`{kind: "server", plugin: "<id>"}` — the shape `web/kernel-api/src/events.ts` declares. A
+client that does not know the frame ignores it ([`PROTOCOL.md`](PROTOCOL.md) §9: unknown `t`
+values are ignored).
 
 `user_id` targets one user's sessions; absent reaches every connected session (this is a
 shared workspace). **Ephemeral, no replay:** a client that was closed missed it, and a
-socket whose send queue is full drops it (PROTOCOL.md §6). State belongs in documents.
+socket whose send queue is full drops it ([`PROTOCOL.md`](PROTOCOL.md) §6). State belongs in documents.
 
 ### 3.10 `call_plugin`
 
@@ -386,7 +376,7 @@ may be called and with what:
 The server checks values with `ddd_core::shape::validate`, and the web kernel's
 `shapeFromJSON` answers the same way (`backend/crates/core/corpus/shapes.json` pins both).
 
-The rules, in the order they are checked (SPEC §6.3):
+The rules, in the order they are checked:
 
 | Rule | Refusal |
 |---|---|
@@ -404,8 +394,8 @@ code. The callee **shares the caller's deadline** — see §5. Top-level invocat
 cron, routes, the admin's test call) are not `call_plugin` and are not checked against
 `backend.exports`.
 
-`backend.calls` (`@kernel` 2.x) is refused at install with a message pointing at
-`dependencies`.
+A manifest with `backend.calls` (`@kernel` 2.x) is refused at install with a message
+pointing at `dependencies`.
 
 ### 3.11 `http_request`
 
@@ -434,9 +424,7 @@ The checks, **in this order** (the order is the security property):
    308 — the codes that carry a `Location`. The other 3xx are answers and come back as
    they are: **304 Not Modified** in particular, which is the reply to the conditional
    `GET` above and the entire reason a plugin stores `etag`/`last-modified` between runs.
-   (Following "every 3xx" looked for a `Location` a 304 never has, and refused the
-   cheapest correct thing a plugin can do — on its *second* run, once it had a validator
-   to send.) 300 and the deprecated 305 are likewise returned, not followed.
+   300 and the deprecated 305 are likewise returned, not followed.
 6. Timeout = `min(timeout_ms, PLUGIN_HTTP_TIMEOUT_MS, remaining invocation deadline)` — a
    `timeout_ms` may only *lower* the cap.
 7. A response body over the cap is `too_large`. Never truncated.
@@ -468,13 +456,11 @@ mapped one: `::ffff:a.b.c.d` (RFC 4291), `::ffff:0:a.b.c.d` (RFC 2765), `::a.b.c
 prefix, RFC 6052). The last is the one that matters in production: on an IPv6-only or
 dual-stack host behind a DNS64/NAT64 gateway — the default in several managed Kubernetes and
 IPv6-only cloud networks — `64:ff9b::a9fe:a9fe` *is* 169.254.169.254, and because the host
-resolves then **pins** the address this check is the only defence. Checking only
-`::ffff:` left three live routes to the metadata service the list exists to protect.
+resolves then **pins** the address this check is the only defence.
 
-An operator may allow specific CIDRs with `PLUGIN_HTTP_ALLOW_CIDRS` (SPEC §6.2's
-"admin-configurable allowlist") — that is how a self-hosted LAN service becomes reachable
-deliberately. The metadata addresses stay refused inside a widened range, in every encoding:
-"let my LAN through" never means "let the instance credentials through".
+An operator may allow specific CIDRs with `PLUGIN_HTTP_ALLOW_CIDRS` — that is how a
+self-hosted LAN service becomes reachable deliberately. The metadata addresses stay refused
+inside a widened range, in every encoding: "let my LAN through" never means "let the instance credentials through".
 
 Request rules: at most 32 headers, 4 KiB each; `host` and the hop-by-hop headers are
 refused; `authorization` is allowed (that is the point). `set-cookie` is stripped from the
@@ -489,9 +475,9 @@ Errors: `capability_denied`, `blocked`, `invalid_argument`, `too_large`, `timeou
 { "level": "info", "message": "imported 12 events" }
 ```
 
-**Not in SPEC §6.3's list, and here anyway.** A Wasm module has no useful stdout: without
-this, the only way to debug a plugin is to make it fail, and anything it printed would be
-invisible in the server's structured JSON log (SPEC §8) — no plugin id, no request id, no
+A Wasm module has no useful stdout: without this, the only way to debug a plugin is to make
+it fail, and anything it printed would be invisible in the server's structured JSON log — no
+plugin id, no request id, no
 level, nothing to filter on. Messages are attributed (`plugin=calendar`), capped at 4 KiB
 (truncated, not refused), and rate-limited to 100 lines per invocation.
 
@@ -515,8 +501,8 @@ Every export takes one JSON payload and answers with an envelope.
 | `ddd_event` | `EventPayload` → `null` | if `backend.events` is non-empty |
 
 `ddd_abi_version` is required because the manifest can lie and a stale `.wasm` can outlive
-the manifest that describes it — the same belt-and-braces the frontend loader applies to a
-stale offline bundle (SPEC §6.4). The install flow refuses a backend module without it, and
+the manifest that describes it — the same check the frontend loader applies to a stale
+offline bundle. The install flow refuses a backend module without it, and
 the host re-checks it at activation **before** running any of the plugin's own code.
 
 One export per kind, rather than one per hook/route/job, keeps the export surface fixed:
@@ -539,8 +525,7 @@ marks the plugin failed.
 "Once per instance" includes the instance activation warms to read `ddd_abi_version` and the
 export list: it is initialised on its way out of the pool for the first real call, not skipped
 because some earlier code path already touched it. A plugin that caches `capabilities` in a
-static can rely on that — it used to see its default on that one instance, which is the
-silent degradation the payload exists to prevent.
+static can rely on that.
 
 ### 4.2 Document hooks
 
@@ -551,7 +536,7 @@ silent degradation the payload exists to prevent.
   "document": { … } }
 ```
 
-The rules, and what each costs (SPEC §6.3):
+The rules, and what each costs:
 
 - **At-most-once, fire-and-forget, no retry.** Failures are logged and counted on the
   breaker. A plugin that must not miss a change reconciles on its cron run rather than
@@ -559,8 +544,8 @@ The rules, and what each costs (SPEC §6.3):
 - **Debounced 2 s per document**, with `coalesced` saying how many changes the delivery
   stands for, and a 30 s ceiling so a continuously-edited document still delivers.
 - **Never delivered to the plugin that caused the change.** Origin comes from the row's
-  `updated_by`/`deleted_by` (`Actor::as_stored`), which is "the last applier the server saw"
-  (SPEC §3.5). *Known consequence:* when a user and a plugin both touch one document inside
+  `updated_by`/`deleted_by` (`Actor::as_stored`), which is "the last applier the server saw".
+  *Known consequence:* when a user and a plugin both touch one document inside
   the debounce window, the last applier wins the attribution, so a delivery can be
   suppressed for a change the user made. Per-hook origin tracking through the CRDT costs
   far more than a two-second edge case is worth, and the per-document write cap catches the
@@ -568,7 +553,7 @@ The rules, and what each costs (SPEC §6.3):
 - **Ordering is per-document only.** There is no global order; nothing may assume one.
 - **`document` is capability-gated.** Without `documents: ["read"]` the payload carries the
   id, origin and seq and nothing else — a hooks-only plugin must not read the workspace
-  through the side door (SPEC §6.2). It is also absent on `document.deleted`.
+  through the side door. It is also absent on `document.deleted`.
 - **A purge is not a hook.** It happens 30 days after the `document.deleted` that already
   fired; there is nothing useful to do with it.
 
@@ -591,8 +576,8 @@ The rules, and what each costs (SPEC §6.3):
 - **No overlapping executions** per expression; a slot arriving while the previous run is
   in flight counts as missed. That is a property of the *job*, not of the scheduler, so the
   admin screen's "run cron now" takes the same claim and answers `409` when a run is already
-  going — a manual run racing the scheduled one gave M4's calendar plugin two
-  reconciliations that both read the pre-write state and both created a document per event.
+  going. Two concurrent runs of one reconciliation would both read the pre-write state and
+  both create the same documents.
 - `last_run` is persisted on the plugin's record, so a restart does not re-fire.
 - Dispatch on `index`, not on the clock: it is stable across restarts and reformatting.
 
@@ -601,7 +586,7 @@ The rules, and what each costs (SPEC §6.3):
 Declared as `backend.routes: ["POST /webhook", "GET /status"]`; reachable at
 `/api/plugins/<id>/<path>`. **Session-authenticated by default**; a path also listed in
 `capabilities.public-routes` is reachable without a session and is shown to the admin as the
-capability it is (SPEC §5.1, §6.2). **What decides is the approved set, not the manifest's
+capability it is. **What decides is the approved set, not the manifest's
 request:** an admin may uncheck a requested public route at approval, and then it needs a
 session like any other.
 
@@ -690,7 +675,7 @@ raise it.
 `deadline_ms` and should refuse rather than be interrupted mid-write. An outbound HTTP
 timeout is likewise capped by what is left, so a 10 s request cannot outlive a 5 s hook.
 
-**The circuit breaker** (SPEC §6.3) counts *host-side* failures — timeout, trap, unreadable
+**The circuit breaker** counts *host-side* failures — timeout, trap, unreadable
 answer, instantiation failure, pool exhaustion — and **not** a plugin's refusal:
 `ErrorCode::is_plugin_fault` is the split, and a plugin is never disabled for correctly
 reporting that a document does not exist. Five in a row disables it, with the reason
@@ -779,7 +764,7 @@ In order, and the first four happen **before anything is extracted**:
    the load plan reports the skip until it is enabled. `optionalDependencies` never block.
 4. `peerLibraries` ranges intersect with what the runtime bundle provides — one version of
    each library for every plugin, chosen once, because an import map cannot change after
-   load (SPEC §6.4). Checked against the **version** the bundle shipped, which the runtime
+   load. Checked against the **version** the bundle shipped, which the runtime
    build records in `runtime-manifest.json` next to each specifier's URL; a bundle with no
    recorded version degrades to the presence check and says so in a warning. Resolution runs
    over the plugins that will actually *load* (`enabled`), the same set the boot-time check
@@ -795,9 +780,9 @@ In order, and the first four happen **before anything is extracted**:
 ### 7.2 Approval, and the one capability an admin may widen
 
 Both install paths (admin upload, directory drop) land as **pending**, and activation is an
-explicit admin click (SPEC §6.2). The approval screen shows the requested capability list
+explicit admin click. The approval screen shows the requested capability list
 verbatim, and says in those words that installing a plugin runs its **frontend** code
-unsandboxed in every user's session — capabilities gate the *server* half only (SPEC §6.1).
+unsandboxed in every user's session — capabilities gate the *server* half only.
 
 The approved set may **narrow** anything. It may **extend** exactly one field:
 `http.hosts`.
@@ -817,25 +802,24 @@ Approving or enabling either one disables the other, with `disabled_reason`
 
 KV and in-document `%%%` data are **retained by default** so a reinstall is lossless. An
 explicit checkbox purges KV and queues a background job stripping the plugin's `%%%`
-sections through CRDT transactions, one document per transaction (SPEC §6.2).
+sections through CRDT transactions, one document per transaction.
 
 ---
 
 ## 8. Not in the ABI, and why
 
-- **`delete_document`.** SPEC §6.3's host-function list has none, and destructive actions
-  are a user's with an audit trail (SPEC §5.4). A plugin whose upstream item vanished marks
+- **`delete_document`.** Destructive actions are a user's, with an audit trail. A plugin whose upstream item vanished marks
   it (`status: cancelled` in its own section, `fm` as it likes) instead of removing a
-  meeting from someone's workspace because a feed hiccuped. **Open for v2** if a real case
-  needs it; it would need an owner check like `rewrite_document` plus an audit entry.
-- **`kv_list` / a KV prefix scan.** Not in the SPEC's list, and the one use case (a
+  meeting from someone's workspace because a feed hiccuped. If a real case needs it, it would
+  need an owner check like `rewrite_document` plus an audit entry.
+- **`kv_list` / a KV prefix scan.** The one use case (a
   uid → document-id index) is better served by `query_documents` on the plugin's own
   section: the projection already knows, and a 5 000-entry index would blow the value cap.
 - **Reading another plugin's KV or config.** By construction, not by check.
 - **A plugin-defined extension point on the server.** Extension points are a *frontend*
-  concept (SPEC §6.4); on the server, `call_plugin` to a dependency's `backend.exports` is
+  concept; on the server, `call_plugin` to a dependency's `backend.exports` is
   the whole composition story.
-- **Web Push / device registration.** v2 (SPEC §7, §10). `emit_client` reaches *connected*
+- **Web Push / device registration.** Not offered. `emit_client` reaches *connected*
   sessions only, and says so.
 - **Anything scheduled finer than a minute.** Cron is minute-resolution; a plugin needing
   seconds is asking for a worker the server does not offer.
@@ -884,9 +868,4 @@ mise run plugin-smoke    # build hello-backend and load it in a minimal Extism h
 
 **Keep the testable logic out of the wasm crate.** A plugin crate cannot be unit-tested on
 the host target — it links the Extism host imports — so pure logic belongs in a plain crate
-beside it and the wasm crate stays glue. `plugins/base/calendar/ics` was the worked
-example until that plugin was removed (2026-09-24); the pattern is unchanged, and so is
-the task that ran it — `mise run plugin-test` was **deleted with that crate** rather than
-left pointing at nothing, because a task that resolves to zero tests reports green.
-`mise.toml` keeps the removal note; bring the task back with the first plugin that has a
-pure crate to run.
+beside it and the wasm crate stays glue.
