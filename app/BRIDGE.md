@@ -1,16 +1,15 @@
 # `window.shell` — the capability bridge, v1
 
-**Status:** frozen for M5 (SPEC §7, §9 M5). Both halves are compiled separately and never
-see each other, so this document is the contract; where it and a doc comment disagree, this
-file wins and the comment is a bug.
+Both halves are compiled separately and never see each other, so this document is the
+contract; where it and a doc comment disagree, this file wins and the comment is a bug.
 
 **The two halves:**
 
-| half | where | owner |
-|---|---|---|
-| the Dart side — handlers, injection, the local server, the updater | `app/lib/**` | shell-bridge, shell-updater |
-| the JavaScript side — `kernel.capabilities`, boot, URL resolution | `web/kernel/src/runtime/{capabilities,shell-bridge}.ts`, `web/app/src/**` | web-shim |
-| the manifest endpoint | `backend/crates/server/src/routes/shell.rs` | server-bundle |
+| half | where |
+|---|---|
+| the Dart side — handlers, injection, the local server, the updater | `app/lib/**` |
+| the JavaScript side — `kernel.capabilities`, boot, URL resolution | `web/kernel/src/runtime/{capabilities,shell-bridge}.ts`, `web/app/src/**` |
+| the manifest endpoint | `backend/crates/server/src/routes/shell.rs` |
 
 **Three rules the whole design follows.** They are not style; each one prevents a specific
 failure that has to be designed out rather than tested out.
@@ -27,7 +26,7 @@ failure that has to be designed out rather than tested out.
    in the browser after a native attempt risks doing the thing twice (two save dialogs, two
    notifications). This is why the shim defines only the methods that are registered.
 
-**Plugins never contain Dart** (SPEC §7). A plugin gets native behaviour by calling
+**Plugins never contain Dart.** A plugin gets native behaviour by calling
 `kernel.capabilities`, which calls this bridge. There is no plugin-supplied native code, no
 per-plugin bridge surface, and no way for a plugin to add one.
 
@@ -35,14 +34,13 @@ per-plugin bridge surface, and no way for a plugin to add one.
 
 ## 1. Scope
 
-v1 is SPEC §7: `filesystem` (export/import) and `notifications` (scheduled local —
-the ones that fire with the app closed), plus the two things the shell needs for itself,
-`auth` and `boot`. `folder` (§4.5, the notes folder) was added later as new methods, which
-§8 allows without a version bump; the Linux desktop shell carries it too.
+v1 covers `filesystem` (export/import) and `notifications` (scheduled local — the ones
+that fire with the app closed), plus the two things the shell needs for itself, `auth` and
+`boot`, and `folder` (§4.5, the notes folder). `folder` consists of methods added without a
+version bump, which §8 allows; the Linux desktop shell carries it too.
 
-**Not in v1, and plugin authors are told so:** server push, device registration, Web Push,
-background sync, camera, contacts, geolocation, biometrics. Those are v2 conversations
-(SPEC §10).
+**Not in v1:** server push, device registration, Web Push, background sync, camera,
+contacts, geolocation, biometrics.
 
 ---
 
@@ -123,13 +121,12 @@ session is a bearer token it keeps; the page reads `bearerToken`, skips the serv
 **Linux desktop shell** (`desktop/`) loads the page from the server's own origin instead, and
 says so with `session: "cookie"`: the page then behaves exactly like a browser tab — cookie
 login, service worker, the workspace-export link — and only uses the native capabilities the
-bridge carries (today, `folder`). `web/app/src/boot/shell.ts` `shellOwnsSession()` is the one
+bridge carries (currently `folder`). `web/app/src/boot/shell.ts` `shellOwnsSession()` is the one
 test; `inShell()` still answers "is there a native shell at all".
 
-Both `version` and `bridgeVersion` are present and equal: `version` is what the committed
-kernel reads (`web/kernel/src/runtime/capabilities.ts`, frozen in M3), `bridgeVersion` is the
-name M5 uses. Emitting both costs nothing and avoids editing a frozen surface; the kernel
-accepts either.
+Both `version` and `bridgeVersion` are present and equal: `version` is what the kernel
+reads (`web/kernel/src/runtime/capabilities.ts`), `bridgeVersion` is the name this document
+uses. The kernel accepts either.
 
 **The detection rule, in full:**
 
@@ -152,7 +149,7 @@ this device can do. **It is never the gate**; presence of the method is. Two sou
 would eventually disagree, and the one that matters is the one that gets called.
 
 `Object.freeze` on the injected object is a courtesy, not a boundary: frontend plugins run
-unsandboxed (SPEC §6.1) and can call `ddd_shell_v1` directly. The bridge's job is ergonomics
+unsandboxed and can call `ddd_shell_v1` directly. The bridge's job is ergonomics
 and graceful degradation, not containment.
 
 ---
@@ -167,20 +164,20 @@ and graceful degradation, not containment.
 | `auth.setToken` | `{ token: string }` | `null` |
 | `auth.clearToken` | — | `null` |
 
-Stored in the platform keystore (`flutter_secure_storage`), alongside the server URL
-(SPEC §5.2: "stored in native secure storage"). Web storage would not do: it is evictable,
+Stored in the platform keystore (`flutter_secure_storage`), alongside the server URL. Web
+storage would not do: it is evictable,
 and it dies with a bundle swap.
 
 The token is **also baked into the page** as `window.shell.bearerToken`, because
 `web/app/src/main.tsx` reads it synchronously during boot, before the kernel exists. The
 namespaced `auth.*` methods are for what happens afterwards: a webview that was
 re-authenticated natively picks up the new token without a reload, and a page that logged in
-itself hands the issued token back (`setBearerToken`, kept as the flat spelling the committed
-boot code already uses).
+itself hands the issued token back (`setBearerToken`, the flat spelling the boot code
+uses).
 
 **This is not a weakening of anything.** The page must authenticate to the server, so the
-token has to reach JavaScript; plugins are full-trust and already share the session
-(SPEC §6.1). The alternative — a local proxy that holds the token and injects it — is worse,
+token has to reach JavaScript; plugins are full-trust and already share the session. The
+alternative — a local proxy that holds the token and injects it — is worse,
 and §6 says why.
 
 `auth` is deliberately **not** exposed through `kernel.capabilities`: a plugin has no business
@@ -195,8 +192,8 @@ reading the token from an API that looks like a feature. It is app-boot plumbing
 | `filesystem.exportWorkspace` | — | `null` |
 | `filesystem.importFile` | `{ accept?: string[] }` | `{ name, mime, size, data } \| null` |
 
-`export`/`pick` are the generic pair the frozen `kernel.capabilities.filesystem` API is
-written against. `exportWorkspace`/`importFile` are the named operations M5's UI calls.
+`export`/`pick` are the generic pair the `kernel.capabilities.filesystem` API is written
+against. `exportWorkspace`/`importFile` are the named operations the app's UI calls.
 
 **A picked file arrives whole**, base64, because a native picker's file has no `File` object
 in the page's realm to read from later. A dismissed picker resolves **empty** (`pick`) or
@@ -204,7 +201,7 @@ in the page's realm to read from later. A dismissed picker resolves **empty** (`
 "changed my mind".
 
 **`exportWorkspace` is not `export(bytes)`.** It is `GET /api/admin/export` — a streamed zip
-of every document (SPEC §5.1, the no-Mongo recovery path) — fetched natively with the bearer
+of every document (the no-Mongo recovery path) — fetched natively with the bearer
 token and handed to the share sheet. Through JavaScript it would mean holding the whole
 archive in the webview's heap. It is **admin-only server-side**: a non-admin gets a 403
 (`denied`) however the UI is drawn, so the affordance must be gated on the user's admin flag.
@@ -222,7 +219,7 @@ archive in the webview's heap. It is **admin-only server-side**: a non-admin get
 
 Five things here are contract, not implementation:
 
-* **`permission()` is synchronous** on the JavaScript side, because the frozen web API is.
+* **`permission()` is synchronous** on the JavaScript side, because the kernel's web API is.
   The shim returns a value baked in at document start and refreshed after `request()`.
 * **`atIso` is the canonical instant** — ISO-8601, normalized to UTC. The kernel's
   `schedule(notification, at)` takes epoch ms and the shim converts. `list()` entries carry
@@ -240,7 +237,7 @@ Five things here are contract, not implementation:
   alarm and calendar apps). Say "around" in the UI rather than asking for a permission the
   app does not deserve.
 
-`scheduled` and `list` are the same handler under two names — `scheduled()` is what the frozen
+`scheduled` and `list` are the same handler under two names — `scheduled()` is what the
 kernel calls, `list` is what this document names it.
 
 ### 4.4 `boot` — the shell's own handlers
@@ -250,7 +247,7 @@ kernel calls, `list` is what this document names it.
 | `boot.ok` | — | `null` |
 | `boot.failed` | `{ reason: string }` | `null` |
 
-`bootOk()` is what makes auto-revert work (§7). The web-shim area calls it **once, after the
+`bootOk()` is what makes auto-revert work (§7). The web side calls it **once, after the
 kernel is up and the first plugin has activated** — not on `DOMContentLoaded`, which a broken
 bundle also reaches. `bootFailed(reason)` is optional politeness; the shell's watchdog covers
 silence.
@@ -326,8 +323,8 @@ update installs — so an unchecked value reaches the filesystem with the *serve
 it, over the app's own private storage. `../../shared_prefs` deletes the keystore holding
 the bearer token; `..` deletes the whole files directory; `state.json` and `.staging`
 collide with the store's own names. A server that also serves file bytes matching its own
-hashes passes every other check in the updater, so this parse is the only gate. `files[].path`
-has had the same treatment since M5 (`isSafeBundlePath`); this closes the other half.
+hashes passes every other check in the updater, so this parse is the only gate.
+`files[].path` gets the same check (`isSafeBundlePath`).
 
 **Plugin files are part of the bundle.** An offline boot with the kernel but without
 `shell-ui` renders nothing, so the manifest spans `WEB_DIST_DIR` *and* every served plugin's
@@ -365,7 +362,7 @@ webview sees — two caches, two update stories, one of them invisible to the re
 with no same-origin check and `package:http` follows by default, so one `301` from the
 configured server — an operator moving the deployment, an identity proxy bouncing an
 unrecognised request to an SSO host — would hand a 30-day-idle / 180-day-absolute workspace
-credential (SPEC §5.2) to whatever host the `Location` names, silently. The server never
+credential to whatever host the `Location` names, silently. The server never
 legitimately redirects `/api`, so a redirect is a misconfiguration or an attack and both are
 better reported than followed: the caller sees a non-200 and the log line names the cause.
 
@@ -388,7 +385,7 @@ The active bundle is served by a `dart:io` `HttpServer` bound to **`127.0.0.1:41
 **Why not `shouldInterceptRequest` / a custom scheme:**
 
 * `http://127.0.0.1` is a **secure context** by specification. The PWA is a PWA: IndexedDB for
-  the whole projection (SPEC §4.1), a Web Worker for the search index (SPEC §4.2),
+  the whole projection, a Web Worker for the search index,
   `crypto.subtle`, `navigator.storage.persist()`. A custom scheme is not a secure context and
   several of those simply are not there.
 * Interception is Android-only and does not fire for every subresource or for service workers
@@ -396,23 +393,23 @@ The active bundle is served by a `dart:io` `HttpServer` bound to **`127.0.0.1:41
 
 **The port is fixed, and that is load-bearing.** Every store the app depends on is keyed by
 origin — port included. An ephemeral port would hand the user an empty workspace on every
-launch and re-bootstrap 5 000 documents (SPEC §9 M2 gate). It is also the origin that must
+launch and re-bootstrap every document. It is also the origin that must
 appear in the server's `APP_ORIGIN` allowlist, which cannot allowlist a moving port.
 
 ### Origin implications for auth
 
-1. **Cookies are out; bearer tokens are in.** SPEC §5.2 says so, and the origin split means a
-   cookie would not be attached anyway: every API call from the page is cross-origin.
+1. **Cookies are out; bearer tokens are in.** The origin split means a cookie would not be
+   attached anyway: every API call from the page is cross-origin.
 2. **`APP_ORIGIN` must include `http://127.0.0.1:41847`.** Both the CORS allowlist and the
-   mandatory WebSocket Origin check (SPEC §4.3) see the loopback origin. Forgetting this
+   mandatory WebSocket Origin check see the loopback origin. Forgetting this
    produces a shell that logs in and then never syncs, which is why the login screen
    pre-flights and says so in words an operator can act on.
 3. **The web side must resolve API and socket URLs against `window.shell.serverBaseUrl`.** In
-   a browser the API is same-origin; in the shell it is not. Three places resolve URLs against
-   the page origin today and are the web-shim area's M5 work:
-   `web/app/src/boot/api.ts` (hard-coded `/api`), `SessionHost` (`apiBase` option — already
-   supported, just needs passing), and `resolveSyncUrl` / `bootstrap.ts` / `doc-hydration.ts`
-   (`location.href`).
+   a browser the API is same-origin; in the shell it is not. `apiBase()`
+   (`web/app/src/boot/shell.ts`) is the REST base, and `web/app/src/boot/kernel-init.ts`
+   passes `serverBaseUrl` to the kernel for the bootstrap URL, the sync socket and the
+   hydration fallback. Plugin modules and the import map stay page-relative: they are part of
+   the bundle (§5).
 
 ### What the local server is not
 
@@ -434,7 +431,7 @@ Required hardening:
 
 ## 7. The failed-boot / auto-revert state machine
 
-SPEC §7: "keeps the previous bundle, auto-reverts after two failed boots." The counter is
+The shell keeps the previous bundle and auto-reverts after two failed boots. The counter is
 **native** (`<app support>/bundles/state.json`), because the thing that would report a failed
 boot is the thing that failed.
 
@@ -456,13 +453,13 @@ failedBoots ≥ 2  → previous bundle? ──yes──→ revert: active ↔ pr
                  └──no───→ the native recovery screen
 ```
 
-Five properties, each one deliberate:
+Each property is deliberate:
 
 * **The increment is written before the load.** A crash that takes the process with it still
   counts. Nothing may defer that write.
 * **Only `bootOk()` clears it.** Rendering is not booting; a bundle that paints a shell and
   then throws has not booted.
-* **Attempt two is safe mode** (`?safe=1`, SPEC §6.1: base plugins only). A bundle that boots
+* **Attempt two is safe mode** (`?safe=1`: base plugins only). A bundle that boots
   in safe mode has a broken *plugin*, not a broken bundle — reverting would not fix it, and the
   user is better off in a working app with a notice than one version back. So the second
   attempt is the diagnostic, and only its failure reverts.
@@ -526,7 +523,7 @@ by the web build into `shell-bundle.json`; the server reads it there.
 ## 9. Frozen surface
 
 Changing any of these breaks a shell or a bundle already in the field. They move only with
-the version rules in §8, and every change is announced in `app/CONTRACTS.md`.
+the version rules in §8.
 
 * the handler name `ddd_shell_v1`, the envelope keys (`v`, `id`, `capability`, `method`,
   `params`, `ok`, `result`, `error.code`, `error.message`) and the six error codes;

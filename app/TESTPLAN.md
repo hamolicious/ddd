@@ -1,29 +1,27 @@
-# `app/TESTPLAN.md` — the on-device acceptance script for M5
+# On-device test plan for the Android shell
 
-SPEC §9 M5's acceptance is *"CodeMirror editing with the Android soft keyboard; offline boot;
-OTA update + revert"*, and §7 adds two capabilities that only exist on a device: scheduled
-local notifications **that fire with the app closed**, and the platform file dialogs.
+The Android shell's acceptance criteria are CodeMirror editing with the Android soft
+keyboard, offline boot, and OTA update + revert. Two capabilities also only exist on a
+device: scheduled local notifications **that fire with the app closed**, and the platform
+file dialogs.
 
-None of that can be checked by `mise run shell-test` or `mise run shell-apk`. Both gates are
-green and both are blind to it: the first runs on the host Dart VM with no Android at all, and
-the second proves the APK links, not that it works. **This file is the rest of the gate**, and
-until someone runs it on hardware, M5's acceptance criteria are unverified — not passed, not
-failed.
+None of that can be checked by `mise run shell-test` or `mise run shell-apk`. Both are blind
+to it: the first runs on the host Dart VM with no Android at all, and the second proves the
+APK links, not that it works. **This file is the rest of the gate**: until it has been run on
+hardware, those criteria are unverified — not passed, not failed.
 
 It is written to be run by a person with a phone and a laptop in one sitting (about 45
 minutes). Nothing here needs Play Store signing, an emulator or root.
 
 ## Why this is a manual script and not a test
 
-The integration machine has no `/dev/kvm` — no kernel module, no device node — so a headless
-emulator would fall back to full software emulation, which does not boot an API 36 system
-image in any useful time. A physical device over `adb` is the cheaper path anyway: the
-soft-keyboard criterion is specifically about a real IME, and "fires with the app closed" is
-specifically about real Doze.
+Without KVM, a headless emulator falls back to full software emulation, which does not boot
+an API 36 system image in any useful time. A physical device over `adb` is the cheaper path
+anyway: the soft-keyboard criterion is specifically about a real IME, and "fires with the app
+closed" is specifically about real Doze.
 
-Automating this later is worth it and is not hard — `integration_test` + `flutter drive`
-covers everything except the notification and the share sheet, which need UiAutomator. That is
-a follow-up, not a blocker.
+`integration_test` + `flutter drive` could automate everything here except the notification
+and the share sheet, which need UiAutomator.
 
 ---
 
@@ -96,7 +94,7 @@ adb shell run-as com.example.app cat files/bundles/state.json
 - `logcat` shows no `boot:` line about a failure.
 
 **Then verify the boot guard actually cleared** — this is the single most load-bearing state
-in the milestone:
+in the shell:
 
 ```bash
 adb shell run-as com.example.app cat files/bundles/state.json
@@ -113,7 +111,7 @@ called `bootOk`).
 
 ---
 
-## 2. CodeMirror editing with the soft keyboard — SPEC §9 M5 acceptance
+## 2. CodeMirror editing with the soft keyboard
 
 This is the criterion most likely to fail, and the reason `android:windowSoftInputMode` is
 `adjustResize` rather than `adjustPan` in `AndroidManifest.xml`.
@@ -132,7 +130,7 @@ This is the criterion most likely to fail, and the reason `android:windowSoftInp
 **Expect**
 
 - **The caret is visible at every moment of typing.** This is the acceptance criterion, stated
-  plainly. If it slides under the keyboard and stays there, M5 fails here.
+  plainly. If it slides under the keyboard and stays there, this step fails.
 - Characters appear in order, with no dropped or doubled keystrokes — a real IME composes text,
   and CodeMirror's handling of composition events in a webview is exactly what is being tested.
 - Selection handles are draggable and land where you put them.
@@ -149,7 +147,7 @@ handles cannot be grabbed.
 
 ---
 
-## 3. Offline boot — SPEC §9 M5 acceptance
+## 3. Offline boot
 
 **Steps**
 
@@ -164,8 +162,8 @@ handles cannot be grabbed.
 
 - The app reaches the workspace with no login screen and no download screen. The token is in
   the keystore and the bundle is on disk; neither needs the network.
-- Documents open and are **readable and searchable** — that is the projection in IndexedDB
-  (SPEC §4.1), which survives because the origin is the fixed loopback port and never changes.
+- Documents open and are **readable and searchable** — that is the projection in IndexedDB,
+  which survives because the origin is the fixed loopback port and never changes.
 - A sync indicator shows offline. Editing a document you have opened before still works.
 - `logcat` shows the background update check failing **silently** — no banner, no dialog. Being
   offline is the normal case, not an error to report.
@@ -177,7 +175,7 @@ Restore: aeroplane mode off, `adb reverse tcp:8080 tcp:8080`.
 
 ---
 
-## 4. OTA update — SPEC §9 M5 acceptance
+## 4. OTA update
 
 **Steps**
 
@@ -212,12 +210,12 @@ Restore: aeroplane mode off, `adb reverse tcp:8080 tcp:8080`.
 - `state.json` now has a `pending` version alongside the unchanged `active`.
 - The staged bytes are on disk before the restart:
   `adb shell run-as com.example.app ls files/bundles/`.
-5. Tap **Restart**. The new bundle boots, `active` is now the new version, `pending` is gone,
+6. Tap **Restart**. The new bundle boots, `active` is now the new version, `pending` is gone,
    `failedBoots` is `0`, and your change is visible.
-6. Tap through to a document to confirm the workspace survived the swap — same origin, same
+7. Tap through to a document to confirm the workspace survived the swap — same origin, same
    IndexedDB, no re-bootstrap.
 
-**Also check the delta path** (this is what makes an update cheap): before step 5, in `logcat`,
+**Also check the delta path** (this is what makes an update cheap): before step 6, in `logcat`,
 the updater should have fetched only the files whose hashes changed, not all 75. A one-line
 plugin change should move a handful of files and a few tens of KB.
 
@@ -226,7 +224,7 @@ page changes underneath you, or the restart lands on the old bundle.
 
 ---
 
-## 5. Revert after two failed boots — SPEC §9 M5 acceptance
+## 5. Revert after two failed boots
 
 The point of this one: the shell must recover from a bundle that **cannot run its own
 JavaScript**, so nothing in the recovery path may depend on the page.
@@ -253,13 +251,13 @@ JavaScript**, so nothing in the recovery path may depend on the page.
   start"* — never a white webview left on screen. `failedBoots` is now `1`.
 - **Attempt 2:** the same, but the bundle is loaded in **safe mode** (`?safe=1`, base plugins
   only) and a banner says so in plain words — *"…running with plugins switched off"* — not
-  "safe mode" and not a spec reference. `failedBoots` is now `2`.
+  "safe mode". `failedBoots` is now `2`.
 - **Attempt 3:** the shell **reverts to the previous bundle**, boots it, and shows a banner:
   *"ddd went back to an earlier version: …"* with the reason in it.
   `state.json`'s `active` is the older version.
 - **The notify half is the part to watch.** A silent revert is a user discovering their app is
-  mysteriously older; the criterion in the M5 brief is "revert to previous **+ notify**", and
-  the banner is that notification.
+  mysteriously older; the criterion is "revert to previous **+ notify**", and the banner is
+  that notification.
 - The reverted app works: documents open, sync resumes.
 
 **Then check the quarantine**: the broken version must not be re-downloaded and re-installed
@@ -271,7 +269,7 @@ not revert, or if it reverts with no banner.
 
 ---
 
-## 6. Scheduled notification with the app closed — SPEC §7
+## 6. Scheduled notification with the app closed
 
 The capability that most justifies the shell existing: a browser tab cannot do this.
 
@@ -331,7 +329,7 @@ dies across a reboot.
 
 ---
 
-## 7. Export and import — SPEC §7 `filesystem`
+## 7. Export and import (`filesystem`)
 
 **Steps**
 
@@ -346,7 +344,7 @@ dies across a reboot.
    The MIME must come from the picker, not be guessed from a name that does not exist.
 7. **Dismiss the picker.** Again: no error, nothing logged loudly.
 8. **Export the workspace** (admin only). The zip of every document arrives — this is the
-   no-Mongo disaster-recovery path of SPEC §5.1, reached from the phone.
+   no-Mongo disaster-recovery path, reached from the phone.
 9. As a **non-admin** user, confirm the workspace export is refused with a readable "you do not
    have permission" rather than a generic failure.
 
@@ -378,6 +376,5 @@ version, and the keyboard used for §2. A failure is only useful with the `logca
 around it (`adb logcat -s flutter:V`) and, for anything about boots or updates, the
 `state.json` before and after.
 
-If §2, §3, §4 or §5 fails, **M5's acceptance is not met** — those four are the criteria SPEC
-§9 names. §6 and §7 are SPEC §7 capability scope: a failure there is a bug to fix, not a
-milestone that did not land.
+If §2, §3, §4 or §5 fails, **the shell's acceptance criteria are not met**. §6 and §7 cover
+the native capabilities: a failure there is a bug to fix.
