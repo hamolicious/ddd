@@ -8,6 +8,7 @@
   "x-tailwind": true,
   "kernel": "^3.0",
   "dependencies": {
+    "commands": "^3.0",
     "document-surface": "^2.0",
     "markdown": "^3.0",
     "router": "^2.0",

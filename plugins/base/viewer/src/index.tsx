@@ -16,7 +16,8 @@
  *   through `_shared/fm-display.ts` so any plugin that shows `fm` agrees on what a
  *   key is.
  * - **Honour `full-width: true`** in the frontmatter: the column fills the pane with
- *   15px gutters instead of the reading measure (`width.ts`).
+ *   15px gutters instead of the reading measure (`width.ts`). "Toggle full width" in the
+ *   palette writes or removes that key on the document on screen.
  * - **List the notes filed inside it** in a footer after the body (`ChildrenFooter.tsx`),
  *   from `folders`' tree when that plugin is enabled.
  * - **Render an attachment wrapper document as a file preview** (SPEC §3.6). A wrapper
@@ -40,14 +41,15 @@ import { OFFLINE_COPY_HEADER, OfflineCopyNote, OfflineCopyState, offlineCopies }
 import type { Kernel } from "@kernel";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
-import { addMode, type DocumentModeProps } from "plugin:document-surface";
+import { addCommand } from "plugin:commands";
+import { addMode, currentDocument, currentRow, type DocumentModeProps } from "plugin:document-surface";
 import { bodyOf, render, renderAttachment, renderDocLink, type MarkdownRenderer } from "plugin:markdown";
 import { addRoute } from "plugin:router";
 import { addView } from "plugin:shell-ui";
 
 import { ChildrenFooter, type ChildrenSource } from "./ChildrenFooter.js";
 import { FmHeader } from "./FmHeader.js";
-import { columnClasses, isFullWidth } from "./width.js";
+import { FULL_WIDTH_KEY, columnClasses, isFullWidth } from "./width.js";
 import {
   formatBytes,
   previewKindFor,
@@ -128,6 +130,32 @@ export default async function activate(kernel: Kernel): Promise<void> {
       </svg>
     ),
     component: Read,
+  });
+
+  // Off removes the key rather than writing `false`: the default needs no line.
+  addCommand({
+    id: "viewer.toggleFullWidth",
+    title: "Toggle full width",
+    category: "Document",
+    icon: "arrows-horizontal",
+    when: () => currentDocument() !== undefined,
+    run: async () => {
+      const id = currentDocument();
+      if (id === undefined) return;
+      const splice = kernel.documents.splice;
+      try {
+        if (isFullWidth(currentRow()?.fm)) await splice.removeFrontmatterKey(id, FULL_WIDTH_KEY);
+        else await splice.setFrontmatterValue(id, FULL_WIDTH_KEY, true);
+      } catch (error) {
+        kernel.log.error("viewer: toggling full width failed", { id, error });
+        kernel.ui.notify({
+          id: `viewer.full-width.${id}`,
+          level: "error",
+          message: "Could not change this note's width.",
+          detail: error instanceof Error ? error.message : String(error),
+        });
+      }
+    },
   });
 
   // A bare file, by attachment id: the wrapper page without the wrapper.
