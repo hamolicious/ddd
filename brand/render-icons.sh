@@ -10,7 +10,7 @@ render() {
   mkdir -p "$(dirname "$3")"
   if [[ "${4:-}" == opaque ]]; then
     # iOS rejects icons with an alpha channel.
-    rsvg-convert -w "$2" -h "$2" "$1" | magick - -background white -alpha remove -alpha off "PNG24:$3"
+    rsvg-convert -w "$2" -h "$2" "$1" | magick - -background white -alpha remove -alpha off -define png:exclude-chunks=date,time "PNG24:$3"
   else
     rsvg-convert -w "$2" -h "$2" "$1" -o "$3"
   fi
@@ -53,4 +53,4 @@ render $mask 512 app/web/icons/Icon-maskable-512.png
 # Flutter: Windows.
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 for s in 16 24 32 48 64 256; do render $any $s "$tmp/$s.png"; done
-magick "$tmp"/{16,24,32,48,64,256}.png app/windows/runner/resources/app_icon.ico
+magick "$tmp"/{16,24,32,48,64,256}.png -define png:exclude-chunks=date,time app/windows/runner/resources/app_icon.ico
