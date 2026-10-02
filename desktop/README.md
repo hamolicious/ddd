@@ -49,7 +49,12 @@ First match wins:
 mise run desktop-run          # against the local server on :$PORT
 cargo install tauri-cli --version '^2'
 mise run desktop-bundle       # .deb + AppImage under target/release/bundle/
+mise run desktop-install      # ~/.local/bin/ddd, its icons and launcher entry
 ```
+
+The icons in `icons/` are rendered from `brand/` (`brand/render-icons.sh`). On Linux, Tauri
+compiles the *first* PNG of `bundle.icon` in as the window icon, which is why `icon.png`
+(512 px) leads that list.
 
 A debug build keeps its webview data (cookies, IndexedDB, service worker) in
 `~/.local/share/app.ddd.desktop/dev-webview/`, apart from the installed app's. The
