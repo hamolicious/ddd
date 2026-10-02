@@ -1602,15 +1602,15 @@
     "semantic_hash": ""
   },
   "plugins/base/viewer/src/FmHeader.tsx": {
-    "mtime": 1790642269.2634497,
-    "seen": 1790642337.760072,
-    "ast_hash": "d6d34e089c3abc76144664ac87bde6ac",
+    "mtime": 1790938221.338535,
+    "seen": 1790938380.518116,
+    "ast_hash": "c9b0ea9344cd091a8cb6bb6662123b4e",
     "semantic_hash": ""
   },
   "plugins/base/viewer/src/index.tsx": {
-    "mtime": 1790724454.9305193,
-    "seen": 1790727220.265065,
-    "ast_hash": "ceddeef1678f1de4e6edc5d2d0ab6e23",
+    "mtime": 1790938221.3374097,
+    "seen": 1790938380.5181172,
+    "ast_hash": "9f079f7f52325e79f4251bd8e1125858",
     "semantic_hash": ""
   },
   "plugins/base/viewer/src/wrapper.test.ts": {
@@ -4230,14 +4230,14 @@
     "semantic_hash": ""
   },
   "desktop/tauri.conf.json": {
-    "mtime": 1790936832.1610484,
-    "seen": 1790936901.9132893,
+    "mtime": 1790936971.3171027,
+    "seen": 1790938380.505816,
     "ast_hash": "8646958bbd20cfa17276d57b498c77d6",
     "semantic_hash": ""
   },
   "desktop/README.md": {
-    "mtime": 1790936892.3865962,
-    "seen": 1790936901.9328945,
+    "mtime": 1790936971.3171027,
+    "seen": 1790938380.5267463,
     "ast_hash": "b18c577dd90d0a4c1d34e4a0bf6fced3",
     "semantic_hash": ""
   },
@@ -4290,9 +4290,9 @@
     "semantic_hash": ""
   },
   "plugins/base/viewer/src/FmHeader.test.tsx": {
-    "mtime": 1790642294.062957,
-    "seen": 1790642337.7600706,
-    "ast_hash": "3d32be0f1f3f032fbacae2ff2cdf4451",
+    "mtime": 1790938227.5841575,
+    "seen": 1790938380.5181146,
+    "ast_hash": "f5055b4c2942dc75721e1d45e217212f",
     "semantic_hash": ""
   },
   "plugins/base/_shared/conditions-children.ts": {
@@ -5028,9 +5028,9 @@
     "semantic_hash": ""
   },
   "plugins/base/viewer/src/ChildrenFooter.tsx": {
-    "mtime": 1790886404.5913224,
-    "seen": 1790886835.680794,
-    "ast_hash": "e4272aaa0c1f719c15abd4f75a71206d",
+    "mtime": 1790938221.338602,
+    "seen": 1790938380.5181131,
+    "ast_hash": "7b6338f64af27289982b0ef08256c994",
     "semantic_hash": ""
   },
   "backend/crates/core/corpus/shapes.json": {
@@ -5625,6 +5625,18 @@
     "mtime": 1790935263.2140203,
     "seen": 1790936901.9124744,
     "ast_hash": "c17c0dc3f5dbd0fa5e921a4304a0bece",
+    "semantic_hash": ""
+  },
+  "plugins/base/viewer/src/width.test.ts": {
+    "mtime": 1790938221.309755,
+    "seen": 1790938380.5181181,
+    "ast_hash": "6045d218ab067c750b1c6a75404064ab",
+    "semantic_hash": ""
+  },
+  "plugins/base/viewer/src/width.ts": {
+    "mtime": 1790938221.3076024,
+    "seen": 1790938380.5181193,
+    "ast_hash": "5a46758482ae7317a3aa0f278be026a6",
     "semantic_hash": ""
   }
 }
