@@ -1,16 +1,15 @@
 # `ddd-core` — the shared core
 
-Everything in this crate runs **identically on the server and in the client
-kernel** (compiled to `wasm32`). Parity between offline and online behaviour is by
-construction: one implementation, two build targets (SPEC §2, §3.4, §4.2).
-`corpus/` is the regression net that keeps it honest.
+Parsing, title resolution, dates, the filter DSL, splices and the query engine. The same
+code runs on the server and, compiled to `wasm32`, in the client kernel, so offline and
+online behaviour match. `corpus/` holds the shared conformance cases.
 
 Three build shapes:
 
 ```
 cargo test  -p ddd-core                        # native, `mongo` feature on
 cargo check -p ddd-core --no-default-features  # the Wasm shape (no bson)
-mise run wasm                                           # wasm32 + wasm-bindgen + smoke test
+mise run wasm                                  # wasm32 + wasm-bindgen + smoke test
 ```
 
 `bson` is only reachable from `filter::mongo`, behind the `mongo` feature.
@@ -18,8 +17,10 @@ mise run wasm                                           # wasm32 + wasm-bindgen 
 ## The client ABI (`src/wasm.rs`, feature `wasm`)
 
 `mise run wasm` builds this crate for `wasm32-unknown-unknown` and runs
-wasm-bindgen over it, writing `web/kernel/src/wasm/pkg/`. Five exports, JSON in and
-out:
+wasm-bindgen over it, writing `web/kernel/src/wasm/pkg/`. It needs
+`rustup target add wasm32-unknown-unknown` once, and either `wasm-pack` or a
+`wasm-bindgen` CLI whose version exactly matches the `wasm-bindgen` crate in
+`Cargo.toml`. Exports, JSON in and out:
 
 | Export | Returns |
 |---|---|
@@ -28,13 +29,13 @@ out:
 | `core_semantics_version()` | `CORE_SEMANTICS_VERSION`, compared against the sync handshake |
 | `normalize_date(input)` | the canonical date form, so client-side sorting matches |
 | `resolve_title(text)` | the resolved title without a full parse round trip |
+| `QueryEngine` | class wrapping the query engine (§7): `new`, `load(json)`, `upsert(rows_json)`, `remove(ids_json)`, `run(plan_json)`, `to_json`, `len`, `is_empty` |
 
-**Filter compilation is deliberately absent**: compiling to Mongo needs `bson` and
-belongs to the server (SPEC §4.2). The TypeScript half of the contract is
-`web/kernel/src/wasm/core-wasm.d.ts`; the two change together. JSON strings rather
-than `JsValue` trees keep the boundary loggable and drop a dependency.
+Filter compilation to Mongo is not exported: it needs `bson` and runs only on the
+server. The TypeScript side of this ABI is `web/kernel/src/wasm/core-wasm.d.ts`;
+change both together.
 
-Three properties every function here holds to:
+Every function here is:
 
 - **Total.** Any input, however malformed, produces an answer. Parsing never
   errors; it drops the offending line and records a `Diagnostic`.
@@ -49,7 +50,7 @@ Three properties every function here holds to:
 
 ## 1. Document layout
 
-A document is one string with three regions (SPEC §3.1):
+A document is one string with three regions:
 
 ```markdown
 ---
@@ -159,9 +160,9 @@ Other line rules:
   `#` is literal.
 - Keys must match `^[A-Za-z0-9_-]{1,64}$`. A non-conforming key is **dropped
   from `fm`, and the text is left untouched** — `fm_parse_error` is set.
-- **Duplicate keys: last occurrence wins.** This is a defined resolution rule
-  (it is how per-key LWW is reconstructed on plain text, SPEC §3.3), so it emits
-  a `duplicate_key` diagnostic but does **not** set `fm_parse_error`.
+- **Duplicate keys: last occurrence wins.** This is a defined rule (per-key
+  last-writer-wins on plain text), so it emits a `duplicate_key` diagnostic but
+  does **not** set `fm_parse_error`.
 
 ### Hardening caps (`limits.rs`)
 
@@ -185,7 +186,7 @@ modified by a cap — only what gets materialized.
 ## 3. Dates
 
 ISO-8601, normalized to canonical form **at materialization** so lexicographic
-sort is correct (SPEC §3.4). There are exactly two canonical shapes:
+sort is correct. There are exactly two canonical shapes:
 
 ```
 YYYY-MM-DD                    DatePrecision::Date
@@ -205,15 +206,15 @@ Both canonical shapes are fixed-width and UTC-normalized, so:
 
 > byte-wise lexicographic order over canonical text **==** chronological order
 
-That single property is what lets Mongo compare stored date strings and still
-agree with the in-memory evaluator. `Ord for Date` is `(epoch, precision)`,
+This is what lets Mongo compare stored date strings and still agree with the
+in-memory evaluator. `Ord for Date` is `(epoch, precision)`,
 which is the same order.
 
 ---
 
 ## 4. The filter DSL
 
-Ours, not Mongo's (SPEC §4.2): same-type comparisons only, explicit
+ddd's own, not Mongo's: same-type comparisons only, explicit
 `contains`/`any` for arrays, explicit `missing` vs `null`, an explicit date type.
 
 - `filter::evaluator::evaluate` runs it over a projection `Row` — on the client
@@ -285,7 +286,7 @@ operator syntax.
 Limits: depth ≤ 16, nodes ≤ 256, `in` literals all of one type family.
 
 `child_of` / `parent_of` are joins over the folder tree (`plugins.folders.children`),
-so only the query engine (§6) answers them: plain `evaluate` returns `NeedsGraph`
+so only the query engine (§7) answers them: plain `evaluate` returns `NeedsGraph`
 and the Mongo compiler `Unsupported`.
 
 ### Semantics, precisely
@@ -344,16 +345,16 @@ to the Mongo sort, so client and server order rows identically. `content` and
 `text` matching is case-insensitive on both sides, but the folding differs for
 non-ASCII: the evaluator uses Rust's Unicode lowercasing, the server uses
 Mongo's `i` regex option. ASCII behaves identically. Full-text search is a
-separate mechanism (SPEC §4.2) and is not affected.
+separate mechanism and is not affected.
 
 ---
 
 ## 5. Splices
 
 `splice` computes **edits only** — applying them is the caller's job (server:
-the per-document actor; client: the kernel splice helper). No function here ever
-parses and re-serializes a block (SPEC §3.3 forbids the round-trip: it destroys
-comments and formatting and corrupts under concurrent edits).
+the per-document actor; client: the kernel splice helper). Nothing here parses and
+re-serializes a block: that would destroy comments and formatting and corrupt
+concurrent edits.
 
 ```rust
 set_frontmatter_value(text, key, &value)?   // replaces only the value span
@@ -370,7 +371,7 @@ apply(text, &edits)                         // reference implementation
   targets the **last** occurrence of a duplicated key.
 - `splice_section` creates the section — and the trailing run — when needed,
   appends new keys just before the closing fence, and removes earlier duplicate
-  lines of any key it writes ("the next write cleans up", SPEC §3.3). A `None`
+  lines of any key it writes, so the next write cleans up duplicates. A `None`
   value removes the key's line; `Some(Value::Null)` writes `key: null`.
 - Values are serialized with `Value::to_yaml_inline`, which quotes anything that
   would otherwise re-parse as a different type or break the line/flow form.
@@ -383,8 +384,8 @@ apply(text, &edits)                         // reference implementation
 
 ## 6. The conformance corpus
 
-`corpus/*.json` is **data, not code** — deliberately, because the same files are
-fed to this crate compiled to `wasm32` and the answers must match.
+`corpus/*.json` is **data, not code**, so the same files can be fed to this crate
+compiled to `wasm32` and the answers compared.
 The only Rust is the harness in `tests/conformance.rs` and
 `tests/common/mod.rs`.
 
@@ -394,6 +395,7 @@ The only Rust is the harness in `tests/conformance.rs` and
 | `dates.json` | canonical forms, tolerated input shapes, calendar validity, epoch values, chronological == lexicographic order, the canonical-shape participation test |
 | `splices.json` | every splice path plus its exact edit count and replaced slices, including CRLF text |
 | `filters.json` | rows + filter cases (evaluated **and** compiled), refused filters, rejected wire forms, sort orders, compiled sort documents |
+| `shapes.json` | value validation against a shape ([`HOST-ABI.md`](../../HOST-ABI.md) §3.10), run by `tests/shapes.rs` |
 
 Plus, in `tests/conformance.rs`: the hardening caps at and just over the
 boundary, the `edit_affects_metadata` short-circuit, and a determinism check on
@@ -401,7 +403,7 @@ every document case.
 
 Adding a rule means adding a corpus case in the same commit.
 
-## 6. Querying (`src/query/`)
+## 7. Querying (`src/query/`)
 
 One engine for filter, full-text search, relations and sort, run natively by the
 server and as wasm by the browser, so a query answers the same wherever it runs.
