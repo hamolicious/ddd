@@ -2,7 +2,7 @@
   "id": "admin",
   "version": "2.2.0",
   "name": "Admin",
-  "description": "Users, invites, audit log, orphan files, and the plugin list with each plugin's dependencies.",
+  "description": "Users, invites, audit log, and the plugin list with each plugin's dependencies.",
   "author": "ddd base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,

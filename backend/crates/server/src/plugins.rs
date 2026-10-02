@@ -48,6 +48,7 @@ pub const BASE_PLUGIN_IDS: &[&str] = &[
     "changes",
     "commands",
     "context-menu",
+    "db-health",
     "doc-events",
     "doc-list",
     "document-surface",
@@ -1615,7 +1616,7 @@ mod tests {
 
     #[test]
     fn the_base_distribution_is_the_thirty_seven_plugins_of_spec_6_5() {
-        assert_eq!(BASE_PLUGIN_IDS.len(), 37);
+        assert_eq!(BASE_PLUGIN_IDS.len(), 38);
         assert!(BASE_PLUGIN_IDS.windows(2).all(|pair| pair[0] < pair[1]));
     }
 }

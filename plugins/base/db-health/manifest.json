@@ -1,0 +1,22 @@
+{
+  "id": "db-health",
+  "version": "1.0.0",
+  "name": "Database health",
+  "description": "Admin checks on what is stored: files nothing uses, and duplicate files and notes.",
+  "author": "ddd base distribution",
+  "license": "MIT OR Apache-2.0",
+  "x-tailwind": true,
+  "kernel": "^3.0",
+  "dependencies": {
+    "commands": "^3.0",
+    "context-menu": "^2.0",
+    "settings": "^2.0"
+  },
+  "peerLibraries": {
+    "react": "^18.0.0"
+  },
+  "frontend": {
+    "module": "frontend/index.mjs",
+    "style": "frontend/style.css"
+  }
+}

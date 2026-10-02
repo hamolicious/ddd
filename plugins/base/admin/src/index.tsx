@@ -1,5 +1,5 @@
 /**
- * `admin` — users, invites, the audit log, orphan attachments, and the plugin list
+ * `admin` — users, invites, the audit log, and the plugin list
  * (SPEC §6.5). A document's snapshots are the `snapshots` plugin's, in the altbar.
  *
  * Every screen here is a thin client over `/api/admin/*` and two admin-facing corners of
@@ -20,9 +20,6 @@
  *
  * - **Audit log** (SPEC §5.4): in a shared workspace any user can delete any document,
  *   so "who deleted this" is the only accountability there is.
- * - **Orphans**: blobs nothing references. Flagged, never auto-deleted (SPEC §3.6).
- * - **Duplicates**: files with the same name and bytes, notes with the same title and
- *   text. Flagged with each copy's reference count, never auto-deleted.
  *
  * **Where the sections live.** Each one is contributed as a `settings.section` *and*
  * gathered behind tabs on the `/admin` route. Both, deliberately: settings is where a user
@@ -84,14 +81,6 @@ const SETTINGS_TITLES: Readonly<Record<SettingsSectionId, { title: string; descr
   audit: {
     title: "Audit log",
     description: "Every destructive and administrative action, with who did it.",
-  },
-  orphans: {
-    title: "Orphan files",
-    description: "Stored files no document references. Nothing is deleted automatically.",
-  },
-  duplicates: {
-    title: "Duplicates",
-    description: "Files with the same name and contents, and notes with the same title and text.",
   },
   plugins: {
     title: "Plugins",
@@ -219,18 +208,6 @@ export default function activate(kernel: Kernel): void {
         title: "Show the audit log",
         category: "Admin",
         run: () => open("audit"),
-      },
-      {
-        id: "admin.orphans",
-        title: "Show orphan files",
-        category: "Admin",
-        run: () => open("orphans"),
-      },
-      {
-        id: "admin.duplicates",
-        title: "Show duplicate files and notes",
-        category: "Admin",
-        run: () => open("duplicates"),
       },
       {
         id: "admin.export",

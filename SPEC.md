@@ -152,7 +152,7 @@ Binary files live in GridFS, outside the CRDT. Simple sync: whole-file, revision
 - Referenced as `attachment://<ulid>`; the `markdown` plugin renders (images inline, chips otherwise). Since `%%%` sections are part of `content`, orphan scanning of materialized text covers plugin-held references automatically.
 - Upload/replace with `If-Match: <revision>`; 409 → client prompts keep-server / overwrite / keep-both. Identical `sha256` auto-resolves.
 - Client cache: lazily fetched on first render + **opt-in background prefetch with a size budget** (setting); a missed file offline renders a "not available offline" chip. Never inline-serve `image/svg+xml` (stored-XSS vector): `nosniff` on everything, `Content-Disposition: attachment` except an allowlist of safe inline types.
-- Deletion explicit; background job flags orphans in admin; no auto-delete.
+- Deletion explicit; orphans and duplicates are flagged in Settings → Database health (`db-health`); no auto-delete.
 
 **Attachments appear in the workspace as wrapper documents.** A standalone upload ("add file to workspace") creates a regular markdown document representing the file — `fm.title` from the filename, body embedding `attachment://<ulid>`, filed by `folders` under the person's "Files go to" note — so folders, search, tags, Trash, `doc://` links, and the properties panel all apply to files with zero special-case machinery; the `viewer` renders a wrapper document as a full-page file preview. Pasting a file *into an existing document* only embeds it (no wrapper — doc lists don't drown in screenshots), and a **"promote to document"** command on any embedded attachment creates the wrapper later and replaces the embed with a `doc://` link to it. Trashing a wrapper trashes the file reference; blobs nothing references surface in the orphan view. This removes the one object that was "served like a document but wasn't one."
 
@@ -199,7 +199,7 @@ All under `/api`, authenticated (session cookie or bearer token). WebSocket is t
 | `PATCH /api/documents/:id` | Body-text-level only: `{"content": …}` replaces text. **No `fm`/`plugins` patching** — machines write via `%%%` splices or own whole documents (§3.3). |
 | `DELETE /api/documents/:id` | Tombstone → Trash (30 d) → purge; id → graveyard forever. |
 
-Attachments: `POST /api/attachments` (streamed multipart), `GET /:id` (+`/meta`), `PUT /:id` (`If-Match` revision), `DELETE /:id`, `GET /` (admin/orphans). Chunked, resumable uploads: `POST /api/uploads` (`{name, size}` → a session), `GET /:id` (where it is), `PATCH /:id?offset=n` (the next chunk; 409 when `n` is not where the server is), `POST /:id/complete` (the attachment, as `POST /api/attachments` answers), `DELETE /:id`; an unfinished upload is swept a day after its last chunk.
+Attachments: `POST /api/attachments` (streamed multipart), `GET /:id` (+`/meta`), `PUT /:id` (`If-Match` revision), `DELETE /:id`, `GET /` (admin), `GET /orphans` and `GET /duplicates` (admin; flag only). `GET /api/documents/duplicates` (admin) lists live documents with the same title and text. Chunked, resumable uploads: `POST /api/uploads` (`{name, size}` → a session), `GET /:id` (where it is), `PATCH /:id?offset=n` (the next chunk; 409 when `n` is not where the server is), `POST /:id/complete` (the attachment, as `POST /api/attachments` answers), `DELETE /:id`; an unfinished upload is swept a day after its last chunk.
 
 Auth: `register` (first user → admin; else invite token), `login` (returns session cookie, or bearer token for shells), `logout`, `me`, `POST /api/auth/password` (change, requires current).
 
@@ -333,7 +333,8 @@ Their genuine niche: **cron while nobody's looking, outbound HTTP with secrets, 
 | `syntax-highlight` | Fenced code highlighted with tree-sitter grammars, in read mode (`markdown`'s `addCodeBlockRenderer`) and while editing (`editor`'s `addExtension`). A pinned catalog of grammars ships in the package; each user installs the languages they want (a per-user setting, from Settings → Code languages or a button on the block), and each device fetches one the first time it needs it. Users can also upload their own grammar (`.wasm`) and `highlights.scm`: checked in the browser, then stored as attachments | `addLanguage` |
 | `editor` | Edit mode — CodeMirror 6 + `y-codemirror.next`; collapses machine sections; paste / drop handlers take them before CodeMirror; publishes a text surface; **must be usable with the Android soft keyboard (M5 acceptance)** | `addExtension`, `addPasteHandler`, `addSurface` |
 | `settings` | Settings shell | `addSection`, `open` |
-| `admin` | Users, invites, pending installs + capability approval, plugin config and dependencies, audit log, orphans | `open` |
+| `admin` | Users, invites, pending installs + capability approval, plugin config and dependencies, audit log | `open` |
+| `db-health` | Settings → Database health (admins): orphan files, duplicate files (same name and bytes) and duplicate notes (same title and text), each copy with its reference count; flags only | — |
 
 First run: the `welcome` plugin fills an empty workspace with a deletable tour, one note per base feature (fixed ids, once per workspace, never on a workspace that already has notes); empty states written for doc-list (search included)/folders/Trash.
 

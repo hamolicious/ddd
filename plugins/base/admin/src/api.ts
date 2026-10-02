@@ -91,51 +91,6 @@ export interface AuditPage {
   readonly next_cursor?: string;
 }
 
-export interface AttachmentView {
-  readonly id: string;
-  readonly name: string;
-  readonly mime: string;
-  readonly size: number;
-  readonly sha256: string;
-  readonly revision: number;
-  readonly created_at: string;
-  readonly created_by: string | null;
-  readonly updated_at: string;
-  readonly updated_by: string | null;
-}
-
-export interface OrphanView {
-  readonly attachment: AttachmentView;
-  readonly flagged_at: string;
-}
-
-/** Files with the same name and bytes (`GET /api/attachments/duplicates`). */
-export interface DuplicateFileGroup {
-  readonly name: string;
-  readonly sha256: string;
-  readonly size: number;
-  /** Oldest first. */
-  readonly files: readonly {
-    readonly attachment: AttachmentView;
-    /** Documents (trashed ones included) that reference this copy. */
-    readonly references: number;
-  }[];
-}
-
-/** Live documents with the same title and text (`GET /api/documents/duplicates`). */
-export interface DuplicateDocumentGroup {
-  readonly title: string;
-  readonly size: number;
-  /** Oldest first. */
-  readonly documents: readonly {
-    readonly id: string;
-    readonly created_at: string;
-    readonly updated_at: string;
-    /** Other documents (trashed ones included) that link here with `doc://`. */
-    readonly references: number;
-  }[];
-}
-
 export interface AdminStats {
   readonly documents: number;
   readonly trashed_documents: number;
@@ -391,13 +346,6 @@ export interface AdminClient {
 
   audit(query?: AuditQuery): Promise<AuditPage>;
 
-  orphans(): Promise<readonly OrphanView[]>;
-  scanOrphans(): Promise<readonly OrphanView[]>;
-  deleteAttachment(id: string): Promise<void>;
-  duplicateFiles(): Promise<readonly DuplicateFileGroup[]>;
-  duplicateDocuments(): Promise<readonly DuplicateDocumentGroup[]>;
-  /** Moves the document to the Trash. */
-  trashDocument(id: string): Promise<void>;
 
 
   plugins(): Promise<InstalledPluginsResponse>;
@@ -463,12 +411,6 @@ export function createAdminClient(fetchApi: ApiFetch): AdminClient {
 
     audit: (query = {}) => json<AuditPage>(`/admin/audit${auditParams(query)}`),
 
-    orphans: () => json<readonly OrphanView[]>("/attachments/orphans"),
-    scanOrphans: () => json<readonly OrphanView[]>("/attachments/orphans/scan", { method: "POST" }),
-    deleteAttachment: (attachmentId) => send(`/attachments/${id(attachmentId)}`, { method: "DELETE" }),
-    duplicateFiles: () => json<readonly DuplicateFileGroup[]>("/attachments/duplicates"),
-    duplicateDocuments: () => json<readonly DuplicateDocumentGroup[]>("/documents/duplicates"),
-    trashDocument: (documentId) => send(`/documents/${id(documentId)}`, { method: "DELETE" }),
 
 
     plugins: () => json<InstalledPluginsResponse>("/plugins"),

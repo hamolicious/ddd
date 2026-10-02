@@ -57,7 +57,8 @@ dist/<id>/<version>/              build output = the installed layout the server
 | `syntax-highlight` | fenced code highlighted with tree-sitter, in read mode and the editor; users install catalog languages as needed, or upload their own grammar + `highlights.scm` | `addLanguage` |
 | `editor` | edit mode (CodeMirror 6 + `y-codemirror.next`) | `addExtension`, `addPasteHandler`, `addSurface`, `surfaces`, `focus` |
 | `settings` | the settings shell | `addSection`, `open` |
-| `admin` | users, invites, audit, orphans, plugins (each one's dependencies, its dependents and any `provides` conflict) | `open`, `isAdmin` |
+| `admin` | users, invites, audit, plugins (each one's dependencies, its dependents and any `provides` conflict) | `open`, `isAdmin` |
+| `db-health` | Settings → Database health, for admins: orphan files, and duplicate files and notes with each copy's reference count; flags only, deletes nothing on its own | — |
 | `welcome` | fills a new, empty workspace with a short tour: one note per base feature | — |
 | `indexer` | workspace stats, every frontmatter field and its values, each note's incoming and outgoing connections — rebuilt locally on every edit | `fmFields`, `fmValues`, `documents`, `connections`, `stats`, `subscribe`… |
 | `doc-events` | "a note was just made here": views that make notes call `notifyCreated`, the folder tree listens with `onCreated`; no dependencies, so neither side needs the other | `notifyCreated`, `onCreated` |
@@ -172,7 +173,7 @@ on rows above its own; within a row the order is free):
 | 1 | `router`, `context-menu` |
 | 2 | `settings` |
 | 3 | `commands`, `header`, `auto-fm` |
-| 4 | `document-surface`, `search`, `themes`, `notices`, `sync-status`, `graph`, `admin` |
+| 4 | `document-surface`, `search`, `themes`, `notices`, `sync-status`, `graph`, `admin`, `db-health` |
 | 5 | `editor`, `table`, `timeline` |
 | 6 | `doc-list`, `slash-commands`, `fm-autocomplete`, `wikilinks` |
 | 7 | `folders` |
