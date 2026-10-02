@@ -2556,9 +2556,9 @@
     "semantic_hash": ""
   },
   "web/vite.app.config.ts": {
-    "mtime": 1790886404.5993786,
-    "seen": 1790886835.6865437,
-    "ast_hash": "0a3d4f1697f0e81ef4dd1604b4422785",
+    "mtime": 1790933822.7676752,
+    "seen": 1790934255.0809383,
+    "ast_hash": "40cbc841b1cd9696618235e72adefeeb",
     "semantic_hash": ""
   },
   "web/vite.config.ts": {
@@ -2968,18 +2968,6 @@
     "seen": 1790384127.0430772,
     "ast_hash": "301a7604d45b3e739efc881eb04896ea",
     "semantic_hash": "301a7604d45b3e739efc881eb04896ea"
-  },
-  "web/app/public/icon-maskable.svg": {
-    "mtime": 1790886404.594013,
-    "seen": 1790886835.6885405,
-    "ast_hash": "5b38dcb533aa090d04612debbe922280",
-    "semantic_hash": ""
-  },
-  "web/app/public/icon.svg": {
-    "mtime": 1790886404.5941677,
-    "seen": 1790886835.6885417,
-    "ast_hash": "fc431040e9cf3884504ee550329b2159",
-    "semantic_hash": ""
   },
   ".claude/settings.json": {
     "mtime": 1790819311.5756655,
@@ -5607,6 +5595,30 @@
     "mtime": 1790886404.471564,
     "seen": 1790886835.6709194,
     "ast_hash": "82e9126afbd6f1ca00b7e3330caf45c1",
+    "semantic_hash": ""
+  },
+  "brand/README.md": {
+    "mtime": 1790933813.7837398,
+    "seen": 1790934255.081634,
+    "ast_hash": "4b03c868a403fe3e602be97516b63493",
+    "semantic_hash": ""
+  },
+  "brand/icon-maskable.svg": {
+    "mtime": 1790933813.7829707,
+    "seen": 1790934255.0835462,
+    "ast_hash": "6307043aca9ea8ee526e87ff06cab129",
+    "semantic_hash": ""
+  },
+  "brand/icon.svg": {
+    "mtime": 1790933813.781952,
+    "seen": 1790934255.083547,
+    "ast_hash": "6e33280d7d15806c5c2487770be9c9b9",
+    "semantic_hash": ""
+  },
+  "brand/logo.svg": {
+    "mtime": 1790933698.9745417,
+    "seen": 1790934255.0835478,
+    "ast_hash": "23ad8b98560db4505bc9bf52a3fdf15b",
     "semantic_hash": ""
   }
 }

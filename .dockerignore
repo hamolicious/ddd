@@ -1,7 +1,7 @@
 # The image build context is the repository root (see `backend/Dockerfile`), so this
 # file is what keeps it small and keeps secrets and stale build output out of it.
 #
-# Everything the image needs: `backend/`, `schema/`, `web/` and `plugins/`. Nothing else.
+# Everything the image needs: `backend/`, `schema/`, `web/`, `plugins/` and `brand/`. Nothing else.
 
 # Secrets — never in a build context, never in a layer.
 .env

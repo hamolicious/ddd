@@ -129,6 +129,8 @@ WORKDIR /repo
 # copies cannot clobber the install above or ship a stale bundle.
 COPY web ./web
 COPY plugins ./plugins
+# The app icons (`web/vite.app.config.ts` emits them from here).
+COPY brand ./brand
 # The generated Wasm package the app bundle imports (aliased in `vite.app.config.ts`).
 COPY --from=rust-builder /wasm-pkg ./web/kernel/src/wasm/pkg
 # The compiled backend halves. Copied as cargo's output tree so the install step below can

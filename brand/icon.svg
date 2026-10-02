@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="72 72 336 336" role="img" aria-label="ddd">
+  <defs>
+    <mask id="d-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="480" height="480">
+      <rect width="480" height="480" fill="#fff"/>
+      <circle cx="240" cy="269" r="54" fill="none" stroke="#000" stroke-width="22"/>
+      <rect x="283" y="147" width="22" height="187" fill="#000"/>
+    </mask>
+  </defs>
+  <polygon points="240,80 380,160 380,320 240,400 100,320 100,160" fill="#ff6a00" stroke="#ff6a00" stroke-width="16" stroke-linejoin="round" mask="url(#d-cut)"/>
+</svg>

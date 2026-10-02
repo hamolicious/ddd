@@ -15,6 +15,7 @@
  * before the first plugin loads, so dev has one React too.
  */
 
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { defineConfig } from "vite";
@@ -60,8 +61,31 @@ const swKillswitch = () => ({
   },
 });
 
+/**
+ * The app icons live in the repository's `brand/` directory, shared by every shell, not
+ * in `publicDir`. This serves them at the site root in dev and emits them there in the
+ * build, so `/icon.svg` and `/icon-maskable.svg` resolve the same either way.
+ */
+const BRAND_ICONS = ["icon.svg", "icon-maskable.svg"];
+const brandIcons = () => ({
+  name: "ddd-brand-icons",
+  configureServer(server: { middlewares: { use: (fn: (req: any, res: any, next: () => void) => void) => void } }) {
+    server.middlewares.use((req, res, next) => {
+      const name = req.url?.split("?")[0].slice(1);
+      if (!name || !BRAND_ICONS.includes(name)) return next();
+      res.setHeader("content-type", "image/svg+xml");
+      res.end(readFileSync(here(`../brand/${name}`)));
+    });
+  },
+  generateBundle(this: { emitFile: (file: { type: "asset"; fileName: string; source: Buffer }) => void }) {
+    for (const name of BRAND_ICONS) {
+      this.emitFile({ type: "asset", fileName: name, source: readFileSync(here(`../brand/${name}`)) });
+    }
+  },
+});
+
 export default defineConfig(({ command }) => ({
-  plugins: command === "serve" ? [swKillswitch()] : [],
+  plugins: command === "serve" ? [swKillswitch(), brandIcons()] : [brandIcons()],
   root: here("./app"),
   publicDir: here("./app/public"),
   resolve: {
