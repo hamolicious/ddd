@@ -43,3 +43,16 @@ node_modules/
 # `mise run plugin-package` output — installable plugin `.zip`s, rebuilt from the
 # `plugins/base/dist` layout whenever they are needed.
 /dist-packages/
+
+# Rust build output anywhere else (crate-local test staging, the desktop shell).
+target/
+
+# Tauri regenerates these on every build of the desktop shell.
+/desktop/gen/schemas/
+
+# graphify: the current graph (graph.json, GRAPH_REPORT.md, …) is committed because
+# CLAUDE.md queries it; its cache, its dated snapshots and the interpreter path of
+# whoever ran it last are not.
+/graphify-out/cache/
+/graphify-out/20*/
+/graphify-out/.graphify_python
