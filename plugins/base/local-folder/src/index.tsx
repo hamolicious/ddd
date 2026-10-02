@@ -27,7 +27,7 @@ import { EXCLUDE_MACHINE_DOCUMENTS } from "../../_shared/machine-docs.js";
 
 import { merge3, textEdits } from "./merge.js";
 import { LocalFolderSettings } from "./Settings.js";
-import { FolderSync, ForeignFolderError, type SyncDeps, type SyncNote } from "./sync.js";
+import { FolderSync, ForeignFolderError, replicaLoading, type SyncDeps, type SyncNote } from "./sync.js";
 
 type FoldersModule = typeof import("plugin:folders");
 type AttachmentsModule = typeof import("plugin:attachments");
@@ -260,6 +260,8 @@ export class Controller {
 
   #schedule(kind: "quick" | "full"): void {
     if (!this.#stop || !this.#sync) return;
+    // Mid first fill: wait. The switch to "synced" when it ends schedules a pass.
+    if (replicaLoading(this.kernel.sync.state)) return;
     if (this.#running) {
       if (this.#again !== "full") this.#again = kind;
       return;
@@ -400,6 +402,12 @@ function deps(kernel: Kernel): SyncDeps {
         if (page.rows.length < PAGE) break;
       }
       return out;
+    },
+    async known(id: string): Promise<"gone" | "unknown"> {
+      // A row means this device has the note, deleted or now outside the mirror. No row
+      // means the replica has not received it — or it was purged while this device was
+      // away, which keeps its file: the safe side.
+      return (await documents.get(id)) ? "gone" : "unknown";
     },
     async updateNote(id, from, to) {
       const open = await documents.open(id);

@@ -1,6 +1,6 @@
 {
   "id": "local-folder",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "name": "Local folder",
   "description": "Keeps every note as a Markdown file in a folder on this device, and keeps the two in step while the app runs.",
   "author": "ddd base distribution",

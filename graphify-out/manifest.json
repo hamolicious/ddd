@@ -888,8 +888,8 @@
     "semantic_hash": ""
   },
   "backend/crates/server/src/routes/documents.rs": {
-    "mtime": 1790946574.9700758,
-    "seen": 1790947329.6920412,
+    "mtime": 1790950807.085415,
+    "seen": 1790951623.9587712,
     "ast_hash": "a21faae21901b7839c86b61093618786",
     "semantic_hash": ""
   },
@@ -4356,9 +4356,9 @@
     "semantic_hash": ""
   },
   "plugins/base/local-folder/manifest.json": {
-    "mtime": 1790897233.2151864,
-    "seen": 1790897350.7897654,
-    "ast_hash": "52cb76d5baac45fef07ca5c07b8e9bb0",
+    "mtime": 1790951514.2839763,
+    "seen": 1790951623.9674902,
+    "ast_hash": "ca4ad7237d392360ea650185007c939d",
     "semantic_hash": ""
   },
   "plugins/base/local-folder/src/Settings.tsx": {
@@ -4368,9 +4368,9 @@
     "semantic_hash": ""
   },
   "plugins/base/local-folder/src/index.tsx": {
-    "mtime": 1790886404.5881467,
-    "seen": 1790886835.6761117,
-    "ast_hash": "8b2fc45f71b8dbf1dfee08ad4d72418b",
+    "mtime": 1790951485.1827195,
+    "seen": 1790951623.9675243,
+    "ast_hash": "01acbe3537060ef4ef092e69182ec849",
     "semantic_hash": ""
   },
   "plugins/base/local-folder/src/mapping.test.ts": {
@@ -4398,15 +4398,15 @@
     "semantic_hash": ""
   },
   "plugins/base/local-folder/src/sync.test.ts": {
-    "mtime": 1790897228.2022061,
-    "seen": 1790897350.7899542,
-    "ast_hash": "1efc9c9531fa4efc3052cd3cde686922",
+    "mtime": 1790951485.1935222,
+    "seen": 1790951623.9676507,
+    "ast_hash": "457066727d2059a8e8b75f7d14c8a455",
     "semantic_hash": ""
   },
   "plugins/base/local-folder/src/sync.ts": {
-    "mtime": 1790897228.2024133,
-    "seen": 1790897350.7899556,
-    "ast_hash": "c6a9edb7c40c22d731790ce22cf98742",
+    "mtime": 1790951501.5099633,
+    "seen": 1790951623.967652,
+    "ast_hash": "fc5ef465a455b5a6a3910260e7f9ff89",
     "semantic_hash": ""
   },
   "web/kernel/src/runtime/folder.ts": {
@@ -5622,8 +5622,8 @@
     "semantic_hash": ""
   },
   "backend/crates/server/tests/duplicates.rs": {
-    "mtime": 1790946590.8303454,
-    "seen": 1790947329.6926277,
+    "mtime": 1790950826.1468513,
+    "seen": 1790951623.9593546,
     "ast_hash": "5d5685786fb37d5ba9b20a4d661e7210",
     "semantic_hash": ""
   },
@@ -5646,8 +5646,8 @@
     "semantic_hash": ""
   },
   "plugins/base/db-health/src/api.ts": {
-    "mtime": 1790946634.0822816,
-    "seen": 1790947329.6981328,
+    "mtime": 1790950826.1469672,
+    "seen": 1790951623.9638643,
     "ast_hash": "856cd38a72e46333ca23f76c3530787f",
     "semantic_hash": ""
   },

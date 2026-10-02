@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { FolderCapability, FolderEntry, TextEdit } from "@kernel";
 
 import { applyEdits, merge3, textEdits } from "./merge.js";
-import { FolderSync, ForeignFolderError, type SyncDeps, type SyncNote } from "./sync.js";
+import { FolderSync, ForeignFolderError, replicaLoading, type SyncDeps, type SyncNote } from "./sync.js";
 
 const enc = new TextEncoder();
 const dec = new TextDecoder();
@@ -78,6 +78,8 @@ class MemoryFolder implements FolderCapability {
 /** Notes in memory, with a title rule close enough to the core's for these tests. */
 class Notes {
   readonly rows = new Map<string, { content: string; parent: string; trashed: boolean; attachment?: string }>();
+  /** Notes the server has that this device's replica has not received yet. */
+  readonly notArrived = new Set<string>();
   #next = 100;
 
   title(content: string): string {
@@ -91,7 +93,7 @@ class Notes {
   }
   live(): SyncNote[] {
     return [...this.rows]
-      .filter(([, row]) => !row.trashed)
+      .filter(([id, row]) => !row.trashed && !this.notArrived.has(id))
       .map(([id, row]) => ({
         id,
         title: this.title(row.content),
@@ -125,6 +127,7 @@ function setup(owner = "user-1") {
     folder,
     owner,
     notes: () => Promise.resolve(notes.live()),
+    known: (id) => Promise.resolve(notes.notArrived.has(id) ? "unknown" : "gone"),
     updateNote: (id, from, to) => {
       const row = notes.rows.get(id)!;
       if (row.content !== from) {
@@ -176,6 +179,109 @@ function setup(owner = "user-1") {
   };
   return { folder, notes, attachments, sync, later };
 }
+
+/**
+ * Regression: the rename hop (2026-10-02) moved the desktop app to a new origin, whose
+ * replica started empty and filled from the server. local-folder ran its first pass at
+ * boot, while the replica was still filling, and read "not in the replica" as "deleted":
+ * it removed the files of notes that had not arrived, and re-imported every changed or
+ * moved file of such a note as a new note — a duplicate of every one of them, the newer
+ * copy mirrored as `<title> (2).md`. A note this device has not received yet is unknown,
+ * not gone: its entry and its file are left alone until it arrives.
+ */
+describe("FolderSync with a replica that has not caught up", () => {
+  /** Mirror three notes, then boot a fresh app whose replica has only some of them. */
+  async function freshBoot(...notArrived: string[]) {
+    const t = setup();
+    t.notes.add("01A", "# Alpha\n\none\n");
+    t.notes.add("01B", "# Bravo\n\ntwo\n");
+    t.notes.add("01C", "# Charlie\n\nthree\n");
+    await t.sync.run();
+    for (const id of notArrived) t.notes.notArrived.add(id);
+    const fresh = new FolderSync((t.sync as unknown as { deps: SyncDeps }).deps);
+    const catchUp = async () => {
+      t.notes.notArrived.clear();
+      return fresh.run();
+    };
+    const live = () => [...t.notes.rows].filter(([, row]) => !row.trashed).map(([id]) => id).sort();
+    return { ...t, fresh, catchUp, live };
+  }
+
+  it("keeps the files of notes that have not arrived", async () => {
+    const { folder, fresh, catchUp, live } = await freshBoot("01B", "01C");
+    await fresh.run();
+    expect(folder.userPaths()).toEqual(["Alpha.md", "Bravo.md", "Charlie.md"]);
+    await catchUp();
+    expect(folder.userPaths()).toEqual(["Alpha.md", "Bravo.md", "Charlie.md"]);
+    expect(live()).toEqual(["01A", "01B", "01C"]);
+  });
+
+  it("does not re-import a changed file of a note that has not arrived; the edit reaches the note", async () => {
+    const { folder, notes, fresh, catchUp, later, live } = await freshBoot("01B");
+    later();
+    folder.put("Bravo.md", "# Bravo\n\ntwo\nedited elsewhere\n");
+    expect(await fresh.run()).toMatchObject({ imported: 0 });
+    await catchUp();
+    expect(live()).toEqual(["01A", "01B", "01C"]);
+    expect(notes.rows.get("01B")!.content).toContain("edited elsewhere");
+    expect(folder.userPaths()).toEqual(["Alpha.md", "Bravo.md", "Charlie.md"]);
+  });
+
+  it("does not re-import a moved file of a note that has not arrived", async () => {
+    const { folder, fresh, catchUp, live } = await freshBoot("01B");
+    await folder.move("Bravo.md", "Bravo renamed.md");
+    expect(await fresh.run()).toMatchObject({ imported: 0 });
+    await catchUp();
+    expect(live()).toEqual(["01A", "01B", "01C"]);
+  });
+
+  it("does not import a held note's file that a folder sync deleted and put back", async () => {
+    const { folder, fresh, catchUp, later, live } = await freshBoot("01B");
+    const bravo = folder.text("Bravo.md")!;
+    await folder.remove("Bravo.md");
+    await fresh.run();
+    later();
+    folder.put("Bravo.md", bravo);
+    expect(await fresh.run()).toMatchObject({ imported: 0 });
+    await catchUp();
+    expect(live()).toEqual(["01A", "01B", "01C"]);
+    expect(folder.userPaths()).toEqual(["Alpha.md", "Bravo.md", "Charlie.md"]);
+  });
+
+  it("does nothing at all on a cold start with an empty replica", async () => {
+    const { folder, fresh, catchUp, live } = await freshBoot("01A", "01B", "01C");
+    const before = [...folder.files.entries()].map(([path, file]) => [path, file.mtimeMs]);
+    expect(await fresh.run()).toMatchObject({ written: 0, imported: 0, heldDeletes: 0 });
+    expect([...folder.files.entries()].map(([path, file]) => [path, file.mtimeMs])).toEqual(before);
+    await catchUp();
+    expect(live()).toEqual(["01A", "01B", "01C"]);
+  });
+
+  it("keeps a held note's file name from a note made meanwhile with the same title", async () => {
+    const { folder, notes, fresh, catchUp } = await freshBoot("01B");
+    notes.add("01D", "# Bravo\n\na different note\n");
+    await fresh.run();
+    expect(folder.text("Bravo.md")).toBe("# Bravo\n\ntwo\n");
+    await catchUp();
+    expect(folder.text("Bravo.md")).toBe("# Bravo\n\ntwo\n");
+    expect(folder.text("Bravo (2).md")).toBe("# Bravo\n\na different note\n");
+  });
+
+  it("still sends a held note to Trash when its file was deleted on disk, once it arrives", async () => {
+    const { folder, notes, fresh, catchUp } = await freshBoot("01B");
+    await folder.remove("Bravo.md");
+    await fresh.run();
+    expect(notes.rows.get("01B")!.trashed).toBe(false);
+    await catchUp();
+    expect(notes.rows.get("01B")!.trashed).toBe(true);
+  });
+
+  it("waits out the replica's first fill", () => {
+    expect(replicaLoading({ bootstrap: { rows: 10, total: 100, complete: false } })).toBe(true);
+    expect(replicaLoading({ bootstrap: { rows: 100, total: 100, complete: true } })).toBe(false);
+    expect(replicaLoading({})).toBe(false);
+  });
+});
 
 describe("FolderSync", () => {
   it("writes every note on the first pass, folders as directories", async () => {

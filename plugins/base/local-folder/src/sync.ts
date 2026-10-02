@@ -21,6 +21,11 @@
  * 2. **App → disk.** Every note is placed by `mapping.ts`; a changed note is written, a
  *    renamed or refiled one is moved, a deleted one's file is removed.
  *
+ * A note in the index that this device has not received yet (`known` says `"unknown"`)
+ * is **held**: its entry and its file are left exactly as they are until it arrives.
+ * Reading "not in the replica" as "deleted" is how a cold start once removed the files of
+ * every note still on its way, and re-imported each changed or moved one as a new note.
+ *
  * Whatever step 1 just did to a note is **pinned** for a few seconds: the app's copy of
  * a title, a parent or the text lags an edit by a debounce, and without the pin step 2
  * would read the old value back and undo the user's change on disk.
@@ -40,9 +45,18 @@ import {
   type Placement,
 } from "./mapping.js";
 
-import type { FolderCapability, FolderEntry, TextEdit } from "@kernel";
+import type { FolderCapability, FolderEntry, SyncState, TextEdit } from "@kernel";
 
 export const STATE_DIR = ".ddd";
+
+/**
+ * Whether the replica is still in its first fill from the server (a cold start, or a
+ * feed reset). No pass runs then: a pass would see most notes as not here yet. `known`
+ * keeps such a pass from doing harm; this keeps it from running at all.
+ */
+export function replicaLoading(state: Pick<SyncState, "bootstrap">): boolean {
+  return state.bootstrap !== undefined && !state.bootstrap.complete;
+}
 const INDEX_PATH = `${STATE_DIR}/index.json`;
 const basePath = (id: string): string => `${STATE_DIR}/base/${id}${NOTE_EXT}`;
 
@@ -72,6 +86,13 @@ export interface SyncDeps {
    */
   readonly owner: string;
   notes(): Promise<readonly SyncNote[]>;
+  /**
+   * What this device knows of a note {@link notes} does not list: `"gone"` when its row
+   * is here and deleted or no longer mirrored; `"unknown"` when this device has no row
+   * for it — the replica has not received it yet (a cold start fills it from the
+   * server). An unknown note is never treated as deleted.
+   */
+  known(id: string): Promise<"gone" | "unknown">;
   /**
    * Turn the note from `from` into `to`, as line edits the CRDT can merge. If the note is
    * no longer `from` (typed into since), the change is merged into what it is now.
@@ -264,6 +285,10 @@ export class FolderSync {
     let notes = await deps.notes();
     let byId = new Map(notes.map((note) => [note.id, note]));
     const byEntryId = new Map(index.entries.map((entry) => [entry.id, entry]));
+    const held = new Set<string>();
+    for (const entry of index.entries) {
+      if (!byId.has(entry.id) && (await deps.known(entry.id)) === "unknown") held.add(entry.id);
+    }
     const dirOwner = new Map<string, string>([["", ""]]);
     for (const entry of index.entries) if (entry.dir !== undefined) dirOwner.set(entry.dir, entry.id);
 
@@ -324,7 +349,7 @@ export class FolderSync {
       if (to) {
         moves.push({ entry, to });
         untracked.splice(untracked.indexOf(to), 1);
-      } else {
+      } else if (!held.has(entry.id)) {
         gone.push(entry);
       }
     }
@@ -354,6 +379,8 @@ export class FolderSync {
     for (const { entry, to } of moves) {
       const note = byId.get(entry.id);
       if (!note) {
+        // Not arrived: the file stays where it went, unimported, until the note is here.
+        if (held.has(entry.id)) continue;
         await removeEntry(entry);
         untracked.push(to);
         continue;
@@ -393,6 +420,8 @@ export class FolderSync {
     for (const { entry, bytes, sha, stat } of changed) {
       const note = byId.get(entry.id);
       if (!note) {
+        // Not arrived: the edit is merged once the note is here.
+        if (held.has(entry.id)) continue;
         // Edited on disk after the note went to Trash: it comes back as a new note.
         await removeEntry(entry);
         untracked.push({ path: entry.path, bytes, sha, stat });
@@ -521,6 +550,11 @@ export class FolderSync {
     byId = new Map(notes.map((note) => [note.id, note]));
     const pins = new Map<string, Placement>();
     for (const id of [...this.#pins.keys()]) if (this.#pinned(id)) pins.set(id, this.#pins.get(id)!.place);
+    // A held note keeps its name, so a note placed meanwhile cannot take its file.
+    for (const id of held) {
+      const entry = byEntryId.get(id);
+      if (entry && !byId.has(id)) pins.set(id, { path: entry.path, ...(entry.dir !== undefined ? { dir: entry.dir } : {}) });
+    }
     const places = layout(
       notes.map((note) => ({
         id: note.id,
@@ -607,9 +641,9 @@ export class FolderSync {
       dirty = true;
     }
 
-    // Notes deleted in the app (or no longer mirrored): their files go.
+    // Notes deleted in the app (or no longer mirrored): their files go. Held ones stay.
     for (const entry of [...index.entries]) {
-      if (byId.has(entry.id) || this.#pinned(entry.id)) continue;
+      if (byId.has(entry.id) || this.#pinned(entry.id) || held.has(entry.id)) continue;
       if (onDisk(entry.path)) {
         await folder.remove(entry.path);
         files.delete(entry.path);
