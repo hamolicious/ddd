@@ -15,7 +15,7 @@
 # opaque:
 #
 #   APP_ORIGIN=https://<DOMAIN>   the WebSocket upgrade is refused with 403 *before*
-#                                 authentication otherwise (PROTOCOL.md §1.2) — the page
+#                                 authentication otherwise — the page
 #                                 loads and never syncs.
 #   COOKIE_SECURE=true            a Secure cookie over http is silently dropped.
 #   TRUST_PROXY_HEADERS=true      without it every client shares one login-rate bucket
@@ -42,7 +42,7 @@
 	reverse_proxy server:{$PORT:8080} {
 		# The WebSocket carries the change feed and per-document CRDT sync; a read
 		# timeout would drop an idle-but-live editor. The protocol's own heartbeat
-		# (25 s, PROTOCOL.md) is what detects a dead peer.
+		# (every 25 s) is what detects a dead peer.
 		transport http {
 			read_timeout 0
 		}

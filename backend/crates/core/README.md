@@ -395,7 +395,7 @@ The only Rust is the harness in `tests/conformance.rs` and
 | `dates.json` | canonical forms, tolerated input shapes, calendar validity, epoch values, chronological == lexicographic order, the canonical-shape participation test |
 | `splices.json` | every splice path plus its exact edit count and replaced slices, including CRLF text |
 | `filters.json` | rows + filter cases (evaluated **and** compiled), refused filters, rejected wire forms, sort orders, compiled sort documents |
-| `shapes.json` | value validation against a shape ([`HOST-ABI.md`](../../HOST-ABI.md) §3.10), run by `tests/shapes.rs` |
+| `shapes.json` | value validation against a shape, run by `tests/shapes.rs` |
 
 Plus, in `tests/conformance.rs`: the hardening caps at and just over the
 boundary, the `edit_affects_metadata` short-circuit, and a determinism check on

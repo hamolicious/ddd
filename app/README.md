@@ -17,13 +17,6 @@ goes through this bridge.
 
 Released APKs are attached to GitHub Releases.
 
-## Docs
-
-| File | What it is |
-|---|---|
-| [`BRIDGE.md`](BRIDGE.md) | The contract: message envelope, `window.shell`, the server manifest, the loopback origin, the revert state machine. Authoritative. |
-| [`TESTPLAN.md`](TESTPLAN.md) | The manual on-device test script (soft-keyboard editing, offline boot, OTA update, revert, notifications, file dialogs) |
-
 ## Layout
 
 ```text
@@ -153,8 +146,8 @@ keystore → native login (first run only)
 
 The bundle is served over loopback HTTP so the page has a real, stable, secure-context origin
 (IndexedDB, Web Workers and `crypto.subtle` work unchanged). The API is therefore cross-origin:
-auth uses a bearer token, and the server's `APP_ORIGIN` must include the loopback origin (see
-`BRIDGE.md` §6).
+auth uses a bearer token, and the server's `APP_ORIGIN` must include the loopback origin,
+`http://127.0.0.1:41847`.
 
 ## Known limitations
 

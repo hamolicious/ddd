@@ -2579,22 +2579,10 @@
     "ast_hash": "586dd6ecb1836b76fb9ae68ea70ed9bb",
     "semantic_hash": ""
   },
-  "app/BRIDGE.md": {
-    "mtime": 1790963787.9354372,
-    "seen": 1790963827.7735598,
-    "ast_hash": "798f81e0560514454096d9723b69b91c",
-    "semantic_hash": ""
-  },
   "app/README.md": {
-    "mtime": 1790963689.976993,
-    "seen": 1790963827.7735612,
-    "ast_hash": "9d40818af9c1d6ab434bed4a8b37c9ab",
-    "semantic_hash": ""
-  },
-  "app/TESTPLAN.md": {
-    "mtime": 1790963787.94458,
-    "seen": 1790963827.7735622,
-    "ast_hash": "8fd0df279131790405f12922e6da4830",
+    "mtime": 1790967712.9374568,
+    "seen": 1790967740.961491,
+    "ast_hash": "ac033817500a64ae998e001699c84432",
     "semantic_hash": ""
   },
   "app/analysis_options.yaml": {
@@ -2657,34 +2645,16 @@
     "ast_hash": "e99a99b5cc82a168fc557eb23b8d5a96",
     "semantic_hash": "e99a99b5cc82a168fc557eb23b8d5a96"
   },
-  "backend/HOST-ABI.md": {
-    "mtime": 1790963780.0538023,
-    "seen": 1790963827.7739606,
-    "ast_hash": "f1b9d6e5017971759f589f702543af7b",
-    "semantic_hash": ""
-  },
-  "backend/PERF.md": {
-    "mtime": 1790963772.455852,
-    "seen": 1790963827.7739618,
-    "ast_hash": "b6fa9bdfd9fc6236bd1e0de90ace34bd",
-    "semantic_hash": ""
-  },
-  "backend/PROTOCOL.md": {
-    "mtime": 1790963758.009434,
-    "seen": 1790963827.7739627,
-    "ast_hash": "15a74f60609ee51bb72a0f8e80951776",
-    "semantic_hash": ""
-  },
   "backend/README.md": {
-    "mtime": 1790963689.9781108,
-    "seen": 1790963827.7739637,
-    "ast_hash": "449db4bd4ce3d54aca8faf1849286095",
+    "mtime": 1790967712.9376478,
+    "seen": 1790967740.9618511,
+    "ast_hash": "9e1086f356920fe8747108d086af9b4f",
     "semantic_hash": ""
   },
   "backend/crates/core/README.md": {
-    "mtime": 1790963186.6339066,
-    "seen": 1790963228.755755,
-    "ast_hash": "cd7a87a6840a47d11aa086c20b34caae",
+    "mtime": 1790967712.9377599,
+    "seen": 1790967740.961852,
+    "ast_hash": "78fcbaf4670ccd8e26fd5b9f70e054cc",
     "semantic_hash": ""
   },
   "docker-compose.yaml": {
@@ -2700,15 +2670,15 @@
     "semantic_hash": ""
   },
   "plugins/examples/README.md": {
-    "mtime": 1790963196.4431458,
-    "seen": 1790963228.7559736,
-    "ast_hash": "1f3341d9c966ce19340e60c4a26a5602",
+    "mtime": 1790967712.9378388,
+    "seen": 1790967740.9622617,
+    "ast_hash": "e2d0d0acea8a167d38eca491b59d8530",
     "semantic_hash": ""
   },
   "web/README.md": {
-    "mtime": 1790963694.591033,
-    "seen": 1790963827.7743237,
-    "ast_hash": "185304accf49c5e46f54d97d6a6bac8c",
+    "mtime": 1790967712.9379447,
+    "seen": 1790967740.9622638,
+    "ast_hash": "bd2857ddb86de3bad1a8b40e1adc91b9",
     "semantic_hash": ""
   },
   "web/app/index.html": {
@@ -4422,9 +4392,9 @@
     "semantic_hash": ""
   },
   "web/collab/README.md": {
-    "mtime": 1790963140.513612,
-    "seen": 1790963228.7560558,
-    "ast_hash": "b6d60754c76f12326924a228b83cb9a1",
+    "mtime": 1790967712.938019,
+    "seen": 1790967740.9623134,
+    "ast_hash": "4d4ae6787968be301ea7bf5a6189b6f8",
     "semantic_hash": ""
   },
   "plugins/base/wikilinks/manifest.json": {
@@ -5568,9 +5538,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1790963483.582384,
-    "seen": 1790963508.6774564,
-    "ast_hash": "0546e08bcc2c767c118aaeb86d1c2e5d",
+    "mtime": 1790967712.9373198,
+    "seen": 1790967740.9614894,
+    "ast_hash": "3f30796fba3d5dec9ec7779e083b2985",
     "semantic_hash": ""
   }
 }

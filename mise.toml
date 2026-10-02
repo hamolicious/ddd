@@ -212,7 +212,7 @@ run = [
 ]
 
 # To unit-test a plugin's logic, put it in a plain crate beside the wasm glue and test it
-# on the host (see `backend/HOST-ABI.md`).
+# on the host.
 
 [tasks.plugin-smoke]
 description = "Build the hello-world plugin and load it in a minimal Extism host (the ABI's end-to-end check)"

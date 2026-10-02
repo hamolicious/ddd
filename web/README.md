@@ -7,7 +7,7 @@ plugin loader and the PWA. Everything visible in the app is a plugin in
 
 ```
 kernel-api/src/          the @kernel contract (frozen); /kernel.d.ts is generated from it
-kernel/src/protocol.ts   the /api/sync wire protocol, mirroring ../backend/PROTOCOL.md
+kernel/src/protocol.ts   the /api/sync wire protocol
 kernel/src/store/        IndexedDB projection store (one store, the whole workspace)
 kernel/src/sync/         change feed, lazy document hydration, reconnect policy
 kernel/src/query/        the shared query engine (Wasm, in a Worker): filter, search, relations, sort
@@ -112,7 +112,7 @@ Gotchas:
 | `npm run e2e` | Playwright against the demo. Needs a running server and `npx playwright install chromium`; skips when `/api` is unreachable. |
 | `npm run e2e:app` | Playwright against the real app. Starts its own server — see below. |
 | `npm run harness:convergence` | N simulated clients with random ops and partitions; checks convergence and materialization equality. `--seed=N` replays; also `--clients=`, `--operations=`, `--journal=`. |
-| `npm run harness:perf` | 5 000 documents: bootstrap, catch-up, round-trip and client heap. Results in [`../backend/PERF.md`](../backend/PERF.md). |
+| `npm run harness:perf` | 5 000 documents: bootstrap, catch-up, round-trip and client heap. |
 | `node scripts/build-examples.mjs` | Builds `plugins/examples/*` into `plugins/examples/dist/`. |
 | `node scripts/compose-plugins.mjs <dir> [--exclude=…] [--include-examples=…]` | Builds a registry directory from already-built plugins. |
 
@@ -236,7 +236,7 @@ an admin approves them.
   opened is read-only offline until reconnect.
 - **The resume point is the server's `safe_seq`**, stored in the same transaction as the
   rows it describes, never the highest `seq` seen. Getting this wrong loses documents
-  silently; see [`../backend/PROTOCOL.md`](../backend/PROTOCOL.md) §2.2.
+  silently.
 - **Parsing and filtering are Rust.** `kernel/src/wasm` calls the same code as the server,
   so offline and online behaviour agree. Filter compilation to Mongo stays server-side.
 - **Recovery is re-derivation, not replay:** re-subscribe the feed from a watermark, or
@@ -249,10 +249,8 @@ an admin approves them.
 
 ## Wire protocol
 
-[`../backend/PROTOCOL.md`](../backend/PROTOCOL.md) is authoritative for the socket and the
-bootstrap stream; this side implements it independently of the server. If the code and
-PROTOCOL.md disagree, treat it as a bug. PROTOCOL.md §10 is a conformance checklist;
-`harness/src/rest.ts` watches the wire and reports violations.
+`kernel/src/protocol.ts` is the client's side of the socket and the bootstrap stream.
+`harness/src/rest.ts` watches the wire and reports protocol violations.
 
 ## Tests against a server
 

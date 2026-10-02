@@ -14,13 +14,10 @@ crates/plugin-sdk  what a plugin's backend half compiles against (wasm32 only,
                    excluded from this workspace: it links Extism's host imports)
 crates/server      axum app: routes, docstore, feed, auth, db, telemetry,
                    pluginhost/ (the Wasm runtime), plugininstall/ (the install flow)
-PROTOCOL.md        the /api/sync wire protocol, authoritative for server and client
-HOST-ABI.md        the Wasm host ABI, authoritative for backend plugin authors
-PERF.md            measured performance results
 ```
 
 **One semver covers both plugin contracts.** A plugin manifest's `kernel` range is checked
-against the frontend `@kernel` surface *and* the backend host ABI ([`HOST-ABI.md`](HOST-ABI.md)).
+against the frontend `@kernel` surface *and* the backend host ABI.
 
 ---
 
@@ -282,8 +279,7 @@ ignored.
 
 ### Plugin routes — `/api/plugins/{id}/*`
 
-A backend plugin's own routes, exactly as its manifest declares them
-([`HOST-ABI.md`](HOST-ABI.md) §4.4).
+A backend plugin's own routes, exactly as its manifest declares them.
 
 - Session-authenticated by default. A manifest may declare `public-routes`, which is shown at
   install as a capability.
@@ -293,9 +289,6 @@ A backend plugin's own routes, exactly as its manifest declares them
 - A plugin's own error keeps its status code; a host failure is 502/503/504.
 
 ### Sync — `/api/sync`
-
-The full wire protocol (message schemas, framing, close codes, backpressure, reconnect
-policy) is in [`PROTOCOL.md`](PROTOCOL.md).
 
 | Method | Path | Behavior |
 |---|---|---|
@@ -367,7 +360,7 @@ cd ../web && npm run harness:convergence
 cd ../web && npm run harness:perf
 ```
 
-Results are in [`PERF.md`](PERF.md). `crates/server/tests/sync_ws.rs` tests the sync protocol
+`crates/server/tests/sync_ws.rs` tests the sync protocol
 end to end: the real router over a real socket against a live Mongo.
 
 ## Testing plugins

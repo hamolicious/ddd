@@ -74,7 +74,7 @@ ddd plugin new my-plugin --dep toolbar@^1.1
   writing your own
 - [`plugins/examples/`](plugins/examples/README.md): small example plugins, including one with
   a backend
-- [`backend/HOST-ABI.md`](backend/HOST-ABI.md): what a plugin backend can call
+- [`backend/crates/plugin-sdk/`](backend/crates/plugin-sdk): what a plugin backend compiles against
 
 ## Developing
 
