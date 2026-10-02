@@ -130,7 +130,7 @@ test("registering the first user boots the whole plugin distribution", async ({
   await expect(page.getByRole("banner").getByRole("navigation", { name: "Main" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Admin" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Settings" })).toBeVisible();
-  await page.keyboard.press("ControlOrMeta+k");
+  await page.keyboard.press("ControlOrMeta+p");
   await expect(page.getByRole("combobox", { name: /command/i })).toBeVisible();
   await page.keyboard.press("Escape");
 

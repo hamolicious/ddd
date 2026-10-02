@@ -296,7 +296,7 @@ test.describe("the command palette", () => {
     await page.goto("/#/trash");
     await expect(page.getByRole("heading", { name: "Trash" })).toBeVisible();
 
-    await page.keyboard.press("ControlOrMeta+k");
+    await page.keyboard.press("ControlOrMeta+p");
     const palette = page.getByRole("combobox", { name: /command/i });
     await expect(palette).toBeVisible();
     // These ran `setMode` on nothing and looked like a broken app.
@@ -315,7 +315,7 @@ test.describe("the command palette", () => {
     // ("Admin ›Browse snapshots"). The same markup builds the keybindings table, so
     // both views were saying it.
     await signIn(page, ADMIN);
-    await page.keyboard.press("ControlOrMeta+k");
+    await page.keyboard.press("ControlOrMeta+p");
     await expect(page.getByRole("combobox", { name: /command/i })).toBeVisible();
 
     const categorised = page.locator(".cmd-list [role=option]", { has: page.locator(".cmd-category") });
@@ -331,7 +331,7 @@ test.describe("the command palette", () => {
 
   test("groups an unfiltered list by category", async ({ page }) => {
     await signIn(page, ADMIN);
-    await page.keyboard.press("ControlOrMeta+k");
+    await page.keyboard.press("ControlOrMeta+p");
     await expect(page.getByRole("combobox", { name: /command/i })).toBeVisible();
 
     // Every score is 0 for an empty query, so the tie-break *is* the ordering. Sorting
@@ -353,7 +353,7 @@ test.describe("the command palette", () => {
 test.describe("the command palette closes", () => {
   test("on Escape even after a click inside it moved focus", async ({ page }) => {
     await signIn(page, ADMIN);
-    await page.keyboard.press("ControlOrMeta+k");
+    await page.keyboard.press("ControlOrMeta+p");
     const input = page.getByRole("combobox", { name: /command/i });
     await expect(input).toBeVisible();
 

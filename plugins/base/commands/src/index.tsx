@@ -27,7 +27,7 @@
  *
  * **The palette renders as a shell overlay.** `shell-ui` owns the single
  * `kernel.ui.mount` (SPEC §6.4), so a plugin needing a persistent React presence
- * adds an always-mounted overlay (`addOverlay`). Mod+K (or whatever it is rebound to) opens
+ * adds an always-mounted overlay (`addOverlay`). Mod+P (or whatever it is rebound to) opens
  * it, and so does a "Commands" button in the toolbar when `toolbar` is installed — the
  * way in on a phone, which has no keyboard shortcut. The user can move or hide it there.
  *
@@ -326,7 +326,7 @@ export default function activate(kernel: Kernel): void {
     if (chord === "") return;
 
     // A bare keystroke belongs to whatever the user is typing into. Chords with a real
-    // modifier are still delivered, which is what makes Mod+K work inside the editor.
+    // modifier are still delivered, which is what makes Mod+P work inside the editor.
     if (isBareChord(parseChord(chord)) && isTypingTarget(event.target)) {
       clearPending();
       return;
@@ -394,7 +394,7 @@ export default function activate(kernel: Kernel): void {
     },
   ]);
   addKeybinding([
-    { command: "commands.openPalette", keys: "Mod+K" },
+    { command: "commands.openPalette", keys: "Mod+P" },
     { command: "settings.open", keys: "Mod+," },
   ]);
 

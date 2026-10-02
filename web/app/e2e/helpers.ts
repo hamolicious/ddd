@@ -120,7 +120,7 @@ export function docRows(page: Page): Locator {
 export async function runCommand(page: Page, title: string | RegExp): Promise<void> {
   // The palette is a portal into `document.body` (the single `kernel.ui.mount` belongs
   // to `shell-ui`), so it is not inside `main`.
-  await page.keyboard.press("ControlOrMeta+k");
+  await page.keyboard.press("ControlOrMeta+p");
   const palette = page.getByRole("combobox", { name: /command/i });
   await expect(palette).toBeVisible();
   await palette.fill(typeof title === "string" ? title : "");

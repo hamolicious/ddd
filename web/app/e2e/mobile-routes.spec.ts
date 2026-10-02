@@ -274,7 +274,7 @@ test.describe("every route at 390 px", () => {
     failures.push(...(await measure(page, "the sidebar drawer")));
     await drawer.click();
 
-    await page.keyboard.press("ControlOrMeta+k");
+    await page.keyboard.press("ControlOrMeta+p");
     await expect(page.getByRole("combobox", { name: /command/i })).toBeVisible();
     await page.waitForTimeout(250);
     failures.push(...(await measure(page, "the command palette")));

@@ -161,7 +161,7 @@ test("the built-in editor is replaced by a separately-authored editor plugin", a
 
     // The mode is reachable by command too (`document.mode.edit` is maintained by the
     // surface for whatever is registered, so it followed the swap).
-    await page.keyboard.press("ControlOrMeta+k");
+    await page.keyboard.press("ControlOrMeta+p");
     const palette = page.getByRole("combobox", { name: /command/i });
     await expect(palette).toBeVisible();
     await palette.fill("Show document as: Edit");

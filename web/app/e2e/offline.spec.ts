@@ -355,7 +355,7 @@ test("a note made offline: editable at once, in the list, and on the server afte
   const net = await network(page, context);
   await signIn(page, ADMIN);
   await net.offline();
-  await page.keyboard.press("ControlOrMeta+k");
+  await page.keyboard.press("ControlOrMeta+p");
   await page.getByRole("combobox", { name: /command/i }).fill("New document");
   await page.keyboard.press("Enter");
   await expect(page.getByRole("tab", { name: /^Edit/ })).toBeVisible({ timeout: 20_000 });

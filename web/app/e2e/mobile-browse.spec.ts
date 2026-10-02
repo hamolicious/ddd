@@ -299,7 +299,7 @@ test.describe("browse and find, at phone width", () => {
   test("the palette is a sheet that fits the viewport and runs a command", async ({ page }) => {
     await signIn(page, ADMIN);
 
-    await page.keyboard.press("ControlOrMeta+k");
+    await page.keyboard.press("ControlOrMeta+p");
     const input = page.getByRole("combobox", { name: /command/i });
     await expect(input).toBeVisible();
 
@@ -432,7 +432,7 @@ test.describe("the same phone, rotated and at the Android floor", () => {
 
     // And the palette is a sheet measured against 390 px of height, not a 70vh dialog
     // in a viewport that has no 70vh to give.
-    await page.keyboard.press("ControlOrMeta+k");
+    await page.keyboard.press("ControlOrMeta+p");
     await expect(page.getByRole("combobox", { name: /command/i })).toBeVisible();
     const sheet = await page.locator(".cmd-palette").boundingBox();
     expect(sheet?.height ?? 0).toBeLessThanOrEqual(391);

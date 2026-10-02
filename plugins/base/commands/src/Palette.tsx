@@ -1,5 +1,5 @@
 /**
- * The command palette (`Mod+K`).
+ * The command palette (`Mod+P`).
  *
  * **Keyboard-operable end to end**, which SPEC §8 lists as a requirement rather than
  * polish: the input takes focus on open, `ArrowUp`/`ArrowDown` move the active option,

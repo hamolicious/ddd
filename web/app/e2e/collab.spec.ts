@@ -213,7 +213,7 @@ test("a note one person makes offline, the other edits once it arrives", async (
   const { alice, bob, close } = await twoPeople(browser, baseURL!, seed);
   try {
     await alice.net.offline();
-    await alice.page.keyboard.press("ControlOrMeta+k");
+    await alice.page.keyboard.press("ControlOrMeta+p");
     await alice.page.getByRole("combobox", { name: /command/i }).fill("New document");
     await alice.page.keyboard.press("Enter");
     // Alice was already on a note, so wait for the address to name the new one.
