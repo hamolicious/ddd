@@ -1,13 +1,9 @@
 # ddd sync protocol — `/api/sync`
 
 **Version:** `1` (the value of `protocol` in every handshake)
-**Status:** frozen for M2. Server (`crates/server/src/routes/sync.rs`, `feed.rs`) and
-client (`web/kernel/src/sync/`, `protocol.ts`) implement this document
-independently; where an implementation and this file disagree, **this file is the
-bug report**. Where this file and [`../SPEC.md`](../SPEC.md) disagree, the SPEC wins.
-
-Spec anchors: §4.1 (projection + lazy CRDTs), §4.2 (local query), §4.3
-(transport), §3.2 (CRDT pinning), §3.5 (persistence), §5.2/§5.3 (auth, sessions).
+Server (`crates/server/src/routes/sync.rs`, `feed.rs`) and client
+(`web/kernel/src/sync/`, `protocol.ts`) implement this document independently;
+where an implementation and this file disagree, **this file is the bug report**.
 
 ---
 
@@ -57,7 +53,7 @@ Origin: https://app.example.com
   recognised protocol version is rejected with HTTP **400** before the upgrade
   (there is no socket yet, so there is no close code).
 - Native shells cannot set `Authorization` on a browser-less WebSocket and have no
-  cookies (SPEC §5.2, §7). They additionally offer
+  cookies. They additionally offer
   `ddd.bearer.<token>`, where `<token>` is the **raw session token**
   exactly as `POST /api/auth/login` returned it (tokens are already URL-safe
   base64-ish opaque strings; they are used verbatim, not re-encoded). The server
@@ -69,7 +65,7 @@ Origin: https://app.example.com
 Resolution order for credentials: `Authorization` header → `ddd.bearer.*`
 subprotocol → session cookie. The first one present is the only one tried.
 
-### 1.2 Origin allowlist (mandatory — SPEC §4.3)
+### 1.2 Origin allowlist (mandatory)
 
 Before anything else the server checks the `Origin` header against
 `APP_ORIGIN` (the same comma-separated allowlist CORS uses):
@@ -97,12 +93,12 @@ about session validity.
   expiry, a row removed straight in the database, a restore from backup. A session
   that is expired, revoked, or belongs to a deactivated user ⇒ close **4401**.
 - `4401` means *re-authenticate*, nothing else. The client shows a re-login
-  affordance and **never clears IndexedDB** (SPEC §5.3). Unsynced document edits
+  affordance and **never clears IndexedDB**. Unsynced document edits
   survive the re-login.
-- Concurrent sockets are capped at **8 per session** (SPEC §4.3, multi-tab), **16
+- Concurrent sockets are capped at **8 per session** (multi-tab), **16
   per user** across all of that user's sessions, and **512 per server process**
-  (SPEC §8 pins `replicas: 1`, so every socket's queues and room references sit on
-  one heap). A socket over any of those is closed with **4429** immediately after
+  (the server runs as a single replica, so every socket's queues and room
+  references sit on one heap). A socket over any of those is closed with **4429** immediately after
   the handshake; the client treats that as "another tab owns the socket", stays in
   `offline` sync state with local-only reads, and retries with the standard backoff.
   The per-user cap exists because a session is cheap to mint — `POST
@@ -143,15 +139,15 @@ receives any other first frame must close with **4400**.
   client whose Wasm core reports a different value must **not** trust its local
   materialization of `content` → `fm`/`title`; it keeps working read-only from the
   server-materialized projection rows and surfaces "reload to update".
-- `plugins_version` is the fingerprint of the plugin load set (`@kernel` 3.0): every
+- `plugins_version` is the fingerprint of the plugin load set: every
   served plugin's `id@version#assets` and whether an admin wants it loaded, plus both
   load orders. It is the `load.version` of `GET /api/plugins`. A client compares it with
   the version it booted with and reloads when they differ, exactly as if a
   `plugins.changed` had reached it, so a client that was offline during a change catches
   up on reconnect. A circuit-breaker trip does not change it.
-- `floor_seq` is the oldest sequence number the feed can still serve. In M2 it is
-  always `0`: the feed is never truncated (§2.2). It exists so ACL filtering (v2)
-  and any future compaction have a way to say "resume is impossible, bootstrap".
+- `floor_seq` is the oldest sequence number the feed can still serve. It is
+  always `0`: the feed is never truncated (§2.2). It exists so a future ACL filter
+  or compaction has a way to say "resume is impossible, bootstrap".
 
 ---
 
@@ -159,7 +155,7 @@ receives any other first frame must close with **4400**.
 
 ### 2.1 What a row is
 
-The projection of SPEC §4.1, plus its sequence number:
+The document's projection row, plus its sequence number:
 
 ```json
 {
@@ -189,19 +185,18 @@ Rules, all normative:
   (`{"$date": …}`) never appears anywhere in this protocol, the REST API, or the
   bootstrap stream. `fm` and `plugins` carry only the shared-core value model
   (null / bool / int / float / string / list / map) — dates inside them are
-  already canonical strings (SPEC §3.4).
-- `content` is the **materialized full text**, all three regions (SPEC §3.1). It
-  is present unless the subscription asked for `include_content: false` or the row
+  already canonical strings.
+- `content` is the **materialized full text** of the document. It is present unless the subscription asked for `include_content: false` or the row
   is `purged`.
 - `deleted: true` is a tombstone: the document is in Trash, still readable and
-  restorable for `TRASH_RETENTION_DAYS` (SPEC §3.5). The client keeps the row and
+  restorable for `TRASH_RETENTION_DAYS`. The client keeps the row and
   shows it in Trash.
 - `purged: true` is the permanent graveyard entry (the row is gone from
   `documents`). It carries only `seq`, `id`, `deleted: true`, `purged: true`,
   `deleted_at`, `deleted_by`. The client **deletes** its local projection row and
   any local Y.Doc replica for that id. If that replica held unsynced edits, the
-  client offers "restore your version as a new document" *before* discarding
-  (SPEC §4.1) — as a new id, because the old id can never be reused.
+  client offers "restore your version as a new document" *before* discarding —
+  as a new id, because the old id can never be reused.
 - Rows are **last-writer-wins per id**: there is exactly one live row per document
   in the feed's source of truth, carrying its newest `seq`. Applying rows is
   idempotent; applying them out of order is not. A client that receives a row with
@@ -244,9 +239,9 @@ Server behaviour:
 
 1. `since_seq > head_seq` ⇒ `feed.reset` with `reason: "seq_ahead"`. (The honest
    case: the database was restored from a backup and the client is from the
-   future — SPEC §8 split-brain note.)
+   future.)
 2. `since_seq < floor_seq` ⇒ `feed.reset` with `reason: "below_floor"`. Cannot
-   happen in M2 (`floor_seq == 0`).
+   happen while `floor_seq == 0`.
 3. The number of rows with `feed_seq > since_seq` exceeds
    `limits.feed_catchup_max_rows` ⇒ `feed.reset` with
    `reason: "bootstrap_required"` and `pending_rows: <count>`. Cold start and
@@ -353,16 +348,16 @@ All CRDT and awareness traffic is **binary** WebSocket frames:
 | `0x02` | `SYNC_STEP2` | both | `Y.encodeStateAsUpdate(doc, theirStateVector)` — update **encoding v1** |
 | `0x03` | `UPDATE` | both | an incremental Yjs update, encoding v1 |
 | `0x04` | `AWARENESS` | both | `awarenessProtocol.encodeAwarenessUpdate(...)` — **relayed opaquely, never parsed, never persisted** |
-| `0x05` | `AWARENESS_QUERY` | client → server | empty; asks the server to re-relay nothing (no-op in M2; reserved so presence UI in v2 needs no new frame type) |
+| `0x05` | `AWARENESS_QUERY` | client → server | empty; asks the server to re-relay nothing (currently a no-op; reserved so a future presence UI needs no new frame type) |
 | `0x06` | `HISTORY` | client → server | an edit made offline: 8 bytes big-endian epoch ms (when it was made), then a Yjs update, encoding v1 (§3.7) |
-| `0x10`–`0x1F` | reserved | — | plugin event channels (M4). A client must ignore unknown types ≥ `0x10`; the server closes **4400** on unknown types < `0x10` |
+| `0x10`–`0x1F` | reserved | — | plugin event channels. A client must ignore unknown types ≥ `0x10`; the server closes **4400** on unknown types < `0x10` |
 
 This is deliberately *not* the y-websocket framing: that protocol muxes nothing
 and carries no document id. The payloads are exactly y-protocols' payloads, so
 `y-protocols/sync` and `y-protocols/awareness` are used unchanged — only the
 envelope is ours.
 
-### 3.2 Pinned CRDT compatibility (SPEC §3.2 — violating any of these corrupts text)
+### 3.2 Pinned CRDT compatibility (violating any of these corrupts text)
 
 - One Yjs doc per document, containing one `Y.Text` at root key **`content`**.
 - yrs `OffsetKind::Utf16` (server) ↔ Yjs default UTF-16 indices (client).
@@ -388,8 +383,8 @@ Server, on `doc.subscribe`:
    `doc.error { code: "not_found" }`. Both are final for that id.
 3. Subscription count over `limits.max_subscriptions` ⇒
    `doc.error { code: "too_many_subscriptions" }`. The client's LRU (~20 hydrated
-   docs, SPEC §4.1) should make this unreachable.
-4. Register the socket as a room subscriber (the per-document actor of SPEC §4.3;
+   docs) should make this unreachable.
+4. Register the socket as a room subscriber (the per-document actor;
    rooms evict 10 min after the last subscriber drops, post-flush).
 5. Send, in this order:
    - JSON `doc.subscribed { id, materialized_version, updated_at, deleted }`
@@ -431,7 +426,7 @@ unsubscribed from, is dropped.
 - The server applies every inbound `SYNC_STEP2`/`UPDATE` through the docstore
   (`DocStore::apply_update`), which serializes writes per document, appends to
   `document_updates` and marks the room dirty. Materialization is debounced
-  (~500 ms) and atomic-with-itself (SPEC §3.5) — which is why a document's *feed
+  (~500 ms) and atomic-with-itself — which is why a document's *feed
   row* can trail its live CRDT state by one debounce window. Editors get the fine
   grained updates over the socket; the projection catches up right after.
 - Applied updates are fanned out to every *other* subscriber of that document as
@@ -456,9 +451,9 @@ unsubscribed from, is dropped.
   costs one diff, and never loses local edits.
 - If a `SYNC_STEP2` the server needs to send exceeds `max_frame_bytes`, it sends
   `doc.error { id, code: "too_large", hint: "rest" }` instead. The client hydrates
-  that document over REST — `GET /api/documents/{id}?format=crdt` (SPEC §5.1),
+  that document over REST — `GET /api/documents/{id}?format=crdt`,
   which has no frame limit — then re-subscribes with the resulting `sv`. Document
-  text is capped at 1 MiB and `crdt` is compacted above 4 MiB (SPEC §3.5), so this
+  text is capped at 1 MiB and `crdt` is compacted above 4 MiB, so this
   is a corner, not a routine path — but it is a defined corner.
 - **`hint` is what distinguishes the two causes of `too_large`, and a client must
   branch on it.** With `hint: "rest"` the *diff* did not fit and REST hydration is
@@ -485,7 +480,7 @@ at its first. The journal is saved with the local replica, so it survives a relo
 
 On (re)subscribe the client sends the journal, oldest first, as `HISTORY` frames
 **before** any `SYNC_STEP2` of its own, then clears it. The server applies each like an
-`UPDATE` and records it in the document's history (`dev-docs/resolved/HISTORY.md`) at the claimed
+`UPDATE` and records it in the document's history at the claimed
 time, clamped between the previous change's time and now, marked offline, with the
 time it arrived kept beside it. The fan-out to other subscribers is an ordinary `UPDATE`.
 
@@ -553,7 +548,7 @@ Authenticated like every other `/api` route (cookie or bearer). Response is
   that, the request is refused with **429** and a `Retry-After`. `limit` is
   client-chosen up to 1 000 and a row carries the document text, so an unbounded
   number of parallel passes is a straightforward way to exhaust a single-replica
-  server (SPEC §8).
+  server.
 - **`safe_seq` is captured on the first page and echoed unchanged on every
   page** — by the server, out of the cursor, not by the client remembering. The
   client uses it when the last page reports `complete: true`, subscribing to the
@@ -568,7 +563,7 @@ Authenticated like every other `/api` route (cookie or bearer). Response is
   skip every document that changed in between. Carrying the pin in the cursor
   makes the guarantee hold for both.
 - `trash` ∈ `live` | `trashed` | `all`, default **`all`**: the client's Trash view
-  works offline (SPEC §6.5), so tombstoned rows belong in the mirror.
+  works offline, so tombstoned rows belong in the mirror.
 - Purged ids are *not* part of bootstrap. A full successful bootstrap pass is
   authoritative: after `complete: true`, the client deletes every local row whose
   id the pass never mentioned.
@@ -577,7 +572,7 @@ Authenticated like every other `/api` route (cookie or bearer). Response is
 - A client may cancel mid-stream and restart from the last `next_cursor` it saw —
   which keeps the pass's pinned `safe_seq`, because the cursor carries it.
   Restarting from scratch is also always safe.
-- Target (SPEC §4.1): 5 000 documents in under 30 s on LAN, with a first-run
+- Target: 5 000 documents in under 30 s on LAN, with a first-run
   progress screen driven by `header.total` and the running row count.
 
 `GET /api/sync/bootstrap?probe=1` returns a single header line only (no rows) —
@@ -602,7 +597,7 @@ downloading anything.
 
 ## 6. Backpressure, limits, and flood control
 
-**Max frame size: 4 MiB**, both directions (SPEC §4.3). Larger inbound frame ⇒
+**Max frame size: 4 MiB**, both directions. Larger inbound frame ⇒
 close **4413**. The server never *sends* a frame above the limit (see §3.5).
 
 **Bounded send queues.** Each connection has two queues:
@@ -642,13 +637,13 @@ per process (§1.3). **Per-user ceilings on REST:** 2 concurrent bootstrap strea
 | `1000` | Normal closure (client navigated away, `logout`) | none |
 | `1001` | Going away | reconnect with backoff |
 | `4400` | Protocol error (bad frame, unknown control type, `welcome` violated) | **do not** auto-reconnect in a loop: log, reconnect once with full backoff, surface "update available — reload" if it repeats (a version skew is the likely cause) |
-| `4401` | Unauthenticated / session revoked / revalidation failed | show re-login; **never clear local data** (SPEC §5.3); resync after re-auth |
+| `4401` | Unauthenticated / session revoked / revalidation failed | show re-login; **never clear local data**; resync after re-auth |
 | `4403` | Origin not allowed, or a cookie connection without `Origin` | stop; this is a misconfiguration |
 | `4408` | Flood / repeated backpressure / rate limit | reconnect with backoff, starting at ×4 the base delay |
 | `4409` | Unsupported protocol version | stop reconnecting; prompt reload (the bundle is stale) |
 | `4413` | Frame too large | reconnect; report a bug — the client should never send one |
 | `4429` | Too many concurrent sockets for this session | stay local-only, retry with backoff (a tab may close) |
-| `4503` | Server shutting down (deploy, SIGTERM — SPEC §8) | reconnect quickly with jitter: single replica, so it will be back |
+| `4503` | Server shutting down (deploy, SIGTERM) | reconnect quickly with jitter: single replica, so it will be back |
 
 Every close frame carries a short human-readable reason string. It is for logs,
 never for branching — branch on the code.
@@ -673,7 +668,7 @@ BASE = 500 ms      CAP = 30 s      n = consecutive failures, capped at 6
 - The client also reconnects immediately, ignoring the backoff, on
   `navigator.onLine` becoming true or the tab becoming visible — each of those at
   most once per 5 s.
-- Sync state machine exposed to plugins (SPEC §6.4 `sync`):
+- Sync state machine exposed to plugins (`sync`):
   `offline → connecting → syncing → synced`, plus `auth-required` (4401) and
   `error`. Pending-write count comes from the client's outbox, not from the socket.
 
@@ -707,7 +702,7 @@ feed-scoped:
 { "t": "error", "code": "internal", "message": "…", "fatal": false }
 ```
 
-Unknown `t` values: the **client ignores** them (forward compatibility with M4
+Unknown `t` values: the **client ignores** them (forward compatibility with
 plugin channels); the **server closes 4400** (a client sending something the
 server does not know is a version skew, and silently dropping writes is worse
 than a reconnect).
@@ -729,7 +724,7 @@ A client implementation is conformant when it:
 A client implementation is additionally conformant when it branches on `doc.error`'s
 `hint` rather than on `too_large` alone (§3.5), and when a purge row makes it offer
 recovery for **any** local replica holding unsynced edits — including one that is
-only on disk, with nothing open (§2.1, SPEC §4.1).
+only on disk, with nothing open (§2.1).
 
 A server implementation is conformant when it:
 
@@ -747,6 +742,6 @@ A server implementation is conformant when it:
 8. serves CRDT frames only for documents the socket has subscribed to, and streams
    the bootstrap page instead of buffering it.
 
-The M2 convergence harness (`web/harness/`) is the executable half of this list:
+The convergence harness (`web/harness/`) is the executable half of this list:
 N simulated clients, randomized ops/partitions/reconnects, asserting CRDT
-convergence *and* materialization equality (SPEC §9 M2).
+convergence *and* materialization equality.
