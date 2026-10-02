@@ -27,17 +27,9 @@ needs an invite (Settings → Invites).
 
 ### Running it on a server
 
-Browsers only allow the offline app, secure cookies and the Android app on HTTPS. The `caddy`
-profile puts Caddy in front of the server with automatic certificates:
-
-```bash
-DOMAIN=notes.example.com ACME_EMAIL=you@example.com \
-  APP_ORIGIN=https://notes.example.com COOKIE_SECURE=true \
-  TRUST_PROXY_HEADERS=true BIND_HOST=127.0.0.1 \
-  docker compose --profile caddy up -d --build
-```
-
-Keep `BIND_HOST=127.0.0.1` when `TRUST_PROXY_HEADERS=true`: the proxy must be the only way in.
+ddd needs HTTPS: put it behind your own reverse proxy, then set `APP_ORIGIN` to your https URL
+and `COOKIE_SECURE=true`. If the proxy is the only way in, also set `TRUST_PROXY_HEADERS=true`
+and `BIND_HOST=127.0.0.1`.
 
 Every setting is listed in [`.env.example`](.env.example) and
 [`backend/README.md`](backend/README.md#environment-variables).
@@ -99,4 +91,3 @@ mise run test           # the server's tests
 | [`cli/`](cli/README.md) | The `ddd` command-line tool |
 | [`schema/`](schema) | JSON schemas, including the plugin manifest |
 | [`brand/`](brand/README.md) | The logo and icons |
-| [`deploy/`](deploy) | The Caddy config for the `caddy` profile |
