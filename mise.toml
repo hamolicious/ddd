@@ -200,7 +200,7 @@ dir = "backend"
 run = "cargo test -p ddd-server --test pluginhost_smoke"
 
 [tasks.web-build]
-description = "Build everything the server serves: the Wasm core, the contract, the PWA bundle (runtime layer + app + service worker), and the base plugins"
+description = "Build everything the server serves: the Wasm core, the contract, the PWA bundle (runtime layer + app + service worker), and the base plugins with their backend halves"
 dir = "web"
 depends = ["wasm"]
 run = [
@@ -208,6 +208,7 @@ run = [
   "npm run kernel:dts",
   "npm run build:app",
   "npm run build:plugins",
+  "node scripts/build-wasm-plugins.mjs",
 ]
 
 [tasks.web-check]
