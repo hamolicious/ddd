@@ -1,0 +1,20 @@
+{
+  "id": "gitlab-packages",
+  "version": "1.0.0",
+  "name": "GitLab packages",
+  "description": "Install plugins from a GitLab generic package registry.",
+  "author": "ddd base distribution",
+  "license": "MIT OR Apache-2.0",
+  "x-tailwind": true,
+  "kernel": "^3.0",
+  "dependencies": {
+    "admin": "^2.3"
+  },
+  "peerLibraries": {
+    "react": "^18.0.0"
+  },
+  "frontend": {
+    "module": "frontend/index.mjs",
+    "style": "frontend/style.css"
+  }
+}

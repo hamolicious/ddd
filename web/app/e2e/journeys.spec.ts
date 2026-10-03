@@ -15,7 +15,7 @@ import {
   trashRow,
 } from "./helpers.js";
 
-const EXPECTED_PLUGINS = 38;
+const EXPECTED_PLUGINS = 40;
 
 const MIDNIGHT_BG = "#0d1117";
 

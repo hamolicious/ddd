@@ -1512,3 +1512,58 @@ async fn rejecting_an_interrupted_approval_removes_the_files_too() {
 
     harness.cleanup().await;
 }
+
+fn manifest_with(id: &str, version: &str, capabilities: &str) -> String {
+    format!(
+        r#"{{"id":"{id}","version":"{version}","kernel":"^3.0","frontend":{{"module":"frontend/index.mjs"}},"capabilities":{capabilities}}}"#
+    )
+}
+
+#[tokio::test]
+#[ignore = "requires MONGO_URI"]
+async fn an_update_keeps_its_approval_only_when_it_asks_for_nothing_new() {
+    let Some(harness) = Harness::start("update-grant").await else {
+        return;
+    };
+    let admin = Actor::User(new_id());
+
+    let first = harness.package("upd", &manifest_with("upd", "1.0.0", r#"{"documents":["read","write"]}"#), false);
+    harness.install(first).await.expect("installs 1.0.0");
+    let narrowed = PluginCapabilities {
+        documents: vec!["read".to_string()],
+        ..PluginCapabilities::default()
+    };
+    plugininstall::approve(&harness.state, "upd", "1.0.0", narrowed.clone(), &admin)
+        .await
+        .expect("approves 1.0.0");
+    let current = plugininstall::record(&harness.state, "upd")
+        .await
+        .expect("reads")
+        .expect("exists");
+
+    let same = harness.package("upd", &manifest_with("upd", "1.1.0", r#"{"documents":["read"]}"#), false);
+    let outcome = harness.install(same).await.expect("installs 1.1.0");
+    let grant = ddd_server::routes::plugin_api::update_grant(&current, &outcome)
+        .expect("asks for less than before, so the approval carries over");
+    assert_eq!(grant, narrowed, "the admin's narrowing survives the update");
+    plugininstall::approve(&harness.state, "upd", "1.1.0", grant, &admin)
+        .await
+        .expect("approves 1.1.0");
+    let current = plugininstall::record(&harness.state, "upd")
+        .await
+        .expect("reads")
+        .expect("exists");
+
+    let wider = harness.package(
+        "upd",
+        &manifest_with("upd", "1.2.0", r#"{"documents":["read"],"notifications":true}"#),
+        false,
+    );
+    let outcome = harness.install(wider).await.expect("installs 1.2.0");
+    assert!(
+        ddd_server::routes::plugin_api::update_grant(&current, &outcome).is_none(),
+        "an update that asks for notifications must wait for the admin"
+    );
+
+    harness.cleanup().await;
+}

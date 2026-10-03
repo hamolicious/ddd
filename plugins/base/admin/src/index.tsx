@@ -15,8 +15,23 @@ import { addView } from "plugin:shell-ui";
 import { AdminSectionBody, AdminView, SETTINGS_SECTIONS, isAdminSection, type AdminSectionId, type SettingsSectionId } from "./AdminView.js";
 import { createAdminClient } from "./api.js";
 import { DialogsContext, type Dialogs } from "./hooks.js";
+import { UploadSource } from "./Plugins.js";
+import { BoundaryContext, addPackageSource as addSource, type PackageSource } from "./sources.js";
+import { listenForUpdates } from "./updates.js";
 
 export type { AdminSectionId } from "./AdminView.js";
+export type { PluginInstallOutcome } from "./api.js";
+export type {
+  InstalledPackage,
+  PackageSource,
+  PackageSourceProps,
+  RemotePackageRequest,
+  UpdateCheckContext,
+} from "./sources.js";
+export { UPDATE_AVAILABLE, type PluginUpdate } from "./updates.js";
+export type { RemoteLookupResult } from "./api.js";
+
+export const addPackageSource: (items: PackageSource | readonly PackageSource[]) => () => void = addSource;
 
 export interface AdminApi {
   open(section?: AdminSectionId): void;
@@ -26,6 +41,7 @@ export interface AdminApi {
 const VIEW = "admin.main";
 
 let kernelRef: Kernel | undefined;
+let stopListening: (() => void) | undefined;
 
 export function open(section?: AdminSectionId): void {
   navigate(section ? `/admin/${section}` : "/admin");
@@ -74,6 +90,15 @@ export default function activate(kernel: Kernel): void {
     return isAdminSection(candidate) ? candidate : "users";
   };
 
+  stopListening = listenForUpdates(kernel.events);
+
+  addSource({
+    id: "upload",
+    title: "Upload",
+    order: 0,
+    component: UploadSource,
+  });
+
   addRoute([
     { path: "/admin", view: VIEW },
     { path: "/admin/:section", view: VIEW },
@@ -84,13 +109,15 @@ export default function activate(kernel: Kernel): void {
     useEffect(() => onChange((route) => setSection(sectionFromRoute(route))), []);
     return (
       <DialogsContext.Provider value={dialogs}>
-        <AdminView
-          client={client}
-          isAdmin={admin}
-          selfId={selfId}
-          section={section}
-          onSelectSection={(next) => navigate(`/admin/${next}`)}
-        />
+        <BoundaryContext.Provider value={kernel.ui}>
+          <AdminView
+            client={client}
+            isAdmin={admin}
+            selfId={selfId}
+            section={section}
+            onSelectSection={(next) => navigate(`/admin/${next}`)}
+          />
+        </BoundaryContext.Provider>
       </DialogsContext.Provider>
     );
   };
@@ -106,7 +133,9 @@ export default function activate(kernel: Kernel): void {
       const meta = SETTINGS_TITLES[id];
       const Section = (): ReactElement => (
         <DialogsContext.Provider value={dialogs}>
-          <AdminSectionBody section={id} client={client} selfId={selfId} embedded />
+          <BoundaryContext.Provider value={kernel.ui}>
+            <AdminSectionBody section={id} client={client} selfId={selfId} embedded />
+          </BoundaryContext.Provider>
         </DialogsContext.Provider>
       );
       return {
@@ -170,5 +199,7 @@ export default function activate(kernel: Kernel): void {
 }
 
 export function deactivate(): void {
+  stopListening?.();
+  stopListening = undefined;
   kernelRef = undefined;
 }

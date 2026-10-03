@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { ReactElement, ReactNode } from "react";
 
 import type { InstalledPlugin, PluginCapabilities } from "@kernel";
@@ -13,11 +13,15 @@ import {
   type PluginAdminList,
   type PluginAdminView,
   type PluginCronState,
+  type PluginInstallOutcome,
 } from "./api.js";
 import { AdminSectionFrame } from "./AdminView.js";
 import { useAsync, useConfirm, useModal, useMutation } from "./hooks.js";
 import { CheckIcon, ChevronIcon, PlayIcon, PowerIcon, TrashIcon, UploadIcon } from "./icons.js";
 import { PluginConfigForm } from "./PluginConfig.js";
+import { describeOutcome, packageSourceRegistry, useBoundary, type PackageSourceProps } from "./sources.js";
+import { useRegistry } from "../../_shared/boundary.js";
+import { installedFrom, updateStore, type ReportedUpdate } from "./updates.js";
 import { describeSkip, pluginRelations, type DependencyView, type PluginRelations } from "./relations.js";
 
 export function PluginsSection({
@@ -81,7 +85,9 @@ export function PluginsSection({
         </p>
       )}
 
-      <UploadPanel client={client} list={list.data} onDone={() => list.reload()} />
+      <PackageSourcesPanel client={client} list={list.data} onDone={() => list.reload()} />
+
+      {list.data !== undefined && <UpdatesPanel client={client} plugins={list.data.plugins} onDone={reload} />}
 
       {list.error !== undefined && (
         <>
@@ -164,7 +170,7 @@ export function PluginsSection({
 
 const PRIMARY = "admin:border-accent! admin:bg-accent! admin:text-accent-text!";
 
-function UploadPanel({
+function PackageSourcesPanel({
   client,
   list,
   onDone,
@@ -173,67 +179,103 @@ function UploadPanel({
   readonly list: PluginAdminList | undefined;
   readonly onDone: () => void;
 }): ReactElement {
+  const sources = useRegistry(packageSourceRegistry);
+  const boundary = useBoundary();
+  const [chosen, setChosen] = useState<string | undefined>(undefined);
+  const [busy, setBusy] = useState<string | undefined>(undefined);
+  const [error, setError] = useState<string | undefined>(undefined);
   const [outcome, setOutcome] = useState<string | undefined>(undefined);
-  const [over, setOver] = useState(false);
-  const input = useRef<HTMLInputElement | null>(null);
-  const upload = useMutation(onDone);
-  const cap = list?.limits.max_package_bytes;
-  const busy = upload.busy !== undefined;
+  const active = sources.find((entry) => entry.value.id === chosen) ?? sources[0];
 
-  const send = (file: File | undefined): void => {
-    if (!file || busy) return;
-    setOutcome(undefined);
-    upload.run(file.name, async () => {
-      const result = await client.uploadPlugin(file);
-      setOutcome(
-        `${result.id} ${result.version} uploaded — ${result.state}` +
-          (result.replaced != null ? `, replacing ${result.replaced}` : "") +
-          (result.warnings.length > 0 ? `. Warnings: ${result.warnings.join("; ")}` : ""),
-      );
-    });
-    if (input.current) input.current.value = "";
-  };
+  const install = useCallback(
+    async (
+      label: string,
+      body: () => Promise<PluginInstallOutcome>,
+    ): Promise<PluginInstallOutcome | undefined> => {
+      if (busy !== undefined) return undefined;
+      setBusy(label);
+      setError(undefined);
+      setOutcome(undefined);
+      try {
+        const result = await body();
+        setOutcome(describeOutcome(result));
+        onDone();
+        return result;
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : String(cause));
+        return undefined;
+      } finally {
+        setBusy(undefined);
+      }
+    },
+    [busy, onDone],
+  );
+
+  const via = active?.value.id ?? "";
+  const props = useMemo(
+    (): PackageSourceProps => ({
+      busy: busy !== undefined,
+      maxPackageBytes: list?.limits.max_package_bytes,
+      installFile: (file) => install(file.name, () => client.uploadPlugin(file)),
+      installFromUrl: (request) =>
+        install(request.label ?? request.url, () =>
+          client.installRemotePlugin({ url: request.url, headers: request.headers ?? {}, via }),
+        ),
+    }),
+    [busy, list?.limits.max_package_bytes, install, client, via],
+  );
+
+  const Source = useMemo(() => {
+    if (!active) return undefined;
+    const component = active.value.component;
+    return boundary
+      ? boundary.boundary(component, { point: "admin.package-source", pluginId: active.pluginId })
+      : component;
+  }, [active, boundary]);
 
   return (
-    <div className="admin:flex admin:flex-col admin:gap-2">
-      <div
-        className={`admin-upload admin:flex admin:flex-wrap admin:items-center admin:gap-3 admin:rounded-lg admin:border-2 admin:border-dashed admin:p-3 ${over ? "admin:border-accent admin:bg-accent-subtle" : "admin:border-border admin:bg-bg-subtle"}`}
-        onDragOver={(event) => {
-          event.preventDefault();
-          setOver(true);
-        }}
-        onDragLeave={() => setOver(false)}
-        onDrop={(event) => {
-          event.preventDefault();
-          setOver(false);
-          send(event.dataTransfer.files[0]);
-        }}
-      >
-        <span className="admin:flex admin:size-10 admin:shrink-0 admin:items-center admin:justify-center admin:rounded-full admin:bg-bg admin:text-text-muted admin:text-xl">
-          <UploadIcon />
-        </span>
-        <div className="admin:flex admin:min-w-48 admin:flex-1 admin:flex-col admin:gap-0.5">
-          <strong>Install or upgrade a plugin</strong>
-          <span className="admin:text-sm admin:text-text-muted">
-            Drop a <code>.zip</code> here or choose one. It waits for your approval; nothing
-            runs until then.{cap !== undefined && <> Up to {formatBytes(cap)}.</>}
-          </span>
+    <section className="admin:flex admin:flex-col admin:gap-2" aria-labelledby="admin-install-heading">
+      <h4 id="admin-install-heading" className="admin:m-0">
+        Install or upgrade a plugin
+      </h4>
+      {sources.length > 1 && (
+        <div className="admin:flex admin:flex-wrap admin:gap-1" role="tablist" aria-label="Where the package comes from">
+          {sources.map((entry) => {
+            const selected = entry.value.id === active?.value.id;
+            return (
+              <button
+                key={entry.value.id}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                disabled={busy !== undefined}
+                className={`admin:tap-h admin:rounded admin:border admin:px-3 ${selected ? PRIMARY : "admin:border-border admin:bg-bg"}`}
+                onClick={() => setChosen(entry.value.id)}
+              >
+                {entry.value.title}
+              </button>
+            );
+          })}
         </div>
-        <label className="admin:tap-h admin:inline-flex admin:cursor-pointer admin:items-center admin:gap-1.5 admin:rounded admin:border admin:border-accent admin:bg-accent admin:px-3 admin:text-accent-text admin:has-[:focus-visible]:outline-2 admin:has-[:focus-visible]:outline-offset-1 admin:has-[:focus-visible]:outline-focus">
-          <input
-            ref={input}
-            className="admin:sr-only"
-            type="file"
-            accept=".zip,application/zip"
-            disabled={busy}
-            onChange={(event) => send(event.target.files?.[0])}
-          />
-          {busy ? `Uploading ${upload.busy}…` : "Choose a package"}
-        </label>
-      </div>
-      {upload.error !== undefined && (
+      )}
+      {active?.value.description !== undefined && (
+        <p className="admin-note admin:m-0">{active.value.description}</p>
+      )}
+      {Source !== undefined ? (
+        <div role={sources.length > 1 ? "tabpanel" : undefined}>
+          <Source {...props} />
+        </div>
+      ) : (
+        <p className="admin-empty">No package source is registered.</p>
+      )}
+      {busy !== undefined && (
+        <p className="admin-note" role="status">
+          Installing {busy}…
+        </p>
+      )}
+      {error !== undefined && (
         <p className="admin-error" role="alert">
-          {upload.error}
+          {error}
         </p>
       )}
       {outcome !== undefined && (
@@ -241,6 +283,194 @@ function UploadPanel({
           {outcome}
         </p>
       )}
+    </section>
+  );
+}
+
+function UpdatesPanel({
+  client,
+  plugins,
+  onDone,
+}: {
+  readonly client: AdminClient;
+  readonly plugins: readonly PluginAdminView[];
+  readonly onDone: () => void;
+}): ReactElement | null {
+  const sources = useRegistry(packageSourceRegistry);
+  const reported = useSyncExternalStore(updateStore.subscribe, updateStore.get, updateStore.get);
+  const [checking, setChecking] = useState(false);
+  const [summary, setSummary] = useState<string | undefined>(undefined);
+  const [problems, setProblems] = useState<readonly string[]>([]);
+  const [updating, setUpdating] = useState<string | undefined>(undefined);
+  const [error, setError] = useState<string | undefined>(undefined);
+  const [outcome, setOutcome] = useState<string | undefined>(undefined);
+
+  const checkers = sources.filter((entry) => entry.value.checkUpdates !== undefined);
+  const updates = useMemo(
+    () =>
+      [...reported.values()].filter((update) =>
+        plugins.some((plugin) => plugin.id === update.plugin && plugin.version !== update.latest),
+      ),
+    [reported, plugins],
+  );
+
+  if (checkers.length === 0) return null;
+
+  const check = async (): Promise<void> => {
+    setChecking(true);
+    setSummary(undefined);
+    setProblems([]);
+    const failures: string[] = [];
+    let checked = 0;
+    await Promise.all(
+      checkers.map(async (entry) => {
+        const source = entry.value;
+        updateStore.clear(source.id);
+        const installed = installedFrom(plugins, source.id);
+        if (installed.length === 0) return;
+        checked += installed.length;
+        try {
+          await source.checkUpdates?.({
+            plugins: installed,
+            lookup: (url, headers) => client.lookupRemote(url, headers),
+          });
+        } catch (cause) {
+          failures.push(`${source.title}: ${cause instanceof Error ? cause.message : String(cause)}`);
+        }
+      }),
+    );
+    setProblems(failures);
+    setSummary(
+      checked === 0
+        ? "No installed plugin came from a source that can check for updates."
+        : `Checked ${checked} plugin${checked === 1 ? "" : "s"}.`,
+    );
+    setChecking(false);
+  };
+
+  const update = async (target: ReportedUpdate): Promise<void> => {
+    if (updating !== undefined) return;
+    setUpdating(target.plugin);
+    setError(undefined);
+    setOutcome(undefined);
+    try {
+      const result = await client.installRemotePlugin({
+        url: target.install.url,
+        headers: target.install.headers ?? {},
+        via: target.source,
+        update: target.plugin,
+      });
+      updateStore.forget(target.plugin);
+      setOutcome(
+        result.state === "enabled"
+          ? `${result.id} updated to ${result.version}.`
+          : `${result.id} ${result.version} asks for more than ${target.current} was allowed; approve it under Pending installs.`,
+      );
+      onDone();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setUpdating(undefined);
+    }
+  };
+
+  return (
+    <section className="admin:flex admin:flex-col admin:gap-2" aria-labelledby="admin-updates-heading">
+      <div className="admin:flex admin:flex-wrap admin:items-center admin:gap-2">
+        <h4 id="admin-updates-heading" className="admin:m-0 admin:flex-1">
+          Updates{updates.length > 0 ? ` (${updates.length})` : ""}
+        </h4>
+        <button type="button" disabled={checking || updating !== undefined} onClick={() => void check()}>
+          {checking ? "Checking…" : "Check updates"}
+        </button>
+      </div>
+      {updates.length > 0 ? (
+        <ul className="admin-plugins" aria-label="Available updates">
+          {updates.map((available) => (
+            <li key={available.plugin} className="admin-plugin admin:flex admin:flex-wrap admin:items-center admin:gap-2">
+              <span className="admin:flex-1">
+                <strong>{available.plugin}</strong> {available.current} → {available.latest}
+                <span className="admin-hint">from {available.source}</span>
+              </span>
+              <button
+                type="button"
+                className={PRIMARY}
+                disabled={updating !== undefined}
+                aria-label={`Update ${available.plugin} to ${available.latest}`}
+                onClick={() => void update(available)}
+              >
+                {updating === available.plugin ? "Updating…" : "Update"}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        summary !== undefined && <p className="admin-empty">Everything is up to date. {summary}</p>
+      )}
+      {problems.map((problem) => (
+        <p key={problem} className="admin-warning" role="status">
+          {problem}
+        </p>
+      ))}
+      {error !== undefined && (
+        <p className="admin-error" role="alert">
+          {error}
+        </p>
+      )}
+      {outcome !== undefined && (
+        <p className="admin-note" role="status">
+          {outcome}
+        </p>
+      )}
+    </section>
+  );
+}
+
+export function UploadSource({ busy, maxPackageBytes, installFile }: PackageSourceProps): ReactElement {
+  const [over, setOver] = useState(false);
+  const input = useRef<HTMLInputElement | null>(null);
+
+  const send = (file: File | undefined): void => {
+    if (!file || busy) return;
+    void installFile(file);
+    if (input.current) input.current.value = "";
+  };
+
+  return (
+    <div
+      className={`admin-upload admin:flex admin:flex-wrap admin:items-center admin:gap-3 admin:rounded-lg admin:border-2 admin:border-dashed admin:p-3 ${over ? "admin:border-accent admin:bg-accent-subtle" : "admin:border-border admin:bg-bg-subtle"}`}
+      onDragOver={(event) => {
+        event.preventDefault();
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(event) => {
+        event.preventDefault();
+        setOver(false);
+        send(event.dataTransfer.files[0]);
+      }}
+    >
+      <span className="admin:flex admin:size-10 admin:shrink-0 admin:items-center admin:justify-center admin:rounded-full admin:bg-bg admin:text-text-muted admin:text-xl">
+        <UploadIcon />
+      </span>
+      <div className="admin:flex admin:min-w-48 admin:flex-1 admin:flex-col admin:gap-0.5">
+        <strong>Upload a package</strong>
+        <span className="admin:text-sm admin:text-text-muted">
+          Drop a <code>.zip</code> here or choose one. It waits for your approval; nothing
+          runs until then.{maxPackageBytes !== undefined && <> Up to {formatBytes(maxPackageBytes)}.</>}
+        </span>
+      </div>
+      <label className="admin:tap-h admin:inline-flex admin:cursor-pointer admin:items-center admin:gap-1.5 admin:rounded admin:border admin:border-accent admin:bg-accent admin:px-3 admin:text-accent-text admin:has-[:focus-visible]:outline-2 admin:has-[:focus-visible]:outline-offset-1 admin:has-[:focus-visible]:outline-focus">
+        <input
+          ref={input}
+          className="admin:sr-only"
+          type="file"
+          accept=".zip,application/zip"
+          disabled={busy}
+          onChange={(event) => send(event.target.files?.[0])}
+        />
+        {busy ? "Installing…" : "Choose a package"}
+      </label>
     </div>
   );
 }
@@ -1033,6 +1263,8 @@ export function describeSource(plugin: PluginAdminView): string {
       return `uploaded as ${source.filename}`;
     case "directory":
       return `dropped into ${source.path}`;
+    case "remote":
+      return `downloaded by ${source.via} from ${source.url}`;
     default:
       return "shipped with the server";
   }

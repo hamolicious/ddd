@@ -1,5 +1,6 @@
 pub mod config;
 pub mod queue;
+pub mod sources;
 pub mod watcher;
 pub mod zipcheck;
 
@@ -29,6 +30,12 @@ const PURGE_PAGE: u32 = 100;
 pub enum InstallSource {
     Upload { filename: String },
     Directory { path: String },
+    Remote {
+        url: String,
+        via: String,
+        #[serde(default)]
+        authenticated: bool,
+    },
     Base,
 }
 
@@ -37,8 +44,16 @@ impl InstallSource {
         match self {
             InstallSource::Upload { filename } => format!("upload {filename}"),
             InstallSource::Directory { path } => format!("drop {path}"),
+            InstallSource::Remote { url, via, .. } => format!("{via} {url}"),
             InstallSource::Base => "base distribution".to_string(),
         }
+    }
+
+    pub fn archive_is_staged_copy(&self) -> bool {
+        matches!(
+            self,
+            InstallSource::Upload { .. } | InstallSource::Remote { .. }
+        )
     }
 }
 
@@ -134,7 +149,7 @@ pub async fn install(
     .await;
 
     if outcome.is_ok()
-        && matches!(request.source, InstallSource::Upload { .. })
+        && request.source.archive_is_staged_copy()
         && let Err(err) = fs::remove_file(&request.archive)
     {
         warn!(

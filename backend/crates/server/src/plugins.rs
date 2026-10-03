@@ -26,6 +26,7 @@ pub const BASE_PLUGIN_IDS: &[&str] = &[
     "fm-autocomplete",
     "folder-style",
     "folders",
+    "gitlab-packages",
     "graph",
     "icons",
     "indexer",
@@ -180,6 +181,42 @@ impl PluginCapabilities {
             http_hosts: self.http_hosts(),
             public_routes: self.public_routes.clone(),
             notifications: self.notifications,
+        }
+    }
+
+    pub fn asks_nothing_beyond(&self, earlier: &PluginCapabilities) -> bool {
+        let earlier_hosts = earlier.http_hosts();
+        self.documents
+            .iter()
+            .all(|right| earlier.documents.contains(right))
+            && (!self.notifications || earlier.notifications)
+            && self
+                .public_routes
+                .iter()
+                .all(|route| earlier.public_routes.contains(route))
+            && (self.http.is_none() || earlier.http.is_some())
+            && self
+                .http_hosts()
+                .iter()
+                .all(|host| earlier_hosts.contains(host))
+    }
+
+    pub fn restricted_to(&self, requested: &PluginCapabilities) -> PluginCapabilities {
+        PluginCapabilities {
+            documents: self
+                .documents
+                .iter()
+                .filter(|right| requested.documents.contains(right))
+                .cloned()
+                .collect(),
+            http: requested.http.as_ref().and(self.http.clone()),
+            notifications: self.notifications && requested.notifications,
+            public_routes: self
+                .public_routes
+                .iter()
+                .filter(|route| requested.public_routes.contains(route))
+                .cloned()
+                .collect(),
         }
     }
 
@@ -1230,9 +1267,42 @@ mod tests {
         assert_eq!(registry.problems().len(), 1);
     }
 
+    fn capabilities(documents: &[&str], hosts: Option<&[&str]>, notifications: bool) -> PluginCapabilities {
+        PluginCapabilities {
+            documents: documents.iter().map(|right| right.to_string()).collect(),
+            http: hosts.map(|hosts| HttpCapability {
+                hosts: hosts.iter().map(|host| host.to_string()).collect(),
+            }),
+            notifications,
+            public_routes: Vec::new(),
+        }
+    }
+
     #[test]
-    fn the_base_distribution_is_the_thirty_seven_plugins_of_spec_6_5() {
-        assert_eq!(BASE_PLUGIN_IDS.len(), 38);
+    fn an_update_asks_nothing_beyond_an_earlier_request_only_when_it_is_a_subset() {
+        let earlier = capabilities(&["read"], Some(&["api.example.com"]), false);
+        assert!(capabilities(&[], None, false).asks_nothing_beyond(&earlier));
+        assert!(capabilities(&["read"], Some(&["API.example.com"]), false).asks_nothing_beyond(&earlier));
+        assert!(!capabilities(&["read", "write"], None, false).asks_nothing_beyond(&earlier));
+        assert!(!capabilities(&["read"], Some(&["other.example.com"]), false).asks_nothing_beyond(&earlier));
+        assert!(!capabilities(&[], None, true).asks_nothing_beyond(&earlier));
+        assert!(!capabilities(&[], Some(&[]), false).asks_nothing_beyond(&PluginCapabilities::default()));
+    }
+
+    #[test]
+    fn a_grant_restricted_to_a_new_request_keeps_the_admins_narrowing() {
+        let approved = capabilities(&["read"], Some(&["api.example.com", "extra.example.com"]), true);
+        let requested = capabilities(&["read", "write"], Some(&["api.example.com"]), false);
+        let kept = approved.restricted_to(&requested);
+        assert_eq!(kept.documents, vec!["read".to_string()]);
+        assert_eq!(kept.http_hosts(), vec!["api.example.com", "extra.example.com"]);
+        assert!(!kept.notifications);
+        assert!(approved.restricted_to(&capabilities(&[], None, false)).http.is_none());
+    }
+
+    #[test]
+    fn the_base_distribution_is_thirty_nine_sorted_plugins() {
+        assert_eq!(BASE_PLUGIN_IDS.len(), 39);
         assert!(BASE_PLUGIN_IDS.windows(2).all(|pair| pair[0] < pair[1]));
     }
 }

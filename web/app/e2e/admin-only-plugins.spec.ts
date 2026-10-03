@@ -19,6 +19,12 @@ test("a member cannot view or install plugins", async ({ page, browser }) => {
     multipart: { package: { name: "x.zip", mimeType: "application/zip", buffer: Buffer.from("PK") } },
   });
   expect(upload.status()).toBe(403);
+  const remote = await api.post("/api/admin/plugins/remote", {
+    data: { url: "https://example.com/x.zip", via: "gitlab" },
+  });
+  expect(remote.status()).toBe(403);
+  const lookup = await api.post("/api/admin/plugins/remote/lookup", { data: { url: "https://example.com/x.json" } });
+  expect(lookup.status()).toBe(403);
   expect((await api.post("/api/admin/plugins/folders/enable")).status()).toBe(403);
   expect((await api.get("/api/admin/plugins/folders/config")).status()).toBe(403);
 

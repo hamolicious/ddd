@@ -220,8 +220,9 @@ node scripts/compose-plugins.mjs /tmp/reg \
 PLUGINS_DIR=/tmp/reg cargo run -- serve              # from backend/
 ```
 
-To install on a running server, package it with `mise run plugin-package <id>` and install
-the `.zip` as an admin, or drop it into `PLUGIN_INBOX_DIR`. New packages are pending until
+To install on a running server, package it with `mise run plugin-package <id>` and, as an
+admin, upload the `.zip` or install it from a GitLab generic package registry (Admin →
+Plugins), or drop it into `PLUGIN_INBOX_DIR`. New packages are pending until
 an admin approves them.
 
 > **Rebuilt a plugin without bumping its version?** Plugin URLs are version-scoped and

@@ -152,7 +152,7 @@ is the annotated copy-me file and covers every variable below.
 | `PLUGIN_BREAKER_THRESHOLD` | `5` | |
 | `PLUGIN_HTTP_TIMEOUT_MS` | `10000` | Global ceilings for outbound HTTP. Hosts come from each plugin's approved capability. |
 | `PLUGIN_HTTP_MAX_RESPONSE_BYTES` | 10 MiB | |
-| `PLUGIN_HTTP_ALLOW_CIDRS` | *(empty)* | Widens the sandbox: CIDRs plugins may reach besides the public internet. Private, loopback, link-local, CGNAT and cloud-metadata addresses are refused otherwise. |
+| `PLUGIN_HTTP_ALLOW_CIDRS` | *(empty)* | Widens the sandbox: CIDRs plugins, and package downloads from `/api/admin/plugins/remote`, may reach besides the public internet. Private, loopback, link-local, CGNAT and cloud-metadata addresses are refused otherwise. Set it to install from a GitLab on your own network. |
 | `PLUGIN_ENABLE_CRON` | `true` | Turn off on a second server pointed at the same database, or for debugging. |
 
 ### Tuning (safe to omit)
@@ -269,6 +269,8 @@ ignored.
 | `GET` | `/export` | Streamed zip of every document as plain markdown. Disaster recovery without Mongo. |
 | `GET` | `/stats` | Workspace counters. |
 | `GET`/`POST` | `/plugins` | Every plugin record (state, requested vs approved capabilities, cron, breaker, last error), or upload a `.zip` (multipart), which lands **pending**. |
+| `POST` | `/plugins/remote` | `{url, headers?, via, update?}`: the server downloads the `.zip` and installs it **pending**, like an upload. `headers` carries credentials (sent once, never stored, dropped on a redirect to another host). `via` names the source, e.g. `gitlab`. With `update: "<id>"` the package must be that plugin, and it is enabled at once when it asks for nothing the running version did not ask for (the admin's narrowing is kept); otherwise it stays pending. Up to 120 s and the package size cap; private addresses need `PLUGIN_HTTP_ALLOW_CIDRS`. |
+| `POST` | `/plugins/remote/lookup` | `{url, headers?}`: a `GET` made by the server for update checks; returns `{status, body}` with the JSON body or `null`. Up to 1 MiB, same address rules as `/plugins/remote`. |
 | `POST` | `/plugins/{id}/{version}/approve` | Body: the approved capability set. Can only narrow, except `http.hosts`, which an admin may widen. Activates the backend half without a restart. |
 | `POST` | `/plugins/{id}/{version}/reject` | Delete the pending package. |
 | `POST` | `/plugins/{id}/enable`, `/disable` | Admin off switch. `enable` also resets the circuit breaker. |

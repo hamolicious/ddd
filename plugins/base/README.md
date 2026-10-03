@@ -1,6 +1,6 @@
 # `plugins/base/` — the base distribution
 
-The visible app: 38 plugins that ship with the server. They are installed like any other
+The visible app: 39 plugins that ship with the server. They are installed like any other
 plugin, can each be replaced or removed, and get no privilege the kernel does not give every
 plugin.
 
@@ -61,7 +61,8 @@ dist/<id>/<version>/              build output, in the installed layout the serv
 | `doc-events` | "a note was just made": note-creating views call `notifyCreated`, the folder tree listens with `onCreated` | `notifyCreated`, `onCreated` |
 | `graph` | notes and their links as a live force-directed graph: the whole workspace at `#/graph`, the open note's neighbourhood in the altbar | — |
 | `settings` | the settings shell | `addSection`, `open` |
-| `admin` | users, invites, audit log, plugins (with dependencies, dependents and `provides` conflicts) | `open`, `isAdmin` |
+| `admin` | users, invites, audit log, plugins (with dependencies, dependents and `provides` conflicts); installs packages from every registered source (see [Package sources](#package-sources)), with **Upload** built in | `open`, `isAdmin`, `addPackageSource`, `UPDATE_AVAILABLE` |
+| `gitlab-packages` | for admins, a **GitLab** package source: downloads a plugin `.zip` from a project's generic package registry, and checks the plugins installed without a token for updates | — |
 | `db-health` | Settings → Database health, for admins: orphan files, duplicate files and notes with each copy's reference count | — |
 | `welcome` | fills a new, empty workspace with a short tour, one note per base feature | — |
 
@@ -113,6 +114,7 @@ flowchart TD
         sync-status --> toolbar
         admin --> toolbar
         admin -.-> icons
+        gitlab-packages --> admin
     end
 
     subgraph documents ["document experience"]
@@ -168,7 +170,7 @@ requires it. Activation order (each row depends only on rows above it):
 | 3 | `toolbar` |
 | 4 | `commands`, `notices`, `sync-status` |
 | 5 | `document-surface`, `search`, `themes`, `graph`, `admin`, `db-health` |
-| 6 | `editor`, `table`, `timeline`, `auto-fm` |
+| 6 | `editor`, `table`, `timeline`, `auto-fm`, `gitlab-packages` |
 | 7 | `doc-list`, `slash-commands`, `fm-autocomplete`, `wikilinks` |
 | 8 | `folders` |
 | 9 | `markdown`, `calendar`, `folder-style`, `welcome` |
@@ -229,6 +231,85 @@ cd web && npm run check:plugins     # also part of `mise run web-check`
 It fails on a missing or out-of-range dependency, a cycle, a `plugin:` import (including
 type-only ones and those reached through `_shared`) not listed in `dependencies`, and a
 static import of an optional dependency.
+
+## Package sources
+
+Admin → Plugins installs a package from one of several sources, shown as tabs. `admin`
+registers **Upload**; `gitlab-packages` registers **GitLab**. Any plugin can add its own with
+`addPackageSource`:
+
+```tsx
+import { addPackageSource, type PackageSourceProps } from "plugin:admin";  // "admin": "^2.3"
+
+function Releases({ busy, installFromUrl }: PackageSourceProps) {
+  return (
+    <button disabled={busy} onClick={() => void installFromUrl({
+      url: "https://example.com/my-plugin-1.0.0.zip",
+      headers: { authorization: "Bearer …" },
+      label: "my-plugin 1.0.0",
+    })}>Install</button>
+  );
+}
+
+addPackageSource({ id: "releases", title: "Releases", order: 30, component: Releases });
+```
+
+| Prop | What it does |
+|---|---|
+| `installFile(file)` | Uploads a `File` (wrap a downloaded `Blob` with `new File([blob], "name.zip")`). |
+| `installFromUrl({ url, headers?, label? })` | The **server** downloads the URL (the page's CSP blocks the browser from reaching other sites). `headers` are sent once and never stored. |
+| `busy` | An install is running; disable your controls. |
+| `maxPackageBytes` | The server's size cap. |
+
+Both install functions resolve to the install outcome, or `undefined` when it failed. The
+panel shows progress, errors and the result, so a source only needs its own form. Every
+package lands pending, and the plugin list records which source installed it (your `id`).
+Inside the panel, the admin classes `admin-form`, `admin-inline-form`, `admin-field`,
+`admin-hint` and `admin-error` style forms like the rest of Admin.
+
+### Updates
+
+A source can also find newer versions of what it installed. Give it `checkUpdates`;
+**Check updates** in Admin → Plugins calls it with the plugins that source installed, and
+the source announces each newer version as an `admin:update-available` event (`UPDATE_AVAILABLE`):
+
+```tsx
+import { UPDATE_AVAILABLE, addPackageSource, type PluginUpdate } from "plugin:admin";
+
+addPackageSource({
+  id: "releases",
+  title: "Releases",
+  component: Releases,
+  checkUpdates: async ({ plugins, lookup }) => {
+    for (const plugin of plugins) {
+      const { status, body } = await lookup(`https://example.com/${plugin.id}/latest.json`);
+      if (status !== 200) throw new Error(`${plugin.id}: ${status}`);
+      const latest = body as { version: string; url: string };
+      if (latest.version === plugin.version) continue;
+      kernel.events.emit<PluginUpdate>(UPDATE_AVAILABLE, {
+        plugin: plugin.id,
+        source: "releases",
+        current: plugin.version,
+        latest: latest.version,
+        install: { url: latest.url },
+      });
+    }
+  },
+});
+```
+
+| In the context | What it is |
+|---|---|
+| `plugins` | `{ id, version, url, authenticated }` for each plugin this source installed. `authenticated` is true when the install sent headers; those are never stored, so such a plugin usually cannot be checked. |
+| `lookup(url, headers?)` | A `GET` made by the server, returning `{ status, body }` with the JSON body (or `null`). Up to 1 MiB. |
+
+Each update gets an **Update** button. It downloads `install.url` and enables the new version
+right away when it asks for nothing the current version did not ask for, keeping any
+narrowing the admin made. Otherwise it waits under Pending installs. A rejected or failed
+check shows its error message next to the button.
+
+The GitLab source checks the plugins it installed without a token, through the project's
+package list.
 
 ## Machine-owned documents
 

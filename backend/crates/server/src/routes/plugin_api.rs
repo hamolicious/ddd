@@ -1,5 +1,4 @@
 use std::collections::{BTreeMap, VecDeque};
-use std::path::PathBuf;
 use std::sync::{Mutex, OnceLock};
 
 use axum::extract::{DefaultBodyLimit, Multipart, Path, Query, State};
@@ -10,14 +9,16 @@ use axum::{Json, Router};
 use bson::doc;
 use ddd_plugin_abi as abi;
 use serde::{Deserialize, Serialize};
-use tokio::io::AsyncWriteExt;
 
 use crate::auth::{AdminUser, ClientMeta, MaybeAuthUser, audit};
 use crate::domain::{Timestamp, new_id};
 use crate::error::{AppError, AppResult};
 use crate::pluginhost::limits::PluginLimits;
 use crate::pluginhost::{self, CallKind, Invocation, PluginHost};
-use crate::plugininstall::{self, InstallRequest, InstallSource, zipcheck};
+use crate::plugininstall::sources::{
+    self, LookupResult, PackageSource, RemoteLookup, RemotePackage, UploadedPackage,
+};
+use crate::plugininstall::{self, InstallRequest, InstallSource};
 use crate::plugins::{self, ConfigField, PluginCapabilities, PluginRecord, PluginState, RouteSpec};
 use crate::state::AppState;
 
@@ -367,6 +368,8 @@ pub fn admin_router() -> Router<AppState> {
             "/",
             get(list).post(upload).layer(DefaultBodyLimit::disable()),
         )
+        .route("/remote", post(install_remote))
+        .route("/remote/lookup", post(lookup_remote))
         .route("/{id}/{version}/approve", post(approve))
         .route("/{id}/{version}/reject", post(reject))
         .route("/{id}/enable", post(enable))
@@ -377,11 +380,7 @@ pub fn admin_router() -> Router<AppState> {
         .route("/{id}/logs", get(logs))
 }
 
-pub const MAX_UPLOAD_BYTES: u64 = zipcheck::MAX_ARCHIVE_BYTES;
-
-pub const PACKAGE_FIELD: &str = "package";
-
-const OTHER_FIELDS_BUDGET: u64 = 64 * 1024;
+pub const MAX_UPLOAD_BYTES: u64 = sources::MAX_PACKAGE_BYTES;
 
 pub const ADMIN_DISABLE_REASON: &str = "admin";
 
@@ -670,14 +669,110 @@ pub async fn upload(
     meta: ClientMeta,
     multipart: Multipart,
 ) -> AppResult<(StatusCode, Json<plugininstall::InstallOutcome>)> {
-    let staged = stage_upload(&state, multipart).await?;
-    let outcome = match plugininstall::install(
+    install_package(&state, &admin, &meta, UploadedPackage(multipart)).await
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RemoteInstall {
+    #[serde(flatten)]
+    pub package: RemotePackage,
+    #[serde(default)]
+    pub update: Option<String>,
+}
+
+pub async fn install_remote(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    meta: ClientMeta,
+    Json(request): Json<RemoteInstall>,
+) -> AppResult<(StatusCode, Json<plugininstall::InstallOutcome>)> {
+    let current = match request.update.as_deref() {
+        Some(id) => Some(
+            plugininstall::record(&state, id)
+                .await?
+                .ok_or(AppError::NotFound("plugin"))?,
+        ),
+        None => None,
+    };
+    let (status, Json(outcome)) = install_package(&state, &admin, &meta, request.package).await?;
+    let Some(current) = current else {
+        return Ok((status, Json(outcome)));
+    };
+    if outcome.id != current.id {
+        return Err(AppError::Unprocessable(format!(
+            "the update for `{}` installed `{}` instead; it is pending, review it before approving",
+            current.id, outcome.id
+        )));
+    }
+    let Some(grant) = update_grant(&current, &outcome) else {
+        return Ok((status, Json(outcome)));
+    };
+
+    plugininstall::approve(&state, &outcome.id, &outcome.version, grant, &admin.actor()).await?;
+    note(
+        &outcome.id,
+        "info",
+        format!(
+            "updated {} from {} to {} and kept its approval",
+            outcome.id, current.version, outcome.version
+        ),
+    );
+    audit::record(
         &state,
+        "plugin.approve",
+        Some(&admin.actor()),
+        audit::TARGET_PLUGIN,
+        Some(outcome.id.clone()),
+        doc! {
+            "version": &outcome.version,
+            "update_from": &current.version,
+            "automatic": true,
+        },
+        meta.ip.clone(),
+    )
+    .await;
+
+    Ok((
+        status,
+        Json(plugininstall::InstallOutcome {
+            state: PluginState::Enabled,
+            ..outcome
+        }),
+    ))
+}
+
+pub fn update_grant(
+    current: &PluginRecord,
+    outcome: &plugininstall::InstallOutcome,
+) -> Option<PluginCapabilities> {
+    let keeps_approval = current.state == PluginState::Enabled
+        && outcome.state == PluginState::Pending
+        && outcome
+            .capabilities
+            .asks_nothing_beyond(&current.manifest.capabilities);
+    keeps_approval.then(|| current.capabilities_approved.restricted_to(&outcome.capabilities))
+}
+
+pub async fn lookup_remote(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+    Json(request): Json<RemoteLookup>,
+) -> AppResult<Json<LookupResult>> {
+    Ok(Json(sources::lookup(state.config(), request).await?))
+}
+
+async fn install_package(
+    state: &AppState,
+    admin: &AdminUser,
+    meta: &ClientMeta,
+    package: impl PackageSource,
+) -> AppResult<(StatusCode, Json<plugininstall::InstallOutcome>)> {
+    let staged = package.stage(state.config()).await?;
+    let outcome = match plugininstall::install(
+        state,
         InstallRequest {
-            source: InstallSource::Upload {
-                filename: staged.filename.clone(),
-            },
-            archive: staged.path.clone(),
+            source: staged.source.clone(),
+            archive: staged.archive.clone(),
             actor: admin.actor(),
             auto_approve: false,
         },
@@ -686,28 +781,29 @@ pub async fn upload(
     {
         Ok(outcome) => outcome,
         Err(error) => {
-            let _ = tokio::fs::remove_file(&staged.path).await;
+            staged.discard().await;
             return Err(error.into());
         }
     };
 
+    let origin = staged.source.label();
     note(
         &outcome.id,
         "info",
         format!(
-            "uploaded {} {} from `{}` — pending approval",
-            outcome.id, outcome.version, staged.filename
+            "installed {} {} from {origin} — pending approval",
+            outcome.id, outcome.version
         ),
     );
     audit::record(
-        &state,
+        state,
         "plugin.install",
         Some(&admin.actor()),
         audit::TARGET_PLUGIN,
         Some(outcome.id.clone()),
         doc! {
             "version": &outcome.version,
-            "filename": &staged.filename,
+            "source": &origin,
             "state": outcome.state.as_str(),
             "replaced": outcome.replaced.clone(),
             "warnings": outcome.warnings.len() as i64,
@@ -717,116 +813,6 @@ pub async fn upload(
     .await;
 
     Ok((StatusCode::CREATED, Json(outcome)))
-}
-
-fn io_error(step: &str, error: std::io::Error) -> AppError {
-    AppError::Internal(anyhow::anyhow!("{step}: {error}"))
-}
-
-struct StagedUpload {
-    path: PathBuf,
-    filename: String,
-}
-
-async fn stage_upload(state: &AppState, mut multipart: Multipart) -> AppResult<StagedUpload> {
-    let directory = plugininstall::staging_dir(state.config()).join("uploads");
-    tokio::fs::create_dir_all(&directory)
-        .await
-        .map_err(|error| io_error("creating the plugin staging directory", error))?;
-
-    let mut other_bytes: u64 = 0;
-    loop {
-        let Some(mut field) = multipart
-            .next_field()
-            .await
-            .map_err(|error| AppError::bad_request(format!("malformed multipart body: {error}")))?
-        else {
-            return Err(AppError::bad_request(format!(
-                "multipart body has no package part (send the zip as `{PACKAGE_FIELD}`)"
-            )));
-        };
-
-        let is_package = field.file_name().is_some() || field.name() == Some(PACKAGE_FIELD);
-        if !is_package {
-            while let Some(chunk) = field.chunk().await.map_err(|error| {
-                AppError::bad_request(format!("malformed multipart body: {error}"))
-            })? {
-                other_bytes += chunk.len() as u64;
-                if other_bytes > OTHER_FIELDS_BUDGET {
-                    return Err(AppError::bad_request(
-                        "multipart body has too much non-file content",
-                    ));
-                }
-            }
-            continue;
-        }
-
-        let filename = sanitize_package_name(field.file_name());
-        let path = directory.join(format!("{}-{}", new_id(), filename));
-        let mut file = tokio::fs::File::create(&path)
-            .await
-            .map_err(|error| io_error("creating the staged package file", error))?;
-        let mut size: u64 = 0;
-
-        loop {
-            let chunk = match field.chunk().await {
-                Ok(chunk) => chunk,
-                Err(error) => {
-                    let _ = tokio::fs::remove_file(&path).await;
-                    return Err(AppError::bad_request(format!(
-                        "upload interrupted: {error}"
-                    )));
-                }
-            };
-            let Some(chunk) = chunk else { break };
-            size += chunk.len() as u64;
-            if size > MAX_UPLOAD_BYTES {
-                let _ = tokio::fs::remove_file(&path).await;
-                return Err(AppError::PayloadTooLarge {
-                    len: size,
-                    limit: MAX_UPLOAD_BYTES,
-                });
-            }
-            if let Err(error) = file.write_all(&chunk).await {
-                let _ = tokio::fs::remove_file(&path).await;
-                return Err(io_error("writing the staged package", error));
-            }
-        }
-
-        if size == 0 {
-            let _ = tokio::fs::remove_file(&path).await;
-            return Err(AppError::bad_request("the uploaded package is empty"));
-        }
-        file.flush()
-            .await
-            .map_err(|error| io_error("flushing the staged package", error))?;
-        file.sync_all()
-            .await
-            .map_err(|error| io_error("syncing the staged package", error))?;
-        drop(file);
-
-        return Ok(StagedUpload { path, filename });
-    }
-}
-
-pub fn sanitize_package_name(raw: Option<&str>) -> String {
-    let candidate = raw
-        .unwrap_or("package.zip")
-        .rsplit(['/', '\\'])
-        .next()
-        .unwrap_or("package.zip")
-        .trim();
-    let cleaned: String = candidate
-        .chars()
-        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_'))
-        .take(96)
-        .collect();
-    let cleaned = cleaned.trim_matches('.').to_string();
-    if cleaned.is_empty() {
-        "package.zip".to_string()
-    } else {
-        cleaned
-    }
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -1273,6 +1259,22 @@ mod tests {
     }
 
     #[test]
+    fn the_event_ring_reports_newest_first_and_only_this_plugin() {
+        let plugin = format!("ring-test-{}", new_id());
+        let other = format!("other-{}", new_id());
+        note(&plugin, "info", "first");
+        note(&other, "info", "not mine");
+        note(&plugin, "error", "second");
+
+        let events = events_for(&plugin, 10);
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].message, "second");
+        assert_eq!(events[0].level, "error");
+        assert_eq!(events[1].message, "first");
+        assert_eq!(events_for(&plugin, 1).len(), 1);
+    }
+
+    #[test]
     fn the_rate_limit_key_is_per_plugin_and_per_client() {
         assert_eq!(
             key_of(&rate_limit_key("cal", Some("user-1"), Some("1.2.3.4"))),
@@ -1595,42 +1597,6 @@ mod admin_surface_tests {
         assert!(!admin_view(&pending, false, false).served);
     }
 
-    #[test]
-    fn an_uploaded_filename_can_never_escape_the_staging_directory() {
-        assert_eq!(
-            sanitize_package_name(Some("plugin-1.0.0.zip")),
-            "plugin-1.0.0.zip"
-        );
-        assert_eq!(sanitize_package_name(Some("../../etc/cron.d/x")), "x");
-        assert_eq!(sanitize_package_name(Some("/etc/passwd")), "passwd");
-        assert_eq!(sanitize_package_name(Some("..\\..\\windows")), "windows");
-        assert_eq!(sanitize_package_name(Some("..")), "package.zip");
-        assert_eq!(sanitize_package_name(Some("   ")), "package.zip");
-        assert_eq!(sanitize_package_name(None), "package.zip");
-        assert_eq!(sanitize_package_name(Some("a b;c$.zip")), "abc.zip");
-        assert!(!sanitize_package_name(Some("a".repeat(500).as_str())).is_empty());
-        assert!(sanitize_package_name(Some("a".repeat(500).as_str())).len() <= 96);
-        for name in ["../x", "/x", "a\0b.zip", "x/../y"] {
-            let cleaned = sanitize_package_name(Some(name));
-            assert!(!cleaned.contains('/') && !cleaned.contains("..") && !cleaned.contains('\0'));
-        }
-    }
-
-    #[test]
-    fn the_event_ring_reports_newest_first_and_only_this_plugin() {
-        let plugin = format!("ring-test-{}", new_id());
-        let other = format!("other-{}", new_id());
-        note(&plugin, "info", "first");
-        note(&other, "info", "not mine");
-        note(&plugin, "error", "second");
-
-        let events = events_for(&plugin, 10);
-        assert_eq!(events.len(), 2);
-        assert_eq!(events[0].message, "second");
-        assert_eq!(events[0].level, "error");
-        assert_eq!(events[1].message, "first");
-        assert_eq!(events_for(&plugin, 1).len(), 1);
-    }
 
     #[test]
     fn the_event_ring_is_bounded() {

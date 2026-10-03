@@ -143,6 +143,7 @@ export type PluginConfigSchema = Readonly<Record<string, PluginConfigSchemaField
 export type PluginInstallSource =
   | { readonly kind: "upload"; readonly filename: string }
   | { readonly kind: "directory"; readonly path: string }
+  | { readonly kind: "remote"; readonly url: string; readonly via: string; readonly authenticated: boolean }
   | { readonly kind: "base" };
 
 export interface PluginAdminView {
@@ -204,6 +205,18 @@ export interface PluginAdminList {
   readonly abi_version: number;
   readonly pending_count: number;
   readonly secret_placeholder: string;
+}
+
+export interface RemotePluginRequest {
+  readonly url: string;
+  readonly headers: Readonly<Record<string, string>>;
+  readonly via: string;
+  readonly update?: string;
+}
+
+export interface RemoteLookupResult {
+  readonly status: number;
+  readonly body: unknown;
 }
 
 export interface PluginInstallOutcome {
@@ -280,6 +293,8 @@ export interface AdminClient {
 
   adminPlugins(): Promise<PluginAdminList>;
   uploadPlugin(file: File): Promise<PluginInstallOutcome>;
+  installRemotePlugin(request: RemotePluginRequest): Promise<PluginInstallOutcome>;
+  lookupRemote(url: string, headers?: Readonly<Record<string, string>>): Promise<RemoteLookupResult>;
   approvePlugin(
     id: string,
     version: string,
@@ -342,6 +357,10 @@ export function createAdminClient(fetchApi: ApiFetch): AdminClient {
       body.append("package", file, file.name);
       return json<PluginInstallOutcome>("/admin/plugins", { method: "POST", body });
     },
+    installRemotePlugin: (request) =>
+      json<PluginInstallOutcome>("/admin/plugins/remote", postJson(request)),
+    lookupRemote: (url, headers = {}) =>
+      json<RemoteLookupResult>("/admin/plugins/remote/lookup", postJson({ url, headers })),
     approvePlugin: (pluginId, version, capabilities) =>
       json<PluginAdminView>(
         `/admin/plugins/${id(pluginId)}/${id(version)}/approve`,
