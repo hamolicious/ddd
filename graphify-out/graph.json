@@ -12229,7 +12229,7 @@
       "file_type": "code",
       "norm_label": "listing",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L393"
+      "source_location": "L395"
     },
     {
       "id": "plugins_base_admin_src_sources_packageprovider",
@@ -12255,7 +12255,7 @@
       "file_type": "code",
       "norm_label": "row",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L399"
+      "source_location": "L401"
     },
     {
       "id": "plugins_base_admin_src_sources_screen",
@@ -12268,7 +12268,7 @@
       "file_type": "code",
       "norm_label": "screen",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L193"
+      "source_location": "L195"
     },
     {
       "id": "plugins_base_admin_src_sources_setupprops",
@@ -20170,7 +20170,7 @@
       "file_type": "code",
       "norm_label": "sourcesetup()",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L281"
+      "source_location": "L283"
     },
     {
       "id": "plugins_base_markdown_src_mdast_sourceof",
@@ -46846,7 +46846,7 @@
       "file_type": "code",
       "norm_label": "browsepackages()",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L405"
+      "source_location": "L407"
     },
     {
       "id": "plugins_base_admin_src_sources_checkupdates",
@@ -46858,7 +46858,7 @@
       "file_type": "code",
       "norm_label": "checkupdates()",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L592"
+      "source_location": "L594"
     },
     {
       "id": "plugins_base_admin_src_sources_describeoutcome",
@@ -46882,7 +46882,7 @@
       "file_type": "code",
       "norm_label": "describeupdate()",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L574"
+      "source_location": "L576"
     },
     {
       "id": "plugins_base_admin_src_sources_formatsize",
@@ -46894,7 +46894,7 @@
       "file_type": "code",
       "norm_label": "formatsize()",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L189"
+      "source_location": "L191"
     },
     {
       "id": "plugins_base_admin_src_sources_installfrom",
@@ -46966,7 +46966,7 @@
       "file_type": "code",
       "norm_label": "sourcesmanager()",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L197"
+      "source_location": "L199"
     },
     {
       "id": "plugins_base_admin_src_sources_updateplugin",
@@ -46978,7 +46978,7 @@
       "file_type": "code",
       "norm_label": "updateplugin()",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L669"
+      "source_location": "L671"
     },
     {
       "id": "plugins_base_admin_src_sources_useavailableupdates",
@@ -46990,7 +46990,7 @@
       "file_type": "code",
       "norm_label": "useavailableupdates()",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L580"
+      "source_location": "L582"
     },
     {
       "id": "plugins_base_admin_src_sources_useboundary",
@@ -143849,6 +143849,18 @@
       "type": "external"
     },
     {
+      "id": "ref_gitlabsetup_js",
+      "label": "ref_gitlabsetup_js",
+      "_origin": "semantic",
+      "community": 158,
+      "community_name": "gitlab.ts",
+      "external": true,
+      "file_type": "concept",
+      "norm_label": "ref_gitlabsetup_js",
+      "source_file": "",
+      "type": "external"
+    },
+    {
       "id": "ref_plugin_admin",
       "label": "ref_plugin_admin",
       "_origin": "semantic",
@@ -144029,6 +144041,18 @@
       "type": "external"
     },
     {
+      "id": "package_sources",
+      "label": "package_sources",
+      "_origin": "semantic",
+      "community": 165,
+      "community_name": "serde",
+      "external": true,
+      "file_type": "concept",
+      "norm_label": "package_sources",
+      "source_file": "",
+      "type": "external"
+    },
+    {
       "id": "routing",
       "label": "routing",
       "_origin": "semantic",
@@ -144049,6 +144073,18 @@
       "external": true,
       "file_type": "concept",
       "norm_label": "serde",
+      "source_file": "",
+      "type": "external"
+    },
+    {
+      "id": "validate_source_id",
+      "label": "validate_source_id",
+      "_origin": "semantic",
+      "community": 165,
+      "community_name": "serde",
+      "external": true,
+      "file_type": "concept",
+      "norm_label": "validate_source_id",
       "source_file": "",
       "type": "external"
     },
@@ -146149,6 +146185,18 @@
       "external": true,
       "file_type": "concept",
       "norm_label": "ref_pluginconfig_js",
+      "source_file": "",
+      "type": "external"
+    },
+    {
+      "id": "ref_sources_js",
+      "label": "ref_sources_js",
+      "_origin": "semantic",
+      "community": 345,
+      "community_name": "Plugins.tsx",
+      "external": true,
+      "file_type": "concept",
+      "norm_label": "ref_sources_js",
       "source_file": "",
       "type": "external"
     },
@@ -149533,50 +149581,6 @@
       "external": true,
       "file_type": "concept",
       "norm_label": "mongodb",
-      "source_file": "",
-      "type": "external"
-    },
-    {
-      "id": "ref_gitlabsetup_js",
-      "label": "ref_gitlabsetup_js",
-      "community": 158,
-      "community_name": "gitlab.ts",
-      "external": true,
-      "file_type": "concept",
-      "norm_label": "ref_gitlabsetup_js",
-      "source_file": "",
-      "type": "external"
-    },
-    {
-      "id": "package_sources",
-      "label": "package_sources",
-      "community": 165,
-      "community_name": "serde",
-      "external": true,
-      "file_type": "concept",
-      "norm_label": "package_sources",
-      "source_file": "",
-      "type": "external"
-    },
-    {
-      "id": "validate_source_id",
-      "label": "validate_source_id",
-      "community": 165,
-      "community_name": "serde",
-      "external": true,
-      "file_type": "concept",
-      "norm_label": "validate_source_id",
-      "source_file": "",
-      "type": "external"
-    },
-    {
-      "id": "ref_sources_js",
-      "label": "ref_sources_js",
-      "community": 345,
-      "community_name": "Plugins.tsx",
-      "external": true,
-      "file_type": "concept",
-      "norm_label": "ref_sources_js",
       "source_file": "",
       "type": "external"
     }
@@ -184943,7 +184947,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L413",
+      "source_location": "L415",
       "weight": 1.0
     },
     {
@@ -184955,7 +184959,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L426",
+      "source_location": "L428",
       "weight": 1.0
     },
     {
@@ -184967,7 +184971,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L435",
+      "source_location": "L437",
       "weight": 1.0
     },
     {
@@ -184979,7 +184983,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L448",
+      "source_location": "L450",
       "weight": 1.0
     },
     {
@@ -184991,7 +184995,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L482",
+      "source_location": "L484",
       "weight": 1.0
     },
     {
@@ -185003,7 +185007,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L485",
+      "source_location": "L487",
       "weight": 1.0
     },
     {
@@ -185015,7 +185019,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L486",
+      "source_location": "L488",
       "weight": 1.0
     },
     {
@@ -185027,7 +185031,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L599",
+      "source_location": "L601",
       "weight": 1.0
     },
     {
@@ -185039,7 +185043,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L605",
+      "source_location": "L607",
       "weight": 1.0
     },
     {
@@ -185051,7 +185055,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L617",
+      "source_location": "L619",
       "weight": 1.0
     },
     {
@@ -185063,7 +185067,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L623",
+      "source_location": "L625",
       "weight": 1.0
     },
     {
@@ -185147,7 +185151,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L318",
+      "source_location": "L320",
       "weight": 1.0
     },
     {
@@ -185159,7 +185163,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L204",
+      "source_location": "L206",
       "weight": 1.0
     },
     {
@@ -185171,7 +185175,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L232",
+      "source_location": "L234",
       "weight": 1.0
     },
     {
@@ -185183,7 +185187,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L672",
+      "source_location": "L674",
       "weight": 1.0
     },
     {
@@ -185195,7 +185199,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L586",
+      "source_location": "L588",
       "weight": 1.0
     },
     {
@@ -233552,7 +233556,7 @@
       "confidence_score": 1.0,
       "context": "field",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L395",
+      "source_location": "L397",
       "weight": 1.0
     },
     {
@@ -233588,7 +233592,7 @@
       "confidence_score": 1.0,
       "context": "field",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L400",
+      "source_location": "L402",
       "weight": 1.0
     },
     {
@@ -233600,7 +233604,7 @@
       "confidence_score": 1.0,
       "context": "field",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L401",
+      "source_location": "L403",
       "weight": 1.0
     },
     {
@@ -233612,7 +233616,7 @@
       "confidence_score": 1.0,
       "context": "field",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L402",
+      "source_location": "L404",
       "weight": 1.0
     },
     {
@@ -402343,7 +402347,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L189",
+      "source_location": "L191",
       "weight": 1.0
     },
     {
@@ -402354,7 +402358,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L193",
+      "source_location": "L195",
       "weight": 1.0
     },
     {
@@ -402365,7 +402369,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L197",
+      "source_location": "L199",
       "weight": 1.0
     },
     {
@@ -402387,7 +402391,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L281",
+      "source_location": "L283",
       "weight": 1.0
     },
     {
@@ -402420,7 +402424,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L393",
+      "source_location": "L395",
       "weight": 1.0
     },
     {
@@ -402431,7 +402435,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L399",
+      "source_location": "L401",
       "weight": 1.0
     },
     {
@@ -402442,7 +402446,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L405",
+      "source_location": "L407",
       "weight": 1.0
     },
     {
@@ -402453,7 +402457,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L574",
+      "source_location": "L576",
       "weight": 1.0
     },
     {
@@ -402464,7 +402468,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L580",
+      "source_location": "L582",
       "weight": 1.0
     },
     {
@@ -402475,7 +402479,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L592",
+      "source_location": "L594",
       "weight": 1.0
     },
     {
@@ -402497,7 +402501,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L669",
+      "source_location": "L671",
       "weight": 1.0
     },
     {
@@ -482383,7 +482387,7 @@
       "confidence_score": 0.8,
       "context": "call",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L420",
+      "source_location": "L422",
       "weight": 1.0
     },
     {
@@ -482431,7 +482435,7 @@
       "confidence_score": 0.8,
       "context": "call",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L332",
+      "source_location": "L334",
       "weight": 1.0
     },
     {
@@ -482443,7 +482447,7 @@
       "confidence_score": 0.8,
       "context": "call",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L332",
+      "source_location": "L334",
       "weight": 1.0
     },
     {
@@ -482455,7 +482459,7 @@
       "confidence_score": 0.8,
       "context": "call",
       "source_file": "plugins/base/admin/src/Sources.tsx",
-      "source_location": "L375",
+      "source_location": "L377",
       "weight": 1.0
     },
     {
@@ -488828,5 +488832,5 @@
       "source_file": "backend/crates/core/README.md"
     }
   ],
-  "built_at_commit": "0f048545dad861c2ba92ed5c9c177376a642f50f"
+  "built_at_commit": "5aac9421506dec04e82212a041a3b6f7cad2ce86"
 }

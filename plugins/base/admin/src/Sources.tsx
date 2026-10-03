@@ -125,7 +125,7 @@ export function InstallRow({
   return (
     <div className="admin:flex admin:flex-col admin:gap-2">
       <div
-        className={`admin-upload admin:flex admin:flex-wrap admin:items-center admin:gap-3 admin:rounded-lg admin:border-2 admin:border-dashed admin:p-3 ${over ? "admin:border-accent admin:bg-accent-subtle" : "admin:border-border admin:bg-bg-subtle"}`}
+        className={`admin-upload admin:flex admin:flex-wrap admin:items-center admin:gap-3 admin:compact:grid admin:compact:grid-cols-[auto_1fr_auto] admin:compact:items-start admin:rounded-lg admin:border-2 admin:border-dashed admin:p-3 ${over ? "admin:border-accent admin:bg-accent-subtle" : "admin:border-border admin:bg-bg-subtle"}`}
         onDragOver={(event) => {
           event.preventDefault();
           setOver(true);
@@ -140,35 +140,37 @@ export function InstallRow({
         <span className="admin:flex admin:size-10 admin:shrink-0 admin:items-center admin:justify-center admin:rounded-full admin:bg-bg admin:text-text-muted admin:text-xl">
           <UploadIcon />
         </span>
-        <div className="admin:flex admin:min-w-48 admin:flex-1 admin:flex-col admin:gap-0.5">
+        <div className="admin:flex admin:min-w-48 admin:flex-1 admin:flex-col admin:gap-0.5 admin:compact:min-w-0">
           <strong>Install or upgrade a plugin</strong>
           <span className="admin:text-sm admin:text-text-muted">
             Drop a <code>.zip</code> here or choose one. It waits for your approval; nothing
             runs until then.{maxPackageBytes !== undefined && <> Up to {formatSize(maxPackageBytes)}.</>}
           </span>
         </div>
-        <label className="admin:tap-h admin:inline-flex admin:cursor-pointer admin:items-center admin:gap-1.5 admin:rounded admin:border admin:border-accent admin:bg-accent admin:px-3 admin:text-accent-text admin:has-[:focus-visible]:outline-2 admin:has-[:focus-visible]:outline-offset-1 admin:has-[:focus-visible]:outline-focus">
-          <input
-            ref={input}
-            className="admin:sr-only"
-            type="file"
-            accept=".zip,application/zip"
-            disabled={busy}
-            onChange={(event) => send(event.target.files?.[0])}
-          />
-          {busy ? "Installing…" : "Choose a package"}
-        </label>
+        <div className="admin:contents admin:compact:col-span-full admin:compact:row-start-2 admin:compact:flex admin:compact:gap-2">
+          <label className="admin:tap-h admin:inline-flex admin:compact:flex-1 admin:compact:justify-center admin:compact:px-2 admin:whitespace-nowrap admin:cursor-pointer admin:items-center admin:gap-1.5 admin:rounded admin:border admin:border-accent admin:bg-accent admin:px-3 admin:text-accent-text admin:has-[:focus-visible]:outline-2 admin:has-[:focus-visible]:outline-offset-1 admin:has-[:focus-visible]:outline-focus">
+            <input
+              ref={input}
+              className="admin:sr-only"
+              type="file"
+              accept=".zip,application/zip"
+              disabled={busy}
+              onChange={(event) => send(event.target.files?.[0])}
+            />
+            {busy ? "Installing…" : "Choose a package"}
+          </label>
+          <button
+            type="button"
+            className="admin:ml-auto admin:inline-flex admin:items-center admin:gap-1.5 admin:compact:ml-0 admin:compact:flex-1 admin:compact:justify-center admin:compact:gap-1 admin:compact:px-2 admin:whitespace-nowrap"
+            onClick={(event) => openBrowser(event.currentTarget)}
+          >
+            <PackageIcon />
+            Browse packages
+          </button>
+        </div>
         <button
           type="button"
-          className="admin:ml-auto admin:inline-flex admin:items-center admin:gap-1.5"
-          onClick={(event) => openBrowser(event.currentTarget)}
-        >
-          <PackageIcon />
-          Browse packages
-        </button>
-        <button
-          type="button"
-          className="admin-icon-button"
+          className="admin-icon-button admin:compact:col-start-3 admin:compact:row-start-1"
           aria-label="Package sources"
           title="Package sources"
           onClick={(event) => openSources(event.currentTarget)}
@@ -490,7 +492,7 @@ export function BrowsePackages({
   return (
     <section className="admin:flex admin:min-h-0 admin:flex-col admin:gap-2" aria-label="Packages">
       <div className="admin:flex admin:flex-wrap admin:items-end admin:gap-2">
-        <div className="admin-field">
+        <div className="admin-field admin:compact:flex-1">
           <label htmlFor={`${id}-source`}>Source</label>
           <select
             id={`${id}-source`}
@@ -506,7 +508,7 @@ export function BrowsePackages({
             ))}
           </select>
         </div>
-        <label className="admin-field admin:flex-1" htmlFor={`${id}-query`}>
+        <label className="admin-field admin:flex-1 admin:compact:order-last admin:compact:basis-full" htmlFor={`${id}-query`}>
           Filter
           <input
             id={`${id}-query`}
