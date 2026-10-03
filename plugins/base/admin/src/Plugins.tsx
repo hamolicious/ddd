@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactElement, ReactNode } from "react";
 
 import type { InstalledPlugin, PluginCapabilities } from "@kernel";
@@ -201,8 +201,11 @@ function PendingCard({
   const [routes, setRoutes] = useState<readonly string[]>(requested["public-routes"] ?? []);
   const [hosts, setHosts] = useState((requested.http?.hosts ?? []).join(", "));
   const [confirmed, setConfirmed] = useState(false);
+  const [open, setOpen] = useState(false);
+  const acknowledgement = useRef<HTMLInputElement | null>(null);
   const mutate = useMutation(onDone);
   const confirm = useConfirm();
+  const detailsId = `admin-pending-details-${plugin.id}`;
 
   const granted: PluginCapabilities = useMemo(() => {
     const value: {
@@ -224,151 +227,63 @@ function PendingCard({
   );
 
   return (
-    <li className="admin-plugin admin-plugin-pending admin:border-s-4! admin:border-s-warning!">
-      <PluginHead plugin={plugin} />
-
-      <p className="admin-warning">
-        <strong>Approving this plugin runs its frontend code in every user’s session.</strong>{" "}
-        The capabilities below are the <em>server-side</em> grants only. Approve nothing you did
-        not obtain yourself.
-      </p>
-
-      <fieldset className="admin-capabilities admin:m-0 admin:flex admin:flex-col admin:gap-2 admin:rounded admin:border admin:border-border admin:p-2 admin:[&_legend]:px-1 admin:[&_legend]:font-semibold admin:[&_label]:tap-h admin:[&_label]:flex admin:[&_label]:items-start admin:[&_label]:gap-2 admin:[&_label_input]:size-6 admin:[&_label_input]:accent-accent">
-        <legend>Capabilities requested</legend>
-
-        {(requested.documents?.length ?? 0) > 0 ? (
-          (requested.documents ?? []).map((right) => (
-            <label key={right}>
-              <input
-                type="checkbox"
-                checked={documents.includes(right)}
-                onChange={(event) =>
-                  setDocuments((current) =>
-                    event.target.checked
-                      ? [...current, right]
-                      : current.filter((value) => value !== right),
-                  )
-                }
-              />
-              <code>documents: {right}</code> — the whole shared workspace, every document
-              every user can see
-            </label>
-          ))
-        ) : (
-          <p className="admin-note">
-            <code>documents</code>: not requested. The document host functions are linked as
-            erroring stubs.
-          </p>
-        )}
-
-        {requested.http !== undefined && (
-          <div className="admin-field">
-            <label htmlFor={`admin-hosts-${plugin.id}`}>
-              <code>http</code> — outbound requests, to these hosts only
-            </label>
-            <input
-              id={`admin-hosts-${plugin.id}`}
-              type="text"
-              value={hosts}
-              placeholder="calendar.example.com, feeds.example.net"
-              onChange={(event) => setHosts(event.target.value)}
-            />
-            <p className="admin-note">
-              Hosts match exactly: no wildcards, no scheme, no port. This is the one field
-              an approval may <em>add</em> to: a plugin whose destination you configure
-              cannot know the host when it is packaged.
-              {requested.http.hosts.length === 0 && (
-                <> This package requested none, so you are naming them.</>
-              )}
-            </p>
-            {addedHosts.length > 0 && (
-              <p className="admin-warning">
-                Adding {addedHosts.map((host) => <code key={host}>{host}</code>)} — hosts the
-                package itself did not ask for.
-              </p>
-            )}
-            <HostPolicyNotes hosts={granted.http?.hosts ?? []} />
-          </div>
-        )}
-
-        {requested.notifications === true && (
-          <label>
-            <input
-              type="checkbox"
-              checked={notifications}
-              onChange={(event) => setNotifications(event.target.checked)}
-            />
-            <code>notifications</code> — native notification bridge
-          </label>
-        )}
-
-        {(requested["public-routes"]?.length ?? 0) > 0 && (
-          <div>
-            <p className="admin-warning">
-              This plugin asks for <strong>unauthenticated routes</strong>: anyone who can
-              reach this server can call them, with no session.
-            </p>
-            {(requested["public-routes"] ?? []).map((route) => (
-              <label key={route}>
-                <input
-                  type="checkbox"
-                  checked={routes.includes(route)}
-                  onChange={(event) =>
-                    setRoutes((current) =>
-                      event.target.checked
-                        ? [...current, route]
-                        : current.filter((value) => value !== route),
-                    )
-                  }
-                />
-                <code>
-                  /api/plugins/{plugin.id}
-                  {route}
-                </code>{" "}
-                — reachable without signing in
-              </label>
-            ))}
-          </div>
-        )}
-
-        {plugin.has_backend ? (
-          <p className="admin-note">
-            Backend half: {describeBackend(plugin)}. Module SHA-256{" "}
-            <code>{plugin.module_sha256 ?? "unknown"}</code>.
-          </p>
-        ) : (
-          <p className="admin-note">
-            No backend half: nothing of this plugin runs on the server, and no capability here
-            applies to its browser code.
-          </p>
-        )}
-      </fieldset>
-
-      {Object.keys(plugin.config_schema).length > 0 && (
-        <p className="admin-note">
-          Configuration keys to fill in after approval:{" "}
-          {Object.entries(plugin.config_schema)
-            .map(([key, field]) => `${key}${field.secret === true ? " (secret)" : ""}`)
-            .join(", ")}
-          .
-        </p>
-      )}
-
-      {problems.length > 0 && (
-        <p className="admin-error" role="alert">
-          This grant is not legal: {problems.join("; ")}. An approval may narrow anything and
-          may only extend <code>http.hosts</code>.
-        </p>
-      )}
-
-      <label className="admin-confirm admin:tap-h admin:flex admin:items-start admin:gap-2 admin:text-[0.9em] admin:text-text admin:[&_input]:mt-[0.35em] admin:[&_input]:size-6 admin:[&_input]:flex-none admin:[&_input]:accent-accent">
-        <input
-          type="checkbox"
-          checked={confirmed}
-          onChange={(event) => setConfirmed(event.target.checked)}
-        />
-        I understand this plugin’s code will run unsandboxed in every user’s browser session.
-      </label>
+    <li className="admin-plugin admin-plugin-pending admin:flex admin:flex-col admin:gap-2 admin:border-s-4! admin:border-s-warning!">
+      <div className="admin:flex admin:items-start admin:gap-2">
+        <div className="admin:min-w-0 admin:flex-1">
+          <PluginHead plugin={plugin} />
+        </div>
+        <div className="admin-actions admin:shrink-0">
+          <button
+            type="button"
+            className={`admin-icon-button ${PRIMARY}`}
+            aria-label={`Approve and enable ${plugin.id} ${plugin.version}`}
+            title="Approve and enable"
+            disabled={problems.length > 0 || mutate.busy !== undefined}
+            onClick={() => {
+              if (!open || !confirmed) {
+                setOpen(true);
+                requestAnimationFrame(() => acknowledgement.current?.focus());
+                return;
+              }
+              mutate.run("approve", () => client.approvePlugin(plugin.id, plugin.version, granted));
+            }}
+          >
+            <CheckIcon />
+          </button>
+          <button
+            type="button"
+            className="admin-danger admin-icon-button"
+            aria-label={`Reject and delete ${plugin.id} ${plugin.version}`}
+            title="Reject and delete"
+            disabled={mutate.busy !== undefined}
+            onClick={(event) => {
+              void confirm({
+                title: `Delete the pending package ${plugin.id} ${plugin.version}?`,
+                confirmLabel: "Reject and delete",
+                danger: true,
+                anchor: event.currentTarget,
+              }).then((ok) => {
+                if (ok) mutate.run("reject", () => client.rejectPlugin(plugin.id, plugin.version));
+              });
+            }}
+          >
+            <TrashIcon />
+          </button>
+          <button
+            type="button"
+            className="admin-icon-button"
+            aria-label={`Details for ${plugin.manifest.name ?? plugin.id} ${plugin.version}`}
+            title={open ? "Hide details" : "Details"}
+            aria-expanded={open}
+            aria-controls={detailsId}
+            onClick={() => setOpen(!open)}
+          >
+            <span className={`admin:inline-flex ${open ? "admin:rotate-180" : ""}`}>
+              <ChevronIcon />
+            </span>
+          </button>
+        </div>
+      </div>
 
       {mutate.error !== undefined && (
         <p className="admin-error" role="alert">
@@ -376,41 +291,155 @@ function PendingCard({
         </p>
       )}
 
-      <div className="admin-actions">
-        <button
-          type="button"
-          className={`admin-icon-button ${PRIMARY}`}
-          aria-label={`Approve and enable ${plugin.id} ${plugin.version}`}
-          title="Approve and enable"
-          disabled={!confirmed || problems.length > 0 || mutate.busy !== undefined}
-          onClick={() =>
-            mutate.run("approve", () =>
-              client.approvePlugin(plugin.id, plugin.version, granted),
-            )
-          }
-        >
-          <CheckIcon />
-        </button>
-        <button
-          type="button"
-          className="admin-danger admin-icon-button"
-          aria-label={`Reject and delete ${plugin.id} ${plugin.version}`}
-          title="Reject and delete"
-          disabled={mutate.busy !== undefined}
-          onClick={(event) => {
-            void confirm({
-              title: `Delete the pending package ${plugin.id} ${plugin.version}?`,
-              confirmLabel: "Reject and delete",
-              danger: true,
-              anchor: event.currentTarget,
-            }).then((ok) => {
-              if (ok) mutate.run("reject", () => client.rejectPlugin(plugin.id, plugin.version));
-            });
-          }}
-        >
-          <TrashIcon />
-        </button>
+      <div
+        id={detailsId}
+        className={`${open ? "admin:flex" : "admin:hidden"} admin:flex-col admin:gap-3 admin:border-t admin:border-border admin:pt-2`}
+      >
+        <p className="admin-warning">
+          <strong>Approving this plugin runs its frontend code in every user’s session.</strong>{" "}
+          The capabilities below are the <em>server-side</em> grants only. Approve nothing you did
+          not obtain yourself.
+        </p>
+
+        <fieldset className="admin-capabilities admin:m-0 admin:flex admin:min-w-0 admin:flex-col admin:gap-2 admin:rounded admin:border admin:border-border admin:px-3 admin:pb-3 admin:pt-1 admin:[&_legend]:px-1 admin:[&_legend]:text-sm admin:[&_legend]:font-semibold admin:[&_label]:tap-h admin:[&_label]:flex admin:[&_label]:items-start admin:[&_label]:gap-2 admin:[&_label_input]:size-6 admin:[&_label_input]:accent-accent">
+          <legend>Capabilities requested</legend>
+
+          {(requested.documents?.length ?? 0) > 0 ? (
+            (requested.documents ?? []).map((right) => (
+              <label key={right}>
+                <input
+                  type="checkbox"
+                  checked={documents.includes(right)}
+                  onChange={(event) =>
+                    setDocuments((current) =>
+                      event.target.checked
+                        ? [...current, right]
+                        : current.filter((value) => value !== right),
+                    )
+                  }
+                />
+                <code>documents: {right}</code> — the whole shared workspace, every document
+                every user can see
+              </label>
+            ))
+          ) : (
+            <p className="admin-note">
+              <code>documents</code>: not requested. The document host functions are linked as
+              erroring stubs.
+            </p>
+          )}
+
+          {requested.http !== undefined && (
+            <div className="admin-field">
+              <label htmlFor={`admin-hosts-${plugin.id}`}>
+                <code>http</code> — outbound requests, to these hosts only
+              </label>
+              <input
+                id={`admin-hosts-${plugin.id}`}
+                type="text"
+                value={hosts}
+                placeholder="calendar.example.com, feeds.example.net"
+                onChange={(event) => setHosts(event.target.value)}
+              />
+              <p className="admin-note">
+                Hosts match exactly: no wildcards, no scheme, no port. This is the one field
+                an approval may <em>add</em> to: a plugin whose destination you configure
+                cannot know the host when it is packaged.
+                {requested.http.hosts.length === 0 && (
+                  <> This package requested none, so you are naming them.</>
+                )}
+              </p>
+              {addedHosts.length > 0 && (
+                <p className="admin-warning">
+                  Adding {addedHosts.map((host) => <code key={host}>{host}</code>)} — hosts the
+                  package itself did not ask for.
+                </p>
+              )}
+              <HostPolicyNotes hosts={granted.http?.hosts ?? []} />
+            </div>
+          )}
+
+          {requested.notifications === true && (
+            <label>
+              <input
+                type="checkbox"
+                checked={notifications}
+                onChange={(event) => setNotifications(event.target.checked)}
+              />
+              <code>notifications</code> — native notification bridge
+            </label>
+          )}
+
+          {(requested["public-routes"]?.length ?? 0) > 0 && (
+            <div>
+              <p className="admin-warning">
+                This plugin asks for <strong>unauthenticated routes</strong>: anyone who can
+                reach this server can call them, with no session.
+              </p>
+              {(requested["public-routes"] ?? []).map((route) => (
+                <label key={route}>
+                  <input
+                    type="checkbox"
+                    checked={routes.includes(route)}
+                    onChange={(event) =>
+                      setRoutes((current) =>
+                        event.target.checked
+                          ? [...current, route]
+                          : current.filter((value) => value !== route),
+                      )
+                    }
+                  />
+                  <code>
+                    /api/plugins/{plugin.id}
+                    {route}
+                  </code>{" "}
+                  — reachable without signing in
+                </label>
+              ))}
+            </div>
+          )}
+
+          {plugin.has_backend ? (
+            <p className="admin-note">
+              Backend half: {describeBackend(plugin)}. Module SHA-256{" "}
+              <code>{plugin.module_sha256 ?? "unknown"}</code>.
+            </p>
+          ) : (
+            <p className="admin-note">
+              No backend half: nothing of this plugin runs on the server, and no capability here
+              applies to its browser code.
+            </p>
+          )}
+        </fieldset>
+
+        {Object.keys(plugin.config_schema).length > 0 && (
+          <p className="admin-note">
+            Configuration keys to fill in after approval:{" "}
+            {Object.entries(plugin.config_schema)
+              .map(([key, field]) => `${key}${field.secret === true ? " (secret)" : ""}`)
+              .join(", ")}
+            .
+          </p>
+        )}
+
+        {problems.length > 0 && (
+          <p className="admin-error" role="alert">
+            This grant is not legal: {problems.join("; ")}. An approval may narrow anything and
+            may only extend <code>http.hosts</code>.
+          </p>
+        )}
+
+        <label className="admin-confirm admin:tap-h admin:flex admin:items-center admin:gap-2 admin:text-[0.9em] admin:text-text admin:[&_input]:size-6 admin:[&_input]:flex-none admin:[&_input]:accent-accent">
+          <input
+            ref={acknowledgement}
+            type="checkbox"
+            checked={confirmed}
+            onChange={(event) => setConfirmed(event.target.checked)}
+          />
+          I understand this plugin’s code will run unsandboxed in every user’s browser session.
+        </label>
       </div>
+
     </li>
   );
 }

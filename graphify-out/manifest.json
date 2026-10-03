@@ -1110,9 +1110,9 @@
     "semantic_hash": ""
   },
   "plugins/base/admin/manifest.json": {
-    "mtime": 1790993824.912451,
-    "seen": 1790993972.5985963,
-    "ast_hash": "31ffc53f61041098157f007c36932c95",
+    "mtime": 1790994274.2325423,
+    "seen": 1790994289.119661,
+    "ast_hash": "020d11739ff1881325ce47b8f27edae9",
     "semantic_hash": ""
   },
   "plugins/base/admin/src/AdminView.tsx": {
@@ -1134,9 +1134,9 @@
     "semantic_hash": ""
   },
   "plugins/base/admin/src/Plugins.tsx": {
-    "mtime": 1790989076.4389307,
-    "seen": 1790989172.928668,
-    "ast_hash": "ec315f55f76dcf06f64c326126b5235d",
+    "mtime": 1790994077.9208724,
+    "seen": 1790994289.119796,
+    "ast_hash": "467a753281d76b90dbfcaceea06e57de",
     "semantic_hash": ""
   },
   "plugins/base/admin/src/Storage.tsx": {
@@ -3204,9 +3204,9 @@
     "semantic_hash": ""
   },
   "web/app/e2e/admin-plugins.spec.ts": {
-    "mtime": 1790993886.0054827,
-    "seen": 1790993972.6143227,
-    "ast_hash": "2001f09cf80d298506072b6900675872",
+    "mtime": 1790994107.1713672,
+    "seen": 1790994289.1329033,
+    "ast_hash": "f18391c6639fd59d68e582c8d20fb544",
     "semantic_hash": ""
   },
   "plugins/base/admin/src/Info.tsx": {

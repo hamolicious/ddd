@@ -1,3 +1,5 @@
+import { crc32 } from "node:zlib";
+
 import { expect, test } from "@playwright/test";
 
 import { ADMIN, signIn } from "./helpers.js";
@@ -111,4 +113,91 @@ test("package sources are set up in a modal, browsed with a filter, and checked 
   await edit.getByRole("button", { name: "Delete", exact: true }).click();
   await edit.getByRole("button", { name: "Delete Lab" }).click();
   await expect(sources.getByText("No sources yet.")).toBeVisible();
+});
+
+function storedZip(files: Readonly<Record<string, string>>): Buffer {
+  const locals: Buffer[] = [];
+  const centrals: Buffer[] = [];
+  let offset = 0;
+  for (const [name, text] of Object.entries(files)) {
+    const data = Buffer.from(text);
+    const path = Buffer.from(name);
+    const sum = crc32(data);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt32LE(sum, 14);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(path.length, 26);
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt32LE(sum, 16);
+    central.writeUInt32LE(data.length, 20);
+    central.writeUInt32LE(data.length, 24);
+    central.writeUInt16LE(path.length, 28);
+    central.writeUInt32LE(offset, 42);
+    locals.push(local, path, data);
+    centrals.push(central, path);
+    offset += local.length + path.length + data.length;
+  }
+  const directory = Buffer.concat(centrals);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(Object.keys(files).length, 8);
+  end.writeUInt16LE(Object.keys(files).length, 10);
+  end.writeUInt32LE(directory.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, directory, end]);
+}
+
+test("a pending install is one folded row, and approving asks for the acknowledgement first", async ({ page }) => {
+  await signIn(page, ADMIN);
+  const id = `pending-demo-${Date.now()}`;
+  const manifest = {
+    id,
+    version: "1.0.0",
+    name: "Pending demo",
+    description: "A package that only exists for this test.",
+    kernel: "^3.0",
+    frontend: { module: "frontend/index.mjs" },
+  };
+  const upload = await page.request.post("/api/admin/plugins", {
+    multipart: {
+      package: {
+        name: `${id}-1.0.0.zip`,
+        mimeType: "application/zip",
+        buffer: storedZip({
+          "manifest.json": JSON.stringify(manifest),
+          "frontend/index.mjs": "export default function activate() {}\n",
+        }),
+      },
+    },
+  });
+  expect(upload.status()).toBe(201);
+
+  try {
+    await page.goto("/#/admin/plugins");
+    const card = page.locator(".admin-plugin-pending").filter({ hasText: "Pending demo" });
+    await expect(card).toBeVisible();
+    await expect(card.getByText("Capabilities requested")).toBeHidden();
+    await expect(card.getByRole("button", { name: `Details for Pending demo 1.0.0` })).toHaveAttribute("aria-expanded", "false");
+
+    const approve = card.getByRole("button", { name: `Approve and enable ${id} 1.0.0` });
+    await approve.click();
+    await expect(card.getByText("Capabilities requested")).toBeVisible();
+    const acknowledgement = card.getByRole("checkbox", { name: /I understand this plugin/ });
+    await expect(acknowledgement).toBeFocused();
+    await approve.click();
+    await expect(card).toBeVisible();
+
+    await acknowledgement.check();
+    await approve.click();
+    await expect(page.getByRole("button", { name: "Disable Pending demo" })).toBeVisible();
+  } finally {
+    await page.request.delete(`/api/admin/plugins/${id}?purge=true`);
+    await page.request.post(`/api/admin/plugins/${id}/1.0.0/reject`);
+  }
 });

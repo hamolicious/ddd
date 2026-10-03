@@ -515,6 +515,7 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
       const holdStill = (touchEvent: TouchEvent): void => {
         if (lifted) touchEvent.preventDefault();
       };
+      const noTextSelection = (selectEvent: Event): void => selectEvent.preventDefault();
 
       const onMove = (moveEvent: PointerEvent): void => {
         if (!lifted) {
@@ -539,6 +540,7 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
         window.removeEventListener("pointercancel", onCancel);
         window.removeEventListener("keydown", onKey, true);
         window.removeEventListener("touchmove", holdStill);
+        document.removeEventListener("selectstart", noTextSelection);
         if (!lifted) return;
         document.body.style.removeProperty("user-select");
         document.body.style.removeProperty("cursor");
@@ -573,6 +575,7 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
         press.current = { timer: setTimeout(lift, LONG_PRESS_MS) };
         window.addEventListener("touchmove", holdStill, { passive: false });
       }
+      document.addEventListener("selectstart", noTextSelection);
       window.addEventListener("pointermove", onMove);
       window.addEventListener("pointerup", onUp);
       window.addEventListener("pointercancel", onCancel);
