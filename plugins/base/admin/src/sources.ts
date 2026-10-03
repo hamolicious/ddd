@@ -24,6 +24,11 @@ export interface InstalledPackage {
   readonly url: string;
 }
 
+export interface LinkedSource {
+  readonly name: string;
+  readonly settings: SourceSettings;
+}
+
 export interface PackageProvider {
   readonly id: string;
   readonly title: string;
@@ -33,6 +38,8 @@ export interface PackageProvider {
   readonly checkUpdates?: (source: SavedSource, plugins: readonly InstalledPackage[]) => Promise<void>;
   readonly defaults?: () => SourceSettings;
   readonly validate?: (settings: SourceSettings) => string | undefined;
+  readonly fromLink?: (link: string) => LinkedSource | undefined;
+  readonly test?: (settings: SourceSettings) => Promise<string>;
   readonly description?: string;
   readonly order?: number;
 }
@@ -51,6 +58,8 @@ export const providerRegistry = createRegistry<PackageProvider>({
     checkUpdates: s.optional(s.func()),
     defaults: s.optional(s.func()),
     validate: s.optional(s.func()),
+    fromLink: s.optional(s.func()),
+    test: s.optional(s.func()),
     description: s.optional(s.string()),
     order: s.optional(s.number()),
   }),
@@ -69,6 +78,30 @@ export const addPackageProvider = (items: PackageProvider | readonly PackageProv
 
 export function providerOf(source: SavedSource): PackageProvider | undefined {
   return providerRegistry.get().find((provider) => provider.id === source.provider);
+}
+
+export function recognise(
+  providers: readonly PackageProvider[],
+  link: string,
+): { readonly provider: PackageProvider; readonly linked: LinkedSource } | undefined {
+  const trimmed = link.trim();
+  if (!trimmed) return undefined;
+  for (const provider of providers) {
+    let linked: LinkedSource | undefined;
+    try {
+      linked = provider.fromLink?.(trimmed);
+    } catch {
+      linked = undefined;
+    }
+    if (linked) return { provider, linked };
+  }
+  return undefined;
+}
+
+export async function testSource(provider: PackageProvider, settings: SourceSettings): Promise<string> {
+  if (provider.test) return provider.test(settings);
+  const found = await provider.browse({ id: "test", provider: provider.id, name: "test", ...settings });
+  return `Reached the source: ${found.length} package${found.length === 1 ? "" : "s"} available.`;
 }
 
 export const EMPTY_SETTINGS: SourceSettings = { config: {}, secrets: {} };

@@ -1,4 +1,11 @@
-import type { AvailablePackage, InstalledPackage, PluginUpdate, SavedSource, SourceSettings } from "plugin:admin";
+import type {
+  AvailablePackage,
+  InstalledPackage,
+  LinkedSource,
+  PluginUpdate,
+  SavedSource,
+  SourceSettings,
+} from "plugin:admin";
 
 export type TokenKind = "none" | "access" | "deploy" | "job";
 
@@ -260,4 +267,52 @@ export async function checkUpdates(
     }),
   );
   if (problems.length > 0) throw new Error(problems.join("; "));
+}
+
+function linkedFrom(instance: string, project: string): LinkedSource {
+  const host = new URL(instance).host;
+  const short = project.split("/").pop() ?? project;
+  return {
+    name: `${short} on ${host}`.slice(0, 80),
+    settings: writeSettings({ instance, project, tokenKind: "none", token: "" }),
+  };
+}
+
+export function fromLink(link: string): LinkedSource | undefined {
+  const raw = link.trim();
+  const ssh = /^(?:ssh:\/\/)?git@([^:/\s]+)[:/](.+?)(?:\.git)?\/?$/.exec(raw);
+  if (ssh) return linkedFrom(`https://${ssh[1]}`, ssh[2]!);
+  let url: URL;
+  try {
+    url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`);
+  } catch {
+    return undefined;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return undefined;
+  const instance = `https://${url.host}`;
+  const api = /^(.*?)\/api\/v4\/projects\/([^/]+)/.exec(url.pathname);
+  if (api) {
+    try {
+      return linkedFrom(`${instance}${api[1]}`, decodeURIComponent(api[2]!));
+    } catch {
+      return undefined;
+    }
+  }
+  const project = url.pathname
+    .split("/-/")[0]!
+    .replace(/\.git$/, "")
+    .replace(/^\/+|\/+$/g, "");
+  if (project.split("/").filter(Boolean).length < 2) return undefined;
+  return linkedFrom(instance, decodeURIComponent(project));
+}
+
+export async function test(settings: SourceSettings, load: FetchJson = fetchJson): Promise<string> {
+  const endpoint = endpointOf(settings);
+  const project = (await load(projectApi(endpoint), endpoint.headers)) as { path_with_namespace?: unknown } | undefined;
+  const label = typeof project?.path_with_namespace === "string" ? project.path_with_namespace : endpoint.project;
+  const packages = newestPerName(await load(packageListUrl(endpoint), endpoint.headers));
+  const listed = packages.map((found) => found.name).join(", ");
+  return packages.length === 0
+    ? `Reached ${label}, but it has no generic packages yet.`
+    : `Reached ${label}: ${packages.length} package${packages.length === 1 ? "" : "s"} (${listed}).`;
 }

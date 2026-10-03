@@ -21,7 +21,7 @@ import { listenForUpdates } from "./updates.js";
 
 export type { AdminSectionId } from "./AdminView.js";
 export type { PluginInstallOutcome } from "./api.js";
-export type { InstalledPackage, AvailablePackage, PackageProvider, SetupProps } from "./sources.js";
+export type { InstalledPackage, AvailablePackage, LinkedSource, PackageProvider, SetupProps } from "./sources.js";
 export type { SavedSource, SourceSettings } from "./api.js";
 export { UPDATE_AVAILABLE, type PluginUpdate } from "./updates.js";
 

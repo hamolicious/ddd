@@ -1110,9 +1110,9 @@
     "semantic_hash": ""
   },
   "plugins/base/admin/manifest.json": {
-    "mtime": 1790989725.6927555,
-    "seen": 1790989741.4870706,
-    "ast_hash": "beefe6981c768fdd0a074b1d9e3309aa",
+    "mtime": 1790993824.912451,
+    "seen": 1790993972.5985963,
+    "ast_hash": "31ffc53f61041098157f007c36932c95",
     "semantic_hash": ""
   },
   "plugins/base/admin/src/AdminView.tsx": {
@@ -1170,9 +1170,9 @@
     "semantic_hash": ""
   },
   "plugins/base/admin/src/index.tsx": {
-    "mtime": 1790988018.252106,
-    "seen": 1790989172.928784,
-    "ast_hash": "dbfa0acde273e87d9b6669e83c9cbe3c",
+    "mtime": 1790993824.9110525,
+    "seen": 1790993972.5990448,
+    "ast_hash": "3e3a8c11c8be9f822450f036e63a40c3",
     "semantic_hash": ""
   },
   "plugins/base/commands/manifest.json": {
@@ -1722,9 +1722,9 @@
     "semantic_hash": ""
   },
   "web/app/e2e/mobile-shell.spec.ts": {
-    "mtime": 1790969666.8815563,
-    "seen": 1790986672.7304113,
-    "ast_hash": "3b4a507c9829f7d5e446515c71211984",
+    "mtime": 1790990698.5835629,
+    "seen": 1790993972.614818,
+    "ast_hash": "ebdd40682f63a3dc0c988cfa95dd85e1",
     "semantic_hash": ""
   },
   "web/app/e2e/polish.spec.ts": {
@@ -2664,9 +2664,9 @@
     "semantic_hash": ""
   },
   "plugins/base/README.md": {
-    "mtime": 1790989091.3802972,
-    "seen": 1790989172.9517777,
-    "ast_hash": "daeafa3d896985b936b802906300a1b5",
+    "mtime": 1790993957.9646273,
+    "seen": 1790993972.6214526,
+    "ast_hash": "1e62b4a900f55307c81e16a44ccdf0b1",
     "semantic_hash": ""
   },
   "plugins/examples/README.md": {
@@ -3204,9 +3204,9 @@
     "semantic_hash": ""
   },
   "web/app/e2e/admin-plugins.spec.ts": {
-    "mtime": 1790989091.379932,
-    "seen": 1790989172.944116,
-    "ast_hash": "f38d57c0e1c9bdab9cf0801e18d80cbd",
+    "mtime": 1790993886.0054827,
+    "seen": 1790993972.6143227,
+    "ast_hash": "2001f09cf80d298506072b6900675872",
     "semantic_hash": ""
   },
   "plugins/base/admin/src/Info.tsx": {
@@ -4662,15 +4662,15 @@
     "semantic_hash": ""
   },
   "plugins/base/kanban/manifest.json": {
-    "mtime": 1790985605.1439784,
-    "seen": 1790986672.7285016,
-    "ast_hash": "32fccc54b50e6536da7e75b613d51bc7",
+    "mtime": 1790993580.6130247,
+    "seen": 1790993972.6051621,
+    "ast_hash": "c905c6ccdd4ee45d5d2fff841751d525",
     "semantic_hash": ""
   },
   "plugins/base/kanban/src/Board.tsx": {
-    "mtime": 1790985605.1225307,
-    "seen": 1790986672.7285025,
-    "ast_hash": "39d00d97c7ad44dbcd36be5f2e3a478d",
+    "mtime": 1790993843.934224,
+    "seen": 1790993972.6051638,
+    "ast_hash": "ea975511bb24098a9f3cb9ffef456511",
     "semantic_hash": ""
   },
   "plugins/base/kanban/src/Settings.tsx": {
@@ -5544,9 +5544,9 @@
     "semantic_hash": ""
   },
   "plugins/base/admin/src/sources.ts": {
-    "mtime": 1790987884.9691398,
-    "seen": 1790989172.9289238,
-    "ast_hash": "54657bf2f7ca437a085e8c254c311d05",
+    "mtime": 1790993745.5409138,
+    "seen": 1790993972.5991669,
+    "ast_hash": "76a5d63f495059148bef4cb149cf4c26",
     "semantic_hash": ""
   },
   "plugins/base/admin/src/updates.test.ts": {
@@ -5562,27 +5562,27 @@
     "semantic_hash": ""
   },
   "plugins/base/gitlab-packages/manifest.json": {
-    "mtime": 1790988156.9197497,
-    "seen": 1790989172.9337618,
-    "ast_hash": "2583868288b70dc5bf14c7dfc4b9a43d",
+    "mtime": 1790993824.913833,
+    "seen": 1790993972.6040869,
+    "ast_hash": "ce4be152e9dafeee52d715bb21f3f4e6",
     "semantic_hash": ""
   },
   "plugins/base/gitlab-packages/src/gitlab.test.ts": {
-    "mtime": 1790988942.8704798,
-    "seen": 1790989172.933766,
-    "ast_hash": "f880d9b23de2f779e8b9b686997ed4b1",
+    "mtime": 1790993860.1165037,
+    "seen": 1790993972.6041248,
+    "ast_hash": "9de582e68df7925fef8539663540c05c",
     "semantic_hash": ""
   },
   "plugins/base/gitlab-packages/src/gitlab.ts": {
-    "mtime": 1790988942.8703485,
-    "seen": 1790989172.9337678,
-    "ast_hash": "020a86fa5bf79e855b739d6fc6f3a037",
+    "mtime": 1790993860.1163218,
+    "seen": 1790993972.604126,
+    "ast_hash": "1fb9d0096471f439a8caabe55c2c6db9",
     "semantic_hash": ""
   },
   "plugins/base/gitlab-packages/src/index.tsx": {
-    "mtime": 1790988082.1668653,
-    "seen": 1790989172.933769,
-    "ast_hash": "9599f85e3a94c0f3721eef5c99f1ff81",
+    "mtime": 1790993812.0256195,
+    "seen": 1790993972.6041272,
+    "ast_hash": "036f2b6312a0e629c74ee68c7bba833f",
     "semantic_hash": ""
   },
   "backend/crates/server/src/plugininstall/package_sources.rs": {
@@ -5604,9 +5604,9 @@
     "semantic_hash": ""
   },
   "plugins/base/admin/src/Sources.tsx": {
-    "mtime": 1790989638.452379,
-    "seen": 1790989741.4873674,
-    "ast_hash": "c9fe4e4773d6151ef92ee5622da28cef",
+    "mtime": 1790993865.0187664,
+    "seen": 1790993972.5988054,
+    "ast_hash": "c5b1e26fed4c1ec66eeb64b79df05859",
     "semantic_hash": ""
   },
   "plugins/base/admin/src/versions.ts": {
@@ -5621,16 +5621,16 @@
     "ast_hash": "31748f00ed8952d770a20373088896b1",
     "semantic_hash": ""
   },
-  "web/app/e2e/zz-tmp-kanban-repro.spec.ts": {
-    "mtime": 1790986951.1061678,
-    "seen": 1790989172.9449987,
-    "ast_hash": "0ed30ee833a90eccaf02d2328e659817",
-    "semantic_hash": ""
-  },
   "web/app/src/boot/AboutSection.tsx": {
     "mtime": 1790989665.486814,
     "seen": 1790989741.504151,
     "ast_hash": "fdd10840272f4a8246a9ff0c8507a3b6",
+    "semantic_hash": ""
+  },
+  "web/app/e2e/zzzz-scratch-select.spec.ts": {
+    "mtime": 1790993795.5050368,
+    "seen": 1790993972.6151462,
+    "ast_hash": "5ef5ec605deb2c43847b53a62c6b48d3",
     "semantic_hash": ""
   }
 }

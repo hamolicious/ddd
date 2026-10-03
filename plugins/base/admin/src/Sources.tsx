@@ -15,8 +15,11 @@ import {
   providerRegistry,
   sourceStore,
   useBoundary,
+  recognise,
+  testSource,
   type AvailablePackage,
   type Boundary,
+  type LinkedSource,
   type PackageProvider,
   type SetupProps,
 } from "./sources.js";
@@ -202,7 +205,12 @@ function formatSize(bytes: number): string {
 
 type Screen =
   | { readonly kind: "list" }
-  | { readonly kind: "setup"; readonly provider: PackageProvider; readonly source?: SavedSource };
+  | {
+      readonly kind: "setup";
+      readonly provider: PackageProvider;
+      readonly source?: SavedSource;
+      readonly linked?: LinkedSource;
+    };
 
 export function SourcesManager({
   client,
@@ -222,6 +230,7 @@ export function SourcesManager({
         boundary={boundary}
         provider={screen.provider}
         source={screen.source}
+        linked={screen.linked}
         pluginId={providers.find((entry) => entry.value.id === screen.provider.id)?.pluginId ?? "admin"}
         onDone={() => setScreen({ kind: "list" })}
       />
@@ -260,31 +269,106 @@ export function SourcesManager({
           </ul>
         )}
       </section>
-      <section className="admin:flex admin:flex-col admin:gap-2" aria-labelledby="admin-add-source">
-        <h4 id="admin-add-source">Add a source</h4>
-        {providers.length === 0 ? (
-          <p className="admin-empty">No installed plugin provides a package source.</p>
-        ) : (
-          <ul className="admin-plugins" aria-label="Source types">
-            {providers.map(({ value: provider }) => (
-              <li key={provider.id} className="admin-plugin admin:flex admin:flex-wrap admin:items-center admin:gap-2">
-                <span className="admin:flex-1">
-                  <strong>{provider.title}</strong>
-                  {provider.description !== undefined && <span className="admin-hint">{provider.description}</span>}
-                </span>
-                <button
-                  type="button"
-                  aria-label={`Add a ${provider.title} source`}
-                  onClick={() => setScreen({ kind: "setup", provider })}
-                >
-                  Add
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <AddSource
+        providers={providers.map((entry) => entry.value)}
+        onChoose={(provider, linked) => setScreen({ kind: "setup", provider, ...(linked ? { linked } : {}) })}
+      />
     </div>
+  );
+}
+
+function AddSource({
+  providers,
+  onChoose,
+}: {
+  readonly providers: readonly PackageProvider[];
+  readonly onChoose: (provider: PackageProvider, linked?: LinkedSource) => void;
+}): ReactElement {
+  const id = useId();
+  const [link, setLink] = useState("");
+  const [manual, setManual] = useState(false);
+  const [problem, setProblem] = useState<string | undefined>(undefined);
+  const linkable = providers.some((provider) => provider.fromLink !== undefined);
+
+  const submit = (): void => {
+    const found = recognise(providers, link);
+    if (!found) {
+      setProblem("No source type recognises that link. Check it, or enter the source manually.");
+      setManual(true);
+      return;
+    }
+    setProblem(undefined);
+    onChoose(found.provider, found.linked);
+  };
+
+  return (
+    <section className="admin:flex admin:flex-col admin:gap-2" aria-labelledby={`${id}-heading`}>
+      <h4 id={`${id}-heading`}>Add a source</h4>
+      {providers.length === 0 ? (
+        <p className="admin-empty">No installed plugin provides a package source.</p>
+      ) : (
+        <>
+          {linkable && (
+            <form
+              className="admin-inline-form"
+              aria-label="Add a source from a link"
+              onSubmit={(event) => {
+                event.preventDefault();
+                submit();
+              }}
+            >
+              <label className="admin-field admin:flex-1" htmlFor={`${id}-link`}>
+                Paste a link to the project
+                <input
+                  id={`${id}-link`}
+                  type="url"
+                  inputMode="url"
+                  value={link}
+                  placeholder="https://…/group/project"
+                  autoComplete="off"
+                  onChange={(event) => setLink(event.target.value)}
+                  onPaste={(event) => {
+                    const pasted = event.clipboardData.getData("text");
+                    if (!recognise(providers, pasted)) return;
+                    event.preventDefault();
+                    setLink(pasted);
+                    const found = recognise(providers, pasted);
+                    if (found) onChoose(found.provider, found.linked);
+                  }}
+                />
+              </label>
+              <button type="submit" className={PRIMARY} disabled={!link.trim()}>
+                Set up
+              </button>
+            </form>
+          )}
+          {problem !== undefined && (
+            <p className="admin-error" role="alert">
+              {problem}
+            </p>
+          )}
+          {linkable && !manual ? (
+            <button type="button" className="admin-link admin:self-start" onClick={() => setManual(true)}>
+              Enter manually
+            </button>
+          ) : (
+            <ul className="admin-plugins" aria-label="Source types">
+              {providers.map((provider) => (
+                <li key={provider.id} className="admin-plugin admin:flex admin:flex-wrap admin:items-center admin:gap-2">
+                  <span className="admin:flex-1">
+                    <strong>{provider.title}</strong>
+                    {provider.description !== undefined && <span className="admin-hint">{provider.description}</span>}
+                  </span>
+                  <button type="button" aria-label={`Add a ${provider.title} source`} onClick={() => onChoose(provider)}>
+                    Add
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 
@@ -293,6 +377,7 @@ function SourceSetup({
   boundary,
   provider,
   source,
+  linked,
   pluginId,
   onDone,
 }: {
@@ -300,17 +385,42 @@ function SourceSetup({
   readonly boundary: Boundary | undefined;
   readonly provider: PackageProvider;
   readonly source: SavedSource | undefined;
+  readonly linked?: LinkedSource;
   readonly pluginId: string;
   readonly onDone: () => void;
 }): ReactElement {
   const id = useId();
-  const [name, setName] = useState(source?.name ?? provider.title);
-  const [settings, setSettings] = useState<SourceSettings>(
-    () => (source ? { config: source.config, secrets: source.secrets } : (provider.defaults?.() ?? EMPTY_SETTINGS)),
+  const [name, setName] = useState(source?.name ?? linked?.name ?? provider.title);
+  const [settings, setSettings] = useState<SourceSettings>(() =>
+    source
+      ? { config: source.config, secrets: source.secrets }
+      : (linked?.settings ?? provider.defaults?.() ?? EMPTY_SETTINGS),
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const [confirming, setConfirming] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [tested, setTested] = useState<{ readonly ok: boolean; readonly text: string } | undefined>(undefined);
+
+  const test = useCallback(
+    (current: SourceSettings): void => {
+      const problem = provider.validate?.(current);
+      if (problem) {
+        setTested({ ok: false, text: problem });
+        return;
+      }
+      setTesting(true);
+      setTested(undefined);
+      void testSource(provider, current)
+        .then((text) => setTested({ ok: true, text }))
+        .catch((cause: unknown) => setTested({ ok: false, text: message(cause) }))
+        .finally(() => setTesting(false));
+    },
+    [provider],
+  );
+  useEffect(() => {
+    if (linked) test(linked.settings);
+  }, [linked, test]);
 
   const Setup = useMemo<ComponentType<SetupProps>>(
     () => (boundary ? boundary.boundary(provider.setup, { point: "admin.package-provider", pluginId }) : provider.setup),
@@ -362,7 +472,24 @@ function SourceSetup({
           onChange={(event) => setName(event.target.value)}
         />
       </label>
-      <Setup value={settings} onChange={setSettings} disabled={busy} />
+      <Setup
+        value={settings}
+        onChange={(next) => {
+          setSettings(next);
+          setTested(undefined);
+        }}
+        disabled={busy}
+      />
+      {testing ? (
+        <p className="admin-note" role="status">
+          Testing…
+        </p>
+      ) : tested ? (
+        <p className={tested.ok ? "admin-note" : "admin-warning"} role="status">
+          {tested.ok ? "✓ " : ""}
+          {tested.text}
+        </p>
+      ) : null}
       {error !== undefined && (
         <p className="admin-error" role="alert">
           {error}
@@ -371,6 +498,9 @@ function SourceSetup({
       <div className="admin-actions">
         <button type="submit" className={PRIMARY} disabled={busy}>
           {busy ? "Saving…" : "Save"}
+        </button>
+        <button type="button" disabled={busy || testing} onClick={() => test(settings)}>
+          {testing ? "Testing…" : "Test"}
         </button>
         <button type="button" disabled={busy} onClick={onDone}>
           Back

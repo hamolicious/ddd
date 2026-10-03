@@ -236,8 +236,11 @@ static import of an optional dependency.
 
 Admin → Plugins installs a `.zip` you upload, or one from a **package source**. The ⚙ button
 at the end of the upload row opens **Package sources**: your saved sources, and the kinds
-of source you can add. Adding one asks for a name and the provider's settings (for GitLab:
-address, project and token). Saved sources are stored on the server, tokens encrypted, and
+of source you can add. Paste a link to a project (a GitLab project page, a page inside it,
+its clone address or a package download link) and the matching provider fills in the setup
+screen and tests it; **Enter manually** picks a provider and starts from a blank form. The
+setup screen has a name, the provider's settings (for GitLab: address, project and token)
+and **Test**, which checks them before you save. Saved sources are stored on the server, tokens encrypted, and
 shared by every admin.
 
 **Browse packages**, beside the ⚙ button, opens a large window listing what every saved
@@ -302,6 +305,8 @@ addPackageProvider({
 | `download(source, url)` | The `.zip` at `url`, as a `Blob`. |
 | `checkUpdates(source, plugins)` | Optional. `plugins` are `{ id, version, url }` for what this source installed; announce each newer version as an `admin:update-available` event. Throw to show what could not be checked. |
 | `defaults()`, `validate(settings)` | Optional. Starting settings, and a message that blocks saving. |
+| `fromLink(link)` | Optional. `{ name, settings }` when the pasted link is one of yours, otherwise `undefined`. |
+| `test(settings)` | Optional. Checks unsaved settings and resolves to a short success message, or throws. Without it, **Test** tries `browse`. |
 
 Inside the dialog the admin classes `admin-form`, `admin-inline-form`, `admin-field`,
 `admin-hint` and `admin-error` style a form like the rest of Admin.

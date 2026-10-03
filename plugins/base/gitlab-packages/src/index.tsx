@@ -2,7 +2,7 @@ import type { Kernel } from "@kernel";
 import { UPDATE_AVAILABLE, addPackageProvider, type PluginUpdate } from "plugin:admin";
 
 import { GitLabSetup } from "./GitLabSetup.js";
-import { DEFAULT_INSTANCE, browse, checkUpdates, download, validate, writeSettings } from "./gitlab.js";
+import { DEFAULT_INSTANCE, browse, checkUpdates, download, fromLink, test, validate, writeSettings } from "./gitlab.js";
 
 export default function activate(kernel: Kernel): void {
   if (!kernel.session.isAdmin()) return;
@@ -15,6 +15,8 @@ export default function activate(kernel: Kernel): void {
     setup: GitLabSetup,
     defaults: () => writeSettings({ instance: DEFAULT_INSTANCE, project: "", tokenKind: "access", token: "" }),
     validate,
+    fromLink,
+    test: (settings) => test(settings),
     browse: (source) => browse(source),
     download: (source, url) => download(source, url),
     checkUpdates: (source, plugins) =>

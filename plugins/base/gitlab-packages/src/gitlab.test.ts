@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { PluginUpdate, SavedSource } from "plugin:admin";
 
 import {
+  DEFAULT_INSTANCE,
   browse,
   chooseFile,
   compareVersions,
@@ -13,6 +14,9 @@ import {
   normalizeProject,
   parsePackageUrl,
   checkUpdates,
+  fromLink,
+  readSettings,
+  test as testSource,
   validate,
   writeSettings,
   type FetchJson,
@@ -65,7 +69,7 @@ describe("settings", () => {
 
   it("normalizes addresses and pasted project URLs", () => {
     expect(normalizeInstance("gitlab.example.com/")).toBe("https://gitlab.example.com");
-    expect(normalizeInstance("")).toBe("https://gitlab.com");
+    expect(normalizeInstance("")).toBe(DEFAULT_INSTANCE);
     const instance = "https://gitlab.example.com";
     expect(normalizeProject("https://gitlab.example.com/tools/ddd-plugins/-/packages", instance)).toBe("tools/ddd-plugins");
     expect(normalizeProject("/tools/ddd-plugins.git", instance)).toBe("tools/ddd-plugins");
@@ -192,5 +196,66 @@ describe("checkUpdates", () => {
     await expect(
       checkUpdates(source(), [{ id: "tasks", version: "1.2.0", url: installed }], () => {}, answers({})),
     ).rejects.toThrow(/tasks: GitLab answered 404/);
+  });
+});
+
+describe("fromLink", () => {
+  const read = (link: string) => {
+    const linked = fromLink(link);
+    return linked && { name: linked.name, ...readSettings(linked.settings) };
+  };
+
+  it("sets a source up from a project page, a page inside it, or a clone address", () => {
+    const expected = {
+      name: "ddd-plugins on gitlab.example.com",
+      instance: "https://gitlab.example.com",
+      project: "tools/ddd-plugins",
+      tokenKind: "none",
+      token: "",
+    };
+    expect(read("https://gitlab.example.com/tools/ddd-plugins")).toEqual(expected);
+    expect(read("https://gitlab.example.com/tools/ddd-plugins/-/packages/12")).toEqual(expected);
+    expect(read("https://gitlab.example.com/tools/ddd-plugins.git")).toEqual(expected);
+    expect(read("git@gitlab.example.com:tools/ddd-plugins.git")).toEqual(expected);
+    expect(read("gitlab.example.com/tools/ddd-plugins/")).toEqual(expected);
+  });
+
+  it("reads the project from a package download link", () => {
+    expect(read("https://gitlab.example.com/api/v4/projects/tools%2Fddd-plugins/packages/generic/tasks/1.0.0/tasks-1.0.0.zip")).toMatchObject({
+      instance: "https://gitlab.example.com",
+      project: "tools/ddd-plugins",
+    });
+    expect(read("https://gitlab.example.com/api/v4/projects/42/packages/generic/tasks/1.0.0/t.zip")).toMatchObject({ project: "42" });
+  });
+
+  it("keeps nested groups and ignores what is not a project", () => {
+    expect(read("https://gitlab.example.com/a/b/c/-/tree/main")).toMatchObject({ project: "a/b/c" });
+    expect(read("https://gitlab.example.com/just-a-group")).toBeUndefined();
+    expect(read("not a link at all")).toBeUndefined();
+    expect(read("ftp://gitlab.example.com/a/b")).toBeUndefined();
+  });
+});
+
+describe("test", () => {
+  it("names the project and the packages it found", async () => {
+    const message = await testSource(
+      source(),
+      answers({
+        [API]: { path_with_namespace: "tools/ddd-plugins" },
+        [`${API}/packages?package_type=generic&per_page=100`]: [
+          { id: 1, name: "tasks", version: "1.0.0" },
+          { id: 2, name: "tasks", version: "1.1.0" },
+          { id: 3, name: "themes", version: "0.1.0" },
+        ],
+      }),
+    );
+    expect(message).toBe("Reached tools/ddd-plugins: 2 packages (tasks, themes).");
+  });
+
+  it("says when the project has no packages, and passes refusals on", async () => {
+    expect(
+      await testSource(source(), answers({ [API]: {}, [`${API}/packages?package_type=generic&per_page=100`]: [] })),
+    ).toBe("Reached tools/ddd-plugins, but it has no generic packages yet.");
+    await expect(testSource(source(), answers({}))).rejects.toThrow(/404/);
   });
 });

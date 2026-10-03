@@ -65,12 +65,25 @@ test("package sources are set up in a modal, browsed with a filter, and checked 
   await page.getByRole("button", { name: "Package sources" }).click();
   const sources = page.getByRole("dialog", { name: "Package sources" });
   await expect(sources.getByText("No sources yet.")).toBeVisible();
-  await sources.getByRole("button", { name: "Add a GitLab source" }).click();
 
+  const fromLink = sources.getByRole("form", { name: "Add a source from a link" });
+  await fromLink.getByLabel("Paste a link to the project").fill("https://nothing.invalid/");
+  await fromLink.getByRole("button", { name: "Set up" }).click();
+  await expect(sources.getByRole("alert")).toContainText("No source type recognises that link");
+  await expect(sources.getByRole("button", { name: "Add a GitLab source" })).toBeVisible();
+
+  await fromLink.getByLabel("Paste a link to the project").fill("https://gitlab.invalid/tools/ddd-plugins/-/packages");
+  await fromLink.getByRole("button", { name: "Set up" }).click();
   const setup = sources.getByRole("form", { name: "New GitLab source" });
+  await expect(setup.getByLabel("Name")).toHaveValue("ddd-plugins on gitlab.invalid");
+  await expect(setup.getByLabel("GitLab address")).toHaveValue("https://gitlab.invalid");
+  await expect(setup.getByLabel("Project ID or path")).toHaveValue("tools/ddd-plugins");
+  await expect(setup.getByRole("status")).toContainText("could not reach https://gitlab.invalid");
+
   await setup.getByLabel("Name").fill("Lab");
-  await setup.getByLabel("GitLab address").fill("https://gitlab.invalid");
-  await setup.getByLabel("Project ID or path").fill("tools/ddd-plugins");
+  await setup.getByLabel("Token", { exact: true }).selectOption("access");
+  await setup.getByRole("button", { name: "Test" }).click();
+  await expect(setup.getByRole("status")).toHaveText(/enter the token/);
   await setup.getByRole("button", { name: "Save" }).click();
   await expect(setup.getByRole("alert")).toHaveText(/enter the token/);
   await setup.getByLabel("Token", { exact: true }).selectOption("none");
