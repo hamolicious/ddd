@@ -21,6 +21,7 @@ import {
 } from "./boot/cache.js";
 import { initKernel, type KernelRuntime } from "./boot/kernel-init.js";
 import { bootModeFor, safeModeFrom } from "./boot/safe-mode.js";
+import { contributeAboutSection } from "./boot/AboutSection.js";
 import { contributeShellSection } from "./boot/ShellSection.js";
 import { contributeHardRefreshCommand } from "./boot/hard-refresh-command.js";
 import {
@@ -181,6 +182,7 @@ async function boot(): Promise<void> {
       await activatePlugins(host, bearer, safeMode === "base", offlineBoot);
 
       await contributeShellSection(host).catch((error: unknown) => console.warn("[shell] the device section could not be added", error));
+      await contributeAboutSection(host).catch((error: unknown) => console.warn("[app] the about section could not be added", error));
       await contributeHardRefreshCommand(host).catch((error: unknown) => console.warn("[app] the hard refresh command could not be added", error));
 
       reportBootOk();

@@ -323,6 +323,7 @@ Android shell downloads and can revert between. See `crates/server/src/routes/sh
 | Path | Behavior |
 |---|---|
 | `GET /healthz` | Liveness. 200 without touching Mongo. |
+| `GET /version` | `{"version": "…"}`, the version the server was built with. Public, touches nothing. |
 | `GET /readyz` | Readiness: Mongo ping (2 s timeout), migration state, frontend plugin counts, backend plugin host counts (active, breaker-open, cron schedules, instances, calls in flight), schema version, uptime, version. 200 or 503, same shape. Plugin problems never fail the probe; alert on `ddd_plugins_disabled` instead. The body carries counts only, never paths or plugin ids. |
 | `GET /metrics` | Prometheus text 0.0.4: HTTP request counts and durations, materialize duration, CRDT updates applied, room/document gauges, change-feed gauges (`ddd_feed_head_seq`, `ddd_feed_safe_seq`, `ddd_feed_subscribers`), socket gauges (`ddd_ws_connections`, `ddd_ws_subscribed_documents`), `ddd_ws_backpressure_drops_total` by queue, and build info. Gauges are sampled every 15 s, so a scrape right after boot can report zeros. |
 

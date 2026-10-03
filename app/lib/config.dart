@@ -2,6 +2,8 @@ library;
 
 const int kBridgeVersion = 1;
 
+const String kAppVersion = String.fromEnvironment('DDD_APP_VERSION');
+
 const String kBridgeHandlerName = 'ddd_shell_v1';
 
 const int kLoopbackPort = 41847;

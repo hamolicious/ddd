@@ -205,6 +205,7 @@ class ShellBridge {
     final String server = jsonEncode(serverBaseUrl.toString());
     final String token = jsonEncode(bearerToken);
     final String permission = jsonEncode(notificationPermission);
+    final String appVersion = jsonEncode(kAppVersion.isEmpty ? null : kAppVersion);
     return '''
 (function () {
   var V = $kBridgeVersion;
@@ -313,6 +314,7 @@ class ShellBridge {
     capabilities: $caps,
     methods: METHODS,
     platform: 'android',
+    appVersion: $appVersion,
     serverBaseUrl: $server,
     bearerToken: token,
     setBearerToken: function (t) {

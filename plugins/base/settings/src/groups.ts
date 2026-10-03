@@ -7,16 +7,22 @@ const CACHE_KEY = "ddd.settings.base-plugins";
 export interface Grouped<T> {
   readonly base: readonly T[];
   readonly extensions: readonly T[];
+  readonly app: readonly T[];
 }
+
+export const APP_SECTION_OWNER = "kernel";
 
 export function groupByBase<T extends { readonly pluginId: string }>(
   entries: readonly T[],
   baseIds: ReadonlySet<string> | undefined,
 ): Grouped<T> {
-  if (!baseIds) return { base: entries, extensions: [] };
+  const app = entries.filter((entry) => entry.pluginId === APP_SECTION_OWNER);
+  const plugins = entries.filter((entry) => entry.pluginId !== APP_SECTION_OWNER);
+  if (!baseIds) return { base: plugins, extensions: [], app };
   return {
-    base: entries.filter((entry) => baseIds.has(entry.pluginId)),
-    extensions: entries.filter((entry) => !baseIds.has(entry.pluginId)),
+    base: plugins.filter((entry) => baseIds.has(entry.pluginId)),
+    extensions: plugins.filter((entry) => !baseIds.has(entry.pluginId)),
+    app,
   };
 }
 

@@ -348,6 +348,7 @@ pub async fn folder_remove(folder: State<'_, Folder>, path: String) -> Result<()
 
 pub fn bridge_script(origin: &str) -> String {
     let origin = serde_json::to_string(origin).expect("a string serializes");
+    let version = serde_json::to_string(env!("CARGO_PKG_VERSION")).expect("a string serializes");
     format!(
         r#"(function () {{
   if (location.origin !== {origin} || window.shell) return;
@@ -375,6 +376,7 @@ pub fn bridge_script(origin: &str) -> String {
       version: 1,
       bridgeVersion: 1,
       platform: "linux",
+      appVersion: {version},
       session: "cookie",
       capabilities: Object.freeze(["folder"]),
       methods: Object.freeze(["folder.choose", "folder.current", "folder.forget", "folder.list", "folder.move", "folder.read", "folder.remove", "folder.write"]),

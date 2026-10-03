@@ -20,6 +20,7 @@ export interface ShellInfo {
   readonly capabilities: readonly string[];
   readonly methods: readonly string[];
   readonly bundleVersion: string | undefined;
+  readonly appVersion: string | undefined;
 }
 
 export const shellBridge = (): ShellBridgeV1 | undefined => {
@@ -139,6 +140,8 @@ export function shellInfo(): ShellInfo | undefined {
       typeof bridge.bundleVersion === "string" && bridge.bundleVersion.length > 0
         ? bridge.bundleVersion
         : undefined,
+    appVersion:
+      typeof bridge.appVersion === "string" && bridge.appVersion.length > 0 ? bridge.appVersion : undefined,
   };
 }
 

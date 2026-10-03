@@ -1,6 +1,6 @@
 {
   "id": "settings",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "name": "Settings",
   "description": "The settings shell.",
   "author": "ddd base distribution",

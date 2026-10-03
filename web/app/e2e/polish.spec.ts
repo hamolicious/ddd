@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { expect, test, type WebSocketRoute } from "@playwright/test";
 
 import {
@@ -386,8 +389,25 @@ test.describe("the settings list", () => {
     const nav = page.getByRole("navigation", { name: "Settings sections" });
     const extensions = nav.getByRole("list", { name: "Extensions" });
     await expect(extensions.getByRole("link", { name: "Appearance" })).toBeVisible();
-    await expect(nav.getByRole("separator")).toBeVisible();
+    await expect(nav.getByRole("separator").first()).toBeVisible();
     await expect(nav.getByRole("list", { name: "Built-in" }).getByRole("link", { name: "Account" })).toBeVisible();
     await expect(nav.getByRole("list", { name: "Built-in" }).getByRole("link", { name: "Appearance" })).toHaveCount(0);
+  });
+
+  test("ends with About, which shows the versions this workspace runs", async ({ page, request, baseURL }) => {
+    const served = (await (await request.get(`${baseURL}/version`)).json()) as { version: string };
+    const web = (JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")) as { version: string }).version;
+    await signIn(page, ADMIN);
+    await page.goto("/#/settings");
+
+    const lists = page.getByRole("navigation", { name: "Settings sections" }).getByRole("list");
+    await expect(lists.last()).toHaveAccessibleName("App");
+    await expect(lists.last().getByRole("listitem").last()).toHaveText("About");
+
+    await lists.last().getByRole("link", { name: "About" }).click();
+    const facts = page.locator("dl.ddd-about");
+    await expect(facts.locator("dt", { hasText: "Server" }).locator("+ dd")).toHaveText(served.version);
+    await expect(facts.locator("dt", { hasText: "Web app" }).locator("+ dd")).toHaveText(web);
+    await expect(facts.locator("dt", { hasText: "Plugin API" }).locator("+ dd")).toHaveText(/^\d+\.\d+\.\d+/);
   });
 });

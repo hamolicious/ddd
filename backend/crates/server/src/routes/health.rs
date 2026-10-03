@@ -16,6 +16,18 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
+        .route("/version", get(version))
+}
+
+#[derive(Debug, Serialize)]
+pub struct VersionReport {
+    pub version: &'static str,
+}
+
+pub async fn version() -> Json<VersionReport> {
+    Json(VersionReport {
+        version: crate::VERSION,
+    })
 }
 
 pub async fn healthz() -> impl IntoResponse {
@@ -178,6 +190,17 @@ mod tests {
     async fn healthz_answers_without_any_state() {
         let response = healthz().await.into_response();
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn version_reports_the_version_the_server_was_built_with() {
+        let response = version().await.into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), 1024)
+            .await
+            .expect("body");
+        let report: serde_json::Value = serde_json::from_slice(&body).expect("json");
+        assert_eq!(report["version"], crate::VERSION);
     }
 
     #[tokio::test]

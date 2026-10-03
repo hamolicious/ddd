@@ -6,6 +6,7 @@ const entries = [
   { pluginId: "themes", id: "a" },
   { pluginId: "my-extension", id: "b" },
   { pluginId: "header", id: "c" },
+  { pluginId: "kernel", id: "about" },
 ];
 
 describe("groupByBase", () => {
@@ -15,8 +16,15 @@ describe("groupByBase", () => {
     expect(grouped.extensions.map((entry) => entry.id)).toEqual(["b"]);
   });
 
-  it("is one group while the base list is unknown", () => {
-    expect(groupByBase(entries, undefined)).toEqual({ base: entries, extensions: [] });
+  it("keeps the app's own sections apart, for the end of the list", () => {
+    expect(groupByBase(entries, new Set(["themes"])).app.map((entry) => entry.id)).toEqual(["about"]);
+    expect(groupByBase(entries, undefined).app.map((entry) => entry.id)).toEqual(["about"]);
+  });
+
+  it("is one group of plugin sections while the base list is unknown", () => {
+    const grouped = groupByBase(entries, undefined);
+    expect(grouped.base.map((entry) => entry.id)).toEqual(["a", "b", "c"]);
+    expect(grouped.extensions).toEqual([]);
   });
 });
 

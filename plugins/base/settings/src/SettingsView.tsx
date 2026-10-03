@@ -28,7 +28,8 @@ export function SettingsView({ kernel, router, sections: host, params }: Setting
   const active =
     chosen ??
     groups.base[0] ??
-    groups.extensions[0];
+    groups.extensions[0] ??
+    groups.app[0];
 
   const list = (entries: readonly RegistryEntry<SettingsSection>[], label: string): ReactNode => (
     <ul className="settings:m-0 settings:list-none settings:p-0 settings:compact:grid settings:compact:gap-1" aria-label={label}>
@@ -71,6 +72,12 @@ export function SettingsView({ kernel, router, sections: host, params }: Setting
               <>
                 <hr className="settings-divider settings:my-2 settings:border-0 settings:border-t settings:border-border" />
                 {list(groups.extensions, "Extensions")}
+              </>
+            ) : null}
+            {groups.app.length > 0 ? (
+              <>
+                <hr className="settings-divider settings:my-2 settings:border-0 settings:border-t settings:border-border" />
+                {list(groups.app, "App")}
               </>
             ) : null}
           </nav>

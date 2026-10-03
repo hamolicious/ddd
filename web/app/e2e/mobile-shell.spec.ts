@@ -82,14 +82,17 @@ test.describe("phone (390 × 844)", () => {
     const nav = page.getByRole("navigation", { name: /settings sections/i });
     await expect(nav).toBeVisible();
 
-    const list = nav.locator("ul");
-    const box = await list.boundingBox();
-    expect(box?.width ?? 0).toBeLessThanOrEqual(PHONE.width);
-    const listScroll = await list.evaluate((element) => ({
-      scrollWidth: element.scrollWidth,
-      clientWidth: element.clientWidth,
-    }));
-    expect(listScroll.scrollWidth).toBeLessThanOrEqual(listScroll.clientWidth + 1);
+    const lists = await nav.locator("ul").all();
+    expect(lists.length).toBeGreaterThan(0);
+    for (const list of lists) {
+      const box = await list.boundingBox();
+      expect(box?.width ?? 0).toBeLessThanOrEqual(PHONE.width);
+      const listScroll = await list.evaluate((element) => ({
+        scrollWidth: element.scrollWidth,
+        clientWidth: element.clientWidth,
+      }));
+      expect(listScroll.scrollWidth).toBeLessThanOrEqual(listScroll.clientWidth + 1);
+    }
 
     await expect(page.locator(".settings-pane")).toBeHidden();
     await tapTargets(page, ".settings-nav-link");

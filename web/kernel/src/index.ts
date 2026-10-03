@@ -1,3 +1,5 @@
+import packageJson from "../../package.json";
+
 export * from "./protocol.js";
 export * from "./store/index.js";
 export * from "./sync/index.js";
@@ -12,4 +14,4 @@ export {
   type ParsedDocument,
 } from "./wasm/index.js";
 
-export const KERNEL_VERSION = "0.1.0";
+export const KERNEL_VERSION: string = packageJson.version;

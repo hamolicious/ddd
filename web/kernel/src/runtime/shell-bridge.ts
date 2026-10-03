@@ -78,6 +78,7 @@ export interface ShellBridgeV1 {
   readonly capabilities?: readonly string[];
   readonly methods?: readonly string[];
   readonly platform?: string;
+  readonly appVersion?: string | null;
   readonly session?: "cookie";
   readonly bundleVersion?: string;
   readonly serverBaseUrl?: string;
