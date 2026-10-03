@@ -250,7 +250,7 @@ function renderListItem(node: MdNode, key: string, env: Env): ReactNode {
         runtime={env.runtime}
         rescan={env.rescan}
       />
-      <span className="md-task-body">{renderChildren(body, env)}</span>
+      <span className="md-task-body" style={state.style}>{renderChildren(body, env)}</span>
     </li>
   );
 }

@@ -1,4 +1,4 @@
-import type { ComponentType, ReactNode } from "react";
+import type { ComponentType, CSSProperties, ReactNode } from "react";
 
 import { createRegistry, s, type DocumentId, type Unsubscribe } from "@kernel";
 
@@ -105,6 +105,7 @@ export interface MarkdownTaskState {
   readonly icon: ReactNode;
   readonly order?: number;
   readonly done?: boolean;
+  readonly style?: CSSProperties;
 }
 
 const orderOr100 = (item: { readonly order?: number }): number => item.order ?? 100;
@@ -152,5 +153,6 @@ export const taskStateRegistry = createRegistry<MarkdownTaskState>({
     icon: s.any(),
     order: s.optional(s.number()),
     done: s.optional(s.boolean()),
+    style: s.optional(s.any()),
   }),
 });

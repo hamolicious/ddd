@@ -59,6 +59,13 @@ export { TASK_SPLICE_ORIGIN } from "./runtime.js";
 
 export type MarkdownApi = MarkdownRenderer;
 
+type IconsModule = typeof import("plugin:icons");
+
+const defaultTaskStates = (Icon: IconsModule["Icon"] | undefined): readonly MarkdownTaskState[] => [
+  { marker: " ", label: "To do", icon: Icon ? <Icon name="square" /> : "☐", order: 0, done: false },
+  { marker: "x", label: "Done", icon: Icon ? <Icon name="square-check" /> : "☑", order: 10, done: true },
+];
+
 export const addAttachmentRenderer: (items: MarkdownAttachment | readonly MarkdownAttachment[]) => () => void =
   attachmentRegistry.add;
 
@@ -286,12 +293,20 @@ export default async function activate(kernel: Kernel): Promise<void> {
   }
   if (surface) offs.push(surface.onModesChange(rendered));
 
-  offs.push(
-    addTaskState([
-      { marker: " ", label: "To do", icon: "☐", order: 0, done: false },
-      { marker: "x", label: "Done", icon: "☑", order: 10, done: true },
-    ]),
-  );
+  let active = true;
+  let removeTaskStates = addTaskState(defaultTaskStates(undefined));
+  offs.push(() => {
+    active = false;
+    removeTaskStates();
+  });
+  void kernel.plugins
+    .optional<IconsModule>("icons")
+    .catch(() => undefined)
+    .then((icons) => {
+      if (!icons || !active) return;
+      removeTaskStates();
+      removeTaskStates = addTaskState(defaultTaskStates(icons.Icon));
+    });
 
   try {
     kernel.settings.defineSchema({

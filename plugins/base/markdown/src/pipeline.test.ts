@@ -68,6 +68,7 @@ function render(
 
 const SHOWN = [
   "id",
+  "style",
   "className",
   "href",
   "src",
@@ -213,20 +214,20 @@ describe("the pipeline, end to end", () => {
         '    <table className="md-table">',
         "      <thead>",
         "        <tr>",
-        '          <th scope="col">',
+        '          <th style={"textAlign":"left"} scope="col">',
         '            "item"',
         "          </th>",
-        '          <th scope="col">',
+        '          <th style={"textAlign":"right"} scope="col">',
         '            "qty"',
         "          </th>",
         "        </tr>",
         "      </thead>",
         "      <tbody>",
         "        <tr>",
-        "          <td>",
+        '          <td style={"textAlign":"left"}>',
         '            "milk"',
         "          </td>",
-        "          <td>",
+        '          <td style={"textAlign":"right"}>',
         '            "2"',
         "          </td>",
         "        </tr>",
@@ -407,6 +408,13 @@ describe("task rendering", () => {
   it("marks the done state on the item, for styling only", () => {
     expect(render("- [x] bread")).toContain("md-task md-task-done");
     expect(render("- [ ] milk")).toContain('<li className="md-item md-task">');
+  });
+
+  it("styles a task's text with its state's style", () => {
+    const flagged: MarkdownTaskState = { marker: "!", label: "Urgent", icon: "!", style: { fontWeight: "bold", color: "red" } };
+    const tree = render("- [!] call back", { tasks: [TODO, flagged, DONE] });
+    expect(tree).toContain('<span style={"fontWeight":"bold","color":"red"} className="md-task-body">');
+    expect(render("- [ ] milk")).not.toContain("fontWeight");
   });
 
   it("leaves a plain list item alone", () => {

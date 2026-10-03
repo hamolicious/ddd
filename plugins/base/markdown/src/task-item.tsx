@@ -76,7 +76,7 @@ export function TaskCheckbox({
     <span className="md-task-control markdown:relative markdown:mx-[calc((var(--md-gutter)-var(--ddd-tap-target))/2)] markdown:inline-flex markdown:min-w-[var(--ddd-tap-target)] markdown:shrink-0 markdown:justify-center">
       <button
         type="button"
-        className="md-task-box markdown:relative markdown:h-[1.45em] markdown:w-[var(--ddd-tap-target)] markdown:before:absolute markdown:before:inset-x-0 markdown:before:top-1/2 markdown:before:h-[var(--ddd-tap-target)] markdown:before:-translate-y-1/2 markdown:before:content-[''] markdown:touch-manipulation markdown:select-none markdown:cursor-pointer markdown:rounded markdown:border-0 markdown:bg-transparent markdown:p-0 markdown:text-[1.1em] markdown:leading-none markdown:text-inherit markdown:hover:enabled:bg-accent-subtle markdown:disabled:cursor-default markdown:disabled:opacity-55"
+        className="md-task-box markdown:relative markdown:h-[1.45em] markdown:w-[var(--ddd-tap-target)] markdown:before:absolute markdown:before:inset-x-0 markdown:before:top-1/2 markdown:before:h-[var(--ddd-tap-target)] markdown:before:-translate-y-1/2 markdown:before:content-[''] markdown:touch-manipulation markdown:select-none markdown:cursor-pointer markdown:border-0! markdown:bg-transparent! markdown:p-0! markdown:text-[1.1em] markdown:leading-none markdown:text-inherit markdown:[&:enabled:hover>.md-task-icon]:bg-accent-subtle markdown:disabled:cursor-default markdown:disabled:opacity-55"
         role="checkbox"
         aria-checked={state.done === true}
         aria-label={state.label}
@@ -92,7 +92,7 @@ export function TaskCheckbox({
           if (next !== null) write(next);
         }}
       >
-        <span className="md-task-icon" aria-hidden="true">
+        <span className="md-task-icon markdown:rounded markdown:px-[0.15em] markdown:py-[0.1em] markdown:[&>svg]:align-[-0.15em]" aria-hidden="true">
           {state.icon}
         </span>
       </button>
