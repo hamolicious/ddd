@@ -19,6 +19,14 @@ declare module "@ddd/core-wasm" {
 
   export function search_remove(ids_json: string): string;
 
+  export function search_compile(plan_json: string): string;
+
+  export function search_encode_cursor(values_json: string): string;
+
+  export function search_snippets(request_json: string): string;
+
+  export function search_fuzzy(request_json: string): string;
+
   export class QueryEngine {
     constructor();
     static load(json: string): QueryEngine | undefined;

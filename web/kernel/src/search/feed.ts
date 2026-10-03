@@ -1,7 +1,9 @@
 import type { ProjectionStore, StoreChange, StoredRow } from "../store/projection-store.js";
 import type { ProjectionBackend } from "./backend.js";
 import type { SqlRow } from "./database.js";
-import type { ProjectionStatus } from "./projection.js";
+import { serializeSearchError } from "./errors.js";
+import type { PeerMessage, PeerOp, SearchPeers } from "./peers.js";
+import type { Applied, ProjectionStatus, SearchRows } from "./projection.js";
 
 export const PROJECTION_CHUNK = 250;
 
@@ -10,54 +12,103 @@ export interface ProjectionProgress {
   readonly total: number;
 }
 
+export type ProjectionRole = "solo" | "owner" | "follower";
+
+interface Pending {
+  readonly op: PeerOp;
+  readonly payload: unknown;
+  readonly resolve: (value: unknown) => void;
+  readonly reject: (error: Error) => void;
+}
+
+function remoteError(error: { readonly name: string; readonly message: string; readonly kind?: string } | undefined): Error {
+  const out = new Error(error?.message ?? "the search owner failed");
+  return Object.assign(out, { name: error?.name ?? "Error", ...(error?.kind ? { kind: error.kind } : {}) });
+}
+
 export class ProjectionFeed {
   readonly ready: Promise<ProjectionStatus>;
 
   #resolveReady!: (status: ProjectionStatus) => void;
   #rejectReady!: (error: Error) => void;
+  #settled = false;
   #started = false;
   #building = true;
+  #role: ProjectionRole;
   #unsubscribe: (() => void) | undefined;
+  #unlisten: (() => void) | undefined;
   #queue: Promise<void> = Promise.resolve();
+  #nextCall = 1;
+  readonly #pending = new Map<number, Pending>();
   readonly #held: StoreChange[] = [];
   readonly #progress = new Set<(progress: ProjectionProgress) => void>();
   readonly #errors = new Set<(error: Error) => void>();
+  readonly #changes = new Set<(sources: ReadonlySet<string>) => void>();
 
   constructor(
     private readonly store: ProjectionStore,
     private readonly backend: ProjectionBackend,
+    private readonly peers?: SearchPeers,
   ) {
+    this.#role = peers ? "follower" : "solo";
     this.ready = new Promise<ProjectionStatus>((resolve, reject) => {
-      this.#resolveReady = resolve;
-      this.#rejectReady = reject;
+      this.#resolveReady = (status) => {
+        this.#settled = true;
+        resolve(status);
+      };
+      this.#rejectReady = (error) => {
+        this.#settled = true;
+        reject(error);
+      };
     });
     this.ready.catch(() => undefined);
+  }
+
+  get role(): ProjectionRole {
+    return this.#role;
   }
 
   start(): Promise<ProjectionStatus> {
     if (this.#started) return this.ready;
     this.#started = true;
     this.#unsubscribe = this.store.subscribe((change) => {
-      if (this.#building) {
+      if (this.#building && this.#role !== "follower") {
         this.#held.push(change);
         return;
       }
       this.#enqueue(() => this.#apply(change));
     });
-    void this.#build().then(
-      (status) => this.#resolveReady(status),
-      (error: unknown) => {
-        const wrapped = error instanceof Error ? error : new Error(String(error));
-        this.#report(wrapped);
-        this.#rejectReady(wrapped);
-      },
-    );
+    if (!this.peers) {
+      this.#own();
+      return this.ready;
+    }
+    const peers = this.peers;
+    this.#unlisten = peers.onMessage((message) => this.#receive(message));
+    void peers.claim().then((owned) => {
+      if (owned) {
+        this.#own();
+        return;
+      }
+      this.#building = false;
+      void peers.whenClaimed().then(() => this.#own());
+      void this.#call("status", null).then(
+        (status) => {
+          if (!this.#settled) this.#resolveReady(status as ProjectionStatus);
+        },
+        () => undefined,
+      );
+    });
     return this.ready;
   }
 
   onProgress(listener: (progress: ProjectionProgress) => void): () => void {
     this.#progress.add(listener);
     return () => this.#progress.delete(listener);
+  }
+
+  onChange(listener: (sources: ReadonlySet<string>) => void): () => void {
+    this.#changes.add(listener);
+    return () => this.#changes.delete(listener);
   }
 
   onError(listener: (error: Error) => void): () => void {
@@ -72,22 +123,61 @@ export class ProjectionFeed {
       queue = this.#queue;
       await queue;
     } while (queue !== this.#queue);
-    return this.backend.status();
+    return this.#role === "follower" ? ((await this.#call("status", null)) as ProjectionStatus) : this.backend.status();
   }
 
   async select(sql: string): Promise<readonly SqlRow[]> {
     await this.ready;
+    if (this.#role === "follower") return (await this.#call("select", sql)) as readonly SqlRow[];
     return this.backend.select(sql);
+  }
+
+  async run(plan: unknown): Promise<SearchRows> {
+    await this.ready;
+    await this.#queue;
+    if (this.#role === "follower") return (await this.#call("run", plan)) as SearchRows;
+    return this.backend.run(plan);
   }
 
   async wipe(): Promise<void> {
     this.stop();
+    if (this.#role === "follower") {
+      await this.#call("wipe", null).catch(() => undefined);
+      return;
+    }
     await this.backend.wipe();
   }
 
   stop(): void {
     this.#unsubscribe?.();
     this.#unsubscribe = undefined;
+  }
+
+  close(): void {
+    this.stop();
+    this.#unlisten?.();
+    this.#unlisten = undefined;
+    for (const pending of this.#pending.values()) pending.reject(new Error("the search feed closed"));
+    this.#pending.clear();
+    this.peers?.close();
+  }
+
+  #own(): void {
+    const wasFollower = this.#role === "follower";
+    this.#role = this.peers ? "owner" : "solo";
+    this.#building = true;
+    void this.#build().then(
+      (status) => {
+        if (!this.#settled) this.#resolveReady(status);
+        if (this.peers) this.peers.post({ kind: "owner", id: this.peers.id });
+        if (wasFollower) this.#replayPending();
+      },
+      (error: unknown) => {
+        const wrapped = error instanceof Error ? error : new Error(String(error));
+        this.#report(wrapped);
+        if (!this.#settled) this.#rejectReady(wrapped);
+      },
+    );
   }
 
   async #build(): Promise<ProjectionStatus> {
@@ -107,20 +197,123 @@ export class ProjectionFeed {
         this.#emit({ done, total: Math.max(total, done) });
       }
     }
-    await this.backend.sync(batch, first, true);
+    const synced = await this.backend.sync(batch, first, true);
     done += batch.length;
     this.#emit({ done, total: Math.max(total, done) });
     this.#building = false;
     for (const change of this.#held.splice(0)) this.#enqueue(() => this.#apply(change));
     await this.#queue;
+    this.#announce(synced.sources);
     return this.backend.status();
+  }
+
+  #announce(sources: readonly string[]): void {
+    if (sources.length === 0) return;
+    this.#changed(sources);
+    if (this.#role === "owner") this.peers?.post({ kind: "changed", sources });
+  }
+
+  #changed(sources: readonly string[]): void {
+    if (sources.length === 0) return;
+    const set = new Set(sources);
+    for (const listener of [...this.#changes]) listener(set);
   }
 
   async #apply(change: StoreChange): Promise<void> {
     const rows = change.applied.length > 0 ? await this.store.getMany(change.applied) : [];
     const present = new Set(rows.map((row) => row.id));
     const gone = [...change.purged, ...change.applied.filter((id) => !present.has(id))];
-    await this.backend.apply(rows, gone);
+    if (this.#role === "follower") {
+      await this.#call("apply", { rows, gone });
+      return;
+    }
+    const applied = await this.backend.apply(rows, gone);
+    this.#announce(applied.sources);
+  }
+
+  #call(op: PeerOp, payload: unknown): Promise<unknown> {
+    const peers = this.peers;
+    if (!peers) return Promise.reject(new Error("no search peers"));
+    return new Promise<unknown>((resolve, reject) => {
+      const id = this.#nextCall++;
+      this.#pending.set(id, { op, payload, resolve, reject });
+      peers.post({ kind: "call", id, from: peers.id, op, payload });
+    });
+  }
+
+  #replayPending(): void {
+    const peers = this.peers;
+    if (!peers) return;
+    for (const [id, pending] of [...this.#pending]) {
+      if (this.#role === "owner") {
+        this.#pending.delete(id);
+        void this.#serve(pending.op, pending.payload).then(pending.resolve, pending.reject);
+      } else {
+        peers.post({ kind: "call", id, from: peers.id, op: pending.op, payload: pending.payload });
+      }
+    }
+  }
+
+  async #serve(op: PeerOp, payload: unknown): Promise<unknown> {
+    switch (op) {
+      case "status":
+        await this.ready;
+        return this.backend.status();
+      case "run":
+        await this.ready;
+        await this.#queue;
+        return this.backend.run(payload);
+      case "select":
+        await this.ready;
+        return this.backend.select(payload as string);
+      case "apply": {
+        const { rows, gone } = payload as { readonly rows: readonly StoredRow[]; readonly gone: readonly string[] };
+        let applied: Applied = { changed: 0, sources: [] };
+        const task = async (): Promise<void> => {
+          applied = await this.backend.apply(rows, gone);
+          this.#announce(applied.sources);
+        };
+        const done = this.#queue.then(task);
+        this.#queue = done.catch((error: unknown) => {
+          this.#report(error instanceof Error ? error : new Error(String(error)));
+        });
+        await done;
+        return applied;
+      }
+      case "wipe":
+        await this.backend.wipe();
+        return undefined;
+    }
+  }
+
+  #receive(message: PeerMessage): void {
+    const peers = this.peers;
+    if (!peers) return;
+    switch (message.kind) {
+      case "call":
+        if (this.#role !== "owner") return;
+        void this.#serve(message.op, message.payload).then(
+          (value) => peers.post({ kind: "reply", id: message.id, to: message.from, ok: true, value }),
+          (error: unknown) =>
+            peers.post({ kind: "reply", id: message.id, to: message.from, ok: false, error: serializeSearchError(error) }),
+        );
+        return;
+      case "reply": {
+        if (message.to !== peers.id) return;
+        const pending = this.#pending.get(message.id);
+        if (!pending) return;
+        this.#pending.delete(message.id);
+        if (message.ok) pending.resolve(message.value);
+        else pending.reject(remoteError(message.error));
+        return;
+      }
+      case "changed":
+        if (this.#role === "follower") this.#changed(message.sources);
+        return;
+      case "owner":
+        if (this.#role === "follower") this.#replayPending();
+        return;
+    }
   }
 
   #enqueue(task: () => Promise<void>): void {

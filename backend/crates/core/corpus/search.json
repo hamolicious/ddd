@@ -1,0 +1,1450 @@
+{
+  "documents": [
+    {
+      "id": "A",
+      "updated_at": "2026-10-02T00:00:00Z",
+      "content": "---\nstatus: open\nclient: acme\npriority: 2\ntags: [x, y]\ndue: 2026-10-05\n---\n# Alpha\n\n- [ ] one\n- [x] two\n[b](doc://B)\n"
+    },
+    {
+      "id": "B",
+      "updated_at": "2026-10-04T00:00:00Z",
+      "content": "---\nstatus: draft\nclient: acme\npriority: 5\ntags: [y]\nflag: true\n---\n# Beta\n\n- [ ] three\n"
+    },
+    {
+      "id": "C",
+      "updated_at": "2026-10-03T00:00:00.000Z",
+      "content": "---\nstatus: open\nclient: zeta\npriority: 1.5\ntags: []\nnote: null\n---\n# Gamma\n\n[gone](doc://Z)\n"
+    },
+    {
+      "id": "D",
+      "updated_at": "2026-10-02T00:00:00Z",
+      "deleted": true,
+      "content": "---\nstatus: done\npriority: \"7\"\n---\n# Delta\n"
+    },
+    {
+      "id": "F",
+      "updated_at": "2026-10-02T00:00:00Z",
+      "content": "---\ntitle: Folder\n---\n# Folder\n\n%%% folders\nchildren: [A, S]\n%%%\n"
+    },
+    {
+      "id": "S",
+      "updated_at": "2026-10-02T00:00:00Z",
+      "content": "# Sub\n\n%%% folders\nchildren: [C]\n%%%\n"
+    }
+  ],
+  "cases": [
+    {
+      "name": "every live document by id",
+      "plan": {},
+      "ids": [
+        "A",
+        "B",
+        "C",
+        "F",
+        "S"
+      ]
+    },
+    {
+      "name": "trashed only",
+      "plan": {
+        "stages": [
+          {
+            "trash": "trashed"
+          }
+        ]
+      },
+      "ids": [
+        "D"
+      ]
+    },
+    {
+      "name": "frontmatter string equality",
+      "plan": {
+        "stages": [
+          {
+            "where": {
+              "cmp": {
+                "field": "fm.status",
+                "op": "eq",
+                "value": {
+                  "str": "open"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ids": [
+        "A",
+        "C"
+      ]
+    },
+    {
+      "name": "numbers do not match strings",
+      "plan": {
+        "stages": [
+          {
+            "trash": "all"
+          },
+          {
+            "where": {
+              "cmp": {
+                "field": "fm.priority",
+                "op": "gt",
+                "value": {
+                  "int": 1
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ids": [
+        "A",
+        "B",
+        "C"
+      ]
+    },
+    {
+      "name": "not, or and missing",
+      "plan": {
+        "stages": [
+          {
+            "where": {
+              "or": [
+                {
+                  "missing": {
+                    "field": "fm.client"
+                  }
+                },
+                {
+                  "not": {
+                    "cmp": {
+                      "field": "fm.client",
+                      "op": "eq",
+                      "value": {
+                        "str": "acme"
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "ids": [
+        "C",
+        "F",
+        "S"
+      ]
+    },
+    {
+      "name": "list contains",
+      "plan": {
+        "stages": [
+          {
+            "where": {
+              "contains": {
+                "field": "fm.tags",
+                "value": {
+                  "str": "y"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ids": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "name": "deep folder children",
+      "plan": {
+        "stages": [
+          {
+            "where": {
+              "child_of": {
+                "of": "F",
+                "deep": true
+              }
+            }
+          }
+        ]
+      },
+      "ids": [
+        "A",
+        "C",
+        "S"
+      ]
+    },
+    {
+      "name": "case-insensitive title prefix",
+      "plan": {
+        "stages": [
+          {
+            "where": {
+              "text": {
+                "field": "title",
+                "mode": "starts_with",
+                "value": "be"
+              }
+            }
+          }
+        ]
+      },
+      "ids": [
+        "B"
+      ]
+    },
+    {
+      "name": "dates compare as instants",
+      "plan": {
+        "stages": [
+          {
+            "where": {
+              "cmp": {
+                "field": "updated_at",
+                "op": "gte",
+                "value": {
+                  "date": "2026-10-03"
+                }
+              }
+            }
+          },
+          {
+            "sort": [
+              "-updated_at"
+            ]
+          }
+        ]
+      },
+      "ids": [
+        "B",
+        "C"
+      ]
+    },
+    {
+      "name": "sort by priority puts missing values last",
+      "plan": {
+        "stages": [
+          {
+            "sort": [
+              "-fm.priority"
+            ]
+          }
+        ]
+      },
+      "ids": [
+        "B",
+        "A",
+        "C",
+        "F",
+        "S"
+      ]
+    },
+    {
+      "name": "select with an alias, then filter and sort on it",
+      "plan": {
+        "stages": [
+          {
+            "select": [
+              {
+                "field": "id"
+              },
+              {
+                "field": "fm.priority",
+                "as": "p"
+              },
+              {
+                "field": "fm.tags"
+              }
+            ]
+          },
+          {
+            "where": {
+              "cmp": {
+                "field": "p",
+                "op": "gt",
+                "value": {
+                  "int": 1
+                }
+              }
+            }
+          },
+          {
+            "sort": [
+              "-p"
+            ]
+          }
+        ]
+      },
+      "rows": [
+        {
+          "id": "B",
+          "p": 5,
+          "fm.tags": [
+            "y"
+          ]
+        },
+        {
+          "id": "A",
+          "p": 2,
+          "fm.tags": [
+            "x",
+            "y"
+          ]
+        },
+        {
+          "id": "C",
+          "p": 1.5,
+          "fm.tags": []
+        }
+      ]
+    },
+    {
+      "name": "limit before a filter",
+      "plan": {
+        "stages": [
+          {
+            "limit": 2
+          },
+          {
+            "where": {
+              "cmp": {
+                "field": "fm.status",
+                "op": "eq",
+                "value": {
+                  "str": "open"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ids": [
+        "A"
+      ]
+    },
+    {
+      "name": "a page with its total",
+      "plan": {
+        "stages": [
+          {
+            "offset": 1
+          },
+          {
+            "limit": 2
+          },
+          "with_total"
+        ]
+      },
+      "ids": [
+        "B",
+        "C"
+      ],
+      "total": 5
+    },
+    {
+      "name": "open tasks with their document",
+      "plan": {
+        "source": "tasks",
+        "stages": [
+          {
+            "where": {
+              "cmp": {
+                "field": "state",
+                "op": "eq",
+                "value": {
+                  "str": "open"
+                }
+              }
+            }
+          },
+          {
+            "select": [
+              {
+                "field": "text"
+              },
+              {
+                "field": "doc.title",
+                "as": "title"
+              },
+              {
+                "field": "line"
+              }
+            ]
+          },
+          {
+            "sort": [
+              "text"
+            ]
+          }
+        ]
+      },
+      "rows": [
+        {
+          "text": "one",
+          "title": "Alpha",
+          "line": 10
+        },
+        {
+          "text": "three",
+          "title": "Beta",
+          "line": 10
+        }
+      ]
+    },
+    {
+      "name": "broken links",
+      "plan": {
+        "source": "links",
+        "stages": [
+          {
+            "where": {
+              "cmp": {
+                "field": "state",
+                "op": "eq",
+                "value": {
+                  "str": "missing"
+                }
+              }
+            }
+          },
+          {
+            "select": [
+              {
+                "field": "doc.id"
+              },
+              {
+                "field": "target"
+              }
+            ]
+          }
+        ]
+      },
+      "rows": [
+        {
+          "doc.id": "C",
+          "target": "Z"
+        }
+      ]
+    },
+    {
+      "name": "frontmatter values keep their kinds",
+      "plan": {
+        "source": "fm",
+        "stages": [
+          {
+            "where": {
+              "in": {
+                "field": "key",
+                "values": [
+                  {
+                    "str": "flag"
+                  },
+                  {
+                    "str": "note"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "select": [
+              {
+                "field": "key"
+              },
+              {
+                "field": "value"
+              },
+              {
+                "field": "kind"
+              }
+            ]
+          },
+          {
+            "sort": [
+              "key"
+            ]
+          }
+        ]
+      },
+      "rows": [
+        {
+          "key": "flag",
+          "value": true,
+          "kind": "boolean"
+        },
+        {
+          "key": "note",
+          "value": null,
+          "kind": "null"
+        }
+      ]
+    },
+    {
+      "name": "text matches frontmatter values",
+      "plan": {
+        "stages": [
+          {
+            "text": "acme "
+          }
+        ]
+      },
+      "ids": [
+        "A",
+        "B"
+      ]
+    },
+    {
+      "name": "the last term is a prefix while typing",
+      "plan": {
+        "stages": [
+          {
+            "text": "alp"
+          }
+        ]
+      },
+      "ids": [
+        "A"
+      ]
+    },
+    {
+      "name": "accents and case fold",
+      "plan": {
+        "stages": [
+          {
+            "text": "ÁLPHA "
+          }
+        ]
+      },
+      "ids": [
+        "A"
+      ]
+    },
+    {
+      "name": "a lone negation keeps everything else",
+      "plan": {
+        "stages": [
+          {
+            "text": "-acme "
+          }
+        ]
+      },
+      "ids": [
+        "C",
+        "F",
+        "S"
+      ]
+    },
+    {
+      "name": "a field-scoped term",
+      "plan": {
+        "stages": [
+          {
+            "text": "title:beta "
+          }
+        ]
+      },
+      "ids": [
+        "B"
+      ]
+    },
+    {
+      "name": "frontmatter keys are not searchable",
+      "plan": {
+        "stages": [
+          {
+            "text": "client "
+          }
+        ]
+      },
+      "ids": []
+    },
+    {
+      "name": "a structured match",
+      "plan": {
+        "stages": [
+          {
+            "match": {
+              "and": [
+                {
+                  "or": [
+                    {
+                      "term": "one"
+                    },
+                    {
+                      "term": "three"
+                    }
+                  ]
+                },
+                {
+                  "not": {
+                    "term": "beta"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "ids": [
+        "A"
+      ]
+    },
+    {
+      "name": "title matches outrank body matches",
+      "plan": {
+        "stages": [
+          {
+            "text": "folder OR sub "
+          },
+          {
+            "sort": [
+              "relevance"
+            ]
+          }
+        ]
+      },
+      "ids": [
+        "F",
+        "S"
+      ]
+    },
+    {
+      "name": "snippets point at the matching line",
+      "plan": {
+        "stages": [
+          {
+            "text": "three "
+          },
+          "snippets",
+          {
+            "select": [
+              {
+                "field": "id"
+              }
+            ]
+          }
+        ]
+      },
+      "rows": [
+        {
+          "id": "B",
+          "snippet": {
+            "text": "- [ ] three",
+            "ranges": [
+              {
+                "start": 6,
+                "end": 11
+              }
+            ],
+            "line": 10
+          }
+        }
+      ]
+    },
+    {
+      "name": "text over tasks reaches the owning document",
+      "plan": {
+        "source": "tasks",
+        "stages": [
+          {
+            "text": "gamma OR beta "
+          },
+          {
+            "select": [
+              {
+                "field": "text"
+              }
+            ]
+          }
+        ]
+      },
+      "rows": [
+        {
+          "text": "three"
+        }
+      ]
+    },
+    {
+      "name": "frontmatter keys in use, with their kinds",
+      "plan": {
+        "source": "fm",
+        "stages": [
+          {
+            "group_by": [
+              "key"
+            ]
+          },
+          {
+            "count": {
+              "as": "documents"
+            }
+          },
+          {
+            "collect": {
+              "field": "kind",
+              "as": "kinds"
+            }
+          },
+          {
+            "sort": [
+              "-documents",
+              "key"
+            ]
+          }
+        ]
+      },
+      "rows": [
+        {
+          "key": "client",
+          "documents": 3,
+          "kinds": [
+            "string"
+          ]
+        },
+        {
+          "key": "priority",
+          "documents": 3,
+          "kinds": [
+            "number"
+          ]
+        },
+        {
+          "key": "status",
+          "documents": 3,
+          "kinds": [
+            "string"
+          ]
+        },
+        {
+          "key": "tags",
+          "documents": 3,
+          "kinds": [
+            "string"
+          ]
+        },
+        {
+          "key": "due",
+          "documents": 1,
+          "kinds": [
+            "date"
+          ]
+        },
+        {
+          "key": "flag",
+          "documents": 1,
+          "kinds": [
+            "boolean"
+          ]
+        },
+        {
+          "key": "note",
+          "documents": 1,
+          "kinds": [
+            "null"
+          ]
+        },
+        {
+          "key": "title",
+          "documents": 1,
+          "kinds": [
+            "string"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "the values of one key, with counts",
+      "plan": {
+        "source": "fm",
+        "stages": [
+          {
+            "where": {
+              "cmp": {
+                "field": "key",
+                "op": "eq",
+                "value": {
+                  "str": "status"
+                }
+              }
+            }
+          },
+          {
+            "group_by": [
+              "value"
+            ]
+          },
+          {
+            "count": {}
+          }
+        ]
+      },
+      "rows": [
+        {
+          "value": "draft",
+          "count": 1
+        },
+        {
+          "value": "open",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "name": "groups filtered by their count",
+      "plan": {
+        "stages": [
+          {
+            "group_by": [
+              "fm.client"
+            ]
+          },
+          {
+            "count": {
+              "as": "n"
+            }
+          },
+          {
+            "where": {
+              "cmp": {
+                "field": "n",
+                "op": "gte",
+                "value": {
+                  "int": 2
+                }
+              }
+            }
+          },
+          {
+            "sort": [
+              "fm.client"
+            ]
+          }
+        ]
+      },
+      "rows": [
+        {
+          "fm.client": "acme",
+          "n": 2
+        },
+        {
+          "fm.client": null,
+          "n": 2
+        }
+      ]
+    },
+    {
+      "name": "open tasks per document",
+      "plan": {
+        "source": "tasks",
+        "stages": [
+          {
+            "where": {
+              "cmp": {
+                "field": "state",
+                "op": "eq",
+                "value": {
+                  "str": "open"
+                }
+              }
+            }
+          },
+          {
+            "group_by": [
+              "doc.title"
+            ]
+          },
+          {
+            "count": {}
+          }
+        ]
+      },
+      "rows": [
+        {
+          "doc.title": "Alpha",
+          "count": 1
+        },
+        {
+          "doc.title": "Beta",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "aggregates over everything",
+      "plan": {
+        "stages": [
+          {
+            "count": {}
+          },
+          {
+            "sum": {
+              "field": "fm.priority",
+              "as": "total"
+            }
+          },
+          {
+            "min": {
+              "field": "fm.priority",
+              "as": "low"
+            }
+          },
+          {
+            "max": {
+              "field": "title",
+              "as": "last"
+            }
+          }
+        ]
+      },
+      "rows": [
+        {
+          "count": 5,
+          "total": 8.5,
+          "low": 1.5,
+          "last": "Sub"
+        }
+      ]
+    },
+    {
+      "name": "distinct link targets",
+      "plan": {
+        "source": "links",
+        "stages": [
+          {
+            "distinct": [
+              "target"
+            ]
+          }
+        ]
+      },
+      "rows": [
+        {
+          "target": "B"
+        },
+        {
+          "target": "Z"
+        }
+      ]
+    },
+    {
+      "name": "a subquery as an in list",
+      "plan": {
+        "stages": [
+          {
+            "where": {
+              "in_plan": {
+                "field": "id",
+                "plan": {
+                  "source": "links",
+                  "stages": [
+                    {
+                      "where": {
+                        "cmp": {
+                          "field": "target",
+                          "op": "eq",
+                          "value": {
+                            "str": "B"
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "select": [
+                        {
+                          "field": "doc.id"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ids": [
+        "A"
+      ]
+    },
+    {
+      "name": "collected frontmatter values stay JSON",
+      "plan": {
+        "stages": [
+          {
+            "where": {
+              "cmp": {
+                "field": "fm.client",
+                "op": "eq",
+                "value": {
+                  "str": "acme"
+                }
+              }
+            }
+          },
+          {
+            "group_by": [
+              "fm.client"
+            ]
+          },
+          {
+            "collect": {
+              "field": "fm.tags",
+              "as": "tags"
+            }
+          },
+          {
+            "collect": {
+              "field": "fm.flag",
+              "as": "flags"
+            }
+          }
+        ]
+      },
+      "rows": [
+        {
+          "fm.client": "acme",
+          "tags": [
+            [
+              "x",
+              "y"
+            ],
+            [
+              "y"
+            ]
+          ],
+          "flags": [
+            true
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a fuzzy title search forgives a swapped letter",
+      "plan": {
+        "stages": [
+          {
+            "fuzzy": {
+              "query": "alpah",
+              "fields": [
+                "title"
+              ]
+            }
+          }
+        ]
+      },
+      "ids": [
+        "A"
+      ]
+    },
+    {
+      "name": "fuzzy ranks the closest first, within a limit",
+      "plan": {
+        "stages": [
+          {
+            "fuzzy": {
+              "query": "gama betta",
+              "limit": 1
+            }
+          }
+        ]
+      },
+      "ids": [
+        "C"
+      ]
+    },
+    {
+      "name": "fuzzy inside one folder",
+      "plan": {
+        "stages": [
+          {
+            "where": {
+              "child_of": {
+                "of": "F",
+                "deep": true
+              }
+            }
+          },
+          {
+            "fuzzy": {
+              "query": "gamma"
+            }
+          }
+        ]
+      },
+      "ids": [
+        "C"
+      ]
+    },
+    {
+      "name": "fuzzy keeps the selected shape",
+      "plan": {
+        "stages": [
+          {
+            "select": [
+              {
+                "field": "id"
+              },
+              {
+                "field": "title",
+                "as": "name"
+              }
+            ]
+          },
+          {
+            "fuzzy": {
+              "query": "sbu"
+            }
+          }
+        ]
+      },
+      "rows": [
+        {
+          "id": "S",
+          "name": "Sub"
+        }
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "name": "unknown field",
+      "plan": {
+        "stages": [
+          {
+            "where": {
+              "exists": {
+                "field": "nope"
+              }
+            }
+          }
+        ]
+      },
+      "kind": "unknown_field"
+    },
+    {
+      "name": "string against a number column",
+      "plan": {
+        "source": "tasks",
+        "stages": [
+          {
+            "where": {
+              "cmp": {
+                "field": "line",
+                "op": "eq",
+                "value": {
+                  "str": "1"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "kind": "bad_value"
+    },
+    {
+      "name": "ordering a boolean",
+      "plan": {
+        "stages": [
+          {
+            "where": {
+              "cmp": {
+                "field": "fm.flag",
+                "op": "lt",
+                "value": {
+                  "bool": true
+                }
+              }
+            }
+          }
+        ]
+      },
+      "kind": "bad_operator"
+    },
+    {
+      "name": "cursor with offset",
+      "plan": {
+        "stages": [
+          {
+            "offset": 1
+          },
+          {
+            "cursor": "W10"
+          }
+        ]
+      },
+      "kind": "bad_stage"
+    },
+    {
+      "name": "limit too large",
+      "plan": {
+        "stages": [
+          {
+            "limit": 1000001
+          }
+        ]
+      },
+      "kind": "limit"
+    },
+    {
+      "name": "field dropped by select",
+      "plan": {
+        "stages": [
+          {
+            "select": [
+              {
+                "field": "id"
+              }
+            ]
+          },
+          {
+            "sort": [
+              "title"
+            ]
+          }
+        ]
+      },
+      "kind": "unknown_field"
+    },
+    {
+      "name": "snippets without text",
+      "plan": {
+        "stages": [
+          "snippets"
+        ]
+      },
+      "kind": "bad_stage"
+    },
+    {
+      "name": "relevance without text",
+      "plan": {
+        "stages": [
+          {
+            "sort": [
+              "relevance"
+            ]
+          }
+        ]
+      },
+      "kind": "bad_stage"
+    },
+    {
+      "name": "too much text",
+      "plan": {
+        "stages": [
+          {
+            "text": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ]
+      },
+      "kind": "limit"
+    },
+    {
+      "name": "malformed stage",
+      "plan": {
+        "stages": [
+          {
+            "explode": true
+          }
+        ]
+      },
+      "kind": "malformed"
+    },
+    {
+      "name": "groupBy without an aggregate",
+      "plan": {
+        "stages": [
+          {
+            "group_by": [
+              "fm.client"
+            ]
+          },
+          {
+            "limit": 1
+          }
+        ]
+      },
+      "kind": "bad_stage"
+    },
+    {
+      "name": "a subquery with two fields",
+      "plan": {
+        "stages": [
+          {
+            "where": {
+              "in_plan": {
+                "field": "id",
+                "plan": {
+                  "stages": [
+                    {
+                      "select": [
+                        {
+                          "field": "id"
+                        },
+                        {
+                          "field": "title"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      },
+      "kind": "bad_stage"
+    },
+    {
+      "name": "subqueries three deep",
+      "plan": {
+        "stages": [
+          {
+            "where": {
+              "in_plan": {
+                "field": "id",
+                "plan": {
+                  "stages": [
+                    {
+                      "where": {
+                        "in_plan": {
+                          "field": "id",
+                          "plan": {
+                            "stages": [
+                              {
+                                "where": {
+                                  "in_plan": {
+                                    "field": "id",
+                                    "plan": {
+                                      "stages": [
+                                        {
+                                          "select": [
+                                            {
+                                              "field": "id"
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              },
+                              {
+                                "select": [
+                                  {
+                                    "field": "id"
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "select": [
+                        {
+                          "field": "id"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      },
+      "kind": "limit"
+    },
+    {
+      "name": "a group filter on a field that is not grouped",
+      "plan": {
+        "stages": [
+          {
+            "group_by": [
+              "fm.client"
+            ]
+          },
+          {
+            "count": {}
+          },
+          {
+            "where": {
+              "cmp": {
+                "field": "title",
+                "op": "eq",
+                "value": {
+                  "str": "x"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "kind": "unknown_field"
+    },
+    {
+      "name": "fuzzy is not last",
+      "plan": {
+        "stages": [
+          {
+            "fuzzy": {
+              "query": "x"
+            }
+          },
+          {
+            "limit": 1
+          }
+        ]
+      },
+      "kind": "bad_stage"
+    },
+    {
+      "name": "fuzzy after groupBy",
+      "plan": {
+        "stages": [
+          {
+            "group_by": [
+              "fm.client"
+            ]
+          },
+          {
+            "count": {}
+          },
+          {
+            "fuzzy": {
+              "query": "x"
+            }
+          }
+        ]
+      },
+      "kind": "bad_stage"
+    },
+    {
+      "name": "fuzzy after a select without id",
+      "plan": {
+        "stages": [
+          {
+            "select": [
+              {
+                "field": "title"
+              }
+            ]
+          },
+          {
+            "fuzzy": {
+              "query": "x"
+            }
+          }
+        ]
+      },
+      "kind": "bad_stage"
+    }
+  ]
+}

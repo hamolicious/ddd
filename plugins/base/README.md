@@ -453,12 +453,53 @@ Before you start:
    listeners, timers) in `export function deactivate()`.
 5. **Never rewrite frontmatter or another plugin's `%%%` section directly.**
    `kernel.documents.splice` is the only sanctioned write path for metadata. And **read
-   locally**: `kernel.documents.query/subscribe/search` run against the local replica,
-   online or offline; don't call `/api/documents` to browse.
+   locally**: `kernel.search` (and the older `kernel.documents.query/subscribe/search`) run
+   against the local replica, online or offline; don't call `/api/documents` to browse.
 
 Types: `import type { Kernel } from "@kernel"`, and other plugins' from `plugin:<id>`.
 Outside this repository, fetch `/kernel.d.ts` from your server (or run `ddd plugin types`)
 and use each dependency's `frontend/index.d.ts` from its installed package.
+
+### Searching with `kernel.search`
+
+`kernel.search` queries what this device has, including edits that have not synced yet. It
+never makes a request. Your manifest needs `"capabilities": { "documents": ["read"] }`.
+
+```ts
+const { rows } = await kernel.search
+  .from()
+  .text('invoice -draft "acme corp"')
+  .where("fm.status", "eq", "open")
+  .sort("-updated_at")
+  .select("id", "title", { client: "fm.client" })
+  .limit(20)
+  .run();
+```
+
+- **Sources.** `from()` reads documents. `from("fm")`, `from("links")`, `from("tasks")` and
+  `from("attachments")` read one row per frontmatter value, outgoing link, task line or
+  attachment, each with its document under `doc.` (`doc.title`, `doc.fm.status`).
+- **Stages run in the order you call them.** `limit(5).where(…)` filters the first five rows;
+  `where(…).limit(5)` returns the first five matches.
+- **Filters.** `where(field, op, value)`, or `where((w) => w.or(w(…), w.not(w(…))))`. A builder
+  that selects one field can be the value of `in`.
+- **Text.** `text("…")` takes what a person types (`a b`, `a OR b`, `-a`, `"a b"`,
+  `title:a`, `a*`, groups) and never throws on it. `match((m) => …)` builds the same thing in
+  code. Sort by `"relevance"`; `snippets()` adds the matching line to each row.
+- **Groups.** `groupBy(…)` followed by `count`, `sum`, `min`, `max`, `avg` or `collect`; a
+  `where` after that filters the groups. `distinct(…)` drops repeated rows.
+- **Typos.** `fuzzy("teh qick borwn", { fields: ["title"], limit: 10 })` ranks the rows that
+  are left by how close they are, and must come last.
+- **Paging.** `limit`, `offset`, or `cursor(result.nextCursor)`; `withTotal()` adds an exact
+  `total`.
+- **Live results.** `watch()` instead of `run()` gives `{ result, onChange, window, close }`.
+  It re-runs only when something it reads changes, at most once per frame. `window(start,
+  count)` moves it over a long list for virtual scrolling.
+
+Rows are typed from what you select, group and count, so a misspelt field is a type error.
+`fm.*` and `plugins.*` accept any key. A bad plan rejects with `SearchPlanError`.
+`SearchUnavailableError` means the local database could not be opened.
+
 
 ## Trust
 

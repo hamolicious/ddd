@@ -136,8 +136,10 @@ pub fn search_schema() -> String {
 
 #[wasm_bindgen]
 pub fn search_project(rows_json: &str) -> String {
-    match search::statements_for_json(rows_json) {
-        Ok(statements) => serde_json::json!({ "statements": statements }).to_string(),
+    match search::project_json(rows_json) {
+        Ok((statements, documents)) => {
+            serde_json::json!({ "statements": statements, "documents": documents }).to_string()
+        }
         Err(error) => serde_json::json!({ "error": error.to_string() }).to_string(),
     }
 }
@@ -147,6 +149,63 @@ pub fn search_remove(ids_json: &str) -> String {
     let ids: Vec<String> = serde_json::from_str(ids_json).unwrap_or_default();
     let statements: Vec<_> = ids.iter().flat_map(|id| search::remove_statements(id)).collect();
     serde_json::json!({ "statements": statements }).to_string()
+}
+
+#[wasm_bindgen]
+pub fn search_compile(plan_json: &str) -> String {
+    match search::Plan::from_json_str(plan_json).and_then(|plan| search::compile(&plan)) {
+        Ok(compiled) => serde_json::json!({ "compiled": compiled }).to_string(),
+        Err(error) => serde_json::json!({ "error": error, "message": error.to_string() }).to_string(),
+    }
+}
+
+#[wasm_bindgen]
+pub fn search_snippets(request_json: &str) -> String {
+    #[derive(serde::Deserialize)]
+    struct Request {
+        terms: Vec<String>,
+        contents: Vec<Option<String>>,
+    }
+    let Ok(request) = serde_json::from_str::<Request>(request_json) else {
+        return "[]".into();
+    };
+    let snippets: Vec<_> = request
+        .contents
+        .iter()
+        .map(|content| content.as_deref().and_then(|text| search::snippet(text, &request.terms)))
+        .collect();
+    serde_json::to_string(&snippets).unwrap_or_else(|_| "[]".into())
+}
+
+#[wasm_bindgen]
+pub fn search_fuzzy(request_json: &str) -> String {
+    #[derive(serde::Deserialize)]
+    struct Request {
+        spec: search::FuzzySpec,
+        candidates: Vec<search::FuzzyCandidate>,
+    }
+    match serde_json::from_str::<Request>(request_json) {
+        Ok(request) => serde_json::to_string(&search::fuzzy_rank(&request.spec, &request.candidates))
+            .unwrap_or_else(|_| "[]".into()),
+        Err(_) => "[]".into(),
+    }
+}
+
+#[wasm_bindgen]
+pub fn search_encode_cursor(values_json: &str) -> String {
+    let values: Vec<serde_json::Value> = serde_json::from_str(values_json).unwrap_or_default();
+    let values: Vec<search::SqlValue> = values
+        .into_iter()
+        .map(|value| match value {
+            serde_json::Value::String(text) => search::SqlValue::Text(text),
+            serde_json::Value::Number(n) => match n.as_i64() {
+                Some(i) => search::SqlValue::Int(i),
+                None => n.as_f64().map_or(search::SqlValue::Null, search::SqlValue::Real),
+            },
+            _ => search::SqlValue::Null,
+        })
+        .collect();
+    search::encode_cursor(&values)
 }
 
 #[wasm_bindgen]

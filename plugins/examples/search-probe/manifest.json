@@ -1,0 +1,15 @@
+{
+  "id": "search-probe",
+  "version": "1.0.0",
+  "kernel": "^3.2",
+  "frontend": {
+    "module": "frontend/index.mjs"
+  },
+  "capabilities": {
+    "documents": ["read"]
+  },
+  "name": "Search probe",
+  "description": "Puts kernel.search on the page as window.dddSearchProbe so browser tests can run and watch search plans.",
+  "author": "ddd examples",
+  "license": "MIT OR Apache-2.0"
+}

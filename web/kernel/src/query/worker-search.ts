@@ -2,7 +2,8 @@ import type { ProjectionRow } from "../protocol.js";
 import type { CoreBindings } from "../wasm/index.js";
 import { ProjectionHost, type ProjectionBackend } from "../search/backend.js";
 import type { SqlRow } from "../search/database.js";
-import type { ProjectionStatus } from "../search/projection.js";
+import type { Applied, ProjectionStatus, SearchRows } from "../search/projection.js";
+import { reviveSearchError } from "../search/revive.js";
 import type { PlanPage, QueryPlan } from "./plan.js";
 import { WasmEngineIndex, type EngineIndex, type SearchStats } from "./search.js";
 import type {
@@ -29,9 +30,10 @@ export class WorkerSearchIndex implements EngineIndex {
     open: async () => (await this.#call({ op: "projection.open" })) as ProjectionStatus,
     status: async () => (await this.#call({ op: "projection.status" })) as ProjectionStatus,
     sync: async (rows, first, last) =>
-      (await this.#call({ op: "projection.sync", rows, first, last })) as number,
-    apply: async (rows, purged) => (await this.#call({ op: "projection.apply", rows, purged })) as number,
+      (await this.#call({ op: "projection.sync", rows, first, last })) as Applied,
+    apply: async (rows, purged) => (await this.#call({ op: "projection.apply", rows, purged })) as Applied,
     select: async (sql) => (await this.#call({ op: "projection.select", sql })) as readonly SqlRow[],
+    run: async (plan) => (await this.#call({ op: "projection.run", plan })) as SearchRows,
     wipe: async () => {
       await this.#call({ op: "projection.wipe" });
     },
@@ -112,7 +114,7 @@ export class WorkerSearchIndex implements EngineIndex {
       if (!pending) return;
       this.#pending.delete(response.id);
       if (response.ok) pending.resolve(response.value);
-      else pending.reject(new Error(response.error));
+      else pending.reject(response.detail ? reviveSearchError(response.detail) : new Error(response.error));
     });
     worker.addEventListener("error", (event: ErrorEvent) => {
       const error = new Error(`search worker failed: ${event.message}`);

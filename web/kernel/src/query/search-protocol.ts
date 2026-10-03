@@ -2,7 +2,8 @@ import type { ProjectionRow } from "../protocol.js";
 import type { PlanPage, QueryPlan } from "./plan.js";
 import type { SearchStats } from "./search.js";
 import type { SqlRow } from "../search/database.js";
-import type { ProjectionStatus } from "../search/projection.js";
+import type { Applied, ProjectionStatus, SearchRows } from "../search/projection.js";
+import type { SerializedSearchError } from "../search/errors.js";
 
 export type SearchRequest =
   | { readonly op: "open" }
@@ -28,9 +29,10 @@ export type SearchRequest =
     }
   | { readonly op: "projection.apply"; readonly rows: readonly ProjectionRow[]; readonly purged: readonly string[] }
   | { readonly op: "projection.select"; readonly sql: string }
+  | { readonly op: "projection.run"; readonly plan: unknown }
   | { readonly op: "projection.wipe" };
 
-export type SearchResponseValue = void | number | PlanPage | SearchStats | ProjectionStatus | readonly SqlRow[];
+export type SearchResponseValue = void | number | Applied | PlanPage | SearchStats | ProjectionStatus | SearchRows | readonly SqlRow[];
 
 export interface SearchRequestEnvelope {
   readonly id: number;
@@ -39,4 +41,4 @@ export interface SearchRequestEnvelope {
 
 export type SearchResponseEnvelope =
   | { readonly id: number; readonly ok: true; readonly value: SearchResponseValue }
-  | { readonly id: number; readonly ok: false; readonly error: string };
+  | { readonly id: number; readonly ok: false; readonly error: string; readonly detail?: SerializedSearchError };

@@ -20,7 +20,7 @@ function composeDefaultRegistry() {
     [
       resolve(web, "scripts", "compose-plugins.mjs"),
       out,
-      "--include-examples=extra-task-states",
+      "--include-examples=extra-task-states,search-probe",
     ],
     { cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] },
   );

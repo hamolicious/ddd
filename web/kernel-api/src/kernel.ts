@@ -2,6 +2,7 @@ import type { CapabilitiesApi } from "./capabilities.js";
 import type { DocumentsApi } from "./documents.js";
 import type { EventsApi } from "./events.js";
 import type { PluginManifest } from "./manifest.js";
+import type { SearchApi } from "./search.js";
 import type { SessionApi } from "./session.js";
 import type { SettingsApi } from "./settings.js";
 import type { SyncApi } from "./sync.js";
@@ -37,6 +38,7 @@ export interface Kernel {
   readonly manifest: PluginManifest;
 
   readonly documents: DocumentsApi;
+  readonly search: SearchApi;
   readonly plugins: PluginsApi;
   readonly events: EventsApi;
   readonly settings: SettingsApi;

@@ -1,4 +1,4 @@
-pub const SEARCH_SCHEMA_VERSION: u32 = 1;
+pub const SEARCH_SCHEMA_VERSION: u32 = 3;
 
 pub const SCHEMA: &[&str] = &[
     "CREATE TABLE meta (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL) WITHOUT ROWID",
@@ -38,6 +38,8 @@ pub const SCHEMA: &[&str] = &[
     "CREATE TABLE attachments (doc TEXT NOT NULL, attachment TEXT NOT NULL, line INTEGER NOT NULL)",
     "CREATE INDEX attachments_doc ON attachments (doc)",
     "CREATE INDEX attachments_attachment ON attachments (attachment)",
+    "CREATE VIRTUAL TABLE documents_fts USING fts5(title, content, fm, content='', contentless_delete=1, tokenize='unicode61 remove_diacritics 2')",
+    "CREATE VIRTUAL TABLE documents_trigram USING fts5(title, content, fm, content='', contentless_delete=1, tokenize='trigram')",
 ];
 
 pub const READ_SCHEMA_VERSION: &str = "SELECT value FROM meta WHERE key = 'schema_version'";

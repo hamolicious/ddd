@@ -1,3 +1,5 @@
+import type { ProjectionFeed } from "../search/feed.js";
+import { SearchHost } from "../search/host.js";
 import type { ComponentType, ReactNode } from "react";
 
 import {
@@ -38,6 +40,7 @@ export interface KernelHostOptions {
   readonly bootMode: BootMode;
   readonly onPluginProblem?: (problem: PluginProblem) => void;
   readonly importPlugin?: PluginImporter;
+  readonly search?: ProjectionFeed;
 }
 
 export interface PluginProblem {
@@ -54,6 +57,7 @@ export class KernelHost {
   readonly theme: ThemeController;
   readonly mount: MountPoint;
   readonly documents: DocumentsHost;
+  readonly search: SearchHost;
   readonly settings: SettingsHost;
   readonly capabilities: CapabilitiesHost;
   readonly session: SessionHost;
@@ -77,6 +81,7 @@ export class KernelHost {
       userId: options.session.user.id,
       parse: (text) => options.core.parseDocument(text),
     });
+    this.search = new SearchHost(options.search);
     this.settings = new SettingsHost({
       documents: this.documents,
       userId: options.session.user.id,
@@ -139,6 +144,7 @@ export class KernelHost {
           });
         },
       },
+      search: this.search.forPlugin(manifest, track),
       plugins: this.plugins.forPlugin(manifest),
       events: {
         ...events,

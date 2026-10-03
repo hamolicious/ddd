@@ -2,7 +2,7 @@ import { IdbDocPersistence, IdbProjectionStore } from "@kernel/store/index.js";
 import { QueryEngine, createSearchIndex } from "@kernel/query/index.js";
 import { SyncClient } from "@kernel/sync/index.js";
 import { loadCore, type CoreBindings } from "@kernel/wasm/index.js";
-import { ProjectionFeed } from "@kernel/search/index.js";
+import { ProjectionFeed, browserPeers } from "@kernel/search/index.js";
 import { KernelHost, type PluginProblem } from "@kernel/runtime/index.js";
 import type { BootMode, LogoutOptions, SessionUser } from "@kernel";
 
@@ -45,7 +45,7 @@ export async function initKernel(options: KernelInitOptions): Promise<KernelRunt
   const index = createSearchIndex();
   const engine = new QueryEngine(store, core, index);
   engine.warmUp().catch((error: unknown) => console.warn("[search] warm-up failed", error));
-  const search = new ProjectionFeed(store, index.projection);
+  const search = new ProjectionFeed(store, index.projection, browserPeers());
   void search.start();
 
   const server = options.serverBaseUrl;
@@ -138,6 +138,7 @@ export async function initKernel(options: KernelInitOptions): Promise<KernelRunt
     sync,
     core,
     bootMode: options.bootMode,
+    search,
     session: {
       user: options.user,
       via: options.bearerToken ? "bearer" : "cookie",
@@ -213,6 +214,10 @@ function unavailableCore(reason: string): CoreBindings {
     searchSchema: fail,
     searchProject: fail,
     searchRemove: fail,
+    searchCompile: fail,
+    searchEncodeCursor: fail,
+    searchSnippets: fail,
+    searchFuzzy: fail,
     semanticsVersion: () => -1,
   };
 }

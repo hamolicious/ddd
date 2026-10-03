@@ -38,6 +38,15 @@ export interface SqlStatement {
   readonly params: readonly SqlParam[];
 }
 
+export interface SearchProjected {
+  readonly statements: readonly SqlStatement[];
+  readonly documents: readonly {
+    readonly id: string;
+    readonly deleted: boolean;
+    readonly fingerprints: readonly [number, number, number, number];
+  }[];
+}
+
 export interface SearchSchema {
   readonly version: number;
   readonly statements: readonly string[];
@@ -45,6 +54,47 @@ export interface SearchSchema {
   readonly write_version: string;
   readonly read_stamps: string;
 }
+
+export interface CompiledSearch {
+  readonly sql: string;
+  readonly params: readonly SqlParam[];
+  readonly columns: readonly { readonly path: readonly string[]; readonly decode: "plain" | "bool" | "json" }[];
+  readonly cursor_columns: number;
+  readonly page_size: number | null;
+  readonly total?: { readonly sql: string; readonly params: readonly SqlParam[] };
+  readonly sources: readonly string[];
+  readonly terms?: readonly string[];
+  readonly snippets: boolean;
+  readonly fuzzy?: SearchFuzzySpec;
+}
+
+export interface SearchFuzzySpec {
+  readonly terms: readonly string[];
+  readonly fields: readonly string[];
+  readonly limit?: number;
+  readonly max_distance: number;
+}
+
+export interface SearchRanked {
+  readonly index: number;
+  readonly score: number;
+  readonly terms: readonly string[];
+}
+
+export interface SearchSnippet {
+  readonly text: string;
+  readonly ranges: readonly { readonly start: number; readonly end: number }[];
+  readonly line: number;
+}
+
+export interface SearchPlanProblem {
+  readonly kind: string;
+  readonly message: string;
+}
+
+export type SearchCompileAnswer =
+  | { readonly compiled: CompiledSearch }
+  | { readonly error: SearchPlanProblem };
 
 export interface CoreBindings {
   parseDocument(text: string): ParsedDocument;
@@ -54,8 +104,15 @@ export interface CoreBindings {
   normalizeDate(input: string): string;
   queryEngine(saved?: string): CoreQueryEngine | undefined;
   searchSchema(): SearchSchema;
-  searchProject(rows: readonly unknown[]): readonly SqlStatement[];
+  searchProject(rows: readonly unknown[]): SearchProjected;
   searchRemove(ids: readonly string[]): readonly SqlStatement[];
+  searchCompile(plan: unknown): SearchCompileAnswer;
+  searchEncodeCursor(values: readonly SqlParam[]): string;
+  searchSnippets(terms: readonly string[], contents: readonly (string | null)[]): readonly (SearchSnippet | null)[];
+  searchFuzzy(
+    spec: SearchFuzzySpec,
+    candidates: readonly { readonly title: string; readonly content: string }[],
+  ): readonly SearchRanked[];
 }
 
 export function filterRow(row: ProjectionRow): FilterRow {
@@ -90,8 +147,25 @@ export function loadCore(initInput?: BufferSource | WebAssembly.Module | URL | s
         return engine === undefined ? undefined : wrapEngine(engine);
       },
       searchSchema: () => JSON.parse(mod.search_schema()) as SearchSchema,
-      searchProject: (rows: readonly unknown[]) => statementsOf(mod.search_project(JSON.stringify(rows))),
+      searchProject: (rows: readonly unknown[]) => {
+        const answer = JSON.parse(mod.search_project(JSON.stringify(rows))) as SearchProjected | { readonly error: string };
+        if ("error" in answer) throw new Error(answer.error);
+        return answer;
+      },
       searchRemove: (ids: readonly string[]) => statementsOf(mod.search_remove(JSON.stringify(ids))),
+      searchCompile: (plan: unknown) => {
+        const answer = JSON.parse(mod.search_compile(JSON.stringify(plan))) as
+          | { readonly compiled: CompiledSearch }
+          | { readonly error: { readonly kind: string }; readonly message: string };
+        return "compiled" in answer
+          ? { compiled: answer.compiled }
+          : { error: { kind: answer.error.kind, message: answer.message } };
+      },
+      searchEncodeCursor: (values: readonly SqlParam[]) => mod.search_encode_cursor(JSON.stringify(values)),
+      searchSnippets: (terms: readonly string[], contents: readonly (string | null)[]) =>
+        JSON.parse(mod.search_snippets(JSON.stringify({ terms, contents }))) as readonly (SearchSnippet | null)[],
+      searchFuzzy: (spec: SearchFuzzySpec, candidates: readonly { readonly title: string; readonly content: string }[]) =>
+        JSON.parse(mod.search_fuzzy(JSON.stringify({ spec, candidates }))) as readonly SearchRanked[],
     } satisfies CoreBindings;
   })();
   return cached;

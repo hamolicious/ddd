@@ -10,6 +10,7 @@ import type {
   SearchResponseValue,
 } from "./search-protocol.js";
 import { ProjectionHost } from "../search/backend.js";
+import { serializeSearchError } from "../search/errors.js";
 
 interface WorkerScope {
   postMessage(message: unknown): void;
@@ -65,6 +66,8 @@ async function handle(envelope: SearchRequestEnvelope): Promise<SearchResponseVa
       return await projection.apply(request.rows, request.purged);
     case "projection.select":
       return await projection.select(request.sql);
+    case "projection.run":
+      return await projection.run(request.plan);
     case "projection.wipe":
       return await projection.wipe();
   }
@@ -83,6 +86,7 @@ scope.addEventListener("message", (event) => {
         id: envelope.id,
         ok: false,
         error: error instanceof Error ? error.message : String(error),
+        detail: serializeSearchError(error),
       };
       scope.postMessage(response);
     },

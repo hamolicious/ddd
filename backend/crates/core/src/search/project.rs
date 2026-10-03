@@ -92,22 +92,24 @@ pub struct Projection {
     pub fm_parse_error: bool,
     pub entries: Vec<FmEntry>,
     pub facts: BodyFacts,
+    pub body: String,
 }
 
 pub fn project(input: ProjectionInput) -> Projection {
-    let (title, fm, plugins, fm_parse_error, facts) = match input.content.as_deref() {
+    let (title, fm, plugins, fm_parse_error, facts, body) = match input.content.as_deref() {
         Some(text) => {
             let parsed = parse_document(text);
             let normalized = normalize_input(text);
             let body = parsed.body_span.slice(&normalized);
             let first_line = 1 + normalized[..parsed.body_span.start].matches('\n').count() as u32;
             let facts = extract_body(&input.id, &parsed.fm, body, first_line);
-            (parsed.title, parsed.fm, parsed.plugins, parsed.fm_parse_error, facts)
+            let body = body.to_string();
+            (parsed.title, parsed.fm, parsed.plugins, parsed.fm_parse_error, facts, body)
         }
         None => {
             let fm = json_map(&input.fm);
             let facts = extract_body(&input.id, &fm, "", 1);
-            (input.title.clone(), fm, json_map(&input.plugins), input.fm_parse_error, facts)
+            (input.title.clone(), fm, json_map(&input.plugins), input.fm_parse_error, facts, String::new())
         }
     };
     let entries = fm_entries(&fm);
@@ -119,6 +121,7 @@ pub fn project(input: ProjectionInput) -> Projection {
         fm_parse_error,
         entries,
         facts,
+        body,
     }
 }
 
@@ -133,6 +136,10 @@ fn map_json(map: &Map) -> String {
     Value::Map(map.clone()).to_json().to_string()
 }
 
+const DELETE_TEXT: &str = "DELETE FROM documents_fts WHERE rowid = (SELECT rowid FROM documents WHERE id = ?1)";
+const INSERT_TEXT: &str = "INSERT INTO documents_fts (rowid, title, content, fm) VALUES ((SELECT rowid FROM documents WHERE id = ?1), ?2, ?3, ?4)";
+const DELETE_TRIGRAMS: &str = "DELETE FROM documents_trigram WHERE rowid = (SELECT rowid FROM documents WHERE id = ?1)";
+const INSERT_TRIGRAMS: &str = "INSERT INTO documents_trigram (rowid, title, content, fm) VALUES ((SELECT rowid FROM documents WHERE id = ?1), ?2, ?3, ?4)";
 const DELETE_DOCUMENT: &str = "DELETE FROM documents WHERE id = ?1";
 const DELETE_FM: &str = "DELETE FROM fm WHERE doc = ?1";
 const DELETE_LINKS: &str = "DELETE FROM link_refs WHERE doc = ?1";
@@ -161,15 +168,71 @@ fn clear_children(id: &str, out: &mut Vec<Statement>) {
 }
 
 pub fn remove_statements(id: &str) -> Vec<Statement> {
-    let mut out = vec![Statement {
-        sql: DELETE_DOCUMENT,
-        params: vec![SqlValue::text(id)],
-    }];
+    let mut out = vec![
+        Statement {
+            sql: DELETE_TEXT,
+            params: vec![SqlValue::text(id)],
+        },
+        Statement {
+            sql: DELETE_TRIGRAMS,
+            params: vec![SqlValue::text(id)],
+        },
+        Statement {
+            sql: DELETE_DOCUMENT,
+            params: vec![SqlValue::text(id)],
+        },
+    ];
     clear_children(id, &mut out);
     out
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ProjectedDocument {
+    pub id: String,
+    pub deleted: bool,
+    pub fingerprints: [u32; 4],
+}
+
+fn fingerprint<T: std::fmt::Debug>(rows: &[T]) -> u32 {
+    if rows.is_empty() {
+        return 0;
+    }
+    let mut hash: u32 = 0x811c_9dc5;
+    for byte in format!("{rows:?}").bytes() {
+        hash ^= u32::from(byte);
+        hash = hash.wrapping_mul(0x0100_0193);
+    }
+    hash.max(1)
+}
+
 impl Projection {
+    pub fn summary(&self) -> ProjectedDocument {
+        ProjectedDocument {
+            id: self.input.id.clone(),
+            deleted: self.input.deleted,
+            fingerprints: [
+                fingerprint(&self.entries),
+                fingerprint(&self.facts.references),
+                fingerprint(&self.facts.tasks),
+                fingerprint(&self.facts.attachments),
+            ],
+        }
+    }
+
+    pub fn fm_text(&self) -> String {
+        let mut words = Vec::new();
+        for entry in &self.entries {
+            match &entry.value {
+                Value::Str(text) => words.push(text.clone()),
+                Value::Int(n) => words.push(n.to_string()),
+                Value::Float(f) => words.push(f.to_string()),
+                Value::Bool(b) => words.push(b.to_string()),
+                _ => {}
+            }
+        }
+        words.join(" ")
+    }
+
     pub fn statements(&self) -> Vec<Statement> {
         let input = &self.input;
         let id = input.id.as_str();
@@ -178,6 +241,14 @@ impl Projection {
             6 + self.entries.len() + self.facts.references.len() + self.facts.tasks.len() + self.facts.attachments.len(),
         );
         clear_children(id, &mut out);
+        out.push(Statement {
+            sql: DELETE_TEXT,
+            params: vec![doc()],
+        });
+        out.push(Statement {
+            sql: DELETE_TRIGRAMS,
+            params: vec![doc()],
+        });
         out.push(Statement {
             sql: INSERT_DOCUMENT,
             params: vec![
@@ -201,6 +272,18 @@ impl Projection {
                 SqlValue::text(&input.stamp),
             ],
         });
+        let fm_text = self.fm_text();
+        for sql in [INSERT_TEXT, INSERT_TRIGRAMS] {
+            out.push(Statement {
+                sql,
+                params: vec![
+                    doc(),
+                    SqlValue::text(&self.title),
+                    SqlValue::text(&self.body),
+                    SqlValue::Text(fm_text.clone()),
+                ],
+            });
+        }
         for entry in &self.entries {
             out.push(Statement {
                 sql: INSERT_FM,
@@ -248,17 +331,28 @@ impl Projection {
 }
 
 pub fn statements_for_rows(rows: Vec<ProjectionInput>) -> Vec<Statement> {
+    project_rows(rows).0
+}
+
+pub fn project_rows(rows: Vec<ProjectionInput>) -> (Vec<Statement>, Vec<ProjectedDocument>) {
     let mut out = Vec::new();
+    let mut documents = Vec::new();
     for row in rows {
         if row.purged {
             out.extend(remove_statements(&row.id));
         } else if !row.id.is_empty() {
-            out.extend(project(row).statements());
+            let projection = project(row);
+            out.extend(projection.statements());
+            documents.push(projection.summary());
         }
     }
-    out
+    (out, documents)
 }
 
 pub fn statements_for_json(rows_json: &str) -> Result<Vec<Statement>, serde_json::Error> {
     Ok(statements_for_rows(serde_json::from_str(rows_json)?))
+}
+
+pub fn project_json(rows_json: &str) -> Result<(Vec<Statement>, Vec<ProjectedDocument>), serde_json::Error> {
+    Ok(project_rows(serde_json::from_str(rows_json)?))
 }

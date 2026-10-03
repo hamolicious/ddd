@@ -36,3 +36,21 @@ export class NotImplementedError extends KernelError {}
 export function notImplemented(what: string): never {
   throw new NotImplementedError(`not implemented: ${what}`);
 }
+
+export class SearchPlanError extends KernelError {
+  constructor(
+    readonly kind: string,
+    message: string,
+  ) {
+    super(message, { kind });
+  }
+}
+
+export class SearchUnavailableError extends KernelError {
+  constructor(
+    message: string,
+    override readonly cause?: unknown,
+  ) {
+    super(message);
+  }
+}

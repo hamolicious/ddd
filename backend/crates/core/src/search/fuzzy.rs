@@ -1,0 +1,290 @@
+use serde::{Deserialize, Serialize};
+
+use crate::document::{normalize_input, parse_document};
+
+use super::text::{FIELD_WEIGHTS, TextField};
+
+pub const PREFIX_WEIGHT: f64 = 0.375;
+pub const FUZZY_WEIGHT: f64 = 0.45;
+pub const FUZZY_SHARE: f64 = 0.2;
+pub const MAX_FUZZY_DISTANCE: usize = 6;
+pub const MAX_FUZZY_CANDIDATES: u64 = 1000;
+const MAX_TOKEN_CHARS: usize = 64;
+
+type FieldTokens = (f64, Vec<(String, Vec<char>)>);
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FuzzySpec {
+    pub terms: Vec<String>,
+    pub fields: Vec<TextField>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u64>,
+    pub max_distance: usize,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct FuzzyCandidate {
+    pub title: String,
+    #[serde(default)]
+    pub content: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Ranked {
+    pub index: usize,
+    pub score: f64,
+    pub terms: Vec<String>,
+}
+
+pub fn fuzzy_terms(query: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for (_, folded) in words(query) {
+        if !out.contains(&folded) {
+            out.push(folded);
+        }
+    }
+    out
+}
+
+pub fn budget_for(length: usize, max_distance: usize) -> usize {
+    ((length as f64 * FUZZY_SHARE).round() as usize)
+        .max(usize::from(length >= 3))
+        .min(max_distance)
+        .min(MAX_FUZZY_DISTANCE)
+}
+
+pub fn narrowing_trigrams(terms: &[String], max_distance: usize) -> Vec<String> {
+    let safe = terms.iter().all(|term| {
+        let length = term.chars().count();
+        length >= 3 && length - 2 > 4 * budget_for(length, max_distance)
+    });
+    if safe { trigrams(terms) } else { Vec::new() }
+}
+
+pub fn trigrams(terms: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for term in terms {
+        let chars: Vec<char> = term.chars().collect();
+        for window in chars.windows(3) {
+            let gram: String = window.iter().collect();
+            if !out.contains(&gram) {
+                out.push(gram);
+            }
+        }
+    }
+    out
+}
+
+fn words(text: &str) -> impl Iterator<Item = (&str, String)> + '_ {
+    text.split(|c: char| !c.is_alphanumeric())
+        .filter(|word| !word.is_empty())
+        .map(|word| {
+            let folded: String = word.chars().take(MAX_TOKEN_CHARS).flat_map(char::to_lowercase).collect();
+            (word, folded)
+        })
+}
+
+fn field_text(candidate: &FuzzyCandidate, field: TextField) -> String {
+    match field {
+        TextField::Title => candidate.title.clone(),
+        TextField::Content => {
+            let parsed = parse_document(&candidate.content);
+            let normalized = normalize_input(&candidate.content);
+            parsed.body_span.slice(&normalized).to_string()
+        }
+        TextField::Fm => {
+            let parsed = parse_document(&candidate.content);
+            let mut out = Vec::new();
+            for entry in super::extract::fm_entries(&parsed.fm) {
+                match entry.value {
+                    crate::value::Value::Str(text) => out.push(text),
+                    crate::value::Value::Int(n) => out.push(n.to_string()),
+                    crate::value::Value::Float(f) => out.push(f.to_string()),
+                    crate::value::Value::Bool(b) => out.push(b.to_string()),
+                    _ => {}
+                }
+            }
+            out.join(" ")
+        }
+    }
+}
+
+fn weight(query: &[char], token: &[char], budget: usize) -> f64 {
+    if token == query {
+        return 1.0;
+    }
+    let longer = token.len() as f64;
+    if token.starts_with(query) {
+        let distance = (token.len() - query.len()) as f64;
+        return PREFIX_WEIGHT * longer / (longer + 0.3 * distance);
+    }
+    if budget == 0 || token.len().abs_diff(query.len()) > budget {
+        return 0.0;
+    }
+    match bounded_distance(query, token, budget) {
+        Some(distance) => FUZZY_WEIGHT * longer / (longer + distance as f64),
+        None => 0.0,
+    }
+}
+
+pub fn bounded_distance(a: &[char], b: &[char], budget: usize) -> Option<usize> {
+    let width = b.len() + 1;
+    let mut rows = vec![vec![0usize; width]; a.len() + 1];
+    for (j, cell) in rows[0].iter_mut().enumerate() {
+        *cell = j;
+    }
+    for i in 1..=a.len() {
+        rows[i][0] = i;
+        let mut row_min = rows[i][0];
+        for j in 1..=b.len() {
+            let cost = usize::from(a[i - 1] != b[j - 1]);
+            let mut best = (rows[i - 1][j - 1] + cost).min(rows[i - 1][j] + 1).min(rows[i][j - 1] + 1);
+            if i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1] {
+                best = best.min(rows[i - 2][j - 2] + 1);
+            }
+            rows[i][j] = best;
+            row_min = row_min.min(best);
+        }
+        if row_min > budget {
+            return None;
+        }
+    }
+    let distance = rows[a.len()][b.len()];
+    (distance <= budget).then_some(distance)
+}
+
+pub fn rank(spec: &FuzzySpec, candidates: &[FuzzyCandidate]) -> Vec<Ranked> {
+    let queries: Vec<(Vec<char>, usize)> = spec
+        .terms
+        .iter()
+        .map(|term| {
+            let chars: Vec<char> = term.chars().collect();
+            let budget = budget_for(chars.len(), spec.max_distance);
+            (chars, budget)
+        })
+        .collect();
+    let mut ranked = Vec::new();
+    for (index, candidate) in candidates.iter().enumerate() {
+        let fields: Vec<FieldTokens> = spec
+            .fields
+            .iter()
+            .map(|field| {
+                let boost = FIELD_WEIGHTS[match field {
+                    TextField::Title => 0,
+                    TextField::Content => 1,
+                    TextField::Fm => 2,
+                }];
+                let text = field_text(candidate, *field);
+                let tokens = words(&text)
+                    .map(|(surface, folded)| (surface.to_string(), folded.chars().collect()))
+                    .collect();
+                (boost, tokens)
+            })
+            .collect();
+        let mut score = 0.0;
+        let mut matched = 0usize;
+        let mut terms: Vec<String> = Vec::new();
+        for (query, budget) in &queries {
+            let mut best = 0.0;
+            let mut surface: Option<&str> = None;
+            for (boost, tokens) in &fields {
+                for (word, token) in tokens {
+                    let found = boost * weight(query, token, *budget);
+                    if found > best {
+                        best = found;
+                        surface = Some(word);
+                    }
+                }
+            }
+            if let Some(word) = surface {
+                score += best;
+                matched += 1;
+                if !terms.iter().any(|known| known == word) {
+                    terms.push(word.to_string());
+                }
+            }
+        }
+        if matched > 0 {
+            ranked.push(Ranked {
+                index,
+                score: score * matched as f64,
+                terms,
+            });
+        }
+    }
+    ranked.sort_by(|a, b| b.score.total_cmp(&a.score).then_with(|| a.index.cmp(&b.index)));
+    if let Some(limit) = spec.limit {
+        ranked.truncate(limit as usize);
+    }
+    ranked
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn candidate(title: &str, body: &str) -> FuzzyCandidate {
+        FuzzyCandidate {
+            title: title.into(),
+            content: format!("# {title}\n\n{body}\n"),
+        }
+    }
+
+    fn spec(query: &str) -> FuzzySpec {
+        FuzzySpec {
+            terms: fuzzy_terms(query),
+            fields: vec![TextField::Title, TextField::Content, TextField::Fm],
+            limit: None,
+            max_distance: MAX_FUZZY_DISTANCE,
+        }
+    }
+
+    #[test]
+    fn transpositions_and_missing_letters_count_as_one_edit() {
+        let found = rank(
+            &spec("teh qick borwn"),
+            &[candidate("The quick brown fox", ""), candidate("Groceries", "milk")],
+        );
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].index, 0);
+        assert_eq!(found[0].terms, vec!["The", "quick", "brown"]);
+    }
+
+    #[test]
+    fn titles_outrank_bodies_and_more_terms_outrank_fewer() {
+        let found = rank(
+            &spec("milk"),
+            &[candidate("Notes", "milk"), candidate("Milk", "notes")],
+        );
+        assert_eq!(found.iter().map(|r| r.index).collect::<Vec<_>>(), vec![1, 0]);
+        let found = rank(
+            &spec("milk bread"),
+            &[candidate("A", "milk milk milk"), candidate("B", "milk bread")],
+        );
+        assert_eq!(found[0].index, 1);
+    }
+
+    #[test]
+    fn the_distance_budget_grows_with_the_word() {
+        assert!(rank(&spec("zebra"), &[candidate("Work", "quarterly report")]).is_empty());
+        assert_eq!(rank(&spec("reprt"), &[candidate("Work", "quarterly report")]).len(), 1);
+        let strict = FuzzySpec {
+            max_distance: 0,
+            ..spec("reprt")
+        };
+        assert!(rank(&strict, &[candidate("Work", "quarterly report")]).is_empty());
+    }
+
+    #[test]
+    fn only_long_enough_terms_narrow_by_trigrams() {
+        assert!(narrowing_trigrams(&fuzzy_terms("sbu"), MAX_FUZZY_DISTANCE).is_empty());
+        assert!(narrowing_trigrams(&fuzzy_terms("quarterly sbu"), MAX_FUZZY_DISTANCE).is_empty());
+        assert!(!narrowing_trigrams(&fuzzy_terms("reports"), MAX_FUZZY_DISTANCE).is_empty());
+        assert!(!narrowing_trigrams(&fuzzy_terms("sbu"), 0).is_empty());
+    }
+
+    #[test]
+    fn trigrams_cover_every_term_once() {
+        assert_eq!(trigrams(&fuzzy_terms("abcd abc ab")), vec!["abc", "bcd"]);
+    }
+}

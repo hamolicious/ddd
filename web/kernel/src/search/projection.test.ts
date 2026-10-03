@@ -101,8 +101,8 @@ describe.skipIf(!coreArtifactExists())("search projection", () => {
     await new ProjectionFeed(store, backend).start();
     store.rows.delete("B");
     const rows = [...store.rows.values()];
-    expect(await backend.sync(rows, true, true)).toBe(1);
+    expect((await backend.sync(rows, true, true)).changed).toBe(1);
     expect(await backend.select("SELECT id FROM documents")).toEqual([{ id: "A" }]);
-    expect(await backend.sync(rows, true, true)).toBe(0);
+    expect((await backend.sync(rows, true, true)).changed).toBe(0);
   });
 });
