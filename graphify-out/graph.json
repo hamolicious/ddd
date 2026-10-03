@@ -37713,7 +37713,7 @@
       "file_type": "code",
       "norm_label": "nohorizontalscroll()",
       "source_file": "web/app/e2e/polish.spec.ts",
-      "source_location": "L15"
+      "source_location": "L18"
     },
     {
       "id": "web_demo_e2e_smoke_spec_signin",
@@ -146507,6 +146507,18 @@
       "type": "external"
     },
     {
+      "id": "ref_boot_aboutsection_js",
+      "label": "ref_boot_aboutsection_js",
+      "_origin": "semantic",
+      "community": 4,
+      "community_name": "main.tsx",
+      "external": true,
+      "file_type": "concept",
+      "norm_label": "ref_boot_aboutsection_js",
+      "source_file": "",
+      "type": "external"
+    },
+    {
       "id": "ref_boot_authgate_js",
       "label": "ref_boot_authgate_js",
       "_origin": "semantic",
@@ -149731,17 +149743,6 @@
       "external": true,
       "file_type": "concept",
       "norm_label": "clientoptions",
-      "source_file": "",
-      "type": "external"
-    },
-    {
-      "id": "ref_boot_aboutsection_js",
-      "label": "ref_boot_aboutsection_js",
-      "community": 4,
-      "community_name": "main.tsx",
-      "external": true,
-      "file_type": "concept",
-      "norm_label": "ref_boot_aboutsection_js",
       "source_file": "",
       "type": "external"
     }
@@ -220184,7 +220185,7 @@
       "confidence_score": 1.0,
       "context": "call",
       "source_file": "web/app/e2e/polish.spec.ts",
-      "source_location": "L15",
+      "source_location": "L18",
       "weight": 1.0
     },
     {
@@ -280194,7 +280195,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "web/app/e2e/polish.spec.ts",
-      "source_location": "L3",
+      "source_location": "L6",
       "weight": 1.0
     },
     {
@@ -280206,7 +280207,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "web/app/e2e/polish.spec.ts",
-      "source_location": "L3",
+      "source_location": "L6",
       "weight": 1.0
     },
     {
@@ -280218,7 +280219,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "web/app/e2e/polish.spec.ts",
-      "source_location": "L3",
+      "source_location": "L6",
       "weight": 1.0
     },
     {
@@ -280230,7 +280231,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "web/app/e2e/polish.spec.ts",
-      "source_location": "L3",
+      "source_location": "L6",
       "weight": 1.0
     },
     {
@@ -280242,7 +280243,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "web/app/e2e/polish.spec.ts",
-      "source_location": "L3",
+      "source_location": "L6",
       "weight": 1.0
     },
     {
@@ -280254,7 +280255,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "web/app/e2e/polish.spec.ts",
-      "source_location": "L3",
+      "source_location": "L6",
       "weight": 1.0
     },
     {
@@ -280266,7 +280267,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "web/app/e2e/polish.spec.ts",
-      "source_location": "L3",
+      "source_location": "L6",
       "weight": 1.0
     },
     {
@@ -280278,7 +280279,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "web/app/e2e/polish.spec.ts",
-      "source_location": "L3",
+      "source_location": "L6",
       "weight": 1.0
     },
     {
@@ -280290,7 +280291,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "web/app/e2e/polish.spec.ts",
-      "source_location": "L3",
+      "source_location": "L6",
       "weight": 1.0
     },
     {
@@ -320851,7 +320852,7 @@
     },
     {
       "source": "web_app_e2e_polish_spec",
-      "target": "ref_playwright_test",
+      "target": "ref_node_fs",
       "relation": "imports_from",
       "_origin": "ast",
       "confidence": "EXTRACTED",
@@ -320863,6 +320864,30 @@
     },
     {
       "source": "web_app_e2e_polish_spec",
+      "target": "ref_node_path",
+      "relation": "imports_from",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "source_file": "web/app/e2e/polish.spec.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "web_app_e2e_polish_spec",
+      "target": "ref_playwright_test",
+      "relation": "imports_from",
+      "_origin": "ast",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "context": "import",
+      "source_file": "web/app/e2e/polish.spec.ts",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "web_app_e2e_polish_spec",
       "target": "web_app_e2e_helpers",
       "relation": "imports_from",
       "_origin": "ast",
@@ -320870,7 +320895,7 @@
       "confidence_score": 1.0,
       "context": "import",
       "source_file": "web/app/e2e/polish.spec.ts",
-      "source_location": "L3",
+      "source_location": "L6",
       "weight": 1.0
     },
     {
@@ -485392,7 +485417,7 @@
       "confidence_score": 0.85,
       "context": "argument",
       "source_file": "web/app/e2e/polish.spec.ts",
-      "source_location": "L35",
+      "source_location": "L38",
       "weight": 1.0
     },
     {
@@ -489317,5 +489342,5 @@
       "source_file": "backend/crates/core/README.md"
     }
   ],
-  "built_at_commit": "2f442d1cf4938b107556b8f135602e4bcd26b369"
+  "built_at_commit": "e16852d522abb3329f554a46196e22b5adb0a8aa"
 }

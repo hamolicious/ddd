@@ -1,17 +1,17 @@
 # Graph Report - ddd-mono  (2026-10-03)
 
 ## Corpus Check
-- 885 files · ~524,870 words
+- 885 files · ~524,914 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 81 file(s) not represented in the graph (top: (none) 15, .toml 13, .xml 10)
 
 ## Summary
-- 12998 nodes · 29095 edges · 639 communities (397 shown, 242 thin omitted)
+- 12998 nodes · 29097 edges · 639 communities (397 shown, 242 thin omitted)
 - Extraction: 98% EXTRACTED · 2% INFERRED · 0% AMBIGUOUS · INFERRED: 507 edges (avg confidence: 0.84)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `2f442d1c`
+- Built from commit: `e16852d5`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
