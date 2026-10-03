@@ -277,18 +277,21 @@ describe("markdown.directive", () => {
     );
   });
 
-  it("degrades an unregistered directive to its literal source (SPEC §6.6)", () => {
+  it("shows an unregistered directive as its source, as ordinary text", () => {
     expect(render(":::note[Hi]\nbody\n:::")).toBe(
       [
         '<div className="md-root">',
-        '  <div className="md-literal md-literal-block" title="no renderer for :note">',
+        '  <p className="md-directive-source">',
         '    ":::note[Hi]\\nbody\\n:::"',
-        "  </div>",
+        "  </p>",
         "</div>",
         "",
       ].join("\n"),
     );
-    expect(render("an :abbr[HTML] thing")).toContain('<span className="md-literal" title="no renderer for :abbr">');
+    const inline = render("an :abbr[HTML] thing");
+    expect(inline).toContain('":abbr[HTML]"');
+    expect(inline).not.toContain("md-literal");
+    expect(render("it crashes :D")).toContain('":D"');
   });
 
   it("only reads a text directive at the start of a word", () => {
@@ -301,7 +304,9 @@ describe("markdown.directive", () => {
   });
 
   it("does not let a container renderer claim a text directive of the same name", () => {
-    expect(render("an :note[x] thing", { directives: { "container:note": Note } })).toContain("md-literal");
+    const tree = render("an :note[x] thing", { directives: { "container:note": Note } });
+    expect(tree).toContain('":note[x]"');
+    expect(tree).not.toContain("Note");
   });
 });
 

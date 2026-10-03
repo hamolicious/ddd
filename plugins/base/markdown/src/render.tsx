@@ -494,7 +494,14 @@ function renderDirective(node: MdNode, key: string, env: Env): ReactNode {
   const component = kind ? env.registries.directives.get(`${kind}:${name}`) : undefined;
 
   if (!component) {
-    return renderLiteral(node, key, env, kind === "text" ? "inline" : "block", `no renderer for :${name}`);
+    const source = sourceOf(node, env.source) ?? textOf(node);
+    return kind === "text" ? (
+      <Fragment key={key}>{source}</Fragment>
+    ) : (
+      <p key={key} className="md-directive-source markdown:whitespace-pre-wrap">
+        {source}
+      </p>
+    );
   }
 
   const labelNode =
