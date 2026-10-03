@@ -2172,9 +2172,9 @@
     "semantic_hash": ""
   },
   "web/kernel/src/query/engine.test.ts": {
-    "mtime": 1790969666.8866308,
-    "seen": 1790986672.7306168,
-    "ast_hash": "9a50190284da64e99f82a64a150f6a39",
+    "mtime": 1791045693.4287791,
+    "seen": 1791047299.484148,
+    "ast_hash": "e3ddfea10235e5f323d44b83dede420c",
     "semantic_hash": ""
   },
   "web/kernel/src/query/filter.test.ts": {
@@ -2190,9 +2190,9 @@
     "semantic_hash": ""
   },
   "web/kernel/src/query/index.ts": {
-    "mtime": 1790969666.88686,
-    "seen": 1790986672.7306197,
-    "ast_hash": "a428ef986b18c13ed0ee206ba4050859",
+    "mtime": 1791046548.6648533,
+    "seen": 1791047299.484217,
+    "ast_hash": "a452ffca844fba73c860b18be8770767",
     "semantic_hash": ""
   },
   "web/kernel/src/query/search-protocol.ts": {
