@@ -116,6 +116,25 @@ describe.skipIf(!available)("QueryEngine", () => {
     live.close();
   });
 
+  it("catches up on a burst of edits with the latest text instead of replaying each one", async () => {
+    const store = new MemoryProjectionStore();
+    await apply(store, [feedRow("a", { content: "draft 0", fm: { status: "open" } })]);
+    const engine = new QueryEngine(store, core);
+    const live = await engine.subscribe({ filter: openFilter });
+    const seen: string[] = [];
+    live.onChange((result) => seen.push(result.rows[0]?.content ?? ""));
+
+    for (let draft = 1; draft <= 5; draft++) {
+      await apply(store, [feedRow("a", { content: `draft ${String(draft)}`, fm: { status: "open" } })]);
+    }
+    await flush();
+    await flush();
+
+    expect(seen.at(-1)).toBe("draft 5");
+    expect(seen.length).toBeLessThan(5);
+    live.close();
+  });
+
   it("stays quiet when a change cannot touch the result", async () => {
     const store = new MemoryProjectionStore();
     await apply(store, [feedRow("a", { fm: { status: "open" } })]);

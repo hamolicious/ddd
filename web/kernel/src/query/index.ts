@@ -129,8 +129,8 @@ export class QueryEngine {
   readonly #index: EngineIndex;
   readonly #live = new Set<LiveQuery<{ readonly rows: readonly ProjectionRow[] }>>();
   #unsubscribe: (() => void) | undefined;
-  #queue: Promise<void> = Promise.resolve();
-  #indexQueue: Promise<void> = Promise.resolve();
+  #pending: StoreChange | undefined;
+  #draining = false;
   #indexOpened: Promise<void> | undefined;
   #persistTimer: ReturnType<typeof setTimeout> | undefined;
   #persistSeq = 0;
@@ -260,24 +260,26 @@ export class QueryEngine {
 
   #attach(): void {
     this.#unsubscribe ??= this.store.subscribe((change) => {
-      const applied = this.store.getMany(change.applied);
-      applied.catch(() => undefined);
-
-      const indexed = (this.#indexQueue = this.#indexQueue
-        .then(async () => this.#write(change, await applied))
-        .catch((error: unknown) => {
-          this.#report(error);
-        }));
-
-      this.#queue = this.#queue
-        .then(async () => {
-          await indexed;
-          await this.#deliver(change, await applied);
-        })
-        .catch((error: unknown) => {
-          this.#report(error);
-        });
+      this.#pending = this.#pending ? mergeChanges(this.#pending, change) : change;
+      if (!this.#draining) {
+        this.#draining = true;
+        void this.#drain();
+      }
     });
+  }
+
+  async #drain(): Promise<void> {
+    for (let change = this.#pending; change; change = this.#pending) {
+      this.#pending = undefined;
+      try {
+        const applied = await this.store.getMany(change.applied);
+        await this.#write(change, applied);
+        await this.#deliver(change, applied);
+      } catch (error) {
+        this.#report(error);
+      }
+    }
+    this.#draining = false;
   }
 
   #detach(): void {
@@ -348,4 +350,18 @@ export class QueryEngine {
     if (this.#onError) this.#onError(wrapped);
     else console.warn("[query]", wrapped.message);
   }
+}
+
+function mergeChanges(earlier: StoreChange, later: StoreChange): StoreChange {
+  const applied = new Set(earlier.applied);
+  const purged = new Set(earlier.purged);
+  for (const id of later.applied) {
+    applied.add(id);
+    purged.delete(id);
+  }
+  for (const id of later.purged) {
+    purged.add(id);
+    applied.delete(id);
+  }
+  return { applied: [...applied], purged: [...purged], safeSeq: Math.max(earlier.safeSeq, later.safeSeq) };
 }
