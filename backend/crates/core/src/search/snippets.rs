@@ -18,10 +18,17 @@ mod tests {
 
     #[test]
     fn snippets_come_from_the_body_with_document_lines() {
-        let found = snippet("---\nstatus: three\n---\n# T\n\n- [ ] three things\n", &["three".into()]).unwrap();
+        let found = snippet(
+            "---\nstatus: three\n---\n# T\n\n- [ ] three things\n",
+            &["three".into()],
+        )
+        .unwrap();
         assert_eq!(found.text, "- [ ] three things");
         assert_eq!(found.line, 6);
         assert_eq!(found.ranges.len(), 1);
-        assert_eq!(&found.text[found.ranges[0].start..found.ranges[0].end], "three");
+        assert_eq!(
+            &found.text[found.ranges[0].start..found.ranges[0].end],
+            "three"
+        );
     }
 }

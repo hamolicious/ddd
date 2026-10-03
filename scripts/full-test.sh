@@ -44,11 +44,12 @@ step "flutter: tests" in_dir app flutter test --fail-fast
 
 step "build: server binary" in_dir backend cargo build --bin ddd
 step "build: app and plugins" in_dir . mise run web-build
+step "build: example plugins" in_dir web node scripts/build-examples.mjs
 e2e_root="$repo/web/test-results/full-test-$$-build"
 mkdir -p "$e2e_root"
 trap 'rm -rf "$e2e_root"' EXIT
 step "snapshot the build for the browser tests" cp -r "$repo/web/app/dist" "$e2e_root/dist"
-step "compose the plugin registry" in_dir . node "$repo/web/scripts/compose-plugins.mjs" "$e2e_root/plugins" --include-examples=extra-task-states
+step "compose the plugin registry" in_dir . node "$repo/web/scripts/compose-plugins.mjs" "$e2e_root/plugins" --include-examples=extra-task-states,search-probe
 step "browser tests (port $e2e_port, database $e2e_db)" in_dir web env DDD_E2E_PORT="$e2e_port" DDD_E2E_DB="$e2e_db" \
   DDD_E2E_WEB_DIST="$e2e_root/dist" DDD_E2E_PLUGINS="$e2e_root/plugins" \
   npx playwright test --config playwright.app.config.ts --max-failures=1 --reporter=list --output "$repo/web/test-results/full-test-$$"

@@ -20,7 +20,10 @@ pub enum Kind {
 
 impl Kind {
     pub fn nullable(self) -> bool {
-        !matches!(self, Kind::Text | Kind::Int | Kind::Real | Kind::Bool | Kind::Date)
+        !matches!(
+            self,
+            Kind::Text | Kind::Int | Kind::Real | Kind::Bool | Kind::Date
+        )
     }
 
     pub fn decode(self) -> Decode {
@@ -252,7 +255,10 @@ pub fn source_table(source: Source) -> Option<SourceTable> {
         }),
         Source::Attachments => Some(SourceTable {
             from: "attachments s JOIN documents d ON d.id = s.doc",
-            columns: &[("attachment", Kind::Text, "s.attachment"), ("line", Kind::Int, "s.line")],
+            columns: &[
+                ("attachment", Kind::Text, "s.attachment"),
+                ("line", Kind::Int, "s.line"),
+            ],
         }),
     }
 }
@@ -264,7 +270,9 @@ pub fn base_scope(source: Source) -> (String, Scope) {
     match source_table(source) {
         None => {
             for (name, kind) in DOCUMENT_COLUMNS {
-                scope.columns.push(Column::plain(name, format!("d.{name}"), *kind));
+                scope
+                    .columns
+                    .push(Column::plain(name, format!("d.{name}"), *kind));
             }
             ("documents d".to_string(), scope)
         }
@@ -277,9 +285,11 @@ pub fn base_scope(source: Source) -> (String, Scope) {
                 scope.columns.push(column);
             }
             for (name, kind) in DOCUMENT_COLUMNS {
-                scope
-                    .columns
-                    .push(Column::plain(&format!("doc.{name}"), format!("d.{name}"), *kind));
+                scope.columns.push(Column::plain(
+                    &format!("doc.{name}"),
+                    format!("d.{name}"),
+                    *kind,
+                ));
             }
             scope
                 .columns

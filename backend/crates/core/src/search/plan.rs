@@ -123,14 +123,20 @@ pub enum Cond {
         value: String,
     },
     ChildOf {
-        #[serde(default = "default_field_id", skip_serializing_if = "is_default_field_id")]
+        #[serde(
+            default = "default_field_id",
+            skip_serializing_if = "is_default_field_id"
+        )]
         field: String,
         of: String,
         #[serde(default)]
         deep: bool,
     },
     ParentOf {
-        #[serde(default = "default_field_id", skip_serializing_if = "is_default_field_id")]
+        #[serde(
+            default = "default_field_id",
+            skip_serializing_if = "is_default_field_id"
+        )]
         field: String,
         of: String,
     },
@@ -149,7 +155,9 @@ impl Cond {
             )));
         }
         if *nodes > MAX_CONDITIONS {
-            return Err(PlanError::Limit(format!("more than {MAX_CONDITIONS} conditions")));
+            return Err(PlanError::Limit(format!(
+                "more than {MAX_CONDITIONS} conditions"
+            )));
         }
         match self {
             Cond::And(children) | Cond::Or(children) => {
@@ -230,14 +238,20 @@ impl Stage {
     pub fn is_aggregate(&self) -> bool {
         matches!(
             self,
-            Stage::Count(_) | Stage::Sum(_) | Stage::Min(_) | Stage::Max(_) | Stage::Avg(_) | Stage::Collect(_)
+            Stage::Count(_)
+                | Stage::Sum(_)
+                | Stage::Min(_)
+                | Stage::Max(_)
+                | Stage::Avg(_)
+                | Stage::Collect(_)
         )
     }
 }
 
 impl Plan {
     pub fn from_json_str(input: &str) -> Result<Plan, PlanError> {
-        let plan: Plan = serde_json::from_str(input).map_err(|e| PlanError::Malformed(e.to_string()))?;
+        let plan: Plan =
+            serde_json::from_str(input).map_err(|e| PlanError::Malformed(e.to_string()))?;
         plan.validate()?;
         Ok(plan)
     }
@@ -251,24 +265,40 @@ impl Plan {
         for (index, stage) in self.stages.iter().enumerate() {
             match stage {
                 Stage::GroupBy(fields) if fields.is_empty() => {
-                    return Err(PlanError::BadStage("groupBy needs at least one field".into()));
+                    return Err(PlanError::BadStage(
+                        "groupBy needs at least one field".into(),
+                    ));
                 }
-                Stage::GroupBy(_) if !self.stages.get(index + 1).is_some_and(Stage::is_aggregate) => {
-                    return Err(PlanError::BadStage("groupBy must be followed by an aggregate".into()));
+                Stage::GroupBy(_)
+                    if !self.stages.get(index + 1).is_some_and(Stage::is_aggregate) =>
+                {
+                    return Err(PlanError::BadStage(
+                        "groupBy must be followed by an aggregate".into(),
+                    ));
                 }
-                Stage::Sum(a) | Stage::Min(a) | Stage::Max(a) | Stage::Avg(a) | Stage::Collect(a) if a.field.is_none() => {
+                Stage::Sum(a)
+                | Stage::Min(a)
+                | Stage::Max(a)
+                | Stage::Avg(a)
+                | Stage::Collect(a)
+                    if a.field.is_none() =>
+                {
                     return Err(PlanError::BadStage("this aggregate needs a field".into()));
                 }
                 Stage::Where(cond) => cond.measure(0, &mut 0)?,
                 Stage::Match(expr) => expr.check()?,
                 Stage::Sort(keys) if keys.len() > MAX_SORT_KEYS => {
-                    return Err(PlanError::Limit(format!("more than {MAX_SORT_KEYS} sort keys")));
+                    return Err(PlanError::Limit(format!(
+                        "more than {MAX_SORT_KEYS} sort keys"
+                    )));
                 }
                 Stage::Sort(keys) if keys.is_empty() => {
                     return Err(PlanError::BadStage("sort needs at least one key".into()));
                 }
                 Stage::Select(items) if items.is_empty() => {
-                    return Err(PlanError::BadStage("select needs at least one field".into()));
+                    return Err(PlanError::BadStage(
+                        "select needs at least one field".into(),
+                    ));
                 }
                 Stage::Limit(n) if *n > MAX_LIMIT => {
                     return Err(PlanError::Limit(format!("limit is above {MAX_LIMIT}")));
@@ -282,13 +312,17 @@ impl Plan {
                 Stage::Offset(_) => offset = true,
                 Stage::Cursor(_) => cursor = true,
                 Stage::WithContent if self.source != Source::Documents => {
-                    return Err(PlanError::BadStage("withContent applies to documents only".into()));
+                    return Err(PlanError::BadStage(
+                        "withContent applies to documents only".into(),
+                    ));
                 }
                 _ => {}
             }
         }
         if offset && cursor {
-            return Err(PlanError::BadStage("cursor and offset cannot be combined".into()));
+            return Err(PlanError::BadStage(
+                "cursor and offset cannot be combined".into(),
+            ));
         }
         Ok(())
     }

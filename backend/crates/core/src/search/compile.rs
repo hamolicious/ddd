@@ -4,16 +4,19 @@ use crate::date::Date;
 use crate::filter::{CompareOp, Literal, TextMatch};
 
 use super::catalog::{
-    Column, DEFAULT_DOCUMENT_ROW, Decode, Kind, Scope, base_scope, document_content, document_id, quote_ident,
-    source_table, tiebreak, trash_column,
+    Column, DEFAULT_DOCUMENT_ROW, Decode, Kind, Scope, base_scope, document_content, document_id,
+    quote_ident, source_table, tiebreak, trash_column,
 };
 use super::cursor::decode_cursor;
+use super::fuzzy::{
+    FuzzySpec, MAX_FUZZY_CANDIDATES, MAX_FUZZY_DISTANCE, fuzzy_terms, narrowing_trigrams,
+};
+use super::plan::FuzzyStage;
 use super::plan::{
-    Aggregate, Cond, MAX_SORT_KEYS, MAX_SUBQUERY_DEPTH, Plan, PlanError, SelectItem, Source, Stage, TrashScope,
+    Aggregate, Cond, MAX_SORT_KEYS, MAX_SUBQUERY_DEPTH, Plan, PlanError, SelectItem, Source, Stage,
+    TrashScope,
 };
 use super::project::SqlValue;
-use super::fuzzy::{FuzzySpec, MAX_FUZZY_CANDIDATES, MAX_FUZZY_DISTANCE, fuzzy_terms, narrowing_trigrams};
-use super::plan::FuzzyStage;
 use super::text::{Fts, Leafy, TextExpr, TextField, parse_text, to_fts, to_leaves};
 
 const RELEVANCE: &str = "relevance";
@@ -129,7 +132,12 @@ pub fn compile(plan: &Plan) -> Result<Compiled, PlanError> {
     compile_with(plan, &mut params, 0, false)
 }
 
-fn compile_with(plan: &Plan, params: &mut Params, depth: usize, nested: bool) -> Result<Compiled, PlanError> {
+fn compile_with(
+    plan: &Plan,
+    params: &mut Params,
+    depth: usize,
+    nested: bool,
+) -> Result<Compiled, PlanError> {
     plan.validate()?;
     let mut trash = TrashScope::Live;
     let mut with_total = false;
@@ -163,8 +171,14 @@ fn compile_with(plan: &Plan, params: &mut Params, depth: usize, nested: bool) ->
     let (from, scope) = base_scope(plan.source);
     let mut block = Block::new(from, scope);
     match trash {
-        TrashScope::Live => block.wheres.push(format!("{} = 0", block.scope.resolve(trash_column(plan.source))?.sql)),
-        TrashScope::Trashed => block.wheres.push(format!("{} = 1", block.scope.resolve(trash_column(plan.source))?.sql)),
+        TrashScope::Live => block.wheres.push(format!(
+            "{} = 0",
+            block.scope.resolve(trash_column(plan.source))?.sql
+        )),
+        TrashScope::Trashed => block.wheres.push(format!(
+            "{} = 1",
+            block.scope.resolve(trash_column(plan.source))?.sql
+        )),
         TrashScope::All => {}
     }
 
@@ -186,7 +200,9 @@ fn compile_with(plan: &Plan, params: &mut Params, depth: usize, nested: bool) ->
             }
             Stage::Snippets => {
                 if compiler.texts == 0 {
-                    return Err(PlanError::BadStage("snippets need a text or match stage before them".into()));
+                    return Err(PlanError::BadStage(
+                        "snippets need a text or match stage before them".into(),
+                    ));
                 }
                 compiler.snippets = true;
             }
@@ -209,7 +225,9 @@ fn compile_with(plan: &Plan, params: &mut Params, depth: usize, nested: bool) ->
                     };
                     let desc = if name == RELEVANCE {
                         if !block.scope.columns.iter().any(|c| c.name == RELEVANCE) {
-                            return Err(PlanError::BadStage("relevance sorting needs a text match".into()));
+                            return Err(PlanError::BadStage(
+                                "relevance sorting needs a text match".into(),
+                            ));
                         }
                         !desc
                     } else {
@@ -217,7 +235,9 @@ fn compile_with(plan: &Plan, params: &mut Params, depth: usize, nested: bool) ->
                     };
                     let column = block.scope.resolve(name)?;
                     if column.kind == Kind::JsonMap {
-                        return Err(PlanError::BadOperator(format!("{name} is a map and cannot be sorted")));
+                        return Err(PlanError::BadOperator(format!(
+                            "{name} is a map and cannot be sorted"
+                        )));
                     }
                     order.push(SortKey {
                         name: name.to_string(),
@@ -259,7 +279,12 @@ fn compile_with(plan: &Plan, params: &mut Params, depth: usize, nested: bool) ->
                     if block.projection.is_none() {
                         if block.shaped {
                             block.projection = Some(
-                                block.scope.columns.iter().map(|c| (c.name.clone(), c.clone())).collect(),
+                                block
+                                    .scope
+                                    .columns
+                                    .iter()
+                                    .map(|c| (c.name.clone(), c.clone()))
+                                    .collect(),
                             );
                         } else if let Some(table) = source_table(plan.source) {
                             let mut items: Vec<SelectItem> = table
@@ -294,7 +319,10 @@ fn compile_with(plan: &Plan, params: &mut Params, depth: usize, nested: bool) ->
                 let keys = project(&items, &block.scope)?;
                 for (_, column) in &keys {
                     if column.kind == Kind::JsonMap {
-                        return Err(PlanError::BadOperator(format!("{} is a map and cannot be grouped", column.name)));
+                        return Err(PlanError::BadOperator(format!(
+                            "{} is a map and cannot be grouped",
+                            column.name
+                        )));
                     }
                 }
                 block.group = Some(keys.iter().map(|(_, column)| column.output_sql()).collect());
@@ -374,7 +402,10 @@ fn aggregate(stage: &Stage, scope: &Scope) -> Result<(String, Column), PlanError
             .clone()
             .ok_or_else(|| PlanError::BadStage("this aggregate needs a field".into()))?;
         if column.kind == Kind::JsonMap {
-            return Err(PlanError::BadOperator(format!("{} is a map and cannot be aggregated", column.name)));
+            return Err(PlanError::BadOperator(format!(
+                "{} is a map and cannot be aggregated",
+                column.name
+            )));
         }
         Ok(column)
     };
@@ -388,10 +419,16 @@ fn aggregate(stage: &Stage, scope: &Scope) -> Result<(String, Column), PlanError
         Stage::Max(_) => (format!("max({})", value(&field)?.value_sql()), Kind::Value),
         Stage::Avg(_) => (format!("avg({})", value(&field)?.value_sql()), Kind::Value),
         Stage::Collect(_) => {
-            let column = field.ok_or_else(|| PlanError::BadStage("collect needs a field".into()))?;
+            let column =
+                field.ok_or_else(|| PlanError::BadStage("collect needs a field".into()))?;
             let item = match column.kind {
-                Kind::Json | Kind::FmValue | Kind::JsonMap => format!("json({})", column.output_sql()),
-                Kind::Bool => format!("json(CASE WHEN {} THEN 'true' ELSE 'false' END)", column.sql),
+                Kind::Json | Kind::FmValue | Kind::JsonMap => {
+                    format!("json({})", column.output_sql())
+                }
+                Kind::Bool => format!(
+                    "json(CASE WHEN {} THEN 'true' ELSE 'false' END)",
+                    column.sql
+                ),
                 _ => column.value_sql(),
             };
             (
@@ -441,9 +478,10 @@ impl Compiler<'_> {
             Fts::Query(query) => {
                 let bound = self.params.bind(SqlValue::Text(query));
                 let alias = format!("m{}", self.texts);
-                block
-                    .from
-                    .push_str(&format!(" JOIN ({MATCHES} {bound}) {alias} ON {alias}.id = {}", id.sql));
+                block.from.push_str(&format!(
+                    " JOIN ({MATCHES} {bound}) {alias} ON {alias}.id = {}",
+                    id.sql
+                ));
                 format!("{alias}.rank")
             }
             Fts::Unrankable => {
@@ -475,7 +513,9 @@ impl Compiler<'_> {
         if let Some(projection) = &block.projection
             && !projection.iter().any(|(_, column)| column.sql == id.sql)
         {
-            return Err(PlanError::BadStage("fuzzy needs id among the selected fields".into()));
+            return Err(PlanError::BadStage(
+                "fuzzy needs id among the selected fields".into(),
+            ));
         }
         let fields = fuzzy
             .fields
@@ -503,7 +543,9 @@ impl Compiler<'_> {
                 id.sql
             ));
         }
-        block.from.push_str(&format!(" JOIN documents fz ON fz.id = {}", id.sql));
+        block
+            .from
+            .push_str(&format!(" JOIN documents fz ON fz.id = {}", id.sql));
         self.fuzzy = Some(FuzzySpec {
             terms,
             fields,
@@ -520,11 +562,17 @@ impl Compiler<'_> {
                 format!("({id} IN (SELECT id FROM ({MATCHES} {bound})))")
             }
             Leafy::And(children) => {
-                let parts: Vec<String> = children.iter().map(|child| self.leaves(child, id)).collect();
+                let parts: Vec<String> = children
+                    .iter()
+                    .map(|child| self.leaves(child, id))
+                    .collect();
                 format!("({})", parts.join(" AND "))
             }
             Leafy::Or(children) => {
-                let parts: Vec<String> = children.iter().map(|child| self.leaves(child, id)).collect();
+                let parts: Vec<String> = children
+                    .iter()
+                    .map(|child| self.leaves(child, id))
+                    .collect();
                 any_of(parts)
             }
             Leafy::Not(child) => format!("(NOT {})", self.leaves(child, id)),
@@ -633,10 +681,13 @@ impl Compiler<'_> {
 
     fn cursor_where(&mut self, block: &Block, cursor: &str) -> Result<String, PlanError> {
         let (terms, tie) = self.order_terms(block);
-        let tie = tie.ok_or_else(|| PlanError::BadStage("a cursor needs the row id in the result".into()))?;
+        let tie = tie
+            .ok_or_else(|| PlanError::BadStage("a cursor needs the row id in the result".into()))?;
         let values = decode_cursor(cursor)?;
         if values.len() != terms.len() + 1 {
-            return Err(PlanError::BadValue("the cursor does not belong to this query".into()));
+            return Err(PlanError::BadValue(
+                "the cursor does not belong to this query".into(),
+            ));
         }
         let mut keys: Vec<(String, bool, SqlValue)> = terms
             .into_iter()
@@ -670,7 +721,12 @@ impl Compiler<'_> {
         Ok(format!("({})", alternatives.join(" OR ")))
     }
 
-    fn block_sql(&mut self, block: &Block, select: &str, ordered: bool) -> Result<String, PlanError> {
+    fn block_sql(
+        &mut self,
+        block: &Block,
+        select: &str,
+        ordered: bool,
+    ) -> Result<String, PlanError> {
         let mut wheres = block.wheres.clone();
         if let Some(cursor) = &block.cursor {
             wheres.push(self.cursor_where(block, cursor)?);
@@ -888,12 +944,16 @@ impl Compiler<'_> {
             }
             Cond::InPlan { field, plan } => {
                 if self.depth + 1 > MAX_SUBQUERY_DEPTH {
-                    return Err(PlanError::Limit(format!("subqueries nest deeper than {MAX_SUBQUERY_DEPTH}")));
+                    return Err(PlanError::Limit(format!(
+                        "subqueries nest deeper than {MAX_SUBQUERY_DEPTH}"
+                    )));
                 }
                 let column = scope.resolve(field)?;
                 let sub = compile_with(plan, &mut *self.params, self.depth + 1, true)?;
                 if sub.columns.len() != 1 {
-                    return Err(PlanError::BadStage("a subquery must select exactly one field".into()));
+                    return Err(PlanError::BadStage(
+                        "a subquery must select exactly one field".into(),
+                    ));
                 }
                 for source in sub.sources {
                     if !self.sources.contains(&source) {
@@ -913,7 +973,13 @@ impl Compiler<'_> {
         })
     }
 
-    fn join(&mut self, children: &[Cond], scope: &Scope, glue: &str, empty: &str) -> Result<String, PlanError> {
+    fn join(
+        &mut self,
+        children: &[Cond],
+        scope: &Scope,
+        glue: &str,
+        empty: &str,
+    ) -> Result<String, PlanError> {
         if children.is_empty() {
             return Ok(empty.to_string());
         }
@@ -924,7 +990,12 @@ impl Compiler<'_> {
         Ok(format!("({})", parts.join(glue)))
     }
 
-    fn compare(&mut self, column: &Column, op: CompareOp, literal: &Literal) -> Result<String, PlanError> {
+    fn compare(
+        &mut self,
+        column: &Column,
+        op: CompareOp,
+        literal: &Literal,
+    ) -> Result<String, PlanError> {
         if is_ordering(op) && matches!(literal, Literal::Null | Literal::Bool(_)) {
             return Err(PlanError::BadOperator(format!(
                 "{} cannot be ordered against {}",
@@ -951,7 +1022,10 @@ impl Compiler<'_> {
             }
         };
         match column.kind {
-            Kind::JsonMap => Err(PlanError::BadOperator(format!("{} is a map and cannot be compared", column.name))),
+            Kind::JsonMap => Err(PlanError::BadOperator(format!(
+                "{} is a map and cannot be compared",
+                column.name
+            ))),
             Kind::Text | Kind::NullText => match literal {
                 Literal::Str(text) => {
                     let bound = self.params.bind(SqlValue::Text(text.clone()));
@@ -980,17 +1054,32 @@ impl Compiler<'_> {
                 let date = match literal {
                     Literal::Date(date) => date.clone(),
                     Literal::Str(text) => Date::parse(text).map_err(|_| mismatch())?,
-                    Literal::Null if column.kind == Kind::NullDate => return Ok(null_compare(&sql, op)),
+                    Literal::Null if column.kind == Kind::NullDate => {
+                        return Ok(null_compare(&sql, op));
+                    }
                     _ => return Err(mismatch()),
                 };
-                let bound = self.params.bind(SqlValue::Text(date.canonical().to_string()));
-                Ok(guard(format!("julianday({sql}) {} julianday({bound})", sql_op(op))))
+                let bound = self
+                    .params
+                    .bind(SqlValue::Text(date.canonical().to_string()));
+                Ok(guard(format!(
+                    "julianday({sql}) {} julianday({bound})",
+                    sql_op(op)
+                )))
             }
-            Kind::Json | Kind::FmValue | Kind::Value => unreachable!("dynamic columns are handled above"),
+            Kind::Json | Kind::FmValue | Kind::Value => {
+                unreachable!("dynamic columns are handled above")
+            }
         }
     }
 
-    fn dynamic(&mut self, type_sql: &str, value_sql: &str, op: CompareOp, literal: &Literal) -> String {
+    fn dynamic(
+        &mut self,
+        type_sql: &str,
+        value_sql: &str,
+        op: CompareOp,
+        literal: &Literal,
+    ) -> String {
         if op == CompareOp::Ne {
             let eq = self.dynamic(type_sql, value_sql, CompareOp::Eq, literal);
             return format!("({type_sql} IS NOT NULL AND NOT {eq})");
@@ -1005,14 +1094,20 @@ impl Compiler<'_> {
             }
             Literal::Int(n) => {
                 let bound = self.params.bind(SqlValue::Int(*n));
-                format!("(({type_sql} IS 'integer' OR {type_sql} IS 'real') AND {value_sql} {op_sql} {bound})")
+                format!(
+                    "(({type_sql} IS 'integer' OR {type_sql} IS 'real') AND {value_sql} {op_sql} {bound})"
+                )
             }
             Literal::Float(f) => {
                 let bound = self.params.bind(SqlValue::Real(*f));
-                format!("(({type_sql} IS 'integer' OR {type_sql} IS 'real') AND {value_sql} {op_sql} {bound})")
+                format!(
+                    "(({type_sql} IS 'integer' OR {type_sql} IS 'real') AND {value_sql} {op_sql} {bound})"
+                )
             }
             Literal::Date(date) => {
-                let bound = self.params.bind(SqlValue::Text(date.canonical().to_string()));
+                let bound = self
+                    .params
+                    .bind(SqlValue::Text(date.canonical().to_string()));
                 format!(
                     "({type_sql} IS 'text' AND {value_sql} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*' AND {value_sql} {op_sql} {bound})"
                 )
@@ -1020,9 +1115,18 @@ impl Compiler<'_> {
         }
     }
 
-    fn list(&mut self, column: &Column, op: CompareOp, literals: &[Literal], every: bool) -> Result<String, PlanError> {
+    fn list(
+        &mut self,
+        column: &Column,
+        op: CompareOp,
+        literals: &[Literal],
+        every: bool,
+    ) -> Result<String, PlanError> {
         let Some((base, path)) = column.list_sql() else {
-            return Err(PlanError::BadOperator(format!("{} is not a list", column.name)));
+            return Err(PlanError::BadOperator(format!(
+                "{} is not a list",
+                column.name
+            )));
         };
         for literal in literals {
             if is_ordering(op) && matches!(literal, Literal::Null | Literal::Bool(_)) {
@@ -1041,20 +1145,32 @@ impl Compiler<'_> {
         );
         let is_array = format!("json_type({base}, '{path}') IS 'array'");
         Ok(if every {
-            format!("({is_array} AND NOT EXISTS (SELECT 1 FROM json_each({base}, '{path}') j WHERE NOT {element}))")
+            format!(
+                "({is_array} AND NOT EXISTS (SELECT 1 FROM json_each({base}, '{path}') j WHERE NOT {element}))"
+            )
         } else {
-            format!("({is_array} AND EXISTS (SELECT 1 FROM json_each({base}, '{path}') j WHERE {element}))")
+            format!(
+                "({is_array} AND EXISTS (SELECT 1 FROM json_each({base}, '{path}') j WHERE {element}))"
+            )
         })
     }
 
-    fn text(&mut self, column: &Column, mode: TextMatch, needle: &str) -> Result<String, PlanError> {
+    fn text(
+        &mut self,
+        column: &Column,
+        mode: TextMatch,
+        needle: &str,
+    ) -> Result<String, PlanError> {
         let value = column.value_sql();
         let guard = match (column.kind, column.type_sql()) {
             (Kind::Text, _) => None,
             (Kind::NullText, _) => Some(format!("{value} IS NOT NULL")),
             (_, Some(type_sql)) => Some(format!("{type_sql} IS 'text'")),
             _ => {
-                return Err(PlanError::BadOperator(format!("{} is not text", column.name)));
+                return Err(PlanError::BadOperator(format!(
+                    "{} is not text",
+                    column.name
+                )));
             }
         };
         let needle = needle.to_lowercase();
@@ -1079,7 +1195,9 @@ impl Compiler<'_> {
 fn id_column(scope: &Scope, field: &str) -> Result<Column, PlanError> {
     let column = scope.resolve(field)?;
     if !matches!(column.kind, Kind::Text | Kind::NullText) {
-        return Err(PlanError::BadOperator(format!("{field} is not a document id")));
+        return Err(PlanError::BadOperator(format!(
+            "{field} is not a document id"
+        )));
     }
     Ok(column)
 }
@@ -1096,7 +1214,10 @@ fn presence(column: &Column, want: Presence) -> String {
         (Some(_), Kind::FmValue) => match want {
             Presence::Missing => "0".into(),
             Presence::Exists => "1".into(),
-            Presence::Null => format!("({} IS 'null')", column.companion.as_deref().unwrap_or("kind")),
+            Presence::Null => format!(
+                "({} IS 'null')",
+                column.companion.as_deref().unwrap_or("kind")
+            ),
         },
         (Some(type_sql), _) => match want {
             Presence::Missing => format!("({type_sql} IS NULL)"),
@@ -1130,7 +1251,10 @@ fn null_compare(sql: &str, op: CompareOp) -> String {
 }
 
 fn is_ordering(op: CompareOp) -> bool {
-    matches!(op, CompareOp::Lt | CompareOp::Lte | CompareOp::Gt | CompareOp::Gte)
+    matches!(
+        op,
+        CompareOp::Lt | CompareOp::Lte | CompareOp::Gt | CompareOp::Gte
+    )
 }
 
 fn sql_op(op: CompareOp) -> &'static str {

@@ -54,7 +54,10 @@ fn run(connection: &Connection, plan: Json) -> Page {
         .prepare(&compiled.sql)
         .unwrap_or_else(|e| panic!("{e}\n{}", compiled.sql));
     let fuzzy_width = if compiled.fuzzy.is_some() { 3 } else { 0 };
-    let width = compiled.columns.len() + compiled.cursor_columns + usize::from(compiled.snippets) + fuzzy_width;
+    let width = compiled.columns.len()
+        + compiled.cursor_columns
+        + usize::from(compiled.snippets)
+        + fuzzy_width;
     let raw: Vec<Vec<Sql>> = statement
         .query_map(params_from_iter(compiled.params.iter().map(bind)), |r| {
             (0..width).map(|i| r.get::<_, Sql>(i)).collect()
@@ -81,10 +84,16 @@ fn run(connection: &Connection, plan: Json) -> Page {
         let ranked = fuzzy_rank(spec, &candidates);
         for found in &ranked {
             if let Sql::Text(id) = &raw[found.index][width - 3] {
-                hits.insert(id.clone(), json!({ "score": found.score, "terms": found.terms }));
+                hits.insert(
+                    id.clone(),
+                    json!({ "score": found.score, "terms": found.terms }),
+                );
             }
         }
-        raw = ranked.iter().map(|found| raw[found.index].clone()).collect();
+        raw = ranked
+            .iter()
+            .map(|found| raw[found.index].clone())
+            .collect();
     }
     let mut next = None;
     if let Some(size) = compiled.page_size
@@ -93,7 +102,10 @@ fn run(connection: &Connection, plan: Json) -> Page {
         raw.truncate(size as usize);
         if compiled.cursor_columns > 0 {
             let last = raw.last().unwrap();
-            let keys: Vec<SqlValue> = last[compiled.columns.len()..].iter().map(sql_value).collect();
+            let keys: Vec<SqlValue> = last[compiled.columns.len()..]
+                .iter()
+                .map(sql_value)
+                .collect();
             next = Some(encode_cursor(&keys));
         }
     }
@@ -131,10 +143,19 @@ fn run(connection: &Connection, plan: Json) -> Page {
         .collect();
     let total = compiled.total.map(|total| {
         connection
-            .query_row(&total.sql, params_from_iter(total.params.iter().map(bind)), |r| r.get(0))
+            .query_row(
+                &total.sql,
+                params_from_iter(total.params.iter().map(bind)),
+                |r| r.get(0),
+            )
             .unwrap_or_else(|e| panic!("{e}\n{}", total.sql))
     });
-    Page { rows, total, next, hits }
+    Page {
+        rows,
+        total,
+        next,
+        hits,
+    }
 }
 
 fn error(plan: Json) -> PlanError {
@@ -152,9 +173,18 @@ fn ids(page: &Page) -> Vec<String> {
 fn corpus() -> Connection {
     let mut connection = open();
     let mut rows = vec![
-        row("A", "---\nstatus: open\nclient: acme\npriority: 2\ntags: [x, y]\ndue: 2026-10-05\n---\n# Alpha\n\n- [ ] one\n- [x] two\n[b](doc://B)\n"),
-        row("B", "---\nstatus: draft\nclient: acme\npriority: 5\ntags: [y]\nflag: true\n---\n# Beta\n\n- [ ] three\n"),
-        row("C", "---\nstatus: open\nclient: zeta\npriority: 1.5\ntags: []\nnote: null\n---\n# Gamma\n\n[gone](doc://Z)\n"),
+        row(
+            "A",
+            "---\nstatus: open\nclient: acme\npriority: 2\ntags: [x, y]\ndue: 2026-10-05\n---\n# Alpha\n\n- [ ] one\n- [x] two\n[b](doc://B)\n",
+        ),
+        row(
+            "B",
+            "---\nstatus: draft\nclient: acme\npriority: 5\ntags: [y]\nflag: true\n---\n# Beta\n\n- [ ] three\n",
+        ),
+        row(
+            "C",
+            "---\nstatus: open\nclient: zeta\npriority: 1.5\ntags: []\nnote: null\n---\n# Gamma\n\n[gone](doc://Z)\n",
+        ),
         row("D", "---\nstatus: done\npriority: \"7\"\n---\n# Delta\n"),
         row(
             "F",
@@ -176,7 +206,10 @@ fn cmp(field: &str, op: &str, value: Json) -> Json {
 
 #[test]
 fn the_default_row_is_a_document_row_without_content() {
-    let page = run(&corpus(), json!({ "stages": [{ "where": cmp("id", "eq", json!({"str": "A"})) }] }));
+    let page = run(
+        &corpus(),
+        json!({ "stages": [{ "where": cmp("id", "eq", json!({"str": "A"})) }] }),
+    );
     let row = &page.rows[0];
     assert_eq!(row["title"], "Alpha");
     assert_eq!(row["fm"]["tags"], json!(["x", "y"]));
@@ -186,51 +219,85 @@ fn the_default_row_is_a_document_row_without_content() {
         &corpus(),
         json!({ "stages": [{ "where": cmp("id", "eq", json!({"str": "A"})) }, "with_content"] }),
     );
-    assert!(page.rows[0]["content"].as_str().unwrap().contains("# Alpha"));
+    assert!(
+        page.rows[0]["content"]
+            .as_str()
+            .unwrap()
+            .contains("# Alpha")
+    );
 }
 
 #[test]
 fn live_trashed_and_all_scopes() {
     let connection = corpus();
     assert_eq!(ids(&run(&connection, json!({}))), ["A", "B", "C", "F", "S"]);
-    assert_eq!(ids(&run(&connection, json!({ "stages": [{ "trash": "trashed" }] }))), ["D"]);
-    assert_eq!(ids(&run(&connection, json!({ "stages": [{ "trash": "all" }] }))).len(), 6);
+    assert_eq!(
+        ids(&run(
+            &connection,
+            json!({ "stages": [{ "trash": "trashed" }] })
+        )),
+        ["D"]
+    );
+    assert_eq!(
+        ids(&run(&connection, json!({ "stages": [{ "trash": "all" }] }))).len(),
+        6
+    );
 }
 
 #[test]
 fn frontmatter_comparisons_keep_their_types() {
     let connection = corpus();
     let q = |cond: Json| ids(&run(&connection, json!({ "stages": [{ "where": cond }] })));
-    assert_eq!(q(cmp("fm.status", "eq", json!({"str": "open"}))), ["A", "C"]);
+    assert_eq!(
+        q(cmp("fm.status", "eq", json!({"str": "open"}))),
+        ["A", "C"]
+    );
     assert_eq!(q(cmp("fm.status", "ne", json!({"str": "open"}))), ["B"]);
     assert_eq!(q(cmp("fm.priority", "gte", json!({"int": 2}))), ["A", "B"]);
     assert_eq!(q(cmp("fm.priority", "lt", json!({"int": 2}))), ["C"]);
     assert_eq!(
-        ids(&run(&connection, json!({ "stages": [{ "trash": "all" }, { "where": cmp("fm.priority", "eq", json!({"str": "7"})) }] }))),
+        ids(&run(
+            &connection,
+            json!({ "stages": [{ "trash": "all" }, { "where": cmp("fm.priority", "eq", json!({"str": "7"})) }] })
+        )),
         ["D"]
     );
     assert_eq!(q(cmp("fm.flag", "eq", json!({"bool": true}))), ["B"]);
     assert_eq!(q(cmp("fm.note", "eq", json!("null"))), ["C"]);
     assert_eq!(q(cmp("fm.due", "gt", json!({"date": "2026-10-01"}))), ["A"]);
-    assert_eq!(q(json!({ "missing": { "field": "fm.client" } })), ["F", "S"]);
+    assert_eq!(
+        q(json!({ "missing": { "field": "fm.client" } })),
+        ["F", "S"]
+    );
     assert_eq!(q(json!({ "is_null": { "field": "fm.note" } })), ["C"]);
-    assert_eq!(q(json!({ "not": cmp("fm.status", "eq", json!({"str": "open"})) })), ["B", "F", "S"]);
+    assert_eq!(
+        q(json!({ "not": cmp("fm.status", "eq", json!({"str": "open"})) })),
+        ["B", "F", "S"]
+    );
 }
 
 #[test]
 fn list_operators() {
     let connection = corpus();
     let q = |cond: Json| ids(&run(&connection, json!({ "stages": [{ "where": cond }] })));
-    assert_eq!(q(json!({ "contains": { "field": "fm.tags", "value": {"str": "y"} } })), ["A", "B"]);
     assert_eq!(
-        q(json!({ "contains_any": { "field": "fm.tags", "values": [{"str": "x"}, {"str": "q"}] } })),
+        q(json!({ "contains": { "field": "fm.tags", "value": {"str": "y"} } })),
+        ["A", "B"]
+    );
+    assert_eq!(
+        q(
+            json!({ "contains_any": { "field": "fm.tags", "values": [{"str": "x"}, {"str": "q"}] } })
+        ),
         ["A"]
     );
     assert_eq!(
         q(json!({ "every": { "field": "fm.tags", "op": "eq", "value": {"str": "y"} } })),
         ["B", "C"]
     );
-    assert_eq!(q(json!({ "any": { "field": "fm.tags", "op": "ne", "value": {"str": "y"} } })), ["A"]);
+    assert_eq!(
+        q(json!({ "any": { "field": "fm.tags", "op": "ne", "value": {"str": "y"} } })),
+        ["A"]
+    );
 }
 
 #[test]
@@ -251,7 +318,10 @@ fn and_or_combine() {
         cmp("fm.status", "eq", json!({"str": "draft"})),
         { "and": [cmp("fm.status", "eq", json!({"str": "open"})), cmp("fm.client", "eq", json!({"str": "zeta"}))] }
     ]});
-    assert_eq!(ids(&run(&connection, json!({ "stages": [{ "where": cond }] }))), ["B", "C"]);
+    assert_eq!(
+        ids(&run(&connection, json!({ "stages": [{ "where": cond }] }))),
+        ["B", "C"]
+    );
 }
 
 #[test]
@@ -259,7 +329,10 @@ fn folder_relations() {
     let connection = corpus();
     let q = |cond: Json| ids(&run(&connection, json!({ "stages": [{ "where": cond }] })));
     assert_eq!(q(json!({ "child_of": { "of": "F" } })), ["A", "S"]);
-    assert_eq!(q(json!({ "child_of": { "of": "F", "deep": true } })), ["A", "C", "S"]);
+    assert_eq!(
+        q(json!({ "child_of": { "of": "F", "deep": true } })),
+        ["A", "C", "S"]
+    );
     assert_eq!(q(json!({ "parent_of": { "of": "C" } })), ["S"]);
 }
 
@@ -317,13 +390,19 @@ fn stages_run_in_order() {
 
 #[test]
 fn later_sorts_keep_earlier_ones_as_tiebreakers() {
-    let page = run(&corpus(), json!({ "stages": [{ "sort": ["-fm.priority"] }, { "sort": ["fm.client"] }] }));
+    let page = run(
+        &corpus(),
+        json!({ "stages": [{ "sort": ["-fm.priority"] }, { "sort": ["fm.client"] }] }),
+    );
     assert_eq!(ids(&page), ["B", "A", "C", "F", "S"]);
 }
 
 #[test]
 fn offset_limit_and_total() {
-    let page = run(&corpus(), json!({ "stages": [{ "sort": ["id"] }, { "offset": 1 }, { "limit": 2 }, "with_total"] }));
+    let page = run(
+        &corpus(),
+        json!({ "stages": [{ "sort": ["id"] }, { "offset": 1 }, { "limit": 2 }, "with_total"] }),
+    );
     assert_eq!(ids(&page), ["B", "C"]);
     assert_eq!(page.total, Some(5));
     assert!(run(&corpus(), json!({})).total.is_none());
@@ -372,7 +451,10 @@ fn other_sources_reach_their_document() {
             { "select": [{ "field": "doc.id" }, { "field": "doc.title" }, { "field": "target" }] }
         ]}),
     );
-    assert_eq!(broken.rows, vec![json!({ "doc.id": "C", "doc.title": "Gamma", "target": "Z" })]);
+    assert_eq!(
+        broken.rows,
+        vec![json!({ "doc.id": "C", "doc.title": "Gamma", "target": "Z" })]
+    );
 
     let values = run(
         &connection,
@@ -411,9 +493,14 @@ fn bad_plans_are_typed_errors() {
         error(json!({ "stages": [{ "offset": 1 }, { "cursor": "W10" }] })),
         PlanError::BadStage(_)
     ));
-    assert!(matches!(error(json!({ "stages": [{ "limit": 2_000_000 }] })), PlanError::Limit(_)));
     assert!(matches!(
-        error(json!({ "stages": [{ "select": [{ "field": "id" }] }, { "where": cmp("title", "eq", json!({"str": "x"})) }] })),
+        error(json!({ "stages": [{ "limit": 2_000_000 }] })),
+        PlanError::Limit(_)
+    ));
+    assert!(matches!(
+        error(
+            json!({ "stages": [{ "select": [{ "field": "id" }] }, { "where": cmp("title", "eq", json!({"str": "x"})) }] })
+        ),
         PlanError::UnknownField(_)
     ));
     assert!(matches!(
@@ -486,14 +573,20 @@ fn the_search_corpus_holds_natively() {
         let error = Plan::from_json_str(&case.plan.to_string())
             .and_then(|plan| compile(&plan))
             .unwrap_err();
-        let kind = serde_json::to_value(&error).unwrap()["kind"].as_str().unwrap().to_string();
+        let kind = serde_json::to_value(&error).unwrap()["kind"]
+            .as_str()
+            .unwrap()
+            .to_string();
         assert_eq!(kind, case.kind, "{}", case.name);
     }
 }
 
 #[test]
 fn fuzzy_hits_carry_scores_and_the_words_as_written() {
-    let page = run(&corpus(), json!({ "stages": [{ "fuzzy": { "query": "alpah", "fields": ["title"] } }] }));
+    let page = run(
+        &corpus(),
+        json!({ "stages": [{ "fuzzy": { "query": "alpah", "fields": ["title"] } }] }),
+    );
     assert_eq!(ids(&page), ["A"]);
     assert_eq!(page.hits["A"]["terms"], json!(["Alpha"]));
     assert!(page.hits["A"]["score"].as_f64().unwrap() > 0.0);
@@ -504,11 +597,23 @@ fn fuzzy_narrows_long_words_by_trigrams_and_still_finds_typos() {
     let mut connection = open();
     apply(
         &mut connection,
-        &statements_for_rows(vec![row("Q", "# Quarterly reports\n"), row("M", "# Milk\n")]),
+        &statements_for_rows(vec![
+            row("Q", "# Quarterly reports\n"),
+            row("M", "# Milk\n"),
+        ]),
     );
-    let plan: Plan = serde_json::from_value(json!({ "stages": [{ "fuzzy": { "query": "reprots" } }] })).unwrap();
-    assert!(compile(&plan).unwrap().sql.contains("documents_trigram MATCH"));
-    let page = run(&connection, json!({ "stages": [{ "fuzzy": { "query": "reprots" } }] }));
+    let plan: Plan =
+        serde_json::from_value(json!({ "stages": [{ "fuzzy": { "query": "reprots" } }] })).unwrap();
+    assert!(
+        compile(&plan)
+            .unwrap()
+            .sql
+            .contains("documents_trigram MATCH")
+    );
+    let page = run(
+        &connection,
+        json!({ "stages": [{ "fuzzy": { "query": "reprots" } }] }),
+    );
     assert_eq!(ids(&page), ["Q"]);
     assert_eq!(page.hits["Q"]["terms"], json!(["reports"]));
 }

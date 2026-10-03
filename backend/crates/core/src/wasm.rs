@@ -147,7 +147,10 @@ pub fn search_project(rows_json: &str) -> String {
 #[wasm_bindgen]
 pub fn search_remove(ids_json: &str) -> String {
     let ids: Vec<String> = serde_json::from_str(ids_json).unwrap_or_default();
-    let statements: Vec<_> = ids.iter().flat_map(|id| search::remove_statements(id)).collect();
+    let statements: Vec<_> = ids
+        .iter()
+        .flat_map(|id| search::remove_statements(id))
+        .collect();
     serde_json::json!({ "statements": statements }).to_string()
 }
 
@@ -155,7 +158,9 @@ pub fn search_remove(ids_json: &str) -> String {
 pub fn search_compile(plan_json: &str) -> String {
     match search::Plan::from_json_str(plan_json).and_then(|plan| search::compile(&plan)) {
         Ok(compiled) => serde_json::json!({ "compiled": compiled }).to_string(),
-        Err(error) => serde_json::json!({ "error": error, "message": error.to_string() }).to_string(),
+        Err(error) => {
+            serde_json::json!({ "error": error, "message": error.to_string() }).to_string()
+        }
     }
 }
 
@@ -172,7 +177,11 @@ pub fn search_snippets(request_json: &str) -> String {
     let snippets: Vec<_> = request
         .contents
         .iter()
-        .map(|content| content.as_deref().and_then(|text| search::snippet(text, &request.terms)))
+        .map(|content| {
+            content
+                .as_deref()
+                .and_then(|text| search::snippet(text, &request.terms))
+        })
         .collect();
     serde_json::to_string(&snippets).unwrap_or_else(|_| "[]".into())
 }
@@ -185,8 +194,10 @@ pub fn search_fuzzy(request_json: &str) -> String {
         candidates: Vec<search::FuzzyCandidate>,
     }
     match serde_json::from_str::<Request>(request_json) {
-        Ok(request) => serde_json::to_string(&search::fuzzy_rank(&request.spec, &request.candidates))
-            .unwrap_or_else(|_| "[]".into()),
+        Ok(request) => {
+            serde_json::to_string(&search::fuzzy_rank(&request.spec, &request.candidates))
+                .unwrap_or_else(|_| "[]".into())
+        }
         Err(_) => "[]".into(),
     }
 }
@@ -200,7 +211,9 @@ pub fn search_encode_cursor(values_json: &str) -> String {
             serde_json::Value::String(text) => search::SqlValue::Text(text),
             serde_json::Value::Number(n) => match n.as_i64() {
                 Some(i) => search::SqlValue::Int(i),
-                None => n.as_f64().map_or(search::SqlValue::Null, search::SqlValue::Real),
+                None => n
+                    .as_f64()
+                    .map_or(search::SqlValue::Null, search::SqlValue::Real),
             },
             _ => search::SqlValue::Null,
         })

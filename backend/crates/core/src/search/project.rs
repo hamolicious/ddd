@@ -104,12 +104,26 @@ pub fn project(input: ProjectionInput) -> Projection {
             let first_line = 1 + normalized[..parsed.body_span.start].matches('\n').count() as u32;
             let facts = extract_body(&input.id, &parsed.fm, body, first_line);
             let body = body.to_string();
-            (parsed.title, parsed.fm, parsed.plugins, parsed.fm_parse_error, facts, body)
+            (
+                parsed.title,
+                parsed.fm,
+                parsed.plugins,
+                parsed.fm_parse_error,
+                facts,
+                body,
+            )
         }
         None => {
             let fm = json_map(&input.fm);
             let facts = extract_body(&input.id, &fm, "", 1);
-            (input.title.clone(), fm, json_map(&input.plugins), input.fm_parse_error, facts, String::new())
+            (
+                input.title.clone(),
+                fm,
+                json_map(&input.plugins),
+                input.fm_parse_error,
+                facts,
+                String::new(),
+            )
         }
     };
     let entries = fm_entries(&fm);
@@ -136,9 +150,11 @@ fn map_json(map: &Map) -> String {
     Value::Map(map.clone()).to_json().to_string()
 }
 
-const DELETE_TEXT: &str = "DELETE FROM documents_fts WHERE rowid = (SELECT rowid FROM documents WHERE id = ?1)";
+const DELETE_TEXT: &str =
+    "DELETE FROM documents_fts WHERE rowid = (SELECT rowid FROM documents WHERE id = ?1)";
 const INSERT_TEXT: &str = "INSERT INTO documents_fts (rowid, title, content, fm) VALUES ((SELECT rowid FROM documents WHERE id = ?1), ?2, ?3, ?4)";
-const DELETE_TRIGRAMS: &str = "DELETE FROM documents_trigram WHERE rowid = (SELECT rowid FROM documents WHERE id = ?1)";
+const DELETE_TRIGRAMS: &str =
+    "DELETE FROM documents_trigram WHERE rowid = (SELECT rowid FROM documents WHERE id = ?1)";
 const INSERT_TRIGRAMS: &str = "INSERT INTO documents_trigram (rowid, title, content, fm) VALUES ((SELECT rowid FROM documents WHERE id = ?1), ?2, ?3, ?4)";
 const DELETE_DOCUMENT: &str = "DELETE FROM documents WHERE id = ?1";
 const DELETE_FM: &str = "DELETE FROM fm WHERE doc = ?1";
@@ -151,12 +167,14 @@ const INSERT_DOCUMENT: &str = "INSERT OR REPLACE INTO documents (
         created_at, created_by, updated_at, updated_by, deleted, deleted_at, deleted_by,
         purged, words, characters, stamp
     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)";
-const INSERT_FM: &str = "INSERT INTO fm (doc, key, value, kind, position) VALUES (?1, ?2, ?3, ?4, ?5)";
+const INSERT_FM: &str =
+    "INSERT INTO fm (doc, key, value, kind, position) VALUES (?1, ?2, ?3, ?4, ?5)";
 const INSERT_LINK: &str =
     "INSERT INTO link_refs (doc, target, kind, key, count) VALUES (?1, ?2, ?3, ?4, ?5)";
 const INSERT_TASK: &str =
     "INSERT INTO tasks (doc, line, state, marker, text) VALUES (?1, ?2, ?3, ?4, ?5)";
-const INSERT_ATTACHMENT: &str = "INSERT INTO attachments (doc, attachment, line) VALUES (?1, ?2, ?3)";
+const INSERT_ATTACHMENT: &str =
+    "INSERT INTO attachments (doc, attachment, line) VALUES (?1, ?2, ?3)";
 
 fn clear_children(id: &str, out: &mut Vec<Statement>) {
     for sql in [DELETE_FM, DELETE_LINKS, DELETE_TASKS, DELETE_ATTACHMENTS] {
@@ -238,7 +256,10 @@ impl Projection {
         let id = input.id.as_str();
         let doc = || SqlValue::text(id);
         let mut out = Vec::with_capacity(
-            6 + self.entries.len() + self.facts.references.len() + self.facts.tasks.len() + self.facts.attachments.len(),
+            6 + self.entries.len()
+                + self.facts.references.len()
+                + self.facts.tasks.len()
+                + self.facts.attachments.len(),
         );
         clear_children(id, &mut out);
         out.push(Statement {
@@ -323,7 +344,11 @@ impl Projection {
         for attachment in &self.facts.attachments {
             out.push(Statement {
                 sql: INSERT_ATTACHMENT,
-                params: vec![doc(), SqlValue::text(&attachment.attachment), SqlValue::count(attachment.line)],
+                params: vec![
+                    doc(),
+                    SqlValue::text(&attachment.attachment),
+                    SqlValue::count(attachment.line),
+                ],
             });
         }
         out
@@ -353,6 +378,8 @@ pub fn statements_for_json(rows_json: &str) -> Result<Vec<Statement>, serde_json
     Ok(statements_for_rows(serde_json::from_str(rows_json)?))
 }
 
-pub fn project_json(rows_json: &str) -> Result<(Vec<Statement>, Vec<ProjectedDocument>), serde_json::Error> {
+pub fn project_json(
+    rows_json: &str,
+) -> Result<(Vec<Statement>, Vec<ProjectedDocument>), serde_json::Error> {
     Ok(project_rows(serde_json::from_str(rows_json)?))
 }

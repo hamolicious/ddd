@@ -42,7 +42,10 @@ pub enum TextExpr {
     And(Vec<TextExpr>),
     Or(Vec<TextExpr>),
     Not(Box<TextExpr>),
-    In { field: TextField, expr: Box<TextExpr> },
+    In {
+        field: TextField,
+        expr: Box<TextExpr>,
+    },
 }
 
 impl TextExpr {
@@ -75,7 +78,9 @@ impl TextExpr {
     fn count_terms(&self) -> usize {
         match self {
             TextExpr::Term(_) | TextExpr::Prefix(_) | TextExpr::Phrase(_) => 1,
-            TextExpr::And(children) | TextExpr::Or(children) => children.iter().map(TextExpr::count_terms).sum(),
+            TextExpr::And(children) | TextExpr::Or(children) => {
+                children.iter().map(TextExpr::count_terms).sum()
+            }
             TextExpr::Not(child) => child.count_terms(),
             TextExpr::In { expr, .. } => expr.count_terms(),
         }
@@ -83,7 +88,9 @@ impl TextExpr {
 
     pub fn check(&self) -> Result<(), PlanError> {
         if self.count_terms() > MAX_QUERY_TERMS {
-            return Err(PlanError::Limit(format!("more than {MAX_QUERY_TERMS} search terms")));
+            return Err(PlanError::Limit(format!(
+                "more than {MAX_QUERY_TERMS} search terms"
+            )));
         }
         Ok(())
     }
@@ -120,7 +127,10 @@ fn lex(input: &str) -> Vec<Token> {
         match c {
             '"' => {
                 let start = i + 1;
-                let end = chars[start..].iter().position(|c| *c == '"').map(|p| start + p);
+                let end = chars[start..]
+                    .iter()
+                    .position(|c| *c == '"')
+                    .map(|p| start + p);
                 let text: String = chars[start..end.unwrap_or(chars.len())].iter().collect();
                 match end {
                     Some(end) => {
@@ -149,7 +159,10 @@ fn lex(input: &str) -> Vec<Token> {
             }
             _ => {
                 let start = i;
-                while i < chars.len() && !chars[i].is_whitespace() && !matches!(chars[i], '"' | '(' | ')') {
+                while i < chars.len()
+                    && !chars[i].is_whitespace()
+                    && !matches!(chars[i], '"' | '(' | ')')
+                {
                     i += 1;
                 }
                 let word: String = chars[start..i].iter().collect();
@@ -232,9 +245,10 @@ impl Parser {
         match token {
             Token::Word(word) => word_expr(&word),
             Token::Phrase(text) => (!tokens(&text).is_empty()).then_some(TextExpr::Phrase(text)),
-            Token::Field(field) => self
-                .atom(depth)
-                .map(|expr| TextExpr::In { field, expr: Box::new(expr) }),
+            Token::Field(field) => self.atom(depth).map(|expr| TextExpr::In {
+                field,
+                expr: Box::new(expr),
+            }),
             Token::Open => {
                 let inner = self.or(depth + 1);
                 if self.peek() == Some(&Token::Close) {
@@ -270,14 +284,18 @@ fn prefix_last(expr: &mut TextExpr) -> bool {
         }
         TextExpr::Prefix(_) => true,
         TextExpr::Phrase(_) | TextExpr::Not(_) => false,
-        TextExpr::And(children) | TextExpr::Or(children) => children.last_mut().is_some_and(prefix_last),
+        TextExpr::And(children) | TextExpr::Or(children) => {
+            children.last_mut().is_some_and(prefix_last)
+        }
         TextExpr::In { expr, .. } => prefix_last(expr),
     }
 }
 
 pub fn parse_text(input: &str) -> Result<Option<TextExpr>, PlanError> {
     if input.len() > MAX_TEXT_BYTES {
-        return Err(PlanError::Limit(format!("search text is over {MAX_TEXT_BYTES} bytes")));
+        return Err(PlanError::Limit(format!(
+            "search text is over {MAX_TEXT_BYTES} bytes"
+        )));
     }
     let mut parser = Parser {
         tokens: lex(input),
@@ -375,8 +393,14 @@ mod tests {
 
     #[test]
     fn terms_are_anded_and_the_last_one_is_a_prefix() {
-        assert_eq!(parse("invoice acme"), TextExpr::And(vec![term("invoice"), TextExpr::Prefix("acme".into())]));
-        assert_eq!(parse("invoice acme "), TextExpr::And(vec![term("invoice"), term("acme")]));
+        assert_eq!(
+            parse("invoice acme"),
+            TextExpr::And(vec![term("invoice"), TextExpr::Prefix("acme".into())])
+        );
+        assert_eq!(
+            parse("invoice acme "),
+            TextExpr::And(vec![term("invoice"), term("acme")])
+        );
     }
 
     #[test]
@@ -404,10 +428,19 @@ mod tests {
 
     #[test]
     fn broken_input_degrades_to_plain_terms() {
-        assert_eq!(parse("\"acme corp"), TextExpr::And(vec![term("acme"), TextExpr::Prefix("corp".into())]));
-        assert_eq!(parse("title: x "), TextExpr::And(vec![term("title"), term("x")]));
+        assert_eq!(
+            parse("\"acme corp"),
+            TextExpr::And(vec![term("acme"), TextExpr::Prefix("corp".into())])
+        );
+        assert_eq!(
+            parse("title: x "),
+            TextExpr::And(vec![term("title"), term("x")])
+        );
         assert_eq!(parse("OR a OR "), term("a"));
-        assert_eq!(parse("(a b ) ) "), TextExpr::And(vec![term("a"), term("b")]));
+        assert_eq!(
+            parse("(a b ) ) "),
+            TextExpr::And(vec![term("a"), term("b")])
+        );
         assert_eq!(parse("- a "), term("a"));
         assert_eq!(parse("re-use "), term("re-use"));
         assert!(parse_text("   ").unwrap().is_none());
@@ -416,8 +449,14 @@ mod tests {
 
     #[test]
     fn limits_are_errors() {
-        assert!(matches!(parse_text(&"a".repeat(1025)), Err(PlanError::Limit(_))));
-        let many = (0..33).map(|i| format!("w{i}")).collect::<Vec<_>>().join(" ");
+        assert!(matches!(
+            parse_text(&"a".repeat(1025)),
+            Err(PlanError::Limit(_))
+        ));
+        let many = (0..33)
+            .map(|i| format!("w{i}"))
+            .collect::<Vec<_>>()
+            .join(" ");
         assert!(matches!(parse_text(&many), Err(PlanError::Limit(_))));
     }
 
@@ -426,13 +465,19 @@ mod tests {
         let Fts::Query(query) = to_fts(&parse("invoice -draft \"acme corp\" title:q3")) else {
             panic!("rankable");
         };
-        assert_eq!(query, "((\"invoice\" AND \"acme corp\" AND {title} : (\"q3\" *)) NOT \"draft\")");
+        assert_eq!(
+            query,
+            "((\"invoice\" AND \"acme corp\" AND {title} : (\"q3\" *)) NOT \"draft\")"
+        );
         assert!(matches!(to_fts(&parse("-draft")), Fts::Unrankable));
         assert!(matches!(to_fts(&parse("a OR -b")), Fts::Unrankable));
     }
 
     #[test]
     fn positive_terms_are_collected_once() {
-        assert_eq!(parse("Invoice -draft \"acme corp\" invoice").terms(), vec!["invoice", "acme", "corp"]);
+        assert_eq!(
+            parse("Invoice -draft \"acme corp\" invoice").terms(),
+            vec!["invoice", "acme", "corp"]
+        );
     }
 }

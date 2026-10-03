@@ -63,7 +63,10 @@ mod tests {
             SqlValue::Null,
         ];
         for take in 0..=values.len() {
-            assert_eq!(decode_cursor(&encode_cursor(&values[..take])).unwrap(), values[..take]);
+            assert_eq!(
+                decode_cursor(&encode_cursor(&values[..take])).unwrap(),
+                values[..take]
+            );
         }
     }
 

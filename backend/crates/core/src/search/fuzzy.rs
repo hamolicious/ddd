@@ -79,7 +79,11 @@ fn words(text: &str) -> impl Iterator<Item = (&str, String)> + '_ {
     text.split(|c: char| !c.is_alphanumeric())
         .filter(|word| !word.is_empty())
         .map(|word| {
-            let folded: String = word.chars().take(MAX_TOKEN_CHARS).flat_map(char::to_lowercase).collect();
+            let folded: String = word
+                .chars()
+                .take(MAX_TOKEN_CHARS)
+                .flat_map(char::to_lowercase)
+                .collect();
             (word, folded)
         })
 }
@@ -138,7 +142,9 @@ pub fn bounded_distance(a: &[char], b: &[char], budget: usize) -> Option<usize> 
         let mut row_min = rows[i][0];
         for j in 1..=b.len() {
             let cost = usize::from(a[i - 1] != b[j - 1]);
-            let mut best = (rows[i - 1][j - 1] + cost).min(rows[i - 1][j] + 1).min(rows[i][j - 1] + 1);
+            let mut best = (rows[i - 1][j - 1] + cost)
+                .min(rows[i - 1][j] + 1)
+                .min(rows[i][j - 1] + 1);
             if i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1] {
                 best = best.min(rows[i - 2][j - 2] + 1);
             }
@@ -212,7 +218,11 @@ pub fn rank(spec: &FuzzySpec, candidates: &[FuzzyCandidate]) -> Vec<Ranked> {
             });
         }
     }
-    ranked.sort_by(|a, b| b.score.total_cmp(&a.score).then_with(|| a.index.cmp(&b.index)));
+    ranked.sort_by(|a, b| {
+        b.score
+            .total_cmp(&a.score)
+            .then_with(|| a.index.cmp(&b.index))
+    });
     if let Some(limit) = spec.limit {
         ranked.truncate(limit as usize);
     }
@@ -243,7 +253,10 @@ mod tests {
     fn transpositions_and_missing_letters_count_as_one_edit() {
         let found = rank(
             &spec("teh qick borwn"),
-            &[candidate("The quick brown fox", ""), candidate("Groceries", "milk")],
+            &[
+                candidate("The quick brown fox", ""),
+                candidate("Groceries", "milk"),
+            ],
         );
         assert_eq!(found.len(), 1);
         assert_eq!(found[0].index, 0);
@@ -256,10 +269,16 @@ mod tests {
             &spec("milk"),
             &[candidate("Notes", "milk"), candidate("Milk", "notes")],
         );
-        assert_eq!(found.iter().map(|r| r.index).collect::<Vec<_>>(), vec![1, 0]);
+        assert_eq!(
+            found.iter().map(|r| r.index).collect::<Vec<_>>(),
+            vec![1, 0]
+        );
         let found = rank(
             &spec("milk bread"),
-            &[candidate("A", "milk milk milk"), candidate("B", "milk bread")],
+            &[
+                candidate("A", "milk milk milk"),
+                candidate("B", "milk bread"),
+            ],
         );
         assert_eq!(found[0].index, 1);
     }
@@ -267,7 +286,10 @@ mod tests {
     #[test]
     fn the_distance_budget_grows_with_the_word() {
         assert!(rank(&spec("zebra"), &[candidate("Work", "quarterly report")]).is_empty());
-        assert_eq!(rank(&spec("reprt"), &[candidate("Work", "quarterly report")]).len(), 1);
+        assert_eq!(
+            rank(&spec("reprt"), &[candidate("Work", "quarterly report")]).len(),
+            1
+        );
         let strict = FuzzySpec {
             max_distance: 0,
             ..spec("reprt")

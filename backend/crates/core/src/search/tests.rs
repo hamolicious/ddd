@@ -57,7 +57,9 @@ fn strings(connection: &Connection, sql: &str) -> Vec<String> {
 #[test]
 fn schema_version_is_recorded() {
     let connection = open();
-    let version: String = connection.query_row(READ_SCHEMA_VERSION, [], |r| r.get(0)).unwrap();
+    let version: String = connection
+        .query_row(READ_SCHEMA_VERSION, [], |r| r.get(0))
+        .unwrap();
     assert_eq!(version, SEARCH_SCHEMA_VERSION.to_string());
 }
 
@@ -65,12 +67,17 @@ fn schema_version_is_recorded() {
 fn a_document_fills_every_source_from_its_text() {
     let mut connection = open();
     let text = "---\ntitle: Plan\nstatus: open\ntags: [a, b]\nparent: doc://P\n---\n\n# Plan\n\n- [ ] write it\n- [x] think\n\nSee [x](doc://B) and ![f](attachment://01J0000000000000000000000A)\n";
-    apply(&mut connection, &statements_for_rows(vec![row("A", text), row("B", "# B\n")]));
+    apply(
+        &mut connection,
+        &statements_for_rows(vec![row("A", text), row("B", "# B\n")]),
+    );
 
     let (title, words, fm): (String, i64, String) = connection
-        .query_row("SELECT title, words, fm FROM documents WHERE id = 'A'", [], |r| {
-            Ok((r.get(0)?, r.get(1)?, r.get(2)?))
-        })
+        .query_row(
+            "SELECT title, words, fm FROM documents WHERE id = 'A'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
         .unwrap();
     assert_eq!(title, "Plan");
     assert_eq!(words, 9);
@@ -81,18 +88,33 @@ fn a_document_fills_every_source_from_its_text() {
             &connection,
             "SELECT key || '=' || value || ':' || kind || ':' || coalesce(position, '-') FROM fm WHERE doc = 'A' ORDER BY key, position"
         ),
-        vec!["parent=doc://P:string:-", "status=open:string:-", "tags=a:string:0", "tags=b:string:1", "title=Plan:string:-"]
+        vec![
+            "parent=doc://P:string:-",
+            "status=open:string:-",
+            "tags=a:string:0",
+            "tags=b:string:1",
+            "title=Plan:string:-"
+        ]
     );
     assert_eq!(
-        strings(&connection, "SELECT state || ':' || line || ':' || text FROM tasks WHERE doc = 'A' ORDER BY line"),
+        strings(
+            &connection,
+            "SELECT state || ':' || line || ':' || text FROM tasks WHERE doc = 'A' ORDER BY line"
+        ),
         vec!["open:10:write it", "done:11:think"]
     );
     assert_eq!(
-        strings(&connection, "SELECT target || ':' || kind || ':' || state FROM links WHERE doc = 'A' ORDER BY target"),
+        strings(
+            &connection,
+            "SELECT target || ':' || kind || ':' || state FROM links WHERE doc = 'A' ORDER BY target"
+        ),
         vec!["B:link:live", "P:frontmatter:missing"]
     );
     assert_eq!(
-        strings(&connection, "SELECT attachment || ':' || line FROM attachments WHERE doc = 'A'"),
+        strings(
+            &connection,
+            "SELECT attachment || ':' || line FROM attachments WHERE doc = 'A'"
+        ),
         vec!["01J0000000000000000000000A:13"]
     );
 }
@@ -100,17 +122,31 @@ fn a_document_fills_every_source_from_its_text() {
 #[test]
 fn reprojecting_replaces_every_row_of_the_document() {
     let mut connection = open();
-    apply(&mut connection, &statements_for_rows(vec![row("A", "- [ ] one\n- [ ] two\n")]));
-    apply(&mut connection, &statements_for_rows(vec![row("A", "- [x] one\n")]));
-    assert_eq!(strings(&connection, "SELECT state FROM tasks"), vec!["done"]);
-    let count: i64 = connection.query_row("SELECT count(*) FROM documents", [], |r| r.get(0)).unwrap();
+    apply(
+        &mut connection,
+        &statements_for_rows(vec![row("A", "- [ ] one\n- [ ] two\n")]),
+    );
+    apply(
+        &mut connection,
+        &statements_for_rows(vec![row("A", "- [x] one\n")]),
+    );
+    assert_eq!(
+        strings(&connection, "SELECT state FROM tasks"),
+        vec!["done"]
+    );
+    let count: i64 = connection
+        .query_row("SELECT count(*) FROM documents", [], |r| r.get(0))
+        .unwrap();
     assert_eq!(count, 1);
 }
 
 #[test]
 fn purging_removes_the_document_everywhere() {
     let mut connection = open();
-    apply(&mut connection, &statements_for_rows(vec![row("A", "---\nk: v\n---\n- [ ] t\n[l](doc://B)\n")]));
+    apply(
+        &mut connection,
+        &statements_for_rows(vec![row("A", "---\nk: v\n---\n- [ ] t\n[l](doc://B)\n")]),
+    );
     let purged = ProjectionInput {
         purged: true,
         ..row("A", "")
@@ -132,8 +168,14 @@ fn trashed_targets_show_in_link_state() {
         deleted_at: Some("2026-10-02T00:00:00Z".into()),
         ..row("B", "# B\n")
     };
-    apply(&mut connection, &statements_for_rows(vec![row("A", "[b](doc://B)\n"), trashed]));
-    assert_eq!(strings(&connection, "SELECT state FROM links"), vec!["trashed"]);
+    apply(
+        &mut connection,
+        &statements_for_rows(vec![row("A", "[b](doc://B)\n"), trashed]),
+    );
+    assert_eq!(
+        strings(&connection, "SELECT state FROM links"),
+        vec!["trashed"]
+    );
 }
 
 #[test]
@@ -146,9 +188,15 @@ fn a_row_without_text_keeps_its_stored_fields() {
         ..row("A", "")
     };
     apply(&mut connection, &statements_for_rows(vec![input]));
-    assert_eq!(strings(&connection, "SELECT title FROM documents"), vec!["Stored"]);
     assert_eq!(
-        strings(&connection, "SELECT key || ':' || kind FROM fm ORDER BY key"),
+        strings(&connection, "SELECT title FROM documents"),
+        vec!["Stored"]
+    );
+    assert_eq!(
+        strings(
+            &connection,
+            "SELECT key || ':' || kind FROM fm ORDER BY key"
+        ),
         vec!["status:string", "when:date"]
     );
 }
@@ -161,7 +209,10 @@ fn frontmatter_values_keep_their_sql_types() {
         &statements_for_rows(vec![row("A", "---\nn: 3\nf: 1.5\nb: true\nz: null\n---\n")]),
     );
     assert_eq!(
-        strings(&connection, "SELECT key || ':' || typeof(value) FROM fm ORDER BY key"),
+        strings(
+            &connection,
+            "SELECT key || ':' || typeof(value) FROM fm ORDER BY key"
+        ),
         vec!["b:integer", "f:real", "n:integer", "z:null"]
     );
 }
@@ -174,7 +225,10 @@ fn rows_parse_from_the_kernel_projection_json() {
         "deleted_by":null,"purged":false,"seq":0,"local":true,"stamp":"s"}]"##;
     let mut connection = open();
     apply(&mut connection, &statements_for_json(json).unwrap());
-    assert_eq!(strings(&connection, "SELECT materialized_version FROM documents"), vec!["local"]);
+    assert_eq!(
+        strings(&connection, "SELECT materialized_version FROM documents"),
+        vec!["local"]
+    );
 }
 
 #[derive(serde::Deserialize)]
@@ -211,8 +265,10 @@ struct ExpectedReference {
 
 #[test]
 fn extraction_agrees_with_the_indexer_fixtures() {
-    let fixtures: Vec<Fixture> =
-        serde_json::from_str(include_str!("../../../../../schema/fixtures/search-extract.json")).unwrap();
+    let fixtures: Vec<Fixture> = serde_json::from_str(include_str!(
+        "../../../../../schema/fixtures/search-extract.json"
+    ))
+    .unwrap();
     assert!(fixtures.len() > 5);
     for fixture in fixtures {
         let projection = project(row(&fixture.id, &fixture.text));
@@ -238,14 +294,24 @@ fn extraction_agrees_with_the_indexer_fixtures() {
         references.sort();
         let mut expected_references = fixture.expected.references;
         expected_references.sort();
-        let mut attachments: Vec<_> = facts.attachments.iter().map(|a| a.attachment.clone()).collect();
+        let mut attachments: Vec<_> = facts
+            .attachments
+            .iter()
+            .map(|a| a.attachment.clone())
+            .collect();
         attachments.sort();
         attachments.dedup();
         let name = &fixture.name;
         assert_eq!(facts.words, fixture.expected.words, "{name}: words");
-        assert_eq!(facts.characters, fixture.expected.characters, "{name}: characters");
+        assert_eq!(
+            facts.characters, fixture.expected.characters,
+            "{name}: characters"
+        );
         assert_eq!(tasks, fixture.expected.tasks, "{name}: tasks");
         assert_eq!(references, expected_references, "{name}: references");
-        assert_eq!(attachments, fixture.expected.attachments, "{name}: attachments");
+        assert_eq!(
+            attachments, fixture.expected.attachments,
+            "{name}: attachments"
+        );
     }
 }

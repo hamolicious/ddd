@@ -144,7 +144,9 @@ pub fn fm_entries(fm: &Map) -> Vec<FmEntry> {
             Value::Null => FmKind::Null,
             Value::Bool(_) => FmKind::Boolean,
             Value::Int(_) | Value::Float(_) => FmKind::Number,
-            Value::Str(text) if Date::looks_like_date(text) && Date::parse(text).is_ok() => FmKind::Date,
+            Value::Str(text) if Date::looks_like_date(text) && Date::parse(text).is_ok() => {
+                FmKind::Date
+            }
             Value::Str(_) => FmKind::String,
             Value::List(_) | Value::Map(_) => return,
         };
@@ -207,7 +209,10 @@ struct References<'a> {
 
 impl<'a> References<'a> {
     fn new(own: &'a str) -> References<'a> {
-        References { own, list: Vec::new() }
+        References {
+            own,
+            list: Vec::new(),
+        }
     }
 
     fn add(&mut self, destination: &str, kind: LinkKind, key: Option<&str>) {
@@ -277,7 +282,15 @@ fn scan_body(body: &str, first_line: u32, references: &mut References<'_>) -> Bo
 
         let prose = strip_inline_code(line);
         for (embed, destination) in inline_links(&prose) {
-            references.add(destination, if embed { LinkKind::Embed } else { LinkKind::Link }, None);
+            references.add(
+                destination,
+                if embed {
+                    LinkKind::Embed
+                } else {
+                    LinkKind::Link
+                },
+                None,
+            );
         }
         for destination in autolinks(&prose) {
             references.add(destination, LinkKind::Link, None);
@@ -427,7 +440,9 @@ fn autolinks(prose: &str) -> Vec<&str> {
     while let Some(offset) = prose[from..].find("<doc:") {
         let start = from + offset + 1;
         let rest = &prose[start..];
-        let end = rest.find(|c: char| c.is_whitespace() || c == '>').unwrap_or(rest.len());
+        let end = rest
+            .find(|c: char| c.is_whitespace() || c == '>')
+            .unwrap_or(rest.len());
         if rest[end..].starts_with('>') {
             found.push(&rest[..end]);
             from = start + end + 1;
@@ -514,8 +529,12 @@ fn scheme_autolink_len(rest: &str) -> Option<usize> {
         return None;
     }
     let after = &body[colon.0 + 1..];
-    let end = after.find(|c: char| c.is_whitespace() || c == '>').unwrap_or(after.len());
-    after[end..].starts_with('>').then_some(1 + colon.0 + 1 + end + 1)
+    let end = after
+        .find(|c: char| c.is_whitespace() || c == '>')
+        .unwrap_or(after.len());
+    after[end..]
+        .starts_with('>')
+        .then_some(1 + colon.0 + 1 + end + 1)
 }
 
 fn is_word_char(c: char) -> bool {
@@ -535,7 +554,10 @@ fn count_words(text: &str) -> u32 {
         while i < chars.len() && is_word_char(chars[i]) {
             i += 1;
         }
-        while i + 1 < chars.len() && matches!(chars[i], '\'' | '’' | '-') && is_word_char(chars[i + 1]) {
+        while i + 1 < chars.len()
+            && matches!(chars[i], '\'' | '’' | '-')
+            && is_word_char(chars[i + 1])
+        {
             i += 1;
             while i < chars.len() && is_word_char(chars[i]) {
                 i += 1;
@@ -618,12 +640,30 @@ mod tests {
 
     #[test]
     fn reads_tasks_with_lines_outside_code() {
-        let body = ["- [ ] a", "* [x] b", "1. [X] c", "- [/] d", "```", "- [ ] no", "```", "not [ ] a task"].join("\n");
+        let body = [
+            "- [ ] a",
+            "* [x] b",
+            "1. [X] c",
+            "- [/] d",
+            "```",
+            "- [ ] no",
+            "```",
+            "not [ ] a task",
+        ]
+        .join("\n");
         let tasks = extract_body("X", &Map::new(), &body, 4).tasks;
-        let summary: Vec<_> = tasks.iter().map(|t| (t.line, t.state.as_str(), t.text.as_str())).collect();
+        let summary: Vec<_> = tasks
+            .iter()
+            .map(|t| (t.line, t.state.as_str(), t.text.as_str()))
+            .collect();
         assert_eq!(
             summary,
-            vec![(4, "open", "a"), (5, "done", "b"), (6, "done", "c"), (7, "other", "d")]
+            vec![
+                (4, "open", "a"),
+                (5, "done", "b"),
+                (6, "done", "c"),
+                (7, "other", "d")
+            ]
         );
         assert_eq!(tasks[3].marker, "/");
     }
@@ -637,7 +677,11 @@ mod tests {
         );
         let facts = extract_body("X", &Map::new(), &body, 1);
         assert_eq!(facts.words, 7);
-        let found: Vec<_> = facts.attachments.iter().map(|a| (a.attachment.as_str(), a.line)).collect();
+        let found: Vec<_> = facts
+            .attachments
+            .iter()
+            .map(|a| (a.attachment.as_str(), a.line))
+            .collect();
         assert_eq!(found, vec![(f1, 2), (f2, 2)]);
     }
 
