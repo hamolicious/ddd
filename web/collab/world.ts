@@ -22,7 +22,10 @@ export interface World {
   close(): Promise<void>;
 }
 
-export async function world(port: number): Promise<World> {
+const PORT_OFFSET = Number(process.env["DDD_COLLAB_PORT_OFFSET"] ?? 0);
+
+export async function world(basePort: number): Promise<World> {
+  const port = basePort + PORT_OFFSET;
   const server = await startServer({ port, database: `ddd_collab_${port}` });
   const aliceToken = await authenticate(server.url, ALICE.email, ALICE.password);
   const rest = new RestClient(server.url, aliceToken);

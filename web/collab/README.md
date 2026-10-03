@@ -11,7 +11,8 @@ mise run collab                       # or: cd web && npm run test:collab
 Each file starts its own server (`app/e2e/server.mjs`) on its own port and a
 throwaway database (`ddd_collab_<port>`), so it never touches your
 workspace. `DDD_COLLAB_SERVER=http://…` points it at a server you started; the
-restart and purge tests then skip.
+restart and purge tests then skip. `DDD_COLLAB_PORT_OFFSET=<n>` moves every file's port (and so its
+database) up by `n`, so two runs on one machine stay apart; `mise run full-test` picks one at random.
 
 | File | What it covers |
 |---|---|

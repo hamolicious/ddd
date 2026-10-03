@@ -770,10 +770,9 @@ mod tests {
                 "the bare `{scheme}` scheme source survived the narrowing:\n{connect}"
             );
         }
-        assert!(
-            shell_csp("N", Some("http://192.168.1.10:8080"))
-                .contains("connect-src 'self' http://192.168.1.10:8080 ws://192.168.1.10:8080 https:;")
-        );
+        assert!(shell_csp("N", Some("http://192.168.1.10:8080")).contains(
+            "connect-src 'self' http://192.168.1.10:8080 ws://192.168.1.10:8080 https:;"
+        ));
         assert!(csp.contains("media-src 'self' blob:"));
         assert!(csp.contains("script-src 'self' 'nonce-N' 'wasm-unsafe-eval'"));
     }

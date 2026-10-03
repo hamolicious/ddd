@@ -114,21 +114,21 @@
     "semantic_hash": ""
   },
   "app/lib/bridge/bridge.dart": {
-    "mtime": 1790989633.0018086,
-    "seen": 1790989741.4756126,
-    "ast_hash": "2145d9a3b2088db8cbb7381dfa56e915",
+    "mtime": 1791048804.8214836,
+    "seen": 1791051704.6483293,
+    "ast_hash": "b261580f3056e14b4f0b05981d073571",
     "semantic_hash": ""
   },
   "app/lib/bridge/filesystem.dart": {
-    "mtime": 1790969666.8437183,
-    "seen": 1790986672.725524,
-    "ast_hash": "32e108c263f7c283c82ba3b736e8771f",
+    "mtime": 1791048804.7124884,
+    "seen": 1791051704.6483326,
+    "ast_hash": "24f0624a50385a48b15ff4d179899099",
     "semantic_hash": ""
   },
   "app/lib/bridge/notifications.dart": {
-    "mtime": 1790969666.8437183,
-    "seen": 1790986672.7255287,
-    "ast_hash": "e3a6b8f25af269324941aa8a808e1983",
+    "mtime": 1791048804.712983,
+    "seen": 1791051704.648432,
+    "ast_hash": "6ec1c1c0a0f5cb85e89d81c3f2fa521f",
     "semantic_hash": ""
   },
   "app/lib/bundle/manifest.dart": {
@@ -174,9 +174,9 @@
     "semantic_hash": ""
   },
   "app/lib/shell/webview_host.dart": {
-    "mtime": 1790969666.8437183,
-    "seen": 1790986672.7255425,
-    "ast_hash": "55d83eba4d094dd6653e6fcb47d8a7a1",
+    "mtime": 1791048804.7135756,
+    "seen": 1791051704.6487112,
+    "ast_hash": "a8358660087a40995f887231e946cb22",
     "semantic_hash": ""
   },
   "app/linux/flutter/generated_plugin_registrant.cc": {
@@ -810,9 +810,9 @@
     "semantic_hash": ""
   },
   "backend/crates/server/src/pluginhost/host_fns.rs": {
-    "mtime": 1790987720.1002052,
-    "seen": 1790989172.9237645,
-    "ast_hash": "02d5a935bbb9121caf90b0eee00e07cc",
+    "mtime": 1791048701.0694392,
+    "seen": 1791051704.653359,
+    "ast_hash": "dff9f4518f633f7e1a491f4ba1ec85ce",
     "semantic_hash": ""
   },
   "backend/crates/server/src/pluginhost/limits.rs": {
@@ -864,9 +864,9 @@
     "semantic_hash": ""
   },
   "backend/crates/server/src/plugins.rs": {
-    "mtime": 1790985401.7635837,
-    "seen": 1790986672.7264595,
-    "ast_hash": "db4219203342e0b0e384c0a6c7e5f9bb",
+    "mtime": 1791048376.8846924,
+    "seen": 1791051704.6537166,
+    "ast_hash": "8d88c01706066c189c47ce0ab5bfdc14",
     "semantic_hash": ""
   },
   "backend/crates/server/src/routes/admin.rs": {
@@ -906,15 +906,15 @@
     "semantic_hash": ""
   },
   "backend/crates/server/src/routes/plugin_api.rs": {
-    "mtime": 1790987720.122205,
-    "seen": 1790989172.9244835,
-    "ast_hash": "b68de04f5e4a354ed03e975d887ff046",
+    "mtime": 1791048376.9236922,
+    "seen": 1791051704.6540189,
+    "ast_hash": "ef4c4af705e3bf30c9057984141a0ab8",
     "semantic_hash": ""
   },
   "backend/crates/server/src/routes/shell.rs": {
-    "mtime": 1790987632.392206,
-    "seen": 1790989172.9244845,
-    "ast_hash": "55d5c6d128bd0257ba501c7dbe59241b",
+    "mtime": 1791048376.9296923,
+    "seen": 1791051704.65402,
+    "ast_hash": "f2fe8e756c395d714130ba65753b6e44",
     "semantic_hash": ""
   },
   "backend/crates/server/src/routes/statics.rs": {
@@ -1008,9 +1008,9 @@
     "semantic_hash": ""
   },
   "backend/crates/server/tests/plugininstall_flow.rs": {
-    "mtime": 1790985460.749733,
-    "seen": 1790986672.7265277,
-    "ast_hash": "a1b223bea3863b9e5a144b1c61d75a53",
+    "mtime": 1791048377.020414,
+    "seen": 1791051704.6546926,
+    "ast_hash": "c7375518aa7c46809370acc93e8498aa",
     "semantic_hash": ""
   },
   "backend/crates/server/tests/plugininstall_zip.rs": {
@@ -1590,9 +1590,9 @@
     "semantic_hash": ""
   },
   "plugins/base/themes/src/prefs.ts": {
-    "mtime": 1790969666.8775516,
-    "seen": 1790986672.729653,
-    "ast_hash": "b95ebbe158b5190da3ff2a2571da0139",
+    "mtime": 1791048561.593384,
+    "seen": 1791051704.6723156,
+    "ast_hash": "9fce7cd571389f5e966a3931840b7044",
     "semantic_hash": ""
   },
   "plugins/base/viewer/manifest.json": {
@@ -1692,9 +1692,9 @@
     "semantic_hash": ""
   },
   "web/app/e2e/journeys.spec.ts": {
-    "mtime": 1790986672.2079618,
-    "seen": 1790986672.7304058,
-    "ast_hash": "bed32eaf1ce5941533cab5036dd8de40",
+    "mtime": 1791048446.3621008,
+    "seen": 1791051704.6760547,
+    "ast_hash": "5288d1da6ad2e0120ae437ff9c61d2c3",
     "semantic_hash": ""
   },
   "web/app/e2e/list-alignment.spec.ts": {
@@ -1704,9 +1704,9 @@
     "semantic_hash": ""
   },
   "web/app/e2e/mobile-browse.spec.ts": {
-    "mtime": 1790969666.8812819,
-    "seen": 1790986672.7304084,
-    "ast_hash": "b7f5f0204361f7a3d69cbfec495e45fb",
+    "mtime": 1791048278.472742,
+    "seen": 1791051704.6761498,
+    "ast_hash": "8fdb0df35a887a2d5266637c2d064251",
     "semantic_hash": ""
   },
   "web/app/e2e/mobile-document.spec.ts": {
@@ -1740,15 +1740,15 @@
     "semantic_hash": ""
   },
   "web/app/e2e/server.mjs": {
-    "mtime": 1790969666.8819547,
-    "seen": 1790986672.730419,
-    "ast_hash": "0ecca35c2da2a5929a05e288c8057ff4",
+    "mtime": 1791049199.9349415,
+    "seen": 1791051704.6764913,
+    "ast_hash": "6f5d1a21b84ea503da51fbbdb1c590cd",
     "semantic_hash": ""
   },
   "web/app/e2e/zz-folder-tree.spec.ts": {
-    "mtime": 1790969666.8821537,
-    "seen": 1790986672.7304223,
-    "ast_hash": "fbb3d4cfa02fee970e89865c6c1f3ece",
+    "mtime": 1791050480.7597876,
+    "seen": 1791051704.6765928,
+    "ast_hash": "636756fb00012bfa224e7f4d6626ff5a",
     "semantic_hash": ""
   },
   "web/app/public/shell-bundle.json": {
@@ -3300,9 +3300,9 @@
     "semantic_hash": ""
   },
   "web/app/e2e/offline.spec.ts": {
-    "mtime": 1790969666.881676,
-    "seen": 1790986672.7304149,
-    "ast_hash": "6a4d98d3290f2f0842e8ffed2573c813",
+    "mtime": 1791048307.0368562,
+    "seen": 1791051704.6763558,
+    "ast_hash": "e4ae3a4aa3f1b900b8825a53b0659124",
     "semantic_hash": ""
   },
   "backend/Cargo.toml": {
@@ -4134,9 +4134,9 @@
     "semantic_hash": ""
   },
   "plugins/base/_shared/conditions-editor.tsx": {
-    "mtime": 1790969666.8589158,
-    "seen": 1790986672.7268367,
-    "ast_hash": "04ee808b1111432777347720df2f3b64",
+    "mtime": 1791048237.2142107,
+    "seen": 1791051704.6561913,
+    "ast_hash": "e6f2458b47e7e790bb5851007fcdacfa",
     "semantic_hash": ""
   },
   "plugins/base/_shared/conditions.test.ts": {
@@ -4146,15 +4146,15 @@
     "semantic_hash": ""
   },
   "plugins/base/_shared/conditions.ts": {
-    "mtime": 1790969666.8590984,
-    "seen": 1790986672.726845,
-    "ast_hash": "5cfa776d2dd9a0124adbf8235a05a19f",
+    "mtime": 1791048237.2140586,
+    "seen": 1791051704.656291,
+    "ast_hash": "8d77017b2a54dc30414e30ebd2b8960b",
     "semantic_hash": ""
   },
   "plugins/base/folder-style/src/Rules.tsx": {
-    "mtime": 1790969666.8670146,
-    "seen": 1790986672.7280772,
-    "ast_hash": "051a2f472bd2c55a073db78b6efbde7d",
+    "mtime": 1791048237.214331,
+    "seen": 1791051704.663323,
+    "ast_hash": "f728fa0ce2a4c6f880f535fe06d0d97f",
     "semantic_hash": ""
   },
   "plugins/base/folder-style/src/matcher.test.ts": {
@@ -4176,9 +4176,9 @@
     "semantic_hash": ""
   },
   "plugins/base/_shared/conditions-index.ts": {
-    "mtime": 1790969666.8590386,
-    "seen": 1790986672.726841,
-    "ast_hash": "00e7c4da07615232094e41f245e9e03e",
+    "mtime": 1791048237.2139213,
+    "seen": 1791051704.6562436,
+    "ast_hash": "3657e30d15cc3846c78532563dd7f510",
     "semantic_hash": ""
   },
   "app/bridge_fixtures/folder.json": {
@@ -4338,9 +4338,9 @@
     "semantic_hash": ""
   },
   "web/collab/world.ts": {
-    "mtime": 1790969666.8848941,
-    "seen": 1790986672.730511,
-    "ast_hash": "4b2240f0f971d6cac40dab075edb496c",
+    "mtime": 1791050691.061934,
+    "seen": 1791051704.6788313,
+    "ast_hash": "9bc1f2a043a15c31cbce8753c89dda12",
     "semantic_hash": ""
   },
   "web/vitest.collab.config.ts": {
@@ -4380,9 +4380,9 @@
     "semantic_hash": ""
   },
   "web/collab/README.md": {
-    "mtime": 1790967712.938019,
-    "seen": 1790967740.9623134,
-    "ast_hash": "4d4ae6787968be301ea7bf5a6189b6f8",
+    "mtime": 1791050696.0081146,
+    "seen": 1791051704.683986,
+    "ast_hash": "79b8d5920883a6068aacae5bb0a6e0d1",
     "semantic_hash": ""
   },
   "plugins/base/wikilinks/manifest.json": {
@@ -4476,9 +4476,9 @@
     "semantic_hash": ""
   },
   "plugins/base/search/src/FilterBar.tsx": {
-    "mtime": 1790969666.8728654,
-    "seen": 1790986672.7289789,
-    "ast_hash": "b1f6d1808632ab48d61cc0c09cdc1e4c",
+    "mtime": 1791048237.214433,
+    "seen": 1791051704.6681013,
+    "ast_hash": "92db08d3ba0f3811d91d50ce5ecb562f",
     "semantic_hash": ""
   },
   "plugins/base/search/src/filter.test.ts": {
@@ -5532,15 +5532,15 @@
     "semantic_hash": ""
   },
   "backend/crates/server/src/plugininstall/sources.rs": {
-    "mtime": 1790987701.9893222,
-    "seen": 1790989172.9240134,
-    "ast_hash": "2c86d10181a36a51bde597913af5ccaa",
+    "mtime": 1791048376.8716924,
+    "seen": 1791051704.6536357,
+    "ast_hash": "a0d46201375601fe7f89b3da184f74c7",
     "semantic_hash": ""
   },
   "backend/crates/server/tests/plugininstall_sources.rs": {
-    "mtime": 1790987758.808955,
-    "seen": 1790989172.9253118,
-    "ast_hash": "5850ce2516b2d20dd7afb798c8d27529",
+    "mtime": 1791048377.0236917,
+    "seen": 1791051704.654694,
+    "ast_hash": "4436ee64140d27f58588f84ff1977fc8",
     "semantic_hash": ""
   },
   "plugins/base/admin/src/sources.ts": {
@@ -5586,15 +5586,15 @@
     "semantic_hash": ""
   },
   "backend/crates/server/src/plugininstall/package_sources.rs": {
-    "mtime": 1790987736.8296916,
-    "seen": 1790989172.9239564,
-    "ast_hash": "15643a62ba0c61c525bcb9c5fc9e1d27",
+    "mtime": 1791048376.868245,
+    "seen": 1791051704.6535907,
+    "ast_hash": "950d538784fc4153c7804d84f99b503e",
     "semantic_hash": ""
   },
   "backend/crates/server/src/routes/package_sources.rs": {
-    "mtime": 1790987457.0589042,
-    "seen": 1790989172.9244823,
-    "ast_hash": "3741ec4ef73d1bcc5c4ac1b3e0435c14",
+    "mtime": 1791048376.9136922,
+    "seen": 1791051704.6540177,
+    "ast_hash": "865c1c1cd1f346326249973225e91a58",
     "semantic_hash": ""
   },
   "backend/docker-entrypoint.sh": {
@@ -5658,15 +5658,21 @@
     "semantic_hash": ""
   },
   "scripts/check-comments.mjs": {
-    "mtime": 1791047375.1049328,
-    "seen": 1791048183.5536327,
-    "ast_hash": "e9a618a1e3717cf7a536f1c38b48eff7",
+    "mtime": 1791048872.59521,
+    "seen": 1791051704.675111,
+    "ast_hash": "813fa0b5a89dfcc9293b00d612aabea6",
     "semantic_hash": ""
   },
   "scripts/full-test.sh": {
-    "mtime": 1791047503.3439252,
-    "seen": 1791048183.5536344,
-    "ast_hash": "634dd37c0157b2248fa5eca2cb76e253",
+    "mtime": 1791050691.062048,
+    "seen": 1791051704.6751144,
+    "ast_hash": "a0d31b5637437cf65e7f12114a6301a6",
+    "semantic_hash": ""
+  },
+  "plugins/base/themes/src/prefs.test.ts": {
+    "mtime": 1791048560.226781,
+    "seen": 1791051704.6723108,
+    "ast_hash": "d87e265a395643b68e4fa07fa3dd23fc",
     "semantic_hash": ""
   }
 }

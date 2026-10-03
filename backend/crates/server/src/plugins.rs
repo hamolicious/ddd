@@ -1267,7 +1267,11 @@ mod tests {
         assert_eq!(registry.problems().len(), 1);
     }
 
-    fn capabilities(documents: &[&str], hosts: Option<&[&str]>, notifications: bool) -> PluginCapabilities {
+    fn capabilities(
+        documents: &[&str],
+        hosts: Option<&[&str]>,
+        notifications: bool,
+    ) -> PluginCapabilities {
         PluginCapabilities {
             documents: documents.iter().map(|right| right.to_string()).collect(),
             http: hosts.map(|hosts| HttpCapability {
@@ -1282,22 +1286,43 @@ mod tests {
     fn an_update_asks_nothing_beyond_an_earlier_request_only_when_it_is_a_subset() {
         let earlier = capabilities(&["read"], Some(&["api.example.com"]), false);
         assert!(capabilities(&[], None, false).asks_nothing_beyond(&earlier));
-        assert!(capabilities(&["read"], Some(&["API.example.com"]), false).asks_nothing_beyond(&earlier));
+        assert!(
+            capabilities(&["read"], Some(&["API.example.com"]), false)
+                .asks_nothing_beyond(&earlier)
+        );
         assert!(!capabilities(&["read", "write"], None, false).asks_nothing_beyond(&earlier));
-        assert!(!capabilities(&["read"], Some(&["other.example.com"]), false).asks_nothing_beyond(&earlier));
+        assert!(
+            !capabilities(&["read"], Some(&["other.example.com"]), false)
+                .asks_nothing_beyond(&earlier)
+        );
         assert!(!capabilities(&[], None, true).asks_nothing_beyond(&earlier));
-        assert!(!capabilities(&[], Some(&[]), false).asks_nothing_beyond(&PluginCapabilities::default()));
+        assert!(
+            !capabilities(&[], Some(&[]), false)
+                .asks_nothing_beyond(&PluginCapabilities::default())
+        );
     }
 
     #[test]
     fn a_grant_restricted_to_a_new_request_keeps_the_admins_narrowing() {
-        let approved = capabilities(&["read"], Some(&["api.example.com", "extra.example.com"]), true);
+        let approved = capabilities(
+            &["read"],
+            Some(&["api.example.com", "extra.example.com"]),
+            true,
+        );
         let requested = capabilities(&["read", "write"], Some(&["api.example.com"]), false);
         let kept = approved.restricted_to(&requested);
         assert_eq!(kept.documents, vec!["read".to_string()]);
-        assert_eq!(kept.http_hosts(), vec!["api.example.com", "extra.example.com"]);
+        assert_eq!(
+            kept.http_hosts(),
+            vec!["api.example.com", "extra.example.com"]
+        );
         assert!(!kept.notifications);
-        assert!(approved.restricted_to(&capabilities(&[], None, false)).http.is_none());
+        assert!(
+            approved
+                .restricted_to(&capabilities(&[], None, false))
+                .http
+                .is_none()
+        );
     }
 
     #[test]

@@ -1,4 +1,4 @@
-import type { FilterJson } from "@kernel";
+import type { FilterJson, Unsubscribe } from "@kernel";
 
 export type ValueKind = "str" | "int" | "float" | "bool" | "date" | "null" | "doc";
 
@@ -342,4 +342,10 @@ export function describeClause(clause: FilterClause): string {
   const head = TREE_OPS.includes(clause.op) ? labels[clause.op] : `${clause.field} ${labels[clause.op]}`;
   const tail = VALUELESS_OPS.includes(clause.op) ? "" : ` ${clause.value}`;
   return `${clause.negate === true ? "not " : ""}${head}${tail}`;
+}
+
+export interface Suggestions {
+  fields(): readonly FieldOption[];
+  values(field: string): readonly string[];
+  subscribe(listener: () => void): Unsubscribe;
 }

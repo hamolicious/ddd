@@ -5,7 +5,7 @@ import type { Icons } from "plugin:icons";
 
 import { ConditionsEditor, type FmKeySelectLike, type FmValueSelectLike, type NoteSelectLike } from "../../_shared/conditions-editor.js";
 import type { NoteSource } from "../../_shared/note-picker.js";
-import type { Suggestions } from "../../_shared/conditions-index.js";
+import type { Suggestions } from "../../_shared/conditions.js";
 import { newClauseId } from "../../_shared/conditions.js";
 
 import { newRuleId, resolveStyle, ruleLabel, textOn, type FolderStyle, type Rule } from "./styles.js";

@@ -930,12 +930,12 @@ pub fn config_get(
     context: &HostContext,
     input: abi::config::ConfigGetInput,
 ) -> Result<abi::config::ConfigGetOutput, abi::HostError> {
-    if let Some(key) = input.key.as_deref() {
-        if !context.plugin.config.contains_key(key) {
-            return Err(invalid(format!(
-                "`{key}` is not a config key this plugin's manifest declares"
-            )));
-        }
+    if let Some(key) = input.key.as_deref()
+        && !context.plugin.config.contains_key(key)
+    {
+        return Err(invalid(format!(
+            "`{key}` is not a config key this plugin's manifest declares"
+        )));
     }
 
     context

@@ -56,9 +56,11 @@ test("registering the first user boots the whole plugin distribution", async ({
     "Keyboard and commands",
     "Directives and machine sections",
   ]) {
+    await main.getByRole("searchbox", { name: "Search documents" }).fill(title);
     await expect(main.getByRole("button", { name: title, exact: true })).toBeVisible();
   }
   await expect(docRows(page).first()).toBeVisible();
+  await main.getByRole("searchbox", { name: "Search documents" }).fill("Folders are notes");
   await main.getByRole("button", { name: "Folders are notes", exact: true }).click();
   await expect(
     page.getByRole("tree", { name: "Folders" }).locator('[role="treeitem"][aria-level="2"]').filter({ hasText: "Folders are notes" }),

@@ -12,6 +12,7 @@ export function preferenceStore(kernel: Kernel, prefix: string): PreferenceStore
   const localKey = (key: string): string => `ddd.${prefix}.${key}`;
   const pendingKey = `ddd.${prefix}.__pending`;
   let warned = false;
+  const sending = new Map<string, number>();
 
   const readLocal = (key: string): string | undefined => {
     try {
@@ -78,19 +79,25 @@ export function preferenceStore(kernel: Kernel, prefix: string): PreferenceStore
     },
 
     set: async (key, value) => {
-      try {
-        await kernel.settings.set(key, value);
-        const waiting = pending();
-        if (waiting.delete(key)) setPending(waiting);
-        clearLocal(key);
-        return;
-      } catch (error) {
-        note("set", error);
-      }
       writeLocal(key, value);
       const waiting = pending();
       waiting.add(key);
       setPending(waiting);
+      sending.set(key, (sending.get(key) ?? 0) + 1);
+      try {
+        await kernel.settings.set(key, value);
+        if (readLocal(key) === value) {
+          const landed = pending();
+          if (landed.delete(key)) setPending(landed);
+          clearLocal(key);
+        }
+      } catch (error) {
+        note("set", error);
+      } finally {
+        const left = (sending.get(key) ?? 1) - 1;
+        if (left > 0) sending.set(key, left);
+        else sending.delete(key);
+      }
     },
 
     subscribe: (listener) => {
@@ -103,7 +110,7 @@ export function preferenceStore(kernel: Kernel, prefix: string): PreferenceStore
     },
 
     get durable(): boolean {
-      return pending().size === 0;
+      return [...pending()].every((key) => sending.has(key));
     },
 
     flush: async () => {

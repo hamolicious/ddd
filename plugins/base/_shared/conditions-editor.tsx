@@ -17,7 +17,7 @@ import {
   type FilterClause,
   type ValueKind,
 } from "./conditions.js";
-import type { Suggestions } from "./conditions-index.js";
+import type { Suggestions } from "./conditions.js";
 import { NoteName, NotePicker, useNotes, type NoteSource } from "./note-picker.js";
 
 export interface ConditionsEditorProps {

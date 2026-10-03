@@ -17,7 +17,10 @@ pub fn router() -> Router<AppState> {
         .route("/{id}", put(update).delete(remove))
 }
 
-async fn list(State(state): State<AppState>, _admin: AdminUser) -> AppResult<Json<Vec<SourceView>>> {
+async fn list(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+) -> AppResult<Json<Vec<SourceView>>> {
     Ok(Json(package_sources::list(&state).await?))
 }
 

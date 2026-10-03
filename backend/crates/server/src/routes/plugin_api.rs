@@ -677,7 +677,11 @@ pub fn update_grant(
         && outcome
             .capabilities
             .asks_nothing_beyond(&current.manifest.capabilities);
-    keeps_approval.then(|| current.capabilities_approved.restricted_to(&outcome.capabilities))
+    keeps_approval.then(|| {
+        current
+            .capabilities_approved
+            .restricted_to(&outcome.capabilities)
+    })
 }
 
 async fn install_package(
@@ -1568,7 +1572,6 @@ mod admin_surface_tests {
         assert!(!admin_view(&pending, false, false).capabilities_differ);
         assert!(!admin_view(&pending, false, false).served);
     }
-
 
     #[test]
     fn the_event_ring_is_bounded() {

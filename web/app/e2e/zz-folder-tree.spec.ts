@@ -87,6 +87,15 @@ function refuseNativeDialogs(page: Page): void {
   });
 }
 
+async function savedLocation(request: APIRequestContext, base: string): Promise<string | undefined> {
+  const response = await request.get(`${base}/api/documents?limit=500`);
+  const { documents } = (await response.json()) as { documents: { id: string; title: string }[] };
+  const settings = documents.find((document) => document.title === `Settings — ${ADMIN.email}`);
+  if (!settings) return undefined;
+  const folders = /^%%% folders\n([\s\S]*?)^%%%$/m.exec(await rawText(request, base, settings.id))?.[1] ?? "";
+  return /^defaultLocation: (\S*)$/m.exec(folders)?.[1];
+}
+
 async function listed(
   request: APIRequestContext,
   baseURL: string,
@@ -430,9 +439,13 @@ test('"New notes go to" decides where a new note is filed', async ({ page, reque
   refuseNativeDialogs(page);
 
   await page.goto("/#/settings/folders");
-  const picker = page.getByLabel("New notes go to");
+  const picker = page.getByRole("combobox", { name: "New notes go to" });
   await expect(picker).toBeVisible();
-  await picker.selectOption(home);
+  await picker.click();
+  await picker.fill(homeTitle);
+  await page.getByRole("option", { name: new RegExp(homeTitle) }).first().click();
+  await expect(picker).toHaveValue(homeTitle);
+  await expect.poll(() => savedLocation(request, base)).toBe(home);
 
   await runCommand(page, "New document");
   await expect(page).toHaveURL(/#\/doc\//);
@@ -441,7 +454,12 @@ test('"New notes go to" decides where a new note is filed', async ({ page, reque
   await listed(request, base, home, [filed]);
 
   await page.goto("/#/settings/folders");
-  await page.getByLabel("New notes go to").selectOption("");
+  const rootPicker = page.getByRole("combobox", { name: "New notes go to" });
+  await rootPicker.click();
+  await rootPicker.fill("");
+  await page.getByRole("option", { name: /^Root/ }).first().click();
+  await expect(rootPicker).toHaveValue("Root");
+  await expect.poll(() => savedLocation(request, base)).not.toBe(home);
   await runCommand(page, "New document");
   await expect(page).toHaveURL(/#\/doc\//);
   const unfiled = /#\/doc\/([^?]+)/.exec(page.url())?.[1] ?? "";
