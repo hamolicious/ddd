@@ -52,8 +52,8 @@ export function SettingsView({ kernel, router, sections: host, params }: Setting
   );
 
   return (
-    <div className="settings:mx-auto settings:max-w-[62rem] settings:p-4 settings:font-sans settings:text-text settings:compact:px-[calc(var(--ddd-space)+var(--ddd-safe-right))] settings:compact:pb-[calc(var(--ddd-space)+var(--ddd-safe-bottom))] settings:compact:pl-[calc(var(--ddd-space)+var(--ddd-safe-left))] settings:compact:pt-2" data-view={chosen ? "section" : "index"}>
-      <header className="settings:[&_h1]:mb-2 settings:[&_h1]:mt-0 settings:[&_h1]:text-2xl settings:compact:[&_h1]:text-xl">
+    <div className="settings:box-border settings:flex settings:h-full settings:flex-col settings:p-4 settings:font-sans settings:compact:block settings:compact:h-auto settings:text-text settings:compact:px-[calc(var(--ddd-space)+var(--ddd-safe-right))] settings:compact:pb-[calc(var(--ddd-space)+var(--ddd-safe-bottom))] settings:compact:pl-[calc(var(--ddd-space)+var(--ddd-safe-left))] settings:compact:pt-2" data-view={chosen ? "section" : "index"}>
+      <header className="settings:shrink-0 settings:[&_h1]:mb-2 settings:[&_h1]:mt-0 settings:[&_h1]:text-2xl settings:compact:[&_h1]:text-xl">
         <h1>Settings</h1>
         <p className="settings:mb-4 settings:mt-0 settings:rounded settings:border-l-[3px] settings:border-warning settings:bg-bg-subtle settings:p-2 settings:text-text-muted settings:compact:mb-2 settings:compact:text-sm">
           Other people in this workspace can read your settings. Put secrets in admin
@@ -64,8 +64,8 @@ export function SettingsView({ kernel, router, sections: host, params }: Setting
       {sections.length === 0 ? (
         <p className="settings:text-text-muted">No plugin has contributed any settings.</p>
       ) : (
-        <div className="settings:grid settings:grid-cols-[minmax(10rem,14rem)_1fr] settings:items-start settings:gap-4 settings:compact:grid-cols-1 settings:compact:gap-2">
-          <nav className={`settings:min-w-0 ${chosen ? " settings:compact:hidden" : ""}`} aria-label="Settings sections">
+        <div className="settings:grid settings:min-h-0 settings:flex-1 settings:grid-cols-[minmax(10rem,14rem)_1fr] settings:gap-4 settings:compact:grid-cols-1 settings:compact:items-start settings:compact:gap-2">
+          <nav className={`settings:min-h-0 settings:min-w-0 settings:overflow-y-auto settings:overscroll-contain settings:compact:overflow-visible ${chosen ? " settings:compact:hidden" : ""}`} aria-label="Settings sections">
             {list(groups.base, "Built-in")}
             {groups.extensions.length > 0 ? (
               <>
@@ -75,7 +75,7 @@ export function SettingsView({ kernel, router, sections: host, params }: Setting
             ) : null}
           </nav>
 
-          <div className={`settings-pane settings:min-w-0 settings:compact:overflow-x-auto ${chosen ? "" : " settings:compact:hidden"}`}>
+          <div className={`settings-pane settings:min-h-0 settings:min-w-0 settings:overflow-y-auto settings:overscroll-contain settings:compact:overflow-y-visible settings:compact:overflow-x-auto ${chosen ? "" : " settings:compact:hidden"}`}>
             <a
               className="settings:mb-1 settings:hidden settings:min-h-[var(--ddd-tap-target)] settings:items-center settings:text-link settings:before:mr-1 settings:before:content-['‹'] settings:compact:inline-flex"
               href={router.url("/settings")}
