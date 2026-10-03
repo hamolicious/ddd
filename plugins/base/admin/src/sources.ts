@@ -2,67 +2,125 @@ import { createContext, useContext, type ComponentType } from "react";
 
 import { createRegistry, s, type Kernel } from "@kernel";
 
-import type { PluginInstallOutcome, RemoteLookupResult } from "./api.js";
+import type { AdminClient, PluginInstallOutcome, SavedSource, SourceSettings } from "./api.js";
 
-export interface RemotePackageRequest {
-  readonly url: string;
-  readonly headers?: Readonly<Record<string, string>>;
-  readonly label?: string;
+export interface SetupProps {
+  readonly value: SourceSettings;
+  readonly onChange: (next: SourceSettings) => void;
+  readonly disabled: boolean;
 }
 
-export interface PackageSourceProps {
-  readonly busy: boolean;
-  readonly maxPackageBytes: number | undefined;
-  readonly installFile: (file: File) => Promise<PluginInstallOutcome | undefined>;
-  readonly installFromUrl: (request: RemotePackageRequest) => Promise<PluginInstallOutcome | undefined>;
+export interface AvailablePackage {
+  readonly name: string;
+  readonly version: string;
+  readonly url: string;
+  readonly plugin?: string;
+  readonly description?: string;
 }
 
 export interface InstalledPackage {
   readonly id: string;
   readonly version: string;
   readonly url: string;
-  readonly authenticated: boolean;
 }
 
-export interface UpdateCheckContext {
-  readonly plugins: readonly InstalledPackage[];
-  readonly lookup: (url: string, headers?: Readonly<Record<string, string>>) => Promise<RemoteLookupResult>;
-}
-
-export interface PackageSource {
+export interface PackageProvider {
   readonly id: string;
   readonly title: string;
-  readonly component: ComponentType<PackageSourceProps>;
-  readonly order?: number;
+  readonly setup: ComponentType<SetupProps>;
+  readonly browse: (source: SavedSource) => Promise<readonly AvailablePackage[]>;
+  readonly download: (source: SavedSource, url: string) => Promise<Blob>;
+  readonly checkUpdates?: (source: SavedSource, plugins: readonly InstalledPackage[]) => Promise<void>;
+  readonly defaults?: () => SourceSettings;
+  readonly validate?: (settings: SourceSettings) => string | undefined;
   readonly description?: string;
-  readonly checkUpdates?: (context: UpdateCheckContext) => Promise<void>;
+  readonly order?: number;
 }
 
-export const SOURCE_ID_PATTERN = /^[A-Za-z0-9._:-]{1,64}$/;
+export const PROVIDER_ID_PATTERN = /^[A-Za-z0-9._:-]{1,64}$/;
 
-export const packageSourceRegistry = createRegistry<PackageSource>({
-  key: (source) => source.id,
-  order: (source) => source.order ?? 100,
+export const providerRegistry = createRegistry<PackageProvider>({
+  key: (provider) => provider.id,
+  order: (provider) => provider.order ?? 100,
   shape: s.object({
     id: s.string(),
     title: s.string(),
-    component: s.component(),
-    order: s.optional(s.number()),
-    description: s.optional(s.string()),
+    setup: s.component(),
+    browse: s.func(),
+    download: s.func(),
     checkUpdates: s.optional(s.func()),
+    defaults: s.optional(s.func()),
+    validate: s.optional(s.func()),
+    description: s.optional(s.string()),
+    order: s.optional(s.number()),
   }),
 });
 
-export const addPackageSource = (items: PackageSource | readonly PackageSource[]): (() => void) => {
-  for (const item of Array.isArray(items) ? items : [items as PackageSource]) {
-    if (!SOURCE_ID_PATTERN.test(item.id)) {
+export const addPackageProvider = (items: PackageProvider | readonly PackageProvider[]): (() => void) => {
+  for (const item of Array.isArray(items) ? items : [items as PackageProvider]) {
+    if (!PROVIDER_ID_PATTERN.test(item.id)) {
       throw new Error(
-        `admin: package source id \`${item.id}\` must be 1 to 64 letters, digits, ".", "_", ":" or "-"`,
+        `admin: package provider id \`${item.id}\` must be 1 to 64 letters, digits, ".", "_", ":" or "-"`,
       );
     }
   }
-  return packageSourceRegistry.add(items);
+  return providerRegistry.add(items);
 };
+
+export function providerOf(source: SavedSource): PackageProvider | undefined {
+  return providerRegistry.get().find((provider) => provider.id === source.provider);
+}
+
+export const EMPTY_SETTINGS: SourceSettings = { config: {}, secrets: {} };
+
+export interface SourceStore {
+  readonly get: () => readonly SavedSource[] | undefined;
+  readonly error: () => string | undefined;
+  readonly subscribe: (listener: () => void) => () => void;
+  readonly load: (client: AdminClient) => Promise<void>;
+}
+
+export function createSourceStore(): SourceStore {
+  let sources: readonly SavedSource[] | undefined;
+  let failure: string | undefined;
+  const listeners = new Set<() => void>();
+  const changed = (): void => {
+    for (const listener of [...listeners]) listener();
+  };
+  return {
+    get: () => sources,
+    error: () => failure,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    load: async (client) => {
+      try {
+        sources = await client.packageSources();
+        failure = undefined;
+      } catch (cause) {
+        failure = cause instanceof Error ? cause.message : String(cause);
+      }
+      changed();
+    },
+  };
+}
+
+export const sourceStore = createSourceStore();
+
+export async function installFrom(
+  client: AdminClient,
+  source: SavedSource,
+  url: string,
+  update?: string,
+): Promise<PluginInstallOutcome> {
+  const provider = providerOf(source);
+  if (!provider) throw new Error(`no installed plugin provides “${source.provider}” sources`);
+  const blob = await provider.download(source, url);
+  const name = decodeURIComponent(new URL(url).pathname.split("/").pop() || "package.zip");
+  const file = new File([blob], name, { type: "application/zip" });
+  return client.uploadPlugin(file, { source: source.id, url, ...(update ? { update } : {}) });
+}
 
 export type Boundary = Pick<Kernel["ui"], "boundary">;
 

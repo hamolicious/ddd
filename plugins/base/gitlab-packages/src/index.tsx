@@ -1,19 +1,23 @@
 import type { Kernel } from "@kernel";
-import { UPDATE_AVAILABLE, addPackageSource, type PluginUpdate } from "plugin:admin";
+import { UPDATE_AVAILABLE, addPackageProvider, type PluginUpdate } from "plugin:admin";
 
-import { GitLabSource } from "./GitLabSource.js";
-import { SOURCE_ID, checkUpdates } from "./updates.js";
+import { GitLabSetup } from "./GitLabSetup.js";
+import { DEFAULT_INSTANCE, browse, checkUpdates, download, validate, writeSettings } from "./gitlab.js";
 
 export default function activate(kernel: Kernel): void {
   if (!kernel.session.isAdmin()) return;
 
-  addPackageSource({
-    id: SOURCE_ID,
+  addPackageProvider({
+    id: "gitlab",
     title: "GitLab",
     order: 20,
-    description: "Download a plugin zip from a project's generic package registry.",
-    component: GitLabSource,
-    checkUpdates: (context) =>
-      checkUpdates(context, (update) => kernel.events.emit<PluginUpdate>(UPDATE_AVAILABLE, update)),
+    description: "A project's generic package registry.",
+    setup: GitLabSetup,
+    defaults: () => writeSettings({ instance: DEFAULT_INSTANCE, project: "", tokenKind: "access", token: "" }),
+    validate,
+    browse: (source) => browse(source),
+    download: (source, url) => download(source, url),
+    checkUpdates: (source, plugins) =>
+      checkUpdates(source, plugins, (update) => kernel.events.emit<PluginUpdate>(UPDATE_AVAILABLE, update)),
   });
 }

@@ -221,8 +221,8 @@ PLUGINS_DIR=/tmp/reg cargo run -- serve              # from backend/
 ```
 
 To install on a running server, package it with `mise run plugin-package <id>` and, as an
-admin, upload the `.zip` or install it from a GitLab generic package registry (Admin →
-Plugins), or drop it into `PLUGIN_INBOX_DIR`. New packages are pending until
+admin, upload the `.zip` in Admin → Plugins (or install it from a saved package source such as a
+GitLab project), or drop it into `PLUGIN_INBOX_DIR`. New packages are pending until
 an admin approves them.
 
 > **Rebuilt a plugin without bumping its version?** Plugin URLs are version-scoped and

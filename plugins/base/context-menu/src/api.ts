@@ -35,6 +35,15 @@ export interface SheetRequest extends MenuCommon {
   render(close: () => void): ReactNode;
 }
 
+export interface DialogRequest {
+  readonly title: string;
+  readonly size?: "normal" | "large";
+  readonly description?: ReactNode;
+  readonly anchor?: HTMLElement | null;
+  readonly onClose?: () => void;
+  render(close: () => void): ReactNode;
+}
+
 export interface FieldCommon {
   readonly id: string;
   readonly label: string;
@@ -108,6 +117,7 @@ export interface ConfirmRequest {
 export interface ContextMenu {
   readonly open: (menu: MenuRequest) => void;
   readonly openSheet: (sheet: SheetRequest) => void;
+  readonly dialog: (request: DialogRequest) => void;
   readonly modal: (request: ModalRequest) => Promise<ModalResult | undefined>;
   readonly confirm: (request: ConfirmRequest) => Promise<boolean>;
   readonly close: () => void;

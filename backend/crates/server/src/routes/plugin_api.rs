@@ -15,9 +15,7 @@ use crate::domain::{Timestamp, new_id};
 use crate::error::{AppError, AppResult};
 use crate::pluginhost::limits::PluginLimits;
 use crate::pluginhost::{self, CallKind, Invocation, PluginHost};
-use crate::plugininstall::sources::{
-    self, LookupResult, PackageSource, RemoteLookup, RemotePackage, UploadedPackage,
-};
+use crate::plugininstall::sources::{self, PackageSource, UploadedPackage};
 use crate::plugininstall::{self, InstallRequest, InstallSource};
 use crate::plugins::{self, ConfigField, PluginCapabilities, PluginRecord, PluginState, RouteSpec};
 use crate::state::AppState;
@@ -368,8 +366,6 @@ pub fn admin_router() -> Router<AppState> {
             "/",
             get(list).post(upload).layer(DefaultBodyLimit::disable()),
         )
-        .route("/remote", post(install_remote))
-        .route("/remote/lookup", post(lookup_remote))
         .route("/{id}/{version}/approve", post(approve))
         .route("/{id}/{version}/reject", post(reject))
         .route("/{id}/enable", post(enable))
@@ -672,75 +668,6 @@ pub async fn upload(
     install_package(&state, &admin, &meta, UploadedPackage(multipart)).await
 }
 
-#[derive(Debug, Deserialize)]
-pub struct RemoteInstall {
-    #[serde(flatten)]
-    pub package: RemotePackage,
-    #[serde(default)]
-    pub update: Option<String>,
-}
-
-pub async fn install_remote(
-    State(state): State<AppState>,
-    admin: AdminUser,
-    meta: ClientMeta,
-    Json(request): Json<RemoteInstall>,
-) -> AppResult<(StatusCode, Json<plugininstall::InstallOutcome>)> {
-    let current = match request.update.as_deref() {
-        Some(id) => Some(
-            plugininstall::record(&state, id)
-                .await?
-                .ok_or(AppError::NotFound("plugin"))?,
-        ),
-        None => None,
-    };
-    let (status, Json(outcome)) = install_package(&state, &admin, &meta, request.package).await?;
-    let Some(current) = current else {
-        return Ok((status, Json(outcome)));
-    };
-    if outcome.id != current.id {
-        return Err(AppError::Unprocessable(format!(
-            "the update for `{}` installed `{}` instead; it is pending, review it before approving",
-            current.id, outcome.id
-        )));
-    }
-    let Some(grant) = update_grant(&current, &outcome) else {
-        return Ok((status, Json(outcome)));
-    };
-
-    plugininstall::approve(&state, &outcome.id, &outcome.version, grant, &admin.actor()).await?;
-    note(
-        &outcome.id,
-        "info",
-        format!(
-            "updated {} from {} to {} and kept its approval",
-            outcome.id, current.version, outcome.version
-        ),
-    );
-    audit::record(
-        &state,
-        "plugin.approve",
-        Some(&admin.actor()),
-        audit::TARGET_PLUGIN,
-        Some(outcome.id.clone()),
-        doc! {
-            "version": &outcome.version,
-            "update_from": &current.version,
-            "automatic": true,
-        },
-        meta.ip.clone(),
-    )
-    .await;
-
-    Ok((
-        status,
-        Json(plugininstall::InstallOutcome {
-            state: PluginState::Enabled,
-            ..outcome
-        }),
-    ))
-}
-
 pub fn update_grant(
     current: &PluginRecord,
     outcome: &plugininstall::InstallOutcome,
@@ -753,14 +680,6 @@ pub fn update_grant(
     keeps_approval.then(|| current.capabilities_approved.restricted_to(&outcome.capabilities))
 }
 
-pub async fn lookup_remote(
-    State(state): State<AppState>,
-    _admin: AdminUser,
-    Json(request): Json<RemoteLookup>,
-) -> AppResult<Json<LookupResult>> {
-    Ok(Json(sources::lookup(state.config(), request).await?))
-}
-
 async fn install_package(
     state: &AppState,
     admin: &AdminUser,
@@ -768,6 +687,16 @@ async fn install_package(
     package: impl PackageSource,
 ) -> AppResult<(StatusCode, Json<plugininstall::InstallOutcome>)> {
     let staged = package.stage(state.config()).await?;
+    let current = match staged.update.as_deref() {
+        Some(id) => match plugininstall::record(state, id).await? {
+            Some(record) => Some(record),
+            None => {
+                staged.discard().await;
+                return Err(AppError::NotFound("plugin"));
+            }
+        },
+        None => None,
+    };
     let outcome = match plugininstall::install(
         state,
         InstallRequest {
@@ -812,7 +741,50 @@ async fn install_package(
     )
     .await;
 
-    Ok((StatusCode::CREATED, Json(outcome)))
+    let Some(current) = current else {
+        return Ok((StatusCode::CREATED, Json(outcome)));
+    };
+    if outcome.id != current.id {
+        return Err(AppError::Unprocessable(format!(
+            "the update for `{}` installed `{}` instead; it is pending, review it before approving",
+            current.id, outcome.id
+        )));
+    }
+    let Some(grant) = update_grant(&current, &outcome) else {
+        return Ok((StatusCode::CREATED, Json(outcome)));
+    };
+
+    plugininstall::approve(state, &outcome.id, &outcome.version, grant, &admin.actor()).await?;
+    note(
+        &outcome.id,
+        "info",
+        format!(
+            "updated {} from {} to {} and kept its approval",
+            outcome.id, current.version, outcome.version
+        ),
+    );
+    audit::record(
+        state,
+        "plugin.approve",
+        Some(&admin.actor()),
+        audit::TARGET_PLUGIN,
+        Some(outcome.id.clone()),
+        doc! {
+            "version": &outcome.version,
+            "update_from": &current.version,
+            "automatic": true,
+        },
+        meta.ip.clone(),
+    )
+    .await;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(plugininstall::InstallOutcome {
+            state: PluginState::Enabled,
+            ..outcome
+        }),
+    ))
 }
 
 #[derive(Debug, Default, Deserialize)]

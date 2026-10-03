@@ -1,7 +1,7 @@
 import { s, validate, type EventsApi, type KernelEvent, type Unsubscribe } from "@kernel";
 
 import type { PluginAdminView } from "./api.js";
-import type { InstalledPackage, RemotePackageRequest } from "./sources.js";
+import type { InstalledPackage } from "./sources.js";
 
 export const UPDATE_AVAILABLE = "admin:update-available";
 
@@ -10,7 +10,7 @@ export interface PluginUpdate {
   readonly source: string;
   readonly current: string;
   readonly latest: string;
-  readonly install: RemotePackageRequest;
+  readonly url: string;
 }
 
 export interface ReportedUpdate extends PluginUpdate {
@@ -22,11 +22,7 @@ const updateShape = s.object({
   source: s.string(),
   current: s.string(),
   latest: s.string(),
-  install: s.object({
-    url: s.string(),
-    headers: s.optional(s.record(s.string())),
-    label: s.optional(s.string()),
-  }),
+  url: s.string(),
 });
 
 export interface UpdateStore {
@@ -83,12 +79,7 @@ export function installedFrom(plugins: readonly PluginAdminView[], source: strin
   const found: InstalledPackage[] = [];
   for (const plugin of plugins) {
     if (plugin.source.kind !== "remote" || plugin.source.via !== source) continue;
-    found.push({
-      id: plugin.id,
-      version: plugin.version,
-      url: plugin.source.url,
-      authenticated: plugin.source.authenticated,
-    });
+    found.push({ id: plugin.id, version: plugin.version, url: plugin.source.url });
   }
   return found;
 }

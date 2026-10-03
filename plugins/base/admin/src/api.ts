@@ -143,7 +143,7 @@ export type PluginConfigSchema = Readonly<Record<string, PluginConfigSchemaField
 export type PluginInstallSource =
   | { readonly kind: "upload"; readonly filename: string }
   | { readonly kind: "directory"; readonly path: string }
-  | { readonly kind: "remote"; readonly url: string; readonly via: string; readonly authenticated: boolean }
+  | { readonly kind: "remote"; readonly url: string; readonly via: string }
   | { readonly kind: "base" };
 
 export interface PluginAdminView {
@@ -207,16 +207,27 @@ export interface PluginAdminList {
   readonly secret_placeholder: string;
 }
 
-export interface RemotePluginRequest {
-  readonly url: string;
-  readonly headers: Readonly<Record<string, string>>;
-  readonly via: string;
+export interface UploadDetails {
+  readonly source?: string;
+  readonly url?: string;
   readonly update?: string;
 }
 
-export interface RemoteLookupResult {
-  readonly status: number;
-  readonly body: unknown;
+export interface SourceSettings {
+  readonly config: Readonly<Record<string, unknown>>;
+  readonly secrets: Readonly<Record<string, string>>;
+}
+
+export interface SavedSource extends SourceSettings {
+  readonly id: string;
+  readonly provider: string;
+  readonly name: string;
+  readonly updated_at?: string;
+  readonly updated_by?: string | null;
+}
+
+export interface SourceDraft extends SourceSettings {
+  readonly name: string;
 }
 
 export interface PluginInstallOutcome {
@@ -292,9 +303,11 @@ export interface AdminClient {
   exportWorkspace(): Promise<Blob>;
 
   adminPlugins(): Promise<PluginAdminList>;
-  uploadPlugin(file: File): Promise<PluginInstallOutcome>;
-  installRemotePlugin(request: RemotePluginRequest): Promise<PluginInstallOutcome>;
-  lookupRemote(url: string, headers?: Readonly<Record<string, string>>): Promise<RemoteLookupResult>;
+  uploadPlugin(file: File, details?: UploadDetails): Promise<PluginInstallOutcome>;
+  packageSources(): Promise<readonly SavedSource[]>;
+  createPackageSource(provider: string, draft: SourceDraft): Promise<SavedSource>;
+  updatePackageSource(id: string, draft: SourceDraft): Promise<SavedSource>;
+  deletePackageSource(id: string): Promise<void>;
   approvePlugin(
     id: string,
     version: string,
@@ -311,7 +324,7 @@ export interface AdminClient {
 
 }
 
-export function createAdminClient(fetchApi: ApiFetch): AdminClient {
+export function createAdminClient(fetchApi: ApiFetch, uncached: ApiFetch = fetchApi): AdminClient {
   const json = async <T>(path: string, init?: RequestInit): Promise<T> => {
     const response = await fetchApi(path, init);
     return (await response.json()) as T;
@@ -352,15 +365,24 @@ export function createAdminClient(fetchApi: ApiFetch): AdminClient {
     exportWorkspace: async () => (await fetchApi("/admin/export")).blob(),
 
     adminPlugins: () => json<PluginAdminList>("/admin/plugins"),
-    uploadPlugin: (file) => {
+    uploadPlugin: (file, details = {}) => {
       const body = new FormData();
+      for (const [key, value] of Object.entries(details)) {
+        if (typeof value === "string" && value !== "") body.append(key, value);
+      }
       body.append("package", file, file.name);
       return json<PluginInstallOutcome>("/admin/plugins", { method: "POST", body });
     },
-    installRemotePlugin: (request) =>
-      json<PluginInstallOutcome>("/admin/plugins/remote", postJson(request)),
-    lookupRemote: (url, headers = {}) =>
-      json<RemoteLookupResult>("/admin/plugins/remote/lookup", postJson({ url, headers })),
+    packageSources: async () => (await (await uncached("/admin/package-sources")).json()) as readonly SavedSource[],
+    createPackageSource: (provider, draft) =>
+      json<SavedSource>("/admin/package-sources", postJson({ provider, ...draft })),
+    updatePackageSource: (sourceId, draft) =>
+      json<SavedSource>(`/admin/package-sources/${id(sourceId)}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(draft),
+      }),
+    deletePackageSource: (sourceId) => send(`/admin/package-sources/${id(sourceId)}`, { method: "DELETE" }),
     approvePlugin: (pluginId, version, capabilities) =>
       json<PluginAdminView>(
         `/admin/plugins/${id(pluginId)}/${id(version)}/approve`,

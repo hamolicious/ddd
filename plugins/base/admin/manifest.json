@@ -1,6 +1,6 @@
 {
   "id": "admin",
-  "version": "2.3.0",
+  "version": "3.0.0",
   "name": "Admin",
   "description": "Users, invites, audit log, and the plugin list with each plugin's dependencies.",
   "author": "ddd base distribution",
@@ -9,7 +9,7 @@
   "kernel": "^3.0",
   "dependencies": {
     "router": "^2.0",
-    "context-menu": "^2.0",
+    "context-menu": "^2.1",
     "shell-ui": "^3.0",
     "settings": "^2.0",
     "toolbar": "^1.0",

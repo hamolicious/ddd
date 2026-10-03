@@ -113,7 +113,7 @@ is the annotated copy-me file and covers every variable below.
 | `BIND_ADDR` | `0.0.0.0:8080` | The server does not speak TLS; terminate it at the ingress. |
 | `APP_ORIGIN` | *(empty)* | Comma-separated allowlist of exact `scheme://host[:port]` (no paths, no wildcards). Empty = same-origin only. Used for CORS **and** the mandatory WebSocket origin check: a cookie-authenticated `/api/sync` upgrade with no `Origin` is refused. |
 | `APP_ORIGIN_HOSTS` | *(empty)* | Extra hosts allowed on `PORT`, e.g. a LAN address for a phone: `192.168.0.69` allows `http://192.168.0.69:PORT`. |
-| `PUBLIC_URL` | *(empty)* | The one origin clients reach this server at. Not an allowlist. When set, narrows the CSP of the Android shell bundle's `connect-src` to this origin's `https`/`wss` pair. |
+| `PUBLIC_URL` | *(empty)* | The one origin clients reach this server at. Not an allowlist. When set, narrows the CSP of the Android shell bundle's `connect-src` to this origin's `https`/`wss` pair, plus any `https:` address (package sources are fetched from the admin's browser). |
 | `COOKIE_SECURE` | `true` | Set `false` only for plain-http local dev. |
 | `TRUST_PROXY_HEADERS` | `false` | Trust the rightmost `X-Forwarded-For` hop. Only enable when a reverse proxy is the only route to the server, or clients can forge their IP and origin. |
 | `LOG_FORMAT` | `json` | `json` (deployed) or `pretty` (local). |
@@ -153,7 +153,7 @@ is the annotated copy-me file and covers every variable below.
 | `PLUGIN_BREAKER_THRESHOLD` | `5` | |
 | `PLUGIN_HTTP_TIMEOUT_MS` | `10000` | Global ceilings for outbound HTTP. Hosts come from each plugin's approved capability. |
 | `PLUGIN_HTTP_MAX_RESPONSE_BYTES` | 10 MiB | |
-| `PLUGIN_HTTP_ALLOW_CIDRS` | *(empty)* | Widens the sandbox: CIDRs plugins, and package downloads from `/api/admin/plugins/remote`, may reach besides the public internet. Private, loopback, link-local, CGNAT and cloud-metadata addresses are refused otherwise. Set it to install from a GitLab on your own network. |
+| `PLUGIN_HTTP_ALLOW_CIDRS` | *(empty)* | Widens the sandbox: CIDRs plugins may reach besides the public internet. Private, loopback, link-local, CGNAT and cloud-metadata addresses are refused otherwise. |
 | `PLUGIN_ENABLE_CRON` | `true` | Turn off on a second server pointed at the same database, or for debugging. |
 
 ### Tuning (safe to omit)
@@ -269,9 +269,9 @@ ignored.
 | `GET` | `/audit` | Audit log, cursor-paginated (default 50, max 200). |
 | `GET` | `/export` | Streamed zip of every document as plain markdown. Disaster recovery without Mongo. |
 | `GET` | `/stats` | Workspace counters. |
-| `GET`/`POST` | `/plugins` | Every plugin record (state, requested vs approved capabilities, cron, breaker, last error), or upload a `.zip` (multipart), which lands **pending**. |
-| `POST` | `/plugins/remote` | `{url, headers?, via, update?}`: the server downloads the `.zip` and installs it **pending**, like an upload. `headers` carries credentials (sent once, never stored, dropped on a redirect to another host). `via` names the source, e.g. `gitlab`. With `update: "<id>"` the package must be that plugin, and it is enabled at once when it asks for nothing the running version did not ask for (the admin's narrowing is kept); otherwise it stays pending. Up to 120 s and the package size cap; private addresses need `PLUGIN_HTTP_ALLOW_CIDRS`. |
-| `POST` | `/plugins/remote/lookup` | `{url, headers?}`: a `GET` made by the server for update checks; returns `{status, body}` with the JSON body or `null`. Up to 1 MiB, same address rules as `/plugins/remote`. |
+| `GET`/`POST` | `/plugins` | Every plugin record (state, requested vs approved capabilities, cron, breaker, last error), or upload a `.zip` (multipart `package`), which lands **pending**. Optional text parts: `source` (a saved package source's id) and `url` (where the zip came from) record its origin; `update: "<id>"` requires the package to be that plugin, and enables it at once when it asks for nothing the running version did not ask for (keeping the admin's narrowing). |
+| `GET`/`POST` | `/package-sources` | Saved package sources for Admin → Plugins: `{provider, name, config, secrets}`. `secrets` are encrypted at rest with `CONFIG_KEY` and returned to admins, whose browsers use them. |
+| `PUT`/`DELETE` | `/package-sources/{id}` | Replace a source's `name`, `config` and `secrets` (an empty secret is removed), or delete it. |
 | `POST` | `/plugins/{id}/{version}/approve` | Body: the approved capability set. Can only narrow, except `http.hosts`, which an admin may widen. Activates the backend half without a restart. |
 | `POST` | `/plugins/{id}/{version}/reject` | Delete the pending package. |
 | `POST` | `/plugins/{id}/enable`, `/disable` | Admin off switch. `enable` also resets the circuit breaker. |

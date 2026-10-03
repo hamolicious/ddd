@@ -52,29 +52,50 @@ test("disabling and enabling a plugin reloads the page into the new plugin set",
   await expect(disable).toBeVisible({ timeout: 30_000 });
 });
 
-test("packages install from every registered source, and a blocked download says why", async ({ page }) => {
+test("package sources are set up in a modal, browsed with a filter, and checked for updates", async ({ page }) => {
   await signIn(page, ADMIN);
   await page.goto("/#/admin/plugins");
 
-  const sources = page.getByRole("tablist", { name: "Where the package comes from" });
-  await expect(sources.getByRole("tab", { name: "Upload", selected: true })).toBeVisible();
   await expect(page.getByText("Choose a package")).toBeVisible();
+  await page.getByRole("button", { name: "Browse packages" }).click();
+  const browser = page.getByRole("dialog", { name: "Browse packages" });
+  await expect(browser.getByText("Add a package source with the ⚙ button")).toBeVisible();
+  await browser.getByRole("button", { name: "Close" }).click();
 
-  await sources.getByRole("tab", { name: "GitLab" }).click();
-  const form = page.getByRole("form", { name: "Install from GitLab" });
-  await form.getByLabel("GitLab address").fill("http://127.0.0.1:9");
-  await form.getByLabel("Project ID or path").fill("tools/ddd-plugins");
-  await form.getByLabel("Package name").fill("extra-task-states");
-  await form.getByLabel("Version").fill("1.2.0");
-  await expect(form.getByLabel("File name")).toHaveAttribute("placeholder", "extra-task-states-1.2.0.zip");
+  await page.getByRole("button", { name: "Package sources" }).click();
+  const sources = page.getByRole("dialog", { name: "Package sources" });
+  await expect(sources.getByText("No sources yet.")).toBeVisible();
+  await sources.getByRole("button", { name: "Add a GitLab source" }).click();
 
-  await form.getByRole("button", { name: "Download and install" }).click();
-  await expect(form.getByRole("alert")).toHaveText(/enter the token/);
+  const setup = sources.getByRole("form", { name: "New GitLab source" });
+  await setup.getByLabel("Name").fill("Lab");
+  await setup.getByLabel("GitLab address").fill("https://gitlab.invalid");
+  await setup.getByLabel("Project ID or path").fill("tools/ddd-plugins");
+  await setup.getByRole("button", { name: "Save" }).click();
+  await expect(setup.getByRole("alert")).toHaveText(/enter the token/);
+  await setup.getByLabel("Token", { exact: true }).selectOption("none");
+  await setup.getByRole("button", { name: "Save" }).click();
 
-  await form.getByLabel("Token", { exact: true }).selectOption("none");
-  await form.getByRole("button", { name: "Download and install" }).click();
-  await expect(page.getByRole("alert").filter({ hasText: "PLUGIN_HTTP_ALLOW_CIDRS" })).toBeVisible();
+  const saved = sources.getByRole("list", { name: "Your sources" });
+  await expect(saved.getByText("Lab", { exact: true })).toBeVisible();
+  await sources.getByRole("button", { name: "Close" }).click();
 
-  await page.getByRole("button", { name: "Check updates" }).click();
-  await expect(page.getByText("No installed plugin came from a source that can check for updates.")).toBeVisible();
+  await page.getByRole("button", { name: "Browse packages" }).click();
+  const filter = browser.getByLabel("Source", { exact: true });
+  await expect(filter.locator("option")).toHaveText(["All sources", "Lab"]);
+  const failure = browser.getByRole("status").filter({ hasText: /^Lab: / });
+  await expect(failure).toBeVisible();
+  await expect(failure).not.toContainText("no installed plugin provides");
+  await browser.getByRole("button", { name: "Close" }).click();
+
+  await page.getByRole("button", { name: "Check for updates" }).click();
+  await expect(page.getByText("No installed plugin came from one of your sources.")).toBeVisible();
+
+  await page.getByRole("button", { name: "Package sources" }).click();
+  await sources.getByRole("button", { name: "Edit Lab" }).click();
+  const edit = sources.getByRole("form", { name: "Edit Lab" });
+  await expect(edit.getByLabel("Project ID or path")).toHaveValue("tools/ddd-plugins");
+  await edit.getByRole("button", { name: "Delete", exact: true }).click();
+  await edit.getByRole("button", { name: "Delete Lab" }).click();
+  await expect(sources.getByText("No sources yet.")).toBeVisible();
 });

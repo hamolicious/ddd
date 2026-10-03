@@ -1,4 +1,5 @@
 pub mod config;
+pub mod package_sources;
 pub mod queue;
 pub mod sources;
 pub mod watcher;
@@ -30,12 +31,7 @@ const PURGE_PAGE: u32 = 100;
 pub enum InstallSource {
     Upload { filename: String },
     Directory { path: String },
-    Remote {
-        url: String,
-        via: String,
-        #[serde(default)]
-        authenticated: bool,
-    },
+    Remote { url: String, via: String },
     Base,
 }
 
@@ -44,7 +40,7 @@ impl InstallSource {
         match self {
             InstallSource::Upload { filename } => format!("upload {filename}"),
             InstallSource::Directory { path } => format!("drop {path}"),
-            InstallSource::Remote { url, via, .. } => format!("{via} {url}"),
+            InstallSource::Remote { url, via } => format!("{via} {url}"),
             InstallSource::Base => "base distribution".to_string(),
         }
     }

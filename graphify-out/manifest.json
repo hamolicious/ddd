@@ -750,9 +750,9 @@
     "semantic_hash": ""
   },
   "backend/crates/server/src/db/mod.rs": {
-    "mtime": 1790969666.8497183,
-    "seen": 1790986672.726408,
-    "ast_hash": "11392159b8a5381718457559ee38e473",
+    "mtime": 1790987429.0268192,
+    "seen": 1790989172.923215,
+    "ast_hash": "79a6de2a31249f35a50cb3ba41bad4e6",
     "semantic_hash": ""
   },
   "backend/crates/server/src/docstore.rs": {
@@ -810,9 +810,9 @@
     "semantic_hash": ""
   },
   "backend/crates/server/src/pluginhost/host_fns.rs": {
-    "mtime": 1790984647.0854602,
-    "seen": 1790986672.7264373,
-    "ast_hash": "82da66b1d072be1ebc03babe6411c306",
+    "mtime": 1790987720.1002052,
+    "seen": 1790989172.9237645,
+    "ast_hash": "02d5a935bbb9121caf90b0eee00e07cc",
     "semantic_hash": ""
   },
   "backend/crates/server/src/pluginhost/limits.rs": {
@@ -840,9 +840,9 @@
     "semantic_hash": ""
   },
   "backend/crates/server/src/plugininstall/mod.rs": {
-    "mtime": 1790985401.7639222,
-    "seen": 1790986672.7264476,
-    "ast_hash": "fbeaa57ad893cad513393445a9fb08f6",
+    "mtime": 1790987720.1108994,
+    "seen": 1790989172.9239547,
+    "ast_hash": "fd3243c4fbbfac77c86b44d874363fe7",
     "semantic_hash": ""
   },
   "backend/crates/server/src/plugininstall/queue.rs": {
@@ -900,27 +900,27 @@
     "semantic_hash": ""
   },
   "backend/crates/server/src/routes/mod.rs": {
-    "mtime": 1790969666.8541625,
-    "seen": 1790986672.7264788,
-    "ast_hash": "a1f68b469bf05829964410adbec743f2",
+    "mtime": 1790987457.0687766,
+    "seen": 1790989172.9244814,
+    "ast_hash": "a698dd8106e39017acdebe029a38664a",
     "semantic_hash": ""
   },
   "backend/crates/server/src/routes/plugin_api.rs": {
-    "mtime": 1790985432.2214527,
-    "seen": 1790986672.7264812,
-    "ast_hash": "b673a467ac33b54dda2bde3ddc8d5ca2",
+    "mtime": 1790987720.122205,
+    "seen": 1790989172.9244835,
+    "ast_hash": "b68de04f5e4a354ed03e975d887ff046",
     "semantic_hash": ""
   },
   "backend/crates/server/src/routes/shell.rs": {
-    "mtime": 1790969666.8541625,
-    "seen": 1790986672.726483,
-    "ast_hash": "73dfa9e4a3a4cdf1e97b9cae6b5a8dc1",
+    "mtime": 1790987632.392206,
+    "seen": 1790989172.9244845,
+    "ast_hash": "55d5c6d128bd0257ba501c7dbe59241b",
     "semantic_hash": ""
   },
   "backend/crates/server/src/routes/statics.rs": {
-    "mtime": 1790969666.8541625,
-    "seen": 1790986672.7264857,
-    "ast_hash": "030399f93e7ffc61768ed8bca693bd8a",
+    "mtime": 1790987626.1711164,
+    "seen": 1790989172.924486,
+    "ast_hash": "74b89d1559ea16325840f7e5d9c285f9",
     "semantic_hash": ""
   },
   "backend/crates/server/src/routes/sync.rs": {
@@ -1110,15 +1110,15 @@
     "semantic_hash": ""
   },
   "plugins/base/admin/manifest.json": {
-    "mtime": 1790984963.1066961,
-    "seen": 1790986672.727106,
-    "ast_hash": "8b7585152ad974d4eb2e759424e4b92d",
+    "mtime": 1790988156.918172,
+    "seen": 1790989172.9285285,
+    "ast_hash": "821c8794de31479b691d345d45390821",
     "semantic_hash": ""
   },
   "plugins/base/admin/src/AdminView.tsx": {
-    "mtime": 1790969666.8611271,
-    "seen": 1790986672.727107,
-    "ast_hash": "f6bf022532bb9a9150370442ab2b51be",
+    "mtime": 1790987909.5395536,
+    "seen": 1790989172.92853,
+    "ast_hash": "9e446478a51cba87a9a5cc4a04b08eda",
     "semantic_hash": ""
   },
   "plugins/base/admin/src/Audit.tsx": {
@@ -1134,9 +1134,9 @@
     "semantic_hash": ""
   },
   "plugins/base/admin/src/Plugins.tsx": {
-    "mtime": 1790985583.4946954,
-    "seen": 1790986672.727112,
-    "ast_hash": "9de690b2351c382b4875dffe8f5778f3",
+    "mtime": 1790989076.4389307,
+    "seen": 1790989172.928668,
+    "ast_hash": "ec315f55f76dcf06f64c326126b5235d",
     "semantic_hash": ""
   },
   "plugins/base/admin/src/Storage.tsx": {
@@ -1158,21 +1158,21 @@
     "semantic_hash": ""
   },
   "plugins/base/admin/src/api.ts": {
-    "mtime": 1790985538.2417376,
-    "seen": 1790986672.7271168,
-    "ast_hash": "dca087acd9c400e045146f73e32fa35b",
+    "mtime": 1790987864.3481023,
+    "seen": 1790989172.9287796,
+    "ast_hash": "4583b92c3b881966175e78422f5935e0",
     "semantic_hash": ""
   },
   "plugins/base/admin/src/hooks.ts": {
-    "mtime": 1790969666.861874,
-    "seen": 1790986672.7271178,
-    "ast_hash": "c6b50e60c64e86d7df6641fcf6fe83bc",
+    "mtime": 1790987913.709954,
+    "seen": 1790989172.928781,
+    "ast_hash": "894cb61a47d198a525ee5bb0a240be5d",
     "semantic_hash": ""
   },
   "plugins/base/admin/src/index.tsx": {
-    "mtime": 1790985583.4948466,
-    "seen": 1790986672.7271204,
-    "ast_hash": "2e7e6616fecc065327646fc26f80824b",
+    "mtime": 1790988018.252106,
+    "seen": 1790989172.928784,
+    "ast_hash": "dbfa0acde273e87d9b6669e83c9cbe3c",
     "semantic_hash": ""
   },
   "plugins/base/commands/manifest.json": {
@@ -1392,9 +1392,9 @@
     "semantic_hash": ""
   },
   "plugins/base/markdown/src/pipeline.test.ts": {
-    "mtime": 1790984492.5948427,
-    "seen": 1790986672.728836,
-    "ast_hash": "76138e88afea6d10310d7194b76eebec",
+    "mtime": 1790987115.2037168,
+    "seen": 1790989172.937129,
+    "ast_hash": "7343ecb1be74114066aea254013a95ee",
     "semantic_hash": ""
   },
   "plugins/base/markdown/src/plugin.test.ts": {
@@ -1410,9 +1410,9 @@
     "semantic_hash": ""
   },
   "plugins/base/markdown/src/render.tsx": {
-    "mtime": 1790984453.9430735,
-    "seen": 1790986672.7288396,
-    "ast_hash": "7747aedef3f68639877a4897a2e4c18a",
+    "mtime": 1790987115.2035024,
+    "seen": 1790989172.937222,
+    "ast_hash": "787476ba1ebb8b0e618b211ebb510a27",
     "semantic_hash": ""
   },
   "plugins/base/markdown/src/runtime.ts": {
@@ -2646,9 +2646,9 @@
     "semantic_hash": ""
   },
   "backend/README.md": {
-    "mtime": 1790985684.1061776,
-    "seen": 1790986672.7309458,
-    "ast_hash": "aeed25076f3cc64bf6eec598e744656b",
+    "mtime": 1790988185.8461952,
+    "seen": 1790989172.9514532,
+    "ast_hash": "d7afbfe1efd86abffd475da60a44b26b",
     "semantic_hash": ""
   },
   "backend/crates/core/README.md": {
@@ -2658,15 +2658,15 @@
     "semantic_hash": ""
   },
   "docker-compose.yaml": {
-    "mtime": 1790969666.8582747,
-    "seen": 1790986672.7311156,
-    "ast_hash": "7dc17203205aa4b420e3a8189bf659b3",
+    "mtime": 1790987396.0066533,
+    "seen": 1790989172.9516466,
+    "ast_hash": "930255ef87842673cb68e992490338f5",
     "semantic_hash": ""
   },
   "plugins/base/README.md": {
-    "mtime": 1790985694.9173367,
-    "seen": 1790986672.7312338,
-    "ast_hash": "4157b146238673483d7b20630a0b26fe",
+    "mtime": 1790989091.3802972,
+    "seen": 1790989172.9517777,
+    "ast_hash": "daeafa3d896985b936b802906300a1b5",
     "semantic_hash": ""
   },
   "plugins/examples/README.md": {
@@ -2676,9 +2676,9 @@
     "semantic_hash": ""
   },
   "web/README.md": {
-    "mtime": 1790985046.6622248,
-    "seen": 1790986672.7312725,
-    "ast_hash": "4b8208f279494afb222f340031dcf9d2",
+    "mtime": 1790988182.6144154,
+    "seen": 1790989172.9518116,
+    "ast_hash": "d275cede6cd16a02475c709ec87872f1",
     "semantic_hash": ""
   },
   "web/app/index.html": {
@@ -2964,21 +2964,21 @@
     "semantic_hash": ""
   },
   "plugins/base/context-menu/manifest.json": {
-    "mtime": 1790886404.5849547,
-    "seen": 1790886835.6736612,
-    "ast_hash": "54f112e2a44e9801ac41628ef18a0ca3",
+    "mtime": 1790987836.0903635,
+    "seen": 1790989172.9305527,
+    "ast_hash": "cb99279166f3b0decfe62d7e89a78b99",
     "semantic_hash": ""
   },
   "plugins/base/context-menu/src/Menu.tsx": {
-    "mtime": 1790969666.8640893,
-    "seen": 1790986672.7276294,
-    "ast_hash": "a3f4f78bfe5386a58130e52e52a7eb63",
+    "mtime": 1790988839.6939695,
+    "seen": 1790989172.9305542,
+    "ast_hash": "8dcc8d00840d5ea4421b407f01913fa4",
     "semantic_hash": ""
   },
   "plugins/base/context-menu/src/index.tsx": {
-    "mtime": 1790969666.8646116,
-    "seen": 1790986672.7276337,
-    "ast_hash": "31121545bca71fc48694d6ad38bf8f13",
+    "mtime": 1790987836.0862103,
+    "seen": 1790989172.9306266,
+    "ast_hash": "fd0d0340365850a3435b742dad0d430d",
     "semantic_hash": ""
   },
   "plugins/base/folders/src/MovePicker.tsx": {
@@ -3174,9 +3174,9 @@
     "semantic_hash": ""
   },
   "plugins/base/admin/src/icons.tsx": {
-    "mtime": 1790969666.861874,
-    "seen": 1790986672.7271192,
-    "ast_hash": "1787afe43fa7e7e4f80ea2ca240281cd",
+    "mtime": 1790989076.438718,
+    "seen": 1790989172.9287827,
+    "ast_hash": "ff7aec6428e2c74e405a26e050e6a167",
     "semantic_hash": ""
   },
   "web/app/e2e/admin-users.spec.ts": {
@@ -3204,9 +3204,9 @@
     "semantic_hash": ""
   },
   "web/app/e2e/admin-plugins.spec.ts": {
-    "mtime": 1790985694.9175715,
-    "seen": 1790986672.7303915,
-    "ast_hash": "4dbb0ea4c3c6a9ad68c557435f36de19",
+    "mtime": 1790989091.379932,
+    "seen": 1790989172.944116,
+    "ast_hash": "f38d57c0e1c9bdab9cf0801e18d80cbd",
     "semantic_hash": ""
   },
   "plugins/base/admin/src/Info.tsx": {
@@ -3630,9 +3630,9 @@
     "semantic_hash": ""
   },
   "web/app/e2e/admin-only-plugins.spec.ts": {
-    "mtime": 1790985694.917471,
-    "seen": 1790986672.73039,
-    "ast_hash": "da061a894b1246b15dd4f5bf4e56b45b",
+    "mtime": 1790988197.331121,
+    "seen": 1790989172.9441147,
+    "ast_hash": "67d54aa614b76293f8189f2a34271c61",
     "semantic_hash": ""
   },
   "plugins/base/syntax-highlight/build.mjs": {
@@ -4926,9 +4926,9 @@
     "semantic_hash": ""
   },
   "plugins/base/context-menu/src/api.ts": {
-    "mtime": 1790969666.8646116,
-    "seen": 1790986672.7276325,
-    "ast_hash": "66a0bbcbebb560ba7eb0cf84df14151a",
+    "mtime": 1790988819.6021066,
+    "seen": 1790989172.9306254,
+    "ast_hash": "3c8bcb411721e60c5ee6422911ddb8ea",
     "semantic_hash": ""
   },
   "plugins/base/doc-events/manifest.json": {
@@ -5526,81 +5526,105 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1790969674.147386,
-    "seen": 1790986672.7308466,
-    "ast_hash": "dd1d9c50b2e409cb89cbd38d394d5162",
+    "mtime": 1790987708.3273869,
+    "seen": 1790989172.9510818,
+    "ast_hash": "aeffc4ac40da125c950706a83d8321bd",
     "semantic_hash": ""
   },
   "backend/crates/server/src/plugininstall/sources.rs": {
-    "mtime": 1790985419.550136,
-    "seen": 1790986672.726452,
-    "ast_hash": "89275e8a7c74b7a862e12178e05171ce",
+    "mtime": 1790987701.9893222,
+    "seen": 1790989172.9240134,
+    "ast_hash": "2c86d10181a36a51bde597913af5ccaa",
     "semantic_hash": ""
   },
   "backend/crates/server/tests/plugininstall_sources.rs": {
-    "mtime": 1790985460.7492347,
-    "seen": 1790986672.7265294,
-    "ast_hash": "f4c9c314115267f5f64a8d9977316ad9",
+    "mtime": 1790987758.808955,
+    "seen": 1790989172.9253118,
+    "ast_hash": "5850ce2516b2d20dd7afb798c8d27529",
     "semantic_hash": ""
   },
   "plugins/base/admin/src/sources.ts": {
-    "mtime": 1790985544.5528831,
-    "seen": 1790986672.72717,
-    "ast_hash": "6af79637b1cb86a495e6b62b81150c8b",
+    "mtime": 1790987884.9691398,
+    "seen": 1790989172.9289238,
+    "ast_hash": "54657bf2f7ca437a085e8c254c311d05",
     "semantic_hash": ""
   },
   "plugins/base/admin/src/updates.test.ts": {
-    "mtime": 1790985646.0350766,
-    "seen": 1790986672.7271712,
-    "ast_hash": "e4af28198e64541fe46d28668f6e1e78",
+    "mtime": 1790987885.0872178,
+    "seen": 1790989172.9289253,
+    "ast_hash": "69492532dc784c611a6851f4b7c03b46",
     "semantic_hash": ""
   },
   "plugins/base/admin/src/updates.ts": {
-    "mtime": 1790985555.5890088,
-    "seen": 1790986672.727172,
-    "ast_hash": "cdcf7a66d7e25fea565d613e20217426",
+    "mtime": 1790987885.0871172,
+    "seen": 1790989172.928927,
+    "ast_hash": "e9928c5586a93762c31a0546f2528368",
     "semantic_hash": ""
   },
   "plugins/base/gitlab-packages/manifest.json": {
-    "mtime": 1790984963.1051433,
-    "seen": 1790986672.7281961,
-    "ast_hash": "d5bbad4f92804f358a10bb694e751400",
-    "semantic_hash": ""
-  },
-  "plugins/base/gitlab-packages/src/GitLabSource.tsx": {
-    "mtime": 1790985791.6347916,
-    "seen": 1790986672.7281969,
-    "ast_hash": "4901f74c703fb173d76a7687df24ab3f",
+    "mtime": 1790988156.9197497,
+    "seen": 1790989172.9337618,
+    "ast_hash": "2583868288b70dc5bf14c7dfc4b9a43d",
     "semantic_hash": ""
   },
   "plugins/base/gitlab-packages/src/gitlab.test.ts": {
-    "mtime": 1790984999.4792202,
-    "seen": 1790986672.7281976,
-    "ast_hash": "5928f4459ede7f75992ff599eddfeebb",
+    "mtime": 1790988942.8704798,
+    "seen": 1790989172.933766,
+    "ast_hash": "f880d9b23de2f779e8b9b686997ed4b1",
     "semantic_hash": ""
   },
   "plugins/base/gitlab-packages/src/gitlab.ts": {
-    "mtime": 1790985646.0309715,
-    "seen": 1790986672.7281983,
-    "ast_hash": "a3f0ad6232266d6739dfe4b5c1a6e55f",
+    "mtime": 1790988942.8703485,
+    "seen": 1790989172.9337678,
+    "ast_hash": "020a86fa5bf79e855b739d6fc6f3a037",
     "semantic_hash": ""
   },
   "plugins/base/gitlab-packages/src/index.tsx": {
-    "mtime": 1790985611.1016698,
-    "seen": 1790986672.7281995,
-    "ast_hash": "01a5f974defa3c2b20f5dfe6b8cd2aa1",
+    "mtime": 1790988082.1668653,
+    "seen": 1790989172.933769,
+    "ast_hash": "9599f85e3a94c0f3721eef5c99f1ff81",
     "semantic_hash": ""
   },
-  "plugins/base/gitlab-packages/src/updates.test.ts": {
-    "mtime": 1790985646.034089,
-    "seen": 1790986672.7282002,
-    "ast_hash": "61f828ddcf2beaf6cbff034bad9ce982",
+  "backend/crates/server/src/plugininstall/package_sources.rs": {
+    "mtime": 1790987736.8296916,
+    "seen": 1790989172.9239564,
+    "ast_hash": "15643a62ba0c61c525bcb9c5fc9e1d27",
     "semantic_hash": ""
   },
-  "plugins/base/gitlab-packages/src/updates.ts": {
-    "mtime": 1790985611.1006699,
-    "seen": 1790986672.7282007,
-    "ast_hash": "b147777f3b3bd8d8cd20247e2555e2b9",
+  "backend/crates/server/src/routes/package_sources.rs": {
+    "mtime": 1790987457.0589042,
+    "seen": 1790989172.9244823,
+    "ast_hash": "3741ec4ef73d1bcc5c4ac1b3e0435c14",
+    "semantic_hash": ""
+  },
+  "backend/docker-entrypoint.sh": {
+    "mtime": 1790987478.8613312,
+    "seen": 1790989172.9255493,
+    "ast_hash": "3a60ec6d4026ccc7cb3f4243c1447f13",
+    "semantic_hash": ""
+  },
+  "plugins/base/admin/src/Sources.tsx": {
+    "mtime": 1790989076.438606,
+    "seen": 1790989172.928669,
+    "ast_hash": "507c54c05a6f9c6d129854375cf6a05c",
+    "semantic_hash": ""
+  },
+  "plugins/base/admin/src/versions.ts": {
+    "mtime": 1790987976.8915458,
+    "seen": 1790989172.9289281,
+    "ast_hash": "5061a02fc45e93845a7a25b3e24f1b28",
+    "semantic_hash": ""
+  },
+  "plugins/base/gitlab-packages/src/GitLabSetup.tsx": {
+    "mtime": 1790988082.1458654,
+    "seen": 1790989172.9337637,
+    "ast_hash": "31748f00ed8952d770a20373088896b1",
+    "semantic_hash": ""
+  },
+  "web/app/e2e/zz-tmp-kanban-repro.spec.ts": {
+    "mtime": 1790986951.1061678,
+    "seen": 1790989172.9449987,
+    "ast_hash": "0ed30ee833a90eccaf02d2328e659817",
     "semantic_hash": ""
   }
 }

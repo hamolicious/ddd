@@ -1,29 +1,24 @@
-use std::collections::BTreeMap;
 use std::future::Future;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
 
 use axum::extract::Multipart;
-use ddd_plugin_abi as abi;
-use serde::Deserialize;
 use tokio::io::AsyncWriteExt;
 
 use crate::config::Config;
 use crate::domain::new_id;
 use crate::error::{AppError, AppResult};
-use crate::pluginhost::host_fns;
 
 use super::{InstallSource, staging_dir, zipcheck};
 
 pub const MAX_PACKAGE_BYTES: u64 = zipcheck::MAX_ARCHIVE_BYTES;
 
 pub const PACKAGE_FIELD: &str = "package";
-
-pub const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(120);
+pub const SOURCE_FIELD: &str = "source";
+pub const URL_FIELD: &str = "url";
+pub const UPDATE_FIELD: &str = "update";
 
 pub const MAX_SOURCE_ID_CHARS: usize = 64;
-
-pub const MAX_LOOKUP_BYTES: usize = 1024 * 1024;
+pub const MAX_URL_CHARS: usize = 2048;
 
 const OTHER_FIELDS_BUDGET: u64 = 64 * 1024;
 
@@ -32,6 +27,7 @@ const STAGING_SUBDIR: &str = "uploads";
 pub struct StagedPackage {
     pub archive: PathBuf,
     pub source: InstallSource,
+    pub update: Option<String>,
 }
 
 impl StagedPackage {
@@ -52,17 +48,37 @@ impl PackageSource for UploadedPackage {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
-pub struct RemotePackage {
-    pub url: String,
-    #[serde(default)]
-    pub headers: BTreeMap<String, String>,
-    pub via: String,
+#[derive(Debug, Default)]
+struct UploadDetails {
+    source: Option<String>,
+    url: Option<String>,
+    update: Option<String>,
 }
 
-impl PackageSource for RemotePackage {
-    async fn stage(self, config: &Config) -> AppResult<StagedPackage> {
-        stage_remote(config, self).await
+impl UploadDetails {
+    fn accept(&mut self, name: &str, value: String) -> AppResult<()> {
+        let value = value.trim().to_string();
+        if value.is_empty() {
+            return Ok(());
+        }
+        match name {
+            SOURCE_FIELD => {
+                validate_source_id(&value)?;
+                self.source = Some(value);
+            }
+            URL_FIELD => self.url = Some(recorded_url(&value)?),
+            UPDATE_FIELD => self.update = Some(value),
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn origin(self, filename: String) -> (InstallSource, Option<String>) {
+        let source = match (self.source, self.url) {
+            (Some(via), Some(url)) => InstallSource::Remote { url, via },
+            _ => InstallSource::Upload { filename },
+        };
+        (source, self.update)
     }
 }
 
@@ -75,81 +91,77 @@ async fn staging_file(config: &Config, filename: &str) -> AppResult<PathBuf> {
 }
 
 async fn stage_upload(config: &Config, mut multipart: Multipart) -> AppResult<StagedPackage> {
+    let mut details = UploadDetails::default();
+    let mut staged: Option<(PathBuf, String)> = None;
     let mut other_bytes: u64 = 0;
-    loop {
-        let Some(mut field) = multipart
+
+    let outcome = async {
+        while let Some(mut field) = multipart
             .next_field()
             .await
             .map_err(|error| AppError::bad_request(format!("malformed multipart body: {error}")))?
-        else {
-            return Err(AppError::bad_request(format!(
-                "multipart body has no package part (send the zip as `{PACKAGE_FIELD}`)"
-            )));
-        };
-
-        let is_package = field.file_name().is_some() || field.name() == Some(PACKAGE_FIELD);
-        if !is_package {
-            while let Some(chunk) = field.chunk().await.map_err(|error| {
-                AppError::bad_request(format!("malformed multipart body: {error}"))
-            })? {
-                other_bytes += chunk.len() as u64;
-                if other_bytes > OTHER_FIELDS_BUDGET {
-                    return Err(AppError::bad_request(
-                        "multipart body has too much non-file content",
-                    ));
+        {
+            let is_package = field.file_name().is_some() || field.name() == Some(PACKAGE_FIELD);
+            if !is_package {
+                let name = field.name().unwrap_or_default().to_string();
+                let mut value = Vec::new();
+                while let Some(chunk) = field.chunk().await.map_err(|error| {
+                    AppError::bad_request(format!("malformed multipart body: {error}"))
+                })? {
+                    other_bytes += chunk.len() as u64;
+                    if other_bytes > OTHER_FIELDS_BUDGET {
+                        return Err(AppError::bad_request(
+                            "multipart body has too much non-file content",
+                        ));
+                    }
+                    value.extend_from_slice(&chunk);
                 }
+                details.accept(&name, String::from_utf8_lossy(&value).into_owned())?;
+                continue;
             }
-            continue;
-        }
+            if staged.is_some() {
+                return Err(AppError::bad_request("send one package per upload"));
+            }
 
-        let filename = sanitize_package_name(field.file_name());
-        let path = staging_file(config, &filename).await?;
-        let mut sink = PackageSink::create(&path).await?;
-        loop {
-            let chunk = match field.chunk().await {
-                Ok(chunk) => chunk,
-                Err(error) => {
-                    sink.abandon().await;
-                    return Err(AppError::bad_request(format!(
-                        "upload interrupted: {error}"
-                    )));
-                }
-            };
-            let Some(chunk) = chunk else { break };
-            sink.write(&chunk).await?;
+            let filename = sanitize_package_name(field.file_name());
+            let path = staging_file(config, &filename).await?;
+            let mut sink = PackageSink::create(&path).await?;
+            staged = Some((path, filename));
+            loop {
+                let chunk = match field.chunk().await {
+                    Ok(chunk) => chunk,
+                    Err(error) => {
+                        sink.abandon().await;
+                        return Err(AppError::bad_request(format!(
+                            "upload interrupted: {error}"
+                        )));
+                    }
+                };
+                let Some(chunk) = chunk else { break };
+                sink.write(&chunk).await?;
+            }
+            sink.finish("the uploaded package is empty").await?;
         }
-        sink.finish("the uploaded package is empty").await?;
-
-        return Ok(StagedPackage {
-            archive: path,
-            source: InstallSource::Upload { filename },
-        });
+        Ok(())
     }
-}
+    .await;
 
-async fn stage_remote(config: &Config, request: RemotePackage) -> AppResult<StagedPackage> {
-    validate_source_id(&request.via)?;
-    let url = parse_package_url(&request.url)?;
-    let headers = request_headers(&request.headers)?;
-    let authenticated = !headers.is_empty();
-
-    let filename = sanitize_package_name(
-        url.path_segments()
-            .and_then(|mut segments| segments.next_back())
-            .filter(|segment| !segment.is_empty()),
-    );
-    let path = staging_file(config, &filename).await?;
-    let sink = PackageSink::create(&path).await?;
-
-    download(config, url.clone(), headers, sink).await?;
-
+    if let Err(error) = outcome {
+        if let Some((path, _)) = &staged {
+            let _ = tokio::fs::remove_file(path).await;
+        }
+        return Err(error);
+    }
+    let Some((archive, filename)) = staged else {
+        return Err(AppError::bad_request(format!(
+            "multipart body has no package part (send the zip as `{PACKAGE_FIELD}`)"
+        )));
+    };
+    let (source, update) = details.origin(filename);
     Ok(StagedPackage {
-        archive: path,
-        source: InstallSource::Remote {
-            url: recorded_url(&url),
-            via: request.via,
-            authenticated,
-        },
+        archive,
+        source,
+        update,
     })
 }
 
@@ -163,238 +175,31 @@ pub fn validate_source_id(id: &str) -> AppResult<()> {
         Ok(())
     } else {
         Err(AppError::bad_request(format!(
-            "`via` names the source that asked for this package: 1 to {MAX_SOURCE_ID_CHARS} \
-             letters, digits, `-`, `_`, `.` or `:`"
+            "a source id is 1 to {MAX_SOURCE_ID_CHARS} letters, digits, `-`, `_`, `.` or `:`"
         )))
     }
 }
 
-pub fn parse_package_url(raw: &str) -> AppResult<reqwest::Url> {
-    let url = reqwest::Url::parse(raw.trim())
+pub fn recorded_url(raw: &str) -> AppResult<String> {
+    let mut url = reqwest::Url::parse(raw.trim())
         .map_err(|error| AppError::bad_request(format!("`{raw}` is not a URL: {error}")))?;
     if url.scheme() != "http" && url.scheme() != "https" {
         return Err(AppError::bad_request(format!(
-            "`{}` is not a scheme a package can be downloaded from; use http or https",
+            "`{}` is not a package address; use http or https",
             url.scheme()
         )));
     }
-    if url.host_str().is_none_or(str::is_empty) {
-        return Err(AppError::bad_request(format!("{url} has no host")));
-    }
-    if !url.username().is_empty() || url.password().is_some() {
-        return Err(AppError::bad_request(
-            "put credentials in a request header, not in the URL",
-        ));
-    }
-    Ok(url)
-}
-
-pub fn recorded_url(url: &reqwest::Url) -> String {
-    let mut recorded = url.clone();
-    recorded.set_query(None);
-    recorded.set_fragment(None);
-    recorded.to_string()
-}
-
-pub fn request_headers(
-    headers: &BTreeMap<String, String>,
-) -> AppResult<reqwest::header::HeaderMap> {
-    if headers.len() > abi::limits::MAX_HTTP_REQUEST_HEADERS {
+    let _ = url.set_username("");
+    let _ = url.set_password(None);
+    url.set_query(None);
+    url.set_fragment(None);
+    let recorded = url.to_string();
+    if recorded.chars().count() > MAX_URL_CHARS {
         return Err(AppError::bad_request(format!(
-            "{} request headers, the limit is {}",
-            headers.len(),
-            abi::limits::MAX_HTTP_REQUEST_HEADERS
+            "a package address may be at most {MAX_URL_CHARS} characters"
         )));
     }
-    let mut map = reqwest::header::HeaderMap::new();
-    for (name, value) in headers {
-        let lower = name.trim().to_ascii_lowercase();
-        if host_fns::REFUSED_REQUEST_HEADERS.contains(&lower.as_str()) {
-            return Err(AppError::bad_request(format!(
-                "`{name}` describes the connection, not the request, and the server sets it"
-            )));
-        }
-        if lower.len() + value.len() > abi::limits::MAX_HTTP_HEADER_BYTES {
-            return Err(AppError::bad_request(format!(
-                "header `{name}` is over the {} byte cap",
-                abi::limits::MAX_HTTP_HEADER_BYTES
-            )));
-        }
-        let header_name = reqwest::header::HeaderName::from_bytes(lower.as_bytes())
-            .map_err(|_| AppError::bad_request(format!("`{name}` is not a header name")))?;
-        let mut header_value = reqwest::header::HeaderValue::from_str(value).map_err(|_| {
-            AppError::bad_request(format!("the value of `{name}` is not a legal header value"))
-        })?;
-        header_value.set_sensitive(true);
-        map.insert(header_name, header_value);
-    }
-    Ok(map)
-}
-
-async fn fetch(
-    config: &Config,
-    mut url: reqwest::Url,
-    mut headers: reqwest::header::HeaderMap,
-) -> AppResult<reqwest::Response> {
-    let deadline = Instant::now() + DOWNLOAD_TIMEOUT;
-    let origin = host_fns::origin_of(&url);
-    let shown = recorded_url(&url);
-    let mut hops = 0u32;
-
-    loop {
-        let remaining = deadline.saturating_duration_since(Instant::now());
-        if remaining.is_zero() {
-            return Err(AppError::Unavailable(format!(
-                "fetching {shown} ran out of time"
-            )));
-        }
-
-        let host = url.host_str().unwrap_or_default().to_string();
-        let port = url.port_or_known_default().unwrap_or(443);
-        let addresses =
-            host_fns::resolve_pinned(&host, port, &config.plugin_http_allow_cidrs, remaining)
-                .await
-                .map_err(refused)?;
-
-        let client = reqwest::Client::builder()
-            .resolve_to_addrs(&host, &addresses)
-            .redirect(reqwest::redirect::Policy::none())
-            .timeout(remaining)
-            .user_agent(concat!("ddd/", env!("CARGO_PKG_VERSION")))
-            .build()
-            .map_err(|error| AppError::Internal(error.into()))?;
-
-        let response = client
-            .get(url.clone())
-            .headers(headers.clone())
-            .send()
-            .await
-            .map_err(|error| AppError::Unavailable(format!("fetching {shown} failed: {error}")))?;
-
-        let status = response.status();
-        if !host_fns::is_redirect(status) {
-            return Ok(response);
-        }
-        if hops >= abi::limits::MAX_HTTP_REDIRECTS {
-            return Err(AppError::bad_request(format!(
-                "more than {} redirects from {shown}",
-                abi::limits::MAX_HTTP_REDIRECTS
-            )));
-        }
-        let location = response
-            .headers()
-            .get(reqwest::header::LOCATION)
-            .and_then(|value| value.to_str().ok())
-            .ok_or_else(|| {
-                AppError::Unavailable(format!("{shown} answered {status} with no Location"))
-            })?;
-        url = url.join(location).map_err(|error| {
-            AppError::Unavailable(format!(
-                "{shown} redirected to something unparseable: {error}"
-            ))
-        })?;
-        if url.scheme() != "http" && url.scheme() != "https" {
-            return Err(AppError::bad_request(format!(
-                "{shown} redirected to a `{}` URL",
-                url.scheme()
-            )));
-        }
-        if host_fns::origin_of(&url) != origin {
-            headers.clear();
-        }
-        hops += 1;
-    }
-}
-
-async fn download(
-    config: &Config,
-    url: reqwest::Url,
-    headers: reqwest::header::HeaderMap,
-    mut sink: PackageSink,
-) -> AppResult<()> {
-    let shown = recorded_url(&url);
-    let outcome = async {
-        let mut response = fetch(config, url, headers).await?;
-        let status = response.status();
-        if !status.is_success() {
-            return Err(AppError::bad_request(refusal_message(&shown, status)));
-        }
-        if let Some(claimed) = response.content_length()
-            && claimed > MAX_PACKAGE_BYTES
-        {
-            return Err(AppError::PayloadTooLarge {
-                len: claimed,
-                limit: MAX_PACKAGE_BYTES,
-            });
-        }
-        while let Some(chunk) = response.chunk().await.map_err(|error| {
-            AppError::Unavailable(format!("downloading {shown} was interrupted: {error}"))
-        })? {
-            sink.write(&chunk).await?;
-        }
-        Ok(())
-    }
-    .await;
-
-    match outcome {
-        Ok(()) => sink.finish("the downloaded package is empty").await,
-        Err(error) => {
-            sink.abandon().await;
-            Err(error)
-        }
-    }
-}
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct RemoteLookup {
-    pub url: String,
-    #[serde(default)]
-    pub headers: BTreeMap<String, String>,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-pub struct LookupResult {
-    pub status: u16,
-    pub body: serde_json::Value,
-}
-
-pub async fn lookup(config: &Config, request: RemoteLookup) -> AppResult<LookupResult> {
-    let url = parse_package_url(&request.url)?;
-    let headers = request_headers(&request.headers)?;
-    let shown = recorded_url(&url);
-    let mut response = fetch(config, url, headers).await?;
-    let status = response.status().as_u16();
-
-    let mut bytes = Vec::new();
-    while let Some(chunk) = response.chunk().await.map_err(|error| {
-        AppError::Unavailable(format!("reading {shown} was interrupted: {error}"))
-    })? {
-        if bytes.len() + chunk.len() > MAX_LOOKUP_BYTES {
-            return Err(AppError::PayloadTooLarge {
-                len: (bytes.len() + chunk.len()) as u64,
-                limit: MAX_LOOKUP_BYTES as u64,
-            });
-        }
-        bytes.extend_from_slice(&chunk);
-    }
-    let body = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
-    Ok(LookupResult { status, body })
-}
-
-fn refused(error: abi::HostError) -> AppError {
-    match error.code {
-        abi::ErrorCode::Blocked => AppError::BadRequest(error.message),
-        _ => AppError::Unavailable(error.message),
-    }
-}
-
-pub fn refusal_message(shown: &str, status: reqwest::StatusCode) -> String {
-    let hint = match status.as_u16() {
-        401 | 403 => " — the token is missing, wrong, or cannot read this package",
-        404 => " — check the address, and that the token can see it",
-        _ => "",
-    };
-    format!("{shown} answered {status}{hint}")
+    Ok(recorded)
 }
 
 struct PackageSink {
@@ -493,7 +298,7 @@ mod tests {
 
     #[test]
     fn a_source_id_is_a_short_plain_name() {
-        for good in ["upload", "gitlab", "gitlab-packages:generic", "a.b_c"] {
+        for good in ["upload", "gitlab", "0193f1c2-aa", "a.b_c:d"] {
             assert!(validate_source_id(good).is_ok(), "{good}");
         }
         for bad in ["", "has space", "slash/y", &"x".repeat(MAX_SOURCE_ID_CHARS + 1)] {
@@ -502,46 +307,41 @@ mod tests {
     }
 
     #[test]
-    fn only_http_urls_without_credentials_are_accepted() {
-        assert!(parse_package_url("https://gitlab.example.com/api/v4/x.zip").is_ok());
-        assert!(parse_package_url("http://10.0.0.1:8080/x.zip").is_ok());
-        assert!(parse_package_url("file:///etc/passwd").is_err());
-        assert!(parse_package_url("ftp://example.com/x.zip").is_err());
-        assert!(parse_package_url("https://user:secret@example.com/x.zip").is_err());
-        assert!(parse_package_url("not a url").is_err());
+    fn the_recorded_url_keeps_no_credentials_query_or_fragment() {
+        assert_eq!(
+            recorded_url("https://user:secret@cdn.example.com/p.zip?X-Amz-Signature=abc#top")
+                .expect("a url"),
+            "https://cdn.example.com/p.zip"
+        );
+        assert!(recorded_url("file:///etc/passwd").is_err());
+        assert!(recorded_url("not a url").is_err());
     }
 
     #[test]
-    fn the_recorded_url_drops_the_query_and_fragment() {
-        let url = reqwest::Url::parse("https://cdn.example.com/p.zip?X-Amz-Signature=abc#top")
+    fn upload_details_name_the_source_only_with_both_source_and_url() {
+        let mut details = UploadDetails::default();
+        details.accept(SOURCE_FIELD, "work-gitlab".into()).expect("a source");
+        details
+            .accept(URL_FIELD, "https://g.example.com/a.zip?private_token=x".into())
             .expect("a url");
-        assert_eq!(recorded_url(&url), "https://cdn.example.com/p.zip");
-    }
+        details.accept(UPDATE_FIELD, "tasks".into()).expect("an update");
+        let (source, update) = details.origin("a.zip".into());
+        assert_eq!(
+            source,
+            InstallSource::Remote {
+                url: "https://g.example.com/a.zip".into(),
+                via: "work-gitlab".into(),
+            }
+        );
+        assert_eq!(update.as_deref(), Some("tasks"));
 
-    #[test]
-    fn connection_headers_are_refused_and_tokens_are_marked_sensitive() {
-        let mut headers = BTreeMap::new();
-        headers.insert("PRIVATE-TOKEN".to_string(), "glpat-abc".to_string());
-        let map = request_headers(&headers).expect("a token header is fine");
-        let value = map.get("private-token").expect("lowercased");
-        assert!(value.is_sensitive());
+        let mut details = UploadDetails::default();
+        details.accept(SOURCE_FIELD, "work-gitlab".into()).expect("a source");
+        let (source, update) = details.origin("a.zip".into());
+        assert_eq!(source, InstallSource::Upload { filename: "a.zip".into() });
+        assert!(update.is_none());
 
-        let mut headers = BTreeMap::new();
-        headers.insert("Host".to_string(), "elsewhere".to_string());
-        assert!(request_headers(&headers).is_err());
-
-        let mut headers = BTreeMap::new();
-        headers.insert("x-token".to_string(), "line\nbreak".to_string());
-        assert!(request_headers(&headers).is_err());
-    }
-
-    #[test]
-    fn a_refusal_says_what_to_check() {
-        let message = refusal_message("https://g/x.zip", reqwest::StatusCode::UNAUTHORIZED);
-        assert!(message.contains("401"));
-        assert!(message.contains("token"));
-        let message = refusal_message("https://g/x.zip", reqwest::StatusCode::NOT_FOUND);
-        assert!(message.contains("404"));
+        assert!(UploadDetails::default().accept(SOURCE_FIELD, "bad id".into()).is_err());
     }
 
     #[test]

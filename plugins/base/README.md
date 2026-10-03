@@ -28,7 +28,7 @@ dist/<id>/<version>/              build output, in the installed layout the serv
 |---|---|---|
 | `shell-ui` | layout, mobile breakpoint, a spot for the top bar and one for the bottom bar, the altbar opposite the sidebar, always-mounted overlays | `addView`, `addOverlay`, `addSidebarPanel`, `addAltbarPanel`, `setHeader`, `setFooter`, `toggleSidebar`, `toggleAltbar`, `layout`… |
 | `toolbar` | the top and bottom bars: header and status footer on desktop, a thin top bar and a bottom icon toolbar on a phone; items pick a bar and side (`bar`, `side`, `mobile`); Settings → Toolbar has a per-device layout | `addItem` |
-| `context-menu` | menus, sheets and modals: a popover beside a button, a bottom sheet on a phone; `modal` and `confirm`. Also the right-click / long-press / menu-key menu for anything marked with a target type (`data-ddd-target`, `_shared/target.ts`), built from every plugin's actions for that type. Plugins never draw a menu of their own | `addAction`, `open`, `modal`, `confirm`… |
+| `context-menu` | menus, sheets and modals: a popover beside a button, a bottom sheet on a phone; `modal` and `confirm`, and `dialog` for a modal that renders the caller's own content (`size: "large"` for a big one). Also the right-click / long-press / menu-key menu for anything marked with a target type (`data-ddd-target`, `_shared/target.ts`), built from every plugin's actions for that type. Plugins never draw a menu of their own | `addAction`, `open`, `modal`, `confirm`, `dialog`… |
 | `notices` | the notice bell in the top bar | — |
 | `sync-status` | the sync pill in the top bar | — |
 | `router` | URL ↔ view (hash-based) | `addRoute`, `navigate`, `Link`, `href`… |
@@ -61,8 +61,8 @@ dist/<id>/<version>/              build output, in the installed layout the serv
 | `doc-events` | "a note was just made": note-creating views call `notifyCreated`, the folder tree listens with `onCreated` | `notifyCreated`, `onCreated` |
 | `graph` | notes and their links as a live force-directed graph: the whole workspace at `#/graph`, the open note's neighbourhood in the altbar | — |
 | `settings` | the settings shell | `addSection`, `open` |
-| `admin` | users, invites, audit log, plugins (with dependencies, dependents and `provides` conflicts); installs packages from every registered source (see [Package sources](#package-sources)), with **Upload** built in | `open`, `isAdmin`, `addPackageSource`, `UPDATE_AVAILABLE` |
-| `gitlab-packages` | for admins, a **GitLab** package source: downloads a plugin `.zip` from a project's generic package registry, and checks the plugins installed without a token for updates | — |
+| `admin` | users, invites, audit log, plugins (with dependencies, dependents and `provides` conflicts); uploads packages, and browses, installs and updates them from saved package sources (see [Package sources](#package-sources)) | `open`, `isAdmin`, `addPackageProvider`, `UPDATE_AVAILABLE` |
+| `gitlab-packages` | the **GitLab** package source: a project's generic package registry, browsed, installed and updated from the admin's browser | — |
 | `db-health` | Settings → Database health, for admins: orphan files, duplicate files and notes with each copy's reference count | — |
 | `welcome` | fills a new, empty workspace with a short tour, one note per base feature | — |
 
@@ -234,82 +234,77 @@ static import of an optional dependency.
 
 ## Package sources
 
-Admin → Plugins installs a package from one of several sources, shown as tabs. `admin`
-registers **Upload**; `gitlab-packages` registers **GitLab**. Any plugin can add its own with
-`addPackageSource`:
+Admin → Plugins installs a `.zip` you upload, or one from a **package source**. The ⚙ button
+at the end of the upload row opens **Package sources**: your saved sources, and the kinds
+of source you can add. Adding one asks for a name and the provider's settings (for GitLab:
+address, project and token). Saved sources are stored on the server, tokens encrypted, and
+shared by every admin.
+
+**Browse packages**, beside the ⚙ button, opens a large window listing what every saved
+source offers, filterable by source and name, with **Install** (lands pending, like an
+upload) or **Update**. The refresh button beside **Installed** asks each source about the
+plugins it installed; plugins with a newer version move to the top of the list, turn blue,
+and get an update button. Everything runs in the admin's browser: the provider
+fetches the list and the `.zip`, and the browser uploads the zip with the source's id and the
+address it came from. The page may fetch any `https:` address for this (`connect-src`).
+
+An update is enabled at once when it asks for nothing the running version did not ask for,
+keeping any narrowing the admin made; otherwise it waits under Pending installs.
+
+A plugin adds a kind of source with `addPackageProvider` (`"admin": "^3.0"`):
 
 ```tsx
-import { addPackageSource, type PackageSourceProps } from "plugin:admin";  // "admin": "^2.3"
+import { UPDATE_AVAILABLE, addPackageProvider, type PluginUpdate, type SetupProps } from "plugin:admin";
 
-function Releases({ busy, installFromUrl }: PackageSourceProps) {
+function Setup({ value, onChange, disabled }: SetupProps) {
   return (
-    <button disabled={busy} onClick={() => void installFromUrl({
-      url: "https://example.com/my-plugin-1.0.0.zip",
-      headers: { authorization: "Bearer …" },
-      label: "my-plugin 1.0.0",
-    })}>Install</button>
+    <label className="admin-field">
+      Feed address
+      <input
+        disabled={disabled}
+        value={String(value.config["feed"] ?? "")}
+        onChange={(event) => onChange({ ...value, config: { feed: event.target.value } })}
+      />
+    </label>
   );
 }
 
-addPackageSource({ id: "releases", title: "Releases", order: 30, component: Releases });
-```
-
-| Prop | What it does |
-|---|---|
-| `installFile(file)` | Uploads a `File` (wrap a downloaded `Blob` with `new File([blob], "name.zip")`). |
-| `installFromUrl({ url, headers?, label? })` | The **server** downloads the URL (the page's CSP blocks the browser from reaching other sites). `headers` are sent once and never stored. |
-| `busy` | An install is running; disable your controls. |
-| `maxPackageBytes` | The server's size cap. |
-
-Both install functions resolve to the install outcome, or `undefined` when it failed. The
-panel shows progress, errors and the result, so a source only needs its own form. Every
-package lands pending, and the plugin list records which source installed it (your `id`).
-Inside the panel, the admin classes `admin-form`, `admin-inline-form`, `admin-field`,
-`admin-hint` and `admin-error` style forms like the rest of Admin.
-
-### Updates
-
-A source can also find newer versions of what it installed. Give it `checkUpdates`;
-**Check updates** in Admin → Plugins calls it with the plugins that source installed, and
-the source announces each newer version as an `admin:update-available` event (`UPDATE_AVAILABLE`):
-
-```tsx
-import { UPDATE_AVAILABLE, addPackageSource, type PluginUpdate } from "plugin:admin";
-
-addPackageSource({
+addPackageProvider({
   id: "releases",
-  title: "Releases",
-  component: Releases,
-  checkUpdates: async ({ plugins, lookup }) => {
+  title: "Release feed",
+  setup: Setup,
+  browse: async (source) => {
+    const feed = await (await fetch(String(source.config["feed"]))).json();
+    return feed.map((item) => ({ name: item.id, version: item.version, url: item.zip }));
+  },
+  download: async (source, url) => (await fetch(url)).blob(),
+  checkUpdates: async (source, plugins) => {
     for (const plugin of plugins) {
-      const { status, body } = await lookup(`https://example.com/${plugin.id}/latest.json`);
-      if (status !== 200) throw new Error(`${plugin.id}: ${status}`);
-      const latest = body as { version: string; url: string };
-      if (latest.version === plugin.version) continue;
-      kernel.events.emit<PluginUpdate>(UPDATE_AVAILABLE, {
-        plugin: plugin.id,
-        source: "releases",
-        current: plugin.version,
-        latest: latest.version,
-        install: { url: latest.url },
-      });
+      const latest = await findLatest(source, plugin);
+      if (latest) {
+        kernel.events.emit<PluginUpdate>(UPDATE_AVAILABLE, {
+          plugin: plugin.id,
+          source: source.id,
+          current: plugin.version,
+          latest: latest.version,
+          url: latest.url,
+        });
+      }
     }
   },
 });
 ```
 
-| In the context | What it is |
+| Field | What it does |
 |---|---|
-| `plugins` | `{ id, version, url, authenticated }` for each plugin this source installed. `authenticated` is true when the install sent headers; those are never stored, so such a plugin usually cannot be checked. |
-| `lookup(url, headers?)` | A `GET` made by the server, returning `{ status, body }` with the JSON body (or `null`). Up to 1 MiB. |
+| `setup` | The settings form in the source's setup screen. `value` is `{ config, secrets }`; keep tokens in `secrets`, which are encrypted at rest. The name field and Save, Back and Delete belong to Admin. |
+| `browse(source)` | The packages a saved source offers: `{ name, version, url, plugin?, description? }`. `plugin` is the plugin id it installs, when it differs from `name`. |
+| `download(source, url)` | The `.zip` at `url`, as a `Blob`. |
+| `checkUpdates(source, plugins)` | Optional. `plugins` are `{ id, version, url }` for what this source installed; announce each newer version as an `admin:update-available` event. Throw to show what could not be checked. |
+| `defaults()`, `validate(settings)` | Optional. Starting settings, and a message that blocks saving. |
 
-Each update gets an **Update** button. It downloads `install.url` and enables the new version
-right away when it asks for nothing the current version did not ask for, keeping any
-narrowing the admin made. Otherwise it waits under Pending installs. A rejected or failed
-check shows its error message next to the button.
-
-The GitLab source checks the plugins it installed without a token, through the project's
-package list.
+Inside the dialog the admin classes `admin-form`, `admin-inline-form`, `admin-field`,
+`admin-hint` and `admin-error` style a form like the rest of Admin.
 
 ## Machine-owned documents
 

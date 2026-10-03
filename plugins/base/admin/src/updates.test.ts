@@ -17,7 +17,7 @@ const update = (plugin: string, source = "gitlab"): ReportedUpdate => ({
   source,
   current: "1.0.0",
   latest: "1.1.0",
-  install: { url: `https://example.com/${plugin}.zip` },
+  url: `https://example.com/${plugin}.zip`,
   reportedBy: "gitlab-packages",
 });
 
@@ -55,12 +55,12 @@ describe("createUpdateStore", () => {
 describe("installedFrom", () => {
   it("lists only plugins a source installed", () => {
     const plugins = [
-      { id: "a", version: "1.0.0", source: { kind: "remote", url: "https://g/a.zip", via: "gitlab", authenticated: false } },
+      { id: "a", version: "1.0.0", source: { kind: "remote", url: "https://g/a.zip", via: "gitlab" } },
       { id: "b", version: "1.0.0", source: { kind: "upload", filename: "b.zip" } },
-      { id: "c", version: "2.0.0", source: { kind: "remote", url: "https://r/c.zip", via: "releases", authenticated: true } },
+      { id: "c", version: "2.0.0", source: { kind: "remote", url: "https://r/c.zip", via: "releases" } },
     ] as unknown as PluginAdminView[];
     expect(installedFrom(plugins, "gitlab")).toEqual([
-      { id: "a", version: "1.0.0", url: "https://g/a.zip", authenticated: false },
+      { id: "a", version: "1.0.0", url: "https://g/a.zip" },
     ]);
   });
 });

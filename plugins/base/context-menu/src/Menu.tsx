@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import type { KeyboardEvent as ReactKeyboardEvent, ReactElement, ReactNode } from "react";
 import { createPortal } from "react-dom";
 
-import type { MenuItem, MenuRequest, ModalRequest, ModalResult, SheetRequest } from "./api.js";
+import type { DialogRequest, MenuItem, MenuRequest, ModalRequest, ModalResult, SheetRequest } from "./api.js";
 import { useCompact } from "../../_shared/compact.js";
 
 import { ModalForm } from "./Modal.js";
@@ -36,11 +36,19 @@ function fallbackBox(): { readonly top: number; readonly bottom: number; readonl
 export type Open =
   | { readonly kind: "menu"; readonly request: MenuRequest }
   | { readonly kind: "sheet"; readonly request: SheetRequest }
+  | { readonly kind: "dialog"; readonly request: DialogRequest }
   | {
       readonly kind: "modal";
       readonly request: ModalRequest & { readonly onClose: () => void };
       readonly settle: (result: ModalResult) => void;
     };
+
+function panelSize(open: Open): string {
+  if (open.kind !== "dialog") return "ctxmenu:sm:max-h-[40rem] ctxmenu:sm:max-w-[30rem]";
+  return open.request.size === "large"
+    ? "ctxmenu:h-[85dvh] ctxmenu:sm:h-[min(48rem,calc(100dvh-4rem))] ctxmenu:sm:max-h-none ctxmenu:sm:max-w-[min(64rem,calc(100vw-4rem))]"
+    : "ctxmenu:sm:max-h-[40rem] ctxmenu:sm:max-w-[44rem]";
+}
 
 export function MenuHost({
   open,
@@ -68,7 +76,7 @@ function Panel({ open, close }: { readonly open: Open; readonly close: () => voi
   const compact = useCompact();
   const panel = useRef<HTMLDivElement | null>(null);
   const { anchor, title, description } = open.request;
-  const popover = open.kind !== "modal" && !compact;
+  const popover = open.kind !== "modal" && open.kind !== "dialog" && !compact;
   const anchored = anchor instanceof HTMLElement && anchor.isConnected;
   const [position, setPosition] = useState<{ top: number; left: number } | undefined>(undefined);
   const [fallback] = useState(fallbackBox);
@@ -134,7 +142,7 @@ function Panel({ open, close }: { readonly open: Open; readonly close: () => voi
       event.preventDefault();
       focusable[(to + focusable.length) % focusable.length]?.focus();
     };
-    const list = open.kind !== "modal";
+    const list = open.kind !== "modal" && open.kind !== "dialog";
     if (!list && event.key !== "Tab") return;
     if (event.key === "ArrowDown") move(index + 1);
     else if (event.key === "ArrowUp") move(index - 1);
@@ -151,6 +159,8 @@ function Panel({ open, close }: { readonly open: Open; readonly close: () => voi
       <MenuSections request={open.request} close={close} />
     ) : open.kind === "modal" ? (
       <ModalForm request={open.request} settle={open.settle} close={close} />
+    ) : open.kind === "dialog" ? (
+      <div className="ctxmenu:px-2">{open.request.render(close)}</div>
     ) : (
       open.request.render(close)
     );
@@ -158,7 +168,7 @@ function Panel({ open, close }: { readonly open: Open; readonly close: () => voi
   const width = open.kind === "sheet" ? "ctxmenu:max-w-[min(30rem,calc(100vw-1rem))]" : "ctxmenu:max-w-[min(22rem,calc(100vw-1rem))]";
   const panelClasses = popover
     ? `context-menu ctxmenu:fixed ctxmenu:flex ctxmenu:max-h-[min(70vh,32rem)] ctxmenu:min-w-[14rem] ctxmenu:flex-col ctxmenu:gap-1 ctxmenu:overflow-y-auto ctxmenu:rounded-lg ctxmenu:border ctxmenu:border-border ctxmenu:bg-bg-raised ctxmenu:p-1 ctxmenu:font-sans ctxmenu:text-text ctxmenu:shadow-2 ${width}`
-    : "context-menu ctxmenu:flex ctxmenu:max-h-[85dvh] ctxmenu:w-full ctxmenu:flex-col ctxmenu:gap-3 ctxmenu:overflow-y-auto ctxmenu:rounded-t-lg ctxmenu:border ctxmenu:border-b-0 ctxmenu:border-border ctxmenu:bg-bg-raised ctxmenu:p-4 ctxmenu:pb-[calc(var(--ddd-space)*1.5+env(safe-area-inset-bottom,0px))] ctxmenu:font-sans ctxmenu:text-text ctxmenu:shadow-2 ctxmenu:sm:max-h-[40rem] ctxmenu:sm:max-w-[30rem] ctxmenu:sm:rounded-lg ctxmenu:sm:border-b ctxmenu:sm:pb-4";
+    : `context-menu ctxmenu:flex ctxmenu:max-h-[85dvh] ctxmenu:w-full ctxmenu:flex-col ctxmenu:gap-3 ctxmenu:overflow-y-auto ctxmenu:rounded-t-lg ctxmenu:border ctxmenu:border-b-0 ctxmenu:border-border ctxmenu:bg-bg-raised ctxmenu:p-4 ctxmenu:pb-[calc(var(--ddd-space)*1.5+env(safe-area-inset-bottom,0px))] ctxmenu:font-sans ctxmenu:text-text ctxmenu:shadow-2 ctxmenu:sm:rounded-lg ctxmenu:sm:border-b ctxmenu:sm:pb-4 ${panelSize(open)}`;
 
   return createPortal(
     <div

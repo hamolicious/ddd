@@ -1150,7 +1150,7 @@ fn describe_issues(issues: &[ddd_core::shape::Issue]) -> String {
         .join("; ")
 }
 
-pub(crate) const REFUSED_REQUEST_HEADERS: &[&str] = &[
+const REFUSED_REQUEST_HEADERS: &[&str] = &[
     "host",
     "connection",
     "proxy-connection",
@@ -1404,7 +1404,7 @@ async fn fetch(request: FetchRequest<'_>) -> Result<abi::http::HttpResponseOutpu
     }
 }
 
-pub(crate) fn origin_of(url: &reqwest::Url) -> String {
+fn origin_of(url: &reqwest::Url) -> String {
     format!(
         "{}://{}:{}",
         url.scheme(),
@@ -1435,7 +1435,7 @@ fn strip_sensitive_headers(
     }
 }
 
-pub(crate) fn is_redirect(status: reqwest::StatusCode) -> bool {
+fn is_redirect(status: reqwest::StatusCode) -> bool {
     matches!(status.as_u16(), 301 | 302 | 303 | 307 | 308)
 }
 
@@ -1472,7 +1472,7 @@ fn check_destination(
     Ok((host.to_string(), port))
 }
 
-pub(crate) async fn resolve_pinned(
+async fn resolve_pinned(
     host: &str,
     port: u16,
     allow_cidrs: &[ipnet::IpNet],

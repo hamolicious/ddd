@@ -4,6 +4,7 @@ pub mod auth;
 pub mod changes;
 pub mod documents;
 pub mod health;
+pub mod package_sources;
 pub mod plugin_api;
 pub mod shell;
 pub mod statics;
@@ -37,6 +38,7 @@ pub fn router(state: AppState, metrics: PrometheusHandle) -> Router {
         .nest("/uploads", uploads::router())
         .nest("/admin", admin::router())
         .nest("/admin/plugins", plugin_api::admin_router())
+        .nest("/admin/package-sources", package_sources::router())
         .nest(
             "/plugins",
             statics::api_router().merge(plugin_api::router()),

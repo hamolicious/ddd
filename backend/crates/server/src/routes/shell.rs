@@ -450,7 +450,7 @@ fn nonce_of(synthesized: &BTreeMap<String, SynthesizedFile>) -> String {
 
 fn shell_csp(nonce: &str, public_url: Option<&str>) -> String {
     let connect = match public_url.and_then(|origin| {
-        crate::config::ws_origin(origin).map(|ws| format!("'self' {origin} {ws}"))
+        crate::config::ws_origin(origin).map(|ws| format!("'self' {origin} {ws} https:"))
     }) {
         Some(narrowed) => narrowed,
         None => "'self' https: http: wss: ws:".to_string(),
@@ -753,7 +753,7 @@ mod tests {
     }
 
     #[test]
-    fn a_configured_public_url_narrows_connect_src_to_that_origin() {
+    fn a_configured_public_url_narrows_connect_src_to_that_origin_and_https() {
         let csp = shell_csp("N", Some("https://notes.example.com"));
         let connect = csp
             .split("; ")
@@ -762,9 +762,9 @@ mod tests {
 
         assert_eq!(
             connect,
-            "connect-src 'self' https://notes.example.com wss://notes.example.com"
+            "connect-src 'self' https://notes.example.com wss://notes.example.com https:"
         );
-        for scheme in ["https:", "http:", "wss:", "ws:"] {
+        for scheme in ["http:", "wss:", "ws:"] {
             assert!(
                 !connect.split(' ').any(|source| source == scheme),
                 "the bare `{scheme}` scheme source survived the narrowing:\n{connect}"
@@ -772,7 +772,7 @@ mod tests {
         }
         assert!(
             shell_csp("N", Some("http://192.168.1.10:8080"))
-                .contains("connect-src 'self' http://192.168.1.10:8080 ws://192.168.1.10:8080;")
+                .contains("connect-src 'self' http://192.168.1.10:8080 ws://192.168.1.10:8080 https:;")
         );
         assert!(csp.contains("media-src 'self' blob:"));
         assert!(csp.contains("script-src 'self' 'nonce-N' 'wasm-unsafe-eval'"));

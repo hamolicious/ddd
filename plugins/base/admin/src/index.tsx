@@ -6,7 +6,7 @@ import type { ReactElement } from "react";
 import type { Kernel } from "@kernel";
 
 import { addCommand } from "plugin:commands";
-import { confirm, modal, openSheet } from "plugin:context-menu";
+import { confirm, dialog, modal, openSheet } from "plugin:context-menu";
 import { addItem } from "plugin:toolbar";
 import { addRoute, current, navigate, onChange } from "plugin:router";
 import { addSection, type SettingsSection } from "plugin:settings";
@@ -15,23 +15,17 @@ import { addView } from "plugin:shell-ui";
 import { AdminSectionBody, AdminView, SETTINGS_SECTIONS, isAdminSection, type AdminSectionId, type SettingsSectionId } from "./AdminView.js";
 import { createAdminClient } from "./api.js";
 import { DialogsContext, type Dialogs } from "./hooks.js";
-import { UploadSource } from "./Plugins.js";
-import { BoundaryContext, addPackageSource as addSource, type PackageSource } from "./sources.js";
+import { setIconsPlugin } from "./icons.js";
+import { BoundaryContext, addPackageProvider as addProvider, type PackageProvider } from "./sources.js";
 import { listenForUpdates } from "./updates.js";
 
 export type { AdminSectionId } from "./AdminView.js";
 export type { PluginInstallOutcome } from "./api.js";
-export type {
-  InstalledPackage,
-  PackageSource,
-  PackageSourceProps,
-  RemotePackageRequest,
-  UpdateCheckContext,
-} from "./sources.js";
+export type { InstalledPackage, AvailablePackage, PackageProvider, SetupProps } from "./sources.js";
+export type { SavedSource, SourceSettings } from "./api.js";
 export { UPDATE_AVAILABLE, type PluginUpdate } from "./updates.js";
-export type { RemoteLookupResult } from "./api.js";
 
-export const addPackageSource: (items: PackageSource | readonly PackageSource[]) => () => void = addSource;
+export const addPackageProvider: (items: PackageProvider | readonly PackageProvider[]) => () => void = addProvider;
 
 export interface AdminApi {
   open(section?: AdminSectionId): void;
@@ -79,8 +73,9 @@ type IconsModule = typeof import("plugin:icons");
 
 export default function activate(kernel: Kernel): void {
   kernelRef = kernel;
-  const dialogs: Dialogs = { confirm, modal, openSheet };
-  const client = createAdminClient(offlineCopies((path, init) => kernel.session.fetch(path, init), adminOfflineCopy));
+  const dialogs: Dialogs = { confirm, dialog, modal, openSheet };
+  const direct = (path: string, init?: RequestInit): Promise<Response> => kernel.session.fetch(path, init);
+  const client = createAdminClient(offlineCopies(direct, adminOfflineCopy), direct);
   const admin = kernel.session.isAdmin();
   const selfId = kernel.session.user.id;
 
@@ -92,12 +87,6 @@ export default function activate(kernel: Kernel): void {
 
   stopListening = listenForUpdates(kernel.events);
 
-  addSource({
-    id: "upload",
-    title: "Upload",
-    order: 0,
-    component: UploadSource,
-  });
 
   addRoute([
     { path: "/admin", view: VIEW },
@@ -151,7 +140,8 @@ export default function activate(kernel: Kernel): void {
     void kernel.plugins
       .optional<IconsModule>("icons")
       .catch(() => undefined)
-      .then((icons) =>
+      .then((icons) => {
+        setIconsPlugin(icons);
         addItem({
           id: "admin.link",
           label: "Admin",
@@ -159,8 +149,8 @@ export default function activate(kernel: Kernel): void {
           side: "end",
           order: 90,
           onSelect: () => open(),
-        }),
-      );
+        });
+      });
 
     addCommand([
       { id: "admin.open", title: "Open administration", category: "Admin", run: () => open() },

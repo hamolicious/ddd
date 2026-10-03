@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 
-import type { ConfirmRequest, ModalRequest, ModalResult, SheetRequest } from "plugin:context-menu";
+import type { ConfirmRequest, DialogRequest, ModalRequest, ModalResult, SheetRequest } from "plugin:context-menu";
 
 export interface AsyncState<T> {
   readonly data: T | undefined;
@@ -69,6 +69,7 @@ export interface Dialogs {
   confirm(request: ConfirmRequest): Promise<boolean>;
   modal(request: ModalRequest): Promise<ModalResult | undefined>;
   openSheet(request: SheetRequest): void;
+  dialog(request: DialogRequest): void;
 }
 
 export const DialogsContext = createContext<Dialogs>({
@@ -78,8 +79,10 @@ export const DialogsContext = createContext<Dialogs>({
     return Promise.resolve(window.confirm(request.title) ? { button, values: {} } : undefined);
   },
   openSheet: () => {},
+  dialog: () => {},
 });
 
 export const useConfirm = (): Dialogs["confirm"] => useContext(DialogsContext).confirm;
 export const useModal = (): Dialogs["modal"] => useContext(DialogsContext).modal;
 export const useSheet = (): Dialogs["openSheet"] => useContext(DialogsContext).openSheet;
+export const useDialog = (): Dialogs["dialog"] => useContext(DialogsContext).dialog;

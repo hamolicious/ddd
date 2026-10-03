@@ -8,6 +8,7 @@ import type {
   ConfirmRequest,
   ContextAction,
   ContextMenu,
+  DialogRequest,
   MenuRequest,
   ModalRequest,
   ModalResult,
@@ -22,6 +23,7 @@ export type {
   ConfirmRequest,
   ContextAction,
   ContextMenu,
+  DialogRequest,
   FieldCommon,
   MenuCommon,
   MenuItem,
@@ -93,6 +95,10 @@ export function open(menu: MenuRequest): void {
 
 export function openSheet(sheet: SheetRequest): void {
   set({ kind: "sheet", request: sheet });
+}
+
+export function dialog(request: DialogRequest): void {
+  set({ kind: "dialog", request });
 }
 
 export function close(): void {

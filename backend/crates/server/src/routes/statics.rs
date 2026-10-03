@@ -332,7 +332,7 @@ fn render_index(html: &str, imports: &BTreeMap<String, String>, nonce: &str) -> 
         "default-src 'self'; script-src 'self' 'nonce-{nonce}' 'wasm-unsafe-eval'; \
          style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; \
          media-src 'self' blob:; frame-src 'self' blob:; font-src 'self'; \
-         connect-src 'self' ws: wss:; worker-src 'self' blob:; object-src 'none'; \
+         connect-src 'self' https: ws: wss:; worker-src 'self' blob:; object-src 'none'; \
          base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
     );
 
@@ -625,7 +625,10 @@ mod tests {
             assert!(csp.contains(directive), "SPEC §8 lost `{directive}`");
         }
         assert!(csp.contains("worker-src 'self' blob:"), "the search worker");
-        assert!(csp.contains("connect-src 'self' ws: wss:"), "/api/sync");
+        assert!(
+            csp.contains("connect-src 'self' https: ws: wss:"),
+            "/api/sync, and package sources browsed from the admin page"
+        );
         assert!(
             csp.contains("media-src 'self' blob:"),
             "audio/video attachments"

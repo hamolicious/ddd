@@ -34,6 +34,7 @@ pub const META: &str = "meta";
 pub const PLUGINS: &str = "plugins";
 pub const PLUGIN_KV: &str = "plugin_kv";
 pub const PLUGIN_CONFIG: &str = "plugin_config";
+pub const PACKAGE_SOURCES: &str = "package_sources";
 
 pub const GRIDFS_BUCKET: &str = "attachments";
 pub const GRIDFS_FILES: &str = "attachments.files";
