@@ -335,10 +335,16 @@ export class DocumentsHost {
       const row = await Promise.resolve()
         .then(() => this.options.sync.store.get(id))
         .catch(() => undefined);
-      if (row?.local && row.seq === 0) this.options.sync.docs.holdUntilCreated([id]);
+      const queued = row?.local && row.seq === 0 && (await this.#createQueued(id));
+      if (queued) this.options.sync.docs.holdUntilCreated([id]);
     }
     const hydrated: HydratedDoc = await this.options.sync.open(id);
     return hydrated;
+  }
+
+  async #createQueued(id: DocumentId): Promise<boolean> {
+    const ops = await this.outbox.ops().catch(() => []);
+    return ops.some((op) => op.kind === "create" && op.id === id);
   }
 
   async create(input: CreateDocumentInput): Promise<DocumentId> {
@@ -346,7 +352,8 @@ export class DocumentsHost {
     const text = normalizeText(input.text);
     const docs = this.options.sync.docs;
     const state = await docs.seed(id, text);
-    if (this.#online() && (await this.outbox.isEmpty())) {
+    const mayCollide = input.id !== undefined;
+    if (mayCollide && this.#online() && (await this.outbox.isEmpty())) {
       try {
         await this.options.api("/documents", {
           method: "POST",

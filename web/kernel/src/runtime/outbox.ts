@@ -69,6 +69,7 @@ export class Outbox {
         continue;
       }
       await this.#update((ops) => ops.filter((candidate) => key(candidate) !== key(op)));
+      if (op.kind === "create") this.options.hydrator.created(op.id);
     }
   }
 
@@ -82,7 +83,6 @@ export class Outbox {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ id: op.id, state: toBase64(op.state) }),
         });
-        this.options.hydrator.created(op.id);
         return "done";
       }
       await api(op.kind === "delete" ? path : `${path}/restore`, { method: op.kind === "delete" ? "DELETE" : "POST" });
@@ -100,7 +100,6 @@ export class Outbox {
 
   async #createRefused(op: Extract<OutboxOp, { kind: "create" }>, status: number | undefined, error: unknown): Promise<Verdict> {
     if (status === 409 && (await this.#serverHolds(op))) {
-      this.options.hydrator.created(op.id);
       return "done";
     }
     if (status === 409 || status === 410) {
