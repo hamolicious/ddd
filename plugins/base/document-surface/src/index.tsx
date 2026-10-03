@@ -28,6 +28,8 @@ import { modeRegistry, type DocumentMode, type DocumentModeProps } from "./api.j
 import { lineFromPath } from "./line.js";
 import { SaveState } from "./SaveState.js";
 import { DefaultModeSection } from "./SettingsSection.js";
+import { useKeyboardOpen } from "./keyboard.js";
+import { usePaneScrolls } from "./pane.js";
 import {
   claimedModeId,
   DEFAULT_MODE_ID,
@@ -531,6 +533,10 @@ function SurfaceView({
     () => surface.snapshot,
   );
 
+  const typing = useKeyboardOpen();
+  const [pane, setPane] = useState<HTMLElement | null>(null);
+  const [spacer, setSpacer] = useState<HTMLElement | null>(null);
+  const paneScrolls = usePaneScrolls(pane, spacer);
   const [line, setLine] = useState<number | undefined>(() => lineFromPath(router.current()));
   useEffect(() => router.onChange((path) => setLine(lineFromPath(path))), [router]);
 
@@ -578,7 +584,7 @@ function SurfaceView({
         <SaveState kernel={surface.kernel} />
         <ModeTabs surface={surface} modes={visible} activeId={active?.id} />
       </header>
-      <ModeBubble surface={surface} modes={visible} activeId={active?.id} />
+      {typing ? null : <ModeBubble surface={surface} modes={visible} activeId={active?.id} />}
 
       {row.deleted ? <TrashedBanner surface={surface} row={row} /> : null}
       {snapshot.hydrationError && !snapshot.handle ? (
@@ -588,7 +594,8 @@ function SurfaceView({
       ) : null}
 
       <section
-        className={`docsurface-pane docsurface:flex docsurface:min-h-0 docsurface:min-w-0 docsurface:flex-1 docsurface:flex-col docsurface:overflow-auto ${visible.length > 1 ? "docsurface:compact:pb-[calc(5rem+var(--ddd-safe-bottom))]" : ""}`}
+        ref={setPane}
+        className="docsurface-pane docsurface:flex docsurface:min-h-0 docsurface:min-w-0 docsurface:flex-1 docsurface:flex-col docsurface:overflow-auto"
         role="tabpanel"
         id={`docsurface-pane-${active?.id ?? "none"}`}
         aria-labelledby={active ? `docsurface-tab-${active.id}` : undefined}
@@ -609,6 +616,13 @@ function SurfaceView({
             No plugin can display a document. Ask an administrator to install one.
           </p>
         )}
+        {visible.length > 1 && paneScrolls ? (
+          <div
+            ref={setSpacer}
+            aria-hidden="true"
+            className="docsurface-bubble-spacer docsurface:hidden docsurface:compact:block docsurface:h-[calc(5rem+var(--ddd-safe-bottom))] docsurface:shrink-0"
+          />
+        ) : null}
       </section>
     </div>
   );

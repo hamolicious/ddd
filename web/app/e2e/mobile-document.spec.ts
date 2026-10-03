@@ -1,6 +1,15 @@
 import { devices, expect, test, type Locator, type Page } from "@playwright/test";
 
-import { ADMIN, createDocument, openDocument, showSidebar, signIn } from "./helpers.js";
+import {
+  ADMIN,
+  createDocument,
+  currentDocumentId,
+  openDocument,
+  rawText,
+  runCommand,
+  showSidebar,
+  signIn,
+} from "./helpers.js";
 
 test.use({ ...devices["Pixel 7"] });
 
@@ -141,6 +150,86 @@ test.describe("the document experience at 390px", () => {
     await expect(content).toContainText("edited ");
 
     await noDocumentOverflow(page);
+  });
+
+  test("a new note opens at once on a slow connection, and reaches the server once it answers", async ({
+    page,
+    request,
+    baseURL,
+  }) => {
+    await signIn(page, ADMIN);
+    let release: () => void = () => undefined;
+    const answered = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route("**/api/documents", async (route) => {
+      if (route.request().method() !== "POST") return route.fallback();
+      await answered;
+      await route.fallback();
+    });
+    const notFound = page.getByText("Document not found");
+    let notFoundSeen = false;
+    void notFound.waitFor({ timeout: 10_000 }).then(
+      () => (notFoundSeen = true),
+      () => undefined,
+    );
+
+    await runCommand(page, "New document");
+    await expect(page.locator(".docsurface-title", { hasText: "Untitled" })).toBeVisible({ timeout: 2_000 });
+    const id = currentDocumentId(page);
+    expect(id, "the new note is open").toBeTruthy();
+    const content = page.locator(".cm-content");
+    await expect(content).toBeVisible({ timeout: 2_000 });
+    await content.click();
+    await page.keyboard.press("ControlOrMeta+End");
+    await page.keyboard.type("written before the server answered");
+
+    release();
+    await expect.poll(() => rawText(request, baseURL as string, id as string)).toContain(
+      "written before the server answered",
+    );
+    expect(notFoundSeen, "the note was shown as missing").toBe(false);
+  });
+
+  test("the editor runs down to the toolbar, and the mode button steps aside while the keyboard is up", async ({
+    page,
+    request,
+    baseURL,
+  }) => {
+    const long = [WIDE, ...Array.from({ length: 80 }, (_, index) => `Paragraph ${String(index)} of filler text.`)].join("\n");
+    const id = await createDocument(request, baseURL as string, long);
+    await signIn(page, ADMIN);
+    await openDocument(page, id);
+
+    const lastLineClearsButton = async (): Promise<number> =>
+      page.evaluate(() => {
+        const pane = document.querySelector(".docsurface-pane");
+        if (!pane) return 0;
+        pane.scrollTop = pane.scrollHeight;
+        const spacer = document.querySelector(".docsurface-bubble-spacer");
+        return spacer?.getBoundingClientRect().height ?? 0;
+      });
+    expect(await lastLineClearsButton(), "the reader leaves room for the button at the end").toBeGreaterThan(40);
+
+    await page.getByRole("button", { name: "Switch to Edit" }).click();
+    const read = page.getByRole("button", { name: "Switch to Read" });
+    await expect(read).toBeVisible();
+
+    const editorGap = (): Promise<number> =>
+      page.evaluate(() => {
+        const pane = document.querySelector(".docsurface-pane")?.getBoundingClientRect();
+        const scroller = document.querySelector(".cm-scroller")?.getBoundingClientRect();
+        return (pane?.bottom ?? 0) - (scroller?.bottom ?? 0);
+      });
+    await expect.poll(editorGap, { message: "the editor stops short of the bottom of its pane" }).toBeLessThanOrEqual(1);
+
+    await page.locator(".cm-content").click();
+    await page.setViewportSize({ width: PHONE.width, height: 420 });
+    await expect(read).toBeHidden();
+    await expect.poll(editorGap).toBeLessThanOrEqual(1);
+
+    await page.setViewportSize(PHONE);
+    await expect(read).toBeVisible();
   });
 
   test("a task's state menu opens on long-press and stays inside the screen", async ({

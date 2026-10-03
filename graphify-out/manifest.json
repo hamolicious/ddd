@@ -1272,9 +1272,9 @@
     "semantic_hash": ""
   },
   "plugins/base/document-surface/src/index.tsx": {
-    "mtime": 1790969666.8657327,
-    "seen": 1790986672.727859,
-    "ast_hash": "746a5396bc2caa8d7af1a0df2bd5bbb5",
+    "mtime": 1791038187.398718,
+    "seen": 1791038367.8685567,
+    "ast_hash": "2c98e6cd120c4538eeb983092ff1b81c",
     "semantic_hash": ""
   },
   "plugins/base/document-surface/src/line.test.ts": {
@@ -1710,9 +1710,9 @@
     "semantic_hash": ""
   },
   "web/app/e2e/mobile-document.spec.ts": {
-    "mtime": 1790969666.8814216,
-    "seen": 1790986672.7304094,
-    "ast_hash": "8c0a616f60df8f66a7fbd3c1247d5d6a",
+    "mtime": 1791038199.2708356,
+    "seen": 1791038367.8792706,
+    "ast_hash": "70ac9018b83851290b0d849b4aac31ea",
     "semantic_hash": ""
   },
   "web/app/e2e/mobile-routes.spec.ts": {
@@ -2274,9 +2274,9 @@
     "semantic_hash": ""
   },
   "web/kernel/src/runtime/documents.ts": {
-    "mtime": 1790969666.8877094,
-    "seen": 1790986672.7306395,
-    "ast_hash": "224118b4086d5e1d4208a3c340354562",
+    "mtime": 1791038061.7807465,
+    "seen": 1791038367.8830407,
+    "ast_hash": "bd84509368da29049ee18d6c185e4f66",
     "semantic_hash": ""
   },
   "web/kernel/src/runtime/events.ts": {
@@ -3354,9 +3354,9 @@
     "semantic_hash": ""
   },
   "web/kernel/src/runtime/outbox.ts": {
-    "mtime": 1790969666.888198,
-    "seen": 1790986672.7306533,
-    "ast_hash": "bde1cb2ab64abe36718dd1fbd7c498e1",
+    "mtime": 1791037009.8950987,
+    "seen": 1791038367.8833325,
+    "ast_hash": "7f098ed2b87671afaf1cc9e70dbcad07",
     "semantic_hash": ""
   },
   "web/kernel/src/runtime/ulid.ts": {
@@ -5625,6 +5625,30 @@
     "mtime": 1790989665.486814,
     "seen": 1790989741.504151,
     "ast_hash": "fdd10840272f4a8246a9ff0c8507a3b6",
+    "semantic_hash": ""
+  },
+  "plugins/base/document-surface/src/keyboard.test.ts": {
+    "mtime": 1791036892.4489636,
+    "seen": 1791038367.8685586,
+    "ast_hash": "fcce2da488284f7e979e77d6400e5b55",
+    "semantic_hash": ""
+  },
+  "plugins/base/document-surface/src/keyboard.ts": {
+    "mtime": 1791036881.3800359,
+    "seen": 1791038367.8685596,
+    "ast_hash": "d575d7122085a1270e62bfa321d4fdec",
+    "semantic_hash": ""
+  },
+  "plugins/base/document-surface/src/pane.test.ts": {
+    "mtime": 1791038187.4020114,
+    "seen": 1791038367.8687923,
+    "ast_hash": "5858cdc853b79fbf64a97e7b3bcf27e9",
+    "semantic_hash": ""
+  },
+  "plugins/base/document-surface/src/pane.ts": {
+    "mtime": 1791038187.3983886,
+    "seen": 1791038367.8687935,
+    "ast_hash": "aca5230f8b8497795846101305b4b58b",
     "semantic_hash": ""
   }
 }
