@@ -85,8 +85,9 @@ COPY --from=rust-builder /build/target/release/ddd /usr/local/bin/ddd
 COPY --from=web-builder /repo/web/app/dist /srv/web
 COPY --from=web-builder /repo/web/kernel-api/dist/kernel.d.ts /srv/kernel.d.ts
 
-COPY --from=web-builder --chown=10001:10001 /repo/plugins/base/dist /srv/plugins
-RUN install -d -o 10001 -g 10001 /srv/plugins.staging
+COPY --from=web-builder /repo/plugins/base/dist /srv/plugins
+COPY --chmod=755 backend/docker-entrypoint.sh /usr/local/bin/ddd-entrypoint
+RUN install -d -o 10001 -g 10001 /srv/data
 
 USER 10001:10001
 WORKDIR /home/ddd
@@ -95,7 +96,8 @@ ENV BIND_ADDR=0.0.0.0:8080 \
     LOG_FORMAT=json \
     RUST_LOG=info \
     WEB_DIST_DIR=/srv/web \
-    PLUGINS_DIR=/srv/plugins \
+    BASE_PLUGINS_DIR=/srv/plugins \
+    PLUGINS_DIR=/srv/data/plugins \
     KERNEL_DTS_PATH=/srv/kernel.d.ts
 EXPOSE 8080
 
@@ -104,5 +106,7 @@ HEALTHCHECK --interval=15s --timeout=5s --start-period=15s --retries=5 \
 
 STOPSIGNAL SIGTERM
 
-ENTRYPOINT ["/usr/local/bin/ddd"]
+VOLUME /srv/data
+
+ENTRYPOINT ["/usr/local/bin/ddd-entrypoint"]
 CMD ["serve"]

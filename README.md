@@ -31,6 +31,10 @@ ddd needs HTTPS: put it behind your own reverse proxy, then set `APP_ORIGIN` to 
 and `COOKIE_SECURE=true`. If the proxy is the only way in, also set `TRUST_PROXY_HEADERS=true`
 and `BIND_HOST=127.0.0.1`.
 
+Plugins you install are kept in the `plugins` volume (`/srv/data` in the container), so they
+survive rebuilding and recreating the container. The plugins that ship with ddd are refreshed
+from the image every time it starts.
+
 Every setting is listed in [`.env.example`](.env.example) and
 [`backend/README.md`](backend/README.md#environment-variables).
 

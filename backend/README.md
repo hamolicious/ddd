@@ -134,7 +134,8 @@ is the annotated copy-me file and covers every variable below.
 | Variable | Default | Notes |
 |---|---|---|
 | `WEB_DIST_DIR` | *(unset)* | The built PWA (`mise run web-build`). Unset = API only, which is what `mise run app` expects (Vite serves the app and proxies `/api`). |
-| `PLUGINS_DIR` | `plugins/base/dist` | Installed plugins, one directory per plugin per version. `mise run plugins` writes the base set to `plugins/base/dist`. |
+| `PLUGINS_DIR` | `plugins/base/dist` | Installed plugins, one directory per plugin per version. `mise run plugins` writes the base set to `plugins/base/dist`. In the Docker image it is `/srv/data/plugins`, on the `/srv/data` volume. |
+| `BASE_PLUGINS_DIR` | `/srv/plugins` | Docker image only: the plugins the image ships with, copied into `PLUGINS_DIR` on every start. Plugins installed later are left alone. |
 | `KERNEL_DTS_PATH` | `web/kernel-api/dist/kernel.d.ts` | The generated plugin contract, served at `/kernel.d.ts` (`mise run kernel-dts`). |
 | `DISABLE_PLUGINS` | `false` | Server-side safe mode: every client is told the plugin list is empty. Client equivalents: `?safe=1` (base plugins only), `?safe=bare`. |
 

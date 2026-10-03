@@ -43,7 +43,7 @@ services:
       APP_ORIGIN_HOSTS: ${APP_ORIGIN_HOSTS:-}
 
       WEB_DIST_DIR: ${WEB_DIST_DIR:-/srv/web}
-      PLUGINS_DIR: ${PLUGINS_DIR:-/srv/plugins}
+      PLUGINS_DIR: /srv/data/plugins
       KERNEL_DTS_PATH: ${KERNEL_DTS_PATH:-/srv/kernel.d.ts}
       DISABLE_PLUGINS: ${DISABLE_PLUGINS:-false}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
@@ -63,8 +63,11 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+    volumes:
+      - plugins:/srv/data
     stop_grace_period: 40s
 
 volumes:
   mongo-data:
   mongo-config:
+  plugins:
