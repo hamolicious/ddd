@@ -4668,9 +4668,9 @@
     "semantic_hash": ""
   },
   "plugins/base/kanban/src/Board.tsx": {
-    "mtime": 1790993843.934224,
-    "seen": 1790993972.6051638,
-    "ast_hash": "ea975511bb24098a9f3cb9ffef456511",
+    "mtime": 1791043627.8924134,
+    "seen": 1791043894.9645429,
+    "ast_hash": "abcc5c8a91697baa509ea705607a37e1",
     "semantic_hash": ""
   },
   "plugins/base/kanban/src/Settings.tsx": {
@@ -5649,6 +5649,12 @@
     "mtime": 1791038187.3983886,
     "seen": 1791038367.8687935,
     "ast_hash": "aca5230f8b8497795846101305b4b58b",
+    "semantic_hash": ""
+  },
+  "web/app/e2e/kanban.spec.ts": {
+    "mtime": 1791043741.867911,
+    "seen": 1791043894.971784,
+    "ast_hash": "c91e9b2768779f3b9648dce7a4d701f0",
     "semantic_hash": ""
   }
 }

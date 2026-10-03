@@ -450,6 +450,7 @@ export function createBoard({ kernel, looks, menu, addCard, fmValueSelect, docum
 
     const startDrag = (event: ReactPointerEvent<HTMLElement>, row: DocumentRow, from: Column, fromIndex: number): void => {
       if (event.button !== 0 || !movable(row, settings.group)) return;
+      if (onScrollbar(event)) return;
       const card = event.currentTarget;
       const box = card.getBoundingClientRect();
       const start = { x: event.clientX, y: event.clientY };
@@ -1043,12 +1044,18 @@ function CardBody({ row, items, look }: { readonly row: DocumentRow; readonly it
 }
 
 const CARD_TEXT_CLASSES =
-  "kanban:min-w-0 kanban:w-full kanban:text-xs kanban:leading-snug kanban:opacity-90 kanban:[&_.md-root]:text-inherit kanban:[&_.md-root_blockquote]:text-inherit kanban:[&_.md-root_blockquote]:opacity-75 kanban:[&_.md-root_li.md-task-done]:text-inherit kanban:[&_.md-root_li.md-task-done]:opacity-60 kanban:[&_.md-root]:text-xs kanban:[&_.md-root]:leading-snug kanban:[&_.md-root>*+*]:mt-1 kanban:[&_.md-root_h1]:my-1 kanban:[&_.md-root_h1]:text-sm kanban:[&_.md-root_h1]:font-semibold kanban:[&_.md-root_h2]:my-1 kanban:[&_.md-root_h2]:text-sm kanban:[&_.md-root_h2]:font-semibold kanban:[&_.md-root_h3]:my-1 kanban:[&_.md-root_h3]:text-xs kanban:[&_.md-root_h3]:font-semibold kanban:[&_.md-root_h4]:my-1 kanban:[&_.md-root_h4]:text-xs kanban:[&_.md-root_h4]:font-semibold kanban:[&_.md-root_h5]:my-1 kanban:[&_.md-root_h5]:text-xs kanban:[&_.md-root_h5]:font-semibold kanban:[&_.md-root_h6]:my-1 kanban:[&_.md-root_h6]:text-xs kanban:[&_.md-root_h6]:font-semibold kanban:[&_.md-root_p]:my-0 kanban:[&_.md-root_ul]:my-0 kanban:[&_.md-root_ol]:my-0 kanban:[&_.md-root_blockquote]:my-0 kanban:[&_.md-root_blockquote]:border-l-2 kanban:[&_.md-root_blockquote]:pl-2 kanban:[&_.md-root_pre]:my-0 kanban:[&_.md-root_pre]:max-w-full kanban:[&_.md-root_pre]:overflow-x-auto kanban:[&_.md-root_pre]:rounded kanban:[&_.md-root_pre]:border kanban:[&_.md-root_pre]:border-border kanban:[&_.md-root_pre]:bg-bg-subtle kanban:[&_.md-root_pre]:p-1.5 kanban:[&_.md-root_code]:break-words kanban:[&_.md-root_code]:rounded-[3px] kanban:[&_.md-root_code]:bg-bg-subtle kanban:[&_.md-root_code]:px-[0.3em] kanban:[&_.md-root_code]:font-mono kanban:[&_.md-root_code]:text-[0.9em] kanban:[&_.md-root_pre_code]:bg-transparent kanban:[&_.md-root_pre_code]:p-0 kanban:[&_.md-root_img]:h-auto kanban:[&_.md-root_img]:max-w-full kanban:[&_.md-root_img]:rounded kanban:[&_.md-root_table]:my-0 kanban:[&_.md-root_table]:block kanban:[&_.md-root_table]:max-w-full kanban:[&_.md-root_table]:overflow-x-auto kanban:[&_.md-root_table]:border-collapse kanban:[&_.md-root_th]:border kanban:[&_.md-root_th]:border-border kanban:[&_.md-root_th]:px-1 kanban:[&_.md-root_th]:text-left kanban:[&_.md-root_td]:border kanban:[&_.md-root_td]:border-border kanban:[&_.md-root_td]:px-1 kanban:[&_.md-root_td]:text-left kanban:[&_.md-root_hr]:my-1 kanban:[&_.md-task-box]:min-h-0!";
+  "kanban:min-w-0 kanban:w-full kanban:max-h-48 kanban:overflow-y-auto kanban:overscroll-y-contain kanban:text-xs kanban:leading-snug kanban:opacity-90 kanban:[&_.md-root]:text-inherit kanban:[&_.md-root_blockquote]:text-inherit kanban:[&_.md-root_blockquote]:opacity-75 kanban:[&_.md-root_li.md-task-done]:text-inherit kanban:[&_.md-root_li.md-task-done]:opacity-60 kanban:[&_.md-root]:text-xs kanban:[&_.md-root]:leading-snug kanban:[&_.md-root>*+*]:mt-1 kanban:[&_.md-root_h1]:my-1 kanban:[&_.md-root_h1]:text-sm kanban:[&_.md-root_h1]:font-semibold kanban:[&_.md-root_h2]:my-1 kanban:[&_.md-root_h2]:text-sm kanban:[&_.md-root_h2]:font-semibold kanban:[&_.md-root_h3]:my-1 kanban:[&_.md-root_h3]:text-xs kanban:[&_.md-root_h3]:font-semibold kanban:[&_.md-root_h4]:my-1 kanban:[&_.md-root_h4]:text-xs kanban:[&_.md-root_h4]:font-semibold kanban:[&_.md-root_h5]:my-1 kanban:[&_.md-root_h5]:text-xs kanban:[&_.md-root_h5]:font-semibold kanban:[&_.md-root_h6]:my-1 kanban:[&_.md-root_h6]:text-xs kanban:[&_.md-root_h6]:font-semibold kanban:[&_.md-root_p]:my-0 kanban:[&_.md-root_ul]:my-0 kanban:[&_.md-root_ol]:my-0 kanban:[&_.md-root_blockquote]:my-0 kanban:[&_.md-root_blockquote]:border-l-2 kanban:[&_.md-root_blockquote]:pl-2 kanban:[&_.md-root_pre]:my-0 kanban:[&_.md-root_pre]:max-w-full kanban:[&_.md-root_pre]:overflow-x-auto kanban:[&_.md-root_pre]:rounded kanban:[&_.md-root_pre]:border kanban:[&_.md-root_pre]:border-border kanban:[&_.md-root_pre]:bg-bg-subtle kanban:[&_.md-root_pre]:p-1.5 kanban:[&_.md-root_code]:break-words kanban:[&_.md-root_code]:rounded-[3px] kanban:[&_.md-root_code]:bg-bg-subtle kanban:[&_.md-root_code]:px-[0.3em] kanban:[&_.md-root_code]:font-mono kanban:[&_.md-root_code]:text-[0.9em] kanban:[&_.md-root_pre_code]:bg-transparent kanban:[&_.md-root_pre_code]:p-0 kanban:[&_.md-root_img]:h-auto kanban:[&_.md-root_img]:max-w-full kanban:[&_.md-root_img]:rounded kanban:[&_.md-root_table]:my-0 kanban:[&_.md-root_table]:block kanban:[&_.md-root_table]:max-w-full kanban:[&_.md-root_table]:overflow-x-auto kanban:[&_.md-root_table]:border-collapse kanban:[&_.md-root_th]:border kanban:[&_.md-root_th]:border-border kanban:[&_.md-root_th]:px-1 kanban:[&_.md-root_th]:text-left kanban:[&_.md-root_td]:border kanban:[&_.md-root_td]:border-border kanban:[&_.md-root_td]:px-1 kanban:[&_.md-root_td]:text-left kanban:[&_.md-root_hr]:my-1 kanban:[&_.md-task-box]:min-h-0!";
 
 const CARD_LINK_CLASSES =
   "kanban:inline-flex kanban:max-w-full kanban:align-baseline kanban:[&>a]:max-w-full kanban:[&>a[style*=background]]:shadow-[0_1px_2px_rgba(0,0,0,0.35)]";
 
 const CONTROL = "a, button, input, select, textarea, label, [role='button'], [role='checkbox']";
+
+function onScrollbar(event: ReactPointerEvent<HTMLElement>): boolean {
+  const text = (event.target as Element).closest<HTMLElement>("[data-card-text]");
+  if (!text || text.scrollHeight <= text.clientHeight) return false;
+  return event.clientX > text.getBoundingClientRect().left + text.clientWidth;
+}
 
 function keepControl(event: SyntheticEvent<HTMLElement>): void {
   if ((event.target as Element).closest(CONTROL)) event.stopPropagation();
@@ -1059,7 +1066,7 @@ function CardText({ id, body }: { readonly id: string; readonly body: string }):
   useEffect(() => onMarkdownChange(() => setRevision((at) => at + 1)), []);
   const rendered = useMemo(() => renderMarkdown(body, { documentId: id }), [body, id, revision]);
   return (
-    <span className={CARD_TEXT_CLASSES} onClick={keepControl} onPointerDown={keepControl}>
+    <span data-card-text className={CARD_TEXT_CLASSES} onClick={keepControl} onPointerDown={keepControl}>
       {rendered}
     </span>
   );
