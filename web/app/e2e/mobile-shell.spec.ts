@@ -233,6 +233,42 @@ test.describe("phone (390 × 844)", () => {
   });
 });
 
+async function swipeUp(page: Page, x: number, from: number, to: number): Promise<void> {
+  const touch = await page.context().newCDPSession(page);
+  await touch.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y: from }] });
+  for (let step = 1; step <= 10; step++) {
+    await touch.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x, y: from + ((to - from) * step) / 10 }],
+    });
+  }
+  await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await touch.detach();
+}
+
+test.describe("phone with touch (390 × 844)", () => {
+  test.use({ viewport: PHONE, hasTouch: true, isMobile: true });
+
+  test("a swipe in the middle of an open settings section scrolls it", async ({ page }) => {
+    await signIn(page, ADMIN);
+
+    await page.goto("/#/settings");
+    await page.getByRole("navigation", { name: /settings sections/i }).getByRole("link", { name: "Keybindings" }).tap();
+    await expect(page).toHaveURL(/#\/settings\/commands\.keybindings$/);
+    await expect(page.locator(".settings-pane")).toBeVisible();
+
+    const main = page.locator("#shell-main");
+    const room = await main.evaluate((element) => element.scrollHeight - element.clientHeight);
+    expect(room, "the keybindings section is taller than the screen").toBeGreaterThan(300);
+    await main.evaluate((element) => {
+      element.scrollTop = 0;
+    });
+
+    await swipeUp(page, PHONE.width / 2, 600, 300);
+    await expect.poll(() => main.evaluate((element) => element.scrollTop)).toBeGreaterThan(100);
+  });
+});
+
 test.describe("phone in landscape (844 × 390)", () => {
   test.use({ viewport: LANDSCAPE, hasTouch: true, isMobile: true });
 

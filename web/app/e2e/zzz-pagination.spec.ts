@@ -41,9 +41,10 @@ test("the list and Trash show a page at a time, and load the rest as they scroll
   const trashedNow = async (): Promise<number> =>
     Number(/of (\d+)/.exec((await trashStatus.textContent()) ?? "")?.[1]);
   await expect.poll(trashedNow).toBeGreaterThanOrEqual(PROBES);
-  const trashed = await trashedNow();
   const rows = page.locator(".doclist-item");
   await expect(rows).toHaveCount(TRASH_PAGE);
-  await rows.last().scrollIntoViewIfNeeded();
-  await expect(rows).toHaveCount(Math.min(2 * TRASH_PAGE, trashed));
+  await expect(async () => {
+    await rows.last().scrollIntoViewIfNeeded({ timeout: 2_000 });
+    await expect(rows).toHaveCount(Math.min(2 * TRASH_PAGE, await trashedNow()), { timeout: 2_000 });
+  }).toPass({ timeout: 20_000 });
 });

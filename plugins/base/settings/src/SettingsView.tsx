@@ -82,7 +82,7 @@ export function SettingsView({ kernel, router, sections: host, params }: Setting
             ) : null}
           </nav>
 
-          <div className={`settings-pane settings:min-h-0 settings:min-w-0 settings:overflow-y-auto settings:overscroll-contain settings:compact:overflow-y-visible settings:compact:overflow-x-auto ${chosen ? "" : " settings:compact:hidden"}`}>
+          <div className={`settings-pane settings:min-h-0 settings:min-w-0 settings:overflow-y-auto settings:overscroll-contain settings:compact:overflow-y-visible settings:compact:overflow-x-auto settings:compact:overscroll-auto ${chosen ? "" : " settings:compact:hidden"}`}>
             <a
               className="settings:mb-1 settings:hidden settings:min-h-[var(--ddd-tap-target)] settings:items-center settings:text-link settings:before:mr-1 settings:before:content-['‹'] settings:compact:inline-flex"
               href={router.url("/settings")}
