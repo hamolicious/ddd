@@ -45,7 +45,7 @@ dist/<id>/<version>/              build output, in the installed layout the serv
 | `local-folder` | mirrors every note as a Markdown file in a folder on this device (`kernel.capabilities.folder`), both ways, while the app runs; asks once in the desktop shell, offered in Settings in Chromium browsers | — |
 | `auto-fm` | adds the frontmatter properties listed in Settings to notes you create (or also edit) on this device, only where the key is missing; can be limited by conditions; values may use `{{date}}`, `{{time}}`, `{{now}}`; per user, client-side, works offline | — |
 | `icons` | the Tabler icon set, packed at build time from a pinned npm tarball and fetched one shard at a time | `Icon`, `Picker`, `search`, `has` |
-| `markdown` | the unified/remark → React pipeline | `addDirective`, `addFence`, `addCodeBlockRenderer`, `addRemarkPlugin`, `addComponent`, `addTaskState`, `addAttachmentRenderer`, `render`… |
+| `markdown` | the unified/remark → React pipeline; task states come from `addTaskState`, the first per marker in `order` winning, so a plugin restyles `[ ]` (order 0) or `[x]` (order 10) by adding the marker with a lower order | `addDirective`, `addFence`, `addCodeBlockRenderer`, `addRemarkPlugin`, `addComponent`, `addTaskState`, `addAttachmentRenderer`, `render`… |
 | `attachments` | paste-to-upload in the editor; shows embedded files through a viewer per file type; resumable `upload` | `addViewer`, `upload` |
 | `native-preview` | viewers for what a browser shows natively: images, PDF, audio, video, text | — |
 | `slash-commands` | the `/` menu in any editor | `addSlashCommand` |

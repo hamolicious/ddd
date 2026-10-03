@@ -145,7 +145,6 @@ export const remarkRegistry = createRegistry<MarkdownRemark>({
 });
 
 export const taskStateRegistry = createRegistry<MarkdownTaskState>({
-  key: (item) => item.marker,
   order: orderOr100,
   shape: s.object({
     marker: s.string(),

@@ -154,6 +154,15 @@ describe("the registries drive the parser", () => {
     expect(taskStates().map((state) => state.marker)).toEqual([" ", "/", "x", "-"]);
   });
 
+  it("lets a plugin restyle a built-in state by adding it earlier, and gives it back on removal", async () => {
+    await activate(fakeKernel().kernel);
+    const remove = addTaskState({ marker: "x", label: "Finished", icon: "✓", order: -5, done: true });
+    expect(taskStates().find((state) => state.marker === "x")?.label).toBe("Finished");
+    expect(taskStates().filter((state) => state.marker === "x")).toHaveLength(1);
+    remove();
+    expect(taskStates().find((state) => state.marker === "x")?.label).toBe("Done");
+  });
+
   it("takes the first code-block renderer in `order`", async () => {
     await activate(fakeKernel().kernel);
     const First = (): ReactNode => null;
