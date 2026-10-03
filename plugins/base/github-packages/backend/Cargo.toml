@@ -1,0 +1,15 @@
+[package]
+name = "github-packages"
+description = "Fetches a plugin package from a GitHub release asset for the admin's browser, which GitHub's asset storage refuses to serve cross-origin."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+ddd-plugin-sdk = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

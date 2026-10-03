@@ -26,6 +26,7 @@ pub const BASE_PLUGIN_IDS: &[&str] = &[
     "fm-autocomplete",
     "folder-style",
     "folders",
+    "github-packages",
     "gitlab-packages",
     "graph",
     "icons",
@@ -1327,7 +1328,7 @@ mod tests {
 
     #[test]
     fn the_base_distribution_is_thirty_nine_sorted_plugins() {
-        assert_eq!(BASE_PLUGIN_IDS.len(), 39);
+        assert_eq!(BASE_PLUGIN_IDS.len(), 40);
         assert!(BASE_PLUGIN_IDS.windows(2).all(|pair| pair[0] < pair[1]));
     }
 }

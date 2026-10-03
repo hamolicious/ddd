@@ -63,11 +63,13 @@ dist/<id>/<version>/              build output, in the installed layout the serv
 | `settings` | the settings shell | `addSection`, `open` |
 | `admin` | users, invites, audit log, plugins (with dependencies, dependents and `provides` conflicts); uploads packages, and browses, installs and updates them from saved package sources (see [Package sources](#package-sources)) | `open`, `isAdmin`, `addPackageProvider`, `UPDATE_AVAILABLE` |
 | `gitlab-packages` | the **GitLab** package source: a project's generic package registry, browsed, installed and updated from the admin's browser | — |
+| `github-packages` | the **GitHub** package source: the `.zip` assets of a repository's releases, browsed, installed and updated from the admin's browser | — |
 | `db-health` | Settings → Database health, for admins: orphan files, duplicate files and notes with each copy's reference count | — |
 | `welcome` | fills a new, empty workspace with a short tour, one note per base feature | — |
 
-Every base plugin is frontend-only. Plugins can also have a `backend.wasm` half; see
-`plugins/examples/hello-backend` and `mise run wasm-plugins`.
+Every base plugin but `github-packages` is frontend-only. Plugins can also have a
+`backend.wasm` half; see `plugins/base/github-packages/backend`, `plugins/examples/hello-backend`
+and `mise run wasm-plugins`.
 
 ### Saved searches and their views
 
@@ -115,6 +117,7 @@ flowchart TD
         admin --> toolbar
         admin -.-> icons
         gitlab-packages --> admin
+        github-packages --> admin
     end
 
     subgraph documents ["document experience"]
@@ -170,7 +173,7 @@ requires it. Activation order (each row depends only on rows above it):
 | 3 | `toolbar` |
 | 4 | `commands`, `notices`, `sync-status` |
 | 5 | `document-surface`, `search`, `themes`, `graph`, `admin`, `db-health` |
-| 6 | `editor`, `table`, `timeline`, `auto-fm`, `gitlab-packages` |
+| 6 | `editor`, `table`, `timeline`, `auto-fm`, `gitlab-packages`, `github-packages` |
 | 7 | `doc-list`, `slash-commands`, `fm-autocomplete`, `wikilinks` |
 | 8 | `folders` |
 | 9 | `markdown`, `calendar`, `folder-style`, `welcome` |
@@ -236,11 +239,12 @@ static import of an optional dependency.
 
 Admin → Plugins installs a `.zip` you upload, or one from a **package source**. The ⚙ button
 at the end of the upload row opens **Package sources**: your saved sources, and the kinds
-of source you can add. Paste a link to a project (a GitLab project page, a page inside it,
-its clone address or a package download link) and the matching provider fills in the setup
-screen and tests it; **Enter manually** picks a provider and starts from a blank form. The
-setup screen has a name, the provider's settings (for GitLab: address, project and token)
-and **Test**, which checks them before you save. Saved sources are stored on the server, tokens encrypted, and
+of source you can add. Paste a link to a project (a GitHub repository or GitLab project page,
+a page inside it, its clone address or a package download link) and the matching provider
+fills in the setup screen and tests it; **Enter manually** picks a provider and starts from a
+blank form. The setup screen has a name, the provider's settings (for GitHub: repository and
+an optional token; for GitLab: address, project and token) and **Test**, which checks them
+before you save. Saved sources are stored on the server, tokens encrypted, and
 shared by every admin.
 
 **Browse packages**, beside the ⚙ button, opens a large window listing what every saved
@@ -250,6 +254,14 @@ plugins it installed; plugins with a newer version move to the top of the list, 
 and get an update button. Everything runs in the admin's browser: the provider
 fetches the list and the `.zip`, and the browser uploads the zip with the source's id and the
 address it came from. The page may fetch any `https:` address for this (`connect-src`).
+
+A GitHub source offers the newest `.zip` asset of each plugin across the repository's
+published releases (drafts and pre-releases are skipped). Name each asset
+`<plugin-id>-<version>.zip`, or `<plugin-id>.zip` with the version as the release tag
+(`v1.2.3`). A public repository needs no token; a private one needs a token that can read
+its contents. GitHub serves release files only to servers, so the `.zip` itself is fetched
+by the plugin's backend route `POST /api/plugins/github-packages/download`, open to admins
+only and to GitHub's API and asset hosts only.
 
 An update is enabled at once when it asks for nothing the running version did not ask for,
 keeping any narrowing the admin made; otherwise it waits under Pending installs.
