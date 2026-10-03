@@ -1,6 +1,6 @@
 {
   "id": "timeline",
-  "version": "4.1.1",
+  "version": "4.2.0",
   "name": "Timeline",
   "description": "Shows a saved search along a time axis, placed by whichever fields you choose. New timelines from the command palette or the folder tree.",
   "author": "ddd base distribution",
@@ -8,13 +8,13 @@
   "x-tailwind": {
     "prefix": "timeline"
   },
-  "kernel": "^3.0",
+  "kernel": "^4.0",
   "dependencies": {
     "commands": "^3.0",
     "context-menu": "^2.0",
     "doc-events": "^1.0",
     "document-surface": "^2.0",
-    "search": "^4.9"
+    "search": "^5.0"
   },
   "optionalDependencies": {
     "router": "^2.0"

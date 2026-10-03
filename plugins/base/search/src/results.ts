@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { DocumentRow, DocumentsApi, FilterJson, QueryPlan } from "@kernel";
-import type { SearchClause, SearchResults, SearchSort, SearchSpec } from "./api.js";
+import type { AnySearchBuilder, DocumentRow, SearchApi } from "@kernel";
+import type { SearchClause, SearchResults, SearchSnippet, SearchSort, SearchSpec } from "./api.js";
 
-import { buildConditions, type ConditionContext, type FilterClause } from "../../_shared/conditions.js";
+import { hasConditions, whereConditions, type FilterClause } from "../../_shared/conditions.js";
+import { notMachine, useLiveSearch, type Watchable } from "../../_shared/live-search.js";
 import { limitFor, usePages } from "../../_shared/pagination.js";
-import { useLivePlan } from "../../_shared/useLiveQuery.js";
 
-import { RELEVANCE, buildEffectiveFilter, buildFilter } from "./filter.js";
+import { RELEVANCE, type FilterDraft } from "./filter.js";
 import { effectiveSort, filterOf } from "./spec.js";
 import { useSearch, type SearchEngine } from "./useSearch.js";
 
@@ -15,33 +15,38 @@ export const DEFAULT_PAGE_SIZE = 50;
 
 const TEXT_DEBOUNCE_MS = 140;
 
-const NATIVE: ConditionContext = { native: true };
-
 export interface PageResults extends SearchResults {
   readonly unfiltered: boolean;
 }
 
-function narrowed(effective: FilterJson | undefined, within: readonly SearchClause[] | undefined): FilterJson | undefined {
-  const extra =
-    within && within.length > 0
-      ? buildConditions({ combine: "and", clauses: within as readonly FilterClause[] }, NATIVE)
-      : undefined;
-  if (extra === undefined) return effective;
-  return effective === undefined ? extra : { and: [effective, extra] };
+export interface QueryOptions {
+  readonly within?: readonly SearchClause[];
+  readonly withContent?: boolean;
 }
 
-export function sortTokens(sort: SearchSort): readonly string[] {
-  if (sort.field === RELEVANCE.field) return ["relevance", "-updated_at"];
+export function sortTokens(sort: SearchSort, searching = true): readonly string[] {
+  if (sort.field === RELEVANCE.field) return searching ? ["relevance", "-updated_at"] : ["-updated_at"];
   return [sort.direction === "desc" ? `-${sort.field}` : sort.field];
 }
 
-export function planFor(text: string, filter: FilterJson | undefined, sort: SearchSort, limit: number): QueryPlan {
-  return {
-    ...(text !== "" ? { text, snippets: true } : {}),
-    ...(filter !== undefined ? { filter } : {}),
-    sort: sortTokens(sort),
-    limit,
-  };
+type Row = DocumentRow & { readonly snippet?: SearchSnippet | null };
+
+export function searchQuery(
+  search: SearchApi,
+  text: string,
+  draft: FilterDraft,
+  sort: SearchSort,
+  options: QueryOptions = {},
+): AnySearchBuilder {
+  let query = search.fromAny();
+  if (text !== "") query = query.text(text);
+  if (hasConditions(draft)) query = query.where((w) => whereConditions(w, draft) ?? w.and());
+  if (draft.includeMachine !== true) query = query.where(notMachine);
+  const within: FilterDraft = { combine: "and", clauses: (options.within ?? []) as readonly FilterClause[] };
+  if (hasConditions(within)) query = query.where((w) => whereConditions(w, within) ?? w.and());
+  query = query.sort(...sortTokens(sort, text !== ""));
+  const withText = text !== "" ? query.snippets() : query;
+  return options.withContent === true ? withText.withContent() : withText;
 }
 
 function ordered<T>(rows: readonly T[], sort: SearchSort, searching: boolean): readonly T[] {
@@ -58,10 +63,10 @@ function useDebounced<T>(value: T, ms: number): T {
 }
 
 export function useResults(
-  documents: DocumentsApi,
+  search: SearchApi,
   engine: SearchEngine,
   spec: SearchSpec,
-  options: { readonly pageSize?: number; readonly within?: readonly SearchClause[] } = {},
+  options: { readonly pageSize?: number; readonly within?: readonly SearchClause[]; readonly withContent?: boolean } = {},
 ): PageResults {
   const pageSize = Math.max(1, Math.floor(options.pageSize ?? DEFAULT_PAGE_SIZE));
   const draft = filterOf(spec);
@@ -70,32 +75,19 @@ export function useResults(
   const searching = text !== "";
   const sort = effectiveSort({ ...spec, query: text });
 
-  const userFilter = buildFilter(draft, NATIVE);
-  const effective = narrowed(buildEffectiveFilter(draft, NATIVE), options.within);
-  const [pages, more] = usePages(JSON.stringify([effective, sort, text, pageSize]));
+  const query = searchQuery(search, text, draft, sort, options);
+  const [pages, more] = usePages(JSON.stringify(query.plan()) + pageSize);
   const limit = limitFor(pages, pageSize);
-
-  const live = useLivePlan(documents, planFor(text, effective, sort, limit));
+  const live = useLiveSearch(query as unknown as Watchable<Row>, { start: 0, count: limit });
 
   const found = useSearch(engine, text, { limit, debounceMs: 0 });
   const extraIds = useMemo(() => {
     const seen = new Set(live.rows.map((row) => row.id));
     return found.hits.map((hit) => hit.id).filter((id) => !seen.has(id));
   }, [found.hits, live.rows]);
-  const extra = useLivePlan(
-    documents,
-    extraIds.length === 0
-      ? undefined
-      : {
-          filter: {
-            and: [
-              { in: { field: "id", values: extraIds.map((id) => ({ str: id })) } },
-              ...(effective !== undefined ? [effective] : []),
-            ],
-          },
-          limit: extraIds.length,
-        },
-  );
+  const extraQuery =
+    extraIds.length === 0 ? undefined : searchQuery(search, "", draft, sort, options).where("id", "in", extraIds);
+  const extra = useLiveSearch(extraQuery as unknown as Watchable<Row> | undefined);
 
   const rows = useMemo(() => {
     const rank = new Map(extraIds.map((id, index) => [id, index]));
@@ -112,7 +104,6 @@ export function useResults(
   const settled = useRef<typeof now | undefined>(undefined);
   if (!loading) settled.current = now;
   const shown = loading && settled.current ? settled.current : now;
-  const hits = live.hits;
 
   return {
     rows: shown.rows,
@@ -122,22 +113,21 @@ export function useResults(
     partial: searching && found.results.some((result) => result.error !== undefined),
     ...(live.error !== undefined ? { error: live.error } : {}),
     more,
-    snippetOf: (row) => (searching ? hits[row.id]?.snippet : undefined),
-    unfiltered: userFilter === undefined,
+    snippetOf: (row) => (searching ? ((row as Row).snippet ?? undefined) : undefined),
+    unfiltered: !hasConditions(draft),
   };
 }
 
 export async function resolveSearch(
-  documents: DocumentsApi,
+  search: SearchApi,
   spec: SearchSpec,
   options: { readonly limit?: number; readonly within?: readonly SearchClause[] } = {},
 ): Promise<readonly DocumentRow[]> {
   const limit = Math.max(1, Math.floor(options.limit ?? DEFAULT_PAGE_SIZE));
   const text = spec.query.trim();
   const sort = effectiveSort(spec);
-  const effective = narrowed(buildEffectiveFilter(filterOf(spec), NATIVE), options.within);
-  const result = await documents.queryPlan(planFor(text, effective, sort, limit));
-  return ordered(result.rows, sort, text !== "");
+  const result = await searchQuery(search, text, filterOf(spec), sort, options).limit(limit).run();
+  return ordered(result.rows as unknown as readonly DocumentRow[], sort, text !== "");
 }
 
 export function useReportRendered(rows: readonly DocumentRow[], report?: (ids: readonly string[]) => void): void {

@@ -1,9 +1,8 @@
 import type { ComponentType, ReactNode, RefObject } from "react";
 
 import { createRegistry, s } from "@kernel";
-import type { DocumentRow, QueryPlan, SearchHit } from "@kernel";
+import type { DocumentRow, SearchHit } from "@kernel";
 
-import type { QueryBuilder, QueryState } from "./query.js";
 
 export interface SearchProvider {
   readonly id: string;
@@ -90,6 +89,7 @@ export interface SearchRender {
   readonly renderView: (props: SearchViewProps) => ReactNode;
   readonly renderSettings?: (fields: readonly SearchField[]) => ReactNode;
   readonly pageSize?: number;
+  readonly withContent?: boolean;
   readonly showsEmpty?: boolean;
 }
 
@@ -146,6 +146,7 @@ export interface FmValueSelectProps {
 export interface ResultsOptions {
   readonly pageSize?: number;
   readonly within?: readonly SearchClause[];
+  readonly withContent?: boolean;
 }
 
 export interface ResolveOptions {
@@ -171,6 +172,4 @@ export interface Search {
   readonly NoteSelect: ComponentType<NoteSelectProps>;
   readonly FmKeySelect: ComponentType<FmKeySelectProps>;
   readonly FmValueSelect: ComponentType<FmValueSelectProps>;
-  readonly query: () => QueryBuilder;
-  readonly useQuery: (source: QueryBuilder | QueryPlan | undefined) => QueryState;
 }

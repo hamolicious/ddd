@@ -17,29 +17,29 @@ export function mayEmbed(chain: EmbedChain, id: string, maxDepth: number): boole
   return chain.depth < maxDepth && !chain.ancestors.includes(id);
 }
 
-const byId = (id: string): Record<string, unknown> => ({
-  cmp: { field: "id", op: "eq", value: { str: id } },
-});
-
 function useRow(kernel: Kernel, id: string): DocumentRow | null | undefined {
   const [row, setRow] = useState<DocumentRow | null | undefined>(undefined);
   useEffect(() => {
     let live = true;
     let close: (() => void) | undefined;
     setRow(undefined);
-    kernel.documents
-      .subscribe({ filter: byId(id), limit: 1 })
-      .then((subscription) => {
+    kernel.search
+      .from()
+      .where("id", "eq", id)
+      .withContent()
+      .limit(1)
+      .watch()
+      .then((watch) => {
         if (!live) {
-          subscription.close();
+          watch.close();
           return;
         }
-        const off = subscription.onChange((result) => setRow(result.rows[0] ?? null));
+        const off = watch.onChange((result) => setRow((result.rows[0] as DocumentRow | undefined) ?? null));
         close = () => {
           off();
-          subscription.close();
+          watch.close();
         };
-        setRow(subscription.result.rows[0] ?? null);
+        setRow((watch.result.rows[0] as DocumentRow | undefined) ?? null);
       })
       .catch(async () => {
         const once = await kernel.documents.get(id).catch(() => undefined);

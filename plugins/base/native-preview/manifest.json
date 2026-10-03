@@ -1,6 +1,6 @@
 {
   "id": "native-preview",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "name": "Browser preview",
   "description": "Viewers for every file type a browser shows by itself: images, PDF, audio, video and plain text.",
   "author": "ddd base distribution",
@@ -8,7 +8,7 @@
   "x-tailwind": {
     "prefix": "nativepreview"
   },
-  "kernel": "^3.0",
+  "kernel": "^4.0",
   "dependencies": {
     "attachments": "^3.0"
   },

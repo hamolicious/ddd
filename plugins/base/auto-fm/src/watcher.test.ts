@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { CoreMap, DocumentRow, DocumentsApi } from "@kernel";
 
+import { fakeSearch } from "../../_shared/fake-search.test-util.js";
+
 import type { AutoField } from "./fields.js";
 import { watch } from "./watcher.js";
 
@@ -30,19 +32,14 @@ function row(id: string, fm: CoreMap, over: Partial<DocumentRow> = {}): Document
 
 function fake(initial: readonly DocumentRow[]) {
   const rows = new Map(initial.map((each) => [each.id, each]));
-  let emit: ((rows: readonly DocumentRow[]) => void) | undefined;
   const writes: [string, string, unknown][] = [];
+  const search = fakeSearch((plan) => {
+    const text = JSON.stringify(plan);
+    if (text.includes('"select"')) return [{ id: "match" }];
+    return [...rows.values()];
+  });
   const documents = {
-    subscribe: vi.fn(async (query: { limit?: number }) => ({
-      result: { rows: query.limit !== undefined ? [...rows.values()] : [], total: rows.size },
-      onChange: (listener: (result: { rows: readonly DocumentRow[] }) => void) => {
-        if (query.limit !== undefined) emit = (next) => listener({ rows: next });
-        return () => {};
-      },
-      close: () => {},
-    })),
     get: vi.fn(async (id: string) => rows.get(id)),
-    query: vi.fn(async () => ({ rows: [], total: 1 })),
     splice: {
       setFrontmatterValue: vi.fn(async (id: string, key: string, value: unknown) => {
         writes.push([id, key, value]);
@@ -52,11 +49,12 @@ function fake(initial: readonly DocumentRow[]) {
     },
   };
   return {
-    documents: documents as unknown as Pick<DocumentsApi, "subscribe" | "query" | "get" | "splice">,
+    documents: documents as unknown as Pick<DocumentsApi, "get" | "splice">,
+    search: search.search,
     writes,
     change(next: DocumentRow) {
       rows.set(next.id, next);
-      emit?.([...rows.values()]);
+      search.emit();
     },
   };
 }
@@ -76,7 +74,7 @@ describe("the watcher", () => {
   afterEach(() => closers.splice(0).forEach((close) => close()));
 
   const start = (store: ReturnType<typeof fake>, fields: AutoField[], active = true) => {
-    const watcher = watch({ documents: store.documents, userId: ME, fields: () => fields, active: () => active, warn: () => {} });
+    const watcher = watch({ documents: store.documents, search: store.search, userId: ME, fields: () => fields, active: () => active, warn: () => {} });
     closers.push(() => watcher.close());
     return watcher;
   };

@@ -1,6 +1,6 @@
 {
   "id": "document-surface",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "name": "Document surface",
   "description": "Owns the document route and the modes other plugins add with addMode.",
   "author": "ddd base distribution",
@@ -8,7 +8,7 @@
   "x-tailwind": {
     "prefix": "docsurface"
   },
-  "kernel": "^3.0",
+  "kernel": "^4.0",
   "dependencies": {
     "commands": "^3.0",
     "doc-events": "^1.0",
@@ -22,5 +22,10 @@
   "frontend": {
     "module": "frontend/index.mjs",
     "style": "frontend/style.css"
+  },
+  "capabilities": {
+    "documents": [
+      "read"
+    ]
   }
 }

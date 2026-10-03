@@ -69,6 +69,7 @@ export interface SavedViewModeOptions {
   readonly render: (props: SavedViewProps) => ReactNode;
   readonly settings?: (props: ViewSettingsProps) => ReactNode;
   readonly pageSize?: (options: ViewOptions) => number;
+  readonly withContent?: boolean;
   readonly showsEmpty?: boolean;
 }
 
@@ -87,6 +88,7 @@ export function savedViewMode(mode: SavedViewModeOptions): DocumentMode {
         renderView={(props) => render({ ...props, options, onOptionsChange: setOptions })}
         {...(settings ? { renderSettings: (fields: readonly SearchField[]) => settings({ options, onOptionsChange: setOptions, fields }) } : {})}
         {...(pageSize !== undefined ? { pageSize } : {})}
+        {...(mode.withContent === true ? { withContent: true } : {})}
         {...(mode.showsEmpty !== undefined ? { showsEmpty: mode.showsEmpty } : {})}
       />
     );

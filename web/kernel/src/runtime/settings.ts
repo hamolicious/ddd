@@ -1,8 +1,8 @@
 import {
   ContractViolationError,
-  type DocumentRow,
   type FilterJson,
-  type QuerySubscription,
+  type SearchApi,
+  type SearchDocumentRow,
   type SectionLineEdit,
   type SettingsApi,
   type SettingsSchema,
@@ -17,6 +17,7 @@ export const SETTINGS_OWNER_KEY = "settings-owner";
 
 export interface SettingsHostOptions {
   readonly documents: DocumentsHost;
+  readonly search: SearchApi;
   readonly userId: string;
   readonly userLabel?: string;
   readonly onWarn?: (message: string) => void;
@@ -37,7 +38,7 @@ export class SettingsHost {
   #documentIds: readonly string[] = [];
   #sectionsByDocument = new Map<string, Record<string, Values>>();
   readonly #rejected = new Set<string>();
-  #subscription: QuerySubscription | undefined;
+  #subscription: { close(): void } | undefined;
   #creating: Promise<string> | undefined;
   #started = false;
 
@@ -46,11 +47,7 @@ export class SettingsHost {
   async start(): Promise<void> {
     if (this.#started) return;
     this.#started = true;
-    const subscription = await this.options.documents.subscribe({
-      filter: settingsFilter(this.options.userId),
-      sort: [{ field: "id", direction: "asc" }],
-      includeDeleted: false,
-    });
+    const subscription = await this.#query().watch();
     this.#subscription = subscription;
     this.#absorb(subscription.result.rows);
     subscription.onChange((result) => this.#absorb(result.rows));
@@ -104,7 +101,11 @@ export class SettingsHost {
     return { ...defaults, ...this.#stored.get(pluginId) };
   }
 
-  #absorb(rows: readonly DocumentRow[]): void {
+  #query() {
+    return this.options.search.from().where(`fm.${SETTINGS_OWNER_KEY}`, "eq", this.options.userId).sort("id");
+  }
+
+  #absorb(rows: readonly SearchDocumentRow[]): void {
     const accepted = this.#accepted(rows);
     this.#documentIds = accepted.map((row) => row.id);
 
@@ -143,7 +144,7 @@ export class SettingsHost {
     for (const pluginId of changed) this.#emit(pluginId);
   }
 
-  #accepted(rows: readonly DocumentRow[]): readonly DocumentRow[] {
+  #accepted(rows: readonly SearchDocumentRow[]): readonly SearchDocumentRow[] {
     const mine = rows.filter((row) => row.created_by === this.options.userId);
     const unattributed = rows.filter((row) => row.created_by === null);
     for (const row of rows) {
@@ -261,11 +262,7 @@ export class SettingsHost {
   }
 
   async #find(): Promise<string | undefined> {
-    const result = await this.options.documents.query({
-      filter: settingsFilter(this.options.userId),
-      sort: [{ field: "id", direction: "asc" }],
-      includeDeleted: false,
-    });
+    const result = await this.#query().run();
     const ids = this.#accepted(result.rows).map((row) => row.id);
     if (ids.length > 0) this.#documentIds = ids;
     return ids[0];

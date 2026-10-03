@@ -120,7 +120,7 @@ fn record_with(
         manifest: PluginManifest {
             id: "hello-backend".to_string(),
             version: "1.0.0".to_string(),
-            kernel: "^3.0".to_string(),
+            kernel: "^4.0".to_string(),
             peer_libraries: BTreeMap::new(),
             frontend: None,
             capabilities: PluginCapabilities {

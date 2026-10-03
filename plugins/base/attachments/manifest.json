@@ -1,12 +1,12 @@
 {
   "id": "attachments",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "name": "Attachments",
   "description": "Uploads files pasted into the editor, and shows embedded files with a viewer per file type.",
   "author": "ddd base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
-  "kernel": "^3.0",
+  "kernel": "^4.0",
   "dependencies": {
     "editor": "^2.0",
     "markdown": "^3.0",

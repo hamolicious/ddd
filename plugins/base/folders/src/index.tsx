@@ -14,7 +14,8 @@ import { addSidebarPanel } from "plugin:shell-ui";
 
 import { BoundedIcon, useRegistry } from "../../_shared/boundary.js";
 import { applyEdits, newUlid } from "../../_shared/saved-view.js";
-import { EXCLUDE_MACHINE_DOCUMENTS, isMachineDocument } from "../../_shared/machine-docs.js";
+import { notMachine } from "../../_shared/live-search.js";
+import { isMachineDocument } from "../../_shared/machine-docs.js";
 
 import { FOLDER_DECORATION_SHAPE, type FolderDecoration, type FolderLook, type Folders, type NoteLook } from "./api.js";
 import { DefaultLocation } from "./DefaultLocation.js";
@@ -194,11 +195,13 @@ export default function activate(kernel: Kernel): void {
 
   void (async () => {
     try {
-      const subscription = await kernel.documents.subscribe({
-        filter: EXCLUDE_MACHINE_DOCUMENTS,
-        limit: TREE_ROW_LIMIT,
-      });
-      const take = (result: { rows: readonly DocumentRow[] }): void => {
+      const subscription = await kernel.search
+        .from()
+        .where(notMachine)
+        .select("id", "title", "plugins")
+        .limit(TREE_ROW_LIMIT)
+        .watch();
+      const take = (result: { rows: readonly Pick<DocumentRow, "id" | "title" | "plugins">[] }): void => {
         projected = result.rows.map((row) => ({
           id: row.id,
           title: row.title || "Untitled",

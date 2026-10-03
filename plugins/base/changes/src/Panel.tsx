@@ -2,7 +2,7 @@ import { OfflineCopyNote } from "../../_shared/offline-copy.js";
 import { changesOfflineCopy } from "./offline.js";
 import { useCallback, useEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
 
-import type { DocumentsApi, SyncApi } from "@kernel";
+import type { SearchApi, SyncApi } from "@kernel";
 import type { ConfirmRequest } from "plugin:context-menu";
 
 import {
@@ -47,7 +47,7 @@ export function ChangesPanel({
   documentId,
   viewing,
   client,
-  documents,
+  search,
   sync,
   confirm,
   navigate,
@@ -57,7 +57,7 @@ export function ChangesPanel({
   readonly viewing: Viewing | undefined;
   readonly isAdmin: boolean;
   readonly client: SnapshotsClient;
-  readonly documents: DocumentsApi;
+  readonly search: SearchApi;
   readonly sync: SyncApi;
   readonly confirm: (request: ConfirmRequest) => Promise<boolean>;
   readonly navigate: (path: string) => void;
@@ -105,17 +105,21 @@ export function ChangesPanel({
         if (live) latest.current();
       }, RELOAD_DELAY_MS);
     };
-    void documents
-      .subscribe({ filter: { cmp: { field: "id", op: "eq", value: { str: documentId } } }, includeDeleted: true, limit: 1 })
-      .then((subscription) => {
+    void search
+      .from()
+      .where("id", "eq", documentId)
+      .trash("all")
+      .select("id", "updated_at", "materialized_version", "deleted")
+      .watch()
+      .then((watch) => {
         if (!live) {
-          subscription.close();
+          watch.close();
           return;
         }
-        const off = subscription.onChange(soon);
+        const off = watch.onChange(soon);
         close = () => {
           off();
-          subscription.close();
+          watch.close();
         };
       })
       .catch(() => undefined);
@@ -124,7 +128,7 @@ export function ChangesPanel({
       if (timer !== undefined) clearTimeout(timer);
       close?.();
     };
-  }, [documents, documentId]);
+  }, [search, documentId]);
 
   useEffect(() => {
     let timer: ReturnType<typeof setInterval> | undefined;

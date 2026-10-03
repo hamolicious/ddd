@@ -1,6 +1,6 @@
 {
   "id": "changes",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "name": "Changes",
   "description": "The open document's history in the side panel: every change and snapshot, to view, revert or restore.",
   "author": "ddd base distribution",
@@ -8,7 +8,7 @@
   "x-tailwind": {
     "prefix": "chg"
   },
-  "kernel": "^3.0",
+  "kernel": "^4.0",
   "dependencies": {
     "commands": "^3.0",
     "context-menu": "^2.0",
@@ -22,5 +22,10 @@
   "frontend": {
     "module": "frontend/index.mjs",
     "style": "frontend/style.css"
+  },
+  "capabilities": {
+    "documents": [
+      "read"
+    ]
   }
 }

@@ -161,7 +161,7 @@ test("a pending install is one folded row, and approving asks for the acknowledg
     version: "1.0.0",
     name: "Pending demo",
     description: "A package that only exists for this test.",
-    kernel: "^3.0",
+    kernel: "^4.0",
     frontend: { module: "frontend/index.mjs" },
   };
   const upload = await page.request.post("/api/admin/plugins", {

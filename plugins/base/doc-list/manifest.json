@@ -1,18 +1,18 @@
 {
   "id": "doc-list",
-  "version": "5.0.0",
+  "version": "5.1.0",
   "name": "Document list",
   "description": "The all-documents page (a search, as a table), new documents, and the Trash view.",
   "author": "ddd base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
-  "kernel": "^3.0",
+  "kernel": "^4.0",
   "dependencies": {
     "commands": "^3.0",
     "context-menu": "^2.0",
     "doc-events": "^1.0",
     "router": "^2.0",
-    "search": "^4.0",
+    "search": "^5.0",
     "shell-ui": "^3.0",
     "table": "^3.0"
   },
@@ -22,5 +22,10 @@
   "frontend": {
     "module": "frontend/index.mjs",
     "style": "frontend/style.css"
+  },
+  "capabilities": {
+    "documents": [
+      "read"
+    ]
   }
 }

@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-pub const KERNEL_VERSION: &str = "3.2.0";
+pub const KERNEL_VERSION: &str = "4.0.0";
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct PluginManifest {

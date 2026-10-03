@@ -106,6 +106,7 @@ export default function activate(kernel: Kernel): void {
       render: (props) => <Board {...props} />,
       settings: (props) => <KanbanSettings {...props} />,
       pageSize: () => PAGE,
+      withContent: true,
       showsEmpty: true,
       starter: BOARD_OPTIONS,
     },

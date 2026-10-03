@@ -1,17 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  TRASHED_ONLY,
   VALUELESS_OPS,
   appliedCount,
   buildClause,
   buildEffectiveFilter,
   buildFilter,
-  buildSort,
   clauseProblem,
   invalidClauses,
-  isFieldPathShaped,
-  TRASH_SORT_IS_CLIENT_SIDE,
   type ClauseOp,
   type FilterClause,
   type ValueKind,
@@ -86,24 +82,6 @@ describe("buildFilter", () => {
         { not: { missing: { field: "fm.due" } } },
       ],
     });
-  });
-});
-
-describe("the Trash partition", () => {
-  it("selects tombstoned rows through the derived `deleted` field", () => {
-    expect(TRASHED_ONLY).toEqual({ cmp: { field: "deleted", op: "eq", value: { bool: true } } });
-  });
-});
-
-describe("buildSort", () => {
-  it("produces one key; `id` is appended by both engines as the tiebreaker", () => {
-    expect(buildSort("updated_at", "desc")).toEqual([{ field: "updated_at", direction: "desc" }]);
-  });
-
-  it("sorts Trash by `deleted_at`, the root both engines now resolve", () => {
-    expect(buildSort("deleted_at", "desc")).toEqual([{ field: "deleted_at", direction: "desc" }]);
-    expect(isFieldPathShaped("deleted_at")).toBe(true);
-    expect(TRASH_SORT_IS_CLIENT_SIDE).toBe(false);
   });
 });
 

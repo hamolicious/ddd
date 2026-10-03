@@ -1,12 +1,12 @@
 {
   "id": "sync-status",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "name": "Sync status",
   "description": "The sync pill in the toolbar: synced/offline dot, unsynced count, retry and sign-in.",
   "author": "ddd base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
-  "kernel": "^3.0",
+  "kernel": "^4.0",
   "dependencies": {
     "toolbar": "^1.0"
   },

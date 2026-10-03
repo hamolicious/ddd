@@ -1,5 +1,5 @@
 import { IdbDocPersistence, IdbProjectionStore } from "@kernel/store/index.js";
-import { QueryEngine, createSearchIndex } from "@kernel/query/index.js";
+import { createSearchIndex } from "@kernel/query/index.js";
 import { SyncClient } from "@kernel/sync/index.js";
 import { loadCore, type CoreBindings } from "@kernel/wasm/index.js";
 import { ProjectionFeed, browserPeers } from "@kernel/search/index.js";
@@ -23,7 +23,6 @@ export interface KernelInitOptions {
 export interface KernelRuntime {
   readonly host: KernelHost;
   readonly store: IdbProjectionStore;
-  readonly engine: QueryEngine;
   readonly sync: SyncClient;
   readonly core: CoreBindings;
   readonly search: ProjectionFeed;
@@ -43,8 +42,6 @@ export async function initKernel(options: KernelInitOptions): Promise<KernelRunt
   await store.open();
 
   const index = createSearchIndex();
-  const engine = new QueryEngine(store, core, index);
-  engine.warmUp().catch((error: unknown) => console.warn("[search] warm-up failed", error));
   const search = new ProjectionFeed(store, index.projection, browserPeers());
   void search.start();
 
@@ -134,7 +131,6 @@ export async function initKernel(options: KernelInitOptions): Promise<KernelRunt
 
   const host = new KernelHost({
     root: options.root,
-    engine,
     sync,
     core,
     bootMode: options.bootMode,
@@ -168,7 +164,7 @@ export async function initKernel(options: KernelInitOptions): Promise<KernelRunt
 
   if (!shellOwnsSession()) void askForPersistentStorage(host);
 
-  return { host, store, engine, sync, core, search };
+  return { host, store, sync, core, search };
 }
 
 const STORAGE_ASKED_KEY = "ddd:storage-asked";

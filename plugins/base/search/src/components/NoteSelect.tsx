@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ComponentType, ReactElement } from "react";
 
-import type { DocumentQuery, DocumentsApi } from "@kernel";
+import type { DocumentsApi, SearchApi } from "@kernel";
 import type { NoteSelectProps } from "../api.js";
 
-import { withoutMachineDocuments } from "../../../_shared/machine-docs.js";
-import { useLiveQuery } from "../../../_shared/useLiveQuery.js";
+import { notMachine, useLiveSearch } from "../../../_shared/live-search.js";
 
 import { Combobox, type ComboboxOptions } from "./Combobox.js";
 import { NoteRow, type NoteHooks } from "./notes.js";
@@ -14,7 +13,8 @@ import { byProximity } from "./proximity.js";
 export type { NoteLooks } from "./notes.js";
 
 export interface NoteSelectDeps {
-  readonly documents: DocumentsApi;
+  readonly documents: Pick<DocumentsApi, "get">;
+  readonly search: SearchApi;
   readonly notes: NoteHooks;
 }
 
@@ -24,12 +24,9 @@ interface Option {
   readonly folder: string;
 }
 
-const EVERY_NOTE: DocumentQuery = {
-  filter: withoutMachineDocuments(),
-  sort: [{ field: "updated_at", direction: "desc" }],
-};
+export function createNoteSelect({ documents, search, notes }: NoteSelectDeps): ComponentType<NoteSelectProps> {
+  const everyNote = search.from().where(notMachine).sort("-updated_at").select("id", "title");
 
-export function createNoteSelect({ documents, notes }: NoteSelectDeps): ComponentType<NoteSelectProps> {
   function useTitle(id: string | undefined): string {
     const [title, setTitle] = useState("");
     useEffect(() => {
@@ -54,7 +51,7 @@ export function createNoteSelect({ documents, notes }: NoteSelectDeps): Componen
     emptyLabel: string | undefined,
     exclude: ((id: string) => boolean) | undefined,
   ): ComboboxOptions<Option> {
-    const live = useLiveQuery(documents, EVERY_NOTE);
+    const live = useLiveSearch(everyNote);
     const known = notes.useKnownNotes();
     const { current: dressed, version } = notes.useLooks();
     const options = useMemo(() => {

@@ -6,6 +6,14 @@ import type { Kernel, SectionLineEdit } from "@kernel";
 import { setFrontmatterValue, spliceSection } from "../../../../web/kernel/src/runtime/splice.js";
 import { importVault, prepareAttachmentDocument, type ImportServices } from "./import.js";
 
+function searchOver(rows: () => readonly Record<string, unknown>[]) {
+  const chain: object = new Proxy(
+    {},
+    { get: (_target, key) => (key === "run" ? async () => ({ rows: rows() }) : () => chain) },
+  );
+  return { from: () => chain };
+}
+
 const kernel = {
   pluginId: "obsidian-importer",
   documents: {
@@ -55,12 +63,9 @@ describe("Obsidian attachment wrappers", () => {
     }));
     const importingKernel = {
       ...kernel,
+      search: searchOver(() => rows),
       documents: {
         ...kernel.documents,
-        query: async ({ offset }: { readonly offset: number }) => ({
-          rows: rows.slice(offset),
-          total: rows.length,
-        }),
         create: async ({ id, text }: { readonly id: string; readonly text: string }) => {
           rows.push({
             id,
@@ -130,13 +135,10 @@ describe("Obsidian attachment wrappers", () => {
     ];
     const importingKernel = {
       ...kernel,
+      search: searchOver(() => rows),
       core: { parseDocument: () => ({ fm: {} }) },
       documents: {
         ...kernel.documents,
-        query: async ({ offset }: { readonly offset: number }) => ({
-          rows: rows.slice(offset),
-          total: rows.length,
-        }),
         open: async () => ({
           text: { toString: () => noteText },
           release: vi.fn(),
@@ -184,10 +186,10 @@ describe("Obsidian folders", () => {
     const file = vi.fn(async () => undefined);
     const importingKernel = {
       ...kernel,
+      search: searchOver(() => []),
       core: { parseDocument: () => ({ fm: {} }) },
       documents: {
         ...kernel.documents,
-        query: async () => ({ rows: [], total: 0 }),
         create: async ({ id }: { readonly id: string }) => {
           created.push(id);
           return id;

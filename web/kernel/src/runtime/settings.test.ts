@@ -3,7 +3,9 @@ import * as Y from "yjs";
 
 import type { OpenDocument, SettingsApi } from "@kernel";
 
-import { QueryEngine } from "../query/index.js";
+import { ProjectionHost } from "../search/backend.js";
+import { ProjectionFeed } from "../search/feed.js";
+import { SearchHost } from "../search/host.js";
 import { MemoryProjectionStore, feedRow } from "../store/testing.js";
 import type { SyncClient } from "../sync/client.js";
 import { coreArtifactExists, loadCoreForNode } from "../wasm/node-core.js";
@@ -15,13 +17,13 @@ const USER = "01J8ZUSER0000000000000000";
 const OTHER_USER = "01J8ZUSER0000000000000001";
 
 const settle = async (): Promise<void> => {
-  for (let i = 0; i < 4; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
+  for (let i = 0; i < 12; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
 };
 
 class FakeWorkspace {
   readonly store = new MemoryProjectionStore();
-  readonly engine: QueryEngine;
   readonly documents: DocumentsHost;
+  readonly search: SearchHost;
   readonly texts = new Map<string, string>();
   readonly creators = new Map<string, string>();
   readonly opened = new Map<string, OpenDocument>();
@@ -30,9 +32,10 @@ class FakeWorkspace {
   #ids = 0;
 
   constructor(private readonly core: CoreBindings) {
-    this.engine = new QueryEngine(this.store, core);
+    const feed = new ProjectionFeed(this.store, new ProjectionHost({ core, persistent: false }));
+    void feed.start();
+    this.search = new SearchHost(feed);
     this.documents = new DocumentsHost({
-      engine: this.engine,
       sync: {
         open: (id: string) => Promise.resolve(this.#open(id)),
         store: this.store,
@@ -141,6 +144,7 @@ describe.skipIf(!coreArtifactExists())("per-user settings documents", () => {
     workspace = new FakeWorkspace(core);
     host = new SettingsHost({
       documents: workspace.documents,
+      search: workspace.search.api(),
       userId: USER,
       userLabel: "alice@example.com",
       onWarn: () => undefined,

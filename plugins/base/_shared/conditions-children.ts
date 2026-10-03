@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 
-import type { DocumentsApi, FilterJson, Unsubscribe } from "@kernel";
+import type { SearchApi, Unsubscribe } from "@kernel";
 
 import { CHILDREN_FIELD, type ConditionContext } from "./conditions.js";
+import { watchRows } from "./live-search.js";
 
 export type ChildrenMap = ReadonlyMap<string, readonly string[]>;
 
@@ -17,7 +18,7 @@ export function contextFrom(children: ChildrenMap): ConditionContext {
 }
 
 export function watchChildren(
-  documents: Pick<DocumentsApi, "subscribe">,
+  search: SearchApi,
   ids: readonly string[] | "all",
   listener: (children: ChildrenMap) => void,
 ): Unsubscribe {
@@ -25,41 +26,20 @@ export function watchChildren(
     listener(new Map());
     return () => {};
   }
-  const filter: FilterJson =
+  const query =
     ids === "all"
-      ? { exists: { field: CHILDREN_FIELD } }
-      : { in: { field: "id", values: ids.map((id) => ({ str: id })) } };
-  let closed = false;
-  let close: (() => void) | undefined;
-  void documents.subscribe({ filter }).then(
-    (subscription) => {
-      if (closed) {
-        subscription.close();
-        return;
-      }
-      const take = (rows: readonly { id: string; plugins: unknown }[]): void =>
-        listener(new Map(rows.map((row) => [row.id, childrenIn(row.plugins)])));
-      take(subscription.result.rows);
-      const off = subscription.onChange((result) => take(result.rows));
-      close = () => {
-        off();
-        subscription.close();
-      };
-    },
+      ? search.from().where(CHILDREN_FIELD, "exists")
+      : search.from().where("id", "in", [...ids]);
+  return watchRows(
+    query.select("id", "plugins"),
+    (rows) => listener(new Map(rows.map((row) => [row.id, childrenIn(row.plugins)]))),
     () => listener(new Map()),
   );
-  return () => {
-    closed = true;
-    close?.();
-  };
 }
 
-export function useConditionContext(
-  documents: Pick<DocumentsApi, "subscribe">,
-  ids: readonly string[] | "all",
-): ConditionContext {
+export function useConditionContext(search: SearchApi, ids: readonly string[] | "all"): ConditionContext {
   const key = ids === "all" ? ids : ids.join("\n");
   const [children, setChildren] = useState<ChildrenMap>(() => new Map());
-  useEffect(() => watchChildren(documents, ids, setChildren), [documents, key]);
+  useEffect(() => watchChildren(search, ids, setChildren), [search, key]);
   return useMemo(() => contextFrom(children), [children]);
 }

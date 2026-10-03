@@ -1,12 +1,12 @@
 {
   "id": "local-folder",
-  "version": "2.0.3",
+  "version": "2.1.0",
   "name": "Local folder",
   "description": "Keeps every note as a Markdown file in a folder on this device, and keeps the two in step while the app runs.",
   "author": "ddd base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
-  "kernel": "^3.0",
+  "kernel": "^4.0",
   "dependencies": {
     "settings": "^2.0"
   },
@@ -20,5 +20,10 @@
   "frontend": {
     "module": "frontend/index.mjs",
     "style": "frontend/style.css"
+  },
+  "capabilities": {
+    "documents": [
+      "read"
+    ]
   }
 }

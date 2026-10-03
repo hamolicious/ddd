@@ -45,7 +45,7 @@ function plugin(
   const manifest: PluginManifest = {
     id,
     version: options.version ?? "1.0.0",
-    kernel: options.kernel ?? "^3.0",
+    kernel: options.kernel ?? "^4.0",
     ...(options.dependencies ? { dependencies: options.dependencies } : {}),
     ...(options.optionalDependencies ? { optionalDependencies: options.optionalDependencies } : {}),
     ...(options.provides ? { provides: options.provides } : {}),

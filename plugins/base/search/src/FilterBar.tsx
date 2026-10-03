@@ -4,7 +4,6 @@ import type { ComponentType, ReactElement, ReactNode, RefObject } from "react";
 import type { ContextMenu } from "plugin:context-menu";
 
 import { useCompact } from "../../_shared/compact.js";
-import type { ConditionContext } from "../../_shared/conditions.js";
 import { ConditionsEditor, type FmKeySelectLike, type FmValueSelectLike, type NoteSelectLike } from "../../_shared/conditions-editor.js";
 import type { NoteSource } from "../../_shared/note-picker.js";
 import type { Suggestions } from "../../_shared/conditions.js";
@@ -37,7 +36,6 @@ export interface FilterBarProps {
   readonly FmKeySelect?: ComponentType<FmKeySelectLike>;
   readonly FmValueSelect?: ComponentType<FmValueSelectLike>;
   readonly suggestions?: Suggestions;
-  readonly context?: ConditionContext;
 }
 
 export function FilterBar({
@@ -60,9 +58,8 @@ export function FilterBar({
   FmKeySelect,
   FmValueSelect,
   suggestions,
-  context,
 }: FilterBarProps): ReactElement {
-  const filter = buildEffectiveFilter(draft, context);
+  const filter = buildEffectiveFilter(draft, { native: true });
 
   const compact = useCompact();
   const panelId = useId();

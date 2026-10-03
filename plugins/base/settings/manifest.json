@@ -1,12 +1,12 @@
 {
   "id": "settings",
-  "version": "2.0.2",
+  "version": "2.1.0",
   "name": "Settings",
   "description": "The settings shell.",
   "author": "ddd base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
-  "kernel": "^3.0",
+  "kernel": "^4.0",
   "dependencies": {
     "router": "^2.0",
     "shell-ui": "^3.0"

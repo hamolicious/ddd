@@ -1,6 +1,6 @@
 {
   "id": "wikilinks",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "name": "Wikilinks",
   "description": "Type [[ to link a note, or ![[ to embed one — in the frontmatter too, where a property takes the note; the editor shows each linked note's title above its link.",
   "author": "ddd base distribution",
@@ -8,7 +8,7 @@
   "x-tailwind": {
     "prefix": "wikilinks"
   },
-  "kernel": "^3.0",
+  "kernel": "^4.0",
   "dependencies": {
     "editor": "^2.0",
     "indexer": "^2.0",

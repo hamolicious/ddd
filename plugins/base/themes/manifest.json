@@ -1,12 +1,12 @@
 {
   "id": "themes",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "name": "Themes",
   "description": "Theme registry and picker; overrides the kernel's default tokens.",
   "author": "ddd base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
-  "kernel": "^3.0",
+  "kernel": "^4.0",
   "dependencies": {
     "settings": "^2.0",
     "commands": "^3.0"

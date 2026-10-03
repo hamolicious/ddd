@@ -1,4 +1,4 @@
-import type { FilterJson, SortKey } from "@kernel";
+import type { FilterJson } from "@kernel";
 
 import {
   buildConditions,
@@ -36,8 +36,6 @@ export const SORT_OPTIONS: readonly FieldOption[] = [
 
 export const RELEVANCE: FieldOption = { field: "relevance", label: "Best match", kind: "str", sortable: true };
 
-export const TRASH_SORT_IS_CLIENT_SIDE = false;
-
 export function buildFilter(draft: FilterDraft, context: ConditionContext = {}): FilterJson | undefined {
   return buildConditions(draft, context);
 }
@@ -54,10 +52,4 @@ export function invalidClauses(draft: FilterDraft): readonly string[] {
 export function appliedCount(draft: FilterDraft): number {
   const usable = draft.clauses.filter((clause) => clauseProblem(clause) === undefined).length;
   return usable + (draft.includeMachine === true ? 1 : 0);
-}
-
-export const TRASHED_ONLY: FilterJson = { cmp: { field: "deleted", op: "eq", value: { bool: true } } };
-
-export function buildSort(field: string, direction: "asc" | "desc"): readonly SortKey[] {
-  return [{ field, direction }];
 }

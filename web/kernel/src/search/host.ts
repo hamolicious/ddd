@@ -46,6 +46,7 @@ class LiveSearch implements SearchWatch<unknown, SearchResultOptions> {
   #sources: ReadonlySet<string>;
   #window: { readonly start: number; readonly count: number } | undefined;
   #closed = false;
+  #generation = 0;
   readonly #listeners = new Set<(result: Result) => void>();
 
   constructor(
@@ -94,8 +95,9 @@ class LiveSearch implements SearchWatch<unknown, SearchResultOptions> {
 
   async refresh(): Promise<void> {
     if (this.#closed) return;
+    const generation = ++this.#generation;
     const rows = await this.host.execute(this.plan());
-    if (this.#closed) return;
+    if (this.#closed || generation !== this.#generation) return;
     this.#sources = new Set(rows.sources);
     const next: WindowedResult = {
       ...resultOf(rows),
@@ -160,6 +162,10 @@ export class SearchHost {
 
   get watching(): number {
     return this.#live.size;
+  }
+
+  api(): SearchApi {
+    return createSearchApi({ run: (plan) => this.run(plan), watch: (plan) => this.watch(plan) });
   }
 
   forPlugin(manifest: PluginManifest, track: (dispose: () => void) => () => void): SearchApi {

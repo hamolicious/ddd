@@ -275,24 +275,24 @@ async function importedDocuments(
   archiveName: string,
 ): Promise<ReadonlyMap<string, ImportedDocument>> {
   const documents = new Map<string, ImportedDocument>();
-  let offset = 0;
-  for (;;) {
-    const result = await kernel.documents.query({ limit: 1_000, offset, includeDeleted: true });
-    for (const row of result.rows) {
-      const section = row.plugins[kernel.pluginId];
-      if (!isMap(section) || section["archive"] !== archiveName) continue;
-      const path = section["source_path"];
-      const attachmentId = section["attachment_id"];
-      if (typeof path === "string") {
-        documents.set(path, {
-          id: row.id,
-          deleted: row.deleted,
-          attachmentId: typeof attachmentId === "string" ? attachmentId : undefined,
-        });
-      }
+  const result = await kernel.search
+    .from()
+    .trash("all")
+    .where(`plugins.${kernel.pluginId}.archive`, "eq", archiveName)
+    .select("id", "deleted", "plugins")
+    .run();
+  for (const row of result.rows) {
+    const section = row.plugins[kernel.pluginId];
+    if (!isMap(section)) continue;
+    const path = section["source_path"];
+    const attachmentId = section["attachment_id"];
+    if (typeof path === "string") {
+      documents.set(path, {
+        id: row.id,
+        deleted: row.deleted,
+        attachmentId: typeof attachmentId === "string" ? attachmentId : undefined,
+      });
     }
-    offset += result.rows.length;
-    if (result.rows.length === 0 || offset >= result.total) break;
   }
   return documents;
 }

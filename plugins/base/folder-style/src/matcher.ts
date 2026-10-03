@@ -1,7 +1,7 @@
-import type { DocumentsApi, FilterJson, Unsubscribe } from "@kernel";
+import type { SearchApi } from "@kernel";
 
-import { buildConditions, treeToWatch } from "../../_shared/conditions.js";
-import { contextFrom, watchChildren, type ChildrenMap } from "../../_shared/conditions-children.js";
+import { whereConditions } from "../../_shared/conditions.js";
+import { watchRows } from "../../_shared/live-search.js";
 
 import type { FolderStyle, Rule } from "./styles.js";
 
@@ -19,87 +19,54 @@ export interface RuleMatcher {
 
 const NONE: ReadonlySet<string> = new Set();
 
-export function ruleMatcher(
-  documents: Pick<DocumentsApi, "subscribe">,
-  onChange: () => void,
-  onError: (cause: unknown) => void,
-): RuleMatcher {
+export function ruleMatcher(search: SearchApi, onChange: () => void, onError: (cause: unknown) => void): RuleMatcher {
   let rules: readonly Rule[] = [];
   let watches: (Watch | undefined)[] = [];
-  let children: ChildrenMap = new Map();
-  let parentsKey = "";
-  let stopChildren: Unsubscribe = () => {};
 
-  const watch = (key: string, filter: FilterJson): Watch => {
-    let closed = false;
-    let stop: (() => void) | undefined;
-    const entry: Watch = {
-      key,
-      ids: NONE,
-      close: () => {
-        closed = true;
-        stop?.();
-      },
-    };
-    void documents.subscribe({ filter }).then(
-      (subscription) => {
-        if (closed) {
-          subscription.close();
-          return;
-        }
-        const take = (rows: readonly { id: string }[]): void => {
-          entry.ids = new Set(rows.map((row) => row.id));
-          onChange();
-        };
-        take(subscription.result.rows);
-        const off = subscription.onChange((result) => take(result.rows));
-        stop = () => {
-          off();
-          subscription.close();
-        };
-      },
-      (cause: unknown) => onError(cause),
-    );
-    return entry;
+  const queryFor = (rule: Rule) => {
+    let empty = false;
+    const query = search
+      .from()
+      .where((w) => {
+        const condition = whereConditions(w, rule.when);
+        empty = condition === undefined;
+        return condition ?? w.and();
+      })
+      .select("id");
+    return empty ? undefined : { query, key: JSON.stringify(query.plan()) };
   };
 
-  const rebuild = (): void => {
-    const context = contextFrom(children);
-    let changed = false;
-    const next = rules.map((rule, index) => {
-      const filter = buildConditions(rule.when, context);
-      const key = JSON.stringify(filter ?? null);
-      const current = watches[index];
-      if (current?.key === key) return current;
-      current?.close();
-      changed = true;
-      return filter === undefined ? undefined : watch(key, filter);
-    });
-    for (const extra of watches.slice(rules.length)) {
-      extra?.close();
-      changed = true;
-    }
-    watches = next;
-    if (changed) onChange();
+  const watch = (found: NonNullable<ReturnType<typeof queryFor>>): Watch => {
+    const entry: Watch = { key: found.key, ids: NONE, close: () => stop() };
+    const stop = watchRows(
+      found.query,
+      (rows) => {
+        entry.ids = new Set(rows.map((row) => row.id));
+        onChange();
+      },
+      onError,
+    );
+    return entry;
   };
 
   return {
     set(next) {
       rules = next;
-      const wanted = rules.map((rule) => treeToWatch(rule.when));
-      const parents = wanted.includes("all")
-        ? "all"
-        : [...new Set(wanted.flatMap((ids) => (ids === "all" ? [] : ids)))].sort();
-      const key = parents === "all" ? parents : parents.join("\n");
-      if (key !== parentsKey) {
-        parentsKey = key;
-        stopChildren();
-        stopChildren = watchChildren(documents, parents, (map) => {
-          children = map;
-          rebuild();
-        });
+      let changed = false;
+      const updated = rules.map((rule, index) => {
+        const current = watches[index];
+        const found = queryFor(rule);
+        if (current !== undefined && found !== undefined && current.key === found.key) return current;
+        current?.close();
+        changed = true;
+        return found === undefined ? undefined : watch(found);
+      });
+      for (const extra of watches.slice(rules.length)) {
+        extra?.close();
+        changed = true;
       }
-      rebuild();
+      watches = updated;
+      if (changed) onChange();
     },
     matched(id) {
       const styles: FolderStyle[] = [];
@@ -109,7 +76,6 @@ export function ruleMatcher(
       return styles;
     },
     close() {
-      stopChildren();
       for (const entry of watches) entry?.close();
       watches = [];
     },

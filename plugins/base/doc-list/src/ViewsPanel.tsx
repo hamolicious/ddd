@@ -1,22 +1,20 @@
-import type { ReactElement } from "react";
+import { useMemo, type ReactElement } from "react";
 
-import type { DocumentsApi } from "@kernel";
+import type { SearchApi } from "@kernel";
 
-import { EXCLUDE_MACHINE_DOCUMENTS } from "../../_shared/machine-docs.js";
-
-import { useLiveQuery } from "../../_shared/useLiveQuery.js";
-
-import { TRASHED_ONLY } from "./DocListView.js";
+import { notMachine, useLiveSearch } from "../../_shared/live-search.js";
 
 export interface ViewsPanelProps {
-  readonly documents: DocumentsApi;
+  readonly search: SearchApi;
   readonly onNavigate: (path: string) => void;
   readonly current: string;
 }
 
-export function ViewsPanel({ documents, onNavigate, current }: ViewsPanelProps): ReactElement {
-  const live = useLiveQuery(documents, { filter: EXCLUDE_MACHINE_DOCUMENTS, limit: 1 });
-  const trashed = useLiveQuery(documents, { filter: TRASHED_ONLY, includeDeleted: true, limit: 1 });
+export function ViewsPanel({ search, onNavigate, current }: ViewsPanelProps): ReactElement {
+  const liveCount = useMemo(() => search.from().where(notMachine).count(), [search]);
+  const trashedCount = useMemo(() => search.from().trash("trashed").count(), [search]);
+  const live = { total: useLiveSearch(liveCount).rows[0]?.count };
+  const trashed = { total: useLiveSearch(trashedCount).rows[0]?.count };
 
   const entries = [
     { path: "/", label: "All documents", count: live.total },

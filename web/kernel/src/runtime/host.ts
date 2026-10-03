@@ -14,7 +14,6 @@ import {
 } from "@kernel";
 
 import { KERNEL_VERSION } from "../index.js";
-import type { QueryEngine } from "../query/index.js";
 import type { SyncClient } from "../sync/client.js";
 import type { CoreBindings } from "../wasm/index.js";
 import { wrapWithBoundary } from "./boundary.js";
@@ -33,7 +32,6 @@ import { ThemeController } from "./theme.js";
 
 export interface KernelHostOptions {
   readonly root: HTMLElement;
-  readonly engine: QueryEngine;
   readonly sync: SyncClient;
   readonly core: CoreBindings;
   readonly session: SessionHostOptions;
@@ -74,7 +72,6 @@ export class KernelHost {
     this.mount = new MountPoint(options.root);
     this.session = new SessionHost(options.session);
     this.documents = new DocumentsHost({
-      engine: options.engine,
       sync: options.sync,
       api: this.session.fetch,
       notices: this.notices,
@@ -84,6 +81,7 @@ export class KernelHost {
     this.search = new SearchHost(options.search);
     this.settings = new SettingsHost({
       documents: this.documents,
+      search: this.search.api(),
       userId: options.session.user.id,
       userLabel: options.session.user.email || options.session.user.name || options.session.user.id,
     });
@@ -119,17 +117,6 @@ export class KernelHost {
       documents: {
         ...documents,
         splice: documents.splice,
-        subscribe: async (query) => {
-          const subscription = await documents.subscribe(query);
-          const close = track(() => subscription.close());
-          return {
-            get result() {
-              return subscription.result;
-            },
-            onChange: (listener) => track(subscription.onChange(listener)),
-            close,
-          };
-        },
         open: async (id) => {
           const open = await documents.open(id);
           const release = track(() => open.release());

@@ -1,7 +1,7 @@
 import type { FolderStatus, Kernel } from "@kernel";
 import { addSection } from "plugin:settings";
 
-import { EXCLUDE_MACHINE_DOCUMENTS } from "../../_shared/machine-docs.js";
+import { notMachine } from "../../_shared/live-search.js";
 
 import { merge3, textEdits } from "./merge.js";
 import { LocalFolderSettings } from "./Settings.js";
@@ -177,11 +177,13 @@ export class Controller {
       this.#sync ??= new FolderSync(deps(this.kernel));
       const onChange = (): void => this.#schedule("quick");
       cleanups.push(this.#folder.onChange(onChange));
-      const subscription = await this.kernel.documents.subscribe({
-        filter: EXCLUDE_MACHINE_DOCUMENTS,
-        sort: [{ field: "updated_at", direction: "desc" }],
-        limit: 50,
-      });
+      const subscription = await this.kernel.search
+        .from()
+        .where(notMachine)
+        .sort("-updated_at")
+        .select("id", "updated_at")
+        .limit(50)
+        .watch();
       cleanups.push(subscription.onChange(debounce(onChange, 500, cleanups)), () => subscription.close());
       let status = this.kernel.sync.state.status;
       cleanups.push(
@@ -352,10 +354,11 @@ function deps(kernel: Kernel): SyncDeps {
     async notes(): Promise<readonly SyncNote[]> {
       const tree = folders();
       const out: SyncNote[] = [];
-      for (let offset = 0; ; offset += PAGE) {
-        const page = await documents.query({ filter: EXCLUDE_MACHINE_DOCUMENTS, limit: PAGE, offset });
+      for (let cursor: string | undefined; ; ) {
+        const base = kernel.search.from().where(notMachine).withContent();
+        const page = await (cursor === undefined ? base : base.cursor(cursor)).limit(PAGE).run();
         for (const row of page.rows) {
-          if (row.deleted || row.purged) continue;
+          if (row.deleted) continue;
           const content = row.content ?? (await documents.text(row.id)) ?? "";
           const attachment = row.fm["attachment"];
           out.push({
@@ -366,7 +369,8 @@ function deps(kernel: Kernel): SyncDeps {
             ...(typeof attachment === "string" && attachment.length > 0 ? { attachment } : {}),
           });
         }
-        if (page.rows.length < PAGE) break;
+        if (page.nextCursor === undefined) break;
+        cursor = page.nextCursor;
       }
       return out;
     },

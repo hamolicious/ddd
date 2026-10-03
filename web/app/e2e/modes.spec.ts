@@ -1,5 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import { expect, test, type Browser, type Page } from "@playwright/test";
@@ -21,7 +21,8 @@ test.beforeAll(async () => {
     { cwd: repo, encoding: "utf8" },
   );
   expect(compose.status, `compose-plugins: ${compose.stderr ?? ""}`).toBe(0);
-  expect(existsSync(join(REGISTRY, "source-view", "1.0.0", "manifest.json"))).toBe(true);
+  const version = (JSON.parse(readFileSync(join(repo, "plugins", "examples", "source-view", "manifest.json"), "utf8")) as { version: string }).version;
+  expect(existsSync(join(REGISTRY, "source-view", version, "manifest.json"))).toBe(true);
 
   server = spawn(process.execPath, [join(web, "app", "e2e", "server.mjs")], {
     cwd: web,

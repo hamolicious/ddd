@@ -101,7 +101,7 @@ fn write_plugin(plugins: &Path, id: &str, version: &str) {
         json!({
             "id": id,
             "version": version,
-            "kernel": "^3.0",
+            "kernel": "^4.0",
             "peerLibraries": { "react": "^18.0.0" },
             "frontend": { "module": "frontend/index.mjs", "style": "frontend/style.css" },
             "x-tailwind": { "prefix": "main" },

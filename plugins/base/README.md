@@ -391,7 +391,7 @@ Two plugins: `shelf` hosts a list other plugins add to; `hello` adds to it and p
 button in the top bar.
 
 ```json
-{ "id": "shelf", "version": "1.0.0", "kernel": "^3.0",
+{ "id": "shelf", "version": "1.0.0", "kernel": "^4.0",
   "frontend": { "module": "frontend/index.mjs" } }
 ```
 
@@ -414,7 +414,7 @@ export default function activate(kernel: Kernel): void {
 ```
 
 ```json
-{ "id": "hello", "version": "1.0.0", "kernel": "^3.0",
+{ "id": "hello", "version": "1.0.0", "kernel": "^4.0",
   "dependencies": { "shelf": "^1.0", "toolbar": "^1.0" },
   "optionalDependencies": { "router": "^2.0" },
   "frontend": { "module": "frontend/index.mjs" } }

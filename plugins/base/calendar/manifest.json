@@ -1,6 +1,6 @@
 {
   "id": "calendar",
-  "version": "4.2.1",
+  "version": "4.3.0",
   "name": "Calendar",
   "description": "Shows a saved search as a month calendar, dated by whichever field you choose. New calendars from the command palette or the folder tree.",
   "author": "ddd base distribution",
@@ -8,13 +8,13 @@
   "x-tailwind": {
     "prefix": "calendar"
   },
-  "kernel": "^3.0",
+  "kernel": "^4.0",
   "dependencies": {
     "commands": "^3.0",
     "context-menu": "^2.0",
     "doc-events": "^1.0",
     "document-surface": "^2.0",
-    "search": "^4.9"
+    "search": "^5.0"
   },
   "optionalDependencies": {
     "folders": "^4.0",

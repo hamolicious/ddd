@@ -3,7 +3,6 @@ import type {
   DocumentRow,
   Kernel,
   OpenDocument,
-  QuerySubscription,
   Registry,
   RegistryEntry,
   Unsubscribe,
@@ -133,10 +132,6 @@ const SETTING_DEFAULT_MODE = "defaultMode";
 const SETTING_MODE_MEMORY = "modeMemory";
 const MEMORY_WRITE_DELAY_MS = 750;
 
-const byId = (id: DocumentId): Record<string, unknown> => ({
-  cmp: { field: "id", op: "eq", value: { str: id } },
-});
-
 export default function activate(kernel: Kernel): void {
   const modes = modeRegistry;
 
@@ -234,7 +229,7 @@ class Surface {
   #revision = 0;
   readonly #listeners = new Set<() => void>();
   #generation = 0;
-  #query: QuerySubscription | undefined;
+  #query: { close(): void } | undefined;
   #queryOff: Unsubscribe | undefined;
   #memory: Map<string, string> | undefined;
   #memoryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -343,18 +338,14 @@ class Surface {
       this.#patch({ row, status: row ? "ready" : "missing", mode });
     };
     try {
-      const subscription = await this.kernel.documents.subscribe({
-        filter: byId(id),
-        includeDeleted: true,
-        limit: 1,
-      });
+      const subscription = await this.kernel.search.from().where("id", "eq", id).trash("all").withContent().limit(1).watch();
       if (generation !== this.#generation) {
         subscription.close();
         return;
       }
       this.#query = subscription;
-      this.#queryOff = subscription.onChange((result) => apply(result.rows[0]));
-      apply(subscription.result.rows[0]);
+      this.#queryOff = subscription.onChange((result) => apply(result.rows[0] as DocumentRow | undefined));
+      apply(subscription.result.rows[0] as DocumentRow | undefined);
     } catch (error) {
       this.kernel.log.warn("live row subscription failed; falling back to a one-shot read", error);
       try {

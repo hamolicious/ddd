@@ -1,6 +1,6 @@
 {
   "id": "graph",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "name": "Graph view",
   "description": "Every note and the links between them as a live, force-directed graph — the whole workspace, or the neighbourhood of the open note in the side panel.",
   "author": "ddd base distribution",
@@ -8,7 +8,7 @@
   "x-tailwind": {
     "prefix": "graph"
   },
-  "kernel": "^3.0",
+  "kernel": "^4.0",
   "dependencies": {
     "indexer": "^2.0",
     "router": "^2.0",

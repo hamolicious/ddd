@@ -1,12 +1,12 @@
 {
   "id": "folder-style",
-  "version": "4.2.1",
+  "version": "4.3.0",
   "name": "Folder colors and icons",
   "description": "Give any note in the folder tree a color and an icon, from its menu, with defaults for the rest in Settings.",
   "author": "ddd base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
-  "kernel": "^3.0",
+  "kernel": "^4.0",
   "dependencies": {
     "context-menu": "^2.0",
     "folders": "^4.0",
@@ -15,7 +15,7 @@
   },
   "optionalDependencies": {
     "icons": "^2.0",
-    "search": "^4.7"
+    "search": "^5.0"
   },
   "peerLibraries": {
     "react": "^18.0.0"
@@ -23,5 +23,10 @@
   "frontend": {
     "module": "frontend/index.mjs",
     "style": "frontend/style.css"
+  },
+  "capabilities": {
+    "documents": [
+      "read"
+    ]
   }
 }

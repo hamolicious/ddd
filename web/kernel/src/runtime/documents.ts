@@ -2,8 +2,6 @@ import {
   KernelError,
   type CreateDocumentInput,
   type DocumentId,
-  type DocumentQuery,
-  type DocumentQueryResult,
   type DocumentRow,
   type DocumentSpliceApi,
   type DocumentsApi,
@@ -11,18 +9,11 @@ import {
   type ListAction,
   type ListPlan,
   type OpenDocument,
-  type PlanResult,
-  type PlanSubscription,
-  type QueryPlan,
-  type QuerySubscription,
-  type SearchHit,
-  type SearchOptions,
   type SectionLineEdit,
   type SpliceTarget,
   type TextEdit,
 } from "@kernel";
 
-import type { QueryEngine } from "../query/index.js";
 import type { SyncClient } from "../sync/client.js";
 import type { HydratedDoc } from "../sync/doc-hydration.js";
 import type { ParsedDocument } from "../wasm/index.js";
@@ -63,7 +54,6 @@ function warnAboutBareNull(pluginId: string, key: string): void {
 export type ApiFetch = (path: string, init?: RequestInit) => Promise<Response>;
 
 export interface DocumentsHostOptions {
-  readonly engine: QueryEngine;
   readonly sync: SyncClient;
   readonly api: ApiFetch;
   readonly notices?: NoticeCenter;
@@ -302,32 +292,12 @@ export class DocumentsHost {
   }
 
   async get(id: DocumentId): Promise<DocumentRow | undefined> {
-    const row = await this.options.engine.get(id);
+    const row = await this.options.sync.store.get(id);
     return row as DocumentRow | undefined;
   }
 
   async text(id: DocumentId): Promise<string | undefined> {
     return (await this.get(id))?.content;
-  }
-
-  async query(query: DocumentQuery): Promise<DocumentQueryResult> {
-    return (await this.options.engine.run(query)) as DocumentQueryResult;
-  }
-
-  async subscribe(query: DocumentQuery): Promise<QuerySubscription> {
-    return (await this.options.engine.subscribe(query)) as unknown as QuerySubscription;
-  }
-
-  async search(text: string, options: SearchOptions = {}): Promise<readonly SearchHit[]> {
-    return this.options.engine.searchDocuments(text, options);
-  }
-
-  async queryPlan(plan: QueryPlan): Promise<PlanResult> {
-    return (await this.options.engine.runPlan(plan)) as PlanResult;
-  }
-
-  async subscribePlan(plan: QueryPlan): Promise<PlanSubscription> {
-    return (await this.options.engine.subscribePlan(plan)) as unknown as PlanSubscription;
   }
 
   async open(id: DocumentId): Promise<OpenDocument> {
@@ -401,11 +371,6 @@ export class DocumentsHost {
     return {
       get: (id) => this.get(id),
       text: (id) => this.text(id),
-      query: (query) => this.query(query),
-      subscribe: (query) => this.subscribe(query),
-      search: (text, options) => this.search(text, options),
-      queryPlan: (plan) => this.queryPlan(plan),
-      subscribePlan: (plan) => this.subscribePlan(plan),
       open: (id) => this.open(id),
       create: (input) => this.create(input),
       delete: (id) => this.delete(id),

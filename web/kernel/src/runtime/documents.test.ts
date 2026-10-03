@@ -3,7 +3,6 @@ import * as Y from "yjs";
 
 import type { OpenDocument } from "@kernel";
 
-import type { QueryEngine } from "../query/index.js";
 import type { SyncClient } from "../sync/client.js";
 import { DocumentsHost } from "./documents.js";
 
@@ -33,7 +32,6 @@ class FakeOpen implements OpenDocument {
 
 function host(open: FakeOpen): DocumentsHost {
   return new DocumentsHost({
-    engine: {} as QueryEngine,
     sync: {
       open: (id: string) => {
         if (id !== open.id) throw new Error(`unexpected open("${id}")`);

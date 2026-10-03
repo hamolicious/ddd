@@ -1,6 +1,6 @@
 import type { Kernel } from "@kernel";
 
-import { withoutMachineDocuments } from "../../_shared/machine-docs.js";
+import { notMachine } from "../../_shared/live-search.js";
 
 import { MARKER_ID, MARKER_TEXT, TOUR } from "./content.js";
 
@@ -17,12 +17,8 @@ export default function activate(kernel: Kernel): void {
 async function seed(kernel: Kernel): Promise<void> {
   if (await kernel.documents.get(MARKER_ID)) return;
 
-  const existing = await kernel.documents.query({
-    filter: withoutMachineDocuments(),
-    limit: 1,
-    includeDeleted: true,
-  });
-  if (existing.total === 0) {
+  const existing = await kernel.search.from().where(notMachine).trash("all").select("id").limit(1).run();
+  if (existing.rows.length === 0) {
     const folders = await kernel.plugins
       .optional<typeof import("plugin:folders")>("folders")
       .catch((error: unknown) => {

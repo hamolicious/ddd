@@ -1,12 +1,12 @@
 {
   "id": "markdown",
-  "version": "3.2.0",
+  "version": "3.3.0",
   "name": "Markdown",
   "description": "The unified/remark to React pipeline, and the extension points over it.",
   "author": "ddd base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
-  "kernel": "^3.0",
+  "kernel": "^4.0",
   "dependencies": {
     "commands": "^3.0",
     "settings": "^2.0"
@@ -28,5 +28,10 @@
   "frontend": {
     "module": "frontend/index.mjs",
     "style": "frontend/style.css"
+  },
+  "capabilities": {
+    "documents": [
+      "read"
+    ]
   }
 }

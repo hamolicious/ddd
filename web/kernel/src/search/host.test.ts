@@ -128,6 +128,20 @@ describe.skipIf(!coreArtifactExists())("kernel.search", () => {
     expect(watch.result.rows.map((row) => row.id)).toEqual(["D09", "D10", "D11", "D12", "D13"]);
   });
 
+  it("a re-run that started before a window moved never overwrites the window", async () => {
+    const rows = Array.from({ length: 30 }, (_, index) =>
+      feedRow({ id: `D${String(index).padStart(2, "0")}`, seq: index + 1, content: `# Doc ${index}\n` }),
+    );
+    const { store, search } = await setup(rows);
+    const watch = await search.from().sort("id").select("id").watch();
+    await store.putLocal([{ ...feedRow({ id: "D99", seq: 0, content: "# Late\n" }), materialized_version: "local" }]);
+    await watch.window(0, 5);
+    await frame();
+    await frame();
+    expect(watch.result.rows.map((row) => row.id)).toEqual(["D00", "D01", "D02", "D03", "D04"]);
+    expect(watch.result.total).toBe(31);
+  });
+
   it("closing a watch stops its updates", async () => {
     const { store, search, host } = await setup([feedRow({ id: "A", seq: 1 })]);
     const watch = await search.from().watch();

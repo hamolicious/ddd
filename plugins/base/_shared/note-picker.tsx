@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useReducer, useState } from "react";
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 
-import type { DocumentsApi, Unsubscribe } from "@kernel";
+import type { SearchApi, Unsubscribe } from "@kernel";
 
-import { withoutMachineDocuments } from "./machine-docs.js";
+import { notMachine, watchRows } from "./live-search.js";
 import { useVirtualList } from "./virtual-list.js";
 
 export interface PickableNote {
@@ -161,20 +161,16 @@ export function NotePicker({ source, onChoose, classPrefix: p, autoFocus = false
   );
 }
 
-export function documentsNoteSource(documents: Pick<DocumentsApi, "subscribe">): NoteSource {
+export function documentsNoteSource(search: SearchApi): NoteSource {
   let notes: readonly PickableNote[] = [];
   const listeners = new Set<() => void>();
   let started = false;
   const start = (): void => {
     if (started) return;
     started = true;
-    void documents.subscribe({ filter: withoutMachineDocuments() }).then((subscription) => {
-      const take = (rows: readonly { id: string; title: string }[]): void => {
-        notes = rows.map((row) => ({ id: row.id, title: row.title, folder: "" }));
-        for (const listener of [...listeners]) listener();
-      };
-      take(subscription.result.rows);
-      subscription.onChange((result) => take(result.rows));
+    watchRows(search.from().where(notMachine).select("id", "title"), (rows) => {
+      notes = rows.map((row) => ({ id: row.id, title: row.title, folder: "" }));
+      for (const listener of [...listeners]) listener();
     });
   };
   return {

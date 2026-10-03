@@ -116,6 +116,7 @@ export default function activate(kernel: Kernel): void {
 
   const watcher: Watcher = watch({
     documents: kernel.documents,
+    search: kernel.search,
     userId: kernel.session.user.id,
     fields: () => fields,
     active: () => typeof document === "undefined" || (document.visibilityState === "visible" && document.hasFocus()),
@@ -141,7 +142,7 @@ export default function activate(kernel: Kernel): void {
   };
 
   const index = (): ConditionIndex => indexer;
-  const fallbackNotes = documentsNoteSource(kernel.documents);
+  const fallbackNotes = documentsNoteSource(kernel.search);
   let lookups: { index: ConditionIndex | undefined; notes: NoteSource; suggestions: Suggestions | undefined } | undefined;
   const lookupsFor = (current: ConditionIndex | undefined) => {
     if (lookups === undefined || lookups.index !== current) {

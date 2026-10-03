@@ -355,7 +355,6 @@ async function signOut(
     current?.host.settings.stop();
     current?.sync.stop();
     await current?.search.wipe().catch(() => undefined);
-    await current?.engine.close();
     await removeSearchFiles();
     await current?.store.clear();
     await deletePluginDatabases();

@@ -27,21 +27,11 @@ import { createNoteHooks, type NoteLooks } from "./components/notes.js";
 import { searchEngine } from "./providers.js";
 import { resolveSearch, useResults as useResultsWith } from "./results.js";
 import { SAVED_SEARCH_KEY, savedSearchNoteText, savedSearchOf as savedSearchOfRow, savedSearchTitle } from "./saved.js";
-import { bindDocuments } from "./query.js";
 import { createSavedSearch } from "./SavedSearch.js";
 import { createSearchShell } from "./SearchShell.js";
 import { documentPath, encodeSpec, parseSpec } from "./spec.js";
 
 export type { NoteLooks } from "./components/notes.js";
-export {
-  QueryBuilder,
-  QueryError,
-  query,
-  useQuery,
-  type QueryOp,
-  type QueryState,
-  type QueryValue,
-} from "./query.js";
 export type {
   FmKeySelectProps,
   FmValueSelectProps,
@@ -151,7 +141,6 @@ export function FmValueSelect(props: FmValueSelectProps): ReactElement {
 }
 
 export default function activate(kernel: Kernel): void {
-  bindDocuments(kernel.documents);
   let router: RouterModule | undefined;
   let commands: CommandsModule | undefined;
   let icons: IconsModule | undefined;
@@ -213,7 +202,7 @@ export default function activate(kernel: Kernel): void {
       };
     },
   });
-  const NoteSelect = createNoteSelect({ documents: kernel.documents, notes });
+  const NoteSelect = createNoteSelect({ documents: kernel.documents, search: kernel.search, notes });
 
   const { FmKeySelect, FmValueSelect } = createFmSelects(indexer, notes);
 
@@ -249,8 +238,8 @@ export default function activate(kernel: Kernel): void {
   };
 
   active = {
-    useResults: (spec, options) => useResultsWith(kernel.documents, engine, spec, options ?? {}),
-    resolve: (spec, options) => resolveSearch(kernel.documents, spec, options ?? {}),
+    useResults: (spec, options) => useResultsWith(kernel.search, engine, spec, options ?? {}),
+    resolve: (spec, options) => resolveSearch(kernel.search, spec, options ?? {}),
     save: saveSearch,
     SearchShell: Shell,
     SavedSearch: createSavedSearch({ SearchShell: Shell, open, update }),
@@ -262,5 +251,4 @@ export default function activate(kernel: Kernel): void {
 
 export function deactivate(): void {
   active = undefined;
-  bindDocuments(undefined);
 }

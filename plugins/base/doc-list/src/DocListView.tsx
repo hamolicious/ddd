@@ -1,18 +1,14 @@
 import { useMemo, useState } from "react";
 import type { ReactElement } from "react";
 
-import type { DocumentQuery, DocumentsApi, FilterJson, SortKey } from "@kernel";
+import type { SearchApi } from "@kernel";
 
 import { LoadMore } from "../../_shared/LoadMore.js";
+import { useLiveSearch } from "../../_shared/live-search.js";
 import { limitFor, showingText, usePages } from "../../_shared/pagination.js";
-import { useLiveQuery } from "../../_shared/useLiveQuery.js";
-
-export const TRASHED_ONLY: FilterJson = { cmp: { field: "deleted", op: "eq", value: { bool: true } } };
-
-const buildSort = (field: string, direction: "asc" | "desc"): readonly SortKey[] => [{ field, direction }];
 
 export interface TrashViewProps {
-  readonly documents: DocumentsApi;
+  readonly search: SearchApi;
   readonly onOpen: (id: string) => void;
   readonly onRestore: (id: string) => Promise<void>;
   readonly retentionDays?: number;
@@ -20,7 +16,7 @@ export interface TrashViewProps {
 }
 
 export function TrashView({
-  documents,
+  search,
   onOpen,
   onRestore,
   retentionDays = 30,
@@ -31,16 +27,11 @@ export function TrashView({
   const [newestFirst, setNewestFirst] = useState(true);
   const [pages, more] = usePages(String(newestFirst));
 
-  const query = useMemo<DocumentQuery>(
-    () => ({
-      filter: TRASHED_ONLY,
-      includeDeleted: true,
-      sort: buildSort("deleted_at", newestFirst ? "desc" : "asc"),
-      limit: limitFor(pages),
-    }),
-    [newestFirst, pages],
+  const query = useMemo(
+    () => search.from().trash("trashed").sort(newestFirst ? "-deleted_at" : "deleted_at"),
+    [search, newestFirst],
   );
-  const state = useLiveQuery(documents, query);
+  const state = useLiveSearch(query, { start: 0, count: limitFor(pages) });
   const rows = state.rows;
 
   return (

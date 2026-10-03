@@ -113,7 +113,7 @@ fn wasm_with_abi_export() -> Vec<u8> {
 
 fn manifest(id: &str, version: &str) -> String {
     format!(
-        r#"{{"id":"{id}","version":"{version}","kernel":"^3.0","frontend":{{"module":"frontend/index.mjs"}}}}"#
+        r#"{{"id":"{id}","version":"{version}","kernel":"^4.0","frontend":{{"module":"frontend/index.mjs"}}}}"#
     )
 }
 
@@ -318,7 +318,7 @@ async fn an_approval_may_widen_http_hosts_and_nothing_else() {
         return;
     };
 
-    let requested = r#"{"id":"cal","version":"1.0.0","kernel":"^3.0",
+    let requested = r#"{"id":"cal","version":"1.0.0","kernel":"^4.0",
         "capabilities":{"documents":["read","write"],"http":{"hosts":[]}},
         "frontend":{"module":"frontend/index.mjs"}}"#;
     let archive = harness.package("cal", requested, false);
@@ -744,7 +744,7 @@ async fn a_manifest_with_unmet_dependencies_is_refused_and_rolls_back() {
         return;
     };
 
-    let needy = r#"{"id":"needy","version":"1.0.0","kernel":"^3.0",
+    let needy = r#"{"id":"needy","version":"1.0.0","kernel":"^4.0",
         "dependencies":{"folders":"^2.0"},
         "optionalDependencies":{"icons":"^9.0"},
         "frontend":{"module":"frontend/index.mjs"}}"#;
@@ -789,14 +789,14 @@ async fn a_met_dependency_installs_and_a_stand_in_counts_at_its_provided_version
     install_enabled(
         &harness,
         "tree",
-        r#"{"id":"tree","version":"1.0.0","kernel":"^3.0","dependencies":{"folders":"^2.0"},
+        r#"{"id":"tree","version":"1.0.0","kernel":"^4.0","dependencies":{"folders":"^2.0"},
             "frontend":{"module":"frontend/index.mjs"}}"#,
     )
     .await;
 
     let archive = harness.package(
         "old",
-        r#"{"id":"old","version":"1.0.0","kernel":"^3.0","dependencies":{"folders":"^1.0"},
+        r#"{"id":"old","version":"1.0.0","kernel":"^4.0","dependencies":{"folders":"^1.0"},
             "frontend":{"module":"frontend/index.mjs"}}"#,
         false,
     );
@@ -806,14 +806,14 @@ async fn a_met_dependency_installs_and_a_stand_in_counts_at_its_provided_version
     install_enabled(
         &harness,
         "alt-editor",
-        r#"{"id":"alt-editor","version":"0.1.0","kernel":"^3.0","provides":"editor@3.0.0",
+        r#"{"id":"alt-editor","version":"0.1.0","kernel":"^4.0","provides":"editor@3.0.0",
             "frontend":{"module":"frontend/index.mjs"}}"#,
     )
     .await;
     install_enabled(
         &harness,
         "emoji",
-        r#"{"id":"emoji","version":"1.0.0","kernel":"^3.0","dependencies":{"editor":"^3.0"},
+        r#"{"id":"emoji","version":"1.0.0","kernel":"^4.0","dependencies":{"editor":"^3.0"},
             "frontend":{"module":"frontend/index.mjs"}}"#,
     )
     .await;
@@ -837,7 +837,7 @@ async fn enabling_a_stand_in_disables_the_plugin_it_stands_in_for() {
     install_enabled(
         &harness,
         "alt-editor",
-        r#"{"id":"alt-editor","version":"0.1.0","kernel":"^3.0","provides":"editor@3.0.0",
+        r#"{"id":"alt-editor","version":"0.1.0","kernel":"^4.0","provides":"editor@3.0.0",
             "frontend":{"module":"frontend/index.mjs"}}"#,
     )
     .await;
@@ -875,7 +875,7 @@ async fn a_backend_half_without_the_abi_export_is_refused() {
         return;
     };
 
-    let with_backend = r#"{"id":"demo","version":"1.0.0","kernel":"^3.0",
+    let with_backend = r#"{"id":"demo","version":"1.0.0","kernel":"^4.0",
         "backend":{"module":"backend.wasm"},
         "frontend":{"module":"frontend/index.mjs"}}"#;
 
@@ -1098,7 +1098,7 @@ async fn an_absence_does_not_undo_a_narrowing_or_an_admin_disable() {
 
     let requested = |id: &str| {
         format!(
-            r#"{{"id":"{id}","version":"1.0.0","kernel":"^3.0",
+            r#"{{"id":"{id}","version":"1.0.0","kernel":"^4.0",
             "capabilities":{{"documents":["read","write"]}},
             "frontend":{{"module":"frontend/index.mjs"}}}}"#
         )
@@ -1279,7 +1279,7 @@ async fn a_secret_is_write_only_for_the_admin_and_readable_by_the_plugin() {
         return;
     };
 
-    let schema_json = r#"{"id":"cal","version":"1.0.0","kernel":"^3.0",
+    let schema_json = r#"{"id":"cal","version":"1.0.0","kernel":"^4.0",
         "config":{"feed_url":{"type":"string","required":true},
                   "auth_header":{"type":"string","secret":true}},
         "frontend":{"module":"frontend/index.mjs"}}"#;
@@ -1515,7 +1515,7 @@ async fn rejecting_an_interrupted_approval_removes_the_files_too() {
 
 fn manifest_with(id: &str, version: &str, capabilities: &str) -> String {
     format!(
-        r#"{{"id":"{id}","version":"{version}","kernel":"^3.0","frontend":{{"module":"frontend/index.mjs"}},"capabilities":{capabilities}}}"#
+        r#"{{"id":"{id}","version":"{version}","kernel":"^4.0","frontend":{{"module":"frontend/index.mjs"}},"capabilities":{capabilities}}}"#
     )
 }
 

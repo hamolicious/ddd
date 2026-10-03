@@ -1,6 +1,6 @@
 {
   "id": "fm-autocomplete",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "name": "Frontmatter autocomplete",
   "description": "While you type a frontmatter value, suggests the values that key already has across the workspace.",
   "author": "ddd base distribution",
@@ -8,7 +8,7 @@
   "x-tailwind": {
     "prefix": "fmac"
   },
-  "kernel": "^3.0",
+  "kernel": "^4.0",
   "dependencies": {
     "editor": "^2.0",
     "indexer": "^2.0",

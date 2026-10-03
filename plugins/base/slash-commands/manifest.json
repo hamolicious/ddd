@@ -1,6 +1,6 @@
 {
   "id": "slash-commands",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "name": "Slash commands",
   "description": "Type / in any editor for a menu of actions other plugins offer.",
   "author": "ddd base distribution",
@@ -8,7 +8,7 @@
   "x-tailwind": {
     "prefix": "slash"
   },
-  "kernel": "^3.0",
+  "kernel": "^4.0",
   "dependencies": {
     "editor": "^2.0",
     "shell-ui": "^3.0"

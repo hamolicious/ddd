@@ -1138,7 +1138,7 @@ mod tests {
         let manifest: PluginManifest = serde_json::from_value(serde_json::json!({
             "id": id,
             "version": "1.0.0",
-            "kernel": "^3.0",
+            "kernel": "^4.0",
             "peerLibraries": peer_libraries,
             "frontend": { "module": "frontend/index.mjs" },
         }))

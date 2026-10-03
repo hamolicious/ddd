@@ -1,7 +1,7 @@
 {
   "id": "obsidian-importer",
-  "version": "2.1.0",
-  "kernel": "^3.0",
+  "version": "2.2.0",
+  "kernel": "^4.0",
   "dependencies": {
     "attachments": "^3.0",
     "commands": "^3.0",
@@ -16,5 +16,10 @@
   "name": "Obsidian importer",
   "description": "Imports notes and attachments from an Obsidian vault ZIP, preserving folders and resolving links.",
   "author": "ddd examples",
-  "license": "MIT OR Apache-2.0"
+  "license": "MIT OR Apache-2.0",
+  "capabilities": {
+    "documents": [
+      "read"
+    ]
+  }
 }

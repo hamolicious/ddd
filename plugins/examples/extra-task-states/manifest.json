@@ -1,7 +1,7 @@
 {
   "id": "extra-task-states",
-  "version": "1.0.0",
-  "kernel": "^3.0",
+  "version": "1.1.0",
+  "kernel": "^4.0",
   "dependencies": {
     "markdown": "^3.0"
   },

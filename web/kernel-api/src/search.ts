@@ -103,7 +103,11 @@ export type SearchOp =
   | "child_of"
   | "parent_of";
 
-export type SearchLiteral = string | number | boolean | null | Date;
+export interface SearchDateLiteral {
+  readonly date: string;
+}
+
+export type SearchLiteral = string | number | boolean | null | Date | SearchDateLiteral;
 
 type Valueless = "missing" | "exists" | "is_null";
 
@@ -349,14 +353,35 @@ export type SearchFrom<S extends SearchSourceName> = SearchBuilder<
   { readonly total: false }
 >;
 
-export type AnySearchBuilder = SearchBuilder<
-  SearchSourceName,
-  SearchScope,
-  { readonly [field: string]: unknown },
-  string,
-  never,
-  SearchResultOptions
->;
+export type AnySearchRow = Readonly<Record<string, unknown>>;
+
+export interface AnySearchBuilder {
+  text(query: string): AnySearchBuilder;
+  match(build: (m: SearchMatch) => SearchTextExpression): AnySearchBuilder;
+  where(field: string, op: SearchOp, value?: unknown, options?: { readonly deep?: boolean }): AnySearchBuilder;
+  where(build: (w: SearchExpression<object, string>) => SearchCondition): AnySearchBuilder;
+  sort(...keys: readonly string[]): AnySearchBuilder;
+  select(...items: readonly (string | { readonly [alias: string]: string })[]): AnySearchBuilder;
+  distinct(...fields: readonly string[]): AnySearchBuilder;
+  groupBy(...fields: readonly string[]): AnySearchBuilder;
+  count(as?: string): AnySearchBuilder;
+  sum(field: string, as?: string): AnySearchBuilder;
+  avg(field: string, as?: string): AnySearchBuilder;
+  min(field: string, as?: string): AnySearchBuilder;
+  max(field: string, as?: string): AnySearchBuilder;
+  collect(field: string, as?: string): AnySearchBuilder;
+  limit(n: number): AnySearchBuilder;
+  offset(n: number): AnySearchBuilder;
+  cursor(cursor: string): AnySearchBuilder;
+  withTotal(): AnySearchBuilder;
+  withContent(): AnySearchBuilder;
+  snippets(): AnySearchBuilder;
+  trash(scope: "live" | "trashed" | "all"): AnySearchBuilder;
+  fuzzy(query: string, options?: SearchFuzzyOptions): SearchFuzzy<AnySearchRow>;
+  run(): Promise<SearchResult<AnySearchRow, SearchResultOptions>>;
+  watch(): Promise<SearchWatch<AnySearchRow, SearchResultOptions>>;
+  plan(): SearchPlanJson;
+}
 
 export interface SearchExecutor {
   run(plan: SearchPlanJson): Promise<SearchResult<unknown, SearchResultOptions>>;
@@ -367,6 +392,7 @@ export interface SearchApi {
   from(): SearchFrom<"documents">;
   from<S extends SearchSourceName>(source: S): SearchFrom<S>;
   fromPlan(plan: SearchPlanJson): AnySearchBuilder;
+  fromAny(source?: SearchSourceName): AnySearchBuilder;
 }
 
 type Stage = unknown;
@@ -380,6 +406,9 @@ const TEXT_MODES = {
 function literal(value: unknown): unknown {
   if (value === null || value === undefined) return "null";
   if (value instanceof Date) return { date: value.toISOString() };
+  if (typeof value === "object" && typeof (value as { date?: unknown }).date === "string") {
+    return { date: (value as SearchDateLiteral).date };
+  }
   switch (typeof value) {
     case "string":
       return { str: value };
@@ -589,5 +618,6 @@ export function createSearchApi(executor: SearchExecutor): SearchApi {
       new Builder(executor, source, [])) as unknown as SearchApi["from"],
     fromPlan: (plan) =>
       new Builder(executor, plan.source ?? "documents", plan.stages ?? []) as unknown as AnySearchBuilder,
+    fromAny: (source = "documents") => new Builder(executor, source, []) as unknown as AnySearchBuilder,
   };
 }

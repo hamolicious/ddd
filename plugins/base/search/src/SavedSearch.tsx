@@ -13,7 +13,15 @@ export interface SavedSearchDeps {
 }
 
 export function createSavedSearch({ SearchShell, open, update }: SavedSearchDeps): ComponentType<SavedSearchProps> {
-  return function SavedSearch({ row, embedded, renderView, renderSettings, pageSize, showsEmpty }: SavedSearchProps): ReactElement {
+  return function SavedSearch({
+    row,
+    embedded,
+    renderView,
+    renderSettings,
+    pageSize,
+    withContent,
+    showsEmpty,
+  }: SavedSearchProps): ReactElement {
     const stored = savedSearchOf(row) ?? "";
     const [spec, setSpec] = useState<SearchSpec>(() => parseSpec(stored));
     const seen = useRef(stored);
@@ -32,6 +40,7 @@ export function createSavedSearch({ SearchShell, open, update }: SavedSearchDeps
         renderView={renderView}
         {...(renderSettings ? { renderSettings } : {})}
         {...(pageSize !== undefined ? { pageSize } : {})}
+        {...(withContent === true ? { withContent } : {})}
         {...(showsEmpty !== undefined ? { showsEmpty } : {})}
         {...(changed ? { onSave: () => update(row.id, encodeSpec(spec)), saveLabel: "Update saved search" } : {})}
       />

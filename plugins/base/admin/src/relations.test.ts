@@ -8,7 +8,7 @@ function plugin(
   manifest: { dependencies?: Record<string, string>; optionalDependencies?: Record<string, string>; provides?: string } = {},
   state: PluginAdminView["state"] = "enabled",
 ): PluginAdminView {
-  return { id, state, manifest: { id, version: "1.0.0", kernel: "^3.0", ...manifest } } as unknown as PluginAdminView;
+  return { id, state, manifest: { id, version: "1.0.0", kernel: "^4.0", ...manifest } } as unknown as PluginAdminView;
 }
 
 describe("pluginRelations", () => {

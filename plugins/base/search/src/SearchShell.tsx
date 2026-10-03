@@ -7,8 +7,6 @@ import type { Icons } from "plugin:icons";
 import type { FmKeySelectProps, FmValueSelectProps, NoteSelectProps, SearchField, SearchShellProps, SearchSort, SearchSpec, SearchViewProps } from "./api.js";
 
 import { indexNoteSource, indexSuggestions, type ConditionIndex } from "../../_shared/conditions-index.js";
-import { useConditionContext } from "../../_shared/conditions-children.js";
-import { treeToWatch } from "../../_shared/conditions.js";
 import { documentsNoteSource } from "../../_shared/note-picker.js";
 import { Spinner } from "../../_shared/Spinner.js";
 
@@ -46,13 +44,17 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
     renderView,
     renderSettings,
     pageSize,
+    withContent,
     showsEmpty,
   }: SearchShellProps): ReactElement {
     const [searchOpen, setSearchOpen] = useState(controls === "shown");
     const [localSort, setLocalSort] = useState<SearchSort | undefined>(undefined);
     const shownSpec: SearchSpec = controls === "hidden" && localSort ? { ...spec, sort: localSort } : spec;
 
-    const results = useResults(kernel.documents, engine, shownSpec, pageSize === undefined ? {} : { pageSize });
+    const results = useResults(kernel.search, engine, shownSpec, {
+      ...(pageSize === undefined ? {} : { pageSize }),
+      ...(withContent === true ? { withContent } : {}),
+    });
     useReportRendered(results.rows, onRendered);
 
     const draft = filterOf(spec);
@@ -60,9 +62,8 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
     const searching = text !== "";
     const sort = effectiveSort(shownSpec);
     const index = deps.index();
-    const context = useConditionContext(kernel.documents, treeToWatch(draft));
     const notes = useMemo(
-      () => (index !== undefined ? indexNoteSource(index) : documentsNoteSource(kernel.documents)),
+      () => (index !== undefined ? indexNoteSource(index) : documentsNoteSource(kernel.search)),
       [index],
     );
     const suggestions = useMemo(() => (index !== undefined ? indexSuggestions(index) : undefined), [index]);
@@ -125,7 +126,6 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
             FmKeySelect={deps.FmKeySelect}
             FmValueSelect={deps.FmValueSelect}
             {...(suggestions !== undefined ? { suggestions } : {})}
-            context={context}
             {...(onSave ? { onSave } : {})}
             {...(saveLabel !== undefined ? { saveLabel } : {})}
             {...(actions && narrowed && results.rows.length > 0

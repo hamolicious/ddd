@@ -7,8 +7,13 @@ import { ADMIN, signIn } from "./helpers.js";
 
 const registry =
   process.env["DDD_E2E_PLUGINS"] ?? join(process.cwd(), "app", "e2e", ".plugins", "default");
-const brokenModule = join(registry, "extra-task-states", "1.0.0", "frontend", "index.mjs");
-const brokenManifest = join(registry, "extra-task-states", "1.0.0", "manifest.json");
+const extraVersion = (
+  JSON.parse(readFileSync(join(process.cwd(), "..", "plugins", "examples", "extra-task-states", "manifest.json"), "utf8")) as {
+    version: string;
+  }
+).version;
+const brokenModule = join(registry, "extra-task-states", extraVersion, "frontend", "index.mjs");
+const brokenManifest = join(registry, "extra-task-states", extraVersion, "manifest.json");
 
 const SABOTAGE = `export default function activate() {
   throw new Error("extra-task-states: deliberately broken by the E2E suite");

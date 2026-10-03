@@ -1,8 +1,9 @@
-import type { DocumentRow, DocumentsApi, FilterJson, Unsubscribe } from "@kernel";
+import type { DocumentRow, DocumentsApi, SearchApi, SearchDocumentRow, Unsubscribe } from "@kernel";
 
-import { buildConditions, treeToWatch } from "../../_shared/conditions.js";
-import { contextFrom, watchChildren, type ChildrenMap } from "../../_shared/conditions-children.js";
-import { EXCLUDE_MACHINE_DOCUMENTS, isMachineDocument } from "../../_shared/machine-docs.js";
+import { hasConditions, treeToWatch, whereConditions } from "../../_shared/conditions.js";
+import { watchChildren } from "../../_shared/conditions-children.js";
+import { notMachine, watchRows } from "../../_shared/live-search.js";
+import { isMachineDocument } from "../../_shared/machine-docs.js";
 
 import { fieldValue, wanted, type AutoField } from "./fields.js";
 
@@ -12,7 +13,8 @@ const RECHECK_MS = [1_500, 5_000, 12_000];
 const CREATED_WITHIN_MS = 60_000;
 
 export interface WatcherOptions {
-  readonly documents: Pick<DocumentsApi, "subscribe" | "query" | "get" | "splice">;
+  readonly documents: Pick<DocumentsApi, "get" | "splice">;
+  readonly search: SearchApi;
   readonly userId: string;
   readonly fields: () => readonly AutoField[];
   readonly active: () => boolean;
@@ -24,7 +26,7 @@ export interface Watcher {
   close(): void;
 }
 
-export function watch({ documents, userId, fields, active, warn }: WatcherOptions): Watcher {
+export function watch({ documents, search, userId, fields, active, warn }: WatcherOptions): Watcher {
   let closed = false;
   const seen = new Map<string, string>();
   let baseline = true;
@@ -33,7 +35,6 @@ export function watch({ documents, userId, fields, active, warn }: WatcherOption
   const running = new Set<string>();
   const again = new Set<string>();
 
-  let children: ChildrenMap = new Map();
   let treeKey = "";
   let stopTree: Unsubscribe = () => {};
 
@@ -47,11 +48,15 @@ export function watch({ documents, userId, fields, active, warn }: WatcherOption
 
   const matches = async (field: AutoField, id: string): Promise<boolean> => {
     if (field.when.clauses.length === 0) return true;
-    const filter = buildConditions(field.when, contextFrom(children));
-    if (filter === undefined) return false;
-    const only: FilterJson = { cmp: { field: "id", op: "eq", value: { str: id } } };
-    const result = await documents.query({ filter: { and: [filter, only] }, limit: 1 });
-    return result.total > 0;
+    if (!hasConditions(field.when)) return false;
+    const result = await search
+      .from()
+      .where("id", "eq", id)
+      .where((w) => whereConditions(w, field.when) ?? w.and())
+      .select("id")
+      .limit(1)
+      .run();
+    return result.rows.length > 0;
   };
 
   const fill = async (id: string): Promise<void> => {
@@ -88,7 +93,7 @@ export function watch({ documents, userId, fields, active, warn }: WatcherOption
     }
   };
 
-  const take = (rows: readonly DocumentRow[]): void => {
+  const take = (rows: readonly SearchDocumentRow[]): void => {
     if (closed) return;
     const first = baseline;
     baseline = false;
@@ -107,24 +112,11 @@ export function watch({ documents, userId, fields, active, warn }: WatcherOption
     }
   };
 
-  let stopRecent: (() => void) | undefined;
-  void documents
-    .subscribe({ filter: EXCLUDE_MACHINE_DOCUMENTS, sort: [{ field: "updated_at", direction: "desc" }], limit: WATCHED })
-    .then(
-      (subscription) => {
-        if (closed) {
-          subscription.close();
-          return;
-        }
-        take(subscription.result.rows);
-        const off = subscription.onChange((result) => take(result.rows));
-        stopRecent = () => {
-          off();
-          subscription.close();
-        };
-      },
-      (cause: unknown) => warn("could not watch for changed notes", cause),
-    );
+  const stopRecent = watchRows(
+    search.from().where(notMachine).sort("-updated_at").limit(WATCHED),
+    take,
+    (cause: unknown) => warn("could not watch for changed notes", cause),
+  );
 
   const refresh = (): void => {
     const wantedTrees = fields().map((field) => treeToWatch(field.when));
@@ -135,8 +127,7 @@ export function watch({ documents, userId, fields, active, warn }: WatcherOption
     if (key === treeKey) return;
     treeKey = key;
     stopTree();
-    stopTree = watchChildren(documents, ids, (map) => {
-      children = map;
+    stopTree = watchChildren(search, ids, () => {
       for (const id of fresh.keys()) if (isFresh(id)) void fill(id);
     });
   };
@@ -146,7 +137,7 @@ export function watch({ documents, userId, fields, active, warn }: WatcherOption
     refresh,
     close() {
       closed = true;
-      stopRecent?.();
+      stopRecent();
       stopTree();
       for (const timer of timers) clearTimeout(timer);
       timers.clear();
@@ -158,7 +149,7 @@ function usable(row: DocumentRow): boolean {
   return !row.deleted && !row.fm_parse_error && !isMachineDocument(row);
 }
 
-function madeHere(row: DocumentRow, userId: string, active: () => boolean): boolean {
+function madeHere(row: SearchDocumentRow, userId: string, active: () => boolean): boolean {
   if (row.created_by !== userId) return false;
   const age = Date.parse(row.updated_at) - Date.parse(row.created_at);
   if (!(age >= 0 && age < CREATED_WITHIN_MS)) return false;

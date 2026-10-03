@@ -183,7 +183,7 @@ my-plugin/
 {
   "id": "my-plugin",            // must equal the directory name
   "version": "1.0.0",
-  "kernel": "^3.0",             // checked at install and again by the loader at boot
+  "kernel": "^4.0",             // checked at install and again by the loader at boot
   "dependencies": { "document-surface": "^2.0" },  // what you import as `plugin:<id>`
   "peerLibraries": { "react": "^18.0.0", "yjs": "^13.0.0" },
   "frontend": { "module": "frontend/index.mjs", "style": "frontend/style.css" }

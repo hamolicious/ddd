@@ -1,5 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 import { expect, test, type Browser } from "@playwright/test";
@@ -26,7 +26,8 @@ test.beforeAll(async () => {
     { cwd: repo, encoding: "utf8" },
   );
   expect(compose.status, `compose-plugins: ${compose.stderr ?? ""}`).toBe(0);
-  expect(existsSync(join(REGISTRY, "alt-editor", "1.0.0", "manifest.json"))).toBe(true);
+  const version = (JSON.parse(readFileSync(join(repo, "plugins", "examples", "alt-editor", "manifest.json"), "utf8")) as { version: string }).version;
+  expect(existsSync(join(REGISTRY, "alt-editor", version, "manifest.json"))).toBe(true);
   expect(existsSync(join(REGISTRY, "editor"))).toBe(false);
 
   server = spawn(process.execPath, [join(web, "app", "e2e", "server.mjs")], {

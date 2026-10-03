@@ -48,18 +48,23 @@ export class WorkspaceIndex {
   }
 
   sync(rows: readonly DocumentRow[]): boolean {
+    return this.update(
+      rows,
+      new Set(rows.filter((row) => !row.purged).map((row) => row.id)),
+    );
+  }
+
+  update(rows: readonly DocumentRow[], present: ReadonlySet<DocumentId>): boolean {
     let changed = false;
-    const seen = new Set<DocumentId>();
     for (const row of rows) {
-      if (row.purged) continue;
-      seen.add(row.id);
+      if (row.purged || !present.has(row.id)) continue;
       const print = fingerprint(row);
       if (this.#entries.get(row.id)?.fingerprint === print) continue;
       this.#entries.set(row.id, { fingerprint: print, data: extract(row) });
       changed = true;
     }
     for (const id of this.#entries.keys()) {
-      if (!seen.has(id)) {
+      if (!present.has(id)) {
         this.#entries.delete(id);
         changed = true;
       }

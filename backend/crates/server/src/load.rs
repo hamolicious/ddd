@@ -407,7 +407,7 @@ mod tests {
             let mut manifest = serde_json::json!({
                 "id": self.id,
                 "version": self.version,
-                "kernel": "^3.0",
+                "kernel": "^4.0",
                 "dependencies": map(&self.deps),
                 "optionalDependencies": map(&self.optional),
                 "frontend": { "module": "frontend/index.mjs" },

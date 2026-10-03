@@ -218,7 +218,7 @@ export default function activate(kernel: Kernel): void {
 
   const TrashHost = (): ReactElement => (
     <TrashView
-      documents={kernel.documents}
+      search={kernel.search}
       onOpen={open}
       onRestore={(id) => kernel.documents.restore(id)}
       currentUserId={kernel.session.user.id}
@@ -230,7 +230,7 @@ export default function activate(kernel: Kernel): void {
     useEffect(() => router.onChange(setPath), []);
     return (
       <ViewsPanel
-        documents={kernel.documents}
+        search={kernel.search}
         current={path.split("?")[0] ?? "/"}
         onNavigate={(next) => router.navigate(next)}
       />

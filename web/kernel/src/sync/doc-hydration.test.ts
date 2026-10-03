@@ -893,6 +893,18 @@ describe("notes made on this device (dev-docs/resolved/SYNC-DECISIONS.md §1)", 
     expect(hydrator.pendingCount).toBe(0);
   });
 
+  it("a note the server confirmed without it being opened is not left counted as unsent", async () => {
+    const persistence = new MemoryDocPersistence();
+    const { hydrator } = await fixture({ persistence, persistDebounceMs: 0 });
+    await hydrator.seed(DOC, "# Welcome\n");
+    expect(await hydrator.unsentIds()).toEqual([DOC]);
+    hydrator.created(DOC);
+    await settle();
+    expect(persistence.states.get(DOC)?.unsynced).toBe(false);
+    expect(await hydrator.unsentIds()).toEqual([]);
+    expect(await hydrator.localText(DOC)).toBe("# Welcome\n");
+  });
+
   it("forget drops the replica and its queue", async () => {
     const persistence = new MemoryDocPersistence();
     const { hydrator } = await fixture({ persistence, persistDebounceMs: 0 });

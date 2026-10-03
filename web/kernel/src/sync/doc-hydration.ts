@@ -281,7 +281,19 @@ export class DocHydrator {
     if (!this.#awaitingCreate.delete(id)) return;
     this.#seeds.delete(id);
     const entry = this.#open.get(id);
-    if (entry && !entry.subscribed) this.#subscribe(entry);
+    if (entry) {
+      if (!entry.subscribed) this.#subscribe(entry);
+      return;
+    }
+    void this.#markCreated(id).catch(() => undefined);
+  }
+
+  async #markCreated(id: string): Promise<void> {
+    const persistence = this.options.persistence;
+    const stored = await persistence?.peek?.(id);
+    if (!persistence || !stored?.unsynced || (stored.journal?.length ?? 0) > 0) return;
+    if (this.#open.has(id) || this.#opening.has(id) || this.#awaitingCreate.has(id)) return;
+    await persistence.save(id, stored.state, { unsynced: false });
   }
 
   async forget(id: string): Promise<void> {

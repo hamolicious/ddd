@@ -38,7 +38,8 @@ describe("spansOf", () => {
   });
 });
 
-const built = fileURLToPath(new URL("../../dist/syntax-highlight/2.0.0/frontend/", import.meta.url));
+const { version } = JSON.parse(readFileSync(new URL("../manifest.json", import.meta.url), "utf8")) as { version: string };
+const built = fileURLToPath(new URL(`../../dist/syntax-highlight/${version}/frontend/`, import.meta.url));
 
 describe.skipIf(!existsSync(`${built}languages/rust/grammar.wasm`))("engine, with the built grammars", () => {
   const engine = createEngine({

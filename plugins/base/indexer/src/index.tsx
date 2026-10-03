@@ -1,4 +1,6 @@
-import type { DocumentId, DocumentQueryResult, Kernel, QuerySubscription, Unsubscribe } from "@kernel";
+import type { DocumentId, DocumentRow, Kernel, Unsubscribe } from "@kernel";
+
+import { watchRows } from "../../_shared/live-search.js";
 
 import type {
   FieldScope,
@@ -66,27 +68,63 @@ export function subscribe(listener: () => void): Unsubscribe {
   };
 }
 
-let subscription: QuerySubscription | undefined;
+const CONTENT_BATCH = 500;
+
+let stop: Unsubscribe | undefined;
+
+interface LightRow {
+  readonly id: string;
+  readonly title: string;
+  readonly materialized_version: string;
+  readonly updated_at: string;
+  readonly deleted: boolean;
+  readonly words: number;
+  readonly characters: number;
+}
+
+const stampOf = (row: LightRow): string =>
+  [row.materialized_version, row.updated_at, row.deleted, row.words, row.characters, row.title].join("\u0000");
 
 export default function activate(kernel: Kernel): void {
-  const apply = (result: DocumentQueryResult): void => {
-    if (!index.sync(result.rows)) return;
-    version = index.version;
-    for (const listener of [...listeners]) {
-      try {
-        listener();
-      } catch (error) {
-        kernel.log.warn("an index listener threw", error);
+  const stamps = new Map<string, string>();
+  let queue: Promise<void> = Promise.resolve();
+  let first = true;
+
+  const take = async (rows: readonly LightRow[]): Promise<void> => {
+    const present = new Set(rows.map((row) => row.id));
+    const changed = rows.filter((row) => stamps.get(row.id) !== stampOf(row)).map((row) => row.id);
+    const full: DocumentRow[] = [];
+    for (let at = 0; at < changed.length; at += CONTENT_BATCH) {
+      const ids = changed.slice(at, at + CONTENT_BATCH);
+      const page = await kernel.search.from().trash("all").where("id", "in", ids).withContent().run();
+      full.push(...(page.rows as readonly DocumentRow[]));
+    }
+    const fetched = new Set(changed);
+    for (const row of rows) if (fetched.has(row.id)) stamps.set(row.id, stampOf(row));
+    for (const id of [...stamps.keys()]) if (!present.has(id)) stamps.delete(id);
+    if (index.update(full, present)) {
+      version = index.version;
+      for (const listener of [...listeners]) {
+        try {
+          listener();
+        } catch (error) {
+          kernel.log.warn("an index listener threw", error);
+        }
       }
+    }
+    if (first) {
+      first = false;
+      settle?.resolve();
     }
   };
 
-  kernel.documents.subscribe({ includeDeleted: true }).then(
-    (opened) => {
-      subscription = opened;
-      apply(opened.result);
-      opened.onChange(apply);
-      settle?.resolve();
+  stop = watchRows(
+    kernel.search
+      .from()
+      .trash("all")
+      .select("id", "title", "materialized_version", "updated_at", "deleted", "words", "characters"),
+    (rows) => {
+      queue = queue.then(() => take(rows)).catch((error: unknown) => kernel.log.error("the workspace could not be indexed", error));
     },
     (error: unknown) => {
       kernel.log.error("the workspace could not be indexed", error);
@@ -96,6 +134,6 @@ export default function activate(kernel: Kernel): void {
 }
 
 export function deactivate(): void {
-  subscription?.close();
-  subscription = undefined;
+  stop?.();
+  stop = undefined;
 }

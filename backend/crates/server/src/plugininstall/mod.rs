@@ -1427,7 +1427,7 @@ mod tests {
 
     fn needing(dependencies: serde_json::Value) -> PluginManifest {
         serde_json::from_value(serde_json::json!({
-            "id": "needy", "version": "1.0.0", "kernel": "^3.0",
+            "id": "needy", "version": "1.0.0", "kernel": "^4.0",
             "dependencies": dependencies,
             "optionalDependencies": { "absent": "*" },
         }))
@@ -1449,9 +1449,9 @@ mod tests {
     #[test]
     fn install_needs_every_required_dependency_in_range() {
         let set = vec![
-            installed(serde_json::json!({ "id": "folders", "version": "2.1.0", "kernel": "^3.0" })),
+            installed(serde_json::json!({ "id": "folders", "version": "2.1.0", "kernel": "^4.0" })),
             installed(serde_json::json!({
-                "id": "alt-editor", "version": "0.1.0", "kernel": "^3.0", "provides": "editor@3.2.0"
+                "id": "alt-editor", "version": "0.1.0", "kernel": "^4.0", "provides": "editor@3.2.0"
             })),
         ];
         assert!(check_dependencies(&needing(serde_json::json!({})), &set).is_ok());

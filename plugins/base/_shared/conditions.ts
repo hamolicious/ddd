@@ -1,4 +1,4 @@
-import type { FilterJson, Unsubscribe } from "@kernel";
+import type { FilterJson, SearchCondition, SearchLiteral, Unsubscribe } from "@kernel";
 
 export type ValueKind = "str" | "int" | "float" | "bool" | "date" | "null" | "doc";
 
@@ -348,4 +348,58 @@ export interface Suggestions {
   fields(): readonly FieldOption[];
   values(field: string): readonly string[];
   subscribe(listener: () => void): Unsubscribe;
+}
+
+interface ConditionExpression {
+  (field: string, op: string, value?: unknown, options?: { readonly deep?: boolean }): SearchCondition;
+  and(...conditions: readonly SearchCondition[]): SearchCondition;
+  or(...conditions: readonly SearchCondition[]): SearchCondition;
+  not(condition: SearchCondition): SearchCondition;
+}
+
+function searchLiteral(literal: unknown): SearchLiteral {
+  if (literal === "null") return null;
+  const node = literal as { readonly str?: string; readonly int?: number; readonly float?: number; readonly bool?: boolean; readonly date?: string };
+  if (node.str !== undefined) return node.str;
+  if (node.int !== undefined) return node.int;
+  if (node.float !== undefined) return node.float;
+  if (node.bool !== undefined) return node.bool;
+  if (node.date !== undefined) return { date: node.date };
+  return null;
+}
+
+export function clauseCondition<W>(expression: W, clause: FilterClause): SearchCondition | undefined {
+  const w = expression as unknown as ConditionExpression;
+  const field = clause.field.trim();
+  let condition: SearchCondition | undefined;
+  if (TREE_OPS.includes(clause.op)) {
+    const id = clause.value.trim();
+    if (id === "") return undefined;
+    condition =
+      clause.op === "child_of" ? w("id", "child_of", id, { deep: clause.deep === true }) : w("id", "parent_of", id);
+  } else {
+    if (!isFieldPathShaped(field) || buildClause(clause) === undefined) return undefined;
+    if (VALUELESS_OPS.includes(clause.op)) condition = w(field, clause.op);
+    else if (TEXT_OPS.includes(clause.op)) condition = w(field, clause.op, clause.value.trim());
+    else if (clause.op === "contains_any") {
+      condition = w(field, "contains_any", splitValues(clause.value).map((value) => searchLiteral(buildLiteral(clause.kind, value))));
+    } else condition = w(field, clause.op, searchLiteral(buildLiteral(clause.kind, clause.value)));
+  }
+  return clause.negate === true ? w.not(condition) : condition;
+}
+
+export function whereConditions<W>(expression: W, conditions: Conditions): SearchCondition | undefined {
+  const w = expression as unknown as ConditionExpression;
+  const parts = conditions.clauses
+    .map((clause) => clauseCondition(expression, clause))
+    .filter((part): part is SearchCondition => part !== undefined);
+  if (parts.length === 0) return undefined;
+  if (parts.length === 1) return parts[0];
+  return conditions.combine === "or" ? w.or(...parts) : w.and(...parts);
+}
+
+export function hasConditions(conditions: Conditions): boolean {
+  return conditions.clauses.some((clause) =>
+    TREE_OPS.includes(clause.op) ? clause.value.trim() !== "" : buildClause(clause) !== undefined,
+  );
 }

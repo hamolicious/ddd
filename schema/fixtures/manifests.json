@@ -4,7 +4,7 @@
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^3.0"
+      "kernel": "^4.0"
     },
     "problems": []
   },
@@ -44,7 +44,7 @@
     "manifest": {
       "id": "graph",
       "version": "1.0.0",
-      "kernel": "^3.0",
+      "kernel": "^4.0",
       "x-defines": [
         "graph.thing"
       ]
@@ -58,7 +58,7 @@
     "manifest": {
       "id": "alt-editor",
       "version": "0.3.0",
-      "kernel": "^3.0",
+      "kernel": "^4.0",
       "provides": "editor@2.0.0",
       "dependencies": {
         "shell-ui": "^2.0"
@@ -71,7 +71,7 @@
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^3.0",
+      "kernel": "^4.0",
       "provides": "editor@^2.0"
     },
     "problems": [
@@ -83,7 +83,7 @@
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^3.0",
+      "kernel": "^4.0",
       "provides": "editor"
     },
     "problems": [
@@ -95,7 +95,7 @@
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^3.0",
+      "kernel": "^4.0",
       "provides": "ddd/editor@2.0.0"
     },
     "problems": [
@@ -107,7 +107,7 @@
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^3.0",
+      "kernel": "^4.0",
       "dependencies": {
         "Bad_Id": "^1.0",
         "router": "latest",
@@ -130,7 +130,7 @@
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^3.0",
+      "kernel": "^4.0",
       "dependencies": [
         "router"
       ]
@@ -144,7 +144,7 @@
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^3.0",
+      "kernel": "^4.0",
       "backend": {
         "module": "backend.wasm",
         "exports": {
@@ -172,7 +172,7 @@
       "x-tailwind": {
         "prefix": "graph"
       },
-      "kernel": "^3.0",
+      "kernel": "^4.0",
       "peerLibraries": {
         "react": "^18.0.0"
       },
@@ -293,7 +293,7 @@
     "manifest": {
       "id": "Bad_Id",
       "version": "1.0",
-      "kernel": "^3.0"
+      "kernel": "^4.0"
     },
     "problems": [
       "id",
@@ -305,7 +305,7 @@
     "manifest": {
       "id": "demo",
       "version": "1.0.0-../../../srv",
-      "kernel": "^3.0"
+      "kernel": "^4.0"
     },
     "problems": [
       "version"
@@ -316,7 +316,7 @@
     "manifest": {
       "id": "demo",
       "version": "1.0.0-a..b",
-      "kernel": "^3.0"
+      "kernel": "^4.0"
     },
     "problems": [
       "version"
@@ -345,7 +345,7 @@
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^3.0",
+      "kernel": "^4.0",
       "frontend": {
         "module": "../escape.mjs",
         "style": "/abs.css"
@@ -361,7 +361,7 @@
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^3.0",
+      "kernel": "^4.0",
       "frontend": {
         "style": null
       }
@@ -376,7 +376,7 @@
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^3.0",
+      "kernel": "^4.0",
       "frontend": {
         "module": "frontend/index..mjs"
       }
@@ -388,7 +388,7 @@
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^3.0",
+      "kernel": "^4.0",
       "capabilities": {
         "documents": [
           "read",
@@ -411,7 +411,7 @@
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^3.0",
+      "kernel": "^4.0",
       "config": {
         "a": {
           "type": "date"
@@ -438,7 +438,7 @@
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^3.0",
+      "kernel": "^4.0",
       "backend": {
         "hooks": [
           "document.opened"
@@ -459,7 +459,7 @@
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^3.0",
+      "kernel": "^4.0",
       "futureField": {
         "a": 1
       },
@@ -472,7 +472,7 @@
     "manifest": {
       "id": "demo",
       "version": "1.0.0",
-      "kernel": "^3.0",
+      "kernel": "^4.0",
       "name": 5,
       "license": null
     },

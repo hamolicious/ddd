@@ -134,7 +134,7 @@ export default function activate(kernel: Kernel): void {
     sameStyle,
     "the default folder look",
   );
-  const matcher = ruleMatcher(kernel.documents, publish, (cause) =>
+  const matcher = ruleMatcher(kernel.search, publish, (cause) =>
     kernel.log.warn("a folder style rule could not be run", cause),
   );
   const rules = stored<readonly Rule[]>(
