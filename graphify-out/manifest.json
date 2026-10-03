@@ -1842,9 +1842,9 @@
     "semantic_hash": ""
   },
   "web/app/runtime/specifiers.ts": {
-    "mtime": 1790969666.8823063,
-    "seen": 1790986672.7304726,
-    "ast_hash": "732f56e8d3a8b301c00def7c8e85e963",
+    "mtime": 1791047349.5961442,
+    "seen": 1791048183.5553324,
+    "ast_hash": "ba127292aeeebd27fa618124e0c334d2",
     "semantic_hash": ""
   },
   "web/app/runtime/unified.js": {
@@ -1986,9 +1986,9 @@
     "semantic_hash": ""
   },
   "web/app/src/ui/ReauthOverlay.tsx": {
-    "mtime": 1790969666.8844876,
-    "seen": 1790986672.7305021,
-    "ast_hash": "2f8349a34dd1647d55910dd3ead3d98b",
+    "mtime": 1791047362.5000112,
+    "seen": 1791048183.5563571,
+    "ast_hash": "b3b1634f0f03d69aff6e951e957ea285",
     "semantic_hash": ""
   },
   "web/app/src/virtual-modules.d.ts": {
@@ -2646,9 +2646,9 @@
     "semantic_hash": ""
   },
   "backend/README.md": {
-    "mtime": 1790989899.4072478,
-    "seen": 1790990542.1531205,
-    "ast_hash": "9757bd83f49c5dc4f6c7a7ac738eb870",
+    "mtime": 1791047399.5159867,
+    "seen": 1791048183.5622408,
+    "ast_hash": "2b804823a7ac920e7e3be0adf7570a06",
     "semantic_hash": ""
   },
   "backend/crates/core/README.md": {
@@ -2676,9 +2676,9 @@
     "semantic_hash": ""
   },
   "web/README.md": {
-    "mtime": 1790988182.6144154,
-    "seen": 1790989172.9518116,
-    "ast_hash": "d275cede6cd16a02475c709ec87872f1",
+    "mtime": 1791047349.5963364,
+    "seen": 1791048183.562748,
+    "ast_hash": "3ae0751f5b8098b50ff93e61ccb5c515",
     "semantic_hash": ""
   },
   "web/app/index.html": {
@@ -2688,9 +2688,9 @@
     "semantic_hash": ""
   },
   "web/demo/index.html": {
-    "mtime": 1790969666.8850045,
-    "seen": 1790986672.7313044,
-    "ast_hash": "0e6557d84b8fe3103a8d905266596e90",
+    "mtime": 1791047386.7319689,
+    "seen": 1791048183.5628288,
+    "ast_hash": "976ca1d563a92d0af0f8bfa1ce0a4e2c",
     "semantic_hash": ""
   },
   "app/android/app/src/main/res/mipmap-hdpi/ic_launcher.png": {
@@ -5526,9 +5526,9 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1790987708.3273869,
-    "seen": 1790989172.9510818,
-    "ast_hash": "aeffc4ac40da125c950706a83d8321bd",
+    "mtime": 1791047399.51581,
+    "seen": 1791048183.561784,
+    "ast_hash": "cf723157ef73d5595cdc524383022420",
     "semantic_hash": ""
   },
   "backend/crates/server/src/plugininstall/sources.rs": {
@@ -5655,6 +5655,18 @@
     "mtime": 1791043741.867911,
     "seen": 1791043894.971784,
     "ast_hash": "c91e9b2768779f3b9648dce7a4d701f0",
+    "semantic_hash": ""
+  },
+  "scripts/check-comments.mjs": {
+    "mtime": 1791047375.1049328,
+    "seen": 1791048183.5536327,
+    "ast_hash": "e9a618a1e3717cf7a536f1c38b48eff7",
+    "semantic_hash": ""
+  },
+  "scripts/full-test.sh": {
+    "mtime": 1791047503.3439252,
+    "seen": 1791048183.5536344,
+    "ast_hash": "634dd37c0157b2248fa5eca2cb76e253",
     "semantic_hash": ""
   }
 }

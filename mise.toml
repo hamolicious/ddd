@@ -116,10 +116,19 @@ run = [
   """,
 ]
 
+[tasks.full-test]
+description = "Every check and test suite (comments, web, collab, Rust, Flutter, browser), stopping at the first failure"
+run = "bash scripts/full-test.sh"
+
+[tasks.comments-check]
+description = "Fail if any source or config file has a comment or docstring (tokei), allowing only functional ones such as shebangs and lint suppressions"
+run = "node scripts/check-comments.mjs"
+
 [tasks.check]
 description = "Type-check the whole workspace (including tests) plus clippy"
 dir = "backend"
 run = [
+  "node ../scripts/check-comments.mjs",
   "cargo fmt --all --check",
   "cargo check --workspace --all-targets",
   "cargo clippy --workspace --all-targets -- -D warnings",
