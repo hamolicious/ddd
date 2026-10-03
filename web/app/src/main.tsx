@@ -19,6 +19,7 @@ import {
   rememberPlugins,
   rememberSession,
 } from "./boot/cache.js";
+import { removeSearchFiles } from "@kernel/search/index.js";
 import { initKernel, type KernelRuntime } from "./boot/kernel-init.js";
 import { bootModeFor, safeModeFrom } from "./boot/safe-mode.js";
 import { contributeAboutSection } from "./boot/AboutSection.js";
@@ -152,6 +153,7 @@ async function boot(): Promise<void> {
         onCoreUnavailable: (error) => console.warn("[wasm] core unavailable", error.message),
       });
       const host = runtime.host;
+      if (import.meta.env.DEV) installSearchConsole(runtime);
 
       let wasConnected = false;
       host.sync.api().subscribe((state) => {
@@ -352,7 +354,9 @@ async function signOut(
   } finally {
     current?.host.settings.stop();
     current?.sync.stop();
+    await current?.search.wipe().catch(() => undefined);
     await current?.engine.close();
+    await removeSearchFiles();
     await current?.store.clear();
     await deletePluginDatabases();
     await globalThis.caches?.delete("ddd:api").catch(() => false);
@@ -360,6 +364,10 @@ async function signOut(
     forgetBootCache();
     location.assign("/");
   }
+}
+
+function installSearchConsole(runtime: KernelRuntime): void {
+  Object.assign(globalThis, { dddSearchSql: (sql: string) => runtime.search.select(sql) });
 }
 
 async function deletePluginDatabases(): Promise<void> {

@@ -6,6 +6,7 @@ pub mod filter;
 pub mod frontmatter;
 pub mod limits;
 pub mod query;
+pub mod search;
 pub mod sections;
 pub mod shape;
 pub mod splice;

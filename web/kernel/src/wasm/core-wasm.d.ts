@@ -13,6 +13,12 @@ declare module "@ddd/core-wasm" {
 
   export function resolve_title(text: string): string;
 
+  export function search_schema(): string;
+
+  export function search_project(rows_json: string): string;
+
+  export function search_remove(ids_json: string): string;
+
   export class QueryEngine {
     constructor();
     static load(json: string): QueryEngine | undefined;

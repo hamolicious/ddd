@@ -1,0 +1,201 @@
+[
+  {
+    "name": "links, embeds, autolinks, definitions and repeats",
+    "id": "X",
+    "text": "See [the list](doc://A) and [again](doc:A#part).\n![](doc://B)\n<doc://C>\n[ref]: doc://D\n[nested [brackets]](doc://E \"title\")\n",
+    "fm": {},
+    "expected": {
+      "words": 10,
+      "characters": 123,
+      "tasks": {
+        "open": 0,
+        "done": 0,
+        "other": 0
+      },
+      "references": [
+        {
+          "id": "A",
+          "kind": "link",
+          "count": 2
+        },
+        {
+          "id": "B",
+          "kind": "embed",
+          "count": 1
+        },
+        {
+          "id": "C",
+          "kind": "link",
+          "count": 1
+        },
+        {
+          "id": "D",
+          "kind": "link",
+          "count": 1
+        },
+        {
+          "id": "E",
+          "kind": "link",
+          "count": 1
+        }
+      ],
+      "attachments": []
+    }
+  },
+  {
+    "name": "code, frontmatter, machine sections and self-references are skipped",
+    "id": "X",
+    "text": "---\ntitle: X\n---\n`[inline](doc://A)` and [self](doc://X)\n```md\n[fenced](doc://B)\n```\n[real](doc://C)\n\n%%% other\nref: doc://D\n%%%\n",
+    "fm": {
+      "title": "X"
+    },
+    "expected": {
+      "words": 6,
+      "characters": 83,
+      "tasks": {
+        "open": 0,
+        "done": 0,
+        "other": 0
+      },
+      "references": [
+        {
+          "id": "C",
+          "kind": "link",
+          "count": 1
+        }
+      ],
+      "attachments": []
+    }
+  },
+  {
+    "name": "frontmatter references by key",
+    "id": "X",
+    "text": "---\nparent: doc://P\nrelated: [doc://Q, plain, doc:R]\nproject: {lead: doc://S}\n---\n",
+    "fm": {
+      "parent": "doc://P",
+      "related": [
+        "doc://Q",
+        "plain",
+        "doc:R"
+      ],
+      "project": {
+        "lead": "doc://S"
+      }
+    },
+    "expected": {
+      "words": 0,
+      "characters": 0,
+      "tasks": {
+        "open": 0,
+        "done": 0,
+        "other": 0
+      },
+      "references": [
+        {
+          "id": "P",
+          "kind": "frontmatter",
+          "key": "parent",
+          "count": 1
+        },
+        {
+          "id": "Q",
+          "kind": "frontmatter",
+          "key": "related",
+          "count": 1
+        },
+        {
+          "id": "R",
+          "kind": "frontmatter",
+          "key": "related",
+          "count": 1
+        },
+        {
+          "id": "S",
+          "kind": "frontmatter",
+          "key": "project.lead",
+          "count": 1
+        }
+      ],
+      "attachments": []
+    }
+  },
+  {
+    "name": "tasks by marker, outside code",
+    "id": "X",
+    "text": "- [ ] a\n* [x] b\n1. [X] c\n- [/] d\n```\n- [ ] no\n```\nnot [ ] a task\n",
+    "fm": {},
+    "expected": {
+      "words": 11,
+      "characters": 64,
+      "tasks": {
+        "open": 1,
+        "done": 2,
+        "other": 1
+      },
+      "references": [],
+      "attachments": []
+    }
+  },
+  {
+    "name": "words and distinct attachments",
+    "id": "X",
+    "text": "---\ntitle: Not counted here\n---\none two  three\n![a](attachment://01J0000000000000000000000A) [b](attachment:01J0000000000000000000000B) ![c](attachment://01J0000000000000000000000A) ![d](attachment://waiting-1a2b3c4d)\n",
+    "fm": {
+      "title": "Not counted here"
+    },
+    "expected": {
+      "words": 7,
+      "characters": 185,
+      "tasks": {
+        "open": 0,
+        "done": 0,
+        "other": 0
+      },
+      "references": [],
+      "attachments": [
+        "01J0000000000000000000000A",
+        "01J0000000000000000000000B"
+      ]
+    }
+  },
+  {
+    "name": "tilde fences, longer closers and unclosed inline code",
+    "id": "X",
+    "text": "~~~~\n[in](doc://A)\n~~~\nstill in\n~~~~~\n``code` [out](doc://B)\n",
+    "fm": {},
+    "expected": {
+      "words": 5,
+      "characters": 60,
+      "tasks": {
+        "open": 0,
+        "done": 0,
+        "other": 0
+      },
+      "references": [
+        {
+          "id": "B",
+          "kind": "link",
+          "count": 1
+        }
+      ],
+      "attachments": []
+    }
+  },
+  {
+    "name": "joined words, unicode and scheme autolinks",
+    "id": "X",
+    "text": "don't re-use rock’n’roll ünïcode 42 <https://example.invalid/a b> [t](https://example.invalid)\n",
+    "fm": {},
+    "expected": {
+      "words": 11,
+      "characters": 94,
+      "tasks": {
+        "open": 0,
+        "done": 0,
+        "other": 0
+      },
+      "references": [],
+      "attachments": []
+    }
+  }
+]

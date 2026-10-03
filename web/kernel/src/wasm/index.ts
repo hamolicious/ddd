@@ -31,6 +31,21 @@ export interface CoreQueryEngine {
   free(): void;
 }
 
+export type SqlParam = string | number | null;
+
+export interface SqlStatement {
+  readonly sql: string;
+  readonly params: readonly SqlParam[];
+}
+
+export interface SearchSchema {
+  readonly version: number;
+  readonly statements: readonly string[];
+  readonly read_version: string;
+  readonly write_version: string;
+  readonly read_stamps: string;
+}
+
 export interface CoreBindings {
   parseDocument(text: string): ParsedDocument;
   evaluateFilter(filter: FilterJson, row: FilterRow): boolean;
@@ -38,6 +53,9 @@ export interface CoreBindings {
   resolveTitle(text: string): string;
   normalizeDate(input: string): string;
   queryEngine(saved?: string): CoreQueryEngine | undefined;
+  searchSchema(): SearchSchema;
+  searchProject(rows: readonly unknown[]): readonly SqlStatement[];
+  searchRemove(ids: readonly string[]): readonly SqlStatement[];
 }
 
 export function filterRow(row: ProjectionRow): FilterRow {
@@ -71,9 +89,18 @@ export function loadCore(initInput?: BufferSource | WebAssembly.Module | URL | s
         const engine = saved === undefined ? new mod.QueryEngine() : mod.QueryEngine.load(saved);
         return engine === undefined ? undefined : wrapEngine(engine);
       },
+      searchSchema: () => JSON.parse(mod.search_schema()) as SearchSchema,
+      searchProject: (rows: readonly unknown[]) => statementsOf(mod.search_project(JSON.stringify(rows))),
+      searchRemove: (ids: readonly string[]) => statementsOf(mod.search_remove(JSON.stringify(ids))),
     } satisfies CoreBindings;
   })();
   return cached;
+}
+
+function statementsOf(json: string): readonly SqlStatement[] {
+  const answer = JSON.parse(json) as { readonly statements: readonly SqlStatement[] } | { readonly error: string };
+  if ("error" in answer) throw new Error(answer.error);
+  return answer.statements;
 }
 
 function wrapEngine(engine: import("@ddd/core-wasm").QueryEngine): CoreQueryEngine {

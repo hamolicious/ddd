@@ -70,6 +70,7 @@ export default defineConfig(({ command }) => ({
       "/kernel.d.ts": { target: process.env.DDD_SERVER ?? "http://127.0.0.1:8080", changeOrigin: false },
     },
   },
+  optimizeDeps: { exclude: ["@sqlite.org/sqlite-wasm"] },
   worker: { format: "es" },
   build: {
     outDir: here("./app/dist"),

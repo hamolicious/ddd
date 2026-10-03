@@ -1,5 +1,8 @@
 import type { ProjectionRow } from "../protocol.js";
 import type { CoreBindings } from "../wasm/index.js";
+import { ProjectionHost, type ProjectionBackend } from "../search/backend.js";
+import type { SqlRow } from "../search/database.js";
+import type { ProjectionStatus } from "../search/projection.js";
 import type { PlanPage, QueryPlan } from "./plan.js";
 import { WasmEngineIndex, type EngineIndex, type SearchStats } from "./search.js";
 import type {
@@ -21,6 +24,18 @@ export class WorkerSearchIndex implements EngineIndex {
     number,
     { resolve: (value: unknown) => void; reject: (error: Error) => void }
   >();
+
+  readonly projection: ProjectionBackend = {
+    open: async () => (await this.#call({ op: "projection.open" })) as ProjectionStatus,
+    status: async () => (await this.#call({ op: "projection.status" })) as ProjectionStatus,
+    sync: async (rows, first, last) =>
+      (await this.#call({ op: "projection.sync", rows, first, last })) as number,
+    apply: async (rows, purged) => (await this.#call({ op: "projection.apply", rows, purged })) as number,
+    select: async (sql) => (await this.#call({ op: "projection.select", sql })) as readonly SqlRow[],
+    wipe: async () => {
+      await this.#call({ op: "projection.wipe" });
+    },
+  };
 
   constructor(private readonly options: WorkerSearchOptions = {}) {}
 
@@ -116,11 +131,15 @@ function defaultWorkerFactory(): Worker {
   });
 }
 
+export type SearchIndexWithProjection = EngineIndex & { readonly projection: ProjectionBackend };
+
 export function createSearchIndex(
   options: WorkerSearchOptions & { readonly core?: CoreBindings } = {},
-): EngineIndex {
+): SearchIndexWithProjection {
   if (options.workerFactory || typeof Worker !== "undefined") {
     return new WorkerSearchIndex(options);
   }
-  return new WasmEngineIndex(options.core ? { core: options.core } : {});
+  const index = new WasmEngineIndex(options.core ? { core: options.core } : {});
+  const projection = new ProjectionHost({ ...(options.core ? { core: options.core } : {}), persistent: false });
+  return Object.assign(index, { projection });
 }

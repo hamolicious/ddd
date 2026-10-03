@@ -1,6 +1,8 @@
 import type { ProjectionRow } from "../protocol.js";
 import type { PlanPage, QueryPlan } from "./plan.js";
 import type { SearchStats } from "./search.js";
+import type { SqlRow } from "../search/database.js";
+import type { ProjectionStatus } from "../search/projection.js";
 
 export type SearchRequest =
   | { readonly op: "open" }
@@ -15,9 +17,20 @@ export type SearchRequest =
       readonly first: boolean;
       readonly last: boolean;
     }
-  | { readonly op: "close" };
+  | { readonly op: "close" }
+  | { readonly op: "projection.open" }
+  | { readonly op: "projection.status" }
+  | {
+      readonly op: "projection.sync";
+      readonly rows: readonly ProjectionRow[];
+      readonly first: boolean;
+      readonly last: boolean;
+    }
+  | { readonly op: "projection.apply"; readonly rows: readonly ProjectionRow[]; readonly purged: readonly string[] }
+  | { readonly op: "projection.select"; readonly sql: string }
+  | { readonly op: "projection.wipe" };
 
-export type SearchResponseValue = void | PlanPage | SearchStats;
+export type SearchResponseValue = void | number | PlanPage | SearchStats | ProjectionStatus | readonly SqlRow[];
 
 export interface SearchRequestEnvelope {
   readonly id: number;

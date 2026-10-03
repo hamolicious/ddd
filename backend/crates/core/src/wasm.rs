@@ -5,6 +5,7 @@ use crate::document::parse_document as parse_document_native;
 use crate::filter::Filter;
 use crate::filter::evaluator::evaluate;
 use crate::query::{Doc, Engine, Plan};
+use crate::search;
 use crate::value::Map;
 
 #[wasm_bindgen]
@@ -119,6 +120,33 @@ impl QueryEngine {
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
+}
+
+#[wasm_bindgen]
+pub fn search_schema() -> String {
+    serde_json::json!({
+        "version": search::SEARCH_SCHEMA_VERSION,
+        "statements": search::SCHEMA,
+        "read_version": search::READ_SCHEMA_VERSION,
+        "write_version": search::WRITE_SCHEMA_VERSION,
+        "read_stamps": search::READ_STAMPS,
+    })
+    .to_string()
+}
+
+#[wasm_bindgen]
+pub fn search_project(rows_json: &str) -> String {
+    match search::statements_for_json(rows_json) {
+        Ok(statements) => serde_json::json!({ "statements": statements }).to_string(),
+        Err(error) => serde_json::json!({ "error": error.to_string() }).to_string(),
+    }
+}
+
+#[wasm_bindgen]
+pub fn search_remove(ids_json: &str) -> String {
+    let ids: Vec<String> = serde_json::from_str(ids_json).unwrap_or_default();
+    let statements: Vec<_> = ids.iter().flat_map(|id| search::remove_statements(id)).collect();
+    serde_json::json!({ "statements": statements }).to_string()
 }
 
 #[wasm_bindgen]

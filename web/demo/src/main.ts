@@ -60,6 +60,9 @@ function unavailableCore(reason: string): CoreBindings {
     resolveTitle: fail,
     normalizeDate: fail,
     queryEngine: fail,
+    searchSchema: fail,
+    searchProject: fail,
+    searchRemove: fail,
     semanticsVersion: () => -1,
   };
 }

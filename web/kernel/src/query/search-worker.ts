@@ -9,6 +9,7 @@ import type {
   SearchResponseEnvelope,
   SearchResponseValue,
 } from "./search-protocol.js";
+import { ProjectionHost } from "../search/backend.js";
 
 interface WorkerScope {
   postMessage(message: unknown): void;
@@ -20,6 +21,10 @@ const scope = globalThis as unknown as WorkerScope;
 const index = new WasmEngineIndex({
   persistence:
     typeof indexedDB === "undefined" ? new MemorySearchPersistence() : new IdbSearchPersistence(),
+});
+
+const projection = new ProjectionHost({
+  persistent: typeof navigator !== "undefined" && typeof navigator.storage?.getDirectory === "function",
 });
 
 let rebuilding: RebuildPass | undefined;
@@ -48,7 +53,20 @@ async function handle(envelope: SearchRequestEnvelope): Promise<SearchResponseVa
       return undefined;
     }
     case "close":
+      projection.close();
       return await index.close();
+    case "projection.open":
+      return await projection.open();
+    case "projection.status":
+      return await projection.status();
+    case "projection.sync":
+      return await projection.sync(request.rows, request.first, request.last);
+    case "projection.apply":
+      return await projection.apply(request.rows, request.purged);
+    case "projection.select":
+      return await projection.select(request.sql);
+    case "projection.wipe":
+      return await projection.wipe();
   }
 }
 
