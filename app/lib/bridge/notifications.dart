@@ -313,12 +313,12 @@ class NotificationsCapability {
               Map<String, Object?>.from(row),
             );
             _pending[n.id] = n;
-          } on BridgeException {}
+          } on BridgeException catch (_) {}
         }
       }
       _prune();
-    } on FormatException {
-    } on FileSystemException {}
+    } on FormatException catch (_) {
+    } on FileSystemException catch (_) {}
   }
 
   Future<void> _persist() async {

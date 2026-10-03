@@ -2,16 +2,12 @@ import type { Unsubscribe } from "@kernel";
 
 import type { FmField, PropertyKind, WorkspaceIndex } from "plugin:indexer";
 
-import { DOC_PREFIX, FIELD_OPTIONS, type FieldOption, type ValueKind } from "./conditions.js";
+import { DOC_PREFIX, FIELD_OPTIONS, type FieldOption, type Suggestions, type ValueKind } from "./conditions.js";
+
+export type { Suggestions };
 import type { NoteLook, NoteSource, PickableNote } from "./note-picker.js";
 
 export type ConditionIndex = Pick<WorkspaceIndex, "fmFields" | "fmValues" | "documents" | "subscribe" | "version">;
-
-export interface Suggestions {
-  fields(): readonly FieldOption[];
-  values(field: string): readonly string[];
-  subscribe(listener: () => void): Unsubscribe;
-}
 
 const FIXED = FIELD_OPTIONS.filter((option) => !option.field.startsWith("fm."));
 

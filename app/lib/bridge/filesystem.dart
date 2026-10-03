@@ -270,7 +270,7 @@ class FilesystemCapability {
     if (root.existsSync()) {
       try {
         await root.delete(recursive: true);
-      } on FileSystemException {}
+      } on FileSystemException catch (_) {}
     }
     await root.create(recursive: true);
     final File file = File('${root.path}/$name');
@@ -416,7 +416,7 @@ String? _dispositionFilename(String? header) {
   if (extended != null) {
     try {
       return Uri.decodeComponent(extended.group(1)!.trim());
-    } on ArgumentError {}
+    } on ArgumentError catch (_) {}
   }
   final RegExpMatch? plain = RegExp(
     r'filename\s*=\s*"?([^";]+)"?',

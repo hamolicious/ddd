@@ -1,9 +1,5 @@
 gradle-wrapper.jar
 /.gradle
-# Gradle's own output root. Distinct from `app/build/` (ignored by `app/.gitignore`), which is
-# where Flutter stages the APK: this one holds Gradle's reports and intermediates, and the
-# Flutter template does not ignore it because a plain Flutter build never writes here.
-# `mise run shell-apk` does.
 /build/
 /captures/
 /gradlew
@@ -12,8 +8,6 @@ gradle-wrapper.jar
 GeneratedPluginRegistrant.java
 .cxx/
 
-# Remember to never publicly share your keystore.
-# See https://flutter.dev/to/reference-keystore
 key.properties
 **/*.keystore
 **/*.jks

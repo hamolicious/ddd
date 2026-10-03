@@ -59,7 +59,9 @@ fn validate_fields(fields: &SourceFields) -> AppResult<()> {
             "a source needs a name of 1 to {MAX_NAME_CHARS} characters"
         )));
     }
-    let size = serde_json::to_vec(&fields.config).map(|bytes| bytes.len()).unwrap_or(usize::MAX);
+    let size = serde_json::to_vec(&fields.config)
+        .map(|bytes| bytes.len())
+        .unwrap_or(usize::MAX);
     if size > MAX_CONFIG_BYTES {
         return Err(AppError::bad_request(format!(
             "a source's settings may take at most {MAX_CONFIG_BYTES} bytes"
@@ -97,9 +99,10 @@ fn opened(state: &AppState, row: &bson::Document) -> AppResult<Option<SourceView
     for (key, value) in sealed {
         let value: SealedValue =
             bson::from_bson(value.clone()).map_err(|error| AppError::Internal(error.into()))?;
-        source
-            .secrets
-            .insert(key.clone(), cipher.open(&scope, key, &value).map_err(AppError::from)?);
+        source.secrets.insert(
+            key.clone(),
+            cipher.open(&scope, key, &value).map_err(AppError::from)?,
+        );
     }
     Ok(Some(source))
 }
@@ -169,7 +172,9 @@ fn seal_secrets(
     Ok(sealed)
 }
 
-fn config_document(config: &serde_json::Map<String, serde_json::Value>) -> AppResult<bson::Document> {
+fn config_document(
+    config: &serde_json::Map<String, serde_json::Value>,
+) -> AppResult<bson::Document> {
     bson::to_document(config).map_err(|error| AppError::bad_request(format!("settings: {error}")))
 }
 
@@ -224,7 +229,9 @@ pub async fn update(
 }
 
 pub async fn delete(state: &AppState, id: &str) -> AppResult<()> {
-    let removed = collection(state).delete_one(bson::doc! { "_id": id }).await?;
+    let removed = collection(state)
+        .delete_one(bson::doc! { "_id": id })
+        .await?;
     if removed.deleted_count == 0 {
         return Err(AppError::NotFound("package source"));
     }
@@ -246,7 +253,9 @@ mod tests {
         assert!(validate_fields(&fields("  ")).is_err());
         assert!(validate_fields(&fields(&"x".repeat(MAX_NAME_CHARS + 1))).is_err());
         let mut bad_secret = fields("ok");
-        bad_secret.secrets.insert("has space".to_string(), "v".to_string());
+        bad_secret
+            .secrets
+            .insert("has space".to_string(), "v".to_string());
         assert!(validate_fields(&bad_secret).is_err());
     }
 }

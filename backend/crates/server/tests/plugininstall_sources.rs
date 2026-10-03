@@ -63,9 +63,14 @@ async fn a_saved_source_keeps_its_token_sealed_and_hands_it_back_to_admins() {
         "the token is stored in the clear: {stored}"
     );
 
-    let updated = package_sources::update(&state, &created.id, fields("Renamed", "glpat-second"), &admin)
-        .await
-        .expect("updates");
+    let updated = package_sources::update(
+        &state,
+        &created.id,
+        fields("Renamed", "glpat-second"),
+        &admin,
+    )
+    .await
+    .expect("updates");
     assert_eq!(updated.name, "Renamed");
     assert_eq!(updated.secrets["token"], "glpat-second");
 
@@ -78,8 +83,15 @@ async fn a_saved_source_keeps_its_token_sealed_and_hands_it_back_to_admins() {
         .expect("clears the token");
     assert!(cleared.secrets.is_empty());
 
-    package_sources::delete(&state, &created.id).await.expect("deletes");
-    assert!(package_sources::list(&state).await.expect("lists").is_empty());
+    package_sources::delete(&state, &created.id)
+        .await
+        .expect("deletes");
+    assert!(
+        package_sources::list(&state)
+            .await
+            .expect("lists")
+            .is_empty()
+    );
     assert!(package_sources::delete(&state, &created.id).await.is_err());
     assert!(
         package_sources::update(&state, &created.id, fields("Gone", ""), &admin)

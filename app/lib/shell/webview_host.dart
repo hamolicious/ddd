@@ -130,12 +130,12 @@ class BundleServer {
       }
       await response.addStream(onDisk.openRead());
       await response.close();
-    } on HttpException {
+    } on HttpException catch (_) {
     } catch (error) {
       debugPrint('bundle server: $error');
       try {
         await _empty(response, HttpStatus.internalServerError);
-      } on Object {}
+      } on Object catch (_) {}
     }
   }
 

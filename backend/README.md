@@ -47,7 +47,7 @@ need `.env`.
 | `mise run up` | Build and run the whole stack in Docker | `docker compose up --build -d` |
 | `mise run down` | Stop the stack, keep the Mongo volume | `docker compose down` |
 | `mise run logs` | Tail the server logs | `docker compose logs -f server` |
-| `mise run check` | fmt + `cargo check` + clippy `-D warnings`, whole workspace | |
+| `mise run check` | No-comments check, fmt + `cargo check` + clippy `-D warnings`, whole workspace | |
 | `mise run test` | Whole workspace test suite | `cargo test --workspace --all-targets` |
 | `mise run wasm-check` | Check the core builds with no server deps (the Wasm shape) | `cargo check -p ddd-core --no-default-features` |
 | `mise run wasm` | Build the core to Wasm for the kernel, then a node smoke test | see [`../web/README.md`](../web/README.md) |

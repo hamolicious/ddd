@@ -83,7 +83,12 @@ mise run web-build      # build the app and the base plugins
 mise run dev            # MongoDB in Docker, the server on :8080
 mise run dev-hot        # the same, with live reload
 mise run test           # the server's tests
+mise run comments-check # fails on any code comment or docstring (needs tokei)
 ```
+
+The code has no comments or docstrings: names carry the meaning, and explanations live in each
+directory's README. Only functional comments are allowed, such as shebangs, lint suppressions and
+`@ts-expect-error`.
 
 | Directory                            | What's in it                                                                                                    |
 | ------------------------------------ | --------------------------------------------------------------------------------------------------------------- |

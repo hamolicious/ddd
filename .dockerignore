@@ -1,22 +1,13 @@
-# The image build context is the repository root (see `backend/Dockerfile`), so this
-# file is what keeps it small and keeps secrets and stale build output out of it.
-#
-# Everything the image needs: `backend/`, `schema/`, `web/`, `plugins/` and `brand/`. Nothing else.
-
-# Secrets — never in a build context, never in a layer.
 .env
 .env.*
 !.env.example
 
-# VCS and tooling metadata.
 .git
 .gitignore
 .github
 .mise
 .playwright-mcp
 
-# Build output. Every one of these is *regenerated inside the image*; copying the host's
-# copy in would at best waste a transfer and at worst ship a stale bundle over a fresh one.
 **/node_modules
 /target
 /backend/target
@@ -29,16 +20,10 @@
 /plugins/base/dist
 /plugins/base/dist.staging
 /plugins/base/*/dist
-# The plugin workspace's cargo output. The `plugin-builder` stage rebuilds it; the host's
-# copy is both large and, in a fresh clone, absent — and a stale `backend.wasm` that looks
-# like a successful build is the nastiest failure mode this pipeline has.
 /plugins/target
 
-# The Flutter shell (SPEC §7, M5) is a separate artifact — it is not in this image, and
-# its platform directories are large.
 /app
 
-# Operator-local output and review notes.
 /backups
 /review
 /docs

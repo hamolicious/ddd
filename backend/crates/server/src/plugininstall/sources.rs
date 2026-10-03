@@ -95,56 +95,55 @@ async fn stage_upload(config: &Config, mut multipart: Multipart) -> AppResult<St
     let mut staged: Option<(PathBuf, String)> = None;
     let mut other_bytes: u64 = 0;
 
-    let outcome = async {
-        while let Some(mut field) = multipart
-            .next_field()
-            .await
-            .map_err(|error| AppError::bad_request(format!("malformed multipart body: {error}")))?
-        {
-            let is_package = field.file_name().is_some() || field.name() == Some(PACKAGE_FIELD);
-            if !is_package {
-                let name = field.name().unwrap_or_default().to_string();
-                let mut value = Vec::new();
-                while let Some(chunk) = field.chunk().await.map_err(|error| {
-                    AppError::bad_request(format!("malformed multipart body: {error}"))
-                })? {
-                    other_bytes += chunk.len() as u64;
-                    if other_bytes > OTHER_FIELDS_BUDGET {
-                        return Err(AppError::bad_request(
-                            "multipart body has too much non-file content",
-                        ));
+    let outcome =
+        async {
+            while let Some(mut field) = multipart.next_field().await.map_err(|error| {
+                AppError::bad_request(format!("malformed multipart body: {error}"))
+            })? {
+                let is_package = field.file_name().is_some() || field.name() == Some(PACKAGE_FIELD);
+                if !is_package {
+                    let name = field.name().unwrap_or_default().to_string();
+                    let mut value = Vec::new();
+                    while let Some(chunk) = field.chunk().await.map_err(|error| {
+                        AppError::bad_request(format!("malformed multipart body: {error}"))
+                    })? {
+                        other_bytes += chunk.len() as u64;
+                        if other_bytes > OTHER_FIELDS_BUDGET {
+                            return Err(AppError::bad_request(
+                                "multipart body has too much non-file content",
+                            ));
+                        }
+                        value.extend_from_slice(&chunk);
                     }
-                    value.extend_from_slice(&chunk);
+                    details.accept(&name, String::from_utf8_lossy(&value).into_owned())?;
+                    continue;
                 }
-                details.accept(&name, String::from_utf8_lossy(&value).into_owned())?;
-                continue;
-            }
-            if staged.is_some() {
-                return Err(AppError::bad_request("send one package per upload"));
-            }
+                if staged.is_some() {
+                    return Err(AppError::bad_request("send one package per upload"));
+                }
 
-            let filename = sanitize_package_name(field.file_name());
-            let path = staging_file(config, &filename).await?;
-            let mut sink = PackageSink::create(&path).await?;
-            staged = Some((path, filename));
-            loop {
-                let chunk = match field.chunk().await {
-                    Ok(chunk) => chunk,
-                    Err(error) => {
-                        sink.abandon().await;
-                        return Err(AppError::bad_request(format!(
-                            "upload interrupted: {error}"
-                        )));
-                    }
-                };
-                let Some(chunk) = chunk else { break };
-                sink.write(&chunk).await?;
+                let filename = sanitize_package_name(field.file_name());
+                let path = staging_file(config, &filename).await?;
+                let mut sink = PackageSink::create(&path).await?;
+                staged = Some((path, filename));
+                loop {
+                    let chunk = match field.chunk().await {
+                        Ok(chunk) => chunk,
+                        Err(error) => {
+                            sink.abandon().await;
+                            return Err(AppError::bad_request(format!(
+                                "upload interrupted: {error}"
+                            )));
+                        }
+                    };
+                    let Some(chunk) = chunk else { break };
+                    sink.write(&chunk).await?;
+                }
+                sink.finish("the uploaded package is empty").await?;
             }
-            sink.finish("the uploaded package is empty").await?;
+            Ok(())
         }
-        Ok(())
-    }
-    .await;
+        .await;
 
     if let Err(error) = outcome {
         if let Some((path, _)) = &staged {
@@ -301,7 +300,12 @@ mod tests {
         for good in ["upload", "gitlab", "0193f1c2-aa", "a.b_c:d"] {
             assert!(validate_source_id(good).is_ok(), "{good}");
         }
-        for bad in ["", "has space", "slash/y", &"x".repeat(MAX_SOURCE_ID_CHARS + 1)] {
+        for bad in [
+            "",
+            "has space",
+            "slash/y",
+            &"x".repeat(MAX_SOURCE_ID_CHARS + 1),
+        ] {
             assert!(validate_source_id(bad).is_err(), "{bad}");
         }
     }
@@ -320,11 +324,18 @@ mod tests {
     #[test]
     fn upload_details_name_the_source_only_with_both_source_and_url() {
         let mut details = UploadDetails::default();
-        details.accept(SOURCE_FIELD, "work-gitlab".into()).expect("a source");
         details
-            .accept(URL_FIELD, "https://g.example.com/a.zip?private_token=x".into())
+            .accept(SOURCE_FIELD, "work-gitlab".into())
+            .expect("a source");
+        details
+            .accept(
+                URL_FIELD,
+                "https://g.example.com/a.zip?private_token=x".into(),
+            )
             .expect("a url");
-        details.accept(UPDATE_FIELD, "tasks".into()).expect("an update");
+        details
+            .accept(UPDATE_FIELD, "tasks".into())
+            .expect("an update");
         let (source, update) = details.origin("a.zip".into());
         assert_eq!(
             source,
@@ -336,12 +347,23 @@ mod tests {
         assert_eq!(update.as_deref(), Some("tasks"));
 
         let mut details = UploadDetails::default();
-        details.accept(SOURCE_FIELD, "work-gitlab".into()).expect("a source");
+        details
+            .accept(SOURCE_FIELD, "work-gitlab".into())
+            .expect("a source");
         let (source, update) = details.origin("a.zip".into());
-        assert_eq!(source, InstallSource::Upload { filename: "a.zip".into() });
+        assert_eq!(
+            source,
+            InstallSource::Upload {
+                filename: "a.zip".into()
+            }
+        );
         assert!(update.is_none());
 
-        assert!(UploadDetails::default().accept(SOURCE_FIELD, "bad id".into()).is_err());
+        assert!(
+            UploadDetails::default()
+                .accept(SOURCE_FIELD, "bad id".into())
+                .is_err()
+        );
     }
 
     #[test]

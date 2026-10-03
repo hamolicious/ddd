@@ -1,28 +1,3 @@
-/**
- * The **blessed runtime layer** (SPEC §6.4): the libraries the kernel and every
- * plugin must share one copy of, and the specifiers the server's import map
- * resolves.
- *
- * Why an import map at all: two copies of React means hooks and context break
- * across a plugin boundary; two copies of Yjs means two CRDT type registries; two
- * copies of `@codemirror/state` means an editor extension silently does nothing.
- * Import maps cannot change after load, which is why the *server* resolves every
- * installed plugin's `peerLibraries` ranges to single versions at install time and
- * serves one map to everybody.
- *
- * Honest consequence, restated from SPEC §6.4: the list below is part of the kernel
- * contract. Replacing the `editor` row means another *CodeMirror-based* editor, and
- * swapping the runtime layer itself is a kernel-major event.
- *
- * Each entry maps a specifier to the entry module that re-exports it. Those entries
- * are plain `.js` on purpose: `@types/react` uses `export =`, which cannot be
- * re-exported with `export *` from a TypeScript file, and a one-line runtime shim is
- * not worth an `@ts-expect-error` apiece. Vite bundles them either way. The build
- * (`vite.runtime.config.ts`) turns them into hashed chunks under `dist/runtime/`
- * and writes `dist/runtime-manifest.json`; the server reads that and serves
- * `/importmap.json` plus the inline map in `index.html`.
- */
-
 export const RUNTIME_SPECIFIERS = {
   "@kernel": "kernel.js",
 

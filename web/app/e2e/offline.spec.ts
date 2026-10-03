@@ -288,10 +288,10 @@ test("server-only screens show what they last loaded, marked as possibly out of 
   const toggle = page.locator(".shell-altbar-toggle");
   if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
   const altbar = page.getByRole("complementary", { name: "Side panel" });
-  await expect(altbar.getByRole("button", { name: "Refresh" })).toBeVisible();
+  await expect(altbar.getByRole("heading", { name: "Changes" })).toBeVisible();
   await net.offline();
 
-  await altbar.getByRole("button", { name: "Refresh" }).click();
+  await typeAtEnd(page, "\nedited with no signal");
   await expect(altbar.getByText(/You are offline\. This is what was loaded/)).toBeVisible({ timeout: 20_000 });
   await expect(altbar.getByRole("alert")).toHaveCount(0);
 

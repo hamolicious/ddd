@@ -1527,7 +1527,11 @@ async fn an_update_keeps_its_approval_only_when_it_asks_for_nothing_new() {
     };
     let admin = Actor::User(new_id());
 
-    let first = harness.package("upd", &manifest_with("upd", "1.0.0", r#"{"documents":["read","write"]}"#), false);
+    let first = harness.package(
+        "upd",
+        &manifest_with("upd", "1.0.0", r#"{"documents":["read","write"]}"#),
+        false,
+    );
     harness.install(first).await.expect("installs 1.0.0");
     let narrowed = PluginCapabilities {
         documents: vec!["read".to_string()],
@@ -1541,7 +1545,11 @@ async fn an_update_keeps_its_approval_only_when_it_asks_for_nothing_new() {
         .expect("reads")
         .expect("exists");
 
-    let same = harness.package("upd", &manifest_with("upd", "1.1.0", r#"{"documents":["read"]}"#), false);
+    let same = harness.package(
+        "upd",
+        &manifest_with("upd", "1.1.0", r#"{"documents":["read"]}"#),
+        false,
+    );
     let outcome = harness.install(same).await.expect("installs 1.1.0");
     let grant = ddd_server::routes::plugin_api::update_grant(&current, &outcome)
         .expect("asks for less than before, so the approval carries over");
@@ -1556,7 +1564,11 @@ async fn an_update_keeps_its_approval_only_when_it_asks_for_nothing_new() {
 
     let wider = harness.package(
         "upd",
-        &manifest_with("upd", "1.2.0", r#"{"documents":["read"],"notifications":true}"#),
+        &manifest_with(
+            "upd",
+            "1.2.0",
+            r#"{"documents":["read"],"notifications":true}"#,
+        ),
         false,
     );
     let outcome = harness.install(wider).await.expect("installs 1.2.0");

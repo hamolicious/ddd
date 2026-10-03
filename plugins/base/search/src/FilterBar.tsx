@@ -7,7 +7,7 @@ import { useCompact } from "../../_shared/compact.js";
 import type { ConditionContext } from "../../_shared/conditions.js";
 import { ConditionsEditor, type FmKeySelectLike, type FmValueSelectLike, type NoteSelectLike } from "../../_shared/conditions-editor.js";
 import type { NoteSource } from "../../_shared/note-picker.js";
-import type { Suggestions } from "../../_shared/conditions-index.js";
+import type { Suggestions } from "../../_shared/conditions.js";
 import {
   SORT_OPTIONS,
   RELEVANCE,

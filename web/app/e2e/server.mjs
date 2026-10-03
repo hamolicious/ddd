@@ -35,7 +35,7 @@ function composeDefaultRegistry() {
 const mongoUri = process.env["DDD_MONGO_URI"] ?? process.env["MONGO_URI"] ?? "mongodb://127.0.0.1:27017";
 const binary =
   process.env["DDD_E2E_BINARY"] ?? resolve(repo, "backend", "target", "debug", "ddd");
-const webDist = resolve(web, "app", "dist");
+const webDist = process.env["DDD_E2E_WEB_DIST"] ?? resolve(web, "app", "dist");
 
 for (const [what, path] of [
   ["the server binary", binary],

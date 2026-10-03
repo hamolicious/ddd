@@ -73,7 +73,7 @@ export function ReauthOverlay({ user, bearer, onSignedIn, exportUnsent }: Reauth
           type="password"
           autoComplete="current-password"
           required
-          // eslint-disable-next-line jsx-a11y/no-autofocus -- a modal that steals
+          // eslint-disable-next-line jsx-a11y/no-autofocus -- the sign-in modal starts on its only field
           autoFocus
         />
 

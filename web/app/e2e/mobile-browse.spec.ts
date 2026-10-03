@@ -245,13 +245,13 @@ test.describe("browse and find, at phone width", () => {
     expect(sheet?.height ?? 0).toBeLessThanOrEqual(PHONE.height + 1);
     expect(sheet?.y ?? -1).toBeGreaterThanOrEqual(0);
 
-    const wiring = await page.locator(".cmd-overlay").evaluate((element) => ({
-      height: element.style.getPropertyValue("--cmd-sheet-height"),
-      top: element.style.getPropertyValue("--cmd-sheet-top"),
-      viewport: `${window.visualViewport?.height ?? -1}px`,
+    const wiring = await palette.evaluate((element) => ({
+      token: document.documentElement.style.getPropertyValue("--ddd-viewport-height"),
+      sheet: Math.round(element.getBoundingClientRect().height),
+      viewport: Math.round(window.visualViewport?.height ?? -1),
     }));
-    expect(wiring.height).toBe(wiring.viewport);
-    expect(wiring.top).toMatch(/^\d+(\.\d+)?px$/);
+    expect(wiring.token).toBe(`${String(wiring.viewport)}px`);
+    expect(wiring.sheet).toBe(wiring.viewport);
 
     const list = page.locator(".cmd-list");
     const scrolls = await list.evaluate(

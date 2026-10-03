@@ -247,6 +247,9 @@ an admin approves them.
   the shell, is a replaceable contribution.
 - **One copy of React, Yjs and `@kernel`**, via the server-generated import map. Two copies
   would break hooks, context and `instanceof` across plugin boundaries.
+  The shared libraries are listed in `app/runtime/specifiers.ts`, one plain `.js`
+  re-export module each. That list is part of the kernel contract: swapping a library in
+  it is a kernel-major change.
 
 ## Wire protocol
 
