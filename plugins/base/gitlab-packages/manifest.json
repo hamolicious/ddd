@@ -1,6 +1,6 @@
 {
   "id": "gitlab-packages",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "name": "GitLab packages",
   "description": "A package source for Admin → Plugins: browse, install and update plugins from a GitLab project's generic package registry.",
   "author": "ddd base distribution",

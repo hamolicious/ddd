@@ -1,6 +1,6 @@
 {
   "id": "admin",
-  "version": "3.1.1",
+  "version": "3.1.2",
   "name": "Admin",
   "description": "Users, invites, audit log, and the plugin list with each plugin's dependencies.",
   "author": "ddd base distribution",
