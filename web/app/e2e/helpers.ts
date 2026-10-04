@@ -53,7 +53,7 @@ export async function trashRow(page: Page, row: Locator): Promise<void> {
 }
 
 export function docRows(page: Page): Locator {
-  return page.locator(".search-item");
+  return page.locator(".doclist-note");
 }
 
 export async function runCommand(page: Page, title: string | RegExp): Promise<void> {

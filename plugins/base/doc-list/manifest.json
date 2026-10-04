@@ -1,8 +1,8 @@
 {
   "id": "doc-list",
-  "version": "5.1.0",
+  "version": "5.2.0",
   "name": "Document list",
-  "description": "The all-documents page (a search, as a table), new documents, and the Trash view.",
+  "description": "The all-documents page (a basic search, or the search builder), a note list view for saved searches, new documents, and the Trash view.",
   "author": "ddd base distribution",
   "license": "MIT OR Apache-2.0",
   "x-tailwind": true,
@@ -11,10 +11,11 @@
     "commands": "^3.0",
     "context-menu": "^2.0",
     "doc-events": "^1.0",
+    "document-surface": "^2.0",
+    "indexer": "^2.0",
     "router": "^2.0",
-    "search": "^5.0",
-    "shell-ui": "^3.0",
-    "table": "^3.0"
+    "search": "^5.1",
+    "shell-ui": "^3.0"
   },
   "peerLibraries": {
     "react": "^18.0.0"

@@ -34,7 +34,7 @@ dist/<id>/<version>/              build output, in the installed layout the serv
 | `router` | URL ↔ view (hash-based) | `addRoute`, `navigate`, `Link`, `href`… |
 | `commands` | command registry, palette, keybindings; draws each command's `icon` through `icons` when present | `addCommand`, `addKeybinding`, `run`, `list`, `openPalette`… |
 | `themes` | theme registry and picker; overrides kernel tokens | `addTheme`, `select`… |
-| `doc-list` | the all-documents page (`table`'s `TablePage`, with search and columns in the URL), new document, Trash | `createDocument`, `newDocument` |
+| `doc-list` | the all-documents page: a typo-tolerant search by default (not saveable), and "Advanced search" for the search builder with filters and sort, which can be saved; results as a note list (look, folder, matched text; ↓ from the search box into the list, ↑/↓ to move, Enter to open at the match); the same list as a saved-search view (`type: list`: "New list" in the palette, New › View › List in the folder tree); new document, Trash | `createDocument`, `newDocument`, `NoteList`, `setNoteLooks` |
 | `search` | search for every view: providers (local index first, then the server), a search as one query string (text, filter, sort), live and one-shot resolution, the `SearchShell` controls, and `SavedSearch` for saved-search notes ("Update saved search"); an Actions button over the results; "New search" in the palette, and New › Search on a note or the root of the folder tree | `addProvider`, `useResults`, `resolve`, `SearchShell`, `SavedSearch`… |
 | `table` | a saved search as a table (`type: table`, or no type): title plus chosen columns, paged rows, a "Match" column; "New table" | `TablePage`, `save` |
 | `kanban` | a saved search as a board (`type: kanban`): columns from a field (`fm.status` by default). Dragging a card or "Move to" sets the field, records when it entered the column (`<field>-since`), and its rank in the card's `%%% kanban` section (or follows the search's sort). Cards show their title, any property, or the rendered body (ticking a task writes to the note). Filter bar, optional swimlanes (`lanes`), a **+** per column and lane. "New board" makes one note that is a saved search of its own children | — |
@@ -85,6 +85,7 @@ type: [kanban, calendar]  # several: a tab each, opens in the first
 | `type` | Plugin | Settings kept in |
 |---|---|---|
 | `table` (or none) | `table` | `%%% table` |
+| `list` | `doc-list` | — |
 | `kanban` | `kanban` | `%%% kanban` |
 | `calendar` | `calendar` | `%%% calendar` |
 | `timeline` | `timeline` | `%%% timeline` |
@@ -145,7 +146,7 @@ flowchart TD
         calendar -.-> folders
         kanban --> search & document-surface & markdown
         kanban -.-> folders
-        doc-list --> search & table
+        doc-list --> search & document-surface & indexer
         folders --> doc-list
         folders -.-> search
         folder-style --> folders & indexer

@@ -91,13 +91,15 @@ test.describe("browse and find, at phone width", () => {
       PHONE.height,
     );
 
-    const open = rows.first().locator(".search-open");
+    const open = rows.first().locator(".doclist-note-open");
     await tappable(open, "the document title button");
 
     const title = await open.boundingBox();
     expect(title?.width ?? 0).toBeLessThanOrEqual(PHONE.width);
     expect(title?.height ?? 0).toBeLessThan(60);
+    await noHorizontalScroll(page, "the basic document search");
 
+    await page.getByRole("button", { name: "Advanced search" }).click();
     await expect(page.getByRole("button", { name: /^Sort by/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /^Order:/ })).toBeVisible();
     const filters = page.getByRole("button", { name: /^filters/i });
@@ -111,7 +113,7 @@ test.describe("browse and find, at phone width", () => {
     await noHorizontalScroll(page, "the document list with a condition added");
 
     await filters.click();
-    await rows.first().locator(".search-open").click();
+    await rows.first().locator(".doclist-note-open").click();
     await expect(modeSwitch(page)).toBeVisible();
   });
 
@@ -221,10 +223,10 @@ test.describe("browse and find, at phone width", () => {
     await seed(request, baseURL as string);
     await signIn(page, ADMIN);
 
-    await page.goto("/#/search?q=phoneneedle");
+    await page.goto("/#/search?q=phoneneedle&advanced=1");
     await expect(page.getByRole("heading", { name: "Documents", level: 2 })).toBeVisible();
-    await expect(page).toHaveURL(/#\/\?q=phoneneedle$/);
-    const results = page.locator(".search-open");
+    await expect(page).toHaveURL(/#\/\?q=phoneneedle&advanced=1$/);
+    const results = page.locator(".doclist-note-open");
     await expect(results.first()).toBeVisible({ timeout: 20_000 });
     await noHorizontalScroll(page, "search results");
 
@@ -344,7 +346,7 @@ test.describe("the same phone, rotated and at the Android floor", () => {
     const actions = row.getByRole("button", { name: /^Actions for/ });
     await expect(actions).toBeVisible();
     expect((await edges(actions)).right).toBeLessThanOrEqual(360);
-    await tappable(row.locator(".search-open"), "the document title button at 360 px");
+    await tappable(row.locator(".doclist-note-open"), "the document title button at 360 px");
   });
 
   test("landscape gets the compact palette and reachable folder actions", async ({

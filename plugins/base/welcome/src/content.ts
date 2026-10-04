@@ -207,8 +207,8 @@ tags: [tour]
 
 # Finding things
 
-- **Search** above the note list finds words in titles and text, offline too
-- The **funnel** filters by any property; the **sort** button orders by one
+- **Search** above the note list finds words in titles and text, typos and all, offline too
+- **Advanced search** adds filters on any property and a sort, and can be saved as a note
 - **Trash** keeps deleted notes for 30 days; restore them from there
 - A folder in the sidebar shows only its notes
 `,

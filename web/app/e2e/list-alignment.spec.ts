@@ -124,6 +124,7 @@ test.describe("the document list's incomplete condition", () => {
     const before = await docRows(page).count();
     expect(before, "the fixture workspace has documents to lose").toBeGreaterThan(0);
 
+    await page.getByRole("button", { name: "Advanced search" }).click();
     const filters = page.getByRole("button", { name: /^Filters/ });
     if ((await filters.getAttribute("aria-expanded")) !== "true") await filters.click();
     await page.getByRole("button", { name: "Add condition" }).click();

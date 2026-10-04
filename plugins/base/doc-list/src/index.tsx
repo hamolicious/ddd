@@ -1,20 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactElement } from "react";
 
-import type { Kernel } from "@kernel";
+import type { Kernel, Unsubscribe } from "@kernel";
 import { addCommand, addKeybinding } from "plugin:commands";
-import { addAction, confirm } from "plugin:context-menu";
+import { addAction, confirm, openFor } from "plugin:context-menu";
 import { notifyCreated } from "plugin:doc-events";
+import { addMode } from "plugin:document-surface";
+import * as indexer from "plugin:indexer";
 import { addRoute, current, navigate, onChange } from "plugin:router";
-import { encode, parse } from "plugin:search";
+import { SavedSearch, SearchShell, encode, parse, save as saveSearch } from "plugin:search";
 import type { SearchSpec } from "plugin:search";
 import { addSidebarPanel, addView } from "plugin:shell-ui";
-import { TablePage, save as saveTable } from "plugin:table";
 
-import { sameOptions } from "../../_shared/saved-view.js";
+import { offerSavedView } from "../../_shared/saved-view-mode.js";
 import { yamlScalar } from "../../_shared/yaml.js";
 
+import { BasicSearch } from "./BasicSearch.js";
+import { ADVANCED_PARAM, basicPath, isAdvanced } from "./mode.js";
 import { TrashView } from "./DocListView.js";
+import { createNoteList, type Looks } from "./NoteList.js";
 import { ViewsPanel } from "./ViewsPanel.js";
 
 function queryOf(hash: string): string {
@@ -41,22 +45,46 @@ export interface DocumentBrowser {
 
 export type DocListApi = DocumentBrowser;
 
-type TableOptions = Readonly<Record<string, string>>;
+export type { NoteListProps } from "./NoteList.js";
 
-const TABLE_PARAM = "t.";
-
-function tableOptionsOf(query: string): TableOptions {
-  const options: Record<string, string> = {};
-  for (const [key, value] of new URLSearchParams(query)) {
-    if (key.startsWith(TABLE_PARAM) && key.length > TABLE_PARAM.length && value !== "") options[key.slice(TABLE_PARAM.length)] = value;
-  }
-  return options;
-}
+export const LIST_TYPE = "list";
 
 const router = { navigate, current, onChange };
 const menu = { confirm };
 const search = { parse, encode };
-const table = { TablePage, save: saveTable };
+
+let noteLooks: Looks | undefined;
+const looksListeners = new Set<() => void>();
+
+export function setNoteLooks(looks: Looks): Unsubscribe {
+  noteLooks = looks;
+  for (const listener of [...looksListeners]) listener();
+  return () => {
+    if (noteLooks !== looks) return;
+    noteLooks = undefined;
+    for (const listener of [...looksListeners]) listener();
+  };
+}
+
+function useLooks(): Looks | undefined {
+  const [, bump] = useState(0);
+  useEffect(() => {
+    const again = (): void => bump((count) => count + 1);
+    looksListeners.add(again);
+    return () => {
+      looksListeners.delete(again);
+    };
+  }, []);
+  return noteLooks;
+}
+
+export const NoteList = createNoteList({
+  useLooks,
+  folders: { documents: () => indexer.documents(), subscribe: indexer.subscribe, version: () => indexer.version },
+  openMenu: (element) => {
+    openFor(element);
+  },
+});
 
 let kernelRef: Kernel | undefined;
 
@@ -66,6 +94,10 @@ const active = (): Kernel => {
 };
 
 let visibleIds: readonly string[] = [];
+
+const reportVisible = (ids: readonly string[]): void => {
+  visibleIds = ids;
+};
 
 let focusWanted = false;
 let focusSearch: (() => void) | undefined;
@@ -100,14 +132,10 @@ export function visible(): readonly string[] {
 
 export default function activate(kernel: Kernel): void {
   kernelRef = kernel;
-  const pathFor = (spec: SearchSpec, options: TableOptions): string => {
+  const pathFor = (spec: SearchSpec): string => {
     const params = new URLSearchParams(search.encode(spec));
-    for (const key of Object.keys(options).sort()) {
-      const value = options[key];
-      if (value !== undefined && value !== "") params.set(`${TABLE_PARAM}${key}`, value);
-    }
-    const encoded = params.toString();
-    return encoded === "" ? "/" : `/?${encoded}`;
+    params.set(ADVANCED_PARAM, "1");
+    return `/?${params.toString()}`;
   };
 
   const open = (id: string, line?: number): void => router.navigate(documentPath(id, line));
@@ -145,14 +173,15 @@ export default function activate(kernel: Kernel): void {
 
   const ListHost = (): ReactElement => {
     const [spec, setSpec] = useState<SearchSpec>(() => search.parse(queryOf(location.hash)));
-    const [options, setOptions] = useState<TableOptions>(() => tableOptionsOf(queryOf(location.hash)));
+    const [advanced, setAdvanced] = useState(() => isAdvanced(queryOf(location.hash)));
     const input = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
       const canonical = (): void => {
         if (router.current().split("?")[0] === "/search") {
           const query = queryOf(location.hash);
-          router.navigate(pathFor(search.parse(query), tableOptionsOf(query)), { replace: true });
+          const parsed = search.parse(query);
+          router.navigate(isAdvanced(query) ? pathFor(parsed) : basicPath(parsed.query), { replace: true });
         }
       };
       canonical();
@@ -161,8 +190,7 @@ export default function activate(kernel: Kernel): void {
         const query = queryOf(location.hash);
         const next = search.parse(query);
         setSpec((current) => (search.encode(current) === search.encode(next) ? current : next));
-        const nextOptions = tableOptionsOf(query);
-        setOptions((current) => (sameOptions(current, nextOptions) ? current : nextOptions));
+        setAdvanced(isAdvanced(query));
       });
     }, []);
     useEffect(() => {
@@ -179,29 +207,57 @@ export default function activate(kernel: Kernel): void {
       };
     }, []);
 
-    const Page = table.TablePage;
+    if (!advanced) {
+      return (
+        <BasicSearch
+          query={spec.query}
+          onQueryChange={(query) => {
+            setSpec({ ...search.parse(""), query });
+            router.navigate(basicPath(query), { replace: true });
+          }}
+          onAdvanced={() => {
+            setAdvanced(true);
+            router.navigate(pathFor(spec), { replace: true });
+          }}
+          onOpen={open}
+          onRendered={reportVisible}
+          searchInput={input}
+          search={kernel.search}
+          NoteList={NoteList}
+        />
+      );
+    }
+
     return (
-      <Page
+      <SearchShell
         spec={spec}
         onSpecChange={(next) => {
           setSpec(next);
-          router.navigate(pathFor(next, options), { replace: true });
-        }}
-        options={options}
-        onOptionsChange={(next) => {
-          setOptions(next);
-          router.navigate(pathFor(spec, next), { replace: true });
+          router.navigate(pathFor(next), { replace: true });
         }}
         heading="Documents"
         onOpen={open}
         searchInput={input}
-        onRendered={(ids) => {
-          visibleIds = ids;
-        }}
-        {...(search.encode(spec) !== "" || Object.keys(options).length > 0
+        onRendered={reportVisible}
+        renderView={(props) => <NoteList results={props.results} onOpen={props.onOpen} searchInput={input} />}
+        headerActions={
+          <button
+            type="button"
+            className="doclist-basic-toggle"
+            onClick={() => {
+              const query = spec.query;
+              setAdvanced(false);
+              setSpec({ ...search.parse(""), query });
+              router.navigate(basicPath(query), { replace: true });
+            }}
+          >
+            Basic search
+          </button>
+        }
+        {...(search.encode(spec) !== ""
           ? {
               onSave: () => {
-                void table.save(spec, options).catch((cause: unknown) => {
+                void saveSearch(spec, { type: LIST_TYPE }).catch((cause: unknown) => {
                   kernel.log.error("could not save the search", cause);
                   kernel.ui.notify({
                     id: "doc-list.save-search-failed",
@@ -236,6 +292,38 @@ export default function activate(kernel: Kernel): void {
       />
     );
   };
+
+  offerSavedView(
+    kernel,
+    {
+      type: LIST_TYPE,
+      label: "List",
+      noun: "list",
+      commandId: "doc-list.newList",
+      commandIcon: "list",
+      icon: (
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" />
+        </svg>
+      ),
+      order: 15,
+      render: (props) => <NoteList results={props.results} onOpen={props.onOpen} />,
+    },
+    {
+      addMode,
+      addCommand: (command) =>
+        addCommand({
+          ...command,
+          run: async () => {
+            await command.run();
+          },
+        }),
+      addAction,
+      notifyCreated,
+      search: () => ({ SavedSearch, encode }),
+      navigate: (path) => router.navigate(path),
+    },
+  );
 
   addRoute([
     { path: "/", view: "doc-list.all", order: 900 },

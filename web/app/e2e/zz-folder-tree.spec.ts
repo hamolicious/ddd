@@ -357,6 +357,19 @@ test("the New search command makes a saved search and opens it", async ({ page, 
   await expect.poll(async () => await rawText(request, base, created), { timeout: 20_000 }).toMatch(/^saved-search:/m);
 });
 
+test("the New list command makes a saved search shown as a note list", async ({ page, request, baseURL }) => {
+  const base = baseURL as string;
+
+  await signIn(page, ADMIN);
+  refuseNativeDialogs(page);
+  await runCommand(page, "New list");
+  await expect(page).toHaveURL(/#\/doc\//);
+  const created = /#\/doc\/([^?]+)/.exec(page.url())?.[1] ?? "";
+  await waitSynced(page);
+  await expect.poll(async () => await rawText(request, base, created), { timeout: 20_000 }).toMatch(/^saved-search:/m);
+  expect(await rawText(request, base, created)).toMatch(/^type: list$/m);
+});
+
 test("deleting a note can keep what is inside it, in its place in the parent", async ({
   page,
   request,

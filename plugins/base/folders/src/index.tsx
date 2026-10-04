@@ -7,7 +7,7 @@ import { addCommand } from "plugin:commands";
 import { addAction, close, confirm, modal, open, openFor, openSheet } from "plugin:context-menu";
 import type { MenuItem, Target } from "plugin:context-menu";
 import { onCreated } from "plugin:doc-events";
-import { newDocument } from "plugin:doc-list";
+import { newDocument, setNoteLooks as setListLooks } from "plugin:doc-list";
 import { current, navigate, onChange as onRouteChange } from "plugin:router";
 import { addSection } from "plugin:settings";
 import { addSidebarPanel } from "plugin:shell-ui";
@@ -140,6 +140,7 @@ export function ensurePath(titles: readonly string[]): Promise<string> {
 }
 
 export default function activate(kernel: Kernel): void {
+  stops.push(setListLooks({ look, onLookChange }));
   void kernel.plugins
     .optional<SearchModule>("search")
     .then((module) => {

@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import { createDocument, signIn } from "./helpers.js";
 
 const TRASH_PAGE = 50;
+const LIST_PAGE = 50;
 const PROBES = 60;
 
 test("the list and Trash show a page at a time, and load the rest as they scroll", async ({
@@ -17,19 +18,16 @@ test("the list and Trash show a page at a time, and load the rest as they scroll
   }
 
   await signIn(page);
-  const status = page.locator(".search-status");
+  const status = page.locator(".doclist-status");
   await expect(status).toHaveText(/^\d+ documents$/);
   expect(Number.parseInt((await status.textContent()) ?? "", 10)).toBeGreaterThanOrEqual(PROBES);
 
-  const box = page.locator(".search-table-box");
-  const loaded = (): Promise<number> => box.evaluate((element) => element.scrollHeight);
-  const first = await loaded();
-  await box.evaluate((element) => element.scrollTo(0, element.scrollHeight));
-  await expect.poll(loaded).toBeGreaterThan(first);
-
-  await box.evaluate((element) => element.scrollTo(0, 0));
-  await page.getByRole("button", { name: /^Order:/ }).click();
-  await expect.poll(loaded).toBeLessThanOrEqual(first);
+  const notes = page.locator(".doclist-note");
+  await expect(notes).toHaveCount(LIST_PAGE);
+  await expect(async () => {
+    await notes.last().scrollIntoViewIfNeeded({ timeout: 2_000 });
+    expect(await notes.count()).toBeGreaterThan(LIST_PAGE);
+  }).toPass({ timeout: 20_000 });
 
   for (const id of ids) {
     const response = await request.delete(`${baseURL}/api/documents/${id}`);

@@ -41,6 +41,7 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
     saveLabel,
     searchInput,
     onRendered,
+    headerActions,
     renderView,
     renderSettings,
     pageSize,
@@ -105,6 +106,7 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
         {heading !== undefined && (
           <header className="search:flex search:items-center search:justify-between search:gap-2 search:[&_h2]:m-0">
             <h2>{heading}</h2>
+            {headerActions}
           </header>
         )}
 

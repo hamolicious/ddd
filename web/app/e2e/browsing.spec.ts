@@ -42,7 +42,7 @@ test("a machine-owned document is out of the list, the count and the tree — un
 
   await showSidebar(page);
   const allDocuments = page.locator(".doclist-view", { hasText: "All documents" });
-  const status = page.locator(".search-status");
+  const status = page.locator(".doclist-status");
   await expect(status).toHaveText(/^\d+ documents?$/);
   const listed = Number.parseInt((await status.textContent()) ?? "", 10);
   await expect(allDocuments.locator(".doclist-count")).toHaveText(String(listed));
@@ -51,6 +51,7 @@ test("a machine-owned document is out of the list, the count and the tree — un
   await expect(tree.getByRole("treeitem", { name: /An ordinary note/ }).first()).toBeVisible();
   await expect(tree.getByRole("treeitem", { name: /Machine owned thing/ })).toHaveCount(0);
 
+  await page.getByRole("button", { name: "Advanced search" }).click();
   await page.getByRole("button", { name: /^Filters/ }).click();
   await page.getByRole("checkbox", { name: /show machine documents/i }).check();
   await expect(page.getByRole("button", { name: "Machine owned thing", exact: true })).toBeVisible();
@@ -60,7 +61,7 @@ test("a machine-owned document is out of the list, the count and the tree — un
   await expect(page.getByRole("tablist", { name: /document mode/i })).toBeVisible();
 });
 
-test("Ctrl+Space searches the list, which keeps its filters and its sort", async ({
+test("Ctrl+Space searches the list, and advanced search keeps its filters and its sort", async ({
   page,
   request,
   baseURL,
@@ -84,11 +85,26 @@ test("Ctrl+Space searches the list, which keeps its filters and its sort", async
   await expect(search).toBeFocused();
   await expect(page).toHaveURL(/#\/$/);
 
+  await search.fill("quibblesearchwrod");
+  await expect(page.getByRole("button", { name: "Quibble ordinary", exact: true })).toBeVisible();
+
   await search.fill(needle);
   await expect(page).toHaveURL(new RegExp(`#/\\?q=${needle}$`));
   await expect(page.getByRole("button", { name: "Quibble ordinary", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Quibble machine", exact: true })).toHaveCount(0);
   await expect(docRows(page)).toHaveCount(1);
+  await expect(page.locator(".doclist-status")).toHaveText(`1 result for “${needle}”`);
+  await expect(page.locator(".doclist-note-match mark")).toHaveText(needle);
+  await search.press("ArrowDown");
+  await expect(page.locator(".doclist-note-open").first()).toBeFocused();
+  await page.keyboard.press("ArrowUp");
+  await expect(search).toBeFocused();
+  await expect(page.getByRole("button", { name: /^Filters/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Save/ })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Advanced search" }).click();
+  await expect(page).toHaveURL(new RegExp(`#/\\?q=${needle}&advanced=1$`));
+  await expect(search).toHaveValue(needle);
   await expect(page.getByRole("button", { name: /^Sort by Best match$/ })).toBeVisible();
   await expect(page.locator(".search-status")).toHaveText(`1 result for “${needle}”`);
 
@@ -103,9 +119,19 @@ test("Ctrl+Space searches the list, which keeps its filters and its sort", async
   await expect(search).toHaveValue(`${needle} x`);
 
   await search.fill("");
-  await expect(page).toHaveURL(/#\/$/);
+  await expect(page).toHaveURL(/#\/\?advanced=1$/);
   await expect(page.getByRole("button", { name: /^Sort by Last updated$/ })).toBeVisible();
   await expect(page.locator(".search-status")).toContainText(/documents|Showing/);
+
+  await page.getByRole("button", { name: "Basic search" }).click();
+  await expect(page).toHaveURL(/#\/$/);
+  await expect(page.getByRole("button", { name: "Advanced search" })).toBeVisible();
+
+  await search.fill(needle);
+  await expect(docRows(page)).toHaveCount(1);
+  await search.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/#\/doc\/[^?]+\?line=\d+$/);
 });
 
 test("?line=N opens the editor at that line, and a second link moves it again", async ({

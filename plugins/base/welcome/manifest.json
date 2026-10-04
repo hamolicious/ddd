@@ -1,6 +1,6 @@
 {
   "id": "welcome",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "name": "Welcome",
   "description": "Fills a new, empty workspace with a short tour: one note per base feature, all deletable.",
   "author": "ddd base distribution",

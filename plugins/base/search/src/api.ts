@@ -103,6 +103,7 @@ export interface SearchShellProps extends SearchRender {
   readonly saveLabel?: string;
   readonly searchInput?: RefObject<HTMLInputElement>;
   readonly onRendered?: (ids: readonly string[]) => void;
+  readonly headerActions?: ReactNode;
 }
 
 export interface SavedSearchProps extends SearchRender {

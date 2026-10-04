@@ -11,7 +11,7 @@
     "commands": "^3.0",
     "context-menu": "^2.0",
     "doc-events": "^1.0",
-    "doc-list": "^5.0",
+    "doc-list": "^5.2",
     "router": "^2.0",
     "settings": "^2.0",
     "shell-ui": "^3.0"
