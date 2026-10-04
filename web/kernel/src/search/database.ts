@@ -37,7 +37,10 @@ export function searchWipePending(): boolean {
 
 export async function removeSearchFiles(): Promise<boolean> {
   const root = await navigator.storage?.getDirectory?.().catch(() => undefined);
-  if (!root) return true;
+  if (!root) {
+    remember(false);
+    return true;
+  }
   await root.removeEntry(SEARCH_OPFS_DIRECTORY, { recursive: true }).catch(() => undefined);
   const gone = await root.getDirectoryHandle(SEARCH_OPFS_DIRECTORY).then(
     () => false,

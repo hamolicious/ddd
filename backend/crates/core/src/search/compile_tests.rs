@@ -715,3 +715,22 @@ fn an_alias_named_id_is_not_the_cursor_tiebreak() {
     .unwrap_err();
     assert!(matches!(error, PlanError::BadStage(_)));
 }
+
+#[test]
+fn fuzzy_finds_an_accented_word_from_a_plain_typo() {
+    let mut connection = open();
+    apply(
+        &mut connection,
+        &statements_for_rows(vec![row("B", "# Crème brûlée\n"), row("M", "# Milk\n")]),
+    );
+    let page = run(
+        &connection,
+        json!({ "stages": [{ "fuzzy": { "query": "brulee" } }] }),
+    );
+    assert_eq!(ids(&page), ["B"]);
+    let page = run(
+        &connection,
+        json!({ "stages": [{ "fuzzy": { "query": "brulle" } }] }),
+    );
+    assert_eq!(ids(&page), ["B"]);
+}

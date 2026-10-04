@@ -39,6 +39,8 @@ export class ProjectionFeed {
   #unlisten: (() => void) | undefined;
   #queue: Promise<void> = Promise.resolve();
   #built: Promise<void> = Promise.resolve();
+  #dormant = false;
+  #building$: Promise<unknown> = Promise.resolve();
   #nextCall = 1;
   readonly #pending = new Map<number, Pending>();
   readonly #held: StoreChange[] = [];
@@ -50,6 +52,7 @@ export class ProjectionFeed {
     private readonly store: ProjectionStore,
     private readonly backend: ProjectionBackend,
     private readonly peers?: SearchPeers,
+    private readonly options: { readonly persistent?: boolean } = {},
   ) {
     this.#role = peers ? "follower" : "solo";
     this.ready = new Promise<ProjectionStatus>((resolve, reject) => {
@@ -119,6 +122,7 @@ export class ProjectionFeed {
 
   async settled(): Promise<ProjectionStatus> {
     await this.ready;
+    await this.#building$;
     let queue: Promise<void>;
     do {
       queue = this.#queue;
@@ -130,6 +134,7 @@ export class ProjectionFeed {
   async select(sql: string): Promise<readonly SqlRow[]> {
     await this.ready;
     await this.#built;
+    this.#refuseWhileDormant();
     if (this.#role === "follower") return (await this.#call("select", sql)) as readonly SqlRow[];
     return this.backend.select(sql);
   }
@@ -137,6 +142,7 @@ export class ProjectionFeed {
   async run(plan: unknown): Promise<SearchRows> {
     await this.ready;
     await this.#built;
+    this.#refuseWhileDormant();
     await this.#queue;
     if (this.#role === "follower") return (await this.#call("run", plan)) as SearchRows;
     return this.backend.run(plan);
@@ -165,14 +171,22 @@ export class ProjectionFeed {
     this.peers?.close();
   }
 
+  #refuseWhileDormant(): void {
+    if (this.#dormant) {
+      throw Object.assign(new Error("search starts again after you sign in"), { name: "SearchUnavailableError" });
+    }
+  }
+
   #own(): void {
     const wasFollower = this.#role === "follower";
+    const answered = this.#settled;
     this.#role = this.peers ? "owner" : "solo";
     this.#building = true;
     const building = this.#build((reusable) => {
       if (!this.#settled) this.#resolveReady(reusable);
     });
-    if (wasFollower) {
+    this.#building$ = building.catch(() => undefined);
+    if (answered) {
       this.#built = building.then(
         () => undefined,
         () => undefined,
@@ -193,8 +207,9 @@ export class ProjectionFeed {
   }
 
   async #build(reusable: (status: ProjectionStatus) => void): Promise<ProjectionStatus> {
-    const opened = await this.backend.open();
+    const opened = await this.backend.open(this.options.persistent === false ? { persistent: false } : {});
     if (opened.persistent && opened.documents > 0) reusable(opened);
+    const sources = new Set<string>();
     const total = await this.store.count({ includeDeleted: true });
     let done = 0;
     let first = true;
@@ -203,20 +218,20 @@ export class ProjectionFeed {
     for await (const row of this.store.iterate({ includeDeleted: true })) {
       batch.push(row);
       if (batch.length >= PROJECTION_CHUNK) {
-        await this.backend.sync(batch, first, false);
+        for (const source of (await this.backend.sync(batch, first, false)).sources) sources.add(source);
         first = false;
         done += batch.length;
         batch = [];
         this.#emit({ done, total: Math.max(total, done) });
       }
     }
-    const synced = await this.backend.sync(batch, first, true);
+    for (const source of (await this.backend.sync(batch, first, true)).sources) sources.add(source);
     done += batch.length;
     this.#emit({ done, total: Math.max(total, done) });
     this.#building = false;
     for (const change of this.#held.splice(0)) this.#enqueue(() => this.#apply(change));
     await this.#queue;
-    this.#announce(synced.sources);
+    this.#announce([...sources]);
     return this.backend.status();
   }
 
@@ -234,6 +249,12 @@ export class ProjectionFeed {
 
   async #apply(change: StoreChange): Promise<void> {
     if (this.#role === "follower") return;
+    if (this.#dormant) {
+      this.#dormant = false;
+      this.backend.revive?.();
+      this.#own();
+      return;
+    }
     const rows = change.applied.length > 0 ? await this.store.getMany(change.applied) : [];
     const present = new Set(rows.map((row) => row.id));
     const gone = [...change.purged, ...change.applied.filter((id) => !present.has(id))];
@@ -273,11 +294,13 @@ export class ProjectionFeed {
       case "run":
         await this.ready;
         await this.#built;
+        this.#refuseWhileDormant();
         await this.#queue;
         return this.backend.run(payload);
       case "select":
         await this.ready;
         await this.#built;
+        this.#refuseWhileDormant();
         return this.backend.select(payload as string);
       case "apply": {
         const { rows, gone } = payload as { readonly rows: readonly StoredRow[]; readonly gone: readonly string[] };
@@ -294,7 +317,7 @@ export class ProjectionFeed {
         return applied;
       }
       case "wipe":
-        this.stop();
+        this.#dormant = true;
         await this.backend.wipe();
         return undefined;
     }

@@ -41,9 +41,9 @@ export async function initKernel(options: KernelInitOptions): Promise<KernelRunt
   const store = new IdbProjectionStore();
   await store.open();
 
-  if (searchWipePending()) await removeSearchFiles();
+  const memoryOnly = searchWipePending() && !(await removeSearchFiles());
   const index = createSearchIndex();
-  const search = new ProjectionFeed(store, index.projection, browserPeers());
+  const search = new ProjectionFeed(store, index.projection, browserPeers(), { persistent: !memoryOnly });
   void search.start();
 
   const server = options.serverBaseUrl;

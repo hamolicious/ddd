@@ -67,15 +67,16 @@ fn vocabulary_query(fuzzy: &FuzzyStage) -> CountQuery {
     let mut params = Params::default();
     let max_distance = fuzzy.max_distance.unwrap_or(MAX_FUZZY_DISTANCE);
     let mut alternatives = Vec::new();
-    for (low, high, shortest, longest) in
-        vocabulary_filter(&fuzzy_terms(&fuzzy.query), max_distance)
-    {
-        let low = params.bind(SqlValue::Text(low));
-        let high = params.bind(SqlValue::Text(high));
-        let shortest = params.bind(SqlValue::Int(shortest as i64));
-        let longest = params.bind(SqlValue::Int(longest as i64));
+    for filter in vocabulary_filter(&fuzzy_terms(&fuzzy.query), max_distance) {
+        let low = params.bind(SqlValue::Text(filter.low));
+        let high = params.bind(SqlValue::Text(filter.high));
+        let shortest = params.bind(SqlValue::Int(filter.shortest as i64));
+        let longest = params.bind(SqlValue::Int(filter.longest as i64));
+        let first = params.bind(SqlValue::Text(filter.first));
+        let second = params.bind(SqlValue::Text(filter.second));
         alternatives.push(format!(
-            "(term >= {low} AND term < {high}) OR (length(term) BETWEEN {shortest} AND {longest})"
+            "(term >= {low} AND term < {high}) OR (length(term) BETWEEN {shortest} AND {longest} \
+             AND (substr(term, 1, 1) = {first} OR substr(term, 2, 1) = {second} OR substr(term, 1, 1) = {second}))"
         ));
     }
     let condition = if alternatives.is_empty() {
@@ -84,7 +85,9 @@ fn vocabulary_query(fuzzy: &FuzzyStage) -> CountQuery {
         alternatives.join(" OR ")
     };
     CountQuery {
-        sql: format!("SELECT term FROM documents_vocab WHERE {condition} LIMIT {MAX_VOCAB_ROWS}"),
+        sql: format!(
+            "SELECT term FROM documents_vocab WHERE {condition} ORDER BY doc DESC LIMIT {MAX_VOCAB_ROWS}"
+        ),
         params: params.values,
     }
 }

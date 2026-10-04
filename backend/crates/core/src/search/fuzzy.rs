@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
 
+use unicode_normalization::UnicodeNormalization;
+use unicode_normalization::char::is_combining_mark;
+
 use crate::document::{normalize_input, parse_document};
 
 use super::text::{FIELD_WEIGHTS, TextField};
@@ -67,21 +70,42 @@ pub fn budget_for(length: usize, max_distance: usize) -> usize {
         .min(MAX_FUZZY_DISTANCE)
 }
 
-pub fn vocabulary_filter(
-    terms: &[String],
-    max_distance: usize,
-) -> Vec<(String, String, usize, usize)> {
+pub fn fold_word(word: &str) -> String {
+    word.nfd()
+        .filter(|c| !is_combining_mark(*c))
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+pub struct VocabularyFilter {
+    pub low: String,
+    pub high: String,
+    pub shortest: usize,
+    pub longest: usize,
+    pub first: String,
+    pub second: String,
+}
+
+pub fn vocabulary_filter(terms: &[String], max_distance: usize) -> Vec<VocabularyFilter> {
     terms
         .iter()
         .map(|term| {
             let length = term.chars().count();
             let budget = budget_for(length, max_distance);
-            (
-                term.clone(),
-                format!("{term}\u{10FFFF}"),
-                length.saturating_sub(budget),
-                length + budget,
-            )
+            let mut chars = term.chars();
+            let first = chars.next().map(String::from).unwrap_or_default();
+            let second = chars
+                .next()
+                .map(String::from)
+                .unwrap_or_else(|| first.clone());
+            VocabularyFilter {
+                low: term.clone(),
+                high: format!("{term}\u{10FFFF}"),
+                shortest: length.saturating_sub(budget),
+                longest: length + budget,
+                first,
+                second,
+            }
         })
         .collect()
 }
@@ -117,11 +141,7 @@ fn words(text: &str) -> impl Iterator<Item = (&str, String)> + '_ {
     text.split(|c: char| !c.is_alphanumeric())
         .filter(|word| !word.is_empty())
         .map(|word| {
-            let folded: String = word
-                .chars()
-                .take(MAX_TOKEN_CHARS)
-                .flat_map(char::to_lowercase)
-                .collect();
+            let folded = fold_word(&word.chars().take(MAX_TOKEN_CHARS).collect::<String>());
             (word, folded)
         })
 }
@@ -377,6 +397,22 @@ mod tests {
                 .contains(&"subway".to_string())
         );
         assert!(expand_terms(&fuzzy_terms("qqqq"), MAX_FUZZY_DISTANCE, &vocabulary).is_empty());
+    }
+
+    #[test]
+    fn accents_fold_on_both_sides() {
+        assert_eq!(fuzzy_terms("Brûlée"), vec!["brulee"]);
+        let found = rank(&spec("brulee"), &[candidate("Crème brûlée", "")]);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].terms, vec!["brûlée"]);
+        assert_eq!(
+            expand_terms(
+                &fuzzy_terms("brûlée"),
+                MAX_FUZZY_DISTANCE,
+                &["brulee".to_string()]
+            ),
+            vec!["brulee"]
+        );
     }
 
     #[test]

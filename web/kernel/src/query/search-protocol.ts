@@ -19,7 +19,7 @@ export type SearchRequest =
       readonly last: boolean;
     }
   | { readonly op: "close" }
-  | { readonly op: "projection.open" }
+  | { readonly op: "projection.open"; readonly persistent?: boolean }
   | { readonly op: "projection.status" }
   | {
       readonly op: "projection.sync";

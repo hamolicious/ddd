@@ -11,7 +11,8 @@ import {
 } from "./projection.js";
 
 export interface ProjectionBackend {
-  open(): Promise<ProjectionStatus>;
+  open(options?: { readonly persistent?: boolean }): Promise<ProjectionStatus>;
+  revive?(): void;
   status(): Promise<ProjectionStatus>;
   sync(rows: readonly ProjectionRow[], first: boolean, last: boolean): Promise<Applied>;
   apply(rows: readonly ProjectionRow[], purged: readonly string[]): Promise<Applied>;
@@ -32,7 +33,14 @@ export class ProjectionHost implements ProjectionBackend {
 
   constructor(private readonly options: ProjectionHostOptions = {}) {}
 
-  async open(): Promise<ProjectionStatus> {
+  #persistent: boolean | undefined;
+
+  revive(): void {
+    this.#wiped = false;
+  }
+
+  async open(options: { readonly persistent?: boolean } = {}): Promise<ProjectionStatus> {
+    if (options.persistent === false && this.#projection === undefined) this.#persistent = false;
     return (await this.#open()).status();
   }
 
@@ -74,7 +82,7 @@ export class ProjectionHost implements ProjectionBackend {
       await (await pending.catch(() => undefined))?.wipe();
       return;
     }
-    const db = await openSearchDatabase({ persistent: this.options.persistent ?? true });
+    const db = await openSearchDatabase({ persistent: this.#persistent ?? this.options.persistent ?? true });
     await db.wipe();
   }
 
@@ -88,7 +96,7 @@ export class ProjectionHost implements ProjectionBackend {
     if (this.#wiped) return Promise.reject(new Error("the search database was deleted at sign-out"));
     this.#projection ??= (async () => {
       const core = this.options.core ?? (await loadCore());
-      const db = await openSearchDatabase({ persistent: this.options.persistent ?? true });
+      const db = await openSearchDatabase({ persistent: this.#persistent ?? this.options.persistent ?? true });
       const projection = new SearchProjection(core, db);
       await projection.open();
       return projection;

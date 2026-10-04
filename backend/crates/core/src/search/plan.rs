@@ -3,7 +3,8 @@ use thiserror::Error;
 
 use crate::filter::{CompareOp, Literal, TextMatch};
 
-use super::text::{TextExpr, TextField};
+use super::fuzzy::fuzzy_terms;
+use super::text::{MAX_QUERY_TERMS, MAX_TEXT_BYTES, TextExpr, TextField};
 
 pub const MAX_STAGES: usize = 32;
 pub const MAX_SORT_KEYS: usize = 8;
@@ -320,6 +321,16 @@ impl Plan {
                     return Err(PlanError::BadStage(
                         "fuzzy must be the last stage, followed only by paging".into(),
                     ));
+                }
+                Stage::Fuzzy(fuzzy) if fuzzy.query.len() > MAX_TEXT_BYTES => {
+                    return Err(PlanError::Limit(format!(
+                        "fuzzy text is over {MAX_TEXT_BYTES} bytes"
+                    )));
+                }
+                Stage::Fuzzy(fuzzy) if fuzzy_terms(&fuzzy.query).len() > MAX_QUERY_TERMS => {
+                    return Err(PlanError::Limit(format!(
+                        "more than {MAX_QUERY_TERMS} fuzzy terms"
+                    )));
                 }
                 Stage::Fuzzy(fuzzy) if fuzzy.limit.is_some_and(|n| n > MAX_LIMIT) => {
                     return Err(PlanError::Limit(format!("limit is above {MAX_LIMIT}")));

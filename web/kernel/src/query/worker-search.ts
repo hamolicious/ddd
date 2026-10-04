@@ -27,7 +27,8 @@ export class WorkerSearchIndex implements EngineIndex {
   >();
 
   readonly projection: ProjectionBackend = {
-    open: async () => (await this.#call({ op: "projection.open" })) as ProjectionStatus,
+    open: async (options) =>
+      (await this.#call({ op: "projection.open", ...(options?.persistent === false ? { persistent: false } : {}) })) as ProjectionStatus,
     status: async () => (await this.#call({ op: "projection.status" })) as ProjectionStatus,
     sync: async (rows, first, last) =>
       (await this.#call({ op: "projection.sync", rows, first, last })) as Applied,

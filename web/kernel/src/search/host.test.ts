@@ -176,7 +176,7 @@ describe.skipIf(!coreArtifactExists())("kernel.search", () => {
     );
     const { search } = await setup(rows);
     const first = await search.from().sort("id").select("id").limit(2).run();
-    const watch = await search.from().sort("id").select("id").cursor(first.nextCursor!).limit(2).watch();
+    const watch = await search.from().sort("id").select("id").cursor(first.nextCursor!).limit(2).withTotal().watch();
     await watch.window(0, 3);
     expect(watch.result.rows.map((row) => row.id)).toEqual(["D0", "D1", "D2"]);
   });

@@ -143,6 +143,20 @@ describe.skipIf(!coreArtifactExists())("one search owner across tabs", () => {
     expect((await second.feed.run(plan)).rows).toEqual([{ text: "one" }]);
   });
 
+  it("an owner wiped from another tab sleeps until the store changes again, then rebuilds", async () => {
+    const hub = new Hub();
+    const first = await tab(hub, "first", rows);
+    await first.feed.ready;
+    const second = await tab(hub, "second", rows);
+    await second.feed.ready;
+    await second.feed.wipe();
+    await expect(first.feed.run(plan)).rejects.toThrow(/sign in/);
+    const row = (await first.store.get("A"))!;
+    await first.store.putLocal([{ ...row, content: "# Alpha\n\n- [ ] after signing in\n", updated_at: "2026-10-04T00:00:00Z" }]);
+    await tick(50);
+    expect((await first.feed.run(plan)).rows).toEqual([{ text: "after signing in" }]);
+  });
+
   it("a call made while nobody owns the database is answered after the takeover", async () => {
     const hub = new Hub();
     const first = await tab(hub, "first", rows);

@@ -57,7 +57,7 @@ async function handle(envelope: SearchRequestEnvelope): Promise<SearchResponseVa
       projection.close();
       return await index.close();
     case "projection.open":
-      return await projection.open();
+      return await projection.open(request.persistent === false ? { persistent: false } : {});
     case "projection.status":
       return await projection.status();
     case "projection.sync":

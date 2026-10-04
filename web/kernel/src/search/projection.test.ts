@@ -116,6 +116,29 @@ describe.skipIf(!coreArtifactExists())("search projection", () => {
     await feed.settled();
   });
 
+  it("changes found anywhere in the startup pass are announced, not only in its last chunk", async () => {
+    const store = new MemoryProjectionStore();
+    const rows = Array.from({ length: 600 }, (_, index) =>
+      feedRow({ id: `D${String(index).padStart(4, "0")}`, seq: index + 1, content: `# Doc ${index}\n` }),
+    );
+    await store.applyRows(rows, checkpoint(rows));
+    const backend = new ProjectionHost({ core, persistent: false });
+    const original = new ProjectionFeed(store, backend);
+    await original.start();
+    original.stop();
+    const first = (await store.get("D0000"))!;
+    await store.putLocal([{ ...first, content: "# Renamed\n", updated_at: "2026-10-05T00:00:00Z" }]);
+    const open = backend.open.bind(backend);
+    backend.open = async (options) => ({ ...(await open(options)), persistent: true });
+    const reopened = new ProjectionFeed(store, backend);
+    const heard: string[] = [];
+    reopened.onChange((sources) => heard.push(...sources));
+    await reopened.start();
+    await reopened.settled();
+    expect(heard).toContain("documents");
+    expect(await reopened.select("SELECT title FROM documents WHERE id = 'D0000'")).toEqual([{ title: "Renamed" }]);
+  });
+
   it("a wiped projection stays stopped instead of quietly rebuilding", async () => {
     const backend = new ProjectionHost({ core, persistent: false });
     await backend.open();

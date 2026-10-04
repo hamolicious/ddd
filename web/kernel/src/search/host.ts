@@ -94,7 +94,14 @@ class LiveSearch implements SearchWatch<unknown, SearchResultOptions> {
     const stages = [...(base.stages ?? [])];
     const paging = (stage: unknown): boolean =>
       typeof stage === "object" && stage !== null && ("cursor" in stage || "limit" in stage || "offset" in stage);
-    if (window !== undefined) while (stages.length > 0 && paging(stages[stages.length - 1])) stages.pop();
+    const anywhere = (stage: unknown): boolean =>
+      stage === "with_total" || stage === "with_content" || (typeof stage === "object" && stage !== null && "trash" in stage);
+    if (window !== undefined) {
+      let end = stages.length;
+      while (end > 0 && (paging(stages[end - 1]) || anywhere(stages[end - 1]))) end -= 1;
+      const tail = stages.splice(end).filter(anywhere);
+      stages.push(...tail);
+    }
     if (window) stages.push({ offset: window.start }, { limit: window.count });
     stages.push("with_total");
     return { ...base, stages };
