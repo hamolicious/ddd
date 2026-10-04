@@ -350,6 +350,7 @@ test("a session that expired while offline: sign in again, and the offline edit 
   const net = await network(page, context);
   await signIn(page, ADMIN);
   await openDocument(page, id);
+  await expect(page.locator("#shell-main").getByText("day one").first()).toBeVisible();
 
   await net.offline();
   await typeAtEnd(page, "\nday two, no signal");
