@@ -9,6 +9,7 @@ export interface DocumentModeProps {
   readonly line?: number;
   readonly unavailable?: boolean;
   readonly embedded?: boolean;
+  readonly switchedTo?: boolean;
 }
 
 export interface DocumentMode {

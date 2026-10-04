@@ -123,6 +123,7 @@ interface Snapshot {
   readonly row?: DocumentRow;
   readonly handle?: OpenDocument;
   readonly mode?: string;
+  readonly switchedTo?: boolean;
   readonly status: SurfaceStatus;
   readonly hydrationError?: string;
   readonly revision: number;
@@ -298,7 +299,7 @@ class Surface {
       return;
     }
     this.#chosen = true;
-    this.#patch({ mode: modeId });
+    this.#patch({ mode: modeId, switchedTo: true });
     rememberMode(this.#memoryMap(), documentId, modeId);
     this.#scheduleMemoryWrite();
   }
@@ -601,6 +602,7 @@ function SurfaceView({
             open={snapshot.handle}
             line={line}
             unavailable={Boolean(snapshot.hydrationError && !snapshot.handle)}
+            switchedTo={snapshot.switchedTo === true}
           />
         ) : (
           <p className="docsurface:max-w-[62ch] docsurface:px-4 docsurface:py-6 docsurface:text-text-muted">
@@ -628,6 +630,7 @@ function ActiveMode({
   open,
   line,
   unavailable,
+  switchedTo,
 }: {
   readonly kernel: Kernel;
   readonly mode: DocumentMode;
@@ -637,6 +640,7 @@ function ActiveMode({
   readonly open?: OpenDocument;
   readonly line?: number;
   readonly unavailable: boolean;
+  readonly switchedTo: boolean;
 }): ReactNode {
   const Component = boundaryFor(kernel, mode, owner);
   return (
@@ -646,6 +650,7 @@ function ActiveMode({
       open={open}
       {...(line !== undefined ? { line } : {})}
       {...(unavailable ? { unavailable } : {})}
+      {...(switchedTo ? { switchedTo } : {})}
     />
   );
 }

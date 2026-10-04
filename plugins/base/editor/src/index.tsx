@@ -306,7 +306,7 @@ export default function activate(kernel: Kernel): void {
     });
   };
 
-  const Edit = ({ id, row, open, line, unavailable }: DocumentModeProps): ReactNode => {
+  const Edit = ({ id, row, open, line, unavailable, switchedTo }: DocumentModeProps): ReactNode => {
     const host = useRef<HTMLDivElement | null>(null);
     const [failure, setFailure] = useState<string | undefined>(undefined);
 
@@ -456,6 +456,7 @@ export default function activate(kernel: Kernel): void {
         setFolded(view, true);
         if (line !== undefined) revealLine(view, line);
         live = view;
+        if (switchedTo) view.focus();
         setFailure(undefined);
       } catch (error) {
         kernel.log.error("the editor could not be created", error);

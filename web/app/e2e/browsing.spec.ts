@@ -141,3 +141,35 @@ test("?line=N opens the editor at that line, and a second link moves it again", 
   await expect(scroller).toBeVisible();
   await expect(page.getByRole("tab", { name: "Edit" })).toHaveAttribute("aria-selected", "true");
 });
+
+test("switching to the editor with the keyboard puts the caret in it, ready to type", async ({
+  page,
+  request,
+  baseURL,
+}) => {
+  const id = await createDocument(request, baseURL as string, "---\ntitle: Focus on switch\n---\n\nbody\n");
+
+  await signIn(page);
+  await page.goto(`/#/doc/${id}`);
+  await page.getByRole("tab", { name: "Read" }).click();
+  await expect(page.locator("article")).toContainText("body");
+
+  await page.keyboard.press("ControlOrMeta+e");
+  await expect(page.getByRole("tab", { name: "Edit" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator(".cm-content")).toBeFocused();
+  await page.keyboard.type("typed straight away");
+  await expect(page.locator(".cm-content")).toContainText("typed straight away");
+});
+
+test("opening a document straight into the editor leaves focus alone", async ({ page, request, baseURL }) => {
+  const id = await createDocument(request, baseURL as string, "---\ntitle: No focus on open\n---\n\nbody\n");
+
+  await signIn(page);
+  await page.goto(`/#/doc/${id}`);
+  await page.getByRole("tab", { name: "Edit" }).click();
+  await page.goto("/#/");
+  await page.goto(`/#/doc/${id}`);
+  await expect(page.getByRole("tab", { name: "Edit" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator(".cm-content")).toBeVisible();
+  await expect(page.locator(".cm-content")).not.toBeFocused();
+});
