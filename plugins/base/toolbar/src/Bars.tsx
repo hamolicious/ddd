@@ -85,7 +85,7 @@ const SEAT_CLASS: Record<Look, { start: string; end: string }> = {
     end: "toolbar:ml-auto toolbar:m-0 toolbar:flex toolbar:shrink-0 toolbar:list-none toolbar:items-center toolbar:gap-0.5 toolbar:p-0",
   },
   dock: {
-    start: "toolbar:m-0 toolbar:flex toolbar:min-h-14 toolbar:list-none toolbar:items-stretch toolbar:overflow-x-auto toolbar:p-0 toolbar:text-2xl toolbar:[scrollbar-width:none]",
+    start: "toolbar:m-0 toolbar:flex toolbar:min-h-14 toolbar:min-w-0 toolbar:list-none toolbar:items-stretch toolbar:p-0 toolbar:text-2xl",
     end: "",
   },
 };
@@ -114,26 +114,26 @@ function Seat({
 const ITEM_CLASS: Record<Look, { component: string; button: string; iconButton: string; cell: string }> = {
   header: {
     cell: "toolbar:flex toolbar:min-w-0 toolbar:items-center",
-    component: "toolbar:flex toolbar:min-w-0 toolbar:items-center toolbar:shrink-0",
+    component: "toolbar:flex toolbar:min-w-0 toolbar:items-center toolbar:shrink-0 toolbar:empty:hidden",
     button: "toolbar:tap toolbar:gap-1 toolbar:px-2.5",
     iconButton: "",
   },
   strip: {
     cell: "toolbar:flex toolbar:min-w-0 toolbar:items-center toolbar:shrink-0",
-    component: "toolbar:flex toolbar:min-w-0 toolbar:items-center toolbar:shrink-0",
+    component: "toolbar:flex toolbar:min-w-0 toolbar:items-center toolbar:shrink-0 toolbar:empty:hidden",
     button: "toolbar:tap toolbar:gap-1 toolbar:px-1.5 toolbar:[&_.toolbar-icon+_.toolbar-label]:sr-only",
     iconButton: "toolbar:w-[var(--ddd-tap-target)] toolbar:p-0!",
   },
   footer: {
     cell: "toolbar:flex toolbar:min-w-0 toolbar:items-center toolbar:shrink-0",
-    component: "toolbar:flex toolbar:min-w-0 toolbar:items-center toolbar:shrink-0 toolbar:not-touch:[&>*]:min-h-6! toolbar:not-touch:[&_button]:min-h-6! toolbar:not-touch:[&_button]:min-w-6! toolbar:not-touch:[&_button]:w-auto! toolbar:not-touch:[&_button]:px-1!",
+    component: "toolbar:flex toolbar:min-w-0 toolbar:items-center toolbar:shrink-0 toolbar:empty:hidden toolbar:not-touch:[&>*]:min-h-6! toolbar:not-touch:[&_button]:min-h-6! toolbar:not-touch:[&_button]:min-w-6! toolbar:not-touch:[&_button]:w-auto! toolbar:not-touch:[&_button]:px-1!",
     button: "toolbar:h-6 toolbar:not-touch:min-h-0! toolbar:touch:h-auto toolbar:touch:tap-h toolbar:gap-1 toolbar:px-1.5 toolbar:text-xs toolbar:hover:text-text",
     iconButton: "",
   },
   dock: {
-    cell: "toolbar:flex toolbar:min-w-[var(--ddd-tap-target)] toolbar:flex-1 toolbar:items-center toolbar:justify-center",
-    component: "toolbar:flex toolbar:min-w-[var(--ddd-tap-target)] toolbar:flex-1 toolbar:items-center toolbar:justify-center",
-    button: "toolbar:size-full toolbar:min-h-14 toolbar:flex-col toolbar:gap-0.5 toolbar:px-1 toolbar:[&_.toolbar-icon+_.toolbar-label]:sr-only toolbar:[&_.toolbar-label]:text-xs toolbar:[&_.toolbar-icon]:inline-flex toolbar:[&_.toolbar-icon_svg]:size-[1em]",
+    cell: "toolbar:flex toolbar:min-w-0 toolbar:flex-1 toolbar:basis-0 toolbar:items-center toolbar:justify-center",
+    component: "toolbar:flex toolbar:min-w-0 toolbar:flex-1 toolbar:basis-0 toolbar:items-center toolbar:justify-center toolbar:empty:hidden toolbar:[&_button]:min-w-0 toolbar:[&_button]:max-w-full",
+    button: "toolbar:size-full toolbar:min-w-0 toolbar:min-h-14 toolbar:flex-col toolbar:gap-0.5 toolbar:px-1 toolbar:[&_.toolbar-icon+_.toolbar-label]:sr-only toolbar:[&_.toolbar-label]:text-xs toolbar:[&_.toolbar-icon]:inline-flex toolbar:[&_.toolbar-icon_svg]:size-[1em]",
     iconButton: "",
   },
 };

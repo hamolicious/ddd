@@ -115,6 +115,34 @@ test.describe("browse and find, at phone width", () => {
     await expect(modeSwitch(page)).toBeVisible();
   });
 
+  test("the bottom toolbar shows every button on screen, and a hidden one takes no space", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 320, height: PHONE.height });
+    await signIn(page, ADMIN);
+
+    const dock = page.getByRole("navigation", { name: "Toolbar" });
+    await expect(dock.getByRole("button", { name: "Settings" })).toBeVisible();
+    await expect(page.locator(".shell-altbar-toggle")).toHaveCount(0);
+
+    const cells = await dock.locator("li").evaluateAll((items) =>
+      items.map((item) => {
+        const box = item.getBoundingClientRect();
+        return { left: box.left, right: box.right, width: box.width, empty: item.childElementCount === 0 };
+      }),
+    );
+    const shown = cells.filter((cell) => !cell.empty);
+    expect(shown.length).toBeGreaterThan(3);
+    for (const cell of shown) {
+      expect(cell.left, "a toolbar button starts off screen").toBeGreaterThanOrEqual(0);
+      expect(cell.right, "a toolbar button runs off screen").toBeLessThanOrEqual(320);
+    }
+    for (const cell of cells.filter((each) => each.empty)) {
+      expect(cell.width, "a button that hid itself still takes up room").toBe(0);
+    }
+    await noHorizontalScroll(page, "the bottom toolbar");
+  });
+
   test("Trash fits, and a deleted document can be restored", async ({ page, request, baseURL }) => {
     const title = `Phone trash fixture ${Date.now()}`;
     await createDocument(
