@@ -41,7 +41,7 @@ test("registering the first user boots the whole plugin distribution", async ({
   await expect(page.getByRole("navigation", { name: "Main" })).toBeVisible();
   await expect(page.getByRole("link", { name: /skip to content/i })).toBeAttached();
 
-  await page.goto("/#/?t.rows=200");
+  await page.goto("/#/");
   const main = page.locator("#shell-main");
   for (const title of [
     "Welcome to ddd",

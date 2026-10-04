@@ -10,16 +10,17 @@ import { indexNoteSource, indexSuggestions, type ConditionIndex } from "../../_s
 import { documentsNoteSource } from "../../_shared/note-picker.js";
 import { Spinner } from "../../_shared/Spinner.js";
 
-import { FilterBar } from "./FilterBar.js";
+import { ChainBar } from "./ChainBar.js";
+import { specCode } from "./code.js";
 import { RELEVANCE, SORT_OPTIONS, type FieldOption } from "./filter.js";
-import { useReportRendered, useResults } from "./results.js";
+import { searchQuery, useReportRendered, useResults } from "./results.js";
 import { effectiveSort, filterOf } from "./spec.js";
 import type { SearchEngine } from "./useSearch.js";
 
 export interface SearchShellDeps {
   readonly kernel: Kernel;
   readonly engine: SearchEngine;
-  readonly menu: Pick<ContextMenu, "open">;
+  readonly menu: Pick<ContextMenu, "open" | "openSheet" | "close">;
   readonly icons: () => Pick<Icons, "Icon"> | undefined;
   readonly index: () => ConditionIndex | undefined;
   readonly actions: () => ((ids: readonly string[], anchor: HTMLElement) => void) | undefined;
@@ -60,7 +61,9 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
 
     const draft = filterOf(spec);
     const text = spec.query.trim();
-    const searching = text !== "";
+    const fuzzyWords = (spec.fuzzy ?? "").trim();
+    const words = [text, fuzzyWords].filter((part) => part !== "").join(" ");
+    const searching = words !== "";
     const sort = effectiveSort(shownSpec);
     const index = deps.index();
     const notes = useMemo(
@@ -68,6 +71,24 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
       [index],
     );
     const suggestions = useMemo(() => (index !== undefined ? indexSuggestions(index) : undefined), [index]);
+    const noteTitle = (id: string): string => notes.notes().find((note) => note.id === id)?.title || "a note";
+    const code = specCode(shownSpec, sort);
+    const copy = (label: string, text: string): void => {
+      void navigator.clipboard.writeText(text).then(
+        () => kernel.ui.notify({ id: "search.copied", level: "info", message: `${label} copied.` }),
+        (cause: unknown) =>
+          kernel.ui.notify({ id: "search.copy-failed", level: "error", message: `Could not copy: ${cause instanceof Error ? cause.message : String(cause)}` }),
+      );
+    };
+    const plan = (): string =>
+      JSON.stringify(
+        searchQuery(kernel.search, text, draft, sort, {
+          ...(withContent === true ? { withContent } : {}),
+          ...(fuzzyWords !== "" ? { fuzzy: fuzzyWords } : {}),
+        }).plan(),
+        null,
+        2,
+      );
 
     const setSort = (next: SearchSort): void => {
       if (controls === "hidden") setLocalSort(next);
@@ -111,28 +132,31 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
         )}
 
         {controls !== "hidden" && searchOpen && (
-          <FilterBar
-            menu={menu}
-            draft={draft}
-            onDraftChange={(filter) => onSpecChange({ ...spec, filter })}
-            sortField={sort.field}
-            sortDirection={sort.direction}
-            onSortChange={(field, direction) => setSort({ field, direction })}
-            query={spec.query}
-            onQueryChange={(query) => onSpecChange({ ...spec, query })}
-            {...(viewPanel !== undefined ? { viewPanel } : {})}
+          <ChainBar
+            spec={spec}
+            onSpecChange={onSpecChange}
+            sort={sort}
+            onSortChange={setSort}
             extraSorts={extraSorts}
+            menu={menu}
+            editor={{
+              notes,
+              NoteSelect: deps.NoteSelect,
+              FmKeySelect: deps.FmKeySelect,
+              FmValueSelect: deps.FmValueSelect,
+              ...(suggestions !== undefined ? { suggestions } : {}),
+            }}
+            noteTitle={noteTitle}
             {...(searchInput ? { searchInput } : {})}
-            notes={notes}
-            NoteSelect={deps.NoteSelect}
-            FmKeySelect={deps.FmKeySelect}
-            FmValueSelect={deps.FmValueSelect}
-            {...(suggestions !== undefined ? { suggestions } : {})}
+            {...(viewPanel !== undefined ? { viewPanel } : {})}
             {...(onSave ? { onSave } : {})}
             {...(saveLabel !== undefined ? { saveLabel } : {})}
             {...(actions && narrowed && results.rows.length > 0
               ? { onActions: (anchor: HTMLElement) => actions(results.rows.map((row) => row.id), anchor) }
               : {})}
+            code={code}
+            onCopyCode={() => copy("The code", code)}
+            onCopyPlan={() => copy("The plan", plan())}
           />
         )}
 
@@ -164,7 +188,7 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
         ) : results.rows.length === 0 ? (
           <p className="search-empty search:m-0 search:py-6 search:text-text-muted">
             {searching
-              ? `Nothing matches “${text}”.`
+              ? `Nothing matches “${words}”.`
               : results.unfiltered
                 ? "No documents yet."
                 : "No document matches. Clear the filter."}
@@ -174,7 +198,7 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
             {renderView(viewProps)}
             {(controls !== "hidden" || results.hasMore) && (
               <p className="search-status search:m-0 search:text-sm search:text-text-muted" role="status" aria-live="polite">
-                {statusText(results.rows.length, results.total, results.hasMore, text)}
+                {statusText(results.rows.length, results.total, results.hasMore, words)}
               </p>
             )}
           </>

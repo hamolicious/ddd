@@ -6,7 +6,7 @@ import type { SearchResults } from "plugin:search";
 import { notMachine, useLiveSearch, type Watchable } from "../../_shared/live-search.js";
 import { limitFor, usePages } from "../../_shared/pagination.js";
 
-import { matchSnippet } from "./match.js";
+import { matchSnippet } from "../../_shared/match.js";
 
 export const BASIC_PAGE_SIZE = 50;
 

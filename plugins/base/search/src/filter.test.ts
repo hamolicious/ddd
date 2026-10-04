@@ -7,8 +7,12 @@ import {
   buildEffectiveFilter,
   buildFilter,
   clauseProblem,
+  hasFilter,
   invalidClauses,
+  replaceStep,
+  stepConditions,
   type ClauseOp,
+  type FilterDraft,
   type FilterClause,
   type ValueKind,
 } from "./filter.js";
@@ -191,5 +195,42 @@ describe("appliedCount", () => {
     expect(appliedCount({ combine: "and", clauses: [], includeMachine: true })).toBe(1);
     expect(appliedCount({ combine: "and", clauses: [clause(), clause({ id: "b", value: "" })] })).toBe(1);
     expect(appliedCount({ combine: "and", clauses: [clause()], includeMachine: true })).toBe(2);
+  });
+});
+
+describe("editing one step of the chain", () => {
+  const status: FilterClause = { id: "s", field: "fm.status", op: "eq", kind: "str", value: "open" };
+  const client: FilterClause = { id: "x", field: "fm.client", op: "eq", kind: "str", value: "Acme" };
+  const base: FilterDraft = { combine: "and", clauses: [status] };
+
+  it("keeps a single condition as a plain where", () => {
+    const next = replaceStep(base, "s", { combine: "and", clauses: [{ ...status, value: "done" }] });
+    expect(next.clauses).toEqual([{ ...status, value: "done" }]);
+    expect(next.groups).toBeUndefined();
+  });
+
+  it("turns a where into a group once it holds two conditions, and back", () => {
+    const grouped = replaceStep(base, "s", { combine: "or", clauses: [status, client] });
+    expect(grouped.clauses).toEqual([]);
+    expect(grouped.groups).toEqual([{ id: "s", combine: "or", clauses: [status, client] }]);
+    expect(stepConditions(grouped, "s")?.clauses).toHaveLength(2);
+    const single = replaceStep(grouped, "s", { combine: "or", clauses: [client] });
+    expect(single.clauses).toEqual([{ ...client, id: "s" }]);
+    expect(single.groups).toBeUndefined();
+  });
+
+  it("keeps a negated group a group even with one condition", () => {
+    const grouped = replaceStep(base, "s", { combine: "or", clauses: [status, client] });
+    const negated = replaceStep(grouped, "s", { combine: "or", clauses: [client], negate: true });
+    expect(negated.groups?.[0]).toEqual({ id: "s", combine: "or", clauses: [client], negate: true });
+  });
+
+  it("removes the step when its last condition goes", () => {
+    expect(replaceStep(base, "s", { combine: "and", clauses: [] }).clauses).toEqual([]);
+  });
+
+  it("counts a usable group as a filter", () => {
+    expect(hasFilter({ combine: "and", clauses: [], groups: [{ id: "g", combine: "or", clauses: [status] }] })).toBe(true);
+    expect(hasFilter({ combine: "and", clauses: [], groups: [{ id: "g", combine: "or", clauses: [{ ...status, value: "" }] }] })).toBe(false);
   });
 });

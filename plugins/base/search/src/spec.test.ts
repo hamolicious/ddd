@@ -37,6 +37,41 @@ describe("a search's query string", () => {
     expect(back.filter.includeMachine).toBe(true);
   });
 
+  it("round-trips any-of groups beside the plain conditions", () => {
+    const original = spec({
+      filter: {
+        combine: "and",
+        clauses: [{ id: "a", field: "fm.status", op: "eq", kind: "str", value: "open" }],
+        groups: [
+          {
+            id: "g",
+            combine: "or",
+            negate: true,
+            clauses: [
+              { id: "b", field: "fm.client", op: "eq", kind: "str", value: "Acme" },
+              { id: "c", field: "created_by", op: "eq", kind: "str", value: "me" },
+            ],
+          },
+        ],
+      },
+    });
+    const back = parseSpec(encodeSpec(original));
+    expect(sameSpec(back, original)).toBe(true);
+    expect(back.filter.groups?.[0]?.combine).toBe("or");
+    expect(back.filter.groups?.[0]?.negate).toBe(true);
+    expect(back.filter.groups?.[0]?.clauses.map((c) => c.field)).toEqual(["fm.client", "created_by"]);
+  });
+
+  it("keeps the typo-tolerant words apart from the text", () => {
+    expect(encodeSpec(spec({ query: "invoice", fuzzy: "teh qick" }))).toBe("q=invoice&fuzzy=teh+qick");
+    expect(parseSpec("fuzzy=teh+qick")).toEqual({ ...EMPTY_SPEC, fuzzy: "teh qick" });
+    expect(parseSpec("q=teh").fuzzy).toBeUndefined();
+  });
+
+  it("reads a search saved before groups existed", () => {
+    expect(parseSpec("where=%5B%5B%22fm.status%22%2C%22eq%22%2C%22str%22%2C%22open%22%5D%5D").filter.groups).toBeUndefined();
+  });
+
   it("ignores the view params older searches held", () => {
     const old = parseSpec("q=milk&view=kanban&v.group=fm.status&cols=fm.status&rows=25");
     expect(old).toEqual({ ...EMPTY_SPEC, query: "milk" });

@@ -100,19 +100,15 @@ test.describe("browse and find, at phone width", () => {
     await noHorizontalScroll(page, "the basic document search");
 
     await page.getByRole("button", { name: "Advanced search" }).click();
-    await expect(page.getByRole("button", { name: /^Sort by/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: /^Order:/ })).toBeVisible();
-    const filters = page.getByRole("button", { name: /^filters/i });
-    await expect(filters).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByRole("button", { name: "Add a step" })).toBeVisible();
     await noHorizontalScroll(page, "the document list");
 
-    await filters.click();
-    await expect(filters).toHaveAttribute("aria-expanded", "true");
-    await expect(page.getByRole("checkbox", { name: /show machine documents/i })).toBeVisible();
-    await page.getByRole("button", { name: "Add condition" }).click();
-    await noHorizontalScroll(page, "the document list with a condition added");
+    await page.getByRole("button", { name: "Add a step" }).click();
+    await page.getByRole("menuitem", { name: /^Condition/ }).click();
+    await expect(page.locator(".search-step-editor .search-clause")).toBeVisible();
+    await noHorizontalScroll(page, "the document list with a condition being added");
+    await page.keyboard.press("Escape");
 
-    await filters.click();
     await rows.first().locator(".doclist-note-open").click();
     await expect(modeSwitch(page)).toBeVisible();
   });
@@ -230,32 +226,19 @@ test.describe("browse and find, at phone width", () => {
     await expect(results.first()).toBeVisible({ timeout: 20_000 });
     await noHorizontalScroll(page, "search results");
 
-    const card = page.locator(".search-controls");
-    const box = await card.boundingBox();
-    const dock = await page.getByRole("contentinfo").boundingBox();
-    expect(Math.round(dock?.y ?? 0) + Math.round(dock?.height ?? 0)).toBe(PHONE.height);
-    expect(Math.round((box?.y ?? 0) + (box?.height ?? 0))).toBe(Math.round(dock?.y ?? 0));
-    await page.getByRole("button", { name: /^Filters/ }).click();
-    const panel = await page.locator(".search-filter-panel").boundingBox();
-    const bar = await page.locator(".search-toolbar").boundingBox();
-    expect((panel?.y ?? 0) + (panel?.height ?? 0)).toBeLessThanOrEqual((bar?.y ?? 0) + 1);
-    const scrim = page.locator(".search-filter-scrim");
-    await expect(scrim).toBeVisible();
-    await scrim.click({ position: { x: 20, y: 120 } });
-    await expect(scrim).toHaveCount(0);
-    await expect(page.locator(".search-filter-panel")).toBeHidden();
+    const chain = await page.locator(".search-chain").boundingBox();
+    const first = await results.first().boundingBox();
+    expect((chain?.y ?? Infinity) + (chain?.height ?? 0)).toBeLessThanOrEqual(first?.y ?? 0);
+    await expect(page.getByRole("searchbox", { name: "Search documents" })).toHaveValue("phoneneedle");
 
-    const search = page.getByRole("searchbox", { name: "Search documents" });
-    const narrow = (await search.boundingBox())?.width ?? 0;
-    await search.focus();
-    await expect.poll(async () => (await search.boundingBox())?.width ?? 0).toBeGreaterThan(narrow + 100);
-    const icons = page.locator(".search-toolbar-icons");
-    await expect(icons).toHaveAttribute("inert", "");
-    await expect.poll(async () => (await icons.boundingBox())?.width ?? 0).toBeLessThan(2);
-    await search.blur();
-    await expect.poll(async () => Math.round((await search.boundingBox())?.width ?? 0)).toBe(Math.round(narrow));
-    await expect(icons).not.toHaveAttribute("inert");
-    await expect(page.getByRole("button", { name: /^Order:/ })).toBeVisible();
+    await page.getByRole("button", { name: "Add a step" }).click();
+    const sheet = page.getByRole("dialog", { name: "Add a step" });
+    await expect(sheet).toBeVisible();
+    const box = await sheet.boundingBox();
+    expect(Math.round((box?.y ?? 0) + (box?.height ?? 0))).toBeGreaterThanOrEqual(PHONE.height - 2);
+    await noHorizontalScroll(page, "the step menu as a bottom sheet");
+    await page.keyboard.press("Escape");
+    await expect(sheet).toHaveCount(0);
 
     await results.first().click();
     await expect(page).toHaveURL(/#\/doc\/[^?]+\?line=\d+$/);

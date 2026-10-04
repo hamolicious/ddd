@@ -1,4 +1,8 @@
-import type { SearchSnippet } from "plugin:search";
+export interface MatchSnippet {
+  readonly text: string;
+  readonly ranges: readonly { readonly start: number; readonly end: number }[];
+  readonly line: number;
+}
 
 export const MATCH_CONTEXT = 60;
 
@@ -28,7 +32,7 @@ function occurrences(haystack: string, needles: readonly string[]): { start: num
   return merged;
 }
 
-export function matchSnippet(content: string, terms: readonly string[]): SearchSnippet | undefined {
+export function matchSnippet(content: string, terms: readonly string[]): MatchSnippet | undefined {
   const lower = content.toLowerCase();
   const needles = [...new Set(terms.map((term) => term.toLowerCase().trim()))];
   const start = bodyStart(content);

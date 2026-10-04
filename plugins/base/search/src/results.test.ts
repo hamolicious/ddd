@@ -27,6 +27,53 @@ describe("a search as a kernel.search query", () => {
   });
 });
 
+describe("a typo-tolerant search", () => {
+  it("ranks with fuzzy last, with the note text for the matched words, and no sort or snippets", () => {
+    const { search } = rowsFor([]);
+    const plan = searchQuery(search, "", filterOf(EMPTY_SPEC), { field: "relevance", direction: "desc" }, { fuzzy: "teh qick" }).plan();
+    expect(plan.stages).toEqual([{ where: EXCLUDE_MACHINE_DOCUMENTS }, "with_content", "with_total", { fuzzy: { query: "teh qick" } }]);
+  });
+
+  it("narrows with text first, then ranks the rest with fuzzy", () => {
+    const { search } = rowsFor([]);
+    const plan = searchQuery(search, "invoice", filterOf(EMPTY_SPEC), { field: "relevance", direction: "desc" }, { fuzzy: "acme" }).plan();
+    expect(plan.stages).toEqual([{ text: "invoice" }, { where: EXCLUDE_MACHINE_DOCUMENTS }, "with_content", "with_total", { fuzzy: { query: "acme" } }]);
+  });
+
+  it("is a plain search without fuzzy words", () => {
+    const { search } = rowsFor([]);
+    const plan = searchQuery(search, "", filterOf(EMPTY_SPEC), { field: "updated_at", direction: "desc" }, { fuzzy: "  " }).plan();
+    expect(plan.stages).toEqual([{ where: EXCLUDE_MACHINE_DOCUMENTS }, { sort: ["-updated_at"] }]);
+  });
+});
+
+describe("a search with any-of groups", () => {
+  it("ands each group onto the plain conditions as its own or", () => {
+    const { search } = rowsFor([]);
+    const status = { id: "s", field: "fm.status", op: "eq", kind: "str", value: "open" } as const;
+    const client = { id: "c", field: "fm.client", op: "eq", kind: "str", value: "Acme" } as const;
+    const plan = searchQuery(
+      search,
+      "",
+      { combine: "and", clauses: [status], groups: [{ id: "g", combine: "or", clauses: [client, { ...client, id: "d", value: "Globex" }] }] },
+      { field: "updated_at", direction: "desc" },
+    ).plan();
+    expect(plan.stages?.[0]).toEqual({
+      where: {
+        and: [
+          { cmp: { field: "fm.status", op: "eq", value: { str: "open" } } },
+          {
+            or: [
+              { cmp: { field: "fm.client", op: "eq", value: { str: "Acme" } } },
+              { cmp: { field: "fm.client", op: "eq", value: { str: "Globex" } } },
+            ],
+          },
+        ],
+      },
+    });
+  });
+});
+
 describe("resolveSearch", () => {
   it("is every document, last updated first, hiding machine documents, for the empty search", async () => {
     const { search, runs } = rowsFor(["b", "c", "a"]);

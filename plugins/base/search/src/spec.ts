@@ -1,7 +1,7 @@
 import { CLAUSE_OPS, VALUE_KINDS, newClauseId, type FilterClause } from "../../_shared/conditions.js";
 import type { SearchSort, SearchSpec } from "./api.js";
 
-import { RELEVANCE, type FilterDraft } from "./filter.js";
+import { RELEVANCE, type FilterDraft, type FilterGroup } from "./filter.js";
 
 export const NO_FILTER: FilterDraft = { combine: "and", clauses: [] };
 
@@ -15,24 +15,28 @@ export function parseSpec(value: string): SearchSpec {
   const params = new URLSearchParams(value.replace(/^\?/, ""));
   const get = (name: string): string => params.get(name) ?? "";
   const includeMachine = get("machine") === "1";
+  const groups = decodeGroups(get("groups"));
   const filter: FilterDraft = {
     combine: get("match") === "any" ? "or" : "and",
     clauses: decodeClauses(get("where")),
+    ...(groups.length > 0 ? { groups } : {}),
     ...(includeMachine ? { includeMachine } : {}),
   };
   const sort = decodeSort(get("sort"));
-  return { query: get("q").trim(), filter, ...(sort ? { sort } : {}) };
+  return { query: get("q").trim(), filter, ...(sort ? { sort } : {}), ...(get("fuzzy").trim() !== "" ? { fuzzy: get("fuzzy").trim() } : {}) };
 }
 
 export function encodeSpec(spec: SearchSpec): string {
   const params = new URLSearchParams();
   const query = spec.query.trim();
   if (query !== "") params.set("q", query);
+  const fuzzy = spec.fuzzy?.trim() ?? "";
+  if (fuzzy !== "") params.set("fuzzy", fuzzy);
   const filter = filterOf(spec);
-  if (filter.clauses.length > 0) {
-    params.set("where", encodeClauses(filter.clauses));
-    if (filter.combine === "or") params.set("match", "any");
-  }
+  const groups = filter.groups ?? [];
+  if (filter.clauses.length > 0) params.set("where", encodeClauses(filter.clauses));
+  if (groups.length > 0) params.set("groups", encodeGroups(groups));
+  if (filter.clauses.length + groups.length > 0 && filter.combine === "or") params.set("match", "any");
   if (filter.includeMachine === true) params.set("machine", "1");
   if (spec.sort) params.set("sort", `${spec.sort.field}:${spec.sort.direction}`);
   return params.toString();
@@ -70,24 +74,57 @@ function decodeSort(raw: string): SearchSort | undefined {
   return { field, direction };
 }
 
+function clauseRows(clauses: readonly FilterClause[]): unknown[] {
+  return clauses.map((clause) => {
+    const flags = `${clause.negate === true ? "n" : ""}${clause.deep === true ? "d" : ""}`;
+    const row = [clause.field, clause.op, clause.kind, clause.value];
+    return flags === "" ? row : [...row, flags];
+  });
+}
+
 function encodeClauses(clauses: readonly FilterClause[]): string {
+  return JSON.stringify(clauseRows(clauses));
+}
+
+function encodeGroups(groups: readonly FilterGroup[]): string {
   return JSON.stringify(
-    clauses.map((clause) => {
-      const flags = `${clause.negate === true ? "n" : ""}${clause.deep === true ? "d" : ""}`;
-      const row = [clause.field, clause.op, clause.kind, clause.value];
-      return flags === "" ? row : [...row, flags];
-    }),
+    groups.map((group) => ({
+      c: group.combine === "or" ? "any" : "all",
+      ...(group.negate === true ? { n: 1 } : {}),
+      w: clauseRows(group.clauses),
+    })),
   );
 }
 
-function decodeClauses(raw: string): readonly FilterClause[] {
-  if (raw === "") return [];
-  let parsed: unknown;
+function parseJson(raw: string): unknown {
+  if (raw === "") return undefined;
   try {
-    parsed = JSON.parse(raw);
+    return JSON.parse(raw);
   } catch {
-    return [];
+    return undefined;
   }
+}
+
+let groupCounter = 0;
+
+function decodeGroups(raw: string): readonly FilterGroup[] {
+  const parsed = parseJson(raw);
+  if (!Array.isArray(parsed)) return [];
+  return parsed.flatMap((entry: unknown): FilterGroup[] => {
+    if (typeof entry !== "object" || entry === null) return [];
+    const { c, n, w } = entry as { readonly c?: unknown; readonly n?: unknown; readonly w?: unknown };
+    const clauses = clausesOf(w);
+    if (clauses.length === 0) return [];
+    groupCounter += 1;
+    return [{ id: `group-${groupCounter}`, combine: c === "all" ? "and" : "or", clauses, ...(n === 1 ? { negate: true } : {}) }];
+  });
+}
+
+function decodeClauses(raw: string): readonly FilterClause[] {
+  return clausesOf(parseJson(raw));
+}
+
+function clausesOf(parsed: unknown): readonly FilterClause[] {
   if (!Array.isArray(parsed)) return [];
   return parsed.flatMap((row: unknown): FilterClause[] => {
     if (!Array.isArray(row) || !row.slice(0, 4).every((part) => typeof part === "string")) return [];

@@ -141,10 +141,14 @@ export default function activate(kernel: Kernel): void {
   const open = (id: string, line?: number): void => router.navigate(documentPath(id, line));
 
   const openSearch = (): void => {
-    const onList = router.current().split("?")[0] === "/";
-    if (!onList) router.navigate("/");
-    if (focusSearch) focusSearch();
-    else focusWanted = true;
+    const [path, query = ""] = router.current().split("?");
+    const basic = path === "/" && !isAdvanced(query);
+    if (basic && focusSearch) {
+      focusSearch();
+      return;
+    }
+    focusWanted = true;
+    router.navigate(basicPath(path === "/" ? search.parse(query).query : ""));
   };
 
   const create = newDocument;
@@ -205,7 +209,7 @@ export default function activate(kernel: Kernel): void {
       return () => {
         focusSearch = undefined;
       };
-    }, []);
+    }, [advanced]);
 
     if (!advanced) {
       return (
@@ -217,7 +221,8 @@ export default function activate(kernel: Kernel): void {
           }}
           onAdvanced={() => {
             setAdvanced(true);
-            router.navigate(pathFor(spec), { replace: true });
+            const { query, ...rest } = spec;
+            router.navigate(pathFor(query.trim() === "" ? spec : { ...rest, query: "", fuzzy: query }), { replace: true });
           }}
           onOpen={open}
           onRendered={reportVisible}
@@ -245,7 +250,7 @@ export default function activate(kernel: Kernel): void {
             type="button"
             className="doclist-basic-toggle"
             onClick={() => {
-              const query = spec.query;
+              const query = spec.query.trim() !== "" ? spec.query : (spec.fuzzy ?? "");
               setAdvanced(false);
               setSpec({ ...search.parse(""), query });
               router.navigate(basicPath(query), { replace: true });

@@ -125,9 +125,8 @@ test.describe("the document list's incomplete condition", () => {
     expect(before, "the fixture workspace has documents to lose").toBeGreaterThan(0);
 
     await page.getByRole("button", { name: "Advanced search" }).click();
-    const filters = page.getByRole("button", { name: /^Filters/ });
-    if ((await filters.getAttribute("aria-expanded")) !== "true") await filters.click();
-    await page.getByRole("button", { name: "Add condition" }).click();
+    await page.getByRole("button", { name: "Add a step" }).click();
+    await page.getByRole("menuitem", { name: /^Condition/ }).click();
 
     const note = page.locator(".search-clause-note");
     await expect(note).toBeVisible();
@@ -135,10 +134,18 @@ test.describe("the document list's incomplete condition", () => {
     await expect(note).toContainText("Type a value");
 
     await expect(docRows(page)).toHaveCount(before);
-    await page.locator(".search-json summary").click();
-    const json = await page.locator(".search-json pre").innerText();
-    expect(json, "an unusable clause reached the query").not.toContain("fm.status");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("button", { name: /, not finished$/ })).toBeVisible();
 
-    await expect(page.locator(".search-filter-count")).toHaveCount(0);
+    await page.getByRole("button", { name: "More" }).click();
+    await page.getByRole("menuitem", { name: "Show as code" }).click();
+    const code = await page.locator(".search-code-text").innerText();
+    expect(code, "an unusable clause reached the query").not.toContain("fm.status");
+    await page.keyboard.press("Escape");
+
+    await page.getByRole("button", { name: "Clear", exact: true }).click();
+    await expect(page.getByRole("button", { name: /, not finished$/ })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Clear", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Add a step" })).toBeFocused();
   });
 });

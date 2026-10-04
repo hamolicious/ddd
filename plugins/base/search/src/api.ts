@@ -35,9 +35,17 @@ export interface SearchClause {
   readonly negate?: boolean;
 }
 
+export interface SearchGroup {
+  readonly id: string;
+  readonly combine: "and" | "or";
+  readonly clauses: readonly SearchClause[];
+  readonly negate?: boolean;
+}
+
 export interface SearchFilter {
   readonly combine: "and" | "or";
   readonly clauses: readonly SearchClause[];
+  readonly groups?: readonly SearchGroup[];
   readonly includeMachine?: boolean;
 }
 
@@ -50,6 +58,7 @@ export interface SearchSpec {
   readonly query: string;
   readonly filter: SearchFilter;
   readonly sort?: SearchSort;
+  readonly fuzzy?: string;
 }
 
 export interface SearchSnippet {

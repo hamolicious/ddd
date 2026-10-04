@@ -5,9 +5,10 @@ import type { SearchClause, SearchResults, SearchSnippet, SearchSort, SearchSpec
 
 import { hasConditions, whereConditions, type FilterClause } from "../../_shared/conditions.js";
 import { notMachine, useLiveSearch, type Watchable } from "../../_shared/live-search.js";
+import { matchSnippet } from "../../_shared/match.js";
 import { limitFor, usePages } from "../../_shared/pagination.js";
 
-import { RELEVANCE, type FilterDraft } from "./filter.js";
+import { RELEVANCE, filterCondition, hasFilter, type FilterDraft } from "./filter.js";
 import { effectiveSort, filterOf } from "./spec.js";
 import { useSearch, type SearchEngine } from "./useSearch.js";
 
@@ -22,6 +23,7 @@ export interface PageResults extends SearchResults {
 export interface QueryOptions {
   readonly within?: readonly SearchClause[];
   readonly withContent?: boolean;
+  readonly fuzzy?: string;
 }
 
 export function sortTokens(sort: SearchSort, searching = true): readonly string[] {
@@ -29,7 +31,7 @@ export function sortTokens(sort: SearchSort, searching = true): readonly string[
   return [sort.direction === "desc" ? `-${sort.field}` : sort.field];
 }
 
-type Row = DocumentRow & { readonly snippet?: SearchSnippet | null };
+type Row = DocumentRow & { readonly snippet?: SearchSnippet | null; readonly content?: string };
 
 export function searchQuery(
   search: SearchApi,
@@ -38,12 +40,14 @@ export function searchQuery(
   sort: SearchSort,
   options: QueryOptions = {},
 ): AnySearchBuilder {
+  const fuzzy = options.fuzzy?.trim() ?? "";
   let query = search.fromAny();
   if (text !== "") query = query.text(text);
-  if (hasConditions(draft)) query = query.where((w) => whereConditions(w, draft) ?? w.and());
+  if (hasFilter(draft)) query = query.where((w) => filterCondition(w, draft) ?? w.and());
   if (draft.includeMachine !== true) query = query.where(notMachine);
   const within: FilterDraft = { combine: "and", clauses: (options.within ?? []) as readonly FilterClause[] };
   if (hasConditions(within)) query = query.where((w) => whereConditions(w, within) ?? w.and());
+  if (fuzzy !== "") return query.withContent().withTotal().fuzzy(fuzzy) as unknown as AnySearchBuilder;
   query = query.sort(...sortTokens(sort, text !== ""));
   const withText = text !== "" ? query.snippets() : query;
   return options.withContent === true ? withText.withContent() : withText;
@@ -72,15 +76,18 @@ export function useResults(
   const draft = filterOf(spec);
   const typed = spec.query.trim();
   const text = useDebounced(typed, TEXT_DEBOUNCE_MS);
-  const searching = text !== "";
+  const fuzzyTyped = (spec.fuzzy ?? "").trim();
+  const fuzzyText = useDebounced(fuzzyTyped, TEXT_DEBOUNCE_MS);
+  const fuzzy = fuzzyText !== "";
+  const searching = text !== "" || fuzzy;
   const sort = effectiveSort({ ...spec, query: text });
 
-  const query = searchQuery(search, text, draft, sort, options);
+  const query = searchQuery(search, text, draft, sort, { ...options, ...(fuzzy ? { fuzzy: fuzzyText } : {}) });
   const [pages, more] = usePages(JSON.stringify(query.plan()) + pageSize);
   const limit = limitFor(pages, pageSize);
   const live = useLiveSearch(query as unknown as Watchable<Row>, { start: 0, count: limit });
 
-  const found = useSearch(engine, text, { limit, debounceMs: 0 });
+  const found = useSearch(engine, fuzzy ? "" : text, { limit, debounceMs: 0 });
   const extraIds = useMemo(() => {
     const seen = new Set(live.rows.map((row) => row.id));
     return found.hits.map((hit) => hit.id).filter((id) => !seen.has(id));
@@ -92,10 +99,10 @@ export function useResults(
   const rows = useMemo(() => {
     const rank = new Map(extraIds.map((id, index) => [id, index]));
     const extras = [...extra.rows].sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
-    return ordered([...live.rows, ...extras], sort, searching);
-  }, [live.rows, extra.rows, extraIds, sort, searching]);
+    return ordered([...live.rows, ...extras], sort, text !== "" && !fuzzy);
+  }, [live.rows, extra.rows, extraIds, sort, text, fuzzy]);
 
-  const loading = live.loading || extra.loading || typed !== text || (searching && found.running);
+  const loading = live.loading || extra.loading || typed !== text || fuzzyTyped !== fuzzyText || (searching && found.running);
   const now = {
     rows,
     total: searching ? undefined : live.total + extra.rows.length,
@@ -113,8 +120,13 @@ export function useResults(
     partial: searching && found.results.some((result) => result.error !== undefined),
     ...(live.error !== undefined ? { error: live.error } : {}),
     more,
-    snippetOf: (row) => (searching ? ((row as Row).snippet ?? undefined) : undefined),
-    unfiltered: !hasConditions(draft),
+    snippetOf: (row) => {
+      if (!fuzzy) return text !== "" ? ((row as Row).snippet ?? undefined) : undefined;
+      const terms = live.hits[row.id]?.terms;
+      const content = (row as Row).content;
+      return terms && content !== undefined ? matchSnippet(content, terms) : undefined;
+    },
+    unfiltered: !hasFilter(draft),
   };
 }
 
@@ -126,8 +138,9 @@ export async function resolveSearch(
   const limit = Math.max(1, Math.floor(options.limit ?? DEFAULT_PAGE_SIZE));
   const text = spec.query.trim();
   const sort = effectiveSort(spec);
-  const result = await searchQuery(search, text, filterOf(spec), sort, options).limit(limit).run();
-  return ordered(result.rows as unknown as readonly DocumentRow[], sort, text !== "");
+  const fuzzy = (spec.fuzzy ?? "").trim();
+  const result = await searchQuery(search, text, filterOf(spec), sort, { ...options, ...(fuzzy !== "" ? { fuzzy } : {}) }).limit(limit).run();
+  return ordered(result.rows as unknown as readonly DocumentRow[], sort, text !== "" && fuzzy === "");
 }
 
 export function useReportRendered(rows: readonly DocumentRow[], report?: (ids: readonly string[]) => void): void {

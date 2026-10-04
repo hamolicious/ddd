@@ -1,7 +1,7 @@
 import type { ComponentType, ReactElement } from "react";
 
 import type { DocumentRow, Kernel, Unsubscribe } from "@kernel";
-import { addAction, open as openMenu } from "plugin:context-menu";
+import { addAction, close as closeMenu, open as openMenu, openSheet } from "plugin:context-menu";
 import { notifyCreated } from "plugin:doc-events";
 import * as indexer from "plugin:indexer";
 
@@ -44,6 +44,7 @@ export type {
   SearchClause,
   SearchField,
   SearchFilter,
+  SearchGroup,
   SearchProvider,
   SearchRender,
   SearchResults,
@@ -216,7 +217,7 @@ export default function activate(kernel: Kernel): void {
   const Shell = createSearchShell({
     kernel,
     engine,
-    menu: { open: openMenu },
+    menu: { open: openMenu, openSheet, close: closeMenu },
     icons: () => icons,
     index,
     actions: () => (commands ? openActions : undefined),

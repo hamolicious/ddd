@@ -52,8 +52,10 @@ test("a machine-owned document is out of the list, the count and the tree — un
   await expect(tree.getByRole("treeitem", { name: /Machine owned thing/ })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Advanced search" }).click();
-  await page.getByRole("button", { name: /^Filters/ }).click();
-  await page.getByRole("checkbox", { name: /show machine documents/i }).check();
+  await expect(page.getByRole("button", { name: /^from / })).toHaveCount(0);
+  await page.getByRole("button", { name: "Add a step" }).click();
+  await page.getByRole("menuitem", { name: /^Include machine notes/ }).click();
+  await expect(page.getByRole("button", { name: /^from notes, with machine notes/ })).toBeVisible();
   await expect(page.getByRole("button", { name: "Machine owned thing", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "An ordinary note", exact: true })).toBeVisible();
 
@@ -103,16 +105,62 @@ test("Ctrl+Space searches the list, and advanced search keeps its filters and it
   await expect(page.getByRole("button", { name: /^Save/ })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Advanced search" }).click();
-  await expect(page).toHaveURL(new RegExp(`#/\\?q=${needle}&advanced=1$`));
-  await expect(search).toHaveValue(needle);
-  await expect(page.getByRole("button", { name: /^Sort by Best match$/ })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`#/\\?fuzzy=${needle}&advanced=1$`));
+  const fuzzyWords = page.getByRole("searchbox", { name: "Typo-tolerant words" });
+  await expect(fuzzyWords).toHaveValue(needle);
+  await expect(search).toHaveCount(0);
+  await expect(docRows(page)).toHaveCount(1);
   await expect(page.locator(".search-status")).toHaveText(`1 result for “${needle}”`);
 
-  await page.getByRole("button", { name: /^Filters/ }).click();
-  await page.getByRole("checkbox", { name: /show machine documents/i }).check();
+  await page.getByRole("button", { name: "Remove typo-tolerant words" }).click();
+  await page.getByRole("button", { name: "Add a step" }).click();
+  await page.getByRole("menuitem", { name: /^Words to find/ }).click();
+  await expect(search).toBeFocused();
+  await search.fill(needle);
+  await expect(page).toHaveURL(new RegExp(`#/\\?q=${needle}&advanced=1$`));
+  await expect(page.getByRole("button", { name: /^sort / })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Add a step" }).click();
+  await page.getByRole("menuitem", { name: /^Include machine notes/ }).click();
   await expect(page.getByRole("button", { name: "Quibble machine", exact: true })).toBeVisible();
   await expect(docRows(page)).toHaveCount(2);
-  await page.getByRole("checkbox", { name: /show machine documents/i }).uncheck();
+  await page.getByRole("button", { name: /^from notes, with machine notes/ }).click();
+  await page.getByRole("checkbox", { name: /show machine documents/i }).click();
+  await expect(page.getByRole("dialog", { name: "From" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^from / })).toHaveCount(0);
+  await expect(docRows(page)).toHaveCount(1);
+
+  await page.getByRole("button", { name: "Add a step" }).click();
+  await page.getByRole("menuitem", { name: /^Sort/ }).click();
+  await page.getByRole("menuitemradio", { name: /Title/ }).click();
+  await expect(page.getByRole("button", { name: /^sort Title/ })).toBeVisible();
+  await page.getByRole("button", { name: /^sort Title/ }).click();
+  await page.getByRole("menuitem", { name: "Remove sort" }).click();
+  await expect(page.getByRole("button", { name: /^sort / })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "More" }).click();
+  await page.getByRole("menuitem", { name: "Show as code" }).click();
+  await expect(page.locator(".search-code-text")).toContainText(`.text("${needle}")`);
+  await expect(page.locator(".search-code-text")).toContainText('.sort("relevance", "-updated_at")');
+  await expect(page.getByRole("dialog", { name: "As code" }).locator(".search-code-text span").first()).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".search-code-text")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Add a step" }).click();
+  await page.getByRole("menuitem", { name: /^Typo-tolerant words/ }).click();
+  await expect(fuzzyWords).toBeFocused();
+  await fuzzyWords.fill("quibblesearchwrod");
+  await expect(page.getByRole("button", { name: "Quibble ordinary", exact: true })).toBeVisible();
+  await expect(page.locator(".doclist-note-match mark")).toHaveText(needle);
+  await expect(page).toHaveURL(/fuzzy=quibblesearchwrod/);
+  await page.getByRole("button", { name: "More" }).click();
+  await page.getByRole("menuitem", { name: "Show as code" }).click();
+  await expect(page.locator(".search-code-text")).toContainText(`.text("${needle}")`);
+  await expect(page.locator(".search-code-text")).toContainText('.fuzzy("quibblesearchwrod")');
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Remove typo-tolerant words" }).click();
+  await expect(fuzzyWords).toHaveCount(0);
+  await expect(docRows(page)).toHaveCount(1);
 
   await search.fill(`${needle} `);
   await search.press("x");
@@ -120,11 +168,17 @@ test("Ctrl+Space searches the list, and advanced search keeps its filters and it
 
   await search.fill("");
   await expect(page).toHaveURL(/#\/\?advanced=1$/);
-  await expect(page.getByRole("button", { name: /^Sort by Last updated$/ })).toBeVisible();
   await expect(page.locator(".search-status")).toContainText(/documents|Showing/);
 
   await page.getByRole("button", { name: "Basic search" }).click();
   await expect(page).toHaveURL(/#\/$/);
+  await expect(page.getByRole("button", { name: "Advanced search" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Advanced search" }).click();
+  await expect(page).toHaveURL(/#\/\?advanced=1$/);
+  await page.keyboard.press("Control+Space");
+  await expect(page).toHaveURL(/#\/$/);
+  await expect(search).toBeFocused();
   await expect(page.getByRole("button", { name: "Advanced search" })).toBeVisible();
 
   await search.fill(needle);
