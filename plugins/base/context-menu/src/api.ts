@@ -4,16 +4,42 @@ import type { Target } from "../../_shared/target.js";
 
 export type { Target } from "../../_shared/target.js";
 
-export interface MenuItem {
+export interface MenuEntry {
   readonly id: string;
   readonly label: string;
   readonly hint?: string;
   readonly icon?: ReactNode;
+  readonly disabled?: boolean;
+  readonly group?: string;
+}
+
+export interface MenuAction extends MenuEntry {
   readonly danger?: boolean;
   readonly checked?: boolean;
-  readonly disabled?: boolean;
   run(): void;
 }
+
+export interface MenuSubmenu extends MenuEntry {
+  readonly items: readonly MenuItem[];
+}
+
+export type MenuItem = MenuAction | MenuSubmenu;
+
+export function isSubmenu(item: MenuItem): item is MenuSubmenu {
+  return "items" in item;
+}
+
+export interface MenuGroup {
+  readonly id: string;
+  readonly label: string;
+  readonly icon?: ReactNode;
+  readonly order?: number;
+  readonly parent?: string;
+}
+
+export const GROUP_NEW = "new";
+export const GROUP_NEW_VIEW = "new.view";
+export const GROUP_MOVE = "move";
 
 export interface MenuSection {
   readonly title?: string;

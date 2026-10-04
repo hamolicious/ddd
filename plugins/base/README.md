@@ -28,7 +28,7 @@ dist/<id>/<version>/              build output, in the installed layout the serv
 |---|---|---|
 | `shell-ui` | layout, mobile breakpoint, a spot for the top bar and one for the bottom bar, the altbar opposite the sidebar, always-mounted overlays | `addView`, `addOverlay`, `addSidebarPanel`, `addAltbarPanel`, `setHeader`, `setFooter`, `toggleSidebar`, `toggleAltbar`, `layout`… |
 | `toolbar` | the top and bottom bars: header and status footer on desktop, a thin top bar and a bottom icon toolbar on a phone; items pick a bar and side (`bar`, `side`, `mobile`); Settings → Toolbar has a per-device layout | `addItem` |
-| `context-menu` | menus, sheets and modals: a popover beside a button, a bottom sheet on a phone; `modal` and `confirm`, and `dialog` for a modal that renders the caller's own content (`size: "large"` for a big one). Also the right-click / long-press / menu-key menu for anything marked with a target type (`data-ddd-target`, `_shared/target.ts`), built from every plugin's actions for that type. Plugins never draw a menu of their own | `addAction`, `open`, `modal`, `confirm`, `dialog`… |
+| `context-menu` | menus, sheets and modals: a popover beside a button, a bottom sheet on a phone; `modal` and `confirm`, and `dialog` for a modal that renders the caller's own content (`size: "large"` for a big one). Also the right-click / long-press / menu-key menu for anything marked with a target type (`data-ddd-target`, `_shared/target.ts`), built from every plugin's actions for that type, with submenus to any depth (see [Menu groups](#menu-groups)). Plugins never draw a menu of their own | `addAction`, `addGroup`, `open`, `modal`, `confirm`, `dialog`… |
 | `notices` | the notice bell in the top bar | — |
 | `sync-status` | the sync pill in the top bar | — |
 | `router` | URL ↔ view (hash-based) | `addRoute`, `navigate`, `Link`, `href`… |
@@ -359,6 +359,31 @@ Types that plugins pass to each other (registry items, service functions) are ex
 the owning plugin and imported from `plugin:<id>`. A `_shared` file may import them too;
 `check:plugins` follows relative imports to make sure the compiling plugin declares the
 dependency.
+
+## Menu groups
+
+A menu item can be a submenu: give it `items` instead of `run`, and those items can hold
+submenus of their own. On a wide screen a submenu opens beside its entry (on hover, a click
+or the right arrow key; left arrow or Escape closes it). On a phone it replaces the sheet's
+list, with a Back entry at the top.
+
+To share a submenu with other plugins, give an item a `group` instead of building the
+submenu yourself. Items with the same group end up in one submenu, whichever plugin added
+them, sorted by their action's `order`. A group sits where its first item would have been.
+Groups with nothing in them are not shown.
+
+`context-menu` registers these groups:
+
+| Group | Shown as | Holds |
+|---|---|---|
+| `new` | New | things to make inside the target, or at the root: Note, Search |
+| `new.view` | New › View | saved views: Table, Board, Timeline, Calendar |
+| `move` | Move to | places within the current view, such as a board's columns |
+
+Label an item for the submenu it sits in: "Board" in `new.view`, not "New board". To add a
+group, call `addGroup({ id, label, parent?, icon?, order? })`. `parent` puts it inside
+another group, and `order` fixes where it sits instead of following its first item. Use a
+generic group when one fits, so that related items from different plugins end up together.
 
 ## The folder tree
 

@@ -116,6 +116,7 @@ describe("buildMenu", () => {
         }),
         action("open", "ddd/document", () => [item("open")]),
       ],
+      new Map(),
       (entry) => failed.push(entry.value.id),
     );
     expect(labels(menu)).toEqual([["open"]]);
@@ -131,6 +132,24 @@ describe("buildMenu", () => {
     ];
     expect(labels(buildMenu(asElement(row), actions))).toEqual([["open"]]);
     expect(labels(buildMenu(asElement(tree), actions))).toEqual([["New note at the root"]]);
+  });
+
+  it("gathers grouped items from every action into one submenu, where the first of them sat", () => {
+    const groups = new Map([["new", { id: "new", label: "New" }]]);
+    const menu = buildMenu(
+      asElement(card),
+      [
+        action("open", "ddd/document", () => [item("open")], 0),
+        action("notes", "ddd/document", () => [{ ...item("note", "Note"), group: "new" }, item("rename")], 10),
+        action("boards", "ddd/document", () => [{ ...item("board", "Board"), group: "new" }], 20),
+        action("trash", "ddd/document", () => [item("trash")], 100),
+      ],
+      groups,
+    );
+    const top = menu?.sections[0]?.items ?? [];
+    expect(top.map((each) => each.label)).toEqual(["open", "New", "rename", "trash"]);
+    const submenu = top[1];
+    expect(submenu && "items" in submenu ? submenu.items.map((each) => each.label) : []).toEqual(["Note", "Board"]);
   });
 
   it("prefixes item ids with their action's, so two actions' items never collide", () => {

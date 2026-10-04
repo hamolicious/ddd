@@ -9,13 +9,16 @@ import type {
   ContextAction,
   ContextMenu,
   DialogRequest,
+  MenuGroup,
   MenuRequest,
   ModalRequest,
   ModalResult,
   SheetRequest,
 } from "./api.js";
+import { GROUP_MOVE, GROUP_NEW, GROUP_NEW_VIEW } from "./api.js";
 import { MenuHost, type Open } from "./Menu.js";
 import { confirmModal } from "./Modal.js";
+import { nestItems } from "./nest.js";
 import { buildMenu, listen } from "./targets.js";
 
 export type {
@@ -25,10 +28,14 @@ export type {
   ContextMenu,
   DialogRequest,
   FieldCommon,
+  MenuAction,
   MenuCommon,
+  MenuEntry,
+  MenuGroup,
   MenuItem,
   MenuRequest,
   MenuSection,
+  MenuSubmenu,
   ModalButton,
   ModalField,
   ModalRequest,
@@ -40,6 +47,8 @@ export type {
   TextAreaField,
   TextField,
 } from "./api.js";
+
+export { GROUP_MOVE, GROUP_NEW, GROUP_NEW_VIEW, isSubmenu } from "./api.js";
 
 export type ContextMenuApi = ContextMenu;
 
@@ -55,6 +64,30 @@ const actions = createRegistry<ContextAction>({
 });
 
 export const addAction: (items: ContextAction | readonly ContextAction[]) => () => void = actions.add;
+
+const groups = createRegistry<MenuGroup>({
+  key: (group) => group.id,
+  order: (group) => group.order ?? 0,
+  shape: s.object({
+    id: s.string(),
+    label: s.string(),
+    icon: s.optional(s.any()),
+    order: s.optional(s.number()),
+    parent: s.optional(s.string()),
+  }),
+});
+
+export const addGroup: (items: MenuGroup | readonly MenuGroup[]) => () => void = groups.add;
+
+const BASE_GROUPS: readonly MenuGroup[] = [
+  { id: GROUP_NEW, label: "New" },
+  { id: GROUP_NEW_VIEW, label: "View", parent: GROUP_NEW },
+  { id: GROUP_MOVE, label: "Move to" },
+];
+
+function groupMap(): ReadonlyMap<string, MenuGroup> {
+  return new Map(groups.get().map((group) => [group.id, group]));
+}
 
 let current: Open | undefined;
 const listeners = new Set<() => void>();
@@ -81,7 +114,7 @@ function Host(): ReactNode {
 }
 
 function openAt(from: Element, anchor: HTMLElement | null): boolean {
-  const menu = buildMenu(from, actions.entries(), (entry, error) =>
+  const menu = buildMenu(from, actions.entries(), groupMap(), (entry, error) =>
     warn(`context action ${entry.value.id} from ${entry.pluginId} failed`, error),
   );
   if (!menu) return false;
@@ -90,7 +123,11 @@ function openAt(from: Element, anchor: HTMLElement | null): boolean {
 }
 
 export function open(menu: MenuRequest): void {
-  set({ kind: "menu", request: menu });
+  const known = groupMap();
+  set({
+    kind: "menu",
+    request: { ...menu, sections: menu.sections.map((section) => ({ ...section, items: nestItems(section.items, known) })) },
+  });
 }
 
 export function openSheet(sheet: SheetRequest): void {
@@ -131,9 +168,11 @@ export default function activate(kernel: Kernel): void {
   teardown?.();
   warn = (message, error) => kernel.log.warn(message, error);
   const removeOverlay = addOverlay({ id: "context-menu", component: Host });
+  const removeGroups = addGroup(BASE_GROUPS);
   const stopListening = listen(openAt);
   teardown = () => {
     stopListening();
+    removeGroups();
     removeOverlay();
   };
 }

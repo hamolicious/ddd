@@ -1,6 +1,7 @@
 import type { RegistryEntry } from "@kernel";
 
-import type { ContextAction, MenuItem, MenuRequest, MenuSection } from "./api.js";
+import type { ContextAction, MenuGroup, MenuRequest, MenuSection } from "./api.js";
+import { nest, type Ranked } from "./nest.js";
 
 import { LONG_PRESS_MS, PRESS_ATTR, markedElements, targetsOf } from "../../_shared/target.js";
 
@@ -10,6 +11,7 @@ const LONG_PRESS_SLOP = 10;
 export function buildMenu(
   from: Element | null,
   actions: readonly RegistryEntry<ContextAction>[],
+  groups: ReadonlyMap<string, MenuGroup> = new Map(),
   report: (action: RegistryEntry<ContextAction>, error: unknown) => void = () => {},
 ): Omit<MenuRequest, "anchor"> | undefined {
   const elements = markedElements(from);
@@ -25,16 +27,17 @@ export function buildMenu(
         unique.map((entry, place) => ({ entry, place, target })).filter(({ entry }) => entry.value.target === target.type),
       )
       .sort((a, b) => (a.entry.value.order ?? 0) - (b.entry.value.order ?? 0) || a.place - b.place);
-    const items: MenuItem[] = [];
+    const entries: Ranked[] = [];
     for (const { entry, target } of ranked) {
       try {
         for (const item of entry.value.items(target, chain)) {
-          items.push({ ...item, id: `${entry.value.id}:${item.id}` });
+          entries.push({ item: { ...item, id: `${entry.value.id}:${item.id}` }, rank: entry.value.order ?? 0 });
         }
       } catch (error) {
         report(entry, error);
       }
     }
+    const items = nest(entries, groups);
     if (items.length === 0) continue;
     const label = own[0]?.label;
     if (sections.length === 0) title = label;
