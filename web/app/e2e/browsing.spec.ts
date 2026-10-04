@@ -156,7 +156,7 @@ test("Ctrl+Space searches the list, and advanced search keeps its filters and it
   await page.getByRole("button", { name: "Add a step" }).click();
   await page.getByRole("menuitem", { name: /^Sort/ }).click();
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("button", { name: /^sort Match score, best match first/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^sort score, best match first/ })).toBeVisible();
   await expect(page.getByRole("button", { name: "Quibble ordinary", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "More" }).click();
   await page.getByRole("menuitem", { name: "Show as code" }).click();

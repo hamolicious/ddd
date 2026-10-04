@@ -68,7 +68,7 @@ export function chainSteps(draft: FilterDraft, noteTitle: (id: string) => string
   ];
 }
 
-export const MATCH_SCORE: FieldOption = { field: "score", label: "Match score", kind: "float", sortable: true };
+export const MATCH_SCORE: FieldOption = { field: "score", label: "score", kind: "float", sortable: true };
 
 export function sortOptions(
   searching: boolean,

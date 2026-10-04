@@ -271,7 +271,7 @@ function WordsChip({
       </span>
       <input
         ref={inputRef}
-        className="search-step-input search:tap-h search:min-w-0 search:flex-1 search:border-0 search:bg-transparent search:p-0 search:font-mono search:text-sm search:text-text search:outline-none"
+        className="search-step-input search:tap-h search:min-w-0 search:flex-1 search:border-0 search:bg-transparent search:p-0 search:font-mono search:text-sm search:text-text search:outline-none search:[&::-webkit-search-cancel-button]:appearance-none"
         type="search"
         aria-label={label}
         placeholder={placeholder}

@@ -11,6 +11,7 @@ import { documentsNoteSource } from "../../_shared/note-picker.js";
 import { Spinner } from "../../_shared/Spinner.js";
 
 import { ChainBar } from "./ChainBar.js";
+import { MATCH_SCORE } from "./chain.js";
 import { specCode } from "./code.js";
 import { RELEVANCE, SORT_OPTIONS, type FieldOption } from "./filter.js";
 import { searchQuery, useReportRendered, useResults } from "./results.js";
@@ -95,7 +96,7 @@ export function createSearchShell(deps: SearchShellDeps): ComponentType<SearchSh
       else onSpecChange({ ...spec, sort: next });
     };
 
-    const known = [RELEVANCE, ...SORT_OPTIONS].some((option) => option.field === sort.field);
+    const known = [RELEVANCE, MATCH_SCORE, ...SORT_OPTIONS].some((option) => option.field === sort.field);
     const extraSorts: readonly FieldOption[] = known
       ? []
       : [{ field: sort.field, label: sort.field.replace(/^fm\./, ""), kind: "str", sortable: true }];
