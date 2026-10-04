@@ -1,7 +1,8 @@
 # ddd
 
-**Dynamic database for documents.** A self-hosted, offline-first notes app where every note is
-Markdown with frontmatter, and every note can be queried like a database row.
+**Dynamic database for documents.** A self-hosted, offline-first notes app.
+
+I hate writing docs so unfortunately for you, the rest of this is all clanker slop.
 
 - **Offline first.** The whole workspace lives in the browser and syncs when it can.
 - **Real-time collaboration.** Every note is a CRDT, so several people and devices can edit it at once.
