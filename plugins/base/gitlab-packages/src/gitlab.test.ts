@@ -6,7 +6,6 @@ import {
   DEFAULT_INSTANCE,
   browse,
   chooseFile,
-  compareVersions,
   download,
   endpointOf,
   newestPerName,
@@ -84,12 +83,6 @@ describe("package helpers", () => {
       file: "tasks-1.2.0.zip",
     });
     expect(parsePackageUrl("https://example.com/plugin.zip")).toBeUndefined();
-  });
-
-  it("orders versions numerically, a pre-release before its release", () => {
-    expect(compareVersions("1.10.0", "1.9.9")).toBe(1);
-    expect(compareVersions("2.0.0-rc.1", "2.0.0")).toBe(-1);
-    expect(compareVersions("v1.2", "1.2.0")).toBe(0);
   });
 
   it("keeps the newest finished version of each package", () => {

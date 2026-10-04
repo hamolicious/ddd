@@ -24,7 +24,7 @@ import {
   type SetupProps,
 } from "./sources.js";
 import { installedFrom, updateStore, type ReportedUpdate } from "./updates.js";
-import { compareVersions } from "./versions.js";
+import { compareVersions } from "../../_shared/versions.js";
 
 const PRIMARY = "admin:border-accent! admin:bg-accent! admin:text-accent-text!";
 
