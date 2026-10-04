@@ -187,22 +187,6 @@ pub fn search_snippets(request_json: &str) -> String {
 }
 
 #[wasm_bindgen]
-pub fn search_fuzzy(request_json: &str) -> String {
-    #[derive(serde::Deserialize)]
-    struct Request {
-        spec: search::FuzzySpec,
-        candidates: Vec<search::FuzzyCandidate>,
-    }
-    match serde_json::from_str::<Request>(request_json) {
-        Ok(request) => {
-            serde_json::to_string(&search::fuzzy_rank_page(&request.spec, &request.candidates))
-                .unwrap_or_else(|_| r#"{"hits":[],"total":0}"#.into())
-        }
-        Err(_) => r#"{"hits":[],"total":0}"#.into(),
-    }
-}
-
-#[wasm_bindgen]
 pub fn search_expand(plan_json: &str, vocabulary_json: &str) -> String {
     let words: Vec<String> = serde_json::from_str(vocabulary_json).unwrap_or_default();
     match search::Plan::from_json_str(plan_json) {

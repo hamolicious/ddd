@@ -8,6 +8,7 @@ use super::catalog::{
     quote_ident, source_table, tiebreak, trash_column,
 };
 use super::cursor::decode_cursor;
+use super::functions::{FUZZY_FUNCTION, FUZZY_TERMS_FUNCTION};
 use super::fuzzy::{
     FuzzySpec, MAX_FUZZY_CANDIDATES, MAX_FUZZY_DISTANCE, MAX_VOCAB_ROWS, expand_terms, fuzzy_terms,
     vocabulary_filter,
@@ -21,6 +22,8 @@ use super::project::SqlValue;
 use super::text::{Fts, Leafy, TextExpr, TextField, parse_text, to_fts, to_leaves};
 
 const RELEVANCE: &str = "relevance";
+pub const SCORE: &str = "score";
+const FUZZY_TERMS: &str = "fuzzy_terms";
 const MATCHES: &str = "SELECT x.id AS id, -bm25(documents_fts, 3.0, 1.0, 2.0) AS rank FROM documents_fts JOIN documents x ON x.rowid = documents_fts.rowid WHERE documents_fts MATCH";
 
 const CHILDREN_PATH: &str = "$.\"folders\".\"children\"";
@@ -50,24 +53,31 @@ pub struct Compiled {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub terms: Vec<String>,
     pub snippets: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub fuzzy: Option<FuzzySpec>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub hits: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vocabulary: Option<CountQuery>,
 }
 
-fn unexpanded(plan: &Plan) -> Option<&FuzzyStage> {
-    plan.stages.iter().find_map(|stage| match stage {
-        Stage::Fuzzy(fuzzy) if fuzzy.expanded.is_none() => Some(fuzzy),
-        _ => None,
-    })
+fn unexpanded(plan: &Plan) -> Vec<&FuzzyStage> {
+    plan.stages
+        .iter()
+        .filter_map(|stage| match stage {
+            Stage::Fuzzy(fuzzy) if fuzzy.expanded.is_none() => Some(fuzzy),
+            _ => None,
+        })
+        .collect()
 }
 
-fn vocabulary_query(fuzzy: &FuzzyStage) -> CountQuery {
+fn vocabulary_query(fuzzies: &[&FuzzyStage]) -> CountQuery {
     let mut params = Params::default();
-    let max_distance = fuzzy.max_distance.unwrap_or(MAX_FUZZY_DISTANCE);
     let mut alternatives = Vec::new();
-    for filter in vocabulary_filter(&fuzzy_terms(&fuzzy.query), max_distance) {
+    for filter in fuzzies.iter().flat_map(|fuzzy| {
+        vocabulary_filter(
+            &fuzzy_terms(&fuzzy.query),
+            fuzzy.max_distance.unwrap_or(MAX_FUZZY_DISTANCE),
+        )
+    }) {
         let low = params.bind(SqlValue::Text(filter.low));
         let high = params.bind(SqlValue::Text(filter.high));
         let shortest = params.bind(SqlValue::Int(filter.shortest as i64));
@@ -180,12 +190,12 @@ struct Compiler<'a> {
     texts: usize,
     terms: Vec<String>,
     snippets: bool,
-    fuzzy: Option<FuzzySpec>,
 }
 
 pub fn compile(plan: &Plan) -> Result<Compiled, PlanError> {
     plan.validate()?;
-    if let Some(fuzzy) = unexpanded(plan) {
+    let fuzzies = unexpanded(plan);
+    if !fuzzies.is_empty() {
         compile(&expand_plan(plan, &[]))?;
         return Ok(Compiled {
             sql: String::new(),
@@ -197,8 +207,8 @@ pub fn compile(plan: &Plan) -> Result<Compiled, PlanError> {
             sources: vec![plan.source, Source::Documents],
             terms: Vec::new(),
             snippets: false,
-            fuzzy: None,
-            vocabulary: Some(vocabulary_query(fuzzy)),
+            hits: false,
+            vocabulary: Some(vocabulary_query(&fuzzies)),
         });
     }
     let mut params = Params::default();
@@ -239,7 +249,6 @@ fn compile_with(
         texts: 0,
         terms: Vec::new(),
         snippets: false,
-        fuzzy: None,
     };
     let (from, scope) = base_scope(plan.source);
     let mut block = Block::new(from, scope);
@@ -417,17 +426,6 @@ fn compile_with(
                     return Err(PlanError::BadStage(format!("{name} is used twice")));
                 }
                 projection.push((name, column));
-            }
-            Stage::Limit(n) if compiler.fuzzy.is_some() => {
-                if let Some(fuzzy) = compiler.fuzzy.as_mut() {
-                    fuzzy.page = Some(fuzzy.page.map_or(*n, |page| page.min(*n)));
-                }
-            }
-            Stage::Offset(n) if compiler.fuzzy.is_some() => {
-                if let Some(fuzzy) = compiler.fuzzy.as_mut() {
-                    fuzzy.offset = Some(fuzzy.offset.unwrap_or(0) + n);
-                    fuzzy.page = fuzzy.page.map(|page| page.saturating_sub(*n));
-                }
             }
             Stage::Limit(n) => {
                 if block.limit.is_some() {
@@ -608,9 +606,10 @@ impl Compiler<'_> {
             .clone()
             .filter(|fields| !fields.is_empty())
             .unwrap_or_else(|| vec![TextField::Title, TextField::Content, TextField::Fm]);
-        let terms = fuzzy_terms(&fuzzy.query);
         let max_distance = fuzzy.max_distance.unwrap_or(MAX_FUZZY_DISTANCE);
         let expanded = fuzzy.expanded.clone().unwrap_or_default();
+        let candidates = self.alias();
+        let text = self.alias();
         if expanded.is_empty() {
             block.wheres.push("0".into());
         } else {
@@ -627,22 +626,54 @@ impl Compiler<'_> {
             let bound = self.params.bind(SqlValue::Text(query));
             block.from.push_str(&format!(
                 " JOIN (SELECT x.id AS id FROM documents_fts JOIN documents x ON x.rowid = documents_fts.rowid \
-                 WHERE documents_fts MATCH {bound} ORDER BY bm25(documents_fts) LIMIT {MAX_FUZZY_CANDIDATES}) fg ON fg.id = {}",
+                 WHERE documents_fts MATCH {bound} ORDER BY bm25(documents_fts) LIMIT {MAX_FUZZY_CANDIDATES}) {candidates} ON {candidates}.id = {}",
                 id.sql
             ));
         }
         block
             .from
-            .push_str(&format!(" JOIN documents fz ON fz.id = {}", id.sql));
-        self.fuzzy = Some(FuzzySpec {
-            terms,
+            .push_str(&format!(" JOIN documents {text} ON {text}.id = {}", id.sql));
+        let spec = FuzzySpec {
+            terms: fuzzy_terms(&fuzzy.query),
             fields,
-            limit: fuzzy.limit,
             max_distance,
-            offset: None,
-            page: None,
-            total: false,
-        });
+        };
+        let spec = serde_json::to_string(&spec).map_err(|error| {
+            PlanError::BadStage(format!("fuzzy could not be prepared: {error}"))
+        })?;
+        let spec = self.params.bind(SqlValue::Text(spec));
+        let arguments = format!("{spec}, {text}.title, {text}.content");
+        let score = Column {
+            name: SCORE.to_string(),
+            sql: format!("{FUZZY_FUNCTION}({arguments})"),
+            kind: Kind::Real,
+            path: None,
+            companion: None,
+            origin: SCORE.to_string(),
+        };
+        let terms = Column {
+            name: FUZZY_TERMS.to_string(),
+            sql: format!("{FUZZY_TERMS_FUNCTION}({arguments})"),
+            kind: Kind::NullText,
+            path: None,
+            companion: None,
+            origin: FUZZY_TERMS.to_string(),
+        };
+        block.wheres.push(format!("{} > 0", score.sql));
+        block
+            .scope
+            .columns
+            .retain(|column| column.name != SCORE && column.name != FUZZY_TERMS);
+        block.order = vec![SortKey {
+            name: SCORE.to_string(),
+            column: score.clone(),
+            desc: true,
+        }];
+        block.scope.columns.push(score);
+        block.scope.columns.push(terms);
+        if let Some(limit) = fuzzy.limit {
+            block.limit = Some(limit);
+        }
         Ok(())
     }
 
@@ -885,15 +916,13 @@ impl Compiler<'_> {
                 .scope
                 .columns
                 .iter()
+                .filter(|column| column.name != SCORE && column.name != FUZZY_TERMS)
                 .map(|column| (vec![column.name.clone()], column.clone()))
                 .collect(),
             None => self.default_row(&block.scope)?,
         };
 
-        if with_total && let Some(fuzzy) = self.fuzzy.as_mut() {
-            fuzzy.total = true;
-        }
-        let total = if with_total && !self.nested && self.fuzzy.is_none() {
+        let total = if with_total && !self.nested {
             let unpaged = Block {
                 limit: None,
                 offset: None,
@@ -947,25 +976,36 @@ impl Compiler<'_> {
         if let Some(content) = &content {
             select.push(format!("{} AS snippet_source", content.sql));
         }
-        let fuzzy = if self.nested { None } else { self.fuzzy.take() };
-        if fuzzy.is_some() {
-            select.push("fz.id AS fuzzy_id".into());
-            select.push("fz.title AS fuzzy_title".into());
-            select.push("fz.content AS fuzzy_content".into());
+        let hits = if self.nested
+            || block.projection.is_some()
+            || block.shaped
+            || block.group.is_some()
+            || block.distinct
+        {
+            None
+        } else {
+            match (
+                document_id(&block.scope, self.source),
+                block.scope.resolve(SCORE),
+                block.scope.resolve(FUZZY_TERMS),
+            ) {
+                (Ok(id), Ok(score), Ok(terms)) => Some((id, score, terms)),
+                _ => None,
+            }
+        };
+        if let Some((id, score, terms)) = &hits {
+            select.push(format!("{} AS fuzzy_id", id.sql));
+            select.push(format!("{} AS fuzzy_score", score.sql));
+            select.push(format!("{} AS fuzzy_terms", terms.sql));
         }
 
         let probed = Block {
             limit: match page_size {
-                Some(n) if fuzzy.is_none() => Some(n + 1),
-                _ if fuzzy.is_some() => Some(MAX_FUZZY_CANDIDATES),
-                _ => block.limit,
+                Some(n) => Some(n + 1),
+                None => block.limit,
             },
             ..block
         };
-        let page_size = if fuzzy.is_some() { None } else { page_size };
-        if fuzzy.is_some() {
-            cursor_columns = 0;
-        }
         let sql = self.block_sql(&probed, &select.join(", "), true)?;
         let sources = self.sources;
         Ok(Compiled {
@@ -978,7 +1018,7 @@ impl Compiler<'_> {
             sources,
             terms: self.terms,
             snippets: self.snippets,
-            fuzzy,
+            hits: hits.is_some(),
             vocabulary: None,
         })
     }

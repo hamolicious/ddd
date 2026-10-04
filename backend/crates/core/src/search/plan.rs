@@ -306,22 +306,6 @@ impl Plan {
                 Stage::Limit(n) if *n > MAX_LIMIT => {
                     return Err(PlanError::Limit(format!("limit is above {MAX_LIMIT}")));
                 }
-                Stage::Fuzzy(_)
-                    if !self.stages[index + 1..].iter().all(|later| {
-                        matches!(
-                            later,
-                            Stage::Offset(_)
-                                | Stage::Limit(_)
-                                | Stage::WithTotal
-                                | Stage::WithContent
-                                | Stage::Trash(_)
-                        )
-                    }) =>
-                {
-                    return Err(PlanError::BadStage(
-                        "fuzzy must be the last stage, followed only by paging".into(),
-                    ));
-                }
                 Stage::Fuzzy(fuzzy) if fuzzy.query.len() > MAX_TEXT_BYTES => {
                     return Err(PlanError::Limit(format!(
                         "fuzzy text is over {MAX_TEXT_BYTES} bytes"

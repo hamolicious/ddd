@@ -47,7 +47,6 @@ export {
   type SearchFieldType,
   type SearchFmColumns,
   type SearchFrom,
-  type SearchFuzzy,
   type SearchFuzzyOptions,
   type SearchGroupStart,
   type SearchHitInfo,

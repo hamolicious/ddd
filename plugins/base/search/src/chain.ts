@@ -68,15 +68,22 @@ export function chainSteps(draft: FilterDraft, noteTitle: (id: string) => string
   ];
 }
 
-export function sortOptions(searching: boolean, sort: SearchSort, extra: readonly FieldOption[]): readonly FieldOption[] {
-  const options = [...(searching ? [RELEVANCE] : []), ...SORT_OPTIONS, ...extra];
+export const MATCH_SCORE: FieldOption = { field: "score", label: "Match score", kind: "float", sortable: true };
+
+export function sortOptions(
+  searching: boolean,
+  sort: SearchSort,
+  extra: readonly FieldOption[],
+  fuzzy = false,
+): readonly FieldOption[] {
+  const options = [...(fuzzy ? [MATCH_SCORE] : []), ...(searching ? [RELEVANCE] : []), ...SORT_OPTIONS, ...extra];
   return options.some((option) => option.field === sort.field)
     ? options
     : [...options, { field: sort.field, label: sort.field.replace(/^fm\./, ""), kind: "str", sortable: true }];
 }
 
 export function orderWords(option: FieldOption | undefined): { readonly desc: string; readonly asc: string } {
-  if (option?.field === RELEVANCE.field) return { desc: "best match first", asc: "best match last" };
+  if (option?.field === RELEVANCE.field || option?.field === MATCH_SCORE.field) return { desc: "best match first", asc: "best match last" };
   if (option?.kind === "date") return { desc: "newest first", asc: "oldest first" };
   return { desc: "Z to A", asc: "A to Z" };
 }

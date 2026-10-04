@@ -22,21 +22,13 @@ type FieldTokens = (f64, Vec<(String, Vec<char>)>);
 pub struct FuzzySpec {
     pub terms: Vec<String>,
     pub fields: Vec<TextField>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub limit: Option<u64>,
     pub max_distance: usize,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub offset: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub page: Option<u64>,
-    #[serde(default)]
-    pub total: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct RankedPage {
-    pub hits: Vec<Ranked>,
-    pub total: usize,
+pub struct FuzzyMatch {
+    pub score: f64,
+    pub terms: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -217,91 +209,89 @@ pub fn bounded_distance(a: &[char], b: &[char], budget: usize) -> Option<usize> 
     (distance <= budget).then_some(distance)
 }
 
-pub fn rank_page(spec: &FuzzySpec, candidates: &[FuzzyCandidate]) -> RankedPage {
-    let ranked = rank(spec, candidates);
-    let total = ranked.len();
-    let start = usize::try_from(spec.offset.unwrap_or(0))
-        .unwrap_or(usize::MAX)
-        .min(total);
-    let end = match spec.page {
-        Some(page) => start
-            .saturating_add(usize::try_from(page).unwrap_or(usize::MAX))
-            .min(total),
-        None => total,
-    };
-    RankedPage {
-        hits: ranked[start..end].to_vec(),
-        total,
-    }
-}
-
-pub fn rank(spec: &FuzzySpec, candidates: &[FuzzyCandidate]) -> Vec<Ranked> {
-    let queries: Vec<(Vec<char>, usize)> = spec
-        .terms
+fn queries(spec: &FuzzySpec) -> Vec<(Vec<char>, usize)> {
+    spec.terms
         .iter()
         .map(|term| {
             let chars: Vec<char> = term.chars().collect();
             let budget = budget_for(chars.len(), spec.max_distance);
             (chars, budget)
         })
+        .collect()
+}
+
+fn score_with(
+    queries: &[(Vec<char>, usize)],
+    spec: &FuzzySpec,
+    candidate: &FuzzyCandidate,
+) -> Option<FuzzyMatch> {
+    let fields: Vec<FieldTokens> = spec
+        .fields
+        .iter()
+        .map(|field| {
+            let boost = FIELD_WEIGHTS[match field {
+                TextField::Title => 0,
+                TextField::Content => 1,
+                TextField::Fm => 2,
+            }];
+            let text = field_text(candidate, *field);
+            let tokens = words(&text)
+                .map(|(surface, folded)| (surface.to_string(), folded.chars().collect()))
+                .collect();
+            (boost, tokens)
+        })
         .collect();
-    let mut ranked = Vec::new();
-    for (index, candidate) in candidates.iter().enumerate() {
-        let fields: Vec<FieldTokens> = spec
-            .fields
-            .iter()
-            .map(|field| {
-                let boost = FIELD_WEIGHTS[match field {
-                    TextField::Title => 0,
-                    TextField::Content => 1,
-                    TextField::Fm => 2,
-                }];
-                let text = field_text(candidate, *field);
-                let tokens = words(&text)
-                    .map(|(surface, folded)| (surface.to_string(), folded.chars().collect()))
-                    .collect();
-                (boost, tokens)
-            })
-            .collect();
-        let mut score = 0.0;
-        let mut matched = 0usize;
-        let mut terms: Vec<String> = Vec::new();
-        for (query, budget) in &queries {
-            let mut best = 0.0;
-            let mut surface: Option<&str> = None;
-            for (boost, tokens) in &fields {
-                for (word, token) in tokens {
-                    let found = boost * weight(query, token, *budget);
-                    if found > best {
-                        best = found;
-                        surface = Some(word);
-                    }
-                }
-            }
-            if let Some(word) = surface {
-                score += best;
-                matched += 1;
-                if !terms.iter().any(|known| known == word) {
-                    terms.push(word.to_string());
+    let mut score = 0.0;
+    let mut matched = 0usize;
+    let mut terms: Vec<String> = Vec::new();
+    for (query, budget) in queries {
+        let mut best = 0.0;
+        let mut surface: Option<&str> = None;
+        for (boost, tokens) in &fields {
+            for (word, token) in tokens {
+                let found = boost * weight(query, token, *budget);
+                if found > best {
+                    best = found;
+                    surface = Some(word);
                 }
             }
         }
-        if matched > 0 {
-            ranked.push(Ranked {
-                index,
-                score: score * matched as f64,
-                terms,
-            });
+        if let Some(word) = surface {
+            score += best;
+            matched += 1;
+            if !terms.iter().any(|known| known == word) {
+                terms.push(word.to_string());
+            }
         }
     }
+    (matched > 0).then_some(FuzzyMatch {
+        score: score * matched as f64,
+        terms,
+    })
+}
+
+pub fn score_candidate(spec: &FuzzySpec, candidate: &FuzzyCandidate) -> Option<FuzzyMatch> {
+    score_with(&queries(spec), spec, candidate)
+}
+
+pub fn rank(spec: &FuzzySpec, candidates: &[FuzzyCandidate]) -> Vec<Ranked> {
+    let queries = queries(spec);
+    let mut ranked: Vec<Ranked> = candidates
+        .iter()
+        .enumerate()
+        .filter_map(|(index, candidate)| {
+            score_with(&queries, spec, candidate).map(|found| Ranked {
+                index,
+                score: found.score,
+                terms: found.terms,
+            })
+        })
+        .collect();
     ranked.sort_by(|a, b| {
         b.score
             .total_cmp(&a.score)
             .then_with(|| a.index.cmp(&b.index))
     });
-    if let Some(limit) = spec.limit {
-        ranked.truncate(limit as usize);
-    }
     ranked
 }
 
@@ -320,11 +310,7 @@ mod tests {
         FuzzySpec {
             terms: fuzzy_terms(query),
             fields: vec![TextField::Title, TextField::Content, TextField::Fm],
-            limit: None,
             max_distance: MAX_FUZZY_DISTANCE,
-            offset: None,
-            page: None,
-            total: false,
         }
     }
 
@@ -416,22 +402,14 @@ mod tests {
     }
 
     #[test]
-    fn pages_of_ranked_hits_carry_the_whole_count() {
-        let all = [
-            candidate("Milk", ""),
-            candidate("Silk", ""),
-            candidate("Notes", "milk"),
-        ];
-        let page = rank_page(
-            &FuzzySpec {
-                offset: Some(1),
-                page: Some(1),
-                total: true,
-                ..spec("milk")
-            },
-            &all,
-        );
-        assert_eq!(page.total, 3);
-        assert_eq!(page.hits.len(), 1);
+    fn one_row_scores_the_same_alone_as_in_a_ranking() {
+        let all = [candidate("Milk", ""), candidate("Notes", "buy milk")];
+        let ranked = rank(&spec("milk"), &all);
+        for found in &ranked {
+            let alone = score_candidate(&spec("milk"), &all[found.index]).unwrap();
+            assert_eq!(alone.score, found.score);
+            assert_eq!(alone.terms, found.terms);
+        }
+        assert!(score_candidate(&spec("milk"), &candidate("Groceries", "bread")).is_none());
     }
 }

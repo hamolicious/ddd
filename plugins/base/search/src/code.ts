@@ -106,7 +106,7 @@ export function specCode(spec: SearchSpec, sort: SearchSort): string {
     ...whereLines(filter),
     ...(filter.includeMachine === true ? [] : [`.where((w) => w.not(w(${quote(`fm.${MACHINE_KEY}`)}, "eq", true)))`]),
     ...(fuzzy !== ""
-      ? [`.fuzzy(${quote(fuzzy)})`]
+      ? [`.fuzzy(${quote(fuzzy)})`, ...(spec.sort ? [`.sort(${sortTokens(spec.sort, text !== "").map(quote).join(", ")})`] : [])]
       : [`.sort(${sortTokens(sort, text !== "").map(quote).join(", ")})`, ...(text !== "" ? [".snippets()"] : [])]),
   ];
   return ["kernel.search", ...lines.map((line) => `  ${line}`)].join("\n");

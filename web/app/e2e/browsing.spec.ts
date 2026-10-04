@@ -153,13 +153,19 @@ test("Ctrl+Space searches the list, and advanced search keeps its filters and it
   await expect(page.getByRole("button", { name: "Quibble ordinary", exact: true })).toBeVisible();
   await expect(page.locator(".doclist-note-match mark")).toHaveText(needle);
   await expect(page).toHaveURL(/fuzzy=quibblesearchwrod/);
+  await page.getByRole("button", { name: "Add a step" }).click();
+  await page.getByRole("menuitem", { name: /^Sort/ }).click();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: /^sort Match score, best match first/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Quibble ordinary", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "More" }).click();
   await page.getByRole("menuitem", { name: "Show as code" }).click();
   await expect(page.locator(".search-code-text")).toContainText(`.text("${needle}")`);
-  await expect(page.locator(".search-code-text")).toContainText('.fuzzy("quibblesearchwrod")');
+  await expect(page.locator(".search-code-text")).toContainText('.fuzzy("quibblesearchwrod")\n  .sort("-score")');
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Remove typo-tolerant words" }).click();
   await expect(fuzzyWords).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^sort / })).toHaveCount(0);
   await expect(docRows(page)).toHaveCount(1);
 
   await search.fill(`${needle} `);

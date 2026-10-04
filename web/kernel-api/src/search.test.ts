@@ -108,6 +108,26 @@ describe("search builder plans", () => {
     });
   });
 
+  it("chains any stage after fuzzy, which can filter and sort on its score", () => {
+    const ranked = search
+      .from()
+      .fuzzy("acme invoce", { fields: ["title"] })
+      .where("score", "gt", 0.5)
+      .where("fm.status", "eq", "open")
+      .sort("-updated_at", "-score")
+      .select("id", "score")
+      .limit(20);
+    expectTypeOf<RowOf<ReturnType<typeof ranked.run>>>().toEqualTypeOf<{ readonly id: string; readonly score: number }>();
+    expect(ranked.plan().stages).toEqual([
+      { fuzzy: { query: "acme invoce", fields: ["title"] } },
+      { where: { cmp: { field: "score", op: "gt", value: { float: 0.5 } } } },
+      { where: { cmp: { field: "fm.status", op: "eq", value: { str: "open" } } } },
+      { sort: ["-updated_at", "-score"] },
+      { select: [{ field: "id" }, { field: "score" }] },
+      { limit: 20 },
+    ]);
+  });
+
   it("builds conditions, matches and subqueries", () => {
     const linksToX = search.from("links").where("target", "eq", "X").select("doc.id");
     const plan = search

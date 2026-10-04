@@ -270,12 +270,6 @@ export interface SearchFuzzyOptions {
   readonly maxDistance?: number;
 }
 
-export interface SearchFuzzy<Row> {
-  run(): Promise<SearchResult<Row>>;
-  watch(options?: SearchWatchOptions): Promise<SearchWatch<Row>>;
-  plan(): SearchPlanJson;
-}
-
 export interface SearchBuilder<
   S extends SearchSourceName,
   C extends SearchScope,
@@ -336,7 +330,7 @@ export interface SearchBuilder<
   withContent(): SearchBuilder<S, C, S extends "documents" ? With<Row, "content", string> : Row, O, never, Opts>;
   snippets(): SearchBuilder<S, C, With<Row, "snippet", SearchSnippet | null>, O, never, Opts>;
   trash(scope: "live" | "trashed" | "all"): SearchBuilder<S, C, Row, O, G, Opts>;
-  fuzzy(query: string, options?: SearchFuzzyOptions): SearchFuzzy<Row>;
+  fuzzy(query: string, options?: SearchFuzzyOptions): SearchBuilder<S, With<C, "score", number>, Row, O, never, Opts>;
   run(): Promise<SearchResult<Row, Opts>>;
   watch(options?: SearchWatchOptions): Promise<SearchWatch<Row, Opts>>;
   plan(): SearchPlanJson;
@@ -386,7 +380,7 @@ export interface AnySearchBuilder {
   withContent(): AnySearchBuilder;
   snippets(): AnySearchBuilder;
   trash(scope: "live" | "trashed" | "all"): AnySearchBuilder;
-  fuzzy(query: string, options?: SearchFuzzyOptions): SearchFuzzy<AnySearchRow>;
+  fuzzy(query: string, options?: SearchFuzzyOptions): AnySearchBuilder;
   run(): Promise<SearchResult<AnySearchRow, SearchResultOptions>>;
   watch(options?: SearchWatchOptions): Promise<SearchWatch<AnySearchRow, SearchResultOptions>>;
   plan(): SearchPlanJson;

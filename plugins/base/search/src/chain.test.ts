@@ -47,6 +47,12 @@ describe("the sort step", () => {
     expect(sortText({ field: "relevance", direction: "desc" }, options)).toBe("Best match, best match first");
   });
 
+  it("offers the match score once there is a fuzzy step", () => {
+    const options = sortOptions(false, { field: "score", direction: "desc" }, [], true);
+    expect(options[0]?.label).toBe("Match score");
+    expect(sortText({ field: "score", direction: "desc" }, options)).toBe("Match score, best match first");
+  });
+
   it("keeps an unknown sort field as an option", () => {
     expect(sortOptions(false, { field: "fm.due", direction: "asc" }, []).at(-1)?.label).toBe("due");
   });

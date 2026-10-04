@@ -66,11 +66,10 @@ fn run(connection: &Connection, plan: Json) -> Page {
     let mut statement = connection
         .prepare(&compiled.sql)
         .unwrap_or_else(|e| panic!("{e}\n{}", compiled.sql));
-    let fuzzy_width = if compiled.fuzzy.is_some() { 3 } else { 0 };
-    let width = compiled.columns.len()
-        + compiled.cursor_columns
-        + usize::from(compiled.snippets)
-        + fuzzy_width;
+    let keys = compiled.columns.len();
+    let snippet_at = keys + compiled.cursor_columns;
+    let hits_at = snippet_at + usize::from(compiled.snippets);
+    let width = hits_at + if compiled.hits { 3 } else { 0 };
     let raw: Vec<Vec<Sql>> = statement
         .query_map(params_from_iter(compiled.params.iter().map(bind)), |r| {
             (0..width).map(|i| r.get::<_, Sql>(i)).collect()
@@ -80,38 +79,16 @@ fn run(connection: &Connection, plan: Json) -> Page {
         .collect();
     let mut raw = raw;
     let mut hits = serde_json::Map::new();
-    let mut fuzzy_total = None;
-    if let Some(spec) = &compiled.fuzzy {
-        let candidates: Vec<FuzzyCandidate> = raw
-            .iter()
-            .map(|values| {
-                let text = |value: &Sql| match value {
-                    Sql::Text(text) => text.clone(),
-                    _ => String::new(),
+    if compiled.hits {
+        for values in &raw {
+            if let (Sql::Text(id), Sql::Real(score)) = (&values[hits_at], &values[hits_at + 1]) {
+                let terms: Json = match &values[hits_at + 2] {
+                    Sql::Text(text) => serde_json::from_str(text).unwrap(),
+                    _ => json!([]),
                 };
-                FuzzyCandidate {
-                    title: text(&values[width - 2]),
-                    content: text(&values[width - 1]),
-                }
-            })
-            .collect();
-        let page = fuzzy_rank_page(spec, &candidates);
-        if spec.total {
-            fuzzy_total = Some(page.total as i64);
-        }
-        let ranked = page.hits;
-        for found in &ranked {
-            if let Sql::Text(id) = &raw[found.index][width - 3] {
-                hits.insert(
-                    id.clone(),
-                    json!({ "score": found.score, "terms": found.terms }),
-                );
+                hits.insert(id.clone(), json!({ "score": score, "terms": terms }));
             }
         }
-        raw = ranked
-            .iter()
-            .map(|found| raw[found.index].clone())
-            .collect();
     }
     let mut next = None;
     if let Some(size) = compiled.page_size
@@ -120,10 +97,7 @@ fn run(connection: &Connection, plan: Json) -> Page {
         raw.truncate(size as usize);
         if compiled.cursor_columns > 0 {
             let last = raw.last().unwrap();
-            let keys: Vec<SqlValue> = last[compiled.columns.len()..]
-                .iter()
-                .map(sql_value)
-                .collect();
+            let keys: Vec<SqlValue> = last[keys..snippet_at].iter().map(sql_value).collect();
             next = Some(encode_cursor(&keys));
         }
     }
@@ -132,7 +106,7 @@ fn run(connection: &Connection, plan: Json) -> Page {
         .map(|values| {
             let mut object = serde_json::Map::new();
             if compiled.snippets {
-                let source = match values.last() {
+                let source = match values.get(snippet_at) {
                     Some(Sql::Text(text)) => Some(text.clone()),
                     _ => None,
                 };
@@ -159,16 +133,14 @@ fn run(connection: &Connection, plan: Json) -> Page {
             Json::Object(object)
         })
         .collect();
-    let total = fuzzy_total.or_else(|| {
-        compiled.total.map(|total| {
-            connection
-                .query_row(
-                    &total.sql,
-                    params_from_iter(total.params.iter().map(bind)),
-                    |r| r.get(0),
-                )
-                .unwrap_or_else(|e| panic!("{e}\n{}", total.sql))
-        })
+    let total = compiled.total.map(|total| {
+        connection
+            .query_row(
+                &total.sql,
+                params_from_iter(total.params.iter().map(bind)),
+                |r| r.get(0),
+            )
+            .unwrap_or_else(|e| panic!("{e}\n{}", total.sql))
     });
     Page {
         rows,

@@ -8,7 +8,7 @@ import { newClauseId, type Conditions, type FilterClause, type Suggestions } fro
 import type { NoteSource } from "../../_shared/note-picker.js";
 import type { SearchSort, SearchSpec } from "./api.js";
 
-import { ANY_STEP, chainSteps, orderWords, sortOptions, sortText } from "./chain.js";
+import { ANY_STEP, MATCH_SCORE, chainSteps, orderWords, sortOptions, sortText } from "./chain.js";
 import { codeTokens, type CodeTokenKind } from "./code.js";
 import { replaceStep, stepConditions, type FieldOption, type FilterDraft } from "./filter.js";
 import { filterOf } from "./spec.js";
@@ -332,7 +332,7 @@ export function ChainBar({
   const filter = filterOf(spec);
   const steps = chainSteps(filter, noteTitle);
   const searching = spec.query.trim() !== "";
-  const options = sortOptions(searching, sort, extraSorts);
+  const options = sortOptions(searching, sort, extraSorts, (spec.fuzzy ?? "").trim() !== "");
   const machine = filter.includeMachine === true;
   const sorted = spec.sort !== undefined;
   const fuzzyWords = spec.fuzzy ?? "";
@@ -345,7 +345,12 @@ export function ChainBar({
       return;
     }
     const { fuzzy: _, ...rest } = spec;
-    onSpecChange(value === "" ? rest : { ...rest, fuzzy: value });
+    if (value !== "") {
+      onSpecChange({ ...rest, fuzzy: value });
+      return;
+    }
+    const { sort: kept, ...unsorted } = rest;
+    onSpecChange(kept?.field === MATCH_SCORE.field ? unsorted : rest);
   };
   const shareInput = (own: MutableRefObject<HTMLInputElement | null>, primary: boolean) => (element: HTMLInputElement | null): void => {
     own.current = element;
@@ -438,7 +443,7 @@ export function ChainBar({
                     },
                   },
                 ]),
-            ...(sorted || showFuzzy
+            ...(sorted
               ? []
               : [
                   {
@@ -446,7 +451,7 @@ export function ChainBar({
                     label: "Sort",
                     hint: ".sort()",
                     run: () => {
-                      onSortChange(sort);
+                      onSortChange(showFuzzy ? { field: MATCH_SCORE.field, direction: "desc" } : sort);
                       setPending("sort");
                     },
                   },
@@ -566,11 +571,10 @@ export function ChainBar({
               onOpen={(anchor) => openStep(step.id, anchor)}
             />
           ))}
-          {sorted && !showFuzzy && <Chip verb="sort" text={sortText(sort, options)} step="sort" onOpen={openSort} />}
           {showFuzzy && (
             <WordsChip
               verb="fuzzy"
-              title="Typo-tolerant words (.fuzzy): always the last step, it ranks notes by how well they match"
+              title="Typo-tolerant words (.fuzzy): ranks notes by how well they match; a sort after it reorders them"
               label="Typo-tolerant words"
               removeLabel="Remove typo-tolerant words"
               placeholder="words, typos are fine"
@@ -587,6 +591,7 @@ export function ChainBar({
               }}
             />
           )}
+          {sorted && <Chip verb="sort" text={sortText(sort, options)} step="sort" onOpen={openSort} />}
           <button
             ref={addButton}
             type="button"

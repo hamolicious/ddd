@@ -1109,6 +1109,168 @@
           "name": "Sub"
         }
       ]
+    },
+    {
+      "name": "a sort after fuzzy reorders its hits",
+      "plan": {
+        "stages": [
+          {
+            "fuzzy": {
+              "query": "alpah betta gama",
+              "fields": [
+                "title"
+              ]
+            }
+          },
+          {
+            "sort": [
+              "-updated_at"
+            ]
+          }
+        ]
+      },
+      "ids": [
+        "B",
+        "C",
+        "A"
+      ]
+    },
+    {
+      "name": "a condition after fuzzy filters its hits",
+      "plan": {
+        "stages": [
+          {
+            "fuzzy": {
+              "query": "alpah betta gama",
+              "fields": [
+                "title"
+              ]
+            }
+          },
+          {
+            "where": {
+              "cmp": {
+                "field": "fm.status",
+                "op": "eq",
+                "value": {
+                  "str": "open"
+                }
+              }
+            }
+          },
+          {
+            "sort": [
+              "title"
+            ]
+          }
+        ]
+      },
+      "ids": [
+        "A",
+        "C"
+      ]
+    },
+    {
+      "name": "the best two fuzzy hits, then newest first",
+      "plan": {
+        "stages": [
+          {
+            "fuzzy": {
+              "query": "alpha gamma betta",
+              "fields": [
+                "title"
+              ]
+            }
+          },
+          {
+            "limit": 2
+          },
+          {
+            "sort": [
+              "-updated_at"
+            ]
+          }
+        ]
+      },
+      "ids": [
+        "C",
+        "A"
+      ]
+    },
+    {
+      "name": "fuzzy hits counted per client",
+      "plan": {
+        "stages": [
+          {
+            "fuzzy": {
+              "query": "alpah betta gama",
+              "fields": [
+                "title"
+              ]
+            }
+          },
+          {
+            "group_by": [
+              "fm.client"
+            ]
+          },
+          {
+            "count": {}
+          },
+          {
+            "sort": [
+              "fm.client"
+            ]
+          }
+        ]
+      },
+      "rows": [
+        {
+          "fm.client": "acme",
+          "count": 2
+        },
+        {
+          "fm.client": "zeta",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "name": "later stages filter and sort on the fuzzy score",
+      "plan": {
+        "stages": [
+          {
+            "fuzzy": {
+              "query": "alpha gamma betta",
+              "fields": [
+                "title"
+              ]
+            }
+          },
+          {
+            "where": {
+              "cmp": {
+                "field": "score",
+                "op": "gt",
+                "value": {
+                  "float": 0
+                }
+              }
+            }
+          },
+          {
+            "sort": [
+              "-score",
+              "title"
+            ]
+          }
+        ]
+      },
+      "ids": [
+        "A",
+        "C",
+        "B"
+      ]
     }
   ],
   "errors": [
@@ -1388,24 +1550,6 @@
         ]
       },
       "kind": "unknown_field"
-    },
-    {
-      "name": "fuzzy is not last",
-      "plan": {
-        "stages": [
-          {
-            "fuzzy": {
-              "query": "x"
-            }
-          },
-          {
-            "sort": [
-              "title"
-            ]
-          }
-        ]
-      },
-      "kind": "bad_stage"
     },
     {
       "name": "fuzzy after groupBy",

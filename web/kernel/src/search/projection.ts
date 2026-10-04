@@ -190,25 +190,13 @@ export class SearchProjection {
       }
     }
     let hits: Record<string, { readonly score: number; readonly terms: readonly string[] }> | undefined;
-    let fuzzyTotal: number | undefined;
-    if (compiled.fuzzy) {
-      const page = this.core.searchFuzzy(
-        compiled.fuzzy,
-        raw.map((values) => ({
-          title: typeof values.fuzzy_title === "string" ? values.fuzzy_title : "",
-          content: typeof values.fuzzy_content === "string" ? values.fuzzy_content : "",
-        })),
-      );
-      if (compiled.fuzzy.total) fuzzyTotal = page.total;
+    if (compiled.hits) {
       hits = {};
-      const ordered: SqlRow[] = [];
-      for (const found of page.hits) {
-        const values = raw[found.index];
-        if (!values) continue;
-        ordered.push(values);
-        hits[String(values.fuzzy_id)] = { score: found.score, terms: found.terms };
+      for (const values of raw) {
+        if (typeof values.fuzzy_id !== "string" || typeof values.fuzzy_score !== "number") continue;
+        const terms = typeof values.fuzzy_terms === "string" ? (JSON.parse(values.fuzzy_terms) as readonly string[]) : [];
+        hits[values.fuzzy_id] = { score: values.fuzzy_score, terms };
       }
-      raw = ordered;
     }
     const rows = raw.map((values) => decodeRow(compiled, values));
     if (compiled.snippets) {
@@ -220,9 +208,9 @@ export class SearchProjection {
         row.snippet = snippets[index] ?? null;
       });
     }
-    const total = fuzzyTotal ?? (compiled.total
+    const total = compiled.total
       ? Number(Object.values(this.db.select(compiled.total.sql, compiled.total.params)[0] ?? {})[0] ?? 0)
-      : undefined);
+      : undefined;
     return {
       rows,
       ...(total === undefined ? {} : { total }),

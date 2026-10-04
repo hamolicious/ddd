@@ -66,7 +66,6 @@ function unavailableCore(reason: string): CoreBindings {
     searchCompile: fail,
     searchEncodeCursor: fail,
     searchSnippets: fail,
-    searchFuzzy: fail,
     searchExpand: fail,
     searchFunctions: fail,
     searchCall: fail,

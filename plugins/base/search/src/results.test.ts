@@ -31,13 +31,28 @@ describe("a typo-tolerant search", () => {
   it("ranks with fuzzy last, with the note text for the matched words, and no sort or snippets", () => {
     const { search } = rowsFor([]);
     const plan = searchQuery(search, "", filterOf(EMPTY_SPEC), { field: "relevance", direction: "desc" }, { fuzzy: "teh qick" }).plan();
-    expect(plan.stages).toEqual([{ where: EXCLUDE_MACHINE_DOCUMENTS }, "with_content", "with_total", { fuzzy: { query: "teh qick" } }]);
+    expect(plan.stages).toEqual([{ where: EXCLUDE_MACHINE_DOCUMENTS }, { fuzzy: { query: "teh qick" } }, "with_content", "with_total"]);
   });
 
   it("narrows with text first, then ranks the rest with fuzzy", () => {
     const { search } = rowsFor([]);
     const plan = searchQuery(search, "invoice", filterOf(EMPTY_SPEC), { field: "relevance", direction: "desc" }, { fuzzy: "acme" }).plan();
-    expect(plan.stages).toEqual([{ text: "invoice" }, { where: EXCLUDE_MACHINE_DOCUMENTS }, "with_content", "with_total", { fuzzy: { query: "acme" } }]);
+    expect(plan.stages).toEqual([{ text: "invoice" }, { where: EXCLUDE_MACHINE_DOCUMENTS }, { fuzzy: { query: "acme" } }, "with_content", "with_total"]);
+  });
+
+  it("sorts after fuzzy when a sort is chosen", () => {
+    const { search } = rowsFor([]);
+    const plan = searchQuery(search, "", filterOf(EMPTY_SPEC), { field: "updated_at", direction: "desc" }, {
+      fuzzy: "acme",
+      fuzzySort: { field: "updated_at", direction: "desc" },
+    }).plan();
+    expect(plan.stages).toEqual([
+      { where: EXCLUDE_MACHINE_DOCUMENTS },
+      { fuzzy: { query: "acme" } },
+      { sort: ["-updated_at"] },
+      "with_content",
+      "with_total",
+    ]);
   });
 
   it("is a plain search without fuzzy words", () => {

@@ -54,7 +54,9 @@ export function queryOf(hash: string): string {
 
 export function effectiveSort(spec: SearchSpec): SearchSort {
   const searching = spec.query.trim() !== "";
-  if (spec.sort && (spec.sort.field !== RELEVANCE.field || searching)) return spec.sort;
+  const ranked = (spec.fuzzy ?? "").trim() !== "";
+  const usable = spec.sort && (spec.sort.field !== RELEVANCE.field || searching) && (spec.sort.field !== "score" || ranked);
+  if (spec.sort && usable) return spec.sort;
   return searching ? { field: RELEVANCE.field, direction: "desc" } : { field: "updated_at", direction: "desc" };
 }
 

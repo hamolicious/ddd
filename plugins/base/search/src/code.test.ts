@@ -85,6 +85,14 @@ describe("a typo-tolerant search as code", () => {
     expect(code).toBe(['kernel.search', '  .from()', '  .where("fm.status", "eq", "open")', '  .fuzzy("teh qick")'].join("\n"));
   });
 
+  it("puts a chosen sort after fuzzy", () => {
+    const code = specCode(
+      { ...EMPTY_SPEC, fuzzy: "acme", sort: { field: "score", direction: "desc" }, filter: { combine: "and", includeMachine: true, clauses: [] } },
+      { field: "score", direction: "desc" },
+    );
+    expect(code).toBe(['kernel.search', '  .from()', '  .fuzzy("acme")', '  .sort("-score")'].join("\n"));
+  });
+
   it("keeps text and fuzzy as their own steps", () => {
     const code = specCode({ ...EMPTY_SPEC, query: "invoice", fuzzy: "acme", filter: { combine: "and", includeMachine: true, clauses: [] } }, relevance);
     expect(code).toBe(['kernel.search', '  .from()', '  .text("invoice")', '  .fuzzy("acme")'].join("\n"));

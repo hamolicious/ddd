@@ -62,6 +62,11 @@ describe("a search's query string", () => {
     expect(back.filter.groups?.[0]?.clauses.map((c) => c.field)).toEqual(["fm.client", "created_by"]);
   });
 
+  it("only sorts by the match score while there are fuzzy words", () => {
+    expect(effectiveSort(spec({ fuzzy: "acme", sort: { field: "score", direction: "desc" } }))).toEqual({ field: "score", direction: "desc" });
+    expect(effectiveSort(spec({ sort: { field: "score", direction: "desc" } }))).toEqual({ field: "updated_at", direction: "desc" });
+  });
+
   it("keeps the typo-tolerant words apart from the text", () => {
     expect(encodeSpec(spec({ query: "invoice", fuzzy: "teh qick" }))).toBe("q=invoice&fuzzy=teh+qick");
     expect(parseSpec("fuzzy=teh+qick")).toEqual({ ...EMPTY_SPEC, fuzzy: "teh qick" });

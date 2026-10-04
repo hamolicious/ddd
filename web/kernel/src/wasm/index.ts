@@ -71,24 +71,8 @@ export interface CompiledSearch {
   readonly sources: readonly string[];
   readonly terms?: readonly string[];
   readonly snippets: boolean;
-  readonly fuzzy?: SearchFuzzySpec;
+  readonly hits?: boolean;
   readonly vocabulary?: { readonly sql: string; readonly params: readonly SqlParam[] };
-}
-
-export interface SearchFuzzySpec {
-  readonly terms: readonly string[];
-  readonly fields: readonly string[];
-  readonly limit?: number;
-  readonly max_distance: number;
-  readonly offset?: number;
-  readonly page?: number;
-  readonly total: boolean;
-}
-
-export interface SearchRanked {
-  readonly index: number;
-  readonly score: number;
-  readonly terms: readonly string[];
 }
 
 export interface SearchSnippet {
@@ -119,10 +103,6 @@ export interface CoreBindings {
   searchCompile(plan: unknown): SearchCompileAnswer;
   searchEncodeCursor(values: readonly SqlParam[]): string;
   searchSnippets(terms: readonly string[], contents: readonly (string | null)[]): readonly (SearchSnippet | null)[];
-  searchFuzzy(
-    spec: SearchFuzzySpec,
-    candidates: readonly { readonly title: string; readonly content: string }[],
-  ): { readonly hits: readonly SearchRanked[]; readonly total: number };
   searchExpand(plan: unknown, vocabulary: readonly string[]): unknown;
   searchFunctions(): readonly SqlFunctionInfo[];
   searchCall(index: number, args: readonly SqlParam[]): SqlParam;
@@ -177,11 +157,6 @@ export function loadCore(initInput?: BufferSource | WebAssembly.Module | URL | s
       searchEncodeCursor: (values: readonly SqlParam[]) => mod.search_encode_cursor(JSON.stringify(values)),
       searchSnippets: (terms: readonly string[], contents: readonly (string | null)[]) =>
         JSON.parse(mod.search_snippets(JSON.stringify({ terms, contents }))) as readonly (SearchSnippet | null)[],
-      searchFuzzy: (spec: SearchFuzzySpec, candidates: readonly { readonly title: string; readonly content: string }[]) =>
-        JSON.parse(mod.search_fuzzy(JSON.stringify({ spec, candidates }))) as {
-          readonly hits: readonly SearchRanked[];
-          readonly total: number;
-        },
       searchExpand: (plan: unknown, vocabulary: readonly string[]) =>
         JSON.parse(mod.search_expand(JSON.stringify(plan), JSON.stringify(vocabulary))) as unknown,
       searchFunctions: () => JSON.parse(mod.search_functions()) as readonly SqlFunctionInfo[],

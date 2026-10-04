@@ -21,7 +21,7 @@ pub use functions::{
     SQL_FUNCTIONS, SqlCall, SqlFunction, SqlFunctionInfo, call_sql_function, sql_function,
 };
 pub use fuzzy::{
-    FuzzyCandidate, FuzzySpec, Ranked, RankedPage, rank as fuzzy_rank, rank_page as fuzzy_rank_page,
+    FuzzyCandidate, FuzzyMatch, FuzzySpec, Ranked, rank as fuzzy_rank, score_candidate,
 };
 pub use plan::{
     Cond, FuzzyStage, MAX_LIMIT, MAX_SORT_KEYS, MAX_STAGES, Plan, PlanError, SelectItem, Source,
