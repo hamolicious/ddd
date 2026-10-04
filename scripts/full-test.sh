@@ -20,6 +20,16 @@ in_dir() {
   (cd "$repo/$dir" && "$@")
 }
 
+lockfiles_current() {
+  local dir
+  for dir in backend cli desktop plugins; do
+    if ! (cd "$repo/$dir" && cargo metadata --locked --format-version 1 >/dev/null); then
+      printf '%s/Cargo.lock does not match its manifests: run cargo metadata in %s and commit the lock file\n' "$dir" "$dir" >&2
+      return 1
+    fi
+  done
+}
+
 e2e_port="${DDD_E2E_PORT:-$((20000 + RANDOM % 20000))}"
 e2e_db="${DDD_E2E_DB:-ddd_e2e_full_$$}"
 collab_offset="${DDD_COLLAB_PORT_OFFSET:-$((10000 + RANDOM % 4000 * 10))}"
@@ -42,6 +52,7 @@ step "web: typecheck" in_dir web npm run --silent typecheck
 step "web: unit tests" in_dir web npx vitest run --bail=1
 step "web: collab tests" in_dir web env DDD_COLLAB_PORT_OFFSET="$collab_offset" npx vitest run --config vitest.collab.config.ts --bail=1
 
+step "rust: lockfiles" lockfiles_current
 step "rust: format" in_dir backend cargo fmt --all --check
 step "rust: clippy" in_dir backend cargo clippy --workspace --all-targets -- -D warnings
 step "rust: tests" in_dir backend cargo test --workspace --all-targets
