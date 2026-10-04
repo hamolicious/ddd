@@ -344,6 +344,19 @@ test("New › Search files a saved search under the note and opens it", async ({
   expect(await rawText(request, base, created)).toMatch(/^saved-search:/m);
 });
 
+test("the New search command makes a saved search and opens it", async ({ page, request, baseURL }) => {
+  const base = baseURL as string;
+
+  await signIn(page, ADMIN);
+  refuseNativeDialogs(page);
+  await runCommand(page, "New search");
+  await expect(page).toHaveURL(/#\/doc\//);
+  const created = /#\/doc\/([^?]+)/.exec(page.url())?.[1] ?? "";
+  expect(created).not.toBe("");
+  await waitSynced(page);
+  await expect.poll(async () => await rawText(request, base, created), { timeout: 20_000 }).toMatch(/^saved-search:/m);
+});
+
 test("deleting a note can keep what is inside it, in its place in the parent", async ({
   page,
   request,

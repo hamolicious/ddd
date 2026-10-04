@@ -146,13 +146,7 @@ export default function activate(kernel: Kernel): void {
       search = module;
       if (module) stops.push(module.setNoteLooks({ look, onLookChange, parentOf, onChange }));
     })
-    .catch((cause: unknown) => kernel.log.warn("search unavailable; no “New search” in the menus", cause));
-  const newSearch = (parent: string): void => {
-    if (!search) return;
-    search.save(search.parse(""), { parent }).catch((cause: unknown) =>
-      kernel.ui.notify({ id: "folders.new-search-failed", level: "error", message: `Could not create the search: ${String(cause)}` }),
-    );
-  };
+    .catch((cause: unknown) => kernel.log.warn("search unavailable", cause));
 
   kernel.settings.defineSchema({
     [SETTINGS_KEYS.defaultLocation]: { type: "string", default: "" },
@@ -883,7 +877,6 @@ export default function activate(kernel: Kernel): void {
         const parent = hierarchy.parentOf.get(id) ?? "";
         return [
           { id: "new-note", label: "Note", group: "new", run: () => docs.newDocument({ parent: id }) },
-          ...(search ? [{ id: "new-search", label: "Search", group: "new", run: () => newSearch(id) }] : []),
           ...(here && hierarchy.childrenOf.has(id)
             ? [
                 { id: "expand-all", label: "Expand all inside", run: () => request({ kind: "fold", id, expanded: true }) },
@@ -936,7 +929,6 @@ export default function activate(kernel: Kernel): void {
         ...(copied !== undefined
           ? [{ id: "paste-root", label: "Paste at the root", hint: copied.title, run: () => void paste("").catch(failed("paste it")) }]
           : []),
-        ...(search ? [{ id: "new-search-root", label: "Search", group: "new", run: () => newSearch("") }] : []),
         { id: "expand-all", label: "Expand all", run: () => request({ kind: "fold", id: "", expanded: true }) },
         { id: "collapse-all", label: "Collapse all", run: () => request({ kind: "fold", id: "", expanded: false }) },
       ],

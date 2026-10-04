@@ -1,6 +1,6 @@
 {
   "id": "search",
-  "version": "5.0.0",
+  "version": "5.1.0",
   "name": "Search",
   "description": "Searching the workspace: providers, saved searches, and the search controls every view shows.",
   "author": "ddd base distribution",

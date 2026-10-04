@@ -1,7 +1,7 @@
 import type { ComponentType, ReactElement } from "react";
 
 import type { DocumentRow, Kernel, Unsubscribe } from "@kernel";
-import { open as openMenu } from "plugin:context-menu";
+import { addAction, open as openMenu } from "plugin:context-menu";
 import { notifyCreated } from "plugin:doc-events";
 import * as indexer from "plugin:indexer";
 
@@ -97,6 +97,7 @@ interface Active {
 }
 
 let active: Active | undefined;
+const stops: (() => void)[] = [];
 
 function need(): Active {
   if (!active) throw new Error("search is not active yet: call it from your plugin's activate() or later");
@@ -151,7 +152,13 @@ export default function activate(kernel: Kernel): void {
       .catch((cause: unknown) => kernel.log.warn(`${id} unavailable`, cause));
   };
   lookup<RouterModule>("router", (module) => (router = module));
-  lookup<CommandsModule>("commands", (module) => (commands = module));
+  lookup<CommandsModule>("commands", (module) => {
+    commands = module;
+    if (!module) return;
+    stops.push(
+      module.addCommand({ id: "search.new", title: "New search", category: "Documents", icon: "file-search", run: () => newSearch() }),
+    );
+  });
   lookup<IconsModule>("icons", (module) => (icons = module));
 
   const index = (): ConditionIndex => indexer;
@@ -226,6 +233,34 @@ export default function activate(kernel: Kernel): void {
     return id;
   };
 
+  const newSearch = (parent?: string): void => {
+    void saveSearch(parseSpec(""), parent !== undefined ? { parent } : {}).catch((cause: unknown) => {
+      kernel.log.error("could not create the search", cause);
+      kernel.ui.notify({
+        id: "search.new-failed",
+        level: "error",
+        message: `Could not create the search: ${cause instanceof Error ? cause.message : String(cause)}`,
+      });
+    });
+  };
+
+  stops.push(
+    addAction([
+      {
+        id: "search.new-here",
+        target: "ddd/document",
+        order: 20,
+        items: (target) => [{ id: "new-search", label: "Search", group: "new", run: () => newSearch(target.id) }],
+      },
+      {
+        id: "search.new-at-root",
+        target: "folders/root",
+        order: 20,
+        items: () => [{ id: "new-search-root", label: "Search", group: "new", run: () => newSearch("") }],
+      },
+    ]),
+  );
+
   const update = (id: string, value: string): void => {
     void kernel.documents.splice.setFrontmatterValue(id, SAVED_SEARCH_KEY, value).catch((cause: unknown) => {
       kernel.log.error("could not update the saved search", cause);
@@ -250,5 +285,6 @@ export default function activate(kernel: Kernel): void {
 }
 
 export function deactivate(): void {
+  for (const stop of stops.splice(0)) stop();
   active = undefined;
 }
