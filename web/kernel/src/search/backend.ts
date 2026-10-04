@@ -27,6 +27,7 @@ export interface ProjectionHostOptions {
 
 export class ProjectionHost implements ProjectionBackend {
   #projection: Promise<SearchProjection> | undefined;
+  #wiped = false;
   #sync: ProjectionSync | undefined;
 
   constructor(private readonly options: ProjectionHostOptions = {}) {}
@@ -65,6 +66,7 @@ export class ProjectionHost implements ProjectionBackend {
   }
 
   async wipe(): Promise<void> {
+    this.#wiped = true;
     const pending = this.#projection;
     this.#projection = undefined;
     this.#sync = undefined;
@@ -83,6 +85,7 @@ export class ProjectionHost implements ProjectionBackend {
   }
 
   #open(): Promise<SearchProjection> {
+    if (this.#wiped) return Promise.reject(new Error("the search database was deleted at sign-out"));
     this.#projection ??= (async () => {
       const core = this.options.core ?? (await loadCore());
       const db = await openSearchDatabase({ persistent: this.options.persistent ?? true });

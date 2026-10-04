@@ -188,6 +188,15 @@ export type SearchResult<Row, Opts extends SearchResultOptions = { readonly tota
     ? { readonly total?: undefined }
     : { readonly total?: number });
 
+export interface SearchWindow {
+  readonly start: number;
+  readonly count: number;
+}
+
+export interface SearchWatchOptions {
+  readonly window?: SearchWindow;
+}
+
 export interface SearchWatch<Row, Opts extends SearchResultOptions = { readonly total: false }> {
   readonly result: Omit<SearchResult<Row, Opts>, "total"> & { readonly total: number; readonly start: number };
   onChange(listener: (result: SearchResult<Row, Opts>) => void): () => void;
@@ -263,7 +272,7 @@ export interface SearchFuzzyOptions {
 
 export interface SearchFuzzy<Row> {
   run(): Promise<SearchResult<Row>>;
-  watch(): Promise<SearchWatch<Row>>;
+  watch(options?: SearchWatchOptions): Promise<SearchWatch<Row>>;
   plan(): SearchPlanJson;
 }
 
@@ -329,7 +338,7 @@ export interface SearchBuilder<
   trash(scope: "live" | "trashed" | "all"): SearchBuilder<S, C, Row, O, G, Opts>;
   fuzzy(query: string, options?: SearchFuzzyOptions): SearchFuzzy<Row>;
   run(): Promise<SearchResult<Row, Opts>>;
-  watch(): Promise<SearchWatch<Row, Opts>>;
+  watch(options?: SearchWatchOptions): Promise<SearchWatch<Row, Opts>>;
   plan(): SearchPlanJson;
 }
 
@@ -379,13 +388,13 @@ export interface AnySearchBuilder {
   trash(scope: "live" | "trashed" | "all"): AnySearchBuilder;
   fuzzy(query: string, options?: SearchFuzzyOptions): SearchFuzzy<AnySearchRow>;
   run(): Promise<SearchResult<AnySearchRow, SearchResultOptions>>;
-  watch(): Promise<SearchWatch<AnySearchRow, SearchResultOptions>>;
+  watch(options?: SearchWatchOptions): Promise<SearchWatch<AnySearchRow, SearchResultOptions>>;
   plan(): SearchPlanJson;
 }
 
 export interface SearchExecutor {
   run(plan: SearchPlanJson): Promise<SearchResult<unknown, SearchResultOptions>>;
-  watch(plan: SearchPlanJson): Promise<SearchWatch<unknown, SearchResultOptions>>;
+  watch(plan: SearchPlanJson, options?: SearchWatchOptions): Promise<SearchWatch<unknown, SearchResultOptions>>;
 }
 
 export interface SearchApi {
@@ -603,8 +612,8 @@ class Builder {
     return this.executor.run(this.plan());
   }
 
-  watch(): Promise<SearchWatch<unknown, SearchResultOptions>> {
-    return this.executor.watch(this.plan());
+  watch(options?: SearchWatchOptions): Promise<SearchWatch<unknown, SearchResultOptions>> {
+    return this.executor.watch(this.plan(), options);
   }
 
   plan(): SearchPlanJson {

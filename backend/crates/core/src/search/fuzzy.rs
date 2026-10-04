@@ -9,6 +9,8 @@ pub const FUZZY_WEIGHT: f64 = 0.45;
 pub const FUZZY_SHARE: f64 = 0.2;
 pub const MAX_FUZZY_DISTANCE: usize = 6;
 pub const MAX_FUZZY_CANDIDATES: u64 = 1000;
+pub const MAX_EXPANSIONS_PER_TERM: usize = 64;
+pub const MAX_VOCAB_ROWS: usize = 50_000;
 const MAX_TOKEN_CHARS: usize = 64;
 
 type FieldTokens = (f64, Vec<(String, Vec<char>)>);
@@ -20,6 +22,18 @@ pub struct FuzzySpec {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<u64>,
     pub max_distance: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub offset: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub page: Option<u64>,
+    #[serde(default)]
+    pub total: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct RankedPage {
+    pub hits: Vec<Ranked>,
+    pub total: usize,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -53,22 +67,46 @@ pub fn budget_for(length: usize, max_distance: usize) -> usize {
         .min(MAX_FUZZY_DISTANCE)
 }
 
-pub fn narrowing_trigrams(terms: &[String], max_distance: usize) -> Vec<String> {
-    let safe = terms.iter().all(|term| {
-        let length = term.chars().count();
-        length >= 3 && length - 2 > 4 * budget_for(length, max_distance)
-    });
-    if safe { trigrams(terms) } else { Vec::new() }
+pub fn vocabulary_filter(
+    terms: &[String],
+    max_distance: usize,
+) -> Vec<(String, String, usize, usize)> {
+    terms
+        .iter()
+        .map(|term| {
+            let length = term.chars().count();
+            let budget = budget_for(length, max_distance);
+            (
+                term.clone(),
+                format!("{term}\u{10FFFF}"),
+                length.saturating_sub(budget),
+                length + budget,
+            )
+        })
+        .collect()
 }
 
-pub fn trigrams(terms: &[String]) -> Vec<String> {
+pub fn expand_terms(terms: &[String], max_distance: usize, vocabulary: &[String]) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for term in terms {
-        let chars: Vec<char> = term.chars().collect();
-        for window in chars.windows(3) {
-            let gram: String = window.iter().collect();
-            if !out.contains(&gram) {
-                out.push(gram);
+        let query: Vec<char> = term.chars().collect();
+        let budget = budget_for(query.len(), max_distance);
+        let mut close: Vec<(usize, usize, &String)> = Vec::new();
+        for word in vocabulary {
+            let candidate: Vec<char> = word.chars().collect();
+            if candidate.starts_with(&query) {
+                close.push((0, candidate.len(), word));
+            } else if budget > 0
+                && candidate.len().abs_diff(query.len()) <= budget
+                && let Some(distance) = bounded_distance(&query, &candidate, budget)
+            {
+                close.push((distance, candidate.len(), word));
+            }
+        }
+        close.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.cmp(b.2)));
+        for (_, _, word) in close.into_iter().take(MAX_EXPANSIONS_PER_TERM) {
+            if !out.contains(word) {
+                out.push(word.clone());
             }
         }
     }
@@ -159,6 +197,24 @@ pub fn bounded_distance(a: &[char], b: &[char], budget: usize) -> Option<usize> 
     (distance <= budget).then_some(distance)
 }
 
+pub fn rank_page(spec: &FuzzySpec, candidates: &[FuzzyCandidate]) -> RankedPage {
+    let ranked = rank(spec, candidates);
+    let total = ranked.len();
+    let start = usize::try_from(spec.offset.unwrap_or(0))
+        .unwrap_or(usize::MAX)
+        .min(total);
+    let end = match spec.page {
+        Some(page) => start
+            .saturating_add(usize::try_from(page).unwrap_or(usize::MAX))
+            .min(total),
+        None => total,
+    };
+    RankedPage {
+        hits: ranked[start..end].to_vec(),
+        total,
+    }
+}
+
 pub fn rank(spec: &FuzzySpec, candidates: &[FuzzyCandidate]) -> Vec<Ranked> {
     let queries: Vec<(Vec<char>, usize)> = spec
         .terms
@@ -246,6 +302,9 @@ mod tests {
             fields: vec![TextField::Title, TextField::Content, TextField::Fm],
             limit: None,
             max_distance: MAX_FUZZY_DISTANCE,
+            offset: None,
+            page: None,
+            total: false,
         }
     }
 
@@ -298,15 +357,45 @@ mod tests {
     }
 
     #[test]
-    fn only_long_enough_terms_narrow_by_trigrams() {
-        assert!(narrowing_trigrams(&fuzzy_terms("sbu"), MAX_FUZZY_DISTANCE).is_empty());
-        assert!(narrowing_trigrams(&fuzzy_terms("quarterly sbu"), MAX_FUZZY_DISTANCE).is_empty());
-        assert!(!narrowing_trigrams(&fuzzy_terms("reports"), MAX_FUZZY_DISTANCE).is_empty());
-        assert!(!narrowing_trigrams(&fuzzy_terms("sbu"), 0).is_empty());
+    fn vocabulary_words_close_to_each_term_are_expanded() {
+        let vocabulary: Vec<String> = [
+            "sub", "subway", "sbu", "milk", "silk", "mile", "zebra", "brown",
+        ]
+        .iter()
+        .map(|w| w.to_string())
+        .collect();
+        assert_eq!(
+            expand_terms(&fuzzy_terms("sbu"), MAX_FUZZY_DISTANCE, &vocabulary),
+            vec!["sbu", "sub"]
+        );
+        assert_eq!(
+            expand_terms(&fuzzy_terms("mlik"), MAX_FUZZY_DISTANCE, &vocabulary),
+            vec!["milk"]
+        );
+        assert!(
+            expand_terms(&fuzzy_terms("su"), MAX_FUZZY_DISTANCE, &vocabulary)
+                .contains(&"subway".to_string())
+        );
+        assert!(expand_terms(&fuzzy_terms("qqqq"), MAX_FUZZY_DISTANCE, &vocabulary).is_empty());
     }
 
     #[test]
-    fn trigrams_cover_every_term_once() {
-        assert_eq!(trigrams(&fuzzy_terms("abcd abc ab")), vec!["abc", "bcd"]);
+    fn pages_of_ranked_hits_carry_the_whole_count() {
+        let all = [
+            candidate("Milk", ""),
+            candidate("Silk", ""),
+            candidate("Notes", "milk"),
+        ];
+        let page = rank_page(
+            &FuzzySpec {
+                offset: Some(1),
+                page: Some(1),
+                total: true,
+                ..spec("milk")
+            },
+            &all,
+        );
+        assert_eq!(page.total, 3);
+        assert_eq!(page.hits.len(), 1);
     }
 }

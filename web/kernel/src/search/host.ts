@@ -8,6 +8,8 @@ import {
   type SearchResult,
   type SearchResultOptions,
   type SearchWatch,
+  type SearchWatchOptions,
+  type SearchWindow,
 } from "@kernel";
 
 import { serializeSearchError } from "./errors.js";
@@ -53,8 +55,10 @@ class LiveSearch implements SearchWatch<unknown, SearchResultOptions> {
     private readonly host: SearchHost,
     private readonly base: SearchPlanJson,
     first: SearchRows,
+    window: SearchWindow | undefined,
   ) {
-    this.#result = { ...resultOf(first), total: first.total ?? first.rows.length, start: 0 };
+    this.#window = window;
+    this.#result = { ...resultOf(first), total: first.total ?? first.rows.length, start: window?.start ?? 0 };
     this.#key = JSON.stringify(this.#result);
     this.#sources = new Set(first.sources);
   }
@@ -86,8 +90,11 @@ class LiveSearch implements SearchWatch<unknown, SearchResultOptions> {
     return LiveSearch.windowed(this.base, this.#window);
   }
 
-  static windowed(base: SearchPlanJson, window?: { readonly start: number; readonly count: number }): SearchPlanJson {
+  static windowed(base: SearchPlanJson, window?: SearchWindow): SearchPlanJson {
     const stages = [...(base.stages ?? [])];
+    const paging = (stage: unknown): boolean =>
+      typeof stage === "object" && stage !== null && ("cursor" in stage || "limit" in stage || "offset" in stage);
+    if (window !== undefined) while (stages.length > 0 && paging(stages[stages.length - 1])) stages.pop();
     if (window) stages.push({ offset: window.start }, { limit: window.count });
     stages.push("with_total");
     return { ...base, stages };
@@ -149,9 +156,13 @@ export class SearchHost {
     return resultOf(await this.execute(plan));
   }
 
-  async watch(plan: SearchPlanJson): Promise<LiveSearch> {
-    const first = await this.execute(LiveSearch.windowed(plan));
-    const live = new LiveSearch(this, plan, first);
+  async watch(plan: SearchPlanJson, options: SearchWatchOptions = {}): Promise<LiveSearch> {
+    const window = options.window && {
+      start: Math.max(0, Math.floor(options.window.start)),
+      count: Math.max(0, Math.floor(options.window.count)),
+    };
+    const first = await this.execute(LiveSearch.windowed(plan, window));
+    const live = new LiveSearch(this, plan, first, window);
     this.#live.add(live);
     return live;
   }
@@ -165,7 +176,7 @@ export class SearchHost {
   }
 
   api(): SearchApi {
-    return createSearchApi({ run: (plan) => this.run(plan), watch: (plan) => this.watch(plan) });
+    return createSearchApi({ run: (plan) => this.run(plan), watch: (plan, options) => this.watch(plan, options) });
   }
 
   forPlugin(manifest: PluginManifest, track: (dispose: () => void) => () => void): SearchApi {
@@ -176,9 +187,9 @@ export class SearchHost {
       );
     return createSearchApi({
       run: (plan) => (allowed ? this.run(plan) : refuse()),
-      watch: async (plan) => {
+      watch: async (plan, options) => {
         if (!allowed) return refuse();
-        const live = await this.watch(plan);
+        const live = await this.watch(plan, options);
         const close = track(() => live.close());
         return {
           get result() {

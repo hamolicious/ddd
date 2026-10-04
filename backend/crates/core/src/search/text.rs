@@ -367,15 +367,33 @@ pub enum Leafy {
 }
 
 pub fn to_leaves(expr: &TextExpr) -> Leafy {
+    leaves_in(expr, None)
+}
+
+fn leaves_in(expr: &TextExpr, field: Option<TextField>) -> Leafy {
+    let scoped = |query: String| match field {
+        Some(field) => format!("{{{}}} : ({query})", field.column()),
+        None => query,
+    };
     match expr {
-        TextExpr::And(children) => Leafy::And(children.iter().map(to_leaves).collect()),
-        TextExpr::Or(children) => Leafy::Or(children.iter().map(to_leaves).collect()),
-        TextExpr::Not(child) => Leafy::Not(Box::new(to_leaves(child))),
-        TextExpr::In { field, expr } => match fts(expr) {
-            Some(query) => Leafy::Match(format!("{{{}}} : ({query})", field.column())),
-            None => to_leaves(expr),
+        TextExpr::And(children) => Leafy::And(
+            children
+                .iter()
+                .map(|child| leaves_in(child, field))
+                .collect(),
+        ),
+        TextExpr::Or(children) => Leafy::Or(
+            children
+                .iter()
+                .map(|child| leaves_in(child, field))
+                .collect(),
+        ),
+        TextExpr::Not(child) => Leafy::Not(Box::new(leaves_in(child, field))),
+        TextExpr::In { field: inner, expr } => match fts(expr) {
+            Some(query) => Leafy::Match(format!("{{{}}} : ({query})", inner.column())),
+            None => leaves_in(expr, Some(*inner)),
         },
-        leaf => Leafy::Match(fts(leaf).unwrap_or_default()),
+        leaf => Leafy::Match(scoped(fts(leaf).unwrap_or_default())),
     }
 }
 
@@ -471,6 +489,21 @@ mod tests {
         );
         assert!(matches!(to_fts(&parse("-draft")), Fts::Unrankable));
         assert!(matches!(to_fts(&parse("a OR -b")), Fts::Unrankable));
+    }
+
+    #[test]
+    fn a_negated_term_keeps_its_field() {
+        let expr = TextExpr::In {
+            field: TextField::Title,
+            expr: Box::new(TextExpr::Not(Box::new(TextExpr::Term("x".into())))),
+        };
+        let Leafy::Not(inner) = to_leaves(&expr) else {
+            panic!("a negation");
+        };
+        let Leafy::Match(query) = *inner else {
+            panic!("a match");
+        };
+        assert_eq!(query, "{title} : (\"x\")");
     }
 
     #[test]

@@ -38,6 +38,7 @@ export class ProjectionFeed {
   #unsubscribe: (() => void) | undefined;
   #unlisten: (() => void) | undefined;
   #queue: Promise<void> = Promise.resolve();
+  #built: Promise<void> = Promise.resolve();
   #nextCall = 1;
   readonly #pending = new Map<number, Pending>();
   readonly #held: StoreChange[] = [];
@@ -128,12 +129,14 @@ export class ProjectionFeed {
 
   async select(sql: string): Promise<readonly SqlRow[]> {
     await this.ready;
+    await this.#built;
     if (this.#role === "follower") return (await this.#call("select", sql)) as readonly SqlRow[];
     return this.backend.select(sql);
   }
 
   async run(plan: unknown): Promise<SearchRows> {
     await this.ready;
+    await this.#built;
     await this.#queue;
     if (this.#role === "follower") return (await this.#call("run", plan)) as SearchRows;
     return this.backend.run(plan);
@@ -166,7 +169,16 @@ export class ProjectionFeed {
     const wasFollower = this.#role === "follower";
     this.#role = this.peers ? "owner" : "solo";
     this.#building = true;
-    void this.#build().then(
+    const building = this.#build((reusable) => {
+      if (!this.#settled) this.#resolveReady(reusable);
+    });
+    if (wasFollower) {
+      this.#built = building.then(
+        () => undefined,
+        () => undefined,
+      );
+    }
+    void building.then(
       (status) => {
         if (!this.#settled) this.#resolveReady(status);
         if (this.peers) this.peers.post({ kind: "owner", id: this.peers.id });
@@ -180,8 +192,9 @@ export class ProjectionFeed {
     );
   }
 
-  async #build(): Promise<ProjectionStatus> {
-    await this.backend.open();
+  async #build(reusable: (status: ProjectionStatus) => void): Promise<ProjectionStatus> {
+    const opened = await this.backend.open();
+    if (opened.persistent && opened.documents > 0) reusable(opened);
     const total = await this.store.count({ includeDeleted: true });
     let done = 0;
     let first = true;
@@ -220,13 +233,10 @@ export class ProjectionFeed {
   }
 
   async #apply(change: StoreChange): Promise<void> {
+    if (this.#role === "follower") return;
     const rows = change.applied.length > 0 ? await this.store.getMany(change.applied) : [];
     const present = new Set(rows.map((row) => row.id));
     const gone = [...change.purged, ...change.applied.filter((id) => !present.has(id))];
-    if (this.#role === "follower") {
-      await this.#call("apply", { rows, gone });
-      return;
-    }
     const applied = await this.backend.apply(rows, gone);
     this.#announce(applied.sources);
   }
@@ -258,13 +268,16 @@ export class ProjectionFeed {
     switch (op) {
       case "status":
         await this.ready;
+        await this.#built;
         return this.backend.status();
       case "run":
         await this.ready;
+        await this.#built;
         await this.#queue;
         return this.backend.run(payload);
       case "select":
         await this.ready;
+        await this.#built;
         return this.backend.select(payload as string);
       case "apply": {
         const { rows, gone } = payload as { readonly rows: readonly StoredRow[]; readonly gone: readonly string[] };
@@ -281,6 +294,7 @@ export class ProjectionFeed {
         return applied;
       }
       case "wipe":
+        this.stop();
         await this.backend.wipe();
         return undefined;
     }

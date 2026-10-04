@@ -17,12 +17,44 @@ export interface SearchDatabase {
   close(): void;
 }
 
-export async function removeSearchFiles(): Promise<void> {
+export const SEARCH_WIPE_PENDING_KEY = "ddd:search-wipe-pending";
+
+function remember(pending: boolean): void {
   try {
-    const root = await navigator.storage?.getDirectory?.();
-    await root?.removeEntry(SEARCH_OPFS_DIRECTORY, { recursive: true });
+    if (pending) localStorage.setItem(SEARCH_WIPE_PENDING_KEY, "1");
+    else localStorage.removeItem(SEARCH_WIPE_PENDING_KEY);
   } catch {
   }
+}
+
+export function searchWipePending(): boolean {
+  try {
+    return localStorage.getItem(SEARCH_WIPE_PENDING_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
+export async function removeSearchFiles(): Promise<boolean> {
+  const root = await navigator.storage?.getDirectory?.().catch(() => undefined);
+  if (!root) return true;
+  await root.removeEntry(SEARCH_OPFS_DIRECTORY, { recursive: true }).catch(() => undefined);
+  const gone = await root.getDirectoryHandle(SEARCH_OPFS_DIRECTORY).then(
+    () => false,
+    () => true,
+  );
+  remember(!gone);
+  return gone;
+}
+
+export function markSearchWipePending(): void {
+  remember(true);
+}
+
+export const FOLD_FUNCTION = "ddd_fold";
+
+export function fold(text: string): string {
+  return text.toLowerCase();
 }
 
 let sqlite: Promise<Sqlite3Static> | undefined;
@@ -110,8 +142,11 @@ class SqliteDatabase implements SearchDatabase {
   }
 
   #open(): Database {
-    if (this.pool) return new this.pool.OpfsSAHPoolDb(SEARCH_DB_FILE);
-    return new this.sqlite3.oo1.DB(":memory:", "c");
+    const db = this.pool ? new this.pool.OpfsSAHPoolDb(SEARCH_DB_FILE) : new this.sqlite3.oo1.DB(":memory:", "c");
+    db.createFunction(FOLD_FUNCTION, (_context: unknown, value: unknown) => (typeof value === "string" ? fold(value) : value) as never, {
+      deterministic: true,
+    });
+    return db;
   }
 
   #prepare(sql: string): PreparedStatement {

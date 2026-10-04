@@ -49,7 +49,20 @@ fn decode(column: &OutputColumn, value: Sql) -> Json {
 
 fn run(connection: &Connection, plan: Json) -> Page {
     let plan: Plan = serde_json::from_value(plan).unwrap();
-    let compiled = compile(&plan).unwrap_or_else(|e| panic!("{e}"));
+    let mut compiled = compile(&plan).unwrap_or_else(|e| panic!("{e}"));
+    if let Some(vocabulary) = &compiled.vocabulary {
+        let mut statement = connection
+            .prepare(&vocabulary.sql)
+            .unwrap_or_else(|e| panic!("{e}\n{}", vocabulary.sql));
+        let words: Vec<String> = statement
+            .query_map(params_from_iter(vocabulary.params.iter().map(bind)), |r| {
+                r.get(0)
+            })
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        compiled = compile(&expand_plan(&plan, &words)).unwrap_or_else(|e| panic!("{e}"));
+    }
     let mut statement = connection
         .prepare(&compiled.sql)
         .unwrap_or_else(|e| panic!("{e}\n{}", compiled.sql));
@@ -67,6 +80,7 @@ fn run(connection: &Connection, plan: Json) -> Page {
         .collect();
     let mut raw = raw;
     let mut hits = serde_json::Map::new();
+    let mut fuzzy_total = None;
     if let Some(spec) = &compiled.fuzzy {
         let candidates: Vec<FuzzyCandidate> = raw
             .iter()
@@ -81,7 +95,11 @@ fn run(connection: &Connection, plan: Json) -> Page {
                 }
             })
             .collect();
-        let ranked = fuzzy_rank(spec, &candidates);
+        let page = fuzzy_rank_page(spec, &candidates);
+        if spec.total {
+            fuzzy_total = Some(page.total as i64);
+        }
+        let ranked = page.hits;
         for found in &ranked {
             if let Sql::Text(id) = &raw[found.index][width - 3] {
                 hits.insert(
@@ -141,14 +159,16 @@ fn run(connection: &Connection, plan: Json) -> Page {
             Json::Object(object)
         })
         .collect();
-    let total = compiled.total.map(|total| {
-        connection
-            .query_row(
-                &total.sql,
-                params_from_iter(total.params.iter().map(bind)),
-                |r| r.get(0),
-            )
-            .unwrap_or_else(|e| panic!("{e}\n{}", total.sql))
+    let total = fuzzy_total.or_else(|| {
+        compiled.total.map(|total| {
+            connection
+                .query_row(
+                    &total.sql,
+                    params_from_iter(total.params.iter().map(bind)),
+                    |r| r.get(0),
+                )
+                .unwrap_or_else(|e| panic!("{e}\n{}", total.sql))
+        })
     });
     Page {
         rows,
@@ -593,7 +613,7 @@ fn fuzzy_hits_carry_scores_and_the_words_as_written() {
 }
 
 #[test]
-fn fuzzy_narrows_long_words_by_trigrams_and_still_finds_typos() {
+fn fuzzy_asks_the_vocabulary_first_then_finds_typos() {
     let mut connection = open();
     apply(
         &mut connection,
@@ -604,16 +624,94 @@ fn fuzzy_narrows_long_words_by_trigrams_and_still_finds_typos() {
     );
     let plan: Plan =
         serde_json::from_value(json!({ "stages": [{ "fuzzy": { "query": "reprots" } }] })).unwrap();
-    assert!(
-        compile(&plan)
-            .unwrap()
-            .sql
-            .contains("documents_trigram MATCH")
-    );
+    assert!(compile(&plan).unwrap().vocabulary.is_some());
     let page = run(
         &connection,
         json!({ "stages": [{ "fuzzy": { "query": "reprots" } }] }),
     );
     assert_eq!(ids(&page), ["Q"]);
     assert_eq!(page.hits["Q"]["terms"], json!(["reports"]));
+}
+
+#[test]
+fn a_short_typo_finds_its_note_among_thousands() {
+    let mut connection = open();
+    let mut rows: Vec<ProjectionInput> = (0..1500)
+        .map(|n| row(&format!("A{n:05}"), &format!("# Note {n}\n")))
+        .collect();
+    rows.push(row("Z99999", "# Milk\n"));
+    apply(&mut connection, &statements_for_rows(rows));
+    let page = run(
+        &connection,
+        json!({ "stages": [{ "fuzzy": { "query": "mlik", "limit": 5 } }] }),
+    );
+    assert_eq!(ids(&page), ["Z99999"]);
+}
+
+#[test]
+fn paging_after_fuzzy_pages_the_ranked_hits() {
+    let mut connection = open();
+    apply(
+        &mut connection,
+        &statements_for_rows(vec![
+            row("A", "# Milk\n"),
+            row("B", "# Silk\n"),
+            row("C", "# Notes\n\nmilk\n"),
+        ]),
+    );
+    let page = run(
+        &connection,
+        json!({ "stages": [{ "fuzzy": { "query": "milk" } }, { "offset": 1 }, { "limit": 1 }, "with_total"] }),
+    );
+    assert_eq!(page.rows.len(), 1);
+    assert_eq!(page.total, Some(3));
+}
+
+#[test]
+fn text_filters_fold_accented_capitals() {
+    let mut connection = open();
+    apply(
+        &mut connection,
+        &statements_for_rows(vec![row("A", "# ÉCOLE\n")]),
+    );
+    let page = run(
+        &connection,
+        json!({ "stages": [{ "where": { "text": { "field": "title", "mode": "contains", "value": "école" } } }] }),
+    );
+    assert_eq!(ids(&page), ["A"]);
+}
+
+#[test]
+fn an_overall_aggregate_has_a_total_of_one() {
+    let page = run(
+        &corpus(),
+        json!({ "stages": [{ "count": {} }, "with_total"] }),
+    );
+    assert_eq!(page.total, Some(1));
+}
+
+#[test]
+fn an_alias_named_id_is_not_the_cursor_tiebreak() {
+    let mut connection = open();
+    let rows: Vec<ProjectionInput> = (0..5)
+        .map(|n| ProjectionInput {
+            content: Some("# Same\n".into()),
+            ..row(&format!("D{n}"), "")
+        })
+        .collect();
+    apply(&mut connection, &statements_for_rows(rows));
+    let page = run(
+        &connection,
+        json!({ "stages": [{ "select": [{ "field": "title", "as": "id" }] }, { "sort": ["id"] }, { "limit": 2 }] }),
+    );
+    assert_eq!(page.rows.len(), 2);
+    assert!(page.next.is_none());
+    let error = compile(
+        &serde_json::from_value(json!({ "stages": [
+            { "select": [{ "field": "title", "as": "id" }] }, { "sort": ["id"] }, { "cursor": encode_cursor(&[SqlValue::Text("Same".into()), SqlValue::Text("Same".into())]) }, { "limit": 2 }
+        ] }))
+        .unwrap(),
+    )
+    .unwrap_err();
+    assert!(matches!(error, PlanError::BadStage(_)));
 }

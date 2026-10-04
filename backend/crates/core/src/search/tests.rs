@@ -4,6 +4,15 @@ use super::*;
 
 pub(crate) fn open() -> Connection {
     let connection = Connection::open_in_memory().unwrap();
+    connection
+        .create_scalar_function(
+            FOLD_FUNCTION,
+            1,
+            rusqlite::functions::FunctionFlags::SQLITE_UTF8
+                | rusqlite::functions::FunctionFlags::SQLITE_DETERMINISTIC,
+            |context| Ok(context.get::<Option<String>>(0)?.map(|text| fold(&text))),
+        )
+        .unwrap();
     for sql in SCHEMA {
         connection.execute(sql, []).unwrap();
     }

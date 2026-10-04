@@ -195,10 +195,20 @@ pub fn search_fuzzy(request_json: &str) -> String {
     }
     match serde_json::from_str::<Request>(request_json) {
         Ok(request) => {
-            serde_json::to_string(&search::fuzzy_rank(&request.spec, &request.candidates))
-                .unwrap_or_else(|_| "[]".into())
+            serde_json::to_string(&search::fuzzy_rank_page(&request.spec, &request.candidates))
+                .unwrap_or_else(|_| r#"{"hits":[],"total":0}"#.into())
         }
-        Err(_) => "[]".into(),
+        Err(_) => r#"{"hits":[],"total":0}"#.into(),
+    }
+}
+
+#[wasm_bindgen]
+pub fn search_expand(plan_json: &str, vocabulary_json: &str) -> String {
+    let words: Vec<String> = serde_json::from_str(vocabulary_json).unwrap_or_default();
+    match search::Plan::from_json_str(plan_json) {
+        Ok(plan) => serde_json::to_string(&search::expand_plan(&plan, &words))
+            .unwrap_or_else(|_| plan_json.into()),
+        Err(_) => plan_json.into(),
     }
 }
 

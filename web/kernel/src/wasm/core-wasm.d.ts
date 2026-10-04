@@ -27,6 +27,8 @@ declare module "@ddd/core-wasm" {
 
   export function search_fuzzy(request_json: string): string;
 
+  export function search_expand(plan_json: string, vocabulary_json: string): string;
+
   export class QueryEngine {
     constructor();
     static load(json: string): QueryEngine | undefined;

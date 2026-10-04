@@ -1,4 +1,4 @@
-pub const SEARCH_SCHEMA_VERSION: u32 = 3;
+pub const SEARCH_SCHEMA_VERSION: u32 = 4;
 
 pub const SCHEMA: &[&str] = &[
     "CREATE TABLE meta (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL) WITHOUT ROWID",
@@ -39,7 +39,7 @@ pub const SCHEMA: &[&str] = &[
     "CREATE INDEX attachments_doc ON attachments (doc)",
     "CREATE INDEX attachments_attachment ON attachments (attachment)",
     "CREATE VIRTUAL TABLE documents_fts USING fts5(title, content, fm, content='', contentless_delete=1, tokenize='unicode61 remove_diacritics 2')",
-    "CREATE VIRTUAL TABLE documents_trigram USING fts5(title, content, fm, content='', contentless_delete=1, tokenize='trigram')",
+    "CREATE VIRTUAL TABLE documents_vocab USING fts5vocab(documents_fts, row)",
 ];
 
 pub const READ_SCHEMA_VERSION: &str = "SELECT value FROM meta WHERE key = 'schema_version'";
@@ -48,3 +48,9 @@ pub const WRITE_SCHEMA_VERSION: &str =
     "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', ?1)";
 
 pub const READ_STAMPS: &str = "SELECT id, stamp FROM documents";
+
+pub const FOLD_FUNCTION: &str = "ddd_fold";
+
+pub fn fold(text: &str) -> String {
+    text.to_lowercase()
+}

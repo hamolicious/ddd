@@ -153,9 +153,6 @@ fn map_json(map: &Map) -> String {
 const DELETE_TEXT: &str =
     "DELETE FROM documents_fts WHERE rowid = (SELECT rowid FROM documents WHERE id = ?1)";
 const INSERT_TEXT: &str = "INSERT INTO documents_fts (rowid, title, content, fm) VALUES ((SELECT rowid FROM documents WHERE id = ?1), ?2, ?3, ?4)";
-const DELETE_TRIGRAMS: &str =
-    "DELETE FROM documents_trigram WHERE rowid = (SELECT rowid FROM documents WHERE id = ?1)";
-const INSERT_TRIGRAMS: &str = "INSERT INTO documents_trigram (rowid, title, content, fm) VALUES ((SELECT rowid FROM documents WHERE id = ?1), ?2, ?3, ?4)";
 const DELETE_DOCUMENT: &str = "DELETE FROM documents WHERE id = ?1";
 const DELETE_FM: &str = "DELETE FROM fm WHERE doc = ?1";
 const DELETE_LINKS: &str = "DELETE FROM link_refs WHERE doc = ?1";
@@ -189,10 +186,6 @@ pub fn remove_statements(id: &str) -> Vec<Statement> {
     let mut out = vec![
         Statement {
             sql: DELETE_TEXT,
-            params: vec![SqlValue::text(id)],
-        },
-        Statement {
-            sql: DELETE_TRIGRAMS,
             params: vec![SqlValue::text(id)],
         },
         Statement {
@@ -267,10 +260,6 @@ impl Projection {
             params: vec![doc()],
         });
         out.push(Statement {
-            sql: DELETE_TRIGRAMS,
-            params: vec![doc()],
-        });
-        out.push(Statement {
             sql: INSERT_DOCUMENT,
             params: vec![
                 doc(),
@@ -293,18 +282,15 @@ impl Projection {
                 SqlValue::text(&input.stamp),
             ],
         });
-        let fm_text = self.fm_text();
-        for sql in [INSERT_TEXT, INSERT_TRIGRAMS] {
-            out.push(Statement {
-                sql,
-                params: vec![
-                    doc(),
-                    SqlValue::text(&self.title),
-                    SqlValue::text(&self.body),
-                    SqlValue::Text(fm_text.clone()),
-                ],
-            });
-        }
+        out.push(Statement {
+            sql: INSERT_TEXT,
+            params: vec![
+                doc(),
+                SqlValue::text(&self.title),
+                SqlValue::text(&self.body),
+                SqlValue::Text(self.fm_text()),
+            ],
+        });
         for entry in &self.entries {
             out.push(Statement {
                 sql: INSERT_FM,

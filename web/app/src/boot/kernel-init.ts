@@ -2,7 +2,7 @@ import { IdbDocPersistence, IdbProjectionStore } from "@kernel/store/index.js";
 import { createSearchIndex } from "@kernel/query/index.js";
 import { SyncClient } from "@kernel/sync/index.js";
 import { loadCore, type CoreBindings } from "@kernel/wasm/index.js";
-import { ProjectionFeed, browserPeers } from "@kernel/search/index.js";
+import { ProjectionFeed, browserPeers, removeSearchFiles, searchWipePending } from "@kernel/search/index.js";
 import { KernelHost, type PluginProblem } from "@kernel/runtime/index.js";
 import type { BootMode, LogoutOptions, SessionUser } from "@kernel";
 
@@ -41,6 +41,7 @@ export async function initKernel(options: KernelInitOptions): Promise<KernelRunt
   const store = new IdbProjectionStore();
   await store.open();
 
+  if (searchWipePending()) await removeSearchFiles();
   const index = createSearchIndex();
   const search = new ProjectionFeed(store, index.projection, browserPeers());
   void search.start();
@@ -214,6 +215,7 @@ function unavailableCore(reason: string): CoreBindings {
     searchEncodeCursor: fail,
     searchSnippets: fail,
     searchFuzzy: fail,
+    searchExpand: fail,
     semanticsVersion: () => -1,
   };
 }

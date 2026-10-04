@@ -506,7 +506,8 @@ const { rows } = await kernel.search
   `total`.
 - **Live results.** `watch()` instead of `run()` gives `{ result, onChange, window, close }`.
   It re-runs only when something it reads changes, at most once per frame. `window(start,
-  count)` moves it over a long list for virtual scrolling.
+  count)` moves it over a long list for virtual scrolling, and `watch({ window: { start,
+  count } })` starts on one.
 
 Rows are typed from what you select, group and count, so a misspelt field is a type error.
 `fm.*` and `plugins.*` accept any key. A bad plan rejects with `SearchPlanError`.

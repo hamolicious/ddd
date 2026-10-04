@@ -170,7 +170,14 @@ export class SearchProjection {
   }
 
   run(plan: unknown): SearchRows {
-    const compiled = this.compile(plan);
+    let compiled = this.compile(plan);
+    if (compiled.vocabulary) {
+      const words = this.db
+        .select(compiled.vocabulary.sql, compiled.vocabulary.params)
+        .map((row) => row.term)
+        .filter((term): term is string => typeof term === "string");
+      compiled = this.compile(this.core.searchExpand(plan, words));
+    }
     let raw = this.db.select(compiled.sql, compiled.params);
     let nextCursor: string | undefined;
     if (compiled.page_size !== null && raw.length > compiled.page_size) {
@@ -183,17 +190,19 @@ export class SearchProjection {
       }
     }
     let hits: Record<string, { readonly score: number; readonly terms: readonly string[] }> | undefined;
+    let fuzzyTotal: number | undefined;
     if (compiled.fuzzy) {
-      const ranked = this.core.searchFuzzy(
+      const page = this.core.searchFuzzy(
         compiled.fuzzy,
         raw.map((values) => ({
           title: typeof values.fuzzy_title === "string" ? values.fuzzy_title : "",
           content: typeof values.fuzzy_content === "string" ? values.fuzzy_content : "",
         })),
       );
+      if (compiled.fuzzy.total) fuzzyTotal = page.total;
       hits = {};
       const ordered: SqlRow[] = [];
-      for (const found of ranked) {
+      for (const found of page.hits) {
         const values = raw[found.index];
         if (!values) continue;
         ordered.push(values);
@@ -211,9 +220,9 @@ export class SearchProjection {
         row.snippet = snippets[index] ?? null;
       });
     }
-    const total = compiled.total
+    const total = fuzzyTotal ?? (compiled.total
       ? Number(Object.values(this.db.select(compiled.total.sql, compiled.total.params)[0] ?? {})[0] ?? 0)
-      : undefined;
+      : undefined);
     return {
       rows,
       ...(total === undefined ? {} : { total }),

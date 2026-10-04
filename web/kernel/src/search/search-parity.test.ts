@@ -77,6 +77,24 @@ describe.skipIf(!coreArtifactExists())("search plans in the Wasm build agree wit
     expect(result.hits?.A?.terms).toEqual(["Alpha"]);
   });
 
+  it("folds accented capitals and finds short typos in the Wasm build", async () => {
+    const small = new ProjectionHost({ core, persistent: false });
+    await small.open();
+    await small.sync(
+      [
+        feedRow({ id: "E", seq: 1, content: "# ÉCOLE\n" }),
+        ...Array.from({ length: 1200 }, (_, index) => feedRow({ id: `N${String(index).padStart(5, "0")}`, seq: index + 2, content: `# Note ${index}\n` })),
+        feedRow({ id: "Z", seq: 2000, content: "# Milk\n" }),
+      ],
+      true,
+      true,
+    );
+    const folded = await small.run({ stages: [{ where: { text: { field: "title", mode: "contains", value: "école" } } }] });
+    expect(folded.rows.map((row) => row.id)).toEqual(["E"]);
+    const typo = await small.run({ stages: [{ fuzzy: { query: "mlik", limit: 3 } }] });
+    expect(typo.rows.map((row) => row.id)).toEqual(["Z"]);
+  });
+
   it("pages with cursors until every row has been seen once", async () => {
     const seen: unknown[] = [];
     let cursor: string | undefined;

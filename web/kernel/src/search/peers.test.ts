@@ -75,9 +75,15 @@ describe.skipIf(!coreArtifactExists())("one search owner across tabs", () => {
     core = await loadCoreForNode();
   });
 
+  const stores = new WeakMap<Hub, MemoryProjectionStore>();
+
   async function tab(hub: Hub, id: string, rows: readonly FeedRow[]) {
-    const store = new MemoryProjectionStore();
-    await store.applyRows(rows, checkpoint(rows));
+    let store = stores.get(hub);
+    if (!store) {
+      store = new MemoryProjectionStore();
+      await store.applyRows(rows, checkpoint(rows));
+      stores.set(hub, store);
+    }
     const backend = new ProjectionHost({ core, persistent: false });
     let opened = 0;
     const open = backend.open.bind(backend);
@@ -105,7 +111,7 @@ describe.skipIf(!coreArtifactExists())("one search owner across tabs", () => {
     expect((await second.feed.run(plan)).rows).toEqual([{ text: "one" }]);
   });
 
-  it("a follower's edits reach the owner and every tab hears about them", async () => {
+  it("a follower's edits, seen through the shared store, reach the owner and every tab hears about them", async () => {
     const hub = new Hub();
     const first = await tab(hub, "first", rows);
     await first.feed.ready;

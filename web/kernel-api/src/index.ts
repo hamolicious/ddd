@@ -70,6 +70,8 @@ export {
   type SearchTextExpression,
   type SearchValue,
   type SearchWatch,
+  type SearchWatchOptions,
+  type SearchWindow,
 } from "./search.js";
 
 export {

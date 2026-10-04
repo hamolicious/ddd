@@ -9,7 +9,8 @@ use super::catalog::{
 };
 use super::cursor::decode_cursor;
 use super::fuzzy::{
-    FuzzySpec, MAX_FUZZY_CANDIDATES, MAX_FUZZY_DISTANCE, fuzzy_terms, narrowing_trigrams,
+    FuzzySpec, MAX_FUZZY_CANDIDATES, MAX_FUZZY_DISTANCE, MAX_VOCAB_ROWS, expand_terms, fuzzy_terms,
+    vocabulary_filter,
 };
 use super::plan::FuzzyStage;
 use super::plan::{
@@ -51,6 +52,58 @@ pub struct Compiled {
     pub snippets: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fuzzy: Option<FuzzySpec>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vocabulary: Option<CountQuery>,
+}
+
+fn unexpanded(plan: &Plan) -> Option<&FuzzyStage> {
+    plan.stages.iter().find_map(|stage| match stage {
+        Stage::Fuzzy(fuzzy) if fuzzy.expanded.is_none() => Some(fuzzy),
+        _ => None,
+    })
+}
+
+fn vocabulary_query(fuzzy: &FuzzyStage) -> CountQuery {
+    let mut params = Params::default();
+    let max_distance = fuzzy.max_distance.unwrap_or(MAX_FUZZY_DISTANCE);
+    let mut alternatives = Vec::new();
+    for (low, high, shortest, longest) in
+        vocabulary_filter(&fuzzy_terms(&fuzzy.query), max_distance)
+    {
+        let low = params.bind(SqlValue::Text(low));
+        let high = params.bind(SqlValue::Text(high));
+        let shortest = params.bind(SqlValue::Int(shortest as i64));
+        let longest = params.bind(SqlValue::Int(longest as i64));
+        alternatives.push(format!(
+            "(term >= {low} AND term < {high}) OR (length(term) BETWEEN {shortest} AND {longest})"
+        ));
+    }
+    let condition = if alternatives.is_empty() {
+        "0".to_string()
+    } else {
+        alternatives.join(" OR ")
+    };
+    CountQuery {
+        sql: format!("SELECT term FROM documents_vocab WHERE {condition} LIMIT {MAX_VOCAB_ROWS}"),
+        params: params.values,
+    }
+}
+
+pub fn expand_plan(plan: &Plan, vocabulary: &[String]) -> Plan {
+    let mut plan = plan.clone();
+    for stage in &mut plan.stages {
+        if let Stage::Fuzzy(fuzzy) = stage
+            && fuzzy.expanded.is_none()
+        {
+            let max_distance = fuzzy.max_distance.unwrap_or(MAX_FUZZY_DISTANCE);
+            fuzzy.expanded = Some(expand_terms(
+                &fuzzy_terms(&fuzzy.query),
+                max_distance,
+                vocabulary,
+            ));
+        }
+    }
+    plan
 }
 
 #[derive(Default)]
@@ -128,6 +181,23 @@ struct Compiler<'a> {
 }
 
 pub fn compile(plan: &Plan) -> Result<Compiled, PlanError> {
+    plan.validate()?;
+    if let Some(fuzzy) = unexpanded(plan) {
+        compile(&expand_plan(plan, &[]))?;
+        return Ok(Compiled {
+            sql: String::new(),
+            params: Vec::new(),
+            columns: Vec::new(),
+            cursor_columns: 0,
+            page_size: None,
+            total: None,
+            sources: vec![plan.source, Source::Documents],
+            terms: Vec::new(),
+            snippets: false,
+            fuzzy: None,
+            vocabulary: Some(vocabulary_query(fuzzy)),
+        });
+    }
     let mut params = Params::default();
     compile_with(plan, &mut params, 0, false)
 }
@@ -345,6 +415,17 @@ fn compile_with(
                 }
                 projection.push((name, column));
             }
+            Stage::Limit(n) if compiler.fuzzy.is_some() => {
+                if let Some(fuzzy) = compiler.fuzzy.as_mut() {
+                    fuzzy.page = Some(fuzzy.page.map_or(*n, |page| page.min(*n)));
+                }
+            }
+            Stage::Offset(n) if compiler.fuzzy.is_some() => {
+                if let Some(fuzzy) = compiler.fuzzy.as_mut() {
+                    fuzzy.offset = Some(fuzzy.offset.unwrap_or(0) + n);
+                    fuzzy.page = fuzzy.page.map(|page| page.saturating_sub(*n));
+                }
+            }
             Stage::Limit(n) => {
                 if block.limit.is_some() {
                     block = compiler.wrap(block)?;
@@ -446,6 +527,7 @@ fn aggregate(stage: &Stage, scope: &Scope) -> Result<(String, Column), PlanError
             kind,
             path: None,
             companion: None,
+            origin: String::new(),
         },
     ))
 }
@@ -503,6 +585,7 @@ impl Compiler<'_> {
             kind: Kind::Real,
             path: None,
             companion: None,
+            origin: RELEVANCE.to_string(),
         });
         Ok(())
     }
@@ -524,22 +607,24 @@ impl Compiler<'_> {
             .unwrap_or_else(|| vec![TextField::Title, TextField::Content, TextField::Fm]);
         let terms = fuzzy_terms(&fuzzy.query);
         let max_distance = fuzzy.max_distance.unwrap_or(MAX_FUZZY_DISTANCE);
-        let grams = narrowing_trigrams(&terms, max_distance);
-        if !grams.is_empty() {
+        let expanded = fuzzy.expanded.clone().unwrap_or_default();
+        if expanded.is_empty() {
+            block.wheres.push("0".into());
+        } else {
             let columns: Vec<&str> = fields.iter().map(|field| field.column()).collect();
             let query = format!(
                 "{{{}}} : ({})",
                 columns.join(" "),
-                grams
+                expanded
                     .iter()
-                    .map(|gram| format!("\"{}\"", gram.replace('"', "\"\"")))
+                    .map(|word| format!("\"{}\"", word.replace('"', "\"\"")))
                     .collect::<Vec<_>>()
                     .join(" OR ")
             );
             let bound = self.params.bind(SqlValue::Text(query));
             block.from.push_str(&format!(
-                " JOIN (SELECT x.id AS id FROM documents_trigram JOIN documents x ON x.rowid = documents_trigram.rowid \
-                 WHERE documents_trigram MATCH {bound} ORDER BY bm25(documents_trigram) LIMIT {MAX_FUZZY_CANDIDATES}) fg ON fg.id = {}",
+                " JOIN (SELECT x.id AS id FROM documents_fts JOIN documents x ON x.rowid = documents_fts.rowid \
+                 WHERE documents_fts MATCH {bound} ORDER BY bm25(documents_fts) LIMIT {MAX_FUZZY_CANDIDATES}) fg ON fg.id = {}",
                 id.sql
             ));
         }
@@ -551,6 +636,9 @@ impl Compiler<'_> {
             fields,
             limit: fuzzy.limit,
             max_distance,
+            offset: None,
+            page: None,
+            total: false,
         });
         Ok(())
     }
@@ -613,6 +701,7 @@ impl Compiler<'_> {
                 kind: column.kind.materialized(),
                 path: None,
                 companion: None,
+                origin: column.origin.clone(),
             });
         }
         let mut next = Block::new(format!("({sql}) {alias}"), scope);
@@ -798,14 +887,22 @@ impl Compiler<'_> {
             None => self.default_row(&block.scope)?,
         };
 
-        let total = if with_total && !self.nested {
+        if with_total && let Some(fuzzy) = self.fuzzy.as_mut() {
+            fuzzy.total = true;
+        }
+        let total = if with_total && !self.nested && self.fuzzy.is_none() {
             let unpaged = Block {
                 limit: None,
                 offset: None,
                 cursor: None,
                 ..block.clone()
             };
-            let inner = self.block_sql(&unpaged, "1", false)?;
+            let counted = if unpaged.group.as_ref().is_some_and(Vec::is_empty) {
+                "count(*)"
+            } else {
+                "1"
+            };
+            let inner = self.block_sql(&unpaged, counted, false)?;
             Some(CountQuery {
                 sql: format!("SELECT count(*) FROM ({inner})"),
                 params: self.params.values.clone(),
@@ -879,6 +976,7 @@ impl Compiler<'_> {
             terms: self.terms,
             snippets: self.snippets,
             fuzzy,
+            vocabulary: None,
         })
     }
 
@@ -1173,16 +1271,16 @@ impl Compiler<'_> {
                 )));
             }
         };
-        let needle = needle.to_lowercase();
+        let needle = super::schema::fold(needle);
         let body = if needle.is_empty() {
             "1".to_string()
         } else {
             let length = needle.chars().count() as i64;
             let bound = self.params.bind(SqlValue::Text(needle));
             match mode {
-                TextMatch::Contains => format!("instr(lower({value}), {bound}) > 0"),
-                TextMatch::StartsWith => format!("instr(lower({value}), {bound}) = 1"),
-                TextMatch::EndsWith => format!("substr(lower({value}), -{length}) = {bound}"),
+                TextMatch::Contains => format!("instr(ddd_fold({value}), {bound}) > 0"),
+                TextMatch::StartsWith => format!("instr(ddd_fold({value}), {bound}) = 1"),
+                TextMatch::EndsWith => format!("substr(ddd_fold({value}), -{length}) = {bound}"),
             }
         };
         Ok(match guard {

@@ -96,6 +96,34 @@ describe.skipIf(!coreArtifactExists())("search projection", () => {
     expect(await feed.select("SELECT id FROM documents ORDER BY id")).toEqual([{ id: "A" }, { id: "B" }]);
   });
 
+  it("a feed that reopens a database with documents is ready before its stamp pass ends", async () => {
+    const store = new MemoryProjectionStore();
+    const rows = [feedRow({ id: "A", seq: 1 })];
+    await store.applyRows(rows, checkpoint(rows));
+    const backend = new ProjectionHost({ core, persistent: false });
+    const open = backend.open.bind(backend);
+    backend.open = async () => ({ ...(await open()), persistent: true, documents: 1 });
+    let synced = false;
+    const sync = backend.sync.bind(backend);
+    backend.sync = async (...args) => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      synced = true;
+      return sync(...args);
+    };
+    const feed = new ProjectionFeed(store, backend);
+    await feed.start();
+    expect(synced).toBe(false);
+    await feed.settled();
+  });
+
+  it("a wiped projection stays stopped instead of quietly rebuilding", async () => {
+    const backend = new ProjectionHost({ core, persistent: false });
+    await backend.open();
+    await backend.wipe();
+    await expect(backend.run({})).rejects.toThrow(/deleted at sign-out/);
+    await expect(backend.apply([feedRow({ id: "A", seq: 1 })], [])).rejects.toThrow(/deleted at sign-out/);
+  });
+
   it("skips unchanged rows and drops rows the store no longer has when it syncs again", async () => {
     const { store, backend } = await setup([feedRow({ id: "A", seq: 1 }), feedRow({ id: "B", seq: 2 })]);
     await new ProjectionFeed(store, backend).start();

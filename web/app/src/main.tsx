@@ -19,7 +19,7 @@ import {
   rememberPlugins,
   rememberSession,
 } from "./boot/cache.js";
-import { removeSearchFiles } from "@kernel/search/index.js";
+import { markSearchWipePending, removeSearchFiles } from "@kernel/search/index.js";
 import { initKernel, type KernelRuntime } from "./boot/kernel-init.js";
 import { bootModeFor, safeModeFrom } from "./boot/safe-mode.js";
 import { contributeAboutSection } from "./boot/AboutSection.js";
@@ -354,8 +354,9 @@ async function signOut(
   } finally {
     current?.host.settings.stop();
     current?.sync.stop();
-    await current?.search.wipe().catch(() => undefined);
-    await removeSearchFiles();
+    markSearchWipePending();
+    await current?.search.wipe().catch((cause: unknown) => console.warn("[search] could not wipe the search database", cause));
+    if (!(await removeSearchFiles())) console.warn("[search] the search database is still on disk; it is deleted at the next start");
     await current?.store.clear();
     await deletePluginDatabases();
     await globalThis.caches?.delete("ddd:api").catch(() => false);

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 import type {
   FilterJson,
+  SearchWindow,
   SearchCompareOp,
   SearchCondition,
   SearchHitInfo,
@@ -28,7 +29,7 @@ export interface LiveSearchWatch<Row> {
 
 export interface Watchable<Row> {
   plan(): SearchPlanJson;
-  watch(): Promise<LiveSearchWatch<Row>>;
+  watch(options?: { readonly window?: SearchWindow }): Promise<LiveSearchWatch<Row>>;
 }
 
 export interface LiveSearchState<Row> {
@@ -37,11 +38,6 @@ export interface LiveSearchState<Row> {
   readonly hits: Readonly<Record<string, SearchHitInfo>>;
   readonly loading: boolean;
   readonly error?: string;
-}
-
-export interface SearchWindow {
-  readonly start: number;
-  readonly count: number;
 }
 
 function stateOf<Row>(result: LiveSearchResult<Row>): LiveSearchState<Row> {
@@ -71,7 +67,8 @@ export function useLiveSearch<Row>(query: Watchable<Row> | undefined, window?: S
     setState((previous) => ({ ...previous, loading: true }));
     void (async () => {
       try {
-        const opened = await source.watch();
+        const wanted = latestWindow.current;
+        const opened = await source.watch(wanted === undefined ? undefined : { window: wanted });
         if (!live) {
           opened.close();
           return;
@@ -80,8 +77,10 @@ export function useLiveSearch<Row>(query: Watchable<Row> | undefined, window?: S
         off = opened.onChange((result) => {
           if (live) setState(stateOf(result));
         });
-        const wanted = latestWindow.current;
-        if (wanted !== undefined) await opened.window(wanted.start, wanted.count);
+        const now = latestWindow.current;
+        if (now !== undefined && (now.start !== wanted?.start || now.count !== wanted?.count)) {
+          await opened.window(now.start, now.count);
+        }
         if (live) setState(stateOf(opened.result));
       } catch (cause) {
         if (live) setState({ rows: [], total: 0, hits: {}, loading: false, error: message(cause) });

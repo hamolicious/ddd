@@ -57,6 +57,7 @@ pub struct Column {
     pub kind: Kind,
     pub path: Option<String>,
     pub companion: Option<String>,
+    pub origin: String,
 }
 
 impl Column {
@@ -67,6 +68,7 @@ impl Column {
             kind,
             path: None,
             companion: None,
+            origin: name.to_string(),
         }
     }
 
@@ -170,6 +172,7 @@ impl Scope {
                 kind: Kind::Json,
                 path: Some(json_path(rest)),
                 companion: None,
+                origin: field.to_string(),
             });
         }
         Err(PlanError::UnknownField(field.to_string()))
@@ -325,5 +328,9 @@ pub fn tiebreak(scope: &Scope, source: Source) -> Option<Column> {
         Source::Documents => "id",
         _ => ROW_KEY,
     };
-    scope.get(key).cloned()
+    scope
+        .columns
+        .iter()
+        .find(|column| column.name == key && column.origin == key)
+        .cloned()
 }

@@ -30,8 +30,8 @@ export function fakeSearch(answer: (plan: SearchPlanJson) => readonly Row[]): Fa
       const { rows, total } = result(plan);
       return Promise.resolve({ rows, total } as never);
     },
-    watch: (plan) => {
-      const entry: FakeWatch = { plan, listeners: new Set(), closed: false };
+    watch: (plan, options) => {
+      const entry: FakeWatch = { plan, listeners: new Set(), closed: false, ...(options?.window ? { window: options.window } : {}) };
       watches.push(entry);
       return Promise.resolve({
         get result() {

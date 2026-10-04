@@ -142,6 +142,45 @@ describe.skipIf(!coreArtifactExists())("kernel.search", () => {
     expect(watch.result.total).toBe(31);
   });
 
+  it("a fuzzy query can be watched and windowed over its ranked hits", async () => {
+    const { store, search } = await setup([
+      feedRow({ id: "A", seq: 1, content: "# Alpha\n" }),
+      feedRow({ id: "B", seq: 2, content: "# Alphabet\n" }),
+    ]);
+    const watch = await search.from().fuzzy("alpha").watch();
+    expect(watch.result.rows.map((row) => (row as { id: string }).id)).toEqual(["A", "B"]);
+    expect(watch.result.total).toBe(2);
+    await watch.window(1, 1);
+    expect(watch.result.rows.map((row) => (row as { id: string }).id)).toEqual(["B"]);
+    await store.putLocal([{ ...feedRow({ id: "C", seq: 0, content: "# Alpah\n" }), materialized_version: "local" }]);
+    await frame();
+    await frame();
+    expect(watch.result.total).toBe(3);
+  });
+
+  it("a watch can start on a window without reading the whole result first", async () => {
+    const rows = Array.from({ length: 20 }, (_, index) =>
+      feedRow({ id: `D${String(index).padStart(2, "0")}`, seq: index + 1, content: `# Doc ${index}\n` }),
+    );
+    const { search, runs } = await setup(rows);
+    const before = runs.length;
+    const watch = await search.from().sort("id").select("id").watch({ window: { start: 5, count: 3 } });
+    expect(watch.result.rows.map((row) => row.id)).toEqual(["D05", "D06", "D07"]);
+    expect(watch.result.total).toBe(20);
+    expect(runs.slice(before).every((plan) => plan.includes('"limit":3'))).toBe(true);
+  });
+
+  it("a window replaces a cursor's paging", async () => {
+    const rows = Array.from({ length: 6 }, (_, index) =>
+      feedRow({ id: `D${index}`, seq: index + 1, content: `# Doc ${index}\n` }),
+    );
+    const { search } = await setup(rows);
+    const first = await search.from().sort("id").select("id").limit(2).run();
+    const watch = await search.from().sort("id").select("id").cursor(first.nextCursor!).limit(2).watch();
+    await watch.window(0, 3);
+    expect(watch.result.rows.map((row) => row.id)).toEqual(["D0", "D1", "D2"]);
+  });
+
   it("closing a watch stops its updates", async () => {
     const { store, search, host } = await setup([feedRow({ id: "A", seq: 1 })]);
     const watch = await search.from().watch();

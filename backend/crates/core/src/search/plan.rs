@@ -181,6 +181,8 @@ pub struct FuzzyStage {
     pub limit: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_distance: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expanded: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -303,8 +305,21 @@ impl Plan {
                 Stage::Limit(n) if *n > MAX_LIMIT => {
                     return Err(PlanError::Limit(format!("limit is above {MAX_LIMIT}")));
                 }
-                Stage::Fuzzy(_) if index + 1 != self.stages.len() => {
-                    return Err(PlanError::BadStage("fuzzy must be the last stage".into()));
+                Stage::Fuzzy(_)
+                    if !self.stages[index + 1..].iter().all(|later| {
+                        matches!(
+                            later,
+                            Stage::Offset(_)
+                                | Stage::Limit(_)
+                                | Stage::WithTotal
+                                | Stage::WithContent
+                                | Stage::Trash(_)
+                        )
+                    }) =>
+                {
+                    return Err(PlanError::BadStage(
+                        "fuzzy must be the last stage, followed only by paging".into(),
+                    ));
                 }
                 Stage::Fuzzy(fuzzy) if fuzzy.limit.is_some_and(|n| n > MAX_LIMIT) => {
                     return Err(PlanError::Limit(format!("limit is above {MAX_LIMIT}")));

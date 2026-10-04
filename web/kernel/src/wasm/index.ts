@@ -66,6 +66,7 @@ export interface CompiledSearch {
   readonly terms?: readonly string[];
   readonly snippets: boolean;
   readonly fuzzy?: SearchFuzzySpec;
+  readonly vocabulary?: { readonly sql: string; readonly params: readonly SqlParam[] };
 }
 
 export interface SearchFuzzySpec {
@@ -73,6 +74,9 @@ export interface SearchFuzzySpec {
   readonly fields: readonly string[];
   readonly limit?: number;
   readonly max_distance: number;
+  readonly offset?: number;
+  readonly page?: number;
+  readonly total: boolean;
 }
 
 export interface SearchRanked {
@@ -112,7 +116,8 @@ export interface CoreBindings {
   searchFuzzy(
     spec: SearchFuzzySpec,
     candidates: readonly { readonly title: string; readonly content: string }[],
-  ): readonly SearchRanked[];
+  ): { readonly hits: readonly SearchRanked[]; readonly total: number };
+  searchExpand(plan: unknown, vocabulary: readonly string[]): unknown;
 }
 
 export function filterRow(row: ProjectionRow): FilterRow {
@@ -165,7 +170,12 @@ export function loadCore(initInput?: BufferSource | WebAssembly.Module | URL | s
       searchSnippets: (terms: readonly string[], contents: readonly (string | null)[]) =>
         JSON.parse(mod.search_snippets(JSON.stringify({ terms, contents }))) as readonly (SearchSnippet | null)[],
       searchFuzzy: (spec: SearchFuzzySpec, candidates: readonly { readonly title: string; readonly content: string }[]) =>
-        JSON.parse(mod.search_fuzzy(JSON.stringify({ spec, candidates }))) as readonly SearchRanked[],
+        JSON.parse(mod.search_fuzzy(JSON.stringify({ spec, candidates }))) as {
+          readonly hits: readonly SearchRanked[];
+          readonly total: number;
+        },
+      searchExpand: (plan: unknown, vocabulary: readonly string[]) =>
+        JSON.parse(mod.search_expand(JSON.stringify(plan), JSON.stringify(vocabulary))) as unknown,
     } satisfies CoreBindings;
   })();
   return cached;

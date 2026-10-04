@@ -3,7 +3,9 @@ export {
   SEARCH_DB_FILE,
   SEARCH_OPFS_DIRECTORY,
   openSearchDatabase,
+  markSearchWipePending,
   removeSearchFiles,
+  searchWipePending,
   type SearchDatabase,
   type SqlRow,
 } from "./database.js";
